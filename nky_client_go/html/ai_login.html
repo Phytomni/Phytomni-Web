@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI助手 - 用户登录</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f5f7fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .login-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            width: 350px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #34495e;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #3367d6;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .footer {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+<div class="login-container">
+    <h1>AI助手登录</h1>
+    <form id="loginForm">
+        <div class="form-group">
+            <label for="email">用户名</label>
+            <input type="text" id="email" placeholder="请输入用户名" required>
+        </div>
+        <div class="form-group">
+            <label for="password">密码</label>
+            <input type="password" id="password" placeholder="请输入密码" required>
+        </div>
+        <div id="errorMessage" class="error-message"></div>
+        <button type="submit">登录</button>
+    </form>
+    <div class="footer">
+        还没有账号？<a href="#" id="registerLink">立即注册</a>
+    </div>
+</div>
+
+<script>
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const errorElement = document.getElementById('errorMessage');
+
+        try {
+            // 发送登录请求
+            const response = await fetch('http://127.0.0.1:8082/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: email,
+                    password: password
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || '登录失败');
+            }
+
+            const data = await response.json();
+
+            // 存储token
+            localStorage.setItem('authToken', data.token);
+
+            localStorage.setItem('username', JSON.stringify({ email }));
+
+            // 跳转到AI对话页面
+            window.location.href = 'ai_dialogue.html';
+
+        } catch (error) {
+            errorElement.textContent = error.message;
+        }
+    });
+
+    // 注册链接点击事件
+    document.getElementById('registerLink').addEventListener('click', function(e) {
+        e.preventDefault();
+        alert('注册功能暂未开放');
+    });
+</script>
+</body>
+</html>
