@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 对话助手</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        #chat-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            height: 500px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 90%;  /* 增加最大宽度 */
+            min-width: 20%;  /* 设置最小宽度 */
+            width: fit-content; /* 关键属性：根据内容自适应 */
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+            /* 添加最大宽度限制 */
+            max-width: min(90%, 600px);
+        }
+
+        .ai-message {
+            background-color: #f1f1f1;
+            margin-right: auto;
+            border-bottom-left-radius: 5px;
+            /* 添加最大宽度限制 */
+            max-width: min(90%, 600px);
+        }
+
+        .ai-steps {
+            background-color: #f8f9fa;
+            border-left: 3px solid #4285f4;
+            padding: 8px 12px;
+            margin: 8px 0;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        #user-input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 16px;
+        }
+
+        #send-button {
+            padding: 12px 20px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        #send-button:hover {
+            background-color: #3367d6;
+        }
+
+        #send-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .typing-indicator {
+            display: inline-block;
+            padding: 10px 15px;
+            background-color: #f1f1f1;
+            margin-bottom: 15px;
+            border-radius: 18px 18px 18px 5px;
+        }
+
+        .typing-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #888;
+            margin: 0 2px;
+            animation: typingAnimation 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typingAnimation {
+            0%, 60%, 100% {
+                transform: translateY(0);
+            }
+            30% {
+                transform: translateY(-5px);
+            }
+        }
+    </style>
+</head>
+<body>
+<h1>🤖 AI 对话助手</h1>
+
+<div id="chat-container"></div>
+
+<div id="input-container">
+    <label for="user-input"></label><input type="text" id="user-input" placeholder="输入您的问题..." autocomplete="off">
+    <button id="send-button">发送</button>
+</div>
+
+<script>
+    const chatContainer = document.getElementById('chat-container');
+    const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-button');
+
+    // JWT Token
+    const authToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluQDEyMzQ1LmNvbSIsImV4cCI6MTc0NzQ3NTczMX0.WQJFtcriiLJwEw1Se01nrsSsxgVxxdrkfN8SRqc1d3g';
+    //const authToken =localStorage.getItem('authToken');
+    console.log(authToken)
+    // 获取AI回复函数
+    async function getAIResponse(userMessage) {
+        try {
+            const response = await fetch('http://127.0.0.1:8081/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': "Bearer "+authToken
+                },
+                body: JSON.stringify({
+                    query: userMessage
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error("API调用失败:", error);
+            return {
+                final_answer: "抱歉，我暂时无法处理您的请求，请稍后再试。",
+                steps: ["请求处理过程中出现错误"]
+            };
+        }
+    }
+
+    // 添加消息到聊天界面
+    function addMessage(text, isUser) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message');
+        messageDiv.classList.add(isUser ? 'user-message' : 'ai-message');
+
+        // 创建内容容器
+        const contentDiv = document.createElement('div');
+        contentDiv.style.width = 'fit-content';
+        contentDiv.textContent = text;
+
+        messageDiv.appendChild(contentDiv);
+        chatContainer.appendChild(messageDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    // 添加AI回复（包含步骤和最终答案）
+    function addAIResponse(responseData) {
+        const responseDiv = document.createElement('div');
+        responseDiv.classList.add('message', 'ai-message');
+
+        // 添加步骤信息
+        if (responseData.steps && responseData.steps.length > 0) {
+            const stepsDiv = document.createElement('div');
+            stepsDiv.innerHTML = '<strong>思考步骤：</strong>';
+            responseData.steps.forEach(step => {
+                const stepDiv = document.createElement('div');
+                stepDiv.classList.add('ai-steps');
+                stepDiv.textContent = step;
+                stepsDiv.appendChild(stepDiv);
+            });
+            responseDiv.appendChild(stepsDiv);
+        }
+
+        // 添加最终答案
+        if (responseData.final_answer) {
+            const answerDiv = document.createElement('div');
+            answerDiv.style.marginTop = '10px';
+            answerDiv.innerHTML = '<strong>最终回答：</strong><br>' + responseData.final_answer;
+            responseDiv.appendChild(answerDiv);
+        }
+
+        chatContainer.appendChild(responseDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    // 显示"正在输入"指示器
+    function showTypingIndicator() {
+        const typingDiv = document.createElement('div');
+        typingDiv.classList.add('typing-indicator');
+        typingDiv.id = 'typing-indicator';
+        typingDiv.innerHTML = `
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            `;
+        chatContainer.appendChild(typingDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    // 隐藏"正在输入"指示器
+    function hideTypingIndicator() {
+        const typingDiv = document.getElementById('typing-indicator');
+        if (typingDiv) {
+            typingDiv.remove();
+        }
+    }
+
+    // 处理用户发送消息
+    async function handleSendMessage() {
+        const message = userInput.value.trim();
+        if (!message) return;
+
+        // 添加用户消息
+        addMessage(message, true);
+        userInput.value = '';
+
+        // 禁用发送按钮
+        sendButton.disabled = true;
+
+        // 显示AI正在输入
+        showTypingIndicator();
+
+        try {
+            // 获取AI回复
+            const aiResponse = await getAIResponse(message);
+
+            // 隐藏输入指示器并添加AI回复
+            hideTypingIndicator();
+            addAIResponse(aiResponse);
+        } catch (error) {
+            hideTypingIndicator();
+            addMessage("抱歉，我遇到了一些问题，请稍后再试。", false);
+            console.error("处理消息时出错:", error);
+        }
+
+        // 重新启用发送按钮
+        sendButton.disabled = false;
+        userInput.focus();
+    }
+
+    // 事件监听
+    sendButton.addEventListener('click', handleSendMessage);
+
+    userInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleSendMessage();
+        }
+    });
+
+    // 初始欢迎消息
+    setTimeout(() => {
+        addMessage("🤖 您好！我是AI助手，有什么可以帮您的吗？", false);
+    }, 500);
+</script>
+</body>
+</html>
