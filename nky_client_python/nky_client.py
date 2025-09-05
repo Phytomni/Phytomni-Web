@@ -567,41 +567,41 @@ async def handle_uploaded_files(files: Optional[List[UploadFile]], username: str
     
     for file in files:
         # 验证文件类型和大小
-        extension_mime_map = {
-            # 文本文件
-            '.pdf': 'application/pdf',
-            '.doc': 'application/msword',
-            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            '.xls': 'application/vnd.ms-excel',
-            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            '.ppt': 'application/vnd.ms-powerpoint',
-            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            '.txt': 'text/plain',
-            # 图片文件
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            # 压缩包
-            # '.7z': 'application/x-7z-compressed',
-            # '.rar': 'application/x-rar-compressed',
-            # '.zip': 'application/zip',
-            # '.gz': 'application/gzip',
-            # 新增视频格式
-            # '.mp4': 'video/mp4'
-        }
+        # extension_mime_map = {
+        #     # 文本文件
+        #     '.pdf': 'application/pdf',
+        #     '.doc': 'application/msword',
+        #     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        #     '.xls': 'application/vnd.ms-excel',
+        #     '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        #     '.ppt': 'application/vnd.ms-powerpoint',
+        #     '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        #     '.txt': 'text/plain',
+        #     # 图片文件
+        #     '.jpg': 'image/jpeg',
+        #     '.jpeg': 'image/jpeg',
+        #     '.png': 'image/png',
+        #     # 压缩包
+        #     # '.7z': 'application/x-7z-compressed',
+        #     # '.rar': 'application/x-rar-compressed',
+        #     # '.zip': 'application/zip',
+        #     # '.gz': 'application/gzip',
+        #     # 新增视频格式
+        #     # '.mp4': 'video/mp4'
+        # }
         
-        file_ext = Path(file.filename).suffix.lower()
-        if file_ext not in extension_mime_map:
-            raise HTTPException(
-                status_code=400,
-                detail=f"不支持的文件扩展名. 只支持: {', '.join(extension_mime_map.keys())}"
-            )
+        # file_ext = Path(file.filename).suffix.lower()
+        # if file_ext not in extension_mime_map:
+        #     raise HTTPException(
+        #         status_code=400,
+        #         detail=f"不支持的文件扩展名. 只支持: {', '.join(extension_mime_map.keys())}"
+        #     )
 
-        if file.content_type != extension_mime_map[file_ext]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"文件类型不匹配. 预期: {extension_mime_map[file_ext]}, 实际: {file.content_type}"
-            )
+        # if file.content_type != extension_mime_map[file_ext]:
+        #     raise HTTPException(
+        #         status_code=400,
+        #         detail=f"文件类型不匹配. 预期: {extension_mime_map[file_ext]}, 实际: {file.content_type}"
+        #     )
 
         # 验证文件大小 (最大10GB)
         max_size = 10 * 1024 * 1024 * 1024
