@@ -1,0 +1,560 @@
+<template>
+  <div class="history-container">
+    <!-- 历史记录列表 -->
+    <div class="history-content">
+      <div v-if="loading" class="loading-container">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>{{ $t('common.loading') }}</span>
+      </div>
+
+      <div v-else-if="historyList.length === 0" class="empty-container">
+        <el-icon><Document /></el-icon>
+        <h3>{{ $t('history.noHistory') }}</h3>
+        <p>{{ $t('history.noHistoryDescription') }}</p>
+        <el-button @click="goToChat" type="primary">
+          {{ $t('chat.startChat') }}
+        </el-button>
+      </div>
+
+      <div v-else class="history-list">
+        <div class="list-header">
+          <h3>{{ $t('history.historyCount', { count: historyList.length }) }}</h3>
+          <el-button @click="refreshHistory" :loading="refreshing" size="small">
+            <el-icon><Refresh /></el-icon>
+            {{ $t('common.refresh') }}
+          </el-button>
+        </div>
+
+        <div class="history-grid">
+          <div 
+            v-for="history in historyList" 
+            :key="history.id" 
+            class="history-item"
+            @click="openChat(history)"
+          >
+            <div class="history-header">
+              <div class="history-title">
+                <el-icon class="history-icon"><Document /></el-icon>
+                <span class="title-text">{{ history.title }}</span>
+              </div>
+              <div class="history-actions" @click.stop>
+                <el-dropdown trigger="click" @command="(command) => handleHistoryAction(command, history)">
+                  <el-icon class="action-icon">
+                    <MoreFilled />
+                  </el-icon>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="rename" :icon="Edit">
+                        {{ $t('chat.actions.rename') }}
+                      </el-dropdown-item>
+                      <el-dropdown-item command="delete" :icon="Delete" divided>
+                        <span style="color: #f56c6c">{{ $t('chat.actions.delete') }}</span>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </div>
+            
+            <div class="history-content">
+              <div class="history-meta">
+                <span class="history-date">{{ formatDate(history.date) }}</span>
+                <span class="history-id">ID: {{ history.id }}</span>
+              </div>
+              <div class="history-preview">
+                {{ history.title }}
+              </div>
+            </div>
+
+            <div class="history-footer">
+              <el-button size="small" @click.stop="openChat(history)" type="primary">
+                {{ $t('chat.openChat') }}
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 重命名对话框 -->
+    <el-dialog
+      v-model="renameDialogVisible"
+      :title="$t('chat.actions.rename')"
+      width="400px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      @close="handleRenameDialogClose"
+    >
+      <el-form :model="renameForm" ref="renameFormRef" :rules="renameRules">
+        <el-form-item prop="title" :label="$t('chat.title')">
+          <el-input
+            v-model="renameForm.title"
+            :placeholder="$t('chat.actions.enterNewTitle')"
+            maxlength="100"
+            show-word-limit
+            @keyup.enter="handleRenameConfirm"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="renameDialogVisible = false">
+            {{ $t('common.cancel') }}
+          </el-button>
+          <el-button type="primary" @click="handleRenameConfirm">
+            {{ $t('common.confirm') }}
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 删除确认对话框 -->
+    <el-dialog
+      v-model="deleteDialogVisible"
+      :title="$t('chat.actions.deleteConfirm')"
+      width="400px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+    >
+      <div class="delete-confirm-content">
+        <el-icon class="warning-icon"><Warning /></el-icon>
+        <p>{{ $t('chat.actions.deleteWarning') }}</p>
+        <p class="history-title-to-delete">{{ historyToDelete?.title }}</p>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="deleteDialogVisible = false">
+            {{ $t('common.cancel') }}
+          </el-button>
+          <el-button type="danger" @click="handleDeleteConfirm">
+            {{ $t('common.confirm') }}
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import {
+  Document,
+  Loading,
+  Refresh,
+  MoreFilled,
+  Edit,
+  Delete,
+  Warning,
+} from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+
+// 定义History接口
+interface History {
+  id: number;
+  dialogue_id: string;
+  title: string;
+  date: string;
+}
+
+const { t } = useI18n();
+const router = useRouter();
+
+// 响应式数据
+const loading = ref(false);
+const refreshing = ref(false);
+const historyList = ref<History[]>([]);
+
+// 重命名对话框相关
+const renameDialogVisible = ref(false);
+const renameForm = ref({
+  title: '',
+});
+const renameFormRef = ref();
+const renameRules = {
+  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+};
+const historyToRename = ref<History | null>(null);
+
+// 删除确认对话框相关
+const deleteDialogVisible = ref(false);
+const historyToDelete = ref<History | null>(null);
+
+// 获取历史记录数据
+const fetchHistoryData = async () => {
+  loading.value = true;
+  try {
+    // 这里应该调用实际的API接口
+    // 暂时使用模拟数据
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    historyList.value = [
+      {
+        id: 1,
+        dialogue_id: 'history_1',
+        title: 'BRCA1基因突变分析',
+        date: '2024-01-15 10:30:00'
+      },
+      {
+        id: 2,
+        dialogue_id: 'history_2',
+        title: 'MAPK信号通路研究',
+        date: '2024-01-14 15:20:00'
+      },
+      {
+        id: 3,
+        dialogue_id: 'history_3',
+        title: 'TP53基因功能分析',
+        date: '2024-01-13 09:15:00'
+      }
+    ];
+  } catch (error) {
+    console.error('获取历史记录失败:', error);
+    ElMessage.error('获取历史记录失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 刷新历史记录
+const refreshHistory = async () => {
+  refreshing.value = true;
+  try {
+    await fetchHistoryData();
+    ElMessage.success('刷新成功');
+  } catch (error) {
+    console.error('刷新失败:', error);
+    ElMessage.error('刷新失败');
+  } finally {
+    refreshing.value = false;
+  }
+};
+
+// 打开对话
+const openChat = (history: History) => {
+  router.push(`/chat?dialogue_id=${history.dialogue_id}`);
+};
+
+// 跳转到聊天页面
+const goToChat = () => {
+  router.push('/chat');
+};
+
+// 处理历史记录操作
+const handleHistoryAction = (command: string, history: History) => {
+  switch (command) {
+    case 'rename':
+      renameForm.value.title = history.title;
+      historyToRename.value = history;
+      renameDialogVisible.value = true;
+      break;
+    case 'delete':
+      historyToDelete.value = history;
+      deleteDialogVisible.value = true;
+      break;
+  }
+};
+
+// 重命名确认
+const handleRenameConfirm = async () => {
+  if (!renameFormRef.value || !historyToRename.value) return;
+  
+  try {
+    const valid = await renameFormRef.value.validate();
+    if (valid) {
+      // 这里应该调用实际的API接口
+      // 暂时直接更新本地数据
+      const index = historyList.value.findIndex(h => h.id === historyToRename.value!.id);
+      if (index !== -1) {
+        historyList.value[index].title = renameForm.value.title;
+      }
+      renameDialogVisible.value = false;
+      historyToRename.value = null;
+      ElMessage.success('重命名成功');
+    }
+  } catch (error) {
+    console.error('重命名失败:', error);
+    ElMessage.error('重命名失败，请重试');
+  }
+};
+
+// 删除确认
+const handleDeleteConfirm = async () => {
+  if (!historyToDelete.value) return;
+  
+  try {
+    // 这里应该调用实际的API接口
+    // 暂时直接从本地列表中移除
+    const index = historyList.value.findIndex(h => h.id === historyToDelete.value!.id);
+    if (index !== -1) {
+      historyList.value.splice(index, 1);
+    }
+    deleteDialogVisible.value = false;
+    historyToDelete.value = null;
+    ElMessage.success('删除成功');
+  } catch (error) {
+    console.error('删除失败:', error);
+    ElMessage.error('删除失败，请重试');
+  }
+};
+
+// 处理重命名对话框关闭
+const handleRenameDialogClose = () => {
+  historyToRename.value = null;
+  renameForm.value.title = '';
+  if (renameFormRef.value) {
+    renameFormRef.value.resetFields();
+  }
+};
+
+// 格式化日期
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// 组件挂载时获取数据
+onMounted(() => {
+  fetchHistoryData();
+});
+</script>
+
+<style lang="scss" scoped>
+.history-container {
+  padding: 24px;
+  background-color: #f5f7fa;
+  min-height: 100vh;
+}
+
+.history-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: #909399;
+  font-size: 16px;
+}
+
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+
+  .el-icon {
+    font-size: 64px;
+    color: #c0c4cc;
+    margin-bottom: 24px;
+  }
+
+  h3 {
+    margin: 0 0 16px 0;
+    font-size: 20px;
+    color: #606266;
+    font-weight: 500;
+  }
+
+  p {
+    margin: 0 0 24px 0;
+    color: #909399;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #ebeef5;
+
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #303133;
+  }
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+  padding: 24px;
+}
+
+.history-item {
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background-color: #fff;
+
+  &:hover {
+    border-color: #409eff;
+    box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+    transform: translateY(-2px);
+  }
+
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+
+    .history-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+
+      .history-icon {
+        font-size: 20px;
+        color: #409eff;
+        flex-shrink: 0;
+      }
+
+      .title-text {
+        font-size: 16px;
+        font-weight: 500;
+        color: #303133;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .history-actions {
+      flex-shrink: 0;
+      margin-left: 12px;
+
+      .action-icon {
+        font-size: 18px;
+        color: #909399;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background-color: #f5f7fa;
+          color: #606266;
+        }
+      }
+    }
+  }
+
+  .history-content {
+    margin-bottom: 20px;
+
+    .history-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: #909399;
+
+      .history-date {
+        color: #67c23a;
+      }
+
+      .history-id {
+        color: #909399;
+      }
+    }
+
+    .history-preview {
+      color: #606266;
+      font-size: 14px;
+      line-height: 1.5;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+  }
+
+  .history-footer {
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.delete-confirm-content {
+  text-align: center;
+  padding: 20px 0;
+  
+  .warning-icon {
+    font-size: 48px;
+    color: #e6a23c;
+    margin-bottom: 16px;
+  }
+  
+  p {
+    margin: 8px 0;
+    color: #606266;
+    
+    &.history-title-to-delete {
+      font-weight: 500;
+      color: #333;
+      background-color: #f5f7fa;
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin: 12px 0;
+    }
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  .history-container {
+    padding: 16px;
+  }
+
+  .history-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .list-header {
+    padding: 16px 16px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+
+    h3 {
+      font-size: 16px;
+    }
+  }
+}
+</style>

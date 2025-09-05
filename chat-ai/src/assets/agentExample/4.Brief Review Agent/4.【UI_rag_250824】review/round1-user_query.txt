@@ -1,0 +1,1 @@
+How does single-cell RNA sequencing (scRNA-seq) reveal the heterogeneous responses of different cell types within plant organs to biotic/abiotic stresses?
