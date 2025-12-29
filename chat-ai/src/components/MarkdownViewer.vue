@@ -221,7 +221,7 @@ const handleFinish = () => {
       height: 0.25em;
       padding: 0;
       margin: 24px 0;
-      background-color: #d0d7de;
+      // background-color: #d0d7de;
       border: 0;
     }
 
