@@ -55,3 +55,14 @@ export const addUser = (data: any) => {
     data: data,
   });
 };
+
+// 解锁用户
+export const unlockUser = (userId: number) => {
+  const formData = new FormData();
+  formData.append('user_id', userId.toString());
+  return request({
+    url: '/v1/user/unlock',
+    method: 'post',
+    data: formData,
+  });
+};

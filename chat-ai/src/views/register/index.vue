@@ -108,6 +108,57 @@ const validateConfirmPassword = (rule: any, value: string, callback: any) => {
   }
 };
 
+// 密码强度验证函数 - 验证密码是否满足复杂度要求
+const validatePasswordStrength = (rule: any, value: string, callback: any) => {
+  if (!value) {
+    callback();
+    return;
+  }
+
+  // 至少8位
+  if (value.length < 8) {
+    callback(new Error(t('register.validation.passwordMinLength8')));
+    return;
+  }
+
+  // 最多16位
+  if (value.length > 16) {
+    callback(new Error(t('register.validation.passwordMaxLength16')));
+    return;
+  }
+
+  // 包含大写字母
+  if (!/[A-Z]/.test(value)) {
+    callback(new Error(t('register.validation.passwordNeedUppercase')));
+    return;
+  }
+
+  // 包含小写字母
+  if (!/[a-z]/.test(value)) {
+    callback(new Error(t('register.validation.passwordNeedLowercase')));
+    return;
+  }
+
+  // 包含数字
+  if (!/[0-9]/.test(value)) {
+    callback(new Error(t('register.validation.passwordNeedNumber')));
+    return;
+  }
+
+  // 包含特殊符号
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(value)) {
+    callback(new Error(t('register.validation.passwordNeedSpecial')));
+    return;
+  }
+
+  // 当密码变化时，如果已经输入了确认密码，则重新验证确认密码
+  if (formData.confirmPassword !== '') {
+    formRef.value?.validateField('confirmPassword');
+  }
+
+  callback();
+};
+
 const formRules = reactive({
   email: [
     { required: true, message: t('register.validation.emailRequired'), trigger: 'blur' as const },
@@ -124,9 +175,7 @@ const formRules = reactive({
       trigger: 'blur' as const,
     },
     {
-      min: 8,
-      max: 16,
-      message: t('register.validation.passwordLength'),
+      validator: validatePasswordStrength,
       trigger: 'blur' as const,
     },
   ],
@@ -145,6 +194,8 @@ const handleSubmit = () => {
     if (valid) {
       loading.value = true;
       handleRegister();
+    } else {
+      ElMessage.warning(t('register.validation.formValidationFailed'));
     }
   });
 };

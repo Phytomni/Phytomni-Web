@@ -103,8 +103,14 @@ export default {
     newPasswordRequired: 'Please enter new password',
     confirmPasswordRequired: 'Please confirm new password',
     passwordMinLength: 'Password must be at least 6 characters',
+    passwordMinLength8: 'Password must be at least 8 characters',
+    passwordNeedUppercase: 'Password must contain uppercase letters',
+    passwordNeedLowercase: 'Password must contain lowercase letters',
+    passwordNeedNumber: 'Password must contain numbers',
+    passwordNeedSpecial: 'Password must contain special characters',
     passwordSame: 'New password cannot be the same as old password',
     passwordMismatch: 'Passwords do not match',
+    formValidationFailed: 'Please check the form for errors'
   },
 
   // Login module
@@ -127,6 +133,12 @@ export default {
     registerSuccess: 'Registration successful',
     loginFailed: 'Login failed',
     registerFailed: 'Registration failed',
+    passwordWarningTitle: 'Password Security Notice',
+    accountLockedTitle: 'Account Locked',
+    accountLockedMessage: 'Your account has been locked for {minutes} minutes due to multiple failed login attempts. Please try again later.',
+    remainingAttempts: 'Login failed. You have {count} attempts remaining',
+    firstLoginTitle: 'First Login Notice',
+    firstLoginMessage: 'This is your first login. For security purposes, please change your initial password.',
     slogan: {
       main: 'Life Science Foundation Model',
       sub: 'Decoding Life',
@@ -169,9 +181,16 @@ export default {
       emailFormat: 'Please enter a valid email address',
       passwordRequired: 'Please enter your password',
       passwordLength: 'Password must be 8-16 characters long',
+      passwordMinLength8: 'Password must be at least 8 characters',
+      passwordMaxLength16: 'Password must not exceed 16 characters',
+      passwordNeedUppercase: 'Password must contain uppercase letters',
+      passwordNeedLowercase: 'Password must contain lowercase letters',
+      passwordNeedNumber: 'Password must contain numbers',
+      passwordNeedSpecial: 'Password must contain special characters',
       confirmPasswordRequired: 'Please confirm your password',
       confirmPasswordMismatch: 'Passwords do not match',
-    },
+      formValidationFailed: 'Please check the form for errors'
+    }
   },
 
   // Forgot password module
@@ -236,12 +255,24 @@ export default {
     systemMonitor: 'System Monitor',
     globalConfig: 'Global Policy Config',
     adminManagement: 'Admin Management',
+    unlock: 'Unlock',
+    unlockConfirmTitle: 'Unlock User',
+    unlockConfirmMessage: 'Are you sure you want to unlock user {email}?',
+    unlockSuccess: 'User unlocked successfully',
+    unlockFailed: 'Failed to unlock user',
     validation: {
       emailRequired: 'Please enter username',
       emailFormat: 'Please enter a valid email address',
       passwordRequired: 'Please enter password',
       passwordLength: 'Length must be between 8 and 16 characters',
+      passwordMinLength8: 'Password must be at least 8 characters',
+      passwordMaxLength16: 'Password must not exceed 16 characters',
+      passwordNeedUppercase: 'Password must contain uppercase letters',
+      passwordNeedLowercase: 'Password must contain lowercase letters',
+      passwordNeedNumber: 'Password must contain numbers',
+      passwordNeedSpecial: 'Password must contain special characters',
       roleRequired: 'Please select a role',
+      formValidationFailed: 'Please check the form for errors'
     },
     logs: {
       formValidationFailed: 'Form validation failed',

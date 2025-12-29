@@ -39,7 +39,7 @@
           align="center" />
         <el-table-column
           :label="$t('common.operation')"
-          width="180"
+          width="250"
           align="center">
           <template #default="scope">
             <el-space>
@@ -54,6 +54,14 @@
                 type="success"
                 @click="handleEdit(scope.row)">
                 {{ $t('common.edit') }}
+              </el-button>
+              <el-button
+                v-if="scope.row.locked_until"
+                size="small"
+                type="warning"
+                @click="handleUnlock(scope.row)">
+                <el-icon><Unlock /></el-icon>
+                {{ $t('user.unlock') }}
               </el-button>
             </el-space>
           </template>
@@ -159,9 +167,9 @@
 
 <script setup lang="ts">
   import { ref, reactive, onMounted } from 'vue';
-  import { Plus } from '@element-plus/icons-vue';
-  import { ElMessage } from 'element-plus';
-  import { getUserList, addUser, changePermission } from '@/api/auth';
+  import { Plus, Unlock } from '@element-plus/icons-vue';
+  import { ElMessage, ElMessageBox } from 'element-plus';
+  import { getUserList, addUser, changePermission, unlockUser } from '@/api/auth';
   import { useI18n } from 'vue-i18n';
 
   const { t } = useI18n();
@@ -175,6 +183,7 @@
     password: string;
     createTime: string;
     lastLogin: string;
+    locked_until: string | null;
   }
 
   // 表格相关
@@ -199,6 +208,59 @@
     code: '',
   });
 
+  // 密码强度验证函数 - 验证密码是否满足复杂度要求
+  const validatePasswordStrength = (rule: any, value: string, callback: any) => {
+    // 编辑模式下，密码为空时不验证（表示不修改密码）
+    if (dialogType.value === 'edit' && !value) {
+      callback();
+      return;
+    }
+
+    // 新增模式下，密码为空时提示必填
+    if (dialogType.value === 'add' && !value) {
+      callback(new Error(t('user.validation.passwordRequired')));
+      return;
+    }
+
+    // 至少8位
+    if (value.length < 8) {
+      callback(new Error(t('user.validation.passwordMinLength8')));
+      return;
+    }
+
+    // 最多16位
+    if (value.length > 16) {
+      callback(new Error(t('user.validation.passwordMaxLength16')));
+      return;
+    }
+
+    // 包含大写字母
+    if (!/[A-Z]/.test(value)) {
+      callback(new Error(t('user.validation.passwordNeedUppercase')));
+      return;
+    }
+
+    // 包含小写字母
+    if (!/[a-z]/.test(value)) {
+      callback(new Error(t('user.validation.passwordNeedLowercase')));
+      return;
+    }
+
+    // 包含数字
+    if (!/[0-9]/.test(value)) {
+      callback(new Error(t('user.validation.passwordNeedNumber')));
+      return;
+    }
+
+    // 包含特殊符号
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(value)) {
+      callback(new Error(t('user.validation.passwordNeedSpecial')));
+      return;
+    }
+
+    callback();
+  };
+
   // 表单验证规则
   const formRules = reactive({
     email: [
@@ -215,14 +277,7 @@
     ],
     password: [
       {
-        required: dialogType.value === 'add',
-        message: t('user.validation.passwordRequired'),
-        trigger: 'blur',
-      },
-      {
-        min: 8,
-        max: 16,
-        message: t('user.validation.passwordLength'),
+        validator: validatePasswordStrength,
         trigger: 'blur',
       },
     ],
@@ -304,6 +359,36 @@
     viewDialogVisible.value = true;
   };
 
+  // 解锁用户
+  const handleUnlock = (row: UserData) => {
+    ElMessageBox.confirm(
+      t('user.unlockConfirmMessage', { email: row.email }),
+      t('user.unlockConfirmTitle'),
+      {
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
+        type: 'warning',
+      }
+    )
+      .then(async () => {
+        try {
+          const res = await unlockUser(row.id);
+          if (res.code === 200) {
+            ElMessage.success(t('user.unlockSuccess'));
+            fetchData();
+          } else {
+            ElMessage.error(res.msg || t('user.unlockFailed'));
+          }
+        } catch (error: any) {
+          console.error('解锁用户失败:', error);
+          ElMessage.error(error.message || t('user.unlockFailed'));
+        }
+      })
+      .catch(() => {
+        // 用户取消操作
+      });
+  };
+
   // 关闭弹窗
   const closeDialog = () => {
     resetForm();
@@ -376,6 +461,7 @@
         }
       } else {
         console.log('表单验证失败', fields);
+        ElMessage.warning(t('user.validation.formValidationFailed'));
       }
     });
   };

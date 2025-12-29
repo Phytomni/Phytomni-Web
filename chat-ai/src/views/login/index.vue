@@ -80,7 +80,7 @@
   import { reactive, ref } from 'vue';
   import { useRouter } from 'vue-router';
   import type { ElForm } from 'element-plus';
-  import { ElMessage } from 'element-plus';
+  import { ElMessage, ElNotification } from 'element-plus';
   import { login } from '@/api/login';
   import { register } from '@/api/auth';
   import { setToken } from '@/utils/auth';
@@ -145,36 +145,99 @@
 
   const handleLogin = () => {
     console.log('开始登录...');
-    
+
     // 创建FormData对象
     const loginFormData = new FormData();
     loginFormData.append('email', formData.email);
     loginFormData.append('password', formData.password);
-    
+
     login(loginFormData)
-      .then((res: { code: number; data: { token: string; user_name: string; login_status: string }; msg?: string }) => {
+      .then((res: {
+        code: number;
+        data?: {
+          token: string;
+          user_name: string;
+          login_status: string;
+          password_warning?: string;
+        };
+        msg?: string;
+        message?: string;
+      }) => {
         console.log('登录响应:', res);
         if (res.code === 200) {
           console.log('登录成功，准备跳转...');
           ElMessage.success('Login successful');
-          setToken(res.data.token);
+          setToken(res.data!.token);
           //保存用户名
-          useUserStore.SET_USER_NAME(res.data.user_name);
+          useUserStore.SET_USER_NAME(res.data!.user_name);
           //保存登录状态
-          useUserStore.SET_LOGIN_STATUS(res.data.login_status);
+          useUserStore.SET_LOGIN_STATUS(res.data!.login_status);
           console.log('用户名已保存到store:', useUserStore.name);
           console.log('登录状态已保存到store:', useUserStore.login_status);
           console.log('Store状态:', useUserStore);
+
+          // 检查是否是首次登录，需要修改密码
+          if (res.data!.login_status === '0') {
+            console.log('首次登录，跳转到修改密码页面');
+            ElNotification({
+              title: t('login.firstLoginTitle'),
+              message: t('login.firstLoginMessage'),
+              type: 'warning',
+              duration: 0,
+              position: 'top-right',
+            });
+            router.replace('/change-password');
+            return;
+          }
+
+          // 检查密码警告信息
+          if (res.data!.password_warning) {
+            ElNotification({
+              title: t('login.passwordWarningTitle'),
+              message: res.data!.password_warning,
+              type: 'warning',
+              duration: 0, // 不自动关闭，需要用户手动关闭
+              position: 'top-right',
+            });
+          }
+
           console.log('Token已设置，跳转到chat页面');
           router.replace('/chat');
         } else {
           console.log('登录失败，状态码:', res.code);
-          ElMessage.error('Login failed: ' + (res.msg || 'Unknown error'));
+          const errorMessage = res.message || res.msg || t('login.loginFailed');
+
+          // 检查是否是账户锁定相关的消息
+          if (errorMessage.includes('锁定') || errorMessage.includes('locked')) {
+            ElNotification({
+              title: t('login.accountLockedTitle'),
+              message: errorMessage,
+              type: 'error',
+              duration: 0,
+              position: 'top-right',
+            });
+          } else {
+            ElMessage.error(errorMessage);
+          }
         }
       })
       .catch((err: any) => {
         console.log('登录异常:', err);
-        ElMessage.error(err.message || 'Login failed');
+        const response = err.response?.data;
+        const errorMessage = response?.message || response?.msg || err.message || t('login.loginFailed');
+
+        // 检查是否是账户锁定相关的消息
+        if (errorMessage.includes('锁定') || errorMessage.includes('locked')) {
+          ElNotification({
+            title: t('login.accountLockedTitle'),
+            message: errorMessage,
+            type: 'error',
+            duration: 0,
+            position: 'top-right',
+          });
+        } else {
+          ElMessage.error(errorMessage);
+        }
       })
       .finally(() => {
         loading.value = false;
@@ -447,4 +510,14 @@
       width: 85%;
     }
   }
+</style>
+
+<!-- 全局样式：调整 ElNotification 关闭按钮位置 -->
+<style lang="scss">
+.el-notification {
+  .el-notification__closeBtn {
+    top: 10px;
+    right: 10px;
+  }
+}
 </style>

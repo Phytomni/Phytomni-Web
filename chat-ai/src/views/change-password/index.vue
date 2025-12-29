@@ -119,6 +119,46 @@
     }
   };
 
+  // 密码强度验证函数 - 验证新密码是否满足复杂度要求
+  const validatePasswordStrength = (rule: any, value: string, callback: any) => {
+    if (!value) {
+      callback();
+      return;
+    }
+
+    // 至少8位
+    if (value.length < 8) {
+      callback(new Error(t('changePassword.passwordMinLength8')));
+      return;
+    }
+
+    // 包含大写字母
+    if (!/[A-Z]/.test(value)) {
+      callback(new Error(t('changePassword.passwordNeedUppercase')));
+      return;
+    }
+
+    // 包含小写字母
+    if (!/[a-z]/.test(value)) {
+      callback(new Error(t('changePassword.passwordNeedLowercase')));
+      return;
+    }
+
+    // 包含数字
+    if (!/[0-9]/.test(value)) {
+      callback(new Error(t('changePassword.passwordNeedNumber')));
+      return;
+    }
+
+    // 包含特殊符号
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(value)) {
+      callback(new Error(t('changePassword.passwordNeedSpecial')));
+      return;
+    }
+
+    callback();
+  };
+
   // 表单验证规则
   const formRules = reactive({
     username: [
@@ -147,8 +187,7 @@
         trigger: 'blur',
       },
       {
-        min: 6,
-        message: t('changePassword.passwordMinLength'),
+        validator: validatePasswordStrength,
         trigger: 'blur',
       },
       {
@@ -204,14 +243,15 @@
             const UserStore = userStore();
             UserStore.FedLogOut().then(() => router.replace('/login'));
           } else {
-            ElMessage.error(response.msg || '密码修改失败');
+            ElMessage.error(response.message || '密码修改失败');
           }
         } catch (error: any) {
           console.error('修改密码失败:', error);
-          ElMessage.error(error.message || '密码修改失败，请稍后重试');
+          ElMessage.warning(error.response.data.message || '密码修改失败，请稍后重试');
         }
       } else {
         console.log('表单验证失败', fields);
+        ElMessage.warning(t('changePassword.formValidationFailed'));
         return false;
       }
     });
