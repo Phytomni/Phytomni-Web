@@ -1782,7 +1782,7 @@ const handleAgentClick = (agent: any) => {
   
   .doc-detailed {
     .doc-citation {
-      color: #333;
+      color: var(--el-text-color-primary);
       font-size: 14px;
       line-height: 1.4;
       margin-bottom: 6px;

@@ -66,3 +66,12 @@ export const unlockUser = (userId: number) => {
     data: formData,
   });
 };
+
+// 获取用户资料
+export const getUserProfile = (email: string) => {
+  return request({
+    url: '/v1/user/profile',
+    method: 'get',
+    params: { email },
+  });
+};

@@ -72,7 +72,7 @@ export const constantRoutes = [
         path: '/gene-display',
         name: 'geneDisplay',
         component: () => import('@/views/gene-display/index.vue'),
-        meta: { title: '基因展示' },
+        meta: { title: '基因展示', hideSidebar: true },
       },
       {
         path: '/knowledge-agent',

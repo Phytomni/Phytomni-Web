@@ -482,6 +482,8 @@ const expandSidebar = () => {
 // 折叠侧边栏
 const collapseSidebar = () => {
   sidebarCollapsed.value = true;
+  // 关闭agents列表
+  showAgentsList.value = false;
   // 用户手动收起时，暂时禁用自动展开功能
   autoExpandEnabled.value = false;
   // 3秒后重新启用自动展开功能

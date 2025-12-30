@@ -624,12 +624,26 @@
                 </el-button>
               </el-tooltip>
             </div>
-            
-            <MentionSender v-model="messageInput" ref="senderRef" :loading="isSending" :disabled="isSending"
-              variant="updown" @submit="sendMessage" :auto-size="{ minRows: 2, maxRows: 5 }" clearable allow-speech
-              :placeholder="$t('chat.inputPlaceholder')" :options="rolesTool.map(x => ({ value: x }))"
-              :trigger-strings="['@']" trigger-split="," :whole="true" @select="handleSelect" @search="handleSearch"
-              submit-type="shiftEnter">
+
+            <MentionSender
+              v-model="messageInput"
+              ref="senderRef"
+              :loading="isSending"
+              :disabled="isSending"
+              variant="updown"
+              @submit="sendMessage"
+              :auto-size="{ minRows: 2, maxRows: 5 }"
+              clearable
+              allow-speech
+              :placeholder="$t('chat.inputPlaceholder', { symbol: '@' })"
+              :options="rolesTool.map((x) => ({ value: x }))"
+              :trigger-strings="['@']"
+              trigger-split=","
+              :whole="true"
+              @select="handleSelect"
+              @search="handleSearch"
+              submit-type="enter"
+            >
               <!-- 自定义 内容头部功能列表 -->
               <template #header>
                 <div class="header-self-wrap">
@@ -4226,7 +4240,7 @@ const updateLog = async (messageId: string) => {
 
   .doc-detailed {
     .doc-citation {
-      color: #333;
+      color: var(--el-text-color-primary);
       font-size: 14px;
       line-height: 1.4;
       margin-bottom: 6px;

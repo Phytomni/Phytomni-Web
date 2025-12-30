@@ -35,7 +35,7 @@
             <div class="history-header">
               <div class="history-title">
                 <el-icon class="history-icon"><Document /></el-icon>
-                <span class="title-text">{{ history.title }}</span>
+                <span class="title-text">{{ history.title_query }}</span>
               </div>
               <div class="history-actions" @click.stop>
                 <el-dropdown trigger="click" @command="(command) => handleHistoryAction(command, history)">
@@ -58,11 +58,11 @@
             
             <div class="history-content">
               <div class="history-meta">
-                <span class="history-date">{{ formatDate(history.date) }}</span>
+                <span class="history-date">{{ formatDate(history.created_at) }}</span>
                 <span class="history-id">ID: {{ history.id }}</span>
               </div>
               <div class="history-preview">
-                {{ history.title }}
+                {{ history.title_query }}
               </div>
             </div>
 
@@ -119,7 +119,7 @@
       <div class="delete-confirm-content">
         <el-icon class="warning-icon"><Warning /></el-icon>
         <p>{{ $t('chat.actions.deleteWarning') }}</p>
-        <p class="history-title-to-delete">{{ historyToDelete?.title }}</p>
+        <p class="history-title-to-delete">{{ historyToDelete?.title_query }}</p>
       </div>
       <template #footer>
         <span class="dialog-footer">
@@ -149,13 +149,14 @@ import {
   Warning,
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import { getHistoryQuestionList, deleteHistory, renameHistory } from '@/api/chat';
 
-// 定义History接口
+// 定义History接口 - 匹配API返回的数据结构
 interface History {
   id: number;
   dialogue_id: string;
-  title: string;
-  date: string;
+  title_query: string;
+  created_at: string;
 }
 
 const { t } = useI18n();
@@ -185,32 +186,17 @@ const historyToDelete = ref<History | null>(null);
 const fetchHistoryData = async () => {
   loading.value = true;
   try {
-    // 这里应该调用实际的API接口
-    // 暂时使用模拟数据
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    historyList.value = [
-      {
-        id: 1,
-        dialogue_id: 'history_1',
-        title: 'BRCA1基因突变分析',
-        date: '2024-01-15 10:30:00'
-      },
-      {
-        id: 2,
-        dialogue_id: 'history_2',
-        title: 'MAPK信号通路研究',
-        date: '2024-01-14 15:20:00'
-      },
-      {
-        id: 3,
-        dialogue_id: 'history_3',
-        title: 'TP53基因功能分析',
-        date: '2024-01-13 09:15:00'
-      }
-    ];
+    const res = await getHistoryQuestionList();
+    if (res.code === 200 && res.data) {
+      historyList.value = res.data;
+    } else {
+      ElMessage.error(res.msg || '获取历史记录失败');
+      historyList.value = [];
+    }
   } catch (error) {
     console.error('获取历史记录失败:', error);
     ElMessage.error('获取历史记录失败');
+    historyList.value = [];
   } finally {
     loading.value = false;
   }
@@ -244,7 +230,7 @@ const goToChat = () => {
 const handleHistoryAction = (command: string, history: History) => {
   switch (command) {
     case 'rename':
-      renameForm.value.title = history.title;
+      renameForm.value.title = history.title_query;
       historyToRename.value = history;
       renameDialogVisible.value = true;
       break;
@@ -258,19 +244,28 @@ const handleHistoryAction = (command: string, history: History) => {
 // 重命名确认
 const handleRenameConfirm = async () => {
   if (!renameFormRef.value || !historyToRename.value) return;
-  
+
   try {
     const valid = await renameFormRef.value.validate();
     if (valid) {
-      // 这里应该调用实际的API接口
-      // 暂时直接更新本地数据
-      const index = historyList.value.findIndex(h => h.id === historyToRename.value!.id);
-      if (index !== -1) {
-        historyList.value[index].title = renameForm.value.title;
+      // 调用重命名 API
+      const formData = new FormData();
+      formData.append('id', historyToRename.value.id.toString());
+      formData.append('rename', renameForm.value.title);
+
+      const res = await renameHistory(formData);
+      if (res.code === 200) {
+        // 更新本地数据
+        const index = historyList.value.findIndex(h => h.id === historyToRename.value!.id);
+        if (index !== -1) {
+          historyList.value[index].title_query = renameForm.value.title;
+        }
+        renameDialogVisible.value = false;
+        historyToRename.value = null;
+        ElMessage.success('重命名成功');
+      } else {
+        ElMessage.error(res.msg || '重命名失败');
       }
-      renameDialogVisible.value = false;
-      historyToRename.value = null;
-      ElMessage.success('重命名成功');
     }
   } catch (error) {
     console.error('重命名失败:', error);
@@ -281,17 +276,25 @@ const handleRenameConfirm = async () => {
 // 删除确认
 const handleDeleteConfirm = async () => {
   if (!historyToDelete.value) return;
-  
+
   try {
-    // 这里应该调用实际的API接口
-    // 暂时直接从本地列表中移除
-    const index = historyList.value.findIndex(h => h.id === historyToDelete.value!.id);
-    if (index !== -1) {
-      historyList.value.splice(index, 1);
+    // 调用删除 API
+    const formData = new FormData();
+    formData.append('id', historyToDelete.value.id.toString());
+
+    const res = await deleteHistory(formData);
+    if (res.code === 200) {
+      // 从本地列表中移除
+      const index = historyList.value.findIndex(h => h.id === historyToDelete.value!.id);
+      if (index !== -1) {
+        historyList.value.splice(index, 1);
+      }
+      deleteDialogVisible.value = false;
+      historyToDelete.value = null;
+      ElMessage.success('删除成功');
+    } else {
+      ElMessage.error(res.msg || '删除失败');
     }
-    deleteDialogVisible.value = false;
-    historyToDelete.value = null;
-    ElMessage.success('删除成功');
   } catch (error) {
     console.error('删除失败:', error);
     ElMessage.error('删除失败，请重试');

@@ -94,6 +94,7 @@ const handleFinish = () => {
       margin: 16px 0 8px;
       line-height: 1.25;
       font-weight: 600;
+      color: var(--el-text-color-primary);
     }
     
     h1 { font-size: 1.5em; }
@@ -115,7 +116,7 @@ const handleFinish = () => {
     }
     
     pre {
-      background-color: #f8f9fa;
+      background-color: var(--el-fill-color-light);
       margin: 12px 0;
       padding: 12px;
       border-radius: 4px;
@@ -123,7 +124,7 @@ const handleFinish = () => {
     }
     
     code {
-      background-color: rgba(175, 184, 193, 0.2);
+      background-color: var(--el-fill-color);
       padding: 0.2em 0.4em;
       border-radius: 4px;
       font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
@@ -135,7 +136,7 @@ const handleFinish = () => {
     }
     
     a {
-      color: #0969da;
+      color: var(--el-color-primary);
       text-decoration: none;
       
       &:hover {
@@ -144,10 +145,33 @@ const handleFinish = () => {
     }
     
     blockquote {
-      color: #57606a;
-      border-left: 0.25em solid #d0d7de;
+      color: var(--el-text-color-secondary);
+      border-left: 0.25em solid var(--el-border-color);
       padding: 0 1em;
       margin: 12px 0;
+    }
+
+    table {
+      border-collapse: collapse;
+      margin: 12px 0;
+      width: 100%;
+
+      th,
+      td {
+        border: 1px solid var(--el-border-color);
+        padding: 6px 13px;
+        text-align: left;
+        color: var(--el-text-color-primary);
+      }
+
+      th {
+        font-weight: 600;
+        background-color: var(--el-fill-color-light);
+      }
+
+      tr:nth-child(2n) {
+        background-color: var(--el-fill-color-lighter);
+      }
     }
   }
 
@@ -156,11 +180,11 @@ const handleFinish = () => {
     font-size: 14px;
     line-height: 1.5;
     word-wrap: break-word;
-    color: #1f2328;
+    color: var(--el-text-color-primary);
     background-color: transparent;
 
     pre {
-      background-color: #f8f9fa;
+      background-color: var(--el-fill-color-light);
       margin: 12px 0;
       padding: 12px;
       border-radius: 4px;
@@ -168,7 +192,7 @@ const handleFinish = () => {
     }
 
     code {
-      background-color: rgba(175, 184, 193, 0.2);
+      background-color: var(--el-fill-color);
       padding: 0.2em 0.4em;
       border-radius: 4px;
       font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
@@ -178,14 +202,16 @@ const handleFinish = () => {
       border-collapse: collapse;
       margin: 12px 0;
       width: 100%;
-      
-      th, td {
-        border: 1px solid #d0d7de;
+
+      th,
+      td {
+        border: 1px solid var(--el-border-color);
         padding: 6px 13px;
+        color: var(--el-text-color-primary);
       }
-      
+
       tr:nth-child(2n) {
-        background-color: #f6f8fa;
+        background-color: var(--el-fill-color-lighter);
       }
     }
 
@@ -200,8 +226,8 @@ const handleFinish = () => {
     }
 
     blockquote {
-      color: #57606a;
-      border-left: 0.25em solid #d0d7de;
+      color: var(--el-text-color-secondary);
+      border-left: 0.25em solid var(--el-border-color);
       padding: 0 1em;
       margin: 12px 0;
     }
@@ -210,6 +236,7 @@ const handleFinish = () => {
       margin: 16px 0 8px;
       line-height: 1.25;
       font-weight: 600;
+      color: var(--el-text-color-primary);
     }
 
     img {
@@ -221,12 +248,11 @@ const handleFinish = () => {
       height: 0.25em;
       padding: 0;
       margin: 24px 0;
-      // background-color: #d0d7de;
       border: 0;
     }
 
     a {
-      color: #0969da;
+      color: var(--el-color-primary);
       text-decoration: none;
       
       &:hover {
@@ -235,4 +261,13 @@ const handleFinish = () => {
     }
   }
 }
-</style> 
+.cif-container {
+  width: 100%;
+  height: 600px; // 固定高度，或使用 min-height
+  min-height: 300px;
+  position: relative;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+</style>

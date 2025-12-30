@@ -411,23 +411,32 @@
   
   .el-input,
   .el-textarea {
-    .el-input__inner,
+    .el-input__wrapper,
     .el-textarea__inner {
       background-color: #1a1a1a !important;
       border-color: var(--el-border-color) !important;
+      box-shadow: none !important;
+    }
+
+    .el-input__inner {
+      background-color: transparent !important;
       color: var(--el-text-color-primary) !important;
-      
+    }
+
+    .el-textarea__inner {
+      color: var(--el-text-color-primary) !important;
+
       &:focus {
         border-color: var(--el-color-primary) !important;
       }
     }
   }
-  
+
   .el-select {
-    .el-input .el-input__inner {
+    .el-select__wrapper {
       background-color: #1a1a1a !important;
       border-color: var(--el-border-color) !important;
-      color: var(--el-text-color-primary) !important;
+      box-shadow: none !important;
     }
   }
   
@@ -628,10 +637,9 @@
   .el-textarea {
     .el-input__inner,
     .el-textarea__inner {
-      background-color: var(--el-bg-color) !important;
       border-color: var(--el-border-color) !important;
       color: var(--el-text-color-primary) !important;
-      
+
       &:focus {
         border-color: var(--el-color-primary) !important;
       }

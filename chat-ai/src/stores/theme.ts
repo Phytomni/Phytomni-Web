@@ -94,6 +94,7 @@ export const useThemeStore = defineStore('theme', {
         root.style.setProperty('--el-border-color-light', 'rgba(84, 84, 84, 0.32)');
         root.style.setProperty('--el-fill-color-light', '#2a2a2a');
         root.style.setProperty('--el-fill-color', '#2a2a2a');
+        root.style.setProperty('--el-fill-color-lighter', '#333333');
         
         // 深色主题按钮变量
         root.style.setProperty('--sidebar-btn-bg', '#2a2a2a');
@@ -127,6 +128,7 @@ export const useThemeStore = defineStore('theme', {
         root.style.setProperty('--el-border-color-light', 'rgba(60, 60, 60, 0.08)');
         root.style.setProperty('--el-fill-color-light', '#f5f7fa');
         root.style.setProperty('--el-fill-color', '#f0f2f5');
+        root.style.setProperty('--el-fill-color-lighter', '#fafafa');
         
         // 浅色主题按钮变量
         root.style.setProperty('--sidebar-btn-bg', '#f0f2ff');

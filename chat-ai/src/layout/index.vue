@@ -39,7 +39,7 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
           </div>
         </el-header>
         <el-container class="content-container">
-          <el-aside :width="isCollapse ? '64px' : '200px'" class="sidebar">
+          <el-aside v-if="!hideSidebar" :width="isCollapse ? '64px' : '200px'" class="sidebar">
             <el-menu
               :default-active="activeMenu"
               :router="true"
@@ -150,6 +150,11 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
   // 判断是否是无布局路由
   const noLayoutRoute = computed(() => {
     return route.meta.layout === 'nolayout';
+  });
+
+  // 判断是否隐藏侧边栏
+  const hideSidebar = computed(() => {
+    return route.meta.hideSidebar === true;
   });
 
   // 侧边栏折叠状态

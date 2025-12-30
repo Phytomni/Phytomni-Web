@@ -11,39 +11,31 @@
         <div class="profile-section">
           <div class="section-header">
             <h3>{{ $t('profile.basicInfo.title') }}</h3>
-            <el-button 
-              type="primary" 
-              size="small" 
-              @click="editBasicInfo"
-              :disabled="editingBasicInfo"
-            >
-              {{ editingBasicInfo ? $t('common.save') : $t('common.edit') }}
-            </el-button>
           </div>
-          
+
           <div class="section-content">
-            <el-form 
-              :model="basicInfoForm" 
-              :disabled="!editingBasicInfo"
+            <el-form
+              :model="basicInfoForm"
+              disabled
               label-width="120px"
               class="profile-form"
             >
               <el-form-item :label="$t('profile.basicInfo.username')">
                 <el-input v-model="basicInfoForm.username" />
               </el-form-item>
-              
+
               <el-form-item :label="$t('profile.basicInfo.email')">
                 <el-input v-model="basicInfoForm.email" />
               </el-form-item>
-              
+
               <el-form-item :label="$t('profile.basicInfo.phone')">
                 <el-input v-model="basicInfoForm.phone" />
               </el-form-item>
-              
+
               <el-form-item :label="$t('profile.basicInfo.organization')">
                 <el-input v-model="basicInfoForm.organization" />
               </el-form-item>
-              
+
               <el-form-item :label="$t('profile.basicInfo.position')">
                 <el-input v-model="basicInfoForm.position" />
               </el-form-item>
@@ -104,17 +96,7 @@
                 <div class="usage-number">{{ usageStats.totalChats }}</div>
                 <div class="usage-label">{{ $t('profile.usage.totalChats') }}</div>
               </div>
-              
-              <div class="usage-item">
-                <div class="usage-number">{{ usageStats.totalFiles }}</div>
-                <div class="usage-label">{{ $t('profile.usage.totalFiles') }}</div>
-              </div>
-              
-              <div class="usage-item">
-                <div class="usage-number">{{ usageStats.storageUsed }}</div>
-                <div class="usage-label">{{ $t('profile.usage.storageUsed') }}</div>
-              </div>
-              
+
               <div class="usage-item">
                 <div class="usage-number">{{ usageStats.lastLogin }}</div>
                 <div class="usage-label">{{ $t('profile.usage.lastLogin') }}</div>
@@ -189,16 +171,15 @@ import { userStore } from '@/stores';
 import {
   Lock,
   User,
-  Edit,
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import { getUserProfile } from '@/api/auth';
 
 const { t } = useI18n();
 const router = useRouter();
 const UserStore = userStore();
 
 // 响应式数据
-const editingBasicInfo = ref(false);
 const passwordDialogVisible = ref(false);
 
 // 基本信息表单
@@ -220,29 +201,75 @@ const passwordForm = reactive({
 // 使用统计
 const usageStats = reactive({
   totalChats: 0,
-  totalFiles: 0,
-  storageUsed: '0 MB',
   lastLogin: '--',
 });
 
 // 表单引用
 const passwordFormRef = ref();
 
+// 新密码强度验证函数 - 验证密码是否满足复杂度要求
+const validateNewPasswordStrength = (rule: any, value: string, callback: any) => {
+  if (!value) {
+    callback(new Error(t('user.validation.passwordRequired')));
+    return;
+  }
+
+  // 至少8位
+  if (value.length < 8) {
+    callback(new Error(t('user.validation.passwordMinLength8')));
+    return;
+  }
+
+  // 最多16位
+  if (value.length > 16) {
+    callback(new Error(t('user.validation.passwordMaxLength16')));
+    return;
+  }
+
+  // 包含大写字母
+  if (!/[A-Z]/.test(value)) {
+    callback(new Error(t('user.validation.passwordNeedUppercase')));
+    return;
+  }
+
+  // 包含小写字母
+  if (!/[a-z]/.test(value)) {
+    callback(new Error(t('user.validation.passwordNeedLowercase')));
+    return;
+  }
+
+  // 包含数字
+  if (!/[0-9]/.test(value)) {
+    callback(new Error(t('user.validation.passwordNeedNumber')));
+    return;
+  }
+
+  // 包含特殊符号
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(value)) {
+    callback(new Error(t('user.validation.passwordNeedSpecial')));
+    return;
+  }
+
+  callback();
+};
+
 // 密码验证规则
 const passwordRules = {
   oldPassword: [
-    { required: true, message: '请输入旧密码', trigger: 'blur' }
+    { required: true, message: () => t('profile.security.oldPasswordPlaceholder'), trigger: 'blur' }
   ],
   newPassword: [
-    { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+    {
+      validator: validateNewPasswordStrength,
+      trigger: 'blur'
+    }
   ],
   confirmPassword: [
-    { required: true, message: '请确认新密码', trigger: 'blur' },
+    { required: true, message: () => t('user.validation.passwordMismatch'), trigger: 'blur' },
     {
       validator: (rule: any, value: string, callback: Function) => {
         if (value !== passwordForm.newPassword) {
-          callback(new Error('两次输入的密码不一致'));
+          callback(new Error(t('user.validation.passwordMismatch')));
         } else {
           callback();
         }
@@ -261,25 +288,6 @@ const getPermissionTagType = (permission: string) => {
       return 'warning';
     default:
       return 'info';
-  }
-};
-
-// 编辑基本信息
-const editBasicInfo = async () => {
-  if (editingBasicInfo.value) {
-    // 保存信息
-    try {
-      // 这里应该调用实际的API接口
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      editingBasicInfo.value = false;
-      ElMessage.success('保存成功');
-    } catch (error) {
-      console.error('保存失败:', error);
-      ElMessage.error('保存失败，请重试');
-    }
-  } else {
-    // 开始编辑
-    editingBasicInfo.value = true;
   }
 };
 
@@ -310,25 +318,48 @@ const handlePasswordChange = async () => {
   }
 };
 
+// 格式化日期时间
+const formatDateTime = (dateStr: string | null): string => {
+  if (!dateStr) return '--';
+  try {
+    const date = new Date(dateStr);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  } catch {
+    return '--';
+  }
+};
+
 // 获取用户信息
 const fetchUserInfo = async () => {
   try {
-    // 这里应该调用实际的API接口
-    // 暂时使用模拟数据
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // 填充基本信息
-    basicInfoForm.username = UserStore.name || '未设置';
-    basicInfoForm.email = 'user@example.com';
-    basicInfoForm.phone = '138****8888';
-    basicInfoForm.organization = '中国农业科学院';
-    basicInfoForm.position = '研究员';
-    
-    // 填充使用统计
-    usageStats.totalChats = 156;
-    usageStats.totalFiles = 23;
-    usageStats.storageUsed = '45.2 MB';
-    usageStats.lastLogin = '2024-01-15 10:30';
+    const email = UserStore.name;
+    if (!email) {
+      ElMessage.warning('未获取到用户信息');
+      return;
+    }
+
+    const res = await getUserProfile(email);
+    if (res.code === 200 && res.data) {
+      const data = res.data;
+
+      // 填充基本信息
+      basicInfoForm.username = data.email || '';
+      basicInfoForm.email = data.email || '';
+      basicInfoForm.phone = data.phone || '';
+      basicInfoForm.organization = data.organization || '';
+      basicInfoForm.position = data.position || '';
+
+      // 填充使用统计
+      usageStats.totalChats = data.dialogue_count || 0;
+      usageStats.lastLogin = formatDateTime(data.last_login_at);
+    } else {
+      ElMessage.error(res.msg || '获取用户信息失败');
+    }
   } catch (error) {
     console.error('获取用户信息失败:', error);
     ElMessage.error('获取用户信息失败');

@@ -38,6 +38,39 @@
           :label="$t('user.role')"
           align="center" />
         <el-table-column
+          prop="phone"
+          :label="$t('user.phone')"
+          align="center">
+          <template #default="scope">
+            {{ scope.row.phone || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="organization"
+          :label="$t('user.organization')"
+          align="center">
+          <template #default="scope">
+            {{ scope.row.organization || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="position"
+          :label="$t('user.position')"
+          align="center">
+          <template #default="scope">
+            {{ scope.row.position || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="last_login_at"
+          :label="$t('user.lastLoginAt')"
+          align="center"
+          width="180">
+          <template #default="scope">
+            {{ scope.row.last_login_at ?  scope.row.last_login_at.replace('T', ' ').slice(0, 19)  : $t('user.notLoggedIn') }}
+          </template>
+        </el-table-column>
+        <el-table-column
           :label="$t('common.operation')"
           width="250"
           align="center">
@@ -100,9 +133,9 @@
             autocomplete="new-email"
             :disabled="dialogType === 'edit'" />
         </el-form-item>
-        <el-form-item 
-          :label="$t('user.password')" 
-          :prop="dialogType === 'add' ? 'password' : ''"
+        <el-form-item
+          :label="$t('user.password')"
+          prop="password"
           :required="dialogType === 'add'">
           <el-input
             v-model="userForm.password"
@@ -121,6 +154,21 @@
             <el-option label="user" value="user" />
             <el-option label="vip_user" value="vip_user" />
           </el-select>
+        </el-form-item>
+        <el-form-item :label="$t('user.phone')">
+          <el-input
+            v-model="userForm.phone"
+            :placeholder="$t('user.phonePlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="$t('user.organization')">
+          <el-input
+            v-model="userForm.organization"
+            :placeholder="$t('user.organizationPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="$t('user.position')">
+          <el-input
+            v-model="userForm.position"
+            :placeholder="$t('user.positionPlaceholder')" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -150,6 +198,22 @@
         <div class="info-item">
           <span class="label">{{ $t('user.role') }}：</span>
           <span class="value">{{ getRoleName(currentUser.description) }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">{{ $t('user.phone') }}：</span>
+          <span class="value">{{ currentUser.phone || '-' }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">{{ $t('user.organization') }}：</span>
+          <span class="value">{{ currentUser.organization || '-' }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">{{ $t('user.position') }}：</span>
+          <span class="value">{{ currentUser.position || '-' }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">{{ $t('user.lastLoginAt') }}：</span>
+          <span class="value">{{ currentUser.last_login_at || $t('user.notLoggedIn') }}</span>
         </div>
       </div>
       <template #footer>
@@ -184,6 +248,10 @@
     createTime: string;
     lastLogin: string;
     locked_until: string | null;
+    last_login_at: string | null;
+    phone: string;
+    organization: string;
+    position: string;
   }
 
   // 表格相关
@@ -206,6 +274,9 @@
     email: '',
     password: '',
     code: '',
+    phone: '',
+    organization: '',
+    position: '',
   });
 
   // 密码强度验证函数 - 验证密码是否满足复杂度要求
@@ -299,7 +370,7 @@
       vip_user: 'vip_user',
     };
     return codeMap[code] || code;
-  };
+  }
 
   // 获取数据的方法
   const fetchData = async () => {
@@ -337,6 +408,9 @@
     userForm.email = '';
     userForm.password = '';
     userForm.code = '';
+    userForm.phone = '';
+    userForm.organization = '';
+    userForm.position = '';
 
     dialogVisible.value = true;
   };
@@ -348,7 +422,10 @@
     userForm.id = row.id;
     userForm.email = row.email;
     userForm.code = row.code;
-    userForm.password = row.password;
+    userForm.password = '';
+    userForm.phone = row.phone || '';
+    userForm.organization = row.organization || '';
+    userForm.position = row.position || '';
 
     dialogVisible.value = true;
   };
@@ -401,6 +478,9 @@
     userForm.email = '';
     userForm.password = '';
     userForm.code = '';
+    userForm.phone = '';
+    userForm.organization = '';
+    userForm.position = '';
     // 清除表单验证状态
     if (userFormRef.value) {
       userFormRef.value.clearValidate();
@@ -420,6 +500,9 @@
             formData.append('email', userForm.email);
             formData.append('password', userForm.password);
             formData.append('code', userForm.code);
+            formData.append('phone', userForm.phone);
+            formData.append('organization', userForm.organization);
+            formData.append('position', userForm.position);
 
             const res = await addUser(formData);
             if (res.code === 200) {
@@ -440,6 +523,10 @@
             if (userForm.password) {
               formData.append('password', userForm.password);
             }
+            // 添加手机号、机构、职位
+            formData.append('phone', userForm.phone);
+            formData.append('organization', userForm.organization);
+            formData.append('position', userForm.position);
 
             const res = await changePermission(formData);
             if (res.code === 200) {
