@@ -268,6 +268,9 @@ export default {
     positionPlaceholder: 'Please enter position',
     lastLoginAt: 'Last Login',
     notLoggedIn: 'Not logged in',
+    chatLimit: 'Chat Limit',
+    chatLimitPlaceholder: 'Please enter chat limit',
+    unlimited: 'Unlimited',
     validation: {
       emailRequired: 'Please enter username',
       emailFormat: 'Please enter a valid email address',

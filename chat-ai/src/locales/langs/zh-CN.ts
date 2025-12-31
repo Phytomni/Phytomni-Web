@@ -268,6 +268,9 @@ export default {
     positionPlaceholder: '请输入职位',
     lastLoginAt: '最后登录',
     notLoggedIn: '未登录',
+    chatLimit: '对话限制',
+    chatLimitPlaceholder: '请输入对话次数限制',
+    unlimited: '无限制',
     validation: {
       emailRequired: '请输入用户名',
       emailFormat: '请输入正确的邮箱地址',

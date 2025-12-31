@@ -24,7 +24,7 @@ export const getGeneList = (params?: {
 };
 // 基因详情展示
 export const getGeneDetails = (params?: {
-  id?: string;
+  file_name?: string;
   current?: number;
   size?: number;
 }) => {

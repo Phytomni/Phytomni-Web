@@ -71,12 +71,12 @@ interface GeneData {
 const searchQuery = ref('');
 const loading = ref(false);
 const currentPage = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(20);
 const total = ref(0);
 const tableData = ref<GeneData[]>([]);
 
 const handleGeneClick = (gene: GeneData) => {
-  const url = `/gene-display/detail?id=${gene.id}`;
+  const url = `/gene-display/detail?file_name=${gene.file_name}`;
   window.open(url, '_blank');
 };
 

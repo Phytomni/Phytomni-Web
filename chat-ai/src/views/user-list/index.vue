@@ -71,6 +71,15 @@
           </template>
         </el-table-column>
         <el-table-column
+          prop="chat_limit"
+          :label="$t('user.chatLimit')"
+          align="center"
+          width="120">
+          <template #default="scope">
+            {{ scope.row.code === 'guest' ? (scope.row.chat_limit ?? '-') : $t('user.unlimited') }}
+          </template>
+        </el-table-column>
+        <el-table-column
           :label="$t('common.operation')"
           width="250"
           align="center">
@@ -153,6 +162,8 @@
             <el-option label="admin" value="admin" />
             <el-option label="user" value="user" />
             <el-option label="vip_user" value="vip_user" />
+            <el-option label="guest" value="guest" />
+
           </el-select>
         </el-form-item>
         <el-form-item :label="$t('user.phone')">
@@ -169,6 +180,16 @@
           <el-input
             v-model="userForm.position"
             :placeholder="$t('user.positionPlaceholder')" />
+        </el-form-item>
+        <el-form-item
+          v-if="userForm.code === 'guest'"
+          :label="$t('user.chatLimit')"
+          prop="chat_limit">
+          <el-input-number
+            v-model="userForm.chat_limit"
+            :min="0"
+            :placeholder="$t('user.chatLimitPlaceholder')"
+            style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -252,6 +273,7 @@
     phone: string;
     organization: string;
     position: string;
+    chat_limit: number | null;
   }
 
   // 表格相关
@@ -277,6 +299,7 @@
     phone: '',
     organization: '',
     position: '',
+    chat_limit: null as number | null,
   });
 
   // 密码强度验证函数 - 验证密码是否满足复杂度要求
@@ -411,6 +434,7 @@
     userForm.phone = '';
     userForm.organization = '';
     userForm.position = '';
+    userForm.chat_limit = null;
 
     dialogVisible.value = true;
   };
@@ -426,6 +450,7 @@
     userForm.phone = row.phone || '';
     userForm.organization = row.organization || '';
     userForm.position = row.position || '';
+    userForm.chat_limit = row.chat_limit ?? null;
 
     dialogVisible.value = true;
   };
@@ -481,6 +506,7 @@
     userForm.phone = '';
     userForm.organization = '';
     userForm.position = '';
+    userForm.chat_limit = null;
     // 清除表单验证状态
     if (userFormRef.value) {
       userFormRef.value.clearValidate();
@@ -503,6 +529,10 @@
             formData.append('phone', userForm.phone);
             formData.append('organization', userForm.organization);
             formData.append('position', userForm.position);
+            // 如果是 guest 用户，添加 chat_limit 参数
+            if (userForm.code === 'guest' && userForm.chat_limit !== null) {
+              formData.append('chat_limit', userForm.chat_limit.toString());
+            }
 
             const res = await addUser(formData);
             if (res.code === 200) {
@@ -527,6 +557,10 @@
             formData.append('phone', userForm.phone);
             formData.append('organization', userForm.organization);
             formData.append('position', userForm.position);
+            // 如果是 guest 用户，添加 chat_limit 参数
+            if (userForm.code === 'guest' && userForm.chat_limit !== null) {
+              formData.append('chat_limit', userForm.chat_limit.toString());
+            }
 
             const res = await changePermission(formData);
             if (res.code === 200) {
