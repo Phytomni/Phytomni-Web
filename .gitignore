@@ -82,15 +82,10 @@ server_tasks.db
 
 
 
-# go配置文件
-#config/local.yml
-# python配置文件
-#.env
-# Python日志目录
-#tool_log/
-# 上传的文件目录
-# uploads/
-# logs/
+# Python 端 dotenv（含真凭据，永远不进 git；模板见 nky_client_python/.env.example）
+nky_client_python/.env
+# Go 配置文件（含真凭据；模板见 nky_client_go/config/app.yml.example）
+nky_client_go/config/app.yml
 
 # Claude Code
 .claude/
