@@ -14,6 +14,14 @@ type SUser struct {
 	CreatedAt        time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
 	UpdatedAt        time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
 	DeleteAt         *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
+	PasswordChangeAt *time.Time `gorm:"column:password_change_at;type:datetime;comment:密码最后修改时间" json:"password_change_at"`
+	LoginFailedCount int        `gorm:"column:login_failed_count;type:int(11);default:0;comment:登录失败次数" json:"login_failed_count"`
+	LockedUntil      *time.Time `gorm:"column:locked_until;type:datetime;comment:锁定截至时间" json:"locked_until"`
+	LastLoginAt      *time.Time `gorm:"column:last_login_at;type:datetime;comment:最后登录时间" json:"last_login_at"`
+	Phone            string     `gorm:"column:phone;type:varchar(20);comment:手机号" json:"phone"`
+	Organization     string     `gorm:"column:organization;type:varchar(255);comment:所属机构" json:"organization"`
+	Position         string     `gorm:"column:position;type:varchar(255);comment:职位" json:"position"`
+	ChatLimit        int        `gorm:"column:chat_limit;type:int(11);default:0;comment:剩余对话次数" json:"chat_limit"`
 }
 
 func (SUser) TableName() string {
@@ -166,4 +174,24 @@ type SUserFeedback struct {
 
 func (m *SUserFeedback) TableName() string {
 	return "s_user_feedback"
+}
+
+type SUserOperationLog struct {
+	Id           int64     `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
+	UserId       int64     `gorm:"column:user_id;type:bigint(20);default:0;comment:用户ID(未登录为0);index" json:"user_id"`
+	UserEmail    string    `gorm:"column:user_email;type:varchar(255);comment:用户邮箱;index" json:"user_email"`
+	Method       string    `gorm:"column:method;type:varchar(10);comment:请求方法" json:"method"`
+	Path         string    `gorm:"column:path;type:varchar(255);comment:请求路径;index" json:"path"`
+	QueryParams  string    `gorm:"column:query_params;type:text;comment:URL参数" json:"query_params"`
+	BodyParams   string    `gorm:"column:body_params;type:longtext;comment:请求体(已脱敏)" json:"body_params"`
+	ClientIp     string    `gorm:"column:client_ip;type:varchar(50);comment:客户端IP" json:"client_ip"`
+	UserAgent    string    `gorm:"column:user_agent;type:varchar(500);comment:用户代理" json:"user_agent"`
+	StatusCode   int       `gorm:"column:status_code;type:int(11);comment:HTTP状态码" json:"status_code"`
+	Latency      int64     `gorm:"column:latency;type:bigint(20);comment:耗时(毫秒)" json:"latency"`
+	ErrorMessage string    `gorm:"column:error_message;type:text;comment:错误信息" json:"error_message"`
+	CreatedAt    time.Time `gorm:"column:created_at;type:datetime;comment:创建时间;index" json:"created_at"`
+}
+
+func (m *SUserOperationLog) TableName() string {
+	return "s_user_operation_logs"
 }
