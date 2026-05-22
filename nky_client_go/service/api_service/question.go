@@ -1,12 +1,14 @@
 package api_service
 
 import (
+	"context"
 	"errors"
-	"github.com/gin-gonic/gin"
 	"nky_client_go/common"
 	"nky_client_go/model"
 	"nky_client_go/server/api"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (ps *ApiService) ApiQuestionStart(ctx *gin.Context, question string) (response *common.QuestionHWResponse, err error) {
@@ -18,8 +20,8 @@ func (ps *ApiService) ApiQuestionStart(ctx *gin.Context, question string) (respo
 	if err != nil {
 		return nil, errors.New("回答创建失败")
 	}
-	err = model.Default().Model(&model.SQuestionLog{}).Debug().Create(&model.SQuestionLog{
-		UserId:   ps.GetUserIdByEmail(ctx.GetString("username")),
+	err = model.DB(ctx).Model(&model.SQuestionLog{}).Debug().Create(&model.SQuestionLog{
+		UserId:   ps.GetUserIdByEmail(ctx, ctx.GetString("username")),
 		Question: question,
 		Answer:   rag,
 	}).Error
@@ -40,10 +42,10 @@ func (ps *ApiService) ApiQuestionList(ctx *gin.Context, page int, size int) (res
 	offset := size * (page - 1)
 
 	name, _ := ctx.Get("username")
-	userId := ps.GetUserIdByEmail(name.(string))
+	userId := ps.GetUserIdByEmail(ctx, name.(string))
 
 	var questionItemList []model.SQuestionLog
-	db := model.Default().Model(&model.SQuestionLog{}).Debug().Where("user_id = ?", userId)
+	db := model.DB(ctx).Model(&model.SQuestionLog{}).Debug().Where("user_id = ?", userId)
 	db = db.Count(&response.Total)
 	db = db.Order("id desc").Limit(size).Offset(offset)
 	db.Find(&questionItemList)
@@ -60,9 +62,9 @@ func (ps *ApiService) ApiQuestionList(ctx *gin.Context, page int, size int) (res
 	return
 }
 
-func (ps *ApiService) ApiQuestionInfo(id int) (response common.QuestionInfoResponse, apiErr api.Error) {
+func (ps *ApiService) ApiQuestionInfo(ctx context.Context, id int) (response common.QuestionInfoResponse, apiErr api.Error) {
 	var questionInfo model.SQuestionLog
-	db := model.Default().Model(&model.SQuestionLog{}).Debug().Where("id = ?", id)
+	db := model.DB(ctx).Model(&model.SQuestionLog{}).Debug().Where("id = ?", id)
 	db.First(&questionInfo)
 
 	response.Info = common.QuestionItem{
@@ -81,8 +83,8 @@ func (ps *ApiService) ApiKooSearchQuestion(ctx *gin.Context, request common.KooS
 	}
 
 	content := request.KooSearchMessages[len(request.KooSearchMessages)-1]
-	err = model.Default().Model(&model.SKooSearchQuestionLog{}).Debug().Create(&model.SKooSearchQuestionLog{
-		UserId:     ps.GetUserIdByEmail(ctx.GetString("username")),
+	err = model.DB(ctx).Model(&model.SKooSearchQuestionLog{}).Debug().Create(&model.SKooSearchQuestionLog{
+		UserId:     ps.GetUserIdByEmail(ctx, ctx.GetString("username")),
 		Question:   content.Content,
 		ChatId:     request.ChatID,
 		Answer:     question.ChatResult.Message,

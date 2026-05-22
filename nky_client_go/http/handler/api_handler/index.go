@@ -44,7 +44,7 @@ func (ph *ApiHandler) ApiQuestionList(ctx *gin.Context) {
 
 func (ph *ApiHandler) ApiQuestionInfo(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Query("id"))
-	response, err := ph.service.ApiQuestionInfo(id)
+	response, err := ph.service.ApiQuestionInfo(ctx, id)
 	if err != nil {
 		ctx.JSON(errs.ErrResp(err))
 		return

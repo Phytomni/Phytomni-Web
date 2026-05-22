@@ -3,7 +3,6 @@ package api_handler
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"nky_client_go/utils/errs"
 	"os"
 	"path/filepath"
+
+	"github.com/gin-gonic/gin"
 
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ func (ph *ApiHandler) ApiGeneList(ctx *gin.Context) {
 	title := ctx.Query("title")
 
 	if title != "" {
-		list, total, totalPages, err := ph.service.ApiGeneSearch(current, size, title)
+		list, total, totalPages, err := ph.service.ApiGeneSearch(ctx, current, size, title)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 			return
@@ -36,7 +37,7 @@ func (ph *ApiHandler) ApiGeneList(ctx *gin.Context) {
 
 		ctx.JSON(errs.SucResp(data))
 	} else {
-		list, total, totalPages, err := ph.service.ApiGeneList(current, size)
+		list, total, totalPages, err := ph.service.ApiGeneList(ctx, current, size)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		}
@@ -51,9 +52,13 @@ func (ph *ApiHandler) ApiGeneList(ctx *gin.Context) {
 	}
 }
 func (ph *ApiHandler) ApiGeneDetails(ctx *gin.Context) {
-	id, _ := strconv.Atoi(ctx.Query("id"))
+	fileName := ctx.Query("file_name")
+	if fileName == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "参数 file_name 不能为空"})
+		return
+	}
 
-	list, err := ph.service.ApiGeneDetails(id)
+	list, err := ph.service.ApiGeneDetails(ctx, fileName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -144,7 +149,7 @@ func (ph *ApiHandler) ApiGeneDetailsStorage(ctx *gin.Context) {
 			string(fileContent), titlesStr)
 
 		// 存储到数据库
-		err = ph.service.ApiGeneDetailsStorage(fileHeader.Filename, combinedContent, speciesCode, geneId)
+		err = ph.service.ApiGeneDetailsStorage(ctx, fileHeader.Filename, combinedContent, speciesCode, geneId)
 		if err != nil {
 			log.Printf("Failed to store file %s: %v", fileHeader.Filename, err)
 			continue
@@ -208,7 +213,7 @@ func (ph *ApiHandler) ApiDownloadAnalystAgentObsFile(ctx *gin.Context) {
 	obsPath := ctx.Query("obs_path")
 	username, _ := ctx.Get("username")
 
-	obsPath, err := ph.service.ApiDownloadAnalystAgentObsFile(username.(string), obsPath)
+	obsPath, err := ph.service.ApiDownloadAnalystAgentObsFile(ctx, username.(string), obsPath)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -217,11 +222,30 @@ func (ph *ApiHandler) ApiDownloadAnalystAgentObsFile(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(obsPath))
 }
 
+func (ph *ApiHandler) ApiDownloadAnalystAgentObsImages(ctx *gin.Context) {
+	obsPath := ctx.Query("obs_path")
+	username, _ := ctx.Get("username")
+
+	// 简单处理 username，防止 panic
+	uStr := ""
+	if username != nil {
+		uStr = username.(string)
+	}
+
+	imageUrls, err := ph.service.ApiDownloadAnalystAgentObsImages(ctx, uStr, obsPath)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		return
+	}
+
+	ctx.JSON(errs.SucResp(imageUrls))
+}
+
 func (ph *ApiHandler) ApiGetDownloadObsFile(ctx *gin.Context) {
 	obsPath := ctx.Query("obs_path")
 	username := ctx.Query("username")
 
-	obsPath, err := ph.service.ApiGetDownloadObsFile(username, obsPath)
+	obsPath, err := ph.service.ApiGetDownloadObsFile(ctx, username, obsPath)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -239,7 +263,7 @@ func (ph *ApiHandler) ApiDownloadObsRenderingFile(ctx *gin.Context) {
 		return
 	}
 	// 获取文件内容和文件名
-	content, filename, err := ph.service.ApiDownloadObsRenderingFile(id, format)
+	content, filename, err := ph.service.ApiDownloadObsRenderingFile(ctx, id, format)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return

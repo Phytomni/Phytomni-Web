@@ -8,7 +8,7 @@ import (
 )
 
 func Api(r *gin.RouterGroup) {
-	prefixRouter := r.Group("auth").Use(middleware.GlobalMiddleware(), middleware.CORS())
+	prefixRouter := r.Group("auth").Use(middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
 	homeHandler := api_handler.NewApiHandler()
 	{
 		prefixRouter.POST("/user/register", homeHandler.ApiUserRegister)                //自主注册
@@ -18,7 +18,7 @@ func Api(r *gin.RouterGroup) {
 
 	}
 
-	prefixTokenRouter := r.Group("v1").Use(middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.CORS())
+	prefixTokenRouter := r.Group("v1").Use(middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.CORS(), middleware.OperationLog())
 	homeTokenHandler := api_handler.NewApiHandler()
 	{
 		//todo 以下为新需求的使用接口
@@ -35,8 +35,10 @@ func Api(r *gin.RouterGroup) {
 		prefixTokenRouter.POST("/modify/password", homeTokenHandler.ApiModifyPassword)         //用户个人修改密码
 		prefixTokenRouter.GET("/permission/user/list", homeTokenHandler.ApiPermissionUserList) //管理员用户列表
 		prefixTokenRouter.POST("/modify/permission", homeTokenHandler.ApiModifyPermission)     //管理员,超级管理员修改权限。密码                                                      //管理员修改用户权限
+		prefixTokenRouter.POST("/user/unlock", homeTokenHandler.ApiUnlockUser)                 //管理员手动解锁用户
 		prefixTokenRouter.GET("/permission/user/tool", homeTokenHandler.ApiPermissionUserTool) //用户工具权限展示
 		prefixTokenRouter.POST("/user/feedback", homeTokenHandler.ApiUserFeedback)             //用户反馈记录
+		prefixTokenRouter.GET("/user/profile", homeTokenHandler.ApiGetUserProfile)             //查询个人资料
 
 		prefixTokenRouter.GET("/async_task/list", homeTokenHandler.ApiAsyncTaskList) //查询任务列表
 		prefixTokenRouter.GET("/async_task/info", homeTokenHandler.ApiAsyncTaskInfo) //查询任务状态
@@ -44,13 +46,17 @@ func Api(r *gin.RouterGroup) {
 		prefixTokenRouter.GET("/analyst/get_log", homeTokenHandler.ApiAnalystAgentGetLog) //查询分析日志
 		//prefixTokenRouter.POST("/analyst/update_log", homeTokenHandler.ApiAnalystAgentUpdateLog) //查询并更新日志内容
 
+		// 增加日志查询接口
+		prefixTokenRouter.POST("/operation/logs", homeTokenHandler.ApiGetOperationLogs) //查询用户操作日志
+
 		//实时创建下载链接能力
 
 		prefixTokenRouter.GET("/gene/list", homeTokenHandler.ApiGeneList)                       //基因测试数据列表
 		prefixTokenRouter.GET("/gene/details", homeTokenHandler.ApiGeneDetails)                 //模拟数据详情
 		prefixTokenRouter.POST("/gene/details/storage", homeTokenHandler.ApiGeneDetailsStorage) //基因示例迭代数据
 
-		prefixTokenRouter.GET("/download/analyst_agent/obs_file", homeTokenHandler.ApiDownloadAnalystAgentObsFile) //获取AnalystAgent的obs文件下载链接
+		prefixTokenRouter.GET("/download/analyst_agent/obs_file", homeTokenHandler.ApiDownloadAnalystAgentObsFile)     //获取AnalystAgent的obs文件下载链接
+		prefixTokenRouter.GET("/download/analyst_agent/obs_images", homeTokenHandler.ApiDownloadAnalystAgentObsImages) //获取AnalystAgent的obs图片下载链接
 
 		prefixTokenRouter.POST("/download/rendering_file", homeTokenHandler.ApiDownloadObsRenderingFile) //文件格式转换下载
 
