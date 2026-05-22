@@ -86,6 +86,11 @@ server_tasks.db
 nky_client_python/.env
 # Go 配置文件（含真凭据；模板见 nky_client_go/config/app.yml.example）
 nky_client_go/config/app.yml
+# 前端 Vite mode-specific env（模板见 chat-ai/.env.dev.example 等）
+chat-ai/.env
+chat-ai/.env.dev
+chat-ai/.env.prod
+chat-ai/.env.staging
 
 # Claude Code
 .claude/

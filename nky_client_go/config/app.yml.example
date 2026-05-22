@@ -16,7 +16,7 @@ debug: true
 # on the other. Use a long random string (e.g. `openssl rand -hex 32`).
 # ---------------------------------------------------------------------
 jwt:
-  secret_key: "REPLACE_WITH_RANDOM_STRING"
+  secret_key: "your-random-jwt-secret"
 
 # ---------------------------------------------------------------------
 # MySQL connection. The Logger hook (db/logger.go) writes every SQL
@@ -27,7 +27,7 @@ jwt:
 db:
   nky_client_go:
     dialect: mysql
-    dsn: "root:REPLACE_PASS@tcp(localhost:3306)/nongke?charset=utf8mb4&parseTime=True&loc=Local"
+    dsn: "root:your-mysql-password@tcp(localhost:3306)/nongke?charset=utf8mb4&parseTime=True&loc=Local"
 
 # ---------------------------------------------------------------------
 # Redis cache (cache/client.go); currently initialized but main.go
@@ -38,7 +38,7 @@ redis:
   clients:
     web:
       addrs:
-        - "REPLACE_REDIS_HOST:6379"
+        - "your-redis-host:6379"
       db: 0
       password:
       type: single-node
@@ -65,8 +65,8 @@ cron:
 # ---------------------------------------------------------------------
 koosearch:
   url:
-    question_url: "http://REPLACE_KOOSEARCH_HOST:8000/v1/koosearch/experience/chat"
-    search_url: "http://REPLACE_KOOSEARCH_HOST:8000/v1/koosearch/experience/search"
+    question_url: "http://your-koosearch-host:8000/v1/koosearch/experience/chat"
+    search_url: "http://your-koosearch-host:8000/v1/koosearch/experience/search"
 
 # ---------------------------------------------------------------------
 # Gene example file root — ApiGeneDetails reads files from here.
