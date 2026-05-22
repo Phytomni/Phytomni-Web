@@ -81,3 +81,12 @@ gene_file_path: "/var/lib/phytomni/gene_examples"
 # unbounded.
 # ---------------------------------------------------------------------
 guest_default_chat_limit: 5
+
+# ---------------------------------------------------------------------
+# Dify chat-messages API — service/api_service/dialogue_demo.go calls
+# RunDialogue which POSTs to this URL with Bearer api_key. Both keys
+# are required; the runtime errors out when either is empty.
+# ---------------------------------------------------------------------
+dify:
+  chat_messages_url: "http://your-dify-host/v1/chat-messages"
+  api_key: "your-dify-app-key"

@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"nky_client_go/common"
+
+	"github.com/spf13/viper"
 )
 
 func RunDialogue(ResearchTheme, user, query, conversationId, messageId string, files []string) (response *common.DialogueResponse, err error) {
@@ -31,11 +34,17 @@ func RunDialogue(ResearchTheme, user, query, conversationId, messageId string, f
 	}
 	client := &http.Client{Transport: tr}
 
-	req, err := http.NewRequest("POST", "http://1.95.214.41/v1/chat-messages", bytes.NewBuffer(jsonData))
+	difyURL := viper.GetString("dify.chat_messages_url")
+	difyKey := viper.GetString("dify.api_key")
+	if difyURL == "" || difyKey == "" {
+		return nil, errors.New("dify.chat_messages_url 或 dify.api_key 未配置")
+	}
+
+	req, err := http.NewRequest("POST", difyURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer [REDACTED-DIFY-KEY]")
+	req.Header.Set("Authorization", "Bearer "+difyKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)

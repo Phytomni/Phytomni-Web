@@ -153,10 +153,10 @@
     const userInput = document.getElementById('user-input');
     const sendButton = document.getElementById('send-button');
 
-    // JWT Token
-    const authToken = '[REDACTED-DEMO-JWT]';
-    //const authToken =localStorage.getItem('authToken');
-    console.log(authToken)
+    // JWT Token — fetched at runtime from localStorage so this static
+    // demo page never carries a real signed token.
+    const authToken = localStorage.getItem('authToken') || '';
+    console.log(authToken);
     // 获取AI回复函数
     async function getAIResponse(userMessage) {
         try {
