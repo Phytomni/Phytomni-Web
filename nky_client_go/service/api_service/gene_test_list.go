@@ -118,7 +118,7 @@ func (ps *ApiService) ApiGeneDetails(ctx context.Context, fileName string) (*mod
 		path = `E:\桌面\1228\20251228\nky_client_python\mcp_server_phytomni\.out`
 	}
 
-	fullPath := fmt.Sprintf("%s\\%s", path, fileName)
+	fullPath := fmt.Sprintf("%s/%s", path, fileName)
 
 	// 安全检查：确保文件路径在目标目录内，防止目录遍历攻击
 	// 这里简化处理，只检查文件名是否包含 ..
