@@ -2,12 +2,11 @@ package api_service
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"io"
 	"io/ioutil"
 	"log"
@@ -20,6 +19,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type TaskStatusResponse struct {
@@ -28,6 +30,69 @@ type TaskStatusResponse struct {
 
 func GetTaskStatus(ctx *gin.Context, taskIds []string) {
 	fmt.Printf("当前共%d条任务开始查询！\n", len(taskIds))
+
+	// 1. 首先获取华为云认证token (提取到循环外，避免重复认证)
+	authData := map[string]interface{}{
+		"auth": map[string]interface{}{
+			"identity": map[string]interface{}{
+				"password": map[string]interface{}{
+					"user": map[string]interface{}{
+						"name":     "[REDACTED]",
+						"password": "[REDACTED]",
+						"domain": map[string]interface{}{
+							"name": "[REDACTED]",
+						},
+					},
+				},
+				"methods": []string{"password"},
+			},
+			"scope": map[string]interface{}{
+				"project": map[string]interface{}{
+					"name": "cn-east-3",
+				},
+			},
+		},
+	}
+
+	authJson, err := json.Marshal(authData)
+	if err != nil {
+		log.Printf("JSON编码失败: %v", err)
+		return
+	}
+
+	authReq, err := http.NewRequest("POST", "https://iam.cn-east-3.myhuaweicloud.com/v3/auth/tokens", bytes.NewBuffer(authJson))
+	if err != nil {
+		log.Printf("创建认证请求失败: %v", err)
+		return
+	}
+	authReq.Header.Set("Content-Type", "application/json")
+
+	authTr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	authClient := &http.Client{Transport: authTr}
+
+	authResp, err := authClient.Do(authReq)
+	if err != nil {
+		log.Printf("认证请求失败: %v", err)
+		return
+	}
+	defer authResp.Body.Close()
+
+	if authResp.StatusCode >= 400 {
+		log.Printf("认证失败，状态码: %d", authResp.StatusCode)
+		// 读取并打印详细错误信息
+		bodyBytes, _ := ioutil.ReadAll(authResp.Body)
+		log.Printf("认证失败详情: %s", string(bodyBytes))
+		return
+	}
+
+	// 获取X-Subject-Token
+	XSToken := authResp.Header.Get("X-Subject-Token")
+	if XSToken == "" {
+		log.Printf("未获取到认证token")
+		return
+	}
 
 	var wg sync.WaitGroup
 	maxConcurrent := 10 // 最大并发数
@@ -44,66 +109,7 @@ func GetTaskStatus(ctx *gin.Context, taskIds []string) {
 				wg.Done()
 			}()
 
-			// 1. 首先获取华为云认证token
-			authData := map[string]interface{}{
-				"auth": map[string]interface{}{
-					"identity": map[string]interface{}{
-						"password": map[string]interface{}{
-							"user": map[string]interface{}{
-								"name":     "[REDACTED]",
-								"password": "[REDACTED]",
-								"domain": map[string]interface{}{
-									"name": "[REDACTED]",
-								},
-							},
-						},
-						"methods": []string{"password"},
-					},
-					"scope": map[string]interface{}{
-						"project": map[string]interface{}{
-							"name": "cn-east-3",
-						},
-					},
-				},
-			}
-
-			authJson, err := json.Marshal(authData)
-			if err != nil {
-				log.Printf("JSON编码失败: %v", err)
-				return
-			}
-
-			authReq, err := http.NewRequest("POST", "https://iam.cn-east-3.myhuaweicloud.com/v3/auth/tokens", bytes.NewBuffer(authJson))
-			if err != nil {
-				log.Printf("创建认证请求失败: %v", err)
-				return
-			}
-			authReq.Header.Set("Content-Type", "application/json")
-
-			authTr := &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			}
-			authClient := &http.Client{Transport: authTr}
-
-			authResp, err := authClient.Do(authReq)
-			if err != nil {
-				log.Printf("认证请求失败: %v", err)
-				return
-			}
-			defer authResp.Body.Close()
-
-			if authResp.StatusCode >= 400 {
-				log.Printf("认证失败，状态码: %d", authResp.StatusCode)
-				return
-			}
-
-			// 获取X-Subject-Token
-			XSToken := authResp.Header.Get("X-Subject-Token")
-			if XSToken == "" {
-				log.Printf("未获取到认证token")
-				return
-			}
-			//2、使用token获取任务状态
+			// 2、使用token获取任务状态
 			tr := &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			}
@@ -197,10 +203,10 @@ func GetTaskStatus(ctx *gin.Context, taskIds []string) {
 	wg.Wait()
 }
 
-func (ps *ApiService) ApiAsyncTaskList(ctx *gin.Context, username string, current, size int) ([]*common.ApiAsyncTaskListResponse, int64, int, error) {
+func (ps *ApiService) ApiAsyncTaskList(ctx context.Context, username string, current, size int) ([]*common.ApiAsyncTaskListResponse, int64, int, error) {
 
 	var QuestionAgentLogList []*common.ApiAsyncTaskListResponse
-	db := model.Default().Model(&model.SQuestionAgentLog{})
+	db := model.DB(ctx).Model(&model.SQuestionAgentLog{})
 	err := db.Where("user_name = ?", username).
 		Where("status = ? or status = ? or status = ?", "RUNNING", "SUCCEEDED", "FAILED").
 		Where("server_id IS NOT NULL or task_id IS NOT NULL").
@@ -224,7 +230,7 @@ func (ps *ApiService) ApiAsyncTaskList(ctx *gin.Context, username string, curren
 
 		if v.FId != 0 {
 			var result *model.SQuestionAgentLog
-			if err = model.Default().Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", v.FId).First(&result).Error; err != nil {
+			if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", v.FId).First(&result).Error; err != nil {
 				return nil, 0, 0, err
 			}
 			v.FDialogueId = result.DialogueId
@@ -234,9 +240,9 @@ func (ps *ApiService) ApiAsyncTaskList(ctx *gin.Context, username string, curren
 	return QuestionAgentLogList, total, totalPages, nil
 }
 
-func (ps *ApiService) ApiAsyncTaskInfo(ctx *gin.Context, id int) (QuestionAgentLogList *model.SQuestionAgentLog, err error) {
+func (ps *ApiService) ApiAsyncTaskInfo(ctx context.Context, id int) (QuestionAgentLogList *model.SQuestionAgentLog, err error) {
 
-	err = model.Default().Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", id).First(&QuestionAgentLogList).Error
+	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", id).First(&QuestionAgentLogList).Error
 	if QuestionAgentLogList.TaskId == "" {
 		return nil, errors.New("任务不存在")
 	}
@@ -244,10 +250,10 @@ func (ps *ApiService) ApiAsyncTaskInfo(ctx *gin.Context, id int) (QuestionAgentL
 	return
 }
 
-func (ps *ApiService) ApiAnalystAgentGetLog(id int, name string) (taskLog string, err error) {
+func (ps *ApiService) ApiAnalystAgentGetLog(ctx context.Context, id int, name string) (taskLog string, err error) {
 
 	var questionAgentLogList *model.SQuestionAgentLog
-	err = model.Default().Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", id).First(&questionAgentLogList).Error
+	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", id).First(&questionAgentLogList).Error
 	if questionAgentLogList.TaskId == "" {
 		return "", errors.New("日志任务不存在")
 	}
@@ -258,10 +264,10 @@ func (ps *ApiService) ApiAnalystAgentGetLog(id int, name string) (taskLog string
 	return questionAgentLogList.TaskLog, nil
 }
 
-func (ps *ApiService) ApiQueryList(ctx *gin.Context, username string) ([]*common.QueryListRequest, error) {
+func (ps *ApiService) ApiQueryList(ctx context.Context, username string) ([]*common.QueryListRequest, error) {
 	// 查询主列表（f_id = 0 的记录）
 	var QuestionAgentLogList []*common.QueryListRequest
-	if err := model.Default().Model(&model.SQuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", username, 0).
+	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", username, 0).
 		Order("created_at DESC").
 		Find(&QuestionAgentLogList).
 		Error; err != nil {
@@ -274,7 +280,7 @@ func (ps *ApiService) ApiQueryList(ctx *gin.Context, username string) ([]*common
 		createdAt := v.CreatedAt             // 默认使用主记录的 CreatedAt
 
 		// 查询关联的最新记录（f_id = v.Id）
-		err := model.Default().Model(&model.SQuestionAgentLog{}).Where("f_id = ? AND delete_at IS NULL", v.Id).
+		err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("f_id = ? AND delete_at IS NULL", v.Id).
 			Order("created_at DESC").
 			Limit(1).
 			First(&DataList).Error
@@ -349,10 +355,10 @@ func (ps *ApiService) ApiQueryList(ctx *gin.Context, username string) ([]*common
 //	return QADataList, nil
 //}
 
-func (ps *ApiService) ApiAnswerCheck(ctx *gin.Context, username string, dialogueId string) (QuestionAgentLogList []*model.SQuestionAgentLog, err error) {
+func (ps *ApiService) ApiAnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.SQuestionAgentLog, err error) {
 	var QuestionAgentLog *model.SQuestionAgentLog
-	err = model.Default().Model(&model.SQuestionAgentLog{}).Debug().Where("user_name = ? and dialogue_id = ?", username, dialogueId).First(&QuestionAgentLog).Error
-	err = model.Default().Model(&model.SQuestionAgentLog{}).Debug().Where("f_id = ? and delete_at IS NULL", QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error
+	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("user_name = ? and dialogue_id = ?", username, dialogueId).First(&QuestionAgentLog).Error
+	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("f_id = ? and delete_at IS NULL", QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error
 	// 创建一个新的切片，将 QuestionAgentLog 放在首位
 	newList := make([]*model.SQuestionAgentLog, 0, len(QuestionAgentLogList)+1)
 	newList = append(newList, QuestionAgentLog)
@@ -367,8 +373,8 @@ func (ps *ApiService) ApiAnswerCheck(ctx *gin.Context, username string, dialogue
 	return
 }
 
-func (ps *ApiService) ApiQueryListDelete(name string, id int) (int, error) {
-	db := model.Default().Model(&model.SQuestionAgentLog{}).Debug()
+func (ps *ApiService) ApiQueryListDelete(ctx context.Context, name string, id int) (int, error) {
+	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("delete_at", time.Now())
 	if result.Error != nil {
@@ -381,8 +387,8 @@ func (ps *ApiService) ApiQueryListDelete(name string, id int) (int, error) {
 	return id, nil
 }
 
-func (ps *ApiService) ApiQueryListRename(name string, id int, rename string) (string, error) {
-	db := model.Default().Model(&model.SQuestionAgentLog{}).Debug()
+func (ps *ApiService) ApiQueryListRename(ctx context.Context, name string, id int, rename string) (string, error) {
+	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("title_query", rename)
 	if result.Error != nil {
@@ -404,8 +410,8 @@ type LogData struct {
 	LogStorageLink string `json:"log_storage_link"`
 }
 
-func (ps *ApiService) ApiQueryReactionType(id int, reactionType, name string) (int, error) {
-	db := model.Default().Model(&model.SQuestionAgentLog{}).Debug()
+func (ps *ApiService) ApiQueryReactionType(ctx context.Context, id int, reactionType, name string) (int, error) {
+	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("reaction_type", reactionType)
 	if result.Error != nil {
@@ -418,8 +424,8 @@ func (ps *ApiService) ApiQueryReactionType(id int, reactionType, name string) (i
 	return id, nil
 }
 
-func (ps *ApiService) ApiQueryCollect(id int, collectType, name string) (int, error) {
-	db := model.Default().Model(&model.SQuestionAgentLog{}).Debug()
+func (ps *ApiService) ApiQueryCollect(ctx context.Context, id int, collectType, name string) (int, error) {
+	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("collect_type", collectType)
 	if result.Error != nil {
@@ -432,10 +438,10 @@ func (ps *ApiService) ApiQueryCollect(id int, collectType, name string) (int, er
 	return id, nil
 }
 
-func (ps *ApiService) ApiQueryCollectList(name string) ([]*common.ApiQueryCollectListResponse, error) {
+func (ps *ApiService) ApiQueryCollectList(ctx context.Context, name string) ([]*common.ApiQueryCollectListResponse, error) {
 
 	var CollectList []*common.ApiQueryCollectListResponse
-	err := model.Default().Model(&model.SQuestionAgentLog{}).Debug().
+	err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().
 		Where("user_name = ? and collect_type =? and delete_at IS NULL", name, "1").
 		Order("created_at DESC").
 		Find(&CollectList).Error
@@ -446,9 +452,9 @@ func (ps *ApiService) ApiQueryCollectList(name string) ([]*common.ApiQueryCollec
 	return CollectList, nil
 }
 
-func (ps *ApiService) ApiAnalystAgentUpdateLog(name, taskId, computeResource string) (string, error) {
+func (ps *ApiService) ApiAnalystAgentUpdateLog(ctx context.Context, name, taskId, computeResource string) (string, error) {
 	//查询日志归属或是否存在
-	db := model.Default().Model(&model.SQuestionAgentLog{})
+	db := model.DB(ctx).Model(&model.SQuestionAgentLog{})
 	var agentLog model.SQuestionAgentLog
 	result := db.Where("user_name = ? and task_id = ? and compute_resource = ? and delete_at IS NULL", name, taskId, computeResource).First(&agentLog)
 	if result.Error != nil {

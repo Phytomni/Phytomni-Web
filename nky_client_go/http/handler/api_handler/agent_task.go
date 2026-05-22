@@ -41,7 +41,7 @@ func (ph *ApiHandler) ApiAsyncTaskInfo(ctx *gin.Context) {
 func (ph *ApiHandler) ApiAnalystAgentGetLog(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Query("id"))
 	name, _ := ctx.Get("username")
-	taskId, err := ph.service.ApiAnalystAgentGetLog(id, name.(string))
+	taskId, err := ph.service.ApiAnalystAgentGetLog(ctx, id, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -55,7 +55,7 @@ func (ph *ApiHandler) ApiAnalystAgentUpdateLog(ctx *gin.Context) {
 	taskId := ctx.PostForm("task_id")
 	computeResource := ctx.PostForm("compute_resource")
 
-	newLogsJSON, err := ph.service.ApiAnalystAgentUpdateLog(name.(string), taskId, computeResource)
+	newLogsJSON, err := ph.service.ApiAnalystAgentUpdateLog(ctx, name.(string), taskId, computeResource)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -90,7 +90,7 @@ func (ph *ApiHandler) ApiQueryListDelete(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	id, _ := strconv.Atoi(ctx.PostForm("id"))
 
-	queryId, err := ph.service.ApiQueryListDelete(name.(string), id)
+	queryId, err := ph.service.ApiQueryListDelete(ctx, name.(string), id)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -104,7 +104,7 @@ func (ph *ApiHandler) ApiQueryListRename(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.PostForm("id"))
 	rename := ctx.PostForm("rename")
 
-	r, err := ph.service.ApiQueryListRename(name.(string), id, rename)
+	r, err := ph.service.ApiQueryListRename(ctx, name.(string), id, rename)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -128,7 +128,7 @@ func (ph *ApiHandler) ApiQueryReactionType(ctx *gin.Context) {
 		return
 	}
 
-	id, err := ph.service.ApiQueryReactionType(id, reactionType, name.(string))
+	id, err := ph.service.ApiQueryReactionType(ctx, id, reactionType, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -152,7 +152,7 @@ func (ph *ApiHandler) ApiQueryCollect(ctx *gin.Context) {
 		return
 	}
 
-	id, err := ph.service.ApiQueryCollect(id, collectType, name.(string))
+	id, err := ph.service.ApiQueryCollect(ctx, id, collectType, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -165,7 +165,7 @@ func (ph *ApiHandler) ApiQueryCollectList(ctx *gin.Context) {
 
 	name, _ := ctx.Get("username")
 
-	collectList, err := ph.service.ApiQueryCollectList(name.(string))
+	collectList, err := ph.service.ApiQueryCollectList(ctx, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
