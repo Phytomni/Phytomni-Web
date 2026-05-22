@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Config struct {
@@ -31,6 +32,13 @@ func InitMysqlDB() error {
 		default:
 			dbGorm = mysql.Open(cfg.Dsn)
 		}
+
+		// 设置自定义 Logger
+		if cfg.Config.Logger == nil {
+			cfg.Config.Logger = logger.Default
+		}
+		cfg.Config.Logger = NewSqlLogger(cfg.Config.Logger)
+
 		db, err := gorm.Open(dbGorm, &cfg.Config)
 		if err != nil {
 			return err
