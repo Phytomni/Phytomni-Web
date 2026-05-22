@@ -26,3 +26,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "sqlalchemy>=2.0.40",
 ]
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
