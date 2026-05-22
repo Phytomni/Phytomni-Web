@@ -7,10 +7,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
+	"github.com/spf13/viper"
 )
 
-// JWT密钥
-const SecretKey = "[REDACTED-JWT-SECRET]"
+// jwtSecret 从 viper 读取 jwt.secret_key,Python 侧 SECRET_KEY_CLIENT 必须设同值,
+// 否则 Go 签发的 token 在 Python 侧解不出来(或反之)。
+func jwtSecret() []byte {
+	return []byte(viper.GetString("jwt.secret_key"))
+}
 
 // JWT Claims结构体
 type Claims struct {
@@ -30,7 +34,7 @@ func GenerateToken(username string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(SecretKey))
+	return token.SignedString(jwtSecret())
 }
 
 // JWT中间件
@@ -62,7 +66,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		token := tokenString[7:]
 		claims := &Claims{}
 		parsedToken, err := jwt.ParseWithClaims(token, claims, func(parsedToken *jwt.Token) (interface{}, error) {
-			return []byte(SecretKey), nil
+			return jwtSecret(), nil
 		})
 
 		if err != nil || !parsedToken.Valid {
