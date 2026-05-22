@@ -1,0 +1,83 @@
+# nky_client_go runtime configuration template.
+#
+# Copy this file to `app.yml` in the same directory, then fill in real
+# values; do NOT commit `app.yml` — the matching .gitignore rule keeps
+# it out of git so live credentials never enter version control.
+
+# ---------------------------------------------------------------------
+# Application identity + log verbosity
+# ---------------------------------------------------------------------
+app: web
+debug: true
+
+# ---------------------------------------------------------------------
+# JWT signing secret — MUST equal SECRET_KEY_CLIENT in the Python
+# sibling's .env, otherwise tokens issued by one side fail verification
+# on the other. Use a long random string (e.g. `openssl rand -hex 32`).
+# ---------------------------------------------------------------------
+jwt:
+  secret_key: "REPLACE_WITH_RANDOM_STRING"
+
+# ---------------------------------------------------------------------
+# MySQL connection. The Logger hook (db/logger.go) writes every SQL
+# into s_sql_operation_logs, so the DSN user needs INSERT on that table
+# plus the SUser-family tables. Format:
+#   <user>:<pass>@tcp(<host>:<port>)/<db>?<gorm-flags>
+# ---------------------------------------------------------------------
+db:
+  nky_client_go:
+    dialect: mysql
+    dsn: "root:REPLACE_PASS@tcp(localhost:3306)/nongke?charset=utf8mb4&parseTime=True&loc=Local"
+
+# ---------------------------------------------------------------------
+# Redis cache (cache/client.go); currently initialized but main.go
+# leaves the client commented out, so this section only matters once
+# the cache layer is wired in.
+# ---------------------------------------------------------------------
+redis:
+  clients:
+    web:
+      addrs:
+        - "REPLACE_REDIS_HOST:6379"
+      db: 0
+      password:
+      type: single-node
+  default: default
+
+# ---------------------------------------------------------------------
+# Structured logging sinks
+# ---------------------------------------------------------------------
+log:
+  outputs:
+    - stdout
+    - ./logs/api.log
+
+# ---------------------------------------------------------------------
+# Feature switches — http server + cron scheduler
+# ---------------------------------------------------------------------
+http:
+  switch: true
+cron:
+  switch: true
+
+# ---------------------------------------------------------------------
+# KooSearch (RAG) endpoints used by the KnowledgeAgent integration
+# ---------------------------------------------------------------------
+koosearch:
+  url:
+    question_url: "http://REPLACE_KOOSEARCH_HOST:8000/v1/koosearch/experience/chat"
+    search_url: "http://REPLACE_KOOSEARCH_HOST:8000/v1/koosearch/experience/search"
+
+# ---------------------------------------------------------------------
+# Gene example file root — ApiGeneDetails reads files from here.
+# Point at the directory that holds the per-gene .out artifacts the
+# Python MCP server emits.
+# ---------------------------------------------------------------------
+gene_file_path: "/var/lib/phytomni/gene_examples"
+
+# ---------------------------------------------------------------------
+# Default chat quota for newly-created guest accounts. ApiUserRegister
+# reads this for the `guest` role; logged-in vip/user roles are
+# unbounded.
+# ---------------------------------------------------------------------
+guest_default_chat_limit: 5
