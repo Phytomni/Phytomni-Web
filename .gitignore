@@ -91,3 +91,14 @@ server_tasks.db
 # 上传的文件目录
 # uploads/
 # logs/
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Local agent context
+.codex
+AGENTS.md
+
+.cursor
+.codegraph
