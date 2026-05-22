@@ -90,3 +90,27 @@ guest_default_chat_limit: 5
 dify:
   chat_messages_url: "http://your-dify-host/v1/chat-messages"
   api_key: "your-dify-app-key"
+
+# ---------------------------------------------------------------------
+# Huawei Cloud IAM + EIHealth — service/api_service/agent_task.go
+# uses these for the analyst-agent polling cron and the on-demand
+# task-log fetch. The IAM block authenticates against a Huawei Cloud
+# project; the EIHealth block points at the bioinformatics compute
+# tenant where analyst tasks actually run.
+#
+# Rotate `iam.password` whenever the leaked sample value is suspected
+# of being known to a third party (it is no longer the active one in
+# this repository). Production typically deploys with region/auth_url
+# wired together so both keys swap atomically on a region migration.
+# ---------------------------------------------------------------------
+huawei:
+  iam:
+    user_name: "your-huawei-iam-user"
+    password: "your-huawei-iam-password"
+    domain_name: "your-huawei-iam-domain"
+    project_name: "cn-east-3"
+    auth_url: "https://iam.cn-east-3.myhuaweicloud.com/v3/auth/tokens"
+  eihealth:
+    base_url: "https://eihealth.cn-east-3.myhuaweicloud.com/v1"
+    account_id: "your-huawei-account-id"
+    project_uuid: "your-eihealth-project-uuid"

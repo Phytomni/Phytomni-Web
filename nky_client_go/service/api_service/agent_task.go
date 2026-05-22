@@ -21,8 +21,51 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
+
+// huaweiIAMAuthBody returns the IAM password-auth body used by both
+// GetTaskStatus and ApiAnalystAgentUpdateLog. Every literal is sourced
+// from viper so operators rotate creds via config/app.yml without
+// recompiling. Missing keys yield empty strings, which Huawei IAM
+// rejects with 400 — surfacing misconfiguration loud rather than silent.
+func huaweiIAMAuthBody() map[string]interface{} {
+	return map[string]interface{}{
+		"auth": map[string]interface{}{
+			"identity": map[string]interface{}{
+				"password": map[string]interface{}{
+					"user": map[string]interface{}{
+						"name":     viper.GetString("huawei.iam.user_name"),
+						"password": viper.GetString("huawei.iam.password"),
+						"domain": map[string]interface{}{
+							"name": viper.GetString("huawei.iam.domain_name"),
+						},
+					},
+				},
+				"methods": []string{"password"},
+			},
+			"scope": map[string]interface{}{
+				"project": map[string]interface{}{
+					"name": viper.GetString("huawei.iam.project_name"),
+				},
+			},
+		},
+	}
+}
+
+// huaweiEIHealthJobsBase returns the EIHealth jobs API root —
+// "<base_url>/<account_id>/eihealth-projects/<project_uuid>/jobs"
+// — composed from viper so account/project rotation does not need
+// a recompile. Callers append "/{task_id}" or "/{task_id}/logs?...".
+func huaweiEIHealthJobsBase() string {
+	return fmt.Sprintf(
+		"%s/%s/eihealth-projects/%s/jobs",
+		viper.GetString("huawei.eihealth.base_url"),
+		viper.GetString("huawei.eihealth.account_id"),
+		viper.GetString("huawei.eihealth.project_uuid"),
+	)
+}
 
 type TaskStatusResponse struct {
 	Status string `json:"status"`
@@ -32,27 +75,7 @@ func GetTaskStatus(ctx *gin.Context, taskIds []string) {
 	fmt.Printf("当前共%d条任务开始查询！\n", len(taskIds))
 
 	// 1. 首先获取华为云认证token (提取到循环外，避免重复认证)
-	authData := map[string]interface{}{
-		"auth": map[string]interface{}{
-			"identity": map[string]interface{}{
-				"password": map[string]interface{}{
-					"user": map[string]interface{}{
-						"name":     "[REDACTED]",
-						"password": "[REDACTED]",
-						"domain": map[string]interface{}{
-							"name": "[REDACTED]",
-						},
-					},
-				},
-				"methods": []string{"password"},
-			},
-			"scope": map[string]interface{}{
-				"project": map[string]interface{}{
-					"name": "cn-east-3",
-				},
-			},
-		},
-	}
+	authData := huaweiIAMAuthBody()
 
 	authJson, err := json.Marshal(authData)
 	if err != nil {
@@ -60,7 +83,7 @@ func GetTaskStatus(ctx *gin.Context, taskIds []string) {
 		return
 	}
 
-	authReq, err := http.NewRequest("POST", "https://iam.cn-east-3.myhuaweicloud.com/v3/auth/tokens", bytes.NewBuffer(authJson))
+	authReq, err := http.NewRequest("POST", viper.GetString("huawei.iam.auth_url"), bytes.NewBuffer(authJson))
 	if err != nil {
 		log.Printf("创建认证请求失败: %v", err)
 		return
@@ -114,7 +137,7 @@ func GetTaskStatus(ctx *gin.Context, taskIds []string) {
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			}
 			client := &http.Client{Transport: tr}
-			req, err := http.NewRequest("GET", "https://eihealth.cn-east-3.myhuaweicloud.com/v1/f9afc0650aec4f9cbc7af24e9e199e77/eihealth-projects/6d50805e-8546-4c8b-a3c0-f7aa8b82bb74/jobs/"+TId, nil)
+			req, err := http.NewRequest("GET", huaweiEIHealthJobsBase()+"/"+TId, nil)
 			if err != nil {
 				log.Printf("创建请求失败: %v", err)
 				return
@@ -466,34 +489,14 @@ func (ps *ApiService) ApiAnalystAgentUpdateLog(ctx context.Context, name, taskId
 	}
 
 	// 1. 首先获取华为云认证token
-	authData := map[string]interface{}{
-		"auth": map[string]interface{}{
-			"identity": map[string]interface{}{
-				"password": map[string]interface{}{
-					"user": map[string]interface{}{
-						"name":     "[REDACTED]",
-						"password": "[REDACTED]",
-						"domain": map[string]interface{}{
-							"name": "[REDACTED]",
-						},
-					},
-				},
-				"methods": []string{"password"},
-			},
-			"scope": map[string]interface{}{
-				"project": map[string]interface{}{
-					"name": "cn-east-3",
-				},
-			},
-		},
-	}
+	authData := huaweiIAMAuthBody()
 
 	authJson, err := json.Marshal(authData)
 	if err != nil {
 		return "", errors.New("获取token失败")
 	}
 
-	authReq, err := http.NewRequest("POST", "https://iam.cn-east-3.myhuaweicloud.com/v3/auth/tokens", bytes.NewBuffer(authJson))
+	authReq, err := http.NewRequest("POST", viper.GetString("huawei.iam.auth_url"), bytes.NewBuffer(authJson))
 	if err != nil {
 		return "", errors.New("创建认证请求失败")
 	}
@@ -521,7 +524,7 @@ func (ps *ApiService) ApiAnalystAgentUpdateLog(ctx context.Context, name, taskId
 	}
 
 	//2、构建url
-	url := fmt.Sprintf("https://eihealth.cn-east-3.myhuaweicloud.com/v1/f9afc0650aec4f9cbc7af24e9e199e77/eihealth-projects/6d50805e-8546-4c8b-a3c0-f7aa8b82bb74/jobs/%s/logs?task_name=%s", taskId, computeResource)
+	url := fmt.Sprintf("%s/%s/logs?task_name=%s", huaweiEIHealthJobsBase(), taskId, computeResource)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", errors.New(fmt.Sprintf("创建请求失败: %v", err))
@@ -646,7 +649,7 @@ func (ps *ApiService) ApiAnalystAgentUpdateLog(ctx context.Context, name, taskId
 //				return
 //			}
 //
-//			authReq, err := http.NewRequest("POST", "https://iam.cn-east-3.myhuaweicloud.com/v3/auth/tokens", bytes.NewBuffer(authJson))
+//			authReq, err := http.NewRequest("POST", viper.GetString("huawei.iam.auth_url"), bytes.NewBuffer(authJson))
 //			if err != nil {
 //				rxLog.Sugar().Error(fmt.Errorf("创建认证请求失败: %v", err))
 //				return
@@ -678,7 +681,7 @@ func (ps *ApiService) ApiAnalystAgentUpdateLog(ctx context.Context, name, taskId
 //			}
 //
 //			//2、构建url
-//			url := fmt.Sprintf("https://eihealth.cn-east-3.myhuaweicloud.com/v1/f9afc0650aec4f9cbc7af24e9e199e77/eihealth-projects/6d50805e-8546-4c8b-a3c0-f7aa8b82bb74/jobs/%s/logs?task_name=%s", taskId, computeResource)
+//			url := fmt.Sprintf("%s/%s/logs?task_name=%s", huaweiEIHealthJobsBase(), taskId, computeResource)
 //			req, err := http.NewRequest("GET", url, nil)
 //			if err != nil {
 //				rxLog.Sugar().Error(fmt.Errorf("创建请求失败: %v", err))
@@ -798,7 +801,7 @@ func (ps *ApiService) ApiAnalystAgentUpdateLog(ctx context.Context, name, taskId
 //		return
 //	}
 //
-//	authReq, err := http.NewRequest("POST", "https://iam.cn-east-3.myhuaweicloud.com/v3/auth/tokens", bytes.NewBuffer(authJson))
+//	authReq, err := http.NewRequest("POST", viper.GetString("huawei.iam.auth_url"), bytes.NewBuffer(authJson))
 //	if err != nil {
 //		sendSSEError(ctx, fmt.Sprintf("创建认证请求失败: %v", err))
 //		return
@@ -829,7 +832,7 @@ func (ps *ApiService) ApiAnalystAgentUpdateLog(ctx context.Context, name, taskId
 //	}
 //
 //	// 初始化变量
-//	url := fmt.Sprintf("https://eihealth.cn-east-3.myhuaweicloud.com/v1/f9afc0650aec4f9cbc7af24e9e199e77/eihealth-projects/6d50805e-8546-4c8b-a3c0-f7aa8b82bb74/jobs/%s/logs?task_name=%s", taskId, computeResource)
+//	url := fmt.Sprintf("%s/%s/logs?task_name=%s", huaweiEIHealthJobsBase(), taskId, computeResource)
 //	var lastCount int
 //	var sentLogs int
 //	finished := false
