@@ -2,11 +2,12 @@ package cron
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
 	rxCron "nky_client_go/cron/base"
 	rxLog "nky_client_go/log"
 	"nky_client_go/model"
 	servicega "nky_client_go/service/api_service"
+
+	"github.com/gin-gonic/gin"
 )
 
 type FreshGA struct {
