@@ -1,13 +1,14 @@
 package api_service
 
 import (
+	"context"
 	"errors"
 	"nky_client_go/model"
 	"time"
 )
 
-func (ps *ApiService) ApiServerCreateTask(serverId, serverStatus, toolName string) (int, error) {
-	db := model.Default().Model(&model.SServerToolLogs{}).Debug()
+func (ps *ApiService) ApiServerCreateTask(ctx context.Context, serverId, serverStatus, toolName string) (int, error) {
+	db := model.DB(ctx).Model(&model.SServerToolLogs{}).Debug()
 	if result := db.Where("server_id=?", serverId).First(&model.SServerToolLogs{}).RowsAffected; result != 0 {
 		return 0, errors.New("server_id已存在，请重新提交")
 	}
@@ -26,7 +27,7 @@ func (ps *ApiService) ApiServerCreateTask(serverId, serverStatus, toolName strin
 	return serverResult.Id, err
 }
 
-func (ps *ApiService) ApiServerUpdateTask(serverId, toolResult, serverFilePath, serverStatus string) (int, error) {
+func (ps *ApiService) ApiServerUpdateTask(ctx context.Context, serverId, toolResult, serverFilePath, serverStatus string) (int, error) {
 	serverResult := &model.SServerToolLogs{
 		ToolResult:     toolResult,
 		ServerFilePath: serverFilePath,
@@ -34,7 +35,7 @@ func (ps *ApiService) ApiServerUpdateTask(serverId, toolResult, serverFilePath, 
 		UpdatedAt:      time.Time{},
 	}
 
-	db := model.Default().Model(&model.SServerToolLogs{}).Debug()
+	db := model.DB(ctx).Model(&model.SServerToolLogs{}).Debug()
 	var serverToolLogs *model.SServerToolLogs
 	db.Where("server_id = ?", serverId).First(&serverToolLogs)
 	if serverToolLogs.Id == 0 {

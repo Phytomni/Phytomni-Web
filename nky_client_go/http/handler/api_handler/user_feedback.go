@@ -1,9 +1,10 @@
 package api_handler
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"nky_client_go/utils/errs"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (ph *ApiHandler) ApiUserFeedback(ctx *gin.Context) {
@@ -16,7 +17,7 @@ func (ph *ApiHandler) ApiUserFeedback(ctx *gin.Context) {
 	}
 
 	// 登录生成有权限的工具
-	userId, err := ph.service.ApiUserFeedback(name.(string), feedbackType, feedbackContent)
+	userId, err := ph.service.ApiUserFeedback(ctx, name.(string), feedbackType, feedbackContent)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return

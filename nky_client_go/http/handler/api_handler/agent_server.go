@@ -11,7 +11,7 @@ func (ph *ApiHandler) ApiServerCreateTask(ctx *gin.Context) {
 	serverStatus := ctx.PostForm("server_status")
 	toolName := ctx.PostForm("tool_name")
 
-	id, err := ph.service.ApiServerCreateTask(serverId, serverStatus, toolName)
+	id, err := ph.service.ApiServerCreateTask(ctx, serverId, serverStatus, toolName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code": http.StatusInternalServerError,
@@ -30,7 +30,7 @@ func (ph *ApiHandler) ApiServerUpdateTask(ctx *gin.Context) {
 	serverFilePath := ctx.PostForm("server_file_path")
 	serverStatus := ctx.PostForm("server_status")
 
-	id, err := ph.service.ApiServerUpdateTask(serverId, toolResult, serverFilePath, serverStatus)
+	id, err := ph.service.ApiServerUpdateTask(ctx, serverId, toolResult, serverFilePath, serverStatus)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code": http.StatusInternalServerError,
