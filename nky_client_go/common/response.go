@@ -24,6 +24,7 @@ type UserResponse struct {
 	Email            string `json:"email"`
 	Password         string `json:"password"`
 	FirstLoginStatus string `json:"first_login_status"`
+	PasswordWarning  string `json:"password_warning,omitempty"` // 密码过期提示信息
 }
 
 type QuestionListResponse struct {
@@ -132,10 +133,16 @@ type UserListResponse struct {
 }
 
 type UserLostData struct {
-	Id          int64  `json:"id"`
-	Email       string `json:"email"`
-	Code        string `json:"code"`
-	Description string `json:"description"`
+	Id           int64      `json:"id"`
+	Email        string     `json:"email"`
+	Code         string     `json:"code"`
+	Description  string     `json:"description"`
+	LockedUntil  *time.Time `json:"locked_until"`  // 锁定截至时间
+	LastLoginAt  *time.Time `json:"last_login_at"` // 最后登录时间
+	Phone        string     `json:"phone"`
+	Organization string     `json:"organization"`
+	Position     string     `json:"position"`
+	ChatLimit    int        `json:"chat_limit"`
 }
 
 type GeneListResponse struct {
@@ -180,4 +187,9 @@ type ApiQueryCollectListResponse struct {
 	DialogueId string    `json:"dialogue_id"`
 	Query      string    `json:"query"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+type UserProfileResponse struct {
+	UserLostData
+	DialogueCount int64 `json:"dialogue_count"` // 对话总数
 }

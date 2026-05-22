@@ -22,7 +22,7 @@ func NewAgent(toolName string) (FileDownloader, error) {
 		return &KnowledgeAgent{}, nil
 	case "DataAgent":
 		return &DataAgent{}, nil
-	case "ReviewAgent":
+	case "BriefReviewAgent":
 		return &ReviewAgent{}, nil
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
