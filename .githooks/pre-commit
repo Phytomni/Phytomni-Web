@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+# Copyright (c) Biotechnology Research Institute,
+# Chinese Academy of Agricultural Sciences. 2024-2026. All rights reserved.
+# Author: xieshang (xieshang0608@gmail.com)
+#         guxiaofeng (guxiaofeng@caas.cn)
+#
+# Pre-commit hook: scan staged files for likely secrets via
+# scripts/scan_secrets.py. Activate by running scripts/install_git_hooks.sh
+# once per local clone (sets core.hooksPath to .githooks).
+#
+# Bypass for an emergency commit (NOT recommended) with `git commit --no-verify`.
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+if command -v python3 >/dev/null 2>&1; then
+    exec python3 scripts/scan_secrets.py --staged
+fi
+
+exec python scripts/scan_secrets.py --staged
