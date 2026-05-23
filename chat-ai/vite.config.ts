@@ -22,6 +22,15 @@ export default defineConfig(({ mode, command }) => {
   const { VITE_APP_BASE_URL, VITE_BASE_API, VITE_FILE_BASE, VITE_PORT } = env;
   const port = VITE_PORT || 80; // 端口
 
+  // Dev-only proxy targets — overridable via .env.dev so each engineer
+  // points at their own LAN backend without editing this file. Defaults
+  // to localhost so a fresh clone works against a locally-running Go +
+  // Python pair (8082 / 8081 are the canonical ports from CLAUDE.md).
+  const devProxyApi =
+    env.VITE_DEV_PROXY_API || 'http://localhost:8082';
+  const devProxyMcp =
+    env.VITE_DEV_PROXY_MCP || 'http://localhost:8081';
+
   return {
     // envPrefix: "VITE_", // env 环境变量前缀默认就是VITE_
     base: '/' + VITE_APP_BASE_URL,
@@ -64,28 +73,16 @@ export default defineConfig(({ mode, command }) => {
       proxy: {
         // detail: https://cli.vuejs.org/config/#devserver-proxy
         [VITE_BASE_API]: {
-          target: `http://192.168.12.153:8082/`,
-          // target: `http://192.168.8.62:8082/`,
+          target: devProxyApi,
           changeOrigin: true,
-          // rewrite: path => {
-          //   const reg = new RegExp('^' + VITE_BASE_API);
-          //   return path.replace(reg, '');
-          // },
         },
         '/v1': {
-          target: `http://192.168.12.153:8082/`,
-          // target: `http://192.168.8.62:8082/`,
+          target: devProxyApi,
           changeOrigin: true,
-          // rewrite: path => {
-          //   const reg = new RegExp('^' + VITE_BASE_API);
-          //   return path.replace(reg, '');
-          // },
         },
         '/query': {
-          target: `http://192.168.12.153:8081/`,
-          // target: `http://192.168.8.62:8081/`,
+          target: devProxyMcp,
           changeOrigin: true,
-          // rewrite: (path) => path.replace(/^\/api/, ''),
         },
       },
     },
