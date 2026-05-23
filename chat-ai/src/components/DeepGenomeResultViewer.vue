@@ -412,12 +412,18 @@ const escapeHtml = (text) => {
   return text.replace(/[&<>"']/g, (m) => map[m]);
 };
 
-// 将./.out/xxxx格式的路径替换为https://1.95.48.200/attachments/xxxx
+// AnalystAgent 返回的 markdown 把图片/链接写成 ./.out/xxxx,前端转换为可
+// 访问的 attachment URL。base prefix 走 Vite env (VITE_ATTACHMENTS_BASE_URL),
+// 默认相对路径 /attachments/ —— dev 时让 vite proxy / 同源 nginx 接管,
+// production 想跨域指向独立 attachments 服务,在 .env.production 改 key 即可,
+// 不要把 prod host 硬编进源码。
+const attachmentsBaseUrl =
+  import.meta.env.VITE_ATTACHMENTS_BASE_URL || '/attachments/';
+
 const convertFilePath = (path) => {
   if (!path) return path;
-  // 替换所有包含.out/的路径，无论是否以./开头
   if (path.includes('.out/')) {
-    return path.replace(/\.?\/?\.out\//g, 'https://1.95.48.200/attachments/');
+    return path.replace(/\.?\/?\.out\//g, attachmentsBaseUrl);
   }
   return path;
 };
