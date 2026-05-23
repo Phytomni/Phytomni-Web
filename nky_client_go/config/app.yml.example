@@ -126,6 +126,14 @@ huawei:
     ak: "your-huawei-obs-access-key"
     sk: "your-huawei-obs-secret-key"
     endpoint: "https://obs.cn-east-3.myhuaweicloud.com"
+  # Huawei API Gateway — service/api_service/token.go signs and POSTs to
+  # this URL to mint the cached HW token in Redis (RedisHWTokenKey). The
+  # `<deployment-id>.apigw.<region>.myhuaweicloud.com` host changes per
+  # ops stage (staging vs prod use different deployments), so keep the
+  # full URL — query string and all — in config rather than reassembling
+  # from parts.
+  apigw:
+    app1_url: "https://your-deployment-id.apigw.your-region.myhuaweicloud.com/app1?a=1&b=2"
 
 # ---------------------------------------------------------------------
 # Outbound notification email — common/email/email_send.go.

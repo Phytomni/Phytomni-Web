@@ -12,6 +12,8 @@ import (
 	rxLog "nky_client_go/log"
 	"nky_client_go/server/api"
 	"os"
+
+	"github.com/spf13/viper"
 )
 
 func (ps *ApiService) GetFreshToken() (response common.FreshTokenResponse, apiErr api.Error) {
@@ -24,7 +26,7 @@ func (ps *ApiService) GetFreshToken() (response common.FreshTokenResponse, apiEr
 		Key:    os.Getenv("HUAWEICLOUD_SDK_AK"),
 		Secret: os.Getenv("HUAWEICLOUD_SDK_SK"),
 	}
-	r, err := http.NewRequest("POST", "https://30030113-3657-4fb6-a7ef-90764239b038.apigw.cn-north-1.huaweicloud.com/app1?a=1&b=2",
+	r, err := http.NewRequest("POST", viper.GetString("huawei.apigw.app1_url"),
 		ioutil.NopCloser(bytes.NewBuffer([]byte("foo=bar"))))
 	if err != nil {
 		fmt.Println(err)
