@@ -36,6 +36,12 @@ func main() {
 
 func initConfig(*cli.Context) error {
 	viper.SetDefault("app", "nky_client_go")
+	// ApiGeneList / ApiGeneDetails read .md examples from this root;
+	// historically the call sites carried a developer's local Windows
+	// path as the fallback, which silently broke on every non-Windows
+	// deploy. SetDefault here so a missing app.yml key lands on the
+	// canonical Linux production-style path instead.
+	viper.SetDefault("gene_file_path", "/var/lib/phytomni/gene_examples")
 	if err := utils.LoadConfigInFile(configFile); err != nil {
 		return err
 	}

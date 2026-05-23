@@ -52,11 +52,11 @@ func (ps *ApiService) ApiGeneSearch(ctx context.Context, current, size int, titl
 
 // fetchGeneFiles 从指定目录读取文件并封装
 func (ps *ApiService) fetchGeneFiles(title string) ([]*model.SGeneExample, error) {
+	// main.go initConfig sets a viper.SetDefault for gene_file_path so
+	// the lookup never returns ""; if it ever does, the os.ReadDir below
+	// will surface a meaningful error instead of falling back to a
+	// developer-specific Windows path.
 	path := viper.GetString("gene_file_path")
-	if path == "" {
-		// 默认路径
-		path = `E:\桌面\1228\20251228\nky_client_python\mcp_server_phytomni\.out`
-	}
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
@@ -112,11 +112,10 @@ func parseGeneFile(filename string) *model.SGeneExample {
 	}
 }
 func (ps *ApiService) ApiGeneDetails(ctx context.Context, fileName string) (*model.SGeneExample, error) {
+	// See fetchGeneFiles — gene_file_path is always defaulted in
+	// initConfig, so the empty-string Windows fallback that used to
+	// live here is no longer needed.
 	path := viper.GetString("gene_file_path")
-	if path == "" {
-		// 默认路径
-		path = `E:\桌面\1228\20251228\nky_client_python\mcp_server_phytomni\.out`
-	}
 
 	fullPath := fmt.Sprintf("%s/%s", path, fileName)
 
