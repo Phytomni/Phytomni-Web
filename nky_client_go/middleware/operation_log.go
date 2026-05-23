@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net/url"
 	"nky_client_go/model"
 	"strings"
 	"time"
@@ -12,6 +13,92 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// sensitiveFieldSubstrings matches the lowercased JSON / query-parameter
+// key against any of these substrings — a hit replaces the value with
+// "******" before the audit log row hits MySQL. The intent is to catch
+// the long tail of credential-bearing field names (api_key, access_token,
+// refresh_token, authorization, etc.) without enumerating every variant.
+var sensitiveFieldSubstrings = []string{
+	"password",
+	"passwd",
+	"token",
+	"secret",
+	"api_key",
+	"apikey",
+	"access_key",
+	"accesskey",
+	"private_key",
+	"privatekey",
+	"authorization",
+}
+
+// redactedMask is the constant placeholder that replaces masked values
+// in the audit log. Twelve characters mirrors the prior /login redact
+// width so existing log readers stay visually aligned.
+const redactedMask = "******"
+
+// looksSensitive reports whether a (lowercase) key name matches one of
+// the registered substring fragments. Substring matching catches the
+// "old_password", "new_password", "x-api-key" and "client_secret"
+// variants that an exact-match list would miss.
+func looksSensitive(key string) bool {
+	lowered := strings.ToLower(key)
+	for _, frag := range sensitiveFieldSubstrings {
+		if strings.Contains(lowered, frag) {
+			return true
+		}
+	}
+	return false
+}
+
+// redactJSONBody walks the parsed JSON top level and masks any value
+// whose key name looks sensitive. Non-JSON payloads, parse failures,
+// and non-object roots are returned unchanged.
+func redactJSONBody(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var bodyMap map[string]interface{}
+	if err := json.Unmarshal(body, &bodyMap); err != nil {
+		return string(body)
+	}
+	for key := range bodyMap {
+		if looksSensitive(key) {
+			bodyMap[key] = redactedMask
+		}
+	}
+	masked, err := json.Marshal(bodyMap)
+	if err != nil {
+		return string(body)
+	}
+	return string(masked)
+}
+
+// redactQueryParams parses the raw query string and masks any sensitive
+// keys before re-encoding. A parse failure returns the input verbatim
+// so the audit log still captures *something*; the alternative (drop
+// the whole query) would lose forensic value.
+func redactQueryParams(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return raw
+	}
+	masked := false
+	for key := range values {
+		if looksSensitive(key) {
+			values.Set(key, redactedMask)
+			masked = true
+		}
+	}
+	if !masked {
+		return raw
+	}
+	return values.Encode()
+}
 
 // OperationLog 用户操作日志中间件
 func OperationLog() gin.HandlerFunc {
@@ -87,30 +174,19 @@ func OperationLog() gin.HandlerFunc {
 			errorMessage = c.Errors.String()
 		}
 
-		// Body 脱敏处理
+		// Body 脱敏处理 — 不再受限于 /login / /register / /modify/password
+		// 三条白名单;任何 JSON body 都按 sensitiveFieldSubstrings 通配
+		// 匹配后写入。Multipart upload 体仍旧整体丢弃(里面通常是文件)。
 		var bodyStr string
 		if !strings.Contains(contentType, "multipart/form-data") {
-			bodyStr = string(bodyBytes)
-			if strings.Contains(path, "/login") || strings.Contains(path, "/register") || strings.Contains(path, "/modify/password") {
-				// 简单的脱敏逻辑：尝试解析 JSON 并掩盖 password
-				var bodyMap map[string]interface{}
-				if err := json.Unmarshal(bodyBytes, &bodyMap); err == nil {
-					if _, ok := bodyMap["password"]; ok {
-						bodyMap["password"] = "******"
-					}
-					if _, ok := bodyMap["new_password"]; ok {
-						bodyMap["new_password"] = "******"
-					}
-					if _, ok := bodyMap["old_password"]; ok {
-						bodyMap["old_password"] = "******"
-					}
-					maskedBody, _ := json.Marshal(bodyMap)
-					bodyStr = string(maskedBody)
-				}
-			}
+			bodyStr = redactJSONBody(bodyBytes)
 		} else {
 			bodyStr = "[Multipart Content - Body Ignored]"
 		}
+
+		// 同一套脱敏规则覆盖 query string,避免 ?token=xxx / ?api_key=xxx
+		// 之类的 URL 形态把凭据写进 audit log。
+		queryParams = redactQueryParams(queryParams)
 
 		// 异步写入数据库
 		go func(
