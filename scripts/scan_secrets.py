@@ -32,6 +32,7 @@ PLACEHOLDER_WORDS = (
     "example",
     "fake",
     "placeholder",
+    "replace",
     "sample",
     "test",
     "your",
