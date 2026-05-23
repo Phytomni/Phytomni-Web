@@ -7,7 +7,14 @@
 # ---------------------------------------------------------------------
 # Application identity + log verbosity
 # ---------------------------------------------------------------------
-app: web
+# `app.trusted_proxies` feeds gin.Engine.SetTrustedProxies (server/http.go)
+# so X-Forwarded-* headers from these CIDRs are honored. Default in code
+# is ["192.0.0.0/8", "172.16.0.0/12"]; override here if your ingress sits
+# in a different subnet (Kubernetes overlay, public load balancer, etc.).
+app:
+  trusted_proxies:
+    - "192.0.0.0/8"
+    - "172.16.0.0/12"
 debug: true
 
 # ---------------------------------------------------------------------
@@ -54,9 +61,17 @@ log:
 
 # ---------------------------------------------------------------------
 # Feature switches — http server + cron scheduler
+#
+# `http.switch` is the master kill-switch for the gin engine wiring.
+# `http.gzip` toggles the gzip response middleware (off by default —
+# turning it on burns CPU on small responses but trims body size for
+# the large analyst-agent payloads). `http.maintenance` flips every
+# non-health route to 503 so ops can drain traffic before a deploy.
 # ---------------------------------------------------------------------
 http:
   switch: true
+  gzip: false
+  maintenance: false
 cron:
   switch: true
 
