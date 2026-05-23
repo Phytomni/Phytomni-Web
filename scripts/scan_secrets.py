@@ -174,6 +174,24 @@ SECRET_RULES = (
         ),
         message="non-placeholder secret assignment detected",
     ),
+    Rule(
+        # Catches the Huawei-style short identifiers ak / sk that the
+        # generic secret-assignment rule above misses (it only matches
+        # access_key / secret_key etc.). Operator [:=]+ covers Python
+        # "=", Go ":=", and YAML ":". Quoted value ≥ 15 chars masks the
+        # 20-char Huawei AK and 40-char SK without false-positiving
+        # `ak := os.Getenv("AK")` style env reads (no quoted literal).
+        name="huawei-credentials",
+        pattern=re.compile(
+            r"(?ix)"
+            r"\b(?:ak|sk|access[_-]?key[_-]?id|secret[_-]?access[_-]?key)\b"
+            r"\s*[:=]+\s*"
+            r"['\"]"
+            r"(?P<value>[A-Za-z0-9][A-Za-z0-9_+/=-]{15,})"
+            r"['\"]"
+        ),
+        message="Huawei-style ak/sk assignment detected",
+    ),
 )
 
 
@@ -223,7 +241,7 @@ def sensitive_path_reason(path: str) -> str | None:
     # (e.g. .env.dev.example, .env.production.template) — Vite and other
     # build tools encode the mode into the filename, and the matching
     # template must keep the same prefix to be discoverable by `cp`.
-    if name.endswith(".example") or name.endswith(".sample") or name.endswith(".template"):
+    if name.endswith((".example", ".sample", ".template")):
         return None
     if name == ".env" or name.startswith(".env."):
         return "environment files must stay out of Git history"

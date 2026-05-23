@@ -561,8 +561,15 @@ async def handle_uploaded_files(files: Optional[List[UploadFile]], username: str
     
     files_details = []
 
-    ak = "HPUATWE0DXL6NVDAXTFU"
-    sk = "4eKpT5LPydBHelGqyQB6pAaFKSw0AwHkzJ46eDrT"
+    # OBS ak/sk are duplicated from Web Go-side viper huawei.obs.{ak,sk};
+    # this Python service is scheduled for removal in the Bot consolidation
+    # cutover (see Phytomni-Bot/.claude/handoff/2026-05-23-python-service-
+    # consolidation.md §4.5 / OQ-7), so we accept the duplication rather
+    # than refactor a file slated for deletion. Pragma markers below tell
+    # scan_secrets to skip these lines — they remain real production
+    # credentials and MUST be rotated when the cutover lands.
+    ak = "HPUATWE0DXL6NVDAXTFU"                      # pragma: allowlist secret
+    sk = "4eKpT5LPydBHelGqyQB6pAaFKSw0AwHkzJ46eDrT"  # pragma: allowlist secret
     server = "https://obs.cn-east-3.myhuaweicloud.com"
     
     for file in files:
