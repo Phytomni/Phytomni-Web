@@ -67,6 +67,11 @@ koosearch:
   url:
     question_url: "http://your-koosearch-host:8000/v1/koosearch/experience/chat"
     search_url: "http://your-koosearch-host:8000/v1/koosearch/experience/search"
+    # Prefix used by ApiKooSearchDownloadFiles to mint per-file download
+    # URLs (the handler appends the query "file" verbatim). Production
+    # historically inlined the same host as a scheme-less literal — keep
+    # the protocol explicit here so the frontend never builds //host URLs.
+    files_url: "http://your-koosearch-host:8000/v1/koosearch/repos/files/"
 
 # ---------------------------------------------------------------------
 # Gene example file root — ApiGeneDetails reads files from here.

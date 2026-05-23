@@ -70,7 +70,7 @@ func RunRAG(repoID, query string, pageNum, pageSize int) (string, error) {
 	client := &http.Client{Transport: tr}
 
 	resp, err := client.Post(
-		"http://1.95.74.240:8000/v1/koosearch/experience/search",
+		RConfig.SearchUrl,
 		"application/json",
 		bytes.NewBuffer(jsonData),
 	)

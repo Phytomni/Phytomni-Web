@@ -2,6 +2,7 @@ package api_handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 	"net/http"
 	"nky_client_go/common"
 	"nky_client_go/utils/errs"
@@ -53,6 +54,6 @@ func (ph *ApiHandler) ApiKooSearchDownloadFiles(ctx *gin.Context) {
 
 	file := ctx.Query("file")
 
-	url := "1.95.74.240:8000/v1/koosearch/repos/files/" + file
+	url := viper.GetString("koosearch.url.files_url") + file
 	ctx.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "data": url})
 }
