@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
@@ -67,11 +66,28 @@ func huaweiEIHealthJobsBase() string {
 	)
 }
 
+// huaweiOBSCredentials returns the Huawei OBS access-key triple read from
+// viper — ak / sk / endpoint. Callers feed the triple straight into
+// obs.New so the credentials never appear as inline literals. Used by
+// the gene_test_list download helpers (ApiDownloadAnalystAgentObsFile
+// and ApiDownloadAnalystAgentObsImages). Rotation happens in
+// config/app.yml without recompiling.
+func huaweiOBSCredentials() (ak, sk, endpoint string) {
+	return viper.GetString("huawei.obs.ak"),
+		viper.GetString("huawei.obs.sk"),
+		viper.GetString("huawei.obs.endpoint")
+}
+
 type TaskStatusResponse struct {
 	Status string `json:"status"`
 }
 
-func GetTaskStatus(ctx *gin.Context, taskIds []string) {
+// GetTaskStatus is invoked from the FreshGA cron and from on-demand
+// handler paths. It only reads from taskIds + the viper-backed Huawei
+// IAM/EIHealth helpers — there is no *gin.Context state to thread
+// through, so the parameter was removed to make the cron call site
+// honest about not having a request context.
+func GetTaskStatus(taskIds []string) {
 	fmt.Printf("当前共%d条任务开始查询！\n", len(taskIds))
 
 	// 1. 首先获取华为云认证token (提取到循环外，避免重复认证)

@@ -164,9 +164,7 @@ func (ps *ApiService) ApiDownloadAnalystAgentObsFile(ctx context.Context, userna
 	}
 
 	// 1、初始化客户端
-	ak := "HPUATWE0DXL6NVDAXTFU"                     // 替换为你的AK
-	sk := "4eKpT5LPydBHelGqyQB6pAaFKSw0AwHkzJ46eDrT" // 替换为你的SK
-	endpoint := "https://obs.cn-east-3.myhuaweicloud.com"
+	ak, sk, endpoint := huaweiOBSCredentials()
 	expiration := 3600
 
 	obsClient, err := obs.New(ak, sk, endpoint)
@@ -228,9 +226,7 @@ func (ps *ApiService) ApiDownloadAnalystAgentObsFile(ctx context.Context, userna
 
 func (ps *ApiService) ApiDownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
 	// 1、初始化客户端
-	ak := "HPUATWE0DXL6NVDAXTFU"                     // 替换为你的AK
-	sk := "4eKpT5LPydBHelGqyQB6pAaFKSw0AwHkzJ46eDrT" // 替换为你的SK
-	endpoint := "https://obs.cn-east-3.myhuaweicloud.com"
+	ak, sk, endpoint := huaweiOBSCredentials()
 	expiration := 3600
 
 	obsClient, err := obs.New(ak, sk, endpoint)
@@ -324,50 +320,8 @@ func ParseObsPath(obsPath string) (bucketName, objectKey string, err error) {
 }
 
 func (ps *ApiService) ApiGetDownloadObsFile(ctx context.Context, username, obsPath string) (string, error) {
-	////1、初始化客户端
-	//ak := "HPUATWE0DXL6NVDAXTFU"                     // 替换为你的AK
-	//sk := "4eKpT5LPydBHelGqyQB6pAaFKSw0AwHkzJ46eDrT" // 替换为你的SK
-	//endpoint := "https://obs.cn-east-3.myhuaweicloud.com"
-	//expiration := 3600
-	////判断是否有权限生成下载链接
-	//var questionAgentLog model.SQuestionAgentLog
-	//if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
-	//	First(&questionAgentLog).RowsAffected; result == 0 {
-	//	return "", errors.New("没有查找到对应的obs路径数据")
-	//}
-	//
-	//obsClient, err := obs.New(ak, sk, endpoint)
-	//if err != nil {
-	//	return "", err
-	//}
-	////2、解析obs路径
-	//
-	//bucketName, objectKey, err := ParseObsPath(obsPath)
-	//if err != nil {
-	//	return "", fmt.Errorf("failed to parse OBS path: %v", err)
-	//}
-	//
-	//// 3. 生成1小时后过期的临时URL
-	//input := &obs.CreateSignedUrlInput{
-	//	Method:  "GET", // 允许GET请求（下载）
-	//	Bucket:  bucketName,
-	//	Key:     objectKey,
-	//	Expires: expiration,
-	//}
-	//
-	//output, err := obsClient.CreateSignedUrl(input)
-	//if err != nil {
-	//	return "", err
-	//}
-	//
-	//// 4. 打印临时URL
-	//fmt.Println("临时下载URL:", output.SignedUrl)
-	//
-	//return output.SignedUrl, nil
 	// 1、初始化客户端
-	ak := "HPUATWE0DXL6NVDAXTFU"                     // 替换为你的AK
-	sk := "4eKpT5LPydBHelGqyQB6pAaFKSw0AwHkzJ46eDrT" // 替换为你的SK
-	endpoint := "https://obs.cn-east-3.myhuaweicloud.com"
+	ak, sk, endpoint := huaweiOBSCredentials()
 	expiration := 3600
 
 	obsClient, err := obs.New(ak, sk, endpoint)

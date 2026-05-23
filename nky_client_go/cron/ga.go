@@ -6,8 +6,6 @@ import (
 	rxLog "nky_client_go/log"
 	"nky_client_go/model"
 	servicega "nky_client_go/service/api_service"
-
-	"github.com/gin-gonic/gin"
 )
 
 type FreshGA struct {
@@ -37,7 +35,5 @@ func (ts *FreshGA) Run() {
 	for _, v := range questionAgentList {
 		taskIdSet = append(taskIdSet, v.TaskId)
 	}
-	var ctx *gin.Context
-	servicega.GetTaskStatus(ctx, taskIdSet)
-
+	servicega.GetTaskStatus(taskIdSet)
 }

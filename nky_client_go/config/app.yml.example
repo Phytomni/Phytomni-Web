@@ -114,3 +114,27 @@ huawei:
     base_url: "https://eihealth.cn-east-3.myhuaweicloud.com/v1"
     account_id: "your-huawei-account-id"
     project_uuid: "your-eihealth-project-uuid"
+  # OBS download credentials — service/api_service/gene_test_list.go reads
+  # these to mint signed URLs for AnalystAgent result downloads. Rotate by
+  # editing config/app.yml; never inline ak/sk back into source files.
+  obs:
+    ak: "your-huawei-obs-access-key"
+    sk: "your-huawei-obs-secret-key"
+    endpoint: "https://obs.cn-east-3.myhuaweicloud.com"
+
+# ---------------------------------------------------------------------
+# Outbound notification email — common/email/email_send.go.
+# `web_base_url` / `api_base_url` are stitched into the link bodies of
+# the notification email (chat page + OBS file download). `from_*` are
+# the QQ-SMTP credentials used to actually send. The auth code is a
+# real production credential previously inlined as a literal; rotating
+# requires updating config/app.yml + restarting the Go service.
+# ---------------------------------------------------------------------
+email:
+  web_base_url: "http://your-web-host"
+  api_base_url: "http://your-api-host:8082"
+  smtp_server: "smtp.qq.com"
+  smtp_port: 587
+  from_display: "nky_email <your-sender@qq.com>"
+  from_address: "your-sender@qq.com"
+  from_auth_code: "your-qq-smtp-auth-code"
