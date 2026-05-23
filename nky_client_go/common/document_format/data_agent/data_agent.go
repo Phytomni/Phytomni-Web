@@ -22,7 +22,7 @@ func ExportToExecl(data TableData) ([]byte, error) {
 
 	// 设置表头
 	for i, header := range data.Headers {
-		col := string('A' + i)
+		col := string(rune('A' + i))
 		cell := fmt.Sprintf("%s%d", col, 1)
 		f.SetCellValue("Sheet1", cell, header)
 	}
@@ -30,7 +30,7 @@ func ExportToExecl(data TableData) ([]byte, error) {
 	// 设置数据行
 	for rowIdx, row := range data.Rows {
 		for colIdx, value := range row {
-			col := string('A' + colIdx)
+			col := string(rune('A' + colIdx))
 			cell := fmt.Sprintf("%s%d", col, rowIdx+2)
 			f.SetCellValue("Sheet1", cell, value)
 		}
