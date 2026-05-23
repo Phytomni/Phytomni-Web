@@ -11,8 +11,8 @@ func DoCron() error {
 		return nil
 	}
 	freshTokenList := make([]rxCron.Cron, 0)
-	// todo 暂停定时任务查询
-	//NewFreshToken(),NewFreshGA(),NewFreshGALog()
+	// NewFreshToken / NewFreshGALog were removed alongside their unregistered
+	// type files — see git history of cron/token.go and cron/ga_log.go.
 	freshTokenList = append(freshTokenList, NewFreshGA())
 	if err := rxCron.InitFromMinute(freshTokenList); err != nil {
 		return err
