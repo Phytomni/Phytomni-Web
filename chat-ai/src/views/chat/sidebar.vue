@@ -408,7 +408,7 @@ const handleButtonClick = (buttonType: string, action: () => void) => {
 const RESPONSIVE_BREAKPOINT = 1200;
 
 // 防抖定时器
-let resizeTimer: number | null = null;
+let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 用户偏好设置 - 是否启用自动展开功能
 const autoExpandEnabled = ref(true);
@@ -482,8 +482,6 @@ const expandSidebar = () => {
 // 折叠侧边栏
 const collapseSidebar = () => {
   sidebarCollapsed.value = true;
-  // 关闭agents列表
-  showAgentsList.value = false;
   // 用户手动收起时，暂时禁用自动展开功能
   autoExpandEnabled.value = false;
   // 3秒后重新启用自动展开功能

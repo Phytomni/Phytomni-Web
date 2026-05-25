@@ -206,7 +206,7 @@ const handleUnfavorite = async (favorite: FavoriteItem) => {
   console.log(favorite,'favorite');
   try {
     const formData = new FormData();
-    formData.append('id', favorite.id);
+    formData.append('id', favorite.id.toString());
     formData.append('collect_type', '0'); // 0表示取消收藏
     
     const response = await collectHistory(formData);

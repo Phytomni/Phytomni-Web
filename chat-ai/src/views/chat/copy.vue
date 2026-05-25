@@ -86,18 +86,7 @@
                       placement="top-start"
                     >
                      <div class="message-fotter-item">
-                        <el-icon @click="()=>{
-                        const result =message.doc_list && message.doc_list.length > 0 ? message.doc_list.map((item: any, index: number) => {
-                          if (item.title) {
-                            return `${index + 1}. ${item.title}`;
-                          } else if (item.au || item.ti) {
-                            return `${index + 1}. ${formatDetailedCitation(item)}`;
-                          }
-                          return `${index + 1}. ${JSON.stringify(item)}`;
-                        }).join('\n'):'';
-                        const copyString = message.content + (result && result !== '' ? '\n参考资料:\n' : '') + result
-                        fallbackCopyText(copyString,index+1)
-                        }"><CopyDocument /></el-icon>
+                        <el-icon @click="() => copyMessageWithDocs(message, index)"><CopyDocument /></el-icon>
                      </div>
                       
                     </el-tooltip>
@@ -171,18 +160,7 @@
                     placement="top-start"
                   >
                     <div class="message-fotter-item">
-                      <el-icon  @click="()=>{
-                        const result =message.doc_list && message.doc_list.length > 0 ? message.doc_list.map((item: any, index: number) => {
-                          if (item.title) {
-                            return `${index + 1}. ${item.title}`;
-                          } else if (item.au || item.ti) {
-                            return `${index + 1}. ${formatDetailedCitation(item)}`;
-                          }
-                          return `${index + 1}. ${JSON.stringify(item)}`;
-                        }).join('\n'):'';
-                        const copyString = message.content + (result && result !== '' ? '\n参考资料:\n' : '') + result
-                        fallbackCopyText(copyString,index+1)
-                        }">
+                      <el-icon @click="() => copyMessageWithDocs(message, index)">
                         <CopyDocument />
                       </el-icon>
                     </div>
@@ -415,7 +393,7 @@ const uploadRef = ref<UploadInstance>()
 const fileList = ref<UploadFile[]>([])
 // 复制状态
 const copyVisible = ref<number>(0);
-const copyTimeRef = ref<number | undefined>(undefined);
+const copyTimeRef = ref<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 const submitUpload = () => {
   uploadRef.value!.submit()
@@ -1285,6 +1263,28 @@ const isAnimating = ref(false);
 // 处理agent点击
 const handleAgentClick = (agent: any) => {
   router.push(agent.route);
+};
+
+// 复制消息内容 + 引用的文档列表(从 inline @click 提取,绕开 vue-tsc
+// 0.39.5 在模板多语句箭头函数内解析局部 const 时把它误映射到
+// component instance 的 bug —— 详见 copy.vue 中 4 处 @click 用法)
+const copyMessageWithDocs = (message: any, index: number) => {
+  const docs =
+    message.doc_list && message.doc_list.length > 0
+      ? message.doc_list
+          .map((item: any, idx: number) => {
+            if (item.title) {
+              return `${idx + 1}. ${item.title}`;
+            } else if (item.au || item.ti) {
+              return `${idx + 1}. ${formatDetailedCitation(item)}`;
+            }
+            return `${idx + 1}. ${JSON.stringify(item)}`;
+          })
+          .join('\n')
+      : '';
+  const text =
+    message.content + (docs && docs !== '' ? '\n参考资料:\n' : '') + docs;
+  fallbackCopyText(text, index + 1);
 };
 
 </script>

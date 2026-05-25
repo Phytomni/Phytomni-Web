@@ -50,7 +50,7 @@
 
   // 切换语言
   const handleCommand = (command: string) => {
-    setLanguage(command);
+    setLanguage(command as 'zh-CN' | 'en-US');
   };
 </script>
 

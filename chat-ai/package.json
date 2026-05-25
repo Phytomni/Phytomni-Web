@@ -5,9 +5,9 @@
     "dev": "vite --mode dev",
     "dev:prod": "vite --mode production",
     "host": "vite --host --mode dev",
-    "build": "run-p type-check build-only --mode production",
+    "build": "run-p type-check build-only",
     "preview": "vite preview --port 4173",
-    "build-only": "vite build",
+    "build-only": "vite build --mode production",
     "type-check": "vue-tsc --noEmit",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },

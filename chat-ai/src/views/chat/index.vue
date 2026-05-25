@@ -245,18 +245,7 @@
                     <el-tooltip effect="dark" :content="$t('chat.copy')" placement="top-start"
                       v-if="copyVisible == 0 || copyVisible !== index + 1">
                       <div class="message-fotter-item">
-                        <el-icon @click="() => {
-                          const result = message.doc_list && message.doc_list.length > 0 ? message.doc_list.map((item: any, index: number) => {
-                            if (item.title) {
-                              return `${index + 1}. ${item.title}`;
-                            } else if (item.au || item.ti) {
-                              return `${index + 1}. ${formatDetailedCitation(item)}`;
-                            }
-                            return `${index + 1}. ${JSON.stringify(item)}`;
-                          }).join('\n') : '';
-                          const copyString = message.content + (result && result !== '' ? '\n参考资料:\n' : '') + result
-                          fallbackCopyText(copyString, index + 1)
-                        }">
+                        <el-icon @click="() => copyMessageWithDocs(message, index)">
                           <CopyDocument />
                         </el-icon>
                       </div>
@@ -460,18 +449,7 @@
                   <el-tooltip effect="dark" :content="$t('chat.copy')" placement="top-start"
                     v-if="copyVisible == 0 || copyVisible !== index + 1">
                     <div class="message-fotter-item">
-                      <el-icon @click="() => {
-                        const result = message.doc_list && message.doc_list.length > 0 ? message.doc_list.map((item: any, index: number) => {
-                          if (item.title) {
-                            return `${index + 1}. ${item.title}`;
-                          } else if (item.au || item.ti) {
-                            return `${index + 1}. ${formatDetailedCitation(item)}`;
-                          }
-                          return `${index + 1}. ${JSON.stringify(item)}`;
-                        }).join('\n') : '';
-                        const copyString = message.content + (result && result !== '' ? '\n参考资料:\n' : '') + result
-                        fallbackCopyText(copyString, index + 1)
-                      }">
+                      <el-icon @click="() => copyMessageWithDocs(message, index)">
                         <CopyDocument />
                       </el-icon>
                     </div>
@@ -1102,7 +1080,7 @@ const chatStates = ref<Record<string, {
   fileList: UploadFile[];
   historyQuestion: any;
   copyVisible: number;
-  copyTimeRef: number | undefined;
+  copyTimeRef: ReturnType<typeof setTimeout> | undefined;
   logData: Record<string, any>;
   loadingLog: Record<string, boolean>;
   refreshingMessages: Record<string, boolean>;
@@ -1293,7 +1271,7 @@ const getFileDownUrl = async (id: string, type: string) => {
   try {
     const response = await getFileDownUrlApi(queryData);
     // 从响应头中提取文件名
-    const contentDisposition = response.headers.get("Content-Disposition");
+    const contentDisposition = response.headers['content-disposition'];
     let fileName = "default_filename"; // 默认文件名
     if (contentDisposition) {
       const fileNameMatch = contentDisposition.match(/filename="?(.+?)"?(;|$)/i);
@@ -1776,7 +1754,7 @@ const copyTimeRef = computed({
     const chatState = getChatState(currentChatId.value);
     return chatState ? chatState.copyTimeRef : undefined;
   },
-  set: (value: number | undefined) => {
+  set: (value: ReturnType<typeof setTimeout> | undefined) => {
     if (!currentChatId.value) return;
     const chatState = getChatState(currentChatId.value);
     if (chatState) {
@@ -3620,6 +3598,28 @@ const updateLog = async (messageId: string) => {
       scrollToBottom();
     });
   }
+};
+
+// 复制消息内容 + 引用的文档列表(从 inline @click 提取,绕开 vue-tsc
+// 0.39.5 在模板多语句箭头函数内解析局部 const 时把它误映射到
+// component instance 的 bug —— 详见 index.vue 中 2 处 @click 用法)
+const copyMessageWithDocs = (message: any, index: number) => {
+  const docs =
+    message.doc_list && message.doc_list.length > 0
+      ? message.doc_list
+          .map((item: any, idx: number) => {
+            if (item.title) {
+              return `${idx + 1}. ${item.title}`;
+            } else if (item.au || item.ti) {
+              return `${idx + 1}. ${formatDetailedCitation(item)}`;
+            }
+            return `${idx + 1}. ${JSON.stringify(item)}`;
+          })
+          .join('\n')
+      : '';
+  const text =
+    message.content + (docs && docs !== '' ? '\n参考资料:\n' : '') + docs;
+  fallbackCopyText(text, index + 1);
 };
 
 </script>

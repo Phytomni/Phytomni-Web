@@ -14,3 +14,4 @@ import { useAppStore } from '@/stores/app';
 import { useThemeStore } from '@/stores/theme';
 
 export { counter, permiStore, userStore, useAppStore, useThemeStore };
+export type { ThemeType } from '@/stores/theme';

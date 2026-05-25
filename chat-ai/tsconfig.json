@@ -33,8 +33,12 @@
         "./src/*"
       ]
     },
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "allowJs": true
   },
+  "exclude": [
+    "src/assets/**/*.md"
+  ],
   "references": [
     {
       "path": "./tsconfig.config.json"

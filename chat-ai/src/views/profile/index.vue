@@ -76,8 +76,8 @@
                     <p>{{ $t('profile.security.permissionDescription') }}</p>
                   </div>
                 </div>
-                <el-tag :type="getPermissionTagType(userStore.permission)">
-                  {{ userStore.permission || 'user' }}
+                <el-tag :type="getPermissionTagType(UserStore.permission)">
+                  {{ UserStore.permission || 'user' }}
                 </el-tag>
               </div>
             </div>

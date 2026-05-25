@@ -81,7 +81,8 @@ interface TaskData {
   upload_path?:string;
   updated_at?:string;
   dialogue_id?:string;
-  f_dialogue_id?:string
+  f_dialogue_id?:string;
+  download_path?:string;
 }
 
 const loading = ref(false);

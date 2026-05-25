@@ -66,6 +66,7 @@ interface GeneData {
   title: string;
   synopsis: string;
   picture: string;
+  file_name?: string;
 }
 
 const searchQuery = ref('');
