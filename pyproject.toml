@@ -1,0 +1,51 @@
+# Copyright (c) Biotechnology Research Institute,
+# Chinese Academy of Agricultural Sciences. 2024-2026. All rights reserved.
+# Author: xieshang (xieshang0608@gmail.com)
+#         guxiaofeng (guxiaofeng@caas.cn)
+#
+# Repo-wide tooling pyproject for Phytomni-Web.
+#
+# Phytomni-Web is a polyglot monorepo (chat-ai/Vue, nky_client_go/Go,
+# nky_client_python/Python). This file does NOT belong to any of those
+# sub-projects — it exists to host a pytest runner for repo-wide tooling
+# under scripts/ (currently scan_secrets.py and its tests).
+#
+# scripts/ stays stdlib-only because the pre-commit hook invokes it via
+# system python3 (see .githooks/pre-commit). The tests in scripts/tests/
+# pin pytest>=9.0.3, matching the Bot repo so contributors who already
+# have that environment can drop in.
+#
+# Usage:
+#   uv sync                 # provision a .venv with pytest installed
+#   uv run pytest           # discover and run scripts/tests/
+
+[project]
+name = "phytomni-web-tooling"
+version = "0.0.0"
+description = "Repo-wide tooling tests for Phytomni-Web (scripts/)."
+requires-python = ">=3.11"
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["scripts/tests"]
+pythonpath = ["scripts"]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+    "-ra",
+]
+markers = [
+    "unit: fast offline unit tests.",
+]

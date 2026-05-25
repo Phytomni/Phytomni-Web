@@ -62,6 +62,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Python 测试/类型检查缓存(repo-wide tooling 的本地产物)
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # Jupyter笔记本缓存
 .ipynb_checkpoints/
 
