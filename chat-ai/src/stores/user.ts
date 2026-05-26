@@ -9,7 +9,6 @@
  */
 
 import { defineStore } from 'pinia';
-// @ts-ignore
 import {
   getToken,
   setToken,

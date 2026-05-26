@@ -146,7 +146,7 @@ const validatePasswordStrength = (rule: any, value: string, callback: any) => {
   }
 
   // 包含特殊符号
-  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(value)) {
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
     callback(new Error(t('register.validation.passwordNeedSpecial')));
     return;
   }

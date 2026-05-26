@@ -615,7 +615,7 @@ const handleButtonClick = (buttonType: string) => {
   }
 };
 
-  const updateCopyIconHandler = (index:number,delay: number = 3000,) => {
+  const updateCopyIconHandler = (index:number,delay = 3000,) => {
     copyVisible.value=index;
     if (copyTimeRef.value) {
       clearTimeout(copyTimeRef.value);

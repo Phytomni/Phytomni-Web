@@ -18,7 +18,7 @@ const source = CancelToken.source();
 
 let downloadLoadingInstance: ReturnType<typeof ElLoading.service> | undefined;
 // 是否显示重新登录
-export let isRelogin = { show: false };
+export const isRelogin = { show: false };
 
 //不设置header，让浏览器自动识别
 // axios.defaults.headers['Content-Type'] = 'application/json;charset=utf-8';
@@ -181,7 +181,8 @@ service.interceptors.response.use(
   },
   (error: any) => {
     console.log(error, 'error1111');
-    let { message, response } = error;
+    const { response } = error;
+    let { message } = error;
     if (response.data.detail.code === 403) {
       isRelogin.show = false;
       const UserStore = userStore();

@@ -2,7 +2,11 @@
 
 declare module '*.vue' {
   import type { DefineComponent } from 'vue';
-  const component: DefineComponent<{}, {}, any>;
+  // `object` is the standard vue-tsc / official Vue SFC shim type for
+  // Props / RawBindings; replacing `{}` (which lint flags as "any
+  // non-nullish value") with `object` keeps the shim compatible with
+  // any consuming component while satisfying ban-types.
+  const component: DefineComponent<object, object, any>;
   export default component;
 }
 

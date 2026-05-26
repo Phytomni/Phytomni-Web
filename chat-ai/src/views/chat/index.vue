@@ -1161,7 +1161,7 @@ const handleButtonClick = (buttonType: string) => {
   });
 };
 
-const updateCopyIconHandler = (index: number, delay: number = 3000,) => {
+const updateCopyIconHandler = (index: number, delay = 3000,) => {
   copyVisible.value = index;
   if (copyTimeRef.value) {
     clearTimeout(copyTimeRef.value);
@@ -1336,7 +1336,7 @@ const parseMessageWithFiles = (messageContent: string) => {
   // 提取文件信息
   const attachedFiles: UploadFile[] = [];
   fileMatches.forEach(match => {
-    const fileInfo = match.match(/\[附件: ([^\(]+) \(([^\)]+)\)\]/);
+    const fileInfo = match.match(/\[附件: ([^(]+) \(([^)]+)\)\]/);
     if (fileInfo) {
       const fileName = fileInfo[1].trim();
       const fileSizeStr = fileInfo[2].trim();
@@ -3428,6 +3428,11 @@ const formatLogContentWithColors = (logContent: string) => {
     .replace(/\n/g, '\n') // 保持换行符
     .trim();
 
+  // ANSI ESC (\u001b) is a control char by design; this contiguous block
+  // converts terminal escape sequences to HTML tags. no-control-regex is
+  // meant to catch accidental control chars in human regex, not ANSI
+  // parsing, so we disable it for the block only.
+  /* eslint-disable no-control-regex */
   // 转换ANSI颜色代码为HTML样式
   // 红色文本
   processedContent = processedContent.replace(/\u001b\[31m/g, '<span style="color: #ff0000;">');
@@ -3455,6 +3460,7 @@ const formatLogContentWithColors = (logContent: string) => {
   // 下划线
   processedContent = processedContent.replace(/\u001b\[4m/g, '<u>');
   processedContent = processedContent.replace(/\u001b\[24m/g, '</u>');
+  /* eslint-enable no-control-regex */
 
   return processedContent;
 };
@@ -3466,7 +3472,7 @@ const readServerFile = async (filePath: string): Promise<string> => {
     let relativePath = filePath;
     if (filePath.includes('src\\assets\\agentOut\\') || filePath.includes('src/assets/agentOut/')) {
       // 提取相对路径部分
-      const pathParts = filePath.split(/[\\\/]/);
+      const pathParts = filePath.split(/[\\/]/);
       const srcIndex = pathParts.findIndex(part => part === 'src');
       if (srcIndex !== -1) {
         relativePath = pathParts.slice(srcIndex).join('/');

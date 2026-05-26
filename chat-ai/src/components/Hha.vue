@@ -21,8 +21,8 @@ import { ref, type Ref } from 'vue'
 const props = defineProps({
   msg: Number,
 })
-let msg = ref(props.msg) 
-let msg1 = ref(1) 
+const msg = ref(props.msg)
+const msg1 = ref(1)
 setTimeout(() => {
   msg1.value++
 }, 1000)

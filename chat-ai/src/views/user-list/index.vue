@@ -347,7 +347,7 @@
     }
 
     // 包含特殊符号
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(value)) {
+    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
       callback(new Error(t('user.validation.passwordNeedSpecial')));
       return;
     }

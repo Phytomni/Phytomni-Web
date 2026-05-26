@@ -9,7 +9,7 @@
  */
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
-// @ts-ignore
+// @ts-expect-error: vite/plugins/index.js has not been migrated to TypeScript yet — drop this directive when the file becomes vite/plugins/index.ts
 import createVitePlugins from './vite/plugins';
 // import vue from '@vitejs/plugin-vue';
 // import vueJsx from '@vitejs/plugin-vue-jsx';

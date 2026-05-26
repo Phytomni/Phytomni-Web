@@ -97,9 +97,8 @@ function filterAsyncRouter(asyncRouterMap: IRoute[], type = false) {
       route.children = filterChildren(route.children);
     }
     if (route.component) {
-      // 组件特殊处理
-      if (route.component === 'Layout') {
-      } else {
+      // 组件特殊处理:'Layout' 是 router 自解析的字符串占位,不走 loadView
+      if (route.component !== 'Layout') {
         route.component = loadView(route.component);
       }
     }
@@ -114,7 +113,7 @@ function filterAsyncRouter(asyncRouterMap: IRoute[], type = false) {
 }
 
 function filterChildren(childrenMap: IRoute[], lastRouter?: IRoute | boolean) {
-  var children: IRoute[] = [];
+  let children: IRoute[] = [];
   childrenMap.forEach((el: IRoute) => {
     if (el.children && el.children.length) {
       if (el.component === 'ParentView' && !lastRouter) {

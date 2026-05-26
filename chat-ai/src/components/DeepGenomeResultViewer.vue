@@ -514,7 +514,7 @@ const processInlineMarkdown = (line) => {
   // 处理 .cif 链接
   line = line.replace(/\[([^\]]+?)\]\(([^)]+?\.cif)\)/g, (_, text, url) => {
     // 转换路径
-    let cleanUrl = convertFilePath(url);
+    const cleanUrl = convertFilePath(url);
     return `<div class="cif-container" data-src="${cleanUrl}" data-alt="${text}">${text} (CIF 文件)</div>`;
   });
   // 处理参考文献引用，确保引用不单独占行
@@ -660,7 +660,7 @@ const processCifContainers = async () => {
 const convertMarkdown = (text) => {
   const lines = text.split('\\n'); // 正确分割行
   console.log(lines.length);
-  let blocks = [];
+  const blocks = [];
   let currentH3CardContent = '';
   let currentH3CardHeader = '';
   let currentH3CardId = '';
@@ -717,7 +717,7 @@ const convertMarkdown = (text) => {
   };
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+    const line = lines[i];
 
     const isTableDelimiter = (l) => {
       return (

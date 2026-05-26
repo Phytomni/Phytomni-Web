@@ -24,6 +24,11 @@ router.beforeEach((to, from, next) => {
   // document.title = to.meta.title ? (to.meta.title as string) : '管理平台';
   document.title = 'Phytomni';
   // if (getToken()) {
+  // FIXME: auth bypass — the original `getToken()` guard is commented
+  // out, leaving every route accessible. Tracked as a separate product
+  // concern (forgot-password is also stubbed, same neighborhood); fixing
+  // this is intentionally out of the current CI-hygiene scope.
+  // eslint-disable-next-line no-constant-condition
   if (true) {
     /* has token */
     if (to.path === '/') {

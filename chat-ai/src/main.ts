@@ -19,7 +19,6 @@ import App from './App.vue';
 import router from './router';
 import directive from './directive';
 // 注册指令
-// @ts-ignore
 import plugins from './plugins'; // plugins
 import { download } from '@/utils/request';
 import 'element-plus/dist/index.css';

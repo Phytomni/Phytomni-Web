@@ -245,7 +245,7 @@ const validateNewPasswordStrength = (rule: any, value: string, callback: any) =>
   }
 
   // 包含特殊符号
-  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(value)) {
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
     callback(new Error(t('user.validation.passwordNeedSpecial')));
     return;
   }
@@ -267,7 +267,7 @@ const passwordRules = {
   confirmPassword: [
     { required: true, message: () => t('user.validation.passwordMismatch'), trigger: 'blur' },
     {
-      validator: (rule: any, value: string, callback: Function) => {
+      validator: (rule: unknown, value: string, callback: (error?: Error) => void) => {
         if (value !== passwordForm.newPassword) {
           callback(new Error(t('user.validation.passwordMismatch')));
         } else {
