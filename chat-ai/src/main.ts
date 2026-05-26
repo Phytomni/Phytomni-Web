@@ -21,7 +21,6 @@ import directive from './directive';
 // 注册指令
 // @ts-ignore
 import plugins from './plugins'; // plugins
-// @ts-ignore
 import { download } from '@/utils/request';
 import 'element-plus/dist/index.css';
 import './assets/main.css'; // 全局样式

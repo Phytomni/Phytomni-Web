@@ -12,7 +12,6 @@ import 'nprogress/nprogress.css';
 import router from '@/router';
 import { userStore, permiStore } from '@/stores';
 import { getToken } from '@/utils';
-// @ts-ignore
 import { isRelogin } from '@/utils/request';
 import type { RouteRecordRaw } from 'vue-router';
 

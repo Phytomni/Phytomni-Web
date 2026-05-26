@@ -7,7 +7,6 @@
  * @Description:
  * 登录页面
  */
-// @ts-ignore
 import request from '@/utils/request';
 
 // 登录

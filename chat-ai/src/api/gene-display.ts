@@ -7,7 +7,6 @@
  * @Description:
  * 既往不恋！当下不杂！！未来不迎！！！
  */
-// @ts-ignore
 import request from '@/utils/request';
 
 // 基因展示

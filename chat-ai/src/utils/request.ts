@@ -1,4 +1,9 @@
-import axios from 'axios';
+import axios, {
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus';
 
 import { userStore } from '@/stores';
@@ -11,7 +16,7 @@ import { saveAs } from 'file-saver';
 const CancelToken = axios.CancelToken;
 const source = CancelToken.source();
 
-let downloadLoadingInstance;
+let downloadLoadingInstance: ReturnType<typeof ElLoading.service> | undefined;
 // 是否显示重新登录
 export let isRelogin = { show: false };
 
@@ -21,7 +26,7 @@ export let isRelogin = { show: false };
 // const baseURL = import.meta.env.VITE_BASE_API;
 const baseURL = '';
 
-const service = axios.create({
+const service: AxiosInstance = axios.create({
   // axios中请求配置有baseURL选项，表示请求URL公共部分
   baseURL: baseURL,
   // 超时
@@ -29,15 +34,19 @@ const service = axios.create({
 });
 
 // 存储活跃的请求控制器
-const activeControllers = new Map();
+const activeControllers = new Map<string, AbortController>();
 
 // request拦截器
 service.interceptors.request.use(
-  config => {
-    // 是否需要设置 token
-    const isToken = (config.headers || {})?.isToken === false;
+  (config: InternalAxiosRequestConfig) => {
+    // `isToken` / `repeatSubmit` are custom call-site sentinels stashed on
+    // `config.headers` by callers; axios's typed header interface does not
+    // know about them, so we treat the access as opaque to read the flags
+    // without breaking the public contract.
+    const headerFlags = config.headers as unknown as Record<string, unknown>;
+    const isToken = headerFlags?.isToken === false;
     // 是否需要防止数据重复提交
-    const isRepeatSubmit = (config.headers || {})?.repeatSubmit === false;
+    const isRepeatSubmit = headerFlags?.repeatSubmit === false;
     config.headers['platform'] = 'bcemis';
     if (getToken() && !isToken) {
       config.headers['Authorization'] = 'Bearer ' + getToken(); // 让每个请求携带自定义token 请根据实际情况自行修改
@@ -92,20 +101,27 @@ service.interceptors.request.use(
 
     return config;
   },
-  error => {
+  (error: unknown) => {
     console.log(error, 'error');
     Promise.reject(error);
   }
 );
 
+// errorCode keys are HTTP-code strings whose values are i18n thunks; the
+// JS code below intentionally chains the lookup with `|| msg || default`
+// and feeds the result straight into ElMessage. Casting to a permissive
+// record lets that pre-existing pattern type-check without altering its
+// runtime path.
+type ErrorCodeLookup = Record<string, (() => string) | string>;
+
 // 响应拦截器
 service.interceptors.response.use(
-  res => {
+  (res: AxiosResponse) => {
 
     // 未设置状态码则默认成功状态
     const code = res.data.code || 200;
     // 获取错误信息
-    const msg = errorCode[code] || res.data.msg || errorCode['default'];
+    const msg = (errorCode as ErrorCodeLookup)[code] || res.data.msg || (errorCode as ErrorCodeLookup)['default'];
     // 二进制数据则直接返回
     if (
       res.headers['content-type'] === 'application/octet-stream'
@@ -118,8 +134,8 @@ service.interceptors.response.use(
     ) {
       return res.data;
     }
-    
-    if (code === 401 || (res.detail && res.detail.code === 403)) {
+
+    if (code === 401 || (res.data.detail && res.data.detail.code === 403)) {
       if (!isRelogin.show) {
         isRelogin.show = true;
         ElMessageBox.alert(
@@ -134,8 +150,8 @@ service.interceptors.response.use(
                 // 清除所有缓存和cookie
                 localStorage.clear();
                 sessionStorage.clear();
-                document.cookie.split(";").forEach(function(c) { 
-                  document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                document.cookie.split(";").forEach(function(c) {
+                  document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
                 });
                 location.href = '/login';
               });
@@ -147,14 +163,14 @@ service.interceptors.response.use(
     } else if (code === 500) {
       if (msg !== "Cannot create property 'headers' on boolean 'false'") {
         ElMessage({
-          message: msg,
+          message: msg as string,
           type: 'error',
         });
       }
-      return Promise.reject(new Error(msg));
+      return Promise.reject(new Error(msg as string));
     } else if (code !== 200) {
       ElMessage({
-        message: msg,
+        message: msg as string,
         type: 'error',
       });
 
@@ -163,7 +179,7 @@ service.interceptors.response.use(
       return res.data;
     }
   },
-  error => {
+  (error: any) => {
     console.log(error, 'error1111');
     let { message, response } = error;
     if (response.data.detail.code === 403) {
@@ -201,18 +217,23 @@ service.interceptors.response.use(
 );
 
 // 通用下载方法
-export function download(url, params, filename) {
+export function download(url: string, params: unknown, filename: string): Promise<void> {
   downloadLoadingInstance = ElLoading.service({
     text: '正在下载数据，请稍候',
     spinner: 'el-icon-loading',
     background: 'rgba(0, 0, 0, 0.7)',
   });
-  return service
+  // The response interceptor above unwraps `res.data` for `responseType:
+  // 'blob'`, so at runtime the promise resolves to a Blob rather than an
+  // AxiosResponse. The cast aligns axios's static type with that runtime
+  // contract — see the `responseType === 'blob'` branch in the interceptor
+  // for the source of the unwrap.
+  return (service
     .post(url, params, {
-      transformRequest: [params => tansParams(params)],
+      transformRequest: [(p: unknown) => tansParams(p as { [x: string]: unknown })],
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       responseType: 'blob',
-    })
+    }) as unknown as Promise<Blob>)
     .then(async data => {
       const isLogin = await blobValidate(data);
       if (isLogin) {
@@ -222,30 +243,32 @@ export function download(url, params, filename) {
         const resText = await data.text();
         const rspObj = JSON.parse(resText);
         const errMsg =
-          errorCode[rspObj.code] || rspObj.msg || errorCode['default'];
-        ElMessage.error(errMsg);
+          (errorCode as ErrorCodeLookup)[rspObj.code] || rspObj.msg || (errorCode as ErrorCodeLookup)['default'];
+        ElMessage.error(errMsg as string);
       }
-      downloadLoadingInstance.close();
+      downloadLoadingInstance?.close();
     })
     .catch(r => {
       console.error(r);
       ElMessage.error('下载文件出现错误，请联系管理员！');
-      downloadLoadingInstance.close();
+      downloadLoadingInstance?.close();
     });
 }
 
-// 创建可中止的请求
-export const createAbortableRequest = (config) => {
+// 创建可中止的请求 — accept the public AxiosRequestConfig shape (headers
+// optional) so call sites can pass plain config literals; the stored
+// `requestId` is just a tag used to address controller entries.
+export const createAbortableRequest = (config: AxiosRequestConfig & { requestId?: string }) => {
   const controller = new AbortController();
   const requestId = config.requestId || Date.now().toString();
-  
+
   // 存储控制器
   activeControllers.set(requestId, controller);
-  
+
   // 添加中止信号到配置
   config.signal = controller.signal;
   config.requestId = requestId;
-  
+
   return service(config).finally(() => {
     // 请求完成后清理控制器
     activeControllers.delete(requestId);
@@ -253,7 +276,7 @@ export const createAbortableRequest = (config) => {
 };
 
 // 中止指定请求
-export const abortRequest = (requestId) => {
+export const abortRequest = (requestId: string): boolean => {
   const controller = activeControllers.get(requestId);
   if (controller) {
     controller.abort();
@@ -264,8 +287,8 @@ export const abortRequest = (requestId) => {
 };
 
 // 中止所有活跃请求
-export const abortAllRequests = () => {
-  activeControllers.forEach((controller, requestId) => {
+export const abortAllRequests = (): void => {
+  activeControllers.forEach((controller) => {
     controller.abort();
   });
   activeControllers.clear();
@@ -292,4 +315,3 @@ export default service;
 //     method: 'post',
 //   });
 // }
-
