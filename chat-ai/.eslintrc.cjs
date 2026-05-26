@@ -18,6 +18,13 @@ module.exports = {
     "@vue/eslint-config-typescript/recommended",
     "@vue/eslint-config-prettier",
   ],
+  // public/ holds large vendor bundles (e.g. 3Dmol-min.js, 612 KB minified)
+  // that crash eslint into catastrophic backtracking; dist/ is build output
+  // that ships from the build pipeline, not source. .gitignore covers dist/
+  // for git, but eslint's --ignore-path is only honored for paths that match
+  // a single .gitignore line and public/ is intentionally git-tracked, so
+  // these patterns must live in the lint config itself.
+  ignorePatterns: ["public/", "dist/"],
   parserOptions: {
     ecmaVersion: "latest",
   },
