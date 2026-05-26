@@ -26,6 +26,7 @@ from scan_secrets import (
     decode_bytes,
     envelope_path_finding,
     is_placeholder,
+    is_pragma_path_allowed,
     parse_diff_path,
     parse_hunk_start,
     redact_line,
@@ -322,20 +323,85 @@ def test_scan_line_findings_never_leak_secret(
 # ---------------------------------------------------------------------
 
 
-def test_scan_line_allowlist_marker_suppresses_all_rules() -> None:
-    """Lines tagged with `pragma: allowlist secret` skip every rule."""
+def test_scan_line_pragma_marker_honored_in_test_path() -> None:
+    """`pragma: allowlist secret` suppresses every rule in scripts/tests/."""
     # Build the asserted input as a single string so the marker travels
     # with the secret on one physical scan-line (the very property the
     # test verifies). Source-side, the pragma at the end also keeps the
     # pre-commit hook from flagging this fixture file.
     line = 'password = "q9X7m2k4nR8tP1bL5wF"  # pragma: allowlist secret'
-    assert scan_line("test", "fake.txt", 1, line) == []
+    assert scan_line("test", "scripts/tests/test_fixture.py", 1, line) == []
 
 
-def test_scan_line_nosec_marker_suppresses_all_rules() -> None:
-    """`nosec` (bandit-style) is also honoured as an allowlist marker."""
+def test_scan_line_pragma_marker_dropped_in_production_path() -> None:
+    """Pragma scope guard: pragma in non-allowed path is silently ignored.
+
+    A production-source line carrying `pragma: allowlist secret` must NOT
+    silence the rules — otherwise anyone could hide real secrets behind
+    a comment-shaped escape hatch. This test pins the scope guard's core
+    contract.
+    """
+    line = 'password = "q9X7m2k4nR8tP1bL5wF"  # pragma: allowlist secret'
+    findings = scan_line("test", "chat-ai/src/utils/request.ts", 1, line)
+    assert len(findings) == 1, "production-path pragma must not suppress rules"
+    assert findings[0].rule == "secret-assignment"
+
+
+def test_scan_line_nosec_marker_honored_in_test_path() -> None:
+    """`nosec` (bandit-style) is also honoured in test paths."""
     line = 'password = "q9X7m2k4nR8tP1bL5wF"  # nosec'  # pragma: allowlist secret
-    assert scan_line("test", "fake.txt", 1, line) == []
+    assert scan_line("test", "scripts/tests/test_fixture.py", 1, line) == []
+
+
+def test_scan_line_nosec_marker_dropped_in_production_path() -> None:
+    """`nosec` outside allowed paths is silently ignored — scope-guard parity."""
+    line = 'password = "q9X7m2k4nR8tP1bL5wF"  # nosec'  # pragma: allowlist secret
+    findings = scan_line("test", "nky_client_go/main.go", 1, line)
+    assert findings, "nosec must not silence rules in production source"
+
+
+def test_scan_line_pragma_honored_at_explicit_exception() -> None:
+    """`nky_client.py` is the documented OBS-leak exception (TW-003/OQ-7).
+
+    The explicit-exception path keeps the pre-commit hook green while the
+    file awaits deletion in the Bot consolidation cutover; verifying it
+    here means future additions or removals from
+    `PRAGMA_EXPLICIT_EXCEPTIONS` cannot silently break behavior.
+    """
+    line = 'ak = "HPUATWE0DXL6NVDAXTFU"  # pragma: allowlist secret'
+    assert scan_line(
+        "test", "nky_client_python/nky_client.py", 1, line
+    ) == []
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        # Test paths at any depth.
+        ("scripts/tests/test_foo.py", True),
+        ("scripts/tests/conftest.py", True),
+        ("scripts/tests/subdir/inner.py", True),
+        # Env/config template suffixes.
+        (".env.example", True),
+        ("app.yml.example", True),
+        ("config.json.template", True),
+        ("settings.toml.sample", True),
+        ("chat-ai/.env.dev.example", True),
+        # Explicit exception entry (TW-003).
+        ("nky_client_python/nky_client.py", True),
+        # Production paths — pragma rejected.
+        ("nky_client_go/main.go", False),
+        ("chat-ai/src/utils/request.ts", False),
+        ("scripts/scan_secrets.py", False),  # not under scripts/tests/
+        ("scripts/install_git_hooks.sh", False),
+        ("docs/PROJECT_CONTEXT.md", False),
+        # Edge: bare filename without parents.
+        ("foo.py", False),
+    ],
+)
+def test_is_pragma_path_allowed(path: str, expected: bool) -> None:
+    """Pragma scope guard accepts test/template paths only, plus exceptions."""
+    assert is_pragma_path_allowed(path) is expected
 
 
 @pytest.mark.parametrize(

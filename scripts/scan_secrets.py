@@ -26,6 +26,25 @@ ALLOWLIST_MARKERS = (
     "pragma: allowlist-secret",
     "nosec",
 )
+# Pragma scope guard — allowlist markers (above) are only honored on lines
+# whose containing path matches one of: a test directory under any
+# `scripts/tests/` (test fixtures need real-shaped secrets to drive the
+# regex rules under test), an env-template filename suffix
+# (`.example` / `.sample` / `.template`), or an entry in
+# PRAGMA_EXPLICIT_EXCEPTIONS (documented production debt slated for removal).
+# A pragma in any other path is silently dropped so production code cannot
+# silence the scanner by sprinkling pragmas around real secrets.
+PRAGMA_ALLOWED_SUFFIXES = (".example", ".sample", ".template")
+PRAGMA_EXPLICIT_EXCEPTIONS = frozenset(
+    {
+        # TW-003 / OQ-7: production OBS ak/sk inline at
+        # nky_client_python/nky_client.py:564-565, scheduled for deletion
+        # in the Bot consolidation cutover (T5). Keeping the line here as
+        # an explicit allowlist entry rather than implicit means future
+        # additions are visible in this set, not hidden in source.
+        "nky_client_python/nky_client.py",
+    }
+)
 PLACEHOLDER_WORDS = (
     "changeme",
     "dummy",
@@ -213,6 +232,35 @@ def is_placeholder(value: str) -> bool:
     return any(word in normalized for word in PLACEHOLDER_WORDS)
 
 
+def is_pragma_path_allowed(path: str) -> bool:
+    """Return whether allowlist-marker pragmas are honored on this path.
+
+    Pragma markers (`pragma: allowlist secret`, `nosec`) are accepted only in
+    paths matching one of three shapes: a `scripts/tests/` test directory at
+    any depth, a filename suffix in `PRAGMA_ALLOWED_SUFFIXES`
+    (`.example` / `.sample` / `.template`), or an entry in
+    `PRAGMA_EXPLICIT_EXCEPTIONS`. Everything else (production source, config,
+    documentation) sees pragma markers silently dropped, so secret-rule
+    matches on the same line still produce findings.
+
+    Args:
+        path: Repository-relative path of the scanned line.
+
+    Returns:
+        True when allowlist pragmas should be honored on `path`.
+    """
+    if path in PRAGMA_EXPLICIT_EXCEPTIONS:
+        return True
+    file_path = Path(path)
+    if file_path.name.lower().endswith(PRAGMA_ALLOWED_SUFFIXES):
+        return True
+    parts = file_path.parts
+    for i in range(len(parts) - 1):
+        if parts[i] == "scripts" and parts[i + 1] == "tests":
+            return True
+    return False
+
+
 def should_skip_path(path: str) -> bool:
     """Return whether a path should be skipped during content scans.
 
@@ -325,7 +373,11 @@ def scan_line(
     """
     lowered = line.lower()
     if any(marker in lowered for marker in ALLOWLIST_MARKERS):
-        return []
+        if is_pragma_path_allowed(path):
+            return []
+        # Pragma in a non-allowed path is silently dropped — scan rules
+        # still run below so production secrets cannot be hidden behind a
+        # comment-shaped escape hatch.
 
     findings: list[Finding] = []
     for rule in SECRET_RULES:
