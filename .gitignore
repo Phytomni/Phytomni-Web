@@ -98,7 +98,7 @@ chat-ai/.env.prod
 chat-ai/.env.staging
 
 # Claude Code
-.claude/
+.claude
 CLAUDE.md
 
 # Local agent context
