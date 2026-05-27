@@ -211,6 +211,8 @@ export default {
     backToLogin: 'Back to Login',
     successTitle: 'Password Reset Successful',
     successMessage: 'Your password has been successfully reset. Please login with your new password.',
+    unavailableTitle: 'Password Reset Not Yet Available',
+    unavailableMessage: 'This feature is under development. Please contact your system administrator to reset your password.',
     agreement: {
       prefix: 'By resetting your password, you agree to our',
       terms: 'Terms of Service',

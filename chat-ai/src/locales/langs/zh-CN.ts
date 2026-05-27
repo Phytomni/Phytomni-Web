@@ -211,6 +211,8 @@ export default {
     backToLogin: '返回登录',
     successTitle: '密码重置成功',
     successMessage: '您的密码已成功重置，请使用新密码登录',
+    unavailableTitle: '密码重置功能暂未开放',
+    unavailableMessage: '此功能正在开发中，如需重置密码请联系系统管理员。',
     agreement: {
       prefix: '重置密码即表示您同意我们的',
       terms: '服务条款',
