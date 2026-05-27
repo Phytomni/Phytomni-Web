@@ -151,6 +151,40 @@ huawei:
     app1_url: "https://your-deployment-id.apigw.your-region.myhuaweicloud.com/app1?a=1&b=2"
 
 # ---------------------------------------------------------------------
+# Bot service integration (Wave A multi-tenant proxy).
+#
+# `base_url`         — Bot's HTTP root (production: internal VPC URL).
+# `user_api_key`     — ONE `ptm_…` user-scoped Bot key for the whole
+#                      Web app. Multi-tenant model: Bot treats this
+#                      Web as one principal; real-user identity lives
+#                      in Web Go MySQL (s_user_operation_log etc.).
+#                      Ops issues this ONCE at deploy via:
+#                        curl -X POST <bot>/v1/api-keys \
+#                          -H 'Authorization: Bearer <service-token>' \
+#                          -d '{"user_id":"web","name":"chat-ai-web-app"}'
+#                      The service token never enters this file —
+#                      it stays with ops + Bot side only.
+# `proxy_enabled`    — feature flag for /v1/answer/check + /v1/files
+#                      handlers. Default false in this example; flip to
+#                      true in production app.yml only after the
+#                      Wave A verification matrix passes (see the ops
+#                      runbook landed by the B-5 commit).
+# `key_audit_redact` — when true, loggers must never emit the full
+#                      user_api_key string (only first 8 chars prefix).
+#                      The bot HTTP client honors this (landed by B-2).
+# Rotate `user_api_key` per Bot runbook ~90 days; ops procedure is
+# (1) issue new key via service-token curl above,
+# (2) edit production app.yml,
+# (3) restart Web Go,
+# (4) revoke old key via DELETE /v1/api-keys/{prefix}.
+# ---------------------------------------------------------------------
+bot:
+  base_url: "http://localhost:8000"
+  user_api_key: "REPLACE_ME"
+  proxy_enabled: false
+  key_audit_redact: true
+
+# ---------------------------------------------------------------------
 # Outbound notification email — common/email/email_send.go.
 # `web_base_url` / `api_base_url` are stitched into the link bodies of
 # the notification email (chat page + OBS file download). `from_*` are
