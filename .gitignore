@@ -104,6 +104,8 @@ CLAUDE.md
 # Local agent context
 .codex
 AGENTS.md
+.agents
+skills-lock.json
 
 .cursor
 .codegraph
