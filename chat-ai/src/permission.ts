@@ -23,13 +23,7 @@ router.beforeEach((to, from, next) => {
   NProgress.start();
   // document.title = to.meta.title ? (to.meta.title as string) : '管理平台';
   document.title = 'Phytomni';
-  // if (getToken()) {
-  // FIXME: auth bypass — the original `getToken()` guard is commented
-  // out, leaving every route accessible. Tracked as a separate product
-  // concern (forgot-password is also stubbed, same neighborhood); fixing
-  // this is intentionally out of the current CI-hygiene scope.
-  // eslint-disable-next-line no-constant-condition
-  if (true) {
+  if (getToken()) {
     /* has token */
     if (to.path === '/') {
       // if (to.path === "/login") {
@@ -65,14 +59,16 @@ router.beforeEach((to, from, next) => {
       if (to.path === '/login' || to.path === '/register' || to.path === '/forgot-password') {
         next();
       } else {
-        // 简化逻辑：直接允许跳转，异步获取用户工具
         const UserStore = userStore();
-        UserStore.getUserTools().then(() => {
-          console.log('getUserTools success');
-        }).catch(() => {
-          console.log('getUserTools failed, but continuing');
-        });
-        next();
+        UserStore.getUserTools()
+          .then(() => {
+            console.log('getUserTools success');
+            next();
+          })
+          .catch((err) => {
+            console.error('getUserTools failed:', err);
+            next({ path: '/login' });
+          });
       }
     }
   } else {
