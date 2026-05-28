@@ -40,12 +40,14 @@ jobs:
           cache-dependency-path: nky_client_go/go.sum
 
       - name: Setup uv (nky_client_python sync / compileall)
-        uses: astral-sh/setup-uv@v3
+        # v3 不接受 `python-version` 输入(只是 soft warning + 忽略),会
+        # fallback 到 CPython 3.14 RC,跟 onnxruntime 1.20.1 的 cp311/312/313
+        # wheels 不兼容导致 G8 uv sync fail。v5 起原生支持 python-version。
+        uses: astral-sh/setup-uv@v5
         with:
-          # pyproject.toml `requires-python = ">=3.11"`,但 setup-uv 默认装最新
-          # (Python 3.14 当前还在 release candidate);onnxruntime 1.20.1 仅
-          # 发 cp311/312/313 wheels,3.14 会让 uv sync 拒绝安装。pin 到 3.12
-          # 是 onnxruntime 和 pyproject 都接受的稳定交集。
+          # pyproject.toml `requires-python = ">=3.11"`;onnxruntime 1.20.1
+          # 仅发 cp311/312/313 wheels。pin 到 3.12 是 onnxruntime 和
+          # pyproject 都接受的稳定交集。
           python-version: '3.12'
 
       - name: Install ripgrep (validate_web_local.sh G-1 secret scan)
