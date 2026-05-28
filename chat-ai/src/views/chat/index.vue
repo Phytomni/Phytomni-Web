@@ -143,10 +143,56 @@
 
                 <!-- 普通消息内容 -->
                 <div v-else>
+                  <!-- GeneNetworkAgent 图片显示 -->
+                  <div
+                    v-if="
+                      message.role === 'assistant' &&
+                      message.tool_name === 'GeneNetworkAgent'
+                    "
+                    class="gene-network-images">
+                    <div v-if="geneNetworkImagesLoading[message.id || '']" class="images-loading">
+                      <el-icon class="is-loading"><Loading /></el-icon>
+                      {{ $t('common.loading') }}
+                    </div>
+                    <div v-else-if="geneNetworkImages[message.id || '']?.length > 0" class="images-container">
+                      <img
+                        v-for="(imgUrl, imgIndex) in geneNetworkImages[message.id || '']"
+                        :key="imgIndex"
+                        :src="imgUrl"
+                        :alt="'Result ' + (imgIndex + 1)"
+                        class="result-image" />
+                    </div>
+                    <div v-else class="no-images">
+                      {{ $t('common.noData') }}
+                    </div>
+                  </div>
+                  <!-- DigitalDesignAgent 图片显示 -->
+                  <div
+                    v-else-if="
+                      message.role === 'assistant' &&
+                      message.tool_name === 'DigitalDesignAgent'
+                    "
+                    class="gene-network-images">
+                    <div v-if="digitalDesignImagesLoading[message.id || '']" class="images-loading">
+                      <el-icon class="is-loading"><Loading /></el-icon>
+                      {{ $t('common.loading') }}
+                    </div>
+                    <div v-else-if="digitalDesignImages[message.id || '']?.length > 0" class="images-container">
+                      <img
+                        v-for="(imgUrl, imgIndex) in digitalDesignImages[message.id || '']"
+                        :key="imgIndex"
+                        :src="imgUrl"
+                        :alt="'Result ' + (imgIndex + 1)"
+                        class="result-image" />
+                    </div>
+                    <div v-else class="no-images">
+                      {{ $t('common.noData') }}
+                    </div>
+                  </div>
                   <!-- DeepGenomeAgent 的返回使用专用查看器组件,带 references 列表;
                        其他 tool_name 回落到通用 MarkdownViewer -->
                   <DeepGenomeResultViewer
-                    v-if="
+                    v-else-if="
                       message.doc_list && message.doc_list.length > 0 &&
                       message.role === 'assistant' &&
                       message.tool_name === 'DeepGenomeAgent'
@@ -804,7 +850,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, nextTick, watch, computed } from 'vue';
+import { onMounted, ref, reactive, nextTick, watch, computed } from 'vue';
 import type { Ref } from 'vue';
 import Sidebar from './sidebar.vue';
 import { MentionSender } from 'vue-element-plus-x';
@@ -824,7 +870,7 @@ import {
   CircleClose,
   CircleCloseFilled,
 } from '@element-plus/icons-vue';
-import { getAnswerCheck, getHistoryQuestionList, getQuery, getQueryAbortable, getChatdownloadURL, getFileDownUrlApi, getAnalystAgentLog, getReactionType, updateAnalystAgentLog } from '@/api/chat';
+import { getAnswerCheck, getHistoryQuestionList, getQuery, getQueryAbortable, getChatdownloadURL, getFileDownUrlApi, getAnalystAgentLog, getReactionType, updateAnalystAgentLog, getObsImages } from '@/api/chat';
 import { userStore } from '@/stores';
 import LangSwitch from '@/components/LangSwitch.vue';
 import { useI18n } from 'vue-i18n';
@@ -1743,6 +1789,102 @@ watch(() => fileList.value, (newVal, oldVal) => {
     senderRef.value.closeHeader();
   }
 });
+
+// GeneNetworkAgent / DigitalDesignAgent 图片下载状态(按 message id 索引,
+// 与 frontend chat/index.vue 保持一致)
+const geneNetworkImages = reactive<Record<string, string[]>>({});
+const geneNetworkImagesLoading = reactive<Record<string, boolean>>({});
+const digitalDesignImages = reactive<Record<string, string[]>>({});
+const digitalDesignImagesLoading = reactive<Record<string, boolean>>({});
+
+// 获取 GeneNetworkAgent 图片(单个 download_path)
+const fetchGeneNetworkImages = async (messageId: string, downloadPath: string) => {
+  if (!messageId || !downloadPath || geneNetworkImages[messageId]) return;
+  geneNetworkImagesLoading[messageId] = true;
+  try {
+    const res: any = await getObsImages({ obs_path: downloadPath });
+    if (res.code === 200 && res.data) {
+      const images = Array.isArray(res.data) ? res.data : [res.data];
+      geneNetworkImages[messageId] = [...new Set(images)] as string[];
+    } else {
+      geneNetworkImages[messageId] = [];
+    }
+  } catch (error) {
+    console.error('获取 GeneNetworkAgent 图片失败:', error);
+    geneNetworkImages[messageId] = [];
+  } finally {
+    geneNetworkImagesLoading[messageId] = false;
+  }
+};
+
+// 获取 DigitalDesignAgent 图片(download_path 可能是数组或 JSON 字符串)
+const fetchDigitalDesignImages = async (messageId: string, downloadPaths: string[]) => {
+  if (!messageId || !downloadPaths || downloadPaths.length === 0 || digitalDesignImages[messageId]) return;
+  digitalDesignImagesLoading[messageId] = true;
+  try {
+    const allImages: string[] = [];
+    for (const path of downloadPaths) {
+      const res: any = await getObsImages({ obs_path: path });
+      if (res.code === 200 && res.data) {
+        if (Array.isArray(res.data)) {
+          allImages.push(...res.data);
+        } else {
+          allImages.push(res.data);
+        }
+      }
+    }
+    digitalDesignImages[messageId] = allImages;
+  } catch (error) {
+    console.error('获取 DigitalDesignAgent 图片失败:', error);
+    digitalDesignImages[messageId] = [];
+  } finally {
+    digitalDesignImagesLoading[messageId] = false;
+  }
+};
+
+// 监听 currentChat 消息变化,自动按 tool_name 抓取 obs 图片
+watch(
+  () => currentChat.value?.messages,
+  (messages) => {
+    if (!messages) return;
+    messages.forEach((msg: any) => {
+      if (
+        msg.role === 'assistant' &&
+        msg.tool_name === 'GeneNetworkAgent' &&
+        msg.download_path &&
+        msg.id &&
+        !geneNetworkImages[msg.id]
+      ) {
+        fetchGeneNetworkImages(msg.id, msg.download_path);
+      }
+      if (
+        msg.role === 'assistant' &&
+        msg.tool_name === 'DigitalDesignAgent' &&
+        msg.download_path &&
+        msg.id &&
+        !digitalDesignImages[msg.id]
+      ) {
+        let paths: string[] = [];
+        if (Array.isArray(msg.download_path)) {
+          paths = msg.download_path;
+        } else if (typeof msg.download_path === 'string') {
+          try {
+            const parsed = JSON.parse(msg.download_path);
+            if (Array.isArray(parsed)) {
+              paths = parsed;
+            }
+          } catch (e) {
+            paths = [msg.download_path];
+          }
+        }
+        if (paths.length > 0) {
+          fetchDigitalDesignImages(msg.id, paths);
+        }
+      }
+    });
+  },
+  { immediate: true, deep: true }
+);
 
 // 复制状态 - 现在基于当前对话
 const copyVisible = computed({
