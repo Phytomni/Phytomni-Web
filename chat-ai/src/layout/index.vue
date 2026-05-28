@@ -111,6 +111,9 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
             <RouterView />
           </el-main>
         </el-container>
+        <el-footer height="auto" class="layout-footer">
+          <Footer />
+        </el-footer>
       </el-container>
     </template>
   </div>
@@ -136,6 +139,7 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
   import { userStore } from '@/stores';
   import LangSwitch from '@/components/LangSwitch.vue';
   import ThemeSwitch from '@/components/ThemeSwitch.vue';
+  import Footer from '@/components/Footer.vue';
   import { useI18n } from 'vue-i18n';
 
   const { t } = useI18n();
@@ -304,5 +308,11 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
     overflow-y: auto !important;
     background-color: #fff;
     height: 100%;
+  }
+
+  .layout-footer {
+    padding: 0;
+    background-color: #fff;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
   }
 </style>
