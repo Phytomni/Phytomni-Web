@@ -143,7 +143,18 @@
 
                 <!-- 普通消息内容 -->
                 <div v-else>
+                  <!-- DeepGenomeAgent 的返回使用专用查看器组件,带 references 列表;
+                       其他 tool_name 回落到通用 MarkdownViewer -->
+                  <DeepGenomeResultViewer
+                    v-if="
+                      message.doc_list && message.doc_list.length > 0 &&
+                      message.role === 'assistant' &&
+                      message.tool_name === 'DeepGenomeAgent'
+                    "
+                    :markdown="message.content.replace(/\n/g, '\\n')"
+                    :references="message.doc_list || []" />
                   <MarkdownViewer
+                    v-else
                     :instantMessage="(message?.instantMessage && currentChat.messages.length - 1 == index) || false"
                     :content="message.content" @finish="() => handleMarkdownFinish(index)" />
                 </div>
@@ -157,7 +168,7 @@
                     </div>
                   </div>
                 </div>
-                <div v-if="message.doc_list && message.doc_list.length > 0">
+                <div v-if="message.tool_name !== 'DeepGenomeAgent' && message.doc_list && message.doc_list.length > 0">
                   <div class="doc-list-title">
                     {{ $t('chat.relatedDocuments') }}：
                   </div>
@@ -822,6 +833,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Paperclip, ElementPlus, Promotion, Close } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router';
 import MarkdownViewer from '@/components/MarkdownViewer.vue'
+import DeepGenomeResultViewer from '@/components/DeepGenomeResultViewer.vue';
 import type { MentionOption } from 'vue-element-plus-x/types/components/MentionSender/types';
 import { useAppStore } from '@/stores';
 import FollowUpQuestions from './FollowUpQuestions.vue';
