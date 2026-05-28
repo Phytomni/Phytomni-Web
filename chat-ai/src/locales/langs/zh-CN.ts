@@ -324,6 +324,8 @@ export default {
     detailInfo: '详细信息',
     relatedLinks: '相关链接',
     newChat: '开启新对话',
+    exploreAgent: '智能体示例',
+    exploreAgentCases: '智能体示例',
     knowledgeBase: '知识库',
     geneDetail: '基因展示',
     thinkingSteps: '思考步骤',

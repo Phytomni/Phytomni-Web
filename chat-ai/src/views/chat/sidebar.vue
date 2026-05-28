@@ -28,6 +28,28 @@
         </el-icon>
         <span v-if="!sidebarCollapsed">{{ $t('chat.newChat') }}</span>
       </el-button>
+      <el-button
+        class="explore-agent-btn"
+        v-if="UserStore.permission !== 'guest'"
+        :class="{ active: activeButton === 'exploreAgent' }"
+        @click="handleButtonClick('explore-agent', exploreAgent)">
+        <el-icon>
+          <Opportunity />
+        </el-icon>
+        <span v-if="!sidebarCollapsed">{{ $t('chat.exploreAgent') }}</span>
+      </el-button>
+      <!-- agents 快捷入口下拉 -->
+      <div v-if="showAgentsList" class="agents-dropdown">
+        <div class="agent-list">
+          <div
+            v-for="agent in presetAgents"
+            :key="agent.id"
+            class="input-container-bottom-item"
+            @click="handleAgentClick(agent)">
+            <span>{{ agent.name }}</span>
+          </div>
+        </div>
+      </div>
       <el-button class="knowledge-base-btn" :class="{ active: activeButton === 'knowledge-base' }" @click="handleButtonClick('knowledge-base', openKnowledgeBase)">
         <el-icon>
           <Search />
@@ -54,13 +76,13 @@
       <template v-if="!sidebarCollapsed">
         <!-- 今天 -->
         <div class="time-group" v-if="todayChats.length">
-          <div class="time-label">
+          <div class="time-label" @click="toggleExpand('today')">
             <span>{{ $t('chat.timeGroup.today') }}</span>
-            <el-icon class="expand-icon">
-              <ArrowUp />
+            <el-icon class="expand-icon" :class="{ expanded: expandedGroups.today }">
+              <ArrowDown />
             </el-icon>
           </div>
-          <div class="chat-items">
+          <div class="chat-items" v-show="expandedGroups.today">
             <el-tooltip v-for="chat in todayChats" :key="chat.id" :content="chat.title" placement="right"
               :show-after="1000" popper-class="chat-tooltip">
               <div class="chat-item" :class="{ active: currentChatId === chat.dialogue_id }"
@@ -94,13 +116,13 @@
 
         <!-- 昨天 -->
         <div class="time-group" v-if="yesterdayChats.length">
-          <div class="time-label">
+          <div class="time-label" @click="toggleExpand('yesterday')">
             <span>{{ $t('chat.timeGroup.yesterday') }}</span>
-            <el-icon class="expand-icon">
+            <el-icon class="expand-icon" :class="{ expanded: expandedGroups.yesterday }">
               <ArrowDown />
             </el-icon>
           </div>
-          <div class="chat-items">
+          <div class="chat-items" v-show="expandedGroups.yesterday">
             <el-tooltip v-for="chat in yesterdayChats" :key="chat.id" :content="chat.title" placement="right"
               :show-after="1000" popper-class="chat-tooltip">
               <div class="chat-item" :class="{ active: currentChatId === chat.dialogue_id }"
@@ -134,13 +156,13 @@
 
         <!-- 7天内 -->
         <div class="time-group" v-if="weekChats.length">
-          <div class="time-label">
+          <div class="time-label" @click="toggleExpand('week')">
             <span>{{ $t('chat.timeGroup.week') }}</span>
-            <el-icon class="expand-icon">
+            <el-icon class="expand-icon" :class="{ expanded: expandedGroups.week }">
               <ArrowDown />
             </el-icon>
           </div>
-          <div class="chat-items">
+          <div class="chat-items" v-show="expandedGroups.week">
             <el-tooltip v-for="chat in weekChats" :key="chat.id" :content="chat.title" placement="right"
               :show-after="1000" popper-class="chat-tooltip">
               <div class="chat-item" :class="{ active: currentChatId === chat.dialogue_id }"
@@ -174,13 +196,13 @@
 
         <!-- 一周前 -->
         <div class="time-group" v-if="olderChats.length">
-          <div class="time-label">
+          <div class="time-label" @click="toggleExpand('older')">
             <span>{{ $t('chat.timeGroup.older') }}</span>
-            <el-icon class="expand-icon">
+            <el-icon class="expand-icon" :class="{ expanded: expandedGroups.older }">
               <ArrowDown />
             </el-icon>
           </div>
-          <div class="chat-items">
+          <div class="chat-items" v-show="expandedGroups.older">
             <el-tooltip v-for="chat in olderChats" :key="chat.id" :content="chat.title" placement="right"
               :show-after="1000" popper-class="chat-tooltip">
               <div class="chat-item" :class="{ active: currentChatId === chat.dialogue_id }"
@@ -345,6 +367,7 @@ import {
   QuestionFilled,
   Monitor,
   Setting,
+  Opportunity,
 } from '@element-plus/icons-vue';
 import { userStore } from '@/stores';
 import { collectHistory, renameHistory, deleteHistory } from '@/api/chat';
@@ -401,7 +424,48 @@ const activeButton = ref('');
 // 处理按钮点击
 const handleButtonClick = (buttonType: string, action: () => void) => {
   activeButton.value = buttonType;
+  if (buttonType !== 'explore-agent') {
+    showAgentsList.value = false;
+  }
   action();
+};
+
+// 是否显示 agents 列表
+const showAgentsList = ref(false);
+
+// 切换 agents 列表显示
+const exploreAgent = () => {
+  showAgentsList.value = !showAgentsList.value;
+};
+
+// 预设的 agents 数据(快捷入口,对应已注册路由)
+const presetAgents = ref([
+  { id: 2, name: 'Knowledge Agent', icon: 'Search', route: '/knowledge-agent', img: '/KnowledgeAgent.jpg' },
+  { id: 3, name: 'Data Agent', icon: 'DataLine', route: '/data-agent', img: '/DataAgent.jpg' },
+  { id: 4, name: 'Analyst Agent', icon: 'Edit', route: '/analyst-agent', img: '/AnalystAgent.jpg' },
+  { id: 5, name: 'Brief Review Agent', icon: 'Edit', route: '/brief-review-agent', img: '/BriefReviewAgent.jpg' },
+  { id: 6, name: 'Gene Network Agent', icon: 'Edit', route: '/gene-network-agent', img: '/GeneNetworkAgent.jpg' },
+  { id: 7, name: 'Deep Genome Agent', icon: 'Edit', route: '/deep-genome-agent', img: '/DeepGenomeAgent.jpg' },
+  { id: 8, name: 'Digital Design Agent', icon: 'Edit', route: '/digital-design-agent', img: '/DigitalDesignAgent.jpg' },
+]);
+
+// 点击 agent 跳转
+const handleAgentClick = (agent: { route: string }) => {
+  router.push(agent.route);
+  showAgentsList.value = false;
+};
+
+// 4 个时间分组的展开/收缩状态
+const expandedGroups = ref({
+  today: true,
+  yesterday: true,
+  week: true,
+  older: true,
+});
+
+// 切换分组展开/收缩
+const toggleExpand = (group: keyof typeof expandedGroups.value) => {
+  expandedGroups.value[group] = !expandedGroups.value[group];
 };
 
 // 响应式断点（小于此宽度时自动收起侧边栏）
@@ -863,7 +927,8 @@ onUnmounted(() => {
         .new-chat-btn,
         .knowledge-base-btn,
         .favorites-btn,
-        .tutorial-btn {
+        .tutorial-btn,
+        .explore-agent-btn {
           width: 30px;
           height: 30px;
 
@@ -945,7 +1010,8 @@ onUnmounted(() => {
     .new-chat-btn,
     .knowledge-base-btn,
     .favorites-btn,
-    .tutorial-btn {
+    .tutorial-btn,
+    .explore-agent-btn {
       background-color: var(--sidebar-btn-active-bg) !important;
       color: var(--sidebar-btn-active-color) !important;
       border-color: var(--sidebar-btn-active-bg) !important;
@@ -961,7 +1027,8 @@ onUnmounted(() => {
     .new-chat-btn,
     .knowledge-base-btn,
     .favorites-btn,
-    .tutorial-btn {
+    .tutorial-btn,
+    .explore-agent-btn {
       width: 40px;
       height: 40px;
       padding: 0;
@@ -1002,7 +1069,8 @@ onUnmounted(() => {
       .new-chat-btn,
     .knowledge-base-btn,
     .favorites-btn,
-    .tutorial-btn {
+    .tutorial-btn,
+    .explore-agent-btn {
     flex: 1;
     display: flex;
     align-items: center;
@@ -1032,6 +1100,41 @@ onUnmounted(() => {
       transform: translateY(-1px);
     }
   }
+
+  /* agents 快捷入口下拉样式 */
+  .agents-dropdown {
+    margin-left: 8px;
+    background: transparent;
+    border-radius: 8px;
+    padding: 0 0 0 12px;
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    max-height: 400px;
+    overflow-y: hidden;
+  }
+
+  .agent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .input-container-bottom-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: var(--sidebar-btn-bg);
+    color: var(--sidebar-btn-color);
+
+    &:hover {
+      background-color: var(--sidebar-btn-bg-hover);
+      border-color: var(--sidebar-btn-bg-hover);
+    }
+  }
 }
 
 
@@ -1057,6 +1160,16 @@ onUnmounted(() => {
       padding: 8px 16px;
       color: #666;
       font-size: 14px;
+      cursor: pointer;
+      user-select: none;
+
+      .expand-icon {
+        transition: transform 0.2s ease;
+
+        &.expanded {
+          transform: rotate(180deg);
+        }
+      }
     }
 
     .chat-items {

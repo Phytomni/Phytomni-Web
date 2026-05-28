@@ -324,6 +324,8 @@ export default {
     detailInfo: 'Detailed Information',
     relatedLinks: 'Related Links',
     newChat: 'Start New',
+    exploreAgent: 'Explore Agents',
+    exploreAgentCases: 'Explore Agent Cases',
     knowledgeBase: 'Knowledge',
     geneDetail: 'Gene Display',
     thinkingSteps: 'Thinking Steps',
