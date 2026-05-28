@@ -103,3 +103,29 @@ For development contributions, please ensure:
 - Python code follows PEP8 guidelines
 - Both services are tested on their respective ports
 - Dependencies are properly documented in go.mod and pyproject.toml/requirements.txt
+
+### Local pre-commit hooks (recommended)
+
+After cloning, install the pre-commit hooks so every `git commit` runs the
+same gates CI runs:
+
+```bash
+./scripts/install_git_hooks.sh
+```
+
+This sets `core.hooksPath` to `.githooks/`, so the pre-commit hook will run
+`scripts/scan_secrets.py --staged` (catches literal credentials) and the
+full G-1 / G0 / G1..G10 gates from `scripts/validate_web_local.sh`
+(vue-tsc, eslint, vite build, gofmt, go vet, go build, uv sync, compileall,
+optional MCP import) before letting the commit land.
+
+The hook is opt-in (no auto-install on clone) by design — it keeps a
+bare-clone workflow simple. If you skip it, the `.github/workflows/ci.yml`
+GitHub Actions workflow runs the same checks on every PR and push to
+`main`, so anything you miss locally still gets caught before merge.
+
+To run the full gate manually without committing:
+
+```bash
+./scripts/validate_web_local.sh
+```
