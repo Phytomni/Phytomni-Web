@@ -61,3 +61,12 @@ func MustGet(name string) *gorm.DB {
 	}
 	return db
 }
+
+// Set 注册一个命名 *gorm.DB 实例。供测试在不走 viper-based InitMysqlDB 的情况下
+// 注入 in-memory SQLite;production 仍走 InitMysqlDB。
+func Set(name string, gormDB *gorm.DB) {
+	if dbs == nil {
+		dbs = make(map[string]*gorm.DB)
+	}
+	dbs[name] = gormDB
+}

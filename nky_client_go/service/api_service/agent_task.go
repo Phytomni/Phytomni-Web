@@ -396,8 +396,18 @@ func (ps *ApiService) ApiQueryList(ctx context.Context, username string) ([]*com
 
 func (ps *ApiService) ApiAnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.SQuestionAgentLog, err error) {
 	var QuestionAgentLog *model.SQuestionAgentLog
-	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("user_name = ? and dialogue_id = ?", username, dialogueId).First(&QuestionAgentLog).Error
-	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("f_id = ? and delete_at IS NULL", QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error
+	// First() 在没匹配时给出 ErrRecordNotFound,但 QuestionAgentLog 仍是 &{Id:0} 空结构;
+	// 若直接接着用 QuestionAgentLog.Id 查 children,会以 f_id=0 (parent 约定值) 误匹配所有 dialogue 的根行。
+	// Defensive guard:RecordNotFound 视为"新对话",返回空 list;其他错误上抛。
+	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("user_name = ? and dialogue_id = ?", username, dialogueId).First(&QuestionAgentLog).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("f_id = ? and delete_at IS NULL", QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error; err != nil {
+		return nil, err
+	}
 	// 创建一个新的切片，将 QuestionAgentLog 放在首位
 	newList := make([]*model.SQuestionAgentLog, 0, len(QuestionAgentLogList)+1)
 	newList = append(newList, QuestionAgentLog)
