@@ -3103,6 +3103,7 @@ const getAgentImage = (agentName: string) => {
     'DataAgent': '/src/assets/images/chat/DataAgent.png',
     'AnalystAgent': '/src/assets/images/chat/AnalystAgent.png',
     'ReviewAgent': '/src/assets/images/chat/ReviewAgent.png',
+    'BriefReviewAgent': '/src/assets/images/chat/BriefReviewAgent.png',
     'DeepGenomeAgent': '/src/assets/images/chat/DeepGenomeAgent.png',
     'InSilicoResearchAgent': '/src/assets/images/chat/InSilicoResearchAgent.png',
     'GeneNetworkAgent': '/src/assets/images/chat/GeneNetworkAgent.png',
