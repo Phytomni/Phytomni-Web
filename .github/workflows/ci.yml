@@ -41,6 +41,12 @@ jobs:
 
       - name: Setup uv (nky_client_python sync / compileall)
         uses: astral-sh/setup-uv@v3
+        with:
+          # pyproject.toml `requires-python = ">=3.11"`,但 setup-uv 默认装最新
+          # (Python 3.14 当前还在 release candidate);onnxruntime 1.20.1 仅
+          # 发 cp311/312/313 wheels,3.14 会让 uv sync 拒绝安装。pin 到 3.12
+          # 是 onnxruntime 和 pyproject 都接受的稳定交集。
+          python-version: '3.12'
 
       - name: Install ripgrep (validate_web_local.sh G-1 secret scan)
         run: sudo apt-get update && sudo apt-get install -y ripgrep
