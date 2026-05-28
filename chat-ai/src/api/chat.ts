@@ -141,3 +141,12 @@ export const updateAnalystAgentLog = (data: { task_id: string; compute_resource:
     data: data,
   });
 };
+
+// 获取 AnalystAgent obs 图片下载链接(GeneNetworkAgent / DigitalDesignAgent 渲染依赖)
+export const getObsImages = (data: { obs_path: string }) => {
+  return request({
+    url: '/v1/download/analyst_agent/obs_images',
+    method: 'get',
+    params: data,
+  });
+};
