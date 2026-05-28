@@ -1,0 +1,56 @@
+name: CI
+
+# 把 scripts/validate_web_local.sh 的 11 项 G-checks 从"开发者本地手跑"提升到
+# "PR + main push 自动跑",作 contributor-side 防御兜底:即便有人没装
+# scripts/install_git_hooks.sh,CI 也会在 PR 上拦红;另外多跑一次
+# scripts/scan_secrets.py --all 把全 tree secret 扫描固化到 CI(不仅 changed files)。
+#
+# 加 status check 为 required merge gate 是 GitHub repo settings 的事
+# (Branches → required status checks),不在本 workflow 范围。
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    name: validate_web_local.sh + secret scan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout (full history for git diff)
+        uses: actions/checkout@v4
+        with:
+          # validate_web_local.sh G-1 / G0 用 git diff;fetch-depth: 0 让两者拿到完整 ref
+          fetch-depth: 0
+
+      - name: Setup Node 20 (chat-ai vue-tsc / eslint / vite)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: chat-ai/package-lock.json
+
+      - name: Setup Go 1.23 (nky_client_go gofmt / vet / build)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: nky_client_go/go.sum
+
+      - name: Setup uv (nky_client_python sync / compileall)
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install ripgrep (validate_web_local.sh G-1 secret scan)
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: npm ci (chat-ai)
+        working-directory: chat-ai
+        run: npm ci
+
+      - name: validate_web_local.sh full gate (G-1 + G0 + G1..G10)
+        run: ./scripts/validate_web_local.sh
+
+      - name: scan_secrets.py --all (whole tree, not just changes)
+        run: python3 scripts/scan_secrets.py --all
