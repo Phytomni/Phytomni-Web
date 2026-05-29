@@ -884,6 +884,17 @@ import type { MentionOption } from 'vue-element-plus-x/types/components/MentionS
 import { useAppStore } from '@/stores';
 import FollowUpQuestions from './FollowUpQuestions.vue';
 import { FilesCard } from 'vue-element-plus-x';
+import ChatAgentImg from '@/assets/images/chat/ChatAgent.png';
+import KnowledgeAgentImg from '@/assets/images/chat/KnowledgeAgent.png';
+import DataAgentImg from '@/assets/images/chat/DataAgent.png';
+import AnalystAgentImg from '@/assets/images/chat/AnalystAgent.png';
+import ReviewAgentImg from '@/assets/images/chat/ReviewAgent.png';
+import BriefReviewAgentImg from '@/assets/images/chat/BriefReviewAgent.png';
+import DeepGenomeAgentImg from '@/assets/images/chat/DeepGenomeAgent.png';
+import InSilicoResearchAgentImg from '@/assets/images/chat/InSilicoResearchAgent.png';
+import GeneNetworkAgentImg from '@/assets/images/chat/GeneNetworkAgent.png';
+import DigitalDesignAgentImg from '@/assets/images/chat/DigitalDesignAgent.png';
+import DefaultAgentImg from '@/assets/images/chat/Agents.png';
 
 // 后续问题显示逻辑已移至FollowUpQuestions组件
 
@@ -3252,19 +3263,19 @@ const getAgentUsage = (agentName: string) => {
 const getAgentImage = (agentName: string) => {
   console.log(agentName, 'agentName');
   const imageMap: Record<string, string> = {
-    'ChatAgent': '/src/assets/images/chat/ChatAgent.png',
-    'KnowledgeAgent': '/src/assets/images/chat/KnowledgeAgent.png',
-    'DataAgent': '/src/assets/images/chat/DataAgent.png',
-    'AnalystAgent': '/src/assets/images/chat/AnalystAgent.png',
-    'ReviewAgent': '/src/assets/images/chat/ReviewAgent.png',
-    'BriefReviewAgent': '/src/assets/images/chat/BriefReviewAgent.png',
-    'DeepGenomeAgent': '/src/assets/images/chat/DeepGenomeAgent.png',
-    'InSilicoResearchAgent': '/src/assets/images/chat/InSilicoResearchAgent.png',
-    'GeneNetworkAgent': '/src/assets/images/chat/GeneNetworkAgent.png',
-    'DigitalDesignAgent': '/src/assets/images/chat/DigitalDesignAgent.png'
+    ChatAgent: ChatAgentImg,
+    KnowledgeAgent: KnowledgeAgentImg,
+    DataAgent: DataAgentImg,
+    AnalystAgent: AnalystAgentImg,
+    ReviewAgent: ReviewAgentImg,
+    BriefReviewAgent: BriefReviewAgentImg,
+    DeepGenomeAgent: DeepGenomeAgentImg,
+    InSilicoResearchAgent: InSilicoResearchAgentImg,
+    GeneNetworkAgent: GeneNetworkAgentImg,
+    DigitalDesignAgent: DigitalDesignAgentImg
   };
 
-  return imageMap[agentName] || '/src/assets/images/chat/Agents.png';
+  return imageMap[agentName] || DefaultAgentImg;
 };
 
 // 显示更多信息弹出窗口
