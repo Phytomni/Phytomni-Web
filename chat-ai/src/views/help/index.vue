@@ -468,9 +468,101 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   font-weight: bold;
 }
 
+/* 深色模式适配(theme axis only — layout-coupled rules in TW-D3 / Wave 4.5) */
+.theme-dark .help-page {
+  background-color: var(--color-background) !important;
+}
 
+.theme-dark .help-container {
+  background: var(--color-background) !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+}
 
+.theme-dark .help-header {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+}
 
+.theme-dark .toc-sidebar {
+  background: var(--color-background-card) !important;
+}
+
+.theme-dark .toc-title {
+  color: var(--el-text-color-primary) !important;
+  border-bottom-color: var(--el-border-color) !important;
+}
+
+.theme-dark .toc-nav {
+  background: var(--color-background-card) !important;
+}
+
+.theme-dark .toc-link {
+  color: var(--el-text-color-regular) !important;
+}
+
+.theme-dark .toc-item:hover .toc-link {
+  color: var(--el-text-color-primary) !important;
+  background: var(--el-fill-color-light) !important;
+}
+
+.theme-dark .toc-item.active .toc-link {
+  color: var(--el-color-primary) !important;
+  background: var(--el-color-primary-light-9) !important;
+}
+
+.theme-dark .toc-item.active::before {
+  background: var(--el-color-primary) !important;
+}
+
+.theme-dark .section-title {
+  color: var(--el-text-color-primary) !important;
+}
+
+.theme-dark .section-title::after {
+  background: linear-gradient(
+    135deg,
+    var(--el-color-primary),
+    #7c3aed
+  ) !important;
+}
+
+.theme-dark .step-item {
+  background: var(--color-background) !important;
+  border-left-color: var(--el-color-primary) !important;
+}
+
+.theme-dark .step-content h3 {
+  color: var(--el-text-color-primary) !important;
+}
+
+.theme-dark .step-content p {
+  color: var(--el-text-color-regular) !important;
+}
+
+.theme-dark .feature-card {
+  background: var(--color-background-card) !important;
+  border-color: var(--el-border-color) !important;
+}
+
+.theme-dark .feature-card:hover {
+  border-color: var(--el-color-primary) !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
+}
+
+.theme-dark .feature-card h3 {
+  color: var(--el-text-color-primary) !important;
+}
+
+.theme-dark .feature-card p {
+  color: var(--el-text-color-regular) !important;
+}
+
+.theme-dark .feature-list li {
+  color: var(--el-text-color-regular) !important;
+}
+
+.theme-dark .feature-list li::before {
+  color: var(--el-color-success) !important;
+}
 
 /* 响应式设计 */
 @media (max-width: 1024px) {
