@@ -839,12 +839,21 @@
       :close-on-press-escape="true"
       width="800px"
       center>
-      <div class="agents-view-container">
-        <img 
-          src="/src/assets/images/chat/AgentsView.png" 
-          alt="Phytomni智能体架构图" 
+      <div
+        class="agents-view-container"
+        @wheel="handleWheel"
+        @mousedown="handleMouseDown"
+        @mousemove="handleMouseMove"
+        @mouseup="handleMouseUp"
+        @mouseleave="handleMouseUp"
+        ref="containerRef"
+        style="overflow: hidden; cursor: grab">
+        <img
+          ref="imageRef"
+          :src="AgentsViewImg"
+          alt="Phytomni智能体架构图"
           class="agents-view-image"
-          style="width: 800px; height: 400px; object-fit: contain;">
+          :style="imageStyle" />
       </div>
     </el-dialog>
   </div>
@@ -895,6 +904,7 @@ import InSilicoResearchAgentImg from '@/assets/images/chat/InSilicoResearchAgent
 import GeneNetworkAgentImg from '@/assets/images/chat/GeneNetworkAgent.png';
 import DigitalDesignAgentImg from '@/assets/images/chat/DigitalDesignAgent.png';
 import DefaultAgentImg from '@/assets/images/chat/Agents.png';
+import AgentsViewImg from '@/assets/images/chat/AgentsView.png';
 
 // 后续问题显示逻辑已移至FollowUpQuestions组件
 
@@ -914,6 +924,112 @@ const leftSidebarCollapsed = ref(false);
 
 // Agents架构图弹窗
 const agentsViewVisible = ref(false);
+
+// Agents架构图弹窗 — 缩放与拖拽状态
+const scale = ref(1);
+const minScale = 1;
+const maxScale = 5;
+
+// 鼠标拖拽
+const isDragging = ref(false);
+const dragStart = reactive({ x: 0, y: 0 });
+const imageOffset = reactive({ x: 0, y: 0 });
+
+// DOM 引用
+const containerRef = ref<HTMLDivElement>();
+const imageRef = ref<HTMLImageElement>();
+
+// 动态样式
+const imageStyle = computed(() => {
+  return {
+    transform: `scale(${scale.value}) translate(${imageOffset.x}px, ${imageOffset.y}px)`,
+    transformOrigin: '0 0',
+    cursor: isDragging.value ? 'grabbing' : 'grab',
+    display: 'block'
+  };
+});
+
+// 滚轮缩放
+const handleWheel = (e: WheelEvent) => {
+  e.preventDefault();
+
+  const container = containerRef.value!;
+  const img = imageRef.value!;
+
+  // 获取容器边界
+  const containerRect = container.getBoundingClientRect();
+
+  // 计算鼠标相对于容器的位置
+  const mouseX = e.clientX - containerRect.left;
+  const mouseY = e.clientY - containerRect.top;
+
+  // 当前缩放
+  let newScale = scale.value;
+
+  // 滚轮方向
+  if (e.deltaY < 0) {
+    newScale = Math.min(maxScale, scale.value + 0.1);
+  } else {
+    newScale = Math.max(minScale, scale.value - 0.1);
+  }
+
+  if (Math.abs(newScale - scale.value) < 0.01) return;
+
+  // 关键：计算缩放后的新偏移，实现以鼠标为中心缩放
+  // 原始图片尺寸
+  const originalWidth = img.naturalWidth;
+  const originalHeight = img.naturalHeight;
+
+  // 计算鼠标在图片上的逻辑位置（相对于图片左上角）
+  // 当前图片左上角相对于容器的位置
+  const currentImageX =
+    (containerRect.width - originalWidth * scale.value) / 2 +
+    imageOffset.x * scale.value;
+  const currentImageY =
+    (containerRect.height - originalHeight * scale.value) / 2 +
+    imageOffset.y * scale.value;
+
+  // 鼠标在图片上的相对坐标（相对于图片左上角）
+  const mouseOnImageX = mouseX - currentImageX;
+  const mouseOnImageY = mouseY - currentImageY;
+
+  // 计算鼠标在原始图片上的相对位置（0-1范围）
+  const mouseRatioX = mouseOnImageX / (originalWidth * scale.value);
+  const mouseRatioY = mouseOnImageY / (originalHeight * scale.value);
+
+  // 计算新的图片左上角位置，使鼠标指向的点保持不变
+  const newImageX = mouseX - originalWidth * newScale * mouseRatioX;
+  const newImageY = mouseY - originalHeight * newScale * mouseRatioY;
+
+  // 计算新的偏移量
+  imageOffset.x =
+    (newImageX - (containerRect.width - originalWidth * newScale) / 2) /
+    newScale;
+  imageOffset.y =
+    (newImageY - (containerRect.height - originalHeight * newScale) / 2) /
+    newScale;
+
+  scale.value = newScale;
+};
+
+// 拖拽移动图片
+const handleMouseDown = (e: MouseEvent) => {
+  if (e.button !== 0) return; // 只响应左键
+  isDragging.value = true;
+  dragStart.x = e.clientX - imageOffset.x;
+  dragStart.y = e.clientY - imageOffset.y;
+  e.preventDefault();
+};
+
+const handleMouseMove = (e: MouseEvent) => {
+  if (!isDragging.value) return;
+  imageOffset.x = e.clientX - dragStart.x;
+  imageOffset.y = e.clientY - dragStart.y;
+};
+
+const handleMouseUp = () => {
+  isDragging.value = false;
+};
 
 // 监听右侧侧边栏状态，当右侧打开时，确保左侧是收起的
 watch(drawerVisible, newValue => {
