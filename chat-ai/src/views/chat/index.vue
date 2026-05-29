@@ -252,7 +252,7 @@
                 
                 <!-- 基于 download_path 的下载按钮 -->
                 <el-button @click="() => downloadFileDirect(message?.download_path)"
-                  v-if="message?.download_path && message?.download_path !== ''"
+                  v-if="message?.download_path && message?.download_path !== '' && message?.tool_name !== 'GeneNetworkAgent' && message?.tool_name !== 'DigitalDesignAgent'"
                   type="primary" style="margin-left: 8px;">
                   <el-icon style="vertical-align: middle">
                     <Download />
@@ -379,7 +379,7 @@
                 
                 <!-- 基于 download_path 的下载按钮 -->
                 <el-button @click="() => downloadFileDirect(message?.download_path)"
-                  v-if="message?.download_path && message?.download_path !== ''"
+                  v-if="message?.download_path && message?.download_path !== '' && message?.tool_name !== 'GeneNetworkAgent' && message?.tool_name !== 'DigitalDesignAgent'"
                   type="primary" style="margin-left: 8px;">
                   <el-icon style="vertical-align: middle">
                     <Download />
@@ -490,7 +490,7 @@
                 
                 <!-- 基于 download_path 的下载按钮 -->
                 <el-button @click="() => downloadFileDirect(message?.download_path)"
-                  v-if="message?.download_path && message?.download_path !== ''"
+                  v-if="message?.download_path && message?.download_path !== '' && message?.tool_name !== 'GeneNetworkAgent' && message?.tool_name !== 'DigitalDesignAgent'"
                   type="primary" style="margin-left: 8px;">
                   <el-icon style="vertical-align: middle">
                     <Download />
