@@ -590,4 +590,101 @@ onMounted(() => {
     }
   }
 }
+
+// 深色模式适配
+.theme-dark .profile-container {
+  background-color: var(--color-background);
+}
+
+.theme-dark .profile-content {
+  background-color: var(--color-background-card);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
+}
+
+.theme-dark .profile-header {
+  border-bottom-color: var(--color-border);
+
+  h2 {
+    color: var(--el-text-color-primary);
+  }
+
+  p {
+    color: var(--el-text-color-secondary);
+  }
+}
+
+.theme-dark .profile-section {
+  border-bottom-color: var(--color-border);
+
+  .section-header {
+    background-color: var(--color-background);
+
+    h3 {
+      color: var(--el-text-color-primary);
+    }
+  }
+}
+
+.theme-dark .security-item {
+  border-color: var(--color-border);
+  background-color: var(--color-background);
+
+  .security-info {
+    .security-icon {
+      color: var(--el-color-primary);
+    }
+
+    .security-text {
+      h4 {
+        color: var(--el-text-color-primary);
+      }
+
+      p {
+        color: var(--el-text-color-secondary);
+      }
+    }
+  }
+}
+
+.theme-dark .usage-item {
+  border-color: var(--color-border);
+  background-color: var(--color-background);
+
+  &:hover {
+    border-color: var(--el-color-primary);
+    background-color: var(--color-background-card);
+  }
+
+  .usage-number {
+    color: var(--el-color-primary);
+  }
+
+  .usage-label {
+    color: var(--el-text-color-secondary);
+  }
+}
+
+// 深色模式下对话框样式适配
+.theme-dark :deep(.el-dialog) {
+  background-color: var(--color-background-card);
+  border: 1px solid var(--color-border);
+}
+
+.theme-dark :deep(.el-dialog__title) {
+  color: var(--el-text-color-primary);
+}
+
+.theme-dark :deep(.el-dialog__body) {
+  color: var(--el-text-color-primary);
+}
+
+// 输入框在深色模式下的适配
+.theme-dark :deep(.el-input__wrapper) {
+  background-color: var(--color-background);
+  border-color: var(--color-border);
+}
+
+.theme-dark :deep(.el-form-item__label) {
+  color: var(--el-text-color-primary);
+}
 </style>
