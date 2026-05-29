@@ -19,7 +19,7 @@
       <div v-else class="history-list">
         <div class="list-header">
           <h3>{{ $t('history.historyCount', { count: historyList.length }) }}</h3>
-          <el-button @click="refreshHistory" :loading="refreshing" size="small">
+          <el-button class="refresh-btn" @click="refreshHistory" :loading="refreshing" size="small">
             <el-icon><Refresh /></el-icon>
             {{ $t('common.refresh') }}
           </el-button>
@@ -364,20 +364,20 @@ onMounted(() => {
 
   .el-icon {
     font-size: 64px;
-    color: #c0c4cc;
+    color: var(--el-text-color-placeholder);
     margin-bottom: 24px;
   }
 
   h3 {
     margin: 0 0 16px 0;
     font-size: 20px;
-    color: #606266;
+    color: var(--el-text-color-primary);
     font-weight: 500;
   }
 
   p {
     margin: 0 0 24px 0;
-    color: #909399;
+    color: var(--el-text-color-secondary);
     font-size: 14px;
     line-height: 1.6;
   }
@@ -388,13 +388,13 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 24px 24px 16px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--el-border-color);
 
   h3 {
     margin: 0;
     font-size: 18px;
     font-weight: 600;
-    color: #303133;
+    color: var(--el-text-color-primary);
   }
 }
 
@@ -406,16 +406,16 @@ onMounted(() => {
 }
 
 .history-item {
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--el-border-color);
   border-radius: 8px;
   padding: 20px;
   cursor: pointer;
   transition: all 0.3s ease;
-  background-color: #fff;
+  background-color: var(--color-background-card);
 
   &:hover {
-    border-color: #409eff;
-    box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+    border-color: var(--el-color-primary);
+    box-shadow: 0 4px 12px rgba(var(--el-color-primary-rgb), 0.15);
     transform: translateY(-2px);
   }
 
@@ -434,14 +434,14 @@ onMounted(() => {
 
       .history-icon {
         font-size: 20px;
-        color: #409eff;
+        color: var(--el-color-primary);
         flex-shrink: 0;
       }
 
       .title-text {
         font-size: 16px;
         font-weight: 500;
-        color: #303133;
+        color: var(--el-text-color-primary);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -454,15 +454,15 @@ onMounted(() => {
 
       .action-icon {
         font-size: 18px;
-        color: #909399;
+        color: var(--el-text-color-secondary);
         cursor: pointer;
         padding: 4px;
         border-radius: 4px;
         transition: all 0.2s ease;
 
         &:hover {
-          background-color: #f5f7fa;
-          color: #606266;
+          background-color: var(--el-fill-color-light);
+          color: var(--el-text-color-primary);
         }
       }
     }
@@ -477,19 +477,19 @@ onMounted(() => {
       align-items: center;
       margin-bottom: 12px;
       font-size: 12px;
-      color: #909399;
+      color: var(--el-text-color-secondary);
 
       .history-date {
-        color: #67c23a;
+        color: var(--el-color-success);
       }
 
       .history-id {
-        color: #909399;
+        color: var(--el-text-color-secondary);
       }
     }
 
     .history-preview {
-      color: #606266;
+      color: var(--el-text-color-primary);
       font-size: 14px;
       line-height: 1.5;
       overflow: hidden;
@@ -515,21 +515,21 @@ onMounted(() => {
 .delete-confirm-content {
   text-align: center;
   padding: 20px 0;
-  
+
   .warning-icon {
     font-size: 48px;
-    color: #e6a23c;
+    color: var(--el-color-warning);
     margin-bottom: 16px;
   }
-  
+
   p {
     margin: 8px 0;
-    color: #606266;
-    
+    color: var(--el-text-color-primary);
+
     &.history-title-to-delete {
       font-weight: 500;
-      color: #333;
-      background-color: #f5f7fa;
+      color: var(--el-text-color-primary);
+      background-color: var(--color-background-hover);
       padding: 8px 12px;
       border-radius: 4px;
       margin: 12px 0;
@@ -558,6 +558,148 @@ onMounted(() => {
     h3 {
       font-size: 16px;
     }
+  }
+}
+
+// 深色模式适配
+.theme-dark .history-container {
+  background-color: var(--color-background);
+}
+
+.theme-dark .history-content {
+  background-color: var(--color-background-card);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
+}
+
+.theme-dark .loading-container {
+  color: var(--el-text-color-secondary);
+}
+
+.theme-dark .empty-container {
+  .el-icon {
+    color: var(--el-text-color-placeholder);
+  }
+
+  h3 {
+    color: var(--el-text-color-primary);
+  }
+
+  p {
+    color: var(--el-text-color-secondary);
+  }
+}
+
+.theme-dark .list-header {
+  border-bottom-color: var(--color-border);
+
+  h3 {
+    color: var(--el-text-color-primary);
+  }
+}
+
+.theme-dark .history-item {
+  background-color: var(--color-background-card);
+  border-color: var(--color-border);
+
+  &:hover {
+    border-color: var(--el-color-primary);
+    box-shadow: 0 4px 12px rgba(var(--el-color-primary-rgb), 0.25);
+    background-color: var(--color-background);
+  }
+
+  .history-title {
+    .title-text {
+      color: var(--el-text-color-primary);
+    }
+  }
+
+  .history-actions {
+    .action-icon {
+      color: var(--el-text-color-secondary);
+
+      &:hover {
+        background-color: var(--el-fill-color-darker);
+        color: var(--el-text-color-primary);
+      }
+    }
+  }
+
+  .history-content {
+    .history-meta {
+      color: var(--el-text-color-secondary);
+
+      .history-date {
+        color: var(--el-color-success);
+      }
+
+      .history-id {
+        color: var(--el-text-color-secondary);
+      }
+    }
+
+    .history-preview {
+      color: var(--el-text-color-primary);
+    }
+  }
+}
+
+.theme-dark .delete-confirm-content {
+  .warning-icon {
+    color: var(--el-color-warning);
+  }
+
+  p {
+    color: var(--el-text-color-primary);
+
+    &.history-title-to-delete {
+      color: var(--el-text-color-primary);
+      background-color: var(--color-background-hover);
+    }
+  }
+}
+
+// 深色模式下对话框样式适配
+.theme-dark :deep(.el-dialog) {
+  background-color: var(--color-background-card);
+  border: 1px solid var(--color-border);
+}
+
+.theme-dark :deep(.el-dialog__title) {
+  color: var(--el-text-color-primary);
+}
+
+.theme-dark :deep(.el-dialog__body) {
+  color: var(--el-text-color-primary);
+}
+
+.theme-dark :deep(.el-input__wrapper) {
+  background-color: var(--color-background);
+  border-color: var(--color-border);
+}
+
+.theme-dark :deep(.el-form-item__label) {
+  color: var(--el-text-color-primary);
+}
+
+// 下拉菜单深色模式适配
+.theme-dark :deep(.el-dropdown-menu) {
+  background-color: var(--color-background-card);
+  border-color: var(--color-border);
+}
+
+.theme-dark :deep(.el-dropdown-menu__item) {
+  color: var(--el-text-color-primary);
+
+  &:hover {
+    background-color: var(--color-background-hover);
+  }
+}
+
+.theme-dark .refresh-btn {
+  color: #333;
+
+  &:hover {
+    color: #409eff;
   }
 }
 </style>
