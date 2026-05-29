@@ -477,6 +477,8 @@ export default {
 
   // Cloud storage module
   cloudStorage: {
+    title: 'Cloud Drive (Beta)',
+    description: 'This is a simplified preview. Some features are still under construction.',
     tryDemo: 'Try Demo',
     totalFiles: 'Total Files',
     usedStorage: 'Used Storage',

@@ -475,6 +475,8 @@ export default {
 
   // 网盘空间模块
   cloudStorage: {
+    title: '网盘空间 (Beta)',
+    description: '这是一个简化的预览版本。部分功能仍在开发中。',
     tryDemo: '体验演示',
     totalFiles: '总文件数',
     usedStorage: '已用存储',

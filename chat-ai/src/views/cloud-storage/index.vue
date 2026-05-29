@@ -1,23 +1,30 @@
 <template>
-  <div class="cloud-storage-container">
+  <div :class="['cloud-storage-container', themeClass]">
     <div class="cloud-storage-content">
-      <h1>网盘空间</h1>
-      <p>这是一个简化的网盘空间页面</p>
-      <el-button type="primary">测试按钮</el-button>
+      <h1>{{ $t('cloudStorage.title') }}</h1>
+      <p>{{ $t('cloudStorage.description') }}</p>
+      <el-button type="primary" @click="handleTryDemo">{{ $t('cloudStorage.tryDemo') }}</el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed } from 'vue';
+import { useThemeStore } from '@/stores/theme';
 
-const title = ref('网盘空间');
+const themeStore = useThemeStore();
+
+const themeClass = computed(() => `theme-${themeStore.currentTheme}`);
+
+const handleTryDemo = () => {
+  console.log('Opening demo for Cloud Drive');
+};
 </script>
 
 <style lang="scss" scoped>
 .cloud-storage-container {
   padding: 24px;
-  background-color: #f5f7fa;
+  background-color: var(--el-bg-color-page, #f5f7fa);
   min-height: 100vh;
 }
 
@@ -25,15 +32,31 @@ const title = ref('网盘空间');
   max-width: 1200px;
   margin: 0 auto;
   text-align: center;
-  
+
   h1 {
-    color: #303133;
+    color: var(--el-text-color-primary, #303133);
     margin-bottom: 16px;
+    font-size: 28px;
+    font-weight: 600;
   }
-  
+
   p {
-    color: #606266;
+    color: var(--el-text-color-regular, #606266);
     margin-bottom: 24px;
+    font-size: 16px;
+    line-height: 1.6;
   }
+}
+
+.theme-dark .cloud-storage-container {
+  background-color: var(--el-bg-color-page, #1a1a1a);
+}
+
+.theme-dark .cloud-storage-content h1 {
+  color: var(--el-text-color-primary, #ffffff);
+}
+
+.theme-dark .cloud-storage-content p {
+  color: var(--el-text-color-regular, rgba(235, 235, 235, 0.64));
 }
 </style>
