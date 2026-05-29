@@ -31,14 +31,14 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            任务创建成功4a7715a-996a-22e0-acd5-fb278e7d45b3
+            {{ $t('agents.analyst.taskCreated') }}4a7715a-996a-22e0-acd5-fb278e7d45b3
             <div class="download-section">
-              <el-button 
-                type="primary" 
-                :icon="Download" 
+              <el-button
+                type="primary"
+                :icon="Download"
                 @click="downloadResults"
                 class="download-button">
-                下载分析结果
+                {{ $t('agents.analyst.downloadResults') }}
               </el-button>
             </div>
             <div class="tip-text">{{ $t('common.Tip') }}</div>

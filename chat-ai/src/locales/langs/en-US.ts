@@ -596,7 +596,9 @@ export default {
   agents: {
     analyst: {
       title: 'Analyst Agent',
-      subtitle: 'Analysis Agent - Provides bioinformatics data analysis and interpretation services'
+      subtitle: 'Analysis Agent - Provides bioinformatics data analysis and interpretation services',
+      taskCreated: 'Task created successfully',
+      downloadResults: 'Download Analysis Results'
     },
     data: {
       title: 'Data Agent', 
