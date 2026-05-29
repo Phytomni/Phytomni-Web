@@ -41,7 +41,7 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            任务已创建:
+            {{ $t('agents.deepGenome.taskCreated') }}:
             4a7715a-996a-22e0-acd5-fb278e7d45b3
             <div class="tip-text">{{ $t('common.Tip') }}</div>
           </div>
@@ -91,13 +91,14 @@
       </div>
     </div>
     <div class="ai-disclaimer">
-      AI 生成内容仅供参考,请审慎使用
+      {{ $t('common.aiDisclaimer') }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import {
   ArrowLeft,
   SuccessFilled,
@@ -108,6 +109,8 @@ import {
 import DeepGenomeResultViewer from '@/components/DeepGenomeResultViewer.vue';
 import { ref } from 'vue';
 
+const { t } = useI18n();
+
 const loveThisState = ref(0);
 const needsImprovementState = ref(0);
 
@@ -116,10 +119,9 @@ const goBack = () => {
   router.back();
 };
 
-// 点赞点踩 tooltip(i18n key 未到位前先用本地化字符串占位,Phase 3 替换)
 const getReactionTooltip = (reactionType: number) => {
-  if (reactionType === 1) return '这个好';
-  if (reactionType === 2) return '需要改进';
+  if (reactionType === 1) return t('chat.loveThis');
+  if (reactionType === 2) return t('chat.needsImprovement');
   return '';
 };
 

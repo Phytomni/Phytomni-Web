@@ -257,7 +257,7 @@
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">下载文件</span>
+                  <span style="vertical-align: middle">{{ $t('chat.downloadFile') }}</span>
                 </el-button>
 
                 <!-- 日志按钮 - 仅在AnalystAgent类型下显示 -->
@@ -268,7 +268,7 @@
                     <el-icon>
                       <Document />
                     </el-icon>
-                    {{ message.showLog ? '隐藏日志' : '查看日志' }}
+                    {{ message.showLog ? $t('chat.hideLog') : $t('chat.showLog') }}
                   </el-button>
                 </div>
 
@@ -384,7 +384,7 @@
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">下载文件</span>
+                  <span style="vertical-align: middle">{{ $t('chat.downloadFile') }}</span>
                 </el-button>
 
                 <!-- 后续问题显示 -->
@@ -495,7 +495,7 @@
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">下载文件</span>
+                  <span style="vertical-align: middle">{{ $t('chat.downloadFile') }}</span>
                 </el-button>
 
                 <!-- 后续问题显示 -->

@@ -7,7 +7,7 @@
           :icon="ArrowLeft" 
           @click="goBack"
           class="back-button">
-          返回
+          {{ $t('common.back') }}
         </el-button>
         <div class="header-text">
           <h1>{{ $t('agents.analyst.title') }}</h1>
