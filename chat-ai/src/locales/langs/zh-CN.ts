@@ -32,7 +32,8 @@ export default {
     running: '运行中',
     waiting: '等待中',
     finished: "已完成",
-    Tip: "(AI 生成)"
+    Tip: "(AI 生成)",
+    aiDisclaimer: '由AI生成，请仔细审查'
   },
 
   // 应用信息
@@ -421,6 +422,13 @@ export default {
     favoritesCount: '共 {count} 个收藏',
     openChat: '打开对话',
     refresh: '刷新',
+    regenerate: '刷新回复',
+    loveThis: '点赞',
+    needsImprovement: '点踩',
+    attachment: '附件',
+    hideLog: '隐藏日志',
+    showLog: '显示日志',
+    downloadFile: '下载文件',
   },
 
   // 历史记录模块
@@ -467,6 +475,7 @@ export default {
 
   // 网盘空间模块
   cloudStorage: {
+    tryDemo: '体验演示',
     totalFiles: '总文件数',
     usedStorage: '已用存储',
     availableStorage: '可用存储',
@@ -599,7 +608,8 @@ export default {
     },
     deepGenome: {
       title: 'Deep Genome Agent',
-      subtitle: '深度基因组智能体 - 提供物种和基因的深度分析服务'
+      subtitle: '深度基因组智能体 - 提供物种和基因的深度分析服务',
+      taskCreated: '任务创建成功'
     },
     geneNetwork: {
       title: 'Gene Network Agent',
