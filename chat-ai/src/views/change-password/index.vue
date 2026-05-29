@@ -325,4 +325,75 @@
       }
     }
   }
+  /* 深色模式适配 */
+  .theme-dark .change-password-page {
+    background-color: var(--color-background);
+  }
+
+  .theme-dark .page-header {
+    background-color: var(--color-background-card);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .theme-dark .page-title {
+    color: var(--el-color-primary);
+  }
+
+  .theme-dark .change-password-container .form-card {
+    background: var(--color-background-card);
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .theme-dark .form-card .title {
+    color: var(--el-text-color-primary);
+  }
+
+  /* 深色模式下 Element Plus 表单样式适配 */
+  .theme-dark :deep(.el-form-item__label) {
+    color: var(--el-text-color-primary);
+  }
+
+  /* 让输入框使用 Element Plus 默认的深色主题样式，不单独设置背景色 */
+  .theme-dark :deep(.el-input__inner) {
+    color: var(--el-text-color-primary);
+  }
+
+  .theme-dark :deep(.el-input__inner::placeholder) {
+    color: var(--el-text-color-placeholder);
+  }
+
+  /* 深色模式下按钮样式 */
+  .theme-dark :deep(.el-button) {
+    background-color: #f5f5f5;
+    border-color: #dcdcdc;
+    color: #333;
+  }
+
+  .theme-dark :deep(.el-button:hover) {
+    color: var(--el-color-primary);
+    border-color: var(--el-color-primary);
+  }
+
+  .theme-dark :deep(.el-button--primary) {
+    background-color: var(--el-color-primary);
+    border-color: var(--el-color-primary);
+    color: #fff;
+  }
+
+  .theme-dark :deep(.el-button--primary:hover) {
+    background-color: var(--el-color-primary-light-3);
+    border-color: var(--el-color-primary-light-3);
+    color: #fff;
+  }
+  .theme-dark .el-input :deep(.el-input__inner) {
+    background: #ffffff!important;
+    color: #333!important;
+  }
+
+  .theme-dark .reset-btn {
+    color: #303133;
+  }
+  .theme-dark .reset-btn:hover {
+    color: #409eff;
+  }
 </style>
