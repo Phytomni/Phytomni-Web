@@ -1171,11 +1171,20 @@ onMounted(async () => {
 
   // 获取历史问题列表
   getHistoryQuestionData().then(() => {
+    // 恢复未完成的会话
+    restorePendingChats();
+
     // 获取URL中的chatId
     const urlChatId = getChatIdFromUrl();
 
     // chatId 不存在默认为新对话
-    if (urlChatId && chatList.value.length > 0) {
+    if (urlChatId) {
+      // 首先检查是否是未完成的会话
+      if (loadPendingChat(urlChatId)) {
+        currentChatId.value = urlChatId;
+        return;
+      }
+
       // 查找是否存在对应的聊天
       const chatExists = chatList.value.find(chat => chat.dialogue_id === urlChatId);
       if (chatExists) {
@@ -1186,6 +1195,9 @@ onMounted(async () => {
         const firstChatId = chatList.value[0].dialogue_id;
         updateUrlWithChatId(firstChatId);
         selectChat(firstChatId);
+      } else {
+        // 如果没有聊天记录，创建一个新对话状态
+        startNewChat();
       }
     } else {
       // 如果没有聊天记录，创建一个新对话状态
@@ -1195,7 +1207,7 @@ onMounted(async () => {
 
   // 检查是否需要显示教学引导
   checkTutorialStatus();
-  
+
   // 添加键盘事件监听器
   document.addEventListener('keydown', handleTutorialKeydown);
 });
@@ -1216,6 +1228,76 @@ const getHistoryQuestionData = () => {
               isFavorite: false, // 默认未收藏
             };
           });
+
+          // 检查localStorage中的临时对话数据
+          const checkAndProcessLocalStorageChats = () => {
+            // 获取所有pending_chat_前缀的键
+            const pendingChatKeys = Object.keys(localStorage).filter((key) =>
+              key.startsWith('pending_chat_')
+            );
+
+            // 遍历localStorage中的临时对话
+            for (const key of pendingChatKeys) {
+              try {
+                const pendingChatData = JSON.parse(
+                  localStorage.getItem(key) || ''
+                );
+                if (
+                  pendingChatData &&
+                  pendingChatData.messages &&
+                  pendingChatData.messages.length > 0
+                ) {
+                  // 获取临时对话中的用户消息
+                  const pendingUserMessage = pendingChatData.messages.find(
+                    (msg: any) => msg.role === 'user'
+                  );
+                  if (pendingUserMessage) {
+                    // 检查是否与会话列表中的对话匹配
+                    const matchingChat = formattedData.find((chat: any) => {
+                      // 尝试多种匹配方式
+                      return (
+                        chat.title === pendingUserMessage.content ||
+                        (chat.title &&
+                          pendingUserMessage.content &&
+                          (chat.title.includes(
+                            pendingUserMessage.content.substring(0, 20)
+                          ) ||
+                            pendingUserMessage.content.includes(
+                              chat.title.substring(0, 20)
+                            )))
+                      );
+                    });
+
+                    // 获取临时对话ID
+                    const tempChatId = key.replace('pending_chat_', '');
+
+                    if (matchingChat) {
+                      console.log(
+                        '找到匹配的会话，删除localStorage中的临时数据:',
+                        tempChatId
+                      );
+                      // 如果当前正在使用这个临时对话，更新为匹配的会话
+                      if (currentChatId.value === tempChatId) {
+                        currentChatId.value = matchingChat.dialogue_id;
+                        updateUrlWithChatId(matchingChat.dialogue_id);
+                        console.log(
+                          '已将当前对话关联到现有对话:',
+                          matchingChat.dialogue_id
+                        );
+                      }
+                      // 删除localStorage中的临时数据
+                      localStorage.removeItem(key);
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('处理localStorage临时数据失败:', error);
+              }
+            }
+          };
+
+          // 先处理localStorage中的临时数据，检查是否有匹配的会话
+          checkAndProcessLocalStorageChats();
 
           // 更新chatList，保持API返回的顺序
           chatList.value = formattedData;
@@ -1248,6 +1330,104 @@ const getHistoryQuestionData = () => {
         resolve();
       });
   });
+};
+
+// 检查 localStorage 中所有未完成的会话,删除已与 chatList 匹配的占位
+// (chat-ai 不像 frontend 把占位条目 push 到 chatList — chat-ai 的 chatList 由 backend
+// fetch 主导,pending chat URL 访问走 loadPendingChat 即可,避免与 chatStates 并行模型冲突)
+const restorePendingChats = () => {
+  const pendingChatKeys = Object.keys(localStorage).filter((key) =>
+    key.startsWith('pending_chat_')
+  );
+
+  pendingChatKeys.forEach((key) => {
+    try {
+      const storedData = localStorage.getItem(key);
+      if (!storedData) return;
+
+      const pendingChatData = JSON.parse(storedData);
+      if (
+        pendingChatData &&
+        (pendingChatData.isPending || pendingChatData.messages)
+      ) {
+        const tempChatId = key.replace('pending_chat_', '');
+
+        const userMessage = pendingChatData.messages?.find(
+          (msg: any) => msg.role === 'user'
+        );
+
+        if (userMessage) {
+          // 先尝试通过 ID 匹配
+          const existsById = chatList.value.some(
+            (chat) =>
+              chat.dialogue_id === pendingChatData.id ||
+              chat.dialogue_id === tempChatId
+          );
+
+          if (!existsById) {
+            // 再尝试通过内容匹配
+            const matchingChat = chatList.value.find((chat: any) => {
+              return (
+                chat.title === userMessage.content ||
+                (chat.title &&
+                  userMessage.content &&
+                  (chat.title.includes(userMessage.content.substring(0, 20)) ||
+                    userMessage.content.includes(chat.title.substring(0, 20))))
+              );
+            });
+
+            if (matchingChat) {
+              console.log(
+                '通过内容匹配找到已存在的会话，删除临时数据:',
+                tempChatId
+              );
+              localStorage.removeItem(key);
+
+              if (currentChatId.value === tempChatId) {
+                currentChatId.value = matchingChat.dialogue_id;
+                updateUrlWithChatId(matchingChat.dialogue_id);
+              }
+            }
+            // 无匹配则保留 localStorage 数据,供后续 loadPendingChat 走 URL 加载
+          } else {
+            // 通过 ID 找到匹配的会话,删除临时数据
+            localStorage.removeItem(key);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('恢复未完成的会话失败:', error);
+      try {
+        localStorage.removeItem(key);
+      } catch (cleanupError) {
+        console.error('清理损坏的会话数据失败:', cleanupError);
+      }
+    }
+  });
+};
+
+// 从 localStorage 加载特定的未完成会话(给 onMounted 中按 url chatId 用)
+const loadPendingChat = (dialogueId: string) => {
+  try {
+    const storedData = localStorage.getItem(`pending_chat_${dialogueId}`);
+    if (!storedData) return false;
+
+    const pendingChatData = JSON.parse(storedData);
+    if (pendingChatData && pendingChatData.isPending) {
+      currentChat.value = {
+        messages: pendingChatData.messages || []
+      };
+      return true;
+    }
+  } catch (error) {
+    console.error('加载未完成的会话失败:', error);
+    try {
+      localStorage.removeItem(`pending_chat_${dialogueId}`);
+    } catch (cleanupError) {
+      console.error('清理损坏的会话数据失败:', cleanupError);
+    }
+  }
+  return false;
 };
 
 // 当前选中的对话
