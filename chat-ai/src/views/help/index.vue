@@ -19,7 +19,7 @@
         <div class="content-layout">
           <!-- 侧边栏目录 -->
           <div class="toc-sidebar">
-            <div class="toc-title">目录</div>
+            <div class="toc-title">{{ $t('help.tableOfContents') }}</div>
             <nav class="toc-nav">
               <ul class="toc-list">
                 <li 

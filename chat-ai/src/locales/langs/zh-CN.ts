@@ -629,6 +629,7 @@ export default {
   help: {
     title: '帮助中心',
     subtitle: 'Phytomni 使用指南与功能说明',
+    tableOfContents: '目录',
     quickStart: {
       title: '快速开始',
       step1: {

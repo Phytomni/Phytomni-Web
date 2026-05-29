@@ -631,6 +631,7 @@ export default {
   help: {
     title: 'Help Center',
     subtitle: 'Phytomni User Guide and Feature Documentation',
+    tableOfContents: 'Table of Contents',
     quickStart: {
       title: 'Quick Start',
       step1: {
