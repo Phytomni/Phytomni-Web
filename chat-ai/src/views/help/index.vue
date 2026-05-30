@@ -139,7 +139,7 @@ onUnmounted(() => {
 })
 
 // Markdown内容
-const helpContent = `<div id="what-is-phytomni"># 1. What is Phytomni?</div>
+const helpContent = `<div id="what-is-phytomni"><h1>1. What is Phytomni?</h1></div>
 
 Phytomni is an intelligent agentic AI system for scientific discovery and design in plant research, which can assist researchers to significantly accelerate scientific discovery, including:
 
@@ -157,7 +157,7 @@ Building upon these core capabilities, Phytomni can perform complex research tas
 -   Designing and optimizing alleles and proteins (including gene promoters and protein engineering);
 -   **... ...**
 
-<div id="getting-started"># 2. Getting Started: How to Use Phytomni</div>
+<div id="getting-started"><h1>2. Getting Started: How to Use Phytomni</h1></div>
 
 Using Phytomni is a conversational, task-oriented process. Follow these simple steps to begin your research:
 
@@ -173,7 +173,7 @@ After submitting your query, you can monitor its progress in real time through t
 
 Once the task is completed, you will be able to review the results directly in the system. For example, when exploring specific genes, the Gene Display module offers a comprehensive, integrated view of the target gene, including basic information, literature summaries, interaction networks, and expression heatmaps. You can download your results for further use or export them into different formats. To facilitate long-term research, completed tasks can also be saved as favourites, allowing you to easily revisit and reuse them whenever needed.
 
-<div id="how-it-works"># 3. How does Phytomni work? Understanding the Architecture and Capabilities</div>
+<div id="how-it-works"><h1>3. How does Phytomni work? Understanding the Architecture and Capabilities</h1></div>
 
 ### The Dual-LLM Core
 
@@ -201,13 +201,13 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 
 -   The **Digital Design Agent** leverages the other agents for allele and protein engineering. Via natural language queries, it supports protein sequence modification and gene promoter optimization, predicts beneficial mutations, and generates protein variants with enhanced traits. It bridges computational design and experimental validation to accelerate synthetic biology, functional genomics, and crop improvement.
 
-<div id="resources"># 4. What resources does Phytomni integrate?</div>
+<div id="resources"><h1>4. What resources does Phytomni integrate?</h1></div>
 
 -   A **Knowledge Base** comprising over 4 million full-text agriculture and plant biology research papers published from 1900-2025, along with over 27 million abstracts and nearly 200,000 patents.
 -   A **Biological Database** covering 65 plant species (including rice, maize, wheat, soybean, *Arabidopsis*, etc.) and 14 omics methods (e.g., genomics, transcriptomics, epigenomics, phenomics, etc.).
 -   A **Bioinformatics Toolkit** containing 125 total bioinformatic tools, including 25 models and 100 command-line tools, encompassing a variety of biological scenarios.
 
-<div id="limitations"># 5. Limitations and Best Practices</div>
+<div id="limitations"><h1>5. Limitations and Best Practices</h1></div>
 
 -   **Experimental Validation is Essential:** While Phytomni provides powerful *in silico* predictions, its outputs may contain theoretical gaps or require real-world context. Validating its recommendations via experiments is crucial to guarantee their reliability in practical scenarios.
 -   **Iterative Refinement is Key:** For complex tasks, refine your queries, input parameters, or prompts based on initial results and feedback to gradually enhance the relevance and quality of the outputs.
