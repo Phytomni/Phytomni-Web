@@ -238,16 +238,16 @@
           const response = await changePassword(formData);
           
           if (response.code === 200) {
-            ElMessage.success('密码修改成功');
+            ElMessage.success(t('changePassword.passwordChangeSuccess'));
             // 修改成功后退出登录
             const UserStore = userStore();
             UserStore.FedLogOut().then(() => router.replace('/login'));
           } else {
-            ElMessage.error(response.message || '密码修改失败');
+            ElMessage.error(response.message || t('changePassword.passwordChangeFailed'));
           }
         } catch (error: any) {
           console.error('修改密码失败:', error);
-          ElMessage.warning(error.response.data.message || '密码修改失败，请稍后重试');
+          ElMessage.warning(error.response.data.message || t('changePassword.passwordChangeRetry'));
         }
       } else {
         console.log('表单验证失败', fields);

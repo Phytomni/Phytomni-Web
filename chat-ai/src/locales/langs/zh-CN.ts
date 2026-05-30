@@ -112,6 +112,9 @@ export default {
     passwordSame: '新密码不能与旧密码相同',
     passwordMismatch: '两次输入的密码不一致',
     formValidationFailed: '请检查表单填写是否正确',
+    passwordChangeSuccess: '密码修改成功',
+    passwordChangeFailed: '密码修改失败',
+    passwordChangeRetry: '密码修改失败，请稍后重试',
   },
 
   // 登录模块
@@ -471,6 +474,11 @@ export default {
       storageUsed: '已用存储',
       lastLogin: '最后登录',
     },
+    passwordChangeSuccess: '密码修改成功',
+    passwordChangeFailed: '密码修改失败，请重试',
+    userInfoNotFound: '未获取到用户信息',
+    fetchUserInfoFailed: '获取用户信息失败',
+    fetchUserInfoError: '获取用户信息失败',
   },
 
   // 网盘空间模块

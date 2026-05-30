@@ -111,7 +111,10 @@ export default {
     passwordNeedSpecial: 'Password must contain special characters',
     passwordSame: 'New password cannot be the same as old password',
     passwordMismatch: 'Passwords do not match',
-    formValidationFailed: 'Please check the form for errors'
+    formValidationFailed: 'Please check the form for errors',
+    passwordChangeSuccess: 'Password changed successfully',
+    passwordChangeFailed: 'Failed to change password',
+    passwordChangeRetry: 'Failed to change password, please try again later',
   },
 
   // Login module
@@ -473,6 +476,11 @@ export default {
       storageUsed: 'Storage Used',
       lastLogin: 'Last Login',
     },
+    passwordChangeSuccess: 'Password changed successfully',
+    passwordChangeFailed: 'Failed to change password, please try again',
+    userInfoNotFound: 'User information not found',
+    fetchUserInfoFailed: 'Failed to fetch user information',
+    fetchUserInfoError: 'Failed to fetch user information',
   },
 
   // Cloud storage module

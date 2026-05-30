@@ -310,11 +310,11 @@ const handlePasswordChange = async () => {
       // 这里应该调用实际的API接口
       await new Promise(resolve => setTimeout(resolve, 1000));
       passwordDialogVisible.value = false;
-      ElMessage.success('密码修改成功');
+      ElMessage.success(t('profile.passwordChangeSuccess'));
     }
   } catch (error) {
     console.error('密码修改失败:', error);
-    ElMessage.error('密码修改失败，请重试');
+    ElMessage.error(t('profile.passwordChangeFailed'));
   }
 };
 
@@ -339,7 +339,7 @@ const fetchUserInfo = async () => {
   try {
     const email = UserStore.name;
     if (!email) {
-      ElMessage.warning('未获取到用户信息');
+      ElMessage.warning(t('profile.userInfoNotFound'));
       return;
     }
 
@@ -358,11 +358,11 @@ const fetchUserInfo = async () => {
       usageStats.totalChats = data.dialogue_count || 0;
       usageStats.lastLogin = formatDateTime(data.last_login_at);
     } else {
-      ElMessage.error(res.msg || '获取用户信息失败');
+      ElMessage.error(res.msg || t('profile.fetchUserInfoFailed'));
     }
   } catch (error) {
     console.error('获取用户信息失败:', error);
-    ElMessage.error('获取用户信息失败');
+    ElMessage.error(t('profile.fetchUserInfoError'));
   }
 };
 
