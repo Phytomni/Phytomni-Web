@@ -4,12 +4,12 @@
       <!-- 页面头部 -->
       <div class="help-header">
         <div class="header-content">
-          <h1 class="help-title">{{ $t('help.title') }}</h1>
+          <h1 class="help-title">{{ $t("help.title") }}</h1>
         </div>
         <div class="header-actions">
           <button class="back-btn" @click="goBack">
             <i class="icon-arrow-left"></i>
-            {{ $t('common.back') }}
+            {{ $t("common.back") }}
           </button>
         </div>
       </div>
@@ -19,124 +19,128 @@
         <div class="content-layout">
           <!-- 侧边栏目录 -->
           <div class="toc-sidebar">
-            <div class="toc-title">{{ $t('help.tableOfContents') }}</div>
+            <div class="toc-title">{{ $t("help.tableOfContents") }}</div>
             <nav class="toc-nav">
               <ul class="toc-list">
-                <li 
-                  v-for="item in tableOfContents" 
+                <li
+                  v-for="item in tableOfContents"
                   :key="item.id"
                   class="toc-item"
-                  :class="{ 'active': activeSection === item.id }"
+                  :class="{ active: activeSection === item.id }"
                   @click="scrollToSection(item.id)"
                 >
                   <span class="toc-link">{{ item.title }}</span>
                 </li>
-                </ul>
+              </ul>
             </nav>
           </div>
-          
+
           <!-- 主内容区域 -->
           <div class="main-content" ref="mainContentRef">
             <MarkdownViewer :content="helpContent" />
-                  </div>
-                </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
-import MarkdownViewer from '@/components/MarkdownViewer.vue'
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { getToken } from '@/utils/auth'
-import { ElMessage } from 'element-plus'
+import { useRouter } from "vue-router";
+import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import { ref, onMounted, onUnmounted } from "vue";
+import { useI18n } from "vue-i18n";
+import { getToken } from "@/utils/auth";
+import { ElMessage } from "element-plus";
 
-const router = useRouter()
-const { t } = useI18n()
+const router = useRouter();
+const { t } = useI18n();
 
 // 返回上一页
 const goBack = () => {
   try {
     // 检查token是否存在
     if (!getToken()) {
-      ElMessage.warning(t('help.goBackTokenExpired'))
-      router.replace('/login')
-      return
+      ElMessage.warning(t("help.goBackTokenExpired"));
+      router.replace("/login");
+      return;
     }
     // 尝试返回上一页
-    router.back()
+    router.back();
   } catch (error) {
     // 处理路由返回异常
-    console.error('返回上一页失败:', error)
-    ElMessage.error(t('help.goBackFailed'))
+    console.error("返回上一页失败:", error);
+    ElMessage.error(t("help.goBackFailed"));
     // 如果返回失败，导航到默认页面
-    router.push('/')
+    router.push("/");
   }
-}
+};
 
 // 目录数据结构
 const tableOfContents = ref([
-  { id: 'what-is-phytomni', title: 'What is Phytomni?', level: 1 },
-  { id: 'getting-started', title: 'Getting Started', level: 1 },
-  { id: 'how-it-works', title: 'How does Phytomni work?', level: 1 },
-  { id: 'resources', title: 'What resources does Phytomni integrate?', level: 1 },
-  { id: 'limitations', title: 'Limitations and Best Practices', level: 1 }
-])
+  { id: "what-is-phytomni", title: "What is Phytomni?", level: 1 },
+  { id: "getting-started", title: "Getting Started", level: 1 },
+  { id: "how-it-works", title: "How does Phytomni work?", level: 1 },
+  {
+    id: "resources",
+    title: "What resources does Phytomni integrate?",
+    level: 1,
+  },
+  { id: "limitations", title: "Limitations and Best Practices", level: 1 },
+]);
 
 // 当前激活的目录项
-const activeSection = ref('what-is-phytomni')
+const activeSection = ref("what-is-phytomni");
 
 // 获取主内容区域元素
-const mainContentRef = ref<HTMLElement | null>(null)
+const mainContentRef = ref<HTMLElement | null>(null);
 
 // 点击目录项跳转
 const scrollToSection = (sectionId: string) => {
-  const element = document.getElementById(sectionId)
+  const element = document.getElementById(sectionId);
   if (element && mainContentRef.value) {
     // 计算元素在主内容区域内的相对位置
-    const elementTop = element.offsetTop - 20 // 添加20px的上边距，避免标题被遮挡
+    const elementTop = element.offsetTop - 20; // 添加20px的上边距，避免标题被遮挡
     // 滚动到指定位置
     mainContentRef.value.scrollTo({
       top: elementTop,
-      behavior: 'smooth'
-    })
-    activeSection.value = sectionId
+      behavior: "smooth",
+    });
+    activeSection.value = sectionId;
   }
-}
+};
 
 // 监听滚动，更新当前激活的章节
 const handleScroll = () => {
-  if (!mainContentRef.value) return
+  if (!mainContentRef.value) return;
 
-  const sections = tableOfContents.value.map(item => item.id)
-  const scrollPosition = mainContentRef.value.scrollTop + 100 // 使用main-content的滚动位置
+  const sections = tableOfContents.value.map((item) => item.id);
+  const scrollPosition = mainContentRef.value.scrollTop + 100; // 使用main-content的滚动位置
 
   for (let i = sections.length - 1; i >= 0; i--) {
-    const element = document.getElementById(sections[i])
+    const element = document.getElementById(sections[i]);
     if (element && element.offsetTop <= scrollPosition) {
-      activeSection.value = sections[i]
-      break
+      activeSection.value = sections[i];
+      break;
     }
   }
-}
+};
 
 onMounted(() => {
   // 绑定到main-content的滚动事件
   if (mainContentRef.value) {
-    mainContentRef.value.addEventListener('scroll', handleScroll)
+    mainContentRef.value.addEventListener("scroll", handleScroll);
   }
   // 初始化时检查当前激活的章节
-  handleScroll()
-})
+  handleScroll();
+});
 
 onUnmounted(() => {
   // 解绑滚动事件
   if (mainContentRef.value) {
-    mainContentRef.value.removeEventListener('scroll', handleScroll)
+    mainContentRef.value.removeEventListener("scroll", handleScroll);
   }
-})
+});
 
 // Markdown内容
 const helpContent = `<div id="what-is-phytomni"><h1>1. What is Phytomni?</h1></div>
@@ -211,7 +215,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 
 -   **Experimental Validation is Essential:** While Phytomni provides powerful *in silico* predictions, its outputs may contain theoretical gaps or require real-world context. Validating its recommendations via experiments is crucial to guarantee their reliability in practical scenarios.
 -   **Iterative Refinement is Key:** For complex tasks, refine your queries, input parameters, or prompts based on initial results and feedback to gradually enhance the relevance and quality of the outputs.
--   **Provide Specific Context:** Furnish detailed context (e.g., task objectives, species, experimental conditions, background) to help the AI understand your intent clearly, minimizing ambiguities and improving response accuracy.`
+-   **Provide Specific Context:** Furnish detailed context (e.g., task objectives, species, experimental conditions, background) to help the AI understand your intent clearly, minimizing ambiguities and improving response accuracy.`;
 </script>
 
 <style scoped>
@@ -344,7 +348,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 }
 
 .toc-item.active::before {
-  content: '';
+  content: "";
   position: absolute;
   left: -20px;
   top: 0;
@@ -383,7 +387,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 }
 
 .section-title::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: 0;
   left: 0;
@@ -500,7 +504,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 }
 
 .feature-list li::before {
-  content: '✓';
+  content: "✓";
   position: absolute;
   left: 0;
   color: #10b981;
@@ -620,11 +624,11 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 /* 响应式设计 */
 @media (max-width: 1024px) {
   .content-layout {
-  flex-direction: column;
-  gap: 30px;
+    flex-direction: column;
+    gap: 30px;
     padding-left: 0; /* 移除左侧padding */
   }
-  
+
   .toc-sidebar {
     width: 100%;
     position: static;
@@ -632,7 +636,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
     top: auto;
     left: auto;
   }
-  
+
   .main-content {
     order: 1;
     overflow-y: visible;
@@ -650,34 +654,34 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   .help-page {
     padding: 10px;
   }
-  
+
   .help-header {
     padding: 30px 20px;
     flex-direction: column;
     gap: 20px;
     text-align: center;
   }
-  
+
   .header-content h1 {
     font-size: 2rem;
   }
-  
+
   .help-content {
     padding: 20px;
   }
-  
+
   .content-layout {
     gap: 20px;
   }
-  
+
   .toc-sidebar {
     width: 100%;
   }
-  
+
   .toc-nav {
     padding: 15px;
   }
-  
+
   .toc-link {
     padding: 10px 12px;
     font-size: 0.9rem;
