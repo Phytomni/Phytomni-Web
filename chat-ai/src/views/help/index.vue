@@ -216,9 +216,9 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 
 <style scoped>
 .help-page {
-  min-height: 100vh;
+  height: 100vh;
   padding: 20px;
-  overflow-y: auto;
+  overflow: hidden; /* 移除页面级别的滚动条 */
 }
 
 .help-container {
@@ -364,6 +364,9 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 .main-content {
   flex: 1;
   min-width: 0;
+  overflow-y: auto; /* 让主内容区域可以独立滚动 */
+  margin-left: 0; /* 移除左侧margin，因为目录现在在help-container内部 */
+  padding-right: 15px; /* 增加右侧内边距，避免滚动条遮挡内容 */
 }
 
 .help-section {
@@ -504,9 +507,23 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   font-weight: bold;
 }
 
-/* 深色模式适配(theme axis only — layout-coupled rules in TW-D3 / Wave 4.5) */
+/* 深色模式适配 */
 .theme-dark .help-page {
   background-color: var(--color-background) !important;
+  overflow: hidden;
+  height: 100vh; /* 确保深色模式下高度也正确设置 */
+}
+
+/* 深色模式下确保body也不会出现滚动条 */
+.theme-dark body {
+  overflow: hidden;
+}
+
+/* 深色模式下的主内容区域 */
+.theme-dark .main-content {
+  margin-left: 0; /* 移除左侧边距，因为目录现在在help-container内部 */
+  overflow-y: auto; /* 确保深色模式下主内容也可以独立滚动 */
+  padding-right: 15px; /* 增加右侧内边距，避免滚动条遮挡内容 */
 }
 
 .theme-dark .help-container {
@@ -618,6 +635,14 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   
   .main-content {
     order: 1;
+    overflow-y: visible;
+    padding-right: 0;
+    height: auto;
+  }
+
+  .theme-dark .main-content {
+    overflow-y: visible;
+    padding-right: 0;
   }
 }
 
