@@ -49,12 +49,31 @@
 import { useRouter } from 'vue-router'
 import MarkdownViewer from '@/components/MarkdownViewer.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { getToken } from '@/utils/auth'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
+const { t } = useI18n()
 
 // 返回上一页
 const goBack = () => {
-  router.back()
+  try {
+    // 检查token是否存在
+    if (!getToken()) {
+      ElMessage.warning(t('help.goBackTokenExpired'))
+      router.replace('/login')
+      return
+    }
+    // 尝试返回上一页
+    router.back()
+  } catch (error) {
+    // 处理路由返回异常
+    console.error('返回上一页失败:', error)
+    ElMessage.error(t('help.goBackFailed'))
+    // 如果返回失败，导航到默认页面
+    router.push('/')
+  }
 }
 
 // 目录数据结构

@@ -632,6 +632,8 @@ export default {
     title: 'Help Center',
     subtitle: 'Phytomni User Guide and Feature Documentation',
     tableOfContents: 'Table of Contents',
+    goBackTokenExpired: 'Login expired, please log in again',
+    goBackFailed: 'Failed to go back to previous page',
     quickStart: {
       title: 'Quick Start',
       step1: {

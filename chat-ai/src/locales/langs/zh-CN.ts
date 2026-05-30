@@ -630,6 +630,8 @@ export default {
     title: '帮助中心',
     subtitle: 'Phytomni 使用指南与功能说明',
     tableOfContents: '目录',
+    goBackTokenExpired: '登录已过期，请重新登录',
+    goBackFailed: '返回上一页失败',
     quickStart: {
       title: '快速开始',
       step1: {
