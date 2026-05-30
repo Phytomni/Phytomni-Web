@@ -36,7 +36,7 @@
           </div>
           
           <!-- 主内容区域 -->
-          <div class="main-content">
+          <div class="main-content" ref="mainContentRef">
             <MarkdownViewer :content="helpContent" />
                   </div>
                 </div>
@@ -88,19 +88,30 @@ const tableOfContents = ref([
 // 当前激活的目录项
 const activeSection = ref('what-is-phytomni')
 
+// 获取主内容区域元素
+const mainContentRef = ref<HTMLElement | null>(null)
+
 // 点击目录项跳转
 const scrollToSection = (sectionId: string) => {
   const element = document.getElementById(sectionId)
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (element && mainContentRef.value) {
+    // 计算元素在主内容区域内的相对位置
+    const elementTop = element.offsetTop - 20 // 添加20px的上边距，避免标题被遮挡
+    // 滚动到指定位置
+    mainContentRef.value.scrollTo({
+      top: elementTop,
+      behavior: 'smooth'
+    })
     activeSection.value = sectionId
   }
 }
 
 // 监听滚动，更新当前激活的章节
 const handleScroll = () => {
+  if (!mainContentRef.value) return
+
   const sections = tableOfContents.value.map(item => item.id)
-  const scrollPosition = window.scrollY + 100 // 偏移量，提前激活
+  const scrollPosition = mainContentRef.value.scrollTop + 100 // 使用main-content的滚动位置
 
   for (let i = sections.length - 1; i >= 0; i--) {
     const element = document.getElementById(sections[i])
@@ -112,13 +123,19 @@ const handleScroll = () => {
 }
 
 onMounted(() => {
-  window.addEventListener('scroll', handleScroll)
+  // 绑定到main-content的滚动事件
+  if (mainContentRef.value) {
+    mainContentRef.value.addEventListener('scroll', handleScroll)
+  }
   // 初始化时检查当前激活的章节
   handleScroll()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll)
+  // 解绑滚动事件
+  if (mainContentRef.value) {
+    mainContentRef.value.removeEventListener('scroll', handleScroll)
+  }
 })
 
 // Markdown内容
