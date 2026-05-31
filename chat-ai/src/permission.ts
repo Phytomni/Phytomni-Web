@@ -66,6 +66,13 @@ function closeFirstLoginNotification(): void {
 router.beforeEach((to, from, next) => {
   NProgress.start();
   document.title = 'Phytomni';
+  // Close stale first-login notification whenever the user reaches
+  // /change-password (compliance) or /login (post-logout). Runs
+  // unconditionally — even when getToken() is false — so the FedLogOut +
+  // redirect-to-/login path still clears it after the token cookie is gone.
+  if (to.name === 'changePassword' || to.path === '/login') {
+    closeFirstLoginNotification();
+  }
   if (getToken()) {
     /* has token — first-login enforcement runs FIRST */
     const loginStatus = readLoginStatusFromLocalStorage();
@@ -78,11 +85,6 @@ router.beforeEach((to, from, next) => {
       showFirstLoginNotification();
       next({ name: 'changePassword' });
       return;
-    }
-    // Reaching /change-password (compliance) or /login (post-FedLogOut)
-    // closes the stale notification handle.
-    if (to.name === 'changePassword' || to.path === '/login') {
-      closeFirstLoginNotification();
     }
     if (to.path === '/') {
       next();
