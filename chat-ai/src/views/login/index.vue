@@ -183,6 +183,10 @@
 
           // 检查是否是首次登录，需要修改密码
           if (res.data!.login_status === '0') {
+            // Mark tutorial as not-yet-seen — this is the ONLY place the flag
+            // is reset to '0', ensuring tutorial fires only for genuine
+            // first-login users (anti-spam).
+            useUserStore.SET_SEEN_TUTORIAL('0');
             console.log('首次登录，跳转到修改密码页面');
             ElNotification({
               title: t('login.firstLoginTitle'),

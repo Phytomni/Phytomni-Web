@@ -28,6 +28,7 @@ interface IState {
   token: string;
   permission: string;
   login_status: string; // 新增登录状态字段
+  seen_tutorial: string; // UX-only flag, decoupled from password state
 }
 
 export default defineStore({
@@ -49,6 +50,10 @@ export default defineStore({
     token: getToken(),
     permission: '',
     login_status: localStorage.getItem('loginStatus') || '1', // 默认非首次登录
+    // Default '1' (assume seen) to avoid deploy-day tutorial spam on every
+    // existing user. login.vue explicitly sets to '0' when server returns
+    // login_status='0' (genuine first-login).
+    seen_tutorial: localStorage.getItem('seenTutorial') || '1',
   }),
   getters: {},
   actions: {
@@ -149,9 +154,20 @@ export default defineStore({
     SET_PERMISSION_LIST(permissionList: string[]) {
       this.permission_list = permissionList;
     },
+    /**
+     * Server-write-only by convention. Should be called ONLY from
+     * views/login/index.vue when handling a successful login response.
+     * Future grep-gate (in scripts/validate_web_local.sh) will enforce
+     * this. Calling this from any other code path can bypass the
+     * first-login enforcement guard in permission.ts.
+     */
     SET_LOGIN_STATUS(loginStatus: string) {
       this.login_status = loginStatus;
       localStorage.setItem('loginStatus', loginStatus);
+    },
+    SET_SEEN_TUTORIAL(seenTutorial: string) {
+      this.seen_tutorial = seenTutorial;
+      localStorage.setItem('seenTutorial', seenTutorial);
     },
   },
 });
