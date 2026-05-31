@@ -1,4 +1,4 @@
- <!--
+<!--
  * 组件注释
  * @Author: wuq-l
  * @Date: 2022-08-18 21:07:26
@@ -13,10 +13,10 @@ export default {
   props: {
     msg: {
       type: String,
-      default: '',
+      default: "",
     },
   },
-}
+};
 </script>
 
 <template>
@@ -52,4 +52,5 @@ h3 {
     text-align: left;
   }
 }
-</style> -->
+</style>
+-->

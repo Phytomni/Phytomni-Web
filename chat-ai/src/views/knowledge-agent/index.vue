@@ -2,28 +2,33 @@
   <div class="knowledge-agent-container">
     <div class="chat-header">
       <div class="header-content">
-        <el-button 
-          type="primary" 
-          :icon="ArrowLeft" 
+        <el-button
+          type="primary"
+          :icon="ArrowLeft"
           @click="goBack"
-          class="back-button">
+          class="back-button"
+        >
           返回
         </el-button>
         <div class="header-text">
-          <h1>{{ $t('agents.knowledge.title') }}</h1>
-          <p>{{ $t('agents.knowledge.subtitle') }}</p>
+          <h1>{{ $t("agents.knowledge.title") }}</h1>
+          <p>{{ $t("agents.knowledge.subtitle") }}</p>
         </div>
       </div>
     </div>
-    
+
     <div class="chat-messages">
       <!-- 用户提问 -->
       <div class="message user-message">
         <div class="message-content">
-          <div class="message-text">How do epigenetic modifications, such as DNA methylation and histone modifications, regulate adaptive responses to drought stress in crops?</div>
+          <div class="message-text">
+            How do epigenetic modifications, such as DNA methylation and histone
+            modifications, regulate adaptive responses to drought stress in
+            crops?
+          </div>
         </div>
       </div>
-      
+
       <!-- AI回答 -->
       <div class="message ai-message">
         <div class="message-avatar">
@@ -31,8 +36,11 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            <MarkdownViewer :content="knowledgeAgentResponse" :instantMessage="true"/>
-            <div class="tip-text">{{ $t('common.Tip') }}</div>
+            <MarkdownViewer
+              :content="knowledgeAgentResponse"
+              :instantMessage="true"
+            />
+            <div class="tip-text">{{ $t("common.Tip") }}</div>
           </div>
         </div>
       </div>
@@ -41,16 +49,17 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
-import { ArrowLeft } from '@element-plus/icons-vue'
-import MarkdownViewer from '@/components/MarkdownViewer.vue'
+import { useRouter } from "vue-router";
+import { ArrowLeft } from "@element-plus/icons-vue";
+import MarkdownViewer from "@/components/MarkdownViewer.vue";
 
-const router = useRouter()
+const router = useRouter();
 const goBack = () => {
-  router.back()
-}
+  router.back();
+};
 
-const botAvatar = 'https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png'
+const botAvatar =
+  "https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png";
 
 const knowledgeAgentResponse = `Epigenetic modifications, including DNA methylation and histone modifications, play crucial roles in regulating adaptive responses to drought stress in crops by altering gene expression and chromatin structure, thereby enabling plants to better cope with water deficit conditions. Here's a detailed look at how these modifications contribute to drought stress responses:
 
@@ -109,7 +118,7 @@ In summary, epigenetic modifications like DNA methylation and histone modificati
 17. Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf
 18. Epigenetic regulation of stress responses in plants.pdf
 19. Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf
-20. Epigenetic regulation of stress responses in plants.pdf`
+20. Epigenetic regulation of stress responses in plants.pdf`;
 </script>
 
 <style lang="scss" scoped>
@@ -124,7 +133,7 @@ In summary, epigenetic modifications like DNA methylation and histone modificati
   background: #fff;
   padding: 20px;
   border-bottom: 1px solid #e0e0e0;
-  
+
   .header-content {
     display: flex;
     align-items: center;
@@ -132,21 +141,21 @@ In summary, epigenetic modifications like DNA methylation and histone modificati
     max-width: 1200px;
     margin: 0 auto;
   }
-  
+
   .back-button {
     flex-shrink: 0;
   }
-  
+
   .header-text {
     flex: 1;
     text-align: center;
-    
+
     h1 {
       margin: 0 0 8px 0;
       color: #333;
       font-size: 24px;
     }
-    
+
     p {
       margin: 0;
       color: #666;
@@ -171,10 +180,10 @@ In summary, epigenetic modifications like DNA methylation and histone modificati
 .message {
   display: flex;
   margin-bottom: 16px;
-  
+
   &.user-message {
     justify-content: flex-end;
-    
+
     .message-content {
       background: #eff6ff;
       color: #333;
@@ -182,16 +191,16 @@ In summary, epigenetic modifications like DNA methylation and histone modificati
       max-width: 100%;
     }
   }
-  
+
   &.ai-message {
     justify-content: flex-start;
-    
+
     .message-avatar {
       flex-shrink: 0;
       align-self: flex-start;
       margin-right: 8px;
     }
-    
+
     .message-content {
       background: white;
       color: #333;
@@ -205,43 +214,49 @@ In summary, epigenetic modifications like DNA methylation and histone modificati
 .message-content {
   padding: 12px 16px;
   word-wrap: break-word;
-  
+
   .message-text {
     line-height: 1.5;
-    
-    :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
+
+    :deep(h1),
+    :deep(h2),
+    :deep(h3),
+    :deep(h4),
+    :deep(h5),
+    :deep(h6) {
       margin-top: 0;
       margin-bottom: 12px;
       color: inherit;
     }
-    
+
     :deep(p) {
       margin-bottom: 12px;
       &:last-child {
         margin-bottom: 0;
       }
     }
-    
-    :deep(ul), :deep(ol) {
+
+    :deep(ul),
+    :deep(ol) {
       margin-bottom: 12px;
       padding-left: 20px;
     }
-    
+
     :deep(li) {
       margin-bottom: 4px;
     }
-    
+
     :deep(strong) {
       font-weight: 600;
     }
-    
+
     :deep(code) {
       background: rgba(0, 0, 0, 0.1);
       padding: 2px 4px;
       border-radius: 3px;
-      font-family: 'Courier New', monospace;
+      font-family: "Courier New", monospace;
     }
-    
+
     :deep(pre) {
       background: rgba(0, 0, 0, 0.05);
       padding: 12px;

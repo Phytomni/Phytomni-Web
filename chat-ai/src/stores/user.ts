@@ -8,16 +8,16 @@
  * 人生无常！大肠包小肠......
  */
 
-import { defineStore } from 'pinia';
+import { defineStore } from "pinia";
 import {
   getToken,
   setToken,
   setExpiresIn,
   removeToken,
   removeExpiresIn,
-} from '@/utils/auth';
-import { getUserTool } from '@/api/chat';
-import Cookies from 'js-cookie';
+} from "@/utils/auth";
+import { getUserTool } from "@/api/chat";
+import Cookies from "js-cookie";
 interface IState {
   name?: string;
   avatar?: string;
@@ -32,28 +32,28 @@ interface IState {
 }
 
 export default defineStore({
-  id: 'user',
+  id: "user",
   state: (): IState => ({
-    name: localStorage.getItem('userName') || '',
-    avatar: '',
+    name: localStorage.getItem("userName") || "",
+    avatar: "",
     roles: [
-      'ChatAgents',
-      'KnowledgeAgents',
-      'DatabaseAgents',
-      'AnalysisAgents',
-      'GeneFunctionAgents',
-      'ReviewAgents',
+      "ChatAgents",
+      "KnowledgeAgents",
+      "DatabaseAgents",
+      "AnalysisAgents",
+      "GeneFunctionAgents",
+      "ReviewAgents",
     ],
     permissions: [],
     permission_list: [], // 权限列表
-    userType: '',
+    userType: "",
     token: getToken(),
-    permission: '',
-    login_status: localStorage.getItem('loginStatus') || '1', // 默认非首次登录
+    permission: "",
+    login_status: localStorage.getItem("loginStatus") || "1", // 默认非首次登录
     // Default '1' (assume seen) to avoid deploy-day tutorial spam on every
     // existing user. login.vue explicitly sets to '0' when server returns
     // login_status='0' (genuine first-login).
-    seen_tutorial: localStorage.getItem('seenTutorial') || '1',
+    seen_tutorial: localStorage.getItem("seenTutorial") || "1",
   }),
   getters: {},
   actions: {
@@ -73,7 +73,7 @@ export default defineStore({
               this.SET_PERMISSION_LIST(res.data.permission_list || []);
               resolve(true);
             } else {
-              reject(new Error('Failed to get user tools'));
+              reject(new Error("Failed to get user tools"));
             }
           })
           .catch((error: unknown) => {
@@ -103,17 +103,17 @@ export default defineStore({
     },
     // 前端 登出
     FedLogOut() {
-      return new Promise(resolve => {
+      return new Promise((resolve) => {
         this.SET_ROLES([]);
         this.SET_PERMISSIONS([]);
         removeToken();
         // 清除用户名
-        this.name = '';
-        localStorage.removeItem('userName');
+        this.name = "";
+        localStorage.removeItem("userName");
         // 清除Cookie
         removeToken();
         removeExpiresIn();
-        Object.keys(Cookies.get()).forEach(cookieName => {
+        Object.keys(Cookies.get()).forEach((cookieName) => {
           Cookies.remove(cookieName);
         });
 
@@ -137,7 +137,7 @@ export default defineStore({
     },
     SET_USER_NAME(userName: string) {
       this.name = userName;
-      localStorage.setItem('userName', userName);
+      localStorage.setItem("userName", userName);
     },
     SET_AVATAR(avatar: string) {
       this.avatar = avatar;
@@ -163,11 +163,11 @@ export default defineStore({
      */
     SET_LOGIN_STATUS(loginStatus: string) {
       this.login_status = loginStatus;
-      localStorage.setItem('loginStatus', loginStatus);
+      localStorage.setItem("loginStatus", loginStatus);
     },
     SET_SEEN_TUTORIAL(seenTutorial: string) {
       this.seen_tutorial = seenTutorial;
-      localStorage.setItem('seenTutorial', seenTutorial);
+      localStorage.setItem("seenTutorial", seenTutorial);
     },
   },
 });

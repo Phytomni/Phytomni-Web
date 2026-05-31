@@ -1,6 +1,6 @@
-import type { LocationQuery, LocationQueryValue } from 'vue-router';
-import { getToken } from '@/utils/auth';
-import { GUEST_ONLY_PATHS } from '@/router/whitelist';
+import type { LocationQuery, LocationQueryValue } from "vue-router";
+import { getToken } from "@/utils/auth";
+import { GUEST_ONLY_PATHS } from "@/router/whitelist";
 
 /**
  * Sanitize a query.redirect target so it never loops back to a guest route or escapes the app's origin.
@@ -9,16 +9,16 @@ import { GUEST_ONLY_PATHS } from '@/router/whitelist';
  */
 export function safeRedirect(
   target: LocationQueryValue | LocationQueryValue[] | undefined,
-  fallback: string,
+  fallback: string
 ): string {
   const first = Array.isArray(target) ? target[0] : target;
-  if (typeof first !== 'string' || first.length === 0) return fallback;
+  if (typeof first !== "string" || first.length === 0) return fallback;
   // Open-redirect hardening: require same-origin relative path.
-  if (!first.startsWith('/')) return fallback;
-  if (first.startsWith('//') || first.startsWith('/\\')) return fallback;
+  if (!first.startsWith("/")) return fallback;
+  if (first.startsWith("//") || first.startsWith("/\\")) return fallback;
   if (/[\r\n\t]/.test(first)) return fallback;
   if (/^[a-z][a-z0-9+.-]*:/i.test(first)) return fallback;
-  const pathOnly = first.split('?')[0];
+  const pathOnly = first.split("?")[0];
   return GUEST_ONLY_PATHS.has(pathOnly) ? fallback : first;
 }
 
@@ -29,7 +29,7 @@ export function safeRedirect(
 export function redirectIfAuthed(
   route: { query: LocationQuery },
   router: { replace: (to: string) => unknown },
-  fallback = '/chat',
+  fallback = "/chat"
 ): boolean {
   if (!getToken()) return false;
   router.replace(safeRedirect(route.query.redirect, fallback));

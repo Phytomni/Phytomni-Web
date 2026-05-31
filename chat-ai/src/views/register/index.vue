@@ -13,19 +13,20 @@
         <LangSwitch />
       </div>
       <div class="register-form">
-        <h2 class="register-title">{{ $t('register.title') }}</h2>
-        <h5 class="register-subtitle">{{ $t('register.subtitle') }}</h5>
+        <h2 class="register-title">{{ $t("register.title") }}</h2>
+        <h5 class="register-subtitle">{{ $t("register.subtitle") }}</h5>
         <el-form ref="formRef" :model="formData" :rules="formRules" status-icon>
-          <div class="form-item-label">{{ $t('register.email') }}</div>
+          <div class="form-item-label">{{ $t("register.email") }}</div>
           <el-form-item prop="email">
             <el-input
               v-model="formData.email"
               :placeholder="$t('register.emailPlaceholder')"
               clearable
-              size="large" />
+              size="large"
+            />
           </el-form-item>
 
-          <div class="form-item-label">{{ $t('register.password') }}</div>
+          <div class="form-item-label">{{ $t("register.password") }}</div>
           <el-form-item prop="password">
             <el-input
               v-model="formData.password"
@@ -33,10 +34,13 @@
               :placeholder="$t('register.passwordPlaceholder')"
               show-password
               clearable
-              size="large" />
+              size="large"
+            />
           </el-form-item>
 
-          <div class="form-item-label">{{ $t('register.confirmPassword') }}</div>
+          <div class="form-item-label">
+            {{ $t("register.confirmPassword") }}
+          </div>
           <el-form-item prop="confirmPassword">
             <el-input
               v-model="formData.confirmPassword"
@@ -44,31 +48,30 @@
               :placeholder="$t('register.confirmPasswordPlaceholder')"
               show-password
               clearable
-              size="large" />
+              size="large"
+            />
           </el-form-item>
 
           <div class="register-agreement">
-            {{ $t('register.agreement.prefix') }}
-            <a href="#">{{ $t('register.agreement.terms') }}</a>
-            {{ $t('register.agreement.and') }}
-            <a href="#">{{ $t('register.agreement.privacy') }}</a>
+            {{ $t("register.agreement.prefix") }}
+            <a href="#">{{ $t("register.agreement.terms") }}</a>
+            {{ $t("register.agreement.and") }}
+            <a href="#">{{ $t("register.agreement.privacy") }}</a>
           </div>
 
           <el-button
             type="primary"
             class="register-button"
             @click="handleSubmit"
-            :loading="loading">
-            {{ $t('register.registerButton') }}
+            :loading="loading"
+          >
+            {{ $t("register.registerButton") }}
           </el-button>
 
           <div class="login-container">
-            <span>{{ $t('register.haveAccount') }}</span>
-            <a
-              href="javascript:;"
-              class="login-link"
-              @click="goToLogin">
-              {{ $t('register.login') }}
+            <span>{{ $t("register.haveAccount") }}</span>
+            <a href="javascript:;" class="login-link" @click="goToLogin">
+              {{ $t("register.login") }}
             </a>
           </div>
         </el-form>
@@ -78,36 +81,38 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { useRoute } from 'vue-router';
-import { onMounted } from 'vue';
-import { redirectIfAuthed } from '@/utils/authRedirect';
-import type { ElForm } from 'element-plus';
-import { ElMessage } from 'element-plus';
-import { register } from '@/api/auth';
-import LangSwitch from '@/components/LangSwitch.vue';
-import { useI18n } from 'vue-i18n';
+import { reactive, ref } from "vue";
+import { useRouter } from "vue-router";
+import { useRoute } from "vue-router";
+import { onMounted } from "vue";
+import { redirectIfAuthed } from "@/utils/authRedirect";
+import type { ElForm } from "element-plus";
+import { ElMessage } from "element-plus";
+import { register } from "@/api/auth";
+import LangSwitch from "@/components/LangSwitch.vue";
+import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
-onMounted(() => { redirectIfAuthed(route, router); });
+onMounted(() => {
+  redirectIfAuthed(route, router);
+});
 const loading = ref(false);
 const formRef = ref<InstanceType<typeof ElForm>>();
 
 const formData = reactive({
-  email: '',
-  password: '',
-  confirmPassword: '',
+  email: "",
+  password: "",
+  confirmPassword: "",
 });
 
 // 自定义验证规则：确认密码
 const validateConfirmPassword = (rule: any, value: string, callback: any) => {
-  if (value === '') {
-    callback(new Error(t('register.validation.confirmPasswordRequired')));
+  if (value === "") {
+    callback(new Error(t("register.validation.confirmPasswordRequired")));
   } else if (value !== formData.password) {
-    callback(new Error(t('register.validation.confirmPasswordMismatch')));
+    callback(new Error(t("register.validation.confirmPasswordMismatch")));
   } else {
     callback();
   }
@@ -122,43 +127,43 @@ const validatePasswordStrength = (rule: any, value: string, callback: any) => {
 
   // 至少8位
   if (value.length < 8) {
-    callback(new Error(t('register.validation.passwordMinLength8')));
+    callback(new Error(t("register.validation.passwordMinLength8")));
     return;
   }
 
   // 最多16位
   if (value.length > 16) {
-    callback(new Error(t('register.validation.passwordMaxLength16')));
+    callback(new Error(t("register.validation.passwordMaxLength16")));
     return;
   }
 
   // 包含大写字母
   if (!/[A-Z]/.test(value)) {
-    callback(new Error(t('register.validation.passwordNeedUppercase')));
+    callback(new Error(t("register.validation.passwordNeedUppercase")));
     return;
   }
 
   // 包含小写字母
   if (!/[a-z]/.test(value)) {
-    callback(new Error(t('register.validation.passwordNeedLowercase')));
+    callback(new Error(t("register.validation.passwordNeedLowercase")));
     return;
   }
 
   // 包含数字
   if (!/[0-9]/.test(value)) {
-    callback(new Error(t('register.validation.passwordNeedNumber')));
+    callback(new Error(t("register.validation.passwordNeedNumber")));
     return;
   }
 
   // 包含特殊符号
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
-    callback(new Error(t('register.validation.passwordNeedSpecial')));
+    callback(new Error(t("register.validation.passwordNeedSpecial")));
     return;
   }
 
   // 当密码变化时，如果已经输入了确认密码，则重新验证确认密码
-  if (formData.confirmPassword !== '') {
-    formRef.value?.validateField('confirmPassword');
+  if (formData.confirmPassword !== "") {
+    formRef.value?.validateField("confirmPassword");
   }
 
   callback();
@@ -166,29 +171,33 @@ const validatePasswordStrength = (rule: any, value: string, callback: any) => {
 
 const formRules = reactive({
   email: [
-    { required: true, message: t('register.validation.emailRequired'), trigger: 'blur' as const },
     {
-      type: 'email' as const,
-      message: t('register.validation.emailFormat'),
-      trigger: 'blur' as const,
+      required: true,
+      message: t("register.validation.emailRequired"),
+      trigger: "blur" as const,
+    },
+    {
+      type: "email" as const,
+      message: t("register.validation.emailFormat"),
+      trigger: "blur" as const,
     },
   ],
   password: [
     {
       required: true,
-      message: t('register.validation.passwordRequired'),
-      trigger: 'blur' as const,
+      message: t("register.validation.passwordRequired"),
+      trigger: "blur" as const,
     },
     {
       validator: validatePasswordStrength,
-      trigger: 'blur' as const,
+      trigger: "blur" as const,
     },
   ],
   confirmPassword: [
     {
       required: true,
       validator: validateConfirmPassword,
-      trigger: 'blur' as const,
+      trigger: "blur" as const,
     },
   ],
 });
@@ -200,32 +209,32 @@ const handleSubmit = () => {
       loading.value = true;
       handleRegister();
     } else {
-      ElMessage.warning(t('register.validation.formValidationFailed'));
+      ElMessage.warning(t("register.validation.formValidationFailed"));
     }
   });
 };
 
 const handleRegister = () => {
-  console.log('开始注册...');
+  console.log("开始注册...");
   const data = new FormData();
-  data.append('email', formData.email);
-  data.append('password', formData.password);
+  data.append("email", formData.email);
+  data.append("password", formData.password);
   // TODO: 调用注册接口
   register(data)
     .then((res: any) => {
-      console.log('注册响应:', res);
+      console.log("注册响应:", res);
       if (res.code === 200) {
-        console.log('注册成功');
-        ElMessage.success('Registration successful');
-        router.replace('/login');
+        console.log("注册成功");
+        ElMessage.success("Registration successful");
+        router.replace("/login");
       } else {
-        console.log('注册失败，状态码:', res.code);
-        ElMessage.error('Registration failed: ' + (res.msg || 'Unknown error'));
+        console.log("注册失败，状态码:", res.code);
+        ElMessage.error("Registration failed: " + (res.msg || "Unknown error"));
       }
     })
     .catch((err: any) => {
-      console.log('注册异常:', err);
-      ElMessage.error(err.message || 'Registration failed');
+      console.log("注册异常:", err);
+      ElMessage.error(err.message || "Registration failed");
     })
     .finally(() => {
       loading.value = false;
@@ -240,7 +249,7 @@ const handleRegister = () => {
 };
 
 const goToLogin = () => {
-  router.push('/login');
+  router.push("/login");
 };
 </script>
 
@@ -267,13 +276,13 @@ const goToLogin = () => {
   position: relative;
 
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-image: url('@/assets/hex-pattern.png');
+    background-image: url("@/assets/hex-pattern.png");
     background-size: cover;
     opacity: 0.2;
     pointer-events: none;
@@ -470,4 +479,4 @@ const goToLogin = () => {
     width: 85%;
   }
 }
-</style> 
+</style>

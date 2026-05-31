@@ -8,8 +8,12 @@
 <template>
   <div class="gene-display-container">
     <div class="search-container">
-      <el-input v-model="searchQuery" :placeholder="$t('gene.searchPlaceholder')" class="input-with-search"
-        @keyup.enter="handleSearch">
+      <el-input
+        v-model="searchQuery"
+        :placeholder="$t('gene.searchPlaceholder')"
+        class="input-with-search"
+        @keyup.enter="handleSearch"
+      >
         <template #append>
           <el-button :icon="Search" @click="handleSearch" />
         </template>
@@ -17,24 +21,48 @@
     </div>
 
     <div class="table-container">
-      <el-table :data="tableData" border stripe v-loading="loading" style="width: 100%"
-        header-row-class-name="table-header-row" header-cell-class-name="table-header-cell">
-        <el-table-column type="index" :label="$t('common.index')" width="80" align="center" />
-        <el-table-column prop="species_code" :label="$t('gene.biocode')" align="center">
+      <el-table
+        :data="tableData"
+        border
+        stripe
+        v-loading="loading"
+        style="width: 100%"
+        header-row-class-name="table-header-row"
+        header-cell-class-name="table-header-cell"
+      >
+        <el-table-column
+          type="index"
+          :label="$t('common.index')"
+          width="80"
+          align="center"
+        />
+        <el-table-column
+          prop="species_code"
+          :label="$t('gene.biocode')"
+          align="center"
+        >
           <template #default="{ row }">
             <span class="gene-name-highlight" @click="handleGeneClick(row)">
               {{ row.species_code }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="gene_id" :label="$t('gene.geneId')" align="center">
+        <el-table-column
+          prop="gene_id"
+          :label="$t('gene.geneId')"
+          align="center"
+        >
           <template #default="{ row }">
             <span class="gene-name-highlight" @click="handleGeneClick(row)">
               {{ row.gene_id }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="file_name" :label="$t('gene.geneName')" align="center">
+        <el-table-column
+          prop="file_name"
+          :label="$t('gene.geneName')"
+          align="center"
+        >
           <template #default="{ row }">
             <span>
               {{ row.file_name }}
@@ -44,20 +72,26 @@
       </el-table>
 
       <div class="pagination-container">
-        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 30, 50]"
-          layout="total, sizes, prev, pager, next, jumper" :total="total" @size-change="handleSizeChange"
-          @current-change="handleCurrentChange" />
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 30, 50]"
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="total"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
-import { getGeneList } from '@/api/gene-display';
-import { useI18n } from 'vue-i18n';
+import { ref, onMounted } from "vue";
+import { Search } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { getGeneList } from "@/api/gene-display";
+import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 
@@ -69,7 +103,7 @@ interface GeneData {
   file_name?: string;
 }
 
-const searchQuery = ref('');
+const searchQuery = ref("");
 const loading = ref(false);
 const currentPage = ref(1);
 const pageSize = ref(20);
@@ -78,7 +112,7 @@ const tableData = ref<GeneData[]>([]);
 
 const handleGeneClick = (gene: GeneData) => {
   const url = `/gene-display/detail?file_name=${gene.file_name}`;
-  window.open(url, '_blank');
+  window.open(url, "_blank");
 };
 
 const fetchData = async () => {
@@ -94,13 +128,13 @@ const fetchData = async () => {
       tableData.value = res.data.gene_list || [];
       total.value = res.data.total || 0;
     } else {
-      ElMessage.error(t('gene.getFailed'));
+      ElMessage.error(t("gene.getFailed"));
       tableData.value = [];
       total.value = 0;
     }
   } catch (error) {
-    console.error(t('gene.logs.fetchDataFailed'), error);
-    ElMessage.error(t('gene.getFailed'));
+    console.error(t("gene.logs.fetchDataFailed"), error);
+    ElMessage.error(t("gene.getFailed"));
     tableData.value = [];
     total.value = 0;
   } finally {

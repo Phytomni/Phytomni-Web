@@ -6,16 +6,13 @@
  * @Description:
  * 既往不恋！当下不杂！！未来不迎！！！
  */
-import request from '@/utils/request';
+import request from "@/utils/request";
 
 // 任务管理列表
-export const getTaskList = (params?: {
-  current?: number;
-  size?: number;
-}) => {
+export const getTaskList = (params?: { current?: number; size?: number }) => {
   return request({
-    url: '/v1/async_task/list',
-    method: 'get',
+    url: "/v1/async_task/list",
+    method: "get",
     params,
   });
 };

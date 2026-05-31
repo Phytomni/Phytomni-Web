@@ -2,15 +2,15 @@
   <div class="profile-container">
     <div class="profile-content">
       <div class="profile-header">
-        <h2>{{ $t('profile.title') }}</h2>
-        <p>{{ $t('profile.description') }}</p>
+        <h2>{{ $t("profile.title") }}</h2>
+        <p>{{ $t("profile.description") }}</p>
       </div>
 
       <div class="profile-sections">
         <!-- 基本信息 -->
         <div class="profile-section">
           <div class="section-header">
-            <h3>{{ $t('profile.basicInfo.title') }}</h3>
+            <h3>{{ $t("profile.basicInfo.title") }}</h3>
           </div>
 
           <div class="section-content">
@@ -46,38 +46,34 @@
         <!-- 账户安全 -->
         <div class="profile-section">
           <div class="section-header">
-            <h3>{{ $t('profile.security.title') }}</h3>
+            <h3>{{ $t("profile.security.title") }}</h3>
           </div>
-          
+
           <div class="section-content">
             <div class="security-items">
               <div class="security-item">
                 <div class="security-info">
                   <el-icon class="security-icon"><Lock /></el-icon>
                   <div class="security-text">
-                    <h4>{{ $t('profile.security.password') }}</h4>
-                    <p>{{ $t('profile.security.passwordDescription') }}</p>
+                    <h4>{{ $t("profile.security.password") }}</h4>
+                    <p>{{ $t("profile.security.passwordDescription") }}</p>
                   </div>
                 </div>
-                <el-button 
-                  type="primary" 
-                  size="small" 
-                  @click="changePassword"
-                >
-                  {{ $t('profile.security.changePassword') }}
+                <el-button type="primary" size="small" @click="changePassword">
+                  {{ $t("profile.security.changePassword") }}
                 </el-button>
               </div>
-              
+
               <div class="security-item">
                 <div class="security-info">
                   <el-icon class="security-icon"><User /></el-icon>
                   <div class="security-text">
-                    <h4>{{ $t('profile.security.permission') }}</h4>
-                    <p>{{ $t('profile.security.permissionDescription') }}</p>
+                    <h4>{{ $t("profile.security.permission") }}</h4>
+                    <p>{{ $t("profile.security.permissionDescription") }}</p>
                   </div>
                 </div>
                 <el-tag :type="getPermissionTagType(UserStore.permission)">
-                  {{ UserStore.permission || 'user' }}
+                  {{ UserStore.permission || "user" }}
                 </el-tag>
               </div>
             </div>
@@ -87,19 +83,23 @@
         <!-- 使用统计 -->
         <div class="profile-section">
           <div class="section-header">
-            <h3>{{ $t('profile.usage.title') }}</h3>
+            <h3>{{ $t("profile.usage.title") }}</h3>
           </div>
-          
+
           <div class="section-content">
             <div class="usage-stats">
               <div class="usage-item">
                 <div class="usage-number">{{ usageStats.totalChats }}</div>
-                <div class="usage-label">{{ $t('profile.usage.totalChats') }}</div>
+                <div class="usage-label">
+                  {{ $t("profile.usage.totalChats") }}
+                </div>
               </div>
 
               <div class="usage-item">
                 <div class="usage-number">{{ usageStats.lastLogin }}</div>
-                <div class="usage-label">{{ $t('profile.usage.lastLogin') }}</div>
+                <div class="usage-label">
+                  {{ $t("profile.usage.lastLogin") }}
+                </div>
               </div>
             </div>
           </div>
@@ -115,47 +115,56 @@
       :close-on-click-modal="false"
       :close-on-press-escape="false"
     >
-      <el-form 
-        :model="passwordForm" 
+      <el-form
+        :model="passwordForm"
         :rules="passwordRules"
         ref="passwordFormRef"
         label-width="120px"
       >
-        <el-form-item :label="$t('profile.security.oldPassword')" prop="oldPassword">
-          <el-input 
-            v-model="passwordForm.oldPassword" 
-            type="password" 
+        <el-form-item
+          :label="$t('profile.security.oldPassword')"
+          prop="oldPassword"
+        >
+          <el-input
+            v-model="passwordForm.oldPassword"
+            type="password"
             show-password
             :placeholder="$t('profile.security.oldPasswordPlaceholder')"
           />
         </el-form-item>
-        
-        <el-form-item :label="$t('profile.security.newPassword')" prop="newPassword">
-          <el-input 
-            v-model="passwordForm.newPassword" 
-            type="password" 
+
+        <el-form-item
+          :label="$t('profile.security.newPassword')"
+          prop="newPassword"
+        >
+          <el-input
+            v-model="passwordForm.newPassword"
+            type="password"
             show-password
             :placeholder="$t('profile.security.newPasswordPlaceholder')"
           />
         </el-form-item>
-        
-        <el-form-item :label="$t('profile.security.confirmPassword')" prop="confirmPassword">
-          <el-input 
-            v-model="passwordForm.confirmPassword" 
-            type="password" 
+
+        <el-form-item
+          :label="$t('profile.security.confirmPassword')"
+          prop="confirmPassword"
+        >
+          <el-input
+            v-model="passwordForm.confirmPassword"
+            type="password"
             show-password
             :placeholder="$t('profile.security.confirmPasswordPlaceholder')"
           />
         </el-form-item>
       </el-form>
-      
+
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="passwordDialogVisible = false">
-            {{ $t('common.cancel') }}
+            {{ $t("common.cancel") }}
           </el-button>
           <el-button type="primary" @click="handlePasswordChange">
-            {{ $t('common.confirm') }}
+            {{ $t("common.confirm") }}
           </el-button>
         </span>
       </template>
@@ -164,16 +173,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
-import { userStore } from '@/stores';
-import {
-  Lock,
-  User,
-} from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
-import { getUserProfile } from '@/api/auth';
+import { ref, reactive, onMounted, computed } from "vue";
+import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
+import { userStore } from "@/stores";
+import { Lock, User } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { getUserProfile } from "@/api/auth";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -184,69 +190,73 @@ const passwordDialogVisible = ref(false);
 
 // 基本信息表单
 const basicInfoForm = reactive({
-  username: '',
-  email: '',
-  phone: '',
-  organization: '',
-  position: '',
+  username: "",
+  email: "",
+  phone: "",
+  organization: "",
+  position: "",
 });
 
 // 密码表单
 const passwordForm = reactive({
-  oldPassword: '',
-  newPassword: '',
-  confirmPassword: '',
+  oldPassword: "",
+  newPassword: "",
+  confirmPassword: "",
 });
 
 // 使用统计
 const usageStats = reactive({
   totalChats: 0,
-  lastLogin: '--',
+  lastLogin: "--",
 });
 
 // 表单引用
 const passwordFormRef = ref();
 
 // 新密码强度验证函数 - 验证密码是否满足复杂度要求
-const validateNewPasswordStrength = (rule: any, value: string, callback: any) => {
+const validateNewPasswordStrength = (
+  rule: any,
+  value: string,
+  callback: any
+) => {
   if (!value) {
-    callback(new Error(t('user.validation.passwordRequired')));
+    callback(new Error(t("user.validation.passwordRequired")));
     return;
   }
 
   // 至少8位
   if (value.length < 8) {
-    callback(new Error(t('user.validation.passwordMinLength8')));
+    callback(new Error(t("user.validation.passwordMinLength8")));
     return;
   }
 
   // 最多16位
   if (value.length > 16) {
-    callback(new Error(t('user.validation.passwordMaxLength16')));
+    callback(new Error(t("user.validation.passwordMaxLength16")));
     return;
   }
 
   // 包含大写字母
   if (!/[A-Z]/.test(value)) {
-    callback(new Error(t('user.validation.passwordNeedUppercase')));
+    callback(new Error(t("user.validation.passwordNeedUppercase")));
     return;
   }
 
   // 包含小写字母
   if (!/[a-z]/.test(value)) {
-    callback(new Error(t('user.validation.passwordNeedLowercase')));
+    callback(new Error(t("user.validation.passwordNeedLowercase")));
     return;
   }
 
   // 包含数字
   if (!/[0-9]/.test(value)) {
-    callback(new Error(t('user.validation.passwordNeedNumber')));
+    callback(new Error(t("user.validation.passwordNeedNumber")));
     return;
   }
 
   // 包含特殊符号
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
-    callback(new Error(t('user.validation.passwordNeedSpecial')));
+    callback(new Error(t("user.validation.passwordNeedSpecial")));
     return;
   }
 
@@ -256,38 +266,50 @@ const validateNewPasswordStrength = (rule: any, value: string, callback: any) =>
 // 密码验证规则
 const passwordRules = {
   oldPassword: [
-    { required: true, message: () => t('profile.security.oldPasswordPlaceholder'), trigger: 'blur' }
+    {
+      required: true,
+      message: () => t("profile.security.oldPasswordPlaceholder"),
+      trigger: "blur",
+    },
   ],
   newPassword: [
     {
       validator: validateNewPasswordStrength,
-      trigger: 'blur'
-    }
+      trigger: "blur",
+    },
   ],
   confirmPassword: [
-    { required: true, message: () => t('user.validation.passwordMismatch'), trigger: 'blur' },
     {
-      validator: (rule: unknown, value: string, callback: (error?: Error) => void) => {
+      required: true,
+      message: () => t("user.validation.passwordMismatch"),
+      trigger: "blur",
+    },
+    {
+      validator: (
+        rule: unknown,
+        value: string,
+        callback: (error?: Error) => void
+      ) => {
         if (value !== passwordForm.newPassword) {
-          callback(new Error(t('user.validation.passwordMismatch')));
+          callback(new Error(t("user.validation.passwordMismatch")));
         } else {
           callback();
         }
       },
-      trigger: 'blur'
-    }
-  ]
+      trigger: "blur",
+    },
+  ],
 };
 
 // 获取权限标签类型
 const getPermissionTagType = (permission: string) => {
   switch (permission) {
-    case 'admin':
-      return 'danger';
-    case 'vip_user':
-      return 'warning';
+    case "admin":
+      return "danger";
+    case "vip_user":
+      return "warning";
     default:
-      return 'info';
+      return "info";
   }
 };
 
@@ -295,42 +317,42 @@ const getPermissionTagType = (permission: string) => {
 const changePassword = () => {
   passwordDialogVisible.value = true;
   // 重置表单
-  passwordForm.oldPassword = '';
-  passwordForm.newPassword = '';
-  passwordForm.confirmPassword = '';
+  passwordForm.oldPassword = "";
+  passwordForm.newPassword = "";
+  passwordForm.confirmPassword = "";
 };
 
 // 处理密码修改
 const handlePasswordChange = async () => {
   if (!passwordFormRef.value) return;
-  
+
   try {
     const valid = await passwordFormRef.value.validate();
     if (valid) {
       // 这里应该调用实际的API接口
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       passwordDialogVisible.value = false;
-      ElMessage.success(t('profile.passwordChangeSuccess'));
+      ElMessage.success(t("profile.passwordChangeSuccess"));
     }
   } catch (error) {
-    console.error('密码修改失败:', error);
-    ElMessage.error(t('profile.passwordChangeFailed'));
+    console.error("密码修改失败:", error);
+    ElMessage.error(t("profile.passwordChangeFailed"));
   }
 };
 
 // 格式化日期时间
 const formatDateTime = (dateStr: string | null): string => {
-  if (!dateStr) return '--';
+  if (!dateStr) return "--";
   try {
     const date = new Date(dateStr);
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
     return `${year}-${month}-${day} ${hours}:${minutes}`;
   } catch {
-    return '--';
+    return "--";
   }
 };
 
@@ -339,7 +361,7 @@ const fetchUserInfo = async () => {
   try {
     const email = UserStore.name;
     if (!email) {
-      ElMessage.warning(t('profile.userInfoNotFound'));
+      ElMessage.warning(t("profile.userInfoNotFound"));
       return;
     }
 
@@ -348,21 +370,21 @@ const fetchUserInfo = async () => {
       const data = res.data;
 
       // 填充基本信息
-      basicInfoForm.username = data.email || '';
-      basicInfoForm.email = data.email || '';
-      basicInfoForm.phone = data.phone || '';
-      basicInfoForm.organization = data.organization || '';
-      basicInfoForm.position = data.position || '';
+      basicInfoForm.username = data.email || "";
+      basicInfoForm.email = data.email || "";
+      basicInfoForm.phone = data.phone || "";
+      basicInfoForm.organization = data.organization || "";
+      basicInfoForm.position = data.position || "";
 
       // 填充使用统计
       usageStats.totalChats = data.dialogue_count || 0;
       usageStats.lastLogin = formatDateTime(data.last_login_at);
     } else {
-      ElMessage.error(res.msg || t('profile.fetchUserInfoFailed'));
+      ElMessage.error(res.msg || t("profile.fetchUserInfoFailed"));
     }
   } catch (error) {
-    console.error('获取用户信息失败:', error);
-    ElMessage.error(t('profile.fetchUserInfoError'));
+    console.error("获取用户信息失败:", error);
+    ElMessage.error(t("profile.fetchUserInfoError"));
   }
 };
 

@@ -16,9 +16,9 @@
 // preserved (not redeclared here) so existing `res.data.foo` patterns
 // keep working via the `any` escape hatch.
 
-import 'axios';
+import "axios";
 
-declare module 'axios' {
+declare module "axios" {
   export interface AxiosResponse<T = any, D = any> {
     code: number;
     msg: string;

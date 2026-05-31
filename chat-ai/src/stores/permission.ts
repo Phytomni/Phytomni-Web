@@ -7,12 +7,12 @@
  * @Description: 动态路由
  * 人生无常！大肠包小肠......
  */
-import { defineStore } from 'pinia';
-import router, { constantRoutes, dynamicRoutes } from '@/router';
-import type { RouteRecordRaw } from 'vue-router';
+import { defineStore } from "pinia";
+import router, { constantRoutes, dynamicRoutes } from "@/router";
+import type { RouteRecordRaw } from "vue-router";
 
 // 匹配views里面所有的.vue文件
-const modules = import.meta.glob('@/views/**/**.vue');
+const modules = import.meta.glob("@/views/**/**.vue");
 
 interface IRoute {
   children?: IRoute[];
@@ -50,21 +50,21 @@ interface IState {
 const data: IRoute[] = [
   {
     meta: {
-      title: 'home',
+      title: "home",
     },
-    path: '/',
-    component: 'HomeView',
+    path: "/",
+    component: "HomeView",
   },
   {
     meta: {
-      title: 'about',
+      title: "about",
     },
-    path: '/about',
-    component: 'AboutView',
+    path: "/about",
+    component: "AboutView",
   },
 ];
 export default defineStore({
-  id: 'permission',
+  id: "permission",
   state: (): IState => ({
     routes: [],
     sidebarRouters: [],
@@ -72,7 +72,7 @@ export default defineStore({
   }),
   actions: {
     GenerateRoutes() {
-      return new Promise(resolve => {
+      return new Promise((resolve) => {
         const sdata: IRoute[] = JSON.parse(JSON.stringify(data));
         const rdata: IRoute[] = JSON.parse(JSON.stringify(data));
         const sidebarRoutes = filterAsyncRouter(sdata);
@@ -98,15 +98,15 @@ function filterAsyncRouter(asyncRouterMap: IRoute[], type = false) {
     }
     if (route.component) {
       // 组件特殊处理:'Layout' 是 router 自解析的字符串占位,不走 loadView
-      if (route.component !== 'Layout') {
+      if (route.component !== "Layout") {
         route.component = loadView(route.component);
       }
     }
     if (route.children != null && route?.children?.length) {
       route.children = filterAsyncRouter(route.children, type);
     } else {
-      delete route['children'];
-      delete route['redirect'];
+      delete route["children"];
+      delete route["redirect"];
     }
     return true;
   });
@@ -116,9 +116,9 @@ function filterChildren(childrenMap: IRoute[], lastRouter?: IRoute | boolean) {
   let children: IRoute[] = [];
   childrenMap.forEach((el: IRoute) => {
     if (el.children && el.children.length) {
-      if (el.component === 'ParentView' && !lastRouter) {
+      if (el.component === "ParentView" && !lastRouter) {
         el.children.forEach((c: IRoute) => {
-          c.path = el.path + '/' + c.path;
+          c.path = el.path + "/" + c.path;
           if (c.children && c.children.length) {
             children = children.concat(filterChildren(c.children, c));
             return;
@@ -129,7 +129,7 @@ function filterChildren(childrenMap: IRoute[], lastRouter?: IRoute | boolean) {
       }
     }
     if (lastRouter) {
-      el.path = (lastRouter as IRoute).path + '/' + el.path;
+      el.path = (lastRouter as IRoute).path + "/" + el.path;
     }
     children = children.concat(el);
   });
@@ -156,7 +156,7 @@ export function filterDynamicRoutes(routes: any[]): RouteRecordRaw {
 export const loadView = (view: any) => {
   let res;
   for (const path in modules) {
-    const dir = path.split('views/')[1].split('.vue')[0];
+    const dir = path.split("views/")[1].split(".vue")[0];
     if (dir === view) {
       res = () => modules[path]();
     }

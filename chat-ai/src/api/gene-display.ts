@@ -7,7 +7,7 @@
  * @Description:
  * 既往不恋！当下不杂！！未来不迎！！！
  */
-import request from '@/utils/request';
+import request from "@/utils/request";
 
 // 基因展示
 export const getGeneList = (params?: {
@@ -16,8 +16,8 @@ export const getGeneList = (params?: {
   size?: number;
 }) => {
   return request({
-    url: '/v1/gene/list',
-    method: 'get',
+    url: "/v1/gene/list",
+    method: "get",
     params,
   });
 };
@@ -28,8 +28,8 @@ export const getGeneDetails = (params?: {
   size?: number;
 }) => {
   return request({
-    url: '/v1/gene/details',
-    method: 'get',
+    url: "/v1/gene/details",
+    method: "get",
     params,
   });
 };

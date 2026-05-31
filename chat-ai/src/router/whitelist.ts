@@ -8,11 +8,18 @@
  * Both constants are co-located here as the SSOT for permission.ts and utils/authRedirect.ts.
  */
 export const WHITELIST = [
-  '/', '/login', '/register', '/forgot-password', '/home', '/about',
+  "/",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/home",
+  "/about",
 ] as const;
 
 export const GUEST_ONLY_PATHS: ReadonlySet<string> = new Set([
-  '/login', '/register', '/forgot-password',
+  "/login",
+  "/register",
+  "/forgot-password",
 ]);
 
 /**
@@ -27,5 +34,5 @@ export const GUEST_ONLY_PATHS: ReadonlySet<string> = new Set([
  * guard recurses infinitely.
  */
 export const FIRST_LOGIN_ALLOWED_ROUTE_NAMES: ReadonlySet<string> = new Set([
-  'changePassword',
+  "changePassword",
 ]);

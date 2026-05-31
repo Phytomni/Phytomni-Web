@@ -7,13 +7,13 @@
  * @Description:
  * 登录页面
  */
-import request from '@/utils/request';
+import request from "@/utils/request";
 
 // 登录
 export const login = (data: any) => {
   return request({
-    url: '/auth/login',
-    method: 'post',
+    url: "/auth/login",
+    method: "post",
     data: data,
   });
 };

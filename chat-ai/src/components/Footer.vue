@@ -7,7 +7,12 @@
 <template>
   <div class="footer-container">
     <div class="footer-content">
-      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="icp-link">
+      <a
+        href="https://beian.miit.gov.cn/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="icp-link"
+      >
         京ICP备07026971号-9
       </a>
     </div>
@@ -68,4 +73,3 @@
   }
 }
 </style>
-

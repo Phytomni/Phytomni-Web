@@ -1,23 +1,25 @@
 <template>
   <div :class="['cloud-storage-container', themeClass]">
     <div class="cloud-storage-content">
-      <h1>{{ $t('cloudStorage.title') }}</h1>
-      <p>{{ $t('cloudStorage.description') }}</p>
-      <el-button type="primary" @click="handleTryDemo">{{ $t('cloudStorage.tryDemo') }}</el-button>
+      <h1>{{ $t("cloudStorage.title") }}</h1>
+      <p>{{ $t("cloudStorage.description") }}</p>
+      <el-button type="primary" @click="handleTryDemo">{{
+        $t("cloudStorage.tryDemo")
+      }}</el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useThemeStore } from '@/stores/theme';
+import { computed } from "vue";
+import { useThemeStore } from "@/stores/theme";
 
 const themeStore = useThemeStore();
 
 const themeClass = computed(() => `theme-${themeStore.currentTheme}`);
 
 const handleTryDemo = () => {
-  console.log('Opening demo for Cloud Drive');
+  console.log("Opening demo for Cloud Drive");
 };
 </script>
 

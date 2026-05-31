@@ -9,12 +9,12 @@
 -->
 <template>
   <div class="log-list">
-    <h1>{{ $t('log.list') }}</h1>
+    <h1>{{ $t("log.list") }}</h1>
   </div>
 </template>
 <script setup lang="ts">
-  import { useI18n } from 'vue-i18n';
+import { useI18n } from "vue-i18n";
 
-  const { t } = useI18n();
+const { t } = useI18n();
 </script>
 <style lang="scss" scoped></style>

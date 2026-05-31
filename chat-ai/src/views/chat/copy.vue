@@ -1,46 +1,84 @@
 <template>
   <div class="chat-container">
     <!-- 左侧侧边栏 -->
-    <Sidebar :chatList="chatList" :currentChatId="currentChatId" :collapsed="leftSidebarCollapsed"
-      @selectChat="selectChat" @startNewChat="startNewChat" @openKnowledgeBase="openKnowledgeBase"
-      @handleSidebarCollapse="handleSidebarCollapse" />
+    <Sidebar
+      :chatList="chatList"
+      :currentChatId="currentChatId"
+      :collapsed="leftSidebarCollapsed"
+      @selectChat="selectChat"
+      @startNewChat="startNewChat"
+      @openKnowledgeBase="openKnowledgeBase"
+      @handleSidebarCollapse="handleSidebarCollapse"
+    />
     <!-- 中间聊天区域 -->
     <div class="chat-main">
       <div class="chat-header">
-        <h2>{{ $t('chat.title') }}</h2>
+        <h2>{{ $t("chat.title") }}</h2>
         <LangSwitch class="header-lang-switch" />
       </div>
 
       <!-- 消息区域 -->
       <div class="message-container" ref="messageContainer">
         <template v-if="currentChat?.messages?.length">
-          <div v-for="(message, index) in currentChat.messages" :key="index" class="message" :class="message.role">
+          <div
+            v-for="(message, index) in currentChat.messages"
+            :key="index"
+            class="message"
+            :class="message.role"
+          >
             <!-- 只有助手消息才显示头像 -->
             <div v-if="message.role === 'assistant'" class="message-avatar">
               <el-avatar :size="36" :src="botAvatar" />
             </div>
             <div class="message-content">
               <!-- 用户消息或没有思考步骤的回答 -->
-              <div v-if="message.role === 'user' || (!message.steps && !message.tableHeaders)" class="message-text">
-                <MarkdownViewer  :instantMessage="(message?.instantMessage && currentChat.messages.length-1 == index)|| false" :content="message.content" />
+              <div
+                v-if="
+                  message.role === 'user' ||
+                  (!message.steps && !message.tableHeaders)
+                "
+                class="message-text"
+              >
+                <MarkdownViewer
+                  :instantMessage="
+                    (message?.instantMessage &&
+                      currentChat.messages.length - 1 == index) ||
+                    false
+                  "
+                  :content="message.content"
+                />
                 <div v-if="message.doc_list && message.doc_list.length > 0">
                   <div class="doc-list-title">
-                    {{ $t('chat.relatedDocuments') }}：
+                    {{ $t("chat.relatedDocuments") }}：
                   </div>
-                  <div class="doc-list-item" v-for="(doc, docIndex) in message.doc_list" :key="docIndex">
+                  <div
+                    class="doc-list-item"
+                    v-for="(doc, docIndex) in message.doc_list"
+                    :key="docIndex"
+                  >
                     <div v-if="doc.title" class="doc-simple">
-                      {{ docIndex + 1 + '、' }}{{ doc.title }}
+                      {{ docIndex + 1 + "、" }}{{ doc.title }}
                     </div>
                     <div v-else-if="doc.au || doc.ti" class="doc-detailed">
                       <div class="doc-citation">
                         {{ docIndex + 1 }}. {{ formatDetailedCitation(doc) }}
                       </div>
                       <div class="doc-links" v-if="doc.dl || doc.pm">
-                        <a v-if="doc.dl" :href="doc.dl" target="_blank" class="doc-link doi-link">
+                        <a
+                          v-if="doc.dl"
+                          :href="doc.dl"
+                          target="_blank"
+                          class="doc-link doi-link"
+                        >
                           <el-icon><Link /></el-icon>
                           DOI
                         </a>
-                        <a v-if="doc.pm" :href="`https://pubmed.ncbi.nlm.nih.gov/${doc.pm}`" target="_blank" class="doc-link pm-link">
+                        <a
+                          v-if="doc.pm"
+                          :href="`https://pubmed.ncbi.nlm.nih.gov/${doc.pm}`"
+                          target="_blank"
+                          class="doc-link pm-link"
+                        >
                           <el-icon><Link /></el-icon>
                           PubMed
                         </a>
@@ -48,81 +86,135 @@
                     </div>
                   </div>
                 </div>
-                 <el-button @click="()=>downloadFile(message?.upload_path)" v-if="message?.status && message?.status=='SUCCEEDED' && message?.upload_path && message?.upload_path !=='' " type="primary">
+                <el-button
+                  @click="() => downloadFile(message?.upload_path)"
+                  v-if="
+                    message?.status &&
+                    message?.status == 'SUCCEEDED' &&
+                    message?.upload_path &&
+                    message?.upload_path !== ''
+                  "
+                  type="primary"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadURL') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadURL")
+                  }}</span>
                 </el-button>
-                  
+
                 <div v-if="message.role === 'user'" class="message-user">
-                  <div class="message-fotter"  v-if="copyVisible == 0 || copyVisible !==index+1" >
+                  <div
+                    class="message-fotter"
+                    v-if="copyVisible == 0 || copyVisible !== index + 1"
+                  >
                     <el-tooltip
                       effect="dark"
                       :content="$t('chat.copy')"
                       placement="top-start"
                     >
-                    <div class="message-fotter-item">
-                       <el-icon
-                        @click="()=>{
-                        fallbackCopyText(message.content,index+1)
-                        }"><CopyDocument /></el-icon>
-                    </div>
-                     
+                      <div class="message-fotter-item">
+                        <el-icon
+                          @click="
+                            () => {
+                              fallbackCopyText(message.content, index + 1);
+                            }
+                          "
+                          ><CopyDocument
+                        /></el-icon>
+                      </div>
                     </el-tooltip>
                   </div>
-                  <div class="message-fotter" v-else-if="copyVisible == index+1" >
+                  <div
+                    class="message-fotter"
+                    v-else-if="copyVisible == index + 1"
+                  >
                     <div class="message-fotter-item">
-                       <el-icon><SuccessFilled /></el-icon>
+                      <el-icon><SuccessFilled /></el-icon>
                     </div>
-                    
                   </div>
                 </div>
                 <div v-else>
-                  <div class="message-fotter"  v-if="copyVisible == 0 || copyVisible !==index+1" >
+                  <div
+                    class="message-fotter"
+                    v-if="copyVisible == 0 || copyVisible !== index + 1"
+                  >
                     <el-tooltip
                       effect="dark"
                       :content="$t('chat.copy')"
                       placement="top-start"
                     >
-                     <div class="message-fotter-item">
-                        <el-icon @click="() => copyMessageWithDocs(message, index)"><CopyDocument /></el-icon>
-                     </div>
-                      
+                      <div class="message-fotter-item">
+                        <el-icon
+                          @click="() => copyMessageWithDocs(message, index)"
+                          ><CopyDocument
+                        /></el-icon>
+                      </div>
                     </el-tooltip>
                   </div>
-                  <div class="message-fotter" v-else-if="copyVisible == index+1" >
-                     <div class="message-fotter-item"><el-icon><SuccessFilled /></el-icon></div>
+                  <div
+                    class="message-fotter"
+                    v-else-if="copyVisible == index + 1"
+                  >
+                    <div class="message-fotter-item">
+                      <el-icon><SuccessFilled /></el-icon>
+                    </div>
                   </div>
                 </div>
               </div>
               <!-- 表格数据展示 -->
               <div v-else-if="message.tableHeaders" class="table-response">
                 <el-table :data="message.content" border style="width: 100%">
-                  <el-table-column v-for="header in message.tableHeaders" :key="header.prop" :prop="header.prop"
-                    :label="header.label" align="center" />
+                  <el-table-column
+                    v-for="header in message.tableHeaders"
+                    :key="header.prop"
+                    :prop="header.prop"
+                    :label="header.label"
+                    align="center"
+                  />
                 </el-table>
-                 <el-button @click="()=>downloadFile(message?.upload_path)" v-if="message?.status && message?.status=='SUCCEEDED' && message?.upload_path && message?.upload_path !=='' " type="primary">
+                <el-button
+                  @click="() => downloadFile(message?.upload_path)"
+                  v-if="
+                    message?.status &&
+                    message?.status == 'SUCCEEDED' &&
+                    message?.upload_path &&
+                    message?.upload_path !== ''
+                  "
+                  type="primary"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadURL') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadURL")
+                  }}</span>
                 </el-button>
-                <div class="message-fotter" v-if="copyVisible == 0 || copyVisible !==index+1" >
-                   <el-tooltip
-                        effect="dark"
-                        :content="$t('chat.copy')"
-                        placement="top-start"
-                      >
-                       <div class="message-fotter-item">
-                          <el-icon @click="fallbackCopyText(message.original,index+1)"><CopyDocument /></el-icon>
-                       </div>
-                   </el-tooltip>
+                <div
+                  class="message-fotter"
+                  v-if="copyVisible == 0 || copyVisible !== index + 1"
+                >
+                  <el-tooltip
+                    effect="dark"
+                    :content="$t('chat.copy')"
+                    placement="top-start"
+                  >
+                    <div class="message-fotter-item">
+                      <el-icon
+                        @click="fallbackCopyText(message.original, index + 1)"
+                        ><CopyDocument
+                      /></el-icon>
+                    </div>
+                  </el-tooltip>
                 </div>
-                <div class="message-fotter" v-else-if="copyVisible == index+1" >
-                   <div class="message-fotter-item">
-                      <el-icon><SuccessFilled /></el-icon>
-                   </div>  
+                <div
+                  class="message-fotter"
+                  v-else-if="copyVisible == index + 1"
+                >
+                  <div class="message-fotter-item">
+                    <el-icon><SuccessFilled /></el-icon>
+                  </div>
                 </div>
               </div>
               <!-- 有思考步骤的助手回答  暂时没有作用 2025/07/21-->
@@ -130,14 +222,18 @@
                 <!-- 思考步骤 -->
                 <div v-if="message.steps && message.steps.length > 0">
                   <div class="steps-title">
-                    {{ $t('chat.thinkingSteps') }}：
+                    {{ $t("chat.thinkingSteps") }}：
                   </div>
-                  <div v-for="(step, stepIndex) in message.steps" :key="stepIndex" class="step-item">
+                  <div
+                    v-for="(step, stepIndex) in message.steps"
+                    :key="stepIndex"
+                    class="step-item"
+                  >
                     <div v-if="stepIndex === 0" class="step-label">
-                      {{ $t('chat.useTool') }}
+                      {{ $t("chat.useTool") }}
                     </div>
                     <div v-else class="step-label">
-                      {{ $t('chat.stepResult') }}
+                      {{ $t("chat.stepResult") }}
                     </div>
                     <div class="step-text">{{ step }}</div>
                   </div>
@@ -145,36 +241,60 @@
                 <!-- 最终答案 -->
                 <div class="final-answer">
                   <!-- <div class="answer-content">{{ message.content }}</div> -->
-                  <MarkdownViewer :instantMessage="(message?.instantMessage && currentChat.messages.length-1 == index) || false" :content="message.content" />
+                  <MarkdownViewer
+                    :instantMessage="
+                      (message?.instantMessage &&
+                        currentChat.messages.length - 1 == index) ||
+                      false
+                    "
+                    :content="message.content"
+                  />
                 </div>
-                <el-button @click="()=>downloadFile(message?.upload_path)" v-if="message?.status && message?.status=='SUCCEEDED' && message?.upload_path && message?.upload_path !=='' " type="primary">
+                <el-button
+                  @click="() => downloadFile(message?.upload_path)"
+                  v-if="
+                    message?.status &&
+                    message?.status == 'SUCCEEDED' &&
+                    message?.upload_path &&
+                    message?.upload_path !== ''
+                  "
+                  type="primary"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadURL') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadURL")
+                  }}</span>
                 </el-button>
-                 <div class="message-fotter" v-if="copyVisible == 0 || copyVisible !==index+1" >
+                <div
+                  class="message-fotter"
+                  v-if="copyVisible == 0 || copyVisible !== index + 1"
+                >
                   <el-tooltip
                     effect="dark"
                     :content="$t('chat.copy')"
                     placement="top-start"
                   >
                     <div class="message-fotter-item">
-                      <el-icon @click="() => copyMessageWithDocs(message, index)">
+                      <el-icon
+                        @click="() => copyMessageWithDocs(message, index)"
+                      >
                         <CopyDocument />
                       </el-icon>
                     </div>
                   </el-tooltip>
-                   
-                 </div>
-                <div class="message-fotter" v-else-if="copyVisible == index+1" >
+                </div>
+                <div
+                  class="message-fotter"
+                  v-else-if="copyVisible == index + 1"
+                >
                   <div class="message-fotter-item">
                     <el-icon><SuccessFilled /></el-icon>
-                  </div> 
+                  </div>
                 </div>
               </div>
             </div>
-            
           </div>
         </template>
 
@@ -196,7 +316,7 @@
 
         <div v-if="!currentChat?.messages?.length" class="empty-chat">
           <div class="welcome-container">
-            <h3>{{ $t('chat.welcome') }}</h3>
+            <h3>{{ $t("chat.welcome") }}</h3>
             <!-- <div class="suggestion-list">
               <div class="suggestion-item" @click="usePrompt($t('chat.suggestions.brca1'))">
                 {{ $t('chat.suggestions.brca1') }}
@@ -241,68 +361,111 @@
         </div>
       </div>
 
-
-
-
-
       <!-- 输入区域 -->
-      <div class="input-container" :style="{ bottom: currentChat?.messages?.length ? '2%' : '30%' }">
-
+      <div
+        class="input-container"
+        :style="{ bottom: currentChat?.messages?.length ? '2%' : '30%' }"
+      >
         <div class="input-container-warpper">
           <!-- 文件列表区域 -->
           <div v-if="fileList.length > 0" class="file-list-container">
             <div class="file-list">
-              <div v-for="(file, index) in fileList" :key="index" class="file-item">
+              <div
+                v-for="(file, index) in fileList"
+                :key="index"
+                class="file-item"
+              >
                 <div class="file-info">
                   <el-icon>
                     <document />
                   </el-icon>
                   <span class="file-name">{{ file.name }}</span>
-                  <span class="file-size">({{ formatFileSize(file.size) }})</span>
+                  <span class="file-size"
+                    >({{ formatFileSize(file.size) }})</span
+                  >
                 </div>
-                <el-button type="text" @click="removeFile(index)" class="remove-btn">
+                <el-button
+                  type="text"
+                  @click="removeFile(index)"
+                  class="remove-btn"
+                >
                   <el-icon><icon-close /></el-icon>
                 </el-button>
               </div>
             </div>
           </div>
           <div class="input-actions">
-
-            <div class="agent-button" :class="{
-              'agent-button-active': activeButton.includes('RAG'),
-              'agent-button-disabled': !hasButtonPermission('RAG')
-            }" @click="hasButtonPermission('RAG') && handleButtonClick('RAG')">
-              {{ $t('chat.agents.RAG') }}
+            <div
+              class="agent-button"
+              :class="{
+                'agent-button-active': activeButton.includes('RAG'),
+                'agent-button-disabled': !hasButtonPermission('RAG'),
+              }"
+              @click="hasButtonPermission('RAG') && handleButtonClick('RAG')"
+            >
+              {{ $t("chat.agents.RAG") }}
             </div>
-            <div class="agent-button" :class="{
-              'agent-button-active': activeButton.includes('BI'),
-              'agent-button-disabled': !hasButtonPermission('BI')
-            }" @click="hasButtonPermission('BI') && handleButtonClick('BI')">
-              {{ $t('chat.agents.BI') }}
+            <div
+              class="agent-button"
+              :class="{
+                'agent-button-active': activeButton.includes('BI'),
+                'agent-button-disabled': !hasButtonPermission('BI'),
+              }"
+              @click="hasButtonPermission('BI') && handleButtonClick('BI')"
+            >
+              {{ $t("chat.agents.BI") }}
             </div>
-            <div class="agent-button" :class="{
-              'agent-button-active': activeButton.includes('GA'),
-              'agent-button-disabled': !hasButtonPermission('GA')
-            }" @click="hasButtonPermission('GA') && handleButtonClick('GA')">
-              {{ $t('chat.agents.GA') }}
+            <div
+              class="agent-button"
+              :class="{
+                'agent-button-active': activeButton.includes('GA'),
+                'agent-button-disabled': !hasButtonPermission('GA'),
+              }"
+              @click="hasButtonPermission('GA') && handleButtonClick('GA')"
+            >
+              {{ $t("chat.agents.GA") }}
             </div>
-            <div class="agent-button" :class="{
-              'agent-button-active': activeButton.includes('联网搜索'),
-              'agent-button-disabled': !hasButtonPermission('联网搜索')
-            }" @click="hasButtonPermission('联网搜索') && handleButtonClick('联网搜索')">
-              {{ $t('chat.agents.search') }}
+            <div
+              class="agent-button"
+              :class="{
+                'agent-button-active': activeButton.includes('联网搜索'),
+                'agent-button-disabled': !hasButtonPermission('联网搜索'),
+              }"
+              @click="
+                hasButtonPermission('联网搜索') && handleButtonClick('联网搜索')
+              "
+            >
+              {{ $t("chat.agents.search") }}
             </div>
           </div>
           <div class="input-box">
-            <el-input class="input-box-input" border="none" v-model="messageInput" type="textarea" :rows="2"
-              :placeholder="$t('chat.inputPlaceholder')" resize="none" :disabled="isSending"
-              @keydown.enter.prevent="sendMessage" />
-            <el-upload ref="uploadRef" class="upload-demo" :show-file-list="false" :auto-upload="false"
-              :on-change="handleFileChange" multiple action="#">
+            <el-input
+              class="input-box-input"
+              border="none"
+              v-model="messageInput"
+              type="textarea"
+              :rows="2"
+              :placeholder="$t('chat.inputPlaceholder')"
+              resize="none"
+              :disabled="isSending"
+              @keydown.enter.prevent="sendMessage"
+            />
+            <el-upload
+              ref="uploadRef"
+              class="upload-demo"
+              :show-file-list="false"
+              :auto-upload="false"
+              :on-change="handleFileChange"
+              multiple
+              action="#"
+            >
               <template #trigger>
                 <el-tooltip content="支持文件上传" placement="top">
                   <div class="upload-btn">
-                    <img src="../../assets/images/chat/upload.png" alt="upload" />
+                    <img
+                      src="../../assets/images/chat/upload.png"
+                      alt="upload"
+                    />
                   </div>
                 </el-tooltip>
               </template>
@@ -318,18 +481,24 @@
             </div>
             <div v-else class="send-btn" @click="sendMessage">
               <img src="../../assets/images/chat/send_open.png" alt="send" />
-
             </div>
           </div>
         </div>
-
       </div>
-      <div v-if="!currentChat?.messages?.length" class="input-container-bottom" @wheel.prevent="handleScroll"
-        :style="containerStyle">
+      <div
+        v-if="!currentChat?.messages?.length"
+        class="input-container-bottom"
+        @wheel.prevent="handleScroll"
+        :style="containerStyle"
+      >
         <div class="agent-list">
           <div class="agent-page">
-            <div v-for="agent in presetAgents" :key="agent.id" class="input-container-bottom-item"
-              @click="handleAgentClick(agent)">
+            <div
+              v-for="agent in presetAgents"
+              :key="agent.id"
+              class="input-container-bottom-item"
+              @click="handleAgentClick(agent)"
+            >
               <span>{{ agent.name }}</span>
             </div>
           </div>
@@ -340,15 +509,19 @@
     <!-- 右侧侧边栏 -->
     <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
       <div class="sidebar-header">
-        <h3>{{ $t('chat.detailInfo') }}</h3>
+        <h3>{{ $t("chat.detailInfo") }}</h3>
         <el-button type="text" @click="drawerVisible = false" class="close-btn">
           <el-icon><icon-close /></el-icon>
         </el-button>
       </div>
       <div class="sidebar-content">
-        <h3>{{ $t('chat.relatedLinks') }}</h3>
+        <h3>{{ $t("chat.relatedLinks") }}</h3>
         <div class="links-container">
-          <div v-for="(link, index) in currentLinks" :key="index" class="link-item">
+          <div
+            v-for="(link, index) in currentLinks"
+            :key="index"
+            class="link-item"
+          >
             <el-icon><el-icon-link /></el-icon>
             <a :href="link.url" target="_blank">{{ link.title }}</a>
           </div>
@@ -358,9 +531,9 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, nextTick, watch, computed } from 'vue';
-import type { Ref } from 'vue';
-import Sidebar from './sidebar.vue';
+import { onMounted, ref, nextTick, watch, computed } from "vue";
+import type { Ref } from "vue";
+import Sidebar from "./sidebar.vue";
 import {
   Close as IconClose,
   Delete as IconDelete,
@@ -376,28 +549,33 @@ import {
   Collection,
   Check,
   Download,
-  Link
-} from '@element-plus/icons-vue';
-import { getAnswerCheck, getHistoryQuestionList, getQuery, getChatdownloadURL } from '@/api/chat';
-import { userStore } from '@/stores';
-import LangSwitch from '@/components/LangSwitch.vue';
-import { useI18n } from 'vue-i18n';
-import type { UploadInstance } from 'element-plus';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { Paperclip } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router';
-import MarkdownViewer from '@/components/MarkdownViewer.vue'
-import axios from 'axios';
+  Link,
+} from "@element-plus/icons-vue";
+import {
+  getAnswerCheck,
+  getHistoryQuestionList,
+  getQuery,
+  getChatdownloadURL,
+} from "@/api/chat";
+import { userStore } from "@/stores";
+import LangSwitch from "@/components/LangSwitch.vue";
+import { useI18n } from "vue-i18n";
+import type { UploadInstance } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { Paperclip } from "@element-plus/icons-vue";
+import { useRouter } from "vue-router";
+import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import axios from "axios";
 
-const uploadRef = ref<UploadInstance>()
-const fileList = ref<UploadFile[]>([])
+const uploadRef = ref<UploadInstance>();
+const fileList = ref<UploadFile[]>([]);
 // 复制状态
 const copyVisible = ref<number>(0);
 const copyTimeRef = ref<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 const submitUpload = () => {
-  uploadRef.value!.submit()
-}
+  uploadRef.value!.submit();
+};
 const { t } = useI18n();
 // 抽屉状态
 const drawerVisible = ref(false);
@@ -406,7 +584,7 @@ const drawerVisible = ref(false);
 const leftSidebarCollapsed = ref(false);
 
 // 监听右侧侧边栏状态，当右侧打开时，确保左侧是收起的
-watch(drawerVisible, newValue => {
+watch(drawerVisible, (newValue) => {
   if (newValue === true && !leftSidebarCollapsed.value) {
     // 右侧打开，左侧需要收起
     leftSidebarCollapsed.value = true;
@@ -414,7 +592,7 @@ watch(drawerVisible, newValue => {
 });
 
 const botAvatar =
-  'https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png';
+  "https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png";
 
 // 定义接口
 interface Chat {
@@ -423,7 +601,7 @@ interface Chat {
   title: string;
   date: string;
   messages?: ChatMessage[];
-  original?:string;
+  original?: string;
   isFavorite: boolean; // 添加收藏状态属性
 }
 
@@ -436,18 +614,18 @@ interface ChatMessage {
     prop: string;
     label: string;
   }>;
-  instantMessage?:boolean;
-  status?:string;
-  upload_path?:string;
-  original?:string;
+  instantMessage?: boolean;
+  status?: string;
+  upload_path?: string;
+  original?: string;
 }
 
 interface ChatResponse {
   query: string;
   answer: string;
   tool_name?: string;
-  status?:string;
-  upload_path?:string;
+  status?: string;
+  upload_path?: string;
   steps?: any[];
 }
 
@@ -461,24 +639,24 @@ interface UploadFile {
 // 格式化详细引用信息
 const formatDetailedCitation = (doc: any) => {
   const parts = [];
-  
+
   // 作者
   if (doc.au) {
     parts.push(doc.au);
   }
-  
+
   // 标题
   if (doc.ti) {
     // 移除HTML标签
-    const cleanTitle = doc.ti.replace(/<[^>]*>/g, '');
+    const cleanTitle = doc.ti.replace(/<[^>]*>/g, "");
     parts.push(`"${cleanTitle}"`);
   }
-  
+
   // 期刊名称
   if (doc.so) {
     parts.push(doc.so);
   }
-  
+
   // 卷号和页码
   if (doc.vl) {
     if (doc.bp && doc.ep) {
@@ -491,26 +669,26 @@ const formatDetailedCitation = (doc: any) => {
   } else if (doc.bp && doc.ep) {
     parts.push(`${doc.bp}-${doc.ep}`);
   }
-  
+
   // 出版年份
   if (doc.py) {
     parts.push(doc.py);
   }
-  
-  return parts.join('. ');
+
+  return parts.join(". ");
 };
 
 // 对话列表
 const chatList = ref<Chat[]>([]);
 
 const rolesTool = userStore().roles;
-console.log(rolesTool, 'rolesTool');
+console.log(rolesTool, "rolesTool");
 // 定义按钮权限映射关系
 const buttonPermissions = {
-  RAG: 'RAG',
-  BI: 'BI',
-  GA: 'GA',
-  联网搜索: '联网搜索',
+  RAG: "RAG",
+  BI: "BI",
+  GA: "GA",
+  联网搜索: "联网搜索",
 };
 
 // 检查按钮权限
@@ -539,7 +717,9 @@ onMounted(() => {
     // chatId 不存在默认为新对话
     if (urlChatId && chatList.value.length > 0) {
       // 查找是否存在对应的聊天
-      const chatExists = chatList.value.some(chat => chat.dialogue_id === urlChatId);
+      const chatExists = chatList.value.some(
+        (chat) => chat.dialogue_id === urlChatId
+      );
       if (chatExists) {
         // 如果存在，选择该聊天
         selectChat(urlChatId);
@@ -555,7 +735,7 @@ onMounted(() => {
 
 // 获取历史问题数据
 const getHistoryQuestionData = () => {
-  return new Promise<void>(resolve => {
+  return new Promise<void>((resolve) => {
     getHistoryQuestionList()
       .then((res: any) => {
         if (res.code === 200 && res.data) {
@@ -582,26 +762,26 @@ const getHistoryQuestionData = () => {
 };
 
 // 当前选中的对话
-const currentChatId = ref('');
+const currentChatId = ref("");
 const currentChat: Ref<any> = ref(null);
 
 // 开始新对话
 const startNewChat = () => {
-  currentChatId.value = '';
+  currentChatId.value = "";
   currentChat.value = { messages: [] };
   historyQuestion.value = null;
 
   // 移除URL中的id参数
   const url = new URL(window.location.href);
-  url.searchParams.delete('dialogue_id');
-  window.history.pushState({}, '', url.toString());
+  url.searchParams.delete("dialogue_id");
+  window.history.pushState({}, "", url.toString());
 };
 
 // 处理按钮点击
 const handleButtonClick = (buttonType: string) => {
   // 检查是否有权限
   if (!hasButtonPermission(buttonType)) {
-    ElMessage.warning(t('chat.noPermission'));
+    ElMessage.warning(t("chat.noPermission"));
     return;
   }
 
@@ -615,57 +795,57 @@ const handleButtonClick = (buttonType: string) => {
   }
 };
 
-  const updateCopyIconHandler = (index:number,delay = 3000,) => {
-    copyVisible.value=index;
-    if (copyTimeRef.value) {
-      clearTimeout(copyTimeRef.value);
-    }
-    copyTimeRef.value = setTimeout(() => {
-      copyVisible.value=0;
-    }, delay);
-  };
+const updateCopyIconHandler = (index: number, delay = 3000) => {
+  copyVisible.value = index;
+  if (copyTimeRef.value) {
+    clearTimeout(copyTimeRef.value);
+  }
+  copyTimeRef.value = setTimeout(() => {
+    copyVisible.value = 0;
+  }, delay);
+};
 
 //copy复制对话
-const textAreaCopyCore= (text:any,index:number)=> {
+const textAreaCopyCore = (text: any, index: number) => {
   // const textarea = document.createElement('textarea');
   // textarea.value = text;
   // document.body.appendChild(textarea);
   // textarea.select();
   // document.execCommand('copy');
   // document.body.removeChild(textarea);
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      // 使text area不在viewport，同时设置不可见
-      textArea.style.position = 'absolute';
-      textArea.style.opacity = '0';
-      textArea.style.left = '-999999px';
-      textArea.style.top = '-999999px';
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      document.execCommand('copy');
-      updateCopyIconHandler(index);
-      textArea.remove();
-      ElMessage.success(t('chat.copySuccess'));
-}
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  // 使text area不在viewport，同时设置不可见
+  textArea.style.position = "absolute";
+  textArea.style.opacity = "0";
+  textArea.style.left = "-999999px";
+  textArea.style.top = "-999999px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  document.execCommand("copy");
+  updateCopyIconHandler(index);
+  textArea.remove();
+  ElMessage.success(t("chat.copySuccess"));
+};
 
-const fallbackCopyText = (text:any,index:number) => {
+const fallbackCopyText = (text: any, index: number) => {
   try {
     if (window.isSecureContext) {
       navigator.clipboard.writeText(text);
       updateCopyIconHandler(index);
-      ElMessage.success(t('chat.copySuccess'));
+      ElMessage.success(t("chat.copySuccess"));
     } else {
-      textAreaCopyCore(text,index);
+      textAreaCopyCore(text, index);
     }
   } catch {
-    ElMessage.success(t('chat.copyFailed'));
+    ElMessage.success(t("chat.copyFailed"));
   }
 };
 
 // 打开聊天代理
 const openChatAgents = () => {
-  console.log(t('chat.logs.openChatAgent'));
+  console.log(t("chat.logs.openChatAgent"));
 
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
@@ -678,46 +858,46 @@ const openChatAgents = () => {
 
 // 知识代理人
 const openKnowledgeAgents = () => {
-  console.log(t('chat.logs.openKnowledgeAgent'));
+  console.log(t("chat.logs.openKnowledgeAgent"));
   // 这里实现知识代理人功能
 };
 
 // 数据库代理
 const openDatabaseAgents = () => {
-  console.log(t('chat.logs.openDatabaseAgent'));
+  console.log(t("chat.logs.openDatabaseAgent"));
   // 这里实现数据库代理功能
 };
 
 // 分析代理
 const openAnalysisAgents = () => {
-  console.log(t('chat.logs.openAnalysisAgent'));
+  console.log(t("chat.logs.openAnalysisAgent"));
   // 这里实现分析代理功能
 };
 
 // 基因功能代理
 const openGeneFunctionAgents = () => {
-  console.log(t('chat.logs.openGeneFunctionAgent'));
+  console.log(t("chat.logs.openGeneFunctionAgent"));
   // 这里实现基因功能代理功能
 };
 
 // 审查代理人
 const openReviewAgents = () => {
-  console.log(t('chat.logs.openReviewAgent'));
+  console.log(t("chat.logs.openReviewAgent"));
   // 这里实现审查代理人功能
 };
 
 // 下载链接
-const downloadFile = async(url:string)=>{
+const downloadFile = async (url: string) => {
   // 在这里调用 getChatdownloadURL 接口 获取下载链接
   const res = await getChatdownloadURL({ obs_path: url });
-  if(res.code == 200){
-    window.open(res.data,"_blank",'noopener,noreferrer')
+  if (res.code == 200) {
+    window.open(res.data, "_blank", "noopener,noreferrer");
   }
-}
+};
 
 // 打开知识库
 const openKnowledgeBase = () => {
-  console.log(t('chat.logs.openKnowledgeBase'));
+  console.log(t("chat.logs.openKnowledgeBase"));
 
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
@@ -735,7 +915,7 @@ const selectChat = async (dialogueId: string) => {
 
   // 在这里调用 getAnswerCheck 接口 获取对话记录
   const res = await getAnswerCheck({ dialogue_id: dialogueId });
-  console.log(res, 'res');
+  console.log(res, "res");
 
   if (res.code === 200) {
     // 处理返回的数据，转换为消息格式
@@ -748,11 +928,11 @@ const selectChat = async (dialogueId: string) => {
         // 添加用户消息
         if (item.query) {
           messages.push({
-            role: 'user',
+            role: "user",
             content: item.query,
           });
           historyMessages.push({
-            role: 'user',
+            role: "user",
             content: item.query,
           });
         }
@@ -763,117 +943,128 @@ const selectChat = async (dialogueId: string) => {
             const answerData = JSON.parse(item.answer);
             if (answerData.final_answer) {
               messages.push({
-                role: 'assistant',
+                role: "assistant",
                 content: answerData.final_answer,
                 steps: answerData.steps || [],
-                status:item?.status|| '',
-                upload_path:item?.upload_path||''
+                status: item?.status || "",
+                upload_path: item?.upload_path || "",
               });
               historyMessages.push({
-                role: 'assistant',
+                role: "assistant",
                 content: answerData.final_answer,
               });
             } else {
-              if (item.tool_name === 'ChatAgents'|| item.tool_name === 'ChatAgent') {
+              if (
+                item.tool_name === "ChatAgents" ||
+                item.tool_name === "ChatAgent"
+              ) {
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                   steps: [],
-                  status:item?.status|| '',
-                  upload_path:item?.upload_path||''
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              } else if (item.tool_name === 'KnowledgeAgents'||item.tool_name ==='ReviewAgents'||item.tool_name === 'KnowledgeAgent'||item.tool_name ==='ReviewAgent') {
+              } else if (
+                item.tool_name === "KnowledgeAgents" ||
+                item.tool_name === "ReviewAgents" ||
+                item.tool_name === "KnowledgeAgent" ||
+                item.tool_name === "ReviewAgent"
+              ) {
                 const contentData = JSON.parse(item.answer);
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: contentData.content,
                   doc_list: contentData.doc_list,
-                  status:item?.status|| '',
-                  upload_path:item?.upload_path|| ''
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              } else if (item.tool_name === 'DatabaseAgents'||item.tool_name === 'DataAgent') {
+              } else if (
+                item.tool_name === "DatabaseAgents" ||
+                item.tool_name === "DataAgent"
+              ) {
                 const contentData = JSON.parse(item.answer);
                 const tableData = convertToTableData(contentData);
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: tableData,
                   tableHeaders: contentData.headers.map((header: string) => ({
-                    prop: header.replace(/\s+/g, '_').toLowerCase(),
+                    prop: header.replace(/\s+/g, "_").toLowerCase(),
                     label: header,
                   })),
-                  status:item?.status|| '',
-                  upload_path:item?.upload_path|| '',
-                  original:item.answer,
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
+                  original: item.answer,
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              } else if (item.tool_name === 'AnalysisAgents') {
+              } else if (item.tool_name === "AnalysisAgents") {
                 // const contentData = JSON.parse(item.answer);
                 messages.push({
-                  role: 'assistant',
-                  content: '任务执行中，请等待',
-                  status:item?.status|| '',
-                  upload_path:item?.upload_path|| ''
+                  role: "assistant",
+                  content: "任务执行中，请等待",
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              }else if (item.tool_name === 'DeepGenomeAgent') {
+              } else if (item.tool_name === "DeepGenomeAgent") {
                 messages.push({
-                  role: 'assistant',
-                  content:item?.answer,
-                  status:item?.status|| '',
-                  upload_path:item?.upload_path|| ''
+                  role: "assistant",
+                  content: item?.answer,
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              }else if(item.tool_name === 'AnalystAgent'){
+              } else if (item.tool_name === "AnalystAgent") {
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
-                  status:item?.status|| '',
-                  upload_path:item?.upload_path||''
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              }else{
+              } else {
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
-                  status:item?.status|| '',
-                  upload_path:item?.upload_path||''
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
               }
             }
           } catch (e) {
             messages.push({
-              role: 'assistant',
+              role: "assistant",
               content: item.answer,
               steps: [],
-              status:item?.status|| '',
-              upload_path:item?.upload_path||''
+              status: item?.status || "",
+              upload_path: item?.upload_path || "",
             });
             historyMessages.push({
-              role: 'assistant',
+              role: "assistant",
               content: item.answer,
             });
           }
@@ -890,7 +1081,7 @@ const selectChat = async (dialogueId: string) => {
   updateUrlWithChatId(dialogueId);
 };
 // 输入框内容
-const messageInput = ref('');
+const messageInput = ref("");
 
 // 发送消息的加载状态
 const isSending = ref(false);
@@ -904,13 +1095,14 @@ const sendMessage = async () => {
 
   isSending.value = true;
   const currentMessage = messageInput.value;
-  messageInput.value = '';
+  messageInput.value = "";
 
-  const isNewChat = !currentChat.value?.messages || currentChat.value.messages.length === 0;
+  const isNewChat =
+    !currentChat.value?.messages || currentChat.value.messages.length === 0;
   if (isNewChat) currentChat.value = { messages: [] };
 
   currentChat.value.messages.push({
-    role: 'user',
+    role: "user",
     content: currentMessage,
   });
 
@@ -922,152 +1114,166 @@ const sendMessage = async () => {
   try {
     const urlChatId = getDialogueIdFromChatId();
     const queryData = new FormData();
-    queryData.append('query', currentMessage);
-    queryData.append('id', (urlChatId ? Number(urlChatId) : 0).toString());
-    queryData.append('tool', activeButton.value.join(','));
+    queryData.append("query", currentMessage);
+    queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
+    queryData.append("tool", activeButton.value.join(","));
     if (historyQuestion.value) {
-      queryData.append('history', JSON.stringify(historyQuestion.value));
-
+      queryData.append("history", JSON.stringify(historyQuestion.value));
     }
     if (fileList.value.length > 0) {
-      fileList.value.forEach(fileItem => {
-        queryData.append('files', fileItem.file);
+      fileList.value.forEach((fileItem) => {
+        queryData.append("files", fileItem.file);
       });
     }
 
     const response = await getQuery(queryData as any);
-    console.log('response', response.data);
+    console.log("response", response.data);
 
     if (response.data) {
-    
       let assistantMessage;
       if (response.data.final_answer) {
         assistantMessage = {
-          role: 'assistant',
-          content: response.data.final_answer || '抱歉，我无法回答这个问题。',
+          role: "assistant",
+          content: response.data.final_answer || "抱歉，我无法回答这个问题。",
           steps: response.data.steps || [],
-          status:response.data?.status|| '',
-          upload_path:response.data?.upload_path||'',
-          instantMessage:true
+          status: response.data?.status || "",
+          upload_path: response.data?.upload_path || "",
+          instantMessage: true,
         };
       } else {
         if (response.data.tool_name) {
-          if (response.data.tool_name === 'ChatAgents'|| response.data === 'ChatAgent') {
+          if (
+            response.data.tool_name === "ChatAgents" ||
+            response.data === "ChatAgent"
+          ) {
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: response.data.answer,
-              status:response.data?.status|| '',
-              upload_path:response.data?.upload_path||'',
-              instantMessage:true
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
+              instantMessage: true,
             };
-          }else if (response.data.tool_name === 'DeepGenomeAgent') {
+          } else if (response.data.tool_name === "DeepGenomeAgent") {
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: response.data.answer,
-              status:response.data?.status|| '',
-              upload_path:response.data?.upload_path||'',
-              instantMessage:true
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
+              instantMessage: true,
             };
-          } else if (response.data.tool_name === 'KnowledgeAgents'||response.data.tool_name ==='ReviewAgents'||response.data.tool_name === 'KnowledgeAgent'||response.data.tool_name ==='ReviewAgent') {
+          } else if (
+            response.data.tool_name === "KnowledgeAgents" ||
+            response.data.tool_name === "ReviewAgents" ||
+            response.data.tool_name === "KnowledgeAgent" ||
+            response.data.tool_name === "ReviewAgent"
+          ) {
             const contentData = JSON.parse(response.data.answer);
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: contentData.content,
               doc_list: contentData.doc_list,
-              status:response.data?.status|| '',
-              upload_path:response.data?.upload_path||'',
-              instantMessage:true
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
+              instantMessage: true,
             };
-          } else if (response.data.tool_name === 'DatabaseAgents'||response.data.tool_name === 'DataAgent') {
+          } else if (
+            response.data.tool_name === "DatabaseAgents" ||
+            response.data.tool_name === "DataAgent"
+          ) {
             const contentData = JSON.parse(response.data.answer);
             const tableData = convertToTableData(contentData);
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: tableData,
               tableHeaders: contentData.headers.map((header: string) => ({
-                prop: header.replace(/\s+/g, '_').toLowerCase(),
+                prop: header.replace(/\s+/g, "_").toLowerCase(),
                 label: header,
               })),
-              status:response.data?.status|| '',
-              upload_path:response.data?.upload_path||'',
-              instantMessage:true,
-              original:response.data.answer,
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
+              instantMessage: true,
+              original: response.data.answer,
             };
-          }else if (response.data.tool_name === 'AnalysisAgents') {
+          } else if (response.data.tool_name === "AnalysisAgents") {
             const contentData = JSON.parse(response.data.answer);
             const tableData = convertToTableData(contentData);
             assistantMessage = {
-              role: 'assistant',
-              content: '任务执行中，请等待',
-              status:response.data?.status|| '',
-              upload_path:response.data?.upload_path||'',
-              instantMessage:true
+              role: "assistant",
+              content: "任务执行中，请等待",
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
+              instantMessage: true,
             };
-          }else if(response.data.tool_name === 'AnalystAgent'){
-              assistantMessage = {
-                role: 'assistant',
-                content: response.data.answer,
-                status:response.data?.status|| '',
-                upload_path:response.data?.upload_path||'',
-                instantMessage:true
-              };
+          } else if (response.data.tool_name === "AnalystAgent") {
+            assistantMessage = {
+              role: "assistant",
+              content: response.data.answer,
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
+              instantMessage: true,
+            };
           }
         } else {
           assistantMessage = {
-            role: 'assistant',
+            role: "assistant",
             content: response.data.answer,
-            status:response.data?.status|| '',
-            upload_path:response.data?.upload_path||'',
-            instantMessage:true
+            status: response.data?.status || "",
+            upload_path: response.data?.upload_path || "",
+            instantMessage: true,
           };
         }
       }
 
-       currentChat.value.messages.push(assistantMessage);
-
+      currentChat.value.messages.push(assistantMessage);
     } else {
       currentChat.value.messages.push({
-        role: 'assistant',
-        content: '抱歉，我无法回答这个问题。',
+        role: "assistant",
+        content: "抱歉，我无法回答这个问题。",
         steps: [],
-        status: '',
-        upload_path:'',
-        instantMessage:true
+        status: "",
+        upload_path: "",
+        instantMessage: true,
       });
     }
   } catch (error: any) {
-    console.error(t('chat.logs.sendMessageFailed'), error);
+    console.error(t("chat.logs.sendMessageFailed"), error);
     // 检查是否是token过期错误
-    if (error.response && error.response.data && error.response.data.detail && error.response.data.detail.code === 403) {
-      ElMessageBox.alert(
-        '登录已过期，请重新登录',
-        '系统提示',
-        {
-          confirmButtonText: '我知道了',
-          type: 'warning',
-          callback: () => {
-            const UserStore = userStore();
-            UserStore.FedLogOut().then(() => {
-              // 清除所有缓存和cookie
-              localStorage.clear();
-              sessionStorage.clear();
-              document.cookie.split(";").forEach(function(c) { 
-                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
-              });
-              location.href = '/login';
+    if (
+      error.response &&
+      error.response.data &&
+      error.response.data.detail &&
+      error.response.data.detail.code === 403
+    ) {
+      ElMessageBox.alert("登录已过期，请重新登录", "系统提示", {
+        confirmButtonText: "我知道了",
+        type: "warning",
+        callback: () => {
+          const UserStore = userStore();
+          UserStore.FedLogOut().then(() => {
+            // 清除所有缓存和cookie
+            localStorage.clear();
+            sessionStorage.clear();
+            document.cookie.split(";").forEach(function (c) {
+              document.cookie = c
+                .replace(/^ +/, "")
+                .replace(
+                  /=.*/,
+                  "=;expires=" + new Date().toUTCString() + ";path=/"
+                );
             });
-          }
-        }
-      );
+            location.href = "/login";
+          });
+        },
+      });
       return;
     }
     currentChat.value.messages.push({
-      role: 'assistant',
-      content: t('chat.sendFailed'),
+      role: "assistant",
+      content: t("chat.sendFailed"),
       steps: [],
-      status:'',
-      upload_path:'',
-      instantMessage:true
+      status: "",
+      upload_path: "",
+      instantMessage: true,
     });
   } finally {
     if (isNewChat) {
@@ -1076,7 +1282,7 @@ const sendMessage = async () => {
         const newChat = chatList.value[0];
         currentChatId.value = newChat.dialogue_id;
         updateUrlWithChatId(newChat.dialogue_id);
-      } 
+      }
     }
     isSending.value = false;
 
@@ -1102,16 +1308,16 @@ const usePrompt = (prompt: string) => {
 // 相关链接
 const currentLinks = ref([
   {
-    title: t('chat.links.brca1'),
-    url: 'https://www.ncbi.nlm.nih.gov/gene/672',
+    title: t("chat.links.brca1"),
+    url: "https://www.ncbi.nlm.nih.gov/gene/672",
   },
   {
-    title: t('chat.links.mapk'),
-    url: 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3135676/',
+    title: t("chat.links.mapk"),
+    url: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3135676/",
   },
   {
-    title: t('chat.links.tp53'),
-    url: 'https://p53.iarc.fr/',
+    title: t("chat.links.tp53"),
+    url: "https://p53.iarc.fr/",
   },
 ]);
 
@@ -1129,29 +1335,31 @@ const handleSidebarCollapse = (isCollapsed: boolean) => {
 // 更新URL中的聊天ID
 const updateUrlWithChatId = (dialogueId: string) => {
   const url = new URL(window.location.href);
-  url.searchParams.set('dialogue_id', dialogueId);
-  window.history.pushState({}, '', url.toString());
+  url.searchParams.set("dialogue_id", dialogueId);
+  window.history.pushState({}, "", url.toString());
 };
 
 // 从URL读取聊天ID
 const getChatIdFromUrl = () => {
   const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get('dialogue_id');
+  return urlParams.get("dialogue_id");
 };
 // 根据聊天ID读取对话ID
 const getDialogueIdFromChatId = () => {
   const urlParams = new URLSearchParams(window.location.search);
-  const dialogueId = urlParams.get('dialogue_id');
-  const chatRealId = chatList.value.find((c: Chat) => c.dialogue_id === dialogueId)?.id;
+  const dialogueId = urlParams.get("dialogue_id");
+  const chatRealId = chatList.value.find(
+    (c: Chat) => c.dialogue_id === dialogueId
+  )?.id;
   return chatRealId;
 };
 // 转换数据格式为 Element Plus Table 格式
 const convertToTableData = (data: { headers: string[]; rows: any[][] }) => {
-  return data.rows.map(row => {
+  return data.rows.map((row) => {
     const obj: Record<string, any> = {};
     data.headers.forEach((header, index) => {
       // 替换空格为下划线，避免属性名中的空格
-      const key = header.replace(/\s+/g, '_').toLowerCase();
+      const key = header.replace(/\s+/g, "_").toLowerCase();
       obj[key] = row[index];
     });
     return obj;
@@ -1164,7 +1372,7 @@ const handleFileChange = (file: any) => {
     name: file.name,
     size: file.size,
     type: file.type,
-    file: file.raw
+    file: file.raw,
   };
   fileList.value.push(newFile);
 };
@@ -1179,11 +1387,11 @@ const clearFiles = () => {
 
 const formatFileSize = (size: number) => {
   if (size < 1024) {
-    return size + ' B';
+    return size + " B";
   } else if (size < 1024 * 1024) {
-    return (size / 1024).toFixed(2) + ' KB';
+    return (size / 1024).toFixed(2) + " KB";
   } else {
-    return (size / (1024 * 1024)).toFixed(2) + ' MB';
+    return (size / (1024 * 1024)).toFixed(2) + " MB";
   }
 };
 
@@ -1191,28 +1399,28 @@ const formatFileSize = (size: number) => {
 const presetAgents = ref([
   {
     id: 1,
-    name: t('chat.geneDetail'),
-    icon: 'Document',
-    route: '/gene-display'
+    name: t("chat.geneDetail"),
+    icon: "Document",
+    route: "/gene-display",
   },
   {
     id: 2,
-    name: 'Research Agent',
-    icon: 'Search',
-    route: '/research'
+    name: "Research Agent",
+    icon: "Search",
+    route: "/research",
   },
   {
     id: 3,
-    name: 'Gene Agent',
-    icon: 'DataLine',
-    route: '/gene-agent'
+    name: "Gene Agent",
+    icon: "DataLine",
+    route: "/gene-agent",
   },
   {
     id: 4,
-    name: 'Design Agent',
-    icon: 'Edit',
-    route: '/design'
-  }
+    name: "Design Agent",
+    icon: "Edit",
+    route: "/design",
+  },
 ]);
 // 基础高度
 const baseHeight = 140;
@@ -1229,7 +1437,7 @@ const containerHeight = computed(() => {
 // 计算当前容器的样式
 const containerStyle = computed(() => ({
   height: `${containerHeight.value}px`,
-  transform: isExpanded.value ? `translateY(-${overlayHeight}px)` : 'none'
+  transform: isExpanded.value ? `translateY(-${overlayHeight}px)` : "none",
 }));
 
 // 是否展开
@@ -1280,13 +1488,12 @@ const copyMessageWithDocs = (message: any, index: number) => {
             }
             return `${idx + 1}. ${JSON.stringify(item)}`;
           })
-          .join('\n')
-      : '';
+          .join("\n")
+      : "";
   const text =
-    message.content + (docs && docs !== '' ? '\n参考资料:\n' : '') + docs;
+    message.content + (docs && docs !== "" ? "\n参考资料:\n" : "") + docs;
   fallbackCopyText(text, index + 1);
 };
-
 </script>
 
 <style lang="scss" scoped>
@@ -1385,7 +1592,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
       padding: 12px;
       border-radius: 8px;
     }
-    .message-text:hover .message-user{
+    .message-text:hover .message-user {
       display: block !important;
     }
 
@@ -1419,7 +1626,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
       }
 
       .final-answer {
-
         .answer-title {
           font-weight: bold;
           margin-bottom: 12px;
@@ -1676,23 +1882,23 @@ const copyMessageWithDocs = (message: any, index: number) => {
     }
   }
 }
-.message-user{
+.message-user {
   position: absolute;
-  bottom:0px;
+  bottom: 0px;
   right: 1px;
   display: none;
 }
 
-.message-fotter{
+.message-fotter {
   width: 100%;
   height: auto;
   display: flex;
-  gap:10px;
+  gap: 10px;
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
   margin-top: 5px;
-  &-item{
+  &-item {
     display: flex;
     justify-content: center;
     align-items: center;
@@ -1702,10 +1908,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
     box-sizing: border-box;
     border-radius: 4px;
   }
-  &-item:hover{
-      color: #1890ff;
-      background: #e8e6e6;
-    }
+  &-item:hover {
+    color: #1890ff;
+    background: #e8e6e6;
+  }
 }
 
 // 加载动画
@@ -1748,7 +1954,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 
   @keyframes dot-pulse {
-
     0%,
     100% {
       opacity: 0.4;
@@ -1775,11 +1980,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
   font-size: 13px;
   font-weight: 400;
   margin-bottom: 8px;
-  
+
   .doc-simple {
     // 简单格式（只有title）
   }
-  
+
   .doc-detailed {
     .doc-citation {
       color: var(--el-text-color-primary);
@@ -1787,12 +1992,12 @@ const copyMessageWithDocs = (message: any, index: number) => {
       line-height: 1.4;
       margin-bottom: 6px;
     }
-    
+
     .doc-links {
       display: flex;
       gap: 12px;
       margin-top: 4px;
-      
+
       .doc-link {
         display: inline-flex;
         align-items: center;
@@ -1803,27 +2008,27 @@ const copyMessageWithDocs = (message: any, index: number) => {
         font-size: 12px;
         font-weight: 500;
         transition: all 0.2s ease;
-        
+
         .el-icon {
           font-size: 12px;
         }
-        
+
         &.doi-link {
           background-color: #e6f7ff;
           color: #1890ff;
           border: 1px solid #91d5ff;
-          
+
           &:hover {
             background-color: #bae7ff;
             border-color: #69c0ff;
           }
         }
-        
+
         &.pm-link {
           background-color: #f6ffed;
           color: #52c41a;
           border: 1px solid #b7eb8f;
-          
+
           &:hover {
             background-color: #d9f7be;
             border-color: #95de64;
@@ -1923,19 +2128,23 @@ const copyMessageWithDocs = (message: any, index: number) => {
   z-index: 1000;
 
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     top: -20px;
     left: 0;
     right: 0;
     height: 20px;
-    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.9));
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      rgba(255, 255, 255, 0.9)
+    );
     opacity: 0;
     transition: opacity 0.3s ease;
   }
 
   &::after {
-    content: '';
+    content: "";
     position: absolute;
     bottom: -20px;
     left: 0;
@@ -1947,7 +2156,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 
   &:hover {
-
     &::before,
     &::after {
       opacity: 1;

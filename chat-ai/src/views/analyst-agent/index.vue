@@ -2,28 +2,38 @@
   <div class="analyst-agent-container">
     <div class="chat-header">
       <div class="header-content">
-        <el-button 
-          type="primary" 
-          :icon="ArrowLeft" 
+        <el-button
+          type="primary"
+          :icon="ArrowLeft"
           @click="goBack"
-          class="back-button">
-          {{ $t('common.back') }}
+          class="back-button"
+        >
+          {{ $t("common.back") }}
         </el-button>
         <div class="header-text">
-          <h1>{{ $t('agents.analyst.title') }}</h1>
-          <p>{{ $t('agents.analyst.subtitle') }}</p>
+          <h1>{{ $t("agents.analyst.title") }}</h1>
+          <p>{{ $t("agents.analyst.subtitle") }}</p>
         </div>
       </div>
     </div>
-    
+
     <div class="chat-messages">
       <!-- 用户提问 -->
       <div class="message user-message">
         <div class="message-content">
-          <div class="message-text">Your data is {"/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_1.fq.gz": "pair-end 1 chip-seq data for rice", "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_2.fq.gz": "pair-end 2 chip-seq data for rice", "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/NIP_genome_final.fa": "rice genome fasta file"}, please help me to perform the callpeak analysis.</div>
+          <div class="message-text">
+            Your data is
+            {"/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_1.fq.gz":
+            "pair-end 1 chip-seq data for rice",
+            "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_2.fq.gz":
+            "pair-end 2 chip-seq data for rice",
+            "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/NIP_genome_final.fa":
+            "rice genome fasta file"}, please help me to perform the callpeak
+            analysis.
+          </div>
         </div>
       </div>
-      
+
       <!-- AI回答 -->
       <div class="message ai-message">
         <div class="message-avatar">
@@ -31,17 +41,20 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            {{ $t('agents.analyst.taskCreated') }}4a7715a-996a-22e0-acd5-fb278e7d45b3
+            {{
+              $t("agents.analyst.taskCreated")
+            }}4a7715a-996a-22e0-acd5-fb278e7d45b3
             <div class="download-section">
               <el-button
                 type="primary"
                 :icon="Download"
                 @click="downloadResults"
-                class="download-button">
-                {{ $t('agents.analyst.downloadResults') }}
+                class="download-button"
+              >
+                {{ $t("agents.analyst.downloadResults") }}
               </el-button>
             </div>
-            <div class="tip-text">{{ $t('common.Tip') }}</div>
+            <div class="tip-text">{{ $t("common.Tip") }}</div>
           </div>
         </div>
       </div>
@@ -50,25 +63,27 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
-import { ArrowLeft, Download } from '@element-plus/icons-vue'
+import { useRouter } from "vue-router";
+import { ArrowLeft, Download } from "@element-plus/icons-vue";
 
-const router = useRouter()
+const router = useRouter();
 const goBack = () => {
-  router.back()
-}
+  router.back();
+};
 
-const botAvatar = 'https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png'
+const botAvatar =
+  "https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png";
 
 // 下载分析结果
 const downloadResults = () => {
-  const link = document.createElement('a')
-  link.href = '/static/downloads/3.Analyst Agent/1.AnalystAgent/results/callpeak_results.zip'
-  link.download = 'callpeak_results.zip'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-}
+  const link = document.createElement("a");
+  link.href =
+    "/static/downloads/3.Analyst Agent/1.AnalystAgent/results/callpeak_results.zip";
+  link.download = "callpeak_results.zip";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 </script>
 
 <style lang="scss" scoped>
@@ -83,7 +98,7 @@ const downloadResults = () => {
   background: #fff;
   padding: 20px;
   border-bottom: 1px solid #e0e0e0;
-  
+
   .header-content {
     display: flex;
     align-items: center;
@@ -91,21 +106,21 @@ const downloadResults = () => {
     max-width: 1200px;
     margin: 0 auto;
   }
-  
+
   .back-button {
     flex-shrink: 0;
   }
-  
+
   .header-text {
     flex: 1;
     text-align: center;
-    
+
     h1 {
       margin: 0 0 8px 0;
       color: #333;
       font-size: 24px;
     }
-    
+
     p {
       margin: 0;
       color: #666;
@@ -130,10 +145,10 @@ const downloadResults = () => {
 .message {
   display: flex;
   margin-bottom: 16px;
-  
+
   &.user-message {
     justify-content: flex-end;
-    
+
     .message-content {
       background: #eff6ff;
       color: #333;
@@ -141,16 +156,16 @@ const downloadResults = () => {
       max-width: 100%;
     }
   }
-  
+
   &.ai-message {
     justify-content: flex-start;
-    
+
     .message-avatar {
       flex-shrink: 0;
       align-self: flex-start;
       margin-right: 8px;
     }
-    
+
     .message-content {
       background: white;
       color: #333;
@@ -164,7 +179,7 @@ const downloadResults = () => {
 .message-content {
   padding: 12px 16px;
   word-wrap: break-word;
-  
+
   .message-text {
     line-height: 1.5;
   }
@@ -172,13 +187,13 @@ const downloadResults = () => {
 
 .download-section {
   margin-top: 12px;
-  
+
   p {
     margin: 0 0 12px 0;
     color: #333;
     font-size: 14px;
   }
-  
+
   .download-button {
     margin-top: 8px;
   }

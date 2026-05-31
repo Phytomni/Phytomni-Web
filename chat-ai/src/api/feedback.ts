@@ -7,13 +7,15 @@
  * @Description:
  * 既往不恋！当下不杂！！未来不迎！！！
  */
-import request from '@/utils/request';
+import request from "@/utils/request";
 
 // 用户反馈
-export const feedback = (data: { feedback_type: string; feedback_content: string } | FormData) => {
+export const feedback = (
+  data: { feedback_type: string; feedback_content: string } | FormData
+) => {
   return request({
-    url: '/v1/user/feedback',
-    method: 'post',
+    url: "/v1/user/feedback",
+    method: "post",
     data: data,
   });
 };

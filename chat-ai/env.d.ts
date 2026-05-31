@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
-declare module '*.vue' {
-  import type { DefineComponent } from 'vue';
+declare module "*.vue" {
+  import type { DefineComponent } from "vue";
   // `object` is the standard vue-tsc / official Vue SFC shim type for
   // Props / RawBindings; replacing `{}` (which lint flags as "any
   // non-nullish value") with `object` keeps the shim compatible with
@@ -14,4 +14,4 @@ declare module '*.vue' {
 // known saveAs(blob, filename) call inside utils/request.ts. Declaring the
 // module as opaque keeps vue-tsc clean without adding an @types/file-saver
 // dev dep for a single call site.
-declare module 'file-saver';
+declare module "file-saver";

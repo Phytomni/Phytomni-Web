@@ -29,46 +29,46 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
-  import { ArrowDown } from '@element-plus/icons-vue';
-  import { useI18n } from 'vue-i18n';
-  import { setLanguage } from '@/locales';
-  import { useAppStore } from '@/stores';
+import { computed } from "vue";
+import { ArrowDown } from "@element-plus/icons-vue";
+import { useI18n } from "vue-i18n";
+import { setLanguage } from "@/locales";
+import { useAppStore } from "@/stores";
 
-  const { locale } = useI18n();
-  const appStore = useAppStore();
+const { locale } = useI18n();
+const appStore = useAppStore();
 
-  // 获取当前语言
-  const currentLang = computed(() => {
-    return appStore.language;
-  });
+// 获取当前语言
+const currentLang = computed(() => {
+  return appStore.language;
+});
 
-  // 显示的语言标签
-  const currentLangLabel = computed(() => {
-    return currentLang.value === 'zh-CN' ? '中文' : 'English';
-  });
+// 显示的语言标签
+const currentLangLabel = computed(() => {
+  return currentLang.value === "zh-CN" ? "中文" : "English";
+});
 
-  // 切换语言
-  const handleCommand = (command: string) => {
-    setLanguage(command as 'zh-CN' | 'en-US');
-  };
+// 切换语言
+const handleCommand = (command: string) => {
+  setLanguage(command as "zh-CN" | "en-US");
+};
 </script>
 
 <style lang="scss" scoped>
-  .lang-switch {
-    display: inline-flex;
-    align-items: center;
-    cursor: pointer;
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
 
-    .lang-dropdown-link {
-      display: flex;
-      align-items: center;
-      color: #606266;
-      font-size: 14px;
-      min-width: 50px;
-      &:hover {
-        color: #409eff;
-      }
+  .lang-dropdown-link {
+    display: flex;
+    align-items: center;
+    color: #606266;
+    font-size: 14px;
+    min-width: 50px;
+    &:hover {
+      color: #409eff;
     }
   }
+}
 </style>

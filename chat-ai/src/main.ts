@@ -7,24 +7,24 @@
  * @Description: main 文件入口
  * 人生无常！大肠包小肠......
  */
-import { createApp } from 'vue';
-import { createPinia } from 'pinia';
-import ElementPlus from 'element-plus';
-import enElementLocale from 'element-plus/es/locale/lang/en';
-import zhElementLocale from 'element-plus/es/locale/lang/zh-cn';
-import i18n, { setLanguage } from './locales'; // 导入国际化配置
-import { useAppStore, useThemeStore } from '@/stores';
+import { createApp } from "vue";
+import { createPinia } from "pinia";
+import ElementPlus from "element-plus";
+import enElementLocale from "element-plus/es/locale/lang/en";
+import zhElementLocale from "element-plus/es/locale/lang/zh-cn";
+import i18n, { setLanguage } from "./locales"; // 导入国际化配置
+import { useAppStore, useThemeStore } from "@/stores";
 
-import App from './App.vue';
-import router from './router';
-import directive from './directive';
+import App from "./App.vue";
+import router from "./router";
+import directive from "./directive";
 // 注册指令
-import plugins from './plugins'; // plugins
-import { download } from '@/utils/request';
-import 'element-plus/dist/index.css';
-import './assets/main.css'; // 全局样式
-import './assets/theme.css'; // 主题样式
-import './permission'; // permission control
+import plugins from "./plugins"; // plugins
+import { download } from "@/utils/request";
+import "element-plus/dist/index.css";
+import "./assets/main.css"; // 全局样式
+import "./assets/theme.css"; // 主题样式
+import "./permission"; // permission control
 
 const app = createApp(App);
 
@@ -38,7 +38,7 @@ const themeStore = useThemeStore();
 
 // 确保在使用 i18n 之前已经正确加载了语言包
 const currentLang =
-  appStore.language || localStorage.getItem('language') || 'en-US';
+  appStore.language || localStorage.getItem("language") || "en-US";
 
 // 初始化 i18n
 app.use(i18n);
@@ -50,10 +50,10 @@ setLanguage(currentLang);
 themeStore.initTheme();
 
 // 添加调试信息
-console.log('Theme initialized:', {
+console.log("Theme initialized:", {
   theme: themeStore.theme,
   currentTheme: themeStore.currentTheme,
-  systemTheme: (themeStore as any).systemTheme
+  systemTheme: (themeStore as any).systemTheme,
 });
 
 // 全局方法挂载
@@ -65,14 +65,14 @@ app.use(directive);
 
 // 使用element-plus 并且设置全局的大小
 app.use(ElementPlus, {
-  locale: currentLang === 'zh-CN' ? zhElementLocale : enElementLocale,
+  locale: currentLang === "zh-CN" ? zhElementLocale : enElementLocale,
   // 支持 large、default、small
-  size: 'default',
+  size: "default",
 });
 
-app.mount('#app');
+app.mount("#app");
 
 // 页面卸载时清理主题监听器
-window.addEventListener('beforeunload', () => {
+window.addEventListener("beforeunload", () => {
   themeStore.cleanup();
 });

@@ -7,11 +7,11 @@
  * @Description:
  * 人生无常！大肠包小肠......
  */
-import Cookies from 'js-cookie';
+import Cookies from "js-cookie";
 
-const TokenKey = 'Admin-Token';
+const TokenKey = "Admin-Token";
 
-const ExpiresInKey = 'Admin-Expires-In';
+const ExpiresInKey = "Admin-Expires-In";
 
 export function getToken() {
   return Cookies.get(TokenKey);

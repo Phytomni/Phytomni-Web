@@ -9,7 +9,7 @@
         overflow-y: auto;
       "
     >
-      <h3 style="color: #000">{{ $t('help.tableOfContents') }}</h3>
+      <h3 style="color: #000">{{ $t("help.tableOfContents") }}</h3>
       <el-menu
         :default-active="activeHeadingId"
         @select="handleNavSelect"
@@ -109,11 +109,11 @@
       >
         <el-button type="primary" @click="downloadPDF">
           <i class="el-icon-document"></i>
-          {{ $t('agents.deepGenome.downloadPDF') }}
+          {{ $t("agents.deepGenome.downloadPDF") }}
         </el-button>
         <el-button type="primary" @click="downloadMarkdown">
           <i class="el-icon-edit"></i>
-          {{ $t('agents.deepGenome.downloadMD') }}
+          {{ $t("agents.deepGenome.downloadMD") }}
         </el-button>
       </div>
       <div v-for="(block, index) in contentBlocks" :key="index">
@@ -219,7 +219,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, reactive } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, reactive } from "vue";
 import {
   ElContainer,
   ElAside,
@@ -233,32 +233,32 @@ import {
   ElButton,
   ElDropdown,
   ElDropdownMenu,
-  ElDropdownItem
-} from 'element-plus';
-import { saveAs } from 'file-saver';
+  ElDropdownItem,
+} from "element-plus";
+import { saveAs } from "file-saver";
 
 // 模拟从 json.txt 获取的 Markdown 内容
 const props = defineProps({
   markdown: {
     type: String,
-    default: ''
+    default: "",
   },
   references: {
     type: Array,
-    default: () => []
-  }
+    default: () => [],
+  },
 });
 
 const contentBlocks = ref([]);
 const headings = ref([]);
 const nestedHeadings = ref([]);
-const activeHeadingId = ref('');
+const activeHeadingId = ref("");
 const mainContentRef = ref(null);
 
 // 点击悬浮放大弹窗相关变量
 const imageViewerVisible = ref(false);
-const currentImageSrc = ref('');
-const currentImageAlt = ref('');
+const currentImageSrc = ref("");
+const currentImageAlt = ref("");
 const containerRef = ref(null);
 const imageRef = ref(null);
 const isDragging = ref(false);
@@ -272,10 +272,10 @@ const imageOffset = reactive({ x: 0, y: 0 });
 const imageStyle = computed(() => {
   return {
     transform: `scale(${scale.value}) translate(${imageOffset.x}px, ${imageOffset.y}px)`,
-    transformOrigin: '0 0',
-    cursor: isDragging.value ? 'grabbing' : 'grab',
-    display: 'block',
-    transition: 'transform 0.2s ease'
+    transformOrigin: "0 0",
+    cursor: isDragging.value ? "grabbing" : "grab",
+    display: "block",
+    transition: "transform 0.2s ease",
   };
 });
 
@@ -284,7 +284,7 @@ const jumpTo = (id) => {
   if (element) {
     // 使用 nextTick 确保 DOM 更新后再滚动
     nextTick(() => {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
     });
   }
 };
@@ -305,7 +305,7 @@ const formatDetailedCitation = (doc) => {
   // 标题
   if (doc.ti) {
     // 移除HTML标签
-    const cleanTitle = doc.ti.replace(/<[^>]*>/g, '');
+    const cleanTitle = doc.ti.replace(/<[^>]*>/g, "");
     parts.push('"' + cleanTitle + '"');
   }
 
@@ -315,7 +315,7 @@ const formatDetailedCitation = (doc) => {
   }
 
   // 卷号、页码和年份组合
-  let volumePageYear = '';
+  let volumePageYear = "";
   if (doc.vl) {
     if (doc.bp && doc.ep) {
       volumePageYear = `${doc.vl}, ${doc.bp}-${doc.ep}`;
@@ -341,7 +341,7 @@ const formatDetailedCitation = (doc) => {
     parts.push(volumePageYear);
   }
 
-  return parts.join('. ');
+  return parts.join(". ");
 };
 
 // 计算属性：处理参考文献列表，生成格式化后的HTML
@@ -356,45 +356,45 @@ const displayReferences = computed(() => {
     if (doc.title) {
       return {
         html: `<div>${refIndex}. ${doc.title}</div>`,
-        id: `ref-${refIndex}`
+        id: `ref-${refIndex}`,
       };
     } else if (doc.au || doc.ti) {
       const citation = formatDetailedCitation(doc);
 
       // 构建 DOI 和 PMID 链接部分
-      let linkPart = '';
+      let linkPart = "";
       const hasLink = doc.dl || doc.pm;
 
       if (hasLink) {
         const doiLink = doc.dl
           ? `doi:<a href="${doc.dl}" target="_blank" class="doi-link">${doc.dl}</a>`
-          : '';
+          : "";
         const pmidLink = doc.pm
           ? `pmid:<a href="https://pubmed.ncbi.nlm.nih.gov/${doc.pm}" target="_blank" class="pmid-link">${doc.pm}</a>`
-          : '';
+          : "";
 
-        const separator = doc.dl && doc.pm ? '; ' : '';
+        const separator = doc.dl && doc.pm ? "; " : "";
 
         linkPart = `. <span class="doc-link-inline">${doiLink}</span><span>${separator}</span><span class="doc-link-inline">${pmidLink}</span>`;
       }
 
       return {
         html: `<div class="doc-citation">${refIndex}. ${citation}${linkPart}</div>`,
-        id: `ref-${refIndex}`
+        id: `ref-${refIndex}`,
       };
     } else {
       // 处理普通字符串类型的引用
-      if (typeof doc === 'string') {
+      if (typeof doc === "string") {
         return {
           html: `<div>${refIndex}. ${doc}</div>`,
-          id: `ref-${refIndex}`
+          id: `ref-${refIndex}`,
         };
       }
 
       // 默认情况
       return {
         html: `<div>${refIndex}. ${JSON.stringify(doc)}</div>`,
-        id: `ref-${refIndex}`
+        id: `ref-${refIndex}`,
       };
     }
   });
@@ -403,11 +403,11 @@ const displayReferences = computed(() => {
 // --- Markdown 转换辅助函数 ---
 const escapeHtml = (text) => {
   const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
   };
   return text.replace(/[&<>"']/g, (m) => map[m]);
 };
@@ -418,11 +418,11 @@ const escapeHtml = (text) => {
 // production 想跨域指向独立 attachments 服务,在 .env.production 改 key 即可,
 // 不要把 prod host 硬编进源码。
 const attachmentsBaseUrl =
-  import.meta.env.VITE_ATTACHMENTS_BASE_URL || '/attachments/';
+  import.meta.env.VITE_ATTACHMENTS_BASE_URL || "/attachments/";
 
 const convertFilePath = (path) => {
   if (!path) return path;
-  if (path.includes('.out/')) {
+  if (path.includes(".out/")) {
     return path.replace(/\.?\/?\.out\//g, attachmentsBaseUrl);
   }
   return path;
@@ -432,8 +432,8 @@ const processInlineMarkdown = (line) => {
   if (!line) return line;
 
   // 调试：检测包含 Protocol Details 的行
-  if (line.includes('Protocol Details') || line.includes('&lt;a')) {
-    console.log('Processing line with a tag:', line);
+  if (line.includes("Protocol Details") || line.includes("&lt;a")) {
+    console.log("Processing line with a tag:", line);
   }
 
   // 先恢复被转义的 HTML <a> 标签（支持各种属性组合）
@@ -442,12 +442,12 @@ const processInlineMarkdown = (line) => {
   line = line.replace(
     /&lt;a\s+(.*?)&gt;(.*?)&lt;\/a&gt;/g,
     function (match, attributes, text) {
-      console.log('Found a tag match:', { match, attributes, text });
+      console.log("Found a tag match:", { match, attributes, text });
       // 恢复属性中的转义字符
       attributes = attributes
         .replace(/&quot;/g, '"')
         .replace(/&#039;/g, "'")
-        .replace(/&amp;/g, '&');
+        .replace(/&amp;/g, "&");
 
       // 转换路径（如果 href 属性存在）
       attributes = attributes.replace(
@@ -459,13 +459,13 @@ const processInlineMarkdown = (line) => {
       );
 
       const result = `<a ${attributes}>${text}</a>`;
-      console.log('Converted to:', result);
+      console.log("Converted to:", result);
       return result;
     }
   );
 
-  if (line.includes('Protocol Details')) {
-    console.log('After a tag processing:', line);
+  if (line.includes("Protocol Details")) {
+    console.log("After a tag processing:", line);
   }
 
   // 先处理.cif格式的图片
@@ -507,7 +507,7 @@ const processInlineMarkdown = (line) => {
         convertedUrl +
         '" target="_blank" download>' +
         text +
-        '</a>'
+        "</a>"
       );
     }
   );
@@ -523,19 +523,19 @@ const processInlineMarkdown = (line) => {
     '<a href="#ref-$1" @click.prevent="jumpTo(\'ref-$1\')" style="display: inline-block;">[$1]</a>'
   );
   // 处理粗体
-  line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  line = line.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  line = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+  line = line.replace(/\*(.*?)\*/g, "<em>$1</em>");
   // 处理斜体 (改进版，避免与列表混淆)
-  line = line.replace(/(^|\s)\*([^*]+?)\*(?=\s|$|[.,;:!?])/g, '$1<em>$2</em>');
+  line = line.replace(/(^|\s)\*([^*]+?)\*(?=\s|$|[.,;:!?])/g, "$1<em>$2</em>");
   // 处理行内代码
-  line = line.replace(/`(.*?)`/g, '<code>$1</code>');
+  line = line.replace(/`(.*?)`/g, "<code>$1</code>");
 
   return line;
 };
 
 // 处理CIF容器的函数
 const processCifContainers = async () => {
-  console.log('processCifContainers function called');
+  console.log("processCifContainers function called");
   await nextTick();
 
   // 查找所有未处理的CIF容器
@@ -546,34 +546,34 @@ const processCifContainers = async () => {
   console.log(`Found ${cifContainers.length} unprocessed CIF containers`);
 
   cifContainers.forEach((container) => {
-    const src = container.getAttribute('data-src') || '';
-    const alt = container.getAttribute('data-alt') || '';
+    const src = container.getAttribute("data-src") || "";
+    const alt = container.getAttribute("data-alt") || "";
 
     // 标记为已处理
-    container.setAttribute('data-processed', 'true');
+    container.setAttribute("data-processed", "true");
 
     try {
       // 动态加载3Dmol.js
       const load3DMol = () => {
         return new Promise((resolve, reject) => {
           if (window.$3Dmol) {
-            console.log('3Dmol.js already loaded');
+            console.log("3Dmol.js already loaded");
             resolve();
             return;
           }
 
-          const script = document.createElement('script');
-          script.src = '/static/js/3Dmol-min.js';
+          const script = document.createElement("script");
+          script.src = "/static/js/3Dmol-min.js";
           script.onload = () => {
             if (window.$3Dmol) {
-              console.log('3Dmol.js loaded successfully');
+              console.log("3Dmol.js loaded successfully");
               resolve();
             } else {
-              reject(new Error('3Dmol.js loaded but $3Dmol is not defined'));
+              reject(new Error("3Dmol.js loaded but $3Dmol is not defined"));
             }
           };
           script.onerror = () => {
-            reject(new Error('Failed to load 3Dmol.js'));
+            reject(new Error("Failed to load 3Dmol.js"));
           };
           document.head.appendChild(script);
         });
@@ -588,27 +588,27 @@ const processCifContainers = async () => {
           )}`;
 
           // 清空容器并创建查看器元素
-          container.innerHTML = '';
-          const viewerDiv = document.createElement('div');
+          container.innerHTML = "";
+          const viewerDiv = document.createElement("div");
           viewerDiv.id = viewerId;
-          viewerDiv.style.width = '100%';
-          viewerDiv.style.height = '600px';
+          viewerDiv.style.width = "100%";
+          viewerDiv.style.height = "600px";
           container.appendChild(viewerDiv);
 
           // 生成文件路径
           let publicSrc = src;
-          if (!src.startsWith('http')) {
+          if (!src.startsWith("http")) {
             // 确保路径正确
-            if (!src.startsWith('/')) {
+            if (!src.startsWith("/")) {
               publicSrc = `/${src}`;
             }
           }
 
-          console.log('Attempting to load CIF file from:', publicSrc);
+          console.log("Attempting to load CIF file from:", publicSrc);
 
           // 创建3Dmol查看器
           const viewer = window.$3Dmol.createViewer(viewerDiv, {
-            backgroundColor: '#f5f5f5'
+            backgroundColor: "#f5f5f5",
           });
 
           // 尝试加载CIF文件
@@ -623,19 +623,19 @@ const processCifContainers = async () => {
               const cifContent = await response.text();
 
               // 添加模型到查看器
-              viewer.addModel(cifContent, 'cif');
+              viewer.addModel(cifContent, "cif");
 
               // 设置样式和视图
-              viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
+              viewer.setStyle({}, { cartoon: { color: "spectrum" } });
               viewer.zoomTo();
               viewer.render();
               viewer.animate();
 
-              console.log('CIF file loaded and rendered successfully');
+              console.log("CIF file loaded and rendered successfully");
             } catch (error) {
-              console.error('Error loading or rendering CIF file:', error);
+              console.error("Error loading or rendering CIF file:", error);
               viewerDiv.innerHTML = `<div class="error">无法加载或渲染CIF文件: ${
-                error instanceof Error ? error.message : '未知错误'
+                error instanceof Error ? error.message : "未知错误"
               }</div>`;
             }
           };
@@ -644,13 +644,13 @@ const processCifContainers = async () => {
           loadCifFile();
         })
         .catch((error) => {
-          console.error('Error loading 3Dmol.js:', error);
+          console.error("Error loading 3Dmol.js:", error);
           container.innerHTML = `<div class="error">无法加载3Dmol.js库: ${error.message}</div>`;
         });
     } catch (error) {
-      console.error('Unexpected error processing CIF container:', error);
+      console.error("Unexpected error processing CIF container:", error);
       container.innerHTML = `<div class="error">处理CIF文件时发生错误: ${
-        error instanceof Error ? error.message : '未知错误'
+        error instanceof Error ? error.message : "未知错误"
       }</div>`;
     }
   });
@@ -658,17 +658,17 @@ const processCifContainers = async () => {
 
 // --- 转换逻辑 ---
 const convertMarkdown = (text) => {
-  const lines = text.split('\\n'); // 正确分割行
+  const lines = text.split("\\n"); // 正确分割行
   console.log(lines.length);
   const blocks = [];
-  let currentH3CardContent = '';
-  let currentH3CardHeader = '';
-  let currentH3CardId = '';
+  let currentH3CardContent = "";
+  let currentH3CardHeader = "";
+  let currentH3CardId = "";
   let isInH3Card = false;
-  let tempContentAfterH2 = '';
+  let tempContentAfterH2 = "";
   let isInStandaloneContentAfterH2 = false;
 
-  let tempContentAfterH1 = '';
+  let tempContentAfterH1 = "";
   let isInStandaloneContentAfterH1 = false;
 
   let isInTable = false;
@@ -680,7 +680,7 @@ const convertMarkdown = (text) => {
 
   const headingsList = [];
 
-  const createHeadingId = (prefix = 'heading') => {
+  const createHeadingId = (prefix = "heading") => {
     return `${prefix}-${headingCounter++}`;
   };
 
@@ -689,13 +689,13 @@ const convertMarkdown = (text) => {
     let html = '<table border="1" class="markdown-table"><thead><tr>';
     headers.forEach((header, index) => {
       // 根据 alignments 设置 th 的样式
-      let alignStyle = '';
-      const align = alignments[index] ? alignments[index].trim() : '';
-      if (align.startsWith(':') && align.endsWith(':')) {
+      let alignStyle = "";
+      const align = alignments[index] ? alignments[index].trim() : "";
+      if (align.startsWith(":") && align.endsWith(":")) {
         alignStyle = ' style="text-align: center;"';
-      } else if (align.endsWith(':')) {
+      } else if (align.endsWith(":")) {
         alignStyle = ' style="text-align: right;"';
-      } else if (align.startsWith(':')) {
+      } else if (align.startsWith(":")) {
         // 默认左对齐，通常不需要显式设置，但可以加上
         alignStyle = ' style="text-align: left;"';
       } else {
@@ -704,15 +704,15 @@ const convertMarkdown = (text) => {
       }
       html += `<th${alignStyle}>${header}</th>`;
     });
-    html += '</tr></thead><tbody>';
+    html += "</tr></thead><tbody>";
     rows.forEach((row) => {
-      html += '<tr>';
+      html += "<tr>";
       row.forEach((cell) => {
         html += `<td>${cell}</td>`;
       });
-      html += '</tr>';
+      html += "</tr>";
     });
-    html += '</tbody></table>';
+    html += "</tbody></table>";
     return html;
   };
 
@@ -721,7 +721,7 @@ const convertMarkdown = (text) => {
 
     const isTableDelimiter = (l) => {
       return (
-        /^\s*\|.*\|.*\|\s*$/.test(l) && l.replace(/\s/g, '').includes('|-')
+        /^\s*\|.*\|.*\|\s*$/.test(l) && l.replace(/\s/g, "").includes("|-")
       );
     };
 
@@ -742,7 +742,7 @@ const convertMarkdown = (text) => {
       isInTable = true;
 
       const headerCells = line
-        .split('|')
+        .split("|")
         .map((cell) => cell.trim())
         .filter((cell) => cell.length > 0);
       tableHeaders = headerCells.map((cell) =>
@@ -752,7 +752,7 @@ const convertMarkdown = (text) => {
       i++; // 跳过分隔符行
       const alignmentLine = lines[i];
       tableAlignments = alignmentLine
-        .split('|')
+        .split("|")
         .map((cell) => cell.trim())
         .filter((cell) => cell.length > 0);
 
@@ -762,7 +762,7 @@ const convertMarkdown = (text) => {
     } else if (isInTable) {
       if (isTableContent(line)) {
         const dataCells = line
-          .split('|')
+          .split("|")
           .map((cell) => cell.trim())
           .filter((cell) => cell.length > 0);
         const processedRow = dataCells.map((cell) =>
@@ -800,117 +800,117 @@ const convertMarkdown = (text) => {
         if (/^####\s(.*)/.test(line)) {
           const match = line.match(/^####\s(.*)/);
           const content = processInlineMarkdown(escapeHtml(match[1]));
-          const id = createHeadingId('h4');
+          const id = createHeadingId("h4");
           headingsList.push({ id, text: content, level: 4 });
           if (isInH3Card) {
             currentH3CardContent += `<h4 id="${id}">${content}</h4>`;
           } else {
-            blocks.push({ type: 'h4', id, content });
+            blocks.push({ type: "h4", id, content });
           }
           currentLineProcessed = true;
         } else if (/^###\s(.*)/.test(line)) {
           if (isInH3Card) {
             blocks.push({
-              type: 'h3-card',
+              type: "h3-card",
               id: currentH3CardId,
               header: currentH3CardHeader,
-              body: currentH3CardContent
+              body: currentH3CardContent,
             });
             isInH3Card = false;
-            currentH3CardContent = '';
-            currentH3CardHeader = '';
-            currentH3CardId = '';
+            currentH3CardContent = "";
+            currentH3CardHeader = "";
+            currentH3CardId = "";
           }
 
           if (isInStandaloneContentAfterH2 && tempContentAfterH2) {
             blocks.push({
-              type: 'standalone-content',
-              content: tempContentAfterH2
+              type: "standalone-content",
+              content: tempContentAfterH2,
             });
             isInStandaloneContentAfterH2 = false;
-            tempContentAfterH2 = '';
+            tempContentAfterH2 = "";
           }
 
           const match = line.match(/^###\s(.*)/);
           const content = processInlineMarkdown(escapeHtml(match[1]));
-          currentH3CardId = createHeadingId('h3');
+          currentH3CardId = createHeadingId("h3");
           currentH3CardHeader = content;
-          currentH3CardContent = '';
+          currentH3CardContent = "";
           isInH3Card = true;
           headingsList.push({
             id: currentH3CardId,
             text: currentH3CardHeader,
-            level: 3
+            level: 3,
           });
           currentLineProcessed = true;
         } else if (/^##\s(.*)/.test(line)) {
           const match = line.match(/^##\s(.*)/);
           const content = processInlineMarkdown(escapeHtml(match[1]));
-          const id = createHeadingId('h2');
+          const id = createHeadingId("h2");
           headingsList.push({ id, text: content, level: 2 });
 
           if (isInStandaloneContentAfterH1 && tempContentAfterH1) {
             blocks.push({
-              type: 'standalone-content',
-              content: tempContentAfterH1
+              type: "standalone-content",
+              content: tempContentAfterH1,
             });
             isInStandaloneContentAfterH1 = false;
-            tempContentAfterH1 = '';
+            tempContentAfterH1 = "";
           }
 
           if (isInH3Card) {
             blocks.push({
-              type: 'h3-card',
+              type: "h3-card",
               id: currentH3CardId,
               header: currentH3CardHeader,
-              body: currentH3CardContent
+              body: currentH3CardContent,
             });
             isInH3Card = false;
-            currentH3CardContent = '';
-            currentH3CardHeader = '';
-            currentH3CardId = '';
+            currentH3CardContent = "";
+            currentH3CardHeader = "";
+            currentH3CardId = "";
           }
 
-          blocks.push({ type: 'h2', id, content });
+          blocks.push({ type: "h2", id, content });
           isInStandaloneContentAfterH2 = true;
           currentLineProcessed = true;
         } else if (/^#\s(.*)/.test(line)) {
           const match = line.match(/^#\s(.*)/);
           const content = processInlineMarkdown(escapeHtml(match[1]));
-          const id = createHeadingId('h1');
+          const id = createHeadingId("h1");
           headingsList.push({ id, text: content, level: 1 });
 
           if (isInH3Card) {
             blocks.push({
-              type: 'h3-card',
+              type: "h3-card",
               id: currentH3CardId,
               header: currentH3CardHeader,
-              body: currentH3CardContent
+              body: currentH3CardContent,
             });
             isInH3Card = false;
-            currentH3CardContent = '';
-            currentH3CardHeader = '';
-            currentH3CardId = '';
+            currentH3CardContent = "";
+            currentH3CardHeader = "";
+            currentH3CardId = "";
           }
           if (isInStandaloneContentAfterH2 && tempContentAfterH2) {
             blocks.push({
-              type: 'standalone-content',
-              content: tempContentAfterH2
+              type: "standalone-content",
+              content: tempContentAfterH2,
             });
             isInStandaloneContentAfterH2 = false;
-            tempContentAfterH2 = '';
+            tempContentAfterH2 = "";
           }
           isInStandaloneContentAfterH1 = true;
-          tempContentAfterH1 = '';
+          tempContentAfterH1 = "";
 
-          blocks.push({ type: 'h1', id, content });
+          blocks.push({ type: "h1", id, content });
           currentLineProcessed = true;
         } else {
           // 处理表格结束后紧跟的普通文本行
           const processedLineContent = `<p>${processInlineMarkdown(
             escapeHtml(line)
           )}</p>`;
-          const isLineContentEmpty = line.trim() === '';
+          const isLineContentEmpty = line.trim() === "";
 
           if (isInH3Card) {
             if (!isLineContentEmpty) {
@@ -945,129 +945,129 @@ const convertMarkdown = (text) => {
     if (/^####\s(.*)/.test(line)) {
       const match = line.match(/^####\s(.*)/);
       const content = processInlineMarkdown(escapeHtml(match[1]));
-      const id = createHeadingId('h4');
+      const id = createHeadingId("h4");
       headingsList.push({ id, text: content, level: 4 });
       if (isInH3Card) {
         currentH3CardContent += `<h4 id="${id}">${content}</h4>`;
       } else {
-        blocks.push({ type: 'h4', id, content });
+        blocks.push({ type: "h4", id, content });
       }
     } else if (/^###\s(.*)/.test(line)) {
       if (isInH3Card) {
         blocks.push({
-          type: 'h3-card',
+          type: "h3-card",
           id: currentH3CardId,
           header: currentH3CardHeader,
-          body: currentH3CardContent
+          body: currentH3CardContent,
         });
         isInH3Card = false;
-        currentH3CardContent = '';
-        currentH3CardHeader = '';
-        currentH3CardId = '';
+        currentH3CardContent = "";
+        currentH3CardHeader = "";
+        currentH3CardId = "";
       }
 
       if (isInStandaloneContentAfterH2 && tempContentAfterH2) {
         blocks.push({
-          type: 'standalone-content',
-          content: tempContentAfterH2
+          type: "standalone-content",
+          content: tempContentAfterH2,
         });
         isInStandaloneContentAfterH2 = false;
-        tempContentAfterH2 = '';
+        tempContentAfterH2 = "";
       }
 
       const match = line.match(/^###\s(.*)/);
       const content = processInlineMarkdown(escapeHtml(match[1]));
-      currentH3CardId = createHeadingId('h3');
+      currentH3CardId = createHeadingId("h3");
       currentH3CardHeader = content;
-      currentH3CardContent = '';
+      currentH3CardContent = "";
       isInH3Card = true;
       headingsList.push({
         id: currentH3CardId,
         text: currentH3CardHeader,
-        level: 3
+        level: 3,
       });
     } else if (/^##\s(.*)/.test(line)) {
       const match = line.match(/^##\s(.*)/);
       const content = processInlineMarkdown(escapeHtml(match[1]));
-      const id = createHeadingId('h2');
+      const id = createHeadingId("h2");
       headingsList.push({ id, text: content, level: 2 });
 
       if (isInStandaloneContentAfterH1 && tempContentAfterH1) {
         blocks.push({
-          type: 'standalone-content',
-          content: tempContentAfterH1
+          type: "standalone-content",
+          content: tempContentAfterH1,
         });
         isInStandaloneContentAfterH1 = false;
-        tempContentAfterH1 = '';
+        tempContentAfterH1 = "";
       }
 
       if (isInH3Card) {
         blocks.push({
-          type: 'h3-card',
+          type: "h3-card",
           id: currentH3CardId,
           header: currentH3CardHeader,
-          body: currentH3CardContent
+          body: currentH3CardContent,
         });
         isInH3Card = false;
-        currentH3CardContent = '';
-        currentH3CardHeader = '';
-        currentH3CardId = '';
+        currentH3CardContent = "";
+        currentH3CardHeader = "";
+        currentH3CardId = "";
       }
 
       // 在添加新的h2标题前，先处理之前的h2后独立内容
       if (isInStandaloneContentAfterH2 && tempContentAfterH2) {
         blocks.push({
-          type: 'standalone-content',
-          content: tempContentAfterH2
+          type: "standalone-content",
+          content: tempContentAfterH2,
         });
         isInStandaloneContentAfterH2 = false;
-        tempContentAfterH2 = '';
+        tempContentAfterH2 = "";
       }
 
-      blocks.push({ type: 'h2', id, content });
+      blocks.push({ type: "h2", id, content });
       isInStandaloneContentAfterH2 = true;
     } else if (/^#\s(.*)/.test(line)) {
       const match = line.match(/^#\s(.*)/);
       const content = processInlineMarkdown(escapeHtml(match[1]));
-      const id = createHeadingId('h1');
+      const id = createHeadingId("h1");
       headingsList.push({ id, text: content, level: 1 });
 
       if (isInH3Card) {
         blocks.push({
-          type: 'h3-card',
+          type: "h3-card",
           id: currentH3CardId,
           header: currentH3CardHeader,
-          body: currentH3CardContent
+          body: currentH3CardContent,
         });
         isInH3Card = false;
-        currentH3CardContent = '';
-        currentH3CardHeader = '';
-        currentH3CardId = '';
+        currentH3CardContent = "";
+        currentH3CardHeader = "";
+        currentH3CardId = "";
       }
       if (isInStandaloneContentAfterH2 && tempContentAfterH2) {
         blocks.push({
-          type: 'standalone-content',
-          content: tempContentAfterH2
+          type: "standalone-content",
+          content: tempContentAfterH2,
         });
         isInStandaloneContentAfterH2 = false;
-        tempContentAfterH2 = '';
+        tempContentAfterH2 = "";
       }
       isInStandaloneContentAfterH1 = true;
-      tempContentAfterH1 = '';
+      tempContentAfterH1 = "";
 
-      blocks.push({ type: 'h1', id, content });
+      blocks.push({ type: "h1", id, content });
     } else {
       // 处理普通段落、图片、链接等
       const processedLineContent = `<p>${processInlineMarkdown(
         escapeHtml(line)
       )}</p>`;
-      const isLineContentEmpty = line.trim() === '';
+      const isLineContentEmpty = line.trim() === "";
 
       // 检查当前行是否包含图片
       const imageMatch = line.match(/!\[(.*?)\]\((.*?)\)/);
 
       if (imageMatch) {
-        let imageHtml = '';
+        let imageHtml = "";
 
         if (line.match(/!\[(.*?)\]\((.*\.cif)\)/)) {
           // 转换CIF文件路径
@@ -1080,12 +1080,12 @@ const convertMarkdown = (text) => {
         }
         // 创建图片HTML
 
-        let captionHtml = '';
+        let captionHtml = "";
 
         // 检查图片后的行是否包含图注（处理空行问题）
         // 寻找图片后第一个非空行作为图注
         let j = i + 1;
-        while (j < lines.length && lines[j].trim() === '') {
+        while (j < lines.length && lines[j].trim() === "") {
           j++;
         }
 
@@ -1151,19 +1151,19 @@ const convertMarkdown = (text) => {
   }
 
   if (isInStandaloneContentAfterH1 && tempContentAfterH1) {
-    blocks.push({ type: 'standalone-content', content: tempContentAfterH1 });
+    blocks.push({ type: "standalone-content", content: tempContentAfterH1 });
   }
   if (isInH3Card && currentH3CardHeader) {
     blocks.push({
-      type: 'h3-card',
+      type: "h3-card",
       id: currentH3CardId,
       header: currentH3CardHeader,
-      body: currentH3CardContent
+      body: currentH3CardContent,
     });
   }
   if (isInStandaloneContentAfterH2 && tempContentAfterH2) {
     // 确保每个h2后面的内容都作为单独的el-card处理
-    blocks.push({ type: 'standalone-content', content: tempContentAfterH2 });
+    blocks.push({ type: "standalone-content", content: tempContentAfterH2 });
   }
 
   contentBlocks.value = blocks;
@@ -1214,37 +1214,37 @@ const convertMarkdown = (text) => {
 // 下载功能相关方法
 const downloadPDF = async () => {
   // 创建打印容器
-  const printContainer = document.createElement('div');
-  printContainer.id = 'print-container';
-  printContainer.style.position = 'absolute';
-  printContainer.style.top = '0';
-  printContainer.style.left = '0';
-  printContainer.style.width = '100%';
-  printContainer.style.height = 'auto';
-  printContainer.style.backgroundColor = '#fff';
-  printContainer.style.zIndex = '9999';
-  printContainer.style.padding = '20px';
-  printContainer.style.display = 'none';
-  printContainer.style.boxSizing = 'border-box';
+  const printContainer = document.createElement("div");
+  printContainer.id = "print-container";
+  printContainer.style.position = "absolute";
+  printContainer.style.top = "0";
+  printContainer.style.left = "0";
+  printContainer.style.width = "100%";
+  printContainer.style.height = "auto";
+  printContainer.style.backgroundColor = "#fff";
+  printContainer.style.zIndex = "9999";
+  printContainer.style.padding = "20px";
+  printContainer.style.display = "none";
+  printContainer.style.boxSizing = "border-box";
 
   // 复制当前内容
-  const contentWrapper = document.createElement('div');
-  contentWrapper.style.maxWidth = '210mm';
-  contentWrapper.style.margin = '0 auto';
-  contentWrapper.style.fontSize = '12pt';
-  contentWrapper.style.pageBreakInside = 'auto';
-  contentWrapper.style.overflow = 'visible';
-  contentWrapper.style.height = 'auto';
+  const contentWrapper = document.createElement("div");
+  contentWrapper.style.maxWidth = "210mm";
+  contentWrapper.style.margin = "0 auto";
+  contentWrapper.style.fontSize = "12pt";
+  contentWrapper.style.pageBreakInside = "auto";
+  contentWrapper.style.overflow = "visible";
+  contentWrapper.style.height = "auto";
 
   // 复制所有内容块
-  const contentBlocksCopy = document.createElement('div');
-  contentBlocksCopy.style.pageBreakInside = 'auto';
-  contentBlocksCopy.style.overflow = 'visible';
-  contentBlocksCopy.style.height = 'auto';
+  const contentBlocksCopy = document.createElement("div");
+  contentBlocksCopy.style.pageBreakInside = "auto";
+  contentBlocksCopy.style.overflow = "visible";
+  contentBlocksCopy.style.height = "auto";
 
   // 直接获取el-main内部的所有内容（不包括el-main本身）
   const originalElMain = mainContentRef.value.$el;
-  const contentInsideElMain = document.createElement('div');
+  const contentInsideElMain = document.createElement("div");
 
   // 克隆el-main内部的所有子节点
   for (let i = 0; i < originalElMain.children.length; i++) {
@@ -1261,14 +1261,14 @@ const downloadPDF = async () => {
   }
 
   // 移除所有可能影响打印的高度限制和溢出设置
-  const allElements = contentInsideElMain.querySelectorAll('*');
+  const allElements = contentInsideElMain.querySelectorAll("*");
   allElements.forEach((element) => {
     // 移除内联样式中的高度和溢出限制
-    element.style.height = 'auto';
-    element.style.maxHeight = 'none';
-    element.style.overflow = 'visible';
-    element.style.minHeight = 'auto';
-    element.style.position = 'static';
+    element.style.height = "auto";
+    element.style.maxHeight = "none";
+    element.style.overflow = "visible";
+    element.style.minHeight = "auto";
+    element.style.position = "static";
   });
 
   contentBlocksCopy.appendChild(contentInsideElMain);
@@ -1279,13 +1279,13 @@ const downloadPDF = async () => {
   document.body.appendChild(printContainer);
 
   // 显示打印容器
-  printContainer.style.display = 'block';
+  printContainer.style.display = "block";
 
   // 等待所有内容渲染完成
   await nextTick();
 
   // 添加打印样式
-  const style = document.createElement('style');
+  const style = document.createElement("style");
   style.innerHTML = `
     @media print {
       /* 基本打印设置 */
@@ -1395,8 +1395,8 @@ const downloadPDF = async () => {
   try {
     await window.print();
   } catch (error) {
-    ElMessage.error('打印失败');
-    console.error('打印错误:', error);
+    ElMessage.error("打印失败");
+    console.error("打印错误:", error);
   }
 
   // 移除打印容器
@@ -1408,7 +1408,7 @@ const downloadMarkdown = () => {
   let convertedMarkdown = props.markdown;
 
   // 处理换行符 - 将转义的\n转换为实际的换行符
-  convertedMarkdown = convertedMarkdown.replace(/\\n/g, '\n');
+  convertedMarkdown = convertedMarkdown.replace(/\\n/g, "\n");
 
   // 转换图片路径
   convertedMarkdown = convertedMarkdown.replace(
@@ -1424,7 +1424,7 @@ const downloadMarkdown = () => {
     /\[([^\]]+?)\]\(([^)]+?)\)/g,
     (match, text, url) => {
       // 跳过已经是http/https开头的链接
-      if (url.startsWith('http://') || url.startsWith('https://')) {
+      if (url.startsWith("http://") || url.startsWith("https://")) {
         return match;
       }
       const convertedUrl = convertFilePath(url);
@@ -1434,24 +1434,24 @@ const downloadMarkdown = () => {
 
   // 添加参考文献部分
   if (displayReferences.value && displayReferences.value.length > 0) {
-    convertedMarkdown += '\n\n## References\n';
+    convertedMarkdown += "\n\n## References\n";
 
     displayReferences.value.forEach((ref, index) => {
       const refIndex = index + 1;
-      let refText = '';
+      let refText = "";
 
       // 从HTML中提取纯文本内容，移除HTML标签
       if (ref.html) {
         // 创建临时元素来解析HTML
-        const tempElement = document.createElement('div');
+        const tempElement = document.createElement("div");
         tempElement.innerHTML = ref.html;
 
         // 获取纯文本内容并去掉参考文献编号（因为我们会手动添加）
-        let plainText = tempElement.textContent || tempElement.innerText || '';
+        let plainText = tempElement.textContent || tempElement.innerText || "";
         plainText = plainText.trim();
 
         // 移除开头的编号和点号（如 "1. "）
-        plainText = plainText.replace(/^\d+\.\s+/, '');
+        plainText = plainText.replace(/^\d+\.\s+/, "");
 
         refText = plainText;
       }
@@ -1463,9 +1463,9 @@ const downloadMarkdown = () => {
 
   // 创建Blob对象并下载
   const blob = new Blob([convertedMarkdown], {
-    type: 'text/markdown;charset=utf-8'
+    type: "text/markdown;charset=utf-8",
   });
-  const filename = props.filename || 'document.md';
+  const filename = props.filename || "document.md";
   saveAs(blob, filename);
 };
 
@@ -1559,18 +1559,18 @@ const handleMouseLeave = () => {
 
 const setupImageClickListeners = () => {
   // 移除旧的事件监听器，避免重复绑定
-  const existingImages = document.querySelectorAll('.clickable-image');
+  const existingImages = document.querySelectorAll(".clickable-image");
   existingImages.forEach((img) => {
     const newImg = img.cloneNode(true);
     img.parentNode.replaceChild(newImg, img);
   });
 
   // 添加新的事件监听器和处理高宽比
-  const images = document.querySelectorAll('.clickable-image');
+  const images = document.querySelectorAll(".clickable-image");
   images.forEach((img) => {
     // 加载图片以获取其原始宽高
     const tempImg = new Image();
-    tempImg.src = img.getAttribute('data-src') || img.src;
+    tempImg.src = img.getAttribute("data-src") || img.src;
 
     tempImg.onload = () => {
       // 计算高宽比
@@ -1578,16 +1578,16 @@ const setupImageClickListeners = () => {
 
       // 如果高宽比小于0.5625，则设置宽度为100%
       if (aspectRatio < 0.5625) {
-        img.style.width = '100%';
+        img.style.width = "100%";
       } else {
         // 否则不单独设置宽度，使用默认的百分比宽度
-        img.style.width = '70%';
+        img.style.width = "70%";
       }
     };
 
-    img.addEventListener('click', () => {
-      const src = img.getAttribute('data-src');
-      const alt = img.getAttribute('data-alt');
+    img.addEventListener("click", () => {
+      const src = img.getAttribute("data-src");
+      const alt = img.getAttribute("data-alt");
       openImageViewer(src, alt);
     });
   });
@@ -1626,9 +1626,9 @@ const expandParentMenus = (id) => {
       `.el-sub-menu[index="${menuId}"]`
     );
 
-    if (subMenuItem && !subMenuItem.classList.contains('is-opened')) {
+    if (subMenuItem && !subMenuItem.classList.contains("is-opened")) {
       // 使用 Element Plus 的方法展开菜单
-      const subMenuTitle = subMenuItem.querySelector('.el-sub-menu__title');
+      const subMenuTitle = subMenuItem.querySelector(".el-sub-menu__title");
       if (subMenuTitle) {
         subMenuTitle.click(); // 模拟点击展开
       }
@@ -1650,7 +1650,7 @@ const setupIntersectionObserver = () => {
           // 元素进入可视区域
           visibleHeadings.push({
             id: headingId,
-            top: entry.boundingClientRect.top
+            top: entry.boundingClientRect.top,
           });
         }
       });
@@ -1674,7 +1674,7 @@ const setupIntersectionObserver = () => {
       // 设置交叉比例，当元素有20%进入视口时触发
       threshold: 0.2,
       // 设置边距，提前或延后触发
-      rootMargin: '-10% 0px -70% 0px'
+      rootMargin: "-10% 0px -70% 0px",
     }
   );
 
@@ -1692,7 +1692,7 @@ const setupIntersectionObserver = () => {
 
 // 在 onMounted 中设置 Intersection Observer
 onMounted(async () => {
-  console.log('markdown', props.markdown);
+  console.log("markdown", props.markdown);
   convertMarkdown(props.markdown);
 
   // 使用 nextTick 确保 DOM 更新后处理 CIF 容器和添加图片点击事件
@@ -2010,7 +2010,7 @@ h3 {
 }
 
 /* 确保sticky按钮容器不影响下拉菜单 */
-[style*='position: sticky'] {
+[style*="position: sticky"] {
   overflow: visible !important;
   position: sticky;
 }
@@ -2025,7 +2025,7 @@ h3 {
 .el-main {
   overflow-y: auto !important;
 }
-[ref='mainContentRef'] {
+[ref="mainContentRef"] {
   overflow: visible !important;
 }
 

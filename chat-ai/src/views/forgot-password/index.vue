@@ -13,16 +13,20 @@
         <LangSwitch />
       </div>
       <div class="forgot-password-form">
-        <h2 class="forgot-password-title">{{ $t('forgotPassword.title') }}</h2>
+        <h2 class="forgot-password-title">{{ $t("forgotPassword.title") }}</h2>
 
         <div class="notice-container">
           <el-icon class="notice-icon" color="#e6a23c" :size="64">
             <WarningFilled />
           </el-icon>
-          <h3 class="notice-title">{{ $t('forgotPassword.unavailableTitle') }}</h3>
-          <p class="notice-message">{{ $t('forgotPassword.unavailableMessage') }}</p>
+          <h3 class="notice-title">
+            {{ $t("forgotPassword.unavailableTitle") }}
+          </h3>
+          <p class="notice-message">
+            {{ $t("forgotPassword.unavailableMessage") }}
+          </p>
           <el-button type="primary" class="submit-button" @click="goToLogin">
-            {{ $t('forgotPassword.backToLogin') }}
+            {{ $t("forgotPassword.backToLogin") }}
           </el-button>
         </div>
       </div>
@@ -31,19 +35,21 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
-import { useRoute } from 'vue-router';
-import { onMounted } from 'vue';
-import { redirectIfAuthed } from '@/utils/authRedirect';
-import { WarningFilled } from '@element-plus/icons-vue';
-import LangSwitch from '@/components/LangSwitch.vue';
+import { useRouter } from "vue-router";
+import { useRoute } from "vue-router";
+import { onMounted } from "vue";
+import { redirectIfAuthed } from "@/utils/authRedirect";
+import { WarningFilled } from "@element-plus/icons-vue";
+import LangSwitch from "@/components/LangSwitch.vue";
 
 const router = useRouter();
 const route = useRoute();
-onMounted(() => { redirectIfAuthed(route, router); });
+onMounted(() => {
+  redirectIfAuthed(route, router);
+});
 
 const goToLogin = () => {
-  router.push('/login');
+  router.push("/login");
 };
 </script>
 
@@ -70,13 +76,13 @@ const goToLogin = () => {
   position: relative;
 
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-image: url('@/assets/hex-pattern.png');
+    background-image: url("@/assets/hex-pattern.png");
     background-size: cover;
     opacity: 0.2;
     pointer-events: none;

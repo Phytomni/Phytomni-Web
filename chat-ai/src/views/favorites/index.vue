@@ -1,35 +1,40 @@
 <template>
   <div class="favorites-container">
-
     <!-- 收藏列表 -->
     <div class="favorites-content">
       <div v-if="loading" class="loading-container">
         <el-icon class="is-loading"><Loading /></el-icon>
-        <span>{{ $t('common.loading') }}</span>
+        <span>{{ $t("common.loading") }}</span>
       </div>
 
       <div v-else-if="favoritesList.length === 0" class="empty-container">
         <el-icon class="empty-icon"><Star /></el-icon>
-        <h3>{{ $t('chat.noFavorites') }}</h3>
-        <p>{{ $t('chat.noFavoritesDescription') }}</p>
+        <h3>{{ $t("chat.noFavorites") }}</h3>
+        <p>{{ $t("chat.noFavoritesDescription") }}</p>
         <el-button @click="goToChat" type="primary">
-          {{ $t('chat.startChat') }}
+          {{ $t("chat.startChat") }}
         </el-button>
       </div>
 
       <div v-else class="favorites-list">
         <div class="list-header">
-          <h3>{{ $t('chat.favoritesCount', { count: favoritesList.length }) }}</h3>
-          <el-button @click="refreshFavorites" :loading="refreshing" size="small">
+          <h3>
+            {{ $t("chat.favoritesCount", { count: favoritesList.length }) }}
+          </h3>
+          <el-button
+            @click="refreshFavorites"
+            :loading="refreshing"
+            size="small"
+          >
             <el-icon><Refresh /></el-icon>
-            {{ $t('common.refresh') }}
+            {{ $t("common.refresh") }}
           </el-button>
         </div>
 
         <div class="favorites-grid">
-          <div 
-            v-for="favorite in favoritesList" 
-            :key="favorite.id" 
+          <div
+            v-for="favorite in favoritesList"
+            :key="favorite.id"
             class="favorite-item"
             @click="openChat(favorite)"
           >
@@ -39,27 +44,34 @@
                 <span class="title-text">{{ favorite.title }}</span>
               </div>
               <div class="favorite-actions" @click.stop>
-                <el-dropdown trigger="click" @command="(command) => handleFavoriteAction(command, favorite)">
+                <el-dropdown
+                  trigger="click"
+                  @command="
+                    (command) => handleFavoriteAction(command, favorite)
+                  "
+                >
                   <el-icon class="action-icon">
                     <MoreFilled />
                   </el-icon>
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item command="rename" :icon="Edit">
-                        {{ $t('chat.actions.rename') }}
+                        {{ $t("chat.actions.rename") }}
                       </el-dropdown-item>
                       <el-dropdown-item command="unfavorite" :icon="Star">
-                        {{ $t('chat.actions.unfavorite') }}
+                        {{ $t("chat.actions.unfavorite") }}
                       </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
               </div>
             </div>
-            
+
             <div class="favorite-content">
               <div class="favorite-meta">
-                <span class="favorite-date">{{ formatDate(favorite.date) }}</span>
+                <span class="favorite-date">{{
+                  formatDate(favorite.date)
+                }}</span>
                 <span class="favorite-id">ID: {{ favorite.id }}</span>
               </div>
               <div class="favorite-preview">
@@ -68,8 +80,12 @@
             </div>
 
             <div class="favorite-footer">
-              <el-button size="small" @click.stop="openChat(favorite)" type="primary">
-                {{ $t('chat.openChat') }}
+              <el-button
+                size="small"
+                @click.stop="openChat(favorite)"
+                type="primary"
+              >
+                {{ $t("chat.openChat") }}
               </el-button>
             </div>
           </div>
@@ -100,23 +116,21 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="renameDialogVisible = false">
-            {{ $t('common.cancel') }}
+            {{ $t("common.cancel") }}
           </el-button>
           <el-button type="primary" @click="handleRenameConfirm">
-            {{ $t('common.confirm') }}
+            {{ $t("common.confirm") }}
           </el-button>
         </span>
       </template>
     </el-dialog>
-
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   ArrowLeft,
   Star,
@@ -124,8 +138,8 @@ import {
   MoreFilled,
   Loading,
   Refresh,
-} from '@element-plus/icons-vue';
-import { getCollectHistory, renameHistory, collectHistory } from '@/api/chat';
+} from "@element-plus/icons-vue";
+import { getCollectHistory, renameHistory, collectHistory } from "@/api/chat";
 
 const router = useRouter();
 
@@ -146,21 +160,19 @@ const favoritesList = ref<FavoriteItem[]>([]);
 // 重命名对话框相关
 const renameDialogVisible = ref(false);
 const renameForm = ref({
-  title: '',
+  title: "",
 });
 const renameFormRef = ref();
 const renameRules = {
-  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  title: [{ required: true, message: "请输入标题", trigger: "blur" }],
 };
 const favoriteToRename = ref<FavoriteItem | null>(null);
-
-
 
 // 获取收藏列表
 const fetchFavorites = async () => {
   loading.value = true;
   try {
-    const response = await getCollectHistory({ id: '' }); // 获取所有收藏
+    const response = await getCollectHistory({ id: "" }); // 获取所有收藏
     if (response.code === 200 && response.data) {
       favoritesList.value = response.data.map((item: any) => ({
         id: item.id,
@@ -170,11 +182,11 @@ const fetchFavorites = async () => {
         isFavorite: true,
       }));
     } else {
-      ElMessage.error(response.msg || '获取收藏列表失败');
+      ElMessage.error(response.msg || "获取收藏列表失败");
     }
   } catch (error) {
-    console.error('获取收藏列表失败:', error);
-    ElMessage.error('获取收藏列表失败');
+    console.error("获取收藏列表失败:", error);
+    ElMessage.error("获取收藏列表失败");
   } finally {
     loading.value = false;
   }
@@ -190,12 +202,12 @@ const refreshFavorites = async () => {
 // 处理收藏项操作
 const handleFavoriteAction = (command: string, favorite: FavoriteItem) => {
   switch (command) {
-    case 'rename':
+    case "rename":
       renameForm.value.title = favorite.title;
       favoriteToRename.value = favorite;
       renameDialogVisible.value = true;
       break;
-    case 'unfavorite':
+    case "unfavorite":
       handleUnfavorite(favorite);
       break;
   }
@@ -203,66 +215,68 @@ const handleFavoriteAction = (command: string, favorite: FavoriteItem) => {
 
 // 取消收藏
 const handleUnfavorite = async (favorite: FavoriteItem) => {
-  console.log(favorite,'favorite');
+  console.log(favorite, "favorite");
   try {
     const formData = new FormData();
-    formData.append('id', favorite.id.toString());
-    formData.append('collect_type', '0'); // 0表示取消收藏
-    
+    formData.append("id", favorite.id.toString());
+    formData.append("collect_type", "0"); // 0表示取消收藏
+
     const response = await collectHistory(formData);
     if (response.code === 200) {
-      ElMessage.success('已取消收藏');
+      ElMessage.success("已取消收藏");
       // 从列表中移除
-      const index = favoritesList.value.findIndex(item => item.id === favorite.id);
+      const index = favoritesList.value.findIndex(
+        (item) => item.id === favorite.id
+      );
       if (index !== -1) {
         favoritesList.value.splice(index, 1);
       }
     } else {
-      ElMessage.error(response.msg || '取消收藏失败');
+      ElMessage.error(response.msg || "取消收藏失败");
     }
   } catch (error) {
-    console.error('取消收藏失败:', error);
-    ElMessage.error('取消收藏失败');
+    console.error("取消收藏失败:", error);
+    ElMessage.error("取消收藏失败");
   }
 };
 
 // 重命名确认
 const handleRenameConfirm = async () => {
   if (!renameFormRef.value || !favoriteToRename.value) return;
-  
+
   try {
     const valid = await renameFormRef.value.validate();
     if (valid) {
       const formData = new FormData();
-      formData.append('id', favoriteToRename.value.id.toString());
-      formData.append('rename', renameForm.value.title);
-      
+      formData.append("id", favoriteToRename.value.id.toString());
+      formData.append("rename", renameForm.value.title);
+
       const response = await renameHistory(formData);
       if (response.code === 200) {
-        ElMessage.success('重命名成功');
+        ElMessage.success("重命名成功");
         // 更新本地数据
-        const index = favoritesList.value.findIndex(item => item.id === favoriteToRename.value!.id);
+        const index = favoritesList.value.findIndex(
+          (item) => item.id === favoriteToRename.value!.id
+        );
         if (index !== -1) {
           favoritesList.value[index].title = renameForm.value.title;
         }
         renameDialogVisible.value = false;
         favoriteToRename.value = null;
       } else {
-        ElMessage.error(response.msg || '重命名失败');
+        ElMessage.error(response.msg || "重命名失败");
       }
     }
   } catch (error) {
-    console.error('重命名失败:', error);
-    ElMessage.error('重命名失败');
+    console.error("重命名失败:", error);
+    ElMessage.error("重命名失败");
   }
 };
-
-
 
 // 处理重命名对话框关闭
 const handleRenameDialogClose = () => {
   favoriteToRename.value = null;
-  renameForm.value.title = '';
+  renameForm.value.title = "";
   if (renameFormRef.value) {
     renameFormRef.value.resetFields();
   }
@@ -275,23 +289,23 @@ const openChat = (favorite: FavoriteItem) => {
 
 // 返回聊天页面
 const goBack = () => {
-  router.push('/chat');
+  router.push("/chat");
 };
 
 // 跳转到聊天页面
 const goToChat = () => {
-  router.push('/chat');
+  router.push("/chat");
 };
 
 // 格式化日期
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 };
 
@@ -308,15 +322,15 @@ onMounted(() => {
   padding: 20px;
 }
 
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 30px;
-    padding: 24px;
-    background: var(--page-card-bg);
-    border-radius: 12px;
-    box-shadow: var(--page-card-shadow);
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 30px;
+  padding: 24px;
+  background: var(--page-card-bg);
+  border-radius: 12px;
+  box-shadow: var(--page-card-shadow);
 
   .header-content {
     h1 {
@@ -521,8 +535,6 @@ onMounted(() => {
   gap: 12px;
 }
 
-
-
 // 响应式设计
 @media (max-width: 768px) {
   .favorites-container {
@@ -545,4 +557,4 @@ onMounted(() => {
     padding: 16px !important;
   }
 }
-</style> 
+</style>

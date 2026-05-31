@@ -18,7 +18,7 @@ export default function (
   const all_permission = "*:*:*";
   const permissions = store.permissions;
   if (Array.isArray(permissionFlag) && permissionFlag.length) {
-    const hasPermissions = permissions.some(permission => {
+    const hasPermissions = permissions.some((permission) => {
       return (
         all_permission === permission || permissionFlag.includes(permission)
       );

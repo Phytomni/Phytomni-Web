@@ -4,31 +4,38 @@
     <div class="history-content">
       <div v-if="loading" class="loading-container">
         <el-icon class="is-loading"><Loading /></el-icon>
-        <span>{{ $t('common.loading') }}</span>
+        <span>{{ $t("common.loading") }}</span>
       </div>
 
       <div v-else-if="historyList.length === 0" class="empty-container">
         <el-icon><Document /></el-icon>
-        <h3>{{ $t('history.noHistory') }}</h3>
-        <p>{{ $t('history.noHistoryDescription') }}</p>
+        <h3>{{ $t("history.noHistory") }}</h3>
+        <p>{{ $t("history.noHistoryDescription") }}</p>
         <el-button @click="goToChat" type="primary">
-          {{ $t('chat.startChat') }}
+          {{ $t("chat.startChat") }}
         </el-button>
       </div>
 
       <div v-else class="history-list">
         <div class="list-header">
-          <h3>{{ $t('history.historyCount', { count: historyList.length }) }}</h3>
-          <el-button class="refresh-btn" @click="refreshHistory" :loading="refreshing" size="small">
+          <h3>
+            {{ $t("history.historyCount", { count: historyList.length }) }}
+          </h3>
+          <el-button
+            class="refresh-btn"
+            @click="refreshHistory"
+            :loading="refreshing"
+            size="small"
+          >
             <el-icon><Refresh /></el-icon>
-            {{ $t('common.refresh') }}
+            {{ $t("common.refresh") }}
           </el-button>
         </div>
 
         <div class="history-grid">
-          <div 
-            v-for="history in historyList" 
-            :key="history.id" 
+          <div
+            v-for="history in historyList"
+            :key="history.id"
             class="history-item"
             @click="openChat(history)"
           >
@@ -38,27 +45,34 @@
                 <span class="title-text">{{ history.title_query }}</span>
               </div>
               <div class="history-actions" @click.stop>
-                <el-dropdown trigger="click" @command="(command) => handleHistoryAction(command, history)">
+                <el-dropdown
+                  trigger="click"
+                  @command="(command) => handleHistoryAction(command, history)"
+                >
                   <el-icon class="action-icon">
                     <MoreFilled />
                   </el-icon>
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item command="rename" :icon="Edit">
-                        {{ $t('chat.actions.rename') }}
+                        {{ $t("chat.actions.rename") }}
                       </el-dropdown-item>
                       <el-dropdown-item command="delete" :icon="Delete" divided>
-                        <span style="color: #f56c6c">{{ $t('chat.actions.delete') }}</span>
+                        <span style="color: #f56c6c">{{
+                          $t("chat.actions.delete")
+                        }}</span>
                       </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
               </div>
             </div>
-            
+
             <div class="history-content">
               <div class="history-meta">
-                <span class="history-date">{{ formatDate(history.created_at) }}</span>
+                <span class="history-date">{{
+                  formatDate(history.created_at)
+                }}</span>
                 <span class="history-id">ID: {{ history.id }}</span>
               </div>
               <div class="history-preview">
@@ -67,8 +81,12 @@
             </div>
 
             <div class="history-footer">
-              <el-button size="small" @click.stop="openChat(history)" type="primary">
-                {{ $t('chat.openChat') }}
+              <el-button
+                size="small"
+                @click.stop="openChat(history)"
+                type="primary"
+              >
+                {{ $t("chat.openChat") }}
               </el-button>
             </div>
           </div>
@@ -99,10 +117,10 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="renameDialogVisible = false">
-            {{ $t('common.cancel') }}
+            {{ $t("common.cancel") }}
           </el-button>
           <el-button type="primary" @click="handleRenameConfirm">
-            {{ $t('common.confirm') }}
+            {{ $t("common.confirm") }}
           </el-button>
         </span>
       </template>
@@ -118,16 +136,18 @@
     >
       <div class="delete-confirm-content">
         <el-icon class="warning-icon"><Warning /></el-icon>
-        <p>{{ $t('chat.actions.deleteWarning') }}</p>
-        <p class="history-title-to-delete">{{ historyToDelete?.title_query }}</p>
+        <p>{{ $t("chat.actions.deleteWarning") }}</p>
+        <p class="history-title-to-delete">
+          {{ historyToDelete?.title_query }}
+        </p>
       </div>
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="deleteDialogVisible = false">
-            {{ $t('common.cancel') }}
+            {{ $t("common.cancel") }}
           </el-button>
           <el-button type="danger" @click="handleDeleteConfirm">
-            {{ $t('common.confirm') }}
+            {{ $t("common.confirm") }}
           </el-button>
         </span>
       </template>
@@ -136,9 +156,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
+import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import {
   Document,
   Loading,
@@ -147,9 +167,13 @@ import {
   Edit,
   Delete,
   Warning,
-} from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
-import { getHistoryQuestionList, deleteHistory, renameHistory } from '@/api/chat';
+} from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import {
+  getHistoryQuestionList,
+  deleteHistory,
+  renameHistory,
+} from "@/api/chat";
 
 // 定义History接口 - 匹配API返回的数据结构
 interface History {
@@ -170,11 +194,11 @@ const historyList = ref<History[]>([]);
 // 重命名对话框相关
 const renameDialogVisible = ref(false);
 const renameForm = ref({
-  title: '',
+  title: "",
 });
 const renameFormRef = ref();
 const renameRules = {
-  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  title: [{ required: true, message: "请输入标题", trigger: "blur" }],
 };
 const historyToRename = ref<History | null>(null);
 
@@ -190,12 +214,12 @@ const fetchHistoryData = async () => {
     if (res.code === 200 && res.data) {
       historyList.value = res.data;
     } else {
-      ElMessage.error(res.msg || '获取历史记录失败');
+      ElMessage.error(res.msg || "获取历史记录失败");
       historyList.value = [];
     }
   } catch (error) {
-    console.error('获取历史记录失败:', error);
-    ElMessage.error('获取历史记录失败');
+    console.error("获取历史记录失败:", error);
+    ElMessage.error("获取历史记录失败");
     historyList.value = [];
   } finally {
     loading.value = false;
@@ -207,10 +231,10 @@ const refreshHistory = async () => {
   refreshing.value = true;
   try {
     await fetchHistoryData();
-    ElMessage.success('刷新成功');
+    ElMessage.success("刷新成功");
   } catch (error) {
-    console.error('刷新失败:', error);
-    ElMessage.error('刷新失败');
+    console.error("刷新失败:", error);
+    ElMessage.error("刷新失败");
   } finally {
     refreshing.value = false;
   }
@@ -223,18 +247,18 @@ const openChat = (history: History) => {
 
 // 跳转到聊天页面
 const goToChat = () => {
-  router.push('/chat');
+  router.push("/chat");
 };
 
 // 处理历史记录操作
 const handleHistoryAction = (command: string, history: History) => {
   switch (command) {
-    case 'rename':
+    case "rename":
       renameForm.value.title = history.title_query;
       historyToRename.value = history;
       renameDialogVisible.value = true;
       break;
-    case 'delete':
+    case "delete":
       historyToDelete.value = history;
       deleteDialogVisible.value = true;
       break;
@@ -250,26 +274,28 @@ const handleRenameConfirm = async () => {
     if (valid) {
       // 调用重命名 API
       const formData = new FormData();
-      formData.append('id', historyToRename.value.id.toString());
-      formData.append('rename', renameForm.value.title);
+      formData.append("id", historyToRename.value.id.toString());
+      formData.append("rename", renameForm.value.title);
 
       const res = await renameHistory(formData);
       if (res.code === 200) {
         // 更新本地数据
-        const index = historyList.value.findIndex(h => h.id === historyToRename.value!.id);
+        const index = historyList.value.findIndex(
+          (h) => h.id === historyToRename.value!.id
+        );
         if (index !== -1) {
           historyList.value[index].title_query = renameForm.value.title;
         }
         renameDialogVisible.value = false;
         historyToRename.value = null;
-        ElMessage.success('重命名成功');
+        ElMessage.success("重命名成功");
       } else {
-        ElMessage.error(res.msg || '重命名失败');
+        ElMessage.error(res.msg || "重命名失败");
       }
     }
   } catch (error) {
-    console.error('重命名失败:', error);
-    ElMessage.error('重命名失败，请重试');
+    console.error("重命名失败:", error);
+    ElMessage.error("重命名失败，请重试");
   }
 };
 
@@ -280,31 +306,33 @@ const handleDeleteConfirm = async () => {
   try {
     // 调用删除 API
     const formData = new FormData();
-    formData.append('id', historyToDelete.value.id.toString());
+    formData.append("id", historyToDelete.value.id.toString());
 
     const res = await deleteHistory(formData);
     if (res.code === 200) {
       // 从本地列表中移除
-      const index = historyList.value.findIndex(h => h.id === historyToDelete.value!.id);
+      const index = historyList.value.findIndex(
+        (h) => h.id === historyToDelete.value!.id
+      );
       if (index !== -1) {
         historyList.value.splice(index, 1);
       }
       deleteDialogVisible.value = false;
       historyToDelete.value = null;
-      ElMessage.success('删除成功');
+      ElMessage.success("删除成功");
     } else {
-      ElMessage.error(res.msg || '删除失败');
+      ElMessage.error(res.msg || "删除失败");
     }
   } catch (error) {
-    console.error('删除失败:', error);
-    ElMessage.error('删除失败，请重试');
+    console.error("删除失败:", error);
+    ElMessage.error("删除失败，请重试");
   }
 };
 
 // 处理重命名对话框关闭
 const handleRenameDialogClose = () => {
   historyToRename.value = null;
-  renameForm.value.title = '';
+  renameForm.value.title = "";
   if (renameFormRef.value) {
     renameFormRef.value.resetFields();
   }
@@ -313,12 +341,12 @@ const handleRenameDialogClose = () => {
 // 格式化日期
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 };
 

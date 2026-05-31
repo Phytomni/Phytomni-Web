@@ -1,15 +1,15 @@
 <template>
   <div class="markdown-viewer">
     <!-- 当需要打字效果时使用 Typewriter 组件 -->
-    <Typewriter 
+    <Typewriter
       v-if="instantMessage"
       :typing="{
         step: 10,
-        interval: 20
-      }" 
+        interval: 20,
+      }"
       :content="content"
       :is-markdown="true"
-      @finish="handleFinish" 
+      @finish="handleFinish"
     />
     <!-- 当不需要打字效果时直接渲染 markdown 内容 -->
     <div v-else class="markdown-content" v-html="renderedContent"></div>
@@ -17,17 +17,17 @@
 </template>
 
 <script setup lang="ts">
-import { Typewriter } from 'vue-element-plus-x'
-import { computed } from 'vue'
+import { Typewriter } from "vue-element-plus-x";
+import { computed } from "vue";
 
 const props = defineProps<{
-  content: string,
-  instantMessage?: boolean
-}>()
+  content: string;
+  instantMessage?: boolean;
+}>();
 
 const emit = defineEmits<{
-  finish: []
-}>()
+  finish: [];
+}>();
 
 // 当不需要打字效果时，直接渲染内容
 const renderedContent = computed(() => {
@@ -35,44 +35,50 @@ const renderedContent = computed(() => {
     // 更完整的 markdown 渲染
     let content = props.content
       // 代码块
-      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+      .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
       // 行内代码
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
       // 粗体
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
       // 斜体
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/\*(.*?)\*/g, "<em>$1</em>")
       // 标题
-      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/^### (.*$)/gim, "<h3>$1</h3>")
+      .replace(/^## (.*$)/gim, "<h2>$1</h2>")
+      .replace(/^# (.*$)/gim, "<h1>$1</h1>")
       // 图片
       .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
-        console.log('渲染图片:', { match, alt, src });
+        console.log("渲染图片:", { match, alt, src });
         return `<img src="${src}" alt="${alt}" style="max-width: 50%; height: auto; border-radius: 4px; margin: 8px 0;" />`;
       })
       // 链接
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+      .replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        '<a href="$2" target="_blank">$1</a>'
+      )
       // 列表
-      .replace(/^\* (.*$)/gim, '<li>$1</li>')
-      .replace(/^- (.*$)/gim, '<li>$1</li>')
+      .replace(/^\* (.*$)/gim, "<li>$1</li>")
+      .replace(/^- (.*$)/gim, "<li>$1</li>")
       // 换行
-      .replace(/\n/g, '<br>')
-    
+      .replace(/\n/g, "<br>");
+
     // 处理列表
-    content = content.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
-    
+    content = content.replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>");
+
     // 处理段落中的图片（确保图片前后有适当的间距）
-    content = content.replace(/(<img[^>]*>)/g, '<p style="text-align: center; margin: 16px 0;">$1</p>')
-    
-    return content
+    content = content.replace(
+      /(<img[^>]*>)/g,
+      '<p style="text-align: center; margin: 16px 0;">$1</p>'
+    );
+
+    return content;
   }
-  return ''
-})
+  return "";
+});
 
 const handleFinish = () => {
-  emit('finish')
-}
+  emit("finish");
+};
 </script>
 
 <style lang="scss">
@@ -83,38 +89,51 @@ const handleFinish = () => {
   }
 
   .markdown-content {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+      Helvetica, Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
     word-wrap: break-word;
     color: #1f2328;
     background-color: transparent;
-    
-    h1, h2, h3, h4, h5, h6 {
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
       margin: 16px 0 8px;
       line-height: 1.25;
       font-weight: 600;
       color: var(--el-text-color-primary);
     }
-    
-    h1 { font-size: 1.5em; }
-    h2 { font-size: 1.3em; }
-    h3 { font-size: 1.1em; }
-    
+
+    h1 {
+      font-size: 1.5em;
+    }
+    h2 {
+      font-size: 1.3em;
+    }
+    h3 {
+      font-size: 1.1em;
+    }
+
     p {
       margin: 8px 0;
       line-height: 1.6;
     }
-    
-    ul, ol {
+
+    ul,
+    ol {
       padding-left: 2em;
       margin: 8px 0;
     }
-    
+
     li {
       margin: 4px 0;
     }
-    
+
     pre {
       background-color: var(--el-fill-color-light);
       margin: 12px 0;
@@ -122,28 +141,29 @@ const handleFinish = () => {
       border-radius: 4px;
       overflow-x: auto;
     }
-    
+
     code {
       background-color: var(--el-fill-color);
       padding: 0.2em 0.4em;
       border-radius: 4px;
-      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas,
+        Liberation Mono, monospace;
     }
-    
+
     pre code {
       background-color: transparent;
       padding: 0;
     }
-    
+
     a {
       color: var(--el-color-primary);
       text-decoration: none;
-      
+
       &:hover {
         text-decoration: underline;
       }
     }
-    
+
     blockquote {
       color: var(--el-text-color-secondary);
       border-left: 0.25em solid var(--el-border-color);
@@ -176,7 +196,8 @@ const handleFinish = () => {
   }
 
   .markdown-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+      Helvetica, Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
     word-wrap: break-word;
@@ -195,7 +216,8 @@ const handleFinish = () => {
       background-color: var(--el-fill-color);
       padding: 0.2em 0.4em;
       border-radius: 4px;
-      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas,
+        Liberation Mono, monospace;
     }
 
     table {
@@ -220,7 +242,8 @@ const handleFinish = () => {
       line-height: 1.6;
     }
 
-    ul, ol {
+    ul,
+    ol {
       padding-left: 2em;
       margin: 8px 0;
     }
@@ -232,7 +255,12 @@ const handleFinish = () => {
       margin: 12px 0;
     }
 
-    h1, h2, h3, h4, h5, h6 {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
       margin: 16px 0 8px;
       line-height: 1.25;
       font-weight: 600;
@@ -254,7 +282,7 @@ const handleFinish = () => {
     a {
       color: var(--el-color-primary);
       text-decoration: none;
-      
+
       &:hover {
         text-decoration: underline;
       }

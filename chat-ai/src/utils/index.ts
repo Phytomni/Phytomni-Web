@@ -23,21 +23,24 @@ export function removeToken() {
   return Cookies.remove(TokenKey);
 }
 
-
 /**
-* 参数处理
-* @param {*} params  参数
-*/
-export function tansParams(params: { [x: string]: any; }) {
-  let result = ''
+ * 参数处理
+ * @param {*} params  参数
+ */
+export function tansParams(params: { [x: string]: any }) {
+  let result = "";
   for (const propName of Object.keys(params)) {
     const value = params[propName];
     const part = encodeURIComponent(propName) + "=";
-    if (value !== null && value !== "" && typeof (value) !== "undefined") {
-      if (typeof value === 'object') {
+    if (value !== null && value !== "" && typeof value !== "undefined") {
+      if (typeof value === "object") {
         for (const key of Object.keys(value)) {
-          if (value[key] !== null && value !== "" && typeof (value[key]) !== 'undefined') {
-            const params = propName + '[' + key + ']';
+          if (
+            value[key] !== null &&
+            value !== "" &&
+            typeof value[key] !== "undefined"
+          ) {
+            const params = propName + "[" + key + "]";
             const subPart = encodeURIComponent(params) + "=";
             result += subPart + encodeURIComponent(value[key]) + "&";
           }
@@ -47,11 +50,11 @@ export function tansParams(params: { [x: string]: any; }) {
       }
     }
   }
-  return result
+  return result;
 }
 
 // 验证是否为blob格式
-export async function blobValidate(data: { text: () => any; }) {
+export async function blobValidate(data: { text: () => any }) {
   try {
     const text = await data.text();
     JSON.parse(text);

@@ -1,82 +1,112 @@
 <template>
   <div class="chat-container">
     <!-- 教学引导遮罩层 -->
-    <div v-if="showTutorial" class="tutorial-overlay" @click="handleTutorialOverlayClick">
+    <div
+      v-if="showTutorial"
+      class="tutorial-overlay"
+      @click="handleTutorialOverlayClick"
+    >
       <!-- 第一步：左侧侧边栏高亮 -->
       <div v-if="currentTutorialStep === 1" class="tutorial-step-1">
         <!-- 左侧侧边栏高亮区域 -->
         <div class="sidebar-highlight-area"></div>
         <!-- 教学内容 -->
         <div class="tutorial-content sidebar-tutorial">
-          <h3>{{ $t('tutorial.step1.title') }}</h3>
-          <p>{{ $t('tutorial.step1.content') }}</p>
+          <h3>{{ $t("tutorial.step1.title") }}</h3>
+          <p>{{ $t("tutorial.step1.content") }}</p>
           <div class="tutorial-actions">
-            <el-button type="primary" @click="nextTutorialStep">{{ $t('tutorial.nextStep') }}</el-button>
+            <el-button type="primary" @click="nextTutorialStep">{{
+              $t("tutorial.nextStep")
+            }}</el-button>
             <div class="tutorial-hint">
-              <small>{{ $t('tutorial.navigationHint') }}</small>
+              <small>{{ $t("tutorial.navigationHint") }}</small>
             </div>
           </div>
         </div>
       </div>
-      
+
       <!-- 第二步：底部案例栏高亮 -->
       <div v-if="currentTutorialStep === 2" class="tutorial-step-2">
         <!-- 底部案例栏高亮区域 -->
         <div class="bottom-highlight-area"></div>
         <!-- 教学内容 -->
         <div class="tutorial-content bottom-tutorial">
-          <h3>{{ $t('tutorial.step2.title') }}</h3>
-          <p>{{ $t('tutorial.step2.content') }}</p>
+          <h3>{{ $t("tutorial.step2.title") }}</h3>
+          <p>{{ $t("tutorial.step2.content") }}</p>
           <div class="tutorial-actions">
-            <el-button @click="prevTutorialStep">{{ $t('tutorial.prevStep') }}</el-button>
-            <el-button type="primary" @click="nextTutorialStep">{{ $t('tutorial.nextStep') }}</el-button>
+            <el-button @click="prevTutorialStep">{{
+              $t("tutorial.prevStep")
+            }}</el-button>
+            <el-button type="primary" @click="nextTutorialStep">{{
+              $t("tutorial.nextStep")
+            }}</el-button>
             <div class="tutorial-hint">
-              <small>{{ $t('tutorial.navigationHint') }}</small>
+              <small>{{ $t("tutorial.navigationHint") }}</small>
             </div>
           </div>
         </div>
       </div>
-      
+
       <!-- 第三步：对话栏高亮 -->
       <div v-if="currentTutorialStep === 3" class="tutorial-step-3">
         <!-- 对话输入区高亮区域 -->
         <div class="input-highlight-area"></div>
         <!-- 教学内容 -->
         <div class="tutorial-content input-tutorial">
-          <h3>{{ $t('tutorial.step3.title') }}</h3>
-          <p>{{ $t('tutorial.step3.content') }}</p>
+          <h3>{{ $t("tutorial.step3.title") }}</h3>
+          <p>{{ $t("tutorial.step3.content") }}</p>
           <div class="tutorial-actions">
-            <el-button @click="prevTutorialStep">{{ $t('tutorial.prevStep') }}</el-button>
-            <el-button type="primary" @click="completeTutorial">{{ $t('tutorial.complete') }}</el-button>
+            <el-button @click="prevTutorialStep">{{
+              $t("tutorial.prevStep")
+            }}</el-button>
+            <el-button type="primary" @click="completeTutorial">{{
+              $t("tutorial.complete")
+            }}</el-button>
             <div class="tutorial-hint">
-              <small>{{ $t('tutorial.navigationHint') }}</small>
+              <small>{{ $t("tutorial.navigationHint") }}</small>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-
-
     <!-- 左侧侧边栏 -->
-    <Sidebar :chatList="chatList" :currentChatId="currentChatId" :collapsed="leftSidebarCollapsed"
+    <Sidebar
+      :chatList="chatList"
+      :currentChatId="currentChatId"
+      :collapsed="leftSidebarCollapsed"
       :showTutorial="showTutorial && currentTutorialStep === 1"
-      @selectChat="selectChat" @startNewChat="startNewChat" @openKnowledgeBase="openKnowledgeBase"
-      @handleSidebarCollapse="handleSidebarCollapse" @startTutorial="startTutorial" />
+      @selectChat="selectChat"
+      @startNewChat="startNewChat"
+      @openKnowledgeBase="openKnowledgeBase"
+      @handleSidebarCollapse="handleSidebarCollapse"
+      @startTutorial="startTutorial"
+    />
     <!-- 中间聊天区域 -->
     <div class="chat-main">
       <div class="chat-header">
         <router-link v-if="UserStore.permission !== 'guest'" to="/help">
-          <h2>{{ $t('chat.title') }}</h2>
+          <h2>{{ $t("chat.title") }}</h2>
         </router-link>
         <div v-else></div>
         <div class="header-controls">
           <LangSwitch class="header-lang-switch" />
-          <el-button v-if="isDevelopment" type="primary" size="small" @click="startTutorial" style="margin-left: 10px;">
-            {{ $t('tutorial.restartTutorial') }}
+          <el-button
+            v-if="isDevelopment"
+            type="primary"
+            size="small"
+            @click="startTutorial"
+            style="margin-left: 10px"
+          >
+            {{ $t("tutorial.restartTutorial") }}
           </el-button>
-          <el-button v-if="isDevelopment" type="primary" size="small" @click="testParallelChats"
-            style="margin-left: 10px;">
+          <el-button
+            v-if="isDevelopment"
+            type="primary"
+            size="small"
+            @click="testParallelChats"
+            style="margin-left: 10px"
+          >
             测试并行对话
           </el-button>
         </div>
@@ -85,32 +115,59 @@
       <!-- 消息区域 -->
       <div class="message-container" ref="messageContainer" :key="timestamp">
         <template v-if="currentChat?.messages?.length">
-          <div v-for="(message, index) in currentChat.messages" :key="index" class="message" :class="message.role">
+          <div
+            v-for="(message, index) in currentChat.messages"
+            :key="index"
+            class="message"
+            :class="message.role"
+          >
             <!-- 只有助手消息才显示头像 -->
             <div v-if="message.role === 'assistant'" class="message-avatar">
               <el-avatar :size="36" :src="botAvatar" />
             </div>
             <div class="message-content">
               <!-- 用户消息或没有思考步骤的回答 -->
-              <div v-if="message.role === 'user' || (!message.steps && !message.tableHeaders)" class="message-text"
-                :class="{ 'has-user': message.role === 'user' }">
-
+              <div
+                v-if="
+                  message.role === 'user' ||
+                  (!message.steps && !message.tableHeaders)
+                "
+                class="message-text"
+                :class="{ 'has-user': message.role === 'user' }"
+              >
                 <!-- 日志视图 - 左右两栏布局 -->
-                <div v-if="message.role === 'assistant' && message.tool_name === 'AnalystAgent' && message.showLog"
-                  class="log-view-container">
+                <div
+                  v-if="
+                    message.role === 'assistant' &&
+                    message.tool_name === 'AnalystAgent' &&
+                    message.showLog
+                  "
+                  class="log-view-container"
+                >
                   <div class="log-view-left">
                     <h4>回复内容</h4>
                     <MarkdownViewer
-                      :instantMessage="(message?.instantMessage && currentChat.messages.length - 1 == index) || false"
-                      :content="message.content" @finish="() => handleMarkdownFinish(index)" />
+                      :instantMessage="
+                        (message?.instantMessage &&
+                          currentChat.messages.length - 1 == index) ||
+                        false
+                      "
+                      :content="message.content"
+                      @finish="() => handleMarkdownFinish(index)"
+                    />
                   </div>
                   <div class="log-view-right">
                     <h4>执行日志 (ID: {{ message.id }})</h4>
 
                     <!-- 更新日志按钮 -->
                     <div class="log-actions">
-                      <el-button type="primary" size="small" @click="updateLog(message.task_id)"
-                        :loading="updatingLog[message.task_id || '']" :disabled="!message.task_id">
+                      <el-button
+                        type="primary"
+                        size="small"
+                        @click="updateLog(message.task_id)"
+                        :loading="updatingLog[message.task_id || '']"
+                        :disabled="!message.task_id"
+                      >
                         <el-icon>
                           <Refresh />
                         </el-icon>
@@ -118,26 +175,51 @@
                       </el-button>
                     </div>
 
-                    <div v-if="loadingLog[message.id || '']" class="log-loading">
+                    <div
+                      v-if="loadingLog[message.id || '']"
+                      class="log-loading"
+                    >
                       <el-icon class="is-loading">
                         <Loading />
                       </el-icon>
                       加载日志中...
                     </div>
-                    <div v-else-if="logData[message.id || '']" class="log-content">
+                    <div
+                      v-else-if="logData[message.id || '']"
+                      class="log-content"
+                    >
                       <!-- 新的日志渲染逻辑 -->
-                      <div v-if="typeof logData[message.id || ''] === 'string'" class="log-text-content">
-                        <pre class="log-pre" v-html="formatLogContentWithColors(logData[message.id || ''])"></pre>
+                      <div
+                        v-if="typeof logData[message.id || ''] === 'string'"
+                        class="log-text-content"
+                      >
+                        <pre
+                          class="log-pre"
+                          v-html="
+                            formatLogContentWithColors(
+                              logData[message.id || '']
+                            )
+                          "
+                        ></pre>
                       </div>
                       <!-- 原有的表格渲染逻辑（向后兼容） -->
-                      <el-table v-else-if="Array.isArray(logData[message.id || ''])" :data="logData[message.id || '']"
-                        border style="width: 100%">
-                        <el-table-column prop="content" label="日志内容" align="left" />
+                      <el-table
+                        v-else-if="Array.isArray(logData[message.id || ''])"
+                        :data="logData[message.id || '']"
+                        border
+                        style="width: 100%"
+                      >
+                        <el-table-column
+                          prop="content"
+                          label="日志内容"
+                          align="left"
+                        />
                       </el-table>
                     </div>
                     <div v-else class="log-error">
-                      暂无日志数据 (loadingLog: {{ loadingLog[message.id || ''] }}, logData: {{ !!logData[message.id || '']
-                      }})
+                      暂无日志数据 (loadingLog:
+                      {{ loadingLog[message.id || ""] }}, logData:
+                      {{ !!logData[message.id || ""] }})
                     </div>
                   </div>
                 </div>
@@ -150,21 +232,33 @@
                       message.role === 'assistant' &&
                       message.tool_name === 'GeneNetworkAgent'
                     "
-                    class="gene-network-images">
-                    <div v-if="geneNetworkImagesLoading[message.id || '']" class="images-loading">
+                    class="gene-network-images"
+                  >
+                    <div
+                      v-if="geneNetworkImagesLoading[message.id || '']"
+                      class="images-loading"
+                    >
                       <el-icon class="is-loading"><Loading /></el-icon>
-                      {{ $t('common.loading') }}
+                      {{ $t("common.loading") }}
                     </div>
-                    <div v-else-if="geneNetworkImages[message.id || '']?.length > 0" class="images-container">
+                    <div
+                      v-else-if="
+                        geneNetworkImages[message.id || '']?.length > 0
+                      "
+                      class="images-container"
+                    >
                       <img
-                        v-for="(imgUrl, imgIndex) in geneNetworkImages[message.id || '']"
+                        v-for="(imgUrl, imgIndex) in geneNetworkImages[
+                          message.id || ''
+                        ]"
                         :key="imgIndex"
                         :src="imgUrl"
                         :alt="'Result ' + (imgIndex + 1)"
-                        class="result-image" />
+                        class="result-image"
+                      />
                     </div>
                     <div v-else class="no-images">
-                      {{ $t('common.noData') }}
+                      {{ $t("common.noData") }}
                     </div>
                   </div>
                   <!-- DigitalDesignAgent 图片显示 -->
@@ -173,124 +267,251 @@
                       message.role === 'assistant' &&
                       message.tool_name === 'DigitalDesignAgent'
                     "
-                    class="gene-network-images">
-                    <div v-if="digitalDesignImagesLoading[message.id || '']" class="images-loading">
+                    class="gene-network-images"
+                  >
+                    <div
+                      v-if="digitalDesignImagesLoading[message.id || '']"
+                      class="images-loading"
+                    >
                       <el-icon class="is-loading"><Loading /></el-icon>
-                      {{ $t('common.loading') }}
+                      {{ $t("common.loading") }}
                     </div>
-                    <div v-else-if="digitalDesignImages[message.id || '']?.length > 0" class="images-container">
+                    <div
+                      v-else-if="
+                        digitalDesignImages[message.id || '']?.length > 0
+                      "
+                      class="images-container"
+                    >
                       <img
-                        v-for="(imgUrl, imgIndex) in digitalDesignImages[message.id || '']"
+                        v-for="(imgUrl, imgIndex) in digitalDesignImages[
+                          message.id || ''
+                        ]"
                         :key="imgIndex"
                         :src="imgUrl"
                         :alt="'Result ' + (imgIndex + 1)"
-                        class="result-image" />
+                        class="result-image"
+                      />
                     </div>
                     <div v-else class="no-images">
-                      {{ $t('common.noData') }}
+                      {{ $t("common.noData") }}
                     </div>
                   </div>
                   <!-- DeepGenomeAgent 的返回使用专用查看器组件,带 references 列表;
                        其他 tool_name 回落到通用 MarkdownViewer -->
                   <DeepGenomeResultViewer
                     v-else-if="
-                      message.doc_list && message.doc_list.length > 0 &&
+                      message.doc_list &&
+                      message.doc_list.length > 0 &&
                       message.role === 'assistant' &&
                       message.tool_name === 'DeepGenomeAgent'
                     "
                     :markdown="message.content.replace(/\n/g, '\\n')"
-                    :references="message.doc_list || []" />
+                    :references="message.doc_list || []"
+                  />
                   <MarkdownViewer
                     v-else
-                    :instantMessage="(message?.instantMessage && currentChat.messages.length - 1 == index) || false"
-                    :content="message.content" @finish="() => handleMarkdownFinish(index)" />
+                    :instantMessage="
+                      (message?.instantMessage &&
+                        currentChat.messages.length - 1 == index) ||
+                      false
+                    "
+                    :content="message.content"
+                    @finish="() => handleMarkdownFinish(index)"
+                  />
                 </div>
 
                 <!-- 用户消息的文件列表显示 -->
-                <div v-if="message.role === 'user' && message.attachedFiles && message.attachedFiles.length > 0"
-                  class="message-files">
+                <div
+                  v-if="
+                    message.role === 'user' &&
+                    message.attachedFiles &&
+                    message.attachedFiles.length > 0
+                  "
+                  class="message-files"
+                >
                   <div class="files-list">
-                    <div v-for="(file, fileIndex) in message.attachedFiles" :key="fileIndex" class="file-item-display">
-                      <FilesCard :uid="fileIndex" :name="file.name" :file-size="file.size" :show-del-icon="false" />
+                    <div
+                      v-for="(file, fileIndex) in message.attachedFiles"
+                      :key="fileIndex"
+                      class="file-item-display"
+                    >
+                      <FilesCard
+                        :uid="fileIndex"
+                        :name="file.name"
+                        :file-size="file.size"
+                        :show-del-icon="false"
+                      />
                     </div>
                   </div>
                 </div>
-                <div v-if="message.tool_name !== 'DeepGenomeAgent' && message.doc_list && message.doc_list.length > 0">
+                <div
+                  v-if="
+                    message.tool_name !== 'DeepGenomeAgent' &&
+                    message.doc_list &&
+                    message.doc_list.length > 0
+                  "
+                >
                   <div class="doc-list-title">
-                    {{ $t('chat.relatedDocuments') }}：
+                    {{ $t("chat.relatedDocuments") }}：
                   </div>
-                  <div class="doc-list-item" v-for="(doc, docIndex) in message.doc_list" :key="docIndex">
+                  <div
+                    class="doc-list-item"
+                    v-for="(doc, docIndex) in message.doc_list"
+                    :key="docIndex"
+                  >
                     <div v-if="doc.title" class="doc-simple">
-                      {{ docIndex + 1 + '、' }}{{ doc.title }}
+                      {{ docIndex + 1 + "、" }}{{ doc.title }}
                     </div>
                     <div v-else-if="doc.au || doc.ti" class="doc-detailed">
                       <div class="doc-citation">
-                        {{ docIndex + 1 }}. {{ formatDetailedCitation(doc) }}<span v-if="doc.dl || doc.pm">. <span
-                            v-if="doc.dl" class="doc-link-inline">doi:<a :href="doc.dl" target="_blank"
-                              class="doi-link">{{ doc.dl }}</a></span><span v-if="doc.dl && doc.pm">; </span><span
-                            v-if="doc.pm" class="doc-link-inline">pmid:<a
-                              :href="`https://pubmed.ncbi.nlm.nih.gov/${doc.pm}`" target="_blank" class="pmid-link">{{
-                                doc.pm }}</a></span></span>
+                        {{ docIndex + 1 }}. {{ formatDetailedCitation(doc)
+                        }}<span v-if="doc.dl || doc.pm"
+                          >.
+                          <span v-if="doc.dl" class="doc-link-inline"
+                            >doi:<a
+                              :href="doc.dl"
+                              target="_blank"
+                              class="doi-link"
+                              >{{ doc.dl }}</a
+                            ></span
+                          ><span v-if="doc.dl && doc.pm">; </span
+                          ><span v-if="doc.pm" class="doc-link-inline"
+                            >pmid:<a
+                              :href="`https://pubmed.ncbi.nlm.nih.gov/${doc.pm}`"
+                              target="_blank"
+                              class="pmid-link"
+                              >{{ doc.pm }}</a
+                            ></span
+                          ></span
+                        >
                       </div>
                     </div>
                   </div>
                   <!-- 调试信息：显示完整的 doc_list 数据 平常隐藏-->
-                  <div v-if="false" class="debug-info"
-                    style="margin-top: 8px; padding: 8px; background-color: #f5f5f5; border-radius: 4px; font-size: 12px; color: #666;">
+                  <div
+                    v-if="false"
+                    class="debug-info"
+                    style="
+                      margin-top: 8px;
+                      padding: 8px;
+                      background-color: #f5f5f5;
+                      border-radius: 4px;
+                      font-size: 12px;
+                      color: #666;
+                    "
+                  >
                     <strong>调试信息 (doc_list):</strong>
                     <pre
-                      style="margin: 4px 0; white-space: pre-wrap; word-break: break-word;">{{ JSON.stringify(message.doc_list, null, 2) }}</pre>
+                      style="
+                        margin: 4px 0;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                      "
+                      >{{ JSON.stringify(message.doc_list, null, 2) }}</pre
+                    >
                   </div>
                 </div>
-                <el-button @click="() => downloadFile(message?.upload_path)"
-                  v-if="message?.status && message?.status == 'SUCCEEDED' && message?.upload_path && message?.upload_path !== ''"
-                  type="primary">
+                <el-button
+                  @click="() => downloadFile(message?.upload_path)"
+                  v-if="
+                    message?.status &&
+                    message?.status == 'SUCCEEDED' &&
+                    message?.upload_path &&
+                    message?.upload_path !== ''
+                  "
+                  type="primary"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadURL') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadURL")
+                  }}</span>
                 </el-button>
-                
+
                 <!-- 基于 download_path 的下载按钮 -->
-                <el-button @click="() => downloadFileDirect(message?.download_path)"
-                  v-if="message?.download_path && message?.download_path !== '' && message?.tool_name !== 'GeneNetworkAgent' && message?.tool_name !== 'DigitalDesignAgent'"
-                  type="primary" style="margin-left: 8px;">
+                <el-button
+                  @click="() => downloadFileDirect(message?.download_path)"
+                  v-if="
+                    message?.download_path &&
+                    message?.download_path !== '' &&
+                    message?.tool_name !== 'GeneNetworkAgent' &&
+                    message?.tool_name !== 'DigitalDesignAgent'
+                  "
+                  type="primary"
+                  style="margin-left: 8px"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadFile') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadFile")
+                  }}</span>
                 </el-button>
 
                 <!-- 日志按钮 - 仅在AnalystAgent类型下显示 -->
-                <div v-if="message.role === 'assistant' && message.tool_name === 'AnalystAgent'"
-                  class="log-button-container">
-                  <el-button type="primary" size="small" @click="toggleLogView(message.id)"
-                    :class="{ 'active': message.showLog }">
+                <div
+                  v-if="
+                    message.role === 'assistant' &&
+                    message.tool_name === 'AnalystAgent'
+                  "
+                  class="log-button-container"
+                >
+                  <el-button
+                    type="primary"
+                    size="small"
+                    @click="toggleLogView(message.id)"
+                    :class="{ active: message.showLog }"
+                  >
                     <el-icon>
                       <Document />
                     </el-icon>
-                    {{ message.showLog ? $t('chat.hideLog') : $t('chat.showLog') }}
+                    {{
+                      message.showLog ? $t("chat.hideLog") : $t("chat.showLog")
+                    }}
                   </el-button>
                 </div>
 
                 <!-- 后续问题显示 -->
                 <FollowUpQuestions
-                  v-if="message.role === 'assistant' && message.followUpQuestions && message.followUpQuestions.length > 0 && message.showFollowUpQuestions && index == currentChat.messages.length - 1"
-                  :questions="message.followUpQuestions" @question-click="handleFollowUpQuestionClick" />
+                  v-if="
+                    message.role === 'assistant' &&
+                    message.followUpQuestions &&
+                    message.followUpQuestions.length > 0 &&
+                    message.showFollowUpQuestions &&
+                    index == currentChat.messages.length - 1
+                  "
+                  :questions="message.followUpQuestions"
+                  @question-click="handleFollowUpQuestionClick"
+                />
 
                 <div v-if="message.role === 'user'" class="message-user">
-                  <div class="message-fotter" v-if="copyVisible == 0 || copyVisible !== index + 1">
-                    <el-tooltip effect="dark" :content="$t('chat.copy')" placement="top-start">
+                  <div
+                    class="message-fotter"
+                    v-if="copyVisible == 0 || copyVisible !== index + 1"
+                  >
+                    <el-tooltip
+                      effect="dark"
+                      :content="$t('chat.copy')"
+                      placement="top-start"
+                    >
                       <div class="message-fotter-item">
-                        <el-icon @click="() => {
-                          fallbackCopyText(message.content, index + 1)
-                        }">
+                        <el-icon
+                          @click="
+                            () => {
+                              fallbackCopyText(message.content, index + 1);
+                            }
+                          "
+                        >
                           <CopyDocument />
                         </el-icon>
                       </div>
                     </el-tooltip>
                   </div>
-                  <div class="message-fotter" v-else-if="copyVisible == index + 1">
+                  <div
+                    class="message-fotter"
+                    v-else-if="copyVisible == index + 1"
+                  >
                     <div class="message-fotter-item">
                       <el-icon>
                         <SuccessFilled />
@@ -300,52 +521,101 @@
                 </div>
                 <div v-else>
                   <div class="message-fotter">
-                    <el-tooltip effect="dark" :content="$t('chat.copy')" placement="top-start"
-                      v-if="copyVisible == 0 || copyVisible !== index + 1">
+                    <el-tooltip
+                      effect="dark"
+                      :content="$t('chat.copy')"
+                      placement="top-start"
+                      v-if="copyVisible == 0 || copyVisible !== index + 1"
+                    >
                       <div class="message-fotter-item">
-                        <el-icon @click="() => copyMessageWithDocs(message, index)">
+                        <el-icon
+                          @click="() => copyMessageWithDocs(message, index)"
+                        >
                           <CopyDocument />
                         </el-icon>
                       </div>
                     </el-tooltip>
-                    <div class="message-fotter-item" v-else-if="copyVisible == index + 1"><el-icon>
+                    <div
+                      class="message-fotter-item"
+                      v-else-if="copyVisible == index + 1"
+                    >
+                      <el-icon>
                         <SuccessFilled />
-                      </el-icon></div>
-                    <el-tooltip effect="dark" content="刷新回复" placement="top-start">
+                      </el-icon>
+                    </div>
+                    <el-tooltip
+                      effect="dark"
+                      content="刷新回复"
+                      placement="top-start"
+                    >
                       <div class="message-fotter-item">
-                        <el-icon @click="() => refreshMessage(index)"
-                          :class="{ 'is-loading': refreshingMessages[`${index}_${message.id || ''}`] || isSending }">
+                        <el-icon
+                          @click="() => refreshMessage(index)"
+                          :class="{
+                            'is-loading':
+                              refreshingMessages[
+                                `${index}_${message.id || ''}`
+                              ] || isSending,
+                          }"
+                        >
                           <Refresh />
                         </el-icon>
                       </div>
                     </el-tooltip>
 
                     <!-- 点赞点踩按钮 -->
-                    <div v-if="message.role === 'assistant' && message.id" class="reaction-buttons">
-                      <el-tooltip effect="dark" :content="getReactionTooltip(message.id, 1)" placement="top">
-                        <div class="message-fotter-item reaction-btn"
-                          :class="{ 'active': getReactionState(message.id) === 1 }"
-                          @click="handleReaction(message.id, 1)">
+                    <div
+                      v-if="message.role === 'assistant' && message.id"
+                      class="reaction-buttons"
+                    >
+                      <el-tooltip
+                        effect="dark"
+                        :content="getReactionTooltip(message.id, 1)"
+                        placement="top"
+                      >
+                        <div
+                          class="message-fotter-item reaction-btn"
+                          :class="{
+                            active: getReactionState(message.id) === 1,
+                          }"
+                          @click="handleReaction(message.id, 1)"
+                        >
                           <el-icon>
-                            <SuccessFilled v-if="getReactionState(message.id) === 1" />
+                            <SuccessFilled
+                              v-if="getReactionState(message.id) === 1"
+                            />
                             <CircleCheck v-else />
                           </el-icon>
                         </div>
                       </el-tooltip>
-                      <el-tooltip effect="dark" :content="getReactionTooltip(message.id, 2)" placement="top">
-                        <div class="message-fotter-item reaction-btn"
-                          :class="{ 'active': getReactionState(message.id) === 2 }"
-                          @click="handleReaction(message.id, 2)">
+                      <el-tooltip
+                        effect="dark"
+                        :content="getReactionTooltip(message.id, 2)"
+                        placement="top"
+                      >
+                        <div
+                          class="message-fotter-item reaction-btn"
+                          :class="{
+                            active: getReactionState(message.id) === 2,
+                          }"
+                          @click="handleReaction(message.id, 2)"
+                        >
                           <el-icon>
-                            <CircleCloseFilled v-if="getReactionState(message.id) === 2" />
+                            <CircleCloseFilled
+                              v-if="getReactionState(message.id) === 2"
+                            />
                             <CircleClose v-else />
                           </el-icon>
                         </div>
                       </el-tooltip>
                     </div>
 
-                    <el-dropdown v-if="downloadWhiteList.includes(message.tool_name)" placement="top-start"
-                      trigger="click" @command="(v) => getFileDownUrl(message.id, v)">
+                    <el-dropdown
+                      v-if="downloadWhiteList.includes(message.tool_name)"
+                      placement="top-start"
+                      trigger="click"
+                      @command="(v) => getFileDownUrl(message.id, v)"
+                    >
                       <div class="message-fotter-item">
                         <el-icon style="vertical-align: middle">
                           <Download />
@@ -354,93 +624,175 @@
                       <template #dropdown>
                         <el-dropdown-menu>
                           <el-dropdown-item
-                            v-for="(item, index) in (message?.tool_name == 'DataAgent' ? ['PDF', 'Markdown', 'Xlsx'] : ['PDF', 'Markdown', 'Word'])"
-                            :key="index" :command="item">{{ item }}</el-dropdown-item>
+                            v-for="(item, index) in message?.tool_name ==
+                            'DataAgent'
+                              ? ['PDF', 'Markdown', 'Xlsx']
+                              : ['PDF', 'Markdown', 'Word']"
+                            :key="index"
+                            :command="item"
+                            >{{ item }}</el-dropdown-item
+                          >
                         </el-dropdown-menu>
                       </template>
                     </el-dropdown>
                   </div>
                 </div>
-                  <div v-if="message.role === 'assistant'" class="tip-text">{{ $t('common.Tip') }}</div>
+                <div v-if="message.role === 'assistant'" class="tip-text">
+                  {{ $t("common.Tip") }}
+                </div>
               </div>
               <!-- 表格数据展示 -->
               <div v-else-if="message.tableHeaders" class="table-response">
                 <el-table :data="message.content" border style="width: 100%">
-                  <el-table-column v-for="header in message.tableHeaders" :key="header.prop" :prop="header.prop"
-                    :label="header.label" align="center" />
+                  <el-table-column
+                    v-for="header in message.tableHeaders"
+                    :key="header.prop"
+                    :prop="header.prop"
+                    :label="header.label"
+                    align="center"
+                  />
                 </el-table>
-                <el-button @click="() => downloadFile(message?.upload_path)"
-                  v-if="message?.status && message?.status == 'SUCCEEDED' && message?.upload_path && message?.upload_path !== ''"
-                  type="primary">
+                <el-button
+                  @click="() => downloadFile(message?.upload_path)"
+                  v-if="
+                    message?.status &&
+                    message?.status == 'SUCCEEDED' &&
+                    message?.upload_path &&
+                    message?.upload_path !== ''
+                  "
+                  type="primary"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadURL') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadURL")
+                  }}</span>
                 </el-button>
-                
+
                 <!-- 基于 download_path 的下载按钮 -->
-                <el-button @click="() => downloadFileDirect(message?.download_path)"
-                  v-if="message?.download_path && message?.download_path !== '' && message?.tool_name !== 'GeneNetworkAgent' && message?.tool_name !== 'DigitalDesignAgent'"
-                  type="primary" style="margin-left: 8px;">
+                <el-button
+                  @click="() => downloadFileDirect(message?.download_path)"
+                  v-if="
+                    message?.download_path &&
+                    message?.download_path !== '' &&
+                    message?.tool_name !== 'GeneNetworkAgent' &&
+                    message?.tool_name !== 'DigitalDesignAgent'
+                  "
+                  type="primary"
+                  style="margin-left: 8px"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadFile') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadFile")
+                  }}</span>
                 </el-button>
 
                 <!-- 后续问题显示 -->
                 <FollowUpQuestions
-                  v-if="message.followUpQuestions && message.followUpQuestions.length > 0 && message.showFollowUpQuestions && index == currentChat.messages.length - 1"
-                  :questions="message.followUpQuestions" @question-click="handleFollowUpQuestionClick" />
+                  v-if="
+                    message.followUpQuestions &&
+                    message.followUpQuestions.length > 0 &&
+                    message.showFollowUpQuestions &&
+                    index == currentChat.messages.length - 1
+                  "
+                  :questions="message.followUpQuestions"
+                  @question-click="handleFollowUpQuestionClick"
+                />
                 <div class="message-fotter">
-                  <el-tooltip effect="dark" :content="$t('chat.copy')" placement="top-start"
-                    v-if="copyVisible == 0 || copyVisible !== index + 1">
+                  <el-tooltip
+                    effect="dark"
+                    :content="$t('chat.copy')"
+                    placement="top-start"
+                    v-if="copyVisible == 0 || copyVisible !== index + 1"
+                  >
                     <div class="message-fotter-item">
-                      <el-icon @click="fallbackCopyText(message.original, index + 1)">
+                      <el-icon
+                        @click="fallbackCopyText(message.original, index + 1)"
+                      >
                         <CopyDocument />
                       </el-icon>
                     </div>
                   </el-tooltip>
-                  <div class="message-fotter-item" v-else-if="copyVisible == index + 1">
+                  <div
+                    class="message-fotter-item"
+                    v-else-if="copyVisible == index + 1"
+                  >
                     <el-icon>
                       <SuccessFilled />
                     </el-icon>
                   </div>
-                  <el-tooltip effect="dark" content="刷新回复" placement="top-start">
+                  <el-tooltip
+                    effect="dark"
+                    content="刷新回复"
+                    placement="top-start"
+                  >
                     <div class="message-fotter-item">
-                      <el-icon @click="() => refreshMessage(index)"
-                        :class="{ 'is-loading': refreshingMessages[`${index}_${message.id || ''}`] || isSending }">
+                      <el-icon
+                        @click="() => refreshMessage(index)"
+                        :class="{
+                          'is-loading':
+                            refreshingMessages[
+                              `${index}_${message.id || ''}`
+                            ] || isSending,
+                        }"
+                      >
                         <Refresh />
                       </el-icon>
                     </div>
                   </el-tooltip>
 
                   <!-- 点赞点踩按钮 -->
-                  <div v-if="message.role === 'assistant' && message.id" class="reaction-buttons">
-                    <el-tooltip effect="dark" :content="getReactionTooltip(message.id, 1)" placement="top">
-                      <div class="message-fotter-item reaction-btn"
-                        :class="{ 'active': getReactionState(message.id) === 1 }"
-                        @click="handleReaction(message.id, 1)">
+                  <div
+                    v-if="message.role === 'assistant' && message.id"
+                    class="reaction-buttons"
+                  >
+                    <el-tooltip
+                      effect="dark"
+                      :content="getReactionTooltip(message.id, 1)"
+                      placement="top"
+                    >
+                      <div
+                        class="message-fotter-item reaction-btn"
+                        :class="{ active: getReactionState(message.id) === 1 }"
+                        @click="handleReaction(message.id, 1)"
+                      >
                         <el-icon>
-                          <SuccessFilled v-if="getReactionState(message.id) === 1" />
+                          <SuccessFilled
+                            v-if="getReactionState(message.id) === 1"
+                          />
                           <CircleCheck v-else />
                         </el-icon>
                       </div>
                     </el-tooltip>
-                    <el-tooltip effect="dark" :content="getReactionTooltip(message.id, 2)" placement="top">
-                      <div class="message-fotter-item reaction-btn"
-                        :class="{ 'active': getReactionState(message.id) === 2 }"
-                        @click="handleReaction(message.id, 2)">
+                    <el-tooltip
+                      effect="dark"
+                      :content="getReactionTooltip(message.id, 2)"
+                      placement="top"
+                    >
+                      <div
+                        class="message-fotter-item reaction-btn"
+                        :class="{ active: getReactionState(message.id) === 2 }"
+                        @click="handleReaction(message.id, 2)"
+                      >
                         <el-icon>
-                          <CircleCloseFilled v-if="getReactionState(message.id) === 2" />
+                          <CircleCloseFilled
+                            v-if="getReactionState(message.id) === 2"
+                          />
                           <CircleClose v-else />
                         </el-icon>
                       </div>
                     </el-tooltip>
                   </div>
 
-                  <el-dropdown v-if="downloadWhiteList.includes(message.tool_name)" placement="top-start"
-                    trigger="click" @command="(v) => getFileDownUrl(message.id, v)">
+                  <el-dropdown
+                    v-if="downloadWhiteList.includes(message.tool_name)"
+                    placement="top-start"
+                    trigger="click"
+                    @command="(v) => getFileDownUrl(message.id, v)"
+                  >
                     <div class="message-fotter-item">
                       <el-icon style="vertical-align: middle">
                         <Download />
@@ -449,8 +801,14 @@
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item
-                          v-for="(item, index) in (message?.tool_name == 'DataAgent' ? ['PDF', 'Markdown', 'Xlsx'] : ['PDF', 'Markdown', 'Word'])"
-                          :key="index" :command="item">{{ item }}</el-dropdown-item>
+                          v-for="(item, index) in message?.tool_name ==
+                          'DataAgent'
+                            ? ['PDF', 'Markdown', 'Xlsx']
+                            : ['PDF', 'Markdown', 'Word']"
+                          :key="index"
+                          :command="item"
+                          >{{ item }}</el-dropdown-item
+                        >
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
@@ -460,15 +818,17 @@
               <div v-else class="ai-response">
                 <!-- 思考步骤 -->
                 <div v-if="message.steps && message.steps.length > 0">
-                  <div class="steps-title">
-                    {{ $t('chat.stepResult') }}：
-                  </div>
-                  <div v-for="(step, stepIndex) in message.steps" :key="stepIndex" class="step-item">
+                  <div class="steps-title">{{ $t("chat.stepResult") }}：</div>
+                  <div
+                    v-for="(step, stepIndex) in message.steps"
+                    :key="stepIndex"
+                    class="step-item"
+                  >
                     <div v-if="stepIndex === 0" class="step-label">
-                      {{ $t('chat.useTool') }}
+                      {{ $t("chat.useTool") }}
                     </div>
                     <div v-else class="step-label">
-                      {{ $t('chat.stepResult') }}
+                      {{ $t("chat.stepResult") }}
                     </div>
                     <div class="step-text">{{ step }}</div>
                   </div>
@@ -477,81 +837,154 @@
                 <div class="final-answer">
                   <!-- <div class="answer-content">{{ message.content }}</div> -->
                   <MarkdownViewer
-                    :instantMessage="(message?.instantMessage && currentChat.messages.length - 1 == index) || false"
-                    :content="message.content" @finish="() => handleMarkdownFinish(index)" />
+                    :instantMessage="
+                      (message?.instantMessage &&
+                        currentChat.messages.length - 1 == index) ||
+                      false
+                    "
+                    :content="message.content"
+                    @finish="() => handleMarkdownFinish(index)"
+                  />
                 </div>
-                <el-button @click="() => downloadFile(message?.upload_path)"
-                  v-if="message?.status && message?.status == 'SUCCEEDED' && message?.upload_path && message?.upload_path !== ''"
-                  type="primary">
+                <el-button
+                  @click="() => downloadFile(message?.upload_path)"
+                  v-if="
+                    message?.status &&
+                    message?.status == 'SUCCEEDED' &&
+                    message?.upload_path &&
+                    message?.upload_path !== ''
+                  "
+                  type="primary"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadURL') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadURL")
+                  }}</span>
                 </el-button>
-                
+
                 <!-- 基于 download_path 的下载按钮 -->
-                <el-button @click="() => downloadFileDirect(message?.download_path)"
-                  v-if="message?.download_path && message?.download_path !== '' && message?.tool_name !== 'GeneNetworkAgent' && message?.tool_name !== 'DigitalDesignAgent'"
-                  type="primary" style="margin-left: 8px;">
+                <el-button
+                  @click="() => downloadFileDirect(message?.download_path)"
+                  v-if="
+                    message?.download_path &&
+                    message?.download_path !== '' &&
+                    message?.tool_name !== 'GeneNetworkAgent' &&
+                    message?.tool_name !== 'DigitalDesignAgent'
+                  "
+                  type="primary"
+                  style="margin-left: 8px"
+                >
                   <el-icon style="vertical-align: middle">
                     <Download />
                   </el-icon>
-                  <span style="vertical-align: middle">{{ $t('chat.downloadFile') }}</span>
+                  <span style="vertical-align: middle">{{
+                    $t("chat.downloadFile")
+                  }}</span>
                 </el-button>
 
                 <!-- 后续问题显示 -->
                 <FollowUpQuestions
-                  v-if="message.followUpQuestions && message.followUpQuestions.length > 0 && message.showFollowUpQuestions && index == currentChat.messages.length - 1"
-                  :questions="message.followUpQuestions" @question-click="handleFollowUpQuestionClick" />
+                  v-if="
+                    message.followUpQuestions &&
+                    message.followUpQuestions.length > 0 &&
+                    message.showFollowUpQuestions &&
+                    index == currentChat.messages.length - 1
+                  "
+                  :questions="message.followUpQuestions"
+                  @question-click="handleFollowUpQuestionClick"
+                />
                 <div class="message-fotter">
-                  <el-tooltip effect="dark" :content="$t('chat.copy')" placement="top-start"
-                    v-if="copyVisible == 0 || copyVisible !== index + 1">
+                  <el-tooltip
+                    effect="dark"
+                    :content="$t('chat.copy')"
+                    placement="top-start"
+                    v-if="copyVisible == 0 || copyVisible !== index + 1"
+                  >
                     <div class="message-fotter-item">
-                      <el-icon @click="() => copyMessageWithDocs(message, index)">
+                      <el-icon
+                        @click="() => copyMessageWithDocs(message, index)"
+                      >
                         <CopyDocument />
                       </el-icon>
                     </div>
                   </el-tooltip>
-                  <div class="message-fotter-item" v-else-if="copyVisible == index + 1">
+                  <div
+                    class="message-fotter-item"
+                    v-else-if="copyVisible == index + 1"
+                  >
                     <el-icon>
                       <SuccessFilled />
                     </el-icon>
                   </div>
-                  <el-tooltip effect="dark" content="刷新回复" placement="top-start">
+                  <el-tooltip
+                    effect="dark"
+                    content="刷新回复"
+                    placement="top-start"
+                  >
                     <div class="message-fotter-item">
-                      <el-icon @click="() => refreshMessage(index)"
-                        :class="{ 'is-loading': refreshingMessages[`${index}_${message.id || ''}`] }">
+                      <el-icon
+                        @click="() => refreshMessage(index)"
+                        :class="{
+                          'is-loading':
+                            refreshingMessages[`${index}_${message.id || ''}`],
+                        }"
+                      >
                         <Refresh />
                       </el-icon>
                     </div>
                   </el-tooltip>
 
                   <!-- 点赞点踩按钮 -->
-                  <div v-if="message.role === 'assistant' && message.id" class="reaction-buttons">
-                    <el-tooltip effect="dark" :content="getReactionTooltip(message.id, 1)" placement="top">
-                      <div class="message-fotter-item reaction-btn"
-                        :class="{ 'active': getReactionState(message.id) === 1 }"
-                        @click="handleReaction(message.id, 1)">
+                  <div
+                    v-if="message.role === 'assistant' && message.id"
+                    class="reaction-buttons"
+                  >
+                    <el-tooltip
+                      effect="dark"
+                      :content="getReactionTooltip(message.id, 1)"
+                      placement="top"
+                    >
+                      <div
+                        class="message-fotter-item reaction-btn"
+                        :class="{ active: getReactionState(message.id) === 1 }"
+                        @click="handleReaction(message.id, 1)"
+                      >
                         <el-icon>
-                          <SuccessFilled v-if="getReactionState(message.id) === 1" />
+                          <SuccessFilled
+                            v-if="getReactionState(message.id) === 1"
+                          />
                           <CircleCheck v-else />
                         </el-icon>
                       </div>
                     </el-tooltip>
-                    <el-tooltip effect="dark" :content="getReactionTooltip(message.id, 2)" placement="top">
-                      <div class="message-fotter-item reaction-btn"
-                        :class="{ 'active': getReactionState(message.id) === 2 }"
-                        @click="handleReaction(message.id, 2)">
+                    <el-tooltip
+                      effect="dark"
+                      :content="getReactionTooltip(message.id, 2)"
+                      placement="top"
+                    >
+                      <div
+                        class="message-fotter-item reaction-btn"
+                        :class="{ active: getReactionState(message.id) === 2 }"
+                        @click="handleReaction(message.id, 2)"
+                      >
                         <el-icon>
-                          <CircleCloseFilled v-if="getReactionState(message.id) === 2" />
+                          <CircleCloseFilled
+                            v-if="getReactionState(message.id) === 2"
+                          />
                           <CircleClose v-else />
                         </el-icon>
                       </div>
                     </el-tooltip>
                   </div>
 
-                  <el-dropdown v-if="downloadWhiteList.includes(message.tool_name)" placement="top-start"
-                    trigger="click" @command="(v) => getFileDownUrl(message.id, v)">
+                  <el-dropdown
+                    v-if="downloadWhiteList.includes(message.tool_name)"
+                    placement="top-start"
+                    trigger="click"
+                    @command="(v) => getFileDownUrl(message.id, v)"
+                  >
                     <div class="message-fotter-item">
                       <el-icon style="vertical-align: middle">
                         <Download />
@@ -560,15 +993,20 @@
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item
-                          v-for="(item, index) in (message?.tool_name == 'DataAgent' ? ['PDF', 'Markdown', 'Xlsx'] : ['PDF', 'Markdown', 'Word'])"
-                          :key="index" :command="item">{{ item }}</el-dropdown-item>
+                          v-for="(item, index) in message?.tool_name ==
+                          'DataAgent'
+                            ? ['PDF', 'Markdown', 'Xlsx']
+                            : ['PDF', 'Markdown', 'Word']"
+                          :key="index"
+                          :command="item"
+                          >{{ item }}</el-dropdown-item
+                        >
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
                 </div>
               </div>
             </div>
-
           </div>
         </template>
 
@@ -579,9 +1017,7 @@
           </div>
           <div class="message-content">
             <div class="message-text loading-message">
-              {{
-                $t('chat.ladingInner')
-              }}
+              {{ $t("chat.ladingInner") }}
               <div class="loading-dots">
                 <span class="dot"></span>
                 <span class="dot"></span>
@@ -590,21 +1026,27 @@
             </div>
           </div>
         </div>
-
-
-
       </div>
 
       <!-- 输入区域 -->
-      <div class="input-container" :style="{ bottom: currentChat?.messages?.length ? '2%' : '30%' }">
+      <div
+        class="input-container"
+        :style="{ bottom: currentChat?.messages?.length ? '2%' : '30%' }"
+      >
         <div v-if="!currentChat?.messages?.length" class="empty-chat">
           <div class="welcome-container">
             <!-- <h3>{{ $t('chat.welcome') }}</h3> -->
             <div class="welcome-container-text">
-              <div class="welcome-container-text1"><img src="../../assets/images/chat/logo.png" class="logo"
-                  alt="Logo" />{{
-                    $t('chat.welcomeTitle') }}</div>
-              <div class="welcome-container-text2">{{ $t('chat.welcomeSubtitle') }}</div>
+              <div class="welcome-container-text1">
+                <img
+                  src="../../assets/images/chat/logo.png"
+                  class="logo"
+                  alt="Logo"
+                />{{ $t("chat.welcomeTitle") }}
+              </div>
+              <div class="welcome-container-text2">
+                {{ $t("chat.welcomeSubtitle") }}
+              </div>
             </div>
             <!-- <div class="suggestion-list">
               <div class="suggestion-item" @click="usePrompt($t('chat.suggestions.brca1'))">
@@ -648,7 +1090,12 @@
             </div> -->
           </div>
         </div>
-        <div class="input-container-warpper" :class="{ 'show-tutorial': showTutorial && currentTutorialStep === 3 }">
+        <div
+          class="input-container-warpper"
+          :class="{
+            'show-tutorial': showTutorial && currentTutorialStep === 3,
+          }"
+        >
           <div class="input-box">
             <!-- 中止按钮 - 移到MentionSender外部，确保在发送时仍可点击 -->
             <div v-if="isSending" class="abort-button-overlay">
@@ -684,11 +1131,23 @@
               <template #header>
                 <div class="header-self-wrap">
                   <!-- 文件列表区域 - 只在发送前显示 -->
-                  <div v-if="fileList.length > 0 && !isSending" class="file-list-container">
+                  <div
+                    v-if="fileList.length > 0 && !isSending"
+                    class="file-list-container"
+                  >
                     <div class="file-list">
-                      <div v-for="(file, index) in fileList" :key="index" class="file-item">
-                        <FilesCard :uid="index" :name="file.name" :file-size="file.size" :show-del-icon="true"
-                          @delete="removeFile(index)" />
+                      <div
+                        v-for="(file, index) in fileList"
+                        :key="index"
+                        class="file-item"
+                      >
+                        <FilesCard
+                          :uid="index"
+                          :name="file.name"
+                          :file-size="file.size"
+                          :show-del-icon="true"
+                          @delete="removeFile(index)"
+                        />
                       </div>
                     </div>
                   </div>
@@ -697,12 +1156,31 @@
 
               <!-- 自定义 内容左下功能列表 -->
               <template #prefix>
-                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                  <el-upload ref="uploadRef" class="upload-demo" :limit="10" accept=".pdf,.doc,.xlsx,.ppt,.txt,.png"
-                    :show-file-list="false" :auto-upload="false" :disabled="isSending" :on-change="handleFileChange"
-                    multiple action="#">
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                  "
+                >
+                  <el-upload
+                    ref="uploadRef"
+                    class="upload-demo"
+                    :limit="10"
+                    accept=".pdf,.doc,.xlsx,.ppt,.txt,.png"
+                    :show-file-list="false"
+                    :auto-upload="false"
+                    :disabled="isSending"
+                    :on-change="handleFileChange"
+                    multiple
+                    action="#"
+                  >
                     <template #trigger>
-                      <el-tooltip :content="$t('chat.uploadFile')" placement="top">
+                      <el-tooltip
+                        :content="$t('chat.uploadFile')"
+                        placement="top"
+                      >
                         <el-button round plain color="#626aef">
                           <el-icon>
                             <Paperclip />
@@ -711,8 +1189,13 @@
                       </el-tooltip>
                     </template>
                   </el-upload>
-                  <el-dropdown v-if="currentChat?.messages?.length" placement="top-start" trigger="click"
-                    :disabled="isSending" @command="handleCommand">
+                  <el-dropdown
+                    v-if="currentChat?.messages?.length"
+                    placement="top-start"
+                    trigger="click"
+                    :disabled="isSending"
+                    @command="handleCommand"
+                  >
                     <el-button round plain color="#626aef">
                       <el-icon>
                         <Menu />
@@ -720,8 +1203,12 @@
                     </el-button>
                     <template #dropdown>
                       <el-dropdown-menu v-if="rolesTool.length > 0">
-                        <el-dropdown-item v-for="(item, index) in rolesTool" :key="index" :command="'@' + item + ','">{{
-                          item }}</el-dropdown-item>
+                        <el-dropdown-item
+                          v-for="(item, index) in rolesTool"
+                          :key="index"
+                          :command="'@' + item + ','"
+                          >{{ item }}</el-dropdown-item
+                        >
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
@@ -730,10 +1217,16 @@
 
               <!-- 自定义 内容右下功能列表 -->
               <template #action-list>
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px">
                   <!-- 发送按钮 -->
-                  <div v-if="!messageInput.trim() || isSending" class="send-btn">
-                    <el-tooltip :content="$t('chat.inputPlaceholderTip')" placement="top">
+                  <div
+                    v-if="!messageInput.trim() || isSending"
+                    class="send-btn"
+                  >
+                    <el-tooltip
+                      :content="$t('chat.inputPlaceholderTip')"
+                      placement="top"
+                    >
                       <el-button round color="#cbcdcd">
                         <el-icon>
                           <Promotion />
@@ -753,8 +1246,15 @@
 
               <!-- 自定义 底部插槽 -->
               <template #footer>
-                <div v-if="!currentChat?.messages?.length"
-                  style="display: flex; align-items: center; justify-content: center; padding: 12px;">
+                <div
+                  v-if="!currentChat?.messages?.length"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 12px;
+                  "
+                >
                   <!-- 权限加载状态 -->
                   <div v-if="rolesLoading" class="roles-loading">
                     <el-icon class="is-loading">
@@ -762,27 +1262,54 @@
                     </el-icon>
                     加载智能体权限中...
                   </div>
-                  
+
                   <!-- 智能体按钮区域 -->
                   <template v-else-if="rolesTool.length > 0">
-                    <div style="width: 100px; height: 50px; margin-right: 20px;cursor: pointer;" @click="showAgentsView"  >
-                      <img src="/src/assets/images/chat/Agents.png" alt="Agents" style="width: 100%; height: 100%;">
+                    <div
+                      style="
+                        width: 100px;
+                        height: 50px;
+                        margin-right: 20px;
+                        cursor: pointer;
+                      "
+                      @click="showAgentsView"
+                    >
+                      <img
+                        src="/src/assets/images/chat/Agents.png"
+                        alt="Agents"
+                        style="width: 100%; height: 100%"
+                      />
                     </div>
                     <div class="input-actions">
-                      <div v-for="(item, index) in rolesTool" :key="index" class="agent-item-wrapper">
+                      <div
+                        v-for="(item, index) in rolesTool"
+                        :key="index"
+                        class="agent-item-wrapper"
+                      >
                         <el-tooltip placement="top">
                           <template #content>
                             <div class="agent-tooltip-content">
                               <p>{{ getAgentTooltip(item) }}</p>
                             </div>
-                            <a class="more-button" @click="showMoreInfo(item)" :disabled="isSending">
-                              {{ $t('chat.more') }}
+                            <a
+                              class="more-button"
+                              @click="showMoreInfo(item)"
+                              :disabled="isSending"
+                            >
+                              {{ $t("chat.more") }}
                             </a>
                           </template>
-                          <div class="agent-button" :class="{
-                            'agent-button-active': activeButton === item
-                          }" @click="handleButtonClick(item)"
-                            :style="{ opacity: isSending ? 0.6 : 1, cursor: isSending ? 'not-allowed' : 'pointer' }">
+                          <div
+                            class="agent-button"
+                            :class="{
+                              'agent-button-active': activeButton === item,
+                            }"
+                            @click="handleButtonClick(item)"
+                            :style="{
+                              opacity: isSending ? 0.6 : 1,
+                              cursor: isSending ? 'not-allowed' : 'pointer',
+                            }"
+                          >
                             {{ item }}
                           </div>
                         </el-tooltip>
@@ -795,34 +1322,51 @@
           </div>
         </div>
       </div>
-      <div v-if="!currentChat?.messages?.length && UserStore.permission !== 'guest'" class="input-container-bottom" 
+      <div
+        v-if="
+          !currentChat?.messages?.length && UserStore.permission !== 'guest'
+        "
+        class="input-container-bottom"
         :class="{ 'show-tutorial': showTutorial && currentTutorialStep === 2 }"
-        @wheel.prevent="handleScroll" :style="containerStyle">
+        @wheel.prevent="handleScroll"
+        :style="containerStyle"
+      >
         <div class="agent-list">
           <div class="agent-page">
-            <div v-for="agent in presetAgents" :key="agent.id" class="input-container-bottom-item"
+            <div
+              v-for="agent in presetAgents"
+              :key="agent.id"
+              class="input-container-bottom-item"
               @click="isSending ? null : handleAgentClick(agent)"
-              :style="{ opacity: isSending ? 0.6 : 1, cursor: isSending ? 'not-allowed' : 'pointer' }">
+              :style="{
+                opacity: isSending ? 0.6 : 1,
+                cursor: isSending ? 'not-allowed' : 'pointer',
+              }"
+            >
               <span>{{ agent.name }}</span>
             </div>
           </div>
         </div>
       </div>
-      <div class="chat-footer">{{ $t('chat.footer') }}</div>
+      <div class="chat-footer">{{ $t("chat.footer") }}</div>
     </div>
 
     <!-- 右侧侧边栏 -->
     <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
       <div class="sidebar-header">
-        <h3>{{ $t('chat.detailInfo') }}</h3>
+        <h3>{{ $t("chat.detailInfo") }}</h3>
         <el-button type="text" @click="drawerVisible = false" class="close-btn">
           <el-icon><icon-close /></el-icon>
         </el-button>
       </div>
       <div class="sidebar-content">
-        <h3>{{ $t('chat.relatedLinks') }}</h3>
+        <h3>{{ $t("chat.relatedLinks") }}</h3>
         <div class="links-container">
-          <div v-for="(link, index) in currentLinks" :key="index" class="link-item">
+          <div
+            v-for="(link, index) in currentLinks"
+            :key="index"
+            class="link-item"
+          >
             <el-icon>
               <Link />
             </el-icon>
@@ -839,7 +1383,8 @@
       :close-on-click-modal="true"
       :close-on-press-escape="true"
       width="800px"
-      center>
+      center
+    >
       <div
         class="agents-view-container"
         @wheel="handleWheel"
@@ -848,22 +1393,24 @@
         @mouseup="handleMouseUp"
         @mouseleave="handleMouseUp"
         ref="containerRef"
-        style="overflow: hidden; cursor: grab">
+        style="overflow: hidden; cursor: grab"
+      >
         <img
           ref="imageRef"
           :src="AgentsViewImg"
           alt="Phytomni智能体架构图"
           class="agents-view-image"
-          :style="imageStyle" />
+          :style="imageStyle"
+        />
       </div>
     </el-dialog>
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, reactive, nextTick, watch, computed } from 'vue';
-import type { Ref } from 'vue';
-import Sidebar from './sidebar.vue';
-import { MentionSender } from 'vue-element-plus-x';
+import { onMounted, ref, reactive, nextTick, watch, computed } from "vue";
+import type { Ref } from "vue";
+import Sidebar from "./sidebar.vue";
+import { MentionSender } from "vue-element-plus-x";
 // import { MentionOption } from 'vue-element-plus-x';
 import {
   Close as IconClose,
@@ -879,43 +1426,59 @@ import {
   CircleCheck,
   CircleClose,
   CircleCloseFilled,
-} from '@element-plus/icons-vue';
-import { getAnswerCheck, getHistoryQuestionList, getQuery, getQueryAbortable, getChatdownloadURL, getFileDownUrlApi, getAnalystAgentLog, getReactionType, updateAnalystAgentLog, getObsImages } from '@/api/chat';
-import { userStore } from '@/stores';
-import LangSwitch from '@/components/LangSwitch.vue';
-import { useI18n } from 'vue-i18n';
-import type { UploadInstance } from 'element-plus';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { Paperclip, ElementPlus, Promotion, Close } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router';
-import MarkdownViewer from '@/components/MarkdownViewer.vue'
-import DeepGenomeResultViewer from '@/components/DeepGenomeResultViewer.vue';
-import type { MentionOption } from 'vue-element-plus-x/types/components/MentionSender/types';
-import { useAppStore } from '@/stores';
-import FollowUpQuestions from './FollowUpQuestions.vue';
-import { FilesCard } from 'vue-element-plus-x';
-import ChatAgentImg from '@/assets/images/chat/ChatAgent.png';
-import KnowledgeAgentImg from '@/assets/images/chat/KnowledgeAgent.png';
-import DataAgentImg from '@/assets/images/chat/DataAgent.png';
-import AnalystAgentImg from '@/assets/images/chat/AnalystAgent.png';
-import ReviewAgentImg from '@/assets/images/chat/ReviewAgent.png';
-import BriefReviewAgentImg from '@/assets/images/chat/BriefReviewAgent.png';
-import DeepGenomeAgentImg from '@/assets/images/chat/DeepGenomeAgent.png';
-import InSilicoResearchAgentImg from '@/assets/images/chat/InSilicoResearchAgent.png';
-import GeneNetworkAgentImg from '@/assets/images/chat/GeneNetworkAgent.png';
-import DigitalDesignAgentImg from '@/assets/images/chat/DigitalDesignAgent.png';
-import DefaultAgentImg from '@/assets/images/chat/Agents.png';
-import AgentsViewImg from '@/assets/images/chat/AgentsView.png';
+} from "@element-plus/icons-vue";
+import {
+  getAnswerCheck,
+  getHistoryQuestionList,
+  getQuery,
+  getQueryAbortable,
+  getChatdownloadURL,
+  getFileDownUrlApi,
+  getAnalystAgentLog,
+  getReactionType,
+  updateAnalystAgentLog,
+  getObsImages,
+} from "@/api/chat";
+import { userStore } from "@/stores";
+import LangSwitch from "@/components/LangSwitch.vue";
+import { useI18n } from "vue-i18n";
+import type { UploadInstance } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
+import {
+  Paperclip,
+  ElementPlus,
+  Promotion,
+  Close,
+} from "@element-plus/icons-vue";
+import { useRouter } from "vue-router";
+import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
+import type { MentionOption } from "vue-element-plus-x/types/components/MentionSender/types";
+import { useAppStore } from "@/stores";
+import FollowUpQuestions from "./FollowUpQuestions.vue";
+import { FilesCard } from "vue-element-plus-x";
+import ChatAgentImg from "@/assets/images/chat/ChatAgent.png";
+import KnowledgeAgentImg from "@/assets/images/chat/KnowledgeAgent.png";
+import DataAgentImg from "@/assets/images/chat/DataAgent.png";
+import AnalystAgentImg from "@/assets/images/chat/AnalystAgent.png";
+import ReviewAgentImg from "@/assets/images/chat/ReviewAgent.png";
+import BriefReviewAgentImg from "@/assets/images/chat/BriefReviewAgent.png";
+import DeepGenomeAgentImg from "@/assets/images/chat/DeepGenomeAgent.png";
+import InSilicoResearchAgentImg from "@/assets/images/chat/InSilicoResearchAgent.png";
+import GeneNetworkAgentImg from "@/assets/images/chat/GeneNetworkAgent.png";
+import DigitalDesignAgentImg from "@/assets/images/chat/DigitalDesignAgent.png";
+import DefaultAgentImg from "@/assets/images/chat/Agents.png";
+import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 
 // 后续问题显示逻辑已移至FollowUpQuestions组件
 
-const uploadRef = ref<UploadInstance>()
+const uploadRef = ref<UploadInstance>();
 const senderRef = ref();
 const timestamp = ref(Date.now());
 
 const submitUpload = () => {
-  uploadRef.value!.submit()
-}
+  uploadRef.value!.submit();
+};
 const { t } = useI18n();
 // 抽屉状态
 const drawerVisible = ref(false);
@@ -944,9 +1507,9 @@ const imageRef = ref<HTMLImageElement>();
 const imageStyle = computed(() => {
   return {
     transform: `scale(${scale.value}) translate(${imageOffset.x}px, ${imageOffset.y}px)`,
-    transformOrigin: '0 0',
-    cursor: isDragging.value ? 'grabbing' : 'grab',
-    display: 'block'
+    transformOrigin: "0 0",
+    cursor: isDragging.value ? "grabbing" : "grab",
+    display: "block",
   };
 });
 
@@ -1033,7 +1596,7 @@ const handleMouseUp = () => {
 };
 
 // 监听右侧侧边栏状态，当右侧打开时，确保左侧是收起的
-watch(drawerVisible, newValue => {
+watch(drawerVisible, (newValue) => {
   if (newValue === true && !leftSidebarCollapsed.value) {
     // 右侧打开，左侧需要收起
     leftSidebarCollapsed.value = true;
@@ -1041,7 +1604,7 @@ watch(drawerVisible, newValue => {
 });
 
 const botAvatar =
-  'https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png';
+  "https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png";
 
 // 定义接口
 interface Chat {
@@ -1124,7 +1687,7 @@ const chatList = ref<Chat[]>([]);
 
 // 修复：将静态引用改为计算属性，确保响应式更新
 const rolesTool = computed(() => userStore().roles);
-console.log(rolesTool.value, 'rolesTool');
+console.log(rolesTool.value, "rolesTool");
 const UserStore = userStore();
 
 // 添加权限加载状态管理
@@ -1132,13 +1695,18 @@ const rolesLoading = ref(false);
 
 // 定义按钮权限映射关系
 const buttonPermissions = {
-  RAG: 'RAG',
-  BI: 'BI',
-  GA: 'GA',
-  联网搜索: '联网搜索',
+  RAG: "RAG",
+  BI: "BI",
+  GA: "GA",
+  联网搜索: "联网搜索",
 };
 //下载显示白名单
-const downloadWhiteList = ['ChatAgent', 'KnowledgeAgent', 'DataAgent', 'ReviewAgent'];
+const downloadWhiteList = [
+  "ChatAgent",
+  "KnowledgeAgent",
+  "DataAgent",
+  "ReviewAgent",
+];
 
 // 检查按钮权限
 const hasButtonPermission = (buttonType: string) => {
@@ -1158,9 +1726,9 @@ const loadUserTools = async () => {
     rolesLoading.value = true;
     try {
       await userStore().getUserTools();
-      console.log('用户权限加载成功:', userStore().roles);
+      console.log("用户权限加载成功:", userStore().roles);
     } catch (error) {
-      console.error('加载用户权限失败:', error);
+      console.error("加载用户权限失败:", error);
     } finally {
       rolesLoading.value = false;
     }
@@ -1188,7 +1756,9 @@ onMounted(async () => {
       }
 
       // 查找是否存在对应的聊天
-      const chatExists = chatList.value.find(chat => chat.dialogue_id === urlChatId);
+      const chatExists = chatList.value.find(
+        (chat) => chat.dialogue_id === urlChatId
+      );
       if (chatExists) {
         // 如果存在，选择该聊天
         selectChat(urlChatId);
@@ -1211,12 +1781,12 @@ onMounted(async () => {
   checkTutorialStatus();
 
   // 添加键盘事件监听器
-  document.addEventListener('keydown', handleTutorialKeydown);
+  document.addEventListener("keydown", handleTutorialKeydown);
 });
 
 // 获取历史问题数据
 const getHistoryQuestionData = () => {
-  return new Promise<void>(resolve => {
+  return new Promise<void>((resolve) => {
     getHistoryQuestionList()
       .then((res: any) => {
         if (res.code === 200 && res.data) {
@@ -1235,14 +1805,14 @@ const getHistoryQuestionData = () => {
           const checkAndProcessLocalStorageChats = () => {
             // 获取所有pending_chat_前缀的键
             const pendingChatKeys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('pending_chat_')
+              key.startsWith("pending_chat_")
             );
 
             // 遍历localStorage中的临时对话
             for (const key of pendingChatKeys) {
               try {
                 const pendingChatData = JSON.parse(
-                  localStorage.getItem(key) || ''
+                  localStorage.getItem(key) || ""
                 );
                 if (
                   pendingChatData &&
@@ -1251,7 +1821,7 @@ const getHistoryQuestionData = () => {
                 ) {
                   // 获取临时对话中的用户消息
                   const pendingUserMessage = pendingChatData.messages.find(
-                    (msg: any) => msg.role === 'user'
+                    (msg: any) => msg.role === "user"
                   );
                   if (pendingUserMessage) {
                     // 检查是否与会话列表中的对话匹配
@@ -1271,11 +1841,11 @@ const getHistoryQuestionData = () => {
                     });
 
                     // 获取临时对话ID
-                    const tempChatId = key.replace('pending_chat_', '');
+                    const tempChatId = key.replace("pending_chat_", "");
 
                     if (matchingChat) {
                       console.log(
-                        '找到匹配的会话，删除localStorage中的临时数据:',
+                        "找到匹配的会话，删除localStorage中的临时数据:",
                         tempChatId
                       );
                       // 如果当前正在使用这个临时对话，更新为匹配的会话
@@ -1283,7 +1853,7 @@ const getHistoryQuestionData = () => {
                         currentChatId.value = matchingChat.dialogue_id;
                         updateUrlWithChatId(matchingChat.dialogue_id);
                         console.log(
-                          '已将当前对话关联到现有对话:',
+                          "已将当前对话关联到现有对话:",
                           matchingChat.dialogue_id
                         );
                       }
@@ -1293,7 +1863,7 @@ const getHistoryQuestionData = () => {
                   }
                 }
               } catch (error) {
-                console.error('处理localStorage临时数据失败:', error);
+                console.error("处理localStorage临时数据失败:", error);
               }
             }
           };
@@ -1305,22 +1875,33 @@ const getHistoryQuestionData = () => {
           chatList.value = formattedData;
 
           // 如果当前有新对话状态，尝试将其与API返回的数据关联
-          if (currentChatId.value && currentChatId.value.startsWith('new_')) {
+          if (currentChatId.value && currentChatId.value.startsWith("new_")) {
             // 查找是否有新创建的对话（通过比较用户消息内容）
-            const currentUserMessage = currentChat.value?.messages?.find((msg: ChatMessage) => msg.role === 'user');
+            const currentUserMessage = currentChat.value?.messages?.find(
+              (msg: ChatMessage) => msg.role === "user"
+            );
             if (currentUserMessage) {
               const matchingChat = formattedData.find((chat: Chat) => {
                 // 比较对话标题与用户消息内容
-                return chat.title === currentUserMessage.content ||
-                  chat.title.includes(currentUserMessage.content.substring(0, 20)) ||
-                  currentUserMessage.content.includes(chat.title.substring(0, 20));
+                return (
+                  chat.title === currentUserMessage.content ||
+                  chat.title.includes(
+                    currentUserMessage.content.substring(0, 20)
+                  ) ||
+                  currentUserMessage.content.includes(
+                    chat.title.substring(0, 20)
+                  )
+                );
               });
 
               if (matchingChat) {
                 // 找到匹配的对话，更新当前对话ID
                 currentChatId.value = matchingChat.dialogue_id;
                 updateUrlWithChatId(matchingChat.dialogue_id);
-                console.log('新对话已关联到现有对话:', matchingChat.dialogue_id);
+                console.log(
+                  "新对话已关联到现有对话:",
+                  matchingChat.dialogue_id
+                );
               }
             }
           }
@@ -1328,7 +1909,7 @@ const getHistoryQuestionData = () => {
         resolve();
       })
       .catch((err: any) => {
-        console.error('获取历史问题数据失败:', err);
+        console.error("获取历史问题数据失败:", err);
         resolve();
       });
   });
@@ -1339,7 +1920,7 @@ const getHistoryQuestionData = () => {
 // fetch 主导,pending chat URL 访问走 loadPendingChat 即可,避免与 chatStates 并行模型冲突)
 const restorePendingChats = () => {
   const pendingChatKeys = Object.keys(localStorage).filter((key) =>
-    key.startsWith('pending_chat_')
+    key.startsWith("pending_chat_")
   );
 
   pendingChatKeys.forEach((key) => {
@@ -1352,10 +1933,10 @@ const restorePendingChats = () => {
         pendingChatData &&
         (pendingChatData.isPending || pendingChatData.messages)
       ) {
-        const tempChatId = key.replace('pending_chat_', '');
+        const tempChatId = key.replace("pending_chat_", "");
 
         const userMessage = pendingChatData.messages?.find(
-          (msg: any) => msg.role === 'user'
+          (msg: any) => msg.role === "user"
         );
 
         if (userMessage) {
@@ -1380,7 +1961,7 @@ const restorePendingChats = () => {
 
             if (matchingChat) {
               console.log(
-                '通过内容匹配找到已存在的会话，删除临时数据:',
+                "通过内容匹配找到已存在的会话，删除临时数据:",
                 tempChatId
               );
               localStorage.removeItem(key);
@@ -1398,11 +1979,11 @@ const restorePendingChats = () => {
         }
       }
     } catch (error) {
-      console.error('恢复未完成的会话失败:', error);
+      console.error("恢复未完成的会话失败:", error);
       try {
         localStorage.removeItem(key);
       } catch (cleanupError) {
-        console.error('清理损坏的会话数据失败:', cleanupError);
+        console.error("清理损坏的会话数据失败:", cleanupError);
       }
     }
   });
@@ -1417,50 +1998,55 @@ const loadPendingChat = (dialogueId: string) => {
     const pendingChatData = JSON.parse(storedData);
     if (pendingChatData && pendingChatData.isPending) {
       currentChat.value = {
-        messages: pendingChatData.messages || []
+        messages: pendingChatData.messages || [],
       };
       return true;
     }
   } catch (error) {
-    console.error('加载未完成的会话失败:', error);
+    console.error("加载未完成的会话失败:", error);
     try {
       localStorage.removeItem(`pending_chat_${dialogueId}`);
     } catch (cleanupError) {
-      console.error('清理损坏的会话数据失败:', cleanupError);
+      console.error("清理损坏的会话数据失败:", cleanupError);
     }
   }
   return false;
 };
 
 // 当前选中的对话
-const currentChatId = ref('');
+const currentChatId = ref("");
 const currentChat: Ref<any> = ref(null);
 
 // 中止请求相关
-const currentRequestId = ref<string>('');
+const currentRequestId = ref<string>("");
 const isAborted = ref(false);
 
 // 所有对话的状态管理
-const chatStates = ref<Record<string, {
-  isSending: boolean;
-  messageInput: string;
-  fileList: UploadFile[];
-  historyQuestion: any;
-  copyVisible: number;
-  copyTimeRef: ReturnType<typeof setTimeout> | undefined;
-  logData: Record<string, any>;
-  loadingLog: Record<string, boolean>;
-  refreshingMessages: Record<string, boolean>;
-  reactions: Record<string, number>; // 添加点赞点踩状态
-  updatingLog: Record<string, boolean>; // 添加更新日志状态
-}>>({});
+const chatStates = ref<
+  Record<
+    string,
+    {
+      isSending: boolean;
+      messageInput: string;
+      fileList: UploadFile[];
+      historyQuestion: any;
+      copyVisible: number;
+      copyTimeRef: ReturnType<typeof setTimeout> | undefined;
+      logData: Record<string, any>;
+      loadingLog: Record<string, boolean>;
+      refreshingMessages: Record<string, boolean>;
+      reactions: Record<string, number>; // 添加点赞点踩状态
+      updatingLog: Record<string, boolean>; // 添加更新日志状态
+    }
+  >
+>({});
 
 // 获取或创建对话状态
 const getChatState = (dialogueId: string) => {
   if (!chatStates.value[dialogueId]) {
     chatStates.value[dialogueId] = {
       isSending: false,
-      messageInput: '',
+      messageInput: "",
       fileList: [],
       historyQuestion: null,
       copyVisible: 0,
@@ -1478,7 +2064,7 @@ const getChatState = (dialogueId: string) => {
 // 开始新对话
 const startNewChat = () => {
   // 创建新对话的状态
-  const newDialogueId = 'new_' + Date.now();
+  const newDialogueId = "new_" + Date.now();
   getChatState(newDialogueId);
 
   // 设置当前对话ID为新创建的ID
@@ -1487,8 +2073,8 @@ const startNewChat = () => {
 
   // 移除URL中的id参数
   const url = new URL(window.location.href);
-  url.searchParams.delete('dialogue_id');
-  window.history.pushState({}, '', url.toString());
+  url.searchParams.delete("dialogue_id");
+  window.history.pushState({}, "", url.toString());
 
   // 确保滚动到底部
   nextTick(() => {
@@ -1503,22 +2089,22 @@ const handleButtonClick = (buttonType: string) => {
 
   // 如果点击的是当前已选中的按钮，则取消选中
   if (activeButton.value === buttonType) {
-    activeButton.value = '';
+    activeButton.value = "";
     // 从输入框中移除对应的 @tool, 标记
-    const command = '@' + buttonType + ',';
-    messageInput.value = messageInput.value.replace(command, '');
+    const command = "@" + buttonType + ",";
+    messageInput.value = messageInput.value.replace(command, "");
     return;
   }
 
   // 如果之前有其他按钮被选中，先移除
   if (activeButton.value) {
-    const oldCommand = '@' + activeButton.value + ',';
-    messageInput.value = messageInput.value.replace(oldCommand, '');
+    const oldCommand = "@" + activeButton.value + ",";
+    messageInput.value = messageInput.value.replace(oldCommand, "");
   }
 
   // 设置新的选中按钮
   activeButton.value = buttonType;
-  const command = '@' + buttonType + ',';
+  const command = "@" + buttonType + ",";
   const newMessageValue = extractAtValues(messageInput.value);
   messageInput.value = `${command}${newMessageValue.cleanedText}`;
 
@@ -1528,7 +2114,7 @@ const handleButtonClick = (buttonType: string) => {
   });
 };
 
-const updateCopyIconHandler = (index: number, delay = 3000,) => {
+const updateCopyIconHandler = (index: number, delay = 3000) => {
   copyVisible.value = index;
   if (copyTimeRef.value) {
     clearTimeout(copyTimeRef.value);
@@ -1540,39 +2126,39 @@ const updateCopyIconHandler = (index: number, delay = 3000,) => {
 
 //copy复制对话
 const textAreaCopyCore = (text: any, index: number) => {
-  const textArea = document.createElement('textarea');
+  const textArea = document.createElement("textarea");
   textArea.value = text;
   // 使text area不在viewport，同时设置不可见
-  textArea.style.position = 'absolute';
-  textArea.style.opacity = '0';
-  textArea.style.left = '-999999px';
-  textArea.style.top = '-999999px';
+  textArea.style.position = "absolute";
+  textArea.style.opacity = "0";
+  textArea.style.left = "-999999px";
+  textArea.style.top = "-999999px";
   document.body.appendChild(textArea);
   textArea.focus();
   textArea.select();
-  document.execCommand('copy');
+  document.execCommand("copy");
   updateCopyIconHandler(index);
   textArea.remove();
-  ElMessage.success(t('chat.copySuccess'));
-}
+  ElMessage.success(t("chat.copySuccess"));
+};
 
 const fallbackCopyText = (text: any, index: number) => {
   try {
     if (window.isSecureContext) {
       navigator.clipboard.writeText(text);
       updateCopyIconHandler(index);
-      ElMessage.success(t('chat.copySuccess'));
+      ElMessage.success(t("chat.copySuccess"));
     } else {
       textAreaCopyCore(text, index);
     }
   } catch {
-    ElMessage.success(t('chat.copyFailed'));
+    ElMessage.success(t("chat.copyFailed"));
   }
 };
 
 // 打开聊天代理
 const openChatAgents = () => {
-  console.log(t('chat.logs.openChatAgent'));
+  console.log(t("chat.logs.openChatAgent"));
 
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
@@ -1585,31 +2171,31 @@ const openChatAgents = () => {
 
 // 知识代理人
 const openKnowledgeAgents = () => {
-  console.log(t('chat.logs.openKnowledgeAgent'));
+  console.log(t("chat.logs.openKnowledgeAgent"));
   // 这里实现知识代理人功能
 };
 
 // 数据库代理
 const openDatabaseAgents = () => {
-  console.log(t('chat.logs.openDatabaseAgent'));
+  console.log(t("chat.logs.openDatabaseAgent"));
   // 这里实现数据库代理功能
 };
 
 // 分析代理
 const openAnalysisAgents = () => {
-  console.log(t('chat.logs.openAnalysisAgent'));
+  console.log(t("chat.logs.openAnalysisAgent"));
   // 这里实现分析代理功能
 };
 
 // 基因功能代理
 const openGeneFunctionAgents = () => {
-  console.log(t('chat.logs.openGeneFunctionAgent'));
+  console.log(t("chat.logs.openGeneFunctionAgent"));
   // 这里实现基因功能代理功能
 };
 
 // 审查代理人
 const openReviewAgents = () => {
-  console.log(t('chat.logs.openReviewAgent'));
+  console.log(t("chat.logs.openReviewAgent"));
   // 这里实现审查代理人功能
 };
 
@@ -1618,39 +2204,43 @@ const downloadFile = async (url: string) => {
   // 在这里调用 getChatdownloadURL 接口 获取下载链接
   const res = await getChatdownloadURL({ obs_path: url });
   if (res.code == 200) {
-    window.open(res.data, "_blank", 'noopener,noreferrer')
+    window.open(res.data, "_blank", "noopener,noreferrer");
   }
-}
+};
 
 // 直接下载文件（基于 download_path）
 const downloadFileDirect = (downloadPath: string) => {
   if (downloadPath) {
-    window.open(downloadPath, "_blank", 'noopener,noreferrer')
+    window.open(downloadPath, "_blank", "noopener,noreferrer");
   }
-}
+};
 
 // 下载对话转换后的文件接链接
 const getFileDownUrl = async (id: string, type: string) => {
   // 在这里调用 getFileDownUrlApi 接口 获取下载链接
   const queryData = new FormData();
-  queryData.append('document_format', type);
-  queryData.append('id', (id ? Number(id) : 0).toString());
+  queryData.append("document_format", type);
+  queryData.append("id", (id ? Number(id) : 0).toString());
   try {
     const response = await getFileDownUrlApi(queryData);
     // 从响应头中提取文件名
-    const contentDisposition = response.headers['content-disposition'];
+    const contentDisposition = response.headers["content-disposition"];
     let fileName = "default_filename"; // 默认文件名
     if (contentDisposition) {
-      const fileNameMatch = contentDisposition.match(/filename="?(.+?)"?(;|$)/i);
+      const fileNameMatch = contentDisposition.match(
+        /filename="?(.+?)"?(;|$)/i
+      );
       if (fileNameMatch && fileNameMatch[1]) {
         fileName = fileNameMatch[1];
       }
     }
-    const blob = new Blob([response.data], { type: response.headers['content-type'] });
+    const blob = new Blob([response.data], {
+      type: response.headers["content-type"],
+    });
 
     // 创建下载链接
     const downloadUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = downloadUrl;
     link.download = fileName; // 设置下载文件名
     document.body.appendChild(link);
@@ -1660,13 +2250,13 @@ const getFileDownUrl = async (id: string, type: string) => {
     window.URL.revokeObjectURL(downloadUrl);
     document.body.removeChild(link);
   } catch (error) {
-    console.error('下载文件失败:', error);
+    console.error("下载文件失败:", error);
   }
 };
 
 // 打开知识库
 const openKnowledgeBase = () => {
-  console.log(t('chat.logs.openKnowledgeBase'));
+  console.log(t("chat.logs.openKnowledgeBase"));
 
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
@@ -1696,13 +2286,13 @@ const parseMessageWithFiles = (messageContent: string) => {
   if (!fileMatches || fileMatches.length === 0) {
     return {
       content: messageContent,
-      attachedFiles: undefined
+      attachedFiles: undefined,
     };
   }
 
   // 提取文件信息
   const attachedFiles: UploadFile[] = [];
-  fileMatches.forEach(match => {
+  fileMatches.forEach((match) => {
     const fileInfo = match.match(/\[附件: ([^(]+) \(([^)]+)\)\]/);
     if (fileInfo) {
       const fileName = fileInfo[1].trim();
@@ -1710,29 +2300,29 @@ const parseMessageWithFiles = (messageContent: string) => {
 
       // 解析文件大小
       let fileSize = 0;
-      if (fileSizeStr.includes('KB')) {
+      if (fileSizeStr.includes("KB")) {
         fileSize = parseFloat(fileSizeStr) * 1024;
-      } else if (fileSizeStr.includes('MB')) {
+      } else if (fileSizeStr.includes("MB")) {
         fileSize = parseFloat(fileSizeStr) * 1024 * 1024;
-      } else if (fileSizeStr.includes('B')) {
+      } else if (fileSizeStr.includes("B")) {
         fileSize = parseFloat(fileSizeStr);
       }
 
       attachedFiles.push({
         name: fileName,
         size: fileSize,
-        type: '', // 历史记录中无法获取文件类型
-        file: null as any // 历史记录中无法获取文件对象
+        type: "", // 历史记录中无法获取文件类型
+        file: null as any, // 历史记录中无法获取文件对象
       });
     }
   });
 
   // 移除文件信息标记，获取纯文本内容
-  const cleanContent = messageContent.replace(fileInfoRegex, '').trim();
+  const cleanContent = messageContent.replace(fileInfoRegex, "").trim();
 
   return {
     content: cleanContent,
-    attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined
+    attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined,
   };
 };
 
@@ -1746,7 +2336,7 @@ const selectChat = async (dialogueId: string) => {
 
   // 在这里调用 getAnswerCheck 接口 获取对话记录
   const res = await getAnswerCheck({ dialogue_id: dialogueId });
-  console.log(res, 'res');
+  console.log(res, "res");
 
   if (res.code === 200) {
     // 处理返回的数据，转换为消息格式
@@ -1762,11 +2352,13 @@ const selectChat = async (dialogueId: string) => {
     // 遍历返回的数组，转换为消息格式
     if (res.data && Array.isArray(res.data)) {
       res.data.forEach((item: ChatResponse) => {
-        console.log('tool_name:', item.tool_name === 'AnalystAgent');
+        console.log("tool_name:", item.tool_name === "AnalystAgent");
 
         // 同步服务器返回的点赞点踩状态
         if (item.id && item.reaction_type) {
-          chatState.reactions[item.id.toString()] = parseInt(item.reaction_type);
+          chatState.reactions[item.id.toString()] = parseInt(
+            item.reaction_type
+          );
         }
 
         // 添加用户消息
@@ -1775,12 +2367,12 @@ const selectChat = async (dialogueId: string) => {
           const { content, attachedFiles } = parseMessageWithFiles(item.query);
 
           messages.push({
-            role: 'user',
+            role: "user",
             content: content,
             attachedFiles: attachedFiles,
           });
           historyMessages.push({
-            role: 'user',
+            role: "user",
             content: content,
           });
         }
@@ -1788,157 +2380,203 @@ const selectChat = async (dialogueId: string) => {
         // 添加助手消息
         if (item.answer) {
           try {
-
-            const answerData = isValidJSON(item.answer) ? JSON.parse(item.answer) : item.answer;
+            const answerData = isValidJSON(item.answer)
+              ? JSON.parse(item.answer)
+              : item.answer;
             if (answerData.final_answer) {
               messages.push({
-                role: 'assistant',
+                role: "assistant",
                 content: answerData.final_answer,
                 steps: answerData.steps || [],
-                status: item?.status || '',
-                upload_path: item?.upload_path || '',
-                download_path: item?.download_path || '',
+                status: item?.status || "",
+                upload_path: item?.upload_path || "",
+                download_path: item?.download_path || "",
                 id: item.id,
                 tool_name: item.tool_name,
-                followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+                followUpQuestions: item.follow_up_questions
+                  ? typeof item.follow_up_questions === "string"
+                    ? JSON.parse(item.follow_up_questions)
+                    : item.follow_up_questions
+                  : [],
                 showFollowUpQuestions: true, // 历史消息默认显示后续问题
                 showLog: false,
                 instantMessage: false,
               });
               historyMessages.push({
-                role: 'assistant',
+                role: "assistant",
                 content: answerData.final_answer,
               });
             } else {
-              if (item.tool_name === 'ChatAgents' || item.tool_name === 'ChatAgent') {
+              if (
+                item.tool_name === "ChatAgents" ||
+                item.tool_name === "ChatAgent"
+              ) {
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                   steps: [],
-                  status: item?.status || '',
-                  upload_path: item?.upload_path || '',
-                  download_path: item?.download_path || '',
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
+                  download_path: item?.download_path || "",
                   id: item.id,
                   tool_name: item.tool_name,
-                  followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+                  followUpQuestions: item.follow_up_questions
+                    ? typeof item.follow_up_questions === "string"
+                      ? JSON.parse(item.follow_up_questions)
+                      : item.follow_up_questions
+                    : [],
                   showFollowUpQuestions: true, // 历史消息默认显示后续问题
                   showLog: false,
                   instantMessage: false,
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              } else if (item.tool_name === 'KnowledgeAgents' || item.tool_name === 'ReviewAgents' || item.tool_name === 'KnowledgeAgent' || item.tool_name === 'ReviewAgent') {
-                const contentData = isValidJSON(item.answer) ? JSON.parse(item.answer) : item.answer;
+              } else if (
+                item.tool_name === "KnowledgeAgents" ||
+                item.tool_name === "ReviewAgents" ||
+                item.tool_name === "KnowledgeAgent" ||
+                item.tool_name === "ReviewAgent"
+              ) {
+                const contentData = isValidJSON(item.answer)
+                  ? JSON.parse(item.answer)
+                  : item.answer;
                 // 打印 doc_list 数据
-                console.log('=== 历史消息 doc_list ===', {
+                console.log("=== 历史消息 doc_list ===", {
                   tool_name: item.tool_name,
                   message_id: item.id,
                   doc_list: contentData.doc_list,
-                  content: contentData.content
+                  content: contentData.content,
                 });
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: contentData.content,
                   doc_list: contentData.doc_list,
-                  status: item?.status || '',
-                  upload_path: item?.upload_path || '',
-                  download_path: item?.download_path || '',
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
+                  download_path: item?.download_path || "",
                   id: item.id,
                   tool_name: item.tool_name,
-                  followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+                  followUpQuestions: item.follow_up_questions
+                    ? typeof item.follow_up_questions === "string"
+                      ? JSON.parse(item.follow_up_questions)
+                      : item.follow_up_questions
+                    : [],
                   showFollowUpQuestions: true, // 历史消息默认显示后续问题
                   showLog: false,
                   instantMessage: false,
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              } else if (item.tool_name === 'DatabaseAgents' || item.tool_name === 'DataAgent') {
-                const contentData = isValidJSON(item.answer) ? JSON.parse(item.answer) : item.answer;
+              } else if (
+                item.tool_name === "DatabaseAgents" ||
+                item.tool_name === "DataAgent"
+              ) {
+                const contentData = isValidJSON(item.answer)
+                  ? JSON.parse(item.answer)
+                  : item.answer;
                 const tableData = convertToTableData(contentData);
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: tableData,
                   tableHeaders: contentData.headers.map((header: string) => ({
-                    prop: header.replace(/\s+/g, '_').toLowerCase(),
+                    prop: header.replace(/\s+/g, "_").toLowerCase(),
                     label: header,
                   })),
-                  status: item?.status || '',
-                  upload_path: item?.upload_path || '',
-                  download_path: item?.download_path || '',
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
+                  download_path: item?.download_path || "",
                   original: item.answer,
                   id: item.id,
                   tool_name: item.tool_name,
-                  followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+                  followUpQuestions: item.follow_up_questions
+                    ? typeof item.follow_up_questions === "string"
+                      ? JSON.parse(item.follow_up_questions)
+                      : item.follow_up_questions
+                    : [],
                   showFollowUpQuestions: true, // 历史消息默认显示后续问题
                   showLog: false,
                   instantMessage: false,
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              } else if (item.tool_name === 'AnalystAgent') {
-                console.log(item, 'item.id');
-                getAnalystAgentLog({ id: item.id || '' }).then((res: any) => {
-                  console.log(res, 'res1111111111111111111');
-                })
+              } else if (item.tool_name === "AnalystAgent") {
+                console.log(item, "item.id");
+                getAnalystAgentLog({ id: item.id || "" }).then((res: any) => {
+                  console.log(res, "res1111111111111111111");
+                });
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
-                  status: item?.status || '',
-                  upload_path: item?.upload_path || '',
-                  download_path: item?.download_path || '',
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
+                  download_path: item?.download_path || "",
                   id: item.id,
                   task_id: item.task_id,
                   tool_name: item.tool_name,
-                  followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+                  followUpQuestions: item.follow_up_questions
+                    ? typeof item.follow_up_questions === "string"
+                      ? JSON.parse(item.follow_up_questions)
+                      : item.follow_up_questions
+                    : [],
                   showFollowUpQuestions: true, // 历史消息默认显示后续问题
                   showLog: false,
                   instantMessage: false,
-                  compute_resource: item?.compute_resource || '',
+                  compute_resource: item?.compute_resource || "",
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              } else if (item.tool_name === 'AnalysisAgents') {
+              } else if (item.tool_name === "AnalysisAgents") {
                 // const contentData = JSON.parse(item.answer);
                 messages.push({
-                  role: 'assistant',
-                  content: '任务执行中，请等待',
-                  status: item?.status || '',
-                  upload_path: item?.upload_path || '',
-                  download_path: item?.download_path || '',
+                  role: "assistant",
+                  content: "任务执行中，请等待",
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
+                  download_path: item?.download_path || "",
                   id: item.id,
                   task_id: item.task_id,
                   tool_name: item.tool_name,
-                  followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+                  followUpQuestions: item.follow_up_questions
+                    ? typeof item.follow_up_questions === "string"
+                      ? JSON.parse(item.follow_up_questions)
+                      : item.follow_up_questions
+                    : [],
                   showFollowUpQuestions: true, // 历史消息默认显示后续问题
                   showLog: false,
                   instantMessage: false,
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
-              } else if (item.tool_name === 'DeepGenomeAgent') {
-                const contentData = isValidJSON(item.answer) ? JSON.parse(item.answer) : item.answer;
-                
+              } else if (item.tool_name === "DeepGenomeAgent") {
+                const contentData = isValidJSON(item.answer)
+                  ? JSON.parse(item.answer)
+                  : item.answer;
+
                 // 创建消息对象
                 const deepGenomeMessage = {
-                  role: 'assistant',
+                  role: "assistant",
                   content: contentData?.content || item.answer,
                   doc_list: contentData?.doc_list,
-                  status: item?.status || '',
-                  upload_path: item?.upload_path || '',
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
                   id: item.id,
                   task_id: item.task_id,
                   tool_name: item.tool_name,
-                  followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+                  followUpQuestions: item.follow_up_questions
+                    ? typeof item.follow_up_questions === "string"
+                      ? JSON.parse(item.follow_up_questions)
+                      : item.follow_up_questions
+                    : [],
                   showFollowUpQuestions: true, // 历史消息默认显示后续问题
                   instantMessage: false,
                   server_file_path: item.server_file_path, // 添加服务器文件路径
@@ -1947,75 +2585,85 @@ const selectChat = async (dialogueId: string) => {
                 // 如果有服务器文件路径，异步读取文件内容
                 if (item.server_file_path) {
                   // 先显示加载状态
-                  deepGenomeMessage.content = '正在加载文件内容...';
-                  
-                  readServerFile(item.server_file_path).then(fileContent => {
-                    console.log(fileContent, 'fileContent');
-                    
-                    if (fileContent && fileContent.trim()) {
-                      deepGenomeMessage.content = fileContent;
-                    } else {
-                      deepGenomeMessage.content = '文件内容为空或加载失败';
-                    }
-                    // 强制更新视图
-                    nextTick(() => {
-                      timestamp.value = Date.now();
-                      scrollToBottom();
-                    });
-                  }).catch(error => {
-                    console.error('读取DeepGenomeAgent文件失败:', error);
-                    deepGenomeMessage.content = '文件加载失败，请稍后重试';
-                    // 强制更新视图
-                    nextTick(() => {
-                      timestamp.value = Date.now();
+                  deepGenomeMessage.content = "正在加载文件内容...";
+
+                  readServerFile(item.server_file_path)
+                    .then((fileContent) => {
+                      console.log(fileContent, "fileContent");
+
+                      if (fileContent && fileContent.trim()) {
+                        deepGenomeMessage.content = fileContent;
+                      } else {
+                        deepGenomeMessage.content = "文件内容为空或加载失败";
+                      }
+                      // 强制更新视图
+                      nextTick(() => {
+                        timestamp.value = Date.now();
                         scrollToBottom();
+                      });
+                    })
+                    .catch((error) => {
+                      console.error("读取DeepGenomeAgent文件失败:", error);
+                      deepGenomeMessage.content = "文件加载失败，请稍后重试";
+                      // 强制更新视图
+                      nextTick(() => {
+                        timestamp.value = Date.now();
+                        scrollToBottom();
+                      });
                     });
-                  });
                 }
-                
+
                 messages.push(deepGenomeMessage);
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
               } else {
                 messages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
-                  status: item?.status || '',
-                  upload_path: item?.upload_path || '',
-                  download_path: item?.download_path || '',
-                  id: item?.id || '',
+                  status: item?.status || "",
+                  upload_path: item?.upload_path || "",
+                  download_path: item?.download_path || "",
+                  id: item?.id || "",
                   task_id: item.task_id,
-                  tool_name: item?.tool_name || '',
-                  followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+                  tool_name: item?.tool_name || "",
+                  followUpQuestions: item.follow_up_questions
+                    ? typeof item.follow_up_questions === "string"
+                      ? JSON.parse(item.follow_up_questions)
+                      : item.follow_up_questions
+                    : [],
                   showFollowUpQuestions: true, // 历史消息默认显示后续问题
                   instantMessage: false,
                 });
                 historyMessages.push({
-                  role: 'assistant',
+                  role: "assistant",
                   content: item.answer,
                 });
               }
             }
           } catch (e) {
             messages.push({
-              role: 'assistant',
+              role: "assistant",
               content: item.answer,
               steps: [],
-              status: item?.status || '',
-              upload_path: item?.upload_path || '',
-              download_path: item?.download_path || '',
-              id: item?.id || '',
+              status: item?.status || "",
+              upload_path: item?.upload_path || "",
+              download_path: item?.download_path || "",
+              id: item?.id || "",
               task_id: item.task_id,
-              tool_name: item.tool_name || '',
-              followUpQuestions: item.follow_up_questions ? (typeof item.follow_up_questions === 'string' ? JSON.parse(item.follow_up_questions) : item.follow_up_questions) : [],
+              tool_name: item.tool_name || "",
+              followUpQuestions: item.follow_up_questions
+                ? typeof item.follow_up_questions === "string"
+                  ? JSON.parse(item.follow_up_questions)
+                  : item.follow_up_questions
+                : [],
               showFollowUpQuestions: true, // 历史消息默认显示后续问题
               showLog: false,
               instantMessage: false,
             });
             historyMessages.push({
-              role: 'assistant',
+              role: "assistant",
               content: item.answer,
             });
             timestamp.value = Date.now();
@@ -2042,9 +2690,9 @@ const selectChat = async (dialogueId: string) => {
 // 输入框内容 - 现在基于当前对话
 const messageInput = computed({
   get: () => {
-    if (!currentChatId.value) return '';
+    if (!currentChatId.value) return "";
     const chatState = getChatState(currentChatId.value);
-    return chatState ? chatState.messageInput : '';
+    return chatState ? chatState.messageInput : "";
   },
   set: (value: string) => {
     if (!currentChatId.value) return;
@@ -2052,7 +2700,7 @@ const messageInput = computed({
     if (chatState) {
       chatState.messageInput = value;
     }
-  }
+  },
 });
 
 // 发送消息的加载状态 - 现在基于当前对话
@@ -2068,7 +2716,7 @@ const isSending = computed({
     if (chatState) {
       chatState.isSending = value;
     }
-  }
+  },
 });
 
 // 文件列表 - 现在基于当前对话
@@ -2084,20 +2732,27 @@ const fileList = computed({
     if (chatState) {
       chatState.fileList = value;
     }
-  }
+  },
 });
 
 // 监听文件列表 控制列表显示
-watch(() => fileList.value, (newVal, oldVal) => {
-  console.log('文件列表变化:', { newVal, oldVal, senderRef: !!senderRef.value });
-  if (newVal?.length > 0 && senderRef.value) {
-    console.log('打开header，文件数量:', newVal.length);
-    senderRef.value.openHeader();
-  } else if (senderRef.value) {
-    console.log('关闭header');
-    senderRef.value.closeHeader();
+watch(
+  () => fileList.value,
+  (newVal, oldVal) => {
+    console.log("文件列表变化:", {
+      newVal,
+      oldVal,
+      senderRef: !!senderRef.value,
+    });
+    if (newVal?.length > 0 && senderRef.value) {
+      console.log("打开header，文件数量:", newVal.length);
+      senderRef.value.openHeader();
+    } else if (senderRef.value) {
+      console.log("关闭header");
+      senderRef.value.closeHeader();
+    }
   }
-});
+);
 
 // GeneNetworkAgent / DigitalDesignAgent 图片下载状态(按 message id 索引,
 // 与 frontend chat/index.vue 保持一致)
@@ -2107,7 +2762,10 @@ const digitalDesignImages = reactive<Record<string, string[]>>({});
 const digitalDesignImagesLoading = reactive<Record<string, boolean>>({});
 
 // 获取 GeneNetworkAgent 图片(单个 download_path)
-const fetchGeneNetworkImages = async (messageId: string, downloadPath: string) => {
+const fetchGeneNetworkImages = async (
+  messageId: string,
+  downloadPath: string
+) => {
   if (!messageId || !downloadPath || geneNetworkImages[messageId]) return;
   geneNetworkImagesLoading[messageId] = true;
   try {
@@ -2119,7 +2777,7 @@ const fetchGeneNetworkImages = async (messageId: string, downloadPath: string) =
       geneNetworkImages[messageId] = [];
     }
   } catch (error) {
-    console.error('获取 GeneNetworkAgent 图片失败:', error);
+    console.error("获取 GeneNetworkAgent 图片失败:", error);
     geneNetworkImages[messageId] = [];
   } finally {
     geneNetworkImagesLoading[messageId] = false;
@@ -2127,8 +2785,17 @@ const fetchGeneNetworkImages = async (messageId: string, downloadPath: string) =
 };
 
 // 获取 DigitalDesignAgent 图片(download_path 可能是数组或 JSON 字符串)
-const fetchDigitalDesignImages = async (messageId: string, downloadPaths: string[]) => {
-  if (!messageId || !downloadPaths || downloadPaths.length === 0 || digitalDesignImages[messageId]) return;
+const fetchDigitalDesignImages = async (
+  messageId: string,
+  downloadPaths: string[]
+) => {
+  if (
+    !messageId ||
+    !downloadPaths ||
+    downloadPaths.length === 0 ||
+    digitalDesignImages[messageId]
+  )
+    return;
   digitalDesignImagesLoading[messageId] = true;
   try {
     const allImages: string[] = [];
@@ -2144,7 +2811,7 @@ const fetchDigitalDesignImages = async (messageId: string, downloadPaths: string
     }
     digitalDesignImages[messageId] = allImages;
   } catch (error) {
-    console.error('获取 DigitalDesignAgent 图片失败:', error);
+    console.error("获取 DigitalDesignAgent 图片失败:", error);
     digitalDesignImages[messageId] = [];
   } finally {
     digitalDesignImagesLoading[messageId] = false;
@@ -2158,8 +2825,8 @@ watch(
     if (!messages) return;
     messages.forEach((msg: any) => {
       if (
-        msg.role === 'assistant' &&
-        msg.tool_name === 'GeneNetworkAgent' &&
+        msg.role === "assistant" &&
+        msg.tool_name === "GeneNetworkAgent" &&
         msg.download_path &&
         msg.id &&
         !geneNetworkImages[msg.id]
@@ -2167,8 +2834,8 @@ watch(
         fetchGeneNetworkImages(msg.id, msg.download_path);
       }
       if (
-        msg.role === 'assistant' &&
-        msg.tool_name === 'DigitalDesignAgent' &&
+        msg.role === "assistant" &&
+        msg.tool_name === "DigitalDesignAgent" &&
         msg.download_path &&
         msg.id &&
         !digitalDesignImages[msg.id]
@@ -2176,7 +2843,7 @@ watch(
         let paths: string[] = [];
         if (Array.isArray(msg.download_path)) {
           paths = msg.download_path;
-        } else if (typeof msg.download_path === 'string') {
+        } else if (typeof msg.download_path === "string") {
           try {
             const parsed = JSON.parse(msg.download_path);
             if (Array.isArray(parsed)) {
@@ -2208,7 +2875,7 @@ const copyVisible = computed({
     if (chatState) {
       chatState.copyVisible = value;
     }
-  }
+  },
 });
 
 const copyTimeRef = computed({
@@ -2223,7 +2890,7 @@ const copyTimeRef = computed({
     if (chatState) {
       chatState.copyTimeRef = value;
     }
-  }
+  },
 });
 
 // 日志状态管理 - 现在基于当前对话
@@ -2239,7 +2906,7 @@ const logData = computed({
     if (chatState) {
       chatState.logData = value;
     }
-  }
+  },
 });
 
 const loadingLog = computed({
@@ -2254,7 +2921,7 @@ const loadingLog = computed({
     if (chatState) {
       chatState.loadingLog = value;
     }
-  }
+  },
 });
 
 // 刷新状态管理 - 现在基于当前对话
@@ -2270,7 +2937,7 @@ const refreshingMessages = computed({
     if (chatState) {
       chatState.refreshingMessages = value;
     }
-  }
+  },
 });
 
 // 历史问题 - 现在基于当前对话
@@ -2286,7 +2953,7 @@ const historyQuestion = computed({
     if (chatState) {
       chatState.historyQuestion = value;
     }
-  }
+  },
 });
 
 // 消息容器引用，用于自动滚动
@@ -2301,13 +2968,13 @@ const scrollToBottom = async () => {
 };
 
 // 监听输入内容
-watch(messageInput, newVal => {
+watch(messageInput, (newVal) => {
   if (activeButton.value && currentChatId.value) {
-    const command = '@' + activeButton.value + ',';
+    const command = "@" + activeButton.value + ",";
     const newMessageValue = extractAtValues(newVal);
     const contains = newVal.includes(command);
     if (!contains) {
-      activeButton.value = ''
+      activeButton.value = "";
     } else {
       messageInput.value = `${command}${newMessageValue.cleanedText}`;
     }
@@ -2319,29 +2986,34 @@ const sendMessage = async () => {
   if (!currentChatId.value) return;
 
   const chatState = getChatState(currentChatId.value);
-  if (!chatState || !chatState.messageInput.trim() || chatState.isSending) return;
+  if (!chatState || !chatState.messageInput.trim() || chatState.isSending)
+    return;
 
   const newMessageValue = extractAtValues(chatState.messageInput);
   const currentMessage = newMessageValue.cleanedText;
   if (!currentMessage.trim()) return;
 
   chatState.isSending = true;
-  chatState.messageInput = '';
+  chatState.messageInput = "";
 
-  const isNewChat = !currentChat.value?.messages || currentChat.value.messages.length === 0;
+  const isNewChat =
+    !currentChat.value?.messages || currentChat.value.messages.length === 0;
   if (isNewChat) currentChat.value = { messages: [] };
 
   // 创建用户消息，包含附件文件信息
   const userMessage = {
-    role: 'user',
+    role: "user",
     content: currentMessage,
-    attachedFiles: chatState.fileList.length > 0 ? [...chatState.fileList] : undefined
+    attachedFiles:
+      chatState.fileList.length > 0 ? [...chatState.fileList] : undefined,
   };
 
   // 将文件信息添加到消息内容中，确保能保存在历史记录中
   let messageContent = currentMessage;
   if (chatState.fileList.length > 0) {
-    const fileInfo = chatState.fileList.map(file => `[附件: ${file.name} (${formatFileSize(file.size)})]`).join('\n');
+    const fileInfo = chatState.fileList
+      .map((file) => `[附件: ${file.name} (${formatFileSize(file.size)})]`)
+      .join("\n");
     messageContent = `${currentMessage}\n\n${fileInfo}`;
   }
 
@@ -2355,76 +3027,105 @@ const sendMessage = async () => {
   try {
     const urlChatId = getDialogueIdFromChatId();
     const queryData = new FormData();
-    queryData.append('query', messageContent); // 使用包含文件信息的消息内容
-    queryData.append('id', (urlChatId ? Number(urlChatId) : 0).toString());
-    queryData.append('tool', newMessageValue.matches.length > 0 ? newMessageValue.matches.join(',') : '');
+    queryData.append("query", messageContent); // 使用包含文件信息的消息内容
+    queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
+    queryData.append(
+      "tool",
+      newMessageValue.matches.length > 0
+        ? newMessageValue.matches.join(",")
+        : ""
+    );
     if (chatState.historyQuestion) {
-      queryData.append('history', JSON.stringify(chatState.historyQuestion));
+      queryData.append("history", JSON.stringify(chatState.historyQuestion));
     }
     if (chatState.fileList.length > 0) {
-      chatState.fileList.forEach(fileItem => {
-        queryData.append('files', fileItem.file);
+      chatState.fileList.forEach((fileItem) => {
+        queryData.append("files", fileItem.file);
       });
     }
 
     // 生成请求ID
     currentRequestId.value = Date.now().toString();
-    
-    const response = await getQueryAbortable(queryData as any, currentRequestId.value);
-    console.log('response', response.data);
 
-          if (response.data) {
-        let assistantMessage: ChatMessage | undefined;
-        if (response.data.final_answer) {
+    const response = await getQueryAbortable(
+      queryData as any,
+      currentRequestId.value
+    );
+    console.log("response", response.data);
+
+    if (response.data) {
+      let assistantMessage: ChatMessage | undefined;
+      if (response.data.final_answer) {
         assistantMessage = {
-          role: 'assistant',
-          content: response.data.final_answer || '抱歉，我无法回答这个问题。',
+          role: "assistant",
+          content: response.data.final_answer || "抱歉，我无法回答这个问题。",
           steps: response.data.steps || [],
-          status: response.data?.status || '',
-          upload_path: response.data?.upload_path || '',
+          status: response.data?.status || "",
+          upload_path: response.data?.upload_path || "",
           instantMessage: true,
           id: response.data.id,
-          followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+          followUpQuestions: response.data.follow_up_questions
+            ? typeof response.data.follow_up_questions === "string"
+              ? JSON.parse(response.data.follow_up_questions)
+              : response.data.follow_up_questions
+            : [],
           showFollowUpQuestions: false,
           showLog: false,
         };
 
         // 同步新消息的点赞状态
         if (response.data.id && response.data.reaction_type) {
-          chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+          chatState.reactions[response.data.id.toString()] = parseInt(
+            response.data.reaction_type
+          );
         }
       } else {
         if (response.data.tool_name) {
-          if (response.data.tool_name === 'ChatAgents' || response.data === 'ChatAgent') {
+          if (
+            response.data.tool_name === "ChatAgents" ||
+            response.data === "ChatAgent"
+          ) {
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: response.data.answer,
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
             };
 
             // 同步新消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
-          } else if (response.data.tool_name === 'DeepGenomeAgent') {
-            const contentData = isValidJSON(response.data.answer) ? JSON.parse(response.data.answer) : response.data.answer;
+          } else if (response.data.tool_name === "DeepGenomeAgent") {
+            const contentData = isValidJSON(response.data.answer)
+              ? JSON.parse(response.data.answer)
+              : response.data.answer;
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: contentData?.content || response.data.answer,
               doc_list: contentData?.doc_list,
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
               server_file_path: response.data.server_file_path, // 添加服务器文件路径
@@ -2434,143 +3135,189 @@ const sendMessage = async () => {
             if (response.data.server_file_path) {
               // 先显示加载状态
               if (assistantMessage) {
-                assistantMessage.content = '正在加载文件内容...';
+                assistantMessage.content = "正在加载文件内容...";
               }
-              
-              readServerFile(response.data.server_file_path).then(fileContent => {
-                if (fileContent && fileContent.trim() && assistantMessage) {
-                  assistantMessage.content = fileContent;
-                } else if (assistantMessage) {
-                  assistantMessage.content = '文件内容为空或加载失败';
-                }
-                // 强制更新视图
-                nextTick(() => {
-                  timestamp.value = Date.now();
-                  scrollToBottom();
+
+              readServerFile(response.data.server_file_path)
+                .then((fileContent) => {
+                  if (fileContent && fileContent.trim() && assistantMessage) {
+                    assistantMessage.content = fileContent;
+                  } else if (assistantMessage) {
+                    assistantMessage.content = "文件内容为空或加载失败";
+                  }
+                  // 强制更新视图
+                  nextTick(() => {
+                    timestamp.value = Date.now();
+                    scrollToBottom();
+                  });
+                })
+                .catch((error) => {
+                  console.error("读取DeepGenomeAgent文件失败:", error);
+                  if (assistantMessage) {
+                    assistantMessage.content = "文件加载失败，请稍后重试";
+                  }
+                  // 强制更新视图
+                  nextTick(() => {
+                    timestamp.value = Date.now();
+                    scrollToBottom();
+                  });
                 });
-              }).catch(error => {
-                console.error('读取DeepGenomeAgent文件失败:', error);
-                if (assistantMessage) {
-                  assistantMessage.content = '文件加载失败，请稍后重试';
-                }
-                // 强制更新视图
-                nextTick(() => {
-                  timestamp.value = Date.now();
-                  scrollToBottom();
-                });
-              });
             }
 
             // 同步新消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
-          } else if (response.data.tool_name === 'KnowledgeAgents' || response.data.tool_name === 'ReviewAgents' || response.data.tool_name === 'KnowledgeAgent' || response.data.tool_name === 'ReviewAgent') {
-            const contentData = isValidJSON(response.data.answer) ? JSON.parse(response.data.answer) : response.data.answer;
+          } else if (
+            response.data.tool_name === "KnowledgeAgents" ||
+            response.data.tool_name === "ReviewAgents" ||
+            response.data.tool_name === "KnowledgeAgent" ||
+            response.data.tool_name === "ReviewAgent"
+          ) {
+            const contentData = isValidJSON(response.data.answer)
+              ? JSON.parse(response.data.answer)
+              : response.data.answer;
             // 打印新消息的 doc_list 数据
-            console.log('=== 新消息 doc_list ===', {
+            console.log("=== 新消息 doc_list ===", {
               tool_name: response.data.tool_name,
               message_id: response.data.id,
               doc_list: contentData.doc_list,
-              content: contentData.content
+              content: contentData.content,
             });
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: contentData.content,
               doc_list: contentData.doc_list,
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
             };
 
             // 同步新消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
-          } else if (response.data.tool_name === 'DatabaseAgents' || response.data.tool_name === 'DataAgent') {
-            const contentData = isValidJSON(response.data.answer) ? JSON.parse(response.data.answer) : response.data.answer;
+          } else if (
+            response.data.tool_name === "DatabaseAgents" ||
+            response.data.tool_name === "DataAgent"
+          ) {
+            const contentData = isValidJSON(response.data.answer)
+              ? JSON.parse(response.data.answer)
+              : response.data.answer;
             const tableData = convertToTableData(contentData);
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: tableData,
               tableHeaders: contentData.headers.map((header: string) => ({
-                prop: header.replace(/\s+/g, '_').toLowerCase(),
+                prop: header.replace(/\s+/g, "_").toLowerCase(),
                 label: header,
               })),
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               original: response.data.answer,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
             };
 
             // 同步新消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
-          } else if (response.data.tool_name === 'AnalysisAgents') {
-            const contentData = isValidJSON(response.data.answer) ? JSON.parse(response.data.answer) : response.data.answer;
+          } else if (response.data.tool_name === "AnalysisAgents") {
+            const contentData = isValidJSON(response.data.answer)
+              ? JSON.parse(response.data.answer)
+              : response.data.answer;
             const tableData = convertToTableData(contentData);
             assistantMessage = {
-              role: 'assistant',
-              content: '任务执行中，请等待',
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              role: "assistant",
+              content: "任务执行中，请等待",
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
             };
 
             // 同步新消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
-          } else if (response.data.tool_name === 'AnalystAgent') {
+          } else if (response.data.tool_name === "AnalystAgent") {
             getAnalystAgentLog({ id: response.data.id }).then((res: any) => {
-              console.log(res, 'res1111111111111111111');
-            })
+              console.log(res, "res1111111111111111111");
+            });
             assistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: response.data.answer,
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
-              compute_resource: response.data?.compute_resource || '',
+              compute_resource: response.data?.compute_resource || "",
             };
 
             // 同步新消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
           }
         } else {
           assistantMessage = {
-            role: 'assistant',
+            role: "assistant",
             content: response.data.answer,
-            status: response.data?.status || '',
-            upload_path: response.data?.upload_path || '',
-            download_path: response.data?.download_path || '',
+            status: response.data?.status || "",
+            upload_path: response.data?.upload_path || "",
+            download_path: response.data?.download_path || "",
             instantMessage: true,
-            tool_name: response.data?.tool_name || '',
+            tool_name: response.data?.tool_name || "",
             id: response.data.id,
-            followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+            followUpQuestions: response.data.follow_up_questions
+              ? typeof response.data.follow_up_questions === "string"
+                ? JSON.parse(response.data.follow_up_questions)
+                : response.data.follow_up_questions
+              : [],
             showFollowUpQuestions: false,
             showLog: false,
           };
@@ -2578,69 +3325,78 @@ const sendMessage = async () => {
       }
 
       currentChat.value.messages.push(assistantMessage);
-
     } else {
       currentChat.value.messages.push({
-        role: 'assistant',
-        content: '抱歉，我无法回答这个问题。',
+        role: "assistant",
+        content: "抱歉，我无法回答这个问题。",
         steps: [],
-        status: '',
-        upload_path: '',
-        download_path: '',
+        status: "",
+        upload_path: "",
+        download_path: "",
         instantMessage: true,
-        tool_name: response.data?.tool_name || '',
+        tool_name: response.data?.tool_name || "",
         followUpQuestions: [],
         showFollowUpQuestions: false,
         showLog: false,
       });
     }
   } catch (error: any) {
-    console.error(t('chat.logs.sendMessageFailed'), error);
-    
+    console.error(t("chat.logs.sendMessageFailed"), error);
+
     // 检查是否是请求被中止
-    if (error.name === 'AbortError' || error.code === 'ERR_CANCELED' || isAborted.value) {
-      console.log('请求已被中止');
+    if (
+      error.name === "AbortError" ||
+      error.code === "ERR_CANCELED" ||
+      isAborted.value
+    ) {
+      console.log("请求已被中止");
       return; // 中止请求时不显示错误消息
     }
-    
+
     // 检查是否是token过期错误
-    if (error.response && error.response.data && error.response.data.detail && error.response.data.detail.code === 403) {
-      ElMessageBox.alert(
-        '登录已过期，请重新登录',
-        '系统提示',
-        {
-          confirmButtonText: '我知道了',
-          type: 'warning',
-          callback: () => {
-            const UserStore = userStore();
-            UserStore.FedLogOut().then(() => {
-              // 清除所有缓存和cookie
-              localStorage.clear();
-              sessionStorage.clear();
-              document.cookie.split(";").forEach(function (c) {
-                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-              });
-              location.href = '/login';
+    if (
+      error.response &&
+      error.response.data &&
+      error.response.data.detail &&
+      error.response.data.detail.code === 403
+    ) {
+      ElMessageBox.alert("登录已过期，请重新登录", "系统提示", {
+        confirmButtonText: "我知道了",
+        type: "warning",
+        callback: () => {
+          const UserStore = userStore();
+          UserStore.FedLogOut().then(() => {
+            // 清除所有缓存和cookie
+            localStorage.clear();
+            sessionStorage.clear();
+            document.cookie.split(";").forEach(function (c) {
+              document.cookie = c
+                .replace(/^ +/, "")
+                .replace(
+                  /=.*/,
+                  "=;expires=" + new Date().toUTCString() + ";path=/"
+                );
             });
-          }
-        }
-      );
+            location.href = "/login";
+          });
+        },
+      });
       return;
     }
-    
+
     // 只有在未被中止的情况下才添加错误消息
     if (!isAborted.value) {
-      console.log(isAborted.value,'添加错误消息');
-      
+      console.log(isAborted.value, "添加错误消息");
+
       currentChat.value.messages.push({
-        role: 'assistant',
-        content: t('chat.sendFailed'),
+        role: "assistant",
+        content: t("chat.sendFailed"),
         steps: [],
-        status: '',
-        upload_path: '',
-        download_path: '',
+        status: "",
+        upload_path: "",
+        download_path: "",
         instantMessage: true,
-        tool_name: '',
+        tool_name: "",
         followUpQuestions: [],
         showFollowUpQuestions: false,
         showLog: false,
@@ -2648,8 +3404,8 @@ const sendMessage = async () => {
     }
   } finally {
     // 清理请求ID
-    currentRequestId.value = '';
-    
+    currentRequestId.value = "";
+
     // 无论是否是新对话，都刷新侧边栏历史记录数据
     await getHistoryQuestionData();
 
@@ -2662,16 +3418,23 @@ const sendMessage = async () => {
       }
     } else {
       // 如果是已存在的对话，更新当前对话的标题（如果发生了变化）
-      if (currentChat.value?.messages && currentChat.value.messages.length > 0) {
-        const userMessage = currentChat.value.messages[currentChat.value.messages.length - 2]; // 倒数第二条是用户消息
-        if (userMessage && userMessage.role === 'user') {
+      if (
+        currentChat.value?.messages &&
+        currentChat.value.messages.length > 0
+      ) {
+        const userMessage =
+          currentChat.value.messages[currentChat.value.messages.length - 2]; // 倒数第二条是用户消息
+        if (userMessage && userMessage.role === "user") {
           // 查找当前对话在列表中的位置并更新标题
-          const currentChatIndex = chatList.value.findIndex(chat => chat.dialogue_id === currentChatId.value);
+          const currentChatIndex = chatList.value.findIndex(
+            (chat) => chat.dialogue_id === currentChatId.value
+          );
           if (currentChatIndex !== -1) {
             // 截取用户消息内容作为标题（限制长度）
-            const newTitle = userMessage.content.length > 50
-              ? userMessage.content.substring(0, 50) + '...'
-              : userMessage.content;
+            const newTitle =
+              userMessage.content.length > 50
+                ? userMessage.content.substring(0, 50) + "..."
+                : userMessage.content;
             chatList.value[currentChatIndex].title = newTitle;
           }
         }
@@ -2698,39 +3461,39 @@ const sendMessage = async () => {
 // 中止当前请求
 const abortCurrentRequest = async () => {
   if (!currentRequestId.value) return;
-  
+
   try {
     // 导入中止请求的方法
-    const requestModule = await import('@/utils/request') as any;
+    const requestModule = (await import("@/utils/request")) as any;
     const success = requestModule.abortRequest(currentRequestId.value);
-    console.log(success,'success11111111111111');
+    console.log(success, "success11111111111111");
     if (success) {
       isAborted.value = true;
-      
+
       // 添加中止消息
       if (currentChat.value?.messages) {
         const abortMessage: ChatMessage = {
-          role: 'assistant',
-          content: t('chat.generationStopped'),
+          role: "assistant",
+          content: t("chat.generationStopped"),
           instantMessage: true,
           id: Date.now().toString(),
         };
         currentChat.value.messages.push(abortMessage);
       }
-      
+
       // 重置状态
       const chatState = getChatState(currentChatId.value);
       if (chatState) {
         chatState.isSending = false;
       }
-      
-      currentRequestId.value = '';
+
+      currentRequestId.value = "";
       // isAborted.value = false;
-      
+
       await scrollToBottom();
     }
   } catch (error) {
-    console.error('中止请求失败:', error);
+    console.error("中止请求失败:", error);
   }
 };
 
@@ -2750,16 +3513,16 @@ const usePrompt = (prompt: string) => {
 // 相关链接
 const currentLinks = ref([
   {
-    title: t('chat.links.brca1'),
-    url: 'https://www.ncbi.nlm.nih.gov/gene/672',
+    title: t("chat.links.brca1"),
+    url: "https://www.ncbi.nlm.nih.gov/gene/672",
   },
   {
-    title: t('chat.links.mapk'),
-    url: 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3135676/',
+    title: t("chat.links.mapk"),
+    url: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3135676/",
   },
   {
-    title: t('chat.links.tp53'),
-    url: 'https://p53.iarc.fr/',
+    title: t("chat.links.tp53"),
+    url: "https://p53.iarc.fr/",
   },
 ]);
 
@@ -2777,29 +3540,31 @@ const handleSidebarCollapse = (isCollapsed: boolean) => {
 // 更新URL中的聊天ID
 const updateUrlWithChatId = (dialogueId: string) => {
   const url = new URL(window.location.href);
-  url.searchParams.set('dialogue_id', dialogueId);
-  window.history.pushState({}, '', url.toString());
+  url.searchParams.set("dialogue_id", dialogueId);
+  window.history.pushState({}, "", url.toString());
 };
 
 // 从URL读取聊天ID
 const getChatIdFromUrl = () => {
   const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get('dialogue_id');
+  return urlParams.get("dialogue_id");
 };
 // 根据聊天ID读取对话ID
 const getDialogueIdFromChatId = () => {
   const urlParams = new URLSearchParams(window.location.search);
-  const dialogueId = urlParams.get('dialogue_id');
-  const chatRealId = chatList.value.find((c: Chat) => c.dialogue_id === dialogueId)?.id;
+  const dialogueId = urlParams.get("dialogue_id");
+  const chatRealId = chatList.value.find(
+    (c: Chat) => c.dialogue_id === dialogueId
+  )?.id;
   return chatRealId;
 };
 // 转换数据格式为 Element Plus Table 格式
 const convertToTableData = (data: { headers: string[]; rows: any[][] }) => {
-  return data.rows.map(row => {
+  return data.rows.map((row) => {
     const obj: Record<string, any> = {};
     data.headers.forEach((header, index) => {
       // 替换空格为下划线，避免属性名中的空格
-      const key = header.replace(/\s+/g, '_').toLowerCase();
+      const key = header.replace(/\s+/g, "_").toLowerCase();
       obj[key] = row[index];
     });
     return obj;
@@ -2808,16 +3573,16 @@ const convertToTableData = (data: { headers: string[]; rows: any[][] }) => {
 
 // 文件处理相关函数
 const handleFileChange = (file: any) => {
-  console.log('文件上传事件:', file);
+  console.log("文件上传事件:", file);
 
   if (!currentChatId.value) {
-    console.log('当前对话ID不存在');
+    console.log("当前对话ID不存在");
     return;
   }
 
   const chatState = getChatState(currentChatId.value);
   if (!chatState) {
-    console.log('聊天状态不存在');
+    console.log("聊天状态不存在");
     return;
   }
 
@@ -2825,28 +3590,28 @@ const handleFileChange = (file: any) => {
     name: file.name,
     size: file.size,
     type: file.type,
-    file: file.raw
+    file: file.raw,
   };
 
-  console.log('添加新文件:', newFile);
-  console.log('更新前文件列表:', chatState.fileList);
+  console.log("添加新文件:", newFile);
+  console.log("更新前文件列表:", chatState.fileList);
 
   // 使用响应式更新方式
   chatState.fileList = [...chatState.fileList, newFile];
 
-  console.log('更新后文件列表:', chatState.fileList);
-  console.log('计算属性fileList.value:', fileList.value);
+  console.log("更新后文件列表:", chatState.fileList);
+  console.log("计算属性fileList.value:", fileList.value);
 
   // 确保文件列表更新后立即显示
   nextTick(() => {
-    console.log('nextTick中的状态:', {
+    console.log("nextTick中的状态:", {
       senderRef: !!senderRef.value,
       fileListLength: chatState.fileList.length,
-      computedFileListLength: fileList.value.length
+      computedFileListLength: fileList.value.length,
     });
 
     if (senderRef.value && chatState.fileList.length > 0) {
-      console.log('调用openHeader');
+      console.log("调用openHeader");
       senderRef.value.openHeader();
     }
 
@@ -2898,11 +3663,11 @@ const clearFiles = () => {
 
 const formatFileSize = (size: number) => {
   if (size < 1024) {
-    return size + ' B';
+    return size + " B";
   } else if (size < 1024 * 1024) {
-    return (size / 1024).toFixed(2) + ' KB';
+    return (size / 1024).toFixed(2) + " KB";
   } else {
-    return (size / (1024 * 1024)).toFixed(2) + ' MB';
+    return (size / (1024 * 1024)).toFixed(2) + " MB";
   }
 };
 
@@ -2910,52 +3675,52 @@ const formatFileSize = (size: number) => {
 const presetAgents = ref([
   {
     id: 1,
-    name: t('chat.geneDetail'),
-    icon: 'Document',
-    route: '/gene-display'
+    name: t("chat.geneDetail"),
+    icon: "Document",
+    route: "/gene-display",
   },
   {
     id: 2,
-    name: 'Knowledge Agent',
-    icon: 'Search',
-    route: '/knowledge-agent'
+    name: "Knowledge Agent",
+    icon: "Search",
+    route: "/knowledge-agent",
   },
   {
     id: 3,
-    name: 'Data Agent',
-    icon: 'DataLine',
-    route: '/data-agent'
+    name: "Data Agent",
+    icon: "DataLine",
+    route: "/data-agent",
   },
   {
     id: 4,
-    name: 'Analyst Agent',
-    icon: 'Edit',
-    route: '/analyst-agent'
+    name: "Analyst Agent",
+    icon: "Edit",
+    route: "/analyst-agent",
   },
   {
     id: 5,
-    name: 'Brief Review Agent',
-    icon: 'Edit',
-    route: '/brief-review-agent'
+    name: "Brief Review Agent",
+    icon: "Edit",
+    route: "/brief-review-agent",
   },
   {
     id: 6,
-    name: 'Gene Network Agent',
-    icon: 'Edit',
-    route: '/gene-network-agent'
+    name: "Gene Network Agent",
+    icon: "Edit",
+    route: "/gene-network-agent",
   },
   {
     id: 7,
-    name: 'Deep Genome Agent',
-    icon: 'Edit',
-    route: '/deep-genome-agent'
+    name: "Deep Genome Agent",
+    icon: "Edit",
+    route: "/deep-genome-agent",
   },
   {
     id: 8,
-    name: 'Digital Design Agent',
-    icon: 'Edit',
-    route: '/digital-design-agent'
-  }
+    name: "Digital Design Agent",
+    icon: "Edit",
+    route: "/digital-design-agent",
+  },
 ]);
 // 基础高度
 const baseHeight = 140;
@@ -2972,7 +3737,7 @@ const containerHeight = computed(() => {
 // 计算当前容器的样式
 const containerStyle = computed(() => ({
   height: `${containerHeight.value}px`,
-  transform: isExpanded.value ? `translateY(-${overlayHeight}px)` : 'none'
+  transform: isExpanded.value ? `translateY(-${overlayHeight}px)` : "none",
 }));
 
 // 是否展开
@@ -3028,7 +3793,7 @@ const handleCommand = (command: string) => {
 
   const regex = /@([^,]+),/;
   const match = command.match(regex);
-  const extractedValue = match ? match[1] : '';
+  const extractedValue = match ? match[1] : "";
   activeButton.value = extractedValue;
   const newMessageValue = extractAtValues(messageInput.value);
   messageInput.value = `${command}${newMessageValue.cleanedText}`;
@@ -3037,7 +3802,7 @@ const handleCommand = (command: string) => {
   nextTick(() => {
     scrollToBottom();
   });
-}
+};
 
 const handleSelect = (option: MentionOption) => {
   activeButton.value = option.value;
@@ -3046,7 +3811,7 @@ const handleSelect = (option: MentionOption) => {
   nextTick(() => {
     scrollToBottom();
   });
-}
+};
 const handleSearch = (searchValue: string, prefix: string) => {
   // console.log(searchValue,'searchValue',prefix)
 
@@ -3054,7 +3819,7 @@ const handleSearch = (searchValue: string, prefix: string) => {
   nextTick(() => {
     scrollToBottom();
   });
-}
+};
 
 // 处理Markdown打字效果完成事件
 const handleMarkdownFinish = (messageIndex: number) => {
@@ -3067,7 +3832,7 @@ const handleMarkdownFinish = (messageIndex: number) => {
       scrollToBottom();
     });
   }
-}
+};
 
 // 处理后续问题点击事件
 const handleFollowUpQuestionClick = (question: string) => {
@@ -3091,16 +3856,19 @@ const handleFollowUpQuestionClick = (question: string) => {
   nextTick(() => {
     sendMessage();
   });
-}
+};
 
 // 切换日志视图
 const toggleLogView = async (messageId: string) => {
   // 如果正在发送或刷新，阻止操作
   if (isSending.value) return;
 
-  if (!currentChat.value?.messages || !messageId || !currentChatId.value) return;
+  if (!currentChat.value?.messages || !messageId || !currentChatId.value)
+    return;
 
-  const message = currentChat.value.messages.find((msg: ChatMessage) => msg.id === messageId);
+  const message = currentChat.value.messages.find(
+    (msg: ChatMessage) => msg.id === messageId
+  );
   if (!message) return;
 
   // 切换显示状态
@@ -3110,7 +3878,11 @@ const toggleLogView = async (messageId: string) => {
   if (!chatState) return;
 
   // 如果显示日志且还没有加载数据，则加载日志数据
-  if (message.showLog && !chatState.logData[messageId] && !chatState.loadingLog[messageId]) {
+  if (
+    message.showLog &&
+    !chatState.logData[messageId] &&
+    !chatState.loadingLog[messageId]
+  ) {
     chatState.loadingLog[messageId] = true;
     try {
       const res = await getAnalystAgentLog({ id: messageId });
@@ -3119,17 +3891,17 @@ const toggleLogView = async (messageId: string) => {
         let parsedData;
 
         // 检查数据是否为字符串格式（新的日志格式）
-        if (typeof res.data === 'string') {
+        if (typeof res.data === "string") {
           // 直接使用字符串数据，不需要JSON解析
           parsedData = res.data;
-          console.log('日志数据加载成功（字符串格式）:', parsedData);
+          console.log("日志数据加载成功（字符串格式）:", parsedData);
         } else {
           // 尝试解析JSON数据（向后兼容）
           try {
             parsedData = JSON.parse(res.data);
-            console.log('日志数据加载成功（JSON格式）:', parsedData);
+            console.log("日志数据加载成功（JSON格式）:", parsedData);
           } catch (parseError) {
-            console.error('JSON解析失败:', parseError);
+            console.error("JSON解析失败:", parseError);
             parsedData = res.data;
           }
         }
@@ -3141,10 +3913,10 @@ const toggleLogView = async (messageId: string) => {
           scrollToBottom();
         });
       } else {
-        console.error('获取日志失败:', res);
+        console.error("获取日志失败:", res);
       }
     } catch (error) {
-      console.error('获取日志失败:', error);
+      console.error("获取日志失败:", error);
     } finally {
       chatState.loadingLog[messageId] = false;
     }
@@ -3154,47 +3926,55 @@ const toggleLogView = async (messageId: string) => {
   nextTick(() => {
     scrollToBottom();
   });
-}
+};
 
 // 刷新消息
 const refreshMessage = async (messageIndex: number) => {
-  console.log('=== 开始刷新消息 ===', { messageIndex, currentChatId: currentChatId.value });
+  console.log("=== 开始刷新消息 ===", {
+    messageIndex,
+    currentChatId: currentChatId.value,
+  });
 
-  if (!currentChat.value?.messages || messageIndex < 0 || messageIndex >= currentChat.value.messages.length || !currentChatId.value) {
-    console.log('刷新消息参数验证失败');
+  if (
+    !currentChat.value?.messages ||
+    messageIndex < 0 ||
+    messageIndex >= currentChat.value.messages.length ||
+    !currentChatId.value
+  ) {
+    console.log("刷新消息参数验证失败");
     return;
   }
 
   const message = currentChat.value.messages[messageIndex];
-  if (!message || message.role !== 'assistant') {
-    console.log('消息验证失败', { message, role: message?.role });
+  if (!message || message.role !== "assistant") {
+    console.log("消息验证失败", { message, role: message?.role });
     return;
   }
 
   // 获取对应的用户消息
   const userMessage = currentChat.value.messages[messageIndex - 1];
-  if (!userMessage || userMessage.role !== 'user') {
-    console.log('用户消息验证失败', { userMessage, role: userMessage?.role });
+  if (!userMessage || userMessage.role !== "user") {
+    console.log("用户消息验证失败", { userMessage, role: userMessage?.role });
     return;
   }
 
   const messageId = message.id;
   if (!messageId) {
-    console.log('消息ID不存在');
+    console.log("消息ID不存在");
     return;
   }
 
   const chatState = getChatState(currentChatId.value);
   if (!chatState) {
-    console.log('聊天状态不存在');
+    console.log("聊天状态不存在");
     return;
   }
 
-  console.log('刷新状态管理:', {
+  console.log("刷新状态管理:", {
     messageIndex,
     messageId,
     currentRefreshingState: chatState.refreshingMessages[messageId],
-    allRefreshingStates: Object.keys(chatState.refreshingMessages)
+    allRefreshingStates: Object.keys(chatState.refreshingMessages),
   });
 
   // 设置刷新状态 - 同时使用messageIndex和messageId作为键值
@@ -3207,78 +3987,97 @@ const refreshMessage = async (messageIndex: number) => {
   try {
     const urlChatId = getDialogueIdFromChatId();
     const queryData = new FormData();
-    queryData.append('query', userMessage.content);
-    queryData.append('id', (urlChatId ? Number(urlChatId) : 0).toString());
-    queryData.append('refresh_id', messageId);
+    queryData.append("query", userMessage.content);
+    queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
+    queryData.append("refresh_id", messageId);
 
     // 添加工具参数（如果有的话）
     if (message.tool_name) {
-      queryData.append('tool', message.tool_name);
+      queryData.append("tool", message.tool_name);
     }
 
     // 添加历史记录（如果有的话）
     if (chatState.historyQuestion) {
-      queryData.append('history', JSON.stringify(chatState.historyQuestion));
+      queryData.append("history", JSON.stringify(chatState.historyQuestion));
     }
 
     // 添加文件（如果有的话）
     if (chatState.fileList.length > 0) {
-      chatState.fileList.forEach(fileItem => {
-        queryData.append('files', fileItem.file);
+      chatState.fileList.forEach((fileItem) => {
+        queryData.append("files", fileItem.file);
       });
     }
 
     const response = await getQuery(queryData as any);
-    console.log('refresh response', response.data);
+    console.log("refresh response", response.data);
 
     if (response.data) {
       let newAssistantMessage: ChatMessage | undefined;
       if (response.data.final_answer) {
         newAssistantMessage = {
-          role: 'assistant',
-          content: response.data.final_answer || '抱歉，我无法回答这个问题。',
+          role: "assistant",
+          content: response.data.final_answer || "抱歉，我无法回答这个问题。",
           steps: response.data.steps || [],
-          status: response.data?.status || '',
-          upload_path: response.data?.upload_path || '',
+          status: response.data?.status || "",
+          upload_path: response.data?.upload_path || "",
           instantMessage: true,
           id: response.data.id || messageId, // 如果没有新ID，保留原ID
           tool_name: response.data.tool_name,
-          followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+          followUpQuestions: response.data.follow_up_questions
+            ? typeof response.data.follow_up_questions === "string"
+              ? JSON.parse(response.data.follow_up_questions)
+              : response.data.follow_up_questions
+            : [],
           showFollowUpQuestions: false,
           showLog: false,
         };
 
         // 同步刷新后消息的点赞状态
         if (response.data.id && response.data.reaction_type) {
-          chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+          chatState.reactions[response.data.id.toString()] = parseInt(
+            response.data.reaction_type
+          );
         }
       } else {
         if (response.data.tool_name) {
-          if (response.data.tool_name === 'ChatAgents' || response.data.tool_name === 'ChatAgent') {
+          if (
+            response.data.tool_name === "ChatAgents" ||
+            response.data.tool_name === "ChatAgent"
+          ) {
             newAssistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: response.data.answer,
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id || messageId, // 如果没有新ID，保留原ID
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
             };
-          } else if (response.data.tool_name === 'DeepGenomeAgent') {
-            const contentData = isValidJSON(response.data.answer) ? JSON.parse(response.data.answer) : response.data.answer;
+          } else if (response.data.tool_name === "DeepGenomeAgent") {
+            const contentData = isValidJSON(response.data.answer)
+              ? JSON.parse(response.data.answer)
+              : response.data.answer;
             newAssistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: contentData?.content || response.data.answer,
               doc_list: contentData?.doc_list,
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
               server_file_path: response.data.server_file_path, // 添加服务器文件路径
@@ -3288,135 +4087,181 @@ const refreshMessage = async (messageIndex: number) => {
             if (response.data.server_file_path) {
               // 先显示加载状态
               if (newAssistantMessage) {
-                newAssistantMessage.content = '正在加载文件内容...';
+                newAssistantMessage.content = "正在加载文件内容...";
               }
-              
-              readServerFile(response.data.server_file_path).then(fileContent => {
-                if (fileContent && fileContent.trim() && newAssistantMessage) {
-                  newAssistantMessage.content = fileContent;
-                } else if (newAssistantMessage) {
-                  newAssistantMessage.content = '文件内容为空或加载失败';
-                }
-                // 强制更新视图
-                nextTick(() => {
-                  timestamp.value = Date.now();
-                  scrollToBottom();
+
+              readServerFile(response.data.server_file_path)
+                .then((fileContent) => {
+                  if (
+                    fileContent &&
+                    fileContent.trim() &&
+                    newAssistantMessage
+                  ) {
+                    newAssistantMessage.content = fileContent;
+                  } else if (newAssistantMessage) {
+                    newAssistantMessage.content = "文件内容为空或加载失败";
+                  }
+                  // 强制更新视图
+                  nextTick(() => {
+                    timestamp.value = Date.now();
+                    scrollToBottom();
+                  });
+                })
+                .catch((error) => {
+                  console.error("读取DeepGenomeAgent文件失败:", error);
+                  if (newAssistantMessage) {
+                    newAssistantMessage.content = "文件加载失败，请稍后重试";
+                  }
+                  // 强制更新视图
+                  nextTick(() => {
+                    timestamp.value = Date.now();
+                    scrollToBottom();
+                  });
                 });
-              }).catch(error => {
-                console.error('读取DeepGenomeAgent文件失败:', error);
-                if (newAssistantMessage) {
-                  newAssistantMessage.content = '文件加载失败，请稍后重试';
-                }
-                // 强制更新视图
-                nextTick(() => {
-                  timestamp.value = Date.now();
-                  scrollToBottom();
-                });
-              });
             }
-          } else if (response.data.tool_name === 'KnowledgeAgents' || response.data.tool_name === 'ReviewAgent' || response.data.tool_name === 'KnowledgeAgent' || response.data.tool_name === 'ReviewAgent') {
-            const contentData = isValidJSON(response.data.answer) ? JSON.parse(response.data.answer) : response.data.answer;
+          } else if (
+            response.data.tool_name === "KnowledgeAgents" ||
+            response.data.tool_name === "ReviewAgent" ||
+            response.data.tool_name === "KnowledgeAgent" ||
+            response.data.tool_name === "ReviewAgent"
+          ) {
+            const contentData = isValidJSON(response.data.answer)
+              ? JSON.parse(response.data.answer)
+              : response.data.answer;
             // 打印刷新消息的 doc_list 数据
-            console.log('=== 刷新消息 doc_list ===', {
+            console.log("=== 刷新消息 doc_list ===", {
               tool_name: response.data.tool_name,
               message_id: response.data.id,
               doc_list: contentData.doc_list,
-              content: contentData.content
+              content: contentData.content,
             });
             newAssistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: contentData.content,
               doc_list: contentData.doc_list,
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
             };
 
             // 同步刷新后消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
-          } else if (response.data.tool_name === 'DatabaseAgents' || response.data.tool_name === 'DataAgent') {
-            const contentData = isValidJSON(response.data.answer) ? JSON.parse(response.data.answer) : response.data.answer;
+          } else if (
+            response.data.tool_name === "DatabaseAgents" ||
+            response.data.tool_name === "DataAgent"
+          ) {
+            const contentData = isValidJSON(response.data.answer)
+              ? JSON.parse(response.data.answer)
+              : response.data.answer;
             const tableData = convertToTableData(contentData);
             newAssistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: tableData,
               tableHeaders: contentData.headers.map((header: string) => ({
-                prop: header.replace(/\s+/g, '_').toLowerCase(),
+                prop: header.replace(/\s+/g, "_").toLowerCase(),
                 label: header,
               })),
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               original: response.data.answer,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
             };
 
             // 同步刷新后消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
-          } else if (response.data.tool_name === 'AnalysisAgents') {
+          } else if (response.data.tool_name === "AnalysisAgents") {
             newAssistantMessage = {
-              role: 'assistant',
-              content: '任务执行中，请等待',
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              role: "assistant",
+              content: "任务执行中，请等待",
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
             };
 
             // 同步刷新后消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
-          } else if (response.data.tool_name === 'AnalystAgent') {
+          } else if (response.data.tool_name === "AnalystAgent") {
             getAnalystAgentLog({ id: response.data.id }).then((res: any) => {
-              console.log(res, 'res1111111111111111111');
-            })
+              console.log(res, "res1111111111111111111");
+            });
             newAssistantMessage = {
-              role: 'assistant',
+              role: "assistant",
               content: response.data.answer,
-              status: response.data?.status || '',
-              upload_path: response.data?.upload_path || '',
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data.tool_name,
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
               showFollowUpQuestions: false,
               showLog: false,
-              compute_resource: response.data?.compute_resource || '',
+              compute_resource: response.data?.compute_resource || "",
             };
 
             // 同步刷新后消息的点赞状态
             if (response.data.id && response.data.reaction_type) {
-              chatState.reactions[response.data.id.toString()] = parseInt(response.data.reaction_type);
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
             }
           }
         } else {
           newAssistantMessage = {
-            role: 'assistant',
+            role: "assistant",
             content: response.data.answer,
-            status: response.data?.status || '',
-            upload_path: response.data?.upload_path || '',
+            status: response.data?.status || "",
+            upload_path: response.data?.upload_path || "",
             instantMessage: true,
-            tool_name: response.data?.tool_name || '',
+            tool_name: response.data?.tool_name || "",
             id: response.data.id || messageId, // 如果没有新ID，保留原ID
-            followUpQuestions: response.data.follow_up_questions ? (typeof response.data.follow_up_questions === 'string' ? JSON.parse(response.data.follow_up_questions) : response.data.follow_up_questions) : [],
+            followUpQuestions: response.data.follow_up_questions
+              ? typeof response.data.follow_up_questions === "string"
+                ? JSON.parse(response.data.follow_up_questions)
+                : response.data.follow_up_questions
+              : [],
             showFollowUpQuestions: false,
             showLog: false,
           };
@@ -3427,27 +4272,31 @@ const refreshMessage = async (messageIndex: number) => {
       if (newAssistantMessage) {
         currentChat.value.messages[messageIndex] = newAssistantMessage;
 
-        console.log('更新消息后的状态:', {
+        console.log("更新消息后的状态:", {
           oldMessageId: messageId,
           newMessageId: newAssistantMessage.id,
-          oldRefreshingState: chatState.refreshingMessages[messageId]
+          oldRefreshingState: chatState.refreshingMessages[messageId],
         });
 
         // 清理旧的刷新状态
         if (chatState.refreshingMessages[refreshKey]) {
           delete chatState.refreshingMessages[refreshKey];
-          console.log('清理旧刷新状态:', refreshKey);
+          console.log("清理旧刷新状态:", refreshKey);
         }
 
         // 为新消息设置刷新状态 - 使用新的键值
-        const newRefreshKey = `${messageIndex}_${newAssistantMessage.id || 'temp'}`;
+        const newRefreshKey = `${messageIndex}_${
+          newAssistantMessage.id || "temp"
+        }`;
         chatState.refreshingMessages[newRefreshKey] = false;
-        console.log('设置新刷新状态:', newRefreshKey);
+        console.log("设置新刷新状态:", newRefreshKey);
 
-        console.log('设置新刷新状态:', {
+        console.log("设置新刷新状态:", {
           newMessageId: newAssistantMessage.id,
-          newRefreshingState: newAssistantMessage.id ? chatState.refreshingMessages[newAssistantMessage.id] : undefined,
-          allRefreshingStates: Object.keys(chatState.refreshingMessages)
+          newRefreshingState: newAssistantMessage.id
+            ? chatState.refreshingMessages[newAssistantMessage.id]
+            : undefined,
+          allRefreshingStates: Object.keys(chatState.refreshingMessages),
         });
 
         // 自动滚动到最新消息
@@ -3455,25 +4304,25 @@ const refreshMessage = async (messageIndex: number) => {
       }
     }
   } catch (error: any) {
-    console.error('刷新消息失败:', error);
-    ElMessage.error('刷新失败，请重试');
+    console.error("刷新消息失败:", error);
+    ElMessage.error("刷新失败，请重试");
   } finally {
     // 确保滚动到底部
     nextTick(() => {
       scrollToBottom();
     });
-    console.log('finally块中的状态清理:', {
+    console.log("finally块中的状态清理:", {
       messageIndex,
       messageId,
       refreshKey,
       currentRefreshingState: chatState.refreshingMessages[refreshKey],
-      allRefreshingStates: Object.keys(chatState.refreshingMessages)
+      allRefreshingStates: Object.keys(chatState.refreshingMessages),
     });
 
     // 清理旧的刷新状态
     if (chatState.refreshingMessages[refreshKey]) {
       delete chatState.refreshingMessages[refreshKey];
-      console.log('finally中清理旧刷新状态:', refreshKey);
+      console.log("finally中清理旧刷新状态:", refreshKey);
     }
 
     // 重置整体发送状态
@@ -3482,14 +4331,12 @@ const refreshMessage = async (messageIndex: number) => {
     // 刷新侧边栏历史记录数据，确保显示最新的对话信息
     try {
       await getHistoryQuestionData();
-      console.log('刷新消息后，侧边栏数据已更新');
+      console.log("刷新消息后，侧边栏数据已更新");
     } catch (error) {
-      console.error('刷新侧边栏数据失败:', error);
+      console.error("刷新侧边栏数据失败:", error);
     }
   }
-}
-
-
+};
 
 const extractAtValues = (text: any) => {
   // 使用正则表达式匹配所有以@开头、以,结尾的子串
@@ -3497,15 +4344,18 @@ const extractAtValues = (text: any) => {
 
   // 提取所有匹配项（用于返回）
   const matches = text.match(regex) || [];
-  const uniqueAgents = [...new Set(matches)]
+  const uniqueAgents = [...new Set(matches)];
   // 从原字符串中去除所有匹配项
-  const cleanedText = text.replace(regex, '');
+  const cleanedText = text.replace(regex, "");
 
   return {
-    matches: uniqueAgents.length > 0 ? uniqueAgents.map((match: any) => match.slice(1, -1)) : [], // 去掉@和,
-    cleanedText: cleanedText
+    matches:
+      uniqueAgents.length > 0
+        ? uniqueAgents.map((match: any) => match.slice(1, -1))
+        : [], // 去掉@和,
+    cleanedText: cleanedText,
   };
-}
+};
 
 // 获取智能体提示信息
 const getAgentTooltip = (agentName: string) => {
@@ -3517,49 +4367,53 @@ const getAgentTooltip = (agentName: string) => {
 // 获取智能体能力列表
 const getAgentCapabilities = (agentName: string) => {
   const capabilities: Record<string, string[]> = {
-    'RAG': ['知识检索', '文献分析', '智能问答'],
-    'BI': ['数据分析', '可视化', '报表生成'],
-    'GA': ['基因分析', '序列比对', '功能预测'],
-    '联网搜索': ['实时搜索', '信息更新', '多源整合'],
-    'Chat Agent': ['自然语言处理', '多轮对话', '上下文理解'],
-    'Knowledge Agent': ['知识库管理', '精准匹配', '权威信息'],
-    'Data Agent': ['数据清洗', '格式转换', '质量优化'],
-    'Analyst Agent': ['统计分析', '模式识别', '洞察生成'],
-    'Review Agent': ['文献综述', '趋势分析', '研究总结'],
-    'Deep Genome Agent': ['基因组解析', '变异检测', '功能注释'],
-    'In Silico Research Agent': ['实验模拟', '预测分析', '成本优化'],
-    'Gene Network Agent': ['网络构建', '通路分析', '调控机制'],
-    'Digital Design Agent': ['序列设计', '结构预测', '功能验证']
+    RAG: ["知识检索", "文献分析", "智能问答"],
+    BI: ["数据分析", "可视化", "报表生成"],
+    GA: ["基因分析", "序列比对", "功能预测"],
+    联网搜索: ["实时搜索", "信息更新", "多源整合"],
+    "Chat Agent": ["自然语言处理", "多轮对话", "上下文理解"],
+    "Knowledge Agent": ["知识库管理", "精准匹配", "权威信息"],
+    "Data Agent": ["数据清洗", "格式转换", "质量优化"],
+    "Analyst Agent": ["统计分析", "模式识别", "洞察生成"],
+    "Review Agent": ["文献综述", "趋势分析", "研究总结"],
+    "Deep Genome Agent": ["基因组解析", "变异检测", "功能注释"],
+    "In Silico Research Agent": ["实验模拟", "预测分析", "成本优化"],
+    "Gene Network Agent": ["网络构建", "通路分析", "调控机制"],
+    "Digital Design Agent": ["序列设计", "结构预测", "功能验证"],
   };
 
-  const agentCapabilities = capabilities[agentName] || ['智能分析', '数据处理', '结果生成'];
-  return agentCapabilities.map((cap: string) => `<li>${cap}</li>`).join('');
+  const agentCapabilities = capabilities[agentName] || [
+    "智能分析",
+    "数据处理",
+    "结果生成",
+  ];
+  return agentCapabilities.map((cap: string) => `<li>${cap}</li>`).join("");
 };
 
 // 获取智能体使用说明
 const getAgentUsage = (agentName: string) => {
   const usage: Record<string, string> = {
-    'RAG': '直接输入您的问题，系统将自动检索相关知识库并生成答案。',
-    'BI': '上传数据文件，系统将自动分析并生成可视化图表和报告。',
-    'GA': '输入基因序列或名称，系统将提供详细的基因功能分析。',
-    '联网搜索': '输入搜索关键词，系统将实时搜索网络信息并整合结果。',
-    'Chat Agent': '用自然语言描述您的需求，系统将提供智能对话服务。',
-    'Knowledge Agent': '输入专业问题，系统将从权威知识库中检索相关信息。',
-    'Data Agent': '上传数据文件，系统将自动处理并优化数据格式。',
-    'Analyst Agent': '提供数据或问题，系统将进行深度分析并生成洞察报告。',
-    'Review Agent': '指定研究领域，系统将自动生成文献综述和研究趋势分析。',
-    'Deep Genome Agent': '输入基因组数据，系统将进行深度解析和功能预测。',
-    'In Silico Research Agent': '描述实验需求，系统将进行数字模拟和预测分析。',
-    'Gene Network Agent': '提供基因列表，系统将构建调控网络并分析关键通路。',
-    'Digital Design Agent': '描述设计需求，系统将生成基因序列和蛋白质结构。'
+    RAG: "直接输入您的问题，系统将自动检索相关知识库并生成答案。",
+    BI: "上传数据文件，系统将自动分析并生成可视化图表和报告。",
+    GA: "输入基因序列或名称，系统将提供详细的基因功能分析。",
+    联网搜索: "输入搜索关键词，系统将实时搜索网络信息并整合结果。",
+    "Chat Agent": "用自然语言描述您的需求，系统将提供智能对话服务。",
+    "Knowledge Agent": "输入专业问题，系统将从权威知识库中检索相关信息。",
+    "Data Agent": "上传数据文件，系统将自动处理并优化数据格式。",
+    "Analyst Agent": "提供数据或问题，系统将进行深度分析并生成洞察报告。",
+    "Review Agent": "指定研究领域，系统将自动生成文献综述和研究趋势分析。",
+    "Deep Genome Agent": "输入基因组数据，系统将进行深度解析和功能预测。",
+    "In Silico Research Agent": "描述实验需求，系统将进行数字模拟和预测分析。",
+    "Gene Network Agent": "提供基因列表，系统将构建调控网络并分析关键通路。",
+    "Digital Design Agent": "描述设计需求，系统将生成基因序列和蛋白质结构。",
   };
 
-  return usage[agentName] || '根据您的具体需求，系统将提供相应的智能服务。';
+  return usage[agentName] || "根据您的具体需求，系统将提供相应的智能服务。";
 };
 
 // 获取智能体对应的图片路径
 const getAgentImage = (agentName: string) => {
-  console.log(agentName, 'agentName');
+  console.log(agentName, "agentName");
   const imageMap: Record<string, string> = {
     ChatAgent: ChatAgentImg,
     KnowledgeAgent: KnowledgeAgentImg,
@@ -3570,7 +4424,7 @@ const getAgentImage = (agentName: string) => {
     DeepGenomeAgent: DeepGenomeAgentImg,
     InSilicoResearchAgent: InSilicoResearchAgentImg,
     GeneNetworkAgent: GeneNetworkAgentImg,
-    DigitalDesignAgent: DigitalDesignAgentImg
+    DigitalDesignAgent: DigitalDesignAgentImg,
   };
 
   return imageMap[agentName] || DefaultAgentImg;
@@ -3585,32 +4439,53 @@ const showMoreInfo = (agentName: string) => {
           <p>${getAgentTooltip(agentName)}</p>
         </div>
         <div class="agent-image">
-          <img src="${getAgentImage(agentName)}" style="width: 100%; height: 300px;" alt="${agentName}">
+          <img src="${getAgentImage(
+            agentName
+          )}" style="width: 100%; height: 300px;" alt="${agentName}">
         </div>
       </div>
     </div>`,
     agentName,
     {
       dangerouslyUseHTMLString: true,
-      confirmButtonText: t('common.close'),
-      customClass: 'agent-info-dialog'
+      confirmButtonText: t("common.close"),
+      customClass: "agent-info-dialog",
     }
   );
-  
+
   // 强制设置弹窗尺寸
   nextTick(() => {
-    const messageBoxElement = document.querySelector('.el-message-box.agent-info-dialog');
+    const messageBoxElement = document.querySelector(
+      ".el-message-box.agent-info-dialog"
+    );
     if (messageBoxElement) {
-      (messageBoxElement as HTMLElement).style.setProperty('--el-messagebox-width', '800px');
-      (messageBoxElement as HTMLElement).style.setProperty('width', '800px');
-      (messageBoxElement as HTMLElement).style.setProperty('max-width', '800px');
-      (messageBoxElement as HTMLElement).style.setProperty('min-width', '800px');
-      
-      const contentElement = messageBoxElement.querySelector('.el-message-box__content');
+      (messageBoxElement as HTMLElement).style.setProperty(
+        "--el-messagebox-width",
+        "800px"
+      );
+      (messageBoxElement as HTMLElement).style.setProperty("width", "800px");
+      (messageBoxElement as HTMLElement).style.setProperty(
+        "max-width",
+        "800px"
+      );
+      (messageBoxElement as HTMLElement).style.setProperty(
+        "min-width",
+        "800px"
+      );
+
+      const contentElement = messageBoxElement.querySelector(
+        ".el-message-box__content"
+      );
       if (contentElement) {
-        (contentElement as HTMLElement).style.setProperty('max-height', '600px');
-        (contentElement as HTMLElement).style.setProperty('height', '600px');
-        (contentElement as HTMLElement).style.setProperty('min-height', '600px');
+        (contentElement as HTMLElement).style.setProperty(
+          "max-height",
+          "600px"
+        );
+        (contentElement as HTMLElement).style.setProperty("height", "600px");
+        (contentElement as HTMLElement).style.setProperty(
+          "min-height",
+          "600px"
+        );
       }
     }
   });
@@ -3645,7 +4520,7 @@ const completeTutorial = () => {
   showTutorial.value = false;
   currentTutorialStep.value = 1;
   // 教学完成,标记用户已看过引导
-  userStore().SET_SEEN_TUTORIAL('1');
+  userStore().SET_SEEN_TUTORIAL("1");
 };
 
 // 处理教学遮罩层点击
@@ -3657,22 +4532,22 @@ const handleTutorialOverlayClick = (event: Event) => {
 // 处理键盘导航
 const handleTutorialKeydown = (event: KeyboardEvent) => {
   if (!showTutorial.value) return;
-  
+
   switch (event.key) {
-    case 'ArrowRight':
-    case ' ':
+    case "ArrowRight":
+    case " ":
       event.preventDefault();
       if (currentTutorialStep.value < 3) {
         nextTutorialStep();
       }
       break;
-    case 'ArrowLeft':
+    case "ArrowLeft":
       event.preventDefault();
       if (currentTutorialStep.value > 1) {
         prevTutorialStep();
       }
       break;
-    case 'Escape':
+    case "Escape":
       event.preventDefault();
       completeTutorial();
       break;
@@ -3682,7 +4557,7 @@ const handleTutorialKeydown = (event: KeyboardEvent) => {
 // 检查是否需要显示教学引导
 const checkTutorialStatus = () => {
   // 从用户 store 获取教学态,'0' 表示未看过引导
-  const tutorialUnseen = userStore().seen_tutorial === '0';
+  const tutorialUnseen = userStore().seen_tutorial === "0";
   if (tutorialUnseen) {
     // 未看过教学引导时显示，确保页面完全加载
     setTimeout(() => {
@@ -3693,36 +4568,36 @@ const checkTutorialStatus = () => {
 
 // 测试并行对话功能
 const testParallelChats = () => {
-  console.log('=== 测试并行对话功能 ===');
+  console.log("=== 测试并行对话功能 ===");
 
   // 创建两个测试对话
-  const chat1Id = 'test_chat_1';
-  const chat2Id = 'test_chat_2';
+  const chat1Id = "test_chat_1";
+  const chat2Id = "test_chat_2";
 
   // 初始化对话状态
   getChatState(chat1Id);
   getChatState(chat2Id);
 
   // 设置不同的输入内容
-  chatStates.value[chat1Id].messageInput = '对话1的测试消息';
-  chatStates.value[chat2Id].messageInput = '对话2的测试消息';
+  chatStates.value[chat1Id].messageInput = "对话1的测试消息";
+  chatStates.value[chat2Id].messageInput = "对话2的测试消息";
 
   // 设置不同的发送状态
   chatStates.value[chat1Id].isSending = true;
   chatStates.value[chat2Id].isSending = false;
 
   // 验证状态独立性
-  console.log('对话1状态:', {
+  console.log("对话1状态:", {
     messageInput: chatStates.value[chat1Id].messageInput,
-    isSending: chatStates.value[chat1Id].isSending
+    isSending: chatStates.value[chat1Id].isSending,
   });
 
-  console.log('对话2状态:', {
+  console.log("对话2状态:", {
     messageInput: chatStates.value[chat2Id].messageInput,
-    isSending: chatStates.value[chat2Id].isSending
+    isSending: chatStates.value[chat2Id].isSending,
   });
 
-  console.log('状态独立性验证通过 ✅');
+  console.log("状态独立性验证通过 ✅");
 };
 
 // 在开发环境下添加测试按钮
@@ -3751,8 +4626,8 @@ const handleReaction = async (messageId: string, reactionType: number) => {
   try {
     // 调用API
     const formData = new FormData();
-    formData.append('id', messageId);
-    formData.append('reaction_type', newReaction.toString());
+    formData.append("id", messageId);
+    formData.append("reaction_type", newReaction.toString());
 
     const response = await getReactionType(formData);
 
@@ -3760,16 +4635,16 @@ const handleReaction = async (messageId: string, reactionType: number) => {
       // 更新本地状态
       chatState.reactions = {
         ...chatState.reactions,
-        [messageId]: newReaction
+        [messageId]: newReaction,
       };
 
       // 显示成功提示
       if (newReaction === 0) {
-        ElMessage.success('已取消');
+        ElMessage.success("已取消");
       } else if (newReaction === 1) {
-        ElMessage.success('已点赞');
+        ElMessage.success("已点赞");
       } else if (newReaction === 2) {
-        ElMessage.success('已点踩');
+        ElMessage.success("已点踩");
       }
 
       // 确保滚动到底部
@@ -3777,11 +4652,11 @@ const handleReaction = async (messageId: string, reactionType: number) => {
         scrollToBottom();
       });
     } else {
-      ElMessage.error('操作失败，请重试');
+      ElMessage.error("操作失败，请重试");
     }
   } catch (error) {
-    console.error('点赞点踩失败:', error);
-    ElMessage.error('操作失败，请重试');
+    console.error("点赞点踩失败:", error);
+    ElMessage.error("操作失败，请重试");
   }
 
   // 确保滚动到底部
@@ -3794,11 +4669,11 @@ const handleReaction = async (messageId: string, reactionType: number) => {
 const getReactionTooltip = (messageId: string, reactionType: number) => {
   const currentReaction = getReactionState(messageId);
   if (reactionType === 1) {
-    return currentReaction === 1 ? '取消点赞' : '点赞';
+    return currentReaction === 1 ? "取消点赞" : "点赞";
   } else if (reactionType === 2) {
-    return currentReaction === 2 ? '取消点踩' : '点踩';
+    return currentReaction === 2 ? "取消点踩" : "点踩";
   }
-  return '';
+  return "";
 };
 
 // 更新日志状态管理 - 现在基于当前对话
@@ -3814,7 +4689,7 @@ const updatingLog = computed({
     if (chatState) {
       chatState.updatingLog = value;
     }
-  }
+  },
 });
 
 // 格式化详细引用信息
@@ -3829,7 +4704,7 @@ const formatDetailedCitation = (doc: any) => {
   // 标题
   if (doc.ti) {
     // 移除HTML标签
-    const cleanTitle = doc.ti.replace(/<[^>]*>/g, '');
+    const cleanTitle = doc.ti.replace(/<[^>]*>/g, "");
     parts.push(`"${cleanTitle}"`);
   }
 
@@ -3839,7 +4714,7 @@ const formatDetailedCitation = (doc: any) => {
   }
 
   // 卷号、页码和年份组合
-  let volumePageYear = '';
+  let volumePageYear = "";
   if (doc.vl) {
     if (doc.bp && doc.ep) {
       volumePageYear = `${doc.vl}, ${doc.bp}-${doc.ep}`;
@@ -3866,17 +4741,17 @@ const formatDetailedCitation = (doc: any) => {
     parts.push(volumePageYear);
   }
 
-  return parts.join('. ');
+  return parts.join(". ");
 };
 
 // 格式化日志内容（保留ANSI颜色代码）
 const formatLogContent = (logContent: string) => {
-  if (!logContent) return '';
+  if (!logContent) return "";
 
   // 处理特殊字符，但保留ANSI颜色代码
   const processedContent = logContent
-    .replace(/\u0026\u0026/g, '&&') // 将 \u0026\u0026 转换为 &&
-    .replace(/\n/g, '\n') // 保持换行符
+    .replace(/\u0026\u0026/g, "&&") // 将 \u0026\u0026 转换为 &&
+    .replace(/\n/g, "\n") // 保持换行符
     .trim();
 
   return processedContent;
@@ -3884,12 +4759,12 @@ const formatLogContent = (logContent: string) => {
 
 // 格式化日志内容并转换ANSI颜色代码为HTML样式
 const formatLogContentWithColors = (logContent: string) => {
-  if (!logContent) return '';
+  if (!logContent) return "";
 
   // 处理特殊字符
   let processedContent = logContent
-    .replace(/\u0026\u0026/g, '&&') // 将 \u0026\u0026 转换为 &&
-    .replace(/\n/g, '\n') // 保持换行符
+    .replace(/\u0026\u0026/g, "&&") // 将 \u0026\u0026 转换为 &&
+    .replace(/\n/g, "\n") // 保持换行符
     .trim();
 
   // ANSI ESC (\u001b) is a control char by design; this contiguous block
@@ -3899,31 +4774,52 @@ const formatLogContentWithColors = (logContent: string) => {
   /* eslint-disable no-control-regex */
   // 转换ANSI颜色代码为HTML样式
   // 红色文本
-  processedContent = processedContent.replace(/\u001b\[31m/g, '<span style="color: #ff0000;">');
+  processedContent = processedContent.replace(
+    /\u001b\[31m/g,
+    '<span style="color: #ff0000;">'
+  );
   // 绿色文本
-  processedContent = processedContent.replace(/\u001b\[32m/g, '<span style="color: #00ff00;">');
+  processedContent = processedContent.replace(
+    /\u001b\[32m/g,
+    '<span style="color: #00ff00;">'
+  );
   // 黄色文本
-  processedContent = processedContent.replace(/\u001b\[33m/g, '<span style="color: #ffff00;">');
+  processedContent = processedContent.replace(
+    /\u001b\[33m/g,
+    '<span style="color: #ffff00;">'
+  );
   // 蓝色文本
-  processedContent = processedContent.replace(/\u001b\[34m/g, '<span style="color: #0000ff;">');
+  processedContent = processedContent.replace(
+    /\u001b\[34m/g,
+    '<span style="color: #0000ff;">'
+  );
   // 洋红色文本
-  processedContent = processedContent.replace(/\u001b\[35m/g, '<span style="color: #ff00ff;">');
+  processedContent = processedContent.replace(
+    /\u001b\[35m/g,
+    '<span style="color: #ff00ff;">'
+  );
   // 青色文本
-  processedContent = processedContent.replace(/\u001b\[36m/g, '<span style="color: #00ffff;">');
+  processedContent = processedContent.replace(
+    /\u001b\[36m/g,
+    '<span style="color: #00ffff;">'
+  );
   // 白色文本
-  processedContent = processedContent.replace(/\u001b\[37m/g, '<span style="color: #ffffff;">');
+  processedContent = processedContent.replace(
+    /\u001b\[37m/g,
+    '<span style="color: #ffffff;">'
+  );
 
   // 重置颜色
-  processedContent = processedContent.replace(/\u001b\[0m/g, '</span>');
+  processedContent = processedContent.replace(/\u001b\[0m/g, "</span>");
 
   // 处理其他常见的ANSI代码
   // 加粗
-  processedContent = processedContent.replace(/\u001b\[1m/g, '<strong>');
-  processedContent = processedContent.replace(/\u001b\[22m/g, '</strong>');
+  processedContent = processedContent.replace(/\u001b\[1m/g, "<strong>");
+  processedContent = processedContent.replace(/\u001b\[22m/g, "</strong>");
 
   // 下划线
-  processedContent = processedContent.replace(/\u001b\[4m/g, '<u>');
-  processedContent = processedContent.replace(/\u001b\[24m/g, '</u>');
+  processedContent = processedContent.replace(/\u001b\[4m/g, "<u>");
+  processedContent = processedContent.replace(/\u001b\[24m/g, "</u>");
   /* eslint-enable no-control-regex */
 
   return processedContent;
@@ -3934,52 +4830,55 @@ const readServerFile = async (filePath: string): Promise<string> => {
   try {
     // 将绝对路径转换为相对于项目的路径
     let relativePath = filePath;
-    if (filePath.includes('src\\assets\\agentOut\\') || filePath.includes('src/assets/agentOut/')) {
+    if (
+      filePath.includes("src\\assets\\agentOut\\") ||
+      filePath.includes("src/assets/agentOut/")
+    ) {
       // 提取相对路径部分
       const pathParts = filePath.split(/[\\/]/);
-      const srcIndex = pathParts.findIndex(part => part === 'src');
+      const srcIndex = pathParts.findIndex((part) => part === "src");
       if (srcIndex !== -1) {
-        relativePath = pathParts.slice(srcIndex).join('/');
+        relativePath = pathParts.slice(srcIndex).join("/");
       }
     }
-    
+
     // 使用 fetch 读取文件内容
     const response = await fetch(`/${relativePath}`);
     if (response.ok) {
       let content = await response.text();
-      
+
       // 处理 Markdown 文件中的图片路径
       content = processImagePaths(content, relativePath);
-      
+
       return content;
     } else {
-      console.error('读取文件失败:', response.status, response.statusText);
-      return '';
+      console.error("读取文件失败:", response.status, response.statusText);
+      return "";
     }
   } catch (error) {
-    console.error('读取服务器文件失败:', error);
-    return '';
+    console.error("读取服务器文件失败:", error);
+    return "";
   }
 };
 
 // 处理 Markdown 文件中的图片路径
 const processImagePaths = (content: string, filePath: string): string => {
   // 获取文件所在目录
-  const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
-  console.log('文件目录:', fileDir);
-  
+  const fileDir = filePath.substring(0, filePath.lastIndexOf("/"));
+  console.log("文件目录:", fileDir);
+
   // 处理相对路径的图片引用
   // 匹配 ![alt text](./path/to/image.png) 格式
   const imageRegex = /!\[([^\]]*)\]\(\.\/([^)]+)\)/g;
-  
+
   return content.replace(imageRegex, (match, altText, imagePath) => {
     // 构建完整的图片路径
     const fullImagePath = `/${fileDir}/${imagePath}`;
-    console.log('处理图片路径:', { 
-      original: match, 
+    console.log("处理图片路径:", {
+      original: match,
       imagePath: imagePath,
       fileDir: fileDir,
-      newPath: fullImagePath 
+      newPath: fullImagePath,
     });
     return `![${altText}](${fullImagePath})`;
   });
@@ -3997,27 +4896,31 @@ const updateLog = async (messageId: string) => {
 
   try {
     // 从当前消息中获取 compute_resource 值
-    let computeResource = 'analyst-agents-small'; // 默认值
+    let computeResource = "analyst-agents-small"; // 默认值
 
     if (currentChat.value?.messages) {
-      const message = currentChat.value.messages.find((msg: ChatMessage) => msg.id === messageId);
+      const message = currentChat.value.messages.find(
+        (msg: ChatMessage) => msg.id === messageId
+      );
       if (message && message.compute_resource) {
         computeResource = message.compute_resource;
       }
     }
 
     const formData = new FormData();
-    formData.append('task_id', messageId);
-    formData.append('compute_resource', computeResource);
+    formData.append("task_id", messageId);
+    formData.append("compute_resource", computeResource);
 
     const response = await updateAnalystAgentLog(formData);
 
     if (response.code === 200) {
-      ElMessage.success('日志更新成功');
+      ElMessage.success("日志更新成功");
 
       // 重新加载日志数据
       if (currentChat.value?.messages) {
-        const message = currentChat.value.messages.find((msg: ChatMessage) => msg.id === messageId);
+        const message = currentChat.value.messages.find(
+          (msg: ChatMessage) => msg.id === messageId
+        );
         if (message && message.showLog) {
           // 重新获取日志数据
           chatState.loadingLog[messageId] = true;
@@ -4027,7 +4930,7 @@ const updateLog = async (messageId: string) => {
               let parsedData;
 
               // 检查数据是否为字符串格式（新的日志格式）
-              if (typeof logRes.data === 'string') {
+              if (typeof logRes.data === "string") {
                 // 直接使用字符串数据，不需要JSON解析
                 parsedData = logRes.data;
               } else {
@@ -4035,7 +4938,7 @@ const updateLog = async (messageId: string) => {
                 try {
                   parsedData = JSON.parse(logRes.data);
                 } catch (parseError) {
-                  console.error('JSON解析失败:', parseError);
+                  console.error("JSON解析失败:", parseError);
                   parsedData = logRes.data;
                 }
               }
@@ -4048,18 +4951,18 @@ const updateLog = async (messageId: string) => {
               });
             }
           } catch (error) {
-            console.error('重新获取日志失败:', error);
+            console.error("重新获取日志失败:", error);
           } finally {
             chatState.loadingLog[messageId] = false;
           }
         }
       }
     } else {
-      ElMessage.error('日志更新失败');
+      ElMessage.error("日志更新失败");
     }
   } catch (error) {
-    console.error('更新日志失败:', error);
-    ElMessage.error('日志更新失败，请重试');
+    console.error("更新日志失败:", error);
+    ElMessage.error("日志更新失败，请重试");
   } finally {
     chatState.updatingLog[messageId] = false;
 
@@ -4085,13 +4988,12 @@ const copyMessageWithDocs = (message: any, index: number) => {
             }
             return `${idx + 1}. ${JSON.stringify(item)}`;
           })
-          .join('\n')
-      : '';
+          .join("\n")
+      : "";
   const text =
-    message.content + (docs && docs !== '' ? '\n参考资料:\n' : '') + docs;
+    message.content + (docs && docs !== "" ? "\n参考资料:\n" : "") + docs;
   fallbackCopyText(text, index + 1);
 };
-
 </script>
 
 <style lang="scss" scoped>
@@ -4247,7 +5149,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
       }
 
       .final-answer {
-
         .answer-title {
           font-weight: bold;
           margin-bottom: 12px;
@@ -4375,8 +5276,8 @@ const copyMessageWithDocs = (message: any, index: number) => {
     width: 85%;
     border: 1px solid #e7e7e7;
     border-radius: 10px;
-    box-shadow: 0 5px 16px -4px rgba(0, 0, 0, .17);
-    
+    box-shadow: 0 5px 16px -4px rgba(0, 0, 0, 0.17);
+
     &.show-tutorial {
       z-index: 1000 !important;
       background: #fff !important;
@@ -4384,7 +5285,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 
   .input-box {
-
     // display: flex;
     // gap: 12px;
     // align-items: flex-end;
@@ -4474,7 +5374,8 @@ const copyMessageWithDocs = (message: any, index: number) => {
     //   }
     // }
 
-    .send-btn, .abort-btn {
+    .send-btn,
+    .abort-btn {
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -4677,7 +5578,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 
   @keyframes dot-pulse {
-
     0%,
     100% {
       opacity: 0.4;
@@ -4774,8 +5674,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-
-
 ::v-deep(.el-textarea__inner) {
   box-shadow: none;
   margin-bottom: 30px;
@@ -4802,26 +5700,30 @@ const copyMessageWithDocs = (message: any, index: number) => {
   border-radius: 12px;
   // box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   z-index: 998;
-  
+
   &.show-tutorial {
     z-index: 1000 !important;
     background: #fff !important;
   }
 
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     top: -20px;
     left: 0;
     right: 0;
     height: 20px;
-    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.9));
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      rgba(255, 255, 255, 0.9)
+    );
     opacity: 0;
     transition: opacity 0.3s ease;
   }
 
   &::after {
-    content: '';
+    content: "";
     position: absolute;
     bottom: -20px;
     left: 0;
@@ -4833,7 +5735,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 
   &:hover {
-
     &::before,
     &::after {
       opacity: 1;
@@ -4856,7 +5757,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
 
   .input-container-bottom-item {
     display: flex;
-    width:22%;
+    width: 22%;
     height: 120px;
     align-items: center;
     justify-content: center;
@@ -4881,8 +5782,8 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-.show-tutorial{
-  z-index: 1000 !important; 
+.show-tutorial {
+  z-index: 1000 !important;
   background: #fff !important;
 }
 // 为了确保容器可以覆盖其他内容
@@ -4975,7 +5876,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
         .log-pre {
           margin: 0;
           padding: 0;
-          font-family: 'Courier New', monospace;
+          font-family: "Courier New", monospace;
           font-size: 12px;
           line-height: 1.4;
           color: #333;
@@ -5113,7 +6014,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   color: #909399;
   font-size: 14px;
   padding: 20px;
-  
+
   .el-icon {
     font-size: 16px;
   }
@@ -5253,7 +6154,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   position: relative;
   width: 100%;
   height: 100%;
-  
+
   // .sidebar-highlight-area {
   //   position: absolute;
   //   top: 0;
@@ -5265,7 +6166,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   //   box-shadow: 0 0 20px rgba(64, 158, 255, 0.3);
   //   z-index: 1001;
   // }
-  
+
   .sidebar-tutorial {
     position: absolute;
     top: 50%;
@@ -5280,7 +6181,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   position: relative;
   width: 100%;
   height: 100%;
-  
+
   // .bottom-highlight-area {
   //   position: absolute;
   //   bottom: 0;
@@ -5292,7 +6193,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   //   box-shadow: 0 -10px 20px rgba(103, 194, 58, 0.3);
   //   z-index: 1001;
   // }
-  
+
   .bottom-tutorial {
     position: absolute;
     top: 50%;
@@ -5307,7 +6208,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   position: relative;
   width: 100%;
   height: 100%;
-  
+
   // .input-highlight-area {
   //   position: absolute;
   //   top: 50%;
@@ -5321,7 +6222,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   //   box-shadow: 0 0 30px rgba(255, 123, 114, 0.3);
   //   z-index: 1001;
   // }
-  
+
   .input-tutorial {
     position: absolute;
     top: 5%;
@@ -5331,29 +6232,27 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-
-
 /* 响应式设计 */
 @media (max-width: 768px) {
   .tutorial-indicator {
     bottom: 10px;
     padding: 8px 16px;
     min-width: 160px;
-    
+
     .tutorial-progress {
       gap: 8px;
-      
+
       .progress-bar {
         height: 3px;
       }
-      
+
       .tutorial-steps {
         gap: 6px;
-        
+
         .tutorial-step {
           width: 24px;
           height: 24px;
-          
+
           .step-number {
             font-size: 11px;
           }
@@ -5420,7 +6319,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
       color: #909399;
       font-size: 12px;
       line-height: 1.4;
-      
+
       small {
         display: block;
         padding: 8px 12px;
@@ -5549,7 +6448,8 @@ const copyMessageWithDocs = (message: any, index: number) => {
 }
 /* 通用动画定义 */
 @keyframes tutorial-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.6;
   }
   50% {
@@ -5558,7 +6458,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
 }
 
 @keyframes tutorial-bounce-left {
-  0%, 20%, 50%, 80%, 100% {
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
     transform: translateY(-50%) translateX(0);
   }
   40% {
@@ -5570,7 +6474,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
 }
 
 @keyframes tutorial-bounce-down {
-  0%, 20%, 50%, 80%, 100% {
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
     transform: translateX(-50%) translateY(0);
   }
   40% {
@@ -5582,7 +6490,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
 }
 
 @keyframes tutorial-bounce-up {
-  0%, 20%, 50%, 80%, 100% {
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
     transform: translateX(-50%) translateY(0);
   }
   40% {
@@ -5612,7 +6524,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
 :deep(.el-dialog__header) {
   text-align: center;
   padding: 20px 20px 10px;
-  
+
   .el-dialog__title {
     font-size: 18px;
     font-weight: 600;
@@ -5631,14 +6543,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
     width: 100% !important;
     height: auto !important;
   }
-  
+
   :deep(.el-dialog) {
     margin: 5vh auto;
     width: 95% !important;
   }
 }
-
-
-
-
 </style>

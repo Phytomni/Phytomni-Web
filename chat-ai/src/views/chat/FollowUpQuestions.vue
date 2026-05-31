@@ -1,7 +1,12 @@
 <template>
   <div class="follow-up-questions">
-    <h4>{{ $t('chat.followUpQuestions') }}</h4>
-    <div v-for="(question, qIndex) in questions" :key="qIndex" class="question-item" @click="handleQuestionClick(question)">
+    <h4>{{ $t("chat.followUpQuestions") }}</h4>
+    <div
+      v-for="(question, qIndex) in questions"
+      :key="qIndex"
+      class="question-item"
+      @click="handleQuestionClick(question)"
+    >
       {{ qIndex + 1 }}. {{ question }}
     </div>
   </div>
@@ -13,14 +18,14 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'question-click', question: string): void;
+  (e: "question-click", question: string): void;
 }
 
 defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const handleQuestionClick = (question: string) => {
-  emit('question-click', question);
+  emit("question-click", question);
 };
 </script>
 
@@ -71,7 +76,7 @@ const handleQuestionClick = (question: string) => {
 
     // 添加点击提示
     &::after {
-      content: '';
+      content: "";
       position: absolute;
       right: 8px;
       top: 50%;
@@ -87,4 +92,4 @@ const handleQuestionClick = (question: string) => {
     }
   }
 }
-</style> 
+</style>

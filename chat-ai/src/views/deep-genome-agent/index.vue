@@ -6,12 +6,13 @@
           type="primary"
           :icon="ArrowLeft"
           @click="goBack"
-          class="back-button">
-          {{ $t('common.back') }}
+          class="back-button"
+        >
+          {{ $t("common.back") }}
         </el-button>
         <div class="header-text">
-          <h1>{{ $t('agents.deepGenome.title') }}</h1>
-          <p>{{ $t('agents.deepGenome.subtitle') }}</p>
+          <h1>{{ $t("agents.deepGenome.title") }}</h1>
+          <p>{{ $t("agents.deepGenome.subtitle") }}</p>
         </div>
       </div>
     </div>
@@ -41,9 +42,9 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            {{ $t('agents.deepGenome.taskCreated') }}:
+            {{ $t("agents.deepGenome.taskCreated") }}:
             4a7715a-996a-22e0-acd5-fb278e7d45b3
-            <div class="tip-text">{{ $t('common.Tip') }}</div>
+            <div class="tip-text">{{ $t("common.Tip") }}</div>
           </div>
         </div>
       </div>
@@ -57,26 +58,37 @@
           <div class="message-text">
             <DeepGenomeResultViewer
               :markdown="deepGenomeAgentResponse.replace(/\n/g, '\\n')"
-              :references="docList" />
+              :references="docList"
+            />
             <div class="message-fotter">
               <!-- 点赞点踩按钮 -->
               <div class="reaction-buttons">
-                <el-tooltip effect="dark" :content="getReactionTooltip(1)" placement="top">
+                <el-tooltip
+                  effect="dark"
+                  :content="getReactionTooltip(1)"
+                  placement="top"
+                >
                   <div
                     class="message-fotter-item reaction-btn"
                     :class="{ active: loveThisState === 1 }"
-                    @click="handleReaction(1)">
+                    @click="handleReaction(1)"
+                  >
                     <el-icon>
                       <SuccessFilled v-if="loveThisState === 1" />
                       <CircleCheck v-else />
                     </el-icon>
                   </div>
                 </el-tooltip>
-                <el-tooltip effect="dark" :content="getReactionTooltip(2)" placement="top">
+                <el-tooltip
+                  effect="dark"
+                  :content="getReactionTooltip(2)"
+                  placement="top"
+                >
                   <div
                     class="message-fotter-item reaction-btn"
                     :class="{ active: needsImprovementState === 2 }"
-                    @click="handleReaction(2)">
+                    @click="handleReaction(2)"
+                  >
                     <el-icon>
                       <CircleCloseFilled v-if="needsImprovementState === 2" />
                       <CircleClose v-else />
@@ -85,29 +97,29 @@
                 </el-tooltip>
               </div>
             </div>
-            <div class="tip-text">{{ $t('common.Tip') }}</div>
+            <div class="tip-text">{{ $t("common.Tip") }}</div>
           </div>
         </div>
       </div>
     </div>
     <div class="ai-disclaimer">
-      {{ $t('common.aiDisclaimer') }}
+      {{ $t("common.aiDisclaimer") }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
+import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import {
   ArrowLeft,
   SuccessFilled,
   CircleCheck,
   CircleCloseFilled,
   CircleClose,
-} from '@element-plus/icons-vue';
-import DeepGenomeResultViewer from '@/components/DeepGenomeResultViewer.vue';
-import { ref } from 'vue';
+} from "@element-plus/icons-vue";
+import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
+import { ref } from "vue";
 
 const { t } = useI18n();
 
@@ -120,9 +132,9 @@ const goBack = () => {
 };
 
 const getReactionTooltip = (reactionType: number) => {
-  if (reactionType === 1) return t('chat.loveThis');
-  if (reactionType === 2) return t('chat.needsImprovement');
-  return '';
+  if (reactionType === 1) return t("chat.loveThis");
+  if (reactionType === 2) return t("chat.needsImprovement");
+  return "";
 };
 
 const handleReaction = (reactionType: number) => {
@@ -133,82 +145,82 @@ const handleReaction = (reactionType: number) => {
   }
 };
 
-const botAvatar = '/logo.png';
+const botAvatar = "/logo.png";
 
 // DeepGenomeResultViewer 的 references 列表(demo 数据,与 docList 中的 file_id
 // / au / ti 字段对齐 viewer 期望的 schema)
 const docList = [
   {
-    file_id: '65c0d139-67b8-4dab-bb4a-b8e9b57dd990',
+    file_id: "65c0d139-67b8-4dab-bb4a-b8e9b57dd990",
     title:
-      'The rice YABBY1 gene is involved in the feedback regulation of gibberellin metabolism.',
+      "The rice YABBY1 gene is involved in the feedback regulation of gibberellin metabolism.",
   },
   {
-    file_id: 'ab4dc877-173d-44f1-bacc-4754905b9eff',
-    title: 'Gibberellin 2-oxidase genes and uses thereof',
+    file_id: "ab4dc877-173d-44f1-bacc-4754905b9eff",
+    title: "Gibberellin 2-oxidase genes and uses thereof",
   },
   {
-    file_id: 'caa4f546-7c2a-4eda-b4d9-c0959bb78df5',
+    file_id: "caa4f546-7c2a-4eda-b4d9-c0959bb78df5",
     title:
-      'Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins.',
+      "Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins.",
   },
   {
-    file_id: '55576eed0d07b52b177bd97fc3137f54',
-    au: 'Murai, M. et al',
-    ti: 'Pleiotropic effect of the dwarfing gene <i>d18-k</i> on cool tolerance at booting stage under the genetic background of an extremely cool-tolerant line Norin-PL8 in rice',
-    so: 'PLANT BREEDING',
-    vl: '122',
-    bp: '410',
-    ep: '415',
-    py: '2003',
-    di: '10.1046/j.1439-0523.2003.00843.x',
-    dl: 'http://dx.doi.org/10.1046/j.1439-0523.2003.00843.x',
+    file_id: "55576eed0d07b52b177bd97fc3137f54",
+    au: "Murai, M. et al",
+    ti: "Pleiotropic effect of the dwarfing gene <i>d18-k</i> on cool tolerance at booting stage under the genetic background of an extremely cool-tolerant line Norin-PL8 in rice",
+    so: "PLANT BREEDING",
+    vl: "122",
+    bp: "410",
+    ep: "415",
+    py: "2003",
+    di: "10.1046/j.1439-0523.2003.00843.x",
+    dl: "http://dx.doi.org/10.1046/j.1439-0523.2003.00843.x",
     pm: null,
   },
   {
-    file_id: '864553cb384fcacf7ee3022e925b48aa',
+    file_id: "864553cb384fcacf7ee3022e925b48aa",
     title:
-      'Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice',
+      "Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice",
   },
   {
-    file_id: 'a1e87ceb902eb1ba6d354f6f56000412',
-    au: '',
-    ti: 'A common allosteric mechanism regulates homeostatic inactivation of auxin and gibberellin',
-    so: 'NATURE COMMUNICATIONS',
-    vl: '11',
+    file_id: "a1e87ceb902eb1ba6d354f6f56000412",
+    au: "",
+    ti: "A common allosteric mechanism regulates homeostatic inactivation of auxin and gibberellin",
+    so: "NATURE COMMUNICATIONS",
+    vl: "11",
     bp: null,
     ep: null,
-    py: '2020',
-    di: '10.1038/s41467-020-16068-0',
-    dl: '',
-    pm: '32358569',
+    py: "2020",
+    di: "10.1038/s41467-020-16068-0",
+    dl: "",
+    pm: "32358569",
   },
   {
-    file_id: '58c87600aba5cd7c98b593364309efde',
-    title: '00002HUHLL7G7JP0MPDO7JP1M9R',
+    file_id: "58c87600aba5cd7c98b593364309efde",
+    title: "00002HUHLL7G7JP0MPDO7JP1M9R",
   },
   {
-    file_id: 'b03f9244cff2a831005a9c4ff554e94d',
-    au: 'Shukla, N. et al',
-    ti: 'Biochemical and physiological responses of rice (<i>Oryza sativa</i> L.) as influenced by <i>Trichoderma harzianum</i> under drought stress',
-    so: 'PLANT PHYSIOLOGY AND BIOCHEMISTRY',
-    vl: '54',
-    bp: '78',
-    ep: '88',
-    py: '2012',
-    di: '10.1016/j.plaphy.2012.02.001',
-    dl: 'http://dx.doi.org/10.1016/j.plaphy.2012.02.001',
-    pm: '22391125',
+    file_id: "b03f9244cff2a831005a9c4ff554e94d",
+    au: "Shukla, N. et al",
+    ti: "Biochemical and physiological responses of rice (<i>Oryza sativa</i> L.) as influenced by <i>Trichoderma harzianum</i> under drought stress",
+    so: "PLANT PHYSIOLOGY AND BIOCHEMISTRY",
+    vl: "54",
+    bp: "78",
+    ep: "88",
+    py: "2012",
+    di: "10.1016/j.plaphy.2012.02.001",
+    dl: "http://dx.doi.org/10.1016/j.plaphy.2012.02.001",
+    pm: "22391125",
   },
   {
-    file_id: '86993031b31b229d51a72728b199de5e',
+    file_id: "86993031b31b229d51a72728b199de5e",
     title:
-      'Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice',
+      "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice",
   },
   {
-    file_id: 'a172a9f9-d949-41a0-805e-58061eee3a88',
+    file_id: "a172a9f9-d949-41a0-805e-58061eee3a88",
     title:
-      'Oryza sativa mediator subunit OsMED25 interacts with OsBZR1 to regulate brassinosteroid signaling and plant architecture in rice.',
+      "Oryza sativa mediator subunit OsMED25 interacts with OsBZR1 to regulate brassinosteroid signaling and plant architecture in rice.",
   },
 ];
 
@@ -461,7 +473,7 @@ Future research should focus on resolving mechanistic uncertainties and explorin
       background: rgba(0, 0, 0, 0.1);
       padding: 2px 4px;
       border-radius: 3px;
-      font-family: 'Courier New', monospace;
+      font-family: "Courier New", monospace;
     }
 
     :deep(pre) {
