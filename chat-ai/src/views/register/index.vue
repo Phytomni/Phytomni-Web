@@ -80,6 +80,9 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
+import { onMounted } from 'vue';
+import { redirectIfAuthed } from '@/utils/authRedirect';
 import type { ElForm } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { register } from '@/api/auth';
@@ -88,6 +91,8 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
+onMounted(() => { redirectIfAuthed(route, router); });
 const loading = ref(false);
 const formRef = ref<InstanceType<typeof ElForm>>();
 

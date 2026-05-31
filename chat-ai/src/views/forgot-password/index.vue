@@ -32,10 +32,15 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
+import { onMounted } from 'vue';
+import { redirectIfAuthed } from '@/utils/authRedirect';
 import { WarningFilled } from '@element-plus/icons-vue';
 import LangSwitch from '@/components/LangSwitch.vue';
 
 const router = useRouter();
+const route = useRoute();
+onMounted(() => { redirectIfAuthed(route, router); });
 
 const goToLogin = () => {
   router.push('/login');

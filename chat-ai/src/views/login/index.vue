@@ -79,6 +79,9 @@
 <script setup lang="ts">
   import { reactive, ref } from 'vue';
   import { useRouter } from 'vue-router';
+  import { useRoute } from 'vue-router';
+  import { onMounted } from 'vue';
+  import { redirectIfAuthed, safeRedirect } from '@/utils/authRedirect';
   import type { ElForm } from 'element-plus';
   import { ElMessage, ElNotification } from 'element-plus';
   import { login } from '@/api/login';
@@ -91,6 +94,8 @@
   const useUserStore = userStore();
   const { t } = useI18n();
   const router = useRouter();
+  const route = useRoute();
+  onMounted(() => { redirectIfAuthed(route, router); });
   const isLogin = ref(true);
   const loading = ref(false);
   const formRef = ref<InstanceType<typeof ElForm>>();
@@ -202,7 +207,7 @@
           }
 
           console.log('Token已设置，跳转到chat页面');
-          router.replace('/chat');
+          router.replace(safeRedirect(route.query.redirect, '/chat'));
         } else {
           console.log('登录失败，状态码:', res.code);
           const errorMessage = res.message || res.msg || t('login.loginFailed');
