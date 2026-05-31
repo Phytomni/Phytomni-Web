@@ -14,6 +14,7 @@ import { userStore, permiStore } from '@/stores';
 import { getToken } from '@/utils';
 import { isRelogin } from '@/utils/request';
 import { WHITELIST } from '@/router/whitelist';
+import { safeRedirect } from '@/utils/authRedirect';
 import type { RouteRecordRaw } from 'vue-router';
 
 NProgress.configure({ showSpinner: false });
@@ -56,7 +57,7 @@ router.beforeEach((to, from, next) => {
       // }
       console.log(to.path, 'to.path');
       if (to.path === '/login' || to.path === '/register' || to.path === '/forgot-password') {
-        next();
+        next(safeRedirect(to.query.redirect, '/chat'));
       } else {
         const UserStore = userStore();
         UserStore.getUserTools()
@@ -66,7 +67,12 @@ router.beforeEach((to, from, next) => {
           })
           .catch((err) => {
             console.error('getUserTools failed:', err);
-            next({ path: '/login' });
+            // Stale-token break — clear token so the next beforeEach takes
+            // the unauthed branch, restoring /login as terminal and breaking
+            // the /chat ↔ /login redirect cycle.
+            UserStore.FedLogOut().then(() => {
+              next({ path: '/login', query: { redirect: to.fullPath } });
+            });
           });
       }
     }
