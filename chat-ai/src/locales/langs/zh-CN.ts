@@ -143,6 +143,11 @@ export default {
     remainingAttempts: '登录失败，您还有 {count} 次尝试机会',
     firstLoginTitle: '首次登录提醒',
     firstLoginMessage: '检测到您是首次登录，为了账户安全，请先修改初始密码。',
+    // NOTE: firstLoginTitle/Message 现有 keys 在 login moment 触发(login.vue:188)
+    // — 用户首次登录瞬间的提醒。FirstLoginEnforce* 在 router 守卫拦截 bypass
+    // 时触发 — 用户尝试绕过强制改密的提示。两套语义独立,文案不混用。
+    firstLoginEnforceTitle: '密码尚未修改',
+    firstLoginEnforceMessage: '请先修改初始密码,否则无法访问其他页面',
     agreement: {
       prefix: '登录即表示您同意我们的',
       terms: '服务条款',

@@ -143,6 +143,8 @@ export default {
     remainingAttempts: 'Login failed. You have {count} attempts remaining',
     firstLoginTitle: 'First Login Notice',
     firstLoginMessage: 'This is your first login. For security purposes, please change your initial password.',
+    firstLoginEnforceTitle: 'Password Change Required',
+    firstLoginEnforceMessage: 'You must change your initial password before accessing other pages.',
     slogan: {
       main: 'Life Science Foundation Model',
       sub: 'Decoding Life',
