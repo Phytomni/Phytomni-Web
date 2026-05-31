@@ -14,3 +14,18 @@ export const WHITELIST = [
 export const GUEST_ONLY_PATHS: ReadonlySet<string> = new Set([
   '/login', '/register', '/forgot-password',
 ]);
+
+/**
+ * Routes a user with `login_status === '0'` (initial password not yet changed)
+ * is allowed to visit. All other authenticated routes redirect to /change-password
+ * via permission.ts beforeEach guard.
+ *
+ * Keyed by route NAME (not path) for vue-router normalization (immune to
+ * trailing-slash / URL-encoding variants).
+ *
+ * INVARIANT: this Set must always include 'changePassword' itself, or the
+ * guard recurses infinitely.
+ */
+export const FIRST_LOGIN_ALLOWED_ROUTE_NAMES: ReadonlySet<string> = new Set([
+  'changePassword',
+]);
