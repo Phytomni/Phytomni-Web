@@ -3644,8 +3644,8 @@ const prevTutorialStep = () => {
 const completeTutorial = () => {
   showTutorial.value = false;
   currentTutorialStep.value = 1;
-  // 更新用户登录状态为非首次登录
-  userStore().SET_LOGIN_STATUS('1');
+  // 教学完成,标记用户已看过引导
+  userStore().SET_SEEN_TUTORIAL('1');
 };
 
 // 处理教学遮罩层点击
@@ -3681,10 +3681,10 @@ const handleTutorialKeydown = (event: KeyboardEvent) => {
 
 // 检查是否需要显示教学引导
 const checkTutorialStatus = () => {
-  // 从用户store中获取登录状态，0表示首次登录
-  const isFirstLogin = userStore().login_status === '0';
-  if (isFirstLogin) {
-    // 首次登录时显示教学引导，确保页面完全加载
+  // 从用户 store 获取教学态,'0' 表示未看过引导
+  const tutorialUnseen = userStore().seen_tutorial === '0';
+  if (tutorialUnseen) {
+    // 未看过教学引导时显示，确保页面完全加载
     setTimeout(() => {
       startTutorial();
     }, 1000);
