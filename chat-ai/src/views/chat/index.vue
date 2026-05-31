@@ -66,9 +66,10 @@
     <!-- 中间聊天区域 -->
     <div class="chat-main">
       <div class="chat-header">
-        <router-link to="/help">
+        <router-link v-if="UserStore.permission !== 'guest'" to="/help">
           <h2>{{ $t('chat.title') }}</h2>
         </router-link>
+        <div v-else></div>
         <div class="header-controls">
           <LangSwitch class="header-lang-switch" />
           <el-button v-if="isDevelopment" type="primary" size="small" @click="startTutorial" style="margin-left: 10px;">
@@ -794,7 +795,7 @@
           </div>
         </div>
       </div>
-      <div v-if="!currentChat?.messages?.length" class="input-container-bottom" 
+      <div v-if="!currentChat?.messages?.length && UserStore.permission !== 'guest'" class="input-container-bottom" 
         :class="{ 'show-tutorial': showTutorial && currentTutorialStep === 2 }"
         @wheel.prevent="handleScroll" :style="containerStyle">
         <div class="agent-list">
@@ -1124,6 +1125,7 @@ const chatList = ref<Chat[]>([]);
 // 修复：将静态引用改为计算属性，确保响应式更新
 const rolesTool = computed(() => userStore().roles);
 console.log(rolesTool.value, 'rolesTool');
+const UserStore = userStore();
 
 // 添加权限加载状态管理
 const rolesLoading = ref(false);
