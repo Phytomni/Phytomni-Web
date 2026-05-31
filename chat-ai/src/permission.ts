@@ -13,11 +13,10 @@ import router from '@/router';
 import { userStore, permiStore } from '@/stores';
 import { getToken } from '@/utils';
 import { isRelogin } from '@/utils/request';
+import { WHITELIST } from '@/router/whitelist';
 import type { RouteRecordRaw } from 'vue-router';
 
 NProgress.configure({ showSpinner: false });
-
-const whiteList = ['/', '/login', '/register', '/forgot-password', '/home', '/about'];
 
 router.beforeEach((to, from, next) => {
   NProgress.start();
@@ -73,7 +72,7 @@ router.beforeEach((to, from, next) => {
     }
   } else {
     /* 判断白名单 */
-    if (whiteList.includes(to.path)) {
+    if ((WHITELIST as readonly string[]).includes(to.path)) {
       next();
     } else {
       /* 重定向到登录页面 */
