@@ -8,7 +8,7 @@
 <template>
   <div class="change-password-page">
     <div class="page-header">
-      <div class="back-button">
+      <div v-if="!isFirstLogin" class="back-button">
         <el-button @click="goBack" icon="ArrowLeft" text>{{
           $t('common.back')
         }}</el-button>
@@ -80,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, onMounted } from 'vue';
+  import { ref, reactive, computed, onMounted } from 'vue';
   import { ElMessage } from 'element-plus';
   import { useRouter } from 'vue-router';
   import { userStore } from '@/stores';
@@ -97,11 +97,17 @@
   const passwordForm = reactive({
     id: '', // 用户ID
     code: '', // 用户代码/权限代码
-    username: 'admin', // 默认用户名，实际应用中可从登录状态获取
+    username: '',
     oldPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
+
+  // First-login user has no legitimate back destination — router guard
+  // will bounce them back. Hide goBack to avoid the visible "flash and
+  // return" UX. Voluntary access (login_status='1') keeps the button.
+  const UserStore = userStore();
+  const isFirstLogin = computed(() => UserStore.login_status === '0');
 
   // 返回上一页
   const goBack = () => {
