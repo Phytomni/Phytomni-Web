@@ -3,6 +3,7 @@ package api_handler
 import (
 	"net/http"
 	"nky_client_go/common"
+	rxLog "nky_client_go/log"
 	"nky_client_go/middleware"
 	"nky_client_go/model"
 	"nky_client_go/utils"
@@ -219,6 +220,23 @@ func (ph *ApiHandler) ApiModifyPassword(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
 	}
+
+	// Mark this user as no longer first-login. The flip happens here (after a
+	// successful password change) instead of in the login handler so the field
+	// reflects "initial password has been changed" rather than "user has ever
+	// logged in". Fail the response on flip error — without the flip the user
+	// stays gated, so a stale success would confuse them.
+	if err := model.DB(ctx).Model(&model.SUser{}).Where("email = ?", name.(string)).
+		Update("first_login_status", "1").Error; err != nil {
+		rxLog.Sugar().Errorw("first_login_status flip failed after password change",
+			"username", name, "err", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "password changed but flag update failed; please log in again",
+		})
+		return
+	}
+
 	ctx.JSON(errs.SucResp(email))
 }
 
@@ -240,14 +258,6 @@ func (ph *ApiHandler) ApiLogin(ctx *gin.Context) {
 		}
 		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": msg})
 		return
-	}
-
-	if userRes.FirstLoginStatus == "0" {
-		err := model.DB(ctx).Model(&model.SUser{}).Debug().Where("id = ?", userRes.Id).Update("first_login_status", "1").Error
-		if err != nil {
-			ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "修改登陆状态失败"})
-			return
-		}
 	}
 
 	// 登录生成有权限的工具

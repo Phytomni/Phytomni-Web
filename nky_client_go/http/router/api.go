@@ -18,7 +18,7 @@ func Api(r *gin.RouterGroup) {
 
 	}
 
-	prefixTokenRouter := r.Group("v1").Use(middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.CORS(), middleware.OperationLog())
+	prefixTokenRouter := r.Group("v1").Use(middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	homeTokenHandler := api_handler.NewApiHandler()
 	{
 		//todo 以下为新需求的使用接口
