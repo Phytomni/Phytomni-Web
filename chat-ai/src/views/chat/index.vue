@@ -4556,6 +4556,19 @@ const handleTutorialKeydown = (event: KeyboardEvent) => {
 
 // 检查是否需要显示教学引导
 const checkTutorialStatus = () => {
+  // Tutorial hand-off (TW-D15): change-password.vue 在 FedLogOut 之后写
+  // sessionStorage.tutorial_pending='1';此处一次性消费 + 同步 Pinia,
+  // 让「改密成功 → 首次进 chat = 看教学」自然触发路径成立。
+  try {
+    if (sessionStorage.getItem("tutorial_pending") === "1") {
+      sessionStorage.removeItem("tutorial_pending");
+      userStore().SET_SEEN_TUTORIAL("0");
+    }
+  } catch (err) {
+    // sessionStorage 不可用(incognito 严格 / 容量满):静默放弃教学
+    console.warn("sessionStorage unavailable for tutorial hand-off", err);
+  }
+
   // 从用户 store 获取教学态,'0' 表示未看过引导
   const tutorialUnseen = userStore().seen_tutorial === "0";
   if (tutorialUnseen) {

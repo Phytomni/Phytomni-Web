@@ -192,10 +192,9 @@ const handleLogin = () => {
 
           // 检查是否是首次登录，需要修改密码
           if (res.data!.login_status === "0") {
-            // Mark tutorial as not-yet-seen — this is the ONLY place the flag
-            // is reset to '0', ensuring tutorial fires only for genuine
-            // first-login users (anti-spam).
-            useUserStore.SET_SEEN_TUTORIAL("0");
+            // Tutorial 触发不在此 set — 改密成功后由 change-password.vue 写
+            // sessionStorage.tutorial_pending,chat/index.vue checkTutorialStatus
+            // 一次性消费再翻 SET_SEEN_TUTORIAL('0')(TW-D15)。
             console.log("首次登录，跳转到修改密码页面");
             ElNotification({
               title: t("login.firstLoginTitle"),

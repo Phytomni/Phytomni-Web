@@ -51,8 +51,11 @@ export default defineStore({
     permission: "",
     login_status: localStorage.getItem("loginStatus") || "1", // 默认非首次登录
     // Default '1' (assume seen) to avoid deploy-day tutorial spam on every
-    // existing user. login.vue explicitly sets to '0' when server returns
-    // login_status='0' (genuine first-login).
+    // existing user. '0' is only set by chat/index.vue checkTutorialStatus
+    // when it consumes the sessionStorage tutorial_pending hand-off written by
+    // change-password.vue after FedLogOut (TW-D15). Dev-only restartTutorial
+    // button in chat/index.vue calls startTutorial() directly without flipping
+    // this flag.
     seen_tutorial: localStorage.getItem("seenTutorial") || "1",
   }),
   getters: {},

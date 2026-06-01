@@ -252,9 +252,17 @@ const submitForm = async () => {
 
         if (response.code === 200) {
           ElMessage.success(t("changePassword.passwordChangeSuccess"));
-          // 修改成功后退出登录
           const UserStore = userStore();
-          UserStore.FedLogOut().then(() => router.replace("/login"));
+          UserStore.FedLogOut().then(() => {
+            // Tutorial hand-off (TW-D15): 改密完成 = 教学触发的唯一自然锚点。
+            // sessionStorage 在 FedLogOut 内 .clear() 之后才写,新写入存活到 tab 关闭。
+            try {
+              sessionStorage.setItem("tutorial_pending", "1");
+            } catch (err) {
+              console.warn("sessionStorage unavailable for tutorial hand-off", err);
+            }
+            router.replace("/login");
+          });
         } else {
           ElMessage.error(
             response.message || t("changePassword.passwordChangeFailed")
