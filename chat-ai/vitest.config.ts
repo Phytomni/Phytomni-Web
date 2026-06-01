@@ -32,6 +32,7 @@ export default defineConfig({
       include: [
         "src/utils/authRedirect.ts",
         "src/utils/auth.ts",
+        "src/utils/pendingChat.ts",
         "src/components/LangSwitch.vue",
       ],
       thresholds: {
