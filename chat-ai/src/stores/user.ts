@@ -25,7 +25,7 @@ interface IState {
   permissions: any[];
   permission_list: string[]; // 新增权限列表字段
   userType: string;
-  token: string;
+  token: string | undefined;
   permission: string;
   login_status: string; // 新增登录状态字段
   seen_tutorial: string; // UX-only flag, decoupled from password state
