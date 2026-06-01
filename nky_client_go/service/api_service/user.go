@@ -21,7 +21,7 @@ func (ps *ApiService) ApiGetUserProfile(ctx context.Context, email string) (*com
 	// 1. 查询用户基本信息
 	if err := model.DB(ctx).Model(&model.SUser{}).Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("用户不存在")
+			return nil, errors.New("auth.user_not_found")
 		}
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (ps *ApiService) GetUserInfo(ctx context.Context, email string, password st
 	if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
 		// 账户已锁定
 		count = 0
-		apiErr = errs.NewError("账户已锁定，请稍后再试")
+		apiErr = errs.NewLockedError("auth.account_locked")
 		return
 	}
 
@@ -180,9 +180,9 @@ func (ps *ApiService) GetUserInfo(ctx context.Context, email string, password st
 
 		count = 0
 		if newFailedCount >= 5 {
-			apiErr = errs.NewError("登录失败次数过多，账户已锁定15分钟")
+			apiErr = errs.NewLockedError("auth.account_locked_threshold")
 		} else {
-			apiErr = errs.NewError("用户名或密码错误")
+			apiErr = errs.NewError("auth.invalid_credentials")
 		}
 		return
 	}

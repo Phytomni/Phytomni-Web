@@ -3,6 +3,7 @@ package api_handler
 import (
 	"net/http"
 	"nky_client_go/common"
+	customI18n "nky_client_go/common/i18n"
 	rxLog "nky_client_go/log"
 	"nky_client_go/middleware"
 	"nky_client_go/model"
@@ -38,7 +39,7 @@ func (ph *ApiHandler) ApiUserRegister(ctx *gin.Context) {
 	if email == "" || password == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":  http.StatusBadRequest,
-			"error": "用户名或密码不能为空",
+			"error": customI18n.T(ctx, "register.credentials_required"),
 		})
 		return
 	}
@@ -47,7 +48,7 @@ func (ph *ApiHandler) ApiUserRegister(ctx *gin.Context) {
 	if len(password) < 8 || len(password) > 16 {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "密码长度至少为8位",
+			"message": customI18n.T(ctx, "register.password_too_short"),
 		})
 		return
 	}
@@ -56,21 +57,21 @@ func (ph *ApiHandler) ApiUserRegister(ctx *gin.Context) {
 	if !utils.ValidatePasswordComplexity(password) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "密码必须包含大小写字母、数字及标点符号",
+			"message": customI18n.T(ctx, "register.password_complexity"),
 		})
 		return
 	}
 
 	// 检查用户是否已存在
 	if exists := ph.service.CheckEmailExists(ctx, email); exists {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "用户名已存在", "token": ""})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": customI18n.T(ctx, "register.username_exists"), "token": ""})
 		return
 	}
 
 	if !govalidator.IsEmail(email) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "用户名必须是有效的邮箱格式",
+			"message": customI18n.T(ctx, "register.email_invalid_format"),
 		})
 		return
 	}
@@ -194,7 +195,7 @@ func (ph *ApiHandler) ApiModifyPassword(ctx *gin.Context) {
 	newPassword := ctx.PostForm("new_password")
 
 	if len(newPassword) < 8 || len(newPassword) > 16 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusInternalServerError, "message": "新的密码格式不正确"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusInternalServerError, "message": customI18n.T(ctx, "modify_password.password_format_invalid")})
 		return
 	}
 
@@ -202,7 +203,7 @@ func (ph *ApiHandler) ApiModifyPassword(ctx *gin.Context) {
 	if !utils.ValidatePasswordComplexity(newPassword) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "新密码必须包含大小写字母、数字及标点符号",
+			"message": customI18n.T(ctx, "modify_password.new_password_complexity"),
 		})
 		return
 	}
@@ -210,7 +211,7 @@ func (ph *ApiHandler) ApiModifyPassword(ctx *gin.Context) {
 	if password == newPassword {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "新密码不能与旧密码相同",
+			"message": customI18n.T(ctx, "modify_password.new_password_same_as_old"),
 		})
 		return
 	}
@@ -246,15 +247,26 @@ func (ph *ApiHandler) ApiLogin(ctx *gin.Context) {
 
 	// 检查用户是否已存在
 	if exists := ph.service.CheckEmailExists(ctx, email); !exists {
-		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "用户不存在"})
+		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": customI18n.T(ctx, "auth.user_not_found")})
 		return
 	}
 
 	userRes, count, err := ph.service.GetUserInfo(ctx, email, password)
 	if count == 0 {
-		msg := "用户名或密码错误"
+		// Service returns translation keys as error messages (e.g. "auth.account_locked").
+		// Translate via customI18n.T before writing JSON; missing-key fallback returns
+		// the key text + warning log so a typo degrades visibly but doesn't 500.
+		if lockedErr, ok := err.(*errs.LockedError); ok {
+			ctx.JSON(http.StatusConflict, gin.H{
+				"code":    http.StatusInternalServerError,
+				"message": customI18n.T(ctx, lockedErr.Error()),
+				"locked":  true,
+			})
+			return
+		}
+		msg := customI18n.T(ctx, "auth.invalid_credentials")
 		if err != nil {
-			msg = err.Error()
+			msg = customI18n.T(ctx, err.Error())
 		}
 		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": msg})
 		return
@@ -270,13 +282,13 @@ func (ph *ApiHandler) ApiLogin(ctx *gin.Context) {
 	// 登录成功后直接生成token
 	token, tokenErr := middleware.GenerateToken(email)
 	if tokenErr != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "生成token失败", "token": ""})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": customI18n.T(ctx, "auth.token_generation_failed"), "token": ""})
 		return
 	}
 
 	// 校验当前密码复杂度，如果过低则添加提示
 	if userRes.PasswordWarning == "" && !utils.ValidatePasswordComplexity(password) {
-		userRes.PasswordWarning = "当前密码复杂度较低，为安全起见请及时修改密码。"
+		userRes.PasswordWarning = customI18n.T(ctx, "password_warning.weak_complexity")
 	}
 
 	userData := struct {

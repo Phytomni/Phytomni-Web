@@ -36,6 +36,20 @@ func (err *Err) Error() string {
 	return err.message
 }
 
+// LockedError signals that the auth/login path tripped account lockout.
+// Handlers should type-assert *LockedError and surface a {locked: true}
+// flag in the JSON response so the frontend can route to ElNotification
+// without sniffing the error message text.
+type LockedError struct {
+	*Err
+}
+
+// NewLockedError builds a *LockedError with the given message and the
+// default business code (http.StatusBadRequest) — matches errs.NewError.
+func NewLockedError(message string) *LockedError {
+	return &LockedError{Err: NewError(message)}
+}
+
 func ErrResp(err api.Error) (httpCode int, rsp Response) {
 	httpCode = err.HttpCode()
 	rsp = Response{
