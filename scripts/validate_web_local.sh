@@ -127,4 +127,7 @@ stray="$( grep -rl 'SET_LOGIN_STATUS' chat-ai/src/ \
   || true )"
 [ -z "$stray" ] || { printf '%s\n' "$stray" >&2; fail "G11.3 SET_LOGIN_STATUS stray caller: files above must not reference SET_LOGIN_STATUS — only stores/user.ts (definition) and views/login/index.vue (sole call) are allowed."; }
 
+step "G12 chat-ai: vitest run + coverage threshold"
+( cd chat-ai && npm run coverage )
+
 step "validate_web_local.sh: ALL GATES PASS"

@@ -39,7 +39,7 @@ describe("setToken — input guard", () => {
   });
 
   it("warns + returns undefined on non-string input", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockReturnValue(undefined);
     const setSpy = vi.spyOn(Cookies, "set");
     expect(setToken(null as any)).toBeUndefined();
     expect(warn).toHaveBeenCalledOnce();
@@ -49,7 +49,7 @@ describe("setToken — input guard", () => {
   it.each(["undefined", "null", ""])(
     "warns + returns undefined on poisoned literal %s",
     (poisoned) => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const warn = vi.spyOn(console, "warn").mockReturnValue(undefined);
       const setSpy = vi.spyOn(Cookies, "set");
       expect(setToken(poisoned)).toBeUndefined();
       expect(warn).toHaveBeenCalledOnce();
