@@ -158,11 +158,11 @@ export default defineStore({
       this.permission_list = permissionList;
     },
     /**
-     * Server-write-only by convention. Should be called ONLY from
-     * views/login/index.vue when handling a successful login response.
-     * Future grep-gate (in scripts/validate_web_local.sh) will enforce
-     * this. Calling this from any other code path can bypass the
-     * first-login enforcement guard in permission.ts.
+     * Server-write-only by convention AND enforced by G11 in
+     * scripts/validate_web_local.sh — only stores/user.ts (this file)
+     * and views/login/index.vue may reference SET_LOGIN_STATUS.
+     * Calling this from any other code path can bypass the first-login
+     * enforcement guard in permission.ts.
      */
     SET_LOGIN_STATUS(loginStatus: string) {
       this.login_status = loginStatus;

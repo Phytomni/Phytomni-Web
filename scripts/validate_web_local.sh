@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G10)
+# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G11)
 #
 # Runs every check listed in .claude/plans/production-backport.md §"全量门禁清单":
 #   G-1  staged/unstaged secret scan
@@ -14,6 +14,8 @@
 #   G8   nky_client_python uv sync
 #   G9   nky_client_python compileall on the five real entrypoints
 #   G10  (Phase D+) attempt mcp_server_phytomni.server import; skip if absent
+#   G11  chat-ai SET_LOGIN_STATUS invariant — definition only in stores/user.ts,
+#        call only in views/login/index.vue
 #
 # Exit 0 means safe to commit. Any failure aborts via `set -e`.
 
@@ -113,5 +115,16 @@ if ( cd nky_client_python && uv run --quiet python -c "import mcp_server_phytomn
 else
   note "skip — mcp_server_phytomni not installed (expected before Phase D editable link)"
 fi
+
+step "G11 chat-ai: SET_LOGIN_STATUS invariant (definition + sole-caller + no-stray)"
+def_count="$( grep -c 'SET_LOGIN_STATUS(' chat-ai/src/stores/user.ts 2>/dev/null || echo 0 )"
+[ "$def_count" = "1" ] || fail "G11.1 SET_LOGIN_STATUS definition: expected 1 hit in chat-ai/src/stores/user.ts, got $def_count"
+call_count="$( grep -c 'SET_LOGIN_STATUS(' chat-ai/src/views/login/index.vue 2>/dev/null || echo 0 )"
+[ "$call_count" = "1" ] || fail "G11.2 SET_LOGIN_STATUS sole legal call: expected 1 hit in chat-ai/src/views/login/index.vue, got $call_count"
+stray="$( grep -rl 'SET_LOGIN_STATUS' chat-ai/src/ \
+  --include='*.ts' --include='*.vue' 2>/dev/null \
+  | grep -v -E '^chat-ai/src/stores/user\.ts$|^chat-ai/src/views/login/index\.vue$' \
+  || true )"
+[ -z "$stray" ] || { printf '%s\n' "$stray" >&2; fail "G11.3 SET_LOGIN_STATUS stray caller: files above must not reference SET_LOGIN_STATUS — only stores/user.ts (definition) and views/login/index.vue (sole call) are allowed."; }
 
 step "validate_web_local.sh: ALL GATES PASS"
