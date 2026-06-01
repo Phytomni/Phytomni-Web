@@ -66,7 +66,6 @@ export default {
     complete: "完成",
     skip: "跳过教程",
     startTutorial: "开始教学",
-    restartTutorial: "重新开始教学",
     navigationHint: "💡 提示：使用 ← → 方向键或空格键导航，ESC键退出",
   },
 

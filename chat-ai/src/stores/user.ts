@@ -50,12 +50,12 @@ export default defineStore({
     token: getToken(),
     permission: "",
     login_status: localStorage.getItem("loginStatus") || "1", // 默认非首次登录
-    // Default '1' (assume seen) to avoid deploy-day tutorial spam on every
-    // existing user. '0' is only set by chat/index.vue checkTutorialStatus
-    // when it consumes the sessionStorage tutorial_pending hand-off written by
-    // change-password.vue after FedLogOut (TW-D15). Dev-only restartTutorial
-    // button in chat/index.vue calls startTutorial() directly without flipping
-    // this flag.
+    // seen_tutorial: '0' = tutorial pending (first login or explicit replay request).
+    // Single mutator is SET_SEEN_TUTORIAL below. Initial value comes from
+    // localStorage; runtime mutations come from checkTutorialStatus on the
+    // chat surface (auto-trigger on first login via sessionStorage hand-off
+    // from change-password.vue) or from the sidebar's "开始教学" button
+    // (replay path for returning users).
     seen_tutorial: localStorage.getItem("seenTutorial") || "1",
   }),
   getters: {},

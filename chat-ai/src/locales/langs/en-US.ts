@@ -66,7 +66,6 @@ export default {
     complete: "Complete",
     skip: "Skip Tutorial",
     startTutorial: "Start Tutorial",
-    restartTutorial: "Restart Tutorial",
     navigationHint:
       "💡 Tip: Use ← → arrow keys or spacebar to navigate, ESC to exit",
   },

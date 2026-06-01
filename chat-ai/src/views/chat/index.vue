@@ -95,15 +95,6 @@
             v-if="isDevelopment"
             type="primary"
             size="small"
-            @click="startTutorial"
-            style="margin-left: 10px"
-          >
-            {{ $t("tutorial.restartTutorial") }}
-          </el-button>
-          <el-button
-            v-if="isDevelopment"
-            type="primary"
-            size="small"
             @click="testParallelChats"
             style="margin-left: 10px"
           >
