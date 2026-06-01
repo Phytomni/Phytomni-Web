@@ -110,7 +110,11 @@ router.beforeEach((to, from, next) => {
           // Stale-token break — clear token so the next beforeEach takes
           // the unauthed branch, restoring /login as terminal and breaking
           // the /chat ↔ /login redirect cycle.
-          UserStore.FedLogOut().then(() => {
+          // Use .finally so a FedLogOut rejection (storage SecurityError in
+          // privacy mode / sandboxed iframe / future logout API failure)
+          // still fires next() — otherwise router stays pending and the
+          // user sees a blank screen with NProgress hung at 80%.
+          UserStore.FedLogOut().finally(() => {
             next({ path: "/login", query: { redirect: to.fullPath } });
           });
         });
