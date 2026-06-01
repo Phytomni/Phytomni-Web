@@ -14,7 +14,7 @@ type HttpError interface {
 
 type Response struct {
 	Code  int         `json:"code"`
-	Msg   string      `json:"msg"`
+	Msg   string      `json:"message"`
 	Data  interface{} `json:"data"`
 	Count int         `json:"count,omitempty"`
 }

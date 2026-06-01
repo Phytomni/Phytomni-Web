@@ -60,9 +60,9 @@ func ErrResp(err api.Error) (httpCode int, rsp Response) {
 }
 
 type Response struct {
-	Code int         `json:"code" validate:"required"` // 响应码
-	Msg  string      `json:"msg" validate:"required"`  // 响应消息
-	Data interface{} `json:"data"`                     // 响应数据
+	Code int         `json:"code" validate:"required"`    // 响应码
+	Msg  string      `json:"message" validate:"required"` // 响应消息(JSON tag = message; Go field name remains Msg for caller compatibility)
+	Data interface{} `json:"data"`                        // 响应数据
 }
 
 func SucResp(data interface{}) (resCode int, res Response) {

@@ -35,7 +35,7 @@ var (
 
 type Response struct {
 	Code int         `json:"code"`
-	Msg  string      `json:"msg"`
+	Msg  string      `json:"message"`
 	Data interface{} `json:"data"`
 }
 
