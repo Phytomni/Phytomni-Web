@@ -1,6 +1,7 @@
 package router
 
 import (
+	customI18n "nky_client_go/common/i18n"
 	"nky_client_go/http/handler/api_handler"
 	"nky_client_go/middleware"
 
@@ -8,7 +9,7 @@ import (
 )
 
 func Api(r *gin.RouterGroup) {
-	prefixRouter := r.Group("auth").Use(middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
+	prefixRouter := r.Group("auth").Use(customI18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
 	homeHandler := api_handler.NewApiHandler()
 	{
 		prefixRouter.POST("/user/register", homeHandler.ApiUserRegister)                //自主注册
@@ -18,7 +19,7 @@ func Api(r *gin.RouterGroup) {
 
 	}
 
-	prefixTokenRouter := r.Group("v1").Use(middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
+	prefixTokenRouter := r.Group("v1").Use(customI18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	homeTokenHandler := api_handler.NewApiHandler()
 	{
 		//todo 以下为新需求的使用接口
@@ -61,7 +62,7 @@ func Api(r *gin.RouterGroup) {
 		prefixTokenRouter.POST("/download/rendering_file", homeTokenHandler.ApiDownloadObsRenderingFile) //文件格式转换下载
 
 	}
-	serverRouter := r.Group("v1/nky/server").Use(middleware.CORS(), middleware.GlobalMiddleware())
+	serverRouter := r.Group("v1/nky/server").Use(customI18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
 	homeServerHandler := api_handler.NewApiHandler()
 	{
 		//todo server内部开放路由

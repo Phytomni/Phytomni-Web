@@ -1,0 +1,36 @@
+[auth]
+user_not_found = "User not found"
+invalid_credentials = "Invalid username or password"
+token_generation_failed = "Failed to generate token"
+account_locked = "Account locked. Please try again later."
+account_locked_threshold = "Too many failed login attempts. Account locked for 15 minutes."
+
+[register]
+email_required = "Email is required"
+credentials_required = "Username and password are required"
+password_too_short = "Password must be at least 8 characters"
+password_complexity = "Password must contain uppercase, lowercase, numbers, and punctuation"
+email_invalid_format = "Username must be a valid email address"
+username_exists = "Username already exists"
+
+[modify_password]
+password_format_invalid = "New password format is invalid"
+new_password_complexity = "New password must contain uppercase, lowercase, numbers, and punctuation"
+new_password_same_as_old = "New password must differ from old password"
+flag_update_failed = "Password changed but flag update failed; please log in again"
+
+[role]
+admin = "Administrator"
+vip_user = "VIP User"
+regular_user = "Regular User"
+guest = "Guest"
+
+[errs]
+failed = "Operation failed"
+
+[password_warning]
+expired_90_days = "Your password is older than 90 days. Please update it soon."
+weak_complexity = "Your password complexity is low. Please update it for security."
+
+[feedback]
+empty_body = "Feedback type and content cannot be empty"
