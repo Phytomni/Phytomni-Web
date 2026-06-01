@@ -179,7 +179,7 @@ import { useI18n } from "vue-i18n";
 import { userStore } from "@/stores";
 import { Lock, User } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { getUserProfile } from "@/api/auth";
+import { getUserProfile, changePassword as apiChangePassword } from "@/api/auth";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -325,19 +325,32 @@ const changePassword = () => {
 // 处理密码修改
 const handlePasswordChange = async () => {
   if (!passwordFormRef.value) return;
-
-  try {
-    const valid = await passwordFormRef.value.validate();
-    if (valid) {
-      // 这里应该调用实际的API接口
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      passwordDialogVisible.value = false;
-      ElMessage.success(t("profile.passwordChangeSuccess"));
+  await passwordFormRef.value.validate(async (valid: boolean) => {
+    if (!valid) return;
+    try {
+      const formData = new FormData();
+      formData.append("password", passwordForm.oldPassword);
+      formData.append("new_password", passwordForm.newPassword);
+      const response = await apiChangePassword(formData);
+      if (response.code === 200) {
+        passwordDialogVisible.value = false;
+        ElMessage.success(t("profile.passwordChangeSuccess"));
+        // 改密成功 → 强制 logout 与 /change-password 路由语义对齐
+        // (防老 JWT 在新密码生效后继续可用)。
+        await UserStore.FedLogOut();
+        router.replace("/login");
+      } else {
+        ElMessage.error(
+          response.message || t("profile.passwordChangeFailed")
+        );
+      }
+    } catch (error: any) {
+      console.error("密码修改失败:", error);
+      ElMessage.warning(
+        error?.response?.data?.message || t("profile.passwordChangeFailed")
+      );
     }
-  } catch (error) {
-    console.error("密码修改失败:", error);
-    ElMessage.error(t("profile.passwordChangeFailed"));
-  }
+  });
 };
 
 // 格式化日期时间
