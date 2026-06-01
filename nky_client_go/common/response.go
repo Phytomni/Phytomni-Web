@@ -169,7 +169,7 @@ type ApiAsyncTaskListResponse struct {
 	ToolName        string     `gorm:"column:tool_name;type:varchar(30);comment:工具类型;NOT NULL" json:"tool_name"`
 	Status          string     `gorm:"column:status;type:varchar(30);comment:任务状态;NOT NULL" json:"status"`
 	LogStatus       string     `gorm:"column:log_status;type:varchar(30);comment:日志状态;NOT NULL" json:"log_status"`
-	ReactionType    string     `gorm:"column:reaction_type;type:enum;comment:点赞状态;NOT NULL" json:"reaction_type"`
+	ReactionType    string     `gorm:"column:reaction_type;type:enum('0','1','2');default:'0';not null;comment:点赞状态" json:"reaction_type"`
 	CreatedAt       time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
 	UpdatedAt       time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
 	DeleteAt        *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL

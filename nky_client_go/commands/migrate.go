@@ -13,12 +13,13 @@ import (
 // Idempotent by construction — the WHERE clause requires first_login_status='1',
 // and the update sets it to '0', so a second invocation matches zero rows.
 //
-// Schema management is intentionally out of scope here. SUser is defined with
-// `gorm:"type:enum"` (no value list), which GORM cannot translate into valid
-// DDL on MariaDB/MySQL — calling AutoMigrate on either a fresh or existing
-// schema generates `enum NOT NULL` and fails with SQL syntax error 1064.
-// Production schema is provisioned via separate manual DDL; this command
-// only handles the backfill.
+// Schema management is intentionally out of scope here. SUser was originally
+// defined with `gorm:"type:enum"` (no value list), which GORM could not
+// translate into valid DDL on MariaDB/MySQL — calling AutoMigrate on either
+// a fresh or existing schema generated `enum NOT NULL` and failed with SQL
+// syntax error 1064. The enum tag has since been fixed in model/table.go so
+// fresh-schema AutoMigrate is now syntactically valid, but production DDL
+// stays manual and this command continues to handle only the backfill.
 //
 // DB connection + Viper config are bootstrapped by main.initConfig (app.Before),
 // so model.Default() is usable directly here.
