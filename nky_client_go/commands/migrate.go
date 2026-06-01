@@ -7,33 +7,32 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// Migrate is the CLI command `go run main.go migrate up`. It performs:
-//  1. GORM AutoMigrate against the SUser model (additive — never drops columns).
-//  2. First-login backfill: revert first_login_status from '1' to '0' for
-//     users whose password_change_at and created_at are within 5 seconds of
-//     each other. Idempotent by construction — the WHERE clause requires
-//     first_login_status='1', and the update sets it to '0', so a second
-//     invocation matches zero rows.
+// Migrate is the CLI command `go run main.go migrate up`. It performs the
+// first-login backfill: revert first_login_status from '1' to '0' for users
+// whose password_change_at and created_at are within 5 seconds of each other.
+// Idempotent by construction — the WHERE clause requires first_login_status='1',
+// and the update sets it to '0', so a second invocation matches zero rows.
+//
+// Schema management is intentionally out of scope here. SUser is defined with
+// `gorm:"type:enum"` (no value list), which GORM cannot translate into valid
+// DDL on MariaDB/MySQL — calling AutoMigrate on either a fresh or existing
+// schema generates `enum NOT NULL` and fails with SQL syntax error 1064.
+// Production schema is provisioned via separate manual DDL; this command
+// only handles the backfill.
 //
 // DB connection + Viper config are bootstrapped by main.initConfig (app.Before),
 // so model.Default() is usable directly here.
 func Migrate() *cli.Command {
 	return &cli.Command{
 		Name:  "migrate",
-		Usage: "数据库迁移 + first-login 状态回填",
+		Usage: "first-login 状态回填",
 		Subcommands: []*cli.Command{
 			{
 				Name:        "up",
-				Usage:       "自动迁移数据库 + 第一次登录状态修复",
-				Description: "GORM AutoMigrate followed by the first_login_status backfill. Safe to re-run.",
+				Usage:       "第一次登录状态修复",
+				Description: "first_login_status backfill. Idempotent — safe to re-run.",
 				Action: func(ctx *cli.Context) error {
 					db := model.Default()
-
-					if err := db.AutoMigrate(&model.SUser{}); err != nil {
-						rxLog.Sugar().Errorw("AutoMigrate SUser failed", "err", err)
-						return err
-					}
-					rxLog.Sugar().Infow("AutoMigrate SUser complete")
 
 					result := db.Exec(`
 						UPDATE s_user
