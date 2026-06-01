@@ -537,12 +537,24 @@ const goToRegister = () => {
 }
 </style>
 
-<!-- 全局样式：调整 ElNotification 关闭按钮位置 -->
+<!-- 全局样式：调整 ElNotification 关闭按钮位置 + mobile 响应式宽度 -->
 <style lang="scss">
 .el-notification {
   .el-notification__closeBtn {
     top: 10px;
     right: 10px;
+  }
+}
+
+/* Mobile viewport 下默认 330px notif 会与 right:16px 锚点叠加溢出
+   320-360px 设备,收为 calc(100vw - 24px) + 12px 双边距 */
+@media (max-width: 768px) {
+  .el-notification {
+    width: calc(100vw - 24px);
+    max-width: 360px;
+    min-width: 0;
+    left: 12px !important;
+    right: 12px !important;
   }
 }
 </style>
