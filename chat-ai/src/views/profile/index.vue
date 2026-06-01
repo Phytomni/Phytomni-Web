@@ -393,7 +393,7 @@ const fetchUserInfo = async () => {
       usageStats.totalChats = data.dialogue_count || 0;
       usageStats.lastLogin = formatDateTime(data.last_login_at);
     } else {
-      ElMessage.error(res.msg || t("profile.fetchUserInfoFailed"));
+      ElMessage.error(res.message || t("profile.fetchUserInfoFailed"));
     }
   } catch (error) {
     console.error("获取用户信息失败:", error);

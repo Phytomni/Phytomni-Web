@@ -114,7 +114,7 @@ const submitFeedback = async () => {
           router.go(-1);
         }, 1500);
       } else {
-        ElMessage.error(response.msg || "提交失败，请重试");
+        ElMessage.error(response.message || "提交失败，请重试");
       }
     }
   } catch (error) {

@@ -873,7 +873,7 @@ const handleRenameConfirm = async () => {
         // 显示成功提示
         ElMessage.success("重命名成功");
       } else {
-        ElMessage.error(response.msg || "重命名失败");
+        ElMessage.error(response.message || "重命名失败");
       }
     }
   } catch (error) {
@@ -916,7 +916,7 @@ const handleDeleteConfirm = async () => {
       // 显示成功提示
       ElMessage.success("删除成功");
     } else {
-      ElMessage.error(response.msg || "删除失败");
+      ElMessage.error(response.message || "删除失败");
     }
   } catch (error) {
     console.error("删除失败:", error);
@@ -950,7 +950,7 @@ const toggleFavorite = async (chat: Chat) => {
       // 显示成功提示
       ElMessage.success(updatedChat.isFavorite ? "已收藏" : "已取消收藏");
     } else {
-      ElMessage.error(response.msg || "操作失败");
+      ElMessage.error(response.message || "操作失败");
     }
   } catch (error) {
     console.error("收藏操作失败:", error);

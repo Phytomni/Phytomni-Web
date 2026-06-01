@@ -510,7 +510,7 @@ const handleUnlock = (row: UserData) => {
           ElMessage.success(t("user.unlockSuccess"));
           fetchData();
         } else {
-          ElMessage.error(res.msg || t("user.unlockFailed"));
+          ElMessage.error(res.message || t("user.unlockFailed"));
         }
       } catch (error: any) {
         console.error("解锁用户失败:", error);
@@ -573,7 +573,7 @@ const handleSubmit = async () => {
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.msg || "用户添加失败");
+            ElMessage.error(res.message || "用户添加失败");
           }
         } else {
           // 编辑用户 - 使用 /v1/modify/permission 接口，FormData格式
@@ -601,7 +601,7 @@ const handleSubmit = async () => {
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.msg || "用户信息修改失败");
+            ElMessage.error(res.message || "用户信息修改失败");
           }
         }
       } catch (error: any) {

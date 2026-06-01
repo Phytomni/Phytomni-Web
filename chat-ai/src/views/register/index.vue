@@ -229,7 +229,9 @@ const handleRegister = () => {
         router.replace("/login");
       } else {
         console.log("注册失败，状态码:", res.code);
-        ElMessage.error("Registration failed: " + (res.msg || "Unknown error"));
+        ElMessage.error(
+          "Registration failed: " + (res.message || "Unknown error")
+        );
       }
     })
     .catch((err: any) => {

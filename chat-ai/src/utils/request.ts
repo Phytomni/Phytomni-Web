@@ -12,6 +12,7 @@ import errorCode from "@/utils/errorCode";
 import { tansParams, blobValidate } from "@/utils";
 import cache from "@/plugins/cache";
 import { saveAs } from "file-saver";
+import i18n from "@/locales";
 
 const CancelToken = axios.CancelToken;
 const source = CancelToken.source();
@@ -54,6 +55,8 @@ service.interceptors.request.use(
     if (getToken()) {
       config.headers["satoken"] = getToken();
     }
+    // 让后端按 vue-i18n 当前 locale 返回本地化错误消息
+    config.headers["Accept-Language"] = i18n.global.locale.value;
     // get请求映射params参数
     if (config.method === "get" && config.params) {
       let url = config.url + "?" + tansParams(config.params);
@@ -122,7 +125,7 @@ service.interceptors.response.use(
     // 获取错误信息
     const msg =
       (errorCode as ErrorCodeLookup)[code] ||
-      res.data.msg ||
+      res.data.message ||
       (errorCode as ErrorCodeLookup)["default"];
     // 二进制数据则直接返回
     if (res.headers["content-type"] === "application/octet-stream") {
@@ -138,8 +141,8 @@ service.interceptors.response.use(
     if (code === 401 || (res.data.detail && res.data.detail.code === 403)) {
       if (!isRelogin.show) {
         isRelogin.show = true;
-        ElMessageBox.alert("登录已过期，请重新登录", {
-          confirmButtonText: "我知道了",
+        ElMessageBox.alert(i18n.global.t("request.sessionExpired"), {
+          confirmButtonText: i18n.global.t("request.confirmButtonText"),
           type: "warning",
           callback: () => {
             isRelogin.show = false;
@@ -161,7 +164,7 @@ service.interceptors.response.use(
           },
         });
       }
-      return Promise.reject("无效的会话，或者会话已过期，请重新登录。");
+      return Promise.reject(i18n.global.t("request.sessionInvalid"));
     } else if (code === 500) {
       if (msg !== "Cannot create property 'headers' on boolean 'false'") {
         ElMessage({
@@ -206,11 +209,13 @@ service.interceptors.response.use(
 
     if (message === "数据正在处理，请勿重复提交") return;
     if (message == "Network Error") {
-      message = "后端接口连接异常";
+      message = i18n.global.t("request.networkError");
     } else if (message.includes("timeout")) {
-      message = "系统接口请求超时";
+      message = i18n.global.t("request.requestTimeout");
     } else if (message.includes("Request failed with status code")) {
-      message = "系统接口" + message.substr(message.length - 3) + "异常";
+      message = i18n.global.t("request.httpStatusError", {
+        code: message.substr(message.length - 3),
+      });
     }
     if (message !== "Cannot create property 'headers' on boolean 'false'") {
       ElMessage({

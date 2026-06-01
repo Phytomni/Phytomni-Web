@@ -214,7 +214,7 @@ const fetchHistoryData = async () => {
     if (res.code === 200 && res.data) {
       historyList.value = res.data;
     } else {
-      ElMessage.error(res.msg || "获取历史记录失败");
+      ElMessage.error(res.message || "获取历史记录失败");
       historyList.value = [];
     }
   } catch (error) {
@@ -290,7 +290,7 @@ const handleRenameConfirm = async () => {
         historyToRename.value = null;
         ElMessage.success("重命名成功");
       } else {
-        ElMessage.error(res.msg || "重命名失败");
+        ElMessage.error(res.message || "重命名失败");
       }
     }
   } catch (error) {
@@ -321,7 +321,7 @@ const handleDeleteConfirm = async () => {
       historyToDelete.value = null;
       ElMessage.success("删除成功");
     } else {
-      ElMessage.error(res.msg || "删除失败");
+      ElMessage.error(res.message || "删除失败");
     }
   } catch (error) {
     console.error("删除失败:", error);

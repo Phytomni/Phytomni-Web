@@ -173,8 +173,8 @@ const handleLogin = () => {
           user_name: string;
           login_status: string;
           password_warning?: string;
+          locked?: boolean;
         };
-        msg?: string;
         message?: string;
       }) => {
         console.log("登录响应:", res);
@@ -222,13 +222,10 @@ const handleLogin = () => {
           router.replace(safeRedirect(route.query.redirect, "/chat"));
         } else {
           console.log("登录失败，状态码:", res.code);
-          const errorMessage = res.message || res.msg || t("login.loginFailed");
+          const errorMessage = res.message || t("login.loginFailed");
 
-          // 检查是否是账户锁定相关的消息
-          if (
-            errorMessage.includes("锁定") ||
-            errorMessage.includes("locked")
-          ) {
+          // 后端通过 res.data.locked 标记上报锁定态(替代旧的子串嗅探)
+          if (res.data?.locked === true) {
             ElNotification({
               title: t("login.accountLockedTitle"),
               message: errorMessage,
@@ -246,13 +243,10 @@ const handleLogin = () => {
       console.log("登录异常:", err);
       const response = err.response?.data;
       const errorMessage =
-        response?.message ||
-        response?.msg ||
-        err.message ||
-        t("login.loginFailed");
+        response?.message || err.message || t("login.loginFailed");
 
-      // 检查是否是账户锁定相关的消息
-      if (errorMessage.includes("锁定") || errorMessage.includes("locked")) {
+      // 后端通过 response.locked 标记上报锁定态(替代旧的子串嗅探)
+      if (response?.locked === true) {
         ElNotification({
           title: t("login.accountLockedTitle"),
           message: errorMessage,

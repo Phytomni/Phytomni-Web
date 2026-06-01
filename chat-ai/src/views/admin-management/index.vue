@@ -362,7 +362,7 @@ const handleSubmit = async () => {
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.msg || "用户添加失败");
+            ElMessage.error(res.message || "用户添加失败");
           }
         } else {
           // 编辑用户 - 使用 /v1/modify/permission 接口，FormData格式
@@ -382,7 +382,7 @@ const handleSubmit = async () => {
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.msg || "用户信息修改失败");
+            ElMessage.error(res.message || "用户信息修改失败");
           }
         }
       } catch (error: any) {

@@ -90,6 +90,16 @@ export default {
     default: "系统未知错误，请反馈给管理员",
   },
 
+  // 请求层(axios 拦截器使用)
+  request: {
+    sessionExpired: "登录已过期，请重新登录",
+    sessionInvalid: "无效的会话，或者会话已过期，请重新登录。",
+    confirmButtonText: "我知道了",
+    networkError: "后端接口连接异常",
+    requestTimeout: "系统接口请求超时",
+    httpStatusError: "系统接口{code}异常",
+  },
+
   // 修改密码
   changePassword: {
     usernamePlaceholder: "请输入用户名",

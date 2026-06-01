@@ -91,6 +91,16 @@ export default {
     default: "Unknown system error, please report to administrator",
   },
 
+  // Request layer (used by axios interceptor)
+  request: {
+    sessionExpired: "Your session has expired. Please log in again.",
+    sessionInvalid: "Invalid or expired session. Please log in again.",
+    confirmButtonText: "OK",
+    networkError: "Backend connection failed",
+    requestTimeout: "Request timed out",
+    httpStatusError: "Server error ({code})",
+  },
+
   // Change password
   changePassword: {
     usernamePlaceholder: "Please enter username",

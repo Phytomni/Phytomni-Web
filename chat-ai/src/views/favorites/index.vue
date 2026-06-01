@@ -182,7 +182,7 @@ const fetchFavorites = async () => {
         isFavorite: true,
       }));
     } else {
-      ElMessage.error(response.msg || "获取收藏列表失败");
+      ElMessage.error(response.message || "获取收藏列表失败");
     }
   } catch (error) {
     console.error("获取收藏列表失败:", error);
@@ -232,7 +232,7 @@ const handleUnfavorite = async (favorite: FavoriteItem) => {
         favoritesList.value.splice(index, 1);
       }
     } else {
-      ElMessage.error(response.msg || "取消收藏失败");
+      ElMessage.error(response.message || "取消收藏失败");
     }
   } catch (error) {
     console.error("取消收藏失败:", error);
@@ -264,7 +264,7 @@ const handleRenameConfirm = async () => {
         renameDialogVisible.value = false;
         favoriteToRename.value = null;
       } else {
-        ElMessage.error(response.msg || "重命名失败");
+        ElMessage.error(response.message || "重命名失败");
       }
     }
   } catch (error) {
