@@ -1,12 +1,12 @@
 /**
  * Helpers for the pending-chat localStorage record shape used by chat/index.vue
- * scanners (TW-D10) and the chat-send/finish writer side (TW-D8).
+ * scanners and the chat-send/finish writer side.
  *
  * Contract:
  *   - Record key: `pending_chat_<dialogueId>`
  *   - Record shape: { isPending: true, messages: NonEmptyArray, id?: string }
  *   - Read side: silent skip + removeItem on corrupt
- *   - Write side: see TW-D8 design for user-visible error policy
+ *   - Write side: caller is responsible for user-visible error policy
  */
 
 export interface PendingChatRecord {
@@ -24,8 +24,8 @@ export interface ChatListEntry {
 
 /**
  * Returns true iff `data` is a valid pending-chat record.
- * Predicate(strict, per TW-D10 Q2 lock):
- *   isPending === true AND Array.isArray(messages) AND messages.length > 0
+ * Strict predicate: isPending === true AND Array.isArray(messages) AND messages.length > 0.
+ * Rejects truthy-but-non-boolean isPending values and empty / corrupt messages payloads.
  */
 export function isValidPendingRecord(
   data: unknown
@@ -40,11 +40,11 @@ export function isValidPendingRecord(
 
 /**
  * Returns true iff `chat` (chatList entry) corresponds to `pending` (localStorage record).
- * Strategy(strict, per TW-D10 Q3 lock):
+ * Strategy:
  *   1. ID match: chat.dialogue_id === pending.id OR chat.dialogue_id === tempChatId
  *   2. Fallback: exact title equality with first user-role message content
- * NO substring fuzzy(removed in TW-D10 because short prompts like `hi` / `help`
- * collided and silently merged unrelated chats — Wave 5.1 plan v1.3 §AF-003).
+ * Substring / prefix matching is deliberately NOT supported — short prompts like
+ * "hi" / "help" collided and silently merged unrelated chats.
  */
 export function matchesChat(
   chat: ChatListEntry,
@@ -63,14 +63,14 @@ export function matchesChat(
 }
 
 /**
- * Parses JSON safely. Returns null on parse failure or empty input + logs the error.
- * Caller decides whether to removeItem the originating key — see TW-D10 Q4 lock
- * (log + removeItem applied by 3 scanners in chat/index.vue).
+ * Parses JSON safely. Returns null on parse failure, on null input, or on empty-string
+ * input. Logs to console.error on parse failure only. Caller decides whether to
+ * removeItem the originating key (current consumers: 3 scanners in chat/index.vue).
  */
 export function safeParse<T = PendingChatRecord>(
   raw: string | null | undefined
 ): T | null {
-  if (!raw) return null;
+  if (raw == null || raw === "") return null;
   try {
     return JSON.parse(raw) as T;
   } catch (error) {

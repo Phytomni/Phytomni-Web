@@ -78,10 +78,10 @@ describe("matchesChat — ID + exact title only", () => {
     expect(matchesChat(chat, pendingBase, "temp-001")).toBe(true);
   });
 
-  it("returns false for substring fuzzy (TW-D10 Q3 lock: NO substring)", () => {
+  it("returns false when chat.title is only a prefix of the pending content (no substring fuzzy)", () => {
     const chat: ChatListEntry = {
       dialogue_id: "backend-real-id",
-      title: "exact title",  // backend truncated title
+      title: "exact title",  // shorter than pending.messages[0].content, so equality must fail
     };
     expect(matchesChat(chat, pendingBase, "temp-001")).toBe(false);
   });
@@ -123,5 +123,11 @@ describe("safeParse — log + null on fail", () => {
     const errSpy = vi.spyOn(console, "error").mockReturnValue(undefined);
     expect(safeParse("{not-json}")).toBeNull();
     expect(errSpy).toHaveBeenCalledOnce();
+  });
+
+  it("returns null for the JSON literal 'null' without logging", () => {
+    const errSpy = vi.spyOn(console, "error").mockReturnValue(undefined);
+    expect(safeParse("null")).toBeNull();
+    expect(errSpy).not.toHaveBeenCalled();
   });
 });
