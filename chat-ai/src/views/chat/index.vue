@@ -1461,6 +1461,7 @@ import DigitalDesignAgentImg from "@/assets/images/chat/DigitalDesignAgent.png";
 import DefaultAgentImg from "@/assets/images/chat/Agents.png";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import { isValidPendingRecord, matchesChat, safeParse, writePendingChat, clearPendingChat, isLocalStorageChat } from "@/utils/pendingChat";
+import { isNetworkError } from "@/utils/networkError";
 
 // 后续问题显示逻辑已移至FollowUpQuestions组件
 
@@ -3196,6 +3197,32 @@ const sendMessage = async () => {
                 response.data.reaction_type
               );
             }
+          } else {
+            // 处理其他未知的工具类型，使用默认格式
+            assistantMessage = {
+              role: "assistant",
+              content: response.data?.answer || "抱歉，我无法回答这个问题。",
+              status: response.data?.status || "",
+              upload_path: response.data?.upload_path || "",
+              download_path: response.data?.download_path || "",
+              instantMessage: true,
+              tool_name: response.data.tool_name,
+              id: response.data.id,
+              followUpQuestions: response.data.follow_up_questions
+                ? typeof response.data.follow_up_questions === "string"
+                  ? JSON.parse(response.data.follow_up_questions)
+                  : response.data.follow_up_questions
+                : [],
+              showFollowUpQuestions: false,
+              showLog: false,
+            };
+
+            // 同步新消息的点赞状态
+            if (response.data.id && response.data.reaction_type) {
+              chatState.reactions[response.data.id.toString()] = parseInt(
+                response.data.reaction_type
+              );
+            }
           }
         } else {
           assistantMessage = {
@@ -3218,7 +3245,26 @@ const sendMessage = async () => {
         }
       }
 
-      currentChat.value.messages.push(assistantMessage);
+      // 确保 assistantMessage 已创建，避免推送 undefined
+      if (assistantMessage) {
+        currentChat.value.messages.push(assistantMessage);
+      } else {
+        // 如果 assistantMessage 未创建，创建默认消息
+        console.warn("assistantMessage 未创建，使用默认消息");
+        currentChat.value.messages.push({
+          role: "assistant",
+          content: response.data?.answer || "抱歉，我无法回答这个问题。",
+          status: response.data?.status || "",
+          upload_path: response.data?.upload_path || "",
+          download_path: response.data?.download_path || "",
+          instantMessage: true,
+          tool_name: response.data?.tool_name || "",
+          id: response.data?.id,
+          followUpQuestions: [],
+          showFollowUpQuestions: false,
+          showLog: false,
+        });
+      }
     } else {
       currentChat.value.messages.push({
         role: "assistant",
@@ -3276,6 +3322,60 @@ const sendMessage = async () => {
         },
       });
       return;
+    }
+
+    // 检查是否是网络错误或超时错误，如果是，先验证消息是否已成功发送
+    if (isNetworkError(error) && !isAborted.value) {
+      console.log("检测到网络错误，验证消息是否已成功发送...");
+
+      try {
+        // 等待一小段时间，让服务器有时间处理请求
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // 如果是新对话，通过刷新历史记录来检查
+        if (isNewChat) {
+          await getHistoryQuestionData();
+          // 如果历史记录中有新对话，说明消息已成功发送
+          if (chatList.value.length > 0) {
+            const newChat = chatList.value[0];
+            const checkRes = await getAnswerCheck({
+              dialogue_id: newChat.dialogue_id,
+            });
+            if (
+              checkRes.code === 200 &&
+              checkRes.data &&
+              checkRes.data.length > 0
+            ) {
+              console.log("消息已成功发送，无需显示错误");
+              return;
+            }
+          }
+        } else {
+          // 如果是已有对话，直接检查当前对话
+          const urlDialogueId = getChatIdFromUrl();
+          if (urlDialogueId) {
+            const checkRes = await getAnswerCheck({
+              dialogue_id: urlDialogueId,
+            });
+            if (
+              checkRes.code === 200 &&
+              checkRes.data &&
+              checkRes.data.length > 0
+            ) {
+              // 检查最后一条消息是否包含我们刚发送的消息
+              const lastItem = checkRes.data[checkRes.data.length - 1];
+              if (lastItem && lastItem.query === messageContent) {
+                console.log("消息已成功发送，无需显示错误");
+                await selectChat(urlDialogueId);
+                return;
+              }
+            }
+          }
+        }
+      } catch (verifyError) {
+        console.error("验证消息状态失败:", verifyError);
+        // 验证失败，继续显示错误
+      }
     }
 
     // 只有在未被中止的情况下才添加错误消息
