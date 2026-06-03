@@ -1339,7 +1339,16 @@
           </div>
         </div>
       </div>
-      <div class="chat-footer">{{ $t("chat.footer") }}</div>
+      <div class="chat-footer">
+        {{ $t("chat.footer") }}
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          class="icp-link"
+          :aria-label="$t('chat.icpAriaLabel')"
+          >京ICP备07026971号-9</a
+        >
+      </div>
     </div>
 
     <!-- 右侧侧边栏 -->
@@ -5037,6 +5046,38 @@ const copyMessageWithDocs = (message: any, index: number) => {
   background: var(--color-background) !important;
   line-height: 1;
   bottom: 4px;
+
+  .icp-link {
+    color: #909399;
+    text-decoration: none;
+    transition: color 0.3s;
+    font-size: 12px;
+
+    &:hover {
+      color: #409eff;
+      text-decoration: underline;
+    }
+
+    &:visited {
+      color: #909399;
+    }
+  }
+}
+
+.theme-dark .chat-footer {
+  color: #fff;
+
+  .icp-link {
+    color: #909399;
+
+    &:hover {
+      color: #409eff;
+    }
+
+    &:visited {
+      color: #909399;
+    }
+  }
 }
 
 .chat-header {
@@ -5126,6 +5167,36 @@ const copyMessageWithDocs = (message: any, index: number) => {
       width: 100%;
       padding: 12px;
       border-radius: 8px;
+
+      // GeneNetworkAgent 图片样式
+      .gene-network-images {
+        .images-loading {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #909399;
+          font-size: 14px;
+          padding: 12px 0;
+        }
+
+        .images-container {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+
+          .result-image {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          }
+        }
+
+        .no-images {
+          color: #909399;
+          font-size: 14px;
+          padding: 12px 0;
+        }
+      }
     }
 
     .message-text:hover .message-user {
@@ -5295,6 +5366,8 @@ const copyMessageWithDocs = (message: any, index: number) => {
     &.show-tutorial {
       z-index: 1000 !important;
       background: #fff !important;
+      border: 2px solid #1890ff;
+      box-shadow: 0 0 10px 0 rgba(24, 144, 255, 0.3);
     }
   }
 

@@ -433,6 +433,7 @@ export default {
     copySuccess: "Copied successfully",
     copyFailed: "Copy failed",
     pendingWriteFailed: "Session backup failed, sending unaffected",
+    icpAriaLabel: "MIIT ICP filing",
     copy: "Copy",
     ladingInner:
       "Processing your request: retrieving data, analyzing information, and generating a response. Please wait",
