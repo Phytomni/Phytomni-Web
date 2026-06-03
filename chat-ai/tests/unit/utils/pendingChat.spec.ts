@@ -3,6 +3,9 @@ import {
   isValidPendingRecord,
   matchesChat,
   safeParse,
+  writePendingChat,
+  clearPendingChat,
+  isLocalStorageChat,
   type PendingChatRecord,
   type ChatListEntry,
 } from "@/utils/pendingChat";
@@ -129,5 +132,320 @@ describe("safeParse — log + null on fail", () => {
     const errSpy = vi.spyOn(console, "error").mockReturnValue(undefined);
     expect(safeParse("null")).toBeNull();
     expect(errSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("writePendingChat", () => {
+  beforeEach(() => {
+    // tests/setup.ts already calls localStorage.clear() + vi.restoreAllMocks()
+    // in an afterEach; redoing here is defensive against future setup changes.
+    localStorage.clear();
+    vi.restoreAllMocks();
+    vi.spyOn(console, "error").mockReturnValue(undefined);
+    vi.spyOn(console, "warn").mockReturnValue(undefined);
+    vi.spyOn(Date.prototype, "toISOString").mockReturnValue(
+      "2026-06-03T12:00:00.000Z"
+    );
+  });
+
+  it("writes record with all 5 fields {id, title, date, messages, isPending: true}", () => {
+    const messages = [{ role: "user", content: "hello" }];
+    writePendingChat("new_123", messages);
+    const raw = localStorage.getItem("pending_chat_new_123");
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!);
+    expect(parsed).toEqual({
+      id: "new_123",
+      title: "hello",
+      date: "2026-06-03T12:00:00.000Z",
+      messages: [{ role: "user", content: "hello" }],
+      isPending: true,
+    });
+  });
+
+  it("uses options.title verbatim when provided (no scan)", () => {
+    const messages = [
+      { role: "user", content: "should be ignored" },
+      { role: "assistant", content: "" },
+    ];
+    writePendingChat("new_123", messages, { title: "explicit caller title" });
+    const parsed = JSON.parse(
+      localStorage.getItem("pending_chat_new_123")!
+    );
+    expect(parsed.title).toBe("explicit caller title");
+  });
+
+  it("falls back to last user-role message content when no title option", () => {
+    const messages = [
+      { role: "user", content: "first user" },
+      { role: "assistant", content: "assistant reply" },
+      { role: "user", content: "second user" },
+    ];
+    writePendingChat("new_123", messages);
+    const parsed = JSON.parse(
+      localStorage.getItem("pending_chat_new_123")!
+    );
+    expect(parsed.title).toBe("second user");
+  });
+
+  it("returns empty title when no user-role message exists (all-assistant messages)", () => {
+    const messages = [
+      { role: "assistant", content: "assistant only" },
+      { role: "system", content: "system msg" },
+    ];
+    writePendingChat("new_123", messages);
+    const parsed = JSON.parse(
+      localStorage.getItem("pending_chat_new_123")!
+    );
+    expect(parsed.title).toBe("");
+  });
+
+  it("title length exactly 49 chars → no truncation, no ellipsis", () => {
+    const title49 = "x".repeat(49);
+    writePendingChat("new_123", [{ role: "user", content: title49 }]);
+    const parsed = JSON.parse(
+      localStorage.getItem("pending_chat_new_123")!
+    );
+    expect(parsed.title).toBe(title49);
+    expect(parsed.title.length).toBe(49);
+  });
+
+  it("title length exactly 50 chars → no truncation, no ellipsis (boundary)", () => {
+    const title50 = "x".repeat(50);
+    writePendingChat("new_123", [{ role: "user", content: title50 }]);
+    const parsed = JSON.parse(
+      localStorage.getItem("pending_chat_new_123")!
+    );
+    expect(parsed.title).toBe(title50);
+    expect(parsed.title.length).toBe(50);
+  });
+
+  it("title length exactly 51 chars → substring(0, 50) + '...'", () => {
+    const title51 = "x".repeat(51);
+    writePendingChat("new_123", [{ role: "user", content: title51 }]);
+    const parsed = JSON.parse(
+      localStorage.getItem("pending_chat_new_123")!
+    );
+    expect(parsed.title).toBe("x".repeat(50) + "...");
+    expect(parsed.title.length).toBe(53);
+  });
+
+  it("strips attachedFiles File objects to {name, size, type} projection", () => {
+    const realFile = new File(["csv,content"], "data.csv", {
+      type: "text/csv",
+    });
+    // Note: in real browsers JSON.stringify(file) === "{}", which is the bug
+    // the source code's projection guards against. happy-dom exposes enumerable
+    // {type, lastModified, name} so a pre-condition equality check is brittle;
+    // we exercise the projection through the round-trip assertions below.
+    const messages = [
+      {
+        role: "user",
+        content: "with attachment",
+        attachedFiles: [
+          {
+            file: realFile,
+            name: realFile.name,
+            size: realFile.size,
+            type: realFile.type,
+          },
+          // Degenerate entry: missing/wrong-typed name/size/type exercises the
+          // three fallback branches in the projection ternaries (lines 149-151).
+          // Without this, branch coverage on pendingChat.ts drops to ~94%.
+          {
+            name: 42 as unknown as string,
+            size: "not-a-number" as unknown as number,
+            type: undefined as unknown as string,
+          },
+        ],
+      },
+    ];
+    writePendingChat("new_123", messages);
+    const parsed = JSON.parse(
+      localStorage.getItem("pending_chat_new_123")!
+    );
+    expect(parsed.messages[0].attachedFiles).toEqual([
+      {
+        name: "data.csv",
+        size: realFile.size,
+        type: "text/csv",
+      },
+      { name: "", size: 0, type: "" },
+    ]);
+    expect(parsed.messages[0].attachedFiles[0]).not.toHaveProperty("file");
+  });
+
+  it("returns void with console.warn on empty-string dialogueId", () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockReturnValue(undefined);
+    writePendingChat("", [{ role: "user", content: "hi" }]);
+    expect(localStorage.length).toBe(0);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns void with console.warn on null dialogueId", () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockReturnValue(undefined);
+    writePendingChat(null as unknown as string, [
+      { role: "user", content: "hi" },
+    ]);
+    expect(localStorage.length).toBe(0);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns void with console.warn on undefined dialogueId", () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockReturnValue(undefined);
+    writePendingChat(undefined as unknown as string, [
+      { role: "user", content: "hi" },
+    ]);
+    expect(localStorage.length).toBe(0);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns void with console.warn on empty messages array", () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockReturnValue(undefined);
+    writePendingChat("new_123", []);
+    expect(localStorage.length).toBe(0);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns void with console.warn on null messages", () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockReturnValue(undefined);
+    writePendingChat("new_123", null as unknown as never[]);
+    expect(localStorage.length).toBe(0);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onError and console.error on JSON.stringify throw (circular ref produces TypeError)", () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockReturnValue(undefined);
+    const onError = vi.fn();
+    // 'as never' is required: TS message-shape forbids self-referential objects,
+    // and we are intentionally exercising the JSON.stringify failure path.
+    const circular: Record<string, unknown> = {
+      role: "user",
+      content: "hi",
+    };
+    circular.self = circular;
+    writePendingChat("new_123", [circular as never], { onError });
+    expect(localStorage.length).toBe(0);
+    expect(onError).toHaveBeenCalledTimes(1);
+    // JSON.stringify on circular refs throws TypeError (subclass of Error);
+    // matching expect.any(Error) keeps tolerance for env differences.
+    expect(onError).toHaveBeenCalledWith(expect.any(Error));
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  it("calls onError and console.error on setItem QuotaExceededError", () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockReturnValue(undefined);
+    // Spy on the live instance, not Storage.prototype: happy-dom's localStorage
+    // dispatches setItem through an internal cache that bypasses prototype-level
+    // spies after the first invocation, causing inter-test pollution.
+    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    });
+    const onError = vi.fn();
+    writePendingChat("new_123", [{ role: "user", content: "hi" }], {
+      onError,
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(expect.any(DOMException));
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  it("does NOT throw to caller on any error path (no onError provided)", () => {
+    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new Error("anything");
+    });
+    expect(() =>
+      writePendingChat("new_123", [{ role: "user", content: "hi" }])
+    ).not.toThrow();
+  });
+});
+
+describe("clearPendingChat", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it("removes key when present", () => {
+    localStorage.setItem(
+      "pending_chat_new_123",
+      JSON.stringify({
+        isPending: true,
+        messages: [{ role: "user", content: "hi" }],
+      })
+    );
+    clearPendingChat("new_123");
+    expect(localStorage.getItem("pending_chat_new_123")).toBeNull();
+  });
+
+  it("is no-op when key absent (idempotent)", () => {
+    expect(() => clearPendingChat("new_does_not_exist")).not.toThrow();
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("returns void with console.warn on invalid dialogueId", () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockReturnValue(undefined);
+    clearPendingChat("");
+    clearPendingChat(null as unknown as string);
+    clearPendingChat(undefined as unknown as string);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("swallows removeItem throw with console.error, does NOT toast", () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockReturnValue(undefined);
+    vi.spyOn(window.localStorage, "removeItem").mockImplementation(() => {
+      throw new Error("removeItem failure");
+    });
+    expect(() => clearPendingChat("new_123")).not.toThrow();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+});
+
+describe("isLocalStorageChat", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns true for 'new_<timestamp>' and any non-empty suffix", () => {
+    expect(isLocalStorageChat("new_1735819200000")).toBe(true);
+    expect(isLocalStorageChat("new_0")).toBe(true);
+    expect(isLocalStorageChat("new_x")).toBe(true);
+  });
+
+  it("returns false for empty / null / undefined / non-string", () => {
+    expect(isLocalStorageChat("")).toBe(false);
+    expect(isLocalStorageChat(null)).toBe(false);
+    expect(isLocalStorageChat(undefined)).toBe(false);
+    // The runtime guard rejects non-string inputs; cast via 'unknown' to satisfy
+    // the parameter type while still flowing through the typeof check.
+    expect(isLocalStorageChat(123 as unknown as string)).toBe(false);
+  });
+
+  it("returns false for 'new_' alone (no suffix — degenerate edge case)", () => {
+    expect(isLocalStorageChat("new_")).toBe(false);
+  });
+
+  it("returns false for non-prefix strings ('123456789' / 'newchat' / whitespace-prefixed)", () => {
+    expect(isLocalStorageChat("123456789")).toBe(false);
+    expect(isLocalStorageChat("newchat")).toBe(false);
+    expect(isLocalStorageChat(" new_123")).toBe(false);
   });
 });

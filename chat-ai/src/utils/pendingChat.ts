@@ -78,3 +78,143 @@ export function safeParse<T = PendingChatRecord>(
     return null;
   }
 }
+
+/**
+ * Write a pending-chat record to localStorage at `pending_chat_<dialogueId>`.
+ *
+ * Caller MUST check isLocalStorageChat(dialogueId) before calling AND pass
+ * a stable dialogueId / messages reference captured at sendMessage entry
+ * (not a fresh read of currentChatId.value / currentChat.value.messages).
+ *
+ * Record shape (matches prod-fork for write/read parity + debug readability):
+ *   - id:        dialogueId verbatim
+ *   - title:     options.title (caller-supplied), truncated to 50 chars + "..."
+ *                fallback if no title: last user-role message content
+ *   - date:      ISO timestamp at call time
+ *   - messages:  sanitized clone of input messages (attachedFiles File objects
+ *                replaced with {name, size, type} projection to avoid
+ *                JSON.stringify silent data loss)
+ *   - isPending: true
+ *
+ * Error policy (non-blocking):
+ *   - empty/null dialogueId or empty messages → console.warn + silent return
+ *   - JSON.stringify throws (e.g. circular ref) → console.error + onError(error)
+ *   - setItem QuotaExceededError → console.error + onError(error)
+ *   - All errors swallowed; helper never throws to caller.
+ */
+export function writePendingChat(
+  dialogueId: string,
+  messages: PendingChatRecord["messages"],
+  options?: {
+    title?: string;
+    onError?: (error: unknown) => void;
+  }
+): void {
+  if (typeof dialogueId !== "string" || dialogueId === "") {
+    console.warn("[pendingChat] writePendingChat: invalid dialogueId");
+    return;
+  }
+  if (!Array.isArray(messages) || messages.length === 0) {
+    console.warn("[pendingChat] writePendingChat: empty messages");
+    return;
+  }
+  try {
+    let titleSource: string;
+    if (typeof options?.title === "string") {
+      titleSource = options.title;
+    } else {
+      const lastUserMsg = [...messages]
+        .reverse()
+        .find((m) => m.role === "user");
+      titleSource =
+        typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
+    }
+    const title =
+      titleSource.length > 50
+        ? titleSource.substring(0, 50) + "..."
+        : titleSource;
+
+    const sanitizedMessages = messages.map((m) => {
+      if (
+        Array.isArray((m as Record<string, unknown>).attachedFiles)
+      ) {
+        const files = (m as Record<string, unknown>).attachedFiles as Array<{
+          name?: string;
+          size?: number;
+          type?: string;
+        }>;
+        return {
+          ...m,
+          attachedFiles: files.map((f) => ({
+            name: typeof f.name === "string" ? f.name : "",
+            size: typeof f.size === "number" ? f.size : 0,
+            type: typeof f.type === "string" ? f.type : "",
+          })),
+        };
+      }
+      return m;
+    });
+
+    const record: PendingChatRecord & {
+      title: string;
+      date: string;
+    } = {
+      id: dialogueId,
+      title,
+      date: new Date().toISOString(),
+      messages: sanitizedMessages,
+      isPending: true as const,
+    };
+    localStorage.setItem(
+      `pending_chat_${dialogueId}`,
+      JSON.stringify(record),
+    );
+  } catch (error) {
+    console.error("[pendingChat] writePendingChat failed:", error);
+    options?.onError?.(error);
+  }
+}
+
+/**
+ * Remove the pending-chat record for `dialogueId`. Idempotent.
+ *
+ * Caller MUST pass a stable dialogueId captured at sendMessage entry, NOT a
+ * fresh read of currentChatId.value — between sendMessage entry and finally,
+ * an `await getHistoryQuestionData()` runs and the user may have switched
+ * chats; reading the ref fresh would clear the wrong key.
+ *
+ * removeItem on missing key is a no-op; removeItem throwing is extremely rare
+ * (old-Safari incognito edge case). Swallowed with console.error only.
+ *
+ * Caller MUST check isLocalStorageChat(dialogueId) before calling (consistency
+ * with writePendingChat — silent return on non-prefix IDs would mask a caller
+ * bug).
+ */
+export function clearPendingChat(dialogueId: string): void {
+  if (typeof dialogueId !== "string" || dialogueId === "") {
+    console.warn("[pendingChat] clearPendingChat: invalid dialogueId");
+    return;
+  }
+  try {
+    localStorage.removeItem(`pending_chat_${dialogueId}`);
+  } catch (error) {
+    console.error("[pendingChat] clearPendingChat failed:", error);
+  }
+}
+
+/**
+ * Predicate: does this dialogueId represent a localStorage-only pending chat?
+ *
+ * True iff dialogueId is a non-empty string matching /^new_.+$/ — the prefix
+ * minted by startNewChat() at chat/index.vue:1946 (`"new_" + Date.now()`).
+ *
+ * The require-at-least-one-char-after-prefix rule prevents the degenerate
+ * 'new_' edge case (which would pass a startsWith-only check but cannot
+ * occur via startNewChat in practice).
+ */
+export function isLocalStorageChat(
+  dialogueId: string | null | undefined
+): boolean {
+  if (typeof dialogueId !== "string" || dialogueId === "") return false;
+  return dialogueId.startsWith("new_") && dialogueId.length > 4;
+}
