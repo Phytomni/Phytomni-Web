@@ -421,6 +421,7 @@ export default {
     downloadURL: "下载链接",
     copySuccess: "复制成功",
     copyFailed: "复制失败",
+    pendingWriteFailed: "会话备份失败，不影响发送",
     copy: "复制",
     ladingInner: "正在处理您的请求：检索数据、分析信息并生成回答，请稍候",
     footer: "内容由 AI 生成，请仔细甄别。",

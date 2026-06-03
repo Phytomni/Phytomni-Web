@@ -1460,7 +1460,7 @@ import GeneNetworkAgentImg from "@/assets/images/chat/GeneNetworkAgent.png";
 import DigitalDesignAgentImg from "@/assets/images/chat/DigitalDesignAgent.png";
 import DefaultAgentImg from "@/assets/images/chat/Agents.png";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
-import { isValidPendingRecord, matchesChat, safeParse } from "@/utils/pendingChat";
+import { isValidPendingRecord, matchesChat, safeParse, writePendingChat, clearPendingChat, isLocalStorageChat } from "@/utils/pendingChat";
 
 // 后续问题显示逻辑已移至FollowUpQuestions组件
 
@@ -2901,6 +2901,21 @@ const sendMessage = async () => {
 
   currentChat.value.messages.push(userMessage);
 
+  // Capture sending IDs and messages here so the write+clear below run against
+  // a stable snapshot, immune to currentChatId / currentChat rotation during
+  // the awaits below (scrollToBottom, getQueryAbortable, and finally
+  // getHistoryQuestionData).
+  const sendingDialogueId = currentChatId.value;
+  const sendingMessages = currentChat.value.messages;
+  const sendingTitle = messageContent;
+
+  if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
+    writePendingChat(sendingDialogueId, sendingMessages, {
+      title: sendingTitle,
+      onError: () => ElMessage.warning(t("chat.pendingWriteFailed")),
+    });
+  }
+
   await scrollToBottom();
 
   try {
@@ -3287,6 +3302,13 @@ const sendMessage = async () => {
 
     // 无论是否是新对话，都刷新侧边栏历史记录数据
     await getHistoryQuestionData();
+
+    // Clear the pending record using the captured sendingDialogueId. Using
+    // currentChatId.value would clear the wrong key if the user switched
+    // chats during the await above (chatStates parallel-chat model).
+    if (isLocalStorageChat(sendingDialogueId)) {
+      clearPendingChat(sendingDialogueId);
+    }
 
     if (isNewChat) {
       // 如果是新对话，选择新创建的对话

@@ -432,6 +432,7 @@ export default {
     downloadURL: "Download link",
     copySuccess: "Copied successfully",
     copyFailed: "Copy failed",
+    pendingWriteFailed: "Session backup failed, sending unaffected",
     copy: "Copy",
     ladingInner:
       "Processing your request: retrieving data, analyzing information, and generating a response. Please wait",
