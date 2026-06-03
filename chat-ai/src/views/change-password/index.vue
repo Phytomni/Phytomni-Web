@@ -253,7 +253,7 @@ const submitForm = async () => {
         if (response.code === 200) {
           ElMessage.success(t("changePassword.passwordChangeSuccess"));
           const UserStore = userStore();
-          UserStore.FedLogOut().then(() => {
+          UserStore.FedLogOut().finally(() => {
             // Tutorial hand-off (TW-D15): 改密完成 = 教学触发的唯一自然锚点。
             // sessionStorage 在 FedLogOut 内 .clear() 之后才写,新写入存活到 tab 关闭。
             try {

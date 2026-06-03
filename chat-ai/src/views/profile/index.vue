@@ -337,8 +337,7 @@ const handlePasswordChange = async () => {
         ElMessage.success(t("profile.passwordChangeSuccess"));
         // 改密成功 → 强制 logout 与 /change-password 路由语义对齐
         // (防老 JWT 在新密码生效后继续可用)。
-        await UserStore.FedLogOut();
-        router.replace("/login");
+        await UserStore.FedLogOut().finally(() => router.replace("/login"));
       } else {
         ElMessage.error(
           response.message || t("profile.passwordChangeFailed")

@@ -193,7 +193,7 @@ const toggleCollapse = () => {
 // 登出
 const handleLogout = () => {
   const UserStore = userStore();
-  UserStore.FedLogOut().then(() => router.replace("/login"));
+  UserStore.FedLogOut().finally(() => router.replace("/login"));
 };
 const handleBack = () => {
   router.push("/chat");

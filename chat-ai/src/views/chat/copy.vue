@@ -1249,7 +1249,7 @@ const sendMessage = async () => {
         type: "warning",
         callback: () => {
           const UserStore = userStore();
-          UserStore.FedLogOut().then(() => {
+          UserStore.FedLogOut().finally(() => {
             // 清除所有缓存和cookie
             localStorage.clear();
             sessionStorage.clear();

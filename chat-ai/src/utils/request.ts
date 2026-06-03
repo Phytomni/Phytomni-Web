@@ -147,7 +147,7 @@ service.interceptors.response.use(
           callback: () => {
             isRelogin.show = false;
             const UserStore = userStore();
-            UserStore.FedLogOut().then(() => {
+            UserStore.FedLogOut().finally(() => {
               // 清除所有缓存和cookie
               localStorage.clear();
               sessionStorage.clear();
@@ -191,7 +191,7 @@ service.interceptors.response.use(
     if (response.data.detail.code === 403) {
       isRelogin.show = false;
       const UserStore = userStore();
-      UserStore.FedLogOut().then(() => {
+      UserStore.FedLogOut().finally(() => {
         // 清除所有缓存和cookie
         localStorage.clear();
         sessionStorage.clear();

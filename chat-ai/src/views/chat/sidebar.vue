@@ -990,7 +990,7 @@ const handleChangePassword = () => router.push("/change-password");
 
 // 登出
 const handleLogout = () => {
-  UserStore.FedLogOut().then(() => router.replace("/login"));
+  UserStore.FedLogOut().finally(() => router.replace("/login"));
 };
 
 // 处理新对话点击事件
