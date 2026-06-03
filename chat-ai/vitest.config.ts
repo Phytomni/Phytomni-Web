@@ -33,6 +33,7 @@ export default defineConfig({
         "src/utils/authRedirect.ts",
         "src/utils/auth.ts",
         "src/utils/pendingChat.ts",
+        "src/utils/networkError.ts",
         "src/components/LangSwitch.vue",
       ],
       thresholds: {
