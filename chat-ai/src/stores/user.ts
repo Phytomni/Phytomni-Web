@@ -99,7 +99,6 @@ export default defineStore({
         this.name = "";
         localStorage.removeItem("userName");
         // 清除Cookie
-        removeToken();
         removeExpiresIn();
         Object.keys(Cookies.get()).forEach((cookieName) => {
           Cookies.remove(cookieName);
