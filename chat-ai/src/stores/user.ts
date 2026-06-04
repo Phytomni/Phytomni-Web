@@ -106,7 +106,7 @@ export default defineStore({
     },
     // 前端 登出
     FedLogOut() {
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         this.SET_ROLES([]);
         this.SET_PERMISSIONS([]);
         removeToken();
@@ -120,13 +120,27 @@ export default defineStore({
           Cookies.remove(cookieName);
         });
 
-        // 清除localStorage
-        localStorage.clear();
-
-        // 清除sessionStorage
-        sessionStorage.clear();
+        const failures: string[] = [];
+        try {
+          localStorage.clear();
+        } catch (err) {
+          console.warn("FedLogOut: localStorage.clear failed", err);
+          failures.push("localStorage");
+        }
+        try {
+          sessionStorage.clear();
+        } catch (err) {
+          console.warn("FedLogOut: sessionStorage.clear failed", err);
+          failures.push("sessionStorage");
+        }
         // TODO 如无特殊要求这里可直接回到登录页(使用window.open)
-        resolve(true);
+        if (failures.length > 0) {
+          reject(
+            new Error(`FedLogOut storage clears failed: ${failures.join(", ")}`)
+          );
+        } else {
+          resolve(true);
+        }
       });
     },
 
