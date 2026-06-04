@@ -60,12 +60,6 @@ export default defineStore({
   }),
   getters: {},
   actions: {
-    // addRoles() {
-    //   this.roles = [1, 2, 3];
-    // },
-    // Login() {
-    //   this.roles = [1, 2, 3];
-    // },
     getUserTools() {
       return new Promise((resolve, reject) => {
         getUserTool()
@@ -84,11 +78,6 @@ export default defineStore({
           });
       });
     },
-    // getInfo() {
-    //   return new Promise((resolve, reject) => {
-    //     resolve(true);
-    //   });
-    // },
     // 前端 登出
     FedLogOut() {
       return new Promise((resolve, reject) => {
@@ -129,10 +118,6 @@ export default defineStore({
     },
 
     /* 同步更新数据 */
-    // SET_TOKEN(token: string) {
-    //   sessionStorage.setItem('currentBreadcrumbs', JSON.stringify([]));
-    //   this.token = token;
-    // },
     SET_NAME(permission: string) {
       this.permission = permission;
     },
