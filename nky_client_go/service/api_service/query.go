@@ -91,8 +91,10 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 		return nil, fmt.Errorf("unknown tool %q", in.Tool)
 	}
 
-	// 3. Resolve dialogue_id + f_id from the threading model above.
-	dialogueID, fID, err := ps.resolveDialogue(ctx, in)
+	// 3. Resolve dialogue_id + f_id from the threading model above. Ownership
+	//    is enforced by user_name so a caller cannot thread onto, or overwrite,
+	//    another user's conversation (real-user isolation lives in Web Go).
+	dialogueID, fID, err := ps.resolveDialogue(ctx, username, in)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +183,7 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 
 	if in.RefreshId != 0 {
 		if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
-			Where("id = ?", in.RefreshId).Updates(&row).Error; err != nil {
+			Where("id = ? AND user_name = ?", in.RefreshId, username).Updates(&row).Error; err != nil {
 			return nil, err
 		}
 		out.Id = in.RefreshId
@@ -195,12 +197,14 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 	return out, nil
 }
 
-// resolveDialogue returns the dialogue_id and f_id for this turn.
-func (ps *ApiService) resolveDialogue(ctx context.Context, in QueryInput) (string, int64, error) {
+// resolveDialogue returns the dialogue_id and f_id for this turn, scoping every
+// lookup to the authenticated user_name so a caller can only refresh or thread
+// onto their own rows.
+func (ps *ApiService) resolveDialogue(ctx context.Context, username string, in QueryInput) (string, int64, error) {
 	if in.RefreshId != 0 {
 		var row model.SQuestionAgentLog
 		if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
-			Where("id = ?", in.RefreshId).First(&row).Error; err != nil {
+			Where("id = ? AND user_name = ?", in.RefreshId, username).First(&row).Error; err != nil {
 			return "", 0, err
 		}
 		return row.DialogueId, row.FId, nil
@@ -210,7 +214,7 @@ func (ps *ApiService) resolveDialogue(ctx context.Context, in QueryInput) (strin
 	}
 	var parent model.SQuestionAgentLog
 	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
-		Where("id = ?", in.Id).First(&parent).Error; err != nil {
+		Where("id = ? AND user_name = ?", in.Id, username).First(&parent).Error; err != nil {
 		return "", 0, err
 	}
 	return parent.DialogueId, in.Id, nil

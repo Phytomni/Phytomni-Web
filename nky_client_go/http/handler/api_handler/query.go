@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	rxLog "nky_client_go/log"
 	"nky_client_go/service/api_service"
 	"nky_client_go/utils/errs"
 
@@ -46,7 +47,8 @@ func (ph *ApiHandler) ApiQuery(ctx *gin.Context) {
 
 	data, err := ph.service.ApiQuery(ctx, name.(string), in)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		rxLog.Sugar().Errorw("ApiQuery failed", "user", name, "err", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "请求处理失败"})
 		return
 	}
 	ctx.JSON(errs.SucResp(data))
@@ -61,7 +63,8 @@ func (ph *ApiHandler) ApiQueryAnalystUpdateLog(ctx *gin.Context) {
 
 	result, err := ph.service.ApiQueryAnalystUpdateLog(ctx, name.(string), taskID, computeResource)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		rxLog.Sugar().Errorw("ApiQueryAnalystUpdateLog failed", "user", name, "err", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "请求处理失败"})
 		return
 	}
 	ctx.JSON(errs.SucResp(result))
