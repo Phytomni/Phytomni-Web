@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"nky_client_go/commands"
 	"nky_client_go/cron"
 	rxMysql "nky_client_go/db"
@@ -63,6 +64,13 @@ func initConfig(*cli.Context) error {
 	}
 	if err := rxBot.InitFromViper(); err != nil {
 		return err
+	}
+	// Only reach out to Bot when the gateway is active. A dormant deploy
+	// (proxy_enabled=false) must not depend on Bot being online to boot.
+	if rxBot.BotConfig.ProxyEnabled {
+		if err := rxBot.ValidateAgents(context.Background(), rxBot.NewClient()); err != nil {
+			rxLog.Sugar().Fatalf("bot agent slug validation failed: %v", err)
+		}
 	}
 	return nil
 }
