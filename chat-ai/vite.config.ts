@@ -28,6 +28,9 @@ export default defineConfig(({ mode, command }) => {
   // Python pair (8082 / 8081 are the canonical ports from CLAUDE.md).
   const devProxyApi = env.VITE_DEV_PROXY_API || "http://localhost:8082";
   const devProxyMcp = env.VITE_DEV_PROXY_MCP || "http://localhost:8081";
+  // /query target. Defaults to the Python MCP service; set VITE_DEV_PROXY_QUERY
+  // to the Go service (8082) to cut over to the Bot gateway without a hard edit.
+  const devProxyQuery = env.VITE_DEV_PROXY_QUERY || devProxyMcp;
 
   return {
     // envPrefix: "VITE_", // env 环境变量前缀默认就是VITE_
@@ -79,7 +82,7 @@ export default defineConfig(({ mode, command }) => {
           changeOrigin: true,
         },
         "/query": {
-          target: devProxyMcp,
+          target: devProxyQuery,
           changeOrigin: true,
         },
       },
