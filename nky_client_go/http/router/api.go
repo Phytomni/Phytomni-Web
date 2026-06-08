@@ -62,6 +62,16 @@ func Api(r *gin.RouterGroup) {
 		prefixTokenRouter.POST("/download/rendering_file", homeTokenHandler.ApiDownloadObsRenderingFile) //文件格式转换下载
 
 	}
+
+	// chat-ai posts /query and /query/analyst/update_log at the root path (not
+	// under /v1). Mount them on a root group that replicates the /v1 auth chain.
+	// The gateway only serves real traffic when bot.proxy_enabled is true.
+	queryRouter := r.Group("").Use(customI18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
+	{
+		queryRouter.POST("/query", homeTokenHandler.ApiQuery)                                    //对话编排,转发到 Bot
+		queryRouter.POST("/query/analyst/update_log", homeTokenHandler.ApiQueryAnalystUpdateLog) //异步任务结果同步回库
+	}
+
 	serverRouter := r.Group("v1/nky/server").Use(customI18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
 	homeServerHandler := api_handler.NewApiHandler()
 	{
