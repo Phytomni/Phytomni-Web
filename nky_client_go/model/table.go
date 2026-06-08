@@ -83,6 +83,7 @@ type SQuestionAgentLog struct {
 	DialogueId        string     `gorm:"column:dialogue_id;type:varchar(255);comment:状态:对话id;NOT NULL" json:"dialogue_id"`
 	FId               int64      `gorm:"column:f_id;type:int(11);comment:状态:父id;NOT NULL" json:"f_id"`
 	ServerId          string     `gorm:"column:server_id;type:varchar(255);comment:状态:server_id;NOT NULL" json:"server_id"`
+	BotRunId          string     `gorm:"column:bot_run_id;type:varchar(64);comment:Bot run_id 跨服务关联键;NULL" json:"bot_run_id"`
 	UserName          string     `gorm:"column:user_name;type:varchar(255);comment:用户名;NOT NULL" json:"user_name"`
 	Query             string     `gorm:"column:query;type:text;comment:问题;NOT NULL" json:"query"`
 	TitleQuery        string     `gorm:"column:title_query;type:text;comment:title问题;NOT NULL" json:"title_query"`

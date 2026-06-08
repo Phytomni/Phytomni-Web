@@ -52,6 +52,26 @@ func Migrate() *cli.Command {
 					return nil
 				},
 			},
+			{
+				Name:        "add-bot-run-id",
+				Usage:       "给 s_question_agent_logs 加 bot_run_id 列",
+				Description: "Add the nullable bot_run_id join column. Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual.",
+				Action: func(ctx *cli.Context) error {
+					db := model.Default()
+					if db.Migrator().HasColumn(&model.SQuestionAgentLog{}, "bot_run_id") {
+						rxLog.Sugar().Info("bot_run_id column already exists, skip")
+						return nil
+					}
+					if err := db.Exec(
+						"ALTER TABLE s_question_agent_logs ADD COLUMN bot_run_id VARCHAR(64) NULL AFTER server_id",
+					).Error; err != nil {
+						rxLog.Sugar().Errorw("add bot_run_id failed", "err", err)
+						return err
+					}
+					rxLog.Sugar().Info("bot_run_id column added")
+					return nil
+				},
+			},
 		},
 	}
 }
