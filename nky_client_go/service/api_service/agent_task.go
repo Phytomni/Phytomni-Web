@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"nky_client_go/common"
 	"nky_client_go/common/email"
+	rxBot "nky_client_go/external/bot"
 	rxLog "nky_client_go/log"
 	"nky_client_go/model"
 	"sort"
@@ -413,6 +414,13 @@ func (ps *ApiService) ApiAnswerCheck(ctx context.Context, username string, dialo
 	newList = append(newList, QuestionAgentLog)
 	newList = append(newList, QuestionAgentLogList...)
 	QuestionAgentLogList = newList
+
+	// Bot 是内容 source of truth:网关激活时用 Bot 内容覆盖 MySQL 过渡字段,
+	// 保留 Web-only 的 id / reaction_type / upload_path。proxy_enabled=false
+	// 或 Bot 不可达时维持 MySQL legacy 字段(降级,不报错),与切流前行为一致。
+	if rxBot.BotConfig != nil && rxBot.BotConfig.ProxyEnabled {
+		ps.overlayBotContent(ctx, dialogueId, QuestionAgentLogList)
+	}
 	//todo: 将有obs下载路径的回答进行替换展示,逻辑待定
 	//for _, v := range QuestionAgentLogList {
 	//	if v.DownloadPath != "" && v.ToolName == "AnalysisAgent" {
@@ -420,6 +428,54 @@ func (ps *ApiService) ApiAnswerCheck(ctx context.Context, username string, dialo
 	//	}
 	//}
 	return
+}
+
+// overlayBotContent fetches Bot runs for a dialogue in a single call and
+// overrides the content columns (query/answer/tool_name/status) on rows that
+// carry a bot_run_id, leaving Web-only fields (id, reaction_type, upload_path)
+// intact. Any Bot failure leaves the MySQL legacy fields in place — a degrade,
+// not an error — so history replay never 500s on Bot trouble.
+func (ps *ApiService) overlayBotContent(ctx context.Context, dialogueId string, list []*model.SQuestionAgentLog) {
+	hasRun := false
+	for _, r := range list {
+		if r.BotRunId != "" {
+			hasRun = true
+			break
+		}
+	}
+	if !hasRun {
+		return
+	}
+	resp, err := rxBot.NewClient().ListRuns(ctx, dialogueId)
+	if err != nil {
+		rxLog.Sugar().Warnw("answer-check bot list runs failed, using legacy fields", "dialogue_id", dialogueId, "err", err)
+		return
+	}
+	byRun := make(map[string]rxBot.RunRecord, len(resp.Data))
+	for _, rec := range resp.Data {
+		byRun[rec.RunID] = rec
+	}
+	for _, row := range list {
+		if row.BotRunId == "" {
+			continue
+		}
+		rec, ok := byRun[row.BotRunId]
+		if !ok {
+			continue
+		}
+		if rec.Query != "" {
+			row.Query = rec.Query
+		}
+		if rec.Answer != "" {
+			row.Answer = rec.Answer
+		}
+		if rec.ToolName != "" {
+			row.ToolName = rec.ToolName
+		}
+		if rec.Status != "" {
+			row.Status = rec.Status
+		}
+	}
 }
 
 func (ps *ApiService) ApiQueryListDelete(ctx context.Context, name string, id int) (int, error) {
