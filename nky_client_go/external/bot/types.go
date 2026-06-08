@@ -1,0 +1,138 @@
+package bot
+
+import "encoding/json"
+
+// ChatMessage is one turn in an OpenAI-compatible message array.
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// ChatCompletionRequest is the body for POST /v1/chat/completions. Only
+// phyto-chat honors Stream=true; other models reject it with 400.
+type ChatCompletionRequest struct {
+	Model         string        `json:"model"`
+	Messages      []ChatMessage `json:"messages"`
+	Stream        bool          `json:"stream"`
+	OBSFileList   []string      `json:"obs_file_list,omitempty"`
+	ResolveGeneID *bool         `json:"resolve_gene_id,omitempty"`
+	DialogueID    string        `json:"dialogue_id,omitempty"`
+}
+
+// Formatted is the Phytomni-specific envelope Bot returns alongside the
+// OpenAI-shaped fields. Answer/FollowUpQuestions are what chat-ai renders.
+type Formatted struct {
+	Answer            string          `json:"answer"`
+	FollowUpQuestions json.RawMessage `json:"follow_up_questions"`
+	Metadata          json.RawMessage `json:"metadata"`
+	References        json.RawMessage `json:"references"`
+	Tabular           json.RawMessage `json:"tabular"`
+	OutputDirs        json.RawMessage `json:"output_dirs"`
+}
+
+// ChatCompletionResponse is the non-streaming response for a sync chat model.
+type ChatCompletionResponse struct {
+	ID        string    `json:"id"`
+	Object    string    `json:"object"`
+	Model     string    `json:"model"`
+	Formatted Formatted `json:"formatted"`
+}
+
+// AgentRunRequest is the body for POST /v1/agents/{slug}/runs.
+type AgentRunRequest struct {
+	Arguments  map[string]interface{} `json:"arguments"`
+	DialogueID string                 `json:"dialogue_id,omitempty"`
+	Debug      bool                   `json:"debug,omitempty"`
+}
+
+// AgentRunResult carries either a finished formatted payload (sync agents) or
+// a dedup-hit marker (analyst re-submit of an identical input fingerprint).
+type AgentRunResult struct {
+	Formatted *Formatted `json:"formatted,omitempty"`
+	DedupHit  bool       `json:"dedup_hit,omitempty"`
+	TaskID    string     `json:"task_id,omitempty"`
+}
+
+// AgentRunResponse covers both the 200 sync shape (status=succeeded) and the
+// 202 remote shape (status=running, task_ids populated). ID is a pointer
+// because a dedup hit returns id=null.
+type AgentRunResponse struct {
+	ID      *string        `json:"id"`
+	Object  string         `json:"object"`
+	Agent   string         `json:"agent"`
+	Status  string         `json:"status"`
+	TaskIDs []string       `json:"task_ids"`
+	Result  AgentRunResult `json:"result"`
+}
+
+// RunRecord is one row from GET /v1/runs / GET /v1/runs/{id}. The top-level
+// query/answer/tool_name/model/status are lifted by Bot from the result so
+// the read path (answer-check) can merge them without parsing result JSON.
+type RunRecord struct {
+	RunID      string          `json:"run_id"`
+	Agent      string          `json:"agent"`
+	Origin     string          `json:"origin"`
+	UserID     string          `json:"user_id"`
+	Status     string          `json:"status"`
+	Result     json.RawMessage `json:"result"`
+	Error      string          `json:"error"`
+	CreatedAt  string          `json:"created_at"`
+	UpdatedAt  string          `json:"updated_at"`
+	ExpiresAt  string          `json:"expires_at"`
+	TaskIDs    []string        `json:"task_ids"`
+	DialogueID string          `json:"dialogue_id"`
+	Query      string          `json:"query"`
+	ToolName   string          `json:"tool_name"`
+	Model      string          `json:"model"`
+	Answer     string          `json:"answer"`
+}
+
+// RunsListResponse is the GET /v1/runs envelope.
+type RunsListResponse struct {
+	Object string      `json:"object"`
+	Data   []RunRecord `json:"data"`
+}
+
+// RunLogsResponse is the GET /v1/runs/{id}/logs envelope.
+type RunLogsResponse struct {
+	RunID    string                   `json:"run_id"`
+	TaskIDs  []string                 `json:"task_ids"`
+	TaskLogs []map[string]interface{} `json:"task_logs"`
+}
+
+// FileUploadResponse is the 201 body from POST /v1/files. Path is the
+// obs://… reference Web Go feeds back into obs_file_list.
+type FileUploadResponse struct {
+	ID       string `json:"id"`
+	Object   string `json:"object"`
+	Bytes    int64  `json:"bytes"`
+	Filename string `json:"filename"`
+	Purpose  string `json:"purpose"`
+	OBSPath  string `json:"obs_path"`
+	Path     string `json:"path"`
+}
+
+// AgentDescriptor is one row of GET /v1/agents. LegacyAliases is advisory
+// metadata only; Web Go maintains its own alias->slug table (see agent_map).
+type AgentDescriptor struct {
+	Slug          string   `json:"slug"`
+	Tool          string   `json:"tool"`
+	Origin        string   `json:"origin"`
+	LegacyAliases []string `json:"legacy_aliases"`
+}
+
+// AgentsListResponse is the GET /v1/agents envelope.
+type AgentsListResponse struct {
+	Object string            `json:"object"`
+	Data   []AgentDescriptor `json:"data"`
+}
+
+// BotError is the uniform error envelope every non-2xx Bot response carries.
+type BotError struct {
+	Error struct {
+		Type      string `json:"type"`
+		Code      int    `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
+	} `json:"error"`
+}
