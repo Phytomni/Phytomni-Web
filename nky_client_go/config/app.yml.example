@@ -181,6 +181,7 @@ huawei:
 bot:
   base_url: "http://localhost:8000"
   user_api_key: "REPLACE_ME"
+  timeout_seconds: 60
   proxy_enabled: false
   key_audit_redact: true
 
