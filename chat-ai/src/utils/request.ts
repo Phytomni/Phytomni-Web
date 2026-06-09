@@ -188,7 +188,7 @@ service.interceptors.response.use(
     console.log(error, "error1111");
     const { response } = error;
     let { message } = error;
-    if (response.data.detail.code === 403) {
+    if (response?.data?.detail?.code === 403) {
       isRelogin.show = false;
       const UserStore = userStore();
       UserStore.FedLogOut().finally(() => {
@@ -208,7 +208,14 @@ service.interceptors.response.use(
     }
 
     if (message === "数据正在处理，请勿重复提交") return;
-    if (message == "Network Error") {
+    // 优先展示服务端返回的可读 message(Go 网关错误体 {code, message};
+    // 旧 Python 服务的 detail 字符串),否则回落 axios 通用错误文案。
+    const serverMessage =
+      response?.data?.message ||
+      (typeof response?.data?.detail === "string" ? response.data.detail : "");
+    if (serverMessage) {
+      message = serverMessage;
+    } else if (message == "Network Error") {
       message = i18n.global.t("request.networkError");
     } else if (message.includes("timeout")) {
       message = i18n.global.t("request.requestTimeout");
