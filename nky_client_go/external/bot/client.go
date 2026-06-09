@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -30,14 +31,50 @@ func NewClient() *Client {
 	}
 }
 
-// botError turns a non-2xx response into a Go error, preferring the uniform
-// Bot error envelope and falling back to the raw body.
+// APIError is a non-2xx Bot response decoded into a typed error so callers can
+// distinguish a client-correctable status (surfaced to chat-ai) from a 5xx or
+// transport failure (kept generic). Message is the Bot envelope message; body
+// is the raw payload kept for logs only.
+type APIError struct {
+	Method    string
+	Path      string
+	Status    int
+	Message   string
+	RequestID string
+	body      string
+}
+
+func (e *APIError) Error() string {
+	if e.Message != "" {
+		return fmt.Sprintf("bot %s %s: %s (code=%d req=%s)", e.Method, e.Path, e.Message, e.Status, e.RequestID)
+	}
+	return fmt.Sprintf("bot %s %s: status %d body %s", e.Method, e.Path, e.Status, e.body)
+}
+
+// botError turns a non-2xx response into a typed *APIError, preferring the
+// uniform Bot error envelope and falling back to the raw body (logs only).
 func botError(method, path string, status int, raw []byte) error {
+	e := &APIError{Method: method, Path: path, Status: status, body: string(raw)}
 	var be BotError
 	if json.Unmarshal(raw, &be) == nil && be.Error.Message != "" {
-		return fmt.Errorf("bot %s %s: %s (code=%d req=%s)", method, path, be.Error.Message, be.Error.Code, be.Error.RequestID)
+		e.Message = be.Error.Message
+		e.RequestID = be.Error.RequestID
 	}
-	return fmt.Errorf("bot %s %s: status %d body %s", method, path, status, string(raw))
+	return e
+}
+
+// SurfaceableMessage reports whether err is a client-correctable Bot error
+// whose message is safe to show the end user. It surfaces 4xx (e.g. a
+// resolve/validation failure) but deliberately not 401/403 (a Web↔Bot auth
+// misconfig must not bounce the user to /login) nor 5xx/transport errors
+// (which may leak internals).
+func SurfaceableMessage(err error) (string, bool) {
+	var ae *APIError
+	if errors.As(err, &ae) && ae.Message != "" &&
+		ae.Status >= 400 && ae.Status < 500 && ae.Status != 401 && ae.Status != 403 {
+		return ae.Message, true
+	}
+	return "", false
 }
 
 // doJSON sends an optional JSON body and decodes a JSON response into out.

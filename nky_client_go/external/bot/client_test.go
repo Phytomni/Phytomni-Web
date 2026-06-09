@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -84,4 +85,43 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestSurfaceableMessage(t *testing.T) {
+	// 4xx (except auth) with a message → surface it.
+	if msg, ok := SurfaceableMessage(&APIError{Status: 400, Message: "无法解析基因"}); !ok || msg != "无法解析基因" {
+		t.Errorf("400 should surface: ok=%v msg=%q", ok, msg)
+	}
+	if _, ok := SurfaceableMessage(&APIError{Status: 413, Message: "too big"}); !ok {
+		t.Error("413 should surface")
+	}
+	// auth + server errors → not surfaced (avoid bouncing the user to login / leaking internals).
+	if _, ok := SurfaceableMessage(&APIError{Status: 401, Message: "unauthorized"}); ok {
+		t.Error("401 must NOT surface")
+	}
+	if _, ok := SurfaceableMessage(&APIError{Status: 403, Message: "forbidden"}); ok {
+		t.Error("403 must NOT surface")
+	}
+	if _, ok := SurfaceableMessage(&APIError{Status: 500, Message: "boom"}); ok {
+		t.Error("500 must NOT surface")
+	}
+	// no envelope message, or a non-APIError → not surfaced.
+	if _, ok := SurfaceableMessage(&APIError{Status: 400, Message: ""}); ok {
+		t.Error("empty message must NOT surface")
+	}
+	if _, ok := SurfaceableMessage(errors.New("plain")); ok {
+		t.Error("non-APIError must NOT surface")
+	}
+}
+
+func TestBotErrorIsTyped(t *testing.T) {
+	err := botError("POST", "/v1/agents/deep_genome/runs", 400,
+		[]byte(`{"error":{"type":"invalid","code":400,"message":"无法解析基因","request_id":"r1"}}`))
+	var ae *APIError
+	if !errors.As(err, &ae) {
+		t.Fatalf("botError should return *APIError, got %T", err)
+	}
+	if ae.Status != 400 || ae.Message != "无法解析基因" || ae.RequestID != "r1" {
+		t.Errorf("APIError fields wrong: %+v", ae)
+	}
 }
