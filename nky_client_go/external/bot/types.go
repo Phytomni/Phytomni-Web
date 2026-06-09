@@ -11,12 +11,11 @@ type ChatMessage struct {
 // ChatCompletionRequest is the body for POST /v1/chat/completions. Only
 // phyto-chat honors Stream=true; other models reject it with 400.
 type ChatCompletionRequest struct {
-	Model         string        `json:"model"`
-	Messages      []ChatMessage `json:"messages"`
-	Stream        bool          `json:"stream"`
-	OBSFileList   []string      `json:"obs_file_list,omitempty"`
-	ResolveGeneID *bool         `json:"resolve_gene_id,omitempty"`
-	DialogueID    string        `json:"dialogue_id,omitempty"`
+	Model       string        `json:"model"`
+	Messages    []ChatMessage `json:"messages"`
+	Stream      bool          `json:"stream"`
+	OBSFileList []string      `json:"obs_file_list,omitempty"`
+	DialogueID  string        `json:"dialogue_id,omitempty"`
 }
 
 // Formatted is the Phytomni-specific envelope Bot returns alongside the
