@@ -125,8 +125,11 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 		out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
 		botRunID = resp.ID
 	} else {
-		// Remote agents (analyst, deep_genome) return 202 + task ids; the final
-		// answer is synced back later via /query/analyst/update_log.
+		// /v1/agents/{slug}/runs serves BOTH synchronous agents (data → 200,
+		// status="succeeded", answer already in result.formatted) AND remote
+		// agents (analyst, deep_genome → 202, status="running", answer polled
+		// later via /query/analyst/update_log). Branch on the returned status;
+		// never assume remote, or a sync agent's answer is silently dropped.
 		resp, err := client.InvokeAgent(ctx, slug, rxBot.AgentRunRequest{
 			Arguments:  map[string]interface{}{"user_query": in.Query},
 			DialogueID: dialogueID,
@@ -134,21 +137,31 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 		if err != nil {
 			return nil, err
 		}
-		out.Status = "RUNNING"
-		logStatus = "sync_running"
-		if resp.Result.DedupHit {
-			taskID = resp.Result.TaskID
-		} else if len(resp.TaskIDs) > 0 {
-			taskID = resp.TaskIDs[0]
-		}
 		if resp.ID != nil {
 			botRunID = *resp.ID
 		}
-		if slug == "deep_genome" {
-			serverID = taskID
-			out.Answer = "server任务创建成功：" + serverID
+		if resp.Status == "succeeded" {
+			// Synchronous agent (e.g. data): the answer is already here.
+			if resp.Result.Formatted != nil {
+				out.Answer = resp.Result.Formatted.Answer
+				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
+			}
+			// out.Status stays "SUCCEEDED".
 		} else {
-			out.Answer = "任务创建成功：" + taskID
+			// Remote agent: only a task id is back; the answer arrives later.
+			out.Status = "RUNNING"
+			logStatus = "sync_running"
+			if resp.Result.DedupHit {
+				taskID = resp.Result.TaskID
+			} else if len(resp.TaskIDs) > 0 {
+				taskID = resp.TaskIDs[0]
+			}
+			if slug == "deep_genome" {
+				serverID = taskID
+				out.Answer = "server任务创建成功：" + serverID
+			} else {
+				out.Answer = "任务创建成功：" + taskID
+			}
 		}
 	}
 
@@ -173,7 +186,7 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 		UploadPath:        strings.Join(obsPaths, ","),
 		DownloadPath:      "",
 		ComputeResource:   "",
-		ServerFilePath:    serverID,
+		ServerFilePath:    "", // not the task id; the output file path is filled by update_log once the remote task emits it
 		ToolName:          out.ToolName,
 		Status:            out.Status,
 		LogStatus:         logStatus,
@@ -241,7 +254,7 @@ func (ps *ApiService) ApiQueryAnalystUpdateLog(ctx context.Context, username, ta
 	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
 		Where("id = ?", row.Id).Updates(map[string]interface{}{
 		"answer":           rec.Answer,
-		"status":           rec.Status,
+		"status":           strings.ToUpper(rec.Status), // chat-ai gates download on "SUCCEEDED"; Bot is lowercase
 		"compute_resource": computeResource,
 		"log_status":       "sync_succeeded",
 	}).Error; err != nil {
