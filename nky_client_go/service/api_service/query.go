@@ -121,7 +121,10 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 		if err != nil {
 			return nil, err
 		}
-		out.Answer = resp.Formatted.Answer
+		// Default-mode chat/completions strips formatted.answer into
+		// choices[0].message.content; source it there, then reshape per slug
+		// (knowledge/review become {content, doc_list}; chat stays plain).
+		out.Answer = rxBot.ShapeAnswer(slug, rxBot.ChatAnswerText(resp), &resp.Formatted)
 		out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
 		botRunID = resp.ID
 	} else {
@@ -150,7 +153,8 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 		if resp.Status == "succeeded" {
 			// Synchronous agent (e.g. data): the answer is already here.
 			if resp.Result.Formatted != nil {
-				out.Answer = resp.Result.Formatted.Answer
+				// Reshape the sync agent payload (data -> {headers, rows}).
+				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 			// out.Status stays "SUCCEEDED".
