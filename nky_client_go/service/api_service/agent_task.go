@@ -466,14 +466,22 @@ func (ps *ApiService) overlayBotContent(ctx context.Context, dialogueId string, 
 		if rec.Query != "" {
 			row.Query = rec.Query
 		}
-		if rec.Answer != "" {
+		// Reshape from the run's formatted envelope (/v1/runs keeps
+		// result.formatted in default mode) so cited/data history replays carry
+		// the JSON chat-ai parses; fall back to the flat answer for runs that
+		// have no formatted block yet (e.g. still running).
+		if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
+			row.Answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
+		} else if rec.Answer != "" {
 			row.Answer = rec.Answer
 		}
 		if rec.ToolName != "" {
 			row.ToolName = rec.ToolName
 		}
 		if rec.Status != "" {
-			row.Status = rec.Status
+			// chat-ai gates the download button on the exact-case "SUCCEEDED";
+			// Bot returns lowercase. Normalize like the update-log write path.
+			row.Status = strings.ToUpper(rec.Status)
 		}
 	}
 }

@@ -262,14 +262,20 @@ func (ps *ApiService) ApiQueryAnalystUpdateLog(ctx context.Context, username, ta
 	if err != nil {
 		return "", err
 	}
+	// Reshape the finished task's content into the JSON chat-ai parses, the
+	// same as the live dispatch and the answer-check overlay.
+	answer := rec.Answer
+	if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
+		answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
+	}
 	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
 		Where("id = ?", row.Id).Updates(map[string]interface{}{
-		"answer":           rec.Answer,
+		"answer":           answer,
 		"status":           strings.ToUpper(rec.Status), // chat-ai gates download on "SUCCEEDED"; Bot is lowercase
 		"compute_resource": computeResource,
 		"log_status":       "sync_succeeded",
 	}).Error; err != nil {
 		return "", err
 	}
-	return rec.Answer, nil
+	return answer, nil
 }

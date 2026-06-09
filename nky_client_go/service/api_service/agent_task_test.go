@@ -2,12 +2,16 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
 	"nky_client_go/db"
+	rxBot "nky_client_go/external/bot"
 )
 
 // setupTestDB 建一个空的 in-memory SQLite,创建 s_question_agent_logs 最小列集,
@@ -31,6 +35,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		query TEXT,
 		answer TEXT,
 		tool_name TEXT,
+		bot_run_id TEXT,
+		status TEXT,
 		created_at DATETIME,
 		updated_at DATETIME,
 		delete_at DATETIME
@@ -111,5 +117,49 @@ func TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("expected 0 items (alice has no parent in dlg-bob), got %d: %+v", len(got), got)
+	}
+}
+
+// TestApiAnswerCheck_OverlayReshapesBotContent pins the activated read path:
+// a knowledge row carrying a bot_run_id gets its answer reshaped into the
+// {content, doc_list} JSON chat-ai parses (sourced from the run's formatted
+// envelope, not the flat answer), and its status uppercased.
+func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(30, 'dlg-k', 0, 'alice', 'q', 'stale', 'KnowledgeAgent', 'run-k', 'succeeded', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"run_id":"run-k","agent":"knowledge","status":"succeeded","tool_name":"KnowledgeAgent","query":"q","answer":"md body","result":{"formatted":{"answer":"md body","references":[{"file_id":"f1","title":"Doc A"}]}}}]}`))
+	}))
+	defer srv.Close()
+
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	defer func() { rxBot.BotConfig = nil }()
+
+	ps := NewApiService()
+	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-k")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(got))
+	}
+	var parsed struct {
+		Content string                   `json:"content"`
+		DocList []map[string]interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got[0].Answer), &parsed); err != nil {
+		t.Fatalf("overlay answer not reshaped to JSON: %q (%v)", got[0].Answer, err)
+	}
+	if parsed.Content != "md body" || len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" {
+		t.Errorf("reshaped answer wrong: %s", got[0].Answer)
+	}
+	if got[0].Status != "SUCCEEDED" {
+		t.Errorf("status not uppercased, got %q", got[0].Status)
 	}
 }
