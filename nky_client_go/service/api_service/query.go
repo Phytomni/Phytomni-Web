@@ -130,8 +130,15 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 		// agents (analyst, deep_genome → 202, status="running", answer polled
 		// later via /query/analyst/update_log). Branch on the returned status;
 		// never assume remote, or a sync agent's answer is silently dropped.
+		args := map[string]interface{}{"user_query": in.Query}
+		if slug == "deep_genome" {
+			// deep_genome needs a structured gene id; resolve_gene_id=true tells
+			// Bot's resolver to derive it from the free-text user_query (Bot
+			// rejects this flag for any other agent, so scope it to deep_genome).
+			args["resolve_gene_id"] = true
+		}
 		resp, err := client.InvokeAgent(ctx, slug, rxBot.AgentRunRequest{
-			Arguments:  map[string]interface{}{"user_query": in.Query},
+			Arguments:  args,
 			DialogueID: dialogueID,
 		})
 		if err != nil {
