@@ -30,11 +30,21 @@ type Formatted struct {
 	OutputDirs        json.RawMessage `json:"output_dirs"`
 }
 
+// Choice is one OpenAI-style choice. In default (non-debug) mode Bot moves the
+// normalized answer into Message.Content and strips formatted.answer, so the
+// chat path reads the answer from here (see ChatAnswerText).
+type Choice struct {
+	Index        int         `json:"index"`
+	Message      ChatMessage `json:"message"`
+	FinishReason string      `json:"finish_reason"`
+}
+
 // ChatCompletionResponse is the non-streaming response for a sync chat model.
 type ChatCompletionResponse struct {
 	ID        string    `json:"id"`
 	Object    string    `json:"object"`
 	Model     string    `json:"model"`
+	Choices   []Choice  `json:"choices"`
 	Formatted Formatted `json:"formatted"`
 }
 
