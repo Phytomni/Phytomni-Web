@@ -31,7 +31,9 @@ func TestCheckFiles(t *testing.T) {
 	if err := CheckFiles([]int64{200}); err == nil {
 		t.Error("over per-file should fail")
 	}
-	if err := CheckFiles([]int64{90, 90, 90}); err == nil { // also trips count, but total guard must hold independently
-		t.Error("over total should fail")
+	// Total guard in isolation: count and per-file within limits, only the sum over.
+	BotConfig = &Config{MaxUploadFileBytes: 100, MaxUploadTotalBytes: 250, MaxUploadFileCount: 5}
+	if err := CheckFiles([]int64{90, 90, 90}); err == nil {
+		t.Error("over total should fail (count 3<=5, each 90<=100, sum 270>250)")
 	}
 }

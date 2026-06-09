@@ -1,6 +1,7 @@
 package api_handler
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -25,6 +26,19 @@ func (ph *ApiHandler) ApiQuery(ctx *gin.Context) {
 	_, totalBytes, _ := rxBot.UploadLimits()
 	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, totalBytes)
 
+	// Parse the bounded multipart body once: a MaxBytesReader trip surfaces
+	// here, so an over-limit upload is reported as too large rather than
+	// mislabeled as an empty query. (/query is multipart-only from chat-ai; a
+	// non-multipart body yields ErrNotMultipart and simply carries no files.)
+	form, formErr := ctx.MultipartForm()
+	if formErr != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(formErr, &maxErr) || strings.Contains(formErr.Error(), "request body too large") {
+			ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": http.StatusRequestEntityTooLarge, "message": "上传内容过大"})
+			return
+		}
+	}
+
 	in := api_service.QueryInput{
 		Query:   ctx.PostForm("query"),
 		Tool:    ctx.PostForm("tool"),
@@ -37,7 +51,7 @@ func (ph *ApiHandler) ApiQuery(ctx *gin.Context) {
 	in.Id, _ = strconv.ParseInt(ctx.DefaultPostForm("id", "0"), 10, 64)
 	in.RefreshId, _ = strconv.ParseInt(ctx.DefaultPostForm("refresh_id", "0"), 10, 64)
 
-	if form, err := ctx.MultipartForm(); err == nil && form != nil {
+	if form != nil {
 		files := form.File["files"]
 		sizes := make([]int64, len(files))
 		for i, fh := range files {
