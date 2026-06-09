@@ -184,6 +184,10 @@ bot:
   timeout_seconds: 60
   proxy_enabled: false
   key_audit_redact: true
+  # /query upload bounds (0 or omitted = built-in default). Tune without recompiling.
+  max_upload_file_bytes: 26214400    # 25 MiB per file (matches Bot /v1/files 413)
+  max_upload_file_count: 10
+  max_upload_total_bytes: 52428800   # 50 MiB per request
 
 # ---------------------------------------------------------------------
 # Outbound notification email — common/email/email_send.go.
