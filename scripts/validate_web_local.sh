@@ -11,6 +11,7 @@
 #   G5   nky_client_go gofmt -l (must be empty)
 #   G6   nky_client_go go vet
 #   G7   nky_client_go go build
+#   G7.5 nky_client_go go test ./... (guards gateway + i18n unit tests)
 #   G8   nky_client_python uv sync
 #   G9   nky_client_python compileall on the five real entrypoints
 #   G10  (Phase D+) attempt mcp_server_phytomni.server import; skip if absent
@@ -101,6 +102,9 @@ step "G6 nky_client_go: go vet"
 
 step "G7 nky_client_go: go build"
 ( cd nky_client_go && go build -o /tmp/phytomni-nky-main . ) && rm -f /tmp/phytomni-nky-main
+
+step "G7.5 nky_client_go: go test"
+( cd nky_client_go && go test ./... )
 
 step "G8 nky_client_python: uv sync"
 ( cd nky_client_python && uv sync --quiet )
