@@ -210,6 +210,20 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 			Where("id = ? AND user_name = ?", in.RefreshId, username).Updates(&row).Error; err != nil {
 			return nil, err
 		}
+		// Updates(&struct) skips zero-valued columns, so re-answering a turn
+		// whose agent type changed (e.g. analyst -> chat) would leave the old
+		// task identifiers behind. Clear the transitional task columns
+		// explicitly with the new turn's values (which may be empty).
+		if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+			Where("id = ? AND user_name = ?", in.RefreshId, username).
+			Updates(map[string]interface{}{
+				"server_id":        serverID,
+				"task_id":          taskID,
+				"log_status":       logStatus,
+				"server_file_path": "",
+			}).Error; err != nil {
+			return nil, err
+		}
 		out.Id = in.RefreshId
 	} else {
 		if err := model.DB(ctx).Create(&row).Error; err != nil {
