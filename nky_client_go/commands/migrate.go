@@ -72,6 +72,34 @@ func Migrate() *cli.Command {
 					return nil
 				},
 			},
+			{
+				Name:        "all",
+				Usage:       "建全部表(dev/CI fresh-schema)",
+				Description: "AutoMigrate every model into a fresh schema. Dev/CI only — production DDL stays manual. The enum tags in model/table.go carry value lists, so fresh-schema AutoMigrate generates valid MariaDB DDL.",
+				Action: func(ctx *cli.Context) error {
+					db := model.Default()
+					if err := db.AutoMigrate(
+						&model.SUser{},
+						&model.SToolName{},
+						&model.SUserToolName{},
+						&model.SQuestionLog{},
+						&model.SKooSearchQuestionLog{},
+						&model.SQuestionAgentLog{},
+						&model.SGeneList{},
+						&model.SGeneExample{},
+						&model.SUserPermission{},
+						&model.SServerToolLogs{},
+						&model.SUserFeedback{},
+						&model.SUserOperationLog{},
+						&model.SSqlOperationLog{},
+					); err != nil {
+						rxLog.Sugar().Errorw("automigrate all failed", "err", err)
+						return err
+					}
+					rxLog.Sugar().Info("automigrate all complete")
+					return nil
+				},
+			},
 		},
 	}
 }

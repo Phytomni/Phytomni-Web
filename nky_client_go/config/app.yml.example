@@ -181,7 +181,7 @@ huawei:
 bot:
   base_url: "http://localhost:8000"
   user_api_key: "REPLACE_ME"
-  timeout_seconds: 60
+  timeout_seconds: 900    # gateway↔Bot HTTP client timeout. MUST exceed the slowest SYNC agent's latency — prod observed chat ~140s / knowledge ~198s / review >300s (RAG-heavy). Async agents (analyst/deep_genome) return a task_id fast and are not bound by this. Legacy Python used a 10h request timeout; pick per the slowest sync agent you serve.
   proxy_enabled: false
   key_audit_redact: true
   # /query upload bounds (0 or omitted = built-in default). Tune without recompiling.

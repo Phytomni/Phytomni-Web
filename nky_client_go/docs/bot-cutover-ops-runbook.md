@@ -59,23 +59,37 @@ every read that joins Bot data filters on the Web identity. `ApiAnswerCheck`
 Any future Bot-proxy endpoint must do the same — never trust a client-sent
 user id.
 
-## 6. Cutover sequence (Push #2 — gated)
+## 6. Cutover sequence (Push #2 — gated, STAGED)
 
-Preconditions: Bot deploy URL provided; `ptm_<web>` minted (§2); Bot e2e
-green; Bot deep_genome NL resolver live; three-party sign-off.
+Preconditions: Bot deploy URL provided + `ptm_<web>` minted (§2); Bot e2e
+green; `timeout_seconds` set above the slowest SYNC agent (prod observed
+chat ~140s / knowledge ~198s / review >300s → use ≥900s); three-party
+sign-off.
+
+NOTE — the production Bot was already smoke-verified end-to-end against the
+live deploy (2026-06-11): chat/knowledge/data returned correctly shaped
+answers (`{content,doc_list}` / `{headers,rows}`) through the gateway, and
+deep_genome `species_code` is Bot-fixed. The Bot team's ongoing dev-branch
+graph work is NOT a precondition — it does not touch the production deploy.
+
+Stage the cutover so the REVERSIBLE flip precedes the IRREVERSIBLE delete,
+keeping an instant rollback live throughout verification:
 
 1. Deploy Web Go with the gateway code (dormant, `proxy_enabled=false`).
-2. Staging: set `proxy_enabled=true` + point `/query` at Web Go (set
-   `VITE_DEV_PROXY_QUERY` / nginx), run the agent smoke matrix against the
-   live Bot, confirm chat-ai is unaffected.
-3. Production cutover commit (the defining act):
-   - `git rm -rf nky_client_python/`
-   - flip `app.yml` `bot.proxy_enabled` to `true`
-   - point production `/query` at Web Go (nginx)
-   - remove the Python systemd unit (ops)
-4. Run `go run main.go migrate add-bot-run-id` against production once
-   (idempotent) if the column is not yet present.
-5. Rotate/retire the old OBS credentials in the Huawei console the same day.
+2. **Reversible flip** (instant-rollback-able — do NOT delete Python yet):
+   - set `app.yml` `bot.base_url` / `user_api_key` / `timeout_seconds`,
+     flip `bot.proxy_enabled` to `true`
+   - point production `/query` at Web Go (nginx upstream) — this repoint,
+     not the flag, is what actually routes traffic to the gateway
+   - run `go run main.go migrate add-bot-run-id` against prod once
+     (idempotent) if the `bot_run_id` column is missing
+   - leave the Python service RUNNING on its port
+3. **Production smoke** through the live gateway (every agent × immediate +
+   history replay). On any failure → §8 rollback (flag + repoint, no git).
+4. **Soak window** (hours / a day) with the flip live and Python standing by.
+5. **Only after smoke green + soak — the irreversible acts:**
+   - `git rm -rf nky_client_python/` + remove the Python systemd unit (ops)
+   - rotate/retire the old OBS credentials in the Huawei console
 
 ## 7. Phase 6 ETL trigger (Option Y only — currently deferred)
 
@@ -87,12 +101,18 @@ cutover; old rows read MySQL legacy fields via the B-5 fallback.
 
 ## 8. Rollback
 
-1. Flip `app.yml` `bot.proxy_enabled` back to `false` (gateway dormant).
-2. If already cut over: `git revert` the cutover commit to restore the
-   Python service from history, repoint `/query` at the Python port, and
-   restart. The `bot_run_id` column stays (harmless).
-3. `ApiAnswerCheck` automatically serves MySQL legacy fields while the
-   gateway is off, so history replay keeps working.
+Two windows, matching the staged §6:
+
+1. **Before the §6-step-5 delete (the safe window):** flip `app.yml`
+   `bot.proxy_enabled` back to `false` AND repoint nginx `/query` to the
+   still-running Python port. Instantly restored — no git changes, no
+   redeploy. This is exactly why §6 keeps Python standing until after smoke
+   + soak.
+2. **After the delete:** `git revert` the cutover commit to restore the
+   Python service from history, redeploy it, repoint `/query` at the Python
+   port, restart. The `bot_run_id` column stays (harmless, nullable).
+3. `ApiAnswerCheck` serves MySQL legacy fields while the gateway is off, so
+   history replay keeps working in either window.
 
 ## 9. Degraded mode (Bot unavailable)
 
