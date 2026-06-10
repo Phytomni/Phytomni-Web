@@ -1,108 +1,60 @@
 # Phytomni-Web
 
-```
-# Phytomni-Web Project
+A web application for agricultural knowledge management: a Vue 3 frontend
+(`chat-ai/`) talking to a Go API gateway (`nky_client_go/`). The gateway
+serves `/query` by proxying to the Phytomni-Bot service over HTTP, and serves
+`/v1/*` + `/auth/*` for auth, users, query history, gene data, and async
+tasks.
 
-A comprehensive web application project featuring a Go client and a Python client with MCP server integration for agricultural knowledge management.
-```
-
-```
 ## Prerequisites
 
-### For nky_client_go:
-- Go 1.18+ installed
+### nky_client_go (Go API gateway)
+- Go 1.23+ installed
 - Port 8082 available
 
-### For nky_client_python:
-- Python 3.8+ installed
-- UV package manager installed (`pip install uv`)
-- Port 8081 available
+### chat-ai (frontend)
+- Node 20+ and npm
 
 ## Installation & Setup
 
-### 1. Go Client Setup (nky_client_go)
+### Go gateway (nky_client_go)
 
 ```bash
-# Navigate to Go client directory
 cd nky_client_go
-
-# Install dependencies
 go mod tidy
-
-# Run the application Default port: 8082
-go run main.go
-
-
+go run main.go          # serve (default action) — :8082
 ```
 
-```
-# Navigate to Python client directory
-cd nky_client_python
+Copy `config/app.yml.example` to `config/app.yml` and fill in real values
+before the first run — DB, the Bot integration (`bot.base_url` /
+`bot.user_api_key` / `bot.proxy_enabled`), Huawei OBS / EIHealth, SMTP, and
+cron. The gateway forwards `/query` to Phytomni-Bot; the in-repo Python MCP
+service that previously served `/query` has been removed.
 
-# Place the mcp_server_phytomni directory in the root
-# Ensure the directory structure is:
-# nky_client_python/
-# ├── nky_client.py
-# └── mcp_server_phytomni/
-#     └── server.py (or relevant server files)
+### Frontend (chat-ai)
 
-# Run the Python client with MCP server Default port: 8081
-uv run nky_client.py mcp_server_phytomni.server
+```bash
+cd chat-ai
+npm install
+npm run dev             # Vite dev server (uses .env.dev)
 ```
+
+The dev server proxies `/query`, `/v1`, and the base API to the Go gateway
+(`http://localhost:8082` by default); override per-engineer via
+`VITE_DEV_PROXY_API` / `VITE_DEV_PROXY_QUERY` in `chat-ai/.env.dev`.
 
 ## Port Configuration
 
-| Service                | Port | Description                                      |
-| :--------------------- | :--- | :----------------------------------------------- |
-| Go Client              | 8082 | Main application server                          |
-| Python Client with MCP | 8081 | Python client with Model Context Protocol server |
-
-## Important Notes
-
-1. **MCP Server Placement**: The `mcp_server_phytomni` directory must be placed directly in the `nky_client_python` root directory for proper module resolution.
-2. **Port Conflicts**: Ensure ports 8081 and 8082 are not occupied by other services before starting the applications.
-3. **Dependencies**: Both clients require their respective dependency managers:
-   - Go: `go mod` for dependency management
-   - Python: `uv` for package management and execution
-4. **Execution Order**: Both clients can be run independently. There are no strict dependencies between them.
-
-## Troubleshooting
-
-### Common Issues:
-
-1. **Port already in use**:
-
-   ```
-   # Find process using port 8081 or 8082
-   lsof -i :8081
-   lsof -i :8082
-   
-   # Or on Windows:
-   netstat -ano | findstr :8081
-   netstat -ano | findstr :8082
-   ```
-
-2. **Go dependencies issues**:
-
-   ```
-   # Clean module cache and reinstall
-   go clean -modcache
-   go mod tidy
-   ```
-
-3. **Python module not found**:
-
-   - Ensure `mcp_server_phytomni` is placed in the correct directory
-   - Verify the directory structure matches the expected layout
+| Service         | Port   | Description                                  |
+| :-------------- | :----- | :------------------------------------------- |
+| Go API gateway  | 8082   | Auth, users, history, gene data, `/query`    |
+| Vite dev server | varies | Frontend (`VITE_PORT`)                       |
 
 ## Development
 
-For development contributions, please ensure:
-
-- Go code follows standard Go formatting (`gofmt`)
-- Python code follows PEP8 guidelines
-- Both services are tested on their respective ports
-- Dependencies are properly documented in go.mod and pyproject.toml/requirements.txt
+- Go code follows standard Go formatting (`gofmt`); validate with
+  `gofmt -l .`, `go vet ./...`, `go build`, `go test ./...`.
+- Frontend: `npm run type-check` && `npm run build` && `npm run lint`.
 
 ### Local pre-commit hooks (recommended)
 
@@ -115,9 +67,9 @@ same gates CI runs:
 
 This sets `core.hooksPath` to `.githooks/`, so the pre-commit hook will run
 `scripts/scan_secrets.py --staged` (catches literal credentials) and the
-full G-1 / G0 / G1..G10 gates from `scripts/validate_web_local.sh`
-(vue-tsc, eslint, vite build, gofmt, go vet, go build, uv sync, compileall,
-optional MCP import) before letting the commit land.
+full G-1 / G0 / G1..G12 gates from `scripts/validate_web_local.sh`
+(vue-tsc, eslint, vite build, gofmt, go vet, go build, go test, vitest)
+before letting the commit land.
 
 The hook is opt-in (no auto-install on clone) by design — it keeps a
 bare-clone workflow simple. If you skip it, the `.github/workflows/ci.yml`
@@ -128,4 +80,22 @@ To run the full gate manually without committing:
 
 ```bash
 ./scripts/validate_web_local.sh
+```
+
+## Troubleshooting
+
+### Port already in use
+
+```bash
+# Find the process using port 8082
+lsof -i :8082
+# Or on Windows:
+netstat -ano | findstr :8082
+```
+
+### Go dependency issues
+
+```bash
+go clean -modcache
+go mod tidy
 ```

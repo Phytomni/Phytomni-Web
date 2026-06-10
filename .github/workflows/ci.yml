@@ -1,6 +1,6 @@
 name: CI
 
-# 把 scripts/validate_web_local.sh 的 11 项 G-checks 从"开发者本地手跑"提升到
+# 把 scripts/validate_web_local.sh 的全部 G-checks 从"开发者本地手跑"提升到
 # "PR + main push 自动跑",作 contributor-side 防御兜底:即便有人没装
 # scripts/install_git_hooks.sh,CI 也会在 PR 上拦红;另外多跑一次
 # scripts/scan_secrets.py --all 把全 tree secret 扫描固化到 CI(不仅 changed files)。
@@ -39,17 +39,6 @@ jobs:
           go-version: '1.23'
           cache-dependency-path: nky_client_go/go.sum
 
-      - name: Setup uv (nky_client_python sync / compileall)
-        # v3 不接受 `python-version` 输入(只是 soft warning + 忽略),会
-        # fallback 到 CPython 3.14 RC,跟 onnxruntime 1.20.1 的 cp311/312/313
-        # wheels 不兼容导致 G8 uv sync fail。v5 起原生支持 python-version。
-        uses: astral-sh/setup-uv@v5
-        with:
-          # pyproject.toml `requires-python = ">=3.11"`;onnxruntime 1.20.1
-          # 仅发 cp311/312/313 wheels。pin 到 3.12 是 onnxruntime 和
-          # pyproject 都接受的稳定交集。
-          python-version: '3.12'
-
       - name: Install ripgrep (validate_web_local.sh G-1 secret scan)
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
@@ -57,7 +46,7 @@ jobs:
         working-directory: chat-ai
         run: npm ci
 
-      - name: validate_web_local.sh full gate (G-1 + G0 + G1..G10)
+      - name: validate_web_local.sh full gate (G-1 + G0 + G1..G7.5, G11, G12)
         run: ./scripts/validate_web_local.sh
 
       - name: scan_secrets.py --all (whole tree, not just changes)

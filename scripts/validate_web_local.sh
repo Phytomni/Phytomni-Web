@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G11)
+# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G7.5, G11, G12)
 #
 # Runs every check listed in .claude/plans/production-backport.md §"全量门禁清单":
 #   G-1  staged/unstaged secret scan
@@ -12,11 +12,9 @@
 #   G6   nky_client_go go vet
 #   G7   nky_client_go go build
 #   G7.5 nky_client_go go test ./... (guards gateway + i18n unit tests)
-#   G8   nky_client_python uv sync
-#   G9   nky_client_python compileall on the five real entrypoints
-#   G10  (Phase D+) attempt mcp_server_phytomni.server import; skip if absent
 #   G11  chat-ai SET_LOGIN_STATUS invariant — definition only in stores/user.ts,
 #        call only in views/login/index.vue
+#   G12  chat-ai vitest run + coverage threshold
 #
 # Exit 0 means safe to commit. Any failure aborts via `set -e`.
 
@@ -105,20 +103,6 @@ step "G7 nky_client_go: go build"
 
 step "G7.5 nky_client_go: go test"
 ( cd nky_client_go && go test ./... )
-
-step "G8 nky_client_python: uv sync"
-( cd nky_client_python && uv sync --quiet )
-
-step "G9 nky_client_python: compileall entrypoints"
-( cd nky_client_python && uv run --quiet python -m compileall -q \
-  nky_client.py models.py tool_format_processing.py client_log.py main.py )
-
-step "G10 nky_client_python: try import mcp_server_phytomni.server"
-if ( cd nky_client_python && uv run --quiet python -c "import mcp_server_phytomni.server" 2>/dev/null ); then
-  note "mcp_server_phytomni import ok"
-else
-  note "skip — mcp_server_phytomni not installed (expected before Phase D editable link)"
-fi
 
 step "G11 chat-ai: SET_LOGIN_STATUS invariant (definition + sole-caller + no-stray)"
 def_count="$( grep -c 'SET_LOGIN_STATUS(' chat-ai/src/stores/user.ts 2>/dev/null || echo 0 )"

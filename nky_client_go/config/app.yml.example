@@ -164,11 +164,12 @@ huawei:
 #                          -d '{"user_id":"web","name":"chat-ai-web-app"}'
 #                      The service token never enters this file —
 #                      it stays with ops + Bot side only.
-# `proxy_enabled`    — feature flag for /v1/answer/check + /v1/files
-#                      handlers. Default false in this example; flip to
-#                      true in production app.yml only after the
-#                      Wave A verification matrix passes (see the ops
-#                      runbook landed by the B-5 commit).
+# `proxy_enabled`    — gates the Bot integration. After the cutover the Go
+#                      gateway is the SOLE /query handler (the Python MCP
+#                      service was removed), so this must be true in any real
+#                      deployment; ValidateAgents fail-fast at boot if Bot is
+#                      unreachable. Use false only for a Bot-less local boot
+#                      that never serves /query.
 # `key_audit_redact` — when true, loggers must never emit the full
 #                      user_api_key string (only first 8 chars prefix).
 #                      The bot HTTP client honors this (landed by B-2).
@@ -182,7 +183,7 @@ bot:
   base_url: "http://localhost:8000"
   user_api_key: "REPLACE_ME"
   timeout_seconds: 900    # gateway↔Bot HTTP client timeout. MUST exceed the slowest SYNC agent's latency — prod observed chat ~140s / knowledge ~198s / review >300s (RAG-heavy). Async agents (analyst/deep_genome) return a task_id fast and are not bound by this. Legacy Python used a 10h request timeout; pick per the slowest sync agent you serve.
-  proxy_enabled: false
+  proxy_enabled: true
   key_audit_redact: true
   # /query upload bounds (0 or omitted = built-in default). Tune without recompiling.
   max_upload_file_bytes: 26214400    # 25 MiB per file (matches Bot /v1/files 413)

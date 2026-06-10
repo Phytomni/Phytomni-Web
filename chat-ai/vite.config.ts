@@ -24,13 +24,13 @@ export default defineConfig(({ mode, command }) => {
 
   // Dev-only proxy targets — overridable via .env.dev so each engineer
   // points at their own LAN backend without editing this file. Defaults
-  // to localhost so a fresh clone works against a locally-running Go +
-  // Python pair (8082 / 8081 are the canonical ports from CLAUDE.md).
+  // to localhost so a fresh clone works against a locally-running Go
+  // gateway (8082 is the canonical port from CLAUDE.md).
   const devProxyApi = env.VITE_DEV_PROXY_API || "http://localhost:8082";
-  const devProxyMcp = env.VITE_DEV_PROXY_MCP || "http://localhost:8081";
-  // /query target. Defaults to the Python MCP service; set VITE_DEV_PROXY_QUERY
-  // to the Go service (8082) to cut over to the Bot gateway without a hard edit.
-  const devProxyQuery = env.VITE_DEV_PROXY_QUERY || devProxyMcp;
+  // /query is served by the Go Bot gateway (8082), same as /v1. The Python
+  // MCP service that used to serve /query was removed in the cutover; set
+  // VITE_DEV_PROXY_QUERY only if the gateway runs on a different host.
+  const devProxyQuery = env.VITE_DEV_PROXY_QUERY || devProxyApi;
 
   return {
     // envPrefix: "VITE_", // env 环境变量前缀默认就是VITE_

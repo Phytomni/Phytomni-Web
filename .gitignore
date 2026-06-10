@@ -87,7 +87,8 @@ server_tasks.db
 
 
 
-# Python 端 dotenv（含真凭据，永远不进 git；模板见 nky_client_python/.env.example）
+# Python 端 dotenv — nky_client_python/ 已从 git 移除（切流删 Python /query 服务），
+# 但本地工作副本可能仍存留含真凭据的 .env；保留此忽略规则直到本地目录被物理删除。
 nky_client_python/.env
 # Go 配置文件（含真凭据；模板见 nky_client_go/config/app.yml.example）
 nky_client_go/config/app.yml
