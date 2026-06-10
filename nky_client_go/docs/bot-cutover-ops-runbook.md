@@ -61,10 +61,17 @@ user id.
 
 ## 6. Cutover sequence (Push #2 — gated, STAGED)
 
-Preconditions: Bot deploy URL provided + `ptm_<web>` minted (§2); Bot e2e
-green; `timeout_seconds` set above the slowest SYNC agent (prod observed
-chat ~140s / knowledge ~198s / review >300s → use ≥900s); three-party
-sign-off.
+**Operator-only.** Every step in this section is run by ops on the
+production host, and ONLY after the gateway code is complete, reviewed,
+and three-party signed off. Nothing here is executed from the Web repo or
+by an AI agent — the repo's job ends at "code ready + this doc correct."
+Production stays untouched until that gate passes.
+
+Preconditions: gateway code complete + reviewed; Bot deploy URL provided;
+the `ptm_<web>` user key already issued and held by ops (§2 documents the
+mint/rotate procedure); Bot e2e green; `timeout_seconds` set above the
+slowest SYNC agent (prod observed chat ~140s / knowledge ~198s /
+review >300s → use ≥900s); three-party sign-off.
 
 NOTE — the production Bot was already smoke-verified end-to-end against the
 live deploy (2026-06-11): chat/knowledge/data returned correctly shaped
@@ -79,8 +86,12 @@ keeping an instant rollback live throughout verification:
 2. **Reversible flip** (instant-rollback-able — do NOT delete Python yet):
    - set `app.yml` `bot.base_url` / `user_api_key` / `timeout_seconds`,
      flip `bot.proxy_enabled` to `true`
-   - point production `/query` at Web Go (nginx upstream) — this repoint,
-     not the flag, is what actually routes traffic to the gateway
+   - route production `/query` to Web Go — ops choice: flip the nginx
+     upstream, OR deploy Web Go into the slot the Python service occupies
+     so the existing route resolves to the gateway (no nginx edit). This
+     routing change, not the flag, is what actually moves traffic; it is
+     the only production-facing edit, made here at cutover and reversible
+     (§8)
    - run `go run main.go migrate add-bot-run-id` against prod once
      (idempotent) if the `bot_run_id` column is missing
    - leave the Python service RUNNING on its port
@@ -89,7 +100,12 @@ keeping an instant rollback live throughout verification:
 4. **Soak window** (hours / a day) with the flip live and Python standing by.
 5. **Only after smoke green + soak — the irreversible acts:**
    - `git rm -rf nky_client_python/` + remove the Python systemd unit (ops)
-   - rotate/retire the old OBS credentials in the Huawei console
+   - retire the decommissioned Python's OBS credentials in the Huawei
+     console. NOTE — Web `/query` uploads already relay through Bot
+     (`/v1/files`), so the gateway holds no OBS key for the chat path. The
+     one remaining direct-OBS reader is `gene_test_list.go` (analyst
+     result downloads); moving that to a Bot relay is a separate follow-up,
+     tracked outside this cutover.
 
 ## 7. Phase 6 ETL trigger (Option Y only — currently deferred)
 
@@ -104,8 +120,9 @@ cutover; old rows read MySQL legacy fields via the B-5 fallback.
 Two windows, matching the staged §6:
 
 1. **Before the §6-step-5 delete (the safe window):** flip `app.yml`
-   `bot.proxy_enabled` back to `false` AND repoint nginx `/query` to the
-   still-running Python port. Instantly restored — no git changes, no
+   `bot.proxy_enabled` back to `false` AND route `/query` back to the
+   still-running Python service (reverse whichever method §6 step 2 used —
+   nginx upstream or slot swap). Instantly restored — no git changes, no
    redeploy. This is exactly why §6 keeps Python standing until after smoke
    + soak.
 2. **After the delete:** `git revert` the cutover commit to restore the
