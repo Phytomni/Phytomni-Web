@@ -47,77 +47,10 @@ type QuestionItem struct {
 	Answer   string `json:"answer"`
 }
 
-type QuestionHWResponse struct {
-	UserName string `json:"username"`
-	Question string `json:"question"`
-	Answer   string `json:"answer"`
-}
-
 // 定义文档列表项结构体
 type DocItem struct {
 	Content string  `json:"content"`
 	Score   float64 `json:"score"`
-}
-
-type DialogueResponse struct {
-	MessageId      string `json:"message_id"`      //父id
-	ConversationId string `json:"conversation_id"` //对话id
-	Answer         string `json:"answer"`          //回答
-}
-
-type ChatResult struct {
-	//Index      int    `json:"index"`
-	Message    string `json:"message"`
-	QuestionID string `json:"question_id"`
-}
-
-// Reference 定义 references 数组中的单个元素结构体
-type Reference struct {
-	FileID string `json:"file_id"`
-	//ChunkID        string  `json:"chunk_id"` //当前参考文档分片的ID
-	Title    string `json:"title"`
-	Subtitle string `json:"subtitle"`
-	Content  string `json:"content"`
-	//FilePath       string  `json:"file_path"` //文件地址
-	//Category       string  `json:"category"` //当未命中配置的类型时，先使用知识库检索再进行大模型总结
-	//UpdateDateTime string  `json:"update_date_time"` //更新时间
-	//RepoID         string  `json:"repo_id"`
-	PageNum      int     `json:"page_num"`      //请求页码
-	ComponentNum int     `json:"component_num"` //当前参考分片位于文档内的第几个分 片
-	Score        float64 `json:"score"`         //分片的相关度打分，分值越高代表越相关
-}
-
-// KooSearchQuestionResponse 定义根结构体，包含整个 JSON 数据的结构
-type KooSearchQuestionResponse struct {
-	ChatID         string      `json:"chat_id"`
-	Category       string      `json:"category"`
-	ChatResult     ChatResult  `json:"chat_result"`
-	SubQueries     []string    `json:"sub_queries"`
-	References     []Reference `json:"references"`
-	Rac            interface{} `json:"rac"`
-	ReferenceTotal int         `json:"reference_total"` //参考来源总个数
-}
-
-type KooSearchSearchResponse struct {
-	DocList []KooSearchSearchResponseDoc `json:"doc_list"`
-	Total   int                          `json:"total"`
-}
-
-type KooSearchSearchResponseDoc struct {
-	FileID string `json:"file_id"`
-	//ChunkID        string    `json:"chunk_id"`
-	Title    string `json:"title"`
-	Subtitle string `json:"subtitle"`
-	Content  string `json:"content"`
-	//FilePath       string    `json:"file_path"`
-	//Category       string    `json:"category"`
-	//UpdateDateTime time.Time `json:"update_date_time"`
-	//RepoID         string    `json:"repo_id"`
-	PageNum      int     `json:"page_num"`
-	ComponentNum int     `json:"component_num"`
-	Score        float64 `json:"score"`
-	//FileName     string  `json:"fileName"`
-	//IndexID string `json:"indexId"`
 }
 
 type LoginResponse struct {

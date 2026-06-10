@@ -76,19 +76,6 @@ cron:
   switch: true
 
 # ---------------------------------------------------------------------
-# KooSearch (RAG) endpoints used by the KnowledgeAgent integration
-# ---------------------------------------------------------------------
-koosearch:
-  url:
-    question_url: "http://your-koosearch-host:8000/v1/koosearch/experience/chat"
-    search_url: "http://your-koosearch-host:8000/v1/koosearch/experience/search"
-    # Prefix used by ApiKooSearchDownloadFiles to mint per-file download
-    # URLs (the handler appends the query "file" verbatim). Production
-    # historically inlined the same host as a scheme-less literal — keep
-    # the protocol explicit here so the frontend never builds //host URLs.
-    files_url: "http://your-koosearch-host:8000/v1/koosearch/repos/files/"
-
-# ---------------------------------------------------------------------
 # Gene example file root — ApiGeneDetails reads files from here.
 # Point at the directory that holds the per-gene .out artifacts the
 # Python MCP server emits.
@@ -101,15 +88,6 @@ gene_file_path: "/var/lib/phytomni/gene_examples"
 # unbounded.
 # ---------------------------------------------------------------------
 guest_default_chat_limit: 5
-
-# ---------------------------------------------------------------------
-# Dify chat-messages API — service/api_service/dialogue_demo.go calls
-# RunDialogue which POSTs to this URL with Bearer api_key. Both keys
-# are required; the runtime errors out when either is empty.
-# ---------------------------------------------------------------------
-dify:
-  chat_messages_url: "http://your-dify-host/v1/chat-messages"
-  api_key: "your-dify-app-key"
 
 # ---------------------------------------------------------------------
 # Huawei Cloud IAM + EIHealth — service/api_service/agent_task.go

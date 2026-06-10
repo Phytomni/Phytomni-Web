@@ -92,13 +92,6 @@ func Api(r *gin.RouterGroup) {
 //
 //prefixTokenRouter.GET("/question/list", homeTokenHandler.ApiQuestionList)
 //prefixTokenRouter.GET("/question/info", homeTokenHandler.ApiQuestionInfo)
-////Dify对话流
-//prefixTokenRouter.POST("/dialogue/start", homeTokenHandler.ApiDialogueFlowStart)
-////RAG
-//prefixTokenRouter.POST("/question/start", homeTokenHandler.ApiQuestionStart)                   //目前只有RAG实现
-//prefixTokenRouter.POST("/koosearch/question", homeTokenHandler.ApiKooSearchQuestion)           //问答
-//prefixTokenRouter.POST("/koosearch/search", homeTokenHandler.ApiKooSearchSearch)               //搜索
-//prefixTokenRouter.GET("/koosearch/download/files", homeTokenHandler.ApiKooSearchDownloadFiles) //下载文件
 ////BI
 //prefixTokenRouter.POST("/bi/question", homeTokenHandler.ApiBiQuestion)
 //}

@@ -1,7 +1,6 @@
 package api_handler
 
 import (
-	"net/http"
 	"nky_client_go/utils/errs"
 	"strconv"
 
@@ -47,22 +46,6 @@ func (ph *ApiHandler) ApiQuestionInfo(ctx *gin.Context) {
 	response, err := ph.service.ApiQuestionInfo(ctx, id)
 	if err != nil {
 		ctx.JSON(errs.ErrResp(err))
-		return
-	}
-	ctx.JSON(errs.SucResp(response))
-}
-
-func (ph *ApiHandler) ApiQuestionStart(ctx *gin.Context) {
-	var question common.QuestionResquest
-	if err := ctx.ShouldBindJSON(&question); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": err.Error()})
-		return
-	}
-	//switch给定的问题类型，走不同的处理逻辑
-	//RAG
-	response, err := ph.service.ApiQuestionStart(ctx, question.Content)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": err.Error()})
 		return
 	}
 	ctx.JSON(errs.SucResp(response))

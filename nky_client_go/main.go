@@ -7,7 +7,6 @@ import (
 	rxMysql "nky_client_go/db"
 	rxBot "nky_client_go/external/bot"
 	rxLog "nky_client_go/log"
-	rxRAG "nky_client_go/service/api_service"
 	"nky_client_go/utils"
 	"os"
 
@@ -57,9 +56,6 @@ func initConfig(*cli.Context) error {
 	//	return err
 	//}
 	if err := cron.DoCron(); err != nil {
-		return err
-	}
-	if err := rxRAG.InitViperRAG(); err != nil {
 		return err
 	}
 	if err := rxBot.InitFromViper(); err != nil {

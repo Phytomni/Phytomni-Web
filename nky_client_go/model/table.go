@@ -61,23 +61,6 @@ func (m *SQuestionLog) TableName() string {
 	return "s_question_log"
 }
 
-type SKooSearchQuestionLog struct {
-	Id         int64      `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
-	UserId     int64      `gorm:"column:user_id;type:int(10) ;comment:用户id;NOT NULL" json:"user_id"`
-	Question   string     `gorm:"column:question;type:text;comment:问题;NOT NULL" json:"question"`
-	ChatId     string     `gorm:"column:chat_id;type:varchar(255);comment:chat_id" json:"chat_id"` //对话id
-	Answer     string     `gorm:"column:answer;type:text;comment:答案;NOT NULL" json:"answer"`
-	QuestionId string     `gorm:"column:question_id;type:varchar(255);comment:问题ID;NOT NULL" json:"question_id"` //问题id
-	Status     int        `gorm:"column:status;type:tinyint(1);default:1;comment:状态:1成功,2失败;NOT NULL" json:"status"`
-	CreatedAt  time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
-	UpdatedAt  time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
-	DeleteAt   *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
-}
-
-func (m *SKooSearchQuestionLog) TableName() string {
-	return "s_koo_search_question_logs"
-}
-
 type SQuestionAgentLog struct {
 	Id                int64      `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	DialogueId        string     `gorm:"column:dialogue_id;type:varchar(255);comment:状态:对话id;NOT NULL" json:"dialogue_id"`
