@@ -261,12 +261,20 @@ func SyncBotRuns(rows []model.SQuestionAgentLog) {
 			continue
 		}
 		newStatus := strings.ToUpper(rec.Status)
-		if row.Status == newStatus {
-			continue // still running (or unchanged) — nothing to write
+		// An empty status would be written verbatim by GORM's map Updates (maps
+		// do not skip zero values the way struct Updates does), flipping the row
+		// out of the WHERE status='RUNNING' poll set permanently. Skip it, the
+		// same way the EIHealth GetTaskStatus struct-update swallows an empty
+		// status.
+		if newStatus == "" || row.Status == newStatus {
+			continue // still running, unchanged, or malformed — nothing to write
 		}
 		updates := map[string]interface{}{"status": newStatus}
+		// final_report is deep_genome-exclusive, and the row reached here only
+		// because tool_name == "DeepGenomeAgent"; reshape with the known slug
+		// rather than trusting the Bot-returned agent field.
 		if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
-			updates["answer"] = rxBot.ShapeAnswer(rec.Agent, fr, nil)
+			updates["answer"] = rxBot.ShapeAnswer("deep_genome", fr, nil)
 		}
 		if err := model.Default().Model(&model.SQuestionAgentLog{}).
 			Where("id = ?", row.Id).Updates(updates).Error; err != nil {
@@ -507,7 +515,8 @@ func (ps *ApiService) overlayBotContent(ctx context.Context, dialogueId string, 
 		if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
 			row.Answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
 		} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
-			row.Answer = rxBot.ShapeAnswer(rec.Agent, fr, nil)
+			// final_report is deep_genome-exclusive; reshape with the known slug.
+			row.Answer = rxBot.ShapeAnswer("deep_genome", fr, nil)
 		} else if rec.Answer != "" {
 			row.Answer = rec.Answer
 		}

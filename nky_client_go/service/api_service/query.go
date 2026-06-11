@@ -284,12 +284,19 @@ func (ps *ApiService) ApiQueryAnalystUpdateLog(ctx context.Context, username, ta
 	if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
 		answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
 	} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
-		answer = rxBot.ShapeAnswer(rec.Agent, fr, nil)
+		// final_report is deep_genome-exclusive; reshape with the known slug.
+		answer = rxBot.ShapeAnswer("deep_genome", fr, nil)
 	}
 	updates := map[string]interface{}{
-		"status":           strings.ToUpper(rec.Status), // chat-ai gates download on "SUCCEEDED"; Bot is lowercase
 		"compute_resource": computeResource,
 		"log_status":       "sync_succeeded",
+	}
+	// chat-ai gates download on "SUCCEEDED"; Bot is lowercase. Skip an empty
+	// status rather than writing '' into the NOT NULL column (GORM's map Updates
+	// does not skip zero values), which would strand the row out of the cron's
+	// WHERE status='RUNNING' poll set.
+	if s := strings.ToUpper(rec.Status); s != "" {
+		updates["status"] = s
 	}
 	// Never clobber an existing answer with a blank reshape: a completed run
 	// that still has no rendered answer (e.g. analyst, whose formatted answer
