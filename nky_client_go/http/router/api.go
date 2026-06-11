@@ -90,8 +90,4 @@ func Api(r *gin.RouterGroup) {
 //prefixTokenRouter.GET("/index", homeTokenHandler.ApiIndexList)
 //prefixTokenRouter.GET("/user_info", homeTokenHandler.ApiUserInfo)
 //
-//prefixTokenRouter.GET("/question/list", homeTokenHandler.ApiQuestionList)
-//prefixTokenRouter.GET("/question/info", homeTokenHandler.ApiQuestionInfo)
-////BI
-//prefixTokenRouter.POST("/bi/question", homeTokenHandler.ApiBiQuestion)
 //}

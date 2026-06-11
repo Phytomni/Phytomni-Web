@@ -48,19 +48,6 @@ func (SUserToolName) TableName() string {
 	return "s_user_tool_name"
 }
 
-// 用户问答表
-type SQuestionLog struct {
-	Id       int64  `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
-	UserId   int64  `gorm:"column:user_id;type:bigint(20) unsigned;default:0;comment:用户ID;NOT NULL" json:"user_id"`
-	Question string `gorm:"column:question;type:text;comment:问题;NOT NULL" json:"question"`
-	Answer   string `gorm:"column:answer;type:text;comment:答案;NOT NULL" json:"answer"`
-	Status   int    `gorm:"column:status;type:tinyint(1);default:1;comment:状态:1成功,2失败;NOT NULL" json:"status"`
-}
-
-func (m *SQuestionLog) TableName() string {
-	return "s_question_log"
-}
-
 type SQuestionAgentLog struct {
 	Id                int64      `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	DialogueId        string     `gorm:"column:dialogue_id;type:varchar(255);comment:状态:对话id;NOT NULL" json:"dialogue_id"`

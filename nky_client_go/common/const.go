@@ -11,8 +11,6 @@ const DEFAULT_PAGE = 1
 const DEFAULT_LEVEL = 1
 const DEFAULT_PAGE_SIZE = 20
 const RedisURL_CACHE = 30
-const RedisHWTokenKey = "HW:Token:cache"
-const RedisHWTokenKeyEX = 86400
 
 const (
 	SUCCESS                = 10000

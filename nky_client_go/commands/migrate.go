@@ -82,7 +82,6 @@ func Migrate() *cli.Command {
 						&model.SUser{},
 						&model.SToolName{},
 						&model.SUserToolName{},
-						&model.SQuestionLog{},
 						&model.SQuestionAgentLog{},
 						&model.SGeneList{},
 						&model.SGeneExample{},

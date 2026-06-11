@@ -14,37 +14,12 @@ type UserInfo struct {
 	UserName string `json:"user_name"`
 }
 
-type FreshTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int    `json:"expires_in"`
-}
-
 type UserResponse struct {
 	Id               int64  `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	Email            string `json:"email"`
 	Password         string `json:"password"`
 	FirstLoginStatus string `json:"first_login_status"`
 	PasswordWarning  string `json:"password_warning,omitempty"` // 密码过期提示信息
-}
-
-type QuestionListResponse struct {
-	Page  int            `json:"page"`
-	Total int64          `json:"total"`
-	List  []QuestionInfo `json:"list"`
-}
-
-type QuestionInfo struct {
-	Id       int64  `json:"id"`
-	Question string `json:"question"`
-}
-
-type QuestionInfoResponse struct {
-	Info QuestionItem `json:"info"`
-}
-type QuestionItem struct {
-	Id       int64  `json:"id"`
-	Question string `json:"question"`
-	Answer   string `json:"answer"`
 }
 
 // 定义文档列表项结构体
