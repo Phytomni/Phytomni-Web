@@ -72,6 +72,14 @@ func Api(r *gin.RouterGroup) {
 		queryRouter.POST("/query/analyst/update_log", homeTokenHandler.ApiQueryAnalystUpdateLog) //异步任务结果同步回库
 	}
 
+	// 浏览器直连下载面:window.open / <img src> 无法携带 Authorization 头,
+	// 鉴权由 handler 内的 query 短时 token(ParseDownloadToken)完成,因此
+	// 不挂 AuthMiddleware;也不挂 OperationLog,避免把 token 记进操作日志。
+	relayDownloadRouter := r.Group("v1").Use(customI18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS())
+	{
+		relayDownloadRouter.GET("/download/relay_file", homeTokenHandler.ApiRelayFileDownload) //token 鉴权的 OBS 中转流式下载
+	}
+
 	serverRouter := r.Group("v1/nky/server").Use(customI18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
 	homeServerHandler := api_handler.NewApiHandler()
 	{

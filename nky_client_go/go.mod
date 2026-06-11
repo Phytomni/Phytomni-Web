@@ -21,7 +21,6 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/google/uuid v1.4.0
-	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.25.4+incompatible
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db

@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"nky_client_go/common"
+	rxBot "nky_client_go/external/bot"
+	"nky_client_go/middleware"
 	"nky_client_go/utils/errs"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/gin-gonic/gin"
@@ -241,17 +245,53 @@ func (ph *ApiHandler) ApiDownloadAnalystAgentObsImages(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(imageUrls))
 }
 
+// ApiGetDownloadObsFile 服务邮件中的下载链接。切流后不再 302 到 OBS 签名
+// URL,而是经 Bot 中转把结果 zip 字节流直接写回浏览器。
 func (ph *ApiHandler) ApiGetDownloadObsFile(ctx *gin.Context) {
 	obsPath := ctx.Query("obs_path")
 	username := ctx.Query("username")
 
-	obsPath, err := ph.service.ApiGetDownloadObsFile(ctx, username, obsPath)
+	rc, filename, length, err := ph.service.ApiGetDownloadObsFile(ctx, username, obsPath)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
 	}
+	defer rc.Close()
 
-	ctx.Redirect(http.StatusFound, obsPath)
+	ctx.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+	ctx.DataFromReader(http.StatusOK, length, "application/octet-stream", rc, nil)
+}
+
+// ApiRelayFileDownload 流式输出一个 OBS 对象(经 Bot 中转)。鉴权走 query
+// 短时 token(middleware.ParseDownloadToken):window.open / <img src> /
+// 邮件链接均无法携带 Authorization 头,这是浏览器直连下载面的统一入口。
+func (ph *ApiHandler) ApiRelayFileDownload(ctx *gin.Context) {
+	key, err := middleware.ParseDownloadToken(ctx.Query("t"))
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": err.Error()})
+		return
+	}
+
+	rc, length, err := rxBot.NewClient().GetObsObjectStream(ctx, key)
+	if err != nil {
+		// 不透传 Bot 内部错误细节给浏览器直连面
+		ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": "文件获取失败"})
+		return
+	}
+	defer rc.Close()
+
+	filename := path.Base(key)
+	contentType := mime.TypeByExtension(path.Ext(filename))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	// 图片内联渲染(<img> 场景),其余作为附件下载
+	disposition := "attachment"
+	if strings.HasPrefix(contentType, "image/") {
+		disposition = "inline"
+	}
+	ctx.Header("Content-Disposition", disposition+`; filename="`+filename+`"`)
+	ctx.DataFromReader(http.StatusOK, length, contentType, rc, nil)
 }
 
 func (ph *ApiHandler) ApiDownloadObsRenderingFile(ctx *gin.Context) {

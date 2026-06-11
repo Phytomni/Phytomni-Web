@@ -112,13 +112,6 @@ huawei:
     base_url: "https://eihealth.cn-east-3.myhuaweicloud.com/v1"
     account_id: "your-huawei-account-id"
     project_uuid: "your-eihealth-project-uuid"
-  # OBS download credentials — service/api_service/gene_test_list.go reads
-  # these to mint signed URLs for AnalystAgent result downloads. Rotate by
-  # editing config/app.yml; never inline ak/sk back into source files.
-  obs:
-    ak: "your-huawei-obs-access-key"
-    sk: "your-huawei-obs-secret-key"
-    endpoint: "https://obs.cn-east-3.myhuaweicloud.com"
 
 # ---------------------------------------------------------------------
 # Bot service integration (Wave A multi-tenant proxy).
@@ -134,6 +127,12 @@ huawei:
 #                          -d '{"user_id":"web","name":"chat-ai-web-app"}'
 #                      The service token never enters this file —
 #                      it stays with ops + Bot side only.
+#                      The key MUST carry the `relay:obs` scope (Bot
+#                      denies relay routes to scope-less keys) and the
+#                      Bot deployment must set RELAY_ENABLED=true —
+#                      the gene/analyst result downloads go through
+#                      Bot's OBS relay (/v1/relay/obs/*); the gateway
+#                      holds no Huawei OBS credentials.
 # `proxy_enabled`    — gates the Bot integration. After the cutover the Go
 #                      gateway is the SOLE /query handler (the Python MCP
 #                      service was removed), so this must be true in any real

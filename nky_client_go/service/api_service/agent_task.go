@@ -67,18 +67,6 @@ func huaweiEIHealthJobsBase() string {
 	)
 }
 
-// huaweiOBSCredentials returns the Huawei OBS access-key triple read from
-// viper — ak / sk / endpoint. Callers feed the triple straight into
-// obs.New so the credentials never appear as inline literals. Used by
-// the gene_test_list download helpers (ApiDownloadAnalystAgentObsFile
-// and ApiDownloadAnalystAgentObsImages). Rotation happens in
-// config/app.yml without recompiling.
-func huaweiOBSCredentials() (ak, sk, endpoint string) {
-	return viper.GetString("huawei.obs.ak"),
-		viper.GetString("huawei.obs.sk"),
-		viper.GetString("huawei.obs.endpoint")
-}
-
 type TaskStatusResponse struct {
 	Status string `json:"status"`
 }

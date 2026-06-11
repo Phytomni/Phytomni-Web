@@ -4,14 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
+	"path"
 
 	"nky_client_go/common/document_format"
+	rxBot "nky_client_go/external/bot"
+	"nky_client_go/middleware"
 	"nky_client_go/model"
 	"strings"
 	"time"
 
-	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 	"github.com/spf13/viper"
 )
 
@@ -153,126 +157,70 @@ func (ps *ApiService) ApiGeneDetailsStorage(ctx context.Context, fileName, conte
 	return err
 }
 
+// findObsKeyBySuffix 在 Bot 中转列出的 keys 中找第一个匹配后缀的对象(忽略大小写)。
+func findObsKeyBySuffix(keys []string, suffix string) string {
+	for _, k := range keys {
+		if strings.HasSuffix(strings.ToLower(k), suffix) {
+			return k
+		}
+	}
+	return ""
+}
+
+// friendlyRelayErr 把 Bot 中转对前缀外/桶外路径的拒绝(切流前历史
+// download_path 的特征)翻译成用户可读的提示;其余错误原样透传。
+func friendlyRelayErr(err error) error {
+	if rxBot.IsLegacyPathErr(err) {
+		return errors.New("该结果文件属于切流前的历史数据,已不再提供下载")
+	}
+	return err
+}
+
+// relayDownloadURL 为一个 OBS 对象签出指向本服务流式下载端点的短时 token URL。
+// 浏览器侧(window.open / <img src>)无法携带 Authorization 头,鉴权落在
+// query token 上;相对路径经前端 /v1 代理回到本服务。
+func relayDownloadURL(obsKey string) (string, error) {
+	token, err := middleware.GenerateDownloadToken(obsKey, middleware.DownloadTokenTTL)
+	if err != nil {
+		return "", err
+	}
+	return "/v1/download/relay_file?t=" + url.QueryEscape(token), nil
+}
+
 func (ps *ApiService) ApiDownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {
 	// 判断是否有权限生成下载链接
 	var questionAgentLog model.SQuestionAgentLog
 	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&questionAgentLog).RowsAffected; result == 0 {
-		fmt.Println("questionAgentLog.Id", questionAgentLog.Id)
 		return "", errors.New("没有查找到对应的obs路径数据")
 	}
 
-	// 1、初始化客户端
-	ak, sk, endpoint := huaweiOBSCredentials()
-	expiration := 3600
-
-	obsClient, err := obs.New(ak, sk, endpoint)
+	keys, err := rxBot.NewClient().ListObsKeys(ctx, obsPath)
 	if err != nil {
-		return "", err
+		return "", friendlyRelayErr(err)
 	}
-
-	newObsPath := convertPath(obsPath)
-
-	// 2、解析obs路径（得到桶名和目录路径）
-	bucketName, directoryKey, err := ParseObsPath(newObsPath)
-	if err != nil {
-		return "", fmt.Errorf("解析OBS路径失败: %v", err)
-	}
-
-	// 3、列出目录下的所有文件
-	listInput := &obs.ListObjectsInput{
-		ListObjsInput: obs.ListObjsInput{
-			Prefix: directoryKey,
-		},
-		Bucket: bucketName, // 桶名
-	}
-	listOutput, err := obsClient.ListObjects(listInput)
-	if err != nil {
-		return "", fmt.Errorf("列出目录文件失败: %v", err)
-	}
-
-	// 4、筛选出zip文件
-	var zipObjectKey string
-	for _, obj := range listOutput.Contents {
-		// 检查文件是否以.zip结尾（区分大小写）
-		if strings.HasSuffix(obj.Key, ".zip") {
-			zipObjectKey = obj.Key
-			// 如果有多个zip文件，这里取第一个，可根据需求调整
-			break
-		}
-	}
-
-	if zipObjectKey == "" {
+	zipKey := findObsKeyBySuffix(keys, ".zip")
+	if zipKey == "" {
 		return "", errors.New("在指定目录下未找到zip文件")
 	}
-
-	// 5、生成zip文件的1小时临时下载URL
-	input := &obs.CreateSignedUrlInput{
-		Method:  "GET", // 下载使用GET方法
-		Bucket:  bucketName,
-		Key:     zipObjectKey, // 使用找到的zip文件路径
-		Expires: expiration,   // 过期时间（秒）
-	}
-
-	output, err := obsClient.CreateSignedUrl(input)
-	if err != nil {
-		return "", fmt.Errorf("生成临时下载链接失败: %v", err)
-	}
-
-	fmt.Println("zip文件临时下载URL:", output.SignedUrl)
-	return output.SignedUrl, nil
+	return relayDownloadURL(zipKey)
 }
 
 func (ps *ApiService) ApiDownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
-	// 1、初始化客户端
-	ak, sk, endpoint := huaweiOBSCredentials()
-	expiration := 3600
-
-	obsClient, err := obs.New(ak, sk, endpoint)
+	keys, err := rxBot.NewClient().ListObsKeys(ctx, obsPath)
 	if err != nil {
-		return nil, err
+		return nil, friendlyRelayErr(err)
 	}
 
-	newObsPath := convertPath(obsPath)
-
-	// 2、解析obs路径（得到桶名和目录路径）
-	bucketName, directoryKey, err := ParseObsPath(newObsPath)
-	if err != nil {
-		return nil, fmt.Errorf("解析OBS路径失败: %v", err)
-	}
-
-	// 3、列出目录下的所有文件
-	listInput := &obs.ListObjectsInput{
-		ListObjsInput: obs.ListObjsInput{
-			Prefix: directoryKey,
-		},
-		Bucket: bucketName, // 桶名
-	}
-	listOutput, err := obsClient.ListObjects(listInput)
-	if err != nil {
-		return nil, fmt.Errorf("列出目录文件失败: %v", err)
-	}
-
-	// 4、筛选出png文件并生成下载链接
 	var imageUrls []string
-	for _, obj := range listOutput.Contents {
-		// 检查文件是否以.png结尾（不区分大小写，这里为了稳健转为小写判断）
-		if strings.HasSuffix(strings.ToLower(obj.Key), ".png") {
-			// 5、生成文件的1小时临时下载URL
-			input := &obs.CreateSignedUrlInput{
-				Method:  "GET", // 下载使用GET方法
-				Bucket:  bucketName,
-				Key:     obj.Key,
-				Expires: expiration, // 过期时间（秒）
-			}
-
-			output, err := obsClient.CreateSignedUrl(input)
+	for _, k := range keys {
+		if strings.HasSuffix(strings.ToLower(k), ".png") {
+			u, err := relayDownloadURL(k)
 			if err != nil {
-				// 如果生成单个文件失败，可以选择跳过或报错，这里选择打印日志继续
-				fmt.Printf("生成图片下载链接失败 [%s]: %v\n", obj.Key, err)
+				// 单个签发失败跳过,保持原"跳过坏文件"行为
 				continue
 			}
-			imageUrls = append(imageUrls, output.SignedUrl)
+			imageUrls = append(imageUrls, u)
 		}
 	}
 
@@ -283,101 +231,31 @@ func (ps *ApiService) ApiDownloadAnalystAgentObsImages(ctx context.Context, user
 	return imageUrls, nil
 }
 
-func convertPath(path string) string {
-	// 去除开头的斜杠
-	path = strings.TrimPrefix(path, "/")
-
-	// 如果路径以 "obs/" 开头，去掉这部分
-	if strings.HasPrefix(path, "obs/") {
-		path = strings.TrimPrefix(path, "obs/")
+// ApiGetDownloadObsFile 服务邮件里的下载链接:校验 obs_path 归属于该用户的
+// 消息记录(邮件链接无法携带任何凭据,这层库内归属校验是该入口仅有的访问
+// 控制),经 Bot 中转找到结果 zip 并返回字节流,由 handler 直接写回浏览器。
+func (ps *ApiService) ApiGetDownloadObsFile(ctx context.Context, username, obsPath string) (io.ReadCloser, string, int64, error) {
+	var questionAgentLog model.SQuestionAgentLog
+	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
+		First(&questionAgentLog).RowsAffected; result == 0 {
+		return nil, "", 0, errors.New("没有查找到对应的obs路径数据")
 	}
 
-	// 添加 obs:// 前缀
-	return "obs://" + path
-}
-
-func ParseObsPath(obsPath string) (bucketName, objectKey string, err error) {
-	if !strings.HasPrefix(obsPath, "obs://") {
-		return "", "", errors.New("invalid OBS path, must start with 'obs://'")
-	}
-
-	// 去掉 "obs://"
-	pathWithoutScheme := strings.TrimPrefix(obsPath, "obs://")
-
-	// 分割 bucket 和 objectKey
-	parts := strings.SplitN(pathWithoutScheme, "/", 2)
-	if len(parts) < 1 {
-		return "", "", errors.New("invalid OBS path, missing bucket name")
-	}
-
-	bucketName = parts[0]
-	if len(parts) == 2 {
-		objectKey = parts[1]
-	}
-
-	return bucketName, objectKey, nil
-}
-
-func (ps *ApiService) ApiGetDownloadObsFile(ctx context.Context, username, obsPath string) (string, error) {
-	// 1、初始化客户端
-	ak, sk, endpoint := huaweiOBSCredentials()
-	expiration := 3600
-
-	obsClient, err := obs.New(ak, sk, endpoint)
+	client := rxBot.NewClient()
+	keys, err := client.ListObsKeys(ctx, obsPath)
 	if err != nil {
-		return "", err
+		return nil, "", 0, friendlyRelayErr(err)
+	}
+	zipKey := findObsKeyBySuffix(keys, ".zip")
+	if zipKey == "" {
+		return nil, "", 0, errors.New("在指定目录下未找到zip文件")
 	}
 
-	newObsPath := convertPath(obsPath)
-
-	// 2、解析obs路径（得到桶名和目录路径）
-	bucketName, directoryKey, err := ParseObsPath(newObsPath)
+	rc, length, err := client.GetObsObjectStream(ctx, zipKey)
 	if err != nil {
-		return "", fmt.Errorf("解析OBS路径失败: %v", err)
+		return nil, "", 0, friendlyRelayErr(err)
 	}
-
-	// 3、列出目录下的所有文件
-	listInput := &obs.ListObjectsInput{
-		ListObjsInput: obs.ListObjsInput{
-			Prefix: directoryKey,
-		},
-		Bucket: bucketName, // 桶名
-	}
-	listOutput, err := obsClient.ListObjects(listInput)
-	if err != nil {
-		return "", fmt.Errorf("列出目录文件失败: %v", err)
-	}
-
-	// 4、筛选出zip文件
-	var zipObjectKey string
-	for _, obj := range listOutput.Contents {
-		// 检查文件是否以.zip结尾（区分大小写）
-		if strings.HasSuffix(obj.Key, ".zip") {
-			zipObjectKey = obj.Key
-			// 如果有多个zip文件，这里取第一个，可根据需求调整
-			break
-		}
-	}
-
-	if zipObjectKey == "" {
-		return "", errors.New("在指定目录下未找到zip文件")
-	}
-
-	// 5、生成zip文件的1小时临时下载URL
-	input := &obs.CreateSignedUrlInput{
-		Method:  "GET", // 下载使用GET方法
-		Bucket:  bucketName,
-		Key:     zipObjectKey, // 使用找到的zip文件路径
-		Expires: expiration,   // 过期时间（秒）
-	}
-
-	output, err := obsClient.CreateSignedUrl(input)
-	if err != nil {
-		return "", fmt.Errorf("生成临时下载链接失败: %v", err)
-	}
-
-	fmt.Println("zip文件临时下载URL:", output.SignedUrl)
-	return output.SignedUrl, nil
+	return rc, path.Base(zipKey), length, nil
 }
 
 func (ps *ApiService) ApiDownloadObsRenderingFile(ctx context.Context, id int, format string) ([]byte, string, error) {

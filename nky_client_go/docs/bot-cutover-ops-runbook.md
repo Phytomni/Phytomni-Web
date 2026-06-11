@@ -30,6 +30,13 @@ Take the one-time `api_key` from the response and write it to production
 `app.yml` `bot.user_api_key` (secure config delivery, not git). Set
 `bot.base_url` to the internal Bot URL (e.g. `http://bot.internal:8000`).
 
+The key MUST carry the `relay:obs` scope — Bot's relay routes deny
+scope-less keys (this is intentional; legacy keys do not auto-gain relay
+access). Grant it at mint time per the Bot-side key-issuing procedure, or
+re-issue the key with the scope if the current one lacks it. The Bot
+deployment itself must run with `RELAY_ENABLED=true`, otherwise every
+`/v1/relay/*` route 404s and gene/analyst result downloads fail.
+
 ## 3. 90-day key rotation (ops procedure, not a Web Go cron)
 
 1. Mint a new `ptm_<web>` key via the curl in §2.
@@ -102,10 +109,16 @@ keeping an instant rollback live throughout verification:
    - `git rm -rf nky_client_python/` + remove the Python systemd unit (ops)
    - retire the decommissioned Python's OBS credentials in the Huawei
      console. NOTE — Web `/query` uploads already relay through Bot
-     (`/v1/files`), so the gateway holds no OBS key for the chat path. The
-     one remaining direct-OBS reader is `gene_test_list.go` (analyst
-     result downloads); moving that to a Bot relay is a separate follow-up,
-     tracked outside this cutover.
+     (`/v1/files`), and gene/analyst result downloads now go through
+     Bot's OBS relay (`/v1/relay/obs/*`), so the gateway holds NO Huawei
+     OBS credentials at all: the `huawei.obs.*` keys are gone from
+     `app.yml` and any leftover Web-side OBS ak/sk can be retired in the
+     Huawei console together with the Python ones. Preconditions for the
+     download path: Bot deploy sets `RELAY_ENABLED=true` and the
+     `ptm_<web>` key carries the `relay:obs` scope (§2). Downloads whose
+     stored path predates the cutover (legacy EIHealth prefixes/buckets
+     outside Bot's output root) are rejected by Bot and surface to users
+     as "历史数据已不再提供下载" — expected, forward-only policy.
 
 ## 7. Phase 6 ETL trigger (Option Y only — currently deferred)
 
