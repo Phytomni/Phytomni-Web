@@ -125,3 +125,43 @@ func TestParseRunFormatted(t *testing.T) {
 		t.Error("expected ok=false for nil")
 	}
 }
+
+func TestParseRunFinalReport(t *testing.T) {
+	report := "deep genome report body"
+	raw := json.RawMessage(`{"final_report":"deep genome report body","task_results":[]}`)
+	got, ok := ParseRunFinalReport(raw)
+	if !ok || got != report {
+		t.Fatalf("ok=%v got=%q", ok, got)
+	}
+	if _, ok := ParseRunFinalReport(json.RawMessage(`{"task_results":[]}`)); ok {
+		t.Error("expected ok=false when final_report absent")
+	}
+	if _, ok := ParseRunFinalReport(json.RawMessage(`{"final_report":""}`)); ok {
+		t.Error("expected ok=false for empty final_report")
+	}
+	if _, ok := ParseRunFinalReport(json.RawMessage(`not json`)); ok {
+		t.Error("expected ok=false for malformed JSON")
+	}
+	if _, ok := ParseRunFinalReport(nil); ok {
+		t.Error("expected ok=false for nil")
+	}
+}
+
+// deep_genome reshapes its final_report through the cited family (f == nil),
+// yielding {content, doc_list: []} — the JSON chat-ai's DeepGenomeResultViewer parses.
+func TestShapeAnswer_DeepGenomeFinalReport(t *testing.T) {
+	got := ShapeAnswer("deep_genome", "report md", nil)
+	var parsed struct {
+		Content string        `json:"content"`
+		DocList []interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("not valid JSON: %v (%s)", err, got)
+	}
+	if parsed.Content != "report md" {
+		t.Errorf("content = %q", parsed.Content)
+	}
+	if parsed.DocList == nil || len(parsed.DocList) != 0 {
+		t.Errorf("expected empty doc_list array, got %s", got)
+	}
+}

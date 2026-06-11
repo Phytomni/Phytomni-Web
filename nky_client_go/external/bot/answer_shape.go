@@ -132,6 +132,24 @@ func ParseRunFormatted(raw json.RawMessage) (*Formatted, string, bool) {
 	return env.Formatted, env.Formatted.Answer, true
 }
 
+// ParseRunFinalReport lifts result.final_report out of a RunRecord.Result.
+// Bot's deep_genome poll path persists the assembled markdown report there
+// (the terminal run aggregate carries no formatted envelope), so the read
+// paths and the freshness cron fall back to it when ParseRunFormatted finds no
+// formatted block. ok is false when the field is absent or empty.
+func ParseRunFinalReport(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 {
+		return "", false
+	}
+	var env struct {
+		FinalReport string `json:"final_report"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil || env.FinalReport == "" {
+		return "", false
+	}
+	return env.FinalReport, true
+}
+
 // unquote strips surrounding quotes from a JSON-encoded scalar so a string
 // file_id renders without quotes when used as a title fallback.
 func unquote(b json.RawMessage) []byte {
