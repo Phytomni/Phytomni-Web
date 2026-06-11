@@ -25,8 +25,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// huaweiIAMAuthBody returns the IAM password-auth body used by both
-// GetTaskStatus and ApiAnalystAgentUpdateLog. Every literal is sourced
+// huaweiIAMAuthBody returns the IAM password-auth body used by the
+// FreshGA cron's GetTaskStatus EIHealth poll. Every literal is sourced
 // from viper so operators rotate creds via config/app.yml without
 // recompiling. Missing keys yield empty strings, which Huawei IAM
 // rejects with 400 — surfacing misconfiguration loud rather than silent.
@@ -502,15 +502,6 @@ func (ps *ApiService) ApiQueryListRename(ctx context.Context, name string, id in
 	return rename, nil
 }
 
-type LogData struct {
-	Count int `json:"count"`
-	Logs  []struct {
-		CollectTime string `json:"collect_time"`
-		Content     string `json:"content"`
-	} `json:"logs"`
-	LogStorageLink string `json:"log_storage_link"`
-}
-
 func (ps *ApiService) ApiQueryReactionType(ctx context.Context, id int, reactionType, name string) (int, error) {
 	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
@@ -551,132 +542,4 @@ func (ps *ApiService) ApiQueryCollectList(ctx context.Context, name string) ([]*
 	}
 
 	return CollectList, nil
-}
-
-func (ps *ApiService) ApiAnalystAgentUpdateLog(ctx context.Context, name, taskId, computeResource string) (string, error) {
-	//查询日志归属或是否存在
-	db := model.DB(ctx).Model(&model.SQuestionAgentLog{})
-	var agentLog model.SQuestionAgentLog
-	result := db.Where("user_name = ? and task_id = ? and compute_resource = ? and delete_at IS NULL", name, taskId, computeResource).First(&agentLog)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return "", errors.New("任务记录不存在")
-		} else {
-			return "", errors.New(fmt.Sprintf(" SQL 语法错误、数据库连接问题查询失败:%v", result.Error))
-		}
-	}
-
-	// 1. 首先获取华为云认证token
-	authData := huaweiIAMAuthBody()
-
-	authJson, err := json.Marshal(authData)
-	if err != nil {
-		return "", errors.New("获取token失败")
-	}
-
-	authReq, err := http.NewRequest("POST", viper.GetString("huawei.iam.auth_url"), bytes.NewBuffer(authJson))
-	if err != nil {
-		return "", errors.New("创建认证请求失败")
-	}
-	authReq.Header.Set("Content-Type", "application/json")
-
-	authTr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	authClient := &http.Client{Transport: authTr}
-
-	authResp, err := authClient.Do(authReq)
-	if err != nil {
-		return "", errors.New("认证请求失败")
-	}
-	defer authResp.Body.Close()
-
-	if authResp.StatusCode >= 400 {
-		return "", errors.New(fmt.Sprintf("认证失败，状态码: %d", authResp.StatusCode))
-	}
-
-	// 获取X-Subject-Token
-	XSToken := authResp.Header.Get("X-Subject-Token")
-	if XSToken == "" {
-		return "", errors.New("未获取到认证token")
-	}
-
-	//2、构建url
-	url := fmt.Sprintf("%s/%s/logs?task_name=%s", huaweiEIHealthJobsBase(), taskId, computeResource)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", errors.New(fmt.Sprintf("创建请求失败: %v", err))
-	}
-
-	// 设置请求头
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Auth-Token", XSToken)
-
-	// 发送请求
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", errors.New(fmt.Sprintf("请求失败: %v", err))
-	}
-	defer resp.Body.Close()
-
-	// 读取响应
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.New(fmt.Sprintf("读取响应失败: %v", err))
-	}
-	// 解析请求体
-	jsonStr := string(body)
-	var data LogData
-	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
-		return "", errors.New(fmt.Sprintf("JSON解析失败: %v", err))
-	}
-
-	//db := model.Default().Model(&model.SQuestionAgentLog{})
-	//
-	//// 查询或创建日志记录
-	//var agentLog model.SQuestionAgentLog
-	//result := db.Where("task_id = ?", taskId).First(&agentLog)
-	//if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-	//	return "", errors.New(fmt.Sprintf("查询任务日志失败: %v", result.Error))
-	//}
-
-	// 处理日志内容
-	var logEntries []map[string]interface{}
-	var jobFinished bool = false // 新增标志位
-
-	for _, entry := range data.Logs {
-		//content := strings.TrimSpace(entry.Content)
-		logEntries = append(logEntries, map[string]interface{}{
-			"content": strings.TrimSpace(entry.Content),
-			// 可以添加更多字段....
-		})
-		// 判断是否包含关键字
-		//if strings.Contains(content, "Job Finished! Cheers!") {
-		//	jobFinished = true
-		//}
-	}
-
-	if agentLog.Status == "SUCCEEDED" || agentLog.Status == "FAILED" {
-		jobFinished = true
-	}
-	// 序列化为JSON
-	newLogsJSON, err := json.Marshal(logEntries)
-	if err != nil {
-		return "", errors.New(fmt.Sprintf("JSON序列化失败: %v", err))
-	}
-
-	// 比较并更新数据,数据不同则更新数据
-	if agentLog.TaskLog != string(newLogsJSON) || (jobFinished && agentLog.LogStatus != "sync_succeeded") {
-		agentLog.TaskLog = string(newLogsJSON)
-		if jobFinished {
-			agentLog.LogStatus = "sync_succeeded" // 更新状态为 sync_succeeded
-		}
-		if err = db.Save(&agentLog).Error; err != nil {
-			return "", errors.New(fmt.Sprintf("更新任务日志失败: %v", err))
-		}
-	}
-
-	return string(newLogsJSON), nil
-
 }

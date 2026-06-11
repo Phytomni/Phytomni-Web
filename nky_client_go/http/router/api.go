@@ -45,7 +45,6 @@ func Api(r *gin.RouterGroup) {
 		prefixTokenRouter.GET("/async_task/info", homeTokenHandler.ApiAsyncTaskInfo) //查询任务状态
 		//prefixTokenRouter.GET("/get_analyst_agent_log", homeTokenHandler.ApiGetAnalystAgentLog) //查询分析日志
 		prefixTokenRouter.GET("/analyst/get_log", homeTokenHandler.ApiAnalystAgentGetLog) //查询分析日志
-		//prefixTokenRouter.POST("/analyst/update_log", homeTokenHandler.ApiAnalystAgentUpdateLog) //查询并更新日志内容
 
 		// 增加日志查询接口
 		prefixTokenRouter.POST("/operation/logs", homeTokenHandler.ApiGetOperationLogs) //查询用户操作日志

@@ -50,20 +50,6 @@ func (ph *ApiHandler) ApiAnalystAgentGetLog(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(taskId))
 }
 
-func (ph *ApiHandler) ApiAnalystAgentUpdateLog(ctx *gin.Context) {
-	name, _ := ctx.Get("username")
-	taskId := ctx.PostForm("task_id")
-	computeResource := ctx.PostForm("compute_resource")
-
-	newLogsJSON, err := ph.service.ApiAnalystAgentUpdateLog(ctx, name.(string), taskId, computeResource)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
-		return
-	}
-
-	ctx.JSON(errs.SucResp(newLogsJSON))
-}
-
 func (ph *ApiHandler) ApiQueryList(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	list, err := ph.service.ApiQueryList(ctx, name.(string))
