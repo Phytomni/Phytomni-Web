@@ -231,6 +231,50 @@ func GetTaskStatus(taskIds []string) {
 	wg.Wait()
 }
 
+// SyncBotRuns reconciles RUNNING deep_genome rows against Bot's in-process run
+// state. These rows never hit EIHealth (the report workflow runs inside Bot),
+// so the legacy GetTaskStatus IAM poll cannot advance them. For each row it
+// polls GET /v1/runs/{bot_run_id}, and when the run's status has changed it
+// flips the MySQL status and writes the assembled report (result.final_report,
+// reshaped into the {content, doc_list} JSON chat-ai parses). It does not
+// clobber the prior answer with a blank reshape (only writes answer when a
+// final_report is present). There is no *gin.Context here (the cron has no
+// request), so it uses a background context and model.Default(), mirroring
+// GetTaskStatus.
+func SyncBotRuns(rows []model.SQuestionAgentLog) {
+	if len(rows) == 0 {
+		return
+	}
+	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
+		return
+	}
+	ctx := context.Background()
+	client := rxBot.NewClient()
+	for _, row := range rows {
+		if row.BotRunId == "" {
+			rxLog.Sugar().Warnf("deep_genome row %d is RUNNING with no bot_run_id; skipping bot sync", row.Id)
+			continue
+		}
+		rec, err := client.GetRun(ctx, row.BotRunId)
+		if err != nil {
+			rxLog.Sugar().Error(err)
+			continue
+		}
+		newStatus := strings.ToUpper(rec.Status)
+		if row.Status == newStatus {
+			continue // still running (or unchanged) — nothing to write
+		}
+		updates := map[string]interface{}{"status": newStatus}
+		if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
+			updates["answer"] = rxBot.ShapeAnswer(rec.Agent, fr, nil)
+		}
+		if err := model.Default().Model(&model.SQuestionAgentLog{}).
+			Where("id = ?", row.Id).Updates(updates).Error; err != nil {
+			rxLog.Sugar().Error(err)
+		}
+	}
+}
+
 func (ps *ApiService) ApiAsyncTaskList(ctx context.Context, username string, current, size int) ([]*common.ApiAsyncTaskListResponse, int64, int, error) {
 
 	var QuestionAgentLogList []*common.ApiAsyncTaskListResponse
