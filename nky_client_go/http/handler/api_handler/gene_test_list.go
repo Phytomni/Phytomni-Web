@@ -245,6 +245,23 @@ func (ph *ApiHandler) ApiDownloadAnalystAgentObsImages(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(imageUrls))
 }
 
+// inlineSafeImageTypes 列出可安全内联渲染的位图类型。SVG(image/svg+xml)
+// 与任何 *+xml 被刻意排除 —— 它们可携带内嵌脚本,同源 inline 提供即构成
+// 存储型 XSS;这些一律强制走附件下载。
+var inlineSafeImageTypes = map[string]bool{
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/gif":  true,
+	"image/webp": true,
+	"image/bmp":  true,
+}
+
+// sanitizeFilename 去掉可能撑破 Content-Disposition 引号文件名的字符
+// (双引号、CR、LF),避免头注入。
+func sanitizeFilename(name string) string {
+	return strings.NewReplacer(`"`, "", "\r", "", "\n", "").Replace(name)
+}
+
 // ApiGetDownloadObsFile 服务邮件中的下载链接。切流后不再 302 到 OBS 签名
 // URL,而是经 Bot 中转把结果 zip 字节流直接写回浏览器。
 func (ph *ApiHandler) ApiGetDownloadObsFile(ctx *gin.Context) {
@@ -258,7 +275,8 @@ func (ph *ApiHandler) ApiGetDownloadObsFile(ctx *gin.Context) {
 	}
 	defer rc.Close()
 
-	ctx.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+	ctx.Header("X-Content-Type-Options", "nosniff")
+	ctx.Header("Content-Disposition", `attachment; filename="`+sanitizeFilename(filename)+`"`)
 	ctx.DataFromReader(http.StatusOK, length, "application/octet-stream", rc, nil)
 }
 
@@ -285,12 +303,16 @@ func (ph *ApiHandler) ApiRelayFileDownload(ctx *gin.Context) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	// 图片内联渲染(<img> 场景),其余作为附件下载
+	// 仅位图图片内联渲染(<img> 场景);SVG/任何 *+xml 强制走附件下载,
+	// 杜绝同源存储型 XSS。其余一律附件。
 	disposition := "attachment"
-	if strings.HasPrefix(contentType, "image/") {
+	if inlineSafeImageTypes[contentType] {
 		disposition = "inline"
 	}
-	ctx.Header("Content-Disposition", disposition+`; filename="`+filename+`"`)
+	// 浏览器直连面:禁 MIME 嗅探 + 最严 CSP 沙箱,任何内联响应都不执行脚本。
+	ctx.Header("X-Content-Type-Options", "nosniff")
+	ctx.Header("Content-Security-Policy", "default-src 'none'; sandbox")
+	ctx.Header("Content-Disposition", disposition+`; filename="`+sanitizeFilename(filename)+`"`)
 	ctx.DataFromReader(http.StatusOK, length, contentType, rc, nil)
 }
 
