@@ -277,18 +277,28 @@ func (ps *ApiService) ApiQueryAnalystUpdateLog(ctx context.Context, username, ta
 		return "", err
 	}
 	// Reshape the finished task's content into the JSON chat-ai parses, the
-	// same as the live dispatch and the answer-check overlay.
+	// same as the live dispatch and the answer-check overlay. deep_genome's
+	// assembled report arrives as result.final_report (no formatted envelope),
+	// so fall back to it when there is no formatted block.
 	answer := rec.Answer
 	if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
 		answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
+	} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
+		answer = rxBot.ShapeAnswer(rec.Agent, fr, nil)
 	}
-	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
-		Where("id = ?", row.Id).Updates(map[string]interface{}{
-		"answer":           answer,
+	updates := map[string]interface{}{
 		"status":           strings.ToUpper(rec.Status), // chat-ai gates download on "SUCCEEDED"; Bot is lowercase
 		"compute_resource": computeResource,
 		"log_status":       "sync_succeeded",
-	}).Error; err != nil {
+	}
+	// Never clobber an existing answer with a blank reshape: a completed run
+	// that still has no rendered answer (e.g. analyst, whose formatted answer
+	// is not yet produced by Bot) must leave the prior column untouched.
+	if answer != "" {
+		updates["answer"] = answer
+	}
+	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+		Where("id = ?", row.Id).Updates(updates).Error; err != nil {
 		return "", err
 	}
 	return answer, nil

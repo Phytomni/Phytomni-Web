@@ -456,10 +456,14 @@ func (ps *ApiService) overlayBotContent(ctx context.Context, dialogueId string, 
 		}
 		// Reshape from the run's formatted envelope (/v1/runs keeps
 		// result.formatted in default mode) so cited/data history replays carry
-		// the JSON chat-ai parses; fall back to the flat answer for runs that
-		// have no formatted block yet (e.g. still running).
+		// the JSON chat-ai parses. deep_genome's assembled report arrives as
+		// result.final_report (no formatted block); fall back to it, then to the
+		// flat answer for runs with no rendered content yet (still running, or
+		// analyst awaiting Bot's formatted answer).
 		if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
 			row.Answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
+		} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
+			row.Answer = rxBot.ShapeAnswer(rec.Agent, fr, nil)
 		} else if rec.Answer != "" {
 			row.Answer = rec.Answer
 		}
