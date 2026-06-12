@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -12,20 +13,40 @@ import (
 
 	"nky_client_go/db"
 	rxBot "nky_client_go/external/bot"
+	"nky_client_go/model"
 )
 
-// setupTestDB 建一个空的 in-memory SQLite,创建 s_question_agent_logs 最小列集,
+// readStatusAnswer reads back a row's status+answer (COALESCE so a NULL column
+// scans as "" instead of erroring) — used by the update-log / bot-sync tests
+// that write then verify.
+func readStatusAnswer(t *testing.T, gdb *gorm.DB, id int64) (status, answer string) {
+	t.Helper()
+	row := gdb.Raw(`SELECT COALESCE(status,''), COALESCE(answer,'') FROM s_question_agent_logs WHERE id = ?`, id).Row()
+	if err := row.Scan(&status, &answer); err != nil {
+		t.Fatalf("read row %d: %v", id, err)
+	}
+	return status, answer
+}
+
+// setupTestDB 建一个空的 in-memory SQLite,创建 s_question_agent_logs 的最小列集,
 // 注册到全局 db registry,返回 *gorm.DB 供测试 seed 数据。
 //
 // 之所以手写 CREATE TABLE 而不是 AutoMigrate `SQuestionAgentLog`:
 // 该 model 多个 `type:enum` GORM tag(MySQL 专有),SQLite AutoMigrate 不识别;
-// 手写 CREATE TABLE 只列 ApiAnswerCheck 实际查的列(id/user_name/dialogue_id/f_id/delete_at),
-// 其余字段 GORM Scan 时按零值填,不影响本测试。
+// 手写 CREATE TABLE 只列 answer-check / update-log / bot-sync 路径实际读写的列
+// (id/user_name/dialogue_id/f_id/bot_run_id/status/answer + task_id/server_id/
+// compute_resource/log_status/delete_at),其余字段 GORM Scan 时按零值填。
+//
+// 连接池钉 1:`:memory:` 下每条连接是独立 DB,写后读若落到不同连接会读空;
+// update-log / bot-sync 测试是"写回再读校验",必须单连接才稳。
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
+	}
+	if sqlDB, err := gdb.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
 	}
 	ddl := `CREATE TABLE s_question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,6 +57,10 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		answer TEXT,
 		tool_name TEXT,
 		bot_run_id TEXT,
+		server_id TEXT,
+		task_id TEXT,
+		compute_resource TEXT,
+		log_status TEXT,
 		status TEXT,
 		created_at DATETIME,
 		updated_at DATETIME,
@@ -198,5 +223,100 @@ func TestApiAnswerCheck_OverlayDegradesOnBot500(t *testing.T) {
 	}
 	if got[0].Status != "RUNNING" {
 		t.Errorf("expected legacy status preserved on Bot 500, got %q", got[0].Status)
+	}
+}
+
+// runRecordServer returns an httptest server answering GET /v1/runs/{id} with a
+// single RunRecord JSON body, and points BotConfig at it for the test.
+func runRecordServer(t *testing.T, body string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+}
+
+// TestSyncBotRuns_WritesReportAndStatusOnChange: a RUNNING deep_genome row whose
+// Bot run has finished gets its status flipped and the assembled final_report
+// reshaped into the {content, doc_list} JSON chat-ai parses.
+func TestSyncBotRuns_WritesReportAndStatusOnChange(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(50, 'dlg-d', 'alice', 'q', 'server任务创建成功：t1', 'DeepGenomeAgent', 'run-d', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	runRecordServer(t, `{"run_id":"run-d","agent":"deep_genome","status":"succeeded","result":{"final_report":"# Gene Report"}}`)
+
+	SyncBotRuns([]model.SQuestionAgentLog{{Id: 50, BotRunId: "run-d", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
+
+	status, answer := readStatusAnswer(t, gdb, 50)
+	if status != "SUCCEEDED" {
+		t.Errorf("status = %q, want SUCCEEDED", status)
+	}
+	if !strings.Contains(answer, "Gene Report") || !strings.Contains(answer, "content") {
+		t.Errorf("answer not reshaped final_report JSON: %q", answer)
+	}
+}
+
+// TestSyncBotRuns_SkipsBlankStatus pins the blank-status guard: a Bot run that
+// comes back with an empty status must NOT be written (an empty status would be
+// persisted verbatim by GORM's map Updates and strand the row out of the cron's
+// WHERE status='RUNNING' poll set). The whole row stays untouched.
+func TestSyncBotRuns_SkipsBlankStatus(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(51, 'dlg-e', 'alice', 'q', 'prior', 'DeepGenomeAgent', 'run-e', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	runRecordServer(t, `{"run_id":"run-e","agent":"deep_genome","status":"","result":{"final_report":"# X"}}`)
+
+	SyncBotRuns([]model.SQuestionAgentLog{{Id: 51, BotRunId: "run-e", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
+
+	status, answer := readStatusAnswer(t, gdb, 51)
+	if status != "RUNNING" || answer != "prior" {
+		t.Errorf("blank status should skip all writes, got status=%q answer=%q", status, answer)
+	}
+}
+
+// TestSyncBotRuns_DisabledIsNoOp: with the gateway off, the cron reconciler is
+// a no-op and never touches the row (or panics on a nil client).
+func TestSyncBotRuns_DisabledIsNoOp(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, user_name, query, tool_name, bot_run_id, status, created_at) VALUES
+		(52, 'dlg-f', 'alice', 'q', 'DeepGenomeAgent', 'run-f', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	rxBot.BotConfig = nil // gateway disabled
+
+	SyncBotRuns([]model.SQuestionAgentLog{{Id: 52, BotRunId: "run-f", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
+
+	if status, _ := readStatusAnswer(t, gdb, 52); status != "RUNNING" {
+		t.Errorf("disabled gateway should not touch the row, status = %q", status)
+	}
+}
+
+// TestSyncBotRuns_SkipsEmptyRunID: a RUNNING row carrying no bot_run_id is
+// skipped (warn-and-continue), never sent to Bot, and left unchanged.
+func TestSyncBotRuns_SkipsEmptyRunID(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, user_name, query, tool_name, bot_run_id, status, created_at) VALUES
+		(53, 'dlg-g', 'alice', 'q', 'DeepGenomeAgent', '', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// BaseURL is deliberately unreachable: a row with no run id must never call Bot.
+	rxBot.BotConfig = &rxBot.Config{BaseURL: "http://127.0.0.1:0", ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	SyncBotRuns([]model.SQuestionAgentLog{{Id: 53, BotRunId: "", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
+
+	if status, _ := readStatusAnswer(t, gdb, 53); status != "RUNNING" {
+		t.Errorf("empty run id should be skipped, status = %q", status)
 	}
 }
