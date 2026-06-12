@@ -157,8 +157,6 @@ const handleSubmit = () => {
 };
 
 const handleLogin = () => {
-  console.log("开始登录...");
-
   // 创建FormData对象
   const loginFormData = new FormData();
   loginFormData.append("email", formData.email);
@@ -177,25 +175,19 @@ const handleLogin = () => {
         };
         message?: string;
       }) => {
-        console.log("登录响应:", res);
         if (res.code === 200) {
-          console.log("登录成功，准备跳转...");
           ElMessage.success("Login successful");
           setToken(res.data!.token);
           //保存用户名
           useUserStore.SET_USER_NAME(res.data!.user_name);
           //保存登录状态
           useUserStore.SET_LOGIN_STATUS(res.data!.login_status);
-          console.log("用户名已保存到store:", useUserStore.name);
-          console.log("登录状态已保存到store:", useUserStore.login_status);
-          console.log("Store状态:", useUserStore);
 
           // 检查是否是首次登录，需要修改密码
           if (res.data!.login_status === "0") {
             // Tutorial 触发不在此 set — 改密成功后由 change-password.vue 写
             // sessionStorage.tutorial_pending,chat/index.vue checkTutorialStatus
             // 一次性消费再翻 SET_SEEN_TUTORIAL('0')(TW-D15)。
-            console.log("首次登录，跳转到修改密码页面");
             ElNotification({
               title: t("login.firstLoginTitle"),
               message: t("login.firstLoginMessage"),
@@ -218,10 +210,8 @@ const handleLogin = () => {
             });
           }
 
-          console.log("Token已设置，跳转到chat页面");
           router.replace(safeRedirect(route.query.redirect, "/chat"));
         } else {
-          console.log("登录失败，状态码:", res.code);
           const errorMessage = res.message || t("login.loginFailed");
 
           // 后端通过 res.data.locked 标记上报锁定态(替代旧的子串嗅探)
@@ -240,7 +230,6 @@ const handleLogin = () => {
       }
     )
     .catch((err: any) => {
-      console.log("登录异常:", err);
       const response = err.response?.data;
       const errorMessage =
         response?.message || err.message || t("login.loginFailed");

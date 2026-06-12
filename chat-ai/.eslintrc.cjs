@@ -49,5 +49,14 @@ module.exports = {
         node: true,
       },
     },
+    {
+      // Auth paths must never log request/response/error objects — they carry
+      // the bearer token (Authorization / satoken headers; res.data.token).
+      // Scoped here because the rest of the app uses console legitimately.
+      files: ["src/views/login/**", "src/permission.ts"],
+      rules: {
+        "no-console": "error",
+      },
+    },
   ],
 };

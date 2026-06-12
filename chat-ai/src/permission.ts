@@ -32,6 +32,7 @@ function readLoginStatusFromLocalStorage(): string {
   try {
     return localStorage.getItem("loginStatus") || "1";
   } catch (err) {
+    // eslint-disable-next-line no-console -- non-sensitive storage diagnostic
     console.warn(
       'localStorage unavailable for login_status read; defaulting to "1"',
       err
@@ -102,11 +103,9 @@ router.beforeEach((to, from, next) => {
       const UserStore = userStore();
       UserStore.getUserTools()
         .then(() => {
-          console.log("getUserTools success");
           next();
         })
-        .catch((err) => {
-          console.error("getUserTools failed:", err);
+        .catch(() => {
           // Stale-token break — clear token so the next beforeEach takes
           // the unauthed branch, restoring /login as terminal and breaking
           // the /chat ↔ /login redirect cycle.
