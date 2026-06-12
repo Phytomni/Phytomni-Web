@@ -163,3 +163,40 @@ func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
 		t.Errorf("status not uppercased, got %q", got[0].Status)
 	}
 }
+
+// TestApiAnswerCheck_OverlayDegradesOnBot500 pins TW-001: when the Bot
+// /v1/runs read fails (HTTP 500), overlayBotContent must degrade — keep the
+// legacy MySQL fields, surface no error, and never panic — even though the
+// failure is now also captured to Sentry for observability.
+func TestApiAnswerCheck_OverlayDegradesOnBot500(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(40, 'dlg-e', 0, 'alice', 'legacy-q', 'legacy-a', 'KnowledgeAgent', 'run-e', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"boom"}`))
+	}))
+	defer srv.Close()
+
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	defer func() { rxBot.BotConfig = nil }()
+
+	ps := NewApiService()
+	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-e")
+	if err != nil {
+		t.Fatalf("expected nil err on Bot 500 (degrade), got %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(got))
+	}
+	if got[0].Answer != "legacy-a" || got[0].Query != "legacy-q" {
+		t.Errorf("expected legacy fields preserved on Bot 500, got query=%q answer=%q", got[0].Query, got[0].Answer)
+	}
+	if got[0].Status != "RUNNING" {
+		t.Errorf("expected legacy status preserved on Bot 500, got %q", got[0].Status)
+	}
+}

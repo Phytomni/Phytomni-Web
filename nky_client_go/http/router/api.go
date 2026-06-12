@@ -41,9 +41,8 @@ func Api(r *gin.RouterGroup) {
 		prefixTokenRouter.POST("/user/feedback", homeTokenHandler.ApiUserFeedback)             //用户反馈记录
 		prefixTokenRouter.GET("/user/profile", homeTokenHandler.ApiGetUserProfile)             //查询个人资料
 
-		prefixTokenRouter.GET("/async_task/list", homeTokenHandler.ApiAsyncTaskList) //查询任务列表
-		prefixTokenRouter.GET("/async_task/info", homeTokenHandler.ApiAsyncTaskInfo) //查询任务状态
-		//prefixTokenRouter.GET("/get_analyst_agent_log", homeTokenHandler.ApiGetAnalystAgentLog) //查询分析日志
+		prefixTokenRouter.GET("/async_task/list", homeTokenHandler.ApiAsyncTaskList)      //查询任务列表
+		prefixTokenRouter.GET("/async_task/info", homeTokenHandler.ApiAsyncTaskInfo)      //查询任务状态
 		prefixTokenRouter.GET("/analyst/get_log", homeTokenHandler.ApiAnalystAgentGetLog) //查询分析日志
 
 		// 增加日志查询接口
@@ -85,8 +84,6 @@ func Api(r *gin.RouterGroup) {
 		//todo server内部开放路由
 		serverRouter.POST("/create_task", homeServerHandler.ApiServerCreateTask) //客户使用server创建
 		serverRouter.POST("/update_task", homeServerHandler.ApiServerUpdateTask) //客户使用server修改
-
-		//serverRouter.GET("/get_analyst_agent_log", homeServerHandler.ApiGetAnalystAgentLog) //获取日志下载链接
 	}
 }
 

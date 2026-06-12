@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
@@ -488,7 +489,9 @@ func (ps *ApiService) overlayBotContent(ctx context.Context, dialogueId string, 
 	}
 	resp, err := rxBot.NewClient().ListRuns(ctx, dialogueId)
 	if err != nil {
+		// 降级:回落 legacy 字段(语义不变);同时上报 Sentry 使 Bot 读路径失败可观测/可告警。
 		rxLog.Sugar().Warnw("answer-check bot list runs failed, using legacy fields", "dialogue_id", dialogueId, "err", err)
+		sentry.CaptureException(err)
 		return
 	}
 	byRun := make(map[string]rxBot.RunRecord, len(resp.Data))
