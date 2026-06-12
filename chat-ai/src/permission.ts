@@ -13,7 +13,7 @@ import { safeRedirect } from "@/utils/authRedirect";
 import { ElNotification } from "element-plus";
 import type { NotificationHandle } from "element-plus";
 import { i18n } from "@/locales";
-import type { RouteRecordRaw } from "vue-router";
+import type { RouteLocationNormalized, NavigationGuardNext } from "vue-router";
 
 NProgress.configure({ showSpinner: false });
 
@@ -64,7 +64,11 @@ function closeFirstLoginNotification(): void {
   }
 }
 
-router.beforeEach((to, from, next) => {
+export function beforeEachGuard(
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalized,
+  next: NavigationGuardNext
+) {
   NProgress.start();
   document.title = "Phytomni";
   // Close stale first-login notification on /login transitions
@@ -127,20 +131,9 @@ router.beforeEach((to, from, next) => {
       NProgress.done();
     }
   }
-});
-
-function setRoute(routes: RouteRecordRaw[], path?: string) {
-  routes.forEach((item: RouteRecordRaw) => {
-    if (path) {
-      router.addRoute(path, item);
-    } else {
-      router.addRoute(item);
-    }
-    if (item.children?.length) {
-      setRoute(item.children, item.path);
-    }
-  });
 }
+
+router.beforeEach(beforeEachGuard);
 
 router.afterEach(() => {
   NProgress.done();
