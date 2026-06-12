@@ -1,7 +1,9 @@
 package db
 
 import (
-	"log"
+	stdLog "log"
+	"os"
+	"time"
 
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
@@ -34,10 +36,18 @@ func InitMysqlDB() error {
 		}
 
 		// 设置自定义 Logger
-		if cfg.Config.Logger == nil {
-			cfg.Config.Logger = logger.Default
-		}
-		cfg.Config.Logger = NewSqlLogger(cfg.Config.Logger)
+		// 开启 ParameterizedQueries：审计日志 sql_content 落库为 ? 占位符而非明文
+		// 字面值（邮箱/聊天内容/密码 hash 等不再随 SQL 入审计表）。
+		// ParameterizedQueries 设在底层 logger.Config 上(gorm.Config 无此字段);
+		// SqlLogger.ParamsFilter 转发到这个 base logger,使其返回 nil vars。
+		baseLogger := logger.New(stdLog.New(os.Stdout, "\r\n", stdLog.LstdFlags), logger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  logger.Warn,
+			IgnoreRecordNotFoundError: false,
+			Colorful:                  true,
+			ParameterizedQueries:      true,
+		})
+		cfg.Config.Logger = NewSqlLogger(baseLogger)
 
 		db, err := gorm.Open(dbGorm, &cfg.Config)
 		if err != nil {
@@ -57,7 +67,7 @@ func Get(name string) (*gorm.DB, bool) {
 func MustGet(name string) *gorm.DB {
 	db, ok := Get(name)
 	if !ok {
-		log.Fatalf("db.Get %s failed: db not init or config not found", name)
+		stdLog.Fatalf("db.Get %s failed: db not init or config not found", name)
 	}
 	return db
 }

@@ -18,6 +18,18 @@ func NewSqlLogger(l logger.Interface) *SqlLogger {
 	return &SqlLogger{Interface: l}
 }
 
+// ParamsFilter 转发到底层 logger 的 ParamsFilter。
+// GORM 在 callbacks.go 里对 db.Logger（即本 *SqlLogger）做 ParamsFilter 类型断言，
+// 但内嵌的 logger.Interface 方法集不含 ParamsFilter，断言会失败、参数化形同虚设。
+// 这里显式实现并转发：底层 logger 开启 ParameterizedQueries 时返回 nil vars，
+// 使 sql_content 落库为 ?, ? 占位符而非明文字面值。
+func (l *SqlLogger) ParamsFilter(ctx context.Context, sql string, params ...interface{}) (string, []interface{}) {
+	if filter, ok := l.Interface.(gorm.ParamsFilter); ok {
+		return filter.ParamsFilter(ctx, sql, params...)
+	}
+	return sql, params
+}
+
 // LogMode 实现 gorm/logger.Interface 的 LogMode 方法
 // 这一步非常关键，因为 service 层经常使用 .Debug()，它会调用 LogMode。
 // 如果不重写此方法，.Debug() 会返回底层的 logger 实例，导致我们的 Trace 钩子丢失。
