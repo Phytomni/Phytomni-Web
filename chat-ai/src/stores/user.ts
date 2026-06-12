@@ -18,11 +18,21 @@ import {
 } from "@/utils/auth";
 import { getUserTool } from "@/api/chat";
 import Cookies from "js-cookie";
+interface UserToolResponse {
+  code: number;
+  message?: string;
+  data: {
+    permission: string;
+    tool_list: string[];
+    permission_list?: string[];
+  };
+}
+
 interface IState {
   name?: string;
   avatar?: string;
-  roles: any[];
-  permissions: any[];
+  roles: string[];
+  permissions: string[];
   permission_list: string[]; // 新增权限列表字段
   userType: string;
   token: string | undefined;
@@ -63,7 +73,7 @@ export default defineStore({
     getUserTools() {
       return new Promise((resolve, reject) => {
         getUserTool()
-          .then((res: any) => {
+          .then((res: UserToolResponse) => {
             if (res.code === 200) {
               this.SET_NAME(res.data.permission);
               this.SET_ROLES(res.data.tool_list);
@@ -106,7 +116,6 @@ export default defineStore({
           console.warn("FedLogOut: sessionStorage.clear failed", err);
           failures.push("sessionStorage");
         }
-        // TODO 如无特殊要求这里可直接回到登录页(使用window.open)
         if (failures.length > 0) {
           reject(
             new Error(`FedLogOut storage clears failed: ${failures.join(", ")}`)
@@ -131,10 +140,10 @@ export default defineStore({
     SET_USER_TYPE(userType: string) {
       this.userType = userType;
     },
-    SET_ROLES(roles: any[]) {
+    SET_ROLES(roles: string[]) {
       this.roles = roles;
     },
-    SET_PERMISSIONS(permissions: any[]) {
+    SET_PERMISSIONS(permissions: string[]) {
       this.permissions = permissions;
     },
     SET_PERMISSION_LIST(permissionList: string[]) {
