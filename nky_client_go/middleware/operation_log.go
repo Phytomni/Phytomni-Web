@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/url"
+	rxLog "nky_client_go/log"
 	"nky_client_go/model"
 	"strings"
 	"time"
@@ -52,25 +53,42 @@ func looksSensitive(key string) bool {
 	return false
 }
 
-// redactJSONBody walks the parsed JSON top level and masks any value
-// whose key name looks sensitive. Non-JSON payloads, parse failures,
-// and non-object roots are returned unchanged.
+// redactValue 递归遍历任意 JSON 值,对 map 中命中 looksSensitive 的 key
+// 整体打码(不再深入其值),对其余 map 值与数组元素继续递归。标量原样返回。
+func redactValue(v interface{}) interface{} {
+	switch node := v.(type) {
+	case map[string]interface{}:
+		for key, child := range node {
+			if looksSensitive(key) {
+				node[key] = redactedMask
+				continue
+			}
+			node[key] = redactValue(child)
+		}
+		return node
+	case []interface{}:
+		for i, child := range node {
+			node[i] = redactValue(child)
+		}
+		return node
+	default:
+		return v
+	}
+}
+
+// redactJSONBody 解析 JSON body 并递归遮蔽所有命中 looksSensitive 的 key
+// (含嵌套 object / array)。解析失败 → 返回打码占位,绝不回落原文。
 func redactJSONBody(body []byte) string {
 	if len(body) == 0 {
 		return ""
 	}
-	var bodyMap map[string]interface{}
-	if err := json.Unmarshal(body, &bodyMap); err != nil {
-		return string(body)
+	var root interface{}
+	if err := json.Unmarshal(body, &root); err != nil {
+		return "[redacted: unparseable body]"
 	}
-	for key := range bodyMap {
-		if looksSensitive(key) {
-			bodyMap[key] = redactedMask
-		}
-	}
-	masked, err := json.Marshal(bodyMap)
+	masked, err := json.Marshal(redactValue(root))
 	if err != nil {
-		return string(body)
+		return "[redacted: unparseable body]"
 	}
 	return string(masked)
 }
@@ -98,6 +116,26 @@ func redactQueryParams(raw string) string {
 		return raw
 	}
 	return values.Encode()
+}
+
+// redactBodyByContentType 按 Content-Type 分流脱敏 request body,绝不落原文:
+//   - multipart/form-data        → 整体丢弃占位(里面通常是文件)
+//   - x-www-form-urlencoded      → 复用 redactQueryParams 的 ParseQuery + 打码逻辑
+//   - JSON                       → redactJSONBody 递归遮蔽
+//   - 其他 / 无法识别            → 打码占位,绝不存原文
+func redactBodyByContentType(contentType string, body []byte) string {
+	switch {
+	case strings.Contains(contentType, "multipart/form-data"):
+		return "[Multipart Content - Body Ignored]"
+	case strings.Contains(contentType, "application/x-www-form-urlencoded"):
+		return redactQueryParams(string(body))
+	case strings.Contains(contentType, "application/json"):
+		return redactJSONBody(body)
+	case len(body) == 0:
+		return ""
+	default:
+		return "[redacted: unsupported content-type]"
+	}
 }
 
 // OperationLog 用户操作日志中间件
@@ -174,15 +212,10 @@ func OperationLog() gin.HandlerFunc {
 			errorMessage = c.Errors.String()
 		}
 
-		// Body 脱敏处理 — 不再受限于 /login / /register / /modify/password
-		// 三条白名单;任何 JSON body 都按 sensitiveFieldSubstrings 通配
-		// 匹配后写入。Multipart upload 体仍旧整体丢弃(里面通常是文件)。
-		var bodyStr string
-		if !strings.Contains(contentType, "multipart/form-data") {
-			bodyStr = redactJSONBody(bodyBytes)
-		} else {
-			bodyStr = "[Multipart Content - Body Ignored]"
-		}
+		// Body 脱敏处理 — 按 Content-Type 分流,绝不落原文:
+		// urlencoded 走 redactQueryParams 同款打码(覆盖 /login / /register /
+		// /modify/password 的 PostForm 凭据),JSON 递归遮蔽,其余打码占位。
+		bodyStr := redactBodyByContentType(contentType, bodyBytes)
 
 		// 同一套脱敏规则覆盖 query string,避免 ?token=xxx / ?api_key=xxx
 		// 之类的 URL 形态把凭据写进 audit log。
@@ -214,8 +247,8 @@ func OperationLog() gin.HandlerFunc {
 			// 写入数据库
 			// 注意：这里需要确保 model.Default() 返回的 DB 实例是并发安全的
 			if err := model.Default().Create(&logEntry).Error; err != nil {
-				// 记录日志失败，通常只能输出到控制台或文件日志
-				// fmt.Printf("Failed to create operation log: %v\n", err)
+				// 只记 err 元数据,绝不记 body —— body 可能含已脱敏前的敏感片段
+				rxLog.Sugar().Errorw("operation log insert failed", "err", err)
 			}
 		}(userId, userEmail, method, path, queryParams, bodyStr, clientIP, userAgent, errorMessage, statusCode, latency)
 	}
