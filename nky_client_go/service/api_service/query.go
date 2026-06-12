@@ -13,6 +13,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// ErrGatewayDisabled is returned when the Bot proxy is turned off in config.
+// The handler maps it to 503 (service unavailable) rather than a generic 500,
+// so ops can tell a deliberate-off gateway from a real server failure.
+var ErrGatewayDisabled = errors.New("bot gateway is disabled")
+
+// ErrUnknownTool is returned when the requested tool resolves to no Bot slug.
+// The handler maps it to 400 (client error) rather than a generic 500, since a
+// bad tool name is a caller mistake, not a server fault.
+var ErrUnknownTool = errors.New("unknown tool")
+
 // QueryFile is one uploaded attachment, read into memory by the handler.
 type QueryFile struct {
 	Filename string
@@ -69,7 +79,7 @@ var slugToToolName = map[string]string{
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
 func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
-		return nil, errors.New("bot gateway is disabled")
+		return nil, ErrGatewayDisabled
 	}
 	client := rxBot.NewClient()
 
@@ -88,7 +98,7 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 	// 2. Web-owned alias -> Bot slug. Empty tool defaults to the chat agent.
 	slug, ok := rxBot.SlugFor(in.Tool)
 	if !ok {
-		return nil, fmt.Errorf("unknown tool %q", in.Tool)
+		return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
 	}
 
 	// 3. Resolve dialogue_id + f_id from the threading model above. Ownership
@@ -262,7 +272,7 @@ func (ps *ApiService) resolveDialogue(ctx context.Context, username string, in Q
 // Web row. chat-ai posts both task_id and compute_resource.
 func (ps *ApiService) ApiQueryAnalystUpdateLog(ctx context.Context, username, taskID, computeResource string) (string, error) {
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
-		return "", errors.New("bot gateway is disabled")
+		return "", ErrGatewayDisabled
 	}
 	var row model.SQuestionAgentLog
 	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).

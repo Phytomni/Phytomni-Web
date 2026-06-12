@@ -15,6 +15,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// queryErrorStatus maps a /query service error to the HTTP status and message
+// chat-ai and ops should see, so a disabled gateway (503) and an unknown tool
+// (400) are distinguishable from a client-correctable Bot 4xx (its surfaced
+// message) and from an opaque server failure (500, generic message).
+func queryErrorStatus(err error) (int, string) {
+	switch {
+	case errors.Is(err, api_service.ErrGatewayDisabled):
+		return http.StatusServiceUnavailable, "服务暂不可用"
+	case errors.Is(err, api_service.ErrUnknownTool):
+		return http.StatusBadRequest, "未知的工具类型"
+	}
+	if msg, ok := rxBot.SurfaceableMessage(err); ok {
+		return http.StatusBadRequest, msg
+	}
+	return http.StatusInternalServerError, "请求处理失败"
+}
+
 // ApiQuery is the gateway entry for chat sends. It parses the multipart form
 // chat-ai posts, hands it to the service, and returns the row chat-ai renders.
 // chat-ai consumes this as JSON via axios; an SSE pass-through path (the Bot
@@ -79,13 +96,13 @@ func (ph *ApiHandler) ApiQuery(ctx *gin.Context) {
 
 	data, err := ph.service.ApiQuery(ctx, name.(string), in)
 	if err != nil {
-		if msg, ok := rxBot.SurfaceableMessage(err); ok {
-			rxLog.Sugar().Warnw("ApiQuery bot client error", "user", name, "err", err)
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": msg})
-			return
+		status, msg := queryErrorStatus(err)
+		if status >= http.StatusInternalServerError {
+			rxLog.Sugar().Errorw("ApiQuery failed", "user", name, "err", err)
+		} else {
+			rxLog.Sugar().Warnw("ApiQuery client error", "user", name, "status", status, "err", err)
 		}
-		rxLog.Sugar().Errorw("ApiQuery failed", "user", name, "err", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "请求处理失败"})
+		ctx.JSON(status, gin.H{"code": status, "message": msg})
 		return
 	}
 	ctx.JSON(errs.SucResp(data))
@@ -100,13 +117,13 @@ func (ph *ApiHandler) ApiQueryAnalystUpdateLog(ctx *gin.Context) {
 
 	result, err := ph.service.ApiQueryAnalystUpdateLog(ctx, name.(string), taskID, computeResource)
 	if err != nil {
-		if msg, ok := rxBot.SurfaceableMessage(err); ok {
-			rxLog.Sugar().Warnw("ApiQueryAnalystUpdateLog bot client error", "user", name, "err", err)
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": msg})
-			return
+		status, msg := queryErrorStatus(err)
+		if status >= http.StatusInternalServerError {
+			rxLog.Sugar().Errorw("ApiQueryAnalystUpdateLog failed", "user", name, "err", err)
+		} else {
+			rxLog.Sugar().Warnw("ApiQueryAnalystUpdateLog client error", "user", name, "status", status, "err", err)
 		}
-		rxLog.Sugar().Errorw("ApiQueryAnalystUpdateLog failed", "user", name, "err", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "请求处理失败"})
+		ctx.JSON(status, gin.H{"code": status, "message": msg})
 		return
 	}
 	ctx.JSON(errs.SucResp(result))
