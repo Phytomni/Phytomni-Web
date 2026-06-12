@@ -17,9 +17,13 @@ import (
 )
 
 func (ph *ApiHandler) ApiGetUserProfile(ctx *gin.Context) {
-	email := ctx.Query("email")
-	if email == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "邮箱不能为空"})
+	// profile 接口为"查自己"语义:邮箱只从 AuthMiddleware 注入的 JWT 身份
+	// (ctx.Get("username"))取,绝不信任前端传来的 ?email=,以关闭 IDOR。
+	// 前端仍发 ?email=,后端忽略,合法自查行为不变。
+	name, ok := ctx.Get("username")
+	email, _ := name.(string)
+	if !ok || email == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未登录"})
 		return
 	}
 
