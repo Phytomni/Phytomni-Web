@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -207,9 +208,25 @@ func (ps *ApiService) ApiDownloadAnalystAgentObsFile(ctx context.Context, userna
 }
 
 func (ps *ApiService) ApiDownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
-	keys, err := rxBot.NewClient().ListObsKeys(ctx, obsPath)
-	if err != nil {
-		return nil, friendlyRelayErr(err)
+	// 归属校验 + 取 reconcile 写入的图片路径(切流后由完成态 reconcile 填充)
+	var row model.SQuestionAgentLog
+	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+		Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
+		First(&row).RowsAffected; result == 0 {
+		return nil, errors.New("没有查找到对应的obs路径数据")
+	}
+
+	var keys []string
+	if row.ImagePaths != "" {
+		_ = json.Unmarshal([]byte(row.ImagePaths), &keys)
+	}
+	if len(keys) == 0 {
+		// 旧行 / image_paths 为空:退回按前缀列举(保持今日行为)
+		var err error
+		keys, err = rxBot.NewClient().ListObsKeys(ctx, obsPath)
+		if err != nil {
+			return nil, friendlyRelayErr(err)
+		}
 	}
 
 	var imageUrls []string
