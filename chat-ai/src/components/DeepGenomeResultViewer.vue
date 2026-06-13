@@ -440,18 +440,12 @@ const convertFilePath = (path) => {
 const processInlineMarkdown = (line) => {
   if (!line) return line;
 
-  // 调试：检测包含 Protocol Details 的行
-  if (line.includes("Protocol Details") || line.includes("&lt;a")) {
-    console.log("Processing line with a tag:", line);
-  }
-
   // 先恢复被转义的 HTML <a> 标签（支持各种属性组合）
   // 匹配模式：&lt;a href=&quot;...&quot; ... &gt;...&lt;/a&gt;
   // 使用更宽松的匹配模式来处理包含HTML实体的属性
   line = line.replace(
     /&lt;a\s+(.*?)&gt;(.*?)&lt;\/a&gt;/g,
     function (match, attributes, text) {
-      console.log("Found a tag match:", { match, attributes, text });
       // 恢复属性中的转义字符
       attributes = attributes
         .replace(/&quot;/g, '"')
@@ -472,14 +466,9 @@ const processInlineMarkdown = (line) => {
       attributes = sanitizeAnchorAttributes(attributes);
 
       const result = `<a ${attributes}>${text}</a>`;
-      console.log("Converted to:", result);
       return result;
     }
   );
-
-  if (line.includes("Protocol Details")) {
-    console.log("After a tag processing:", line);
-  }
 
   // 先处理.cif格式的图片
   line = line.replace(/!\[(.*?)\]\((.*?\.cif)\)/g, function (match, alt, src) {
@@ -548,15 +537,12 @@ const processInlineMarkdown = (line) => {
 
 // 处理CIF容器的函数
 const processCifContainers = async () => {
-  console.log("processCifContainers function called");
   await nextTick();
 
   // 查找所有未处理的CIF容器
   const cifContainers = document.querySelectorAll(
     '.cif-container[data-src$=".cif"]:not([data-processed])'
   );
-
-  console.log(`Found ${cifContainers.length} unprocessed CIF containers`);
 
   cifContainers.forEach((container) => {
     const src = container.getAttribute("data-src") || "";
@@ -570,7 +556,6 @@ const processCifContainers = async () => {
       const load3DMol = () => {
         return new Promise((resolve, reject) => {
           if (window.$3Dmol) {
-            console.log("3Dmol.js already loaded");
             resolve();
             return;
           }
@@ -579,7 +564,6 @@ const processCifContainers = async () => {
           script.src = "/static/js/3Dmol-min.js";
           script.onload = () => {
             if (window.$3Dmol) {
-              console.log("3Dmol.js loaded successfully");
               resolve();
             } else {
               reject(new Error("3Dmol.js loaded but $3Dmol is not defined"));
@@ -617,8 +601,6 @@ const processCifContainers = async () => {
             }
           }
 
-          console.log("Attempting to load CIF file from:", publicSrc);
-
           // 创建3Dmol查看器
           const viewer = window.$3Dmol.createViewer(viewerDiv, {
             backgroundColor: "#f5f5f5",
@@ -643,8 +625,6 @@ const processCifContainers = async () => {
               viewer.zoomTo();
               viewer.render();
               viewer.animate();
-
-              console.log("CIF file loaded and rendered successfully");
             } catch (error) {
               console.error("Error loading or rendering CIF file:", error);
               viewerDiv.innerHTML = `<div class="error">无法加载或渲染CIF文件: ${
@@ -672,7 +652,6 @@ const processCifContainers = async () => {
 // --- 转换逻辑 ---
 const convertMarkdown = (text) => {
   const lines = text.split("\\n"); // 正确分割行
-  console.log(lines.length);
   const blocks = [];
   let currentH3CardContent = "";
   let currentH3CardHeader = "";
@@ -1705,7 +1684,6 @@ const setupIntersectionObserver = () => {
 
 // 在 onMounted 中设置 Intersection Observer
 onMounted(async () => {
-  console.log("markdown", props.markdown);
   convertMarkdown(props.markdown);
 
   // 使用 nextTick 确保 DOM 更新后处理 CIF 容器和添加图片点击事件
