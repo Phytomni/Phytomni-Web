@@ -64,6 +64,7 @@ type SQuestionAgentLog struct {
 	FileName          string     `gorm:"column:file_name;type:varchar(255);comment:文件名" json:"file_name"`
 	UploadPath        string     `gorm:"column:upload_path;type:varchar(255);comment:上传路径" json:"upload_path"`
 	DownloadPath      string     `gorm:"column:download_path;type:varchar(255);comment:下载路径" json:"download_path"`
+	ImagePaths        string     `gorm:"column:image_paths;type:text;comment:图廊图片OBS路径(JSON数组);NULL" json:"image_paths"`
 	ComputeResource   string     `gorm:"column:compute_resource;type:varchar(50);comment:资源选择" json:"compute_resource"`
 	ServerFilePath    string     `gorm:"column:server_file_path;type:varchar(255);comment:server文件路径" json:"server_file_path"`
 	ToolName          string     `gorm:"column:tool_name;type:varchar(30);comment:工具类型;NOT NULL" json:"tool_name"`

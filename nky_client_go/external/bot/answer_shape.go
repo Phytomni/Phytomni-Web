@@ -150,6 +150,35 @@ func ParseRunFinalReport(raw json.RawMessage) (string, bool) {
 	return env.FinalReport, true
 }
 
+// ParseRunArtifacts lifts result.artifacts[] out of a RunRecord.Result. Each
+// entry is one finished sub-task's outputs ({task_id, output_dir, paths}). It
+// returns the non-empty output_dirs (the first becomes the representative
+// gallery prefix written into download_path) and the flattened object paths
+// across all tasks (the full multi-directory set). ok is false when there are
+// no artifacts. A sub-task with an empty paths slice (best-effort OBS glob) is
+// tolerated. No image filtering here — the gallery handler owns the .png filter.
+func ParseRunArtifacts(raw json.RawMessage) (dirs []string, paths []string, ok bool) {
+	if len(raw) == 0 {
+		return nil, nil, false
+	}
+	var env struct {
+		Artifacts []struct {
+			OutputDir string   `json:"output_dir"`
+			Paths     []string `json:"paths"`
+		} `json:"artifacts"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil || len(env.Artifacts) == 0 {
+		return nil, nil, false
+	}
+	for _, a := range env.Artifacts {
+		if a.OutputDir != "" {
+			dirs = append(dirs, a.OutputDir)
+		}
+		paths = append(paths, a.Paths...)
+	}
+	return dirs, paths, true
+}
+
 // unquote strips surrounding quotes from a JSON-encoded scalar so a string
 // file_id renders without quotes when used as a title fallback.
 func unquote(b json.RawMessage) []byte {

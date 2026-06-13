@@ -183,3 +183,47 @@ func TestShapeAnswer_DeepGenomeFinalReport(t *testing.T) {
 		t.Errorf("expected empty doc_list array, got %s", got)
 	}
 }
+
+func TestParseRunArtifacts(t *testing.T) {
+	raw := json.RawMessage(`{"artifacts":[
+		{"task_id":"t1","output_dir":"/obs/p/r1","paths":["/obs/p/r1/a.png","/obs/p/r1/t.csv"]},
+		{"task_id":"t2","output_dir":"/obs/p/r2","paths":["/obs/p/r2/b.png"]}
+	]}`)
+	dirs, paths, ok := ParseRunArtifacts(raw)
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	if len(dirs) != 2 || dirs[0] != "/obs/p/r1" || dirs[1] != "/obs/p/r2" {
+		t.Errorf("dirs = %v", dirs)
+	}
+	if len(paths) != 3 || paths[0] != "/obs/p/r1/a.png" || paths[2] != "/obs/p/r2/b.png" {
+		t.Errorf("paths = %v", paths)
+	}
+}
+
+func TestParseRunArtifacts_EmptyPathsTask(t *testing.T) {
+	// a task whose OBS glob failed contributes its dir but no paths
+	raw := json.RawMessage(`{"artifacts":[{"task_id":"t1","output_dir":"/obs/p/r1","paths":[]}]}`)
+	dirs, paths, ok := ParseRunArtifacts(raw)
+	if !ok || len(dirs) != 1 || dirs[0] != "/obs/p/r1" {
+		t.Errorf("dirs=%v ok=%v", dirs, ok)
+	}
+	if len(paths) != 0 {
+		t.Errorf("expected no paths, got %v", paths)
+	}
+}
+
+func TestParseRunArtifacts_NoneOrMalformed(t *testing.T) {
+	if _, _, ok := ParseRunArtifacts(json.RawMessage(`{"final_report":"x"}`)); ok {
+		t.Error("expected ok=false when no artifacts key")
+	}
+	if _, _, ok := ParseRunArtifacts(json.RawMessage(`{"artifacts":[]}`)); ok {
+		t.Error("expected ok=false for empty artifacts array")
+	}
+	if _, _, ok := ParseRunArtifacts(json.RawMessage(`not json`)); ok {
+		t.Error("expected ok=false for malformed JSON")
+	}
+	if _, _, ok := ParseRunArtifacts(nil); ok {
+		t.Error("expected ok=false for nil")
+	}
+}

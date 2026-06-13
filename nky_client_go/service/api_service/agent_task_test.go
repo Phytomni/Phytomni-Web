@@ -63,6 +63,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		compute_resource TEXT,
 		log_status TEXT,
 		status TEXT,
+		download_path TEXT,
+		image_paths TEXT,
 		created_at DATETIME,
 		updated_at DATETIME,
 		delete_at DATETIME
