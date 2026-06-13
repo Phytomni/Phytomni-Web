@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -301,8 +302,12 @@ func TestSyncBotRuns_DisabledIsNoOp(t *testing.T) {
 	}
 }
 
-// TestSyncBotRuns_SkipsEmptyRunID: a RUNNING row carrying no bot_run_id is
-// skipped (warn-and-continue), never sent to Bot, and left unchanged.
+// TestSyncBotRuns_SkipsEmptyRunID pins the empty-run-id guard. Asserting only on
+// the row's final status is vacuous: a removed guard would call GetRun("") and,
+// whether that fails or succeeds, could land on the same status. So this asserts
+// the discriminator directly — Bot is never hit (a reachable counting server
+// stays at 0). The server also returns a finished run, so a removed guard would
+// additionally flip the row to SUCCEEDED, giving a second red signal.
 func TestSyncBotRuns_SkipsEmptyRunID(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
@@ -310,13 +315,22 @@ func TestSyncBotRuns_SkipsEmptyRunID(t *testing.T) {
 		(53, 'dlg-g', 'alice', 'q', 'DeepGenomeAgent', '', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	// BaseURL is deliberately unreachable: a row with no run id must never call Bot.
-	rxBot.BotConfig = &rxBot.Config{BaseURL: "http://127.0.0.1:0", ProxyEnabled: true, TimeoutSeconds: 5}
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"run_id":"","agent":"deep_genome","status":"succeeded","result":{"final_report":"# leaked"}}`))
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	SyncBotRuns([]model.SQuestionAgentLog{{Id: 53, BotRunId: "", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
 
+	if n := hits.Load(); n != 0 {
+		t.Errorf("empty run id must never call Bot, got %d request(s)", n)
+	}
 	if status, _ := readStatusAnswer(t, gdb, 53); status != "RUNNING" {
-		t.Errorf("empty run id should be skipped, status = %q", status)
+		t.Errorf("empty run id row must stay RUNNING, got %q", status)
 	}
 }
