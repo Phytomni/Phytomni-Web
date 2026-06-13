@@ -973,7 +973,8 @@ const selectChat = async (dialogueId: string) => {
                 item.tool_name === "KnowledgeAgents" ||
                 item.tool_name === "ReviewAgents" ||
                 item.tool_name === "KnowledgeAgent" ||
-                item.tool_name === "ReviewAgent"
+                item.tool_name === "ReviewAgent" ||
+                item.tool_name === "BriefReviewAgent"
               ) {
                 const contentData = JSON.parse(item.answer);
                 messages.push({
@@ -1165,7 +1166,8 @@ const sendMessage = async () => {
             response.data.tool_name === "KnowledgeAgents" ||
             response.data.tool_name === "ReviewAgents" ||
             response.data.tool_name === "KnowledgeAgent" ||
-            response.data.tool_name === "ReviewAgent"
+            response.data.tool_name === "ReviewAgent" ||
+            response.data.tool_name === "BriefReviewAgent"
           ) {
             const contentData = JSON.parse(response.data.answer);
             assistantMessage = {
