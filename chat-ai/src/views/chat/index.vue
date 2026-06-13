@@ -2375,7 +2375,6 @@ const selectChat = async (dialogueId: string) => {
                   content: item.answer,
                 });
               } else if (item.tool_name === "AnalystAgent") {
-                getAnalystAgentLog({ id: item.id || "" });
                 messages.push({
                   role: "assistant",
                   content: item.answer,
@@ -3142,7 +3141,6 @@ const sendMessage = async () => {
               );
             }
           } else if (response.data.tool_name === "AnalystAgent") {
-            getAnalystAgentLog({ id: response.data.id });
             assistantMessage = {
               role: "assistant",
               content: response.data.answer,
@@ -4149,7 +4147,6 @@ const refreshMessage = async (messageIndex: number) => {
               );
             }
           } else if (response.data.tool_name === "AnalystAgent") {
-            getAnalystAgentLog({ id: response.data.id });
             newAssistantMessage = {
               role: "assistant",
               content: response.data.answer,
