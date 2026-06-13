@@ -29,6 +29,17 @@ func readStatusAnswer(t *testing.T, gdb *gorm.DB, id int64) (status, answer stri
 	return status, answer
 }
 
+// readGalleryCols reads back a row's download_path + image_paths (COALESCE so a
+// NULL column scans as "") — used by the reconcile gallery-write tests.
+func readGalleryCols(t *testing.T, gdb *gorm.DB, id int64) (downloadPath, imagePaths string) {
+	t.Helper()
+	row := gdb.Raw(`SELECT COALESCE(download_path,''), COALESCE(image_paths,'') FROM s_question_agent_logs WHERE id = ?`, id).Row()
+	if err := row.Scan(&downloadPath, &imagePaths); err != nil {
+		t.Fatalf("read gallery cols %d: %v", id, err)
+	}
+	return downloadPath, imagePaths
+}
+
 // setupTestDB 建一个空的 in-memory SQLite,创建 s_question_agent_logs 的最小列集,
 // 注册到全局 db registry,返回 *gorm.DB 供测试 seed 数据。
 //
@@ -263,6 +274,9 @@ func TestSyncBotRuns_WritesReportAndStatusOnChange(t *testing.T) {
 	if !strings.Contains(answer, "Gene Report") || !strings.Contains(answer, "content") {
 		t.Errorf("answer not reshaped final_report JSON: %q", answer)
 	}
+	if dp, ip := readGalleryCols(t, gdb, 50); dp != "" || ip != "" {
+		t.Errorf("deep_genome must not write gallery cols, got dp=%q ip=%q", dp, ip)
+	}
 }
 
 // TestSyncBotRuns_SkipsBlankStatus pins the blank-status guard: a Bot run that
@@ -334,5 +348,34 @@ func TestSyncBotRuns_SkipsEmptyRunID(t *testing.T) {
 	}
 	if status, _ := readStatusAnswer(t, gdb, 53); status != "RUNNING" {
 		t.Errorf("empty run id row must stay RUNNING, got %q", status)
+	}
+}
+
+// TestSyncBotRuns_AnalystWritesAnswerAndGallery: a RUNNING analyst-class row
+// whose Bot run finished gets its status flipped, its formatted answer written
+// (passed through ShapeAnswer's default as plain markdown), and its gallery
+// columns populated from result.artifacts.
+func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(54, 'dlg-a', 'alice', 'q', '任务创建成功：t1', 'AnalystAgent', 'run-a', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	runRecordServer(t, `{"run_id":"run-a","agent":"network","status":"succeeded","result":{"formatted":{"answer":"analysis done"},"artifacts":[{"task_id":"t1","output_dir":"/obs/p/r1","paths":["/obs/p/r1/a.png"]}]}}`)
+
+	SyncBotRuns([]model.SQuestionAgentLog{{Id: 54, BotRunId: "run-a", Status: "RUNNING", ToolName: "AnalystAgent"}})
+
+	status, answer := readStatusAnswer(t, gdb, 54)
+	if status != "SUCCEEDED" || answer != "analysis done" {
+		t.Errorf("status=%q answer=%q, want SUCCEEDED / analysis done", status, answer)
+	}
+	dp, ip := readGalleryCols(t, gdb, 54)
+	if dp != "/obs/p/r1" {
+		t.Errorf("download_path = %q, want /obs/p/r1", dp)
+	}
+	var paths []string
+	if err := json.Unmarshal([]byte(ip), &paths); err != nil || len(paths) != 1 || paths[0] != "/obs/p/r1/a.png" {
+		t.Errorf("image_paths = %q (%v)", ip, err)
 	}
 }

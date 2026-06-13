@@ -271,10 +271,25 @@ func SyncBotRuns(rows []model.SQuestionAgentLog) {
 			continue // still running, unchanged, or malformed — nothing to write
 		}
 		updates := map[string]interface{}{"status": newStatus}
-		// final_report is deep_genome-exclusive, and the row reached here only
-		// because tool_name == "DeepGenomeAgent"; reshape with the known slug
-		// rather than trusting the Bot-returned agent field.
-		if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
+		// analyst 类(cron 路由切换后才会进来):formatted 存在即非 deep_genome。
+		// 答案非空才写(避免抹掉已渲染答案);同分支回填图廊路径,使 deep_genome
+		// 的 final_report 路径保持原样、不产生 download_path。
+		if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
+			if shaped := rxBot.ShapeAnswer(rec.Agent, answerText, f); shaped != "" {
+				updates["answer"] = shaped
+			}
+			if dirs, paths, ok2 := rxBot.ParseRunArtifacts(rec.Result); ok2 {
+				if len(dirs) > 0 && dirs[0] != "" {
+					updates["download_path"] = dirs[0]
+				}
+				if len(paths) > 0 {
+					if b, err := json.Marshal(paths); err == nil {
+						updates["image_paths"] = string(b)
+					}
+				}
+			}
+		} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
+			// final_report is deep_genome-exclusive; reshape with the known slug.
 			updates["answer"] = rxBot.ShapeAnswer("deep_genome", fr, nil)
 		}
 		if err := model.Default().Model(&model.SQuestionAgentLog{}).

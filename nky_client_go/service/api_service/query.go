@@ -3,6 +3,7 @@ package api_service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -291,16 +292,27 @@ func (ps *ApiService) ApiQueryAnalystUpdateLog(ctx context.Context, username, ta
 	// same as the live dispatch and the answer-check overlay. deep_genome's
 	// assembled report arrives as result.final_report (no formatted envelope),
 	// so fall back to it when there is no formatted block.
-	answer := rec.Answer
-	if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
-		answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
-	} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
-		// final_report is deep_genome-exclusive; reshape with the known slug.
-		answer = rxBot.ShapeAnswer("deep_genome", fr, nil)
-	}
 	updates := map[string]interface{}{
 		"compute_resource": computeResource,
 		"log_status":       "sync_succeeded",
+	}
+	answer := rec.Answer
+	if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
+		answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
+		// analyst 类:回填图廊代表性前缀 + 全量图片路径(均仅非空才写,no-clobber)
+		if dirs, paths, ok2 := rxBot.ParseRunArtifacts(rec.Result); ok2 {
+			if len(dirs) > 0 && dirs[0] != "" {
+				updates["download_path"] = dirs[0]
+			}
+			if len(paths) > 0 {
+				if b, err := json.Marshal(paths); err == nil {
+					updates["image_paths"] = string(b)
+				}
+			}
+		}
+	} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
+		// final_report is deep_genome-exclusive; reshape with the known slug.
+		answer = rxBot.ShapeAnswer("deep_genome", fr, nil)
 	}
 	// chat-ai gates download on "SUCCEEDED"; Bot is lowercase. Skip an empty
 	// status rather than writing '' into the NOT NULL column (GORM's map Updates

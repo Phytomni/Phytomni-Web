@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -118,5 +119,55 @@ func TestApiQueryAnalystUpdateLog_NoClobberAnswer(t *testing.T) {
 	}
 	if stored != "keep me" {
 		t.Errorf("prior answer must not be clobbered, got %q", stored)
+	}
+}
+
+// TestApiQueryAnalystUpdateLog_WritesGalleryPaths: a finished analyst-class run
+// (formatted envelope present) writes the representative output_dir into
+// download_path and the flattened multi-directory image list into image_paths.
+func TestApiQueryAnalystUpdateLog_WritesGalleryPaths(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
+		(64, 'alice', 'q', '任务创建成功：t-g', 'AnalystAgent', 't-g', 'run-g', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	runRecordServer(t, `{"run_id":"run-g","agent":"network","status":"succeeded","result":{"formatted":{"answer":"done"},"artifacts":[{"task_id":"t1","output_dir":"/obs/p/r1","paths":["/obs/p/r1/a.png","/obs/p/r1/t.csv"]},{"task_id":"t2","output_dir":"/obs/p/r2","paths":["/obs/p/r2/b.png"]}]}}`)
+	ps := NewApiService()
+
+	if _, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-g", "cr-1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	dp, ip := readGalleryCols(t, gdb, 64)
+	if dp != "/obs/p/r1" {
+		t.Errorf("download_path = %q, want representative dir /obs/p/r1", dp)
+	}
+	var paths []string
+	if err := json.Unmarshal([]byte(ip), &paths); err != nil {
+		t.Fatalf("image_paths not JSON: %q (%v)", ip, err)
+	}
+	if len(paths) != 3 || paths[0] != "/obs/p/r1/a.png" || paths[2] != "/obs/p/r2/b.png" {
+		t.Errorf("image_paths = %v", paths)
+	}
+}
+
+// TestApiQueryAnalystUpdateLog_NoArtifactsNoClobber: a finished run with no
+// artifacts must not wipe an already-populated download_path/image_paths.
+func TestApiQueryAnalystUpdateLog_NoArtifactsNoClobber(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, download_path, image_paths, created_at) VALUES
+		(65, 'alice', 'q', 'prior', 'AnalystAgent', 't-na', 'run-na', 'RUNNING', '/obs/old', '["/obs/old/x.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	runRecordServer(t, `{"run_id":"run-na","agent":"network","status":"succeeded","result":{"formatted":{"answer":"done"}}}`)
+	ps := NewApiService()
+
+	if _, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-na", "cr-1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	dp, ip := readGalleryCols(t, gdb, 65)
+	if dp != "/obs/old" || ip != `["/obs/old/x.png"]` {
+		t.Errorf("no-artifacts run must not clobber gallery, got dp=%q ip=%q", dp, ip)
 	}
 }
