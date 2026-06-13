@@ -152,3 +152,17 @@ export function sanitizeAnchorAttributes(attributes: string): string {
 
   return kept.join(" ");
 }
+
+/**
+ * 校验单个 href URL,用于把 URL 直接插进固定 `<a href="...">` 的场景
+ * (doi / pmid / .md 链接)——这些点不透传任意属性,但 URL 本身可能携带危险
+ * 协议(如 `[x](javascript:alert(1)//.md)` 借 `.md` 后缀混进 javascript:)。
+ *
+ * @param url 待插入 href 的原始 URL。
+ * @returns 协议在白名单内则返回转义后的 URL(可安全放进 v-html 的属性),
+ *          否则返回 `"#"`。
+ */
+export function sanitizeHref(url: string): string {
+  if (!url) return "#";
+  return isSafeHref(url) ? escapeAttrValue(url) : "#";
+}

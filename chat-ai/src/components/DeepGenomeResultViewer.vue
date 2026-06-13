@@ -236,7 +236,7 @@ import {
   ElDropdownItem,
 } from "element-plus";
 import { saveAs } from "file-saver";
-import { sanitizeAnchorAttributes } from "@/utils/sanitizeMarkup";
+import { sanitizeAnchorAttributes, sanitizeHref } from "@/utils/sanitizeMarkup";
 
 // 模拟从 json.txt 获取的 Markdown 内容
 const props = defineProps({
@@ -368,10 +368,18 @@ const displayReferences = computed(() => {
 
       if (hasLink) {
         const doiLink = doc.dl
-          ? `doi:<a href="${doc.dl}" target="_blank" class="doi-link">${doc.dl}</a>`
+          ? `doi:<a href="${sanitizeHref(
+              String(doc.dl)
+            )}" target="_blank" class="doi-link">${escapeHtml(
+              String(doc.dl)
+            )}</a>`
           : "";
         const pmidLink = doc.pm
-          ? `pmid:<a href="https://pubmed.ncbi.nlm.nih.gov/${doc.pm}" target="_blank" class="pmid-link">${doc.pm}</a>`
+          ? `pmid:<a href="${sanitizeHref(
+              "https://pubmed.ncbi.nlm.nih.gov/" + String(doc.pm)
+            )}" target="_blank" class="pmid-link">${escapeHtml(
+              String(doc.pm)
+            )}</a>`
           : "";
 
         const separator = doc.dl && doc.pm ? "; " : "";
@@ -509,7 +517,7 @@ const processInlineMarkdown = (line) => {
       const convertedUrl = convertFilePath(url);
       return (
         '<a href="' +
-        convertedUrl +
+        sanitizeHref(convertedUrl) +
         '" target="_blank" download>' +
         text +
         "</a>"

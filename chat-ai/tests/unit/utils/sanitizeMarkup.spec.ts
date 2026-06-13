@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeAnchorAttributes } from "@/utils/sanitizeMarkup";
+import { sanitizeAnchorAttributes, sanitizeHref } from "@/utils/sanitizeMarkup";
 
 // Locks the AF-001 fix: the <a> tags that DeepGenomeResultViewer resurrects
 // from agent markdown and feeds to v-html must never carry an executable
@@ -148,5 +148,43 @@ describe("sanitizeAnchorAttributes — XSS hardening for resurrected <a> tags", 
 
   it("returns an empty string for empty input", () => {
     expect(sanitizeAnchorAttributes("")).toBe("");
+  });
+});
+
+// Defense-in-depth for the doi/pmid/.md links that interpolate a URL straight
+// into a fixed <a href="..."> rendered through v-html.
+describe("sanitizeHref — scheme allow-list for interpolated href URLs", () => {
+  it("passes through a legitimate https URL unchanged", () => {
+    expect(sanitizeHref("https://doi.org/10.1234/abc")).toBe(
+      "https://doi.org/10.1234/abc"
+    );
+  });
+
+  it("passes through a pubmed URL built from a numeric pmid", () => {
+    expect(sanitizeHref("https://pubmed.ncbi.nlm.nih.gov/12345")).toBe(
+      "https://pubmed.ncbi.nlm.nih.gov/12345"
+    );
+  });
+
+  it("neutralizes a javascript: URL to #", () => {
+    expect(sanitizeHref("javascript:alert(1)")).toBe("#");
+  });
+
+  it("neutralizes a javascript: scheme smuggled past a .md suffix", () => {
+    // [x](javascript:alert(1)//.md) would otherwise match the .md link regex.
+    expect(sanitizeHref("javascript:alert(1)//.md")).toBe("#");
+  });
+
+  it("escapes a quote/angle-bracket breakout in an otherwise-safe URL", () => {
+    const out = sanitizeHref(
+      'https://pubmed.ncbi.nlm.nih.gov/"><img onerror=x>'
+    );
+    expect(out).not.toContain('"><img');
+    expect(out).toContain("&quot;");
+    expect(out).toContain("&lt;");
+  });
+
+  it("returns # for an empty URL", () => {
+    expect(sanitizeHref("")).toBe("#");
   });
 });
