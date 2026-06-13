@@ -682,7 +682,6 @@ const formatDetailedCitation = (doc: any) => {
 const chatList = ref<Chat[]>([]);
 
 const rolesTool = userStore().roles;
-console.log(rolesTool, "rolesTool");
 // 定义按钮权限映射关系
 const buttonPermissions = {
   RAG: "RAG",
@@ -845,7 +844,6 @@ const fallbackCopyText = (text: any, index: number) => {
 
 // 打开聊天代理
 const openChatAgents = () => {
-  console.log(t("chat.logs.openChatAgent"));
 
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
@@ -858,31 +856,26 @@ const openChatAgents = () => {
 
 // 知识代理人
 const openKnowledgeAgents = () => {
-  console.log(t("chat.logs.openKnowledgeAgent"));
   // 这里实现知识代理人功能
 };
 
 // 数据库代理
 const openDatabaseAgents = () => {
-  console.log(t("chat.logs.openDatabaseAgent"));
   // 这里实现数据库代理功能
 };
 
 // 分析代理
 const openAnalysisAgents = () => {
-  console.log(t("chat.logs.openAnalysisAgent"));
   // 这里实现分析代理功能
 };
 
 // 基因功能代理
 const openGeneFunctionAgents = () => {
-  console.log(t("chat.logs.openGeneFunctionAgent"));
   // 这里实现基因功能代理功能
 };
 
 // 审查代理人
 const openReviewAgents = () => {
-  console.log(t("chat.logs.openReviewAgent"));
   // 这里实现审查代理人功能
 };
 
@@ -897,7 +890,6 @@ const downloadFile = async (url: string) => {
 
 // 打开知识库
 const openKnowledgeBase = () => {
-  console.log(t("chat.logs.openKnowledgeBase"));
 
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
@@ -915,7 +907,6 @@ const selectChat = async (dialogueId: string) => {
 
   // 在这里调用 getAnswerCheck 接口 获取对话记录
   const res = await getAnswerCheck({ dialogue_id: dialogueId });
-  console.log(res, "res");
 
   if (res.code === 200) {
     // 处理返回的数据，转换为消息格式
@@ -1128,7 +1119,6 @@ const sendMessage = async () => {
     }
 
     const response = await getQuery(queryData as any);
-    console.log("response", response.data);
 
     if (response.data) {
       let assistantMessage;

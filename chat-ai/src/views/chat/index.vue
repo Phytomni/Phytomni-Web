@@ -1689,7 +1689,6 @@ const chatList = ref<Chat[]>([]);
 
 // 修复：将静态引用改为计算属性，确保响应式更新
 const rolesTool = computed(() => userStore().roles);
-console.log(rolesTool.value, "rolesTool");
 const UserStore = userStore();
 
 // 添加权限加载状态管理
@@ -1728,7 +1727,6 @@ const loadUserTools = async () => {
     rolesLoading.value = true;
     try {
       await userStore().getUserTools();
-      console.log("用户权限加载成功:", userStore().roles);
     } catch (error) {
       console.error("加载用户权限失败:", error);
     } finally {
@@ -1834,10 +1832,6 @@ const getHistoryQuestionData = () => {
                 // 找到匹配的对话，更新当前对话ID
                 currentChatId.value = matchingChat.dialogue_id;
                 updateUrlWithChatId(matchingChat.dialogue_id);
-                console.log(
-                  "新对话已关联到现有对话:",
-                  matchingChat.dialogue_id
-                );
               }
             }
           }
@@ -2047,7 +2041,6 @@ const fallbackCopyText = (text: any, index: number) => {
 
 // 打开聊天代理
 const openChatAgents = () => {
-  console.log(t("chat.logs.openChatAgent"));
 
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
@@ -2060,31 +2053,26 @@ const openChatAgents = () => {
 
 // 知识代理人
 const openKnowledgeAgents = () => {
-  console.log(t("chat.logs.openKnowledgeAgent"));
   // 这里实现知识代理人功能
 };
 
 // 数据库代理
 const openDatabaseAgents = () => {
-  console.log(t("chat.logs.openDatabaseAgent"));
   // 这里实现数据库代理功能
 };
 
 // 分析代理
 const openAnalysisAgents = () => {
-  console.log(t("chat.logs.openAnalysisAgent"));
   // 这里实现分析代理功能
 };
 
 // 基因功能代理
 const openGeneFunctionAgents = () => {
-  console.log(t("chat.logs.openGeneFunctionAgent"));
   // 这里实现基因功能代理功能
 };
 
 // 审查代理人
 const openReviewAgents = () => {
-  console.log(t("chat.logs.openReviewAgent"));
   // 这里实现审查代理人功能
 };
 
@@ -2145,7 +2133,6 @@ const getFileDownUrl = async (id: string, type: string) => {
 
 // 打开知识库
 const openKnowledgeBase = () => {
-  console.log(t("chat.logs.openKnowledgeBase"));
 
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
@@ -2225,7 +2212,6 @@ const selectChat = async (dialogueId: string) => {
 
   // 在这里调用 getAnswerCheck 接口 获取对话记录
   const res = await getAnswerCheck({ dialogue_id: dialogueId });
-  console.log(res, "res");
 
   if (res.code === 200) {
     // 处理返回的数据，转换为消息格式
@@ -2241,7 +2227,6 @@ const selectChat = async (dialogueId: string) => {
     // 遍历返回的数组，转换为消息格式
     if (res.data && Array.isArray(res.data)) {
       res.data.forEach((item: ChatResponse) => {
-        console.log("tool_name:", item.tool_name === "AnalystAgent");
 
         // 同步服务器返回的点赞点踩状态
         if (item.id && item.reaction_type) {
@@ -2333,12 +2318,6 @@ const selectChat = async (dialogueId: string) => {
                   ? JSON.parse(item.answer)
                   : item.answer;
                 // 打印 doc_list 数据
-                console.log("=== 历史消息 doc_list ===", {
-                  tool_name: item.tool_name,
-                  message_id: item.id,
-                  doc_list: contentData.doc_list,
-                  content: contentData.content,
-                });
                 messages.push({
                   role: "assistant",
                   content: contentData.content,
@@ -2396,10 +2375,7 @@ const selectChat = async (dialogueId: string) => {
                   content: item.answer,
                 });
               } else if (item.tool_name === "AnalystAgent") {
-                console.log(item, "item.id");
-                getAnalystAgentLog({ id: item.id || "" }).then((res: any) => {
-                  console.log(res, "res1111111111111111111");
-                });
+                getAnalystAgentLog({ id: item.id || "" });
                 messages.push({
                   role: "assistant",
                   content: item.answer,
@@ -2479,7 +2455,6 @@ const selectChat = async (dialogueId: string) => {
 
                   readServerFile(item.server_file_path)
                     .then((fileContent) => {
-                      console.log(fileContent, "fileContent");
 
                       if (fileContent && fileContent.trim()) {
                         deepGenomeMessage.content = fileContent;
@@ -2629,16 +2604,9 @@ const fileList = computed({
 watch(
   () => fileList.value,
   (newVal, oldVal) => {
-    console.log("文件列表变化:", {
-      newVal,
-      oldVal,
-      senderRef: !!senderRef.value,
-    });
     if (newVal?.length > 0 && senderRef.value) {
-      console.log("打开header，文件数量:", newVal.length);
       senderRef.value.openHeader();
     } else if (senderRef.value) {
-      console.log("关闭header");
       senderRef.value.closeHeader();
     }
   }
@@ -2956,7 +2924,6 @@ const sendMessage = async () => {
       queryData as any,
       currentRequestId.value
     );
-    console.log("response", response.data);
 
     if (response.data) {
       let assistantMessage: ChatMessage | undefined;
@@ -3086,12 +3053,6 @@ const sendMessage = async () => {
               ? JSON.parse(response.data.answer)
               : response.data.answer;
             // 打印新消息的 doc_list 数据
-            console.log("=== 新消息 doc_list ===", {
-              tool_name: response.data.tool_name,
-              message_id: response.data.id,
-              doc_list: contentData.doc_list,
-              content: contentData.content,
-            });
             assistantMessage = {
               role: "assistant",
               content: contentData.content,
@@ -3181,9 +3142,7 @@ const sendMessage = async () => {
               );
             }
           } else if (response.data.tool_name === "AnalystAgent") {
-            getAnalystAgentLog({ id: response.data.id }).then((res: any) => {
-              console.log(res, "res1111111111111111111");
-            });
+            getAnalystAgentLog({ id: response.data.id });
             assistantMessage = {
               role: "assistant",
               content: response.data.answer,
@@ -3300,7 +3259,6 @@ const sendMessage = async () => {
       error.code === "ERR_CANCELED" ||
       isAborted.value
     ) {
-      console.log("请求已被中止");
       return; // 中止请求时不显示错误消息
     }
 
@@ -3337,7 +3295,6 @@ const sendMessage = async () => {
 
     // 检查是否是网络错误或超时错误，如果是，先验证消息是否已成功发送
     if (isNetworkError(error) && !isAborted.value) {
-      console.log("检测到网络错误，验证消息是否已成功发送...");
 
       try {
         // 等待一小段时间，让服务器有时间处理请求
@@ -3357,7 +3314,6 @@ const sendMessage = async () => {
               checkRes.data &&
               checkRes.data.length > 0
             ) {
-              console.log("消息已成功发送，无需显示错误");
               return;
             }
           }
@@ -3376,7 +3332,6 @@ const sendMessage = async () => {
               // 检查最后一条消息是否包含我们刚发送的消息
               const lastItem = checkRes.data[checkRes.data.length - 1];
               if (lastItem && lastItem.query === messageContent) {
-                console.log("消息已成功发送，无需显示错误");
                 await selectChat(urlDialogueId);
                 return;
               }
@@ -3391,7 +3346,6 @@ const sendMessage = async () => {
 
     // 只有在未被中止的情况下才添加错误消息
     if (!isAborted.value) {
-      console.log(isAborted.value, "添加错误消息");
 
       currentChat.value.messages.push({
         role: "assistant",
@@ -3478,7 +3432,6 @@ const abortCurrentRequest = async () => {
     // 导入中止请求的方法
     const requestModule = (await import("@/utils/request")) as any;
     const success = requestModule.abortRequest(currentRequestId.value);
-    console.log(success, "success11111111111111");
     if (success) {
       isAborted.value = true;
 
@@ -3585,16 +3538,13 @@ const convertToTableData = (data: { headers: string[]; rows: any[][] }) => {
 
 // 文件处理相关函数
 const handleFileChange = (file: any) => {
-  console.log("文件上传事件:", file);
 
   if (!currentChatId.value) {
-    console.log("当前对话ID不存在");
     return;
   }
 
   const chatState = getChatState(currentChatId.value);
   if (!chatState) {
-    console.log("聊天状态不存在");
     return;
   }
 
@@ -3605,25 +3555,15 @@ const handleFileChange = (file: any) => {
     file: file.raw,
   };
 
-  console.log("添加新文件:", newFile);
-  console.log("更新前文件列表:", chatState.fileList);
 
   // 使用响应式更新方式
   chatState.fileList = [...chatState.fileList, newFile];
 
-  console.log("更新后文件列表:", chatState.fileList);
-  console.log("计算属性fileList.value:", fileList.value);
 
   // 确保文件列表更新后立即显示
   nextTick(() => {
-    console.log("nextTick中的状态:", {
-      senderRef: !!senderRef.value,
-      fileListLength: chatState.fileList.length,
-      computedFileListLength: fileList.value.length,
-    });
 
     if (senderRef.value && chatState.fileList.length > 0) {
-      console.log("调用openHeader");
       senderRef.value.openHeader();
     }
 
@@ -3906,12 +3846,10 @@ const toggleLogView = async (messageId: string) => {
         if (typeof res.data === "string") {
           // 直接使用字符串数据，不需要JSON解析
           parsedData = res.data;
-          console.log("日志数据加载成功（字符串格式）:", parsedData);
         } else {
           // 尝试解析JSON数据（向后兼容）
           try {
             parsedData = JSON.parse(res.data);
-            console.log("日志数据加载成功（JSON格式）:", parsedData);
           } catch (parseError) {
             console.error("JSON解析失败:", parseError);
             parsedData = res.data;
@@ -3942,10 +3880,6 @@ const toggleLogView = async (messageId: string) => {
 
 // 刷新消息
 const refreshMessage = async (messageIndex: number) => {
-  console.log("=== 开始刷新消息 ===", {
-    messageIndex,
-    currentChatId: currentChatId.value,
-  });
 
   if (
     !currentChat.value?.messages ||
@@ -3953,41 +3887,30 @@ const refreshMessage = async (messageIndex: number) => {
     messageIndex >= currentChat.value.messages.length ||
     !currentChatId.value
   ) {
-    console.log("刷新消息参数验证失败");
     return;
   }
 
   const message = currentChat.value.messages[messageIndex];
   if (!message || message.role !== "assistant") {
-    console.log("消息验证失败", { message, role: message?.role });
     return;
   }
 
   // 获取对应的用户消息
   const userMessage = currentChat.value.messages[messageIndex - 1];
   if (!userMessage || userMessage.role !== "user") {
-    console.log("用户消息验证失败", { userMessage, role: userMessage?.role });
     return;
   }
 
   const messageId = message.id;
   if (!messageId) {
-    console.log("消息ID不存在");
     return;
   }
 
   const chatState = getChatState(currentChatId.value);
   if (!chatState) {
-    console.log("聊天状态不存在");
     return;
   }
 
-  console.log("刷新状态管理:", {
-    messageIndex,
-    messageId,
-    currentRefreshingState: chatState.refreshingMessages[messageId],
-    allRefreshingStates: Object.keys(chatState.refreshingMessages),
-  });
 
   // 设置刷新状态 - 同时使用messageIndex和messageId作为键值
   const refreshKey = `${messageIndex}_${messageId}`;
@@ -4021,7 +3944,6 @@ const refreshMessage = async (messageIndex: number) => {
     }
 
     const response = await getQuery(queryData as any);
-    console.log("refresh response", response.data);
 
     if (response.data) {
       let newAssistantMessage: ChatMessage | undefined;
@@ -4142,12 +4064,6 @@ const refreshMessage = async (messageIndex: number) => {
               ? JSON.parse(response.data.answer)
               : response.data.answer;
             // 打印刷新消息的 doc_list 数据
-            console.log("=== 刷新消息 doc_list ===", {
-              tool_name: response.data.tool_name,
-              message_id: response.data.id,
-              doc_list: contentData.doc_list,
-              content: contentData.content,
-            });
             newAssistantMessage = {
               role: "assistant",
               content: contentData.content,
@@ -4233,9 +4149,7 @@ const refreshMessage = async (messageIndex: number) => {
               );
             }
           } else if (response.data.tool_name === "AnalystAgent") {
-            getAnalystAgentLog({ id: response.data.id }).then((res: any) => {
-              console.log(res, "res1111111111111111111");
-            });
+            getAnalystAgentLog({ id: response.data.id });
             newAssistantMessage = {
               role: "assistant",
               content: response.data.answer,
@@ -4285,16 +4199,10 @@ const refreshMessage = async (messageIndex: number) => {
       if (newAssistantMessage) {
         currentChat.value.messages[messageIndex] = newAssistantMessage;
 
-        console.log("更新消息后的状态:", {
-          oldMessageId: messageId,
-          newMessageId: newAssistantMessage.id,
-          oldRefreshingState: chatState.refreshingMessages[messageId],
-        });
 
         // 清理旧的刷新状态
         if (chatState.refreshingMessages[refreshKey]) {
           delete chatState.refreshingMessages[refreshKey];
-          console.log("清理旧刷新状态:", refreshKey);
         }
 
         // 为新消息设置刷新状态 - 使用新的键值
@@ -4302,15 +4210,7 @@ const refreshMessage = async (messageIndex: number) => {
           newAssistantMessage.id || "temp"
         }`;
         chatState.refreshingMessages[newRefreshKey] = false;
-        console.log("设置新刷新状态:", newRefreshKey);
 
-        console.log("设置新刷新状态:", {
-          newMessageId: newAssistantMessage.id,
-          newRefreshingState: newAssistantMessage.id
-            ? chatState.refreshingMessages[newAssistantMessage.id]
-            : undefined,
-          allRefreshingStates: Object.keys(chatState.refreshingMessages),
-        });
 
         // 自动滚动到最新消息
         await scrollToBottom();
@@ -4324,18 +4224,10 @@ const refreshMessage = async (messageIndex: number) => {
     nextTick(() => {
       scrollToBottom();
     });
-    console.log("finally块中的状态清理:", {
-      messageIndex,
-      messageId,
-      refreshKey,
-      currentRefreshingState: chatState.refreshingMessages[refreshKey],
-      allRefreshingStates: Object.keys(chatState.refreshingMessages),
-    });
 
     // 清理旧的刷新状态
     if (chatState.refreshingMessages[refreshKey]) {
       delete chatState.refreshingMessages[refreshKey];
-      console.log("finally中清理旧刷新状态:", refreshKey);
     }
 
     // 重置整体发送状态
@@ -4344,7 +4236,6 @@ const refreshMessage = async (messageIndex: number) => {
     // 刷新侧边栏历史记录数据，确保显示最新的对话信息
     try {
       await getHistoryQuestionData();
-      console.log("刷新消息后，侧边栏数据已更新");
     } catch (error) {
       console.error("刷新侧边栏数据失败:", error);
     }
@@ -4426,7 +4317,6 @@ const getAgentUsage = (agentName: string) => {
 
 // 获取智能体对应的图片路径
 const getAgentImage = (agentName: string) => {
-  console.log(agentName, "agentName");
   const imageMap: Record<string, string> = {
     ChatAgent: ChatAgentImg,
     KnowledgeAgent: KnowledgeAgentImg,
@@ -4594,7 +4484,6 @@ const checkTutorialStatus = () => {
 
 // 测试并行对话功能
 const testParallelChats = () => {
-  console.log("=== 测试并行对话功能 ===");
 
   // 创建两个测试对话
   const chat1Id = "test_chat_1";
@@ -4613,17 +4502,8 @@ const testParallelChats = () => {
   chatStates.value[chat2Id].isSending = false;
 
   // 验证状态独立性
-  console.log("对话1状态:", {
-    messageInput: chatStates.value[chat1Id].messageInput,
-    isSending: chatStates.value[chat1Id].isSending,
-  });
 
-  console.log("对话2状态:", {
-    messageInput: chatStates.value[chat2Id].messageInput,
-    isSending: chatStates.value[chat2Id].isSending,
-  });
 
-  console.log("状态独立性验证通过 ✅");
 };
 
 // 在开发环境下添加测试按钮
@@ -4891,7 +4771,6 @@ const readServerFile = async (filePath: string): Promise<string> => {
 const processImagePaths = (content: string, filePath: string): string => {
   // 获取文件所在目录
   const fileDir = filePath.substring(0, filePath.lastIndexOf("/"));
-  console.log("文件目录:", fileDir);
 
   // 处理相对路径的图片引用
   // 匹配 ![alt text](./path/to/image.png) 格式
@@ -4900,12 +4779,6 @@ const processImagePaths = (content: string, filePath: string): string => {
   return content.replace(imageRegex, (match, altText, imagePath) => {
     // 构建完整的图片路径
     const fullImagePath = `/${fileDir}/${imagePath}`;
-    console.log("处理图片路径:", {
-      original: match,
-      imagePath: imagePath,
-      fileDir: fileDir,
-      newPath: fullImagePath,
-    });
     return `![${altText}](${fullImagePath})`;
   });
 };
