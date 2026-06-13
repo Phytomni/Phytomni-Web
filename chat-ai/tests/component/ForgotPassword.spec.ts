@@ -17,7 +17,18 @@ vi.mock("@/utils/authRedirect", () => ({ redirectIfAuthed }));
 import ForgotPassword from "@/views/forgot-password/index.vue";
 
 function mountView() {
-  return mount(ForgotPassword, { global: { stubs: { LangSwitch: true } } });
+  return mount(ForgotPassword, {
+    global: {
+      stubs: { LangSwitch: true },
+      // The view renders i18n keys via $t. The global test i18n stub
+      // (tests/setup.ts) deliberately omits forgotPassword.* messages — the
+      // real keys ship in src/locales/langs — which makes intlify emit
+      // "not found / fall back" stderr noise on every mount. Resolve $t to the
+      // key here so the key-based assertions below stay valid while the lookup
+      // (and its warnings) is bypassed.
+      mocks: { $t: (key: string) => key },
+    },
+  });
 }
 
 describe("ForgotPassword view", () => {
