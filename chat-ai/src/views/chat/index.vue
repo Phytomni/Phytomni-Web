@@ -1471,6 +1471,7 @@ import DefaultAgentImg from "@/assets/images/chat/Agents.png";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import { isValidPendingRecord, matchesChat, safeParse, writePendingChat, clearPendingChat, isLocalStorageChat } from "@/utils/pendingChat";
 import { isNetworkError } from "@/utils/networkError";
+import { clampPanOffset } from "@/utils/imageViewer";
 
 // 后续问题显示逻辑已移至FollowUpQuestions组件
 
@@ -1519,8 +1520,9 @@ const imageStyle = computed(() => {
 const handleWheel = (e: WheelEvent) => {
   e.preventDefault();
 
-  const container = containerRef.value!;
-  const img = imageRef.value!;
+  const container = containerRef.value;
+  const img = imageRef.value;
+  if (!container || !img) return;
 
   // 获取容器边界
   const containerRect = container.getBoundingClientRect();
@@ -1546,6 +1548,10 @@ const handleWheel = (e: WheelEvent) => {
   const originalWidth = img.naturalWidth;
   const originalHeight = img.naturalHeight;
 
+  // 图片尚未加载完(naturalWidth/Height 为 0)时直接退出，避免后续除零
+  // 产生 NaN/Infinity 偏移把图片甩出视野。
+  if (!originalWidth || !originalHeight) return;
+
   // 计算鼠标在图片上的逻辑位置（相对于图片左上角）
   // 当前图片左上角相对于容器的位置
   const currentImageX =
@@ -1567,13 +1573,19 @@ const handleWheel = (e: WheelEvent) => {
   const newImageX = mouseX - originalWidth * newScale * mouseRatioX;
   const newImageY = mouseY - originalHeight * newScale * mouseRatioY;
 
-  // 计算新的偏移量
-  imageOffset.x =
+  // 计算新的偏移量，并 clamp 在可视范围内(防止越过容器中心拖丢图片）
+  imageOffset.x = clampPanOffset(
     (newImageX - (containerRect.width - originalWidth * newScale) / 2) /
-    newScale;
-  imageOffset.y =
+      newScale,
+    originalWidth,
+    newScale
+  );
+  imageOffset.y = clampPanOffset(
     (newImageY - (containerRect.height - originalHeight * newScale) / 2) /
-    newScale;
+      newScale,
+    originalHeight,
+    newScale
+  );
 
   scale.value = newScale;
 };
@@ -1589,13 +1601,32 @@ const handleMouseDown = (e: MouseEvent) => {
 
 const handleMouseMove = (e: MouseEvent) => {
   if (!isDragging.value) return;
-  imageOffset.x = e.clientX - dragStart.x;
-  imageOffset.y = e.clientY - dragStart.y;
+  const img = imageRef.value;
+  imageOffset.x = clampPanOffset(
+    e.clientX - dragStart.x,
+    img?.naturalWidth ?? 0,
+    scale.value
+  );
+  imageOffset.y = clampPanOffset(
+    e.clientY - dragStart.y,
+    img?.naturalHeight ?? 0,
+    scale.value
+  );
 };
 
 const handleMouseUp = () => {
   isDragging.value = false;
 };
+
+// 关闭架构图弹窗时复位缩放/拖拽状态，避免下次打开仍停留在上次缩放的位置。
+watch(agentsViewVisible, (visible) => {
+  if (!visible) {
+    scale.value = 1;
+    imageOffset.x = 0;
+    imageOffset.y = 0;
+    isDragging.value = false;
+  }
+});
 
 // 监听右侧侧边栏状态，当右侧打开时，确保左侧是收起的
 watch(drawerVisible, (newValue) => {
@@ -2041,7 +2072,6 @@ const fallbackCopyText = (text: any, index: number) => {
 
 // 打开聊天代理
 const openChatAgents = () => {
-
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
     leftSidebarCollapsed.value = true;
@@ -2133,7 +2163,6 @@ const getFileDownUrl = async (id: string, type: string) => {
 
 // 打开知识库
 const openKnowledgeBase = () => {
-
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
     leftSidebarCollapsed.value = true;
@@ -2227,7 +2256,6 @@ const selectChat = async (dialogueId: string) => {
     // 遍历返回的数组，转换为消息格式
     if (res.data && Array.isArray(res.data)) {
       res.data.forEach((item: ChatResponse) => {
-
         // 同步服务器返回的点赞点踩状态
         if (item.id && item.reaction_type) {
           chatState.reactions[item.id.toString()] = parseInt(
@@ -2454,7 +2482,6 @@ const selectChat = async (dialogueId: string) => {
 
                   readServerFile(item.server_file_path)
                     .then((fileContent) => {
-
                       if (fileContent && fileContent.trim()) {
                         deepGenomeMessage.content = fileContent;
                       } else {
@@ -3293,7 +3320,6 @@ const sendMessage = async () => {
 
     // 检查是否是网络错误或超时错误，如果是，先验证消息是否已成功发送
     if (isNetworkError(error) && !isAborted.value) {
-
       try {
         // 等待一小段时间，让服务器有时间处理请求
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -3344,7 +3370,6 @@ const sendMessage = async () => {
 
     // 只有在未被中止的情况下才添加错误消息
     if (!isAborted.value) {
-
       currentChat.value.messages.push({
         role: "assistant",
         content: t("chat.sendFailed"),
@@ -3536,7 +3561,6 @@ const convertToTableData = (data: { headers: string[]; rows: any[][] }) => {
 
 // 文件处理相关函数
 const handleFileChange = (file: any) => {
-
   if (!currentChatId.value) {
     return;
   }
@@ -3553,14 +3577,11 @@ const handleFileChange = (file: any) => {
     file: file.raw,
   };
 
-
   // 使用响应式更新方式
   chatState.fileList = [...chatState.fileList, newFile];
 
-
   // 确保文件列表更新后立即显示
   nextTick(() => {
-
     if (senderRef.value && chatState.fileList.length > 0) {
       senderRef.value.openHeader();
     }
@@ -3878,7 +3899,6 @@ const toggleLogView = async (messageId: string) => {
 
 // 刷新消息
 const refreshMessage = async (messageIndex: number) => {
-
   if (
     !currentChat.value?.messages ||
     messageIndex < 0 ||
@@ -3908,7 +3928,6 @@ const refreshMessage = async (messageIndex: number) => {
   if (!chatState) {
     return;
   }
-
 
   // 设置刷新状态 - 同时使用messageIndex和messageId作为键值
   const refreshKey = `${messageIndex}_${messageId}`;
@@ -4196,7 +4215,6 @@ const refreshMessage = async (messageIndex: number) => {
       if (newAssistantMessage) {
         currentChat.value.messages[messageIndex] = newAssistantMessage;
 
-
         // 清理旧的刷新状态
         if (chatState.refreshingMessages[refreshKey]) {
           delete chatState.refreshingMessages[refreshKey];
@@ -4207,7 +4225,6 @@ const refreshMessage = async (messageIndex: number) => {
           newAssistantMessage.id || "temp"
         }`;
         chatState.refreshingMessages[newRefreshKey] = false;
-
 
         // 自动滚动到最新消息
         await scrollToBottom();
@@ -4481,7 +4498,6 @@ const checkTutorialStatus = () => {
 
 // 测试并行对话功能
 const testParallelChats = () => {
-
   // 创建两个测试对话
   const chat1Id = "test_chat_1";
   const chat2Id = "test_chat_2";
@@ -4499,8 +4515,6 @@ const testParallelChats = () => {
   chatStates.value[chat2Id].isSending = false;
 
   // 验证状态独立性
-
-
 };
 
 // 在开发环境下添加测试按钮
