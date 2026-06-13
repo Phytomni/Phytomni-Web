@@ -106,7 +106,10 @@ keeping an instant rollback live throughout verification:
    history replay). On any failure → §8 rollback (flag + repoint, no git).
 4. **Soak window** (hours / a day) with the flip live and Python standing by.
 5. **Only after smoke green + soak — the irreversible acts:**
-   - `git rm -rf nky_client_python/` + remove the Python systemd unit (ops)
+   - remove the Python systemd unit on the production host (ops); the
+     in-repo `nky_client_python/` is already gone (deleted in the cutover
+     commit, now in `main` history), so no repo `git rm` remains here — only
+     the host-side service teardown
    - retire the decommissioned Python's OBS credentials in the Huawei
      console. NOTE — Web `/query` uploads already relay through Bot
      (`/v1/files`), and gene/analyst result downloads now go through
@@ -138,9 +141,10 @@ Two windows, matching the staged §6:
    nginx upstream or slot swap). Instantly restored — no git changes, no
    redeploy. This is exactly why §6 keeps Python standing until after smoke
    + soak.
-2. **After the delete:** `git revert` the cutover commit to restore the
-   Python service from history, redeploy it, repoint `/query` at the Python
-   port, restart. The `bot_run_id` column stays (harmless, nullable).
+2. **After the production decommission:** the in-repo Python service was
+   already removed in the cutover commit (in `main` history), so restore it
+   with `git revert` of that commit, redeploy it, repoint `/query` at the
+   Python port, restart. The `bot_run_id` column stays (harmless, nullable).
 3. `ApiAnswerCheck` serves MySQL legacy fields while the gateway is off, so
    history replay keeps working in either window.
 
