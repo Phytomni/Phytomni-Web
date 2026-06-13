@@ -63,6 +63,7 @@ var slugToToolName = map[string]string{
 	"analyst":     "AnalystAgent",
 	"review":      "ReviewAgent",
 	"deep_genome": "DeepGenomeAgent",
+	"brief_gene":  "BriefReviewAgent",
 }
 
 // ApiQuery is the gateway orchestration: upload files to Bot, dispatch to the

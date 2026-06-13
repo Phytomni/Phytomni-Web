@@ -15,6 +15,9 @@ var aliasToSlug = map[string]string{
 	"AnalystAgent": "analyst", "AnalysisAgents": "analyst",
 	"ReviewAgent": "review", "ReviewAgents": "review",
 	"DeepGenomeAgent": "deep_genome",
+	// BriefReviewAgent is a brief-review variant backed by Bot's brief_gene
+	// sync agent; chat-ai keeps the BriefReviewAgent vocabulary for rendering.
+	"BriefReviewAgent": "brief_gene",
 }
 
 // slugToChatModel maps the sync chat-family slugs to their /v1/chat/completions

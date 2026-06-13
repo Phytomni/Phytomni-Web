@@ -43,6 +43,24 @@ func TestShapeAnswer_CitedEmptyRefs(t *testing.T) {
 	}
 }
 
+func TestShapeAnswer_BriefGeneCited(t *testing.T) {
+	f := &Formatted{References: json.RawMessage(`[{"file_id":"f1","title":"Brief A"}]`)}
+	got := ShapeAnswer("brief_gene", "summary [1]", f)
+	var parsed struct {
+		Content string                   `json:"content"`
+		DocList []map[string]interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("brief_gene should reshape to cited JSON: %v (%s)", err, got)
+	}
+	if parsed.Content != "summary [1]" {
+		t.Errorf("content = %q", parsed.Content)
+	}
+	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Brief A" {
+		t.Errorf("doc_list = %v", parsed.DocList)
+	}
+}
+
 func TestShapeAnswer_DataPositional(t *testing.T) {
 	f := &Formatted{Tabular: json.RawMessage(`{"headers":["gene","len"],"rows":[["g1",100],["g2",200]]}`)}
 	got := ShapeAnswer("data", "2 rows x 2 columns", f)

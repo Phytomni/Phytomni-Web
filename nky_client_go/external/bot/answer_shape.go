@@ -11,7 +11,7 @@ import "encoding/json"
 // degrades to answerText (or an empty table).
 func ShapeAnswer(slug string, answerText string, f *Formatted) string {
 	switch slug {
-	case "knowledge", "review", "deep_genome":
+	case "knowledge", "review", "deep_genome", "brief_gene":
 		return citedAnswer(answerText, f)
 	case "data":
 		return tableAnswer(f)
