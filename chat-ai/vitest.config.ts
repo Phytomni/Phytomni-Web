@@ -34,6 +34,7 @@ export default defineConfig({
         "src/utils/auth.ts",
         "src/utils/pendingChat.ts",
         "src/utils/networkError.ts",
+        "src/utils/sanitizeMarkup.ts",
         "src/components/LangSwitch.vue",
         "src/permission.ts",
         "src/views/forgot-password/index.vue",
