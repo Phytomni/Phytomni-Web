@@ -313,31 +313,31 @@ func SyncBotRuns(rows []model.SQuestionAgentLog) {
 func (ps *ApiService) ApiAsyncTaskList(ctx context.Context, username string, current, size int) ([]*common.ApiAsyncTaskListResponse, int64, int, error) {
 
 	var QuestionAgentLogList []*common.ApiAsyncTaskListResponse
-	db := model.DB(ctx).Model(&model.SQuestionAgentLog{})
-	err := db.Where("user_name = ?", username).
+
+	// 归属过滤的可复用查询:用 Session 固化 user_name + 状态 + 资源条件,让 Count
+	// 和分页 Find 各自从同一组 scoped 条件克隆——既不互相污染,也不会退化成全表
+	// (跨用户列表隔离显式可读,不依赖链式实例的隐式状态)。
+	scoped := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+		Where("user_name = ?", username).
 		Where("status = ? or status = ? or status = ?", "RUNNING", "SUCCEEDED", "FAILED").
 		Where("server_id IS NOT NULL or task_id IS NOT NULL").
-		Order("created_at DESC").
-		Find(&QuestionAgentLogList).Error
+		Session(&gorm.Session{})
 
-	for _, v := range QuestionAgentLogList {
-		fmt.Println(v.Id)
-	}
 	var total int64
-	if err = db.Count(&total).Error; err != nil {
+	if err := scoped.Count(&total).Error; err != nil {
 		return nil, 0, 0, err
 	}
+
 	totalPages := int((total + int64(size) - 1) / int64(size))
 	offset := (current - 1) * size
-	if err = db.Offset(offset).Limit(size).Find(&QuestionAgentLogList).Error; err != nil {
+	if err := scoped.Order("created_at DESC").Offset(offset).Limit(size).Find(&QuestionAgentLogList).Error; err != nil {
 		return nil, 0, 0, err
 	}
 
 	for _, v := range QuestionAgentLogList {
-
 		if v.FId != 0 {
 			var result *model.SQuestionAgentLog
-			if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", v.FId).First(&result).Error; err != nil {
+			if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("id = ?", v.FId).First(&result).Error; err != nil {
 				return nil, 0, 0, err
 			}
 			v.FDialogueId = result.DialogueId
