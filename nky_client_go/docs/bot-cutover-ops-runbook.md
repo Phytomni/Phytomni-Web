@@ -5,7 +5,7 @@ Operator procedures for the Web Go ↔ Phytomni-Bot `/query` cutover
 examples are scrubbed — never paste real keys, tokens, or DSNs into this
 file or into commits.
 
-Architecture reference: `1.phytomni/.claude/reference/Web-Bot-目标架构.md`.
+Architecture reference: the internal Web↔Bot target-architecture document (maintained separately, not in this repo).
 The gateway is dormant until `bot.proxy_enabled=true`.
 
 ## 1. Bot service token (ops-only)
