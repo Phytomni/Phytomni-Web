@@ -620,6 +620,7 @@ export default {
     resetSuccess: "配置重置成功",
     testSuccess: "配置测试通过",
     testFailed: "配置测试失败",
+    testUnavailable: "配置测试功能暂未接入后端",
   },
 
   // 智能体页面

@@ -642,6 +642,7 @@ export default {
     resetSuccess: "Configuration reset successfully",
     testSuccess: "Configuration test passed",
     testFailed: "Configuration test failed",
+    testUnavailable: "Configuration test is not yet wired to the backend",
   },
 
   // Agent Pages

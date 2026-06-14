@@ -1,11 +1,7 @@
 <!--
- * 组件注释
- * @Author: error: git config user.name & please set dead value or install git
- * @Date: 2025-04-28 17:54:52
- * @LastEditors: error: git config user.name & please set dead value or install git
- * @LastEditTime: 2025-05-09 17:23:44
- * @Description: 
- * 既往不恋！当下不杂！！未来不迎！！！
+  操作日志查看页 — 占位中(功能延期,非已落地特性)。
+  后端 /v1/operation/logs 现已收敛为仅管理员可读;此页待实现
+  「管理员鉴权感知 + 分页 + 日期筛选」的审计日志查看 UI,在此之前保持占位。
 -->
 <template>
   <div class="log-list">

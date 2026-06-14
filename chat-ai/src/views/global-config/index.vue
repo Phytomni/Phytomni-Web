@@ -258,18 +258,10 @@ const handleReset = async () => {
 };
 
 // 测试配置
-const handleTest = async () => {
-  testing.value = true;
-  try {
-    // 这里应该调用API测试配置
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // 模拟API调用
-
-    ElMessage.success(t("globalConfig.testSuccess"));
-  } catch (error) {
-    ElMessage.error(t("globalConfig.testFailed"));
-  } finally {
-    testing.value = false;
-  }
+const handleTest = () => {
+  // 配置测试端点尚未接入后端。此前用 setTimeout 模拟并恒报“测试通过”,会让用户
+  // 误以为配置已通过后端校验;改为明确提示功能暂不可用,待真实校验接口落地后再恢复。
+  ElMessage.info(t("globalConfig.testUnavailable"));
 };
 
 // 查看历史详情
