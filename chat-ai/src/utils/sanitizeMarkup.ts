@@ -166,3 +166,32 @@ export function sanitizeHref(url: string): string {
   if (!url) return "#";
   return isSafeHref(url) ? escapeAttrValue(url) : "#";
 }
+
+/**
+ * HTML-entity-encode arbitrary text headed for a v-html sink. Use to neutralize
+ * agent-influenced strings interpolated straight into innerHTML — the
+ * MarkdownViewer source body, the DeepGenome reference text fields — so any raw
+ * `<img onerror>` / quote-breakout becomes inert text. Coerces non-strings.
+ */
+export function escapeHtml(text: string): string {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Scheme-check a URL that has ALREADY been escapeHtml-ed (the markdown source is
+ * escaped in full before the link/img regexes run). Re-validates the scheme
+ * WITHOUT re-escaping — re-escaping would double-encode a query-string `&amp;`.
+ * A dangerous scheme needing entity obfuscation can't survive the up-front
+ * escape (its leading `&` is now `&amp;`, which the browser also can't read as a
+ * scheme), so only a literal `javascript:`/`data:`/`vbscript:` reaches here, and
+ * the scheme allow-list rejects it. Returns the (escaped) URL when safe, else `#`.
+ */
+export function sanitizeEscapedHref(escapedUrl: string): string {
+  if (!escapedUrl) return "#";
+  return isSafeHref(escapedUrl) ? escapedUrl : "#";
+}

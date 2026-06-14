@@ -356,7 +356,7 @@ const displayReferences = computed(() => {
 
     if (doc.title) {
       return {
-        html: `<div>${refIndex}. ${doc.title}</div>`,
+        html: `<div>${refIndex}. ${escapeHtml(String(doc.title))}</div>`,
         id: `ref-${refIndex}`,
       };
     } else if (doc.au || doc.ti) {
@@ -388,21 +388,25 @@ const displayReferences = computed(() => {
       }
 
       return {
-        html: `<div class="doc-citation">${refIndex}. ${citation}${linkPart}</div>`,
+        // citation 是纯文本(au/so/卷页年),先转义;linkPart 是本组件生成的
+        // 已消毒锚点(sanitizeHref + escapeHtml),保留原样不再转义。
+        html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
+          citation
+        )}${linkPart}</div>`,
         id: `ref-${refIndex}`,
       };
     } else {
       // 处理普通字符串类型的引用
       if (typeof doc === "string") {
         return {
-          html: `<div>${refIndex}. ${doc}</div>`,
+          html: `<div>${refIndex}. ${escapeHtml(doc)}</div>`,
           id: `ref-${refIndex}`,
         };
       }
 
       // 默认情况
       return {
-        html: `<div>${refIndex}. ${JSON.stringify(doc)}</div>`,
+        html: `<div>${refIndex}. ${escapeHtml(JSON.stringify(doc))}</div>`,
         id: `ref-${refIndex}`,
       };
     }

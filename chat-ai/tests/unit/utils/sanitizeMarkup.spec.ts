@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeAnchorAttributes, sanitizeHref } from "@/utils/sanitizeMarkup";
+import {
+  sanitizeAnchorAttributes,
+  sanitizeHref,
+  escapeHtml,
+  sanitizeEscapedHref,
+} from "@/utils/sanitizeMarkup";
 
 // Locks the AF-001 fix: the <a> tags that DeepGenomeResultViewer resurrects
 // from agent markdown and feeds to v-html must never carry an executable
@@ -186,5 +191,74 @@ describe("sanitizeHref — scheme allow-list for interpolated href URLs", () => 
 
   it("returns # for an empty URL", () => {
     expect(sanitizeHref("")).toBe("#");
+  });
+});
+
+// escapeHtml entity-encodes raw text headed for a v-html sink. Used to
+// neutralize agent-influenced strings interpolated straight into innerHTML
+// (the MarkdownViewer source body, the DeepGenome reference text fields).
+describe("escapeHtml — entity-encode text before v-html", () => {
+  it("encodes the five HTML-significant characters", () => {
+    expect(escapeHtml(`& < > " '`)).toBe(
+      "&amp; &lt; &gt; &quot; &#039;"
+    );
+  });
+
+  it("neutralizes an onerror image payload into inert text", () => {
+    const out = escapeHtml('<img src=x onerror="alert(1)">');
+    expect(out).not.toContain("<img");
+    expect(out).toContain("&lt;img");
+    expect(out).toContain("&quot;");
+  });
+
+  it("encodes & exactly once (no double-encoding)", () => {
+    expect(escapeHtml("a&b")).toBe("a&amp;b");
+  });
+
+  it("coerces non-string input without throwing", () => {
+    expect(escapeHtml(123 as unknown as string)).toBe("123");
+    expect(escapeHtml(null as unknown as string)).toBe("");
+    expect(escapeHtml(undefined as unknown as string)).toBe("");
+  });
+});
+
+// sanitizeEscapedHref scheme-checks a URL that has ALREADY been escapeHtml-ed
+// (the markdown source is escaped in full before the link/img regexes run), so
+// it must NOT re-escape — re-escaping would double-encode a query-string &amp;.
+describe("sanitizeEscapedHref — scheme-check an already-escaped URL", () => {
+  it("passes a safe https URL through unchanged", () => {
+    expect(sanitizeEscapedHref("https://example.org/a")).toBe(
+      "https://example.org/a"
+    );
+  });
+
+  it("passes relative / #anchor URLs through unchanged", () => {
+    expect(sanitizeEscapedHref("/attachments/r.png")).toBe(
+      "/attachments/r.png"
+    );
+    expect(sanitizeEscapedHref("#ref-3")).toBe("#ref-3");
+  });
+
+  it("preserves an already-escaped query &amp; without double-encoding", () => {
+    expect(sanitizeEscapedHref("https://e.org?a=1&amp;b=2")).toBe(
+      "https://e.org?a=1&amp;b=2"
+    );
+  });
+
+  it("neutralizes a plain javascript: / data: / vbscript: scheme to #", () => {
+    expect(sanitizeEscapedHref("javascript:alert(1)")).toBe("#");
+    expect(sanitizeEscapedHref("data:text/html,<b>x</b>")).toBe("#");
+    expect(sanitizeEscapedHref("vbscript:msgbox(1)")).toBe("#");
+  });
+
+  it("leaves an escaped quote in a safe URL inert (no breakout, no #)", () => {
+    // escapeHtml turned a literal " into &quot; — a real quote can no longer
+    // close the href attribute, so the URL stays as-is on a safe scheme.
+    const out = sanitizeEscapedHref("https://e.org&quot;onerror=x");
+    expect(out).toBe("https://e.org&quot;onerror=x");
+  });
+
+  it("returns # for an empty URL", () => {
+    expect(sanitizeEscapedHref("")).toBe("#");
   });
 });

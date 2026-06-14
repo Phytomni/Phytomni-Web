@@ -19,6 +19,7 @@
 <script setup lang="ts">
 import { Typewriter } from "vue-element-plus-x";
 import { computed } from "vue";
+import { escapeHtml, sanitizeEscapedHref } from "@/utils/sanitizeMarkup";
 
 const props = defineProps<{
   content: string;
@@ -32,8 +33,10 @@ const emit = defineEmits<{
 // 当不需要打字效果时，直接渲染内容
 const renderedContent = computed(() => {
   if (!props.instantMessage) {
-    // 更完整的 markdown 渲染
-    let content = props.content
+    // 先把整段正文 HTML 转义,再跑 markdown 正则:转义后正文里任何裸标签都成实体,
+    // 只有下面我们生成的结构标签是真 HTML。本组件渲染 agent(经 Bot 中转)内容,
+    // 经 v-html 注入,故内容必须先消毒(打字态走 Typewriter+DOMPurify,另行处理)。
+    let content = escapeHtml(props.content)
       // 代码块
       .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
       // 行内代码
@@ -46,16 +49,18 @@ const renderedContent = computed(() => {
       .replace(/^### (.*$)/gim, "<h3>$1</h3>")
       .replace(/^## (.*$)/gim, "<h2>$1</h2>")
       .replace(/^# (.*$)/gim, "<h1>$1</h1>")
-      // 图片
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
-        console.log("渲染图片:", { match, alt, src });
-        return `<img src="${src}" alt="${alt}" style="max-width: 50%; height: auto; border-radius: 4px; margin: 8px 0;" />`;
+      // 图片(src 过协议白名单;alt 已随正文整体转义)
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+        return `<img src="${sanitizeEscapedHref(
+          src
+        )}" alt="${alt}" style="max-width: 50%; height: auto; border-radius: 4px; margin: 8px 0;" />`;
       })
-      // 链接
-      .replace(
-        /\[([^\]]+)\]\(([^)]+)\)/g,
-        '<a href="$2" target="_blank">$1</a>'
-      )
+      // 链接(href 过协议白名单;链接文字已随正文整体转义)
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, href) => {
+        return `<a href="${sanitizeEscapedHref(
+          href
+        )}" target="_blank">${text}</a>`;
+      })
       // 列表
       .replace(/^\* (.*$)/gim, "<li>$1</li>")
       .replace(/^- (.*$)/gim, "<li>$1</li>")
