@@ -162,8 +162,9 @@ func (ps *ApiService) GetUserInfo(ctx context.Context, email string, password st
 		return
 	}
 
-	// 3. 验证密码
-	if user.Password != utils.MD5String(password) {
+	// 3. 验证密码（bcrypt 或遗留 MD5,按存储值形状判别）
+	verified, needsUpgrade, _ := utils.VerifyPassword(user.Password, password)
+	if !verified {
 		// 密码错误，增加失败次数
 		newFailedCount := user.LoginFailedCount + 1
 		updates := map[string]interface{}{
@@ -193,6 +194,22 @@ func (ps *ApiService) GetUserInfo(ctx context.Context, email string, password st
 		"locked_until":       nil,
 		"last_login_at":      time.Now(),
 	})
+
+	// 登录成功后,若仍是遗留 MD5,用本次明文升级为 bcrypt。守卫 CAS（WHERE
+	// password=原值）保证不覆盖并发改密;尽力而为：哈希/写入失败仅记日志,绝不
+	// 影响登录,也不动 password_change_at（凭证本身没变）。
+	if needsUpgrade {
+		if newHash, herr := utils.HashPassword(password); herr == nil {
+			res := model.DB(ctx).Model(&model.SUser{}).
+				Where("id = ? AND password = ?", user.Id, user.Password).
+				Update("password", newHash)
+			if res.Error != nil {
+				log.Printf("懒升级 bcrypt 失败(忽略,不影响登录) id=%d: %v", user.Id, res.Error)
+			}
+		} else {
+			log.Printf("懒升级 bcrypt 跳过(哈希出错) id=%d: %v", user.Id, herr)
+		}
+	}
 
 	// 5. 检查密码是否过期 (90天)
 	if user.PasswordChangeAt != nil {

@@ -2,10 +2,12 @@ package api_service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
 	"nky_client_go/db"
@@ -222,5 +224,59 @@ func TestApiUnlockUser_SuperAdminUnlocks(t *testing.T) {
 	ps := NewApiService()
 	if err := ps.ApiUnlockUser(context.Background(), "root@x.com", 2); err != nil {
 		t.Fatalf("expected super_admin unlock to succeed, got %v", err)
+	}
+}
+
+func TestGetUserInfo_BcryptRowVerifies(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	hash, _ := utils.HashPassword("goodpass")
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, hash).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ps := NewApiService()
+	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
+	if apiErr != nil || count != 1 {
+		t.Fatalf("bcrypt login: want count=1 err=nil, got count=%d err=%v", count, apiErr)
+	}
+}
+
+func TestGetUserInfo_LegacyMD5UpgradesOnLogin(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("goodpass")).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ps := NewApiService()
+	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
+	if apiErr != nil || count != 1 {
+		t.Fatalf("md5 login: want count=1 err=nil, got count=%d err=%v", count, apiErr)
+	}
+	var stored string
+	if err := gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if !strings.HasPrefix(stored, "$2") {
+		t.Errorf("expected lazy upgrade to bcrypt, password still %q", stored)
+	}
+}
+
+func TestGetUserInfo_UpgradeFailureDoesNotFailLogin(t *testing.T) {
+	// Force HashPassword to error (out-of-range cost) so the lazy upgrade is
+	// skipped; login must still succeed and the row stays on legacy MD5.
+	viper.Set("bcrypt_cost", 99)
+	defer viper.Set("bcrypt_cost", 0)
+
+	gdb := setupUserTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("goodpass")).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ps := NewApiService()
+	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
+	if apiErr != nil || count != 1 {
+		t.Fatalf("login must succeed despite upgrade failure, got count=%d err=%v", count, apiErr)
+	}
+	var stored string
+	gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored)
+	if stored != utils.MD5String("goodpass") {
+		t.Errorf("row should stay on MD5 when upgrade hash fails, got %q", stored)
 	}
 }
