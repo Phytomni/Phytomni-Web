@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
+	customI18n "nky_client_go/common/i18n"
 	"nky_client_go/db"
 )
 
@@ -120,5 +123,43 @@ func TestApiGetUserProfile_MissingUsernameReturns401(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 when username missing, got %d (body=%s)", w.Code, w.Body.String())
+	}
+}
+
+// newRegisterPostContext 构造一个带 x-www-form-urlencoded body 的 POST
+// *gin.Context,并绑定 Localize 中间件,使 customI18n.T 能解析键。
+func newRegisterPostContext(t *testing.T, form url.Values) (*gin.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/user/register", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c.Request = req
+	customI18n.Localize()(c)
+	return c, w
+}
+
+// TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope 钉死错误信封键:
+// 空凭证分支必须把本地化文案放在 "message"(前端拦截器只读 res.data.message),
+// 不得用旧的 "error" 键 —— 否则本地化文案在前端被通用回落吞掉。
+func TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope(t *testing.T) {
+	ph := NewApiHandler()
+	c, w := newRegisterPostContext(t, url.Values{})
+
+	ph.ApiUserRegister(c)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on empty credentials, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body %s: %v", w.Body.String(), err)
+	}
+	if _, hasError := body["error"]; hasError {
+		t.Errorf("response uses legacy \"error\" key; frontend reads \"message\" (body=%s)", w.Body.String())
+	}
+	if msg, ok := body["message"].(string); !ok || msg == "" {
+		t.Errorf("expected non-empty \"message\", got %v (body=%s)", body["message"], w.Body.String())
 	}
 }

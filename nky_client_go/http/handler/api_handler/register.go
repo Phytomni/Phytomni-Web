@@ -41,9 +41,11 @@ func (ph *ApiHandler) ApiUserRegister(ctx *gin.Context) {
 	password := ctx.PostForm("password")
 
 	if email == "" || password == "" {
+		// 前端响应拦截器只读 res.data.message,错误信封必须用 "message" 承载
+		// 已本地化的文案,而非旧的 "error" 键(否则本地化文案被通用回落吞掉)。
 		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":  http.StatusBadRequest,
-			"error": customI18n.T(ctx, "register.credentials_required"),
+			"code":    http.StatusBadRequest,
+			"message": customI18n.T(ctx, "register.credentials_required"),
 		})
 		return
 	}
@@ -237,7 +239,7 @@ func (ph *ApiHandler) ApiModifyPassword(ctx *gin.Context) {
 			"username", name, "err", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "password changed but flag update failed; please log in again",
+			"message": customI18n.T(ctx, "modify_password.flag_update_failed"),
 		})
 		return
 	}
