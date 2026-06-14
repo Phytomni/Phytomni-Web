@@ -48,7 +48,25 @@ func (e *APIError) Error() string {
 	if e.Message != "" {
 		return fmt.Sprintf("bot %s %s: %s (code=%d req=%s)", e.Method, e.Path, e.Message, e.Status, e.RequestID)
 	}
-	return fmt.Sprintf("bot %s %s: status %d body %s", e.Method, e.Path, e.Status, e.body)
+	return fmt.Sprintf("bot %s %s: status %d body %s", e.Method, e.Path, e.Status, truncateForLog(e.body))
+}
+
+// maxBodyInError bounds how much of a non-envelope Bot response body is
+// embedded in the error string.
+const maxBodyInError = 256
+
+// truncateForLog caps the raw Bot body that gets stringified into the error.
+// The error reaches logs and Sentry (e.g. via overlayBotContent's
+// CaptureException), and a 5xx body may carry internal detail or user data, so
+// short payloads survive intact while oversized ones are truncated rather than
+// echoed in full. Truncation is on a rune boundary so a multibyte (e.g.
+// Chinese) body never lands as invalid UTF-8.
+func truncateForLog(s string) string {
+	r := []rune(s)
+	if len(r) <= maxBodyInError {
+		return s
+	}
+	return string(r[:maxBodyInError]) + "…(truncated)"
 }
 
 // botError turns a non-2xx response into a typed *APIError, preferring the

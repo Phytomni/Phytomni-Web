@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -111,6 +112,27 @@ func TestSurfaceableMessage(t *testing.T) {
 	}
 	if _, ok := SurfaceableMessage(errors.New("plain")); ok {
 		t.Error("non-APIError must NOT surface")
+	}
+}
+
+func TestAPIErrorTruncatesRawBody(t *testing.T) {
+	// No envelope message → Error() falls back to the raw body branch, which
+	// reaches logs/Sentry. An oversized body must be truncated, not echoed whole.
+	big := strings.Repeat("x", 1000)
+	got := (&APIError{Method: "GET", Path: "/v1/runs", Status: 500, body: big}).Error()
+	if contains(got, big) {
+		t.Fatalf("full 1000-char raw body leaked into error string: %q", got)
+	}
+	if !contains(got, "(truncated)") {
+		t.Fatalf("oversized body should be marked truncated: %q", got)
+	}
+	// A short body is diagnostic and stays intact.
+	short := (&APIError{Method: "GET", Path: "/v1/runs", Status: 500, body: "oops"}).Error()
+	if !contains(short, "oops") {
+		t.Fatalf("short body should be preserved for diagnostics: %q", short)
+	}
+	if contains(short, "(truncated)") {
+		t.Fatalf("short body should not be marked truncated: %q", short)
 	}
 }
 
