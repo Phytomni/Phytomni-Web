@@ -83,6 +83,7 @@
       @startTutorial="startTutorial"
       @chatRenamed="handleChatRenamed"
       @chatDeleted="handleChatDeleted"
+      @chatFavorited="handleChatFavorited"
     />
     <!-- 中间聊天区域 -->
     <div class="chat-main">
@@ -3542,6 +3543,16 @@ const handleChatDeleted = (deletedChat: Chat) => {
   chatList.value = chatList.value.filter(
     (c) => c.dialogue_id !== deletedChat.dialogue_id
   );
+};
+
+// 收藏状态同样由父组件更新(子组件只发 chatFavorited 事件)。
+const handleChatFavorited = (updatedChat: Chat) => {
+  const index = chatList.value.findIndex(
+    (c) => c.dialogue_id === updatedChat.dialogue_id
+  );
+  if (index !== -1) {
+    chatList.value[index] = updatedChat;
+  }
 };
 
 // 更新URL中的聊天ID

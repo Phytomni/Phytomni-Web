@@ -838,7 +838,7 @@ const fallbackCopyText = (text: any, index: number) => {
       textAreaCopyCore(text, index);
     }
   } catch {
-    ElMessage.success(t("chat.copyFailed"));
+    ElMessage.error(t("chat.copyFailed"));
   }
 };
 

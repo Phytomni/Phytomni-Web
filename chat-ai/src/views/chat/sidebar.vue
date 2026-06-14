@@ -917,18 +917,7 @@ const toggleFavorite = async (chat: Chat) => {
     const response = await collectHistory(formData);
     if (response.code === 200) {
       const updatedChat = { ...chat, isFavorite: !chat.isFavorite };
-      // 更新本地数据
-      const index = props.chatList.findIndex(
-        (c) => c.dialogue_id === updatedChat.dialogue_id
-      );
-      if (index !== -1) {
-        // FIXME: prop mutation again — parent already receives 'chatFavorited'
-        // below; the duplicate local edit should be removed once the parent owns
-        // the list. Deferred from the CI hygiene pass.
-        // eslint-disable-next-line vue/no-mutating-props
-        props.chatList[index] = updatedChat;
-      }
-      // 通知父组件收藏状态已更改
+      // 由父组件(chatList 的 owner)更新收藏状态,子组件不直接改写 props.chatList。
       emit("chatFavorited", updatedChat);
       // 显示成功提示
       ElMessage.success(updatedChat.isFavorite ? "已收藏" : "已取消收藏");
