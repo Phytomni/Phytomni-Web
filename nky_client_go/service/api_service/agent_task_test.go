@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
 	"nky_client_go/db"
@@ -159,6 +160,37 @@ func TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers(t *testing.T) {
 	}
 }
 
+// TestApiAnswerCheck_ScopesChildrenToOwner pins the child-row owner scope:
+// even if a foreign child row points (via f_id) at the caller's own parent —
+// the kind of cross-owner attachment a write bug or DB corruption could
+// produce — the history read must filter children by user_name and never
+// surface it. Mutation: drop `user_name = ?` from the child query and the
+// foreign row leaks into the returned list (3 rows instead of 2).
+func TestApiAnswerCheck_ScopesChildrenToOwner(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, created_at) VALUES
+		(70, 'dlg-x',  0, 'alice', 'q1',   'a1',   '2026-01-01 00:00:00'),
+		(71, 'dlg-x', 70, 'alice', 'q2',   'a2',   '2026-01-01 00:01:00'),
+		(72, 'dlg-x', 70, 'bob',   'leak', 'leak', '2026-01-01 00:02:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	ps := NewApiService()
+	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-x")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected parent + alice child only (2 rows), got %d: %+v", len(got), got)
+	}
+	for _, r := range got {
+		if r.UserName == "bob" || r.Id == 72 {
+			t.Errorf("cross-owner child leaked into history: id=%d user=%q", r.Id, r.UserName)
+		}
+	}
+}
+
 // TestApiAnswerCheck_OverlayReshapesBotContent pins the activated read path:
 // a knowledge row carrying a bot_run_id gets its answer reshaped into the
 // {content, doc_list} JSON chat-ai parses (sourced from the run's formatted
@@ -200,6 +232,41 @@ func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
 	}
 	if got[0].Status != "SUCCEEDED" {
 		t.Errorf("status not uppercased, got %q", got[0].Status)
+	}
+}
+
+// TestApiAnswerCheck_OverlayReshapesFinalReport pins the deep_genome read path
+// on the history overlay: a row carrying a bot_run_id whose run finished with
+// result.final_report (no formatted envelope) gets its answer reshaped through
+// ShapeAnswer's cited family. Mutation: drop the `else if ParseRunFinalReport`
+// branch in overlayBotContent and the answer stays the stale seeded value.
+func TestApiAnswerCheck_OverlayReshapesFinalReport(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(31, 'dlg-dg', 0, 'alice', 'q', 'stale', 'DeepGenomeAgent', 'run-dg', 'succeeded', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"run_id":"run-dg","agent":"deep_genome","status":"succeeded","tool_name":"DeepGenomeAgent","query":"q","result":{"final_report":"# Gene Report"}}]}`))
+	}))
+	defer srv.Close()
+
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	defer func() { rxBot.BotConfig = nil }()
+
+	ps := NewApiService()
+	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-dg")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(got))
+	}
+	if !strings.Contains(got[0].Answer, "Gene Report") || !strings.Contains(got[0].Answer, "content") {
+		t.Errorf("final_report not reshaped in overlay, got %q", got[0].Answer)
 	}
 }
 
@@ -377,5 +444,26 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	var paths []string
 	if err := json.Unmarshal([]byte(ip), &paths); err != nil || len(paths) != 1 || paths[0] != "/obs/p/r1/a.png" {
 		t.Errorf("image_paths = %q (%v)", ip, err)
+	}
+}
+
+// TestHuaweiTLSConfig pins the EIHealth/IAM polling TLS posture: certificate
+// verification is ON unless huawei.insecure_skip_verify is explicitly true. A
+// regression that hard-coded InsecureSkipVerify=true again would fail the
+// default (key-absent) and explicit-false cases.
+func TestHuaweiTLSConfig(t *testing.T) {
+	t.Cleanup(func() { viper.Set("huawei.insecure_skip_verify", false) })
+
+	// Production default: key absent -> verification ON.
+	if huaweiTLSConfig().InsecureSkipVerify {
+		t.Error("default (key absent) must verify certs (InsecureSkipVerify=false)")
+	}
+	viper.Set("huawei.insecure_skip_verify", true)
+	if !huaweiTLSConfig().InsecureSkipVerify {
+		t.Error("explicit true must disable verification (dev-only opt-in)")
+	}
+	viper.Set("huawei.insecure_skip_verify", false)
+	if huaweiTLSConfig().InsecureSkipVerify {
+		t.Error("explicit false must verify certs")
 	}
 }

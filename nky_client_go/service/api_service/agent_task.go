@@ -77,6 +77,17 @@ type TaskStatusResponse struct {
 // IAM/EIHealth helpers — there is no *gin.Context state to thread
 // through, so the parameter was removed to make the cron call site
 // honest about not having a request context.
+// huaweiTLSConfig builds the TLS config for the Huawei IAM / EIHealth polling
+// clients. Certificate verification is ON by default; the legacy
+// InsecureSkipVerify=true is now opt-in via huawei.insecure_skip_verify so a
+// dev box behind a TLS-intercepting proxy can still poll while production
+// verifies the cert chain (defends the IAM token exchange against MITM). The
+// secure default is a behavior change on the live cron — an operator must smoke
+// a real poll against the Huawei endpoint before trusting it.
+func huaweiTLSConfig() *tls.Config {
+	return &tls.Config{InsecureSkipVerify: viper.GetBool("huawei.insecure_skip_verify")}
+}
+
 func GetTaskStatus(taskIds []string) {
 	fmt.Printf("当前共%d条任务开始查询！\n", len(taskIds))
 
@@ -97,7 +108,7 @@ func GetTaskStatus(taskIds []string) {
 	authReq.Header.Set("Content-Type", "application/json")
 
 	authTr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: huaweiTLSConfig(),
 	}
 	authClient := &http.Client{Transport: authTr}
 
@@ -140,7 +151,7 @@ func GetTaskStatus(taskIds []string) {
 
 			// 2、使用token获取任务状态
 			tr := &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig: huaweiTLSConfig(),
 			}
 			client := &http.Client{Transport: tr}
 			req, err := http.NewRequest("GET", huaweiEIHealthJobsBase()+"/"+TId, nil)
@@ -462,7 +473,11 @@ func (ps *ApiService) ApiAnswerCheck(ctx context.Context, username string, dialo
 		}
 		return nil, err
 	}
-	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("f_id = ? and delete_at IS NULL", QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error; err != nil {
+	// Scope children to the same owner as the parent. Defense-in-depth: child
+	// rows are written under the dialogue owner, so a row with a different
+	// user_name attached to an owned parent (via a write bug or DB corruption)
+	// must never surface through history.
+	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("user_name = ? and f_id = ? and delete_at IS NULL", username, QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error; err != nil {
 		return nil, err
 	}
 	// 创建一个新的切片，将 QuestionAgentLog 放在首位
