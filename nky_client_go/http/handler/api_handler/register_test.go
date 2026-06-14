@@ -10,10 +10,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
 	customI18n "nky_client_go/common/i18n"
 	"nky_client_go/db"
+	"nky_client_go/utils"
 )
 
 // setupProfileTestDB 建一个 in-memory SQLite,创建 ApiGetUserProfile 实际查的两张表
@@ -161,5 +163,54 @@ func TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope(t *testing.T) {
 	}
 	if msg, ok := body["message"].(string); !ok || msg == "" {
 		t.Errorf("expected non-empty \"message\", got %v (body=%s)", body["message"], w.Body.String())
+	}
+}
+
+// setupLoginTestDB creates the full s_user column set ApiLogin -> GetUserInfo
+// reads (mirrors service/api_service/user_test.go's DDL).
+func setupLoginTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	ddl := `CREATE TABLE s_user (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT, password TEXT, code TEXT, description TEXT,
+		first_login_status TEXT DEFAULT '0',
+		created_at DATETIME, updated_at DATETIME, delete_at DATETIME,
+		password_change_at DATETIME, login_failed_count INTEGER DEFAULT 0,
+		locked_until DATETIME, last_login_at DATETIME,
+		phone TEXT, organization TEXT, position TEXT, chat_limit INTEGER DEFAULT 0
+	)`
+	if err := gdb.Exec(ddl).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	db.Set("nky_client_go", gdb)
+	return gdb
+}
+
+// TestApiLogin_ResponseOmitsPasswordHash pins that the login success body never
+// carries the stored hash (the response struct has no password field).
+func TestApiLogin_ResponseOmitsPasswordHash(t *testing.T) {
+	prev := viper.GetString("jwt.secret_key")
+	viper.Set("jwt.secret_key", "unit-test-secret")
+	t.Cleanup(func() { viper.Set("jwt.secret_key", prev) })
+
+	gdb := setupLoginTestDB(t)
+	hash, _ := utils.HashPassword("goodpass")
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code, first_login_status) VALUES (1, 'a@x.com', ?, 'user', '1')`, hash).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	ph := NewApiHandler()
+	c, w := newRegisterPostContext(t, url.Values{"email": {"a@x.com"}, "password": {"goodpass"}})
+	ph.ApiLogin(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "\"password\"") {
+		t.Errorf("login response leaked a password field: %s", w.Body.String())
 	}
 }
