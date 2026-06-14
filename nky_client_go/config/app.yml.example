@@ -90,6 +90,16 @@ gene_file_path: "/var/lib/phytomni/gene_examples"
 guest_default_chat_limit: 5
 
 # ---------------------------------------------------------------------
+# bcrypt work factor for password hashing (utils/password.go). Omit or
+# set 0 to use the library default (10). Allowed range is [10,31]; the
+# server refuses to boot on a value outside it (no silent downgrade).
+# Higher = stronger but slower on EVERY login (incl. failures) — there
+# is no login rate limiter, so cost x QPS is a CPU budget. Raise only
+# after measuring p99 login latency on production hardware.
+# ---------------------------------------------------------------------
+bcrypt_cost: 10
+
+# ---------------------------------------------------------------------
 # Huawei Cloud IAM + EIHealth — service/api_service/agent_task.go
 # uses these for the analyst-agent polling cron and the on-demand
 # task-log fetch. The IAM block authenticates against a Huawei Cloud

@@ -46,6 +46,11 @@ func initConfig(*cli.Context) error {
 	if err := utils.LoadConfigInFile(configFile); err != nil {
 		return err
 	}
+	// Fail fast on a misconfigured bcrypt cost rather than silently
+	// degrading the work factor on the first password write.
+	if err := utils.ValidateBcryptCost(); err != nil {
+		return err
+	}
 	if err := rxLog.InitFromViper(); err != nil {
 		return err
 	}
