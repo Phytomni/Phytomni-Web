@@ -280,3 +280,43 @@ func TestGetUserInfo_UpgradeFailureDoesNotFailLogin(t *testing.T) {
 		t.Errorf("row should stay on MD5 when upgrade hash fails, got %q", stored)
 	}
 }
+
+func TestApiModifyPassword_LegacyOldVerifiesNewIsBcrypt(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("oldpass")).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ps := NewApiService()
+	if _, err := ps.ApiModifyPassword(context.Background(), "a@x.com", "oldpass", "newpass"); err != nil {
+		t.Fatalf("change with correct old (md5) should succeed, got %v", err)
+	}
+	var stored string
+	gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored)
+	if !strings.HasPrefix(stored, "$2") {
+		t.Errorf("new password should be stored as bcrypt, got %q", stored)
+	}
+	ok, _, _ := utils.VerifyPassword(stored, "newpass")
+	if !ok {
+		t.Error("stored new hash does not verify the new password")
+	}
+}
+
+func TestApiModifyPassword_WrongOldRejected(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("oldpass")).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ps := NewApiService()
+	if _, err := ps.ApiModifyPassword(context.Background(), "a@x.com", "WRONG", "newpass"); err == nil {
+		t.Fatal("expected error on wrong old password, got nil")
+	}
+}
+
+func TestApiModifyPassword_UnknownUserFailsClosed(t *testing.T) {
+	setupUserTestDB(t) // no rows seeded
+	ps := NewApiService()
+	// A JWT for a since-deleted user: must error, must not panic.
+	if _, err := ps.ApiModifyPassword(context.Background(), "ghost@x.com", "x", "newpass"); err == nil {
+		t.Fatal("expected error for unknown user, got nil")
+	}
+}

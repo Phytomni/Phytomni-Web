@@ -100,25 +100,33 @@ func (ps *ApiService) RegisterAddUser(ctx context.Context, email string, passwor
 }
 
 func (ps *ApiService) ApiModifyPassword(ctx context.Context, name, Password, newPassword string) (string, error) {
-	oldHash := utils.MD5String(Password)
-	newHash := utils.MD5String(newPassword)
-
-	var userInfo *model.SUser
+	// 先按邮箱取行(身份来自 JWT),再在 Go 内验旧密码 —— bcrypt 加盐非确定性,不能
+	// 再用 SQL `WHERE password = ?` 等值匹配。原 SQL 写法隐式兜了"用户不存在",这里
+	// 必须显式补 not-found 守卫(已删但 token 仍有效的用户须 fail-closed)。用值类型
+	// 而非指针,避免 not-found 时对 nil 取 .Id。
+	var userInfo model.SUser
 	db := model.DB(ctx).Model(&model.SUser{}).Debug()
-	err := db.Where("email = ? and password = ?", name, oldHash).First(&userInfo).Error
-	if userInfo.Id == 0 || err != nil {
+	if err := db.Where("email = ?", name).First(&userInfo).Error; err != nil || userInfo.Id == 0 {
 		return "", errors.New("原密码输入错误,请重试")
 	}
 
-	err = db.Where("id = ? and password = ?", userInfo.Id, oldHash).Updates(map[string]interface{}{
-		"password":           newHash,
-		"password_change_at": time.Now(),
-	}).Error
-	if err != nil {
+	ok, _, _ := utils.VerifyPassword(userInfo.Password, Password)
+	if !ok {
+		return "", errors.New("原密码输入错误,请重试")
+	}
+
+	newHash, herr := utils.HashPassword(newPassword)
+	if herr != nil {
 		return "", errors.New("密码修改失败")
 	}
-	return name, err
 
+	if err := db.Where("id = ?", userInfo.Id).Updates(map[string]interface{}{
+		"password":           newHash,
+		"password_change_at": time.Now(),
+	}).Error; err != nil {
+		return "", errors.New("密码修改失败")
+	}
+	return name, nil
 }
 
 func (ps *ApiService) UpdateUserPassWord(ctx context.Context, password string, id int) bool {
