@@ -82,6 +82,7 @@
       @handleSidebarCollapse="handleSidebarCollapse"
       @startTutorial="startTutorial"
       @chatRenamed="handleChatRenamed"
+      @chatDeleted="handleChatDeleted"
     />
     <!-- 中间聊天区域 -->
     <div class="chat-main">
@@ -2067,7 +2068,7 @@ const fallbackCopyText = (text: any, index: number) => {
       textAreaCopyCore(text, index);
     }
   } catch {
-    ElMessage.success(t("chat.copyFailed"));
+    ElMessage.error(t("chat.copyFailed"));
   }
 };
 
@@ -3534,6 +3535,13 @@ const handleChatRenamed = (updatedChat: Chat) => {
   if (index !== -1) {
     chatList.value[index] = updatedChat;
   }
+};
+
+// 父组件持有 chatList,删除由此处从列表移除(子组件只发 chatDeleted 事件)。
+const handleChatDeleted = (deletedChat: Chat) => {
+  chatList.value = chatList.value.filter(
+    (c) => c.dialogue_id !== deletedChat.dialogue_id
+  );
 };
 
 // 更新URL中的聊天ID

@@ -882,17 +882,11 @@ const handleDeleteConfirm = async () => {
 
     const response = await deleteHistory(formData);
     if (response.code === 200) {
-      // 从本地列表中移除
-      const index = props.chatList.findIndex(
+      // 由父组件(chatList 的 owner)从列表中移除,子组件不直接改写 props.chatList。
+      const deletedChat = props.chatList.find(
         (c) => c.dialogue_id === chatToDelete.value!.dialogue_id
       );
-      if (index !== -1) {
-        const deletedChat = props.chatList[index];
-        // FIXME: prop mutation pre-empts the emit below; refactor so the parent
-        // owns the splice (via 'chatDeleted' handler) and this component never
-        // edits chatList directly. Deferred from the CI hygiene pass.
-        // eslint-disable-next-line vue/no-mutating-props
-        props.chatList.splice(index, 1);
+      if (deletedChat) {
         // 通知父组件聊天已删除
         emit("chatDeleted", deletedChat);
       }
