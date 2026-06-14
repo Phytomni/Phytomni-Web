@@ -151,6 +151,37 @@ func TestApiQueryAnalystUpdateLog_WritesGalleryPaths(t *testing.T) {
 	}
 }
 
+// TestApiQueryAnalystUpdateLog_FinalReport pins the deep_genome read path on the
+// async write-back: a finished run carrying result.final_report (no formatted
+// envelope) reshapes through ShapeAnswer's cited family and lands in the row.
+// Mutation: drop the `else if ParseRunFinalReport` branch in query.go and the
+// answer stays the seeded placeholder (the report never surfaces) — this fails.
+func TestApiQueryAnalystUpdateLog_FinalReport(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
+		(66, 'alice', 'q', 'server任务创建成功：t-dg', 'DeepGenomeAgent', 't-dg', 'run-dg', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	runRecordServer(t, `{"run_id":"run-dg","agent":"deep_genome","status":"succeeded","result":{"final_report":"# Gene Report"}}`)
+	ps := NewApiService()
+
+	answer, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-dg", "cr-1")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(answer, "Gene Report") || !strings.Contains(answer, "content") {
+		t.Errorf("final_report not reshaped into cited JSON, got %q", answer)
+	}
+	status, stored := readStatusAnswer(t, gdb, 66)
+	if status != "SUCCEEDED" {
+		t.Errorf("status = %q, want SUCCEEDED", status)
+	}
+	if stored != answer {
+		t.Errorf("stored answer %q != returned answer %q", stored, answer)
+	}
+}
+
 // TestApiQueryAnalystUpdateLog_NoArtifactsNoClobber: a finished run with no
 // artifacts must not wipe an already-populated download_path/image_paths.
 func TestApiQueryAnalystUpdateLog_NoArtifactsNoClobber(t *testing.T) {
