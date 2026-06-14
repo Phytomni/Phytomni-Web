@@ -81,6 +81,7 @@
       @openKnowledgeBase="openKnowledgeBase"
       @handleSidebarCollapse="handleSidebarCollapse"
       @startTutorial="startTutorial"
+      @chatRenamed="handleChatRenamed"
     />
     <!-- 中间聊天区域 -->
     <div class="chat-main">
@@ -3522,6 +3523,16 @@ const handleSidebarCollapse = (isCollapsed: boolean) => {
   // 如果左侧侧边栏展开且右侧侧边栏也是展开的，则关闭右侧
   if (!isCollapsed && drawerVisible.value) {
     drawerVisible.value = false;
+  }
+};
+
+// 侧边栏重命名会话后,由父组件更新自己持有的 chatList(子组件改为 emit,不改 prop)
+const handleChatRenamed = (updatedChat: Chat) => {
+  const index = chatList.value.findIndex(
+    (c) => c.dialogue_id === updatedChat.dialogue_id
+  );
+  if (index !== -1) {
+    chatList.value[index] = updatedChat;
   }
 };
 

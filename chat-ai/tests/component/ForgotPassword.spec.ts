@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, config } from "@vue/test-utils";
+import { createI18n } from "vue-i18n";
+import ElementPlus from "element-plus";
+import zhCN from "@/locales/langs/zh-CN";
+import enUS from "@/locales/langs/en-US";
 
 // vi.hoisted runs before the hoisted vi.mock factories, so these spies are
 // initialized by the time the factories dereference them (a plain top-level
@@ -16,17 +20,28 @@ vi.mock("@/utils/authRedirect", () => ({ redirectIfAuthed }));
 
 import ForgotPassword from "@/views/forgot-password/index.vue";
 
+// Install the REAL locale messages (not a $t-echoes-the-key stub): the view's
+// forgotPassword.* keys ship in src/locales/langs, so the test now exercises
+// actual key resolution — it fails if a key is missing or renamed — and the
+// assertions below check the real rendered copy. Locale pinned to zh-CN so the
+// expected strings are deterministic regardless of the test env's navigator.
+const i18n = createI18n({
+  legacy: false,
+  locale: "zh-CN",
+  fallbackLocale: "en-US",
+  messages: { "zh-CN": zhCN, "en-US": enUS },
+});
+
+// Replace the global empty-message i18n that tests/setup.ts installs with this
+// real-message one (vitest isolates per file, so this is local to this spec).
+// Installing vue-i18n exactly once avoids the duplicate-registration warnings a
+// second plugin would emit.
+config.global.plugins = [i18n, ElementPlus];
+
 function mountView() {
   return mount(ForgotPassword, {
     global: {
       stubs: { LangSwitch: true },
-      // The view renders i18n keys via $t. The global test i18n stub
-      // (tests/setup.ts) deliberately omits forgotPassword.* messages — the
-      // real keys ship in src/locales/langs — which makes intlify emit
-      // "not found / fall back" stderr noise on every mount. Resolve $t to the
-      // key here so the key-based assertions below stay valid while the lookup
-      // (and its warnings) is bypassed.
-      mocks: { $t: (key: string) => key },
     },
   });
 }
@@ -40,7 +55,9 @@ describe("ForgotPassword view", () => {
     const wrapper = mountView();
     expect(wrapper.find(".notice-container").exists()).toBe(true);
     expect(wrapper.findAll("input").length).toBe(0);
-    expect(wrapper.text()).toContain("forgotPassword.unavailableTitle");
+    // Real zh-CN copy for forgotPassword.unavailableTitle — proves the key
+    // resolves, not just that some key string was echoed.
+    expect(wrapper.text()).toContain("密码重置功能暂未开放");
   });
 
   it("invokes redirectIfAuthed on mount", () => {

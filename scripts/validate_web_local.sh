@@ -33,12 +33,16 @@ fail() { printf '\n\e[1;31mFAIL: %s\e[0m\n' "$*" >&2; exit 1; }
 # ------------------------------------------------------------------
 # G-1 — secret scan on the diff
 # ------------------------------------------------------------------
-step "G-1 secret scan (changed files only)"
+step "G-1 secret scan (changed + untracked files)"
 changed="$(mktemp)"
 trap 'rm -f "$changed"' EXIT
+# Scan staged + unstaged tracked changes AND new untracked files (a brand-new
+# file carrying a secret is invisible to `git diff` until it is added).
+# --exclude-standard honors .gitignore, so node_modules/dist/.codex stay out.
 {
   git diff --name-only --diff-filter=ACMR
   git diff --cached --name-only --diff-filter=ACMR
+  git ls-files --others --exclude-standard
 } | sort -u >"$changed"
 
 if [ -s "$changed" ]; then

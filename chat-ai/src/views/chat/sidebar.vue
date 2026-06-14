@@ -855,20 +855,9 @@ const handleRenameConfirm = async () => {
           ...chatToRename.value,
           title: renameForm.value.title,
         };
-        // 更新本地数据
-        const index = props.chatList.findIndex(
-          (c) => c.dialogue_id === updatedChat.dialogue_id
-        );
-        if (index !== -1) {
-          // FIXME: mutating a prop in place; refactor to emit('chatRenamed', updatedChat)
-          // and let the parent update its own state. Deferred from the CI hygiene
-          // pass because the change ripples through every consumer of <sidebar />.
-          // eslint-disable-next-line vue/no-mutating-props
-          props.chatList[index] = updatedChat;
-        }
         renameDialogVisible.value = false;
         chatToRename.value = null;
-        // 通知父组件聊天已重命名
+        // 父组件持有 chatList,由它在收到事件后更新本地列表;子组件不直接改 prop。
         emit("chatRenamed", updatedChat);
         // 显示成功提示
         ElMessage.success("重命名成功");
