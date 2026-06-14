@@ -64,3 +64,57 @@ func TestAddBotRunID_AddsWhenAbsent(t *testing.T) {
 		t.Error("bot_run_id should be present after add")
 	}
 }
+
+// TestAddColumnIfMissing_SkipsWhenPresent drives the shared idempotency guard
+// directly (TW-002: the CLI Action closure is unexported). The ddl passed in
+// would FAIL with "duplicate column" if it ran, so a nil return proves the
+// HasColumn guard short-circuited — delete the guard and this test goes red.
+func TestAddColumnIfMissing_SkipsWhenPresent(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE s_question_agent_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		download_path TEXT,
+		image_paths TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	db.Set("nky_client_go", gdb)
+
+	if err := addColumnIfMissing(model.Default(), &model.SQuestionAgentLog{}, "image_paths",
+		"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
+		t.Fatalf("present-column path must no-op, got %v", err)
+	}
+}
+
+// TestAddColumnIfMissing_AddsWhenAbsent drives the other half: absent column →
+// the ALTER runs and the column exists afterward. SQLite-compatible DDL (no
+// AFTER/COMMENT, which SQLite rejects); the production MySQL text lives in the
+// add-image-paths subcommand.
+func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE s_question_agent_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		download_path TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	db.Set("nky_client_go", gdb)
+
+	m := model.Default().Migrator()
+	if m.HasColumn(&model.SQuestionAgentLog{}, "image_paths") {
+		t.Fatal("image_paths should be absent before add")
+	}
+	if err := addColumnIfMissing(model.Default(), &model.SQuestionAgentLog{}, "image_paths",
+		"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
+		t.Fatalf("add column: %v", err)
+	}
+	if !m.HasColumn(&model.SQuestionAgentLog{}, "image_paths") {
+		t.Error("image_paths should be present after add")
+	}
+}

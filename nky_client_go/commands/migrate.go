@@ -5,7 +5,26 @@ import (
 	"nky_client_go/model"
 
 	"github.com/urfave/cli/v2"
+	"gorm.io/gorm"
 )
+
+// addColumnIfMissing runs an idempotent additive ALTER: if model already has
+// col it logs and no-ops, otherwise it executes ddl. The add-bot-run-id and
+// add-image-paths subcommands share this single implementation of the
+// HasColumn idempotency guard so a test can drive the guard directly — the CLI
+// Action closures themselves are unexported and not reachable from a test.
+func addColumnIfMissing(db *gorm.DB, model interface{}, col, ddl string) error {
+	if db.Migrator().HasColumn(model, col) {
+		rxLog.Sugar().Infof("%s column already exists, skip", col)
+		return nil
+	}
+	if err := db.Exec(ddl).Error; err != nil {
+		rxLog.Sugar().Errorw("add column failed", "column", col, "err", err)
+		return err
+	}
+	rxLog.Sugar().Infof("%s column added", col)
+	return nil
+}
 
 // Migrate is the CLI command `go run main.go migrate up`. It performs the
 // first-login backfill: revert first_login_status from '1' to '0' for users
@@ -57,19 +76,17 @@ func Migrate() *cli.Command {
 				Usage:       "给 s_question_agent_logs 加 bot_run_id 列",
 				Description: "Add the nullable bot_run_id join column. Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual.",
 				Action: func(ctx *cli.Context) error {
-					db := model.Default()
-					if db.Migrator().HasColumn(&model.SQuestionAgentLog{}, "bot_run_id") {
-						rxLog.Sugar().Info("bot_run_id column already exists, skip")
-						return nil
-					}
-					if err := db.Exec(
-						"ALTER TABLE s_question_agent_logs ADD COLUMN bot_run_id VARCHAR(64) NULL AFTER server_id",
-					).Error; err != nil {
-						rxLog.Sugar().Errorw("add bot_run_id failed", "err", err)
-						return err
-					}
-					rxLog.Sugar().Info("bot_run_id column added")
-					return nil
+					return addColumnIfMissing(model.Default(), &model.SQuestionAgentLog{}, "bot_run_id",
+						"ALTER TABLE s_question_agent_logs ADD COLUMN bot_run_id VARCHAR(64) NULL AFTER server_id")
+				},
+			},
+			{
+				Name:        "add-image-paths",
+				Usage:       "给 s_question_agent_logs 加 image_paths 列",
+				Description: "Add the nullable image_paths text column (gallery image OBS paths, stored as a JSON array). Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual (see docs/web-production-deployment-manual.md §5.3). Without this column every /query returns 500 (Unknown column 'image_paths').",
+				Action: func(ctx *cli.Context) error {
+					return addColumnIfMissing(model.Default(), &model.SQuestionAgentLog{}, "image_paths",
+						"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT '图廊图片OBS路径(JSON数组)' AFTER download_path")
 				},
 			},
 			{
