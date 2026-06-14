@@ -93,18 +93,10 @@ func redactJSONBody(body []byte) string {
 	return string(masked)
 }
 
-// redactQueryParams parses the raw query string and masks any sensitive
-// keys before re-encoding. A parse failure returns the input verbatim
-// so the audit log still captures *something*; the alternative (drop
-// the whole query) would lose forensic value.
-func redactQueryParams(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	values, err := url.ParseQuery(raw)
-	if err != nil {
-		return raw
-	}
+// maskParsedQuery masks sensitive keys in already-parsed url.Values and
+// re-encodes. When nothing matched it returns fallback verbatim, so a clean
+// input keeps its original spacing/ordering for the log reader.
+func maskParsedQuery(values url.Values, fallback string) string {
 	masked := false
 	for key := range values {
 		if looksSensitive(key) {
@@ -113,14 +105,48 @@ func redactQueryParams(raw string) string {
 		}
 	}
 	if !masked {
-		return raw
+		return fallback
 	}
 	return values.Encode()
 }
 
+// redactQueryParams parses the raw query string and masks any sensitive
+// keys before re-encoding. A parse failure returns the input verbatim
+// so the audit log still captures *something*; the alternative (drop
+// the whole query) would lose forensic value. This raw-on-error fallback
+// is deliberate for query STRINGS only — request bodies go through
+// redactURLEncodedBody, which never falls back to raw.
+func redactQueryParams(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return raw
+	}
+	return maskParsedQuery(values, raw)
+}
+
+// redactURLEncodedBody masks sensitive keys in an x-www-form-urlencoded
+// request body. Unlike redactQueryParams it NEVER falls back to the raw
+// bytes: a malformed body (invalid percent-encoding) returns a placeholder.
+// Request bodies carry credentials — /login, /auth/user/register and
+// /modify/password submit the password via PostForm — so the body-redaction
+// invariant is "never store plaintext", even when the body fails to parse.
+func redactURLEncodedBody(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		return "[redacted: unparseable body]"
+	}
+	return maskParsedQuery(values, string(body))
+}
+
 // redactBodyByContentType 按 Content-Type 分流脱敏 request body,绝不落原文:
 //   - multipart/form-data        → 整体丢弃占位(里面通常是文件)
-//   - x-www-form-urlencoded      → 复用 redactQueryParams 的 ParseQuery + 打码逻辑
+//   - x-www-form-urlencoded      → redactURLEncodedBody(ParseQuery 失败也不回落原文)
 //   - JSON                       → redactJSONBody 递归遮蔽
 //   - 其他 / 无法识别            → 打码占位,绝不存原文
 func redactBodyByContentType(contentType string, body []byte) string {
@@ -128,7 +154,7 @@ func redactBodyByContentType(contentType string, body []byte) string {
 	case strings.Contains(contentType, "multipart/form-data"):
 		return "[Multipart Content - Body Ignored]"
 	case strings.Contains(contentType, "application/x-www-form-urlencoded"):
-		return redactQueryParams(string(body))
+		return redactURLEncodedBody(body)
 	case strings.Contains(contentType, "application/json"):
 		return redactJSONBody(body)
 	case len(body) == 0:
