@@ -320,3 +320,45 @@ func TestApiModifyPassword_UnknownUserFailsClosed(t *testing.T) {
 		t.Fatal("expected error for unknown user, got nil")
 	}
 }
+
+func TestApiUserRegister_StoresBcrypt(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	ps := NewApiService()
+	if err := ps.ApiUserRegister(context.Background(), "new@x.com", "Secret12!"); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	var stored string
+	gdb.Raw(`SELECT password FROM s_user WHERE email = 'new@x.com'`).Scan(&stored)
+	if !strings.HasPrefix(stored, "$2") {
+		t.Errorf("self-register should store bcrypt, got %q", stored)
+	}
+}
+
+func TestRegisterAddUser_StoresBcrypt(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	ps := NewApiService()
+	if _, err := ps.RegisterAddUser(context.Background(), "adm@x.com", "Secret12!", "user", 0, "", "", ""); err != nil {
+		t.Fatalf("admin create: %v", err)
+	}
+	var stored string
+	gdb.Raw(`SELECT password FROM s_user WHERE email = 'adm@x.com'`).Scan(&stored)
+	if !strings.HasPrefix(stored, "$2") {
+		t.Errorf("admin-create should store bcrypt, got %q", stored)
+	}
+}
+
+func TestUpdateUserPassWord_StoresBcrypt(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("old")).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ps := NewApiService()
+	if ok := ps.UpdateUserPassWord(context.Background(), "Secret12!", 7); !ok {
+		t.Fatal("admin reset returned false")
+	}
+	var stored string
+	gdb.Raw(`SELECT password FROM s_user WHERE id = 7`).Scan(&stored)
+	if !strings.HasPrefix(stored, "$2") {
+		t.Errorf("admin reset should store bcrypt, got %q", stored)
+	}
+}

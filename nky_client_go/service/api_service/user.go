@@ -63,7 +63,11 @@ func (ps *ApiService) RegisterAddUser(ctx context.Context, email string, passwor
 	var userInfo model.SUser
 	var description string
 	userInfo.Email = email
-	userInfo.Password = utils.MD5String(password)
+	hashed, herr := utils.HashPassword(password)
+	if herr != nil {
+		return false, errors.New("管理员新增用户注册失败")
+	}
+	userInfo.Password = hashed
 	userInfo.Code = code
 	userInfo.FirstLoginStatus = "0"
 	userInfo.CreatedAt = time.Time{}
@@ -131,7 +135,11 @@ func (ps *ApiService) ApiModifyPassword(ctx context.Context, name, Password, new
 
 func (ps *ApiService) UpdateUserPassWord(ctx context.Context, password string, id int) bool {
 
-	pwdHash := utils.MD5String(password)
+	pwdHash, herr := utils.HashPassword(password)
+	if herr != nil {
+		log.Printf("更新用户密码失败(哈希出错): %v", herr)
+		return false
+	}
 	result := model.DB(ctx).Model(&model.SUser{}).
 		Where("id = ?", id).
 		Updates(map[string]interface{}{
@@ -391,7 +399,10 @@ func (ps *ApiService) ApiModifyPermission(ctx context.Context, name string, user
 }
 
 func (ps *ApiService) ApiUserRegister(ctx context.Context, email, password string) error {
-	mdPassword := utils.MD5String(password)
+	mdPassword, herr := utils.HashPassword(password)
+	if herr != nil {
+		return errors.New("用户注册失败")
+	}
 	now := time.Now()
 	db := model.DB(ctx).Model(&model.SUser{}).Debug()
 	err := db.Create(&model.SUser{
