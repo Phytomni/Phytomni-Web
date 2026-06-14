@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	rxLog "nky_client_go/log"
 	"regexp"
 	"strings"
 	"time"
@@ -105,15 +106,29 @@ func (l *SqlLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql s
 			"created_at":     time.Now(),
 		}
 
-		// 获取数据库连接
-		// 注意：这里硬编码了 "nky_client_go"，实际应该从配置获取或者传递进来
-		if db, ok := Get("nky_client_go"); ok {
-			// 使用一个新的 Session，并且禁用 Logger，防止无限递归
-			db.Session(&gorm.Session{Logger: logger.Discard, NewDB: true}).
-				Table("s_sql_operation_logs").
-				Create(logEntry)
+		// 写入审计行；插入失败不再静默丢弃,经 zap 上报使缺表/掉库可观测。
+		// zap 不产生 SQL,故在 SQL logger 内部调用它不会再次触发 Trace 递归。
+		if werr := writeSQLAuditLog(logEntry); werr != nil {
+			rxLog.Sugar().Warnw("sql audit log insert failed",
+				"table", tableName, "op", opType, "err", werr)
 		}
 	}(userId, userEmail, sqlStr, elapsed, err)
+}
+
+// writeSQLAuditLog inserts one audit row into s_sql_operation_logs and returns
+// the insert error — previously this error was dropped, so a missing table or
+// dead DB silently lost audit rows. The session disables the logger and starts
+// a fresh DB so the insert itself never re-enters Trace (infinite recursion).
+// A nil registry (e.g. unit tests not exercising the audit path) is a no-op,
+// not an error.
+func writeSQLAuditLog(logEntry map[string]interface{}) error {
+	gdb, ok := Get("nky_client_go")
+	if !ok {
+		return nil
+	}
+	return gdb.Session(&gorm.Session{Logger: logger.Discard, NewDB: true}).
+		Table("s_sql_operation_logs").
+		Create(logEntry).Error
 }
 
 // parseSql 简单的 SQL 解析
