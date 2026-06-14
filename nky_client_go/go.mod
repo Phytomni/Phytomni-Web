@@ -29,6 +29,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/urfave/cli/v2 v2.27.5
 	go.uber.org/zap v1.27.0
+	golang.org/x/crypto v0.36.0
 	golang.org/x/text v0.23.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/driver/mysql v1.5.7
@@ -82,7 +83,6 @@ require (
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.15.0 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
