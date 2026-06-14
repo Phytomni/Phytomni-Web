@@ -105,7 +105,13 @@ service.interceptors.request.use(
     return config;
   },
   (error: unknown) => {
-    console.log(error, "error");
+    // 只打印脱敏后的消息,绝不打印原始 error 对象:axios error 携带
+    // config.headers(此处含 Authorization Bearer + satoken),整体打印会把
+    // 活令牌写进浏览器控制台。
+    console.log(
+      "request error:",
+      error instanceof Error ? error.message : String(error)
+    );
     Promise.reject(error);
   }
 );
@@ -185,7 +191,13 @@ service.interceptors.response.use(
     }
   },
   (error: any) => {
-    console.log(error, "error1111");
+    // 脱敏日志 —— 原始 axios error 内嵌 config.headers(Bearer 令牌 + satoken),
+    // 这里只暴露用于排障的非敏感字段。
+    console.log("response error:", {
+      status: error?.response?.status,
+      url: error?.config?.url,
+      message: error?.message,
+    });
     const { response } = error;
     let { message } = error;
     if (response?.data?.detail?.code === 403) {
