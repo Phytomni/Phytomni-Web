@@ -31,17 +31,25 @@ func (ts *FreshGA) Run() {
 	// deep_genome runs in-process on Bot, not on EIHealth, so its task ids are
 	// not EIHealth jobs. Route by tool_name: EIHealth-backed agents (analyst)
 	// keep the legacy IAM poll; deep_genome rows reconcile against Bot run state.
-	var eiHealthTaskIds []string
-	var botRows []model.SQuestionAgentLog
-	for _, v := range questionAgentList {
+	eiHealthTaskIds, botRows := partitionRunningRows(questionAgentList)
+	if len(eiHealthTaskIds) > 0 {
+		servicega.GetTaskStatus(eiHealthTaskIds)
+	}
+	servicega.SyncBotRuns(botRows)
+}
+
+// partitionRunningRows splits RUNNING rows by their backing compute platform:
+// deep_genome rows reconcile against Bot run state, every other (analyst /
+// EIHealth-backed) tool keeps the legacy IAM job poll keyed by task_id. Pure
+// (no DB / network) so the routing is unit-testable without standing up either
+// backend.
+func partitionRunningRows(rows []model.SQuestionAgentLog) (eiHealthTaskIds []string, botRows []model.SQuestionAgentLog) {
+	for _, v := range rows {
 		if v.ToolName == "DeepGenomeAgent" {
 			botRows = append(botRows, v)
 		} else {
 			eiHealthTaskIds = append(eiHealthTaskIds, v.TaskId)
 		}
 	}
-	if len(eiHealthTaskIds) > 0 {
-		servicega.GetTaskStatus(eiHealthTaskIds)
-	}
-	servicega.SyncBotRuns(botRows)
+	return eiHealthTaskIds, botRows
 }
