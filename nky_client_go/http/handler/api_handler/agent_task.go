@@ -29,8 +29,9 @@ func (ph *ApiHandler) ApiAsyncTaskList(ctx *gin.Context) {
 
 func (ph *ApiHandler) ApiAsyncTaskInfo(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Query("id"))
+	name, _ := ctx.Get("username")
 
-	info, err := ph.service.ApiAsyncTaskInfo(ctx, id)
+	info, err := ph.service.ApiAsyncTaskInfo(ctx, id, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return

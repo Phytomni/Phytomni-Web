@@ -347,9 +347,13 @@ func (ps *ApiService) ApiAsyncTaskList(ctx context.Context, username string, cur
 	return QuestionAgentLogList, total, totalPages, nil
 }
 
-func (ps *ApiService) ApiAsyncTaskInfo(ctx context.Context, id int) (QuestionAgentLogList *model.SQuestionAgentLog, err error) {
+func (ps *ApiService) ApiAsyncTaskInfo(ctx context.Context, id int, username string) (QuestionAgentLogList *model.SQuestionAgentLog, err error) {
 
-	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", id).First(&QuestionAgentLogList).Error
+	// 按 id + 归属用户查询,防止任意登录用户用可枚举的自增 id 越权读取他人任务行。
+	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().
+		Where("id = ? and user_name = ?", id, username).First(&QuestionAgentLogList).Error; err != nil {
+		return nil, errors.New("任务不存在")
+	}
 	if QuestionAgentLogList.TaskId == "" {
 		return nil, errors.New("任务不存在")
 	}

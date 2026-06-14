@@ -2,11 +2,26 @@ package api_service
 
 import (
 	"context"
+	"errors"
 	"nky_client_go/model"
 	"time"
 )
 
-func (ps *ApiService) ApiGetOperationLogs(ctx context.Context, userIds []int64, startTime, endTime string) ([]model.SUserOperationLog, error) {
+// ErrOperationLogForbidden 表示调用者无权读取操作日志审计表。
+// 该表含跨用户 PII(邮箱/IP/UA/请求元数据),只能由管理员查询。
+// handler 将其映射为 403。
+var ErrOperationLogForbidden = errors.New("无权访问操作日志")
+
+func (ps *ApiService) ApiGetOperationLogs(ctx context.Context, operatorName string, userIds []int64, startTime, endTime string) ([]model.SUserOperationLog, error) {
+	// 鉴权:审计日志只对管理员开放,普通登录用户不得枚举他人记录。
+	var operator *model.SUser
+	if err := model.DB(ctx).Model(&model.SUser{}).Where("email = ?", operatorName).First(&operator).Error; err != nil {
+		return nil, ErrOperationLogForbidden
+	}
+	if operator.Code != "admin" && operator.Code != "super_admin" {
+		return nil, ErrOperationLogForbidden
+	}
+
 	db := model.DB(ctx).Model(&model.SUserOperationLog{}).Debug()
 
 	// 添加用户ID过滤条件

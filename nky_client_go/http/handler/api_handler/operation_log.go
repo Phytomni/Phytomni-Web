@@ -1,7 +1,9 @@
 package api_handler
 
 import (
+	"errors"
 	"net/http"
+	"nky_client_go/service/api_service"
 	"nky_client_go/utils/errs"
 	"strconv"
 	"strings"
@@ -10,6 +12,13 @@ import (
 )
 
 func (ph *ApiHandler) ApiGetOperationLogs(ctx *gin.Context) {
+	// 操作员身份(管理员鉴权在 service 层执行)
+	operatorName, exists := ctx.Get("username")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未登录"})
+		return
+	}
+
 	// 获取参数
 	userIdsStr := ctx.PostForm("user_ids") // 逗号分隔的ID字符串，例如 "1,2,3"
 	startTime := ctx.PostForm("start_time")
@@ -27,8 +36,12 @@ func (ph *ApiHandler) ApiGetOperationLogs(ctx *gin.Context) {
 	}
 
 	// 调用服务层
-	logs, err := ph.service.ApiGetOperationLogs(ctx, userIds, startTime, endTime)
+	logs, err := ph.service.ApiGetOperationLogs(ctx, operatorName.(string), userIds, startTime, endTime)
 	if err != nil {
+		if errors.Is(err, api_service.ErrOperationLogForbidden) {
+			ctx.JSON(http.StatusForbidden, gin.H{"code": http.StatusForbidden, "message": err.Error()})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
 	}
