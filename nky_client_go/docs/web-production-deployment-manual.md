@@ -47,7 +47,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 | DB schema | — | `+bot_run_id`, `+image_paths`, three enum tightenings; two legacy tables retained-but-unused | An additive migration is required before cutover |
 | nginx | `/query` upstream is the Python service | `/query` upstream is Go `:8082` | One reverse-proxy line moves at cutover |
 | First-login flow | No server-side gate | Backend gate + matching frontend guard | Backend and frontend **must** ship together |
-| Auth | MD5 password hashes; audit logs unredacted | bcrypt (lazy upgrade); operation-log admin-only + body redaction | No action needed beyond `bcrypt_cost`; behavior changes are automatic |
+| Auth | MD5 password hashes; audit logs unredacted | bcrypt (lazy upgrade); operation-log admin-only + body redaction | Set `bcrypt_cost`; **run the §5.6 operator preconditions** (inventory, column width, snapshot, canary) before deploy — the hash migration is forward-only |
 
 ---
 
@@ -247,6 +247,39 @@ The data model no longer defines `s_question_log` or `s_koo_search_question_logs
 
 > **Never run `go run main.go migrate all` in production.** That subcommand is `AutoMigrate` for dev/CI fresh schemas only; production DDL stays manual (the statements above).
 
+### 5.6 Password storage (bcrypt) — operator preconditions
+
+The Go service hashes new passwords with bcrypt and **lazily upgrades** a legacy MD5 row to bcrypt on that user's next successful login (no forced resets). This is a one-way migration of the stored hash. Before deploying the bcrypt-capable binary, run these read-only checks against production and capture a backup. None of this is automatic — the binary cannot widen a column, take a snapshot, or canary itself.
+
+1. **Hash inventory (read-only).** Confirm every row is a recognized scheme; triage `empty`/`other` before deploy (those users cannot log in and will never upgrade):
+
+   ```sql
+   SELECT COUNT(*),
+     CASE
+       WHEN password REGEXP '^[$]2[aby][$]' THEN 'bcrypt'
+       WHEN password REGEXP '^[0-9a-f]{32}$' THEN 'md5'
+       WHEN password IS NULL OR password = '' THEN 'empty'
+       ELSE 'other'
+     END AS scheme
+   FROM s_user GROUP BY scheme;
+   ```
+
+2. **Column width.** A bcrypt hash is 60 chars; the column must hold ≥ 60:
+
+   ```sql
+   SHOW COLUMNS FROM s_user LIKE 'password';
+   ```
+
+   If it is already wide (`longtext`, `varchar(255)`, etc.) **no ALTER is needed**. Only if it is narrower than 60: `ALTER TABLE s_user MODIFY COLUMN password VARCHAR(72)` — run online (`ALGORITHM=INPLACE, LOCK=NONE`), and add `NOT NULL` only after confirming zero NULLs.
+
+3. **Snapshot `s_user`** immediately before deploy. This is the rollback net (see §11): once bcrypt rows are written, the change is forward-only.
+
+4. **Legacy-account canary.** On a restored snapshot or a replica, deploy the new binary and confirm a **real** legacy (MD5) account both logs in **and** upgrades to `$2…`, against the production hash format — not just a synthetic test row.
+
+5. **Post-deploy monitoring.** Track the count of all **non-bcrypt** rows (not only clean 32-hex MD5 — `other`/`empty` are invisible to a naive MD5 count) and watch for lazy-upgrade write failures in the logs. A row that never logs in stays on MD5 indefinitely; decide later whether a forced-reset campaign is warranted.
+
+> `bcrypt_cost` is the **only** app.yml knob (see §4.6); it does not remove the operator steps above.
+
 ---
 
 ## 6. Backend deploy (Go)
@@ -408,7 +441,7 @@ See runbook [§6](bot-cutover-ops-runbook.md) for the staged-cutover detail.
 That is an instant revert with **no DB or code rollback needed** — `/query` returns to the Python path and the rest of the Go service keeps serving. See runbook [§8](bot-cutover-ops-runbook.md).
 
 - **Frontend:** restore the dated `dist` backup and reload nginx.
-- **Go binary:** redeploy the previous binary.
+- **Go binary:** redeploy the previous binary. **bcrypt point-of-no-return:** the old binary only understands MD5, so any account that already logged in under the new binary (and was lazily upgraded to `$2…`) can no longer authenticate against the old binary and is locked out. If you must roll the binary back after bcrypt rows exist, restore the §5.6 `s_user` snapshot for the affected rows — a binary-only rollback is **not** sufficient.
 - **Database:** the added columns are nullable and additive; leaving them in place is harmless, so no down-migration is required.
 
 ---
