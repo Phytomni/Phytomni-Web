@@ -3018,26 +3018,6 @@ const removeFile = (index: number) => {
   });
 };
 
-const clearFiles = () => {
-  if (!currentChatId.value) return;
-
-  const chatState = getChatState(currentChatId.value);
-  if (!chatState) return;
-
-  chatState.fileList = [];
-
-  // 确保文件列表清空后关闭header
-  nextTick(() => {
-    if (senderRef.value) {
-      senderRef.value.closeHeader();
-    }
-
-    // 确保滚动到底部
-    scrollToBottom();
-  });
-};
-
-
 // 预设的agents数据
 const presetAgents = ref([
   {
