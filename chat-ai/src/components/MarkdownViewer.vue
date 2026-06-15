@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { Typewriter } from "vue-element-plus-x";
 import { computed } from "vue";
-import { escapeHtml, sanitizeEscapedHref } from "@/utils/sanitizeMarkup";
+import { escapeHtml, sanitizeEscapedHref } from "@/utils/sanitize-markup";
 
 const props = defineProps<{
   content: string;

@@ -9,7 +9,7 @@ import router from "@/router";
 import { userStore } from "@/stores";
 import { getToken } from "@/utils";
 import { WHITELIST, FIRST_LOGIN_ALLOWED_ROUTE_NAMES } from "@/router/whitelist";
-import { safeRedirect } from "@/utils/authRedirect";
+import { safeRedirect } from "@/utils/auth-redirect";
 import { ElNotification } from "element-plus";
 import type { NotificationHandle } from "element-plus";
 import { i18n } from "@/locales";

@@ -8,7 +8,7 @@ import { ElMessage, ElMessageBox, ElLoading } from "element-plus";
 
 import { userStore } from "@/stores";
 import { getToken } from "@/utils/auth";
-import errorCode from "@/utils/errorCode";
+import errorCode from "@/utils/error-code";
 import { tansParams, blobValidate } from "@/utils";
 import cache from "@/plugins/cache";
 import { saveAs } from "file-saver";

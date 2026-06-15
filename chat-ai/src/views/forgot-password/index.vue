@@ -38,7 +38,7 @@
 import { useRouter } from "vue-router";
 import { useRoute } from "vue-router";
 import { onMounted } from "vue";
-import { redirectIfAuthed } from "@/utils/authRedirect";
+import { redirectIfAuthed } from "@/utils/auth-redirect";
 import { WarningFilled } from "@element-plus/icons-vue";
 import LangSwitch from "@/components/LangSwitch.vue";
 

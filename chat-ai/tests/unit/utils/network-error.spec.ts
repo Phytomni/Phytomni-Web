@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isNetworkError } from "@/utils/networkError";
+import { isNetworkError } from "@/utils/network-error";
 
 describe("isNetworkError", () => {
   it('returns true for { message: "Network Error" } (detection rule a)', () => {

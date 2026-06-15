@@ -8,7 +8,7 @@ import {
   isLocalStorageChat,
   type PendingChatRecord,
   type ChatListEntry,
-} from "@/utils/pendingChat";
+} from "@/utils/pending-chat";
 
 describe("isValidPendingRecord — strict predicate", () => {
   it("returns true for valid record", () => {

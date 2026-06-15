@@ -5,7 +5,7 @@
  *   NOTE `/home` and `/about` are historical drift — no actual routes match them, kept for parity.
  * - GUEST_ONLY_PATHS: subset that authenticated users should be redirected AWAY from.
  *
- * Both constants are co-located here as the SSOT for permission.ts and utils/authRedirect.ts.
+ * Both constants are co-located here as the SSOT for permission.ts and utils/auth-redirect.ts.
  */
 export const WHITELIST = [
   "/",

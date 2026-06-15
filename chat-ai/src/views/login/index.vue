@@ -83,7 +83,7 @@ import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRoute } from "vue-router";
 import { onMounted } from "vue";
-import { redirectIfAuthed, safeRedirect } from "@/utils/authRedirect";
+import { redirectIfAuthed, safeRedirect } from "@/utils/auth-redirect";
 import type { ElForm } from "element-plus";
 import { ElMessage, ElNotification } from "element-plus";
 import { login } from "@/api/login";

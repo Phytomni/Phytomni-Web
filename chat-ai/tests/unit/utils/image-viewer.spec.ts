@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampPanOffset } from "@/utils/imageViewer";
+import { clampPanOffset } from "@/utils/image-viewer";
 
 // Locks the AF-005 robustness fix for the Agents-diagram image viewer:
 // no NaN/Infinity from an unloaded image, no panning an un-zoomed image,

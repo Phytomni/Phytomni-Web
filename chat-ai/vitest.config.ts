@@ -30,12 +30,12 @@ export default defineConfig({
       // identical assertion templates). When reaction-related tests grow
       // (TW-D10 / TW-D8 territory), include can expand to cover chat.ts.
       include: [
-        "src/utils/authRedirect.ts",
+        "src/utils/auth-redirect.ts",
         "src/utils/auth.ts",
-        "src/utils/pendingChat.ts",
-        "src/utils/networkError.ts",
-        "src/utils/sanitizeMarkup.ts",
-        "src/utils/imageViewer.ts",
+        "src/utils/pending-chat.ts",
+        "src/utils/network-error.ts",
+        "src/utils/sanitize-markup.ts",
+        "src/utils/image-viewer.ts",
         "src/components/LangSwitch.vue",
         "src/permission.ts",
         "src/views/forgot-password/index.vue",

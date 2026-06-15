@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { safeRedirect, redirectIfAuthed } from "@/utils/authRedirect";
+import { safeRedirect, redirectIfAuthed } from "@/utils/auth-redirect";
 
 // GUEST_ONLY_PATHS membership matters for #12-13 — keep the test
 // assertions data-driven from the live import so the source-of-truth

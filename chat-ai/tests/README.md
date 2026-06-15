@@ -22,7 +22,7 @@ tests/
 
 ## Coverage policy
 
-当前 `vitest.config.ts` 的 `coverage.include` 列出 3 个 fully-tested 文件:`src/utils/authRedirect.ts` / `src/utils/auth.ts` / `src/components/LangSwitch.vue`。Thresholds:lines/functions/statements 80%, branches 75%。
+当前 `vitest.config.ts` 的 `coverage.include` 列出 3 个 fully-tested 文件:`src/utils/auth-redirect.ts` / `src/utils/auth.ts` / `src/components/LangSwitch.vue`。Thresholds:lines/functions/statements 80%, branches 75%。
 
 `src/api/chat.ts` 有 spec 文件并 run(覆盖 `getReactionType`),但**不在 coverage.include 内** — 该 file 含 ~35 个 thin axios wrappers,全测会逼着写 30+ 重复 assertion 模板。等反应/收藏类测试家族扩(TW-D10 / TW-D8 落地后),把 chat.ts 升进 include。
 

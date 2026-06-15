@@ -16,7 +16,7 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ push }),
   useRoute: () => ({ query: {} }),
 }));
-vi.mock("@/utils/authRedirect", () => ({ redirectIfAuthed }));
+vi.mock("@/utils/auth-redirect", () => ({ redirectIfAuthed }));
 
 import ForgotPassword from "@/views/forgot-password/index.vue";
 

@@ -1472,9 +1472,9 @@ import GeneNetworkAgentImg from "@/assets/images/chat/GeneNetworkAgent.png";
 import DigitalDesignAgentImg from "@/assets/images/chat/DigitalDesignAgent.png";
 import DefaultAgentImg from "@/assets/images/chat/Agents.png";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
-import { isValidPendingRecord, matchesChat, safeParse, writePendingChat, clearPendingChat, isLocalStorageChat } from "@/utils/pendingChat";
-import { isNetworkError } from "@/utils/networkError";
-import { clampPanOffset } from "@/utils/imageViewer";
+import { isValidPendingRecord, matchesChat, safeParse, writePendingChat, clearPendingChat, isLocalStorageChat } from "@/utils/pending-chat";
+import { isNetworkError } from "@/utils/network-error";
+import { clampPanOffset } from "@/utils/image-viewer";
 
 // 后续问题显示逻辑已移至FollowUpQuestions组件
 

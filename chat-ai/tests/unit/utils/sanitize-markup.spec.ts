@@ -4,7 +4,7 @@ import {
   sanitizeHref,
   escapeHtml,
   sanitizeEscapedHref,
-} from "@/utils/sanitizeMarkup";
+} from "@/utils/sanitize-markup";
 
 // Locks the AF-001 fix: the <a> tags that DeepGenomeResultViewer resurrects
 // from agent markdown and feeds to v-html must never carry an executable

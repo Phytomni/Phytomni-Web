@@ -236,7 +236,7 @@ import {
   ElDropdownItem,
 } from "element-plus";
 import { saveAs } from "file-saver";
-import { sanitizeAnchorAttributes, sanitizeHref } from "@/utils/sanitizeMarkup";
+import { sanitizeAnchorAttributes, sanitizeHref } from "@/utils/sanitize-markup";
 
 // 模拟从 json.txt 获取的 Markdown 内容
 const props = defineProps({
@@ -466,7 +466,7 @@ const processInlineMarkdown = (line) => {
       );
 
       // XSS 防护：复活的 <a> 属性是原样透传的，注入 v-html 前先剥掉事件处理器
-      // 属性并中和 javascript:/data: 等危险协议 href（详见 @/utils/sanitizeMarkup）。
+      // 属性并中和 javascript:/data: 等危险协议 href（详见 @/utils/sanitize-markup）。
       attributes = sanitizeAnchorAttributes(attributes);
 
       const result = `<a ${attributes}>${text}</a>`;
