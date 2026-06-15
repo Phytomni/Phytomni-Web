@@ -2,6 +2,8 @@ package api_service
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -72,6 +74,50 @@ func TestApiDownloadAnalystAgentObsImages_ContainmentBypass(t *testing.T) {
 	// /obs/OTHER/evil.png escapes the run root → dropped.
 	if len(urls) != 2 {
 		t.Fatalf("expected 2 in-scope png urls (cross-root dropped), got %d: %v", len(urls), urls)
+	}
+	for _, u := range urls {
+		if !strings.Contains(u, "/v1/download/relay_file?t=") {
+			t.Errorf("url not a signed relay url: %q", u)
+		}
+	}
+}
+
+// TestApiDownloadAnalystAgentObsImages_FallbackListingContainment: when
+// image_paths is empty the handler falls back to OBS prefix listing, and the
+// keys that listing returns flow through the SAME containment loop as stored
+// keys — there is no source-specific bypass. A reachable fake relay returns a
+// mix of in-root and cross-root .png keys (plus a non-image); the in-root pngs
+// are signed and the cross-root one is dropped. This is the success-path twin
+// of the dead-Bot MalformedJSON case: it proves the fallback branch both
+// returns keys AND that containment still applies to them. Delete the
+// containment check and the cross-root key leaks → red.
+func TestApiDownloadAnalystAgentObsImages_FallbackListingContainment(t *testing.T) {
+	gdb := setupTestDB(t)
+	// image_paths left empty → handler must fall back to ListObsKeys.
+	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+		(id, user_name, download_path, image_paths, created_at) VALUES
+		(74, 'alice', '/obs/p/r1', '', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Reachable fake Bot relay: listing returns in-root pngs (run root /obs/p),
+	// a cross-root png, and a non-image. Only the two in-root pngs may be signed.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"keys":["/obs/p/r1/a.png","/obs/p/r2/b.png","/obs/OTHER/evil.png","/obs/p/r1/t.csv"]}`))
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	ps := NewApiService()
+	urls, err := ps.ApiDownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// /obs/p/r1 + /obs/p/r2 under run root /obs/p → signed (2);
+	// /obs/OTHER/evil.png escapes → dropped; t.csv → not a png.
+	if len(urls) != 2 {
+		t.Fatalf("expected 2 in-scope png urls from fallback listing (cross-root + csv excluded), got %d: %v", len(urls), urls)
 	}
 	for _, u := range urls {
 		if !strings.Contains(u, "/v1/download/relay_file?t=") {
