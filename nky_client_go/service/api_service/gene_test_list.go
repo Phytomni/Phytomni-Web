@@ -12,6 +12,7 @@ import (
 
 	"nky_client_go/common/document_format"
 	rxBot "nky_client_go/external/bot"
+	rxLog "nky_client_go/log"
 	"nky_client_go/middleware"
 	"nky_client_go/model"
 	"strings"
@@ -218,7 +219,12 @@ func (ps *ApiService) ApiDownloadAnalystAgentObsImages(ctx context.Context, user
 
 	var keys []string
 	if row.ImagePaths != "" {
-		_ = json.Unmarshal([]byte(row.ImagePaths), &keys)
+		if err := json.Unmarshal([]byte(row.ImagePaths), &keys); err != nil {
+			// 非空但非法 JSON:DB 损坏 / Bot 契约漂移 —— 报警后退回列举(保可用),
+			// 不静默把损坏状态当作正常的旧行(legacy)处理。
+			rxLog.Sugar().Warnw("image_paths 非法 JSON,退回 OBS 前缀列举", "download_path", obsPath, "err", err)
+			keys = nil
+		}
 	}
 	if len(keys) == 0 {
 		// 旧行 / image_paths 为空:退回按前缀列举(保持今日行为)
@@ -229,16 +235,28 @@ func (ps *ApiService) ApiDownloadAnalystAgentObsImages(ctx context.Context, user
 		}
 	}
 
+	// containment 锚点 = run 根(path.Dir(download_path))。写入侧 download_path 只存
+	// dirs[0],但 image_paths 跨同一 run 的多个 sibling output_dir 扁平存放,故锚点
+	// 不能是 download_path 本身(会误杀 sibling 图),取其父目录。download token 对
+	// 任意 key 签名、无前缀绑定,签发循环是该 object 唯一授权闸,越界路径在此丢弃。
+	anchor := path.Dir(obsPath)
 	var imageUrls []string
 	for _, k := range keys {
-		if strings.HasSuffix(strings.ToLower(k), ".png") {
-			u, err := relayDownloadURL(k)
-			if err != nil {
-				// 单个签发失败跳过,保持原"跳过坏文件"行为
-				continue
-			}
-			imageUrls = append(imageUrls, u)
+		if !strings.HasSuffix(strings.ToLower(k), ".png") {
+			continue
 		}
+		if anchor != "" && anchor != "." && !strings.HasPrefix(k, anchor+"/") {
+			// 越界路径:跳过 + 报警(fail-safe:丢可疑、服务其余、可观测)
+			rxLog.Sugar().Warnw("图片路径越出 run 根,跳过签发", "key", k, "anchor", anchor)
+			continue
+		}
+		u, err := relayDownloadURL(k)
+		if err != nil {
+			// 单个签发失败跳过,保持原"跳过坏文件"行为;加 warn 以可观测。
+			rxLog.Sugar().Warnw("图片签发失败,跳过", "key", k, "err", err)
+			continue
+		}
+		imageUrls = append(imageUrls, u)
 	}
 
 	if len(imageUrls) == 0 {
