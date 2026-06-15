@@ -1673,8 +1673,6 @@ onMounted(async () => {
   // 检查是否需要显示教学引导
   checkTutorialStatus();
 
-  // 添加键盘事件监听器
-  document.addEventListener("keydown", handleTutorialKeydown);
 });
 
 // 获取历史问题数据
@@ -4258,7 +4256,6 @@ const {
   prevTutorialStep,
   completeTutorial,
   handleTutorialOverlayClick,
-  handleTutorialKeydown,
   checkTutorialStatus,
 } = useTutorial();
 

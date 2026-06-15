@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { userStore } from "@/stores";
 
 export function useTutorial() {
@@ -64,6 +64,14 @@ export function useTutorial() {
         break;
     }
   };
+
+  // 键盘事件监听器生命周期 — 挂载时注册,卸载时清除(防泄漏)
+  onMounted(() => {
+    document.addEventListener("keydown", handleTutorialKeydown);
+  });
+  onUnmounted(() => {
+    document.removeEventListener("keydown", handleTutorialKeydown);
+  });
 
   // 检查是否需要显示教学引导
   const checkTutorialStatus = () => {
