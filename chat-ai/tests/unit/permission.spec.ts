@@ -13,15 +13,20 @@ const mockStore = { getUserTools: vi.fn(), FedLogOut: vi.fn() };
 vi.mock("@/stores", () => ({ userStore: () => mockStore }));
 // Keep i18n light — the first-login branch calls i18n.global.t.
 vi.mock("@/locales", () => ({ i18n: { global: { t: (k: string) => k } } }));
-// Avoid real ElNotification DOM side effects.
+// Avoid real ElNotification DOM side effects. mockNotifClose is a STABLE close
+// spy (hoisted so the eager reference inside the factory is TDZ-safe) shared by
+// every notification handle, so a test can assert the guard closed it.
+const { mockNotifClose } = vi.hoisted(() => ({ mockNotifClose: vi.fn() }));
 vi.mock("element-plus", () => ({
-  ElNotification: vi.fn(() => ({ close: vi.fn() })),
+  ElNotification: vi.fn(() => ({ close: mockNotifClose })),
 }));
 
 import { beforeEachGuard } from "@/permission";
 import { getToken } from "@/utils";
+import { ElNotification } from "element-plus";
 
 const mockGetToken = getToken as unknown as ReturnType<typeof vi.fn>;
+const mockElNotification = ElNotification as unknown as ReturnType<typeof vi.fn>;
 // setTimeout(0) flushes the microtask chain (guard calls next() inside
 // getUserTools .then / .catch().finally).
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -159,5 +164,37 @@ describe("beforeEachGuard", () => {
     expect(mockStore.getUserTools).not.toHaveBeenCalled();
     expect(mockStore.FedLogOut).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it("10: first-login notification is closed on the post-logout /login transition", () => {
+    // Reset any notification handle leaked from a prior test (module-level
+    // state survives vi.clearAllMocks): a /login nav clears it to null.
+    mockGetToken.mockReturnValue(false);
+    beforeEachGuard(route("/login") as any, route("/") as any, vi.fn() as any);
+    mockElNotification.mockClear();
+    mockNotifClose.mockClear();
+
+    // Show it: authed first-login user heading to a gated route.
+    mockGetToken.mockReturnValue("tok");
+    localStorage.setItem("loginStatus", "0");
+    const next = vi.fn();
+    beforeEachGuard(
+      route("/chat", { name: "chat" }) as any,
+      route("/") as any,
+      next as any
+    );
+    expect(mockElNotification).toHaveBeenCalledTimes(1);
+
+    // Logout clears the token; the guard must STILL close the stale
+    // notification on the /login transition — the close runs unconditionally,
+    // before the auth check, so it fires even in the unauthed branch. Remove
+    // that close call and this assertion goes red.
+    mockGetToken.mockReturnValue(false);
+    beforeEachGuard(
+      route("/login", { name: "login" }) as any,
+      route("/chat") as any,
+      next as any
+    );
+    expect(mockNotifClose).toHaveBeenCalledTimes(1);
   });
 });
