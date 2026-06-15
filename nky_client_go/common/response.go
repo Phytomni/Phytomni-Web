@@ -5,15 +5,6 @@ import (
 	"time"
 )
 
-type ChineseBookResponse struct {
-	Page  int `json:"page"`
-	Total int `json:"total"`
-}
-
-type UserInfo struct {
-	UserName string `json:"user_name"`
-}
-
 type UserResponse struct {
 	Id               int64  `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	Email            string `json:"email"`
