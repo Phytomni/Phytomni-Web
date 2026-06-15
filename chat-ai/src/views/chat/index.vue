@@ -1474,6 +1474,8 @@ import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import { isValidPendingRecord, matchesChat, safeParse, writePendingChat, clearPendingChat, isLocalStorageChat } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { clampPanOffset } from "@/utils/image-viewer";
+import { isValidJSON, convertToTableData, formatFileSize, extractAtValues } from "./utils/format";
+import { processImagePaths, readServerFile, formatLogContent, formatLogContentWithColors } from "./utils/agent-log";
 
 // 后续问题显示逻辑已移至FollowUpQuestions组件
 
@@ -2166,15 +2168,6 @@ const openKnowledgeBase = () => {
   drawerVisible.value = true;
 };
 
-// 判断字符串是否为有效的JSON
-const isValidJSON = (str: string): boolean => {
-  try {
-    JSON.parse(str);
-    return true;
-  } catch (e) {
-    return false;
-  }
-};
 
 // 解析消息内容，提取文件信息
 const parseMessageWithFiles = (messageContent: string) => {
@@ -3567,18 +3560,6 @@ const getDialogueIdFromChatId = () => {
   )?.id;
   return chatRealId;
 };
-// 转换数据格式为 Element Plus Table 格式
-const convertToTableData = (data: { headers: string[]; rows: any[][] }) => {
-  return data.rows.map((row) => {
-    const obj: Record<string, any> = {};
-    data.headers.forEach((header, index) => {
-      // 替换空格为下划线，避免属性名中的空格
-      const key = header.replace(/\s+/g, "_").toLowerCase();
-      obj[key] = row[index];
-    });
-    return obj;
-  });
-};
 
 // 文件处理相关函数
 const handleFileChange = (file: any) => {
@@ -3653,15 +3634,6 @@ const clearFiles = () => {
   });
 };
 
-const formatFileSize = (size: number) => {
-  if (size < 1024) {
-    return size + " B";
-  } else if (size < 1024 * 1024) {
-    return (size / 1024).toFixed(2) + " KB";
-  } else {
-    return (size / (1024 * 1024)).toFixed(2) + " MB";
-  }
-};
 
 // 预设的agents数据
 const presetAgents = ref([
@@ -4277,24 +4249,6 @@ const refreshMessage = async (messageIndex: number) => {
   }
 };
 
-const extractAtValues = (text: any) => {
-  // 使用正则表达式匹配所有以@开头、以,结尾的子串
-  const regex = /@[^,]+,/g;
-
-  // 提取所有匹配项（用于返回）
-  const matches = text.match(regex) || [];
-  const uniqueAgents = [...new Set(matches)];
-  // 从原字符串中去除所有匹配项
-  const cleanedText = text.replace(regex, "");
-
-  return {
-    matches:
-      uniqueAgents.length > 0
-        ? uniqueAgents.map((match: any) => match.slice(1, -1))
-        : [], // 去掉@和,
-    cleanedText: cleanedText,
-  };
-};
 
 // 获取智能体提示信息
 const getAgentTooltip = (agentName: string) => {
@@ -4680,139 +4634,6 @@ const formatDetailedCitation = (doc: any) => {
   }
 
   return parts.join(". ");
-};
-
-// 格式化日志内容（保留ANSI颜色代码）
-const formatLogContent = (logContent: string) => {
-  if (!logContent) return "";
-
-  // 处理特殊字符，但保留ANSI颜色代码
-  const processedContent = logContent
-    .replace(/\u0026\u0026/g, "&&") // 将 \u0026\u0026 转换为 &&
-    .replace(/\n/g, "\n") // 保持换行符
-    .trim();
-
-  return processedContent;
-};
-
-// 格式化日志内容并转换ANSI颜色代码为HTML样式
-const formatLogContentWithColors = (logContent: string) => {
-  if (!logContent) return "";
-
-  // 处理特殊字符
-  let processedContent = logContent
-    .replace(/\u0026\u0026/g, "&&") // 将 \u0026\u0026 转换为 &&
-    .replace(/\n/g, "\n") // 保持换行符
-    .trim();
-
-  // ANSI ESC (\u001b) is a control char by design; this contiguous block
-  // converts terminal escape sequences to HTML tags. no-control-regex is
-  // meant to catch accidental control chars in human regex, not ANSI
-  // parsing, so we disable it for the block only.
-  /* eslint-disable no-control-regex */
-  // 转换ANSI颜色代码为HTML样式
-  // 红色文本
-  processedContent = processedContent.replace(
-    /\u001b\[31m/g,
-    '<span style="color: #ff0000;">'
-  );
-  // 绿色文本
-  processedContent = processedContent.replace(
-    /\u001b\[32m/g,
-    '<span style="color: #00ff00;">'
-  );
-  // 黄色文本
-  processedContent = processedContent.replace(
-    /\u001b\[33m/g,
-    '<span style="color: #ffff00;">'
-  );
-  // 蓝色文本
-  processedContent = processedContent.replace(
-    /\u001b\[34m/g,
-    '<span style="color: #0000ff;">'
-  );
-  // 洋红色文本
-  processedContent = processedContent.replace(
-    /\u001b\[35m/g,
-    '<span style="color: #ff00ff;">'
-  );
-  // 青色文本
-  processedContent = processedContent.replace(
-    /\u001b\[36m/g,
-    '<span style="color: #00ffff;">'
-  );
-  // 白色文本
-  processedContent = processedContent.replace(
-    /\u001b\[37m/g,
-    '<span style="color: #ffffff;">'
-  );
-
-  // 重置颜色
-  processedContent = processedContent.replace(/\u001b\[0m/g, "</span>");
-
-  // 处理其他常见的ANSI代码
-  // 加粗
-  processedContent = processedContent.replace(/\u001b\[1m/g, "<strong>");
-  processedContent = processedContent.replace(/\u001b\[22m/g, "</strong>");
-
-  // 下划线
-  processedContent = processedContent.replace(/\u001b\[4m/g, "<u>");
-  processedContent = processedContent.replace(/\u001b\[24m/g, "</u>");
-  /* eslint-enable no-control-regex */
-
-  return processedContent;
-};
-
-// 读取服务器文件内容的函数
-const readServerFile = async (filePath: string): Promise<string> => {
-  try {
-    // 将绝对路径转换为相对于项目的路径
-    let relativePath = filePath;
-    if (
-      filePath.includes("src\\assets\\agentOut\\") ||
-      filePath.includes("src/assets/agentOut/")
-    ) {
-      // 提取相对路径部分
-      const pathParts = filePath.split(/[\\/]/);
-      const srcIndex = pathParts.findIndex((part) => part === "src");
-      if (srcIndex !== -1) {
-        relativePath = pathParts.slice(srcIndex).join("/");
-      }
-    }
-
-    // 使用 fetch 读取文件内容
-    const response = await fetch(`/${relativePath}`);
-    if (response.ok) {
-      let content = await response.text();
-
-      // 处理 Markdown 文件中的图片路径
-      content = processImagePaths(content, relativePath);
-
-      return content;
-    } else {
-      console.error("读取文件失败:", response.status, response.statusText);
-      return "";
-    }
-  } catch (error) {
-    console.error("读取服务器文件失败:", error);
-    return "";
-  }
-};
-
-// 处理 Markdown 文件中的图片路径
-const processImagePaths = (content: string, filePath: string): string => {
-  // 获取文件所在目录
-  const fileDir = filePath.substring(0, filePath.lastIndexOf("/"));
-
-  // 处理相对路径的图片引用
-  // 匹配 ![alt text](./path/to/image.png) 格式
-  const imageRegex = /!\[([^\]]*)\]\(\.\/([^)]+)\)/g;
-
-  return content.replace(imageRegex, (match, altText, imagePath) => {
-    // 构建完整的图片路径
-    const fullImagePath = `/${fileDir}/${imagePath}`;
-    return `![${altText}](${fullImagePath})`;
-  });
 };
 
 // 更新日志函数
