@@ -424,48 +424,6 @@ func (ps *ApiService) ApiQueryList(ctx context.Context, username string) ([]*com
 	return QADataList, nil
 }
 
-//func (ps *ApiService) ApiQueryList(ctx *gin.Context, username string) ([]*common.QueryListRequest, error) {
-//	db := model.Default().Model(&model.SQuestionAgentLog{}).Debug()
-//
-//	// 一次性查询所有需要的数据
-//	var results []struct {
-//		MainRecord  common.QueryListRequest
-//		LatestReply common.QueryListRequest
-//		HasReply    bool
-//	}
-//
-//	// 查询主记录并左连接最新的回复记录
-//	err := db.Table("s_question_agent_logs AS main").
-//		Select("main.*, reply.*, reply.id IS NOT NULL AS has_reply").
-//		Joins("LEFT JOIN (SELECT f_id, MAX(created_at) AS max_created_at FROM s_question_agent_logs WHERE f_id != 0 AND delete_at IS NULL GROUP BY f_id) AS latest ON main.id = latest.f_id").
-//		Joins("LEFT JOIN s_question_agent_logs AS reply ON reply.f_id = main.id AND reply.created_at = latest.max_created_at AND reply.delete_at IS NULL").
-//		Where("main.user_name = ? AND main.f_id = ? AND main.delete_at IS NULL", username, 0).
-//		Order("COALESCE(reply.created_at, main.created_at) DESC").
-//		Scan(&results).Error
-//
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	// 构建最终结果
-//	QADataList := make([]*common.QueryListRequest, 0, len(results))
-//	for _, result := range results {
-//		createdAt := result.MainRecord.CreatedAt
-//		if result.HasReply {
-//			createdAt = result.LatestReply.CreatedAt
-//		}
-//
-//		QADataList = append(QADataList, &common.QueryListRequest{
-//			Id:         result.MainRecord.Id,
-//			DialogueId: result.MainRecord.DialogueId,
-//			Query:      result.MainRecord.Query,
-//			CreatedAt:  createdAt,
-//		})
-//	}
-//
-//	return QADataList, nil
-//}
-
 func (ps *ApiService) ApiAnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.SQuestionAgentLog, err error) {
 	var QuestionAgentLog *model.SQuestionAgentLog
 	// First() 在没匹配时给出 ErrRecordNotFound,但 QuestionAgentLog 仍是 &{Id:0} 空结构;
