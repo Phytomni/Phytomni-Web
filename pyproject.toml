@@ -5,8 +5,8 @@
 #
 # Repo-wide tooling pyproject for Phytomni-Web.
 #
-# Phytomni-Web is a polyglot monorepo (chat-ai/Vue, nky_client_go/Go,
-# nky_client_python/Python). This file does NOT belong to any of those
+# Phytomni-Web is a polyglot monorepo (chat-ai/Vue, nky_client_go/Go).
+# This file does NOT belong to any of those
 # sub-projects — it exists to host a pytest runner for repo-wide tooling
 # under scripts/ (currently scan_secrets.py and its tests).
 #
