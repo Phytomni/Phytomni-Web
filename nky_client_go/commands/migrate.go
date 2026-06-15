@@ -26,6 +26,43 @@ func addColumnIfMissing(db *gorm.DB, model interface{}, col, ddl string) error {
 	return nil
 }
 
+// firstLoginBackfillSQL is the exact production statement run by `migrate up`.
+// It reverts first_login_status from '1' to '0' for users whose
+// password_change_at and created_at are within 5 seconds of each other (the
+// password was never independently changed after account creation).
+//
+// Idempotent by construction: the WHERE clause requires first_login_status='1'
+// and the UPDATE sets it to '0', so a second run matches zero rows.
+// TIMESTAMPDIFF is MySQL-specific; SQLite backfill tests drive
+// backfillFirstLoginStatusWith with a portable time-window expression to
+// exercise the same row-selection semantics without re-running this text.
+const firstLoginBackfillSQL = `
+	UPDATE s_user
+	SET first_login_status = '0'
+	WHERE first_login_status = '1'
+	  AND password_change_at IS NOT NULL
+	  AND created_at IS NOT NULL
+	  AND ABS(TIMESTAMPDIFF(SECOND, password_change_at, created_at)) < 5`
+
+// backfillFirstLoginStatus runs the production backfill and returns the number
+// of rows flipped. Extracted as a package-level seam so a test can drive the
+// backfill directly — the `up` Action closure is unexported and unreachable.
+func backfillFirstLoginStatus(db *gorm.DB) (int64, error) {
+	return backfillFirstLoginStatusWith(db, firstLoginBackfillSQL)
+}
+
+// backfillFirstLoginStatusWith executes the given backfill SQL and returns the
+// rows affected. The SQL is a parameter only so SQLite tests can substitute a
+// portable time-window expression for MySQL's TIMESTAMPDIFF; production always
+// goes through backfillFirstLoginStatus with firstLoginBackfillSQL.
+func backfillFirstLoginStatusWith(db *gorm.DB, sql string) (int64, error) {
+	result := db.Exec(sql)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
 // Migrate is the CLI command `go run main.go migrate up`. It performs the
 // first-login backfill: revert first_login_status from '1' to '0' for users
 // whose password_change_at and created_at are within 5 seconds of each other.
@@ -52,22 +89,13 @@ func Migrate() *cli.Command {
 				Usage:       "第一次登录状态修复",
 				Description: "first_login_status backfill. Idempotent — safe to re-run.",
 				Action: func(ctx *cli.Context) error {
-					db := model.Default()
-
-					result := db.Exec(`
-						UPDATE s_user
-						SET first_login_status = '0'
-						WHERE first_login_status = '1'
-						  AND password_change_at IS NOT NULL
-						  AND created_at IS NOT NULL
-						  AND ABS(TIMESTAMPDIFF(SECOND, password_change_at, created_at)) < 5
-					`)
-					if result.Error != nil {
-						rxLog.Sugar().Errorw("first_login backfill failed", "err", result.Error)
-						return result.Error
+					rows, err := backfillFirstLoginStatus(model.Default())
+					if err != nil {
+						rxLog.Sugar().Errorw("first_login backfill failed", "err", err)
+						return err
 					}
 					rxLog.Sugar().Infow("first_login_status backfill complete",
-						"rows_affected", result.RowsAffected)
+						"rows_affected", rows)
 					return nil
 				},
 			},

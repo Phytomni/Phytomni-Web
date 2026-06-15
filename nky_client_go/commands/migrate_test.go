@@ -118,3 +118,103 @@ func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
 		t.Error("image_paths should be present after add")
 	}
 }
+
+// sqliteBackfillSQL mirrors firstLoginBackfillSQL's row-selection semantics
+// (flip first_login_status '1'→'0' when password_change_at and created_at are
+// within 5 seconds) using SQLite-portable julianday arithmetic instead of
+// MySQL's TIMESTAMPDIFF. The WHERE/SET shape is identical so this exercises the
+// same idempotency + selection contract the production statement relies on.
+const sqliteBackfillSQL = `
+	UPDATE s_user
+	SET first_login_status = '0'
+	WHERE first_login_status = '1'
+	  AND password_change_at IS NOT NULL
+	  AND created_at IS NOT NULL
+	  AND ABS((julianday(password_change_at) - julianday(created_at)) * 86400) < 5`
+
+func newBackfillTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	// Table name must match SUser.TableName() == "s_user".
+	if err := gdb.Exec(`CREATE TABLE s_user (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		first_login_status TEXT,
+		password_change_at TEXT,
+		created_at TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	return gdb
+}
+
+// TestBackfillFirstLoginStatus_SelectsOnlyWithinWindow pins the row-selection
+// contract: only a status='1' row whose two timestamps are within 5s is
+// flipped. A status='1' row an hour apart, and an already-'0' row, are left
+// untouched. Delete the WHERE window and the hour-apart row would also flip,
+// turning this test red.
+func TestBackfillFirstLoginStatus_SelectsOnlyWithinWindow(t *testing.T) {
+	gdb := newBackfillTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_user (first_login_status, password_change_at, created_at) VALUES
+		('1', '2026-01-01 10:00:02', '2026-01-01 10:00:00'),
+		('1', '2026-01-01 11:00:00', '2026-01-01 10:00:00'),
+		('0', '2026-01-01 10:00:00', '2026-01-01 10:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	rows, err := backfillFirstLoginStatusWith(gdb, sqliteBackfillSQL)
+	if err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	if rows != 1 {
+		t.Fatalf("expected exactly 1 row flipped (within-window only), got %d", rows)
+	}
+
+	var stillFlagged int64
+	if err := gdb.Raw(`SELECT COUNT(*) FROM s_user WHERE first_login_status = '1'`).Scan(&stillFlagged).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if stillFlagged != 1 {
+		t.Errorf("the hour-apart row must remain first_login_status='1'; got %d still flagged", stillFlagged)
+	}
+}
+
+// TestBackfillFirstLoginStatus_Idempotent pins the idempotency contract: a
+// second run matches zero rows because the first run already cleared every
+// within-window '1'. If the SET/WHERE ever stopped narrowing on
+// first_login_status='1', the second run would re-touch rows and this goes red.
+func TestBackfillFirstLoginStatus_Idempotent(t *testing.T) {
+	gdb := newBackfillTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_user (first_login_status, password_change_at, created_at) VALUES
+		('1', '2026-01-01 10:00:01', '2026-01-01 10:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	first, err := backfillFirstLoginStatusWith(gdb, sqliteBackfillSQL)
+	if err != nil {
+		t.Fatalf("first backfill: %v", err)
+	}
+	if first != 1 {
+		t.Fatalf("first run should flip 1 row, got %d", first)
+	}
+
+	second, err := backfillFirstLoginStatusWith(gdb, sqliteBackfillSQL)
+	if err != nil {
+		t.Fatalf("second backfill: %v", err)
+	}
+	if second != 0 {
+		t.Errorf("second run must be a no-op (idempotent), got %d rows affected", second)
+	}
+}
+
+// TestBackfillFirstLoginStatus_SurfacesError pins that a failing statement
+// propagates rather than being swallowed: the production seam returns the error
+// so `migrate up` exits non-zero instead of reporting a phantom success.
+func TestBackfillFirstLoginStatus_SurfacesError(t *testing.T) {
+	gdb := newBackfillTestDB(t)
+	if _, err := backfillFirstLoginStatusWith(gdb, `UPDATE no_such_table SET x = 1`); err == nil {
+		t.Fatal("expected an error from a statement against a missing table, got nil")
+	}
+}
