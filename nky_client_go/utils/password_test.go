@@ -69,6 +69,23 @@ func TestVerifyPassword_FailsClosedOnMalformed(t *testing.T) {
 	}
 }
 
+func TestVerifyPassword_AcceptsAllBcryptVariants(t *testing.T) {
+	// bcrypt.GenerateFromPassword 只产出 $2a$,但 $2a$/$2b$/$2y$ 摘要同构、可互验。
+	// 生产库可能存在其它工具(或 PHP)写入的 $2b$/$2y$ 行,VerifyPassword 的三前缀
+	// 分支必须都接受。删掉 $2b/$2y 任一前缀 case 即让此测试 RED(mutation 锚点)。
+	base, _ := HashPassword("goodpass") // $2a$...
+	for _, pfx := range []string{"$2b$", "$2y$"} {
+		stored := pfx + strings.TrimPrefix(base, "$2a$")
+		ok, needsUpgrade, err := VerifyPassword(stored, "goodpass")
+		if err != nil || !ok || needsUpgrade {
+			t.Errorf("%s correct: want ok=true upgrade=false err=nil, got ok=%v upgrade=%v err=%v", pfx, ok, needsUpgrade, err)
+		}
+		if ok, _, _ := VerifyPassword(stored, "wrong"); ok {
+			t.Errorf("%s wrong password verified true", pfx)
+		}
+	}
+}
+
 func TestValidateBcryptCost(t *testing.T) {
 	defer viper.Set("bcrypt_cost", 0)
 

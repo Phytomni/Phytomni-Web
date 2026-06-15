@@ -3,6 +3,7 @@ package api_service
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -361,4 +362,157 @@ func TestUpdateUserPassWord_StoresBcrypt(t *testing.T) {
 	if !strings.HasPrefix(stored, "$2") {
 		t.Errorf("admin reset should store bcrypt, got %q", stored)
 	}
+}
+
+// TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt 钉死 design §10/§274:
+// 懒升级把密码从 MD5 换成 bcrypt,但**绝不动** password_change_at —— 凭证本身没变,
+// 升级是存储格式迁移,不是改密。若动了它,90 天过期计时会被静默重置。
+// mutation:给 user.go 的升级 Update 加上 "password_change_at": time.Now() → 本测试 RED。
+func TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	// 固定一个非零的历史 password_change_at(40 天前,未过 90 天,不触发警告也不为 NULL)。
+	changedAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code, password_change_at) VALUES (1, 'a@x.com', ?, 'user', ?)`,
+		utils.MD5String("goodpass"), changedAt).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	ps := NewApiService()
+	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
+	if apiErr != nil || count != 1 {
+		t.Fatalf("login should succeed, got count=%d err=%v", count, apiErr)
+	}
+
+	var stored string
+	var gotChangedAt *time.Time
+	if err := gdb.Raw(`SELECT password, password_change_at FROM s_user WHERE id = 1`).Row().Scan(&stored, &gotChangedAt); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if !strings.HasPrefix(stored, "$2") {
+		t.Fatalf("expected lazy upgrade to bcrypt, got %q", stored)
+	}
+	if gotChangedAt == nil || !gotChangedAt.Equal(changedAt) {
+		t.Errorf("lazy upgrade must NOT touch password_change_at: want %v, got %v", changedAt, gotChangedAt)
+	}
+}
+
+// TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite 钉死 design §274 的并发 no-clobber:
+// 升级用守卫 CAS(WHERE id=? AND password=登录起始读到的 MD5 值)。若另一路并发写在
+// read 与 upgrade 之间已把行改成新 bcrypt,本路 CAS 必须 RowsAffected==0、不覆盖那个新值。
+// 用 GORM After-query 回调 + sync.Once 在 s_user 被查出后、升级前注入一次竞争 bcrypt 写。
+// mutation:把升级 Where 改成只 "id = ?"(去掉 AND password=) → 本测试 RED(竞争写被覆盖)。
+func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`,
+		utils.MD5String("goodpass")).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// 竞争者:一个已落库的 bcrypt(代表另一并发会话的改密结果)。
+	racingHash, _ := utils.HashPassword("rotated-by-someone-else")
+
+	var once sync.Once
+	cbName := "test_inject_concurrent_pw_write"
+	if err := gdb.Callback().Query().After("gorm:query").Register(cbName, func(tx *gorm.DB) {
+		// 只在查询 s_user 时、且仅一次:模拟竞争写恰好落在 login 的 read 与 upgrade 之间。
+		if tx.Statement == nil || tx.Statement.Table != "s_user" {
+			return
+		}
+		once.Do(func() {
+			// 用裸 SQL 直写,避免再次触发本回调造成递归。
+			gdb.Exec(`UPDATE s_user SET password = ? WHERE id = 1`, racingHash)
+		})
+	}); err != nil {
+		t.Fatalf("register callback: %v", err)
+	}
+	t.Cleanup(func() { _ = gdb.Callback().Query().Remove(cbName) })
+
+	ps := NewApiService()
+	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
+	if apiErr != nil || count != 1 {
+		t.Fatalf("login should still succeed, got count=%d err=%v", count, apiErr)
+	}
+
+	var stored string
+	gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored)
+	if stored != racingHash {
+		t.Errorf("guarded CAS must not clobber the concurrent write: want racing hash %q, got %q", racingHash, stored)
+	}
+}
+
+// TestApiModifyPassword_BcryptOldVerifies 钉死 design §10:改密时旧密码已是 bcrypt
+// (用户先前已懒升级)也能正确验证并改成新 bcrypt。原有用例只覆盖 MD5 旧密码。
+func TestApiModifyPassword_BcryptOldVerifies(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	oldHash, _ := utils.HashPassword("oldpass")
+	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, oldHash).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ps := NewApiService()
+	if _, err := ps.ApiModifyPassword(context.Background(), "a@x.com", "oldpass", "newpass"); err != nil {
+		t.Fatalf("change with correct bcrypt old password should succeed, got %v", err)
+	}
+	var stored string
+	gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored)
+	if !strings.HasPrefix(stored, "$2") {
+		t.Errorf("new password should be stored as bcrypt, got %q", stored)
+	}
+	if ok, _, _ := utils.VerifyPassword(stored, "newpass"); !ok {
+		t.Error("stored new hash does not verify the new password")
+	}
+	// 旧密码不应再能验证(确实换了)。
+	if ok, _, _ := utils.VerifyPassword(stored, "oldpass"); ok {
+		t.Error("old password still verifies after change")
+	}
+}
+
+// TestWriteSites_FailClosedOnHashError 钉死三个写入站点的 fail-closed:bcrypt_cost 越界
+// 使 HashPassword 报错时,注册/管理员建号/管理员重置都必须返回失败且**不写入任何行/不改密**,
+// 绝不静默落库明文或空哈希。mutation:任一站点把 `if herr != nil { return ... }` 删掉 → 对应子测试 RED。
+func TestWriteSites_FailClosedOnHashError(t *testing.T) {
+	viper.Set("bcrypt_cost", 99) // 越界 → HashPassword 报错
+	defer viper.Set("bcrypt_cost", 0)
+
+	t.Run("ApiUserRegister", func(t *testing.T) {
+		gdb := setupUserTestDB(t)
+		ps := NewApiService()
+		if err := ps.ApiUserRegister(context.Background(), "new@x.com", "Secret12!"); err == nil {
+			t.Error("self-register must fail when hashing errors")
+		}
+		var n int64
+		gdb.Raw(`SELECT COUNT(*) FROM s_user WHERE email = 'new@x.com'`).Scan(&n)
+		if n != 0 {
+			t.Errorf("no row must be written on hash error, found %d", n)
+		}
+	})
+
+	t.Run("RegisterAddUser", func(t *testing.T) {
+		gdb := setupUserTestDB(t)
+		ps := NewApiService()
+		if ok, err := ps.RegisterAddUser(context.Background(), "adm@x.com", "Secret12!", "user", 0, "", "", ""); ok || err == nil {
+			t.Errorf("admin-create must fail-closed on hash error, got ok=%v err=%v", ok, err)
+		}
+		var n int64
+		gdb.Raw(`SELECT COUNT(*) FROM s_user WHERE email = 'adm@x.com'`).Scan(&n)
+		if n != 0 {
+			t.Errorf("no row must be written on hash error, found %d", n)
+		}
+	})
+
+	t.Run("UpdateUserPassWord", func(t *testing.T) {
+		gdb := setupUserTestDB(t)
+		// seed 一个已知 MD5,断言重置失败后密码原样不变(没被空哈希覆盖)。
+		if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("orig")).Error; err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		ps := NewApiService()
+		if ok := ps.UpdateUserPassWord(context.Background(), "Secret12!", 7); ok {
+			t.Error("admin reset must return false on hash error")
+		}
+		var stored string
+		gdb.Raw(`SELECT password FROM s_user WHERE id = 7`).Scan(&stored)
+		if stored != utils.MD5String("orig") {
+			t.Errorf("password must stay unchanged on hash error, got %q", stored)
+		}
+	})
 }
