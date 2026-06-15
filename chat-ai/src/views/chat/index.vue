@@ -1444,6 +1444,7 @@ import { useChatStates } from "./composables/useChatStates";
 import { useAgentImages } from "./composables/useAgentImages";
 import { useReactions } from "./composables/useReactions";
 import { useCopyDownload } from "./composables/useCopyDownload";
+import { useFileUpload } from "./composables/useFileUpload";
 import LangSwitch from "@/components/LangSwitch.vue";
 import { useI18n } from "vue-i18n";
 import type { UploadInstance } from "element-plus";
@@ -2211,18 +2212,6 @@ const selectChat = async (dialogueId: string) => {
   updateUrlWithChatId(dialogueId);
 };
 
-// 监听文件列表 控制列表显示
-watch(
-  () => fileList.value,
-  (newVal, oldVal) => {
-    if (newVal?.length > 0 && senderRef.value) {
-      senderRef.value.openHeader();
-    } else if (senderRef.value) {
-      senderRef.value.closeHeader();
-    }
-  }
-);
-
 // 消息容器引用，用于自动滚动
 const messageContainer = ref<HTMLElement | null>(null);
 
@@ -2233,6 +2222,15 @@ const scrollToBottom = async () => {
     messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
   }
 };
+
+// 文件上传处理 — 状态与逻辑抽取至 useFileUpload 组合式函数
+const { handleFileChange, removeFile } = useFileUpload({
+  fileList,
+  currentChatId,
+  getChatState,
+  senderRef,
+  scrollToBottom,
+});
 
 // 消息点赞点踩功能 — 状态与逻辑抽取至 useReactions 组合式函数
 const { getReactionState, handleReaction, getReactionTooltip } = useReactions({
@@ -2962,60 +2960,6 @@ const getDialogueIdFromChatId = () => {
     (c: Chat) => c.dialogue_id === dialogueId
   )?.id;
   return chatRealId;
-};
-
-// 文件处理相关函数
-const handleFileChange = (file: any) => {
-  if (!currentChatId.value) {
-    return;
-  }
-
-  const chatState = getChatState(currentChatId.value);
-  if (!chatState) {
-    return;
-  }
-
-  const newFile: UploadFile = {
-    name: file.name,
-    size: file.size,
-    type: file.type,
-    file: file.raw,
-  };
-
-  // 使用响应式更新方式
-  chatState.fileList = [...chatState.fileList, newFile];
-
-  // 确保文件列表更新后立即显示
-  nextTick(() => {
-    if (senderRef.value && chatState.fileList.length > 0) {
-      senderRef.value.openHeader();
-    }
-
-    // 确保滚动到底部
-    scrollToBottom();
-  });
-};
-
-const removeFile = (index: number) => {
-  if (!currentChatId.value) return;
-
-  const chatState = getChatState(currentChatId.value);
-  if (!chatState) return;
-
-  // 使用响应式更新方式
-  const newFileList = [...chatState.fileList];
-  newFileList.splice(index, 1);
-  chatState.fileList = newFileList;
-
-  // 如果文件列表为空，关闭header
-  nextTick(() => {
-    if (senderRef.value && chatState.fileList.length === 0) {
-      senderRef.value.closeHeader();
-    }
-
-    // 确保滚动到底部
-    scrollToBottom();
-  });
 };
 
 // 预设的agents数据
