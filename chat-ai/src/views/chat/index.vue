@@ -1457,7 +1457,6 @@ import { useRouter } from "vue-router";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import type { MentionOption } from "vue-element-plus-x/types/components/MentionSender/types";
-import { useAppStore } from "@/stores";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
 import ChatAgentImg from "@/assets/images/chat/ChatAgent.png";
@@ -1704,14 +1703,6 @@ interface UploadFile {
   type: string;
   file: File;
 }
-
-const isMouseEnter = ref(false);
-const handleMouseEnter = () => {
-  isMouseEnter.value = true;
-};
-const handleMouseLeave = () => {
-  isMouseEnter.value = false;
-};
 
 // 显示Agents架构图弹窗
 const showAgentsView = () => {
