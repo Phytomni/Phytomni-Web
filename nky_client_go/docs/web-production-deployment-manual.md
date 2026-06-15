@@ -220,14 +220,20 @@ ALTER TABLE s_question_agent_logs
   ADD COLUMN bot_run_id VARCHAR(64) NULL COMMENT 'Bot run_id 跨服务关联键' AFTER server_id;
 ```
 
-### 5.3 Add `image_paths` (manual — no dedicated subcommand)
+### 5.3 Add `image_paths` (idempotent CLI)
+
+```bash
+go run main.go migrate add-image-paths     # guarded by HasColumn; safe to re-run
+```
+
+Equivalent DDL (for reference only — prefer the command above):
 
 ```sql
 ALTER TABLE s_question_agent_logs
   ADD COLUMN image_paths TEXT NULL COMMENT '图廊图片OBS路径(JSON数组)' AFTER download_path;
 ```
 
-> **Do not skip this.** The Go model writes `image_paths` on every chat-log insert. Without the column, **every `/query` returns 500** (`Unknown column 'image_paths'`) even though the Bot answered. This was reproduced in a live end-to-end run.
+> **Do not skip this.** The Go model writes `image_paths` on every chat-log insert. Without the column, **every `/query` returns 500** (`Unknown column 'image_paths'`) even though the Bot answered. This was reproduced in a live end-to-end run. The `add-image-paths` subcommand is dev/CI fresh-schema convenience; production DDL still runs manually (use the CLI or the SQL above, your choice).
 
 ### 5.4 Backfill the first-login flag
 
