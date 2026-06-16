@@ -237,6 +237,7 @@ import {
 } from "element-plus";
 import { saveAs } from "file-saver";
 import { sanitizeAnchorAttributes, sanitizeHref } from "@/utils/sanitize-markup";
+import { formatDetailedCitation } from "@/utils/citation";
 
 // 模拟从 json.txt 获取的 Markdown 内容
 const props = defineProps({
@@ -292,57 +293,6 @@ const jumpTo = (id) => {
 
 const handleNavSelect = (index) => {
   jumpTo(index);
-};
-
-// 格式化参考文献的函数
-const formatDetailedCitation = (doc) => {
-  const parts = [];
-
-  // 作者
-  if (doc.au) {
-    parts.push(doc.au);
-  }
-
-  // 标题
-  if (doc.ti) {
-    // 移除HTML标签
-    const cleanTitle = doc.ti.replace(/<[^>]*>/g, "");
-    parts.push('"' + cleanTitle + '"');
-  }
-
-  // 期刊名称
-  if (doc.so) {
-    parts.push(doc.so);
-  }
-
-  // 卷号、页码和年份组合
-  let volumePageYear = "";
-  if (doc.vl) {
-    if (doc.bp && doc.ep) {
-      volumePageYear = `${doc.vl}, ${doc.bp}-${doc.ep}`;
-    } else if (doc.bp) {
-      volumePageYear = `${doc.vl}, ${doc.bp}`;
-    } else {
-      volumePageYear = doc.vl;
-    }
-  } else if (doc.bp && doc.ep) {
-    volumePageYear = `${doc.bp}-${doc.ep}`;
-  }
-
-  // 添加年份（用括号包围）
-  if (doc.py) {
-    if (volumePageYear) {
-      volumePageYear += `, (${doc.py})`;
-    } else {
-      volumePageYear = `(${doc.py})`;
-    }
-  }
-
-  if (volumePageYear) {
-    parts.push(volumePageYear);
-  }
-
-  return parts.join(". ");
 };
 
 // 计算属性：处理参考文献列表，生成格式化后的HTML

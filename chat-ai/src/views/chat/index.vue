@@ -1457,6 +1457,7 @@ import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import { isValidPendingRecord, matchesChat, safeParse } from "@/utils/pending-chat";
+import { formatDetailedCitation } from "@/utils/citation";
 import { formatLogContentWithColors } from "./utils/agent-log";
 import type { Chat, ChatMessage } from "./types";
 
@@ -2102,58 +2103,6 @@ const testParallelChats = () => {
 
 // 在开发环境下添加测试按钮
 const isDevelopment = import.meta.env.DEV;
-
-// 格式化详细引用信息
-const formatDetailedCitation = (doc: any) => {
-  const parts = [];
-
-  // 作者
-  if (doc.au) {
-    parts.push(doc.au);
-  }
-
-  // 标题
-  if (doc.ti) {
-    // 移除HTML标签
-    const cleanTitle = doc.ti.replace(/<[^>]*>/g, "");
-    parts.push(`"${cleanTitle}"`);
-  }
-
-  // 期刊名称
-  if (doc.so) {
-    parts.push(doc.so);
-  }
-
-  // 卷号、页码和年份组合
-  let volumePageYear = "";
-  if (doc.vl) {
-    if (doc.bp && doc.ep) {
-      volumePageYear = `${doc.vl}, ${doc.bp}-${doc.ep}`;
-    } else if (doc.bp) {
-      volumePageYear = `${doc.vl}, ${doc.bp}`;
-    } else {
-      volumePageYear = doc.vl;
-    }
-  } else if (doc.bp && doc.ep) {
-    volumePageYear = `${doc.bp}-${doc.ep}`;
-  }
-
-  // 添加年份（用括号包围）
-  if (doc.py) {
-    if (volumePageYear) {
-      volumePageYear += `, (${doc.py})`;
-    } else {
-      volumePageYear = `(${doc.py})`;
-    }
-  }
-
-  // 如果有卷号页码年份信息，添加到parts中
-  if (volumePageYear) {
-    parts.push(volumePageYear);
-  }
-
-  return parts.join(". ");
-};
 
 // 复制消息内容 + 引用的文档列表(从 inline @click 提取,绕开 vue-tsc
 // 0.39.5 在模板多语句箭头函数内解析局部 const 时把它误映射到
