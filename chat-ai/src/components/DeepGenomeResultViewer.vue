@@ -234,13 +234,12 @@ import {
   ElDropdownMenu,
   ElDropdownItem,
 } from "element-plus";
-import { sanitizeHref } from "@/utils/sanitize-markup";
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
 import {
   processInlineMarkdown,
   convertFilePath,
 } from "@/utils/markdown-inline";
-import { formatDetailedCitation } from "@/utils/citation";
+import { buildDisplayReferences } from "@/utils/reference-renderer";
 
 // 模拟从 json.txt 获取的 Markdown 内容
 const props = defineProps({
@@ -299,72 +298,10 @@ const handleNavSelect = (index) => {
 };
 
 // 计算属性：处理参考文献列表，生成格式化后的HTML
-const displayReferences = computed(() => {
-  if (!props.references || props.references.length === 0) {
-    return [];
-  }
-
-  return props.references.map((doc, index) => {
-    const refIndex = index + 1;
-
-    if (doc.title) {
-      return {
-        html: `<div>${refIndex}. ${escapeHtml(String(doc.title))}</div>`,
-        id: `ref-${refIndex}`,
-      };
-    } else if (doc.au || doc.ti) {
-      const citation = formatDetailedCitation(doc);
-
-      // 构建 DOI 和 PMID 链接部分
-      let linkPart = "";
-      const hasLink = doc.dl || doc.pm;
-
-      if (hasLink) {
-        const doiLink = doc.dl
-          ? `doi:<a href="${sanitizeHref(
-              String(doc.dl)
-            )}" target="_blank" class="doi-link">${escapeHtml(
-              String(doc.dl)
-            )}</a>`
-          : "";
-        const pmidLink = doc.pm
-          ? `pmid:<a href="${sanitizeHref(
-              "https://pubmed.ncbi.nlm.nih.gov/" + String(doc.pm)
-            )}" target="_blank" class="pmid-link">${escapeHtml(
-              String(doc.pm)
-            )}</a>`
-          : "";
-
-        const separator = doc.dl && doc.pm ? "; " : "";
-
-        linkPart = `. <span class="doc-link-inline">${doiLink}</span><span>${separator}</span><span class="doc-link-inline">${pmidLink}</span>`;
-      }
-
-      return {
-        // citation 是纯文本(au/so/卷页年),先转义;linkPart 是本组件生成的
-        // 已消毒锚点(sanitizeHref + escapeHtml),保留原样不再转义。
-        html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
-          citation
-        )}${linkPart}</div>`,
-        id: `ref-${refIndex}`,
-      };
-    } else {
-      // 处理普通字符串类型的引用
-      if (typeof doc === "string") {
-        return {
-          html: `<div>${refIndex}. ${escapeHtml(doc)}</div>`,
-          id: `ref-${refIndex}`,
-        };
-      }
-
-      // 默认情况
-      return {
-        html: `<div>${refIndex}. ${escapeHtml(JSON.stringify(doc))}</div>`,
-        id: `ref-${refIndex}`,
-      };
-    }
-  });
-});
+// 渲染逻辑(含 v-html 清洗不变量)抽到 @/utils/reference-renderer 直接单测。
+const displayReferences = computed(() =>
+  buildDisplayReferences(props.references)
+);
 
 // --- Markdown 转换辅助函数 ---
 const escapeHtml = (text) => {
