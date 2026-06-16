@@ -3584,53 +3584,6 @@ const getAgentTooltip = (agentName: string) => {
   return t(`chat.agents.${agentKey}`) || agentName;
 };
 
-// 获取智能体能力列表
-const getAgentCapabilities = (agentName: string) => {
-  const capabilities: Record<string, string[]> = {
-    RAG: ["知识检索", "文献分析", "智能问答"],
-    BI: ["数据分析", "可视化", "报表生成"],
-    GA: ["基因分析", "序列比对", "功能预测"],
-    联网搜索: ["实时搜索", "信息更新", "多源整合"],
-    "Chat Agent": ["自然语言处理", "多轮对话", "上下文理解"],
-    "Knowledge Agent": ["知识库管理", "精准匹配", "权威信息"],
-    "Data Agent": ["数据清洗", "格式转换", "质量优化"],
-    "Analyst Agent": ["统计分析", "模式识别", "洞察生成"],
-    "Review Agent": ["文献综述", "趋势分析", "研究总结"],
-    "Deep Genome Agent": ["基因组解析", "变异检测", "功能注释"],
-    "In Silico Research Agent": ["实验模拟", "预测分析", "成本优化"],
-    "Gene Network Agent": ["网络构建", "通路分析", "调控机制"],
-    "Digital Design Agent": ["序列设计", "结构预测", "功能验证"],
-  };
-
-  const agentCapabilities = capabilities[agentName] || [
-    "智能分析",
-    "数据处理",
-    "结果生成",
-  ];
-  return agentCapabilities.map((cap: string) => `<li>${cap}</li>`).join("");
-};
-
-// 获取智能体使用说明
-const getAgentUsage = (agentName: string) => {
-  const usage: Record<string, string> = {
-    RAG: "直接输入您的问题，系统将自动检索相关知识库并生成答案。",
-    BI: "上传数据文件，系统将自动分析并生成可视化图表和报告。",
-    GA: "输入基因序列或名称，系统将提供详细的基因功能分析。",
-    联网搜索: "输入搜索关键词，系统将实时搜索网络信息并整合结果。",
-    "Chat Agent": "用自然语言描述您的需求，系统将提供智能对话服务。",
-    "Knowledge Agent": "输入专业问题，系统将从权威知识库中检索相关信息。",
-    "Data Agent": "上传数据文件，系统将自动处理并优化数据格式。",
-    "Analyst Agent": "提供数据或问题，系统将进行深度分析并生成洞察报告。",
-    "Review Agent": "指定研究领域，系统将自动生成文献综述和研究趋势分析。",
-    "Deep Genome Agent": "输入基因组数据，系统将进行深度解析和功能预测。",
-    "In Silico Research Agent": "描述实验需求，系统将进行数字模拟和预测分析。",
-    "Gene Network Agent": "提供基因列表，系统将构建调控网络并分析关键通路。",
-    "Digital Design Agent": "描述设计需求，系统将生成基因序列和蛋白质结构。",
-  };
-
-  return usage[agentName] || "根据您的具体需求，系统将提供相应的智能服务。";
-};
-
 // 获取智能体对应的图片路径
 const getAgentImage = (agentName: string) => {
   const imageMap: Record<string, string> = {
