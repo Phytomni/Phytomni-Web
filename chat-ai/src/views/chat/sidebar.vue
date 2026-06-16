@@ -527,7 +527,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, toRef, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import {
   User,
@@ -554,6 +554,7 @@ import { userStore } from "@/stores";
 import { collectHistory, renameHistory, deleteHistory } from "@/api/chat";
 import { ElMessage } from "element-plus";
 import type { Chat } from "./types";
+import { useChatHistoryGroups } from "./composables/useChatHistoryGroups";
 
 // 定义接收的属性
 const props = defineProps({
@@ -576,6 +577,7 @@ const props = defineProps({
 });
 const router = useRouter();
 const UserStore = userStore();
+const { todayChats, yesterdayChats, weekChats, olderChats } = useChatHistoryGroups(toRef(props, "chatList"));
 // 定义向父组件发送的事件
 const emit = defineEmits([
   "selectChat",
@@ -997,58 +999,6 @@ const selectChat = (dialogueId: string) => emit("selectChat", dialogueId);
 const hasPermission = (permission: string) => {
   return UserStore.permission_list.includes(permission);
 };
-
-// 按日期分组
-const todayChats = computed(() => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // 设置为今天的开始时间
-
-  return props.chatList.filter((chat: Chat) => {
-    const chatDate = new Date(chat.date);
-    return chatDate >= today;
-  });
-});
-
-const yesterdayChats = computed(() => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // 今天的开始时间
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1); // 昨天的开始时间
-
-  return props.chatList.filter((chat: Chat) => {
-    const chatDate = new Date(chat.date);
-    return chatDate >= yesterday && chatDate < today;
-  });
-});
-
-const weekChats = computed(() => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // 今天的开始时间
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1); // 昨天的开始时间
-
-  const weekAgo = new Date(today);
-  weekAgo.setDate(weekAgo.getDate() - 7); // 7天前的开始时间
-
-  return props.chatList.filter((chat: Chat) => {
-    const chatDate = new Date(chat.date);
-    return chatDate >= weekAgo && chatDate < yesterday;
-  });
-});
-
-// 添加一周前的聊天记录
-const olderChats = computed(() => {
-  const weekAgo = new Date();
-  weekAgo.setHours(0, 0, 0, 0); // 今天的开始时间
-  weekAgo.setDate(weekAgo.getDate() - 7); // 7天前的开始时间
-
-  return props.chatList.filter((chat: Chat) => {
-    const chatDate = new Date(chat.date);
-    return chatDate < weekAgo;
-  });
-});
 
 // 组件挂载时检查窗口大小并添加监听器
 onMounted(() => {
