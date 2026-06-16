@@ -132,7 +132,7 @@ describe("useCopyDownload", () => {
 
       const clickSpy = vi
         .spyOn(HTMLAnchorElement.prototype, "click")
-        .mockImplementation(() => {});
+        .mockImplementation(() => undefined);
 
       mockGetFileDownUrlApi.mockResolvedValueOnce({
         headers: {
