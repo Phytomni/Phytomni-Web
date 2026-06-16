@@ -1413,10 +1413,8 @@
 import { onMounted, ref, nextTick, watch, computed } from "vue";
 import Sidebar from "./sidebar.vue";
 import { MentionSender } from "vue-element-plus-x";
-// import { MentionOption } from 'vue-element-plus-x';
 import {
   Close as IconClose,
-  Delete as IconDelete,
   Document,
   CopyDocument,
   SuccessFilled,
@@ -1447,10 +1445,8 @@ import { useComposer } from "./composables/useComposer";
 import LangSwitch from "@/components/LangSwitch.vue";
 import { useI18n } from "vue-i18n";
 import type { UploadInstance } from "element-plus";
-import { ElMessage } from "element-plus";
 import {
   Paperclip,
-  ElementPlus,
   Promotion,
   Close,
 } from "@element-plus/icons-vue";
@@ -1461,10 +1457,8 @@ import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import { isValidPendingRecord, matchesChat, safeParse } from "@/utils/pending-chat";
-import { processImagePaths, formatLogContent, formatLogContentWithColors } from "./utils/agent-log";
-import type { Chat, ChatMessage, ChatResponse, UploadFile } from "./types";
-
-// 后续问题显示逻辑已移至FollowUpQuestions组件
+import { formatLogContentWithColors } from "./utils/agent-log";
+import type { Chat, ChatMessage } from "./types";
 
 const uploadRef = ref<UploadInstance>();
 const senderRef = ref();
@@ -1721,7 +1715,6 @@ const {
   logData,
   loadingLog,
   refreshingMessages,
-  historyQuestion,
   updatingLog,
 } = useChatStates();
 
@@ -2063,8 +2056,6 @@ const handleFollowUpQuestionClick = (question: string) => {
   });
 };
 
-// 切换日志视图
-// 刷新消息
 // 消息刷新（重新生成助手回答）— 逻辑抽取至 useRefreshMessage 组合式函数
 const { refreshMessage } = useRefreshMessage({
   currentChat,
