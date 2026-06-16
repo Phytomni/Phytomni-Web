@@ -1432,7 +1432,6 @@ import {
 import {
   getAnswerCheck,
   getHistoryQuestionList,
-  getQuery,
   getQueryAbortable,
   getAnalystAgentLog,
   updateAnalystAgentLog,
