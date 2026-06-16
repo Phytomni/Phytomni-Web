@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 
@@ -9,25 +10,32 @@ import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 // au/so, plain-string and JSON fallbacks) so a raw tag can't reach the DOM.
 const passthrough = { template: "<div><slot /></div>" };
 
+const stubs = {
+  ElContainer: passthrough,
+  ElAside: passthrough,
+  ElMain: passthrough,
+  ElCard: passthrough,
+  ElMenu: passthrough,
+  ElMenuItem: passthrough,
+  ElSubMenu: passthrough,
+  ElDialog: passthrough,
+  ElButton: passthrough,
+  ElDropdown: passthrough,
+  ElDropdownMenu: passthrough,
+  ElDropdownItem: passthrough,
+};
+
 function render(references: unknown[]) {
   return mount(DeepGenomeResultViewer, {
     props: { markdown: "", references },
-    global: {
-      stubs: {
-        ElContainer: passthrough,
-        ElAside: passthrough,
-        ElMain: passthrough,
-        ElCard: passthrough,
-        ElMenu: passthrough,
-        ElMenuItem: passthrough,
-        ElSubMenu: passthrough,
-        ElDialog: passthrough,
-        ElButton: passthrough,
-        ElDropdown: passthrough,
-        ElDropdownMenu: passthrough,
-        ElDropdownItem: passthrough,
-      },
-    },
+    global: { stubs },
+  });
+}
+
+function renderMarkdown(markdown: string) {
+  return mount(DeepGenomeResultViewer, {
+    props: { markdown, references: [] },
+    global: { stubs },
   });
 }
 
@@ -69,5 +77,48 @@ describe("DeepGenomeResultViewer — reference text-field XSS hardening", () => 
     const a = ref.find("a.doi-link");
     expect(a.exists()).toBe(true);
     expect(a.attributes("href")).toBe("https://doi.org/10.1/x");
+  });
+});
+
+// The image-caption path feeds the first non-empty line after an image into
+// processInlineMarkdown and on into a v-html sink. The caption text comes from
+// props.markdown (agent/RAG output, attacker-influenceable), so it MUST be
+// escapeHtml'd first like every other block path. convertMarkdown splits the
+// prop on the literal two-char sequence "\n", so the input below uses literal
+// backslash-n separators. A leading "## " puts the image card into a
+// standalone-content block that renders through v-html.
+describe("DeepGenomeResultViewer — image-caption XSS hardening", () => {
+  it("escapes a raw <img onerror> smuggled into an image caption", async () => {
+    const markdown =
+      "## Figure section\\n" +
+      "![fig](https://example.com/a.png)\\n" +
+      '<img src=x onerror="window.__xss__=1">';
+
+    const w = renderMarkdown(markdown);
+    await nextTick();
+    await nextTick();
+
+    const html = w.html();
+    // The caption block must render the raw tag as inert, escaped text.
+    expect(html).toContain("&lt;img");
+    // And there must be no live <img onerror> element from the caption.
+    const captionImg = w
+      .findAll("img")
+      .find((el) => el.attributes("onerror") !== undefined);
+    expect(captionImg).toBeUndefined();
+  });
+
+  it("still renders legitimate **bold** markdown in an image caption", async () => {
+    const markdown =
+      "## Figure section\\n" +
+      "![fig](https://example.com/a.png)\\n" +
+      "**Bold caption**";
+
+    const w = renderMarkdown(markdown);
+    await nextTick();
+    await nextTick();
+
+    expect(w.find("strong").exists()).toBe(true);
+    expect(w.find("strong").text()).toBe("Bold caption");
   });
 });

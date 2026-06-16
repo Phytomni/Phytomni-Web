@@ -1040,8 +1040,11 @@ const convertMarkdown = (text) => {
           const captionLine = lines[j];
           // 提取图注文本，保留所有内容
           let captionText = captionLine.trim();
-          // 对图注文本应用Markdown处理，确保**被转换为strong标签
-          captionText = processInlineMarkdown(captionText);
+          // 对图注文本应用Markdown处理，确保**被转换为strong标签。
+          // 先 escapeHtml 再做内联处理（与标题/段落/表格单元格等同级路径一致），
+          // 让 agent/RAG 图注里的原始 HTML（如 <img onerror>）变成惰性文本，
+          // 不会经 v-html 槽执行,合法的 **加粗** 仍会被转换为 strong。
+          captionText = processInlineMarkdown(escapeHtml(captionText));
           // 生成图注HTML
           captionHtml = `<p style="text-align: center; margin-top: 8px;">${captionText}</p>`;
           // 跳过从i+1到j的所有行（包括空行和图注行）
