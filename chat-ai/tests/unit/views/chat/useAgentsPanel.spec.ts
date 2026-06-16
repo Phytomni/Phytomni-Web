@@ -91,12 +91,41 @@ describe("useAgentsPanel", () => {
       panel.handleScroll({ deltaY: -100 } as WheelEvent);
       expect(panel.containerStyle.value.height).toBe("140px");
     });
+
+    it("动画窗口内的反向滚动被 isAnimating 门控吞掉(去抖)", () => {
+      vi.useFakeTimers();
+      const { panel } = makeComposable();
+
+      // 向下滚动 → 展开,并置 isAnimating=true(500ms 门控)
+      panel.handleScroll({ deltaY: 100 } as WheelEvent);
+      expect(panel.containerStyle.value.height).toBe("480px");
+
+      // 500ms 未到:反向滚动应被门控吞掉,仍保持展开
+      panel.handleScroll({ deltaY: -100 } as WheelEvent);
+      expect(panel.containerStyle.value.height).toBe("480px");
+
+      // 推进过动画窗口后,反向滚动才生效 → 收起
+      vi.advanceTimersByTime(500);
+      panel.handleScroll({ deltaY: -100 } as WheelEvent);
+      expect(panel.containerStyle.value.height).toBe("140px");
+    });
   });
 
   describe("getAgentTooltip", () => {
     it("首字母小写键转换 → t('chat.agents.chatAgent')", () => {
       const { panel } = makeComposable();
       expect(panel.getAgentTooltip("ChatAgent")).toBe("chat.agents.chatAgent");
+    });
+
+    it("t 返回空值时回退到原始 agentName(|| 兜底分支)", () => {
+      const emptyT = (_k: string) => "";
+      const panel = useAgentsPanel({
+        t: emptyT,
+        isSending: ref(false) as any,
+        router: { push: vi.fn() } as any,
+        scrollToBottom: vi.fn(),
+      });
+      expect(panel.getAgentTooltip("ChatAgent")).toBe("ChatAgent");
     });
   });
 
