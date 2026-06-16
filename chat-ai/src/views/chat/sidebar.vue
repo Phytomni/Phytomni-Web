@@ -553,15 +553,7 @@ import {
 import { userStore } from "@/stores";
 import { collectHistory, renameHistory, deleteHistory } from "@/api/chat";
 import { ElMessage } from "element-plus";
-
-// 定义Chat接口
-interface Chat {
-  id: number;
-  dialogue_id: string;
-  title: string;
-  date: string; // 与index.vue保持一致，用date代替created_at
-  isFavorite: boolean; // 新增收藏状态
-}
+import type { Chat } from "./types";
 
 // 定义接收的属性
 const props = defineProps({
