@@ -159,4 +159,47 @@ describe("useSelectChat", () => {
     // URL 始终更新(在 if 块之外)
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
   });
+
+  it("并发切换安全:mid-fetch 切换 currentChatId 后 reaction 和 historyQuestion 写回参数 dialogueId 而非 live currentChatId", async () => {
+    // 手动控制 getAnswerCheck 的 resolve 时机
+    let resolveCheck!: (v: any) => void;
+    const pendingCheck = new Promise<any>((resolve) => {
+      resolveCheck = resolve;
+    });
+    mockGetAnswerCheck.mockReturnValueOnce(pendingCheck);
+
+    const { selectChat } = makeComposable();
+
+    // 1. 启动 selectChat("d1")，但不 await — fetch 挂起
+    const p = selectChat("d1");
+
+    // 2. 在 await 期间用户切换到 d2
+    currentChatId.value = "d2";
+
+    // 3. resolve fetch，携带 ChatAgent 风格的 reaction_type
+    resolveCheck({
+      code: 200,
+      data: [
+        {
+          id: "msg-concurrent",
+          reaction_type: "2",
+          query: "并发问题",
+          answer: "并发回答",
+          tool_name: "ChatAgent",
+        },
+      ],
+    });
+
+    await p;
+
+    // reaction 水合写到参数 d1，不写到 live currentChatId d2
+    expect(getChatState("d1").reactions["msg-concurrent"]).toBe(2);
+    expect(getChatState("d2").reactions["msg-concurrent"]).toBeUndefined();
+
+    // historyQuestion 也写到 d1
+    const hq = getChatState("d1").historyQuestion;
+    expect(Array.isArray(hq)).toBe(true);
+    expect(hq.length).toBe(2);
+    expect(getChatState("d2").historyQuestion).toBeNull();
+  });
 });
