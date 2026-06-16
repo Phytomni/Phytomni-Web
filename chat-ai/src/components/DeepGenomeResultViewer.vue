@@ -219,7 +219,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
 import {
   ElContainer,
   ElAside,
@@ -236,6 +236,7 @@ import {
 } from "element-plus";
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
 import { useDeepGenomeImageViewer } from "@/composables/useDeepGenomeImageViewer";
+import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 import {
   processInlineMarkdown,
   convertFilePath,
@@ -257,7 +258,6 @@ const props = defineProps({
 const contentBlocks = ref([]);
 const headings = ref([]);
 const nestedHeadings = ref([]);
-const activeHeadingId = ref("");
 const mainContentRef = ref(null);
 
 // 图片查看器（缩放/拖拽/点击放大弹窗）— 已提取至 composable
@@ -275,20 +275,6 @@ const {
   handleMouseLeave,
   setupImageClickListeners,
 } = useDeepGenomeImageViewer();
-
-const jumpTo = (id) => {
-  const element = document.getElementById(id);
-  if (element) {
-    // 使用 nextTick 确保 DOM 更新后再滚动
-    nextTick(() => {
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }
-};
-
-const handleNavSelect = (index) => {
-  jumpTo(index);
-};
 
 // 计算属性：处理参考文献列表，生成格式化后的HTML
 // 渲染逻辑(含 v-html 清洗不变量)抽到 @/utils/reference-renderer 直接单测。
@@ -985,102 +971,9 @@ const { downloadPDF, downloadMarkdown } = useDeepGenomeDownloads({
   displayReferences,
 });
 
-// Intersection Observer 相关变量
-const observerRef = ref(null);
-const observedElements = ref(new Set());
-
-// 改进的自动展开父菜单函数
-const expandParentMenus = (id) => {
-  // 首先找到当前激活项在嵌套结构中的路径
-  const findPath = (items, targetId, path = []) => {
-    for (const item of items) {
-      if (item.id === targetId) {
-        path.push(item.id);
-        return path;
-      }
-      if (item.children && item.children.length > 0) {
-        const childPath = findPath(item.children, targetId, [...path, item.id]);
-        if (childPath) {
-          return childPath;
-        }
-      }
-    }
-    return null;
-  };
-
-  const path = findPath(nestedHeadings.value, id);
-  if (!path) return;
-
-  // 展开路径中所有的父菜单（除了最后一个，即当前激活项本身）
-  for (let i = 0; i < path.length - 1; i++) {
-    const menuId = path[i];
-    const subMenuItem = document.querySelector(
-      `.el-sub-menu[index="${menuId}"]`
-    );
-
-    if (subMenuItem && !subMenuItem.classList.contains("is-opened")) {
-      // 使用 Element Plus 的方法展开菜单
-      const subMenuTitle = subMenuItem.querySelector(".el-sub-menu__title");
-      if (subMenuTitle) {
-        subMenuTitle.click(); // 模拟点击展开
-      }
-    }
-  }
-};
-
-// 使用 Intersection Observer 监测标题元素
-const setupIntersectionObserver = () => {
-  // 创建 Intersection Observer 实例
-  const observer = new IntersectionObserver(
-    (entries) => {
-      const visibleHeadings = [];
-
-      entries.forEach((entry) => {
-        const headingId = entry.target.id;
-
-        if (entry.isIntersecting) {
-          // 元素进入可视区域
-          visibleHeadings.push({
-            id: headingId,
-            top: entry.boundingClientRect.top,
-          });
-        }
-      });
-
-      // 如果有可见的标题元素，找到最上方的那个作为当前激活的标题
-      if (visibleHeadings.length > 0) {
-        // 按视口中的位置排序，选择最上方的标题
-        visibleHeadings.sort((a, b) => a.top - b.top);
-
-        const currentActiveId = visibleHeadings[0].id;
-
-        if (currentActiveId !== activeHeadingId.value) {
-          activeHeadingId.value = currentActiveId;
-          expandParentMenus(currentActiveId);
-        }
-      }
-    },
-    {
-      // 设置根元素为滚动容器
-      root: mainContentRef.value?.$el || mainContentRef.value,
-      // 设置交叉比例，当元素有20%进入视口时触发
-      threshold: 0.2,
-      // 设置边距，提前或延后触发
-      rootMargin: "-10% 0px -70% 0px",
-    }
-  );
-
-  observerRef.value = observer;
-
-  // 观察所有标题元素
-  headings.value.forEach((heading) => {
-    const element = document.getElementById(heading.id);
-    if (element && !observedElements.value.has(element)) {
-      observer.observe(element);
-      observedElements.value.add(element);
-    }
-  });
-};
+// TOC 导航 + IntersectionObserver 激活追踪 — 已提取至 composable
+const { activeHeadingId, handleNavSelect, setupIntersectionObserver } =
+  useDeepGenomeToc({ headings, nestedHeadings, mainContentRef });
 
 // 在 onMounted 中设置 Intersection Observer
 onMounted(async () => {
@@ -1106,19 +999,6 @@ onMounted(async () => {
   });
 });
 
-// 确保在组件卸载时清理 Intersection Observer
-onUnmounted(() => {
-  if (observerRef.value) {
-    // 停止观察所有元素
-    observedElements.value.forEach((element) => {
-      observerRef.value.unobserve(element);
-    });
-    // 断开观察者连接
-    observerRef.value.disconnect();
-    observerRef.value = null;
-    observedElements.value.clear();
-  }
-});
 </script>
 
 <style scoped>
