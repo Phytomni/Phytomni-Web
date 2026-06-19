@@ -104,7 +104,7 @@ import { ref, onMounted } from "vue";
 import { Link, Download } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
-import { getTaskList } from "@/api/task-manager";
+import { getTaskList } from "@/api/task";
 import { getChatdownloadURL } from "@/api/chat";
 
 const { t } = useI18n();
