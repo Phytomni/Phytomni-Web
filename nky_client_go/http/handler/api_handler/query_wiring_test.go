@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	rxBot "nky_client_go/external/bot"
+	rxBot "phytomni-server/external/bot"
 
 	"github.com/gin-gonic/gin"
 )

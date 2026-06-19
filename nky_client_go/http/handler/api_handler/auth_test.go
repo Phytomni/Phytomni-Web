@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
-	"nky_client_go/common/i18n"
-	"nky_client_go/db"
-	"nky_client_go/utils"
+	"phytomni-server/common/i18n"
+	"phytomni-server/db"
+	"phytomni-server/utils"
 )
 
 // setupProfileTestDB 建一个 in-memory SQLite,创建 GetUserProfile 实际查的两张表

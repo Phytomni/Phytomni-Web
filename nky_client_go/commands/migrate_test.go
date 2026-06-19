@@ -6,8 +6,8 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"nky_client_go/db"
-	"nky_client_go/model"
+	"phytomni-server/db"
+	"phytomni-server/model"
 )
 
 // TestAddBotRunID_Idempotent 钉死 add-bot-run-id 的幂等守卫:当 bot_run_id 列已存在时,

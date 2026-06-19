@@ -3,10 +3,10 @@ package document_format
 import (
 	"encoding/json"
 	"fmt"
-	"nky_client_go/common/document_format/chat_agent"
-	"nky_client_go/common/document_format/data_agent"
-	"nky_client_go/common/document_format/knowledge_agent"
-	"nky_client_go/common/document_format/review_agent"
+	"phytomni-server/common/document_format/chat_agent"
+	"phytomni-server/common/document_format/data_agent"
+	"phytomni-server/common/document_format/knowledge_agent"
+	"phytomni-server/common/document_format/review_agent"
 	"time"
 )
 

@@ -2,8 +2,8 @@ package api_handler
 
 import (
 	"net/http"
-	"nky_client_go/common"
-	"nky_client_go/utils/errs"
+	"phytomni-server/common"
+	"phytomni-server/utils/errs"
 	"strconv"
 
 	"github.com/gin-gonic/gin"

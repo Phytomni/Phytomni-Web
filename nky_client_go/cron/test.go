@@ -1,9 +1,9 @@
 package cron
 
 import (
-	rxCron "nky_client_go/cron/base"
-	"nky_client_go/log"
-	"nky_client_go/utils"
+	rxCron "phytomni-server/cron/base"
+	"phytomni-server/log"
+	"phytomni-server/utils"
 )
 
 type TestSecond struct {

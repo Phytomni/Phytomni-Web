@@ -3,7 +3,7 @@ package api_service
 import (
 	"testing"
 
-	rxBot "nky_client_go/external/bot"
+	rxBot "phytomni-server/external/bot"
 )
 
 // TestSlugRoutingDecision pins the chat-vs-remote dispatch decision and the

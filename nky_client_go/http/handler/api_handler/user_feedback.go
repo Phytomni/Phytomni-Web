@@ -2,7 +2,7 @@ package api_handler
 
 import (
 	"net/http"
-	"nky_client_go/utils/errs"
+	"phytomni-server/utils/errs"
 
 	"github.com/gin-gonic/gin"
 )

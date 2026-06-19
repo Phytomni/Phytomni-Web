@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	rxBot "nky_client_go/external/bot"
-	"nky_client_go/model"
+	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 
 	"github.com/google/uuid"
 )

@@ -3,7 +3,7 @@ package cron
 import (
 	"testing"
 
-	"nky_client_go/model"
+	"phytomni-server/model"
 )
 
 // TestPartitionRunningRows pins the cron's platform split: deep_genome rows go

@@ -9,7 +9,7 @@ import (
 	"github.com/jordan-wright/email"
 	"github.com/spf13/viper"
 
-	rxLog "nky_client_go/log"
+	rxLog "phytomni-server/log"
 )
 
 // SendEmail mails a task-completion notice to UserEmail. SMTP credentials,

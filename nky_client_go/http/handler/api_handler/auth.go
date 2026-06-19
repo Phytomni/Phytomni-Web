@@ -2,12 +2,12 @@ package api_handler
 
 import (
 	"net/http"
-	"nky_client_go/common/i18n"
-	rxLog "nky_client_go/log"
-	"nky_client_go/middleware"
-	"nky_client_go/model"
-	"nky_client_go/utils"
-	"nky_client_go/utils/errs"
+	"phytomni-server/common/i18n"
+	rxLog "phytomni-server/log"
+	"phytomni-server/middleware"
+	"phytomni-server/model"
+	"phytomni-server/utils"
+	"phytomni-server/utils/errs"
 	"strconv"
 
 	"github.com/asaskevich/govalidator"

@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"fmt"
-	"nky_client_go/common"
+	"phytomni-server/common"
 	"strings"
 
 	"github.com/gin-gonic/gin"

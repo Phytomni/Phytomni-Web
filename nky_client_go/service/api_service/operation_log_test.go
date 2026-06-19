@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"nky_client_go/db"
+	"phytomni-server/db"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"

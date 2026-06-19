@@ -10,11 +10,11 @@ import (
 	"os"
 	"path"
 
-	"nky_client_go/common/document_format"
-	rxBot "nky_client_go/external/bot"
-	rxLog "nky_client_go/log"
-	"nky_client_go/middleware"
-	"nky_client_go/model"
+	"phytomni-server/common/document_format"
+	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
+	"phytomni-server/middleware"
+	"phytomni-server/model"
 	"strings"
 	"time"
 

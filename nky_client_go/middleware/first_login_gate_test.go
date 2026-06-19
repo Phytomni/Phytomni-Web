@@ -9,7 +9,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"nky_client_go/db"
+	"phytomni-server/db"
 )
 
 // setupGateTestDB 建 in-memory SQLite 的 s_user(只需 email + first_login_status,

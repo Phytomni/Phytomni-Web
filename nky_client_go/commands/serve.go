@@ -1,11 +1,11 @@
 package commands
 
 import (
-	"nky_client_go/http/router"
+	"phytomni-server/http/router"
 
-	"nky_client_go/graceful"
+	"phytomni-server/graceful"
 
-	"nky_client_go/server"
+	"phytomni-server/server"
 
 	"github.com/urfave/cli/v2"
 )

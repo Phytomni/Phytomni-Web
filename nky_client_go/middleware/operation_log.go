@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/url"
-	rxLog "nky_client_go/log"
-	"nky_client_go/model"
+	rxLog "phytomni-server/log"
+	"phytomni-server/model"
 	"strings"
 	"time"
 

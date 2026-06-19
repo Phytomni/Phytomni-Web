@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"nky_client_go/server/httpmw"
-	"nky_client_go/utils"
+	"phytomni-server/server/httpmw"
+	"phytomni-server/utils"
 
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"

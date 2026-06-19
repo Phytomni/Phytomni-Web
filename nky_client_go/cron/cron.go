@@ -1,7 +1,7 @@
 package cron
 
 import (
-	rxCron "nky_client_go/cron/base"
+	rxCron "phytomni-server/cron/base"
 
 	"github.com/spf13/viper"
 )

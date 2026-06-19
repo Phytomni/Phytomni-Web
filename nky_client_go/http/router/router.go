@@ -1,7 +1,7 @@
 package router
 
 import (
-	"nky_client_go/log"
+	"phytomni-server/log"
 
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"

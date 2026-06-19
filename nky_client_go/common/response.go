@@ -1,7 +1,7 @@
 package common
 
 import (
-	"nky_client_go/model"
+	"phytomni-server/model"
 	"time"
 )
 

@@ -2,10 +2,10 @@ package cron
 
 import (
 	"fmt"
-	rxCron "nky_client_go/cron/base"
-	rxLog "nky_client_go/log"
-	"nky_client_go/model"
-	"nky_client_go/service/api_service"
+	rxCron "phytomni-server/cron/base"
+	rxLog "phytomni-server/log"
+	"phytomni-server/model"
+	"phytomni-server/service/api_service"
 )
 
 type TaskReconciler struct {

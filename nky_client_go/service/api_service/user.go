@@ -2,8 +2,8 @@ package api_service
 
 import (
 	"context"
-	"nky_client_go/common"
-	"nky_client_go/model"
+	"phytomni-server/common"
+	"phytomni-server/model"
 	"time"
 
 	"github.com/gin-gonic/gin"

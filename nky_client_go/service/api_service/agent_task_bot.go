@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	rxBot "nky_client_go/external/bot"
-	rxLog "nky_client_go/log"
-	"nky_client_go/model"
+	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
+	"phytomni-server/model"
 )
 
 // SyncBotRuns reconciles RUNNING deep_genome rows against Bot's in-process run

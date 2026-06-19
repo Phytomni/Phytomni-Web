@@ -3,10 +3,10 @@ package api_service
 import (
 	"context"
 	"log"
-	"nky_client_go/common"
-	"nky_client_go/model"
-	"nky_client_go/utils"
-	"nky_client_go/utils/errs"
+	"phytomni-server/common"
+	"phytomni-server/model"
+	"phytomni-server/utils"
+	"phytomni-server/utils/errs"
 	"time"
 
 	"github.com/go-errors/errors"

@@ -9,9 +9,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"nky_client_go/common/email"
-	rxLog "nky_client_go/log"
-	"nky_client_go/model"
+	"phytomni-server/common/email"
+	rxLog "phytomni-server/log"
+	"phytomni-server/model"
 	"sync"
 	"time"
 

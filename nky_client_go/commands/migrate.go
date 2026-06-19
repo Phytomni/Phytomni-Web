@@ -1,8 +1,8 @@
 package commands
 
 import (
-	rxLog "nky_client_go/log"
-	"nky_client_go/model"
+	rxLog "phytomni-server/log"
+	"phytomni-server/model"
 
 	"github.com/urfave/cli/v2"
 	"gorm.io/gorm"

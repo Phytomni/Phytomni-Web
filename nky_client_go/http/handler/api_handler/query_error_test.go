@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	rxBot "nky_client_go/external/bot"
-	"nky_client_go/service/api_service"
+	rxBot "phytomni-server/external/bot"
+	"phytomni-server/service/api_service"
 )
 
 // TestQueryErrorStatus pins the /query error contract: a disabled gateway is a

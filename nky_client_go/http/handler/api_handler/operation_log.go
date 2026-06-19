@@ -3,8 +3,8 @@ package api_handler
 import (
 	"errors"
 	"net/http"
-	"nky_client_go/service/api_service"
-	"nky_client_go/utils/errs"
+	"phytomni-server/service/api_service"
+	"phytomni-server/utils/errs"
 	"strconv"
 	"strings"
 

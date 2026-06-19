@@ -11,9 +11,9 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
-	"nky_client_go/db"
-	"nky_client_go/utils"
-	"nky_client_go/utils/errs"
+	"phytomni-server/db"
+	"phytomni-server/utils"
+	"phytomni-server/utils/errs"
 )
 
 // setupUserTestDB 建一个空的 in-memory SQLite,手写 s_user 最小列集并注册到全局 db

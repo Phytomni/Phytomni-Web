@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"nky_client_go/commands"
-	"nky_client_go/cron"
-	rxMysql "nky_client_go/db"
-	rxBot "nky_client_go/external/bot"
-	rxLog "nky_client_go/log"
-	"nky_client_go/utils"
 	"os"
+	"phytomni-server/commands"
+	"phytomni-server/cron"
+	rxMysql "phytomni-server/db"
+	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
+	"phytomni-server/utils"
 
 	"github.com/spf13/viper"
 	"github.com/urfave/cli/v2"

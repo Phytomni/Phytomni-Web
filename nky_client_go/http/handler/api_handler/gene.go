@@ -7,13 +7,13 @@ import (
 	"log"
 	"mime"
 	"net/http"
-	"nky_client_go/common"
-	rxBot "nky_client_go/external/bot"
-	"nky_client_go/middleware"
-	"nky_client_go/utils/errs"
 	"os"
 	"path"
 	"path/filepath"
+	"phytomni-server/common"
+	rxBot "phytomni-server/external/bot"
+	"phytomni-server/middleware"
+	"phytomni-server/utils/errs"
 
 	"github.com/gin-gonic/gin"
 

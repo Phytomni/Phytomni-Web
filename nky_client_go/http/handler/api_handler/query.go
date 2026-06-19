@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	rxBot "nky_client_go/external/bot"
-	rxLog "nky_client_go/log"
-	"nky_client_go/service/api_service"
-	"nky_client_go/utils/errs"
+	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
+	"phytomni-server/service/api_service"
+	"phytomni-server/utils/errs"
 
 	"github.com/gin-gonic/gin"
 )

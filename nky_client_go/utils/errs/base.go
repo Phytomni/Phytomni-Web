@@ -2,7 +2,7 @@ package errs
 
 import (
 	"net/http"
-	"nky_client_go/common"
+	"phytomni-server/common"
 )
 
 const SuccessCode = 10000

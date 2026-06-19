@@ -1,9 +1,9 @@
 package router
 
 import (
-	"nky_client_go/common/i18n"
-	"nky_client_go/http/handler/api_handler"
-	"nky_client_go/middleware"
+	"phytomni-server/common/i18n"
+	"phytomni-server/http/handler/api_handler"
+	"phytomni-server/middleware"
 
 	"github.com/gin-gonic/gin"
 )

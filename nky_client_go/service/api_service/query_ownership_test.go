@@ -7,7 +7,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"nky_client_go/db"
+	"phytomni-server/db"
 )
 
 // setupQueryTestDB 建 s_question_agent_logs 的 in-memory SQLite,列集对齐

@@ -2,7 +2,7 @@ package model
 
 import (
 	"context"
-	"nky_client_go/db"
+	"phytomni-server/db"
 
 	"gorm.io/gorm"
 )

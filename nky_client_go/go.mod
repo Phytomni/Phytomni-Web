@@ -1,4 +1,4 @@
-module nky_client_go
+module phytomni-server
 
 go 1.23.0
 

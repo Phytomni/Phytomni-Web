@@ -3,8 +3,8 @@ package api_handler
 import (
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"nky_client_go/common"
-	"nky_client_go/utils/errs"
+	"phytomni-server/common"
+	"phytomni-server/utils/errs"
 	"strconv"
 )
 

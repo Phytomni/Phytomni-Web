@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
-	"nky_client_go/db"
-	rxBot "nky_client_go/external/bot"
-	"nky_client_go/model"
+	"phytomni-server/db"
+	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 )
 
 // readStatusAnswer reads back a row's status+answer (COALESCE so a NULL column

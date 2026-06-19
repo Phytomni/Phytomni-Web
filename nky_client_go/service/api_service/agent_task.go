@@ -11,10 +11,10 @@ import (
 	"github.com/getsentry/sentry-go"
 	"gorm.io/gorm"
 
-	"nky_client_go/common"
-	rxBot "nky_client_go/external/bot"
-	rxLog "nky_client_go/log"
-	"nky_client_go/model"
+	"phytomni-server/common"
+	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
+	"phytomni-server/model"
 )
 
 func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, size int) ([]*common.ApiAsyncTaskListResponse, int64, int, error) {
