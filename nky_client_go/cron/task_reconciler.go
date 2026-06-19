@@ -21,8 +21,8 @@ func (r *TaskReconciler) Spec() string {
 
 func (r *TaskReconciler) Run() {
 	fmt.Println("分析结果每10分钟查询一次")
-	var questionAgentList []model.SQuestionAgentLog
-	err := model.Default().Model(&model.SQuestionAgentLog{}).Debug().Where("status = ?", "RUNNING").Find(&questionAgentList).Error
+	var questionAgentList []model.QuestionAgentLog
+	err := model.Default().Model(&model.QuestionAgentLog{}).Debug().Where("status = ?", "RUNNING").Find(&questionAgentList).Error
 	if err != nil {
 		rxLog.Sugar().Error(err)
 		return
@@ -43,7 +43,7 @@ func (r *TaskReconciler) Run() {
 // EIHealth-backed) tool keeps the legacy IAM job poll keyed by task_id. Pure
 // (no DB / network) so the routing is unit-testable without standing up either
 // backend.
-func partitionRunningRows(rows []model.SQuestionAgentLog) (eiHealthTaskIds []string, botRows []model.SQuestionAgentLog) {
+func partitionRunningRows(rows []model.QuestionAgentLog) (eiHealthTaskIds []string, botRows []model.QuestionAgentLog) {
 	for _, v := range rows {
 		if v.ToolName == "DeepGenomeAgent" {
 			botRows = append(botRows, v)

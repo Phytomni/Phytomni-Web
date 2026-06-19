@@ -1,5 +1,5 @@
 // Server-side first-login gate. First-login users (those who have not yet
-// changed their initial password, identified by SUser.FirstLoginStatus == "0")
+// changed their initial password, identified by User.FirstLoginStatus == "0")
 // are restricted to the password-change endpoint only. All other /v1/*
 // requests return 403.
 //
@@ -48,7 +48,7 @@ func LoginStatusMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		var user model.SUser
+		var user model.User
 		if err := model.DB(ctx).Select("first_login_status").
 			Where("email = ?", username).First(&user).Error; err != nil {
 			rxLog.Sugar().Errorw("first_login_gate user lookup failed",

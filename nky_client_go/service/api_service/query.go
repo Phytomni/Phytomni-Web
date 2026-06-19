@@ -193,7 +193,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if fID == 0 && in.RefreshId == 0 {
 		titleQuery = in.Query // first turn of a new conversation is its title
 	}
-	row := model.SQuestionAgentLog{
+	row := model.QuestionAgentLog{
 		DialogueId:        dialogueID,
 		FId:               fID,
 		ServerId:          serverID,
@@ -218,7 +218,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	}
 
 	if in.RefreshId != 0 {
-		if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 			Where("id = ? AND user_name = ?", in.RefreshId, username).Updates(&row).Error; err != nil {
 			return nil, err
 		}
@@ -226,7 +226,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// whose agent type changed (e.g. analyst -> chat) would leave the old
 		// task identifiers behind. Clear the transitional task columns
 		// explicitly with the new turn's values (which may be empty).
-		if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 			Where("id = ? AND user_name = ?", in.RefreshId, username).
 			Updates(map[string]interface{}{
 				"server_id":        serverID,
@@ -252,8 +252,8 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 // onto their own rows.
 func (ps *Service) resolveDialogue(ctx context.Context, username string, in QueryInput) (string, int64, error) {
 	if in.RefreshId != 0 {
-		var row model.SQuestionAgentLog
-		if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+		var row model.QuestionAgentLog
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 			Where("id = ? AND user_name = ?", in.RefreshId, username).First(&row).Error; err != nil {
 			return "", 0, err
 		}
@@ -262,8 +262,8 @@ func (ps *Service) resolveDialogue(ctx context.Context, username string, in Quer
 	if in.Id == 0 {
 		return uuid.NewString(), 0, nil
 	}
-	var parent model.SQuestionAgentLog
-	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+	var parent model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("id = ? AND user_name = ?", in.Id, username).First(&parent).Error; err != nil {
 		return "", 0, err
 	}
@@ -276,8 +276,8 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return "", ErrGatewayDisabled
 	}
-	var row model.SQuestionAgentLog
-	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+	var row model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("user_name = ? AND task_id = ?", username, taskID).First(&row).Error; err != nil {
 		return "", err
 	}
@@ -327,7 +327,7 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 	if answer != "" {
 		updates["answer"] = answer
 	}
-	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("id = ?", row.Id).Updates(updates).Error; err != nil {
 		return "", err
 	}

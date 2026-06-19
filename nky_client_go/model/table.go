@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-type SUser struct {
+type User struct {
 	Id               int64      `json:"id"`
 	Email            string     `json:"email"`
 	Password         string     `json:"password"`
@@ -24,31 +24,31 @@ type SUser struct {
 	ChatLimit        int        `gorm:"column:chat_limit;type:int(11);default:0;comment:剩余对话次数" json:"chat_limit"`
 }
 
-func (SUser) TableName() string {
+func (User) TableName() string {
 	return "s_user"
 }
 
-type SToolName struct {
+type ToolName struct {
 	Id          int64  `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	ToolName    string `json:"tool_name"`
 	Description string `json:"description"`
 }
 
-func (SToolName) TableName() string {
+func (ToolName) TableName() string {
 	return "s_tool_name"
 }
 
-type SUserToolName struct {
+type UserToolName struct {
 	Id     int64  `json:"id"`
 	Code   string `json:"code"`
 	ToolId string `json:"tool_id"`
 }
 
-func (SUserToolName) TableName() string {
+func (UserToolName) TableName() string {
 	return "s_user_tool_name"
 }
 
-type SQuestionAgentLog struct {
+type QuestionAgentLog struct {
 	Id                int64      `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	DialogueId        string     `gorm:"column:dialogue_id;type:varchar(255);comment:状态:对话id;NOT NULL" json:"dialogue_id"`
 	FId               int64      `gorm:"column:f_id;type:int(11);comment:状态:父id;NOT NULL" json:"f_id"`
@@ -77,11 +77,11 @@ type SQuestionAgentLog struct {
 	DeleteAt          *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
 }
 
-func (m *SQuestionAgentLog) TableName() string {
+func (m *QuestionAgentLog) TableName() string {
 	return "s_question_agent_logs"
 }
 
-type SGeneList struct {
+type GeneList struct {
 	Id       int64  `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	Title    string `gorm:"column:title;type:varchar(255);comment:标题;NOT NULL" json:"title"`
 	Synopsis string `gorm:"column:synopsis;type:varchar(255);comment:简介;NOT NULL" json:"synopsis"`
@@ -89,11 +89,11 @@ type SGeneList struct {
 	Content  string `gorm:"column:content;type:longtext;comment:内容;NOT NULL" json:"content"`
 }
 
-func (m *SGeneList) TableName() string {
+func (m *GeneList) TableName() string {
 	return "s_gene_list"
 }
 
-type SGeneExample struct {
+type GeneExample struct {
 	Id          int64      `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	FileName    string     `gorm:"column:file_name;type:varchar(255);comment:文件名;NOT NULL" json:"file_name"`
 	Content     string     `gorm:"column:content;type:longtext;comment:内容;NOT NULL" json:"content"`
@@ -104,20 +104,20 @@ type SGeneExample struct {
 	DeleteAt    *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
 }
 
-func (m *SGeneExample) TableName() string {
+func (m *GeneExample) TableName() string {
 	return "s_gene_example"
 }
 
-type SUserPermission struct {
+type UserPermission struct {
 	Id   int64  `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	Name string `gorm:"column:name;type:varchar(255);comment:权限名;NOT NULL" json:"name"`
 }
 
-func (m *SUserPermission) TableName() string {
+func (m *UserPermission) TableName() string {
 	return "s_user_permission"
 }
 
-type SServerToolLogs struct {
+type ServerToolLogs struct {
 	Id             int        `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	ServerId       string     `gorm:"column:server_id;type:varchar(255);comment:server_id;NOT NULL" json:"server_id"`
 	ToolResult     string     `gorm:"column:tool_result;type:longtext;comment:工具执行结果;NOT NULL" json:"tool_result"`
@@ -130,11 +130,11 @@ type SServerToolLogs struct {
 	DeleteAt       *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
 }
 
-func (m *SServerToolLogs) TableName() string {
+func (m *ServerToolLogs) TableName() string {
 	return "s_server_tool_logs"
 }
 
-type SUserFeedback struct {
+type UserFeedback struct {
 	Id              int        `gorm:"column:id;type:int(10) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	UserId          int        `gorm:"column:user_id;type:int(10);comment:用户id;NOT NULL" json:"user_id"`
 	FeedbackType    string     `gorm:"column:feedback_type;type:varchar(255);comment:反馈类型;NOT NULL" json:"feedback_type"`
@@ -144,11 +144,11 @@ type SUserFeedback struct {
 	DeleteAt        *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
 }
 
-func (m *SUserFeedback) TableName() string {
+func (m *UserFeedback) TableName() string {
 	return "s_user_feedback"
 }
 
-type SUserOperationLog struct {
+type UserOperationLog struct {
 	Id           int64     `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	UserId       int64     `gorm:"column:user_id;type:bigint(20);default:0;comment:用户ID(未登录为0);index" json:"user_id"`
 	UserEmail    string    `gorm:"column:user_email;type:varchar(255);comment:用户邮箱;index" json:"user_email"`
@@ -164,6 +164,6 @@ type SUserOperationLog struct {
 	CreatedAt    time.Time `gorm:"column:created_at;type:datetime;comment:创建时间;index" json:"created_at"`
 }
 
-func (m *SUserOperationLog) TableName() string {
+func (m *UserOperationLog) TableName() string {
 	return "s_user_operation_logs"
 }

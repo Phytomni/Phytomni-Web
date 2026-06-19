@@ -21,7 +21,7 @@ import (
 // setupProfileTestDB 建一个 in-memory SQLite,创建 GetUserProfile 实际查的两张表
 // (s_user / s_question_agent_logs) 的最小列集,注册到全局 db registry。
 //
-// 手写 CREATE TABLE 而非 AutoMigrate:SUser 带 MySQL 专有的 type:enum tag,
+// 手写 CREATE TABLE 而非 AutoMigrate:User 带 MySQL 专有的 type:enum tag,
 // SQLite AutoMigrate 不识别;这里只列 profile 路径读到的列,其余按零值填充。
 func setupProfileTestDB(t *testing.T) *gorm.DB {
 	t.Helper()

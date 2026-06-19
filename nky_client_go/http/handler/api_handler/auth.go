@@ -202,7 +202,7 @@ func (ph *Handler) ModifyPassword(ctx *gin.Context) {
 	// reflects "initial password has been changed" rather than "user has ever
 	// logged in". Fail the response on flip error — without the flip the user
 	// stays gated, so a stale success would confuse them.
-	if err := model.DB(ctx).Model(&model.SUser{}).Where("email = ?", name.(string)).
+	if err := model.DB(ctx).Model(&model.User{}).Where("email = ?", name.(string)).
 		Update("first_login_status", "1").Error; err != nil {
 		rxLog.Sugar().Errorw("first_login_status flip failed after password change",
 			"username", name, "err", err)

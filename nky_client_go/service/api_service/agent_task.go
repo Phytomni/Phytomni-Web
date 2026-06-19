@@ -24,7 +24,7 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 	// 归属过滤的可复用查询:用 Session 固化 user_name + 状态 + 资源条件,让 Count
 	// 和分页 Find 各自从同一组 scoped 条件克隆——既不互相污染,也不会退化成全表
 	// (跨用户列表隔离显式可读,不依赖链式实例的隐式状态)。
-	scoped := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+	scoped := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("user_name = ?", username).
 		Where("status = ? or status = ? or status = ?", "RUNNING", "SUCCEEDED", "FAILED").
 		Where("server_id IS NOT NULL or task_id IS NOT NULL").
@@ -43,8 +43,8 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 
 	for _, v := range QuestionAgentLogList {
 		if v.FId != 0 {
-			var result *model.SQuestionAgentLog
-			if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("id = ?", v.FId).First(&result).Error; err != nil {
+			var result *model.QuestionAgentLog
+			if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("id = ?", v.FId).First(&result).Error; err != nil {
 				return nil, 0, 0, err
 			}
 			v.FDialogueId = result.DialogueId
@@ -54,10 +54,10 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 	return QuestionAgentLogList, total, totalPages, nil
 }
 
-func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (QuestionAgentLogList *model.SQuestionAgentLog, err error) {
+func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (QuestionAgentLogList *model.QuestionAgentLog, err error) {
 
 	// 按 id + 归属用户查询,防止任意登录用户用可枚举的自增 id 越权读取他人任务行。
-	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().
+	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().
 		Where("id = ? and user_name = ?", id, username).First(&QuestionAgentLogList).Error; err != nil {
 		return nil, errors.New("任务不存在")
 	}
@@ -70,8 +70,8 @@ func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (
 
 func (ps *Service) AnalystAgentGetLog(ctx context.Context, id int, name string) (taskLog string, err error) {
 
-	var questionAgentLogList *model.SQuestionAgentLog
-	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", id).First(&questionAgentLogList).Error
+	var questionAgentLogList *model.QuestionAgentLog
+	err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("id = ?", id).First(&questionAgentLogList).Error
 	if questionAgentLogList.TaskId == "" {
 		return "", errors.New("日志任务不存在")
 	}
@@ -85,7 +85,7 @@ func (ps *Service) AnalystAgentGetLog(ctx context.Context, id int, name string) 
 func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.QueryListRequest, error) {
 	// 查询主列表（f_id = 0 的记录）
 	var QuestionAgentLogList []*common.QueryListRequest
-	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", username, 0).
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", username, 0).
 		Order("created_at DESC").
 		Find(&QuestionAgentLogList).
 		Error; err != nil {
@@ -98,7 +98,7 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 		createdAt := v.CreatedAt             // 默认使用主记录的 CreatedAt
 
 		// 查询关联的最新记录（f_id = v.Id）
-		err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("f_id = ? AND delete_at IS NULL", v.Id).
+		err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("f_id = ? AND delete_at IS NULL", v.Id).
 			Order("created_at DESC").
 			Limit(1).
 			First(&DataList).Error
@@ -131,12 +131,12 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 	return QADataList, nil
 }
 
-func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.SQuestionAgentLog, err error) {
-	var QuestionAgentLog *model.SQuestionAgentLog
+func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.QuestionAgentLog, err error) {
+	var QuestionAgentLog *model.QuestionAgentLog
 	// First() 在没匹配时给出 ErrRecordNotFound,但 QuestionAgentLog 仍是 &{Id:0} 空结构;
 	// 若直接接着用 QuestionAgentLog.Id 查 children,会以 f_id=0 (parent 约定值) 误匹配所有 dialogue 的根行。
 	// Defensive guard:RecordNotFound 视为"新对话",返回空 list;其他错误上抛。
-	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("user_name = ? and dialogue_id = ?", username, dialogueId).First(&QuestionAgentLog).Error; err != nil {
+	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("user_name = ? and dialogue_id = ?", username, dialogueId).First(&QuestionAgentLog).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -146,11 +146,11 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 	// rows are written under the dialogue owner, so a row with a different
 	// user_name attached to an owned parent (via a write bug or DB corruption)
 	// must never surface through history.
-	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("user_name = ? and f_id = ? and delete_at IS NULL", username, QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error; err != nil {
+	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("user_name = ? and f_id = ? and delete_at IS NULL", username, QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error; err != nil {
 		return nil, err
 	}
 	// 创建一个新的切片，将 QuestionAgentLog 放在首位
-	newList := make([]*model.SQuestionAgentLog, 0, len(QuestionAgentLogList)+1)
+	newList := make([]*model.QuestionAgentLog, 0, len(QuestionAgentLogList)+1)
 	newList = append(newList, QuestionAgentLog)
 	newList = append(newList, QuestionAgentLogList...)
 	QuestionAgentLogList = newList
@@ -175,7 +175,7 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 // carry a bot_run_id, leaving Web-only fields (id, reaction_type, upload_path)
 // intact. Any Bot failure leaves the MySQL legacy fields in place — a degrade,
 // not an error — so history replay never 500s on Bot trouble.
-func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, list []*model.SQuestionAgentLog) {
+func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, list []*model.QuestionAgentLog) {
 	hasRun := false
 	for _, r := range list {
 		if r.BotRunId != "" {
@@ -234,7 +234,7 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 }
 
 func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (int, error) {
-	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
+	db := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("delete_at", time.Now())
 	if result.Error != nil {
@@ -248,7 +248,7 @@ func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (in
 }
 
 func (ps *Service) QueryListRename(ctx context.Context, name string, id int, rename string) (string, error) {
-	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
+	db := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("title_query", rename)
 	if result.Error != nil {
@@ -262,7 +262,7 @@ func (ps *Service) QueryListRename(ctx context.Context, name string, id int, ren
 }
 
 func (ps *Service) QueryReactionType(ctx context.Context, id int, reactionType, name string) (int, error) {
-	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
+	db := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("reaction_type", reactionType)
 	if result.Error != nil {
@@ -276,7 +276,7 @@ func (ps *Service) QueryReactionType(ctx context.Context, id int, reactionType, 
 }
 
 func (ps *Service) QueryCollect(ctx context.Context, id int, collectType, name string) (int, error) {
-	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
+	db := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("collect_type", collectType)
 	if result.Error != nil {
@@ -292,7 +292,7 @@ func (ps *Service) QueryCollect(ctx context.Context, id int, collectType, name s
 func (ps *Service) QueryCollectList(ctx context.Context, name string) ([]*common.ApiQueryCollectListResponse, error) {
 
 	var CollectList []*common.ApiQueryCollectListResponse
-	err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().
+	err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().
 		Where("user_name = ? and collect_type =? and delete_at IS NULL", name, "1").
 		Order("created_at DESC").
 		Find(&CollectList).Error

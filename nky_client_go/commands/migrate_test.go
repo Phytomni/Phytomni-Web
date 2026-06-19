@@ -14,7 +14,7 @@ import (
 // HasColumn 返回 true,命令应短路、不再执行 ALTER。
 //
 // 直接测命令 Action 闭包不可达(未导出),因此复刻命令体内的同一守卫
-// db.Migrator().HasColumn(&model.SQuestionAgentLog{}, "bot_run_id"):该守卫为真即代表
+// db.Migrator().HasColumn(&model.QuestionAgentLog{}, "bot_run_id"):该守卫为真即代表
 // 命令会走 "skip" 分支。建表时即带 bot_run_id 列。
 func TestAddBotRunID_Idempotent(t *testing.T) {
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -30,7 +30,7 @@ func TestAddBotRunID_Idempotent(t *testing.T) {
 	}
 	db.Set("nky_client_go", gdb)
 
-	if !model.Default().Migrator().HasColumn(&model.SQuestionAgentLog{}, "bot_run_id") {
+	if !model.Default().Migrator().HasColumn(&model.QuestionAgentLog{}, "bot_run_id") {
 		t.Fatal("guard should report bot_run_id present; idempotent re-run would otherwise re-ALTER")
 	}
 }
@@ -52,7 +52,7 @@ func TestAddBotRunID_AddsWhenAbsent(t *testing.T) {
 	db.Set("nky_client_go", gdb)
 
 	m := model.Default().Migrator()
-	if m.HasColumn(&model.SQuestionAgentLog{}, "bot_run_id") {
+	if m.HasColumn(&model.QuestionAgentLog{}, "bot_run_id") {
 		t.Fatal("bot_run_id should be absent before add")
 	}
 	if err := model.Default().Exec(
@@ -60,7 +60,7 @@ func TestAddBotRunID_AddsWhenAbsent(t *testing.T) {
 	).Error; err != nil {
 		t.Fatalf("add column: %v", err)
 	}
-	if !m.HasColumn(&model.SQuestionAgentLog{}, "bot_run_id") {
+	if !m.HasColumn(&model.QuestionAgentLog{}, "bot_run_id") {
 		t.Error("bot_run_id should be present after add")
 	}
 }
@@ -83,7 +83,7 @@ func TestAddColumnIfMissing_SkipsWhenPresent(t *testing.T) {
 	}
 	db.Set("nky_client_go", gdb)
 
-	if err := addColumnIfMissing(model.Default(), &model.SQuestionAgentLog{}, "image_paths",
+	if err := addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
 		"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
 		t.Fatalf("present-column path must no-op, got %v", err)
 	}
@@ -107,14 +107,14 @@ func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
 	db.Set("nky_client_go", gdb)
 
 	m := model.Default().Migrator()
-	if m.HasColumn(&model.SQuestionAgentLog{}, "image_paths") {
+	if m.HasColumn(&model.QuestionAgentLog{}, "image_paths") {
 		t.Fatal("image_paths should be absent before add")
 	}
-	if err := addColumnIfMissing(model.Default(), &model.SQuestionAgentLog{}, "image_paths",
+	if err := addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
 		"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
 		t.Fatalf("add column: %v", err)
 	}
-	if !m.HasColumn(&model.SQuestionAgentLog{}, "image_paths") {
+	if !m.HasColumn(&model.QuestionAgentLog{}, "image_paths") {
 		t.Error("image_paths should be present after add")
 	}
 }
@@ -138,7 +138,7 @@ func newBackfillTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	// Table name must match SUser.TableName() == "s_user".
+	// Table name must match User.TableName() == "s_user".
 	if err := gdb.Exec(`CREATE TABLE s_user (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		first_login_status TEXT,

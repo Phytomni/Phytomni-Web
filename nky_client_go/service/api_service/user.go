@@ -12,9 +12,9 @@ import (
 )
 
 func (ps *Service) GetUserProfile(ctx context.Context, email string) (*common.UserProfileResponse, error) {
-	var user model.SUser
+	var user model.User
 	// 1. 查询用户基本信息
-	if err := model.DB(ctx).Model(&model.SUser{}).Where("email = ?", email).First(&user).Error; err != nil {
+	if err := model.DB(ctx).Model(&model.User{}).Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("auth.user_not_found")
 		}
@@ -23,7 +23,7 @@ func (ps *Service) GetUserProfile(ctx context.Context, email string) (*common.Us
 
 	// 2. 查询对话总数 (f_id = 0 代表对话)
 	var dialogueCount int64
-	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", email, 0).Count(&dialogueCount).Error; err != nil {
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", email, 0).Count(&dialogueCount).Error; err != nil {
 		return nil, err
 	}
 
@@ -46,7 +46,7 @@ func (ps *Service) GetUserProfile(ctx context.Context, email string) (*common.Us
 
 func (ps *Service) CheckEmailExists(ctx context.Context, email string) bool {
 	var count int64
-	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email = ?", email)
+	db := model.DB(ctx).Model(&model.User{}).Debug().Where("email = ?", email)
 	db.Count(&count)
 	if count > 0 {
 		return true
@@ -55,16 +55,16 @@ func (ps *Service) CheckEmailExists(ctx context.Context, email string) bool {
 }
 
 func (ps *Service) GetUserIdByEmail(ctx context.Context, email string) (userId int64) {
-	var userInfo model.SUser
-	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email =?", email)
+	var userInfo model.User
+	db := model.DB(ctx).Model(&model.User{}).Debug().Where("email =?", email)
 	db.First(&userInfo)
 	userId = userInfo.Id
 	return
 }
 
 func (ps *Service) GetUserRegisterPermission(ctx context.Context, email string) (bool, string) {
-	var user *model.SUser
-	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email = ?", email)
+	var user *model.User
+	db := model.DB(ctx).Model(&model.User{}).Debug().Where("email = ?", email)
 	db.First(&user)
 	if user.Code == "admin" {
 		return true, user.Code
@@ -73,8 +73,8 @@ func (ps *Service) GetUserRegisterPermission(ctx context.Context, email string) 
 }
 
 func (ps *Service) GetUpdateUserRegisterPermission(ctx context.Context, email string) (bool, string) {
-	var user *model.SUser
-	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email = ?", email)
+	var user *model.User
+	db := model.DB(ctx).Model(&model.User{}).Debug().Where("email = ?", email)
 	db.First(&user)
 	if user.Code == "admin" || user.Code == "super_admin" {
 		return true, user.Code
@@ -83,17 +83,17 @@ func (ps *Service) GetUpdateUserRegisterPermission(ctx context.Context, email st
 }
 
 func (ps *Service) GetUserToolPermission(ctx context.Context, email string) ([]string, []string, string) {
-	var user *model.SUser
-	model.DB(ctx).Model(&model.SUser{}).Debug().Where("email =?", email).First(&user)
+	var user *model.User
+	model.DB(ctx).Model(&model.User{}).Debug().Where("email =?", email).First(&user)
 
-	var UserToolName []*model.SUserToolName
-	model.DB(ctx).Model(&model.SUserToolName{}).Debug().Where("code =?", user.Code).Find(&UserToolName)
+	var UserToolName []*model.UserToolName
+	model.DB(ctx).Model(&model.UserToolName{}).Debug().Where("code =?", user.Code).Find(&UserToolName)
 
 	var ToolList []string
 	var permissionList []string
 	for _, v := range UserToolName {
-		var ToolName *model.SToolName
-		db := model.DB(ctx).Model(&model.SToolName{}).Debug().Where("id =?", v.ToolId)
+		var ToolName *model.ToolName
+		db := model.DB(ctx).Model(&model.ToolName{}).Debug().Where("id =?", v.ToolId)
 		db.First(&ToolName)
 		if ToolName.Id <= 9 {
 			ToolList = append(ToolList, ToolName.ToolName)
@@ -112,7 +112,7 @@ func (ps *Service) GetUserList(ctx *gin.Context, current, size int, code string)
 	switch code {
 	case "admin":
 		// 计算总记录数
-		db := model.DB(ctx).Model(&model.SUser{}).Where("code != ? and code !=?", "super_admin", "admin")
+		db := model.DB(ctx).Model(&model.User{}).Where("code != ? and code !=?", "super_admin", "admin")
 		if err := db.Count(&total).Error; err != nil {
 			return nil, 0, 0, err
 		}
@@ -130,7 +130,7 @@ func (ps *Service) GetUserList(ctx *gin.Context, current, size int, code string)
 
 	case "super_admin":
 		// 计算总记录数
-		db := model.DB(ctx).Model(&model.SUser{}).Where("code != ?", "super_admin")
+		db := model.DB(ctx).Model(&model.User{}).Where("code != ?", "super_admin")
 		if err := db.Count(&total).Error; err != nil {
 			return nil, 0, 0, err
 		}
@@ -156,10 +156,10 @@ func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int
 		return 0, errors.New("权限格式错误,没有这样的权限")
 	}
 
-	db := model.DB(ctx).Model(&model.SUser{}).Debug()
+	db := model.DB(ctx).Model(&model.User{}).Debug()
 
 	//判断权限是否为管理员或超级管理员
-	var adminUser *model.SUser
+	var adminUser *model.User
 	if db.Where("email = ?", name).First(&adminUser); adminUser.Code != "admin" && adminUser.Code != "super_admin" {
 		return 0, errors.New("您没有修改用户权限的权利，请通知管理员")
 	}
@@ -193,7 +193,7 @@ func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int
 		updateData["chat_limit"] = chatLimit
 	}
 
-	result := db.Model(&model.SUser{}).Where("id = ?", userId).Updates(updateData)
+	result := db.Model(&model.User{}).Where("id = ?", userId).Updates(updateData)
 	if result.Error != nil {
 		return 0, result.Error
 	}
@@ -205,10 +205,10 @@ func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int
 }
 
 func (ps *Service) UnlockUser(ctx context.Context, operatorName string, targetUserId int) error {
-	db := model.DB(ctx).Model(&model.SUser{}).Debug()
+	db := model.DB(ctx).Model(&model.User{}).Debug()
 
 	// 1. 检查操作者权限
-	var operator *model.SUser
+	var operator *model.User
 	if err := db.Where("email = ?", operatorName).First(&operator).Error; err != nil {
 		return errors.New("操作员不存在")
 	}

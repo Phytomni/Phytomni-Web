@@ -179,8 +179,8 @@ func GetTaskStatus(taskIds []string) {
 			}
 
 			//todo 变更状态
-			var existingLog model.SQuestionAgentLog
-			err = model.Default().Model(&model.SQuestionAgentLog{}).Where("task_id = ?", TId).First(&existingLog).Error
+			var existingLog model.QuestionAgentLog
+			err = model.Default().Model(&model.QuestionAgentLog{}).Where("task_id = ?", TId).First(&existingLog).Error
 			if err != nil {
 				rxLog.Sugar().Error(err)
 				return
@@ -188,8 +188,8 @@ func GetTaskStatus(taskIds []string) {
 			fmt.Println(existingLog.UserName, " ", TId, " ", taskResp)
 			// 只有当状态不同时才更新
 			if existingLog.Status != taskResp.Status {
-				err = model.Default().Model(&model.SQuestionAgentLog{}).Debug().Where("task_id = ?", TId).
-					Updates(&model.SQuestionAgentLog{
+				err = model.Default().Model(&model.QuestionAgentLog{}).Debug().Where("task_id = ?", TId).
+					Updates(&model.QuestionAgentLog{
 						Status:    taskResp.Status,
 						UpdatedAt: time.Time{},
 					}).Error
@@ -201,7 +201,7 @@ func GetTaskStatus(taskIds []string) {
 				// 获取执行结果成功则给用户发送邮件提示
 				if taskResp.Status == "SUCCEEDED" {
 					if existingLog.FId != 0 {
-						var fExistingLog *model.SQuestionAgentLog
+						var fExistingLog *model.QuestionAgentLog
 						if result := model.Default().Debug().Where("id = ?", existingLog.FId).First(&fExistingLog).RowsAffected; result == 0 {
 							rxLog.Sugar().Error(existingLog.DialogueId, "的对话页面不存在")
 							return
@@ -218,7 +218,7 @@ func GetTaskStatus(taskIds []string) {
 			}
 			//强行触发发送邮件
 			//if existingLog.FId != 0 {
-			//	var fExistingLog *model.SQuestionAgentLog
+			//	var fExistingLog *model.QuestionAgentLog
 			//	if result := model.Default().Debug().Where("id = ?", existingLog.FId).First(&fExistingLog).RowsAffected; result == 0 {
 			//		rxLog.Sugar().Error(existingLog.DialogueId, "的对话页面不存在")
 			//		return

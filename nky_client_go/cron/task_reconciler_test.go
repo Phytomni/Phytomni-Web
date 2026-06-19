@@ -12,7 +12,7 @@ import (
 // either class (e.g. a wrong tool_name literal) would flip these buckets, so
 // this asserts both bucket contents directly rather than just their sizes.
 func TestPartitionRunningRows(t *testing.T) {
-	rows := []model.SQuestionAgentLog{
+	rows := []model.QuestionAgentLog{
 		{Id: 1, ToolName: "DeepGenomeAgent", TaskId: "dg-1", BotRunId: "run-1"},
 		{Id: 2, ToolName: "AnalystAgent", TaskId: "an-1"},
 		{Id: 3, ToolName: "DeepGenomeAgent", TaskId: "dg-2", BotRunId: "run-2"},

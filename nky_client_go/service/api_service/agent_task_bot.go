@@ -20,7 +20,7 @@ import (
 // final_report is present). There is no *gin.Context here (the cron has no
 // request), so it uses a background context and model.Default(), mirroring
 // GetTaskStatus.
-func SyncBotRuns(rows []model.SQuestionAgentLog) {
+func SyncBotRuns(rows []model.QuestionAgentLog) {
 	if len(rows) == 0 {
 		return
 	}
@@ -70,7 +70,7 @@ func SyncBotRuns(rows []model.SQuestionAgentLog) {
 			// final_report is deep_genome-exclusive; reshape with the known slug.
 			updates["answer"] = rxBot.ShapeAnswer("deep_genome", fr, nil)
 		}
-		if err := model.Default().Model(&model.SQuestionAgentLog{}).
+		if err := model.Default().Model(&model.QuestionAgentLog{}).
 			Where("id = ?", row.Id).Updates(updates).Error; err != nil {
 			rxLog.Sugar().Error(err)
 		}

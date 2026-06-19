@@ -8,12 +8,12 @@ import (
 )
 
 func (ps *Service) ServerCreateTask(ctx context.Context, serverId, serverStatus, toolName string) (int, error) {
-	db := model.DB(ctx).Model(&model.SServerToolLogs{}).Debug()
-	if result := db.Where("server_id=?", serverId).First(&model.SServerToolLogs{}).RowsAffected; result != 0 {
+	db := model.DB(ctx).Model(&model.ServerToolLogs{}).Debug()
+	if result := db.Where("server_id=?", serverId).First(&model.ServerToolLogs{}).RowsAffected; result != 0 {
 		return 0, errors.New("server_id已存在，请重新提交")
 	}
 
-	serverResult := &model.SServerToolLogs{
+	serverResult := &model.ServerToolLogs{
 		ServerId:     serverId,
 		ToolName:     toolName,
 		ServerStatus: serverStatus,
@@ -28,15 +28,15 @@ func (ps *Service) ServerCreateTask(ctx context.Context, serverId, serverStatus,
 }
 
 func (ps *Service) ServerUpdateTask(ctx context.Context, serverId, toolResult, serverFilePath, serverStatus string) (int, error) {
-	serverResult := &model.SServerToolLogs{
+	serverResult := &model.ServerToolLogs{
 		ToolResult:     toolResult,
 		ServerFilePath: serverFilePath,
 		ServerStatus:   serverStatus,
 		UpdatedAt:      time.Time{},
 	}
 
-	db := model.DB(ctx).Model(&model.SServerToolLogs{}).Debug()
-	var serverToolLogs *model.SServerToolLogs
+	db := model.DB(ctx).Model(&model.ServerToolLogs{}).Debug()
+	var serverToolLogs *model.ServerToolLogs
 	db.Where("server_id = ?", serverId).First(&serverToolLogs)
 	if serverToolLogs.Id == 0 {
 		return 0, errors.New("没有查到server任务")

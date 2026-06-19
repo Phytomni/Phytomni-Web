@@ -2,8 +2,8 @@ package model
 
 import "time"
 
-// SSqlOperationLog SQL操作日志表
-type SSqlOperationLog struct {
+// SqlOperationLog SQL操作日志表
+type SqlOperationLog struct {
 	Id            int64     `gorm:"column:id;primaryKey;autoIncrement;comment:主键ID" json:"id"`
 	UserId        int64     `gorm:"column:user_id;comment:用户ID" json:"user_id"`
 	UserEmail     string    `gorm:"column:user_email;type:varchar(255);comment:用户邮箱" json:"user_email"`
@@ -16,6 +16,6 @@ type SSqlOperationLog struct {
 	CreatedAt     time.Time `gorm:"column:created_at;comment:创建时间" json:"created_at"`
 }
 
-func (SSqlOperationLog) TableName() string {
+func (SqlOperationLog) TableName() string {
 	return "s_sql_operation_logs"
 }

@@ -17,8 +17,8 @@ import (
 )
 
 // setupUserTestDB 建一个空的 in-memory SQLite,手写 s_user 最小列集并注册到全局 db
-// registry。手写 CREATE TABLE(而非 AutoMigrate SUser)的理由同 agent_task_test.go:
-// SUser 的 first_login_status 带 MySQL 专有 `type:enum` GORM tag,SQLite AutoMigrate
+// registry。手写 CREATE TABLE(而非 AutoMigrate User)的理由同 agent_task_test.go:
+// User 的 first_login_status 带 MySQL 专有 `type:enum` GORM tag,SQLite AutoMigrate
 // 不识别;这里只列 GetUserInfo / UnlockUser 实际读写的列。
 func setupUserTestDB(t *testing.T) *gorm.DB {
 	t.Helper()

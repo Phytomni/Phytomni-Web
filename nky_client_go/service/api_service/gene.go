@@ -21,11 +21,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-func (ps *Service) GeneList(ctx context.Context, current, size int) ([]*model.SGeneExample, int64, int, error) {
+func (ps *Service) GeneList(ctx context.Context, current, size int) ([]*model.GeneExample, int64, int, error) {
 	return ps.GeneSearch(ctx, current, size, "")
 }
 
-func (ps *Service) GeneSearch(ctx context.Context, current, size int, title string) ([]*model.SGeneExample, int64, int, error) {
+func (ps *Service) GeneSearch(ctx context.Context, current, size int, title string) ([]*model.GeneExample, int64, int, error) {
 	allData, err := ps.fetchGeneFiles(title)
 	if err != nil {
 		// 如果目录读取失败，可以记录日志并返回空列表，或者直接返回错误
@@ -35,7 +35,7 @@ func (ps *Service) GeneSearch(ctx context.Context, current, size int, title stri
 
 	total := int64(len(allData))
 	if total == 0 {
-		return []*model.SGeneExample{}, 0, 0, nil
+		return []*model.GeneExample{}, 0, 0, nil
 	}
 
 	totalPages := int((total + int64(size) - 1) / int64(size))
@@ -57,7 +57,7 @@ func (ps *Service) GeneSearch(ctx context.Context, current, size int, title stri
 }
 
 // fetchGeneFiles 从指定目录读取文件并封装
-func (ps *Service) fetchGeneFiles(title string) ([]*model.SGeneExample, error) {
+func (ps *Service) fetchGeneFiles(title string) ([]*model.GeneExample, error) {
 	// main.go initConfig sets a viper.SetDefault for gene_file_path so
 	// the lookup never returns ""; if it ever does, the os.ReadDir below
 	// will surface a meaningful error instead of falling back to a
@@ -69,7 +69,7 @@ func (ps *Service) fetchGeneFiles(title string) ([]*model.SGeneExample, error) {
 		return nil, err
 	}
 
-	var list []*model.SGeneExample
+	var list []*model.GeneExample
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -88,7 +88,7 @@ func (ps *Service) fetchGeneFiles(title string) ([]*model.SGeneExample, error) {
 	return list, nil
 }
 
-func parseGeneFile(filename string) *model.SGeneExample {
+func parseGeneFile(filename string) *model.GeneExample {
 	if !strings.HasSuffix(filename, "_result.md") {
 		return nil
 	}
@@ -110,14 +110,14 @@ func parseGeneFile(filename string) *model.SGeneExample {
 
 	geneId := strings.TrimSuffix(filename, "_result.md")
 
-	return &model.SGeneExample{
+	return &model.GeneExample{
 		FileName:    filename,
 		SpeciesCode: speciesCode,
 		GeneId:      geneId,
 		// Id, CreatedAt, UpdatedAt, Content, DeleteAt 不需要填充
 	}
 }
-func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.SGeneExample, error) {
+func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.GeneExample, error) {
 	// See fetchGeneFiles — gene_file_path is always defaulted in
 	// initConfig, so the empty-string Windows fallback that used to
 	// live here is no longer needed.
@@ -147,14 +147,14 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.SGe
 
 func (ps *Service) GeneDetailsStorage(ctx context.Context, fileName, content, speciesCode, geneId string) error {
 
-	gene := &model.SGeneExample{
+	gene := &model.GeneExample{
 		FileName:    fileName,
 		Content:     content,
 		SpeciesCode: speciesCode,
 		GeneId:      geneId,
 		CreatedAt:   time.Time{},
 	}
-	err := model.DB(ctx).Model(&model.SGeneExample{}).Create(gene).Error
+	err := model.DB(ctx).Model(&model.GeneExample{}).Create(gene).Error
 
 	return err
 }
@@ -191,8 +191,8 @@ func relayDownloadURL(obsKey string) (string, error) {
 
 func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {
 	// 判断是否有权限生成下载链接
-	var questionAgentLog model.SQuestionAgentLog
-	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
+	var questionAgentLog model.QuestionAgentLog
+	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&questionAgentLog).RowsAffected; result == 0 {
 		return "", errors.New("没有查找到对应的obs路径数据")
 	}
@@ -210,8 +210,8 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 
 func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
 	// 归属校验 + 取 reconcile 写入的图片路径(切流后由完成态 reconcile 填充)
-	var row model.SQuestionAgentLog
-	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
+	var row model.QuestionAgentLog
+	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&row).RowsAffected; result == 0 {
 		return nil, errors.New("没有查找到对应的obs路径数据")
@@ -270,8 +270,8 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 // 消息记录(邮件链接无法携带任何凭据,这层库内归属校验是该入口仅有的访问
 // 控制),经 Bot 中转找到结果 zip 并返回字节流,由 handler 直接写回浏览器。
 func (ps *Service) GetDownloadObsFile(ctx context.Context, username, obsPath string) (io.ReadCloser, string, int64, error) {
-	var questionAgentLog model.SQuestionAgentLog
-	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
+	var questionAgentLog model.QuestionAgentLog
+	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&questionAgentLog).RowsAffected; result == 0 {
 		return nil, "", 0, errors.New("没有查找到对应的obs路径数据")
 	}
@@ -295,8 +295,8 @@ func (ps *Service) GetDownloadObsFile(ctx context.Context, username, obsPath str
 
 func (ps *Service) DownloadObsRenderingFile(ctx context.Context, id int, format string) ([]byte, string, error) {
 
-	var questionAgentLog *model.SQuestionAgentLog
-	db := model.DB(ctx).Model(&model.SQuestionAgentLog{})
+	var questionAgentLog *model.QuestionAgentLog
+	db := model.DB(ctx).Model(&model.QuestionAgentLog{})
 
 	if err := db.Where("id = ?", id).First(&questionAgentLog).Error; err != nil {
 		return nil, "", err

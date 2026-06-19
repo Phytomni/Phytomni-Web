@@ -45,9 +45,9 @@ type UserLostData struct {
 }
 
 type GeneListResponse struct {
-	Total      int64                 `json:"total"`
-	TotalPages int                   `json:"total_pages"`
-	GeneList   []*model.SGeneExample `json:"gene_list"`
+	Total      int64                `json:"total"`
+	TotalPages int                  `json:"total_pages"`
+	GeneList   []*model.GeneExample `json:"gene_list"`
 }
 
 type ApiAsyncTaskListResponse struct {

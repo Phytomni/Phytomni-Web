@@ -69,7 +69,7 @@ func backfillFirstLoginStatusWith(db *gorm.DB, sql string) (int64, error) {
 // Idempotent by construction — the WHERE clause requires first_login_status='1',
 // and the update sets it to '0', so a second invocation matches zero rows.
 //
-// Schema management is intentionally out of scope here. SUser was originally
+// Schema management is intentionally out of scope here. User was originally
 // defined with `gorm:"type:enum"` (no value list), which GORM could not
 // translate into valid DDL on MariaDB/MySQL — calling AutoMigrate on either
 // a fresh or existing schema generated `enum NOT NULL` and failed with SQL
@@ -104,7 +104,7 @@ func Migrate() *cli.Command {
 				Usage:       "给 s_question_agent_logs 加 bot_run_id 列",
 				Description: "Add the nullable bot_run_id join column. Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual.",
 				Action: func(ctx *cli.Context) error {
-					return addColumnIfMissing(model.Default(), &model.SQuestionAgentLog{}, "bot_run_id",
+					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "bot_run_id",
 						"ALTER TABLE s_question_agent_logs ADD COLUMN bot_run_id VARCHAR(64) NULL AFTER server_id")
 				},
 			},
@@ -113,7 +113,7 @@ func Migrate() *cli.Command {
 				Usage:       "给 s_question_agent_logs 加 image_paths 列",
 				Description: "Add the nullable image_paths text column (gallery image OBS paths, stored as a JSON array). Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual (see docs/web-production-deployment-manual.md §5.3). Without this column every /query returns 500 (Unknown column 'image_paths').",
 				Action: func(ctx *cli.Context) error {
-					return addColumnIfMissing(model.Default(), &model.SQuestionAgentLog{}, "image_paths",
+					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
 						"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT '图廊图片OBS路径(JSON数组)' AFTER download_path")
 				},
 			},
@@ -124,17 +124,17 @@ func Migrate() *cli.Command {
 				Action: func(ctx *cli.Context) error {
 					db := model.Default()
 					if err := db.AutoMigrate(
-						&model.SUser{},
-						&model.SToolName{},
-						&model.SUserToolName{},
-						&model.SQuestionAgentLog{},
-						&model.SGeneList{},
-						&model.SGeneExample{},
-						&model.SUserPermission{},
-						&model.SServerToolLogs{},
-						&model.SUserFeedback{},
-						&model.SUserOperationLog{},
-						&model.SSqlOperationLog{},
+						&model.User{},
+						&model.ToolName{},
+						&model.UserToolName{},
+						&model.QuestionAgentLog{},
+						&model.GeneList{},
+						&model.GeneExample{},
+						&model.UserPermission{},
+						&model.ServerToolLogs{},
+						&model.UserFeedback{},
+						&model.UserOperationLog{},
+						&model.SqlOperationLog{},
 					); err != nil {
 						rxLog.Sugar().Errorw("automigrate all failed", "err", err)
 						return err

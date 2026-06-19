@@ -208,7 +208,7 @@ func OperationLog() gin.HandlerFunc {
 
 		// 3.3 如果有 email 但没有 id，查询数据库
 		if userId == 0 && userEmail != "" {
-			var user model.SUser
+			var user model.User
 			// 使用 model.Default() 查询，并禁用日志记录，防止产生“无主”的 SQL 日志
 			// 这条查询本身就是为了获取 UserID，此时还没有 UserID，如果记录日志会导致 s_sql_operation_logs 中出现大量 user_id 为空的记录
 			if err := model.Default().Session(&gorm.Session{Logger: logger.Discard}).Select("id").Where("email = ?", userEmail).First(&user).Error; err == nil {
@@ -255,7 +255,7 @@ func OperationLog() gin.HandlerFunc {
 			status int,
 			lat int64,
 		) {
-			logEntry := model.SUserOperationLog{
+			logEntry := model.UserOperationLog{
 				UserId:       uid,
 				UserEmail:    uEmail,
 				Method:       mtd,

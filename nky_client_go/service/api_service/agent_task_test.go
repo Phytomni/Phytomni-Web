@@ -44,7 +44,7 @@ func readGalleryCols(t *testing.T, gdb *gorm.DB, id int64) (downloadPath, imageP
 // setupTestDB 建一个空的 in-memory SQLite,创建 s_question_agent_logs 的最小列集,
 // 注册到全局 db registry,返回 *gorm.DB 供测试 seed 数据。
 //
-// 之所以手写 CREATE TABLE 而不是 AutoMigrate `SQuestionAgentLog`:
+// 之所以手写 CREATE TABLE 而不是 AutoMigrate `QuestionAgentLog`:
 // 该 model 多个 `type:enum` GORM tag(MySQL 专有),SQLite AutoMigrate 不识别;
 // 手写 CREATE TABLE 只列 answer-check / update-log / bot-sync 路径实际读写的列
 // (id/user_name/dialogue_id/f_id/bot_run_id/status/answer + task_id/server_id/
@@ -332,7 +332,7 @@ func TestSyncBotRuns_WritesReportAndStatusOnChange(t *testing.T) {
 	}
 	runRecordServer(t, `{"run_id":"run-d","agent":"deep_genome","status":"succeeded","result":{"final_report":"# Gene Report"}}`)
 
-	SyncBotRuns([]model.SQuestionAgentLog{{Id: 50, BotRunId: "run-d", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
+	SyncBotRuns([]model.QuestionAgentLog{{Id: 50, BotRunId: "run-d", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
 
 	status, answer := readStatusAnswer(t, gdb, 50)
 	if status != "SUCCEEDED" {
@@ -359,7 +359,7 @@ func TestSyncBotRuns_SkipsBlankStatus(t *testing.T) {
 	}
 	runRecordServer(t, `{"run_id":"run-e","agent":"deep_genome","status":"","result":{"final_report":"# X"}}`)
 
-	SyncBotRuns([]model.SQuestionAgentLog{{Id: 51, BotRunId: "run-e", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
+	SyncBotRuns([]model.QuestionAgentLog{{Id: 51, BotRunId: "run-e", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
 
 	status, answer := readStatusAnswer(t, gdb, 51)
 	if status != "RUNNING" || answer != "prior" {
@@ -378,7 +378,7 @@ func TestSyncBotRuns_DisabledIsNoOp(t *testing.T) {
 	}
 	rxBot.BotConfig = nil // gateway disabled
 
-	SyncBotRuns([]model.SQuestionAgentLog{{Id: 52, BotRunId: "run-f", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
+	SyncBotRuns([]model.QuestionAgentLog{{Id: 52, BotRunId: "run-f", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
 
 	if status, _ := readStatusAnswer(t, gdb, 52); status != "RUNNING" {
 		t.Errorf("disabled gateway should not touch the row, status = %q", status)
@@ -408,7 +408,7 @@ func TestSyncBotRuns_SkipsEmptyRunID(t *testing.T) {
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	SyncBotRuns([]model.SQuestionAgentLog{{Id: 53, BotRunId: "", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
+	SyncBotRuns([]model.QuestionAgentLog{{Id: 53, BotRunId: "", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
 
 	if n := hits.Load(); n != 0 {
 		t.Errorf("empty run id must never call Bot, got %d request(s)", n)
@@ -431,7 +431,7 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	}
 	runRecordServer(t, `{"run_id":"run-a","agent":"network","status":"succeeded","result":{"formatted":{"answer":"analysis done"},"artifacts":[{"task_id":"t1","output_dir":"/obs/p/r1","paths":["/obs/p/r1/a.png"]}]}}`)
 
-	SyncBotRuns([]model.SQuestionAgentLog{{Id: 54, BotRunId: "run-a", Status: "RUNNING", ToolName: "AnalystAgent"}})
+	SyncBotRuns([]model.QuestionAgentLog{{Id: 54, BotRunId: "run-a", Status: "RUNNING", ToolName: "AnalystAgent"}})
 
 	status, answer := readStatusAnswer(t, gdb, 54)
 	if status != "SUCCEEDED" || answer != "analysis done" {

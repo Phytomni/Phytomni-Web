@@ -12,17 +12,17 @@ import (
 // handler 将其映射为 403。
 var ErrOperationLogForbidden = errors.New("无权访问操作日志")
 
-func (ps *Service) GetOperationLogs(ctx context.Context, operatorName string, userIds []int64, startTime, endTime string) ([]model.SUserOperationLog, error) {
+func (ps *Service) GetOperationLogs(ctx context.Context, operatorName string, userIds []int64, startTime, endTime string) ([]model.UserOperationLog, error) {
 	// 鉴权:审计日志只对管理员开放,普通登录用户不得枚举他人记录。
-	var operator *model.SUser
-	if err := model.DB(ctx).Model(&model.SUser{}).Where("email = ?", operatorName).First(&operator).Error; err != nil {
+	var operator *model.User
+	if err := model.DB(ctx).Model(&model.User{}).Where("email = ?", operatorName).First(&operator).Error; err != nil {
 		return nil, ErrOperationLogForbidden
 	}
 	if operator.Code != "admin" && operator.Code != "super_admin" {
 		return nil, ErrOperationLogForbidden
 	}
 
-	db := model.DB(ctx).Model(&model.SUserOperationLog{}).Debug()
+	db := model.DB(ctx).Model(&model.UserOperationLog{}).Debug()
 
 	// 添加用户ID过滤条件
 	if len(userIds) > 0 {
@@ -63,7 +63,7 @@ func (ps *Service) GetOperationLogs(ctx context.Context, operatorName string, us
 		}
 	}
 
-	var logs []model.SUserOperationLog
+	var logs []model.UserOperationLog
 	// 按时间倒序排列
 	if err := db.Order("created_at DESC").Find(&logs).Error; err != nil {
 		return nil, err

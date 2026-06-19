@@ -14,7 +14,7 @@ import (
 )
 
 func (ps *Service) RegisterAddUser(ctx context.Context, email string, password string, code string, id int, phone, organization, position string) (bool, error) {
-	var userInfo model.SUser
+	var userInfo model.User
 	var description string
 	userInfo.Email = email
 	hashed, herr := utils.HashPassword(password)
@@ -50,7 +50,7 @@ func (ps *Service) RegisterAddUser(ctx context.Context, email string, password s
 		return false, errors.New("错误的权限赋值，您没有这样的权限")
 	}
 
-	affected := model.DB(ctx).Model(&model.SUser{}).Debug().Create(&userInfo).RowsAffected
+	affected := model.DB(ctx).Model(&model.User{}).Debug().Create(&userInfo).RowsAffected
 	if affected > 0 {
 		return true, nil
 	}
@@ -62,8 +62,8 @@ func (ps *Service) ModifyPassword(ctx context.Context, name, Password, newPasswo
 	// 再用 SQL `WHERE password = ?` 等值匹配。原 SQL 写法隐式兜了"用户不存在",这里
 	// 必须显式补 not-found 守卫(已删但 token 仍有效的用户须 fail-closed)。用值类型
 	// 而非指针,避免 not-found 时对 nil 取 .Id。
-	var userInfo model.SUser
-	db := model.DB(ctx).Model(&model.SUser{}).Debug()
+	var userInfo model.User
+	db := model.DB(ctx).Model(&model.User{}).Debug()
 	if err := db.Where("email = ?", name).First(&userInfo).Error; err != nil || userInfo.Id == 0 {
 		return "", errors.New("原密码输入错误,请重试")
 	}
@@ -94,7 +94,7 @@ func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id i
 		log.Printf("更新用户密码失败(哈希出错): %v", herr)
 		return false
 	}
-	result := model.DB(ctx).Model(&model.SUser{}).
+	result := model.DB(ctx).Model(&model.User{}).
 		Where("id = ?", id).
 		Updates(map[string]interface{}{
 			"password":           pwdHash,
@@ -115,8 +115,8 @@ func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id i
 }
 
 func (ps *Service) GetUserInfo(ctx context.Context, email string, password string) (userInfo common.UserResponse, count int64, apiErr common.Error) {
-	var user model.SUser
-	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email =?", email)
+	var user model.User
+	db := model.DB(ctx).Model(&model.User{}).Debug().Where("email =?", email)
 
 	// 1. 检查用户是否存在
 	if err := db.First(&user).Error; err != nil {
@@ -147,7 +147,7 @@ func (ps *Service) GetUserInfo(ctx context.Context, email string, password strin
 			updates["locked_until"] = lockedUntil
 		}
 
-		model.DB(ctx).Model(&model.SUser{}).Where("id = ?", user.Id).Updates(updates)
+		model.DB(ctx).Model(&model.User{}).Where("id = ?", user.Id).Updates(updates)
 
 		count = 0
 		if newFailedCount >= 5 {
@@ -159,7 +159,7 @@ func (ps *Service) GetUserInfo(ctx context.Context, email string, password strin
 	}
 
 	// 4. 登录成功，重置失败次数和锁定时间，更新最后登录时间
-	model.DB(ctx).Model(&model.SUser{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
+	model.DB(ctx).Model(&model.User{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
 		"login_failed_count": 0,
 		"locked_until":       nil,
 		"last_login_at":      time.Now(),
@@ -170,7 +170,7 @@ func (ps *Service) GetUserInfo(ctx context.Context, email string, password strin
 	// 影响登录,也不动 password_change_at（凭证本身没变）。
 	if needsUpgrade {
 		if newHash, herr := utils.HashPassword(password); herr == nil {
-			res := model.DB(ctx).Model(&model.SUser{}).
+			res := model.DB(ctx).Model(&model.User{}).
 				Where("id = ? AND password = ?", user.Id, user.Password).
 				Update("password", newHash)
 			if res.Error != nil {
@@ -208,8 +208,8 @@ func (ps *Service) UserRegister(ctx context.Context, email, password string) err
 		return errors.New("用户注册失败")
 	}
 	now := time.Now()
-	db := model.DB(ctx).Model(&model.SUser{}).Debug()
-	err := db.Create(&model.SUser{
+	db := model.DB(ctx).Model(&model.User{}).Debug()
+	err := db.Create(&model.User{
 		Email:            email,
 		Password:         mdPassword,
 		Code:             "user",
