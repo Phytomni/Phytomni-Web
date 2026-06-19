@@ -149,7 +149,7 @@ describe("beforeEachGuard", () => {
   it("9: token + first-login status 0 + changePassword route → next() WITHOUT calling getUserTools (first-login gate)", async () => {
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "0");
-    // Backend first-login gate (nky_client_go middleware/first_login_gate.go)
+    // Backend first-login gate (apps/server/middleware/first_login_gate.go)
     // 403s getUserTools for login_status==='0'. The guard must reach
     // /change-password directly so the user can clear the flag — not probe the
     // gated endpoint, 403, FedLogOut and bounce to /login (the lockout bug).

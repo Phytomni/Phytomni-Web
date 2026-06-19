@@ -95,7 +95,7 @@ export function beforeEachGuard(
       return;
     }
     // First-login users (login_status === "0") are gated server-side to
-    // /v1/modify/password only (nky_client_go middleware/first_login_gate.go);
+    // /v1/modify/password only (apps/server/middleware/first_login_gate.go);
     // every other /v1/* returns 403. Probing getUserTools() for an allow-listed
     // destination (changePassword) would 403 → FedLogOut → bounce back to
     // /login, locking the user out of the only page that clears the flag.

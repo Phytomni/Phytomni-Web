@@ -181,7 +181,7 @@ db:
     dsn: "<DB_USER>:<DB_PASSWORD>@tcp(<PROD_DB_HOST>:3306)/phytomni?charset=utf8mb4&parseTime=True&loc=Local"
 ```
 
-Confirm whether the database is co-located (`localhost`) or stays on its external host **(verify on-server)**, and that the DSN user has INSERT on the audit-log tables plus the `SUser`/`SQuestionAgentLog` families.
+Confirm whether the database is co-located (`localhost`) or stays on its external host **(verify on-server)**, and that the DSN user has INSERT on the audit-log tables plus the `User`/`QuestionAgentLog` families.
 
 ### 4.6 Other keys
 

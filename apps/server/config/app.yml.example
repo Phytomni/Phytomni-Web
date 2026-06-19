@@ -27,8 +27,8 @@ jwt:
 
 # ---------------------------------------------------------------------
 # MySQL connection. The Logger hook (db/logger.go) writes every SQL
-# into s_sql_operation_logs, so the DSN user needs INSERT on that table
-# plus the SUser-family tables. Format:
+# into sql_operation_logs, so the DSN user needs INSERT on that table
+# plus the User-family tables. Format:
 #   <user>:<pass>@tcp(<host>:<port>)/<db>?<gorm-flags>
 # ---------------------------------------------------------------------
 db:
@@ -135,7 +135,7 @@ huawei:
 # `user_api_key`     — ONE `ptm_…` user-scoped Bot key for the whole
 #                      Web app. Multi-tenant model: Bot treats this
 #                      Web as one principal; real-user identity lives
-#                      in Web Go MySQL (s_user_operation_log etc.).
+#                      in Web Go MySQL (user_operation_logs etc.).
 #                      Ops issues this ONCE at deploy via:
 #                        curl -X POST <bot>/v1/api-keys \
 #                          -H 'Authorization: Bearer <service-token>' \
