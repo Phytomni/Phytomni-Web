@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"nky_client_go/server/middleware"
+	"nky_client_go/server/httpmw"
 	"nky_client_go/utils"
 
 	"github.com/getsentry/sentry-go"
@@ -35,12 +35,12 @@ func NewHttp(options ...HttpOption) *Http {
 	}
 
 	// 默认中间件
-	g.Use(middleware.RequestID(), middleware.Recovery())
+	g.Use(httpmw.RequestID(), httpmw.Recovery())
 	g.Use(sentrygin.New(sentrygin.Options{Repanic: true, WaitForDelivery: true, Timeout: 10 * time.Second}))
 
 	// 开启维护模式，维护模式请求全部禁止
 	if viper.GetBool("http.maintenance") {
-		g.Use(middleware.UnderMaintenance())
+		g.Use(httpmw.UnderMaintenance())
 	}
 
 	// 健康检查
