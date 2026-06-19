@@ -8,7 +8,7 @@ import (
 type UserResponse struct {
 	Id               int64  `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
 	Email            string `json:"email"`
-	Password         string `json:"password"`
+	Password         string `json:"-"` // never serialized to clients (bcrypt hash; carried internally only)
 	FirstLoginStatus string `json:"first_login_status"`
 	PasswordWarning  string `json:"password_warning,omitempty"` // 密码过期提示信息
 }
