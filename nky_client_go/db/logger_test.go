@@ -58,7 +58,7 @@ func openLoggedTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("create s_probe_users: %v", err)
 	}
 
-	Set("nky_client_go", gdb) // 异步写库经 Get("nky_client_go") 取连接
+	Set("phytomni-server", gdb) // 异步写库经 Get("phytomni-server") 取连接
 	return gdb
 }
 
@@ -137,7 +137,7 @@ func TestWriteSQLAuditLog_SurfacesInsertError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	Set("nky_client_go", gdb)
+	Set("phytomni-server", gdb)
 
 	if err := writeSQLAuditLog(auditRow()); err == nil {
 		t.Fatal("missing s_sql_operation_logs must surface an insert error, not drop it silently")

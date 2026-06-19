@@ -28,7 +28,7 @@ func TestAddBotRunID_Idempotent(t *testing.T) {
 	)`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
-	db.Set("nky_client_go", gdb)
+	db.Set("phytomni-server", gdb)
 
 	if !model.Default().Migrator().HasColumn(&model.QuestionAgentLog{}, "bot_run_id") {
 		t.Fatal("guard should report bot_run_id present; idempotent re-run would otherwise re-ALTER")
@@ -49,7 +49,7 @@ func TestAddBotRunID_AddsWhenAbsent(t *testing.T) {
 	)`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
-	db.Set("nky_client_go", gdb)
+	db.Set("phytomni-server", gdb)
 
 	m := model.Default().Migrator()
 	if m.HasColumn(&model.QuestionAgentLog{}, "bot_run_id") {
@@ -81,7 +81,7 @@ func TestAddColumnIfMissing_SkipsWhenPresent(t *testing.T) {
 	)`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
-	db.Set("nky_client_go", gdb)
+	db.Set("phytomni-server", gdb)
 
 	if err := addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
 		"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
@@ -104,7 +104,7 @@ func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
 	)`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
-	db.Set("nky_client_go", gdb)
+	db.Set("phytomni-server", gdb)
 
 	m := model.Default().Migrator()
 	if m.HasColumn(&model.QuestionAgentLog{}, "image_paths") {

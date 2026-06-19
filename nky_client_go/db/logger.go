@@ -122,7 +122,7 @@ func (l *SqlLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql s
 // A nil registry (e.g. unit tests not exercising the audit path) is a no-op,
 // not an error.
 func writeSQLAuditLog(logEntry map[string]interface{}) error {
-	gdb, ok := Get("nky_client_go")
+	gdb, ok := Get("phytomni-server")
 	if !ok {
 		return nil
 	}

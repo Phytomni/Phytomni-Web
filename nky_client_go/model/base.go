@@ -8,7 +8,7 @@ import (
 )
 
 func Default() *gorm.DB {
-	return db.MustGet("nky_client_go")
+	return db.MustGet("phytomni-server")
 }
 
 // DB 获取带有 Context 的 DB 实例，用于传递 UserID 等信息给 Logger

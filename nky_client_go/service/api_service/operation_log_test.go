@@ -32,7 +32,7 @@ func setupOperationLogDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("ddl s_user_operation_logs: %v", err)
 	}
-	db.Set("nky_client_go", gdb)
+	db.Set("phytomni-server", gdb)
 	return gdb
 }
 

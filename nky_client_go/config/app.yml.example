@@ -1,4 +1,4 @@
-# nky_client_go runtime configuration template.
+# phytomni-server runtime configuration template.
 #
 # Copy this file to `app.yml` in the same directory, then fill in real
 # values; do NOT commit `app.yml` — the matching .gitignore rule keeps
@@ -32,7 +32,7 @@ jwt:
 #   <user>:<pass>@tcp(<host>:<port>)/<db>?<gorm-flags>
 # ---------------------------------------------------------------------
 db:
-  nky_client_go:
+  phytomni-server:
     dialect: mysql
     dsn: "root:your-mysql-password@tcp(localhost:3306)/nongke?charset=utf8mb4&parseTime=True&loc=Local"
 

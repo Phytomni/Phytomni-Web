@@ -29,7 +29,7 @@ func setupGateTestDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
-	db.Set("nky_client_go", gdb)
+	db.Set("phytomni-server", gdb)
 	return gdb
 }
 

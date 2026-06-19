@@ -36,7 +36,7 @@ func main() {
 }
 
 func initConfig(*cli.Context) error {
-	viper.SetDefault("app", "nky_client_go")
+	viper.SetDefault("app", "phytomni-server")
 	// GeneList / GeneDetails read .md examples from this root;
 	// historically the call sites carried a developer's local Windows
 	// path as the fallback, which silently broke on every non-Windows

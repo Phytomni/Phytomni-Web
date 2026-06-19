@@ -48,7 +48,7 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 	if err := gdb.Exec(ddl).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
-	db.Set("nky_client_go", gdb)
+	db.Set("phytomni-server", gdb)
 	return gdb
 }
 
