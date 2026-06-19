@@ -34,7 +34,7 @@ export default defineConfig(({ mode, command }) => {
 
   return {
     // envPrefix: "VITE_", // env 环境变量前缀默认就是VITE_
-    base: "/" + VITE_APP_BASE_URL,
+    base: "/" + (VITE_APP_BASE_URL || ""),
     // plugins: [vue(), vueJsx()],
     plugins: createVitePlugins(env, command === "build"),
     resolve: {
