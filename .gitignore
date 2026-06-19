@@ -107,6 +107,7 @@ CLAUDE.md
 AGENTS.md
 .agents
 skills-lock.json
+.superpowers
 
 .cursor
 .codegraph
