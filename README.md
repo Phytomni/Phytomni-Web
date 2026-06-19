@@ -1,28 +1,28 @@
 # Phytomni-Web
 
 A web application for agricultural knowledge management: a Vue 3 frontend
-(`chat-ai/`) talking to a Go API gateway (`nky_client_go/`). The gateway
+(`apps/web/`) talking to a Go API gateway (`apps/server/`). The gateway
 serves `/query` by proxying to the Phytomni-Bot service over HTTP, and serves
 `/v1/*` + `/auth/*` for auth, users, query history, gene data, and async
 tasks.
 
 ## Prerequisites
 
-### nky_client_go (Go API gateway)
+### apps/server (Go API gateway)
 - Go 1.23+ installed
-- Port 8082 available
+- Port 8080 available
 
-### chat-ai (frontend)
+### apps/web (frontend)
 - Node 20+ and npm
 
 ## Installation & Setup
 
-### Go gateway (nky_client_go)
+### Go gateway (apps/server)
 
 ```bash
-cd nky_client_go
+cd apps/server
 go mod tidy
-go run main.go          # serve (default action) — :8082
+go run main.go          # serve (default action) — :8080
 ```
 
 Copy `config/app.yml.example` to `config/app.yml` and fill in real values
@@ -31,23 +31,23 @@ before the first run — DB, the Bot integration (`bot.base_url` /
 cron. The gateway forwards `/query` to Phytomni-Bot; the in-repo Python MCP
 service that previously served `/query` has been removed.
 
-### Frontend (chat-ai)
+### Frontend (apps/web)
 
 ```bash
-cd chat-ai
+cd apps/web
 npm install
 npm run dev             # Vite dev server (uses .env.dev)
 ```
 
 The dev server proxies `/query`, `/v1`, and the base API to the Go gateway
-(`http://localhost:8082` by default); override per-engineer via
-`VITE_DEV_PROXY_API` / `VITE_DEV_PROXY_QUERY` in `chat-ai/.env.dev`.
+(`http://localhost:8080` by default); override per-engineer via
+`VITE_DEV_PROXY_API` / `VITE_DEV_PROXY_QUERY` in `apps/web/.env.dev`.
 
 ## Port Configuration
 
 | Service         | Port   | Description                                  |
 | :-------------- | :----- | :------------------------------------------- |
-| Go API gateway  | 8082   | Auth, users, history, gene data, `/query`    |
+| Go API gateway  | 8080   | Auth, users, history, gene data, `/query`    |
 | Vite dev server | varies | Frontend (`VITE_PORT`)                       |
 
 ## Development
@@ -87,10 +87,10 @@ To run the full gate manually without committing:
 ### Port already in use
 
 ```bash
-# Find the process using port 8082
-lsof -i :8082
+# Find the process using port 8080
+lsof -i :8080
 # Or on Windows:
-netstat -ano | findstr :8082
+netstat -ano | findstr :8080
 ```
 
 ### Go dependency issues

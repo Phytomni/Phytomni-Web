@@ -1,4 +1,4 @@
-# chat-ai tests
+# apps/web tests
 
 ## Run
 

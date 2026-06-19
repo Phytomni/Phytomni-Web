@@ -45,7 +45,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 | OBS credentials | Held by the Python/Web side; files fetched directly | Held by the Bot only; downloads go through a Bot relay | Web carries no Huawei OBS keys after cutover |
 | `app.yml` | Minimal | New `bot`, `huawei`, `jwt`, `email` blocks; DSN host/user change; `gene_file_path` change | Several new required keys; missing them blocks boot or features |
 | DB schema | — | `+bot_run_id`, `+image_paths`, three enum tightenings; two legacy tables retained-but-unused | An additive migration is required before cutover |
-| nginx | `/query` upstream is the Python service | `/query` upstream is Go `:8082` | One reverse-proxy line moves at cutover |
+| nginx | `/query` upstream is the Python service | `/query` upstream is Go `:8080` | One reverse-proxy line moves at cutover |
 | First-login flow | No server-side gate | Backend gate + matching frontend guard | Backend and frontend **must** ship together |
 | Auth | MD5 password hashes; audit logs unredacted | bcrypt (lazy upgrade); operation-log admin-only + body redaction | Set `bcrypt_cost`; **run the §5.6 operator preconditions** (inventory, column width, snapshot, canary) before deploy — the hash migration is forward-only |
 
@@ -56,9 +56,9 @@ The headline change: **the legacy Python chat service is retired. The Go service
 | Component | Port | Role |
 |---|---|---|
 | nginx | `:443` (TLS, `phytomni.cn`) | TLS termination + reverse proxy by path + serves the SPA |
-| Go service | `:8082` | Serves `/auth`, `/v1/*`, `/query`, `/query/analyst/update_log`. Sole MySQL writer |
+| Go service | `:8080` | Serves `/auth`, `/v1/*`, `/query`, `/query/analyst/update_log`. Sole MySQL writer |
 | Bot | `:8000` | **Internal only.** Go relays chat here; the browser never reaches it directly. Deployed by the Bot team |
-| MySQL | `:3306` | `nongke` database |
+| MySQL | `:3306` | `phytomni` database |
 | Legacy Python chat service | **(verify on-server)** | Retired at cutover; remove from nginx once `/query` points at Go |
 | Satellite: `/aiquery/*`, `/oneauth/*` | separate | Redis cache + unified auth — unchanged, proxied independently |
 
@@ -66,7 +66,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 
 ```
                           ┌──────────────────────────────┐
- Browser ── HTTPS ──▶ nginx│ /auth, /v1  ─▶ Go      :8082 │──▶ MySQL :3306 (nongke)
+ Browser ── HTTPS ──▶ nginx│ /auth, /v1  ─▶ Go      :8080 │──▶ MySQL :3306 (phytomni)
  (phytomni.cn :443)        │ /query      ─▶ Python service│──▶ MCP server + Huawei OBS
                           └──────────────────────────────┘
 ```
@@ -75,7 +75,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 
 ```
                           ┌────────────────────────────────────┐
- Browser ── HTTPS ──▶ nginx│ /auth, /v1, /query ─▶ Go     :8082 │──▶ MySQL :3306 (nongke)
+ Browser ── HTTPS ──▶ nginx│ /auth, /v1, /query ─▶ Go     :8080 │──▶ MySQL :3306 (phytomni)
  (phytomni.cn :443)        └────────────────────────────────────┘
                                                   │ relay (Bearer <PTM_WEB_KEY>)
                                                   ▼
@@ -91,12 +91,12 @@ The headline change: **the legacy Python chat service is retired. The Go service
 Do these before touching anything mutable.
 
 1. **Back up (mandatory, first).**
-   - MySQL: `mysqldump -u <DB_USER> -p nongke > nongke_backup_$(date +%F).sql`
+   - MySQL: `mysqldump -u <DB_USER> -p phytomni > phytomni_backup_$(date +%F).sql`
    - Frontend: archive the live `dist` directory to a dated backup (see §8).
    - Config: copy the current `config/app.yml` to a safe location.
 2. **Toolchain on the build host.**
    - Go 1.23 to build the Go binary.
-   - Node + npm to build `chat-ai/dist`.
+   - Node + npm to build `apps/web/dist`.
 3. **Bot readiness** (coordinate with the Bot team — see §7):
    - The Bot is reachable on its internal URL.
    - The Bot exposes all required agents (§7).
@@ -162,7 +162,7 @@ Outbound notification email (chat-page links + OBS download links). Omit the blo
 ```yaml
 email:
   web_base_url: "http://<WEB_HOST>"
-  api_base_url: "http://<API_HOST>:8082"
+  api_base_url: "http://<API_HOST>:8080"
   smtp_server: "smtp.qq.com"
   smtp_port: 587
   from_display: "nky_email <<SENDER_EMAIL>>"
@@ -176,9 +176,9 @@ The current production DSN points at an external host as `root`. This release ex
 
 ```yaml
 db:
-  nky_client_go:
+  phytomni-server:
     dialect: mysql
-    dsn: "<DB_USER>:<DB_PASSWORD>@tcp(<PROD_DB_HOST>:3306)/nongke?charset=utf8mb4&parseTime=True&loc=Local"
+    dsn: "<DB_USER>:<DB_PASSWORD>@tcp(<PROD_DB_HOST>:3306)/phytomni?charset=utf8mb4&parseTime=True&loc=Local"
 ```
 
 Confirm whether the database is co-located (`localhost`) or stays on its external host **(verify on-server)**, and that the DSN user has INSERT on the audit-log tables plus the `SUser`/`SQuestionAgentLog` families.
@@ -194,7 +194,9 @@ Confirm whether the database is co-located (`localhost`) or stays on its externa
 
 ## 5. Database migration
 
-Run after the backup in §3. All statements are **additive and safe** on existing data. Use the wired CLI where one exists (`go run main.go <cmd>`, or the built binary `./nky_client_go <cmd>`).
+Run after the backup in §3. All statements are **additive and safe** on existing data. Use the wired CLI where one exists (`go run main.go <cmd>`, or the built binary `./phytomni-server <cmd>`).
+
+> **Table names:** the SQL in this section uses the production table names as they exist today (`s_*`). The repo's table rename (drop `s_` and pluralize — e.g. `s_user` → `users`, `s_question_agent_logs` → `question_agent_logs`) ships as a separate operator cutover (`RENAME TABLE`); run each statement against whichever names are live at the time.
 
 ### 5.1 Tighten three enum columns
 
@@ -287,16 +289,16 @@ The Go service hashes new passwords with bcrypt and **lazily upgrades** a legacy
 1. **Build** with Go 1.23:
 
    ```bash
-   cd nky_client_go
-   GOTOOLCHAIN=auto go build -o nky_client_go .
+   cd apps/server
+   GOTOOLCHAIN=auto go build -o phytomni-server .
    ```
 
 2. **Config resolution.** The binary loads `./config/app.yml` relative to its working directory, or pass `--config <path>` to point elsewhere. Run it from a directory whose `./config/app.yml` is the production config.
 
-3. **Run.** The default action is `Serve`, which listens on `:8082`:
+3. **Run.** The default action is `Serve`, which listens on `:8080`:
 
    ```bash
-   ./nky_client_go            # serve (default) — :8082
+   ./phytomni-server          # serve (default) — :8080
    ```
 
    Put it under a process supervisor (systemd). Send logs to your standard sink (`log.outputs` in `app.yml`).
@@ -360,26 +362,26 @@ The Bot sees a single principal (`user_id="web"`). Real per-user isolation lives
 
 > **The authoritative nginx config is on the production server (`/root/...`) and is NOT in any repo.** Ops edits it in place. The `reference/deer-flow/docker/nginx/*` files in the repo are for **local dev only** (wrong upstreams) — do not use them.
 
-### 8.1 Reverse-proxy rules (to Go `:8082`)
+### 8.1 Reverse-proxy rules (to Go `:8080`)
 
-The Go service serves these path prefixes; nginx must proxy them to `127.0.0.1:8082`:
+The Go service serves these path prefixes; nginx must proxy them to `127.0.0.1:8080`:
 
 ```nginx
-location /auth  { proxy_pass http://127.0.0.1:8082; }
-location /v1    { proxy_pass http://127.0.0.1:8082; }
-location /query { proxy_pass http://127.0.0.1:8082; }   # CHANGED: was the Python service
+location /auth  { proxy_pass http://127.0.0.1:8080; }
+location /v1    { proxy_pass http://127.0.0.1:8080; }
+location /query { proxy_pass http://127.0.0.1:8080; }   # CHANGED: was the Python service
 location / {
     root <NGINX_WEB_ROOT>;          # the deployed dist directory
     try_files $uri /index.html;     # SPA fallback for Vue Router
 }
 ```
 
-The only routing change at cutover is the **`/query` upstream moving from the Python service to Go `:8082`**.
+The only routing change at cutover is the **`/query` upstream moving from the Python service to Go `:8080`**.
 
 ### 8.2 Frontend build & deploy
 
 ```bash
-cd chat-ai
+cd apps/web
 npm run build                       # outputs to ./dist
 ```
 
@@ -411,7 +413,7 @@ Staged: steps 1–7 are **reversible**; step 9 is **irreversible**. Do not do st
 3. **Migrate the database** (§5) while the Python service is still serving — every change is additive.
 4. **Deploy the Go binary** with `bot.proxy_enabled: false`; verify `/auth` + `/v1` health.
 5. **Deploy the new frontend `dist` + nginx rules**, but **keep `/query` pointed at the Python service** for now.
-6. **Reversible flip:** set the `bot.*` config (§4.1), set `proxy_enabled: true`, restart Go (the boot agent validation must pass), then **repoint nginx `/query` → Go `:8082`** and `systemctl reload nginx`.
+6. **Reversible flip:** set the `bot.*` config (§4.1), set `proxy_enabled: true`, restart Go (the boot agent validation must pass), then **repoint nginx `/query` → Go `:8080`** and `systemctl reload nginx`.
 7. **Smoke test** (§10).
 8. **Soak** for your standard window, watching `/query` error rates.
 9. **Irreversible cleanup** (only if smoke + soak are green): decommission the Python service (its systemd unit) and revoke the Web-side Huawei OBS credentials.

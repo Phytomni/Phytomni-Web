@@ -1,7 +1,7 @@
 # API 接口文档
 
 ## 基础信息
-*   **Base URL**: `http://localhost:8082`
+*   **Base URL**: `http://localhost:8080`
 *   **Content-Type**: `application/x-www-form-urlencoded` (除非特别说明)
 
 ---
