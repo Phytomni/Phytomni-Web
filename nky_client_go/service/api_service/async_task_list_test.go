@@ -21,7 +21,7 @@ func setupAsyncListDB(t *testing.T) *gorm.DB {
 	if sqlDB, err := gdb.DB(); err == nil {
 		sqlDB.SetMaxOpenConns(1)
 	}
-	ddl := `CREATE TABLE s_question_agent_logs (
+	ddl := `CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		dialogue_id TEXT, f_id INTEGER DEFAULT 0, server_id TEXT,
 		user_name TEXT, query TEXT, answer TEXT, task_id TEXT, task_log TEXT,
@@ -40,7 +40,7 @@ func setupAsyncListDB(t *testing.T) *gorm.DB {
 // 都只能是调用者本人的任务,绝不能把别的用户的任务带出来。
 func TestApiAsyncTaskList_ScopesToOwner(t *testing.T) {
 	gdb := setupAsyncListDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, task_id, status, created_at) VALUES
 		(1, 'dlg-a1', 0, 'alice', 't-a1', 'SUCCEEDED', '2026-01-01 00:00:00'),
 		(2, 'dlg-a2', 0, 'alice', 't-a2', 'RUNNING',   '2026-01-01 00:01:00'),

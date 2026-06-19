@@ -40,7 +40,7 @@ func TestRedactBodyURLEncoded(t *testing.T) {
 
 // TestRedactBodyURLEncodedMalformed 锁死 body 脱敏不变量:一个含无效百分号编码的
 // urlencoded body(例如密码里有裸 '%')会让 url.ParseQuery 报错;此时绝不能回落原文,
-// 否则 /login、/modify/password 的明文凭据会直接落进 s_user_operation_logs。
+// 否则 /login、/modify/password 的明文凭据会直接落进 user_operation_logs。
 // 这正是 query-string 路径(redactQueryParams)有意保留原文、而 body 路径必须打码的分叉点。
 func TestRedactBodyURLEncodedMalformed(t *testing.T) {
 	// "100%pass" 里的 "%pa" 不是合法十六进制 → ParseQuery 失败。

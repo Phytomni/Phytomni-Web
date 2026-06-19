@@ -19,7 +19,7 @@ import (
 )
 
 // setupProfileTestDB 建一个 in-memory SQLite,创建 GetUserProfile 实际查的两张表
-// (s_user / s_question_agent_logs) 的最小列集,注册到全局 db registry。
+// (users / question_agent_logs) 的最小列集,注册到全局 db registry。
 //
 // 手写 CREATE TABLE 而非 AutoMigrate:User 带 MySQL 专有的 type:enum tag,
 // SQLite AutoMigrate 不识别;这里只列 profile 路径读到的列,其余按零值填充。
@@ -30,7 +30,7 @@ func setupProfileTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	ddl := []string{
-		`CREATE TABLE s_user (
+		`CREATE TABLE users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT,
 			code TEXT,
@@ -44,7 +44,7 @@ func setupProfileTestDB(t *testing.T) *gorm.DB {
 			created_at DATETIME,
 			updated_at DATETIME
 		)`,
-		`CREATE TABLE s_question_agent_logs (
+		`CREATE TABLE question_agent_logs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			dialogue_id TEXT,
 			f_id INTEGER DEFAULT 0,
@@ -79,7 +79,7 @@ func newProfileRequestContext(t *testing.T, rawQuery string) (*gin.Context, *htt
 // 未 fix 时:handler 读 ctx.Query("email")=="bob@x.com" → 返回 Bob 的资料(IDOR)。
 func TestApiGetUserProfile_IgnoresQueryEmailUsesJWT(t *testing.T) {
 	gdb := setupProfileTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, code) VALUES
+	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES
 		(1, 'alice@x.com', 'user'),
 		(2, 'bob@x.com',   'user')`).Error; err != nil {
 		t.Fatalf("seed users: %v", err)
@@ -112,7 +112,7 @@ func TestApiGetUserProfile_IgnoresQueryEmailUsesJWT(t *testing.T) {
 // ?email= 或返回任何资料。未 fix 时:handler 读 ctx.Query("email") → 200。
 func TestApiGetUserProfile_MissingUsernameReturns401(t *testing.T) {
 	gdb := setupProfileTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, code) VALUES
+	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES
 		(2, 'bob@x.com', 'user')`).Error; err != nil {
 		t.Fatalf("seed users: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope(t *testing.T) {
 	}
 }
 
-// setupLoginTestDB creates the full s_user column set Login -> GetUserInfo
+// setupLoginTestDB creates the full users column set Login -> GetUserInfo
 // reads (mirrors service/api_service/user_test.go's DDL).
 func setupLoginTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -174,7 +174,7 @@ func setupLoginTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	ddl := `CREATE TABLE s_user (
+	ddl := `CREATE TABLE users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		email TEXT, password TEXT, code TEXT, description TEXT,
 		first_login_status TEXT DEFAULT '0',
@@ -199,7 +199,7 @@ func TestApiLogin_ResponseOmitsPasswordHash(t *testing.T) {
 
 	gdb := setupLoginTestDB(t)
 	hash, _ := utils.HashPassword("goodpass")
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code, first_login_status) VALUES (1, 'a@x.com', ?, 'user', '1')`, hash).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code, first_login_status) VALUES (1, 'a@x.com', ?, 'user', '1')`, hash).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 

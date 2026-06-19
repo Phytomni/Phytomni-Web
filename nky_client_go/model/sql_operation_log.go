@@ -17,5 +17,5 @@ type SqlOperationLog struct {
 }
 
 func (SqlOperationLog) TableName() string {
-	return "s_sql_operation_logs"
+	return "sql_operation_logs"
 }

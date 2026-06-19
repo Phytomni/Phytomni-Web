@@ -34,7 +34,7 @@ jwt:
 db:
   phytomni-server:
     dialect: mysql
-    dsn: "root:your-mysql-password@tcp(localhost:3306)/nongke?charset=utf8mb4&parseTime=True&loc=Local"
+    dsn: "root:your-mysql-password@tcp(localhost:3306)/phytomni?charset=utf8mb4&parseTime=True&loc=Local"
 
 # ---------------------------------------------------------------------
 # Redis cache (cache/client.go); currently initialized but main.go

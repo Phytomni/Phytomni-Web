@@ -12,7 +12,7 @@ import (
 	"phytomni-server/db"
 )
 
-// setupGateTestDB 建 in-memory SQLite 的 s_user(只需 email + first_login_status,
+// setupGateTestDB 建 in-memory SQLite 的 users(只需 email + first_login_status,
 // 即 LoginStatusMiddleware 实际 Select 的列)并注册到全局 registry。
 // 手写 DDL 而非 AutoMigrate 的理由同 service 层测试:first_login_status 的
 // MySQL `type:enum` tag SQLite 不识别。
@@ -22,7 +22,7 @@ func setupGateTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.Exec(`CREATE TABLE s_user (
+	if err := gdb.Exec(`CREATE TABLE users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		email TEXT,
 		first_login_status TEXT DEFAULT '0'
@@ -52,7 +52,7 @@ func runGate(t *testing.T, gdb *gorm.DB, username interface{}, path string) *htt
 // 的用户访问非白名单路径被 403 拦截。
 func TestLoginStatusMiddleware_FirstLoginBlocksOtherPaths(t *testing.T) {
 	gdb := setupGateTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (email, first_login_status) VALUES ('alice@x.com', '0')`).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('alice@x.com', '0')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	w := runGate(t, gdb, "alice@x.com", "/v1/user/profile")
@@ -65,7 +65,7 @@ func TestLoginStatusMiddleware_FirstLoginBlocksOtherPaths(t *testing.T) {
 // 可以访问 /v1/modify/password(不被拦截)。
 func TestLoginStatusMiddleware_FirstLoginAllowsPasswordChange(t *testing.T) {
 	gdb := setupGateTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (email, first_login_status) VALUES ('alice@x.com', '0')`).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('alice@x.com', '0')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	w := runGate(t, gdb, "alice@x.com", "/v1/modify/password")
@@ -78,7 +78,7 @@ func TestLoginStatusMiddleware_FirstLoginAllowsPasswordChange(t *testing.T) {
 // 任意路径放行。
 func TestLoginStatusMiddleware_NonFirstLoginPasses(t *testing.T) {
 	gdb := setupGateTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (email, first_login_status) VALUES ('bob@x.com', '1')`).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('bob@x.com', '1')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	w := runGate(t, gdb, "bob@x.com", "/v1/user/profile")

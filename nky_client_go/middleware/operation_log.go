@@ -210,7 +210,7 @@ func OperationLog() gin.HandlerFunc {
 		if userId == 0 && userEmail != "" {
 			var user model.User
 			// 使用 model.Default() 查询，并禁用日志记录，防止产生“无主”的 SQL 日志
-			// 这条查询本身就是为了获取 UserID，此时还没有 UserID，如果记录日志会导致 s_sql_operation_logs 中出现大量 user_id 为空的记录
+			// 这条查询本身就是为了获取 UserID，此时还没有 UserID，如果记录日志会导致 sql_operation_logs 中出现大量 user_id 为空的记录
 			if err := model.Default().Session(&gorm.Session{Logger: logger.Discard}).Select("id").Where("email = ?", userEmail).First(&user).Error; err == nil {
 				userId = user.Id
 				// 关键：将 user_id 设置回 Context，以便后续的 Service 层调用 model.DB(c) 时能传递给 Logger

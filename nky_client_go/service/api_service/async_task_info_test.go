@@ -9,7 +9,7 @@ import (
 // 不得用他人的 id 越权读取任务行(query/answer/任务元数据)。
 func TestApiAsyncTaskInfo_ScopesToOwner(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, task_id, status, created_at) VALUES
 		(80, 'dlg-a', 0, 'alice', 't-a', 'SUCCEEDED', '2026-01-01 00:00:00'),
 		(81, 'dlg-b', 0, 'bob',   't-b', 'SUCCEEDED', '2026-01-01 00:01:00')`).Error; err != nil {

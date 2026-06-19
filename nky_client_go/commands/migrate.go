@@ -37,7 +37,7 @@ func addColumnIfMissing(db *gorm.DB, model interface{}, col, ddl string) error {
 // backfillFirstLoginStatusWith with a portable time-window expression to
 // exercise the same row-selection semantics without re-running this text.
 const firstLoginBackfillSQL = `
-	UPDATE s_user
+	UPDATE users
 	SET first_login_status = '0'
 	WHERE first_login_status = '1'
 	  AND password_change_at IS NOT NULL
@@ -101,20 +101,20 @@ func Migrate() *cli.Command {
 			},
 			{
 				Name:        "add-bot-run-id",
-				Usage:       "给 s_question_agent_logs 加 bot_run_id 列",
+				Usage:       "给 question_agent_logs 加 bot_run_id 列",
 				Description: "Add the nullable bot_run_id join column. Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual.",
 				Action: func(ctx *cli.Context) error {
 					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "bot_run_id",
-						"ALTER TABLE s_question_agent_logs ADD COLUMN bot_run_id VARCHAR(64) NULL AFTER server_id")
+						"ALTER TABLE question_agent_logs ADD COLUMN bot_run_id VARCHAR(64) NULL AFTER server_id")
 				},
 			},
 			{
 				Name:        "add-image-paths",
-				Usage:       "给 s_question_agent_logs 加 image_paths 列",
+				Usage:       "给 question_agent_logs 加 image_paths 列",
 				Description: "Add the nullable image_paths text column (gallery image OBS paths, stored as a JSON array). Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual (see docs/web-production-deployment-manual.md §5.3). Without this column every /query returns 500 (Unknown column 'image_paths').",
 				Action: func(ctx *cli.Context) error {
 					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
-						"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT '图廊图片OBS路径(JSON数组)' AFTER download_path")
+						"ALTER TABLE question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT '图廊图片OBS路径(JSON数组)' AFTER download_path")
 				},
 			},
 			{

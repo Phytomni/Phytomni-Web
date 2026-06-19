@@ -65,7 +65,7 @@ func (l *SqlLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql s
 		opType, tableName := parseSql(sql)
 
 		// 过滤掉日志表本身的操作，防止死循环
-		if tableName == "s_sql_operation_logs" || tableName == "s_user_operation_logs" {
+		if tableName == "sql_operation_logs" || tableName == "user_operation_logs" {
 			return
 		}
 
@@ -115,7 +115,7 @@ func (l *SqlLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql s
 	}(userId, userEmail, sqlStr, elapsed, err)
 }
 
-// writeSQLAuditLog inserts one audit row into s_sql_operation_logs and returns
+// writeSQLAuditLog inserts one audit row into sql_operation_logs and returns
 // the insert error — previously this error was dropped, so a missing table or
 // dead DB silently lost audit rows. The session disables the logger and starts
 // a fresh DB so the insert itself never re-enters Trace (infinite recursion).
@@ -127,7 +127,7 @@ func writeSQLAuditLog(logEntry map[string]interface{}) error {
 		return nil
 	}
 	return gdb.Session(&gorm.Session{Logger: logger.Discard, NewDB: true}).
-		Table("s_sql_operation_logs").
+		Table("sql_operation_logs").
 		Create(logEntry).Error
 }
 

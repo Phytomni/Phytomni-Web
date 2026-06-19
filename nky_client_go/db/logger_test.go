@@ -37,7 +37,7 @@ func openLoggedTestDB(t *testing.T) *gorm.DB {
 	sqlDB.SetMaxOpenConns(1)
 
 	// 审计日志落盘表（Trace 异步写这张表）。
-	ddl := `CREATE TABLE s_sql_operation_logs (
+	ddl := `CREATE TABLE sql_operation_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id INTEGER,
 		user_email TEXT,
@@ -50,7 +50,7 @@ func openLoggedTestDB(t *testing.T) *gorm.DB {
 		created_at DATETIME
 	)`
 	if err := gdb.Exec(ddl).Error; err != nil {
-		t.Fatalf("create s_sql_operation_logs: %v", err)
+		t.Fatalf("create sql_operation_logs: %v", err)
 	}
 
 	// 被审计的业务表。
@@ -75,7 +75,7 @@ func fetchLatestSQLContent(t *testing.T, gdb *gorm.DB, like string) string {
 	for i := 0; i < 50; i++ {
 		var content string
 		err := gdb.Session(&gorm.Session{Logger: logger.Discard, NewDB: true}).
-			Table("s_sql_operation_logs").
+			Table("sql_operation_logs").
 			Where("sql_content LIKE ?", like).
 			Order("id DESC").
 			Limit(1).
@@ -132,7 +132,7 @@ func auditRow() map[string]interface{} {
 // TestWriteSQLAuditLog_SurfacesInsertError 验证 AF-004:审计表缺失时,插入错误
 // 必须被返回(而非静默丢弃)。删掉 Create(...).Error 的返回 → 此测试转红。
 func TestWriteSQLAuditLog_SurfacesInsertError(t *testing.T) {
-	// s_sql_operation_logs 故意不建表。
+	// sql_operation_logs 故意不建表。
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -140,13 +140,13 @@ func TestWriteSQLAuditLog_SurfacesInsertError(t *testing.T) {
 	Set("phytomni-server", gdb)
 
 	if err := writeSQLAuditLog(auditRow()); err == nil {
-		t.Fatal("missing s_sql_operation_logs must surface an insert error, not drop it silently")
+		t.Fatal("missing sql_operation_logs must surface an insert error, not drop it silently")
 	}
 }
 
 // TestWriteSQLAuditLog_OKWhenTablePresent 验证正常路径:表存在时插入成功、返回 nil。
 func TestWriteSQLAuditLog_OKWhenTablePresent(t *testing.T) {
-	openLoggedTestDB(t) // 注册带 s_sql_operation_logs 的连接到 registry
+	openLoggedTestDB(t) // 注册带 sql_operation_logs 的连接到 registry
 	if err := writeSQLAuditLog(auditRow()); err != nil {
 		t.Fatalf("insert into present audit table should succeed: %v", err)
 	}

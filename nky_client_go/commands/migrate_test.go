@@ -21,7 +21,7 @@ func TestAddBotRunID_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.Exec(`CREATE TABLE s_question_agent_logs (
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		server_id TEXT,
 		bot_run_id TEXT
@@ -43,7 +43,7 @@ func TestAddBotRunID_AddsWhenAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.Exec(`CREATE TABLE s_question_agent_logs (
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		server_id TEXT
 	)`).Error; err != nil {
@@ -56,7 +56,7 @@ func TestAddBotRunID_AddsWhenAbsent(t *testing.T) {
 		t.Fatal("bot_run_id should be absent before add")
 	}
 	if err := model.Default().Exec(
-		"ALTER TABLE s_question_agent_logs ADD COLUMN bot_run_id VARCHAR(64)",
+		"ALTER TABLE question_agent_logs ADD COLUMN bot_run_id VARCHAR(64)",
 	).Error; err != nil {
 		t.Fatalf("add column: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestAddColumnIfMissing_SkipsWhenPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.Exec(`CREATE TABLE s_question_agent_logs (
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		download_path TEXT,
 		image_paths TEXT
@@ -84,7 +84,7 @@ func TestAddColumnIfMissing_SkipsWhenPresent(t *testing.T) {
 	db.Set("phytomni-server", gdb)
 
 	if err := addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
-		"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
+		"ALTER TABLE question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
 		t.Fatalf("present-column path must no-op, got %v", err)
 	}
 }
@@ -98,7 +98,7 @@ func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.Exec(`CREATE TABLE s_question_agent_logs (
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		download_path TEXT
 	)`).Error; err != nil {
@@ -111,7 +111,7 @@ func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
 		t.Fatal("image_paths should be absent before add")
 	}
 	if err := addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
-		"ALTER TABLE s_question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
+		"ALTER TABLE question_agent_logs ADD COLUMN image_paths TEXT"); err != nil {
 		t.Fatalf("add column: %v", err)
 	}
 	if !m.HasColumn(&model.QuestionAgentLog{}, "image_paths") {
@@ -125,7 +125,7 @@ func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
 // MySQL's TIMESTAMPDIFF. The WHERE/SET shape is identical so this exercises the
 // same idempotency + selection contract the production statement relies on.
 const sqliteBackfillSQL = `
-	UPDATE s_user
+	UPDATE users
 	SET first_login_status = '0'
 	WHERE first_login_status = '1'
 	  AND password_change_at IS NOT NULL
@@ -138,8 +138,8 @@ func newBackfillTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	// Table name must match User.TableName() == "s_user".
-	if err := gdb.Exec(`CREATE TABLE s_user (
+	// Table name must match User.TableName() == "users".
+	if err := gdb.Exec(`CREATE TABLE users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		first_login_status TEXT,
 		password_change_at TEXT,
@@ -157,7 +157,7 @@ func newBackfillTestDB(t *testing.T) *gorm.DB {
 // turning this test red.
 func TestBackfillFirstLoginStatus_SelectsOnlyWithinWindow(t *testing.T) {
 	gdb := newBackfillTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (first_login_status, password_change_at, created_at) VALUES
+	if err := gdb.Exec(`INSERT INTO users (first_login_status, password_change_at, created_at) VALUES
 		('1', '2026-01-01 10:00:02', '2026-01-01 10:00:00'),
 		('1', '2026-01-01 11:00:00', '2026-01-01 10:00:00'),
 		('0', '2026-01-01 10:00:00', '2026-01-01 10:00:00')`).Error; err != nil {
@@ -173,7 +173,7 @@ func TestBackfillFirstLoginStatus_SelectsOnlyWithinWindow(t *testing.T) {
 	}
 
 	var stillFlagged int64
-	if err := gdb.Raw(`SELECT COUNT(*) FROM s_user WHERE first_login_status = '1'`).Scan(&stillFlagged).Error; err != nil {
+	if err := gdb.Raw(`SELECT COUNT(*) FROM users WHERE first_login_status = '1'`).Scan(&stillFlagged).Error; err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if stillFlagged != 1 {
@@ -187,7 +187,7 @@ func TestBackfillFirstLoginStatus_SelectsOnlyWithinWindow(t *testing.T) {
 // first_login_status='1', the second run would re-touch rows and this goes red.
 func TestBackfillFirstLoginStatus_Idempotent(t *testing.T) {
 	gdb := newBackfillTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (first_login_status, password_change_at, created_at) VALUES
+	if err := gdb.Exec(`INSERT INTO users (first_login_status, password_change_at, created_at) VALUES
 		('1', '2026-01-01 10:00:01', '2026-01-01 10:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}

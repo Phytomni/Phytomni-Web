@@ -25,7 +25,7 @@ type User struct {
 }
 
 func (User) TableName() string {
-	return "s_user"
+	return "users"
 }
 
 type ToolName struct {
@@ -35,7 +35,7 @@ type ToolName struct {
 }
 
 func (ToolName) TableName() string {
-	return "s_tool_name"
+	return "tool_names"
 }
 
 type UserToolName struct {
@@ -45,7 +45,7 @@ type UserToolName struct {
 }
 
 func (UserToolName) TableName() string {
-	return "s_user_tool_name"
+	return "user_tool_names"
 }
 
 type QuestionAgentLog struct {
@@ -78,7 +78,7 @@ type QuestionAgentLog struct {
 }
 
 func (m *QuestionAgentLog) TableName() string {
-	return "s_question_agent_logs"
+	return "question_agent_logs"
 }
 
 type GeneList struct {
@@ -90,7 +90,7 @@ type GeneList struct {
 }
 
 func (m *GeneList) TableName() string {
-	return "s_gene_list"
+	return "gene_lists"
 }
 
 type GeneExample struct {
@@ -105,7 +105,7 @@ type GeneExample struct {
 }
 
 func (m *GeneExample) TableName() string {
-	return "s_gene_example"
+	return "gene_examples"
 }
 
 type UserPermission struct {
@@ -114,7 +114,7 @@ type UserPermission struct {
 }
 
 func (m *UserPermission) TableName() string {
-	return "s_user_permission"
+	return "user_permissions"
 }
 
 type ServerToolLogs struct {
@@ -131,7 +131,7 @@ type ServerToolLogs struct {
 }
 
 func (m *ServerToolLogs) TableName() string {
-	return "s_server_tool_logs"
+	return "server_tool_logs"
 }
 
 type UserFeedback struct {
@@ -145,7 +145,7 @@ type UserFeedback struct {
 }
 
 func (m *UserFeedback) TableName() string {
-	return "s_user_feedback"
+	return "user_feedback"
 }
 
 type UserOperationLog struct {
@@ -165,5 +165,5 @@ type UserOperationLog struct {
 }
 
 func (m *UserOperationLog) TableName() string {
-	return "s_user_operation_logs"
+	return "user_operation_logs"
 }

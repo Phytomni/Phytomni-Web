@@ -27,7 +27,7 @@ func TestApiQueryAnalystUpdateLog_Disabled(t *testing.T) {
 // carrying no bot_run_id cannot be synced and errors out rather than calling Bot.
 func TestApiQueryAnalystUpdateLog_MissingBotRunID(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, tool_name, task_id, bot_run_id, status, created_at) VALUES
 		(60, 'alice', 'q', 'AnalystAgent', 't-norun', '', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -46,7 +46,7 @@ func TestApiQueryAnalystUpdateLog_MissingBotRunID(t *testing.T) {
 // reshaped into the row, status uppercased, compute_resource/log_status set.
 func TestApiQueryAnalystUpdateLog_HappyPath(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
 		(61, 'alice', 'q', '任务创建成功：t-ok', 'AnalystAgent', 't-ok', 'run-ok', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -73,7 +73,7 @@ func TestApiQueryAnalystUpdateLog_HappyPath(t *testing.T) {
 // still applying the new answer.
 func TestApiQueryAnalystUpdateLog_SkipsBlankStatus(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
 		(62, 'alice', 'q', 'prior', 'AnalystAgent', 't-blank', 'run-blank', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -98,7 +98,7 @@ func TestApiQueryAnalystUpdateLog_SkipsBlankStatus(t *testing.T) {
 // formatted block) must leave the prior answer column untouched.
 func TestApiQueryAnalystUpdateLog_NoClobberAnswer(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
 		(63, 'alice', 'q', 'keep me', 'AnalystAgent', 't-noans', 'run-noans', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -127,7 +127,7 @@ func TestApiQueryAnalystUpdateLog_NoClobberAnswer(t *testing.T) {
 // download_path and the flattened multi-directory image list into image_paths.
 func TestApiQueryAnalystUpdateLog_WritesGalleryPaths(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
 		(64, 'alice', 'q', '任务创建成功：t-g', 'AnalystAgent', 't-g', 'run-g', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -158,7 +158,7 @@ func TestApiQueryAnalystUpdateLog_WritesGalleryPaths(t *testing.T) {
 // answer stays the seeded placeholder (the report never surfaces) — this fails.
 func TestApiQueryAnalystUpdateLog_FinalReport(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
 		(66, 'alice', 'q', 'server任务创建成功：t-dg', 'DeepGenomeAgent', 't-dg', 'run-dg', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -186,7 +186,7 @@ func TestApiQueryAnalystUpdateLog_FinalReport(t *testing.T) {
 // artifacts must not wipe an already-populated download_path/image_paths.
 func TestApiQueryAnalystUpdateLog_NoArtifactsNoClobber(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, download_path, image_paths, created_at) VALUES
 		(65, 'alice', 'q', 'prior', 'AnalystAgent', 't-na', 'run-na', 'RUNNING', '/obs/old', '["/obs/old/x.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)

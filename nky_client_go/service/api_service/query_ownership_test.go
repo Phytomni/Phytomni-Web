@@ -10,7 +10,7 @@ import (
 	"phytomni-server/db"
 )
 
-// setupQueryTestDB 建 s_question_agent_logs 的 in-memory SQLite,列集对齐
+// setupQueryTestDB 建 question_agent_logs 的 in-memory SQLite,列集对齐
 // resolveDialogue 读取的 id/user_name/dialogue_id/f_id。手写 DDL 理由同 agent_task_test.go。
 func setupQueryTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -18,7 +18,7 @@ func setupQueryTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.Exec(`CREATE TABLE s_question_agent_logs (
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		dialogue_id TEXT,
 		f_id INTEGER DEFAULT 0,
@@ -34,7 +34,7 @@ func setupQueryTestDB(t *testing.T) *gorm.DB {
 // (resolveDialogue 的 WHERE user_name = ? 把跨用户访问压成 ErrRecordNotFound)。
 func TestResolveDialogue_RefreshScopedToOwner(t *testing.T) {
 	gdb := setupQueryTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name) VALUES (1, 'dlg-bob', 0, 'bob')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestResolveDialogue_RefreshScopedToOwner(t *testing.T) {
 // bob 的 parent 上(同一 user_name 闸)。
 func TestResolveDialogue_ThreadScopedToOwner(t *testing.T) {
 	gdb := setupQueryTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name) VALUES (1, 'dlg-bob', 0, 'bob')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestResolveDialogue_ThreadScopedToOwner(t *testing.T) {
 // 返回 parent 的 dialogue_id 且 f_id == in.Id。
 func TestResolveDialogue_OwnerThreadsOwnParent(t *testing.T) {
 	gdb := setupQueryTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name) VALUES (1, 'dlg-alice', 0, 'alice')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}

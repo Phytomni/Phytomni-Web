@@ -16,7 +16,7 @@ import (
 // Bot/OBS call is made.
 func TestApiDownloadAnalystAgentObsImages_StoredPaths(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, download_path, image_paths, created_at) VALUES
 		(70, 'alice', '/obs/p/r1', '["/obs/p/r1/a.png","/obs/p/r2/b.png","/obs/p/r1/t.csv"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -40,7 +40,7 @@ func TestApiDownloadAnalystAgentObsImages_StoredPaths(t *testing.T) {
 // requesting user (no matching row) is rejected before any OBS/Bot call.
 func TestApiDownloadAnalystAgentObsImages_OwnershipMiss(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, download_path, image_paths, created_at) VALUES
 		(71, 'bob', '/obs/p/r9', '["/obs/p/r9/a.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -60,7 +60,7 @@ func TestApiDownloadAnalystAgentObsImages_OwnershipMiss(t *testing.T) {
 // cross-root path is rejected. Delete the containment check and this goes red.
 func TestApiDownloadAnalystAgentObsImages_ContainmentBypass(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, download_path, image_paths, created_at) VALUES
 		(72, 'alice', '/obs/p/r1', '["/obs/p/r1/a.png","/obs/p/r2/b.png","/obs/OTHER/evil.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -94,7 +94,7 @@ func TestApiDownloadAnalystAgentObsImages_ContainmentBypass(t *testing.T) {
 func TestApiDownloadAnalystAgentObsImages_FallbackListingContainment(t *testing.T) {
 	gdb := setupTestDB(t)
 	// image_paths left empty → handler must fall back to ListObsKeys.
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, download_path, image_paths, created_at) VALUES
 		(74, 'alice', '/obs/p/r1', '', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -135,7 +135,7 @@ func TestApiDownloadAnalystAgentObsImages_FallbackListingContainment(t *testing.
 // availability, so it is not separately asserted.
 func TestApiDownloadAnalystAgentObsImages_MalformedJSON(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, download_path, image_paths, created_at) VALUES
 		(73, 'alice', '/obs/p/r1', '{bad-json', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)

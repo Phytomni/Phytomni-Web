@@ -23,7 +23,7 @@ import (
 // that write then verify.
 func readStatusAnswer(t *testing.T, gdb *gorm.DB, id int64) (status, answer string) {
 	t.Helper()
-	row := gdb.Raw(`SELECT COALESCE(status,''), COALESCE(answer,'') FROM s_question_agent_logs WHERE id = ?`, id).Row()
+	row := gdb.Raw(`SELECT COALESCE(status,''), COALESCE(answer,'') FROM question_agent_logs WHERE id = ?`, id).Row()
 	if err := row.Scan(&status, &answer); err != nil {
 		t.Fatalf("read row %d: %v", id, err)
 	}
@@ -34,14 +34,14 @@ func readStatusAnswer(t *testing.T, gdb *gorm.DB, id int64) (status, answer stri
 // NULL column scans as "") — used by the reconcile gallery-write tests.
 func readGalleryCols(t *testing.T, gdb *gorm.DB, id int64) (downloadPath, imagePaths string) {
 	t.Helper()
-	row := gdb.Raw(`SELECT COALESCE(download_path,''), COALESCE(image_paths,'') FROM s_question_agent_logs WHERE id = ?`, id).Row()
+	row := gdb.Raw(`SELECT COALESCE(download_path,''), COALESCE(image_paths,'') FROM question_agent_logs WHERE id = ?`, id).Row()
 	if err := row.Scan(&downloadPath, &imagePaths); err != nil {
 		t.Fatalf("read gallery cols %d: %v", id, err)
 	}
 	return downloadPath, imagePaths
 }
 
-// setupTestDB 建一个空的 in-memory SQLite,创建 s_question_agent_logs 的最小列集,
+// setupTestDB 建一个空的 in-memory SQLite,创建 question_agent_logs 的最小列集,
 // 注册到全局 db registry,返回 *gorm.DB 供测试 seed 数据。
 //
 // 之所以手写 CREATE TABLE 而不是 AutoMigrate `QuestionAgentLog`:
@@ -61,7 +61,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if sqlDB, err := gdb.DB(); err == nil {
 		sqlDB.SetMaxOpenConns(1)
 	}
-	ddl := `CREATE TABLE s_question_agent_logs (
+	ddl := `CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		dialogue_id TEXT,
 		f_id INTEGER DEFAULT 0,
@@ -108,7 +108,7 @@ func TestApiAnswerCheck_NoHistory(t *testing.T) {
 // TestApiAnswerCheck_HappyPath 验证正常路径:1 parent + 2 children 返回 3 行,parent 在 index 0。
 func TestApiAnswerCheck_HappyPath(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, query, answer, created_at) VALUES
 		(10, 'dlg-1',  0, 'alice', 'q1', 'a1', '2026-01-01 00:00:00'),
 		(11, 'dlg-1', 10, 'alice', 'q2', 'a2', '2026-01-01 00:01:00'),
@@ -141,7 +141,7 @@ func TestApiAnswerCheck_HappyPath(t *testing.T) {
 //	→ second query WHERE f_id=0 命中 bob 的 parent(id=21, f_id=0)→ 返回 2 行(空 parent + bob 行)。
 func TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, created_at) VALUES
 		(20, 'dlg-alice', 0, 'alice', '2026-01-01 00:00:00'),
 		(21, 'dlg-bob',   0, 'bob',   '2026-01-01 00:00:00')`).Error; err != nil {
@@ -168,7 +168,7 @@ func TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers(t *testing.T) {
 // foreign row leaks into the returned list (3 rows instead of 2).
 func TestApiAnswerCheck_ScopesChildrenToOwner(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, query, answer, created_at) VALUES
 		(70, 'dlg-x',  0, 'alice', 'q1',   'a1',   '2026-01-01 00:00:00'),
 		(71, 'dlg-x', 70, 'alice', 'q2',   'a2',   '2026-01-01 00:01:00'),
@@ -197,7 +197,7 @@ func TestApiAnswerCheck_ScopesChildrenToOwner(t *testing.T) {
 // envelope, not the flat answer), and its status uppercased.
 func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
 		(30, 'dlg-k', 0, 'alice', 'q', 'stale', 'KnowledgeAgent', 'run-k', 'succeeded', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -242,7 +242,7 @@ func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
 // branch in overlayBotContent and the answer stays the stale seeded value.
 func TestApiAnswerCheck_OverlayReshapesFinalReport(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
 		(31, 'dlg-dg', 0, 'alice', 'q', 'stale', 'DeepGenomeAgent', 'run-dg', 'succeeded', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -276,7 +276,7 @@ func TestApiAnswerCheck_OverlayReshapesFinalReport(t *testing.T) {
 // failure is now also captured to Sentry for observability.
 func TestApiAnswerCheck_OverlayDegradesOnBot500(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
 		(40, 'dlg-e', 0, 'alice', 'legacy-q', 'legacy-a', 'KnowledgeAgent', 'run-e', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -325,7 +325,7 @@ func runRecordServer(t *testing.T, body string) {
 // reshaped into the {content, doc_list} JSON chat-ai parses.
 func TestSyncBotRuns_WritesReportAndStatusOnChange(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
 		(50, 'dlg-d', 'alice', 'q', 'server任务创建成功：t1', 'DeepGenomeAgent', 'run-d', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -352,7 +352,7 @@ func TestSyncBotRuns_WritesReportAndStatusOnChange(t *testing.T) {
 // WHERE status='RUNNING' poll set). The whole row stays untouched.
 func TestSyncBotRuns_SkipsBlankStatus(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
 		(51, 'dlg-e', 'alice', 'q', 'prior', 'DeepGenomeAgent', 'run-e', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -371,7 +371,7 @@ func TestSyncBotRuns_SkipsBlankStatus(t *testing.T) {
 // a no-op and never touches the row (or panics on a nil client).
 func TestSyncBotRuns_DisabledIsNoOp(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, tool_name, bot_run_id, status, created_at) VALUES
 		(52, 'dlg-f', 'alice', 'q', 'DeepGenomeAgent', 'run-f', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -393,7 +393,7 @@ func TestSyncBotRuns_DisabledIsNoOp(t *testing.T) {
 // additionally flip the row to SUCCEEDED, giving a second red signal.
 func TestSyncBotRuns_SkipsEmptyRunID(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, tool_name, bot_run_id, status, created_at) VALUES
 		(53, 'dlg-g', 'alice', 'q', 'DeepGenomeAgent', '', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -424,7 +424,7 @@ func TestSyncBotRuns_SkipsEmptyRunID(t *testing.T) {
 // columns populated from result.artifacts.
 func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_question_agent_logs
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
 		(54, 'dlg-a', 'alice', 'q', '任务创建成功：t1', 'AnalystAgent', 'run-a', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)

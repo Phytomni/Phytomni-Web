@@ -16,7 +16,7 @@ import (
 	"phytomni-server/utils/errs"
 )
 
-// setupUserTestDB 建一个空的 in-memory SQLite,手写 s_user 最小列集并注册到全局 db
+// setupUserTestDB 建一个空的 in-memory SQLite,手写 users 最小列集并注册到全局 db
 // registry。手写 CREATE TABLE(而非 AutoMigrate User)的理由同 agent_task_test.go:
 // User 的 first_login_status 带 MySQL 专有 `type:enum` GORM tag,SQLite AutoMigrate
 // 不识别;这里只列 GetUserInfo / UnlockUser 实际读写的列。
@@ -26,7 +26,7 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	ddl := `CREATE TABLE s_user (
+	ddl := `CREATE TABLE users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		email TEXT,
 		password TEXT,
@@ -56,7 +56,7 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 // 没守护时,误改阈值/锁定窗口不会被任何测试发现。
 func TestGetUserInfo_LockoutOnFifthFailure(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user
+	if err := gdb.Exec(`INSERT INTO users
 		(id, email, password, code, login_failed_count) VALUES
 		(1, 'alice@x.com', ?, 'user', 4)`, utils.MD5String("goodpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -72,7 +72,7 @@ func TestGetUserInfo_LockoutOnFifthFailure(t *testing.T) {
 		t.Fatalf("expected *errs.LockedError on 5th failure, got %T (%v)", apiErr, apiErr)
 	}
 	var lockedUntil *time.Time
-	if err := gdb.Raw(`SELECT locked_until FROM s_user WHERE id = 1`).Scan(&lockedUntil).Error; err != nil {
+	if err := gdb.Raw(`SELECT locked_until FROM users WHERE id = 1`).Scan(&lockedUntil).Error; err != nil {
 		t.Fatalf("read locked_until: %v", err)
 	}
 	if lockedUntil == nil || !lockedUntil.After(time.Now()) {
@@ -85,7 +85,7 @@ func TestGetUserInfo_LockoutOnFifthFailure(t *testing.T) {
 func TestGetUserInfo_RejectsWhileLocked(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	future := time.Now().Add(10 * time.Minute)
-	if err := gdb.Exec(`INSERT INTO s_user
+	if err := gdb.Exec(`INSERT INTO users
 		(id, email, password, code, locked_until) VALUES
 		(1, 'alice@x.com', ?, 'user', ?)`, utils.MD5String("goodpass"), future).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -106,7 +106,7 @@ func TestGetUserInfo_RejectsWhileLocked(t *testing.T) {
 func TestGetUserInfo_PasswordExpiryWarning(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	old := time.Now().Add(-91 * 24 * time.Hour)
-	if err := gdb.Exec(`INSERT INTO s_user
+	if err := gdb.Exec(`INSERT INTO users
 		(id, email, password, code, password_change_at) VALUES
 		(1, 'alice@x.com', ?, 'user', ?)`, utils.MD5String("goodpass"), old).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -130,7 +130,7 @@ func TestGetUserInfo_PasswordExpiryWarning(t *testing.T) {
 func TestGetUserInfo_SuccessResetsFailureCount(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	recent := time.Now().Add(-1 * time.Hour)
-	if err := gdb.Exec(`INSERT INTO s_user
+	if err := gdb.Exec(`INSERT INTO users
 		(id, email, password, code, password_change_at, login_failed_count) VALUES
 		(1, 'alice@x.com', ?, 'user', ?, 3)`, utils.MD5String("goodpass"), recent).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -142,7 +142,7 @@ func TestGetUserInfo_SuccessResetsFailureCount(t *testing.T) {
 		t.Fatalf("expected success, got count=%d apiErr=%v", count, apiErr)
 	}
 	var failed int
-	if err := gdb.Raw(`SELECT login_failed_count FROM s_user WHERE id = 1`).Scan(&failed).Error; err != nil {
+	if err := gdb.Raw(`SELECT login_failed_count FROM users WHERE id = 1`).Scan(&failed).Error; err != nil {
 		t.Fatalf("read login_failed_count: %v", err)
 	}
 	if failed != 0 {
@@ -155,10 +155,10 @@ func TestGetUserInfo_SuccessResetsFailureCount(t *testing.T) {
 func TestApiUnlockUser_RejectsNonAdmin(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	future := time.Now().Add(10 * time.Minute)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, code) VALUES (1, 'op@x.com', 'user')`).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES (1, 'op@x.com', 'user')`).Error; err != nil {
 		t.Fatalf("seed operator: %v", err)
 	}
-	if err := gdb.Exec(`INSERT INTO s_user
+	if err := gdb.Exec(`INSERT INTO users
 		(id, email, code, locked_until, login_failed_count) VALUES
 		(2, 'victim@x.com', 'user', ?, 5)`, future).Error; err != nil {
 		t.Fatalf("seed target: %v", err)
@@ -170,7 +170,7 @@ func TestApiUnlockUser_RejectsNonAdmin(t *testing.T) {
 		t.Fatal("expected non-admin operator to be rejected, got nil error")
 	}
 	var lockedUntil *time.Time
-	if e := gdb.Raw(`SELECT locked_until FROM s_user WHERE id = 2`).Scan(&lockedUntil).Error; e != nil {
+	if e := gdb.Raw(`SELECT locked_until FROM users WHERE id = 2`).Scan(&lockedUntil).Error; e != nil {
 		t.Fatalf("read locked_until: %v", e)
 	}
 	if lockedUntil == nil {
@@ -183,10 +183,10 @@ func TestApiUnlockUser_RejectsNonAdmin(t *testing.T) {
 func TestApiUnlockUser_AdminUnlocks(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	future := time.Now().Add(10 * time.Minute)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, code) VALUES (1, 'admin@x.com', 'admin')`).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES (1, 'admin@x.com', 'admin')`).Error; err != nil {
 		t.Fatalf("seed operator: %v", err)
 	}
-	if err := gdb.Exec(`INSERT INTO s_user
+	if err := gdb.Exec(`INSERT INTO users
 		(id, email, code, locked_until, login_failed_count) VALUES
 		(2, 'victim@x.com', 'user', ?, 5)`, future).Error; err != nil {
 		t.Fatalf("seed target: %v", err)
@@ -198,7 +198,7 @@ func TestApiUnlockUser_AdminUnlocks(t *testing.T) {
 	}
 	var lockedUntil *time.Time
 	var failed int
-	if e := gdb.Raw(`SELECT locked_until, login_failed_count FROM s_user WHERE id = 2`).
+	if e := gdb.Raw(`SELECT locked_until, login_failed_count FROM users WHERE id = 2`).
 		Row().Scan(&lockedUntil, &failed); e != nil {
 		t.Fatalf("read target: %v", e)
 	}
@@ -214,10 +214,10 @@ func TestApiUnlockUser_AdminUnlocks(t *testing.T) {
 func TestApiUnlockUser_SuperAdminUnlocks(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	future := time.Now().Add(10 * time.Minute)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, code) VALUES (1, 'root@x.com', 'super_admin')`).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES (1, 'root@x.com', 'super_admin')`).Error; err != nil {
 		t.Fatalf("seed operator: %v", err)
 	}
-	if err := gdb.Exec(`INSERT INTO s_user
+	if err := gdb.Exec(`INSERT INTO users
 		(id, email, code, locked_until) VALUES (2, 'victim@x.com', 'user', ?)`, future).Error; err != nil {
 		t.Fatalf("seed target: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestApiUnlockUser_SuperAdminUnlocks(t *testing.T) {
 func TestGetUserInfo_BcryptRowVerifies(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	hash, _ := utils.HashPassword("goodpass")
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, hash).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, hash).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
@@ -243,7 +243,7 @@ func TestGetUserInfo_BcryptRowVerifies(t *testing.T) {
 
 func TestGetUserInfo_LegacyMD5UpgradesOnLogin(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("goodpass")).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("goodpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
@@ -252,7 +252,7 @@ func TestGetUserInfo_LegacyMD5UpgradesOnLogin(t *testing.T) {
 		t.Fatalf("md5 login: want count=1 err=nil, got count=%d err=%v", count, apiErr)
 	}
 	var stored string
-	if err := gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored).Error; err != nil {
+	if err := gdb.Raw(`SELECT password FROM users WHERE id = 1`).Scan(&stored).Error; err != nil {
 		t.Fatalf("read back: %v", err)
 	}
 	if !strings.HasPrefix(stored, "$2") {
@@ -267,7 +267,7 @@ func TestGetUserInfo_UpgradeFailureDoesNotFailLogin(t *testing.T) {
 	defer viper.Set("bcrypt_cost", 0)
 
 	gdb := setupUserTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("goodpass")).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("goodpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
@@ -276,7 +276,7 @@ func TestGetUserInfo_UpgradeFailureDoesNotFailLogin(t *testing.T) {
 		t.Fatalf("login must succeed despite upgrade failure, got count=%d err=%v", count, apiErr)
 	}
 	var stored string
-	gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored)
+	gdb.Raw(`SELECT password FROM users WHERE id = 1`).Scan(&stored)
 	if stored != utils.MD5String("goodpass") {
 		t.Errorf("row should stay on MD5 when upgrade hash fails, got %q", stored)
 	}
@@ -284,7 +284,7 @@ func TestGetUserInfo_UpgradeFailureDoesNotFailLogin(t *testing.T) {
 
 func TestApiModifyPassword_LegacyOldVerifiesNewIsBcrypt(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("oldpass")).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("oldpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
@@ -292,7 +292,7 @@ func TestApiModifyPassword_LegacyOldVerifiesNewIsBcrypt(t *testing.T) {
 		t.Fatalf("change with correct old (md5) should succeed, got %v", err)
 	}
 	var stored string
-	gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored)
+	gdb.Raw(`SELECT password FROM users WHERE id = 1`).Scan(&stored)
 	if !strings.HasPrefix(stored, "$2") {
 		t.Errorf("new password should be stored as bcrypt, got %q", stored)
 	}
@@ -304,7 +304,7 @@ func TestApiModifyPassword_LegacyOldVerifiesNewIsBcrypt(t *testing.T) {
 
 func TestApiModifyPassword_WrongOldRejected(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("oldpass")).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("oldpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
@@ -329,7 +329,7 @@ func TestApiUserRegister_StoresBcrypt(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	var stored string
-	gdb.Raw(`SELECT password FROM s_user WHERE email = 'new@x.com'`).Scan(&stored)
+	gdb.Raw(`SELECT password FROM users WHERE email = 'new@x.com'`).Scan(&stored)
 	if !strings.HasPrefix(stored, "$2") {
 		t.Errorf("self-register should store bcrypt, got %q", stored)
 	}
@@ -342,7 +342,7 @@ func TestRegisterAddUser_StoresBcrypt(t *testing.T) {
 		t.Fatalf("admin create: %v", err)
 	}
 	var stored string
-	gdb.Raw(`SELECT password FROM s_user WHERE email = 'adm@x.com'`).Scan(&stored)
+	gdb.Raw(`SELECT password FROM users WHERE email = 'adm@x.com'`).Scan(&stored)
 	if !strings.HasPrefix(stored, "$2") {
 		t.Errorf("admin-create should store bcrypt, got %q", stored)
 	}
@@ -350,7 +350,7 @@ func TestRegisterAddUser_StoresBcrypt(t *testing.T) {
 
 func TestUpdateUserPassWord_StoresBcrypt(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("old")).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("old")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
@@ -358,7 +358,7 @@ func TestUpdateUserPassWord_StoresBcrypt(t *testing.T) {
 		t.Fatal("admin reset returned false")
 	}
 	var stored string
-	gdb.Raw(`SELECT password FROM s_user WHERE id = 7`).Scan(&stored)
+	gdb.Raw(`SELECT password FROM users WHERE id = 7`).Scan(&stored)
 	if !strings.HasPrefix(stored, "$2") {
 		t.Errorf("admin reset should store bcrypt, got %q", stored)
 	}
@@ -372,7 +372,7 @@ func TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	// 固定一个非零的历史 password_change_at(40 天前,未过 90 天,不触发警告也不为 NULL)。
 	changedAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code, password_change_at) VALUES (1, 'a@x.com', ?, 'user', ?)`,
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code, password_change_at) VALUES (1, 'a@x.com', ?, 'user', ?)`,
 		utils.MD5String("goodpass"), changedAt).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt(t *testing.T) {
 
 	var stored string
 	var gotChangedAt *time.Time
-	if err := gdb.Raw(`SELECT password, password_change_at FROM s_user WHERE id = 1`).Row().Scan(&stored, &gotChangedAt); err != nil {
+	if err := gdb.Raw(`SELECT password, password_change_at FROM users WHERE id = 1`).Row().Scan(&stored, &gotChangedAt); err != nil {
 		t.Fatalf("read back: %v", err)
 	}
 	if !strings.HasPrefix(stored, "$2") {
@@ -399,11 +399,11 @@ func TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt(t *testing.T) {
 // TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite 钉死 design §274 的并发 no-clobber:
 // 升级用守卫 CAS(WHERE id=? AND password=登录起始读到的 MD5 值)。若另一路并发写在
 // read 与 upgrade 之间已把行改成新 bcrypt,本路 CAS 必须 RowsAffected==0、不覆盖那个新值。
-// 用 GORM After-query 回调 + sync.Once 在 s_user 被查出后、升级前注入一次竞争 bcrypt 写。
+// 用 GORM After-query 回调 + sync.Once 在 users 被查出后、升级前注入一次竞争 bcrypt 写。
 // mutation:把升级 Where 改成只 "id = ?"(去掉 AND password=) → 本测试 RED(竞争写被覆盖)。
 func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`,
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`,
 		utils.MD5String("goodpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -414,13 +414,13 @@ func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
 	var once sync.Once
 	cbName := "test_inject_concurrent_pw_write"
 	if err := gdb.Callback().Query().After("gorm:query").Register(cbName, func(tx *gorm.DB) {
-		// 只在查询 s_user 时、且仅一次:模拟竞争写恰好落在 login 的 read 与 upgrade 之间。
-		if tx.Statement == nil || tx.Statement.Table != "s_user" {
+		// 只在查询 users 时、且仅一次:模拟竞争写恰好落在 login 的 read 与 upgrade 之间。
+		if tx.Statement == nil || tx.Statement.Table != "users" {
 			return
 		}
 		once.Do(func() {
 			// 用裸 SQL 直写,避免再次触发本回调造成递归。
-			gdb.Exec(`UPDATE s_user SET password = ? WHERE id = 1`, racingHash)
+			gdb.Exec(`UPDATE users SET password = ? WHERE id = 1`, racingHash)
 		})
 	}); err != nil {
 		t.Fatalf("register callback: %v", err)
@@ -434,7 +434,7 @@ func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
 	}
 
 	var stored string
-	gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored)
+	gdb.Raw(`SELECT password FROM users WHERE id = 1`).Scan(&stored)
 	if stored != racingHash {
 		t.Errorf("guarded CAS must not clobber the concurrent write: want racing hash %q, got %q", racingHash, stored)
 	}
@@ -445,7 +445,7 @@ func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
 func TestApiModifyPassword_BcryptOldVerifies(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	oldHash, _ := utils.HashPassword("oldpass")
-	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, oldHash).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, oldHash).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
@@ -453,7 +453,7 @@ func TestApiModifyPassword_BcryptOldVerifies(t *testing.T) {
 		t.Fatalf("change with correct bcrypt old password should succeed, got %v", err)
 	}
 	var stored string
-	gdb.Raw(`SELECT password FROM s_user WHERE id = 1`).Scan(&stored)
+	gdb.Raw(`SELECT password FROM users WHERE id = 1`).Scan(&stored)
 	if !strings.HasPrefix(stored, "$2") {
 		t.Errorf("new password should be stored as bcrypt, got %q", stored)
 	}
@@ -480,7 +480,7 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 			t.Error("self-register must fail when hashing errors")
 		}
 		var n int64
-		gdb.Raw(`SELECT COUNT(*) FROM s_user WHERE email = 'new@x.com'`).Scan(&n)
+		gdb.Raw(`SELECT COUNT(*) FROM users WHERE email = 'new@x.com'`).Scan(&n)
 		if n != 0 {
 			t.Errorf("no row must be written on hash error, found %d", n)
 		}
@@ -493,7 +493,7 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 			t.Errorf("admin-create must fail-closed on hash error, got ok=%v err=%v", ok, err)
 		}
 		var n int64
-		gdb.Raw(`SELECT COUNT(*) FROM s_user WHERE email = 'adm@x.com'`).Scan(&n)
+		gdb.Raw(`SELECT COUNT(*) FROM users WHERE email = 'adm@x.com'`).Scan(&n)
 		if n != 0 {
 			t.Errorf("no row must be written on hash error, found %d", n)
 		}
@@ -502,7 +502,7 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 	t.Run("UpdateUserPassWord", func(t *testing.T) {
 		gdb := setupUserTestDB(t)
 		// seed 一个已知 MD5,断言重置失败后密码原样不变(没被空哈希覆盖)。
-		if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("orig")).Error; err != nil {
+		if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("orig")).Error; err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 		ps := NewService()
@@ -510,7 +510,7 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 			t.Error("admin reset must return false on hash error")
 		}
 		var stored string
-		gdb.Raw(`SELECT password FROM s_user WHERE id = 7`).Scan(&stored)
+		gdb.Raw(`SELECT password FROM users WHERE id = 7`).Scan(&stored)
 		if stored != utils.MD5String("orig") {
 			t.Errorf("password must stay unchanged on hash error, got %q", stored)
 		}
