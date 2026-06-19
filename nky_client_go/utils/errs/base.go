@@ -2,7 +2,7 @@ package errs
 
 import (
 	"net/http"
-	"nky_client_go/server/api"
+	"nky_client_go/common"
 )
 
 const SuccessCode = 10000
@@ -50,24 +50,9 @@ func NewLockedError(message string) *LockedError {
 	return &LockedError{Err: NewError(message)}
 }
 
-func ErrResp(err api.Error) (httpCode int, rsp Response) {
-	httpCode = err.HttpCode()
-	rsp = Response{
-		Code: err.Code(),
-		Msg:  err.Error(),
-	}
-	return
-}
-
-type Response struct {
-	Code int         `json:"code" validate:"required"`    // 响应码
-	Msg  string      `json:"message" validate:"required"` // 响应消息(JSON tag = message; Go field name remains Msg for caller compatibility)
-	Data interface{} `json:"data"`                        // 响应数据
-}
-
-func SucResp(data interface{}) (resCode int, res Response) {
+func SucResp(data interface{}) (resCode int, res common.Response) {
 	resCode = 200
-	res = Response{
+	res = common.Response{
 		Code: resCode,
 		Msg:  "success",
 		Data: data,

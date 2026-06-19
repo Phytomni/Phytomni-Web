@@ -5,7 +5,6 @@ import (
 	"log"
 	"nky_client_go/common"
 	"nky_client_go/model"
-	"nky_client_go/server/api"
 	"nky_client_go/utils"
 	"nky_client_go/utils/errs"
 	"time"
@@ -115,7 +114,7 @@ func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id i
 
 }
 
-func (ps *Service) GetUserInfo(ctx context.Context, email string, password string) (userInfo common.UserResponse, count int64, apiErr api.Error) {
+func (ps *Service) GetUserInfo(ctx context.Context, email string, password string) (userInfo common.UserResponse, count int64, apiErr common.Error) {
 	var user model.SUser
 	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email =?", email)
 

@@ -44,3 +44,9 @@ func ReturnResponse(code int, data interface{}, msg string, c *gin.Context) {
 		data,
 	})
 }
+
+type Error interface {
+	Code() int
+	HttpCode() int
+	Error() string
+}
