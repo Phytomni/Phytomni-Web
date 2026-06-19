@@ -1,3 +1,5 @@
+import { escapeHtml } from "@/utils/sanitize-markup";
+
 // 处理 Markdown 文件中的图片路径
 export const processImagePaths = (content: string, filePath: string): string => {
   // 获取文件所在目录
@@ -77,6 +79,15 @@ export const formatLogContentWithColors = (logContent: string) => {
   // converts terminal escape sequences to HTML tags. no-control-regex is
   // meant to catch accidental control chars in human regex, not ANSI
   // parsing, so we disable it for the block only.
+
+  // XSS 防护:日志正文是 analyst-agent 输出(经后端/EIHealth/Bot 中转,
+  // agent/tool/RAG 可影响),最终经 index.vue 的 v-html 注入 DOM。在 ANSI→HTML
+  // 转换之前先 HTML 转义,把正文里的恶意 HTML(<img onerror>、<script> 等)
+  // 中和成实体。ANSI 控制字符(ESC)与 [31m 等不在 escapeHtml 编码的
+  // & < > " ' 之列,故转义后原样保留,下面的 ANSI 正则仍能匹配 —— 着色/加粗/
+  // 下划线标签(本函数自身插入的可信字面量)照常生成,合法着色输出渲染不变。
+  processedContent = escapeHtml(processedContent);
+
   /* eslint-disable no-control-regex */
   // 转换ANSI颜色代码为HTML样式
   // 红色文本
