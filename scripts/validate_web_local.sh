@@ -4,17 +4,17 @@
 # Runs every check listed in .claude/plans/production-backport.md §"全量门禁清单":
 #   G-1  staged/unstaged secret scan
 #   G0   git diff whitespace check
-#   G1   chat-ai vue-tsc --noEmit
-#   G2   chat-ai eslint (read-only, no --fix)
-#   G3   chat-ai vite build
-#   G4   nky_client_go go mod tidy
-#   G5   nky_client_go gofmt -l (must be empty)
-#   G6   nky_client_go go vet
-#   G7   nky_client_go go build
-#   G7.5 nky_client_go go test ./... (guards gateway + i18n unit tests)
-#   G11  chat-ai SET_LOGIN_STATUS invariant — definition only in stores/user.ts,
+#   G1   apps/web vue-tsc --noEmit
+#   G2   apps/web eslint (read-only, no --fix)
+#   G3   apps/web vite build
+#   G4   apps/server go mod tidy
+#   G5   apps/server gofmt -l (must be empty)
+#   G6   apps/server go vet
+#   G7   apps/server go build
+#   G7.5 apps/server go test ./... (guards gateway + i18n unit tests)
+#   G11  apps/web SET_LOGIN_STATUS invariant — definition only in stores/user.ts,
 #        call only in views/login/index.vue
-#   G12  chat-ai vitest run + coverage threshold
+#   G12  apps/web vitest run + coverage threshold
 #
 # Exit 0 means safe to commit. Any failure aborts via `set -e`.
 
@@ -75,51 +75,51 @@ note "no whitespace errors"
 # ------------------------------------------------------------------
 # Sub-project gates
 # ------------------------------------------------------------------
-step "G1 chat-ai: vue-tsc --noEmit"
-( cd chat-ai && npm run --silent type-check )
+step "G1 apps/web: vue-tsc --noEmit"
+( cd apps/web && npm run --silent type-check )
 
-step "G2 chat-ai: eslint (read-only)"
-( cd chat-ai && npx --no-install eslint . \
+step "G2 apps/web: eslint (read-only)"
+( cd apps/web && npx --no-install eslint . \
   --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts \
   --ignore-path .gitignore )
 
-step "G3 chat-ai: vite build"
-( cd chat-ai && npm run --silent build )
+step "G3 apps/web: vite build"
+( cd apps/web && npm run --silent build )
 
-step "G4 nky_client_go: go mod tidy"
-( cd nky_client_go && go mod tidy )
-if ! git diff --quiet -- nky_client_go/go.mod nky_client_go/go.sum; then
+step "G4 apps/server: go mod tidy"
+( cd apps/server && go mod tidy )
+if ! git diff --quiet -- apps/server/go.mod apps/server/go.sum; then
   fail "G4 go mod tidy touched go.mod/go.sum; review the diff and commit it before retrying."
 fi
 
-step "G5 nky_client_go: gofmt -l"
-unformatted="$( cd nky_client_go && gofmt -l . )"
+step "G5 apps/server: gofmt -l"
+unformatted="$( cd apps/server && gofmt -l . )"
 if [ -n "$unformatted" ]; then
   printf 'gofmt -l reported:\n%s\n' "$unformatted" >&2
   fail "G5 gofmt: files above are not gofmt-clean; run 'gofmt -w' on them."
 fi
 
-step "G6 nky_client_go: go vet"
-( cd nky_client_go && go vet ./... )
+step "G6 apps/server: go vet"
+( cd apps/server && go vet ./... )
 
-step "G7 nky_client_go: go build"
-( cd nky_client_go && go build -o /tmp/phytomni-nky-main . ) && rm -f /tmp/phytomni-nky-main
+step "G7 apps/server: go build"
+( cd apps/server && go build -o /tmp/phytomni-nky-main . ) && rm -f /tmp/phytomni-nky-main
 
-step "G7.5 nky_client_go: go test"
-( cd nky_client_go && go test ./... )
+step "G7.5 apps/server: go test"
+( cd apps/server && go test ./... )
 
-step "G11 chat-ai: SET_LOGIN_STATUS invariant (definition + sole-caller + no-stray)"
-def_count="$( grep -c 'SET_LOGIN_STATUS(' chat-ai/src/stores/user.ts 2>/dev/null || echo 0 )"
-[ "$def_count" = "1" ] || fail "G11.1 SET_LOGIN_STATUS definition: expected 1 hit in chat-ai/src/stores/user.ts, got $def_count"
-call_count="$( grep -c 'SET_LOGIN_STATUS(' chat-ai/src/views/login/index.vue 2>/dev/null || echo 0 )"
-[ "$call_count" = "1" ] || fail "G11.2 SET_LOGIN_STATUS sole legal call: expected 1 hit in chat-ai/src/views/login/index.vue, got $call_count"
-stray="$( grep -rl 'SET_LOGIN_STATUS' chat-ai/src/ \
+step "G11 apps/web: SET_LOGIN_STATUS invariant (definition + sole-caller + no-stray)"
+def_count="$( grep -c 'SET_LOGIN_STATUS(' apps/web/src/stores/user.ts 2>/dev/null || echo 0 )"
+[ "$def_count" = "1" ] || fail "G11.1 SET_LOGIN_STATUS definition: expected 1 hit in apps/web/src/stores/user.ts, got $def_count"
+call_count="$( grep -c 'SET_LOGIN_STATUS(' apps/web/src/views/login/index.vue 2>/dev/null || echo 0 )"
+[ "$call_count" = "1" ] || fail "G11.2 SET_LOGIN_STATUS sole legal call: expected 1 hit in apps/web/src/views/login/index.vue, got $call_count"
+stray="$( grep -rl 'SET_LOGIN_STATUS' apps/web/src/ \
   --include='*.ts' --include='*.vue' 2>/dev/null \
-  | grep -v -E '^chat-ai/src/stores/user\.ts$|^chat-ai/src/views/login/index\.vue$' \
+  | grep -v -E '^apps/web/src/stores/user\.ts$|^apps/web/src/views/login/index\.vue$' \
   || true )"
 [ -z "$stray" ] || { printf '%s\n' "$stray" >&2; fail "G11.3 SET_LOGIN_STATUS stray caller: files above must not reference SET_LOGIN_STATUS — only stores/user.ts (definition) and views/login/index.vue (sole call) are allowed."; }
 
-step "G12 chat-ai: vitest run + coverage threshold"
-( cd chat-ai && npm run coverage )
+step "G12 apps/web: vitest run + coverage threshold"
+( cd apps/web && npm run coverage )
 
 step "validate_web_local.sh: ALL GATES PASS"

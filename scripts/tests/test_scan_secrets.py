@@ -120,8 +120,8 @@ def test_should_skip_path_true(path: str) -> None:
     [
         "src/main.py",
         "scripts/scan_secrets.py",
-        "chat-ai/src/views/chat/index.vue",
-        "nky_client_go/main.go",
+        "apps/web/src/views/chat/index.vue",
+        "apps/server/main.go",
         "docs/README.md",
     ],
 )
@@ -342,7 +342,7 @@ def test_scan_line_pragma_marker_dropped_in_production_path() -> None:
     contract.
     """
     line = 'password = "q9X7m2k4nR8tP1bL5wF"  # pragma: allowlist secret'
-    findings = scan_line("test", "chat-ai/src/utils/request.ts", 1, line)
+    findings = scan_line("test", "apps/web/src/utils/request.ts", 1, line)
     assert len(findings) == 1, "production-path pragma must not suppress rules"
     assert findings[0].rule == "secret-assignment"
 
@@ -356,7 +356,7 @@ def test_scan_line_nosec_marker_honored_in_test_path() -> None:
 def test_scan_line_nosec_marker_dropped_in_production_path() -> None:
     """`nosec` outside allowed paths is silently ignored — scope-guard parity."""
     line = 'password = "q9X7m2k4nR8tP1bL5wF"  # nosec'  # pragma: allowlist secret
-    findings = scan_line("test", "nky_client_go/main.go", 1, line)
+    findings = scan_line("test", "apps/server/main.go", 1, line)
     assert findings, "nosec must not silence rules in production source"
 
 
@@ -386,12 +386,12 @@ def test_scan_line_pragma_honored_at_explicit_exception() -> None:
         ("app.yml.example", True),
         ("config.json.template", True),
         ("settings.toml.sample", True),
-        ("chat-ai/.env.dev.example", True),
+        ("apps/web/.env.dev.example", True),
         # Explicit exception entry (TW-003).
         ("nky_client_python/nky_client.py", True),
         # Production paths — pragma rejected.
-        ("nky_client_go/main.go", False),
-        ("chat-ai/src/utils/request.ts", False),
+        ("apps/server/main.go", False),
+        ("apps/web/src/utils/request.ts", False),
         ("scripts/scan_secrets.py", False),  # not under scripts/tests/
         ("scripts/install_git_hooks.sh", False),
         ("docs/PROJECT_CONTEXT.md", False),
