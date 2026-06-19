@@ -29,6 +29,15 @@ export default defineConfig({
       // axios wrappers and gating against the full surface would force ~30
       // identical assertion templates). When reaction-related tests grow
       // (TW-D10 / TW-D8 territory), include can expand to cover chat.ts.
+      // The list below is the curated set whose specs meet all four thresholds
+      // (lines/stmts/funcs >=80, branch >=75) — verified by measurement. The P1
+      // split added many composables/utils; the ones whose specs lock invariants
+      // but do NOT yet reach 80% line coverage (the giant async handlers
+      // useSendMessage/useSelectChat/useRefreshMessage, useChatStates/useLogView/
+      // useTutorial, the DeepGenome parser deep-genome-markdown.ts + its
+      // viewer/toc composables, chat/utils format.ts + agent-log.ts, and
+      // useImageZoomPan which still has no spec) are intentionally OUT until
+      // their coverage is expanded — their specs still run in `test:run`.
       include: [
         "src/utils/auth-redirect.ts",
         "src/utils/auth.ts",
@@ -39,6 +48,17 @@ export default defineConfig({
         "src/components/LangSwitch.vue",
         "src/permission.ts",
         "src/views/forgot-password/index.vue",
+        "src/utils/citation.ts",
+        "src/utils/markdown-inline.ts",
+        "src/utils/reference-renderer.ts",
+        "src/views/chat/utils/message-parse.ts",
+        "src/views/chat/composables/useChatHistoryGroups.ts",
+        "src/views/chat/composables/useSidebarResponsive.ts",
+        "src/views/chat/composables/useSidebarAgents.ts",
+        "src/views/chat/composables/useReactions.ts",
+        "src/views/chat/composables/useAgentImages.ts",
+        "src/views/chat/composables/useComposer.ts",
+        "src/views/chat/composables/useAgentsPanel.ts",
       ],
       thresholds: {
         lines: 80,
