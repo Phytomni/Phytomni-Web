@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
-	customI18n "nky_client_go/common/i18n"
+	"nky_client_go/common/i18n"
 	"nky_client_go/db"
 	"nky_client_go/utils"
 )
@@ -129,7 +129,7 @@ func TestApiGetUserProfile_MissingUsernameReturns401(t *testing.T) {
 }
 
 // newRegisterPostContext 构造一个带 x-www-form-urlencoded body 的 POST
-// *gin.Context,并绑定 Localize 中间件,使 customI18n.T 能解析键。
+// *gin.Context,并绑定 Localize 中间件,使 i18n.T 能解析键。
 func newRegisterPostContext(t *testing.T, form url.Values) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -138,7 +138,7 @@ func newRegisterPostContext(t *testing.T, form url.Values) (*gin.Context, *httpt
 	req := httptest.NewRequest(http.MethodPost, "/v1/user/register", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c.Request = req
-	customI18n.Localize()(c)
+	i18n.Localize()(c)
 	return c, w
 }
 

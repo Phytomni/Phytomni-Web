@@ -19,7 +19,7 @@ import (
 )
 
 // huaweiIAMAuthBody returns the IAM password-auth body used by the
-// FreshGA cron's GetTaskStatus EIHealth poll. Every literal is sourced
+// TaskReconciler cron's GetTaskStatus EIHealth poll. Every literal is sourced
 // from viper so operators rotate creds via config/app.yml without
 // recompiling. Missing keys yield empty strings, which Huawei IAM
 // rejects with 400 — surfacing misconfiguration loud rather than silent.
@@ -64,7 +64,7 @@ type TaskStatusResponse struct {
 	Status string `json:"status"`
 }
 
-// GetTaskStatus is invoked from the FreshGA cron and from on-demand
+// GetTaskStatus is invoked from the TaskReconciler cron and from on-demand
 // handler paths. It only reads from taskIds + the viper-backed Huawei
 // IAM/EIHealth helpers — there is no *gin.Context state to thread
 // through, so the parameter was removed to make the cron call site

@@ -2,7 +2,7 @@ package api_handler
 
 import (
 	"net/http"
-	customI18n "nky_client_go/common/i18n"
+	"nky_client_go/common/i18n"
 	rxLog "nky_client_go/log"
 	"nky_client_go/middleware"
 	"nky_client_go/model"
@@ -44,7 +44,7 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 		// 已本地化的文案,而非旧的 "error" 键(否则本地化文案被通用回落吞掉)。
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": customI18n.T(ctx, "register.credentials_required"),
+			"message": i18n.T(ctx, "register.credentials_required"),
 		})
 		return
 	}
@@ -53,7 +53,7 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 	if len(password) < 8 || len(password) > 16 {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": customI18n.T(ctx, "register.password_too_short"),
+			"message": i18n.T(ctx, "register.password_too_short"),
 		})
 		return
 	}
@@ -62,21 +62,21 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 	if !utils.ValidatePasswordComplexity(password) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": customI18n.T(ctx, "register.password_complexity"),
+			"message": i18n.T(ctx, "register.password_complexity"),
 		})
 		return
 	}
 
 	// 检查用户是否已存在
 	if exists := ph.service.CheckEmailExists(ctx, email); exists {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": customI18n.T(ctx, "register.username_exists"), "token": ""})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "register.username_exists"), "token": ""})
 		return
 	}
 
 	if !govalidator.IsEmail(email) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": customI18n.T(ctx, "register.email_invalid_format"),
+			"message": i18n.T(ctx, "register.email_invalid_format"),
 		})
 		return
 	}
@@ -170,7 +170,7 @@ func (ph *Handler) ModifyPassword(ctx *gin.Context) {
 	newPassword := ctx.PostForm("new_password")
 
 	if len(newPassword) < 8 || len(newPassword) > 16 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusInternalServerError, "message": customI18n.T(ctx, "modify_password.password_format_invalid")})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "modify_password.password_format_invalid")})
 		return
 	}
 
@@ -178,7 +178,7 @@ func (ph *Handler) ModifyPassword(ctx *gin.Context) {
 	if !utils.ValidatePasswordComplexity(newPassword) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": customI18n.T(ctx, "modify_password.new_password_complexity"),
+			"message": i18n.T(ctx, "modify_password.new_password_complexity"),
 		})
 		return
 	}
@@ -186,7 +186,7 @@ func (ph *Handler) ModifyPassword(ctx *gin.Context) {
 	if password == newPassword {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": customI18n.T(ctx, "modify_password.new_password_same_as_old"),
+			"message": i18n.T(ctx, "modify_password.new_password_same_as_old"),
 		})
 		return
 	}
@@ -208,7 +208,7 @@ func (ph *Handler) ModifyPassword(ctx *gin.Context) {
 			"username", name, "err", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": customI18n.T(ctx, "modify_password.flag_update_failed"),
+			"message": i18n.T(ctx, "modify_password.flag_update_failed"),
 		})
 		return
 	}
@@ -222,26 +222,26 @@ func (ph *Handler) Login(ctx *gin.Context) {
 
 	// 检查用户是否已存在
 	if exists := ph.service.CheckEmailExists(ctx, email); !exists {
-		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": customI18n.T(ctx, "auth.user_not_found")})
+		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "auth.user_not_found")})
 		return
 	}
 
 	userRes, count, err := ph.service.GetUserInfo(ctx, email, password)
 	if count == 0 {
 		// Service returns translation keys as error messages (e.g. "auth.account_locked").
-		// Translate via customI18n.T before writing JSON; missing-key fallback returns
+		// Translate via i18n.T before writing JSON; missing-key fallback returns
 		// the key text + warning log so a typo degrades visibly but doesn't 500.
 		if lockedErr, ok := err.(*errs.LockedError); ok {
 			ctx.JSON(http.StatusConflict, gin.H{
 				"code":    http.StatusInternalServerError,
-				"message": customI18n.T(ctx, lockedErr.Error()),
+				"message": i18n.T(ctx, lockedErr.Error()),
 				"locked":  true,
 			})
 			return
 		}
-		msg := customI18n.T(ctx, "auth.invalid_credentials")
+		msg := i18n.T(ctx, "auth.invalid_credentials")
 		if err != nil {
-			msg = customI18n.T(ctx, err.Error())
+			msg = i18n.T(ctx, err.Error())
 		}
 		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": msg})
 		return
@@ -257,13 +257,13 @@ func (ph *Handler) Login(ctx *gin.Context) {
 	// 登录成功后直接生成token
 	token, tokenErr := middleware.GenerateToken(email)
 	if tokenErr != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": customI18n.T(ctx, "auth.token_generation_failed"), "token": ""})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "auth.token_generation_failed"), "token": ""})
 		return
 	}
 
 	// 校验当前密码复杂度，如果过低则添加提示
 	if userRes.PasswordWarning == "" && !utils.ValidatePasswordComplexity(password) {
-		userRes.PasswordWarning = customI18n.T(ctx, "password_warning.weak_complexity")
+		userRes.PasswordWarning = i18n.T(ctx, "password_warning.weak_complexity")
 	}
 
 	userData := struct {

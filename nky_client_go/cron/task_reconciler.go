@@ -5,21 +5,21 @@ import (
 	rxCron "nky_client_go/cron/base"
 	rxLog "nky_client_go/log"
 	"nky_client_go/model"
-	servicega "nky_client_go/service/api_service"
+	"nky_client_go/service/api_service"
 )
 
-type FreshGA struct {
+type TaskReconciler struct {
 }
 
-func NewFreshGA() rxCron.Cron {
-	return &FreshGA{}
+func NewTaskReconciler() rxCron.Cron {
+	return &TaskReconciler{}
 }
 
-func (ts *FreshGA) Spec() string {
+func (r *TaskReconciler) Spec() string {
 	return "*/10 * * * *"
 }
 
-func (ts *FreshGA) Run() {
+func (r *TaskReconciler) Run() {
 	fmt.Println("分析结果每10分钟查询一次")
 	var questionAgentList []model.SQuestionAgentLog
 	err := model.Default().Model(&model.SQuestionAgentLog{}).Debug().Where("status = ?", "RUNNING").Find(&questionAgentList).Error
@@ -33,9 +33,9 @@ func (ts *FreshGA) Run() {
 	// keep the legacy IAM poll; deep_genome rows reconcile against Bot run state.
 	eiHealthTaskIds, botRows := partitionRunningRows(questionAgentList)
 	if len(eiHealthTaskIds) > 0 {
-		servicega.GetTaskStatus(eiHealthTaskIds)
+		api_service.GetTaskStatus(eiHealthTaskIds)
 	}
-	servicega.SyncBotRuns(botRows)
+	api_service.SyncBotRuns(botRows)
 }
 
 // partitionRunningRows splits RUNNING rows by their backing compute platform:

@@ -13,7 +13,7 @@ func DoCron() error {
 	freshTokenList := make([]rxCron.Cron, 0)
 	// NewFreshToken / NewFreshGALog were removed alongside their unregistered
 	// type files — see git history of cron/token.go and cron/ga_log.go.
-	freshTokenList = append(freshTokenList, NewFreshGA())
+	freshTokenList = append(freshTokenList, NewTaskReconciler())
 	if err := rxCron.InitFromMinute(freshTokenList); err != nil {
 		return err
 	}

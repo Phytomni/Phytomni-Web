@@ -1,7 +1,7 @@
 package router
 
 import (
-	customI18n "nky_client_go/common/i18n"
+	"nky_client_go/common/i18n"
 	"nky_client_go/http/handler/api_handler"
 	"nky_client_go/middleware"
 
@@ -9,7 +9,7 @@ import (
 )
 
 func Api(r *gin.RouterGroup) {
-	prefixRouter := r.Group("auth").Use(customI18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
+	prefixRouter := r.Group("auth").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
 	authHandler := api_handler.NewHandler()
 	{
 		prefixRouter.POST("/user/register", authHandler.UserRegister)                   //自主注册
@@ -19,7 +19,7 @@ func Api(r *gin.RouterGroup) {
 
 	}
 
-	prefixTokenRouter := r.Group("v1").Use(customI18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
+	prefixTokenRouter := r.Group("v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	apiHandler := api_handler.NewHandler()
 	{
 		//todo 以下为新需求的使用接口
@@ -64,7 +64,7 @@ func Api(r *gin.RouterGroup) {
 	// chat-ai posts /query and /query/analyst/update_log at the root path (not
 	// under /v1). Mount them on a root group that replicates the /v1 auth chain.
 	// The gateway only serves real traffic when bot.proxy_enabled is true.
-	queryRouter := r.Group("").Use(customI18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
+	queryRouter := r.Group("").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	{
 		queryRouter.POST("/query", apiHandler.Query)                                    //对话编排,转发到 Bot
 		queryRouter.POST("/query/analyst/update_log", apiHandler.QueryAnalystUpdateLog) //异步任务结果同步回库
@@ -73,12 +73,12 @@ func Api(r *gin.RouterGroup) {
 	// 浏览器直连下载面:window.open / <img src> 无法携带 Authorization 头,
 	// 鉴权由 handler 内的 query 短时 token(ParseDownloadToken)完成,因此
 	// 不挂 AuthMiddleware;也不挂 OperationLog,避免把 token 记进操作日志。
-	relayDownloadRouter := r.Group("v1").Use(customI18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS())
+	relayDownloadRouter := r.Group("v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS())
 	{
 		relayDownloadRouter.GET("/download/relay_file", apiHandler.RelayFileDownload) //token 鉴权的 OBS 中转流式下载
 	}
 
-	serverRouter := r.Group("v1/nky/server").Use(customI18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
+	serverRouter := r.Group("v1/nky/server").Use(i18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
 	serverTaskHandler := api_handler.NewHandler()
 	{
 		//todo server内部开放路由
