@@ -6,12 +6,12 @@ import (
 	"nky_client_go/utils/errs"
 )
 
-func (ph *ApiHandler) ApiServerCreateTask(ctx *gin.Context) {
+func (ph *Handler) ServerCreateTask(ctx *gin.Context) {
 	serverId := ctx.PostForm("server_id")
 	serverStatus := ctx.PostForm("server_status")
 	toolName := ctx.PostForm("tool_name")
 
-	id, err := ph.service.ApiServerCreateTask(ctx, serverId, serverStatus, toolName)
+	id, err := ph.service.ServerCreateTask(ctx, serverId, serverStatus, toolName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code": http.StatusInternalServerError,
@@ -24,13 +24,13 @@ func (ph *ApiHandler) ApiServerCreateTask(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(gin.H{"create_id": id}))
 }
 
-func (ph *ApiHandler) ApiServerUpdateTask(ctx *gin.Context) {
+func (ph *Handler) ServerUpdateTask(ctx *gin.Context) {
 	serverId := ctx.PostForm("server_id")
 	toolResult := ctx.PostForm("tool_result")
 	serverFilePath := ctx.PostForm("server_file_path")
 	serverStatus := ctx.PostForm("server_status")
 
-	id, err := ph.service.ApiServerUpdateTask(ctx, serverId, toolResult, serverFilePath, serverStatus)
+	id, err := ph.service.ServerUpdateTask(ctx, serverId, toolResult, serverFilePath, serverStatus)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code": http.StatusInternalServerError,

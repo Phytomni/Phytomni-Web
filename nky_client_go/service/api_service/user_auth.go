@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func (ps *ApiService) RegisterAddUser(ctx context.Context, email string, password string, code string, id int, phone, organization, position string) (bool, error) {
+func (ps *Service) RegisterAddUser(ctx context.Context, email string, password string, code string, id int, phone, organization, position string) (bool, error) {
 	var userInfo model.SUser
 	var description string
 	userInfo.Email = email
@@ -58,7 +58,7 @@ func (ps *ApiService) RegisterAddUser(ctx context.Context, email string, passwor
 	return false, errors.New("管理员新增用户注册失败")
 }
 
-func (ps *ApiService) ApiModifyPassword(ctx context.Context, name, Password, newPassword string) (string, error) {
+func (ps *Service) ModifyPassword(ctx context.Context, name, Password, newPassword string) (string, error) {
 	// 先按邮箱取行(身份来自 JWT),再在 Go 内验旧密码 —— bcrypt 加盐非确定性,不能
 	// 再用 SQL `WHERE password = ?` 等值匹配。原 SQL 写法隐式兜了"用户不存在",这里
 	// 必须显式补 not-found 守卫(已删但 token 仍有效的用户须 fail-closed)。用值类型
@@ -88,7 +88,7 @@ func (ps *ApiService) ApiModifyPassword(ctx context.Context, name, Password, new
 	return name, nil
 }
 
-func (ps *ApiService) UpdateUserPassWord(ctx context.Context, password string, id int) bool {
+func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id int) bool {
 
 	pwdHash, herr := utils.HashPassword(password)
 	if herr != nil {
@@ -115,7 +115,7 @@ func (ps *ApiService) UpdateUserPassWord(ctx context.Context, password string, i
 
 }
 
-func (ps *ApiService) GetUserInfo(ctx context.Context, email string, password string) (userInfo common.UserResponse, count int64, apiErr api.Error) {
+func (ps *Service) GetUserInfo(ctx context.Context, email string, password string) (userInfo common.UserResponse, count int64, apiErr api.Error) {
 	var user model.SUser
 	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email =?", email)
 
@@ -203,7 +203,7 @@ func (ps *ApiService) GetUserInfo(ctx context.Context, email string, password st
 	return
 }
 
-func (ps *ApiService) ApiUserRegister(ctx context.Context, email, password string) error {
+func (ps *Service) UserRegister(ctx context.Context, email, password string) error {
 	mdPassword, herr := utils.HashPassword(password)
 	if herr != nil {
 		return errors.New("用户注册失败")

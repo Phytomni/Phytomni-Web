@@ -32,12 +32,12 @@ func queryErrorStatus(err error) (int, string) {
 	return http.StatusInternalServerError, "请求处理失败"
 }
 
-// ApiQuery is the gateway entry for chat sends. It parses the multipart form
+// Query is the gateway entry for chat sends. It parses the multipart form
 // chat-ai posts, hands it to the service, and returns the row chat-ai renders.
 // chat-ai consumes this as JSON via axios; an SSE pass-through path (the Bot
 // client exposes ChatCompletionStream) is wired once chat-ai adopts streaming
 // — today it never sends stream=true.
-func (ph *ApiHandler) ApiQuery(ctx *gin.Context) {
+func (ph *Handler) Query(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 
 	_, totalBytes, _ := rxBot.UploadLimits()
@@ -94,7 +94,7 @@ func (ph *ApiHandler) ApiQuery(ctx *gin.Context) {
 		}
 	}
 
-	data, err := ph.service.ApiQuery(ctx, name.(string), in)
+	data, err := ph.service.Query(ctx, name.(string), in)
 	if err != nil {
 		status, msg := queryErrorStatus(err)
 		if status >= http.StatusInternalServerError {
@@ -108,14 +108,14 @@ func (ph *ApiHandler) ApiQuery(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(data))
 }
 
-// ApiQueryAnalystUpdateLog syncs a finished remote task result back into the
+// QueryAnalystUpdateLog syncs a finished remote task result back into the
 // Web row. chat-ai posts task_id plus compute_resource.
-func (ph *ApiHandler) ApiQueryAnalystUpdateLog(ctx *gin.Context) {
+func (ph *Handler) QueryAnalystUpdateLog(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	taskID := ctx.PostForm("task_id")
 	computeResource := ctx.PostForm("compute_resource")
 
-	result, err := ph.service.ApiQueryAnalystUpdateLog(ctx, name.(string), taskID, computeResource)
+	result, err := ph.service.QueryAnalystUpdateLog(ctx, name.(string), taskID, computeResource)
 	if err != nil {
 		status, msg := queryErrorStatus(err)
 		if status >= http.StatusInternalServerError {

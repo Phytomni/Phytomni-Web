@@ -67,19 +67,19 @@ var slugToToolName = map[string]string{
 	"brief_gene":  "BriefReviewAgent",
 }
 
-// ApiQuery is the gateway orchestration: upload files to Bot, dispatch to the
+// Query is the gateway orchestration: upload files to Bot, dispatch to the
 // resolved agent, persist a Web-side row (Bot owns the content; Web keeps the
 // ownership/threading record plus a transitional content fallback), and return
 // exactly what chat-ai consumes.
 //
-// Threading model (reconstructed from the surviving read paths ApiQueryList /
-// ApiAnswerCheck, not from the deleted Python service):
+// Threading model (reconstructed from the surviving read paths QueryList /
+// AnswerCheck, not from the deleted Python service):
 //   - parent rows have f_id = 0 and carry the conversation title_query;
 //   - child rows have f_id = <parent row id> and share the parent dialogue_id.
 //
 // So Id=0 starts a new conversation (fresh dialogue_id), Id=N appends a child
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
-func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
+func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
@@ -250,7 +250,7 @@ func (ps *ApiService) ApiQuery(ctx context.Context, username string, in QueryInp
 // resolveDialogue returns the dialogue_id and f_id for this turn, scoping every
 // lookup to the authenticated user_name so a caller can only refresh or thread
 // onto their own rows.
-func (ps *ApiService) resolveDialogue(ctx context.Context, username string, in QueryInput) (string, int64, error) {
+func (ps *Service) resolveDialogue(ctx context.Context, username string, in QueryInput) (string, int64, error) {
 	if in.RefreshId != 0 {
 		var row model.SQuestionAgentLog
 		if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
@@ -270,9 +270,9 @@ func (ps *ApiService) resolveDialogue(ctx context.Context, username string, in Q
 	return parent.DialogueId, in.Id, nil
 }
 
-// ApiQueryAnalystUpdateLog syncs a finished remote task's result back into the
+// QueryAnalystUpdateLog syncs a finished remote task's result back into the
 // Web row. chat-ai posts both task_id and compute_resource.
-func (ps *ApiService) ApiQueryAnalystUpdateLog(ctx context.Context, username, taskID, computeResource string) (string, error) {
+func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, computeResource string) (string, error) {
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return "", ErrGatewayDisabled
 	}

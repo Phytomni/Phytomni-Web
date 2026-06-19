@@ -8,12 +8,12 @@ import (
 	"strconv"
 )
 
-func (ph *ApiHandler) ApiAsyncTaskList(ctx *gin.Context) {
+func (ph *Handler) AsyncTaskList(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	current, _ := strconv.Atoi(ctx.Query("current"))
 	size, _ := strconv.Atoi(ctx.Query("size"))
 
-	list, total, totalPages, err := ph.service.ApiAsyncTaskList(ctx, name.(string), current, size)
+	list, total, totalPages, err := ph.service.AsyncTaskList(ctx, name.(string), current, size)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -27,11 +27,11 @@ func (ph *ApiHandler) ApiAsyncTaskList(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(data))
 }
 
-func (ph *ApiHandler) ApiAsyncTaskInfo(ctx *gin.Context) {
+func (ph *Handler) AsyncTaskInfo(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Query("id"))
 	name, _ := ctx.Get("username")
 
-	info, err := ph.service.ApiAsyncTaskInfo(ctx, id, name.(string))
+	info, err := ph.service.AsyncTaskInfo(ctx, id, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -39,10 +39,10 @@ func (ph *ApiHandler) ApiAsyncTaskInfo(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(info))
 }
 
-func (ph *ApiHandler) ApiAnalystAgentGetLog(ctx *gin.Context) {
+func (ph *Handler) AnalystAgentGetLog(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Query("id"))
 	name, _ := ctx.Get("username")
-	taskId, err := ph.service.ApiAnalystAgentGetLog(ctx, id, name.(string))
+	taskId, err := ph.service.AnalystAgentGetLog(ctx, id, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -51,9 +51,9 @@ func (ph *ApiHandler) ApiAnalystAgentGetLog(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(taskId))
 }
 
-func (ph *ApiHandler) ApiQueryList(ctx *gin.Context) {
+func (ph *Handler) QueryList(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
-	list, err := ph.service.ApiQueryList(ctx, name.(string))
+	list, err := ph.service.QueryList(ctx, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -61,10 +61,10 @@ func (ph *ApiHandler) ApiQueryList(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(list))
 }
 
-func (ph *ApiHandler) ApiAnswerCheck(ctx *gin.Context) {
+func (ph *Handler) AnswerCheck(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	dialogueId := ctx.Query("dialogue_id")
-	list, err := ph.service.ApiAnswerCheck(ctx, name.(string), dialogueId)
+	list, err := ph.service.AnswerCheck(ctx, name.(string), dialogueId)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -73,11 +73,11 @@ func (ph *ApiHandler) ApiAnswerCheck(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(list))
 }
 
-func (ph *ApiHandler) ApiQueryListDelete(ctx *gin.Context) {
+func (ph *Handler) QueryListDelete(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	id, _ := strconv.Atoi(ctx.PostForm("id"))
 
-	queryId, err := ph.service.ApiQueryListDelete(ctx, name.(string), id)
+	queryId, err := ph.service.QueryListDelete(ctx, name.(string), id)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -86,12 +86,12 @@ func (ph *ApiHandler) ApiQueryListDelete(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(queryId))
 }
 
-func (ph *ApiHandler) ApiQueryListRename(ctx *gin.Context) {
+func (ph *Handler) QueryListRename(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	id, _ := strconv.Atoi(ctx.PostForm("id"))
 	rename := ctx.PostForm("rename")
 
-	r, err := ph.service.ApiQueryListRename(ctx, name.(string), id, rename)
+	r, err := ph.service.QueryListRename(ctx, name.(string), id, rename)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -100,7 +100,7 @@ func (ph *ApiHandler) ApiQueryListRename(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(r))
 }
 
-func (ph *ApiHandler) ApiQueryReactionType(ctx *gin.Context) {
+func (ph *Handler) QueryReactionType(ctx *gin.Context) {
 	// todo 需要判断如果接收reaction_type与数据库中的一致，则reaction_type为0，前端可以实现
 	name, _ := ctx.Get("username")
 	id, _ := strconv.Atoi(ctx.PostForm("id"))
@@ -115,7 +115,7 @@ func (ph *ApiHandler) ApiQueryReactionType(ctx *gin.Context) {
 		return
 	}
 
-	id, err := ph.service.ApiQueryReactionType(ctx, id, reactionType, name.(string))
+	id, err := ph.service.QueryReactionType(ctx, id, reactionType, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -124,7 +124,7 @@ func (ph *ApiHandler) ApiQueryReactionType(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(id))
 }
 
-func (ph *ApiHandler) ApiQueryCollect(ctx *gin.Context) {
+func (ph *Handler) QueryCollect(ctx *gin.Context) {
 	// todo collect_type的0无状态，1-收藏
 	name, _ := ctx.Get("username")
 	id, _ := strconv.Atoi(ctx.PostForm("id"))
@@ -139,7 +139,7 @@ func (ph *ApiHandler) ApiQueryCollect(ctx *gin.Context) {
 		return
 	}
 
-	id, err := ph.service.ApiQueryCollect(ctx, id, collectType, name.(string))
+	id, err := ph.service.QueryCollect(ctx, id, collectType, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -148,11 +148,11 @@ func (ph *ApiHandler) ApiQueryCollect(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(id))
 }
 
-func (ph *ApiHandler) ApiQueryCollectList(ctx *gin.Context) {
+func (ph *Handler) QueryCollectList(ctx *gin.Context) {
 
 	name, _ := ctx.Get("username")
 
-	collectList, err := ph.service.ApiQueryCollectList(ctx, name.(string))
+	collectList, err := ph.service.QueryCollectList(ctx, name.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return

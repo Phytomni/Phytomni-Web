@@ -46,8 +46,8 @@ func TestApiGetOperationLogs_DeniesNonAdmin(t *testing.T) {
 		t.Fatalf("seed log: %v", err)
 	}
 
-	ps := NewApiService()
-	logs, err := ps.ApiGetOperationLogs(context.Background(), "alice@example.com", nil, "", "")
+	ps := NewService()
+	logs, err := ps.GetOperationLogs(context.Background(), "alice@example.com", nil, "", "")
 	if !errors.Is(err, ErrOperationLogForbidden) {
 		t.Fatalf("expected ErrOperationLogForbidden for non-admin, got err=%v rows=%d", err, len(logs))
 	}
@@ -59,8 +59,8 @@ func TestApiGetOperationLogs_DeniesNonAdmin(t *testing.T) {
 // 未知操作员(token 用户在 s_user 查不到)同样拒绝,不暴露审计数据。
 func TestApiGetOperationLogs_DeniesUnknownOperator(t *testing.T) {
 	setupOperationLogDB(t)
-	ps := NewApiService()
-	if _, err := ps.ApiGetOperationLogs(context.Background(), "ghost@example.com", nil, "", ""); !errors.Is(err, ErrOperationLogForbidden) {
+	ps := NewService()
+	if _, err := ps.GetOperationLogs(context.Background(), "ghost@example.com", nil, "", ""); !errors.Is(err, ErrOperationLogForbidden) {
 		t.Fatalf("expected ErrOperationLogForbidden for unknown operator, got %v", err)
 	}
 }
@@ -77,8 +77,8 @@ func TestApiGetOperationLogs_AllowsAdmin(t *testing.T) {
 		t.Fatalf("seed logs: %v", err)
 	}
 
-	ps := NewApiService()
-	logs, err := ps.ApiGetOperationLogs(context.Background(), "root@example.com", nil, "", "")
+	ps := NewService()
+	logs, err := ps.GetOperationLogs(context.Background(), "root@example.com", nil, "", "")
 	if err != nil {
 		t.Fatalf("admin should be allowed, got %v", err)
 	}

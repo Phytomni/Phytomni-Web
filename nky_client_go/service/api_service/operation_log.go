@@ -12,7 +12,7 @@ import (
 // handler 将其映射为 403。
 var ErrOperationLogForbidden = errors.New("无权访问操作日志")
 
-func (ps *ApiService) ApiGetOperationLogs(ctx context.Context, operatorName string, userIds []int64, startTime, endTime string) ([]model.SUserOperationLog, error) {
+func (ps *Service) GetOperationLogs(ctx context.Context, operatorName string, userIds []int64, startTime, endTime string) ([]model.SUserOperationLog, error) {
 	// 鉴权:审计日志只对管理员开放,普通登录用户不得枚举他人记录。
 	var operator *model.SUser
 	if err := model.DB(ctx).Model(&model.SUser{}).Where("email = ?", operatorName).First(&operator).Error; err != nil {

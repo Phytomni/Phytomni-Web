@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (ph *ApiHandler) ApiUserFeedback(ctx *gin.Context) {
+func (ph *Handler) UserFeedback(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	feedbackType := ctx.PostForm("feedback_type")
 	feedbackContent := ctx.PostForm("feedback_content")
@@ -17,7 +17,7 @@ func (ph *ApiHandler) ApiUserFeedback(ctx *gin.Context) {
 	}
 
 	// 登录生成有权限的工具
-	userId, err := ph.service.ApiUserFeedback(ctx, name.(string), feedbackType, feedbackContent)
+	userId, err := ph.service.UserFeedback(ctx, name.(string), feedbackType, feedbackContent)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return

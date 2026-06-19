@@ -17,7 +17,7 @@ import (
 	"nky_client_go/model"
 )
 
-func (ps *ApiService) ApiAsyncTaskList(ctx context.Context, username string, current, size int) ([]*common.ApiAsyncTaskListResponse, int64, int, error) {
+func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, size int) ([]*common.ApiAsyncTaskListResponse, int64, int, error) {
 
 	var QuestionAgentLogList []*common.ApiAsyncTaskListResponse
 
@@ -54,7 +54,7 @@ func (ps *ApiService) ApiAsyncTaskList(ctx context.Context, username string, cur
 	return QuestionAgentLogList, total, totalPages, nil
 }
 
-func (ps *ApiService) ApiAsyncTaskInfo(ctx context.Context, id int, username string) (QuestionAgentLogList *model.SQuestionAgentLog, err error) {
+func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (QuestionAgentLogList *model.SQuestionAgentLog, err error) {
 
 	// 按 id + 归属用户查询,防止任意登录用户用可枚举的自增 id 越权读取他人任务行。
 	if err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().
@@ -68,7 +68,7 @@ func (ps *ApiService) ApiAsyncTaskInfo(ctx context.Context, id int, username str
 	return
 }
 
-func (ps *ApiService) ApiAnalystAgentGetLog(ctx context.Context, id int, name string) (taskLog string, err error) {
+func (ps *Service) AnalystAgentGetLog(ctx context.Context, id int, name string) (taskLog string, err error) {
 
 	var questionAgentLogList *model.SQuestionAgentLog
 	err = model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().Where("id = ?", id).First(&questionAgentLogList).Error
@@ -82,7 +82,7 @@ func (ps *ApiService) ApiAnalystAgentGetLog(ctx context.Context, id int, name st
 	return questionAgentLogList.TaskLog, nil
 }
 
-func (ps *ApiService) ApiQueryList(ctx context.Context, username string) ([]*common.QueryListRequest, error) {
+func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.QueryListRequest, error) {
 	// 查询主列表（f_id = 0 的记录）
 	var QuestionAgentLogList []*common.QueryListRequest
 	if err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", username, 0).
@@ -131,7 +131,7 @@ func (ps *ApiService) ApiQueryList(ctx context.Context, username string) ([]*com
 	return QADataList, nil
 }
 
-func (ps *ApiService) ApiAnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.SQuestionAgentLog, err error) {
+func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.SQuestionAgentLog, err error) {
 	var QuestionAgentLog *model.SQuestionAgentLog
 	// First() 在没匹配时给出 ErrRecordNotFound,但 QuestionAgentLog 仍是 &{Id:0} 空结构;
 	// 若直接接着用 QuestionAgentLog.Id 查 children,会以 f_id=0 (parent 约定值) 误匹配所有 dialogue 的根行。
@@ -175,7 +175,7 @@ func (ps *ApiService) ApiAnswerCheck(ctx context.Context, username string, dialo
 // carry a bot_run_id, leaving Web-only fields (id, reaction_type, upload_path)
 // intact. Any Bot failure leaves the MySQL legacy fields in place — a degrade,
 // not an error — so history replay never 500s on Bot trouble.
-func (ps *ApiService) overlayBotContent(ctx context.Context, dialogueId string, list []*model.SQuestionAgentLog) {
+func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, list []*model.SQuestionAgentLog) {
 	hasRun := false
 	for _, r := range list {
 		if r.BotRunId != "" {
@@ -233,7 +233,7 @@ func (ps *ApiService) overlayBotContent(ctx context.Context, dialogueId string, 
 	}
 }
 
-func (ps *ApiService) ApiQueryListDelete(ctx context.Context, name string, id int) (int, error) {
+func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (int, error) {
 	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("delete_at", time.Now())
@@ -247,7 +247,7 @@ func (ps *ApiService) ApiQueryListDelete(ctx context.Context, name string, id in
 	return id, nil
 }
 
-func (ps *ApiService) ApiQueryListRename(ctx context.Context, name string, id int, rename string) (string, error) {
+func (ps *Service) QueryListRename(ctx context.Context, name string, id int, rename string) (string, error) {
 	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("title_query", rename)
@@ -261,7 +261,7 @@ func (ps *ApiService) ApiQueryListRename(ctx context.Context, name string, id in
 	return rename, nil
 }
 
-func (ps *ApiService) ApiQueryReactionType(ctx context.Context, id int, reactionType, name string) (int, error) {
+func (ps *Service) QueryReactionType(ctx context.Context, id int, reactionType, name string) (int, error) {
 	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("reaction_type", reactionType)
@@ -275,7 +275,7 @@ func (ps *ApiService) ApiQueryReactionType(ctx context.Context, id int, reaction
 	return id, nil
 }
 
-func (ps *ApiService) ApiQueryCollect(ctx context.Context, id int, collectType, name string) (int, error) {
+func (ps *Service) QueryCollect(ctx context.Context, id int, collectType, name string) (int, error) {
 	db := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("collect_type", collectType)
@@ -289,7 +289,7 @@ func (ps *ApiService) ApiQueryCollect(ctx context.Context, id int, collectType, 
 	return id, nil
 }
 
-func (ps *ApiService) ApiQueryCollectList(ctx context.Context, name string) ([]*common.ApiQueryCollectListResponse, error) {
+func (ps *Service) QueryCollectList(ctx context.Context, name string) ([]*common.ApiQueryCollectListResponse, error) {
 
 	var CollectList []*common.ApiQueryCollectListResponse
 	err := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Debug().

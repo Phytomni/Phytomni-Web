@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func (ps *ApiService) ApiServerCreateTask(ctx context.Context, serverId, serverStatus, toolName string) (int, error) {
+func (ps *Service) ServerCreateTask(ctx context.Context, serverId, serverStatus, toolName string) (int, error) {
 	db := model.DB(ctx).Model(&model.SServerToolLogs{}).Debug()
 	if result := db.Where("server_id=?", serverId).First(&model.SServerToolLogs{}).RowsAffected; result != 0 {
 		return 0, errors.New("server_id已存在，请重新提交")
@@ -27,7 +27,7 @@ func (ps *ApiService) ApiServerCreateTask(ctx context.Context, serverId, serverS
 	return serverResult.Id, err
 }
 
-func (ps *ApiService) ApiServerUpdateTask(ctx context.Context, serverId, toolResult, serverFilePath, serverStatus string) (int, error) {
+func (ps *Service) ServerUpdateTask(ctx context.Context, serverId, toolResult, serverFilePath, serverStatus string) (int, error) {
 	serverResult := &model.SServerToolLogs{
 		ToolResult:     toolResult,
 		ServerFilePath: serverFilePath,

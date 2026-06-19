@@ -1,8 +1,8 @@
 package api_service
 
-func NewApiService() *ApiService {
-	return &ApiService{}
+func NewService() *Service {
+	return &Service{}
 }
 
-type ApiService struct {
+type Service struct {
 }

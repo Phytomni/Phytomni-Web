@@ -21,8 +21,8 @@ func TestApiDownloadAnalystAgentObsImages_StoredPaths(t *testing.T) {
 		(70, 'alice', '/obs/p/r1', '["/obs/p/r1/a.png","/obs/p/r2/b.png","/obs/p/r1/t.csv"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
-	urls, err := ps.ApiDownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
+	ps := NewService()
+	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -45,8 +45,8 @@ func TestApiDownloadAnalystAgentObsImages_OwnershipMiss(t *testing.T) {
 		(71, 'bob', '/obs/p/r9', '["/obs/p/r9/a.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
-	if _, err := ps.ApiDownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r9"); err == nil {
+	ps := NewService()
+	if _, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r9"); err == nil {
 		t.Fatal("expected error when alice requests bob's path")
 	}
 }
@@ -65,8 +65,8 @@ func TestApiDownloadAnalystAgentObsImages_ContainmentBypass(t *testing.T) {
 		(72, 'alice', '/obs/p/r1', '["/obs/p/r1/a.png","/obs/p/r2/b.png","/obs/OTHER/evil.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
-	urls, err := ps.ApiDownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
+	ps := NewService()
+	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -109,8 +109,8 @@ func TestApiDownloadAnalystAgentObsImages_FallbackListingContainment(t *testing.
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	ps := NewApiService()
-	urls, err := ps.ApiDownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
+	ps := NewService()
+	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -145,8 +145,8 @@ func TestApiDownloadAnalystAgentObsImages_MalformedJSON(t *testing.T) {
 	// (mirrors query_updatelog_test) rather than nil-derefing on NewClient.
 	rxBot.BotConfig = &rxBot.Config{BaseURL: "http://127.0.0.1:0", ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
-	ps := NewApiService()
-	urls, err := ps.ApiDownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
+	ps := NewService()
+	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
 	if err == nil {
 		t.Fatalf("expected fallback-to-listing error (dead Bot addr), got urls=%v", urls)
 	}

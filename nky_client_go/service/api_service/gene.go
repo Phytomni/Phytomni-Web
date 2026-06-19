@@ -21,11 +21,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-func (ps *ApiService) ApiGeneList(ctx context.Context, current, size int) ([]*model.SGeneExample, int64, int, error) {
-	return ps.ApiGeneSearch(ctx, current, size, "")
+func (ps *Service) GeneList(ctx context.Context, current, size int) ([]*model.SGeneExample, int64, int, error) {
+	return ps.GeneSearch(ctx, current, size, "")
 }
 
-func (ps *ApiService) ApiGeneSearch(ctx context.Context, current, size int, title string) ([]*model.SGeneExample, int64, int, error) {
+func (ps *Service) GeneSearch(ctx context.Context, current, size int, title string) ([]*model.SGeneExample, int64, int, error) {
 	allData, err := ps.fetchGeneFiles(title)
 	if err != nil {
 		// 如果目录读取失败，可以记录日志并返回空列表，或者直接返回错误
@@ -57,7 +57,7 @@ func (ps *ApiService) ApiGeneSearch(ctx context.Context, current, size int, titl
 }
 
 // fetchGeneFiles 从指定目录读取文件并封装
-func (ps *ApiService) fetchGeneFiles(title string) ([]*model.SGeneExample, error) {
+func (ps *Service) fetchGeneFiles(title string) ([]*model.SGeneExample, error) {
 	// main.go initConfig sets a viper.SetDefault for gene_file_path so
 	// the lookup never returns ""; if it ever does, the os.ReadDir below
 	// will surface a meaningful error instead of falling back to a
@@ -117,7 +117,7 @@ func parseGeneFile(filename string) *model.SGeneExample {
 		// Id, CreatedAt, UpdatedAt, Content, DeleteAt 不需要填充
 	}
 }
-func (ps *ApiService) ApiGeneDetails(ctx context.Context, fileName string) (*model.SGeneExample, error) {
+func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.SGeneExample, error) {
 	// See fetchGeneFiles — gene_file_path is always defaulted in
 	// initConfig, so the empty-string Windows fallback that used to
 	// live here is no longer needed.
@@ -145,7 +145,7 @@ func (ps *ApiService) ApiGeneDetails(ctx context.Context, fileName string) (*mod
 	return item, nil
 }
 
-func (ps *ApiService) ApiGeneDetailsStorage(ctx context.Context, fileName, content, speciesCode, geneId string) error {
+func (ps *Service) GeneDetailsStorage(ctx context.Context, fileName, content, speciesCode, geneId string) error {
 
 	gene := &model.SGeneExample{
 		FileName:    fileName,
@@ -189,7 +189,7 @@ func relayDownloadURL(obsKey string) (string, error) {
 	return "/v1/download/relay_file?t=" + url.QueryEscape(token), nil
 }
 
-func (ps *ApiService) ApiDownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {
+func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {
 	// 判断是否有权限生成下载链接
 	var questionAgentLog model.SQuestionAgentLog
 	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
@@ -208,7 +208,7 @@ func (ps *ApiService) ApiDownloadAnalystAgentObsFile(ctx context.Context, userna
 	return relayDownloadURL(zipKey)
 }
 
-func (ps *ApiService) ApiDownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
+func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
 	// 归属校验 + 取 reconcile 写入的图片路径(切流后由完成态 reconcile 填充)
 	var row model.SQuestionAgentLog
 	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).
@@ -266,10 +266,10 @@ func (ps *ApiService) ApiDownloadAnalystAgentObsImages(ctx context.Context, user
 	return imageUrls, nil
 }
 
-// ApiGetDownloadObsFile 服务邮件里的下载链接:校验 obs_path 归属于该用户的
+// GetDownloadObsFile 服务邮件里的下载链接:校验 obs_path 归属于该用户的
 // 消息记录(邮件链接无法携带任何凭据,这层库内归属校验是该入口仅有的访问
 // 控制),经 Bot 中转找到结果 zip 并返回字节流,由 handler 直接写回浏览器。
-func (ps *ApiService) ApiGetDownloadObsFile(ctx context.Context, username, obsPath string) (io.ReadCloser, string, int64, error) {
+func (ps *Service) GetDownloadObsFile(ctx context.Context, username, obsPath string) (io.ReadCloser, string, int64, error) {
 	var questionAgentLog model.SQuestionAgentLog
 	if result := model.DB(ctx).Model(&model.SQuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&questionAgentLog).RowsAffected; result == 0 {
@@ -293,7 +293,7 @@ func (ps *ApiService) ApiGetDownloadObsFile(ctx context.Context, username, obsPa
 	return rc, path.Base(zipKey), length, nil
 }
 
-func (ps *ApiService) ApiDownloadObsRenderingFile(ctx context.Context, id int, format string) ([]byte, string, error) {
+func (ps *Service) DownloadObsRenderingFile(ctx context.Context, id int, format string) ([]byte, string, error) {
 
 	var questionAgentLog *model.SQuestionAgentLog
 	db := model.DB(ctx).Model(&model.SQuestionAgentLog{})

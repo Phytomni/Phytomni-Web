@@ -19,7 +19,7 @@ import (
 // setupUserTestDB 建一个空的 in-memory SQLite,手写 s_user 最小列集并注册到全局 db
 // registry。手写 CREATE TABLE(而非 AutoMigrate SUser)的理由同 agent_task_test.go:
 // SUser 的 first_login_status 带 MySQL 专有 `type:enum` GORM tag,SQLite AutoMigrate
-// 不识别;这里只列 GetUserInfo / ApiUnlockUser 实际读写的列。
+// 不识别;这里只列 GetUserInfo / UnlockUser 实际读写的列。
 func setupUserTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -62,7 +62,7 @@ func TestGetUserInfo_LockoutOnFifthFailure(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	_, count, apiErr := ps.GetUserInfo(context.Background(), "alice@x.com", "wrongpass")
 
 	if count != 0 {
@@ -91,7 +91,7 @@ func TestGetUserInfo_RejectsWhileLocked(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	_, count, apiErr := ps.GetUserInfo(context.Background(), "alice@x.com", "goodpass")
 
 	if count != 0 {
@@ -112,7 +112,7 @@ func TestGetUserInfo_PasswordExpiryWarning(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	info, count, apiErr := ps.GetUserInfo(context.Background(), "alice@x.com", "goodpass")
 
 	if apiErr != nil {
@@ -136,7 +136,7 @@ func TestGetUserInfo_SuccessResetsFailureCount(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	_, count, apiErr := ps.GetUserInfo(context.Background(), "alice@x.com", "goodpass")
 	if apiErr != nil || count != 1 {
 		t.Fatalf("expected success, got count=%d apiErr=%v", count, apiErr)
@@ -164,8 +164,8 @@ func TestApiUnlockUser_RejectsNonAdmin(t *testing.T) {
 		t.Fatalf("seed target: %v", err)
 	}
 
-	ps := NewApiService()
-	err := ps.ApiUnlockUser(context.Background(), "op@x.com", 2)
+	ps := NewService()
+	err := ps.UnlockUser(context.Background(), "op@x.com", 2)
 	if err == nil {
 		t.Fatal("expected non-admin operator to be rejected, got nil error")
 	}
@@ -192,8 +192,8 @@ func TestApiUnlockUser_AdminUnlocks(t *testing.T) {
 		t.Fatalf("seed target: %v", err)
 	}
 
-	ps := NewApiService()
-	if err := ps.ApiUnlockUser(context.Background(), "admin@x.com", 2); err != nil {
+	ps := NewService()
+	if err := ps.UnlockUser(context.Background(), "admin@x.com", 2); err != nil {
 		t.Fatalf("expected admin unlock to succeed, got %v", err)
 	}
 	var lockedUntil *time.Time
@@ -222,8 +222,8 @@ func TestApiUnlockUser_SuperAdminUnlocks(t *testing.T) {
 		t.Fatalf("seed target: %v", err)
 	}
 
-	ps := NewApiService()
-	if err := ps.ApiUnlockUser(context.Background(), "root@x.com", 2); err != nil {
+	ps := NewService()
+	if err := ps.UnlockUser(context.Background(), "root@x.com", 2); err != nil {
 		t.Fatalf("expected super_admin unlock to succeed, got %v", err)
 	}
 }
@@ -234,7 +234,7 @@ func TestGetUserInfo_BcryptRowVerifies(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, hash).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
+	ps := NewService()
 	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
 	if apiErr != nil || count != 1 {
 		t.Fatalf("bcrypt login: want count=1 err=nil, got count=%d err=%v", count, apiErr)
@@ -246,7 +246,7 @@ func TestGetUserInfo_LegacyMD5UpgradesOnLogin(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("goodpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
+	ps := NewService()
 	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
 	if apiErr != nil || count != 1 {
 		t.Fatalf("md5 login: want count=1 err=nil, got count=%d err=%v", count, apiErr)
@@ -270,7 +270,7 @@ func TestGetUserInfo_UpgradeFailureDoesNotFailLogin(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("goodpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
+	ps := NewService()
 	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
 	if apiErr != nil || count != 1 {
 		t.Fatalf("login must succeed despite upgrade failure, got count=%d err=%v", count, apiErr)
@@ -287,8 +287,8 @@ func TestApiModifyPassword_LegacyOldVerifiesNewIsBcrypt(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("oldpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
-	if _, err := ps.ApiModifyPassword(context.Background(), "a@x.com", "oldpass", "newpass"); err != nil {
+	ps := NewService()
+	if _, err := ps.ModifyPassword(context.Background(), "a@x.com", "oldpass", "newpass"); err != nil {
 		t.Fatalf("change with correct old (md5) should succeed, got %v", err)
 	}
 	var stored string
@@ -307,25 +307,25 @@ func TestApiModifyPassword_WrongOldRejected(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, utils.MD5String("oldpass")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
-	if _, err := ps.ApiModifyPassword(context.Background(), "a@x.com", "WRONG", "newpass"); err == nil {
+	ps := NewService()
+	if _, err := ps.ModifyPassword(context.Background(), "a@x.com", "WRONG", "newpass"); err == nil {
 		t.Fatal("expected error on wrong old password, got nil")
 	}
 }
 
 func TestApiModifyPassword_UnknownUserFailsClosed(t *testing.T) {
 	setupUserTestDB(t) // no rows seeded
-	ps := NewApiService()
+	ps := NewService()
 	// A JWT for a since-deleted user: must error, must not panic.
-	if _, err := ps.ApiModifyPassword(context.Background(), "ghost@x.com", "x", "newpass"); err == nil {
+	if _, err := ps.ModifyPassword(context.Background(), "ghost@x.com", "x", "newpass"); err == nil {
 		t.Fatal("expected error for unknown user, got nil")
 	}
 }
 
 func TestApiUserRegister_StoresBcrypt(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	ps := NewApiService()
-	if err := ps.ApiUserRegister(context.Background(), "new@x.com", "Secret12!"); err != nil {
+	ps := NewService()
+	if err := ps.UserRegister(context.Background(), "new@x.com", "Secret12!"); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	var stored string
@@ -337,7 +337,7 @@ func TestApiUserRegister_StoresBcrypt(t *testing.T) {
 
 func TestRegisterAddUser_StoresBcrypt(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	ps := NewApiService()
+	ps := NewService()
 	if _, err := ps.RegisterAddUser(context.Background(), "adm@x.com", "Secret12!", "user", 0, "", "", ""); err != nil {
 		t.Fatalf("admin create: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestUpdateUserPassWord_StoresBcrypt(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("old")).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
+	ps := NewService()
 	if ok := ps.UpdateUserPassWord(context.Background(), "Secret12!", 7); !ok {
 		t.Fatal("admin reset returned false")
 	}
@@ -377,7 +377,7 @@ func TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
 	if apiErr != nil || count != 1 {
 		t.Fatalf("login should succeed, got count=%d err=%v", count, apiErr)
@@ -427,7 +427,7 @@ func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = gdb.Callback().Query().Remove(cbName) })
 
-	ps := NewApiService()
+	ps := NewService()
 	_, count, apiErr := ps.GetUserInfo(context.Background(), "a@x.com", "goodpass")
 	if apiErr != nil || count != 1 {
 		t.Fatalf("login should still succeed, got count=%d err=%v", count, apiErr)
@@ -448,8 +448,8 @@ func TestApiModifyPassword_BcryptOldVerifies(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`, oldHash).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ps := NewApiService()
-	if _, err := ps.ApiModifyPassword(context.Background(), "a@x.com", "oldpass", "newpass"); err != nil {
+	ps := NewService()
+	if _, err := ps.ModifyPassword(context.Background(), "a@x.com", "oldpass", "newpass"); err != nil {
 		t.Fatalf("change with correct bcrypt old password should succeed, got %v", err)
 	}
 	var stored string
@@ -473,10 +473,10 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 	viper.Set("bcrypt_cost", 99) // 越界 → HashPassword 报错
 	defer viper.Set("bcrypt_cost", 0)
 
-	t.Run("ApiUserRegister", func(t *testing.T) {
+	t.Run("UserRegister", func(t *testing.T) {
 		gdb := setupUserTestDB(t)
-		ps := NewApiService()
-		if err := ps.ApiUserRegister(context.Background(), "new@x.com", "Secret12!"); err == nil {
+		ps := NewService()
+		if err := ps.UserRegister(context.Background(), "new@x.com", "Secret12!"); err == nil {
 			t.Error("self-register must fail when hashing errors")
 		}
 		var n int64
@@ -488,7 +488,7 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 
 	t.Run("RegisterAddUser", func(t *testing.T) {
 		gdb := setupUserTestDB(t)
-		ps := NewApiService()
+		ps := NewService()
 		if ok, err := ps.RegisterAddUser(context.Background(), "adm@x.com", "Secret12!", "user", 0, "", "", ""); ok || err == nil {
 			t.Errorf("admin-create must fail-closed on hash error, got ok=%v err=%v", ok, err)
 		}
@@ -505,7 +505,7 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 		if err := gdb.Exec(`INSERT INTO s_user (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("orig")).Error; err != nil {
 			t.Fatalf("seed: %v", err)
 		}
-		ps := NewApiService()
+		ps := NewService()
 		if ok := ps.UpdateUserPassWord(context.Background(), "Secret12!", 7); ok {
 			t.Error("admin reset must return false on hash error")
 		}

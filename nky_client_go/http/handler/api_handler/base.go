@@ -2,12 +2,12 @@ package api_handler
 
 import "nky_client_go/service/api_service"
 
-func NewApiHandler() *ApiHandler {
-	return &ApiHandler{
-		service: api_service.NewApiService(),
+func NewHandler() *Handler {
+	return &Handler{
+		service: api_service.NewService(),
 	}
 }
 
-type ApiHandler struct {
-	service *api_service.ApiService
+type Handler struct {
+	service *api_service.Service
 }

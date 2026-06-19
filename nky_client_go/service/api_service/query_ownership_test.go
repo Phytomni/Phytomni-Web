@@ -39,7 +39,7 @@ func TestResolveDialogue_RefreshScopedToOwner(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	_, _, err := ps.resolveDialogue(context.Background(), "alice", QueryInput{RefreshId: 1})
 	if err == nil {
 		t.Fatal("expected error: alice must not resolve bob's row via refresh")
@@ -55,7 +55,7 @@ func TestResolveDialogue_ThreadScopedToOwner(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	_, _, err := ps.resolveDialogue(context.Background(), "alice", QueryInput{Id: 1})
 	if err == nil {
 		t.Fatal("expected error: alice must not thread onto bob's parent")
@@ -71,7 +71,7 @@ func TestResolveDialogue_OwnerThreadsOwnParent(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	dlg, fID, err := ps.resolveDialogue(context.Background(), "alice", QueryInput{Id: 1})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -88,7 +88,7 @@ func TestResolveDialogue_OwnerThreadsOwnParent(t *testing.T) {
 // f_id=0。
 func TestResolveDialogue_NewConversation(t *testing.T) {
 	setupQueryTestDB(t)
-	ps := NewApiService()
+	ps := NewService()
 	dlg, fID, err := ps.resolveDialogue(context.Background(), "alice", QueryInput{})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)

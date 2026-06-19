@@ -34,18 +34,18 @@ func newQueryRequest(t *testing.T, query string) (*gin.Context, *httptest.Respon
 }
 
 // TestApiQuery_DisabledGatewayWiring exercises queryErrorStatus through the real
-// ApiQuery handler glue (not just the pure helper): a disabled gateway must come
+// Query handler glue (not just the pure helper): a disabled gateway must come
 // back as a 503 whose body `code` matches the HTTP status. This pins the wiring
 // the helper unit test cannot reach — that the helper is actually invoked and
 // the status is not mis-mapped onto the response code. With the gateway off the
 // service returns ErrGatewayDisabled before any DB access, so no DB is needed.
 func TestApiQuery_DisabledGatewayWiring(t *testing.T) {
 	rxBot.BotConfig = nil // gateway disabled
-	ph := NewApiHandler()
+	ph := NewHandler()
 	c, w := newQueryRequest(t, "hi")
 	c.Set("username", "alice")
 
-	ph.ApiQuery(c)
+	ph.Query(c)
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d (body=%s)", w.Code, w.Body.String())

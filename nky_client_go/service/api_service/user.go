@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (ps *ApiService) ApiGetUserProfile(ctx context.Context, email string) (*common.UserProfileResponse, error) {
+func (ps *Service) GetUserProfile(ctx context.Context, email string) (*common.UserProfileResponse, error) {
 	var user model.SUser
 	// 1. 查询用户基本信息
 	if err := model.DB(ctx).Model(&model.SUser{}).Where("email = ?", email).First(&user).Error; err != nil {
@@ -44,7 +44,7 @@ func (ps *ApiService) ApiGetUserProfile(ctx context.Context, email string) (*com
 	}, nil
 }
 
-func (ps *ApiService) CheckEmailExists(ctx context.Context, email string) bool {
+func (ps *Service) CheckEmailExists(ctx context.Context, email string) bool {
 	var count int64
 	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email = ?", email)
 	db.Count(&count)
@@ -54,7 +54,7 @@ func (ps *ApiService) CheckEmailExists(ctx context.Context, email string) bool {
 	return false
 }
 
-func (ps *ApiService) GetUserIdByEmail(ctx context.Context, email string) (userId int64) {
+func (ps *Service) GetUserIdByEmail(ctx context.Context, email string) (userId int64) {
 	var userInfo model.SUser
 	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email =?", email)
 	db.First(&userInfo)
@@ -62,7 +62,7 @@ func (ps *ApiService) GetUserIdByEmail(ctx context.Context, email string) (userI
 	return
 }
 
-func (ps *ApiService) GetUserRegisterPermission(ctx context.Context, email string) (bool, string) {
+func (ps *Service) GetUserRegisterPermission(ctx context.Context, email string) (bool, string) {
 	var user *model.SUser
 	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email = ?", email)
 	db.First(&user)
@@ -72,7 +72,7 @@ func (ps *ApiService) GetUserRegisterPermission(ctx context.Context, email strin
 	return false, ""
 }
 
-func (ps *ApiService) GetUpdateUserRegisterPermission(ctx context.Context, email string) (bool, string) {
+func (ps *Service) GetUpdateUserRegisterPermission(ctx context.Context, email string) (bool, string) {
 	var user *model.SUser
 	db := model.DB(ctx).Model(&model.SUser{}).Debug().Where("email = ?", email)
 	db.First(&user)
@@ -82,7 +82,7 @@ func (ps *ApiService) GetUpdateUserRegisterPermission(ctx context.Context, email
 	return false, ""
 }
 
-func (ps *ApiService) GetUserToolPermission(ctx context.Context, email string) ([]string, []string, string) {
+func (ps *Service) GetUserToolPermission(ctx context.Context, email string) ([]string, []string, string) {
 	var user *model.SUser
 	model.DB(ctx).Model(&model.SUser{}).Debug().Where("email =?", email).First(&user)
 
@@ -105,7 +105,7 @@ func (ps *ApiService) GetUserToolPermission(ctx context.Context, email string) (
 	return ToolList, permissionList, user.Code
 }
 
-func (ps *ApiService) GetUserList(ctx *gin.Context, current, size int, code string) ([]*common.UserLostData, int64, int, error) {
+func (ps *Service) GetUserList(ctx *gin.Context, current, size int, code string) ([]*common.UserLostData, int64, int, error) {
 	var users []*common.UserLostData
 	var total int64
 
@@ -150,7 +150,7 @@ func (ps *ApiService) GetUserList(ctx *gin.Context, current, size int, code stri
 	return nil, 0, 0, nil
 }
 
-func (ps *ApiService) ApiModifyPermission(ctx context.Context, name string, userId int, code, phone, organization, position string, chatLimit int) (int, error) {
+func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int, code, phone, organization, position string, chatLimit int) (int, error) {
 
 	if code != "user" && code != "vip_user" && code != "admin" && code != "guest" {
 		return 0, errors.New("权限格式错误,没有这样的权限")
@@ -204,7 +204,7 @@ func (ps *ApiService) ApiModifyPermission(ctx context.Context, name string, user
 	return userId, nil
 }
 
-func (ps *ApiService) ApiUnlockUser(ctx context.Context, operatorName string, targetUserId int) error {
+func (ps *Service) UnlockUser(ctx context.Context, operatorName string, targetUserId int) error {
 	db := model.DB(ctx).Model(&model.SUser{}).Debug()
 
 	// 1. 检查操作者权限

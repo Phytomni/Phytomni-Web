@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (ph *ApiHandler) ApiUnlockUser(ctx *gin.Context) {
+func (ph *Handler) UnlockUser(ctx *gin.Context) {
 	// 获取当前登录用户名（操作员）
 	operatorName, exists := ctx.Get("username")
 	if !exists {
@@ -30,7 +30,7 @@ func (ph *ApiHandler) ApiUnlockUser(ctx *gin.Context) {
 	}
 
 	// 调用Service执行解锁
-	err = ph.service.ApiUnlockUser(ctx, operatorName.(string), userId)
+	err = ph.service.UnlockUser(ctx, operatorName.(string), userId)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -39,7 +39,7 @@ func (ph *ApiHandler) ApiUnlockUser(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp("解锁成功"))
 }
 
-func (ph *ApiHandler) ApiPermissionUserTool(ctx *gin.Context) {
+func (ph *Handler) PermissionUserTool(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 
 	// 登录生成有权限的工具
@@ -62,7 +62,7 @@ func (ph *ApiHandler) ApiPermissionUserTool(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(LoginRes))
 }
 
-func (ph *ApiHandler) ApiPermissionUserList(ctx *gin.Context) {
+func (ph *Handler) PermissionUserList(ctx *gin.Context) {
 	// 检查是否有查看用户列表的权限
 	name, _ := ctx.Get("username")
 
@@ -91,7 +91,7 @@ func (ph *ApiHandler) ApiPermissionUserList(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(response))
 }
 
-func (ph *ApiHandler) ApiModifyPermission(ctx *gin.Context) {
+func (ph *Handler) ModifyPermission(ctx *gin.Context) {
 
 	name, _ := ctx.Get("username")
 	userId, _ := strconv.Atoi(ctx.PostForm("id"))
@@ -116,7 +116,7 @@ func (ph *ApiHandler) ApiModifyPermission(ctx *gin.Context) {
 		return
 	}
 
-	uId, err := ph.service.ApiModifyPermission(ctx, name.(string), userId, code, phone, organization, position, chatLimit)
+	uId, err := ph.service.ModifyPermission(ctx, name.(string), userId, code, phone, organization, position, chatLimit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return

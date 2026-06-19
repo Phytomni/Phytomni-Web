@@ -15,9 +15,9 @@ import (
 func TestApiQueryAnalystUpdateLog_Disabled(t *testing.T) {
 	setupTestDB(t)
 	rxBot.BotConfig = nil
-	ps := NewApiService()
+	ps := NewService()
 
-	_, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-1", "cr-1")
+	_, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-1", "cr-1")
 	if !errors.Is(err, ErrGatewayDisabled) {
 		t.Fatalf("want ErrGatewayDisabled, got %v", err)
 	}
@@ -34,9 +34,9 @@ func TestApiQueryAnalystUpdateLog_MissingBotRunID(t *testing.T) {
 	}
 	rxBot.BotConfig = &rxBot.Config{BaseURL: "http://127.0.0.1:0", ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
-	ps := NewApiService()
+	ps := NewService()
 
-	_, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-norun", "cr-1")
+	_, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-norun", "cr-1")
 	if err == nil || !strings.Contains(err.Error(), "no bot_run_id") {
 		t.Fatalf("want a no-bot_run_id error, got %v", err)
 	}
@@ -52,9 +52,9 @@ func TestApiQueryAnalystUpdateLog_HappyPath(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-ok","agent":"analyst","status":"succeeded","answer":"plain","result":{"formatted":{"answer":"report ready"}}}`)
-	ps := NewApiService()
+	ps := NewService()
 
-	answer, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-ok", "cr-1")
+	answer, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-ok", "cr-1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -79,9 +79,9 @@ func TestApiQueryAnalystUpdateLog_SkipsBlankStatus(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-blank","agent":"analyst","status":"","result":{"formatted":{"answer":"new answer"}}}`)
-	ps := NewApiService()
+	ps := NewService()
 
-	if _, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-blank", "cr-1"); err != nil {
+	if _, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-blank", "cr-1"); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	status, stored := readStatusAnswer(t, gdb, 62)
@@ -104,9 +104,9 @@ func TestApiQueryAnalystUpdateLog_NoClobberAnswer(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-noans","agent":"analyst","status":"succeeded","answer":""}`)
-	ps := NewApiService()
+	ps := NewService()
 
-	answer, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-noans", "cr-1")
+	answer, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-noans", "cr-1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -133,9 +133,9 @@ func TestApiQueryAnalystUpdateLog_WritesGalleryPaths(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-g","agent":"network","status":"succeeded","result":{"formatted":{"answer":"done"},"artifacts":[{"task_id":"t1","output_dir":"/obs/p/r1","paths":["/obs/p/r1/a.png","/obs/p/r1/t.csv"]},{"task_id":"t2","output_dir":"/obs/p/r2","paths":["/obs/p/r2/b.png"]}]}}`)
-	ps := NewApiService()
+	ps := NewService()
 
-	if _, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-g", "cr-1"); err != nil {
+	if _, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-g", "cr-1"); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	dp, ip := readGalleryCols(t, gdb, 64)
@@ -164,9 +164,9 @@ func TestApiQueryAnalystUpdateLog_FinalReport(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-dg","agent":"deep_genome","status":"succeeded","result":{"final_report":"# Gene Report"}}`)
-	ps := NewApiService()
+	ps := NewService()
 
-	answer, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-dg", "cr-1")
+	answer, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-dg", "cr-1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -192,9 +192,9 @@ func TestApiQueryAnalystUpdateLog_NoArtifactsNoClobber(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-na","agent":"network","status":"succeeded","result":{"formatted":{"answer":"done"}}}`)
-	ps := NewApiService()
+	ps := NewService()
 
-	if _, err := ps.ApiQueryAnalystUpdateLog(context.Background(), "alice", "t-na", "cr-1"); err != nil {
+	if _, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-na", "cr-1"); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	dp, ip := readGalleryCols(t, gdb, 65)

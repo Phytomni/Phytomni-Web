@@ -21,13 +21,13 @@ import (
 	"strings"
 )
 
-func (ph *ApiHandler) ApiGeneList(ctx *gin.Context) {
+func (ph *Handler) GeneList(ctx *gin.Context) {
 	current, _ := strconv.Atoi(ctx.Query("current"))
 	size, _ := strconv.Atoi(ctx.Query("size"))
 	title := ctx.Query("title")
 
 	if title != "" {
-		list, total, totalPages, err := ph.service.ApiGeneSearch(ctx, current, size, title)
+		list, total, totalPages, err := ph.service.GeneSearch(ctx, current, size, title)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 			return
@@ -41,7 +41,7 @@ func (ph *ApiHandler) ApiGeneList(ctx *gin.Context) {
 
 		ctx.JSON(errs.SucResp(data))
 	} else {
-		list, total, totalPages, err := ph.service.ApiGeneList(ctx, current, size)
+		list, total, totalPages, err := ph.service.GeneList(ctx, current, size)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		}
@@ -55,14 +55,14 @@ func (ph *ApiHandler) ApiGeneList(ctx *gin.Context) {
 		ctx.JSON(errs.SucResp(data))
 	}
 }
-func (ph *ApiHandler) ApiGeneDetails(ctx *gin.Context) {
+func (ph *Handler) GeneDetails(ctx *gin.Context) {
 	fileName := ctx.Query("file_name")
 	if fileName == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "参数 file_name 不能为空"})
 		return
 	}
 
-	list, err := ph.service.ApiGeneDetails(ctx, fileName)
+	list, err := ph.service.GeneDetails(ctx, fileName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -71,7 +71,7 @@ func (ph *ApiHandler) ApiGeneDetails(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(list))
 }
 
-func (ph *ApiHandler) ApiGeneDetailsStorage(ctx *gin.Context) {
+func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 	// 获取表单参数
 	speciesCode := ctx.PostForm("species_code")
 	geneId := ctx.PostForm("gene_id")
@@ -153,7 +153,7 @@ func (ph *ApiHandler) ApiGeneDetailsStorage(ctx *gin.Context) {
 			string(fileContent), titlesStr)
 
 		// 存储到数据库
-		err = ph.service.ApiGeneDetailsStorage(ctx, fileHeader.Filename, combinedContent, speciesCode, geneId)
+		err = ph.service.GeneDetailsStorage(ctx, fileHeader.Filename, combinedContent, speciesCode, geneId)
 		if err != nil {
 			log.Printf("Failed to store file %s: %v", fileHeader.Filename, err)
 			continue
@@ -213,11 +213,11 @@ func (ph *ApiHandler) ApiGeneDetailsStorage(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(successFiles))
 }
 
-func (ph *ApiHandler) ApiDownloadAnalystAgentObsFile(ctx *gin.Context) {
+func (ph *Handler) DownloadAnalystAgentObsFile(ctx *gin.Context) {
 	obsPath := ctx.Query("obs_path")
 	username, _ := ctx.Get("username")
 
-	obsPath, err := ph.service.ApiDownloadAnalystAgentObsFile(ctx, username.(string), obsPath)
+	obsPath, err := ph.service.DownloadAnalystAgentObsFile(ctx, username.(string), obsPath)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -226,7 +226,7 @@ func (ph *ApiHandler) ApiDownloadAnalystAgentObsFile(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(obsPath))
 }
 
-func (ph *ApiHandler) ApiDownloadAnalystAgentObsImages(ctx *gin.Context) {
+func (ph *Handler) DownloadAnalystAgentObsImages(ctx *gin.Context) {
 	obsPath := ctx.Query("obs_path")
 	username, _ := ctx.Get("username")
 
@@ -236,7 +236,7 @@ func (ph *ApiHandler) ApiDownloadAnalystAgentObsImages(ctx *gin.Context) {
 		uStr = username.(string)
 	}
 
-	imageUrls, err := ph.service.ApiDownloadAnalystAgentObsImages(ctx, uStr, obsPath)
+	imageUrls, err := ph.service.DownloadAnalystAgentObsImages(ctx, uStr, obsPath)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -262,13 +262,13 @@ func sanitizeFilename(name string) string {
 	return strings.NewReplacer(`"`, "", "\r", "", "\n", "").Replace(name)
 }
 
-// ApiGetDownloadObsFile 服务邮件中的下载链接。切流后不再 302 到 OBS 签名
+// GetDownloadObsFile 服务邮件中的下载链接。切流后不再 302 到 OBS 签名
 // URL,而是经 Bot 中转把结果 zip 字节流直接写回浏览器。
-func (ph *ApiHandler) ApiGetDownloadObsFile(ctx *gin.Context) {
+func (ph *Handler) GetDownloadObsFile(ctx *gin.Context) {
 	obsPath := ctx.Query("obs_path")
 	username := ctx.Query("username")
 
-	rc, filename, length, err := ph.service.ApiGetDownloadObsFile(ctx, username, obsPath)
+	rc, filename, length, err := ph.service.GetDownloadObsFile(ctx, username, obsPath)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -280,10 +280,10 @@ func (ph *ApiHandler) ApiGetDownloadObsFile(ctx *gin.Context) {
 	ctx.DataFromReader(http.StatusOK, length, "application/octet-stream", rc, nil)
 }
 
-// ApiRelayFileDownload 流式输出一个 OBS 对象(经 Bot 中转)。鉴权走 query
+// RelayFileDownload 流式输出一个 OBS 对象(经 Bot 中转)。鉴权走 query
 // 短时 token(middleware.ParseDownloadToken):window.open / <img src> /
 // 邮件链接均无法携带 Authorization 头,这是浏览器直连下载面的统一入口。
-func (ph *ApiHandler) ApiRelayFileDownload(ctx *gin.Context) {
+func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 	key, err := middleware.ParseDownloadToken(ctx.Query("t"))
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": err.Error()})
@@ -316,7 +316,7 @@ func (ph *ApiHandler) ApiRelayFileDownload(ctx *gin.Context) {
 	ctx.DataFromReader(http.StatusOK, length, contentType, rc, nil)
 }
 
-func (ph *ApiHandler) ApiDownloadObsRenderingFile(ctx *gin.Context) {
+func (ph *Handler) DownloadObsRenderingFile(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.PostForm("id")) //主id
 	format := ctx.PostForm("document_format") //文件格式
 
@@ -325,7 +325,7 @@ func (ph *ApiHandler) ApiDownloadObsRenderingFile(ctx *gin.Context) {
 		return
 	}
 	// 获取文件内容和文件名
-	content, filename, err := ph.service.ApiDownloadObsRenderingFile(ctx, id, format)
+	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, id, format)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return

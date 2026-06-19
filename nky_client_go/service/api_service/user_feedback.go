@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func (ps *ApiService) ApiUserFeedback(ctx context.Context, email, feedbackType, feedbackContent string) (id int, err error) {
+func (ps *Service) UserFeedback(ctx context.Context, email, feedbackType, feedbackContent string) (id int, err error) {
 	var user *model.SUser
 	err = model.DB(ctx).Model(&model.SUser{}).Debug().Where("email =?", email).First(&user).Error
 	if err != nil {

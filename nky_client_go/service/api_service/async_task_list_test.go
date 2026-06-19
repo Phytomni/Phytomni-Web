@@ -36,7 +36,7 @@ func setupAsyncListDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// ApiAsyncTaskList 必须做跨用户列表隔离:Count 返回的 total 与分页 Find 返回的行
+// AsyncTaskList 必须做跨用户列表隔离:Count 返回的 total 与分页 Find 返回的行
 // 都只能是调用者本人的任务,绝不能把别的用户的任务带出来。
 func TestApiAsyncTaskList_ScopesToOwner(t *testing.T) {
 	gdb := setupAsyncListDB(t)
@@ -49,8 +49,8 @@ func TestApiAsyncTaskList_ScopesToOwner(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
-	list, total, _, err := ps.ApiAsyncTaskList(context.Background(), "alice", 1, 10)
+	ps := NewService()
+	list, total, _, err := ps.AsyncTaskList(context.Background(), "alice", 1, 10)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

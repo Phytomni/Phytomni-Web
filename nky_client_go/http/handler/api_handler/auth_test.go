@@ -18,7 +18,7 @@ import (
 	"nky_client_go/utils"
 )
 
-// setupProfileTestDB 建一个 in-memory SQLite,创建 ApiGetUserProfile 实际查的两张表
+// setupProfileTestDB 建一个 in-memory SQLite,创建 GetUserProfile 实际查的两张表
 // (s_user / s_question_agent_logs) 的最小列集,注册到全局 db registry。
 //
 // 手写 CREATE TABLE 而非 AutoMigrate:SUser 带 MySQL 专有的 type:enum tag,
@@ -85,11 +85,11 @@ func TestApiGetUserProfile_IgnoresQueryEmailUsesJWT(t *testing.T) {
 		t.Fatalf("seed users: %v", err)
 	}
 
-	ph := NewApiHandler()
+	ph := NewHandler()
 	c, w := newProfileRequestContext(t, "email=bob@x.com")
 	c.Set("username", "alice@x.com") // AuthMiddleware 注入的身份
 
-	ph.ApiGetUserProfile(c)
+	ph.GetUserProfile(c)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body=%s)", w.Code, w.Body.String())
@@ -117,11 +117,11 @@ func TestApiGetUserProfile_MissingUsernameReturns401(t *testing.T) {
 		t.Fatalf("seed users: %v", err)
 	}
 
-	ph := NewApiHandler()
+	ph := NewHandler()
 	c, w := newProfileRequestContext(t, "email=bob@x.com")
 	// 故意不 Set username
 
-	ph.ApiGetUserProfile(c)
+	ph.GetUserProfile(c)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 when username missing, got %d (body=%s)", w.Code, w.Body.String())
@@ -146,10 +146,10 @@ func newRegisterPostContext(t *testing.T, form url.Values) (*gin.Context, *httpt
 // 空凭证分支必须把本地化文案放在 "message"(前端拦截器只读 res.data.message),
 // 不得用旧的 "error" 键 —— 否则本地化文案在前端被通用回落吞掉。
 func TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope(t *testing.T) {
-	ph := NewApiHandler()
+	ph := NewHandler()
 	c, w := newRegisterPostContext(t, url.Values{})
 
-	ph.ApiUserRegister(c)
+	ph.UserRegister(c)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 on empty credentials, got %d (body=%s)", w.Code, w.Body.String())
@@ -166,7 +166,7 @@ func TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope(t *testing.T) {
 	}
 }
 
-// setupLoginTestDB creates the full s_user column set ApiLogin -> GetUserInfo
+// setupLoginTestDB creates the full s_user column set Login -> GetUserInfo
 // reads (mirrors service/api_service/user_test.go's DDL).
 func setupLoginTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -203,9 +203,9 @@ func TestApiLogin_ResponseOmitsPasswordHash(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ph := NewApiHandler()
+	ph := NewHandler()
 	c, w := newRegisterPostContext(t, url.Values{"email": {"a@x.com"}, "password": {"goodpass"}})
-	ph.ApiLogin(c)
+	ph.Login(c)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body=%s)", w.Code, w.Body.String())

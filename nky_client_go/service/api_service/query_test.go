@@ -7,7 +7,7 @@ import (
 )
 
 // TestSlugRoutingDecision pins the chat-vs-remote dispatch decision and the
-// empty-tool default, which drive which Bot endpoint ApiQuery calls.
+// empty-tool default, which drive which Bot endpoint Query calls.
 func TestSlugRoutingDecision(t *testing.T) {
 	cases := []struct {
 		tool     string

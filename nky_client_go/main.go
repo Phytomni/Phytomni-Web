@@ -37,7 +37,7 @@ func main() {
 
 func initConfig(*cli.Context) error {
 	viper.SetDefault("app", "nky_client_go")
-	// ApiGeneList / ApiGeneDetails read .md examples from this root;
+	// GeneList / GeneDetails read .md examples from this root;
 	// historically the call sites carried a developer's local Windows
 	// path as the fallback, which silently broke on every non-Windows
 	// deploy. SetDefault here so a missing app.yml key lands on the

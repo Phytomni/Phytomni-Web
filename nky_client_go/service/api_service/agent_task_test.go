@@ -93,9 +93,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 // 没 fix 时:First() ErrRecordNotFound,但 QuestionAgentLog=&{Id:0} 被 prepend,len(got)=1。
 func TestApiAnswerCheck_NoHistory(t *testing.T) {
 	setupTestDB(t)
-	ps := NewApiService()
+	ps := NewService()
 
-	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-nonexistent")
+	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-nonexistent")
 
 	if err != nil {
 		t.Fatalf("expected nil err for missing dialogue, got %v", err)
@@ -116,8 +116,8 @@ func TestApiAnswerCheck_HappyPath(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
-	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-1")
+	ps := NewService()
+	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-1")
 
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -148,9 +148,9 @@ func TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
+	ps := NewService()
 	// alice 试图打开 bob 的 dialogue (越权场景 + missing parent 场景共一)
-	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-bob")
+	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-bob")
 
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -176,8 +176,8 @@ func TestApiAnswerCheck_ScopesChildrenToOwner(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ps := NewApiService()
-	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-x")
+	ps := NewService()
+	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-x")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -212,8 +212,8 @@ func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	defer func() { rxBot.BotConfig = nil }()
 
-	ps := NewApiService()
-	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-k")
+	ps := NewService()
+	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-k")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -257,8 +257,8 @@ func TestApiAnswerCheck_OverlayReshapesFinalReport(t *testing.T) {
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	defer func() { rxBot.BotConfig = nil }()
 
-	ps := NewApiService()
-	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-dg")
+	ps := NewService()
+	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-dg")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -291,8 +291,8 @@ func TestApiAnswerCheck_OverlayDegradesOnBot500(t *testing.T) {
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	defer func() { rxBot.BotConfig = nil }()
 
-	ps := NewApiService()
-	got, err := ps.ApiAnswerCheck(context.Background(), "alice", "dlg-e")
+	ps := NewService()
+	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-e")
 	if err != nil {
 		t.Fatalf("expected nil err on Bot 500 (degrade), got %v", err)
 	}

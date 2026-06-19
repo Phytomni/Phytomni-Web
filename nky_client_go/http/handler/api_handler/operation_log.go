@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (ph *ApiHandler) ApiGetOperationLogs(ctx *gin.Context) {
+func (ph *Handler) GetOperationLogs(ctx *gin.Context) {
 	// 操作员身份(管理员鉴权在 service 层执行)
 	operatorName, exists := ctx.Get("username")
 	if !exists {
@@ -36,7 +36,7 @@ func (ph *ApiHandler) ApiGetOperationLogs(ctx *gin.Context) {
 	}
 
 	// 调用服务层
-	logs, err := ph.service.ApiGetOperationLogs(ctx, operatorName.(string), userIds, startTime, endTime)
+	logs, err := ph.service.GetOperationLogs(ctx, operatorName.(string), userIds, startTime, endTime)
 	if err != nil {
 		if errors.Is(err, api_service.ErrOperationLogForbidden) {
 			ctx.JSON(http.StatusForbidden, gin.H{"code": http.StatusForbidden, "message": err.Error()})

@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (ph *ApiHandler) ApiGetUserProfile(ctx *gin.Context) {
+func (ph *Handler) GetUserProfile(ctx *gin.Context) {
 	// profile 接口为"查自己"语义:邮箱只从 AuthMiddleware 注入的 JWT 身份
 	// (ctx.Get("username"))取,绝不信任前端传来的 ?email=,以关闭 IDOR。
 	// 前端仍发 ?email=,后端忽略,合法自查行为不变。
@@ -26,7 +26,7 @@ func (ph *ApiHandler) ApiGetUserProfile(ctx *gin.Context) {
 		return
 	}
 
-	profile, err := ph.service.ApiGetUserProfile(ctx, email)
+	profile, err := ph.service.GetUserProfile(ctx, email)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -35,7 +35,7 @@ func (ph *ApiHandler) ApiGetUserProfile(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(profile))
 }
 
-func (ph *ApiHandler) ApiUserRegister(ctx *gin.Context) {
+func (ph *Handler) UserRegister(ctx *gin.Context) {
 	email := ctx.PostForm("email")
 	password := ctx.PostForm("password")
 
@@ -81,7 +81,7 @@ func (ph *ApiHandler) ApiUserRegister(ctx *gin.Context) {
 		return
 	}
 
-	err := ph.service.ApiUserRegister(ctx, email, password)
+	err := ph.service.UserRegister(ctx, email, password)
 	if err != nil {
 		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusConflict, "message": err.Error()})
 		return
@@ -91,7 +91,7 @@ func (ph *ApiHandler) ApiUserRegister(ctx *gin.Context) {
 
 }
 
-func (ph *ApiHandler) ApiRegister(ctx *gin.Context) {
+func (ph *Handler) Register(ctx *gin.Context) {
 	email := ctx.PostForm("email")
 	password := ctx.PostForm("password")
 	code := ctx.PostForm("code")
@@ -164,7 +164,7 @@ func (ph *ApiHandler) ApiRegister(ctx *gin.Context) {
 
 }
 
-func (ph *ApiHandler) ApiModifyPassword(ctx *gin.Context) {
+func (ph *Handler) ModifyPassword(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	password := ctx.PostForm("password")
 	newPassword := ctx.PostForm("new_password")
@@ -191,7 +191,7 @@ func (ph *ApiHandler) ApiModifyPassword(ctx *gin.Context) {
 		return
 	}
 
-	email, err := ph.service.ApiModifyPassword(ctx, name.(string), password, newPassword)
+	email, err := ph.service.ModifyPassword(ctx, name.(string), password, newPassword)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
@@ -216,7 +216,7 @@ func (ph *ApiHandler) ApiModifyPassword(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(email))
 }
 
-func (ph *ApiHandler) ApiLogin(ctx *gin.Context) {
+func (ph *Handler) Login(ctx *gin.Context) {
 	email := ctx.PostForm("email")
 	password := ctx.PostForm("password")
 
