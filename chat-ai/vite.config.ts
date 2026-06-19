@@ -20,14 +20,14 @@ export default defineConfig(({ mode, command }) => {
   // 设置第三个参数为 '' 来加载所有环境变量，而不管是否有 `VITE_` 前缀。
   const env = loadEnv(mode, process.cwd(), "");
   const { VITE_APP_BASE_URL, VITE_BASE_API, VITE_FILE_BASE, VITE_PORT } = env;
-  const port = VITE_PORT || 80; // 端口
+  const port = VITE_PORT || 5173; // 端口
 
   // Dev-only proxy targets — overridable via .env.dev so each engineer
   // points at their own LAN backend without editing this file. Defaults
   // to localhost so a fresh clone works against a locally-running Go
-  // gateway (8082 is the canonical port from CLAUDE.md).
-  const devProxyApi = env.VITE_DEV_PROXY_API || "http://localhost:8082";
-  // /query is served by the Go Bot gateway (8082), same as /v1. The Python
+  // gateway (8080 is the canonical port from CLAUDE.md).
+  const devProxyApi = env.VITE_DEV_PROXY_API || "http://localhost:8080";
+  // /query is served by the Go Bot gateway (8080), same as /v1. The Python
   // MCP service that used to serve /query was removed in the cutover; set
   // VITE_DEV_PROXY_QUERY only if the gateway runs on a different host.
   const devProxyQuery = env.VITE_DEV_PROXY_QUERY || devProxyApi;

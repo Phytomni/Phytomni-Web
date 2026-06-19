@@ -184,7 +184,7 @@ bot:
 # ---------------------------------------------------------------------
 email:
   web_base_url: "http://your-web-host"
-  api_base_url: "http://your-api-host:8082"
+  api_base_url: "http://your-api-host:8080"
   smtp_server: "smtp.qq.com"
   smtp_port: 587
   from_display: "nky_email <your-sender@qq.com>"
