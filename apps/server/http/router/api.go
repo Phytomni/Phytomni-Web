@@ -86,12 +86,3 @@ func Api(r *gin.RouterGroup) {
 		serverRouter.POST("/update_task", serverTaskHandler.ServerUpdateTask) //客户使用server修改
 	}
 }
-
-//prefixTokenRouter := r.Group("v1").Use(middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.CORS())
-//apiHandler := api_handler.NewHandler()
-//{
-////todo 以下接口都暂停使用
-//prefixTokenRouter.GET("/index", apiHandler.ApiIndexList)
-//prefixTokenRouter.GET("/user_info", apiHandler.ApiUserInfo)
-//
-//}
