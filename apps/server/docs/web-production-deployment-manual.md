@@ -17,7 +17,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 
 **Wording.** This guide never uses version numbers. It says **"the current production stack"** for what is running today and **"this release" / "the new build"** for what you are deploying.
 
-**Secrets are placeholders.** Every credential below is written as a placeholder such as `<DB_PASSWORD>`, `<PTM_WEB_KEY>`, `<BOT_SERVICE_TOKEN>`, `<JWT_SECRET>`, `<PROD_DB_HOST>`, `<SMTP_AUTH_CODE>`, `<HUAWEI_IAM_PASSWORD>`. Substitute the real values out-of-band on the server. Never commit real values, and never paste them into tickets or logs.
+**Secrets are placeholders.** Every credential below is written as a placeholder such as `<DB_PASSWORD>`, `<PTM_WEB_KEY>`, `<BOT_SERVICE_TOKEN>`, `<JWT_SECRET>`, `<PROD_DB_HOST>`, `<SMTP_AUTH_CODE>`. Substitute the real values out-of-band on the server. Never commit real values, and never paste them into tickets or logs.
 
 **Verify-on-server markers.** A few facts live only on the production server and are **not** in any repo. They are marked **(verify on-server)** below — confirm them in place rather than assuming.
 
@@ -48,7 +48,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 | Chat backend | A Python service (`nky_client_python`) serves `/query`, owns the MCP client, and holds Huawei OBS credentials | Removed. The Go service's `/query` handler relays to the Bot | A whole process is decommissioned; `/query` traffic moves to Go |
 | Bot dependency | None | Required. Go validates Bot agents at boot when the gateway is enabled | Bot must be up and complete before Go starts with the gateway on |
 | OBS credentials | Held by the Python/Web side; files fetched directly | Held by the Bot only; downloads go through a Bot relay | Web carries no Huawei OBS keys after cutover |
-| `app.yml` | Minimal | New `bot`, `huawei`, `jwt`, `email` blocks; DSN host/user change; `gene_file_path` change | Several new required keys; missing them blocks boot or features |
+| `app.yml` | Minimal | New `bot`, `jwt`, `email` blocks; DSN host/user change; `gene_file_path` change | Several new required keys; missing them blocks boot or features |
 | DB schema | — | `+bot_run_id`, `+image_paths`, three enum tightenings; two legacy tables retained-but-unused | An additive migration is required before cutover |
 | nginx | `/query` upstream is the Python service | `/query` upstream is Go `:8080` | One reverse-proxy line moves at cutover |
 | First-login flow | No server-side gate | Backend gate + matching frontend guard | Backend and frontend **must** ship together |
@@ -132,24 +132,13 @@ bot:
 - `timeout_seconds` bounds **synchronous** agent calls only. Observed production latencies: chat ~140s, knowledge ~198s, review >300s (RAG-heavy). Keep it **≥900**; raise it if your RAG agents run slower. Async agents (analyst, deep_genome) return a task id immediately and are not bound by this.
 - `user_api_key` is minted by the Bot team; `key_audit_redact: true` ensures it is never logged in full.
 
-### 4.2 `huawei` — NEW (critical)
+### 4.2 `huawei` — REMOVED
 
-Used by the analyst-agent EIHealth polling cron and on-demand task-log fetch.
-
-```yaml
-huawei:
-  insecure_skip_verify: false          # NEVER true in production (disables TLS verify)
-  iam:
-    user_name: "<HUAWEI_IAM_USER>"
-    password: "<HUAWEI_IAM_PASSWORD>"
-    domain_name: "<HUAWEI_IAM_DOMAIN>"
-    project_name: "cn-east-3"
-    auth_url: "https://iam.cn-east-3.myhuaweicloud.com/v3/auth/tokens"
-  eihealth:
-    base_url: "https://eihealth.cn-east-3.myhuaweicloud.com/v1"
-    account_id: "<HUAWEI_ACCOUNT_ID>"
-    project_uuid: "<EIHEALTH_PROJECT_UUID>"
-```
+The Go service no longer talks to Huawei IAM/EIHealth directly and holds no
+Huawei credentials. Async (analyst / deep_genome) task status is reconciled
+through the Bot run API (`SyncBotRuns` + the `/query/analyst/update_log`
+writeback); OBS access is the Bot relay (`/v1/relay/obs/*`). Remove any
+`huawei.*` block from the live `app.yml`.
 
 ### 4.3 `jwt` — NEW (critical)
 

@@ -158,3 +158,13 @@ Two windows, matching the staged §6:
 - Runtime: `/query` returns a 5xx with an operator-actionable log when Bot
   is down; `/v1/answer/check` degrades to MySQL legacy fields rather than
   failing. Web Go itself never crashes on Bot trouble.
+
+## 10. Post-deploy: remove dead Huawei config (operator)
+
+- Delete the `huawei.*` block from the live `config/app.yml` (the Go service no
+  longer reads it).
+- Optional one-time cleanup: any RUNNING `question_agent_logs` row that predates
+  the Bot cutover (has a `task_id` but no `bot_run_id`) can no longer be
+  reconciled and can be marked failed, e.g.
+  `UPDATE question_agent_logs SET status='FAILED' WHERE status='RUNNING' AND (bot_run_id IS NULL OR bot_run_id='') AND created_at < '<cutover-date>';`
+  Run only after confirming such rows exist and are genuinely stale.

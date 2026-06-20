@@ -27,9 +27,10 @@ go run main.go          # serve (default action) — :8080
 
 Copy `config/app.yml.example` to `config/app.yml` and fill in real values
 before the first run — DB, the Bot integration (`bot.base_url` /
-`bot.user_api_key` / `bot.proxy_enabled`), Huawei OBS / EIHealth, SMTP, and
-cron. The gateway forwards `/query` to Phytomni-Bot; the in-repo Python MCP
-service that previously served `/query` has been removed.
+`bot.user_api_key` / `bot.proxy_enabled`; Huawei OBS is reached only through
+the Bot relay, so the Web service holds no Huawei keys), SMTP, and cron. The
+gateway forwards `/query` to Phytomni-Bot; the in-repo Python MCP service that
+previously served `/query` has been removed.
 
 ### Frontend (apps/web)
 
