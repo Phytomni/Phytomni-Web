@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// aliasToSlug maps the tool names chat-ai historically sends (singular and
+// aliasToSlug maps the tool names the Web app historically sends (singular and
 // plural forms) to Bot canonical agent slugs. This table is Web-owned and
 // deliberately decoupled from Bot's advisory legacy_aliases metadata.
 var aliasToSlug = map[string]string{
@@ -16,7 +16,7 @@ var aliasToSlug = map[string]string{
 	"ReviewAgent": "review", "ReviewAgents": "review",
 	"DeepGenomeAgent": "deep_genome",
 	// BriefReviewAgent is a brief-review variant backed by Bot's brief_gene
-	// sync agent; chat-ai keeps the BriefReviewAgent vocabulary for rendering.
+	// sync agent; the Web app keeps the BriefReviewAgent vocabulary for rendering.
 	"BriefReviewAgent": "brief_gene",
 }
 
@@ -54,7 +54,7 @@ func ValidateAgents(ctx context.Context, c *Client) error {
 	return nil
 }
 
-// SlugFor translates a chat-ai tool name into a Bot slug. An empty tool
+// SlugFor translates a Web app tool name into a Bot slug. An empty tool
 // defaults to the chat agent.
 func SlugFor(tool string) (string, bool) {
 	if tool == "" {

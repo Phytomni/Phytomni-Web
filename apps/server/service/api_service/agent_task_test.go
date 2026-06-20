@@ -193,7 +193,7 @@ func TestApiAnswerCheck_ScopesChildrenToOwner(t *testing.T) {
 
 // TestApiAnswerCheck_OverlayReshapesBotContent pins the activated read path:
 // a knowledge row carrying a bot_run_id gets its answer reshaped into the
-// {content, doc_list} JSON chat-ai parses (sourced from the run's formatted
+// {content, doc_list} JSON the Web app parses (sourced from the run's formatted
 // envelope, not the flat answer), and its status uppercased.
 func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
 	gdb := setupTestDB(t)
@@ -322,7 +322,7 @@ func runRecordServer(t *testing.T, body string) {
 
 // TestSyncBotRuns_WritesReportAndStatusOnChange: a RUNNING deep_genome row whose
 // Bot run has finished gets its status flipped and the assembled final_report
-// reshaped into the {content, doc_list} JSON chat-ai parses.
+// reshaped into the {content, doc_list} JSON the Web app parses.
 func TestSyncBotRuns_WritesReportAndStatusOnChange(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs

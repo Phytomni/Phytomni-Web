@@ -3,7 +3,7 @@ package bot
 import "encoding/json"
 
 // ShapeAnswer rewrites a Bot reply into the JSON-string-in-answer contract
-// chat-ai's JSON.parse(answer) expects, keyed by agent slug. cited families
+// the Web app's JSON.parse(answer) expects, keyed by agent slug. cited families
 // (knowledge/review/deep_genome) become {content, doc_list}; data becomes
 // {headers, rows} with positional rows; chat/analyst (and any unknown slug)
 // pass through as a plain string. answerText is the display answer already
@@ -36,7 +36,7 @@ func ChatAnswerText(resp *ChatCompletionResponse) string {
 
 // citedAnswer emits {"content": answerText, "doc_list": [{"title": ...}]}.
 // Bot references carry only {file_id, title}; an empty title falls back to the
-// file_id so chat-ai's `v-if="doc.title"` branch still renders the row.
+// file_id so the Web app's `v-if="doc.title"` branch still renders the row.
 func citedAnswer(answerText string, f *Formatted) string {
 	docList := []map[string]interface{}{}
 	if f != nil && len(f.References) > 0 {
@@ -63,8 +63,8 @@ func citedAnswer(answerText string, f *Formatted) string {
 
 // tableAnswer emits {"headers": [...], "rows": [[...]]}. The table lives in
 // Bot's formatted.tabular; rows are normalized to positional arrays aligned to
-// headers (chat-ai indexes row[i] by header position). A missing or
-// undecodable tabular still yields valid JSON, because chat-ai's Data history
+// headers (the Web app indexes row[i] by header position). A missing or
+// undecodable tabular still yields valid JSON, because the Web app's Data history
 // branch has no try/catch and must never throw.
 func tableAnswer(f *Formatted) string {
 	headers := []string{}

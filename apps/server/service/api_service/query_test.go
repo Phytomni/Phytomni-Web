@@ -35,8 +35,8 @@ func TestSlugRoutingDecision(t *testing.T) {
 	}
 }
 
-// TestToolNameMapCoversAgents ensures every renderable tool_name chat-ai needs
-// has a slug mapping, so persisted rows carry a tool_name chat-ai can branch on.
+// TestToolNameMapCoversAgents ensures every renderable tool_name the Web app needs
+// has a slug mapping, so persisted rows carry a tool_name the Web app can branch on.
 func TestToolNameMapCoversAgents(t *testing.T) {
 	want := []string{"ChatAgent", "KnowledgeAgent", "DataAgent", "AnalystAgent", "ReviewAgent", "DeepGenomeAgent"}
 	have := make(map[string]bool)
@@ -45,7 +45,7 @@ func TestToolNameMapCoversAgents(t *testing.T) {
 	}
 	for _, w := range want {
 		if !have[w] {
-			t.Errorf("slugToToolName missing tool_name %q chat-ai renders by", w)
+			t.Errorf("slugToToolName missing tool_name %q the Web app renders by", w)
 		}
 	}
 }

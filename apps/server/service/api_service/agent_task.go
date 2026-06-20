@@ -210,7 +210,7 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 		}
 		// Reshape from the run's formatted envelope (/v1/runs keeps
 		// result.formatted in default mode) so cited/data history replays carry
-		// the JSON chat-ai parses. deep_genome's assembled report arrives as
+		// the JSON the Web app parses. deep_genome's assembled report arrives as
 		// result.final_report (no formatted block); fall back to it, then to the
 		// flat answer for runs with no rendered content yet (still running, or
 		// analyst awaiting Bot's formatted answer).
@@ -226,7 +226,7 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 			row.ToolName = rec.ToolName
 		}
 		if rec.Status != "" {
-			// chat-ai gates the download button on the exact-case "SUCCEEDED";
+			// The Web app gates the download button on the exact-case "SUCCEEDED";
 			// Bot returns lowercase. Normalize like the update-log write path.
 			row.Status = strings.ToUpper(rec.Status)
 		}

@@ -33,14 +33,14 @@ type QueryFile struct {
 // QueryInput is the parsed /query multipart form.
 type QueryInput struct {
 	Query     string
-	Id        int64 // chat-ai's threading id: 0 = new conversation, else parent row id
+	Id        int64 // the Web app's threading id: 0 = new conversation, else parent row id
 	Tool      string
 	RefreshId int64 // !=0 = re-answer an existing turn (UPDATE that row)
 	History   string
 	Files     []QueryFile
 }
 
-// QueryData is the response payload chat-ai reads off response.data. The
+// QueryData is the response payload the Web app reads off response.data. The
 // content fields are relayed from Bot; id/reaction are Web-owned.
 type QueryData struct {
 	Id                int64  `json:"id"`
@@ -56,7 +56,7 @@ type QueryData struct {
 	DialogueId        string `json:"dialogue_id"`
 }
 
-// slugToToolName maps a Bot slug back to the tool_name chat-ai renders by.
+// slugToToolName maps a Bot slug back to the tool_name the Web app renders by.
 var slugToToolName = map[string]string{
 	"chat":        "ChatAgent",
 	"knowledge":   "KnowledgeAgent",
@@ -70,7 +70,7 @@ var slugToToolName = map[string]string{
 // Query is the gateway orchestration: upload files to Bot, dispatch to the
 // resolved agent, persist a Web-side row (Bot owns the content; Web keeps the
 // ownership/threading record plus a transitional content fallback), and return
-// exactly what chat-ai consumes.
+// exactly what the Web app consumes.
 //
 // Threading model (reconstructed from the surviving read paths QueryList /
 // AnswerCheck, not from the deleted Python service):
@@ -271,7 +271,7 @@ func (ps *Service) resolveDialogue(ctx context.Context, username string, in Quer
 }
 
 // QueryAnalystUpdateLog syncs a finished remote task's result back into the
-// Web row. chat-ai posts both task_id and compute_resource.
+// Web row. The Web app posts both task_id and compute_resource.
 func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, computeResource string) (string, error) {
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return "", ErrGatewayDisabled
@@ -288,7 +288,7 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 	if err != nil {
 		return "", err
 	}
-	// Reshape the finished task's content into the JSON chat-ai parses, the
+	// Reshape the finished task's content into the JSON the Web app parses, the
 	// same as the live dispatch and the answer-check overlay. deep_genome's
 	// assembled report arrives as result.final_report (no formatted envelope),
 	// so fall back to it when there is no formatted block.
@@ -314,7 +314,7 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 		// final_report is deep_genome-exclusive; reshape with the known slug.
 		answer = rxBot.ShapeAnswer("deep_genome", fr, nil)
 	}
-	// chat-ai gates download on "SUCCEEDED"; Bot is lowercase. Skip an empty
+	// The Web app gates download on "SUCCEEDED"; Bot is lowercase. Skip an empty
 	// status rather than writing '' into the NOT NULL column (GORM's map Updates
 	// does not skip zero values), which would strand the row out of the cron's
 	// WHERE status='RUNNING' poll set.

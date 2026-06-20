@@ -32,7 +32,7 @@ func NewClient() *Client {
 }
 
 // APIError is a non-2xx Bot response decoded into a typed error so callers can
-// distinguish a client-correctable status (surfaced to chat-ai) from a 5xx or
+// distinguish a client-correctable status (surfaced to the Web app) from a 5xx or
 // transport failure (kept generic). Message is the Bot envelope message; body
 // is the raw payload kept for logs only.
 type APIError struct {
@@ -140,7 +140,7 @@ func (c *Client) ChatCompletion(ctx context.Context, req ChatCompletionRequest) 
 }
 
 // ChatCompletionStream opens a streaming chat completion and returns the raw
-// SSE body for the caller to io.Copy through to chat-ai. Precondition
+// SSE body for the caller to io.Copy through to the Web app. Precondition
 // failures (auth, unsupported model) surface as a decoded error here, before
 // any frame is forwarded, because Bot validates them up front. The caller
 // owns closing the returned ReadCloser.

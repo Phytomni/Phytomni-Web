@@ -15,7 +15,7 @@ import (
 // so the legacy GetTaskStatus IAM poll cannot advance them. For each row it
 // polls GET /v1/runs/{bot_run_id}, and when the run's status has changed it
 // flips the MySQL status and writes the assembled report (result.final_report,
-// reshaped into the {content, doc_list} JSON chat-ai parses). It does not
+// reshaped into the {content, doc_list} JSON the Web app parses). It does not
 // clobber the prior answer with a blank reshape (only writes answer when a
 // final_report is present). There is no *gin.Context here (the cron has no
 // request), so it uses a background context and model.Default(), mirroring

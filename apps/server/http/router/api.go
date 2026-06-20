@@ -61,7 +61,7 @@ func Api(r *gin.RouterGroup) {
 
 	}
 
-	// chat-ai posts /query and /query/analyst/update_log at the root path (not
+	// The Web app posts /query and /query/analyst/update_log at the root path (not
 	// under /v1). Mount them on a root group that replicates the /v1 auth chain.
 	// The gateway only serves real traffic when bot.proxy_enabled is true.
 	queryRouter := r.Group("").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())

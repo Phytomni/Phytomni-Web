@@ -1651,9 +1651,11 @@ const getHistoryQuestionData = () => {
   });
 };
 
-// 检查 localStorage 中所有未完成的会话,删除已与 chatList 匹配的占位
-// (chat-ai 不像 frontend 把占位条目 push 到 chatList — chat-ai 的 chatList 由 backend
-// fetch 主导,pending chat URL 访问走 loadPendingChat 即可,避免与 chatStates 并行模型冲突)
+// Check localStorage for all incomplete sessions and remove placeholders that
+// already match an entry in chatList. Unlike the legacy frontend, the Web app
+// does not push placeholder entries into chatList — here chatList is driven by
+// backend fetches, and pending-chat URLs are handled by loadPendingChat, avoiding
+// conflicts with the parallel chatStates model.
 const restorePendingChats = () => {
   const pendingChatKeys = Object.keys(localStorage).filter((key) =>
     key.startsWith("pending_chat_")

@@ -166,7 +166,7 @@ func TestParseRunFinalReport(t *testing.T) {
 }
 
 // deep_genome reshapes its final_report through the cited family (f == nil),
-// yielding {content, doc_list: []} — the JSON chat-ai's DeepGenomeResultViewer parses.
+// yielding {content, doc_list: []} — the JSON the Web app's DeepGenomeResultViewer parses.
 func TestShapeAnswer_DeepGenomeFinalReport(t *testing.T) {
 	got := ShapeAnswer("deep_genome", "report md", nil)
 	var parsed struct {

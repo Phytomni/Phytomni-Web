@@ -14,7 +14,7 @@ import (
 )
 
 // newQueryRequest builds a /query multipart POST carrying just a query field,
-// mirroring what chat-ai sends, on a gin test context.
+// mirroring what the Web app sends, on a gin test context.
 func newQueryRequest(t *testing.T, query string) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	var buf bytes.Buffer

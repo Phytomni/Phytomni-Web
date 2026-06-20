@@ -16,7 +16,7 @@ import (
 )
 
 // queryErrorStatus maps a /query service error to the HTTP status and message
-// chat-ai and ops should see, so a disabled gateway (503) and an unknown tool
+// the Web app and ops should see, so a disabled gateway (503) and an unknown tool
 // (400) are distinguishable from a client-correctable Bot 4xx (its surfaced
 // message) and from an opaque server failure (500, generic message).
 func queryErrorStatus(err error) (int, string) {
@@ -33,9 +33,9 @@ func queryErrorStatus(err error) (int, string) {
 }
 
 // Query is the gateway entry for chat sends. It parses the multipart form
-// chat-ai posts, hands it to the service, and returns the row chat-ai renders.
-// chat-ai consumes this as JSON via axios; an SSE pass-through path (the Bot
-// client exposes ChatCompletionStream) is wired once chat-ai adopts streaming
+// the Web app posts, hands it to the service, and returns the row the Web app renders.
+// The Web app consumes this as JSON via axios; an SSE pass-through path (the Bot
+// client exposes ChatCompletionStream) is wired once the Web app adopts streaming
 // — today it never sends stream=true.
 func (ph *Handler) Query(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
@@ -45,7 +45,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 
 	// Parse the bounded multipart body once: a MaxBytesReader trip surfaces
 	// here, so an over-limit upload is reported as too large rather than
-	// mislabeled as an empty query. (/query is multipart-only from chat-ai; a
+	// mislabeled as an empty query. (/query is multipart-only from the Web app; a
 	// non-multipart body yields ErrNotMultipart and simply carries no files.)
 	form, formErr := ctx.MultipartForm()
 	if formErr != nil {
@@ -109,7 +109,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 }
 
 // QueryAnalystUpdateLog syncs a finished remote task result back into the
-// Web row. chat-ai posts task_id plus compute_resource.
+// Web row. The Web app posts task_id plus compute_resource.
 func (ph *Handler) QueryAnalystUpdateLog(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	taskID := ctx.PostForm("task_id")

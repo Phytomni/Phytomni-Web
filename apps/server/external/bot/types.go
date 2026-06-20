@@ -19,7 +19,7 @@ type ChatCompletionRequest struct {
 }
 
 // Formatted is the Phytomni-specific envelope Bot returns alongside the
-// OpenAI-shaped fields. Answer/FollowUpQuestions are what chat-ai renders.
+// OpenAI-shaped fields. Answer/FollowUpQuestions are what the Web app renders.
 type Formatted struct {
 	Answer            string          `json:"answer"`
 	FollowUpQuestions json.RawMessage `json:"follow_up_questions"`
