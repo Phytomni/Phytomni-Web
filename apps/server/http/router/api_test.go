@@ -99,3 +99,14 @@ func TestApiV1ConversationRoutes(t *testing.T) {
 		},
 	)
 }
+
+// TestApiV1ChatSendRoute pins the D4 chat-send migration: POST /query becomes
+// POST /api/v1/conversations/:id/messages (id=0 means a new conversation), co-
+// existing with the GET on the same path. The old root /query route must be gone.
+func TestApiV1ChatSendRoute(t *testing.T) {
+	routes := routeSet(t)
+	assertRoutes(t, routes,
+		[]string{"POST /api/v1/conversations/:id/messages"},
+		[]string{"POST /query"},
+	)
+}

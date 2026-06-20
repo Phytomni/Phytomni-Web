@@ -28,8 +28,9 @@ func newQueryRequest(t *testing.T, query string) (*gin.Context, *httptest.Respon
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/query", &buf)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &buf)
 	c.Request.Header.Set("Content-Type", mw.FormDataContentType())
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
 	return c, w
 }
 

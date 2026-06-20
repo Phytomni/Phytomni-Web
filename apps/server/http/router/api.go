@@ -62,19 +62,19 @@ func Api(r *gin.RouterGroup) {
 
 		apiV1Router.GET("/conversations", apiHandler.Conversations)                  //会话列表(?favorite=true 为收藏列表)
 		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)       //某会话的全部子级对话
+		apiV1Router.POST("/conversations/:id/messages", apiHandler.Query)            //发送消息(id=0 为新会话,转发到 Bot)
 		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)         //软删除会话
 		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)          //重命名会话
 		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType) //点赞/点踩
 		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)      //收藏/取消收藏
 	}
 
-	// The Web app posts /query and /query/analyst/update_log at the root path (not
-	// under /v1). Mount them on a root group that replicates the /v1 auth chain.
-	// The gateway only serves real traffic when bot.proxy_enabled is true.
+	// Bot 回写口暂留根路径(Bot 跨仓 backport 前的别名);发送消息已迁到
+	// POST /api/v1/conversations/:id/messages。中间件链与旧 /v1 一致;网关仅在
+	// bot.proxy_enabled 为 true 时服务真实流量。
 	queryRouter := r.Group("").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	{
-		queryRouter.POST("/query", apiHandler.Query)                                    //对话编排,转发到 Bot
-		queryRouter.POST("/query/analyst/update_log", apiHandler.QueryAnalystUpdateLog) //异步任务结果同步回库
+		queryRouter.POST("/query/analyst/update_log", apiHandler.QueryAnalystUpdateLog) //异步任务结果同步回库(Bot 回写,CP7 迁移)
 	}
 
 	// 浏览器直连下载面:window.open / <img src> 无法携带 Authorization 头,

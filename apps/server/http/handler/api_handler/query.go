@@ -65,7 +65,9 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "查询内容不能为空"})
 		return
 	}
-	in.Id, _ = strconv.ParseInt(ctx.DefaultPostForm("id", "0"), 10, 64)
+	// RESTful:会话 id 从路径 /conversations/:id/messages 取(id=0 表示新会话,
+	// 沿用旧 DefaultPostForm("id","0") 的语义)。refresh_id 仍随 multipart body。
+	in.Id, _ = strconv.ParseInt(ctx.Param("id"), 10, 64)
 	in.RefreshId, _ = strconv.ParseInt(ctx.DefaultPostForm("refresh_id", "0"), 10, 64)
 
 	if form != nil {

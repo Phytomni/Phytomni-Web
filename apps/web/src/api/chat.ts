@@ -17,7 +17,7 @@ export const getHistoryQuestionList = () => {
   });
 };
 
-// 对话
+// 对话(发送消息;RESTful:会话 id 进路径,id=0 为新会话)
 export const getQuery = (
   data:
     | {
@@ -28,14 +28,15 @@ export const getQuery = (
       }
     | FormData
 ) => {
+  const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
   return request({
-    url: "/query",
+    url: `/api/v1/conversations/${id}/messages`,
     method: "post",
     data: data,
   });
 };
 
-// 可中止的对话请求
+// 可中止的对话请求(同上)
 export const getQueryAbortable = (
   data:
     | {
@@ -47,8 +48,9 @@ export const getQueryAbortable = (
     | FormData,
   requestId?: string
 ) => {
+  const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
   return createAbortableRequest({
-    url: "/query",
+    url: `/api/v1/conversations/${id}/messages`,
     method: "post",
     data: data,
     requestId: requestId,
