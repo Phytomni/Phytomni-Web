@@ -72,3 +72,30 @@ func TestApiV1AuthUserRoutes(t *testing.T) {
 		},
 	)
 }
+
+// TestApiV1ConversationRoutes pins the §5.6 RESTful migration of the conversation
+// group: list/collect-list collapse onto GET /api/v1/conversations (the dispatcher
+// branches on ?favorite=true), and the per-conversation actions move the id into
+// the path with resource verbs.
+func TestApiV1ConversationRoutes(t *testing.T) {
+	routes := routeSet(t)
+	assertRoutes(t, routes,
+		[]string{
+			"GET /api/v1/conversations",
+			"GET /api/v1/conversations/:id/messages",
+			"DELETE /api/v1/conversations/:id",
+			"PATCH /api/v1/conversations/:id",
+			"PUT /api/v1/conversations/:id/reaction",
+			"PUT /api/v1/conversations/:id/favorite",
+		},
+		[]string{
+			"GET /v1/query/list",
+			"GET /v1/answer/check",
+			"POST /v1/query/list/delete",
+			"POST /v1/query/list/rename",
+			"POST /v1/query/reaction_type",
+			"POST /v1/query/collect",
+			"GET /v1/query/collect/list",
+		},
+	)
+}

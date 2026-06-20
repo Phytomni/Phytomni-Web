@@ -172,7 +172,7 @@ const favoriteToRename = ref<FavoriteItem | null>(null);
 const fetchFavorites = async () => {
   loading.value = true;
   try {
-    const response = await getCollectHistory({ id: "" }); // 获取所有收藏
+    const response = await getCollectHistory(); // 获取所有收藏
     if (response.code === 200 && response.data) {
       favoritesList.value = response.data.map((item: any) => ({
         id: item.id,

@@ -12,7 +12,7 @@ import request, { createAbortableRequest } from "@/utils/request";
 // 历史问题列表
 export const getHistoryQuestionList = () => {
   return request({
-    url: "/v1/query/list",
+    url: "/api/v1/conversations",
     method: "get",
   });
 };
@@ -55,12 +55,11 @@ export const getQueryAbortable = (
   });
 };
 
-// 查询对话
+// 查询对话(某会话的全部子级对话)
 export const getAnswerCheck = (data: { dialogue_id: string }) => {
   return request({
-    url: "/v1/answer/check",
+    url: `/api/v1/conversations/${data.dialogue_id}/messages`,
     method: "get",
-    params: data,
   });
 };
 
@@ -101,52 +100,55 @@ export const getAnalystAgentLog = (data: { id: string }) => {
     params: data,
   });
 };
-// 点赞点踩
+// 点赞点踩(RESTful:会话 id 进路径)
 export const getReactionType = (
   data: { id: string; reaction_type: string } | FormData
 ) => {
+  const id = data instanceof FormData ? data.get("id") : data.id;
   return request({
-    url: "/v1/query/reaction_type",
-    method: "post",
+    url: `/api/v1/conversations/${id}/reaction`,
+    method: "put",
     data: data,
   });
 };
-// 删除历史对话
+// 删除历史对话(RESTful:会话 id 进路径,无需请求体)
 export const deleteHistory = (
   data: { id: string; reaction_type: string } | FormData
 ) => {
+  const id = data instanceof FormData ? data.get("id") : data.id;
   return request({
-    url: "/v1/query/list/delete",
-    method: "post",
-    data: data,
+    url: `/api/v1/conversations/${id}`,
+    method: "delete",
   });
 };
-// 重命名对话
+// 重命名对话(RESTful:会话 id 进路径,rename 留在请求体)
 export const renameHistory = (
   data: { id: string; rename: string } | FormData
 ) => {
+  const id = data instanceof FormData ? data.get("id") : data.id;
   return request({
-    url: "/v1/query/list/rename",
-    method: "post",
+    url: `/api/v1/conversations/${id}`,
+    method: "patch",
     data: data,
   });
 };
-// 收藏对话
+// 收藏对话(RESTful:会话 id 进路径,collect_type 留在请求体)
 export const collectHistory = (
-  data: { id: string; reaction_type: string } | FormData
+  data: { id: string; collect_type: string } | FormData
 ) => {
+  const id = data instanceof FormData ? data.get("id") : data.id;
   return request({
-    url: "/v1/query/collect",
-    method: "post",
+    url: `/api/v1/conversations/${id}/favorite`,
+    method: "put",
     data: data,
   });
 };
-// 获取收藏对话列表
-export const getCollectHistory = (data: { id: string }) => {
+// 获取收藏对话列表(RESTful:并入会话列表,?favorite=true 过滤)
+export const getCollectHistory = () => {
   return request({
-    url: "/v1/query/collect/list",
+    url: "/api/v1/conversations",
     method: "get",
-    params: data,
+    params: { favorite: true },
   });
 };
 

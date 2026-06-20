@@ -70,7 +70,7 @@ func newProfileRequestContext(t *testing.T, rawQuery string) (*gin.Context, *htt
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/v1/user/profile?"+rawQuery, nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/users/me?"+rawQuery, nil)
 	return c, w
 }
 
@@ -135,7 +135,7 @@ func newRegisterPostContext(t *testing.T, form url.Values) (*gin.Context, *httpt
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	req := httptest.NewRequest(http.MethodPost, "/v1/user/register", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/registrations", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c.Request = req
 	i18n.Localize()(c)

@@ -63,7 +63,7 @@ func (ph *Handler) QueryList(ctx *gin.Context) {
 
 func (ph *Handler) AnswerCheck(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
-	dialogueId := ctx.Query("dialogue_id")
+	dialogueId := ctx.Param("id") // RESTful:会话 id 从路径 /conversations/:id/messages 取
 	list, err := ph.service.AnswerCheck(ctx, name.(string), dialogueId)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
@@ -75,7 +75,7 @@ func (ph *Handler) AnswerCheck(ctx *gin.Context) {
 
 func (ph *Handler) QueryListDelete(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
-	id, _ := strconv.Atoi(ctx.PostForm("id"))
+	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful:会话 id 从路径 /conversations/:id 取
 
 	queryId, err := ph.service.QueryListDelete(ctx, name.(string), id)
 	if err != nil {
@@ -88,7 +88,7 @@ func (ph *Handler) QueryListDelete(ctx *gin.Context) {
 
 func (ph *Handler) QueryListRename(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
-	id, _ := strconv.Atoi(ctx.PostForm("id"))
+	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful:会话 id 从路径 /conversations/:id 取
 	rename := ctx.PostForm("rename")
 
 	r, err := ph.service.QueryListRename(ctx, name.(string), id, rename)
@@ -103,7 +103,7 @@ func (ph *Handler) QueryListRename(ctx *gin.Context) {
 func (ph *Handler) QueryReactionType(ctx *gin.Context) {
 	// todo 需要判断如果接收reaction_type与数据库中的一致，则reaction_type为0，前端可以实现
 	name, _ := ctx.Get("username")
-	id, _ := strconv.Atoi(ctx.PostForm("id"))
+	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful:会话 id 从路径 /conversations/:id 取
 	reactionType := ctx.PostForm("reaction_type")
 
 	// 校验 reactionType 是否合法（0、1、2 中的一个）
@@ -127,7 +127,7 @@ func (ph *Handler) QueryReactionType(ctx *gin.Context) {
 func (ph *Handler) QueryCollect(ctx *gin.Context) {
 	// todo collect_type的0无状态，1-收藏
 	name, _ := ctx.Get("username")
-	id, _ := strconv.Atoi(ctx.PostForm("id"))
+	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful:会话 id 从路径 /conversations/:id 取
 	collectType := ctx.PostForm("collect_type")
 
 	// 校验 reactionType 是否合法（0、1 中的一个）
@@ -159,4 +159,16 @@ func (ph *Handler) QueryCollectList(ctx *gin.Context) {
 	}
 
 	ctx.JSON(errs.SucResp(collectList))
+}
+
+// Conversations serves GET /api/v1/conversations. With ?favorite=true it returns
+// the favorited (collected) conversations; otherwise the full list. The two were
+// separate endpoints (query/list and query/collect/list) before the RESTful merge
+// onto a single resource path with a query filter.
+func (ph *Handler) Conversations(ctx *gin.Context) {
+	if ctx.Query("favorite") == "true" {
+		ph.QueryCollectList(ctx)
+		return
+	}
+	ph.QueryList(ctx)
 }

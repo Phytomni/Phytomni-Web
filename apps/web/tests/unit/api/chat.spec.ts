@@ -21,13 +21,13 @@ describe("getReactionType — wire contract", () => {
     (request as any).mockReset();
   });
 
-  it("posts to /v1/query/reaction_type with the supplied payload", async () => {
+  it("puts to /api/v1/conversations/:id/reaction with the supplied payload", async () => {
     (request as any).mockResolvedValueOnce({ code: 0, msg: "ok" });
     await getReactionType({ id: "abc", reaction_type: "dislike" });
     expect(request).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledWith({
-      url: "/v1/query/reaction_type",
-      method: "post",
+      url: "/api/v1/conversations/abc/reaction",
+      method: "put",
       data: { id: "abc", reaction_type: "dislike" },
     });
   });

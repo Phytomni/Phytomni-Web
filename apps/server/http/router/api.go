@@ -28,15 +28,6 @@ func Api(r *gin.RouterGroup) {
 	prefixTokenRouter := r.Group("v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	apiHandler := api_handler.NewHandler()
 	{
-		//todo 以下为新需求的使用接口
-		prefixTokenRouter.GET("/query/list", apiHandler.QueryList)                   //查看存储的所有问答列表,返回用户所有问题
-		prefixTokenRouter.GET("/answer/check", apiHandler.AnswerCheck)               //根据父id查找全部子级对话
-		prefixTokenRouter.POST("/query/list/delete", apiHandler.QueryListDelete)     //问题列表软删除
-		prefixTokenRouter.POST("/query/list/rename", apiHandler.QueryListRename)     //问题列表重命名
-		prefixTokenRouter.POST("/query/reaction_type", apiHandler.QueryReactionType) //对话点赞，点踩
-		prefixTokenRouter.POST("/query/collect", apiHandler.QueryCollect)            //对话收藏
-		prefixTokenRouter.GET("/query/collect/list", apiHandler.QueryCollectList)    //对话收藏列表
-
 		prefixTokenRouter.GET("/async_task/list", apiHandler.AsyncTaskList)      //查询任务列表
 		prefixTokenRouter.GET("/async_task/info", apiHandler.AsyncTaskInfo)      //查询任务状态
 		prefixTokenRouter.GET("/analyst/get_log", apiHandler.AnalystAgentGetLog) //查询分析日志
@@ -68,6 +59,13 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.POST("/users/:id/unlock", apiHandler.UnlockUser)                 //管理员手动解锁用户
 		apiV1Router.GET("/users/me/tool-permissions", apiHandler.PermissionUserTool) //用户工具权限展示
 		apiV1Router.POST("/user-feedback", apiHandler.UserFeedback)                  //用户反馈记录
+
+		apiV1Router.GET("/conversations", apiHandler.Conversations)                  //会话列表(?favorite=true 为收藏列表)
+		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)       //某会话的全部子级对话
+		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)         //软删除会话
+		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)          //重命名会话
+		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType) //点赞/点踩
+		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)      //收藏/取消收藏
 	}
 
 	// The Web app posts /query and /query/analyst/update_log at the root path (not
