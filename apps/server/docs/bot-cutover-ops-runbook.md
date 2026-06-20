@@ -8,6 +8,8 @@ file or into commits.
 Architecture reference: the internal Web↔Bot target-architecture document (maintained separately, not in this repo).
 The gateway is dormant until `bot.proxy_enabled=true`.
 
+> **⚠️ API 路径重整(RESTful `/api/v1`):** 异步结果回写已迁到 `PATCH /api/v1/async-tasks/analyst-log`;Bot 当前仍调旧 `POST /query/analyst/update_log`,该旧路由 Go 侧作为别名暂留,待 Bot backport 到新路径后由运维移除。下文若引用旧 `/query/...` 路径,新契约以 [`API_DOC.md`](../API_DOC.md) 的 `/api/v1` 为准。
+
 ## 1. Bot service token (ops-only)
 
 The Bot **service token** mints and revokes user keys. It is ops-only:

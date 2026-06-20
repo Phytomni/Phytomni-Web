@@ -19,7 +19,7 @@ export default defineConfig(({ mode, command }) => {
   // 根据当前工作目录中的 `mode` 加载 .env 文件
   // 设置第三个参数为 '' 来加载所有环境变量，而不管是否有 `VITE_` 前缀。
   const env = loadEnv(mode, process.cwd(), "");
-  const { VITE_APP_BASE_URL, VITE_BASE_API, VITE_FILE_BASE, VITE_PORT } = env;
+  const { VITE_APP_BASE_URL, VITE_FILE_BASE, VITE_PORT } = env;
   const port = VITE_PORT || 5173; // 端口
 
   // Dev-only proxy targets — overridable via .env.dev so each engineer
@@ -27,10 +27,6 @@ export default defineConfig(({ mode, command }) => {
   // to localhost so a fresh clone works against a locally-running Go
   // gateway (8080 is the canonical port from CLAUDE.md).
   const devProxyApi = env.VITE_DEV_PROXY_API || "http://localhost:8080";
-  // /query is served by the Go Bot gateway (8080), same as /v1. The Python
-  // MCP service that used to serve /query was removed in the cutover; set
-  // VITE_DEV_PROXY_QUERY only if the gateway runs on a different host.
-  const devProxyQuery = env.VITE_DEV_PROXY_QUERY || devProxyApi;
 
   return {
     // envPrefix: "VITE_", // env 环境变量前缀默认就是VITE_
@@ -73,21 +69,10 @@ export default defineConfig(({ mode, command }) => {
       open: true,
       proxy: {
         // detail: https://cli.vuejs.org/config/#devserver-proxy
-        [VITE_BASE_API]: {
-          target: devProxyApi,
-          changeOrigin: true,
-        },
-        // RESTful 收敛后的 Go 业务 API 面;旧 /v1 在各组迁移期间并存,迁完移除。
+        // Go 业务 API 已收敛到 /api/v1;前端只打这一个面。Bot 回写与外部 server
+        // 接入的旧别名是服务端到服务端调用,不经浏览器 dev 代理。
         "/api/v1": {
           target: devProxyApi,
-          changeOrigin: true,
-        },
-        "/v1": {
-          target: devProxyApi,
-          changeOrigin: true,
-        },
-        "/query": {
-          target: devProxyQuery,
           changeOrigin: true,
         },
       },

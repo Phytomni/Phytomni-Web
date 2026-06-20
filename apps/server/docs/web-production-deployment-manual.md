@@ -4,6 +4,11 @@ This manual takes the **currently-deployed production Web stack** to **this rele
 
 The headline change: **the legacy Python chat service is retired. The Go service becomes the sole `/query` gateway and relays chat traffic to the Bot.** The Bot is deployed and operated by a separate team — this manual covers only the **Web side** of that integration (URL, key, ports, boot check, relay routes) and links the Bot's own deployment doc where Bot bring-up is needed.
 
+> **⚠️ 本次发布含 API 路径重整(RESTful `/api/v1`):** Go 业务 API 已整体收敛到 RESTful 的 `/api/v1` 前缀(动词与资源路径均变),权威映射见 [`API_DOC.md`](../API_DOC.md)。运维须知:
+> - **nginx 反代须新增 `/api/v1` location** 指向 Go 服务;前端只打 `/api/v1`,旧 `/auth`、`/v1`、`/query` 前端面已废弃。
+> - **跨边界旧别名暂留**:Bot 仍调 `POST /query/analyst/update_log`、外部 server 客户端仍调 `/v1/nky/server/*`——这两条旧路由 Go 侧继续作为别名服务,待 Bot / 外部客户端 backport 后由运维移除。
+> - 下文 curl/nginx 示例若仍引用旧路径,新契约一律以 `API_DOC.md` 的 `/api/v1` 为准;完整运营级路径核对在 cutover 时随本次发布一并落地。
+
 ---
 
 ## 0. Scope & conventions
