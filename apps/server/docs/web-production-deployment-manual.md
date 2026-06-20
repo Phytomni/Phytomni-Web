@@ -61,7 +61,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 | Component | Port | Role |
 |---|---|---|
 | nginx | `:443` (TLS, `phytomni.cn`) | TLS termination + reverse proxy by path + serves the SPA |
-| Go service | `:8080` | Serves `/auth`, `/v1/*`, `/query`, `/query/analyst/update_log`. Sole MySQL writer |
+| Go service | `:8080` | Serves `/api/v1/*` (plus the retained back-compat aliases `/query/analyst/update_log` and `/v1/nky/server/*`). Sole MySQL writer |
 | Bot | `:8000` | **Internal only.** Go relays chat here; the browser never reaches it directly. Deployed by the Bot team |
 | MySQL | `:3306` | `phytomni` database |
 | Legacy Python chat service | **(verify on-server)** | Retired at cutover; remove from nginx once `/query` points at Go |
@@ -308,7 +308,7 @@ The Go service hashes new passwords with bcrypt and **lazily upgrades** a legacy
 
    Put it under a process supervisor (systemd). Send logs to your standard sink (`log.outputs` in `app.yml`).
 
-4. **First boot dormant.** Bring Go up first with `bot.proxy_enabled: false` to validate the non-chat surface (`/auth`, `/v1/*`) without requiring the Bot. Flip the gateway on later in the cutover (§9).
+4. **First boot dormant.** Bring Go up first with `bot.proxy_enabled: false` to validate the non-chat surface (`/api/v1/*`) without requiring the Bot. Flip the gateway on later in the cutover (§9).
 
 ---
 
@@ -342,9 +342,9 @@ Ensure the Bot exposes all seven before starting Go with the gateway on. (This i
 ### 7.3 Relay surface
 
 - **Sync agents** (chat / knowledge / review): Go relays `POST /v1/chat/completions`.
-- **Async agents** (analyst / deep_genome): Go posts `POST /v1/agents/{slug}/runs`, gets a run id, stores it in `s_question_agent_logs.bot_run_id`, and reconciles later via `/query/analyst/update_log`.
+- **Async agents** (analyst / deep_genome): Go posts `POST /v1/agents/{slug}/runs`, gets a run id, stores it in `question_agent_logs.bot_run_id`, and reconciles later via the writeback (`PATCH /api/v1/async-tasks/analyst-log`; the Bot still uses the `/query/analyst/update_log` alias until it backports).
 - **File upload**: `POST /v1/files`.
-- **OBS download**: `/v1/relay/obs/*` (Go→Bot) and the browser-facing `/v1/download/relay_file?t=<signed-token>` (token in the query string so `window.open` / `<img>` / email links work without an auth header).
+- **OBS download**: `/v1/relay/obs/*` (Go→Bot) and the browser-facing `/api/v1/downloads/relay-file?t=<signed-token>` (token in the query string so `window.open` / `<img>` / email links work without an auth header).
 
 ### 7.4 Error contract (`/query`)
 
@@ -429,12 +429,12 @@ See runbook [§6](bot-cutover-ops-runbook.md) for the staged-cutover detail.
 
 ## 10. Verification & smoke
 
-- **Auth.** `POST /auth/login` succeeds; `GET /v1/permission/user/tool` returns the user's tools.
+- **Auth.** `POST /api/v1/auth/sessions` succeeds; `GET /api/v1/users/me/tool-permissions` returns the user's tools.
 - **Chat round-trip.** `/query` returns 200 for each sync agent. Drive at least **ChatAgent** and one RAG agent (e.g. **KnowledgeAgent**) end-to-end from the browser and confirm a rendered reply. (This path was validated in a live local run.)
 - **First-login.** A fresh user logs in → reaches the change-password form with **no redirect loop** → changes the password → lands on chat.
 - **Error contract.** `/query` returns 503 when the gateway is disabled and 400 for an unknown tool name.
-- **Audit access.** `POST /v1/operation/logs` returns **403** for a non-admin account.
-- **Redaction.** Spot-check `s_user_operation_logs` — password fields are masked (`******`).
+- **Audit access.** `GET /api/v1/operation-logs` returns **403** for a non-admin account.
+- **Redaction.** Spot-check `user_operation_logs` — password fields are masked (`******`).
 
 ---
 
@@ -457,7 +457,7 @@ That is an instant revert with **no DB or code rollback needed** — `/query` re
 
 - **Bot down (with `proxy_enabled: true`).** `/query` returns 503 immediately; existing conversation history still renders (it reads MySQL legacy fields and makes no Bot call). To restore service before the Bot is back, fall back to the Python path (§11). See runbook [§9](bot-cutover-ops-runbook.md).
 - **Slow RAG / upstream rerank.** A slow retrieval/rerank upstream can push a sync agent past `bot.timeout_seconds`, surfacing as a user 500. Keep `timeout_seconds` ≥900 and watch `/query` error rates; raise it if a heavy agent runs longer.
-- **First-login gate must ship backend + frontend together.** The backend gate allows first-login users only to `/v1/modify/password`; the frontend guard skips its tool-probe for that route. Deploy the Go service and the frontend in the **same** release — the backend gate alone locks first-login users out of the only page that clears the flag.
+- **First-login gate must ship backend + frontend together.** The backend gate allows first-login users only to `/api/v1/users/me/password`; the frontend guard skips its tool-probe for that route. Deploy the Go service and the frontend in the **same** release — the backend gate alone locks first-login users out of the only page that clears the flag.
 - **bcrypt lazy upgrade.** Legacy MD5 password hashes upgrade to bcrypt on the user's next successful login — no forced resets. Monitor upgrade success for a few weeks after deploy.
 
 ### Appendix — companion docs
