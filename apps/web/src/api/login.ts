@@ -9,10 +9,10 @@
  */
 import request from "@/utils/request";
 
-// 登录
+// 登录(建会话)
 export const login = (data: any) => {
   return request({
-    url: "/auth/login",
+    url: "/api/v1/auth/sessions",
     method: "post",
     data: data,
   });

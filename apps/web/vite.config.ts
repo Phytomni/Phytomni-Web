@@ -77,6 +77,11 @@ export default defineConfig(({ mode, command }) => {
           target: devProxyApi,
           changeOrigin: true,
         },
+        // RESTful 收敛后的 Go 业务 API 面;旧 /v1 在各组迁移期间并存,迁完移除。
+        "/api/v1": {
+          target: devProxyApi,
+          changeOrigin: true,
+        },
         "/v1": {
           target: devProxyApi,
           changeOrigin: true,

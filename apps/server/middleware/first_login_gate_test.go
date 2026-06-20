@@ -55,20 +55,20 @@ func TestLoginStatusMiddleware_FirstLoginBlocksOtherPaths(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('alice@x.com', '0')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	w := runGate(t, gdb, "alice@x.com", "/v1/user/profile")
+	w := runGate(t, gdb, "alice@x.com", "/api/v1/users/me")
 	if w.Code != http.StatusForbidden {
 		t.Errorf("expected 403 for first-login user on non-allowed path, got %d", w.Code)
 	}
 }
 
 // TestLoginStatusMiddleware_FirstLoginAllowsPasswordChange 钉死白名单:first-login 用户
-// 可以访问 /v1/modify/password(不被拦截)。
+// 可以访问 /api/v1/users/me/password(不被拦截)。
 func TestLoginStatusMiddleware_FirstLoginAllowsPasswordChange(t *testing.T) {
 	gdb := setupGateTestDB(t)
 	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('alice@x.com', '0')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	w := runGate(t, gdb, "alice@x.com", "/v1/modify/password")
+	w := runGate(t, gdb, "alice@x.com", "/api/v1/users/me/password")
 	if w.Code != http.StatusOK {
 		t.Errorf("expected pass-through (200) on allowed path, got %d", w.Code)
 	}
@@ -81,7 +81,7 @@ func TestLoginStatusMiddleware_NonFirstLoginPasses(t *testing.T) {
 	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('bob@x.com', '1')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	w := runGate(t, gdb, "bob@x.com", "/v1/user/profile")
+	w := runGate(t, gdb, "bob@x.com", "/api/v1/users/me")
 	if w.Code != http.StatusOK {
 		t.Errorf("expected pass-through (200) for non-first-login user, got %d", w.Code)
 	}
@@ -90,7 +90,7 @@ func TestLoginStatusMiddleware_NonFirstLoginPasses(t *testing.T) {
 // TestLoginStatusMiddleware_MissingContextAborts 钉死 fail-closed:缺 username 上下文 → 401。
 func TestLoginStatusMiddleware_MissingContextAborts(t *testing.T) {
 	gdb := setupGateTestDB(t)
-	w := runGate(t, gdb, nil, "/v1/user/profile")
+	w := runGate(t, gdb, nil, "/api/v1/users/me")
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 when username context missing, got %d", w.Code)
 	}

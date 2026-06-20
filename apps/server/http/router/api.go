@@ -9,14 +9,20 @@ import (
 )
 
 func Api(r *gin.RouterGroup) {
-	prefixRouter := r.Group("auth").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
 	authHandler := api_handler.NewHandler()
-	{
-		prefixRouter.POST("/user/register", authHandler.UserRegister)                   //自主注册
-		prefixRouter.OPTIONS("/login", func(c *gin.Context) { c.AbortWithStatus(204) }) //本机的前端会有跨域问题，显示解决
-		prefixRouter.POST("/login", authHandler.Login)
-		prefixRouter.GET("/download/obs_file", authHandler.GetDownloadObsFile) //给与邮件中获取文件下载的链接（需要修改为获取zip）
 
+	// 邮件直链的 OBS 文件下载:链接自带短时 token、无 JWT。迁到 /api/v1/downloads 归
+	// 后续组,暂留旧 auth 组。/auth/login 与 /auth/user/register 已迁到 /api/v1/auth。
+	prefixRouter := r.Group("auth").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
+	{
+		prefixRouter.GET("/download/obs_file", authHandler.GetDownloadObsFile) //给与邮件中获取文件下载的链接（需要修改为获取zip）
+	}
+
+	// /api/v1/auth:公开端点(无 JWT)。OPTIONS 预检由 CORS 中间件统一处理,无需专路由。
+	apiAuthRouter := r.Group("api/v1/auth").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
+	{
+		apiAuthRouter.POST("/sessions", authHandler.Login)             //登录(建会话)
+		apiAuthRouter.POST("/registrations", authHandler.UserRegister) //自主注册(D5)
 	}
 
 	prefixTokenRouter := r.Group("v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
@@ -30,16 +36,6 @@ func Api(r *gin.RouterGroup) {
 		prefixTokenRouter.POST("/query/reaction_type", apiHandler.QueryReactionType) //对话点赞，点踩
 		prefixTokenRouter.POST("/query/collect", apiHandler.QueryCollect)            //对话收藏
 		prefixTokenRouter.GET("/query/collect/list", apiHandler.QueryCollectList)    //对话收藏列表
-
-		//todo
-		prefixTokenRouter.POST("/register", apiHandler.Register)                      //管理员注册用户、vip用户
-		prefixTokenRouter.POST("/modify/password", apiHandler.ModifyPassword)         //用户个人修改密码
-		prefixTokenRouter.GET("/permission/user/list", apiHandler.PermissionUserList) //管理员用户列表
-		prefixTokenRouter.POST("/modify/permission", apiHandler.ModifyPermission)     //管理员,超级管理员修改权限。密码                                                      //管理员修改用户权限
-		prefixTokenRouter.POST("/user/unlock", apiHandler.UnlockUser)                 //管理员手动解锁用户
-		prefixTokenRouter.GET("/permission/user/tool", apiHandler.PermissionUserTool) //用户工具权限展示
-		prefixTokenRouter.POST("/user/feedback", apiHandler.UserFeedback)             //用户反馈记录
-		prefixTokenRouter.GET("/user/profile", apiHandler.GetUserProfile)             //查询个人资料
 
 		prefixTokenRouter.GET("/async_task/list", apiHandler.AsyncTaskList)      //查询任务列表
 		prefixTokenRouter.GET("/async_task/info", apiHandler.AsyncTaskInfo)      //查询任务状态
@@ -59,6 +55,19 @@ func Api(r *gin.RouterGroup) {
 
 		prefixTokenRouter.POST("/download/rendering_file", apiHandler.DownloadObsRenderingFile) //文件格式转换下载
 
+	}
+
+	// /api/v1 认证组(JWT + 强制改密闸):用户与管理。中间件链与旧 v1 组逐字一致。
+	apiV1Router := r.Group("api/v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
+	{
+		apiV1Router.POST("/users", apiHandler.Register)                              //管理员注册用户、vip用户(D5)
+		apiV1Router.GET("/users", apiHandler.PermissionUserList)                     //管理员用户列表
+		apiV1Router.GET("/users/me", apiHandler.GetUserProfile)                      //查询个人资料(邮箱取自 JWT,IDOR 关闭)
+		apiV1Router.PUT("/users/me/password", apiHandler.ModifyPassword)             //用户个人修改密码(🔒 与 first_login_gate 锁步)
+		apiV1Router.PUT("/users/:id/permissions", apiHandler.ModifyPermission)       //管理员修改用户权限/密码
+		apiV1Router.POST("/users/:id/unlock", apiHandler.UnlockUser)                 //管理员手动解锁用户
+		apiV1Router.GET("/users/me/tool-permissions", apiHandler.PermissionUserTool) //用户工具权限展示
+		apiV1Router.POST("/user-feedback", apiHandler.UserFeedback)                  //用户反馈记录
 	}
 
 	// The Web app posts /query and /query/analyst/update_log at the root path (not

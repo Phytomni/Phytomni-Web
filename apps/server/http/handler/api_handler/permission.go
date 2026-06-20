@@ -17,8 +17,8 @@ func (ph *Handler) UnlockUser(ctx *gin.Context) {
 		return
 	}
 
-	// 获取要解锁的用户ID
-	userIdStr := ctx.PostForm("user_id")
+	// 获取要解锁的用户ID(RESTful:从路径参数 /users/:id/unlock 取)
+	userIdStr := ctx.Param("id")
 	if userIdStr == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "用户ID不能为空"})
 		return
@@ -94,7 +94,7 @@ func (ph *Handler) PermissionUserList(ctx *gin.Context) {
 func (ph *Handler) ModifyPermission(ctx *gin.Context) {
 
 	name, _ := ctx.Get("username")
-	userId, _ := strconv.Atoi(ctx.PostForm("id"))
+	userId, _ := strconv.Atoi(ctx.Param("id")) // RESTful:用户 id 从路径 /users/:id/permissions 取
 	code := ctx.PostForm("code")
 	password := ctx.PostForm("password")
 	phone := ctx.PostForm("phone")

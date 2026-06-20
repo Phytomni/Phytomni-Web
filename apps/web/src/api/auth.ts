@@ -15,61 +15,59 @@ export const getUserList = (data: {
   size: string | number;
 }) => {
   return request({
-    url: "/v1/permission/user/list",
+    url: "/api/v1/users",
     method: "get",
     params: data,
   });
 };
 
-// 注册
+// 自主注册(D5:自助注册落 /auth/registrations,与管理员建号 POST /users 区分)
 export const register = (data: any) => {
   return request({
-    url: "/auth/user/register",
+    url: "/api/v1/auth/registrations",
     method: "post",
     data: data,
   });
 };
 
-// 修改权限
+// 修改权限(RESTful:用户 id 进路径 /users/:id/permissions)
 export const changePermission = (data: any) => {
+  const id = data instanceof FormData ? data.get("id") : data?.id;
   return request({
-    url: "/v1/modify/permission",
-    method: "post",
+    url: `/api/v1/users/${id}/permissions`,
+    method: "put",
     data: data,
   });
 };
-// 修改密码/权限
+// 修改个人密码
 export const changePassword = (data: any) => {
   return request({
-    url: "/v1/modify/password",
-    method: "post",
+    url: "/api/v1/users/me/password",
+    method: "put",
     data: data,
   });
 };
-// 新增用户
+// 新增用户(管理员建号,D5)
 export const addUser = (data: any) => {
   return request({
-    url: "/v1/register",
+    url: "/api/v1/users",
     method: "post",
     data: data,
   });
 };
 
-// 解锁用户
+// 解锁用户(RESTful:用户 id 进路径,无需请求体)
 export const unlockUser = (userId: number) => {
-  const formData = new FormData();
-  formData.append("user_id", userId.toString());
   return request({
-    url: "/v1/user/unlock",
+    url: `/api/v1/users/${userId}/unlock`,
     method: "post",
-    data: formData,
   });
 };
 
-// 获取用户资料
+// 获取用户资料(后端从 JWT 取邮箱、忽略 ?email=,IDOR 关闭;前端仍传以保持兼容)
 export const getUserProfile = (email: string) => {
   return request({
-    url: "/v1/user/profile",
+    url: "/api/v1/users/me",
     method: "get",
     params: { email },
   });

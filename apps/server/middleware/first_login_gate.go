@@ -1,6 +1,6 @@
 // Server-side first-login gate. First-login users (those who have not yet
 // changed their initial password, identified by User.FirstLoginStatus == "0")
-// are restricted to the password-change endpoint only. All other /v1/*
+// are restricted to the password-change endpoint only. All other /api/v1/*
 // requests return 403.
 //
 // Position in the middleware chain: AFTER AuthMiddleware (needs the
@@ -19,7 +19,7 @@ import (
 // firstLoginAllowedPaths lists the only paths a first-login user may hit.
 // Exact match (not prefix) prevents query-string / trailing-slash bypass.
 var firstLoginAllowedPaths = []string{
-	"/v1/modify/password",
+	"/api/v1/users/me/password",
 }
 
 // LoginStatusMiddleware enforces the first-login-only-modify-password policy.
