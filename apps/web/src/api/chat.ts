@@ -68,7 +68,7 @@ export const getAnswerCheck = (data: { dialogue_id: string }) => {
 // 获取用户权限工具
 export const getUserTool = () => {
   return request({
-    url: "/v1/permission/user/tool",
+    url: "/api/v1/users/me/tool-permissions",
     method: "get",
   });
 };

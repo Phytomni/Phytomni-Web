@@ -348,7 +348,7 @@ const handleSubmit = async () => {
     if (valid) {
       try {
         if (dialogType.value === "add") {
-          // 新增用户 - 使用 /v1/register 接口，FormData格式
+          // 新增用户 - 使用 POST /api/v1/users 接口，FormData格式
           const formData = new FormData();
           formData.append("email", userForm.email);
           formData.append("password", userForm.password);
@@ -365,7 +365,7 @@ const handleSubmit = async () => {
             ElMessage.error(res.message || "用户添加失败");
           }
         } else {
-          // 编辑用户 - 使用 /v1/modify/permission 接口，FormData格式
+          // 编辑用户 - 使用 PUT /api/v1/users/:id/permissions 接口，FormData格式
           const formData = new FormData();
           formData.append("id", userForm.id.toString());
           formData.append("code", userForm.code);
