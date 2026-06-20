@@ -153,13 +153,13 @@ export const getCollectHistory = () => {
   });
 };
 
-// 更新日志
+// 更新分析日志(RESTful:异步任务子资源回写)
 export const updateAnalystAgentLog = (
   data: { task_id: string; compute_resource: string } | FormData
 ) => {
   return request({
-    url: "/query/analyst/update_log",
-    method: "post",
+    url: "/api/v1/async-tasks/analyst-log",
+    method: "patch",
     data: data,
   });
 };

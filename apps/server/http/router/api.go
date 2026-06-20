@@ -46,9 +46,10 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType) //点赞/点踩
 		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)      //收藏/取消收藏
 
-		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                      //任务列表(owner-scoped)
-		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                  //任务状态(owner-scoped)
-		apiV1Router.GET("/async-tasks/:id/analyst-log", apiHandler.AnalystAgentGetLog) //分析日志
+		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                       //任务列表(owner-scoped)
+		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                   //任务状态(owner-scoped)
+		apiV1Router.GET("/async-tasks/:id/analyst-log", apiHandler.AnalystAgentGetLog)  //分析日志
+		apiV1Router.PATCH("/async-tasks/analyst-log", apiHandler.QueryAnalystUpdateLog) //异步结果回写(Bot 经旧别名 /query/analyst/update_log)
 
 		apiV1Router.GET("/operation-logs", apiHandler.GetOperationLogs)   //操作日志查询(admin-only)
 		apiV1Router.GET("/genes", apiHandler.GeneList)                    //基因测试数据列表
@@ -60,12 +61,12 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.POST("/downloads/rendering-file", apiHandler.DownloadObsRenderingFile)               //文件格式转换下载
 	}
 
-	// Bot 回写口暂留根路径(Bot 跨仓 backport 前的别名);发送消息已迁到
-	// POST /api/v1/conversations/:id/messages。中间件链与旧 /v1 一致;网关仅在
-	// bot.proxy_enabled 为 true 时服务真实流量。
+	// Bot 回写别名:Bot 仍 POST /query/analyst/update_log;前端已改用
+	// PATCH /api/v1/async-tasks/analyst-log。Bot 跨仓 backport 后由 operator 移除本别名。
+	// 中间件链与 /api/v1 一致;网关仅在 bot.proxy_enabled 为 true 时服务真实流量。
 	queryRouter := r.Group("").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	{
-		queryRouter.POST("/query/analyst/update_log", apiHandler.QueryAnalystUpdateLog) //异步任务结果同步回库(Bot 回写,CP7 迁移)
+		queryRouter.POST("/query/analyst/update_log", apiHandler.QueryAnalystUpdateLog) //Bot 回写别名(等 Bot backport)
 	}
 
 	// 浏览器直连下载面:window.open / <img src> 无法携带 Authorization 头,
@@ -76,11 +77,19 @@ func Api(r *gin.RouterGroup) {
 		relayDownloadRouter.GET("/relay-file", apiHandler.RelayFileDownload) //token 鉴权的 OBS 中转流式下载
 	}
 
-	serverRouter := r.Group("v1/nky/server").Use(i18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
+	// /api/v1/server:开放(无 JWT)的外部 server 接入口。
+	serverRouter := r.Group("api/v1/server").Use(i18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
 	serverTaskHandler := api_handler.NewHandler()
 	{
-		//todo server内部开放路由
-		serverRouter.POST("/create_task", serverTaskHandler.ServerCreateTask) //客户使用server创建
-		serverRouter.POST("/update_task", serverTaskHandler.ServerUpdateTask) //客户使用server修改
+		serverRouter.POST("/tasks", serverTaskHandler.ServerCreateTask)      //客户使用 server 创建
+		serverRouter.PATCH("/tasks/:id", serverTaskHandler.ServerUpdateTask) //客户使用 server 修改(server_id 进路径)
+	}
+
+	// 旧外部接入别名:外部客户端仍调 /v1/nky/server/*;它们跨边界 backport 到
+	// /api/v1/server/tasks 后由 operator 移除本别名(design §2.1 无永久兼容层)。
+	legacyServerRouter := r.Group("v1/nky/server").Use(i18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
+	{
+		legacyServerRouter.POST("/create_task", serverTaskHandler.ServerCreateTask) //别名 → POST /api/v1/server/tasks
+		legacyServerRouter.POST("/update_task", serverTaskHandler.ServerUpdateTask) //别名 → PATCH /api/v1/server/tasks/:id
 	}
 }
