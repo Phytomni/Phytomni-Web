@@ -56,7 +56,7 @@ func (ph *Handler) GeneList(ctx *gin.Context) {
 	}
 }
 func (ph *Handler) GeneDetails(ctx *gin.Context) {
-	fileName := ctx.Query("file_name")
+	fileName := ctx.Param("id") // RESTful:gene 资源 id 即 file_name,从路径 /genes/:id 取
 	if fileName == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "参数 file_name 不能为空"})
 		return

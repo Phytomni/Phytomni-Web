@@ -21,7 +21,7 @@ func SendEmail(UserEmail, Tid, fDialogueId, OutputFile string) {
 	webBase := viper.GetString("email.web_base_url")
 	apiBase := viper.GetString("email.api_base_url")
 	agroAi := webBase + "/chat?dialogue_id=" + fDialogueId
-	down := apiBase + "/auth/download/obs_file?obs_path=" + OutputFile + "&username=" + UserEmail
+	down := apiBase + "/api/v1/downloads/obs-file?obs_path=" + OutputFile + "&username=" + UserEmail
 
 	e := email.NewEmail()
 	e.From = viper.GetString("email.from_display")

@@ -30,7 +30,7 @@ func TestApiDownloadAnalystAgentObsImages_StoredPaths(t *testing.T) {
 		t.Fatalf("expected 2 png urls (csv filtered), got %d: %v", len(urls), urls)
 	}
 	for _, u := range urls {
-		if !strings.Contains(u, "/v1/download/relay_file?t=") {
+		if !strings.Contains(u, "/api/v1/downloads/relay-file?t=") {
 			t.Errorf("url not a signed relay url: %q", u)
 		}
 	}
@@ -76,7 +76,7 @@ func TestApiDownloadAnalystAgentObsImages_ContainmentBypass(t *testing.T) {
 		t.Fatalf("expected 2 in-scope png urls (cross-root dropped), got %d: %v", len(urls), urls)
 	}
 	for _, u := range urls {
-		if !strings.Contains(u, "/v1/download/relay_file?t=") {
+		if !strings.Contains(u, "/api/v1/downloads/relay-file?t=") {
 			t.Errorf("url not a signed relay url: %q", u)
 		}
 	}
@@ -120,7 +120,7 @@ func TestApiDownloadAnalystAgentObsImages_FallbackListingContainment(t *testing.
 		t.Fatalf("expected 2 in-scope png urls from fallback listing (cross-root + csv excluded), got %d: %v", len(urls), urls)
 	}
 	for _, u := range urls {
-		if !strings.Contains(u, "/v1/download/relay_file?t=") {
+		if !strings.Contains(u, "/api/v1/downloads/relay-file?t=") {
 			t.Errorf("url not a signed relay url: %q", u)
 		}
 	}

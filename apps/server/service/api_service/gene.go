@@ -180,13 +180,13 @@ func friendlyRelayErr(err error) error {
 
 // relayDownloadURL 为一个 OBS 对象签出指向本服务流式下载端点的短时 token URL。
 // 浏览器侧(window.open / <img src>)无法携带 Authorization 头,鉴权落在
-// query token 上;相对路径经前端 /v1 代理回到本服务。
+// query token 上;相对路径经前端 /api/v1 代理回到本服务。
 func relayDownloadURL(obsKey string) (string, error) {
 	token, err := middleware.GenerateDownloadToken(obsKey, middleware.DownloadTokenTTL)
 	if err != nil {
 		return "", err
 	}
-	return "/v1/download/relay_file?t=" + url.QueryEscape(token), nil
+	return "/api/v1/downloads/relay-file?t=" + url.QueryEscape(token), nil
 }
 
 func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {

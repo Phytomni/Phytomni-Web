@@ -10,13 +10,7 @@ import (
 
 func Api(r *gin.RouterGroup) {
 	authHandler := api_handler.NewHandler()
-
-	// 邮件直链的 OBS 文件下载:链接自带短时 token、无 JWT。迁到 /api/v1/downloads 归
-	// 后续组,暂留旧 auth 组。/auth/login 与 /auth/user/register 已迁到 /api/v1/auth。
-	prefixRouter := r.Group("auth").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
-	{
-		prefixRouter.GET("/download/obs_file", authHandler.GetDownloadObsFile) //给与邮件中获取文件下载的链接（需要修改为获取zip）
-	}
+	apiHandler := api_handler.NewHandler()
 
 	// /api/v1/auth:公开端点(无 JWT)。OPTIONS 预检由 CORS 中间件统一处理,无需专路由。
 	apiAuthRouter := r.Group("api/v1/auth").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
@@ -25,23 +19,11 @@ func Api(r *gin.RouterGroup) {
 		apiAuthRouter.POST("/registrations", authHandler.UserRegister) //自主注册(D5)
 	}
 
-	prefixTokenRouter := r.Group("v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
-	apiHandler := api_handler.NewHandler()
+	// /api/v1/downloads(邮件直链):obs-file 链接自带 obs_path+username、无 JWT,但记
+	// 操作日志(与旧 auth 组中间件链一致)。
+	apiDownloadEmailRouter := r.Group("api/v1/downloads").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
 	{
-		// 增加日志查询接口
-		prefixTokenRouter.POST("/operation/logs", apiHandler.GetOperationLogs) //查询用户操作日志
-
-		//实时创建下载链接能力
-
-		prefixTokenRouter.GET("/gene/list", apiHandler.GeneList)                       //基因测试数据列表
-		prefixTokenRouter.GET("/gene/details", apiHandler.GeneDetails)                 //模拟数据详情
-		prefixTokenRouter.POST("/gene/details/storage", apiHandler.GeneDetailsStorage) //基因示例迭代数据
-
-		prefixTokenRouter.GET("/download/analyst_agent/obs_file", apiHandler.DownloadAnalystAgentObsFile)     //获取AnalystAgent的obs文件下载链接
-		prefixTokenRouter.GET("/download/analyst_agent/obs_images", apiHandler.DownloadAnalystAgentObsImages) //获取AnalystAgent的obs图片下载链接
-
-		prefixTokenRouter.POST("/download/rendering_file", apiHandler.DownloadObsRenderingFile) //文件格式转换下载
-
+		apiDownloadEmailRouter.GET("/obs-file", authHandler.GetDownloadObsFile) //邮件中的结果下载链接
 	}
 
 	// /api/v1 认证组(JWT + 强制改密闸):用户与管理。中间件链与旧 v1 组逐字一致。
@@ -67,6 +49,15 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                      //任务列表(owner-scoped)
 		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                  //任务状态(owner-scoped)
 		apiV1Router.GET("/async-tasks/:id/analyst-log", apiHandler.AnalystAgentGetLog) //分析日志
+
+		apiV1Router.GET("/operation-logs", apiHandler.GetOperationLogs)   //操作日志查询(admin-only)
+		apiV1Router.GET("/genes", apiHandler.GeneList)                    //基因测试数据列表
+		apiV1Router.GET("/genes/:id", apiHandler.GeneDetails)             //基因详情(资源 id 即 file_name)
+		apiV1Router.POST("/gene-examples", apiHandler.GeneDetailsStorage) //基因示例迭代数据
+
+		apiV1Router.GET("/downloads/analyst-agent/obs-file", apiHandler.DownloadAnalystAgentObsFile)     //AnalystAgent obs 文件下载链接
+		apiV1Router.GET("/downloads/analyst-agent/obs-images", apiHandler.DownloadAnalystAgentObsImages) //AnalystAgent obs 图片下载链接
+		apiV1Router.POST("/downloads/rendering-file", apiHandler.DownloadObsRenderingFile)               //文件格式转换下载
 	}
 
 	// Bot 回写口暂留根路径(Bot 跨仓 backport 前的别名);发送消息已迁到
@@ -80,9 +71,9 @@ func Api(r *gin.RouterGroup) {
 	// 浏览器直连下载面:window.open / <img src> 无法携带 Authorization 头,
 	// 鉴权由 handler 内的 query 短时 token(ParseDownloadToken)完成,因此
 	// 不挂 AuthMiddleware;也不挂 OperationLog,避免把 token 记进操作日志。
-	relayDownloadRouter := r.Group("v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS())
+	relayDownloadRouter := r.Group("api/v1/downloads").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS())
 	{
-		relayDownloadRouter.GET("/download/relay_file", apiHandler.RelayFileDownload) //token 鉴权的 OBS 中转流式下载
+		relayDownloadRouter.GET("/relay-file", apiHandler.RelayFileDownload) //token 鉴权的 OBS 中转流式下载
 	}
 
 	serverRouter := r.Group("v1/nky/server").Use(i18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())

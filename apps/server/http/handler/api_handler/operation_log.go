@@ -20,9 +20,10 @@ func (ph *Handler) GetOperationLogs(ctx *gin.Context) {
 	}
 
 	// 获取参数
-	userIdsStr := ctx.PostForm("user_ids") // 逗号分隔的ID字符串，例如 "1,2,3"
-	startTime := ctx.PostForm("start_time")
-	endTime := ctx.PostForm("end_time")
+	// GET 查询:参数从查询串取(POST→GET 后由 body 改为 query)
+	userIdsStr := ctx.Query("user_ids") // 逗号分隔的ID字符串，例如 "1,2,3"
+	startTime := ctx.Query("start_time")
+	endTime := ctx.Query("end_time")
 
 	var userIds []int64
 	if userIdsStr != "" {

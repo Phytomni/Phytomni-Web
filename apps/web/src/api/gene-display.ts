@@ -16,7 +16,7 @@ export const getGeneList = (params?: {
   size?: number;
 }) => {
   return request({
-    url: "/v1/gene/list",
+    url: "/api/v1/genes",
     method: "get",
     params,
   });
@@ -28,8 +28,7 @@ export const getGeneDetails = (params?: {
   size?: number;
 }) => {
   return request({
-    url: "/v1/gene/details",
+    url: `/api/v1/genes/${encodeURIComponent(params?.file_name ?? "")}`,
     method: "get",
-    params,
   });
 };

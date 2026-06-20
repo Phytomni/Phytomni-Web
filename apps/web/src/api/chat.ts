@@ -76,7 +76,7 @@ export const getUserTool = () => {
 // 获取对话下载链接
 export const getChatdownloadURL = (data: { obs_path: string }) => {
   return request({
-    url: "/v1/download/analyst_agent/obs_file",
+    url: "/api/v1/downloads/analyst-agent/obs-file",
     method: "get",
     params: data,
   });
@@ -87,7 +87,7 @@ export const getFileDownUrlApi = (
   data: { id: string; document_format: string } | FormData
 ) => {
   return request({
-    url: "/v1/download/rendering_file",
+    url: "/api/v1/downloads/rendering-file",
     method: "post",
     data: data,
     responseType: "blob",
@@ -167,7 +167,7 @@ export const updateAnalystAgentLog = (
 // 获取 AnalystAgent obs 图片下载链接(GeneNetworkAgent / DigitalDesignAgent 渲染依赖)
 export const getObsImages = (data: { obs_path: string }) => {
   return request({
-    url: "/v1/download/analyst_agent/obs_images",
+    url: "/api/v1/downloads/analyst-agent/obs-images",
     method: "get",
     params: data,
   });

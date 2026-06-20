@@ -119,6 +119,40 @@ func TestApiV1AsyncTaskRoutes(t *testing.T) {
 	)
 }
 
+// TestApiV1AuditGeneDownloadRoutes pins the §5.6 migration of the audit, gene and
+// download surfaces, including the three distinct download middleware chains: the
+// JWT analyst-agent/rendering downloads under the authed group, the no-JWT email
+// obs-file (still logged), and the no-JWT/no-log token relay-file. operation-logs
+// flips POST→GET (admin gate stays in the service) and gene details key on the
+// file name as the resource id.
+func TestApiV1AuditGeneDownloadRoutes(t *testing.T) {
+	routes := routeSet(t)
+	assertRoutes(t, routes,
+		[]string{
+			"GET /api/v1/operation-logs",
+			"GET /api/v1/genes",
+			"GET /api/v1/genes/:id",
+			"POST /api/v1/gene-examples",
+			"GET /api/v1/downloads/obs-file",
+			"GET /api/v1/downloads/analyst-agent/obs-file",
+			"GET /api/v1/downloads/analyst-agent/obs-images",
+			"POST /api/v1/downloads/rendering-file",
+			"GET /api/v1/downloads/relay-file",
+		},
+		[]string{
+			"POST /v1/operation/logs",
+			"GET /v1/gene/list",
+			"GET /v1/gene/details",
+			"POST /v1/gene/details/storage",
+			"GET /auth/download/obs_file",
+			"GET /v1/download/analyst_agent/obs_file",
+			"GET /v1/download/analyst_agent/obs_images",
+			"POST /v1/download/rendering_file",
+			"GET /v1/download/relay_file",
+		},
+	)
+}
+
 // TestApiV1ChatSendRoute pins the D4 chat-send migration: POST /query becomes
 // POST /api/v1/conversations/:id/messages (id=0 means a new conversation), co-
 // existing with the GET on the same path. The old root /query route must be gone.
