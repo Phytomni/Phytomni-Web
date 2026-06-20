@@ -28,7 +28,7 @@ func (ph *Handler) AsyncTaskList(ctx *gin.Context) {
 }
 
 func (ph *Handler) AsyncTaskInfo(ctx *gin.Context) {
-	id, _ := strconv.Atoi(ctx.Query("id"))
+	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful:任务 id 从路径 /async-tasks/:id 取
 	name, _ := ctx.Get("username")
 
 	info, err := ph.service.AsyncTaskInfo(ctx, id, name.(string))
@@ -40,7 +40,7 @@ func (ph *Handler) AsyncTaskInfo(ctx *gin.Context) {
 }
 
 func (ph *Handler) AnalystAgentGetLog(ctx *gin.Context) {
-	id, _ := strconv.Atoi(ctx.Query("id"))
+	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful:任务 id 从路径 /async-tasks/:id 取
 	name, _ := ctx.Get("username")
 	taskId, err := ph.service.AnalystAgentGetLog(ctx, id, name.(string))
 	if err != nil {

@@ -28,10 +28,6 @@ func Api(r *gin.RouterGroup) {
 	prefixTokenRouter := r.Group("v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	apiHandler := api_handler.NewHandler()
 	{
-		prefixTokenRouter.GET("/async_task/list", apiHandler.AsyncTaskList)      //查询任务列表
-		prefixTokenRouter.GET("/async_task/info", apiHandler.AsyncTaskInfo)      //查询任务状态
-		prefixTokenRouter.GET("/analyst/get_log", apiHandler.AnalystAgentGetLog) //查询分析日志
-
 		// 增加日志查询接口
 		prefixTokenRouter.POST("/operation/logs", apiHandler.GetOperationLogs) //查询用户操作日志
 
@@ -67,6 +63,10 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)          //重命名会话
 		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType) //点赞/点踩
 		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)      //收藏/取消收藏
+
+		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                      //任务列表(owner-scoped)
+		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                  //任务状态(owner-scoped)
+		apiV1Router.GET("/async-tasks/:id/analyst-log", apiHandler.AnalystAgentGetLog) //分析日志
 	}
 
 	// Bot 回写口暂留根路径(Bot 跨仓 backport 前的别名);发送消息已迁到

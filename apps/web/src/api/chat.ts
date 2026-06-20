@@ -94,12 +94,11 @@ export const getFileDownUrlApi = (
   });
 };
 
-// 获取对话下载链接
+// 获取分析日志(RESTful:任务 id 进路径)
 export const getAnalystAgentLog = (data: { id: string }) => {
   return request({
-    url: "/v1/analyst/get_log",
+    url: `/api/v1/async-tasks/${data.id}/analyst-log`,
     method: "get",
-    params: data,
   });
 };
 // 点赞点踩(RESTful:会话 id 进路径)

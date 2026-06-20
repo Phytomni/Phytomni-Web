@@ -100,6 +100,25 @@ func TestApiV1ConversationRoutes(t *testing.T) {
 	)
 }
 
+// TestApiV1AsyncTaskRoutes pins the §5.6 async-task migration: the id moves from
+// the query string into the path; owner-scoping stays in the service layer and is
+// covered by the service tests, so this only asserts the route shape.
+func TestApiV1AsyncTaskRoutes(t *testing.T) {
+	routes := routeSet(t)
+	assertRoutes(t, routes,
+		[]string{
+			"GET /api/v1/async-tasks",
+			"GET /api/v1/async-tasks/:id",
+			"GET /api/v1/async-tasks/:id/analyst-log",
+		},
+		[]string{
+			"GET /v1/async_task/list",
+			"GET /v1/async_task/info",
+			"GET /v1/analyst/get_log",
+		},
+	)
+}
+
 // TestApiV1ChatSendRoute pins the D4 chat-send migration: POST /query becomes
 // POST /api/v1/conversations/:id/messages (id=0 means a new conversation), co-
 // existing with the GET on the same path. The old root /query route must be gone.

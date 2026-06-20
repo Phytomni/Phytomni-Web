@@ -11,7 +11,7 @@ import request from "@/utils/request";
 // 任务管理列表
 export const getTaskList = (params?: { current?: number; size?: number }) => {
   return request({
-    url: "/v1/async_task/list",
+    url: "/api/v1/async-tasks",
     method: "get",
     params,
   });
