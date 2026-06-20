@@ -28,28 +28,8 @@ func (r *TaskReconciler) Run() {
 		return
 	}
 
-	// deep_genome runs in-process on Bot, not on EIHealth, so its task ids are
-	// not EIHealth jobs. Route by tool_name: EIHealth-backed agents (analyst)
-	// keep the legacy IAM poll; deep_genome rows reconcile against Bot run state.
-	eiHealthTaskIds, botRows := partitionRunningRows(questionAgentList)
-	if len(eiHealthTaskIds) > 0 {
-		api_service.GetTaskStatus(eiHealthTaskIds)
-	}
-	api_service.SyncBotRuns(botRows)
-}
-
-// partitionRunningRows splits RUNNING rows by their backing compute platform:
-// deep_genome rows reconcile against Bot run state, every other (analyst /
-// EIHealth-backed) tool keeps the legacy IAM job poll keyed by task_id. Pure
-// (no DB / network) so the routing is unit-testable without standing up either
-// backend.
-func partitionRunningRows(rows []model.QuestionAgentLog) (eiHealthTaskIds []string, botRows []model.QuestionAgentLog) {
-	for _, v := range rows {
-		if v.ToolName == "DeepGenomeAgent" {
-			botRows = append(botRows, v)
-		} else {
-			eiHealthTaskIds = append(eiHealthTaskIds, v.TaskId)
-		}
-	}
-	return eiHealthTaskIds, botRows
+	// 所有异步 agent(analyst + deep_genome)都由 Bot 提交远端并持有 bot_run_id;
+	// 统一交给 SyncBotRuns 按 bot_run_id 轮询 Bot run 状态回收(无 bot_run_id 的历史
+	// 行由 SyncBotRuns 内部跳过)。退役产品 EIHealth 的 IAM 直连轮询已移除。
+	api_service.SyncBotRuns(questionAgentList)
 }

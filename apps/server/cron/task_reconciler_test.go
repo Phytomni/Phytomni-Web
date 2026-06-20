@@ -1,39 +1,71 @@
 package cron
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
-	"phytomni-server/model"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+
+	"phytomni-server/db"
+	rxBot "phytomni-server/external/bot"
 )
 
-// TestPartitionRunningRows pins the cron's platform split: deep_genome rows go
-// to the Bot reconcile set, every other (analyst / EIHealth-backed) tool goes
-// to the legacy IAM job poll keyed by task_id. A regression that mis-routed
-// either class (e.g. a wrong tool_name literal) would flip these buckets, so
-// this asserts both bucket contents directly rather than just their sizes.
-func TestPartitionRunningRows(t *testing.T) {
-	rows := []model.QuestionAgentLog{
-		{Id: 1, ToolName: "DeepGenomeAgent", TaskId: "dg-1", BotRunId: "run-1"},
-		{Id: 2, ToolName: "AnalystAgent", TaskId: "an-1"},
-		{Id: 3, ToolName: "DeepGenomeAgent", TaskId: "dg-2", BotRunId: "run-2"},
-		{Id: 4, ToolName: "NetworkAgent", TaskId: "an-2"},
+// setupReconcilerDB builds an in-memory question_agent_logs and registers it as
+// the default connection (mirrors the api_service test schema). Conn pool pinned
+// to 1: each :memory: connection is its own DB, so write-then-read must reuse one.
+func setupReconcilerDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
 	}
-
-	eiHealthTaskIds, botRows := partitionRunningRows(rows)
-
-	if len(eiHealthTaskIds) != 2 || eiHealthTaskIds[0] != "an-1" || eiHealthTaskIds[1] != "an-2" {
-		t.Errorf("eihealth task ids = %v, want [an-1 an-2]", eiHealthTaskIds)
+	if sqlDB, err := gdb.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
 	}
-	if len(botRows) != 2 || botRows[0].Id != 1 || botRows[1].Id != 3 {
-		t.Errorf("bot rows = %+v, want deep_genome rows {1,3}", botRows)
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		dialogue_id TEXT, f_id INTEGER DEFAULT 0, user_name TEXT, query TEXT,
+		answer TEXT, tool_name TEXT, bot_run_id TEXT, server_id TEXT, task_id TEXT,
+		compute_resource TEXT, log_status TEXT, status TEXT,
+		download_path TEXT, image_paths TEXT,
+		created_at DATETIME, updated_at DATETIME, delete_at DATETIME
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
 	}
+	db.Set("phytomni-server", gdb)
+	return gdb
 }
 
-// TestPartitionRunningRows_Empty: no RUNNING rows yields two empty buckets, so
-// the cron skips both pollers rather than calling them with empty input.
-func TestPartitionRunningRows_Empty(t *testing.T) {
-	eiHealthTaskIds, botRows := partitionRunningRows(nil)
-	if len(eiHealthTaskIds) != 0 || len(botRows) != 0 {
-		t.Errorf("empty input must yield empty buckets, got ei=%v bot=%v", eiHealthTaskIds, botRows)
+// TestReconciler_RoutesRunningRowToBot pins the post-EIHealth routing: the cron
+// reconciles a RUNNING analyst-class row against its Bot run, not a dead Huawei
+// poll. Before the routing switch this row went to the EIHealth IAM poll and
+// stayed RUNNING; now Run() hands every RUNNING row to SyncBotRuns, so a finished
+// Bot run flips it to SUCCEEDED and writes the formatted answer.
+func TestReconciler_RoutesRunningRowToBot(t *testing.T) {
+	gdb := setupReconcilerDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(60, 'dlg-r', 'alice', 'q', '任务创建成功：t1', 'AnalystAgent', 'run-r', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"run_id":"run-r","agent":"network","status":"succeeded","result":{"formatted":{"answer":"done"}}}`))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	(&TaskReconciler{}).Run()
+
+	var status, answer string
+	row := gdb.Raw(`SELECT COALESCE(status,''), COALESCE(answer,'') FROM question_agent_logs WHERE id = 60`).Row()
+	if err := row.Scan(&status, &answer); err != nil {
+		t.Fatalf("read row: %v", err)
+	}
+	if status != "SUCCEEDED" || answer != "done" {
+		t.Errorf("cron did not reconcile analyst via Bot: status=%q answer=%q, want SUCCEEDED/done", status, answer)
 	}
 }

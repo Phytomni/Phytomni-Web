@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
 	"phytomni-server/db"
@@ -444,26 +443,5 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	var paths []string
 	if err := json.Unmarshal([]byte(ip), &paths); err != nil || len(paths) != 1 || paths[0] != "/obs/p/r1/a.png" {
 		t.Errorf("image_paths = %q (%v)", ip, err)
-	}
-}
-
-// TestHuaweiTLSConfig pins the EIHealth/IAM polling TLS posture: certificate
-// verification is ON unless huawei.insecure_skip_verify is explicitly true. A
-// regression that hard-coded InsecureSkipVerify=true again would fail the
-// default (key-absent) and explicit-false cases.
-func TestHuaweiTLSConfig(t *testing.T) {
-	t.Cleanup(func() { viper.Set("huawei.insecure_skip_verify", false) })
-
-	// Production default: key absent -> verification ON.
-	if huaweiTLSConfig().InsecureSkipVerify {
-		t.Error("default (key absent) must verify certs (InsecureSkipVerify=false)")
-	}
-	viper.Set("huawei.insecure_skip_verify", true)
-	if !huaweiTLSConfig().InsecureSkipVerify {
-		t.Error("explicit true must disable verification (dev-only opt-in)")
-	}
-	viper.Set("huawei.insecure_skip_verify", false)
-	if huaweiTLSConfig().InsecureSkipVerify {
-		t.Error("explicit false must verify certs")
 	}
 }

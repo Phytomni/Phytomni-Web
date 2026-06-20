@@ -10,16 +10,13 @@ import (
 	"phytomni-server/model"
 )
 
-// SyncBotRuns reconciles RUNNING deep_genome rows against Bot's in-process run
-// state. These rows never hit EIHealth (the report workflow runs inside Bot),
-// so the legacy GetTaskStatus IAM poll cannot advance them. For each row it
-// polls GET /v1/runs/{bot_run_id}, and when the run's status has changed it
-// flips the MySQL status and writes the assembled report (result.final_report,
-// reshaped into the {content, doc_list} JSON the Web app parses). It does not
-// clobber the prior answer with a blank reshape (only writes answer when a
-// final_report is present). There is no *gin.Context here (the cron has no
-// request), so it uses a background context and model.Default(), mirroring
-// GetTaskStatus.
+// SyncBotRuns reconciles every RUNNING Bot-backed row (analyst + deep_genome)
+// against Bot's run state. For each row it polls GET /v1/runs/{bot_run_id}, and
+// when the run's status has changed it flips the MySQL status and writes the
+// reshaped answer: analyst from result.formatted (+ gallery artifacts),
+// deep_genome from result.final_report. It does not clobber a prior answer with a
+// blank reshape. There is no *gin.Context here (the cron has no request), so it
+// uses a background context and model.Default().
 func SyncBotRuns(rows []model.QuestionAgentLog) {
 	if len(rows) == 0 {
 		return
@@ -31,7 +28,7 @@ func SyncBotRuns(rows []model.QuestionAgentLog) {
 	client := rxBot.NewClient()
 	for _, row := range rows {
 		if row.BotRunId == "" {
-			rxLog.Sugar().Warnf("deep_genome row %d is RUNNING with no bot_run_id; skipping bot sync", row.Id)
+			rxLog.Sugar().Warnf("RUNNING row %d has no bot_run_id; skipping bot sync", row.Id)
 			continue
 		}
 		rec, err := client.GetRun(ctx, row.BotRunId)
@@ -42,14 +39,12 @@ func SyncBotRuns(rows []model.QuestionAgentLog) {
 		newStatus := strings.ToUpper(rec.Status)
 		// An empty status would be written verbatim by GORM's map Updates (maps
 		// do not skip zero values the way struct Updates does), flipping the row
-		// out of the WHERE status='RUNNING' poll set permanently. Skip it, the
-		// same way the EIHealth GetTaskStatus struct-update swallows an empty
-		// status.
+		// out of the WHERE status='RUNNING' poll set permanently — so skip it.
 		if newStatus == "" || row.Status == newStatus {
 			continue // still running, unchanged, or malformed — nothing to write
 		}
 		updates := map[string]interface{}{"status": newStatus}
-		// analyst 类(cron 路由切换后才会进来):formatted 存在即非 deep_genome。
+		// analyst 类:formatted 存在即非 deep_genome。
 		// 答案非空才写(避免抹掉已渲染答案);同分支回填图廊路径,使 deep_genome
 		// 的 final_report 路径保持原样、不产生 download_path。
 		if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
