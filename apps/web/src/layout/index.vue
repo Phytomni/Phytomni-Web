@@ -13,7 +13,6 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
               $t("common.back")
             }}</el-button>
             <div style="width: 40px; height: 40px" class="logo-img"></div>
-            <!-- <img src="@/assets/logo.svg" alt="Logo" class="logo-img" /> -->
             <h1 class="logo-text">{{ $t("app.title") }}</h1>
           </div>
           <div class="header-right">

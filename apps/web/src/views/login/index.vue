@@ -3,7 +3,6 @@
     <div class="login-left">
       <div class="logo-container">
         <div class="logo" style="width: 40px; height: 40px"></div>
-        <!-- <img src="@/assets/logo.svg" class="logo" alt="Logo" /> -->
         <!-- <h1 class="title">Crop Wild Relatives Atlas</h1> -->
       </div>
       <div class="slogan">
