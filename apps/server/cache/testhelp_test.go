@@ -31,3 +31,27 @@ func startMiniredis(t *testing.T) string {
 	})
 	return mr.Addr()
 }
+
+// startMiniredisRaw is like startMiniredis but returns the *miniredis.Miniredis
+// handle so tests can FastForward (TTL) or Close (simulate an outage).
+func startMiniredisRaw(t *testing.T) *miniredis.Miniredis {
+	t.Helper()
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	viper.Set("redis.default", "web")
+	viper.Set("redis.clients", map[string]interface{}{
+		"web": map[string]interface{}{
+			"type":  "single-node",
+			"addrs": []string{mr.Addr()},
+			"db":    0,
+		},
+	})
+	t.Cleanup(func() {
+		viper.Set("redis.clients", nil)
+		viper.Set("redis.default", "")
+	})
+	return mr
+}
