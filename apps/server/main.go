@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	rxRedis "phytomni-server/cache"
 	"phytomni-server/commands"
 	"phytomni-server/cron"
 	rxMysql "phytomni-server/db"
@@ -57,9 +58,23 @@ func initConfig(*cli.Context) error {
 	if err := rxMysql.InitMysqlDB(); err != nil {
 		return err
 	}
-	//if err := rxRedis.InitFromViperDefault(); err != nil {
-	//	return err
-	//}
+	// Redis user/product layer (token revocation, rate-limit, OBS-listing cache).
+	// FAIL-OPEN: a Redis outage must NOT block boot — features degrade instead.
+	// Use InitFromViper (fills the "clients" map read by cache.Client), NOT
+	// InitFromViperDefault (a separate clientDefault map → nil here).
+	viper.SetDefault("redis.enabled", true)
+	if viper.GetBool("redis.enabled") {
+		if err := rxRedis.InitFromViper(); err != nil {
+			rxLog.Sugar().Warnf("redis init failed; user/product features degrade fail-open: %v", err)
+		}
+		// Fail-fast only on a wiring/config error (no "web" client at all),
+		// NOT on a transient outage (a down server still yields a non-nil client).
+		if rxRedis.Client("web") == nil {
+			rxLog.Sugar().Fatal("redis.enabled=true but no 'web' client configured (check redis.clients.web)")
+		}
+	} else {
+		rxLog.Sugar().Warn("redis.enabled=false: token revocation / rate-limit / OBS-cache disabled (all fail-open)")
+	}
 	if err := cron.DoCron(); err != nil {
 		return err
 	}

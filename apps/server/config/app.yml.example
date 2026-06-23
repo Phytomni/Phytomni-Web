@@ -37,11 +37,18 @@ db:
     dsn: "root:your-mysql-password@tcp(localhost:3306)/phytomni?charset=utf8mb4&parseTime=True&loc=Local"
 
 # ---------------------------------------------------------------------
-# Redis cache (cache/client.go); currently initialized but main.go
-# leaves the client commented out, so this section only matters once
-# the cache layer is wired in.
+# Redis (cache/client.go) — the user/product layer (token revocation,
+# rate-limit, OBS-listing cache). main.go initializes it fail-open: a
+# Redis outage logs a WARN and boot continues (features degrade); boot
+# fails fast only when `enabled: true` but no `web` client is configured.
+# `default` MUST name a configured client (here: web) so cache.Available
+# and /readyz probe the right instance.
 # ---------------------------------------------------------------------
 redis:
+  # Master switch for the Redis user/product layer. Default true = secure
+  # path. Set false to run fully without Redis (every Redis feature
+  # degrades fail-open; a startup WARN is logged).
+  enabled: true
   clients:
     web:
       addrs:
@@ -49,7 +56,7 @@ redis:
       db: 0
       password:
       type: single-node
-  default: default
+  default: web
 
 # ---------------------------------------------------------------------
 # Structured logging sinks
