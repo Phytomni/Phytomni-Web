@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"net/http"
+	rxCache "phytomni-server/cache"
 	"phytomni-server/common"
+	"phytomni-server/model"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -86,8 +88,53 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// 撤销检查(验签+exp 已通过):只降级"增强",绝不降级认证本身。
+		// 1) 单 token 黑名单(Redis,fail-open)。
+		if rxCache.IsBlocked(c.Request.Context(), rxCache.HashToken(token)) {
+			revokedResponse(c)
+			return
+		}
+		// 2) per-user epoch(Redis,fail-open):iat<epoch 即撤销,含 iat=0 legacy。
+		if epoch := rxCache.GetUserEpoch(c.Request.Context(), claims.Username); epoch > 0 && claims.IssuedAt < epoch {
+			revokedResponse(c)
+			return
+		}
+		// 3) 持久 floor(MySQL,Redis 挂时仍生效):iat<password_change_at 即撤销。
+		// iat=0 legacy 豁免(部署不触发全员重登);NULL/未找到/DB 错 → 跳过(fail-open)。
+		if floor, ok := passwordChangeFloor(c, claims.Username); ok && claims.IssuedAt > 0 && claims.IssuedAt < floor {
+			revokedResponse(c)
+			return
+		}
+
 		c.Set("username", claims.Username)
 		c.Set("token", token) // 将token存储到context中
 		c.Next()
 	}
+}
+
+// revokedResponse 以 401 中止一个已撤销的会话(与无效 token 同壳,不泄露撤销原因)。
+func revokedResponse(c *gin.Context) {
+	c.JSON(http.StatusUnauthorized, gin.H{
+		"detail": gin.H{
+			"code":  common.FORBID,
+			"error": "会话已失效,请重新登录",
+		},
+	})
+	c.Abort()
+}
+
+// passwordChangeFloor 读用户的 password_change_at 作为 min-acceptable-iat 底线。
+// 内联查 model(不经 service 层,避免 middleware↔api_service 导入环;镜像
+// first_login_gate.go)。返回 (unix, true) 仅当行存在且该列非 NULL;否则 (0,false)
+// → 调用方跳过 floor(fail-open:NULL/未找到/DB 错都不拒)。
+func passwordChangeFloor(c *gin.Context, email string) (int64, bool) {
+	var user model.User
+	if err := model.DB(c).Select("password_change_at").
+		Where("email = ?", email).First(&user).Error; err != nil {
+		return 0, false
+	}
+	if user.PasswordChangeAt == nil {
+		return 0, false
+	}
+	return user.PasswordChangeAt.Unix(), true
 }
