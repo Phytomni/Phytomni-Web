@@ -2,14 +2,11 @@ package utils
 
 import (
 	"fmt"
-	"io"
 	"io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -159,48 +156,6 @@ func ExistDir(path string) {
 	}
 }
 
-func DownloadReader(url string, readerHelper func(reader io.Reader) error) (err error) {
-	httpCli := http.Client{}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return
-	}
-
-	resp, err := httpCli.Do(req)
-	if err != nil {
-		return
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	return readerHelper(resp.Body)
-}
-
-func DownloadToDir(url string, name, outDir string) (path string, size int64, err error) {
-	path = fmt.Sprintf("%s/%s", outDir, name)
-	file, err := os.Create(path)
-	if err != nil {
-		return
-	}
-
-	defer func() {
-		_ = file.Close()
-	}()
-
-	if err = DownloadReader(url, func(reader io.Reader) error {
-		if size, err = io.Copy(file, reader); err != nil {
-			return err
-		}
-
-		return nil
-	}); err != nil {
-		return
-	}
-
-	return
-}
-
 func SplitFilePath(path string) (dir, name, suffix string) {
 	dir = filepath.Dir(path)
 	baseName := filepath.Base(path)
@@ -211,24 +166,6 @@ func SplitFilePath(path string) (dir, name, suffix string) {
 	}
 	name = baseName
 	return
-}
-
-func GetFileSize(url string) (int, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		os.Exit(1)
-		return 0, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	contentLength, err := strconv.Atoi(resp.Header.Get("Content-Length"))
-	if err != nil {
-		os.Exit(1)
-		return 0, err
-	}
-	return contentLength, nil
 }
 
 // IsDigits 检查字符串是否全是数字

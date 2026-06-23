@@ -7,55 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 )
-
-// UrlExists 判断远程url是否存在
-func UrlExists(url string) bool {
-	resp, err := http.Head(url)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return false
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		return true
-	}
-	return false
-}
-
-// DownloadFile 将远程文件下载到本地
-func DownloadFile(url, path, filepath string) error {
-	ExistDir(path)
-	// 创建文件
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	// 发送 GET 请求
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// 检查 HTTP 响应状态码
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
-	}
-
-	// 将响应 Body 写入文件
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
 
 // ReadFileContent 使用 os 包中的 Open 函数打开文件，然后使用 io 包中的 Read 方法逐字节或指定大小读取文件内容。
 func ReadFileContent(filename string) ([]byte, error) {
