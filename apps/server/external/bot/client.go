@@ -56,11 +56,10 @@ func (e *APIError) Error() string {
 const maxBodyInError = 256
 
 // truncateForLog caps the raw Bot body that gets stringified into the error.
-// The error reaches logs and Sentry (e.g. via overlayBotContent's
-// CaptureException), and a 5xx body may carry internal detail or user data, so
-// short payloads survive intact while oversized ones are truncated rather than
-// echoed in full. Truncation is on a rune boundary so a multibyte (e.g.
-// Chinese) body never lands as invalid UTF-8.
+// The error reaches the logs, and a 5xx body may carry internal detail or user
+// data, so short payloads survive intact while oversized ones are truncated
+// rather than echoed in full. Truncation is on a rune boundary so a multibyte
+// (e.g. Chinese) body never lands as invalid UTF-8.
 func truncateForLog(s string) string {
 	r := []rune(s)
 	if len(r) <= maxBodyInError {

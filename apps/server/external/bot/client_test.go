@@ -117,7 +117,7 @@ func TestSurfaceableMessage(t *testing.T) {
 
 func TestAPIErrorTruncatesRawBody(t *testing.T) {
 	// No envelope message → Error() falls back to the raw body branch, which
-	// reaches logs/Sentry. An oversized body must be truncated, not echoed whole.
+	// reaches the logs. An oversized body must be truncated, not echoed whole.
 	big := strings.Repeat("x", 1000)
 	got := (&APIError{Method: "GET", Path: "/v1/runs", Status: 500, body: big}).Error()
 	if contains(got, big) {

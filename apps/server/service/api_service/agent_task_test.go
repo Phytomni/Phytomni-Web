@@ -272,7 +272,7 @@ func TestApiAnswerCheck_OverlayReshapesFinalReport(t *testing.T) {
 // TestApiAnswerCheck_OverlayDegradesOnBot500 pins TW-001: when the Bot
 // /v1/runs read fails (HTTP 500), overlayBotContent must degrade — keep the
 // legacy MySQL fields, surface no error, and never panic — even though the
-// failure is now also captured to Sentry for observability.
+// failure is logged as a warn for observability.
 func TestApiAnswerCheck_OverlayDegradesOnBot500(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs

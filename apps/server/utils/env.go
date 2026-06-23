@@ -19,20 +19,6 @@ func GetEnvironment() string {
 	}
 }
 
-// GetShortEnvironment 当前运行环境的简写版本，目前主要用于sentry
-func GetShortEnvironment() string {
-	env := GetEnvironment()
-	switch env {
-	case "prod", "production":
-		return "prod"
-	case "test":
-		return "test"
-	case "dev", "develop":
-		return "dev"
-	}
-	return "prod"
-}
-
 func IsProduction() bool {
 	return GetEnvironment() == "production"
 }

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getsentry/sentry-go"
 	"gorm.io/gorm"
 
 	"phytomni-server/common"
@@ -188,9 +187,8 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 	}
 	resp, err := rxBot.NewClient().ListRuns(ctx, dialogueId)
 	if err != nil {
-		// 降级:回落 legacy 字段(语义不变);同时上报 Sentry 使 Bot 读路径失败可观测/可告警。
+		// 降级:回落 legacy 字段(语义不变);Bot 读路径失败记 warn 日志以便观测/告警。
 		rxLog.Sugar().Warnw("answer-check bot list runs failed, using legacy fields", "dialogue_id", dialogueId, "err", err)
-		sentry.CaptureException(err)
 		return
 	}
 	byRun := make(map[string]rxBot.RunRecord, len(resp.Data))

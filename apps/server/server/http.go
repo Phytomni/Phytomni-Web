@@ -9,8 +9,6 @@ import (
 	"phytomni-server/server/httpmw"
 	"phytomni-server/utils"
 
-	"github.com/getsentry/sentry-go"
-	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
@@ -36,7 +34,6 @@ func NewHttp(options ...HttpOption) *Http {
 
 	// 默认中间件
 	g.Use(httpmw.RequestID(), httpmw.Recovery())
-	g.Use(sentrygin.New(sentrygin.Options{Repanic: true, WaitForDelivery: true, Timeout: 10 * time.Second}))
 
 	// 开启维护模式，维护模式请求全部禁止
 	if viper.GetBool("http.maintenance") {
@@ -64,8 +61,7 @@ func NewHttp(options ...HttpOption) *Http {
 }
 
 type Http struct {
-	TracesSampler sentry.TracesSampler
-	gin           *gin.Engine
+	gin *gin.Engine
 	http.Server
 }
 
@@ -79,7 +75,6 @@ func (h *Http) GracefulStart(ctx context.Context) {
 
 	select {
 	case <-ctx.Done():
-		sentry.Flush(2 * time.Second)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := h.Shutdown(ctx); err != nil {

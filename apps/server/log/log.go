@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -34,9 +33,6 @@ type Config struct {
 	// 旧日志最多被打包数量 0或不设置永久保存
 	// MaxAge 也会导致就日志删除
 	MaxBackups int `json:"max_backups" mapstructure:"max_backups"`
-
-	// 是否关闭sentry，默认是开启的
-	DisableSentry bool `json:"disable_sentry" mapstructure:"disable_sentry"`
 }
 
 var (
@@ -140,38 +136,8 @@ func InitFromViper() error {
 		}
 	}
 
-	// 如果是error级别的日志，发送至sentry
-	sentryHook := zap.Hooks(func(entry zapcore.Entry) error {
-		if entry.Level == zapcore.ErrorLevel {
-			event := sentry.NewEvent()
-			event.Message = entry.Message
-			event.Timestamp = entry.Time
-			event.Level = sentryLevel(entry.Level)
-			// event.Extra = clone.fields
-			// event.Tags = c.cfg.Tags
-
-			trace := sentry.NewStacktrace()
-			if len(trace.Frames) > 5 {
-				trace.Frames = trace.Frames[:len(trace.Frames)-5]
-			}
-			if trace != nil {
-				event.Exception = []sentry.Exception{{
-					Type:       entry.Message,
-					Value:      entry.Caller.TrimmedPath(),
-					Stacktrace: trace,
-				}}
-			}
-
-			sentry.CaptureEvent(event)
-		}
-		return nil
-	})
-
 	options := make([]zap.Option, 0)
 	options = append(options, zap.AddCaller())
-	if !config.DisableSentry {
-		options = append(options, sentryHook)
-	}
 
 	// 创建日志实例
 	logger = zap.New(zapcore.NewTee(cores...), options...)
@@ -193,25 +159,4 @@ func Sugar() *zap.SugaredLogger {
 
 func SugarContext(ctx context.Context) *zap.SugaredLogger {
 	return logger.Sugar().With("request_id", ctx.Value("x-request-id"))
-}
-
-func sentryLevel(lvl zapcore.Level) sentry.Level {
-	switch lvl {
-	case zapcore.DebugLevel:
-		return sentry.LevelDebug
-	case zapcore.InfoLevel:
-		return sentry.LevelInfo
-	case zapcore.WarnLevel:
-		return sentry.LevelWarning
-	case zapcore.ErrorLevel:
-		return sentry.LevelError
-	case zapcore.DPanicLevel:
-		return sentry.LevelFatal
-	case zapcore.PanicLevel:
-		return sentry.LevelFatal
-	case zapcore.FatalLevel:
-		return sentry.LevelFatal
-	default:
-		return sentry.LevelFatal
-	}
 }
