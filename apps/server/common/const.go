@@ -1,7 +1,6 @@
 package common
 
 import (
-	"github.com/chenyahui/gin-cache/persist"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 )
@@ -27,8 +26,7 @@ const (
 )
 
 var (
-	GVA_REDIS      *redis.Client
-	GVA_HTTP_CACHE *persist.RedisStore
+	GVA_REDIS *redis.Client
 )
 
 type Response struct {
