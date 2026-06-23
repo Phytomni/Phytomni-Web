@@ -3,7 +3,9 @@ package api_service
 import (
 	"context"
 	"log"
+	rxCache "phytomni-server/cache"
 	"phytomni-server/common"
+	"phytomni-server/middleware"
 	"phytomni-server/model"
 	"phytomni-server/utils"
 	"phytomni-server/utils/errs"
@@ -84,6 +86,11 @@ func (ps *Service) ModifyPassword(ctx context.Context, name, Password, newPasswo
 	}).Error; err != nil {
 		return "", errors.New("密码修改失败")
 	}
+	// 设 per-user epoch:在线令该用户所有更早 token 失效(含 legacy iat=0)。fail-open:
+	// Redis 挂只记日志——持久 password_change_at floor 已是离线兜底,撤销不丢。
+	if err := rxCache.SetUserEpoch(ctx, name, time.Now(), middleware.TokenLifetime); err != nil {
+		log.Printf("改密设撤销 epoch 失败(fail-open,不影响改密) email=%s: %v", name, err)
+	}
 	return name, nil
 }
 
@@ -109,6 +116,16 @@ func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id i
 		// 处理未找到用户的情况
 		log.Printf("未找到ID为 %d 的用户", id)
 		return false
+	}
+	// 解析 id→email 设 per-user epoch(令目标用户旧会话失效)。fail-open:查不到 email
+	// 或 Redis 挂只记日志,改密本身已成功(持久 floor 仍兜底)。
+	var target model.User
+	if err := model.DB(ctx).Select("email").Where("id = ?", id).First(&target).Error; err == nil && target.Email != "" {
+		if err := rxCache.SetUserEpoch(ctx, target.Email, time.Now(), middleware.TokenLifetime); err != nil {
+			log.Printf("管理员改密设撤销 epoch 失败(fail-open) id=%d: %v", id, err)
+		}
+	} else if err != nil {
+		log.Printf("管理员改密解析目标 email 失败(fail-open) id=%d: %v", id, err)
 	}
 	return true
 
