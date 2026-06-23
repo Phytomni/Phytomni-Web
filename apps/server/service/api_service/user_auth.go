@@ -86,8 +86,11 @@ func (ps *Service) ModifyPassword(ctx context.Context, name, Password, newPasswo
 	}).Error; err != nil {
 		return "", errors.New("密码修改失败")
 	}
-	// 设 per-user epoch:在线令该用户所有更早 token 失效(含 legacy iat=0)。fail-open:
-	// Redis 挂只记日志——持久 password_change_at floor 已是离线兜底,撤销不丢。
+	// 设 per-user epoch = now(真实事件时间)。AuthMiddleware 比较 iat < epoch-IatSkew,
+	// GenerateToken 设 iat = now-IatSkew,skew 两边抵消,净效果="仅当 token 真正在此
+	// 刻之前签发时才撤销"。切勿在此写 now+IatSkew,否则双重计算 skew 会使有效阈值变为
+	// now+IatSkew,令改密后 60s 内的恢复 token 被误撤销(即 C1 锁出的 epoch 路径变体)。
+	// fail-open:Redis 挂只记日志——持久 password_change_at floor 已是离线兜底。
 	if err := rxCache.SetUserEpoch(ctx, name, time.Now(), middleware.TokenLifetime); err != nil {
 		log.Printf("改密设撤销 epoch 失败(fail-open,不影响改密) email=%s: %v", name, err)
 	}
@@ -117,8 +120,11 @@ func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id i
 		log.Printf("未找到ID为 %d 的用户", id)
 		return false
 	}
-	// 解析 id→email 设 per-user epoch(令目标用户旧会话失效)。fail-open:查不到 email
-	// 或 Redis 挂只记日志,改密本身已成功(持久 floor 仍兜底)。
+	// 解析 id→email 设 per-user epoch = now(真实事件时间)。AuthMiddleware 的
+	// iat < epoch-IatSkew 比较与 GenerateToken 的 iat=now-IatSkew 相减后净效果为
+	// "仅撤销此刻之前签发的 token"。此处切勿加 IatSkew,否则会令改密后的恢复
+	// token 被误撤销。fail-open:查不到 email 或 Redis 挂只记日志,改密本身已成功
+	// (持久 floor 仍兜底)。
 	var target model.User
 	if err := model.DB(ctx).Select("email").Where("id = ?", id).First(&target).Error; err == nil && target.Email != "" {
 		if err := rxCache.SetUserEpoch(ctx, target.Email, time.Now(), middleware.TokenLifetime); err != nil {

@@ -28,15 +28,25 @@ type Claims struct {
 // per-user epoch 键的 TTL——共用一个常量防止两边漂移。
 const TokenLifetime = 24 * time.Hour
 
+// IatSkew 是发行方对 iat 的反向偏移量,用于吸收多实例/NTP 时钟偏差。
+// GenerateToken 将 iat 设为 now-IatSkew;撤销层在比较 iat 与 epoch/floor 时
+// 同步减去 IatSkew,确保"revoke if token was genuinely issued before the event"
+// 语义——两边共享同一常量防止漂移。
+// 撤销事件的写入方(logout-all、改密)必须将 epoch 设为 now(真实事件时间),
+// 切勿加 IatSkew——比较时已减去 IatSkew,net 效果="仅撤销此刻之前签发的
+// token";若写入 now+IatSkew 会双重计数 skew,令改密后 60s 内的恢复 token
+// 被误撤销(C1 lockout 的 epoch 路径变体)。
+const IatSkew = 60 * time.Second
+
 // 生成JWT token
 func GenerateToken(username string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
 		Username: username,
 		StandardClaims: jwt.StandardClaims{
-			// iat = now-60s:吸收多实例/NTP 偏移、永不未来时(golang-jwt v3 的
+			// iat = now-iatSkew:吸收多实例/NTP 偏移、永不未来时(golang-jwt v3 的
 			// verifyIat 无 leeway,严格 now>=iat)。撤销层按 iat 与 epoch/floor 比较。
-			IssuedAt:  now.Add(-60 * time.Second).Unix(),
+			IssuedAt:  now.Add(-IatSkew).Unix(),
 			ExpiresAt: now.Add(TokenLifetime).Unix(),
 		},
 	}
@@ -89,19 +99,23 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// 撤销检查(验签+exp 已通过):只降级"增强",绝不降级认证本身。
+		// iatSkew 与 GenerateToken 的后退量一致,比较时减去,确保"仅当 token 真正
+		// 在事件发生前签发"语义——防止密码修改后立即重登触发 60s 锁出。
+		skewSec := int64(IatSkew / time.Second)
 		// 1) 单 token 黑名单(Redis,fail-open)。
 		if rxCache.IsBlocked(c.Request.Context(), rxCache.HashToken(token)) {
 			revokedResponse(c)
 			return
 		}
-		// 2) per-user epoch(Redis,fail-open):iat<epoch 即撤销,含 iat=0 legacy。
-		if epoch := rxCache.GetUserEpoch(c.Request.Context(), claims.Username); epoch > 0 && claims.IssuedAt < epoch {
+		// 2) per-user epoch(Redis,fail-open):iat<epoch-skew 即撤销,含 iat=0 legacy。
+		// epoch 是 ~1.7e9 unix 值,epoch-skewSec>0 始终成立,故 iat=0 legacy 仍被撤销。
+		if epoch := rxCache.GetUserEpoch(c.Request.Context(), claims.Username); epoch > 0 && claims.IssuedAt < epoch-skewSec {
 			revokedResponse(c)
 			return
 		}
-		// 3) 持久 floor(MySQL,Redis 挂时仍生效):iat<password_change_at 即撤销。
+		// 3) 持久 floor(MySQL,Redis 挂时仍生效):iat<floor-skew 即撤销。
 		// iat=0 legacy 豁免(部署不触发全员重登);NULL/未找到/DB 错 → 跳过(fail-open)。
-		if floor, ok := passwordChangeFloor(c, claims.Username); ok && claims.IssuedAt > 0 && claims.IssuedAt < floor {
+		if floor, ok := passwordChangeFloor(c, claims.Username); ok && claims.IssuedAt > 0 && claims.IssuedAt < floor-skewSec {
 			revokedResponse(c)
 			return
 		}

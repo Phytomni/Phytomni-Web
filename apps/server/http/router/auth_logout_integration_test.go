@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/golang-jwt/jwt"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
@@ -177,22 +179,39 @@ func TestE2E_LogoutRevokesToken(t *testing.T) {
 }
 
 // TestE2E_LogoutAllRevokesOtherDevice proves the writer→checker contract for the
-// per-user epoch: POST /api/v1/auth/logout-all with token1 bumps the epoch to now,
-// so token2 (minted before the call, iat = now-60s < epoch = now) is rejected 401
-// on the very next request.
+// per-user epoch: POST /api/v1/auth/logout-all with tok1 bumps the epoch to now,
+// and tok2 — which represents an "other device" that logged in 2 minutes earlier —
+// is rejected 401 on the next request.
+//
+// tok2 is hand-signed with IssuedAt = now-2min so its iat is clearly in the past
+// relative to the epoch written by logout-all (epoch = now). With the correct
+// comparison `iat < epoch-skew` (= now-60s) this holds: now-120s < now-60s → revoked.
+// Using GenerateToken for tok2 would produce iat=now-60s, landing exactly on the
+// boundary (== not <) and NOT being revoked in the same integer-second — a
+// same-second timing ambiguity, not a real-world scenario.
 func TestE2E_LogoutAllRevokesOtherDevice(t *testing.T) {
 	engine, gdb := buildRealApiEnv(t)
 	gdb.Exec(`INSERT INTO users (id, email, first_login_status) VALUES (1, 'bob@x.com', '1')`)
 
-	// Two GenerateToken calls simulate two device sessions. Both are minted before
-	// logout-all, so both have iat = now-60s < epoch = now after the call.
+	// tok1: current device — uses GenerateToken so it passes AuthMiddleware on the
+	// logout-all call (iat = now-60s, well within the still-valid window).
 	tok1, err := middleware.GenerateToken("bob@x.com")
 	if err != nil {
 		t.Fatalf("GenerateToken tok1: %v", err)
 	}
-	tok2, err := middleware.GenerateToken("bob@x.com")
-	if err != nil {
-		t.Fatalf("GenerateToken tok2: %v", err)
+
+	// tok2: other device logged in 2 minutes ago — hand-signed with a clearly past iat
+	// to avoid same-second boundary ambiguity with the epoch written by logout-all.
+	// After logout-all (epoch = now): iat=now-120s < epoch-60s=now-60s → revoked.
+	tok2Claims := &middleware.Claims{
+		Username: "bob@x.com",
+	}
+	tok2Claims.IssuedAt = time.Now().Add(-2 * time.Minute).Unix()
+	tok2Claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	tok2Signed := jwt.NewWithClaims(jwt.SigningMethodHS256, tok2Claims)
+	tok2, err2 := tok2Signed.SignedString([]byte("integration-test-secret"))
+	if err2 != nil {
+		t.Fatalf("hand-sign tok2: %v", err2)
 	}
 
 	// Device 1 calls logout-all → per-user epoch = now.
@@ -200,8 +219,8 @@ func TestE2E_LogoutAllRevokesOtherDevice(t *testing.T) {
 		t.Fatalf("logout-all: want 200, got %d", code)
 	}
 
-	// Device 2's token has iat = now-60s < epoch = now → AuthMiddleware must reject it.
-	// Use /logout as the probe: simple handler, no DB deps beyond the users table.
+	// Device 2's token has iat = now-2min < epoch-60s = now-60s → AuthMiddleware rejects.
+	// Use /logout as the probe: simple handler, no extra DB deps.
 	if code := authRequest(engine, http.MethodPost, "/api/v1/auth/logout", tok2); code != http.StatusUnauthorized {
 		t.Fatalf("other device token must be rejected 401 after logout-all (epoch revocation): want 401, got %d", code)
 	}
