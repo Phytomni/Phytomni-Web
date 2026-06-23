@@ -164,6 +164,21 @@ func TestApiV1ChatSendRoute(t *testing.T) {
 	)
 }
 
+// TestApiV1AuthLifecycleRoutes pins the Phase 1 logout endpoints. They live on a
+// dedicated group (AuthMiddleware, no LoginStatusMiddleware) so a first-login user
+// can still log out — a regression that drops them or moves them onto the public
+// auth group / the first-login-gated v1 group fails here.
+func TestApiV1AuthLifecycleRoutes(t *testing.T) {
+	routes := routeSet(t)
+	assertRoutes(t, routes,
+		[]string{
+			"POST /api/v1/auth/logout",
+			"POST /api/v1/auth/logout-all",
+		},
+		nil,
+	)
+}
+
 // TestApiV1CrossBoundaryAliases pins the cross-boundary endpoints (Bot writeback,
 // external server tasks): the new RESTful routes are live, AND the old paths stay
 // registered as aliases until the off-repo consumers (Bot, external clients)

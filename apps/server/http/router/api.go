@@ -61,6 +61,15 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.POST("/downloads/rendering-file", apiHandler.DownloadObsRenderingFile)               //文件格式转换下载
 	}
 
+	// /api/v1/auth 生命周期组:登出/全设备登出。带 AuthMiddleware(handler 需 ctx 的
+	// username/token)但**不带 LoginStatusMiddleware**——首登用户也必须能登出。这是
+	// 与公开 apiAuthRouter(无 AuthMiddleware)和 apiV1Router(有首登闸)都不同的专用组。
+	authLifecycleRouter := r.Group("api/v1/auth").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.CORS(), middleware.OperationLog())
+	{
+		authLifecycleRouter.POST("/logout", apiHandler.Logout)        //当前 token 失效(单设备)
+		authLifecycleRouter.POST("/logout-all", apiHandler.LogoutAll) //全设备登出(per-user epoch)
+	}
+
 	// Bot 回写别名:Bot 仍 POST /query/analyst/update_log;前端已改用
 	// PATCH /api/v1/async-tasks/analyst-log。Bot 跨仓 backport 后由 operator 移除本别名。
 	// 中间件链与 /api/v1 一致;网关仅在 bot.proxy_enabled 为 true 时服务真实流量。
