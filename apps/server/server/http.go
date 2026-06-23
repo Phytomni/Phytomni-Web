@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	rxRedis "phytomni-server/cache"
 	"phytomni-server/server/httpmw"
 	"phytomni-server/utils"
 
@@ -47,6 +48,10 @@ func NewHttp(options ...HttpOption) *Http {
 		})
 	})
 
+	// 就绪检查:汇报 Redis 状态 + fail-open 计数,供运维监控"enabled 但不可达"。
+	// 始终 200(fail-open:Redis 挂应用仍可服务);redis 字段供告警。
+	g.GET("/readyz", readyzHandler)
+
 	srv := &Http{
 		Server: http.Server{
 			Handler: g,
@@ -58,6 +63,22 @@ func NewHttp(options ...HttpOption) *Http {
 	}
 
 	return srv
+}
+
+// readyzHandler reports readiness. It always returns 200 (the app is ready to
+// serve even when Redis is down — every Redis feature is fail-open); the redis
+// field ("up"/"down") and the running fail-open counter let monitoring catch an
+// "enabled-but-unreachable" Redis and watch how often features degraded.
+func readyzHandler(c *gin.Context) {
+	redisStatus := "down"
+	if rxRedis.Available(c.Request.Context()) {
+		redisStatus = "up"
+	}
+	c.JSON(200, gin.H{
+		"status":         "ok",
+		"redis":          redisStatus,
+		"failopen_count": rxRedis.FailOpenCount(),
+	})
 }
 
 type Http struct {
