@@ -59,7 +59,7 @@ const goBack = () => {
 };
 
 const botAvatar =
-  "https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png";
+  "/avatars/bot.svg";
 
 const knowledgeAgentResponse = `Epigenetic modifications, including DNA methylation and histone modifications, play crucial roles in regulating adaptive responses to drought stress in crops by altering gene expression and chromatin structure, thereby enabling plants to better cope with water deficit conditions. Here's a detailed look at how these modifications contribute to drought stress responses:
 

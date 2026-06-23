@@ -59,7 +59,7 @@ const goBack = () => {
 };
 
 const botAvatar =
-  "https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png";
+  "/avatars/bot.svg";
 
 const briefReviewAgentResponse = `**Title**: Advances in Single-Cell RNA Sequencing (scRNA-seq) Methodology and Its Applications in Plant Biology
 

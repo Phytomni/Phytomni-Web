@@ -1488,7 +1488,7 @@ watch(drawerVisible, (newValue) => {
 });
 
 const botAvatar =
-  "https://cube.elemecdn.com/9/3c/436fe7666b465e0e69e553e5f5a071png.png";
+  "/avatars/bot.svg";
 
 // 显示Agents架构图弹窗
 const showAgentsView = () => {

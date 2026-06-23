@@ -373,7 +373,7 @@
         <div class="user-avatar-container">
           <el-avatar
             :size="32"
-            src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png"
+            src="/avatars/user.svg"
           />
           <span v-if="!sidebarCollapsed" class="username">
             {{ UserStore.name || "未设置用户名" }}
