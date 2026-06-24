@@ -9,6 +9,30 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// TestReadyzHandler_IncludesRateLimitBlocked asserts that /readyz JSON exposes
+// the ratelimit_blocked field alongside redis and failopen_count, machine-locking
+// the observability contract (Step 2 of Phase 2 Task 3).
+func TestReadyzHandler_IncludesRateLimitBlocked(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/readyz", readyzHandler)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("readyz must be 200, got %d", w.Code)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	for _, k := range []string{"redis", "failopen_count", "ratelimit_blocked"} {
+		if _, ok := body[k]; !ok {
+			t.Errorf("readyz must expose %q", k)
+		}
+	}
+}
+
 // readyzHandler is the extracted handler (see http.go) so it can be tested
 // without standing up the full server.
 func TestReadyzReportsRedisStatusAndCount(t *testing.T) {

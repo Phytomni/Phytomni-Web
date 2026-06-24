@@ -75,9 +75,10 @@ func readyzHandler(c *gin.Context) {
 		redisStatus = "up"
 	}
 	c.JSON(200, gin.H{
-		"status":         "ok",
-		"redis":          redisStatus,
-		"failopen_count": rxRedis.FailOpenCount(),
+		"status":            "ok",
+		"redis":             redisStatus,
+		"failopen_count":    rxRedis.FailOpenCount(),
+		"ratelimit_blocked": rxRedis.RateLimitBlockedCount(),
 	})
 }
 

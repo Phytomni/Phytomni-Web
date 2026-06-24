@@ -15,8 +15,8 @@ func Api(r *gin.RouterGroup) {
 	// /api/v1/auth:公开端点(无 JWT)。OPTIONS 预检由 CORS 中间件统一处理,无需专路由。
 	apiAuthRouter := r.Group("api/v1/auth").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
 	{
-		apiAuthRouter.POST("/sessions", authHandler.Login)             //登录(建会话)
-		apiAuthRouter.POST("/registrations", authHandler.UserRegister) //自主注册(D5)
+		apiAuthRouter.POST("/sessions", middleware.PerIPRateLimit("login"), authHandler.Login)                //登录(建会话,per-IP 限流)
+		apiAuthRouter.POST("/registrations", middleware.PerIPRateLimit("register"), authHandler.UserRegister) //自主注册(D5,per-IP 限流)
 	}
 
 	// /api/v1/downloads(邮件直链):obs-file 链接自带 obs_path+username、无 JWT,但记
@@ -38,13 +38,13 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/users/me/tool-permissions", apiHandler.PermissionUserTool) //用户工具权限展示
 		apiV1Router.POST("/user-feedback", apiHandler.UserFeedback)                  //用户反馈记录
 
-		apiV1Router.GET("/conversations", apiHandler.Conversations)                  //会话列表(?favorite=true 为收藏列表)
-		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)       //某会话的全部子级对话
-		apiV1Router.POST("/conversations/:id/messages", apiHandler.Query)            //发送消息(id=0 为新会话,转发到 Bot)
-		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)         //软删除会话
-		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)          //重命名会话
-		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType) //点赞/点踩
-		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)      //收藏/取消收藏
+		apiV1Router.GET("/conversations", apiHandler.Conversations)                                             //会话列表(?favorite=true 为收藏列表)
+		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)                                  //某会话的全部子级对话
+		apiV1Router.POST("/conversations/:id/messages", middleware.PerUserRateLimit("query"), apiHandler.Query) //发送消息(id=0 为新会话,转发到 Bot,per-user 限流)
+		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)                                    //软删除会话
+		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)                                     //重命名会话
+		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType)                            //点赞/点踩
+		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)                                 //收藏/取消收藏
 
 		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                       //任务列表(owner-scoped)
 		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                   //任务状态(owner-scoped)
