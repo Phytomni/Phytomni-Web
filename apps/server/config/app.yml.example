@@ -58,6 +58,21 @@ redis:
       type: single-node
   default: web
 
+# 限流/防滥(Redis 易失节流,全程 fail-open)。总开关默认 OFF(暗发布):上线后由
+# 运维确认再置 true。Redis 挂时一律放行,绝不因限流而拒绝登录(MySQL 账户锁定仍是
+# 持久底线)。limit/window 改动需重启生效。
+ratelimit:
+  enabled: false
+  login: # 公开登录 per-IP
+    limit: 60
+    window: 60s
+  register: # 公开注册 per-IP
+    limit: 10
+    window: 1h
+  query: # /query per-user(护 Bot relay 成本)
+    limit: 30
+    window: 60s
+
 # ---------------------------------------------------------------------
 # Structured logging sinks
 # ---------------------------------------------------------------------
