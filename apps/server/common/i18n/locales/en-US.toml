@@ -36,3 +36,6 @@ weak_complexity = "Your password complexity is low. Please update it for securit
 
 [feedback]
 empty_body = "Feedback type and content cannot be empty"
+
+[chat]
+quota_exhausted = "Account has no chat quota; contact an administrator"

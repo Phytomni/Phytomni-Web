@@ -36,3 +36,6 @@ weak_complexity = "当前密码复杂度较低，为安全起见请及时修改�
 
 [feedback]
 empty_body = "反馈类型或反馈内容不能为空"
+
+[chat]
+quota_exhausted = "账户额度不足，请联系管理员开通"

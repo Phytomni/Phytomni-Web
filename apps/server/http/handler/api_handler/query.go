@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
 	"phytomni-server/service/api_service"
@@ -39,6 +40,17 @@ func queryErrorStatus(err error) (int, string) {
 // — today it never sends stream=true.
 func (ph *Handler) Query(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
+
+	// Reject inert accounts before any body parsing or Bot relay.
+	if email, _ := name.(string); email != "" {
+		if err := ph.service.CheckChatAllowed(ctx, email); err != nil {
+			ctx.JSON(http.StatusForbidden, gin.H{
+				"code":    http.StatusForbidden,
+				"message": i18n.T(ctx, "chat.quota_exhausted"),
+			})
+			return
+		}
+	}
 
 	_, totalBytes, _ := rxBot.UploadLimits()
 	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, totalBytes)
