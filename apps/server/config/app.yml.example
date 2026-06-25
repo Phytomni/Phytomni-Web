@@ -73,6 +73,14 @@ ratelimit:
     limit: 30
     window: 60s
 
+
+# OBS 列举缓存(终态任务的 Web→Bot→OBS 列目录结果,fail-open)。默认 ON;仅 Redis
+# 可用且任务 status=SUCCEEDED 且列举非空时缓存。置 false 可单独旁路缓存而不影响
+# token 撤销/限流。ttl 改动需重启生效。
+obscache:
+  enabled: true
+  ttl: 1h
+
 # ---------------------------------------------------------------------
 # Structured logging sinks
 # ---------------------------------------------------------------------

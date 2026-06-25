@@ -197,7 +197,8 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 		return "", errors.New("没有查找到对应的obs路径数据")
 	}
 
-	keys, err := rxBot.NewClient().ListObsKeys(ctx, obsPath)
+	client := rxBot.NewClient()
+	keys, err := listObsKeysCached(ctx, client, obsPath, questionAgentLog.Status == statusSucceeded)
 	if err != nil {
 		return "", friendlyRelayErr(err)
 	}
@@ -229,7 +230,8 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	if len(keys) == 0 {
 		// 旧行 / image_paths 为空:退回按前缀列举(保持今日行为)
 		var err error
-		keys, err = rxBot.NewClient().ListObsKeys(ctx, obsPath)
+		client := rxBot.NewClient()
+		keys, err = listObsKeysCached(ctx, client, obsPath, row.Status == statusSucceeded)
 		if err != nil {
 			return nil, friendlyRelayErr(err)
 		}
@@ -277,7 +279,7 @@ func (ps *Service) GetDownloadObsFile(ctx context.Context, username, obsPath str
 	}
 
 	client := rxBot.NewClient()
-	keys, err := client.ListObsKeys(ctx, obsPath)
+	keys, err := listObsKeysCached(ctx, client, obsPath, questionAgentLog.Status == statusSucceeded)
 	if err != nil {
 		return nil, "", 0, friendlyRelayErr(err)
 	}

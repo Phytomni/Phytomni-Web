@@ -63,6 +63,10 @@ func initConfig(*cli.Context) error {
 	// Use InitFromViper (fills the "clients" map read by cache.Client), NOT
 	// InitFromViperDefault (a separate clientDefault map → nil here).
 	viper.SetDefault("redis.enabled", true)
+	// OBS-listing cache is a benign fail-open optimization; default ON (active
+	// only when Redis is reachable). Flip to false to bypass it without
+	// disabling revocation/rate-limit.
+	viper.SetDefault("obscache.enabled", true)
 	if viper.GetBool("redis.enabled") {
 		if err := rxRedis.InitFromViper(); err != nil {
 			rxLog.Sugar().Warnf("redis init failed; user/product features degrade fail-open: %v", err)
