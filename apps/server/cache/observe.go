@@ -39,6 +39,7 @@ func FailOpenCount() int64 { return atomic.LoadInt64(&failOpenCount) }
 func resetFailOpenForTest() {
 	atomic.StoreInt64(&failOpenCount, 0)
 	atomic.StoreInt64(&rateLimitBlocked, 0)
+	atomic.StoreInt64(&obsCacheHit, 0)
 	warnMu.Lock()
 	lastWarn = map[string]time.Time{}
 	warnMu.Unlock()
@@ -54,3 +55,14 @@ func ObserveRateLimitBlocked() { atomic.AddInt64(&rateLimitBlocked, 1) }
 
 // RateLimitBlockedCount 返回进程启动以来被限流拦下的请求总数(/readyz 暴露)。
 func RateLimitBlockedCount() int64 { return atomic.LoadInt64(&rateLimitBlocked) }
+
+// obsCacheHit 记录 OBS 列举缓存的真命中数(仅命中,不含 miss/fail-open)。与
+// failOpenCount/rateLimitBlocked 同构(atomic + getter + /readyz 字段),供运维判断
+// 缓存有效性与 TTL 调优。
+var obsCacheHit int64
+
+// ObserveObsCacheHit 在 GetObsKeys 命中时调用。
+func ObserveObsCacheHit() { atomic.AddInt64(&obsCacheHit, 1) }
+
+// ObsCacheHitCount 返回进程启动以来的 OBS 列举缓存命中总数(/readyz 暴露)。
+func ObsCacheHitCount() int64 { return atomic.LoadInt64(&obsCacheHit) }
