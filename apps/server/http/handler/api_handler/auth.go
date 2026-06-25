@@ -1,11 +1,13 @@
 package api_handler
 
 import (
+	"errors"
 	"net/http"
 	"phytomni-server/common/i18n"
 	rxLog "phytomni-server/log"
 	"phytomni-server/middleware"
 	"phytomni-server/model"
+	"phytomni-server/service/api_service"
 	"phytomni-server/utils"
 	"phytomni-server/utils/errs"
 	"strconv"
@@ -45,6 +47,23 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
 			"message": i18n.T(ctx, "register.credentials_required"),
+		})
+		return
+	}
+
+	if err := ph.service.CheckRegisterFloor(ctx, ctx.ClientIP()); err != nil {
+		if errors.Is(err, api_service.ErrRegisterRateLimited) {
+			ctx.Header("Retry-After", "3600")
+			ctx.JSON(http.StatusTooManyRequests, gin.H{
+				"code":    http.StatusTooManyRequests,
+				"message": i18n.T(ctx, "register.rate_limited"),
+			})
+			return
+		}
+		// fail-closed:COUNT 出错也拒注册(低危、可重试),不静默放行
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    http.StatusServiceUnavailable,
+			"message": i18n.T(ctx, "register.rate_limited"),
 		})
 		return
 	}
