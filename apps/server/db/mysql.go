@@ -48,6 +48,10 @@ func InitMysqlDB() error {
 			ParameterizedQueries:      true,
 		})
 		cfg.Config.Logger = NewSqlLogger(baseLogger)
+		// TranslateError maps driver-level errors (e.g. duplicate-key 1062) to
+		// gorm sentinel values such as gorm.ErrDuplicatedKey so callers can use
+		// errors.Is instead of parsing raw driver strings.
+		cfg.Config.TranslateError = true
 
 		db, err := gorm.Open(dbGorm, &cfg.Config)
 		if err != nil {

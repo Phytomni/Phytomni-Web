@@ -26,6 +26,22 @@ func addColumnIfMissing(db *gorm.DB, model interface{}, col, ddl string) error {
 	return nil
 }
 
+// addUniqueIndexIfMissing is an idempotent helper for creating a unique index.
+// addColumnIfMissing handles columns; this companion handles indexes using
+// db.Migrator().HasIndex since the column helpers cannot create indexes.
+func addUniqueIndexIfMissing(db *gorm.DB, model interface{}, indexName, ddl string) error {
+	if db.Migrator().HasIndex(model, indexName) {
+		rxLog.Sugar().Infof("%s index already exists, skip", indexName)
+		return nil
+	}
+	if err := db.Exec(ddl).Error; err != nil {
+		rxLog.Sugar().Errorw("create unique index failed", "index", indexName, "err", err)
+		return err
+	}
+	rxLog.Sugar().Infof("%s unique index added", indexName)
+	return nil
+}
+
 // firstLoginBackfillSQL is the exact production statement run by `migrate up`.
 // It reverts first_login_status from '1' to '0' for users whose
 // password_change_at and created_at are within 5 seconds of each other (the
@@ -64,10 +80,9 @@ func backfillFirstLoginStatusWith(db *gorm.DB, sql string) (int64, error) {
 }
 
 // reportDuplicateEmails returns every email address that appears more than once
-// in the users table. It never modifies any row — callers must not delete or
-// update based on this list without explicit operator approval (see design §6-3).
-// Used by the `migrate dedupe-emails` subcommand so operators can identify
-// existing duplicates before a UNIQUE index is added to users.email.
+// in the users table. It never modifies any row — operators must resolve
+// existing duplicates manually before a UNIQUE index is added to users.email.
+// Used by the `migrate dedupe-emails` subcommand.
 func reportDuplicateEmails(db *gorm.DB) ([]string, error) {
 	var dups []string
 	err := db.Model(&model.User{}).
@@ -152,6 +167,15 @@ func Migrate() *cli.Command {
 					rxLog.Sugar().Warnw("dedupe-emails: operator action required before adding UNIQUE index",
 						"duplicate_count", len(dups))
 					return nil
+				},
+			},
+			{
+				Name:        "add-email-unique-index",
+				Usage:       "给 users.email 加唯一索引",
+				Description: "Add a UNIQUE index on users(email). Idempotent — no-op if the index already exists. Run dedupe-emails first to confirm no duplicate emails exist; production DDL stays manual.",
+				Action: func(ctx *cli.Context) error {
+					return addUniqueIndexIfMissing(model.Default(), &model.User{}, "uniq_users_email",
+						"CREATE UNIQUE INDEX uniq_users_email ON users(email)")
 				},
 			},
 			{

@@ -119,6 +119,44 @@ func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
 	}
 }
 
+// TestAddUniqueIndexIfMissing_Idempotent pins the HasIndex-guarded idempotency
+// of addUniqueIndexIfMissing: first call creates the index, second call is a
+// no-op (no "index already exists" DDL error). After creation, inserting a
+// duplicate email must violate the constraint — proving the index is active.
+func TestAddUniqueIndexIfMissing_Idempotent(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{TranslateError: true})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	// Table name matches User.TableName() == "users"; minimal columns only.
+	if err := gdb.Exec(`CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	db.Set("phytomni-server", gdb)
+
+	const ddl = "CREATE UNIQUE INDEX uniq_users_email ON users(email)"
+
+	// First call: index is absent → must be created.
+	if err := addUniqueIndexIfMissing(model.Default(), &model.User{}, "uniq_users_email", ddl); err != nil {
+		t.Fatalf("first call (create): %v", err)
+	}
+	// Second call: index already present → HasIndex guard must short-circuit, no DDL error.
+	if err := addUniqueIndexIfMissing(model.Default(), &model.User{}, "uniq_users_email", ddl); err != nil {
+		t.Fatalf("second call (no-op): %v", err)
+	}
+
+	// The index is active: a duplicate email insert must error.
+	if err := gdb.Exec(`INSERT INTO users (email) VALUES ('a@x.com')`).Error; err != nil {
+		t.Fatalf("first insert: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO users (email) VALUES ('a@x.com')`).Error; err == nil {
+		t.Error("duplicate email insert must fail when unique index is present")
+	}
+}
+
 // sqliteBackfillSQL mirrors firstLoginBackfillSQL's row-selection semantics
 // (flip first_login_status '1'→'0' when password_change_at and created_at are
 // within 5 seconds) using SQLite-portable julianday arithmetic instead of

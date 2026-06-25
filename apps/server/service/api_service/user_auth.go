@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	stdErrors "errors"
 	"log"
 	rxCache "phytomni-server/cache"
 	"phytomni-server/common"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/go-errors/errors"
 	"github.com/spf13/viper"
+	"gorm.io/gorm"
 )
 
 func (ps *Service) RegisterAddUser(ctx context.Context, email string, password string, code string, id int, phone, organization, position string) (bool, error) {
@@ -52,11 +54,13 @@ func (ps *Service) RegisterAddUser(ctx context.Context, email string, password s
 		return false, errors.New("错误的权限赋值，您没有这样的权限")
 	}
 
-	affected := model.DB(ctx).Model(&model.User{}).Debug().Create(&userInfo).RowsAffected
-	if affected > 0 {
-		return true, nil
+	if err := model.DB(ctx).Model(&model.User{}).Debug().Create(&userInfo).Error; err != nil {
+		if stdErrors.Is(err, gorm.ErrDuplicatedKey) {
+			return false, errors.New("该邮箱已被注册")
+		}
+		return false, errors.New("管理员新增用户注册失败")
 	}
-	return false, errors.New("管理员新增用户注册失败")
+	return true, nil
 }
 
 func (ps *Service) ModifyPassword(ctx context.Context, name, Password, newPassword string) (string, error) {
@@ -240,6 +244,9 @@ func (ps *Service) UserRegister(ctx context.Context, email, password string) err
 		PasswordChangeAt: &now,
 	}).Error
 	if err != nil {
+		if stdErrors.Is(err, gorm.ErrDuplicatedKey) {
+			return errors.New("该邮箱已被注册")
+		}
 		return errors.New("用户注册失败")
 	}
 	return nil

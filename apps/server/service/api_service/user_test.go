@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	stdErrors "errors"
 	"strings"
 	"sync"
 	"testing"
@@ -515,4 +516,92 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 			t.Errorf("password must stay unchanged on hash error, got %q", stored)
 		}
 	})
+}
+
+// setupUserTestDBWithUniqueEmail opens a fresh in-memory SQLite with the same
+// users schema as setupUserTestDB but also creates a UNIQUE index on email so
+// duplicate-key paths are reachable in tests. TranslateError must be on for
+// gorm.ErrDuplicatedKey mapping to work on SQLite.
+func setupUserTestDBWithUniqueEmail(t *testing.T) *gorm.DB {
+	t.Helper()
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{TranslateError: true})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	ddl := `CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT,
+		password TEXT,
+		code TEXT,
+		description TEXT,
+		first_login_status TEXT DEFAULT '0',
+		created_at DATETIME,
+		updated_at DATETIME,
+		delete_at DATETIME,
+		password_change_at DATETIME,
+		login_failed_count INTEGER DEFAULT 0,
+		locked_until DATETIME,
+		last_login_at DATETIME,
+		phone TEXT,
+		organization TEXT,
+		position TEXT,
+		chat_limit INTEGER DEFAULT 0
+	)`
+	if err := gdb.Exec(ddl).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if err := gdb.Exec(`CREATE UNIQUE INDEX uniq_users_email ON users(email)`).Error; err != nil {
+		t.Fatalf("create unique index: %v", err)
+	}
+	db.Set("phytomni-server", gdb)
+	return gdb
+}
+
+// TestUserRegister_DuplicateEmailFriendlyError pins the dup-key mapping in
+// UserRegister: registering the same email twice must return a friendly Chinese
+// message, not a raw GORM or driver error string. The unique index must be
+// present on the test DB so the second insert genuinely violates the constraint.
+// mutation: remove the errors.Is(err, gorm.ErrDuplicatedKey) branch → this
+// test goes red because the generic "用户注册失败" message is not the
+// duplicate-specific one being asserted.
+func TestUserRegister_DuplicateEmailFriendlyError(t *testing.T) {
+	setupUserTestDBWithUniqueEmail(t)
+	ps := NewService()
+
+	if err := ps.UserRegister(context.Background(), "dup@x.com", "Secret12!"); err != nil {
+		t.Fatalf("first registration must succeed, got %v", err)
+	}
+
+	err := ps.UserRegister(context.Background(), "dup@x.com", "Secret12!")
+	if err == nil {
+		t.Fatal("second registration with same email must return an error")
+	}
+	const want = "该邮箱已被注册"
+	if !stdErrors.Is(err, stdErrors.New(want)) && err.Error() != want {
+		// errors.Is won't match plain errors.New by value; check message directly.
+		if err.Error() != want {
+			t.Errorf("expected friendly message %q, got %q", want, err.Error())
+		}
+	}
+}
+
+// TestRegisterAddUser_DuplicateEmailFriendlyError pins the same dup-key mapping
+// in RegisterAddUser: an admin attempting to create a second account with an
+// already-registered email must get the friendly message, not a raw error.
+func TestRegisterAddUser_DuplicateEmailFriendlyError(t *testing.T) {
+	setupUserTestDBWithUniqueEmail(t)
+	ps := NewService()
+
+	if _, err := ps.RegisterAddUser(context.Background(), "dup@x.com", "Secret12!", "user", 0, "", "", ""); err != nil {
+		t.Fatalf("first admin-create must succeed, got %v", err)
+	}
+
+	_, err := ps.RegisterAddUser(context.Background(), "dup@x.com", "Secret12!", "user", 0, "", "", "")
+	if err == nil {
+		t.Fatal("second admin-create with same email must return an error")
+	}
+	const want = "该邮箱已被注册"
+	if err.Error() != want {
+		t.Errorf("expected friendly message %q, got %q", want, err.Error())
+	}
 }
