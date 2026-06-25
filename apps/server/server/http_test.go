@@ -33,6 +33,29 @@ func TestReadyzHandler_IncludesRateLimitBlocked(t *testing.T) {
 	}
 }
 
+// TestReadyzHandler_IncludesObsCacheHit asserts /readyz JSON exposes the
+// obs_cache_hit field alongside the existing redis/failopen/ratelimit fields.
+func TestReadyzHandler_IncludesObsCacheHit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/readyz", readyzHandler)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("readyz must be 200, got %d", w.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("readyz body not JSON: %v", err)
+	}
+	for _, k := range []string{"redis", "failopen_count", "ratelimit_blocked", "obs_cache_hit"} {
+		if _, ok := body[k]; !ok {
+			t.Errorf("readyz JSON missing %q (got keys %v)", k, body)
+		}
+	}
+}
+
 // readyzHandler is the extracted handler (see http.go) so it can be tested
 // without standing up the full server.
 func TestReadyzReportsRedisStatusAndCount(t *testing.T) {

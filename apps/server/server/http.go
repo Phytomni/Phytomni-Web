@@ -79,6 +79,7 @@ func readyzHandler(c *gin.Context) {
 		"redis":             redisStatus,
 		"failopen_count":    rxRedis.FailOpenCount(),
 		"ratelimit_blocked": rxRedis.RateLimitBlockedCount(),
+		"obs_cache_hit":     rxRedis.ObsCacheHitCount(),
 	})
 }
 
