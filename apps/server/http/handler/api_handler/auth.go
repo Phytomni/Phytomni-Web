@@ -63,7 +63,7 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 		// fail-closed:COUNT 出错也拒注册(低危、可重试),不静默放行
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{
 			"code":    http.StatusServiceUnavailable,
-			"message": i18n.T(ctx, "register.rate_limited"),
+			"message": i18n.T(ctx, "register.service_unavailable"),
 		})
 		return
 	}

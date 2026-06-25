@@ -13,6 +13,7 @@ password_complexity = "密码必须包含大小写字母、数字及标点符号
 email_invalid_format = "用户名必须是有效的邮箱格式"
 username_exists = "用户名已存在"
 rate_limited = "注册过于频繁，请稍后再试"
+service_unavailable = "服务暂时不可用，请稍后再试"
 
 [modify_password]
 password_format_invalid = "新的密码格式不正确"

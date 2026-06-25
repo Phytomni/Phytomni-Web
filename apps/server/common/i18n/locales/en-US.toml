@@ -13,6 +13,7 @@ password_complexity = "Password must contain uppercase, lowercase, numbers, and 
 email_invalid_format = "Username must be a valid email address"
 username_exists = "Username already exists"
 rate_limited = "Too many registrations, please try again later"
+service_unavailable = "Service temporarily unavailable, please try again later"
 
 [modify_password]
 password_format_invalid = "New password format is invalid"

@@ -149,6 +149,12 @@ func TestRegisterFloor_429AfterLimit(t *testing.T) {
 	if msg == "" {
 		t.Errorf("429 response must have non-empty message, got body: %s", w.Body.String())
 	}
+	// Assert the message is the actual localized rate-limit text, not a raw key fallback.
+	// Default locale is en-US (no Accept-Language header) → "Too many registrations...".
+	// Accept either locale substring so the test is robust across zh-CN/en-US.
+	if !strings.Contains(msg, "registrations") && !strings.Contains(msg, "频繁") {
+		t.Errorf("429 message must contain rate-limit text (got %q); raw i18n key fallback is not acceptable", msg)
+	}
 }
 
 // TestRegisterFloor_CouplingOpLogWritten machine-locks that OperationLog
