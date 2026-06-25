@@ -3,7 +3,6 @@ package api_service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -183,5 +182,4 @@ func TestRegisterFloor_CountErrorFailsClosed(t *testing.T) {
 	}
 	// Sanity: the error message should mention the missing table.
 	t.Logf("COUNT error (expected): %v", err)
-	_ = fmt.Sprintf("%v", err) // ensure err is used
 }

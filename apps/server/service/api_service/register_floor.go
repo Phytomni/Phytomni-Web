@@ -15,7 +15,7 @@ var ErrRegisterRateLimited = errors.New("注册过于频繁，请稍后再试")
 
 const registerFloorPath = "/api/v1/auth/registrations"
 
-// registerFloorConfig 读注册底线阈值/窗口。比 Phase 2 Redis 层(10/h)更宽——只兜
+// registerFloorConfig 读注册底线阈值/窗口。比 Redis 限流层(10/h)更宽——只兜
 // 断网/持续滥用,非正常态二道闸。viper 缺省回落(改动需重启)。
 func registerFloorConfig() (int64, time.Duration) {
 	limit := viper.GetInt64("register.durable_floor.limit")
@@ -36,7 +36,7 @@ func registerFloorConfig() (int64, time.Duration) {
 //
 // IP 按**精确等值**匹配 OperationLog 中间件写入的原始 c.ClientIP() 值(走 client_ip
 // 上的存值;IPv4 常态命中)。IPv6 /48 聚合是未来增强(需中间件侧也存掩码值或 SQL 范围
-// 查,见 design §6-5 / Non-Goals),本期按全地址等值——故不做掩码,保持读写两侧一致 +
+// 查),本期按全地址等值——故不做掩码,保持读写两侧一致 +
 // 索引友好。读现有 user_operation_logs(path、created_at 已索引),无新表/列/索引。
 func (ps *Service) CheckRegisterFloor(ctx context.Context, clientIP string) error {
 	if clientIP == "" {

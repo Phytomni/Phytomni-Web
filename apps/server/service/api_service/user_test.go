@@ -2,7 +2,6 @@ package api_service
 
 import (
 	"context"
-	stdErrors "errors"
 	"strings"
 	"sync"
 	"testing"
@@ -577,11 +576,8 @@ func TestUserRegister_DuplicateEmailFriendlyError(t *testing.T) {
 		t.Fatal("second registration with same email must return an error")
 	}
 	const want = "该邮箱已被注册"
-	if !stdErrors.Is(err, stdErrors.New(want)) && err.Error() != want {
-		// errors.Is won't match plain errors.New by value; check message directly.
-		if err.Error() != want {
-			t.Errorf("expected friendly message %q, got %q", want, err.Error())
-		}
+	if err.Error() != want {
+		t.Errorf("expected friendly message %q, got %q", want, err.Error())
 	}
 }
 
