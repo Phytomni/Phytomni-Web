@@ -79,6 +79,41 @@ func backfillFirstLoginStatusWith(db *gorm.DB, sql string) (int64, error) {
 	return result.RowsAffected, nil
 }
 
+// chatLimitBackfillSQL sets chat_limit to the sentinel value (2^30 = 1073741824)
+// for every non-guest user currently at 0. The later enforcement gate checks
+// chat_limit > 0 (boolean, no decrement), so any large positive value lets
+// existing legitimate users pass without being retroactively blocked. New
+// self-registered accounts are created at 0 and remain inert until approved.
+//
+// Idempotent by construction: the WHERE requires chat_limit = 0, so a second
+// run finds no matching rows. Guest users keep whatever limit their account
+// type assigns — the code <> 'guest' clause leaves them untouched.
+const chatLimitBackfillSQL = `
+	UPDATE users
+	SET chat_limit = 1073741824
+	WHERE chat_limit = 0
+	  AND code <> 'guest'`
+
+// backfillChatLimit runs the production backfill and returns the number of
+// rows updated. Extracted as a package-level seam so tests can drive the
+// logic directly — the CLI Action closure is unexported and unreachable from
+// tests. Mirrors the backfillFirstLoginStatus / backfillFirstLoginStatusWith
+// pattern.
+func backfillChatLimit(db *gorm.DB) (int64, error) {
+	return backfillChatLimitWith(db, chatLimitBackfillSQL)
+}
+
+// backfillChatLimitWith executes the given SQL and returns rows affected.
+// The sql parameter lets SQLite tests substitute a portable expression when
+// needed; production always goes through backfillChatLimit.
+func backfillChatLimitWith(db *gorm.DB, sql string) (int64, error) {
+	result := db.Exec(sql)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
 // reportDuplicateEmails returns every email address that appears more than once
 // in the users table. It never modifies any row — operators must resolve
 // existing duplicates manually before a UNIQUE index is added to users.email.
@@ -126,6 +161,20 @@ func Migrate() *cli.Command {
 					}
 					rxLog.Sugar().Infow("first_login_status backfill complete",
 						"rows_affected", rows)
+					return nil
+				},
+			},
+			{
+				Name:        "backfill-chat-limit",
+				Usage:       "置存量非 guest 用户的 chat_limit 哨兵值",
+				Description: "Run before the ChatLimit enforcement gate goes live. Sets chat_limit=0 non-guest users to the large-positive sentinel so they are not retroactively blocked. New self-registered accounts stay at 0 (inert). Idempotent — safe to re-run.",
+				Action: func(ctx *cli.Context) error {
+					rows, err := backfillChatLimit(model.Default())
+					if err != nil {
+						rxLog.Sugar().Errorw("backfill-chat-limit failed", "err", err)
+						return err
+					}
+					rxLog.Sugar().Infow("chat_limit backfill complete", "rows_affected", rows)
 					return nil
 				},
 			},

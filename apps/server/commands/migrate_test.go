@@ -305,3 +305,81 @@ func TestBackfillFirstLoginStatus_SurfacesError(t *testing.T) {
 		t.Fatal("expected an error from a statement against a missing table, got nil")
 	}
 }
+
+// chatLimitBackfillSQLSQLite is the SQLite-portable equivalent of
+// chatLimitBackfillSQL. The production SQL is identical in WHERE/SET shape
+// (both use only integer comparison and a string inequality), so no dialect
+// substitution is actually needed here — the constant is kept separate solely
+// to make the seam explicit and to mirror the firstLoginBackfillSQL /
+// sqliteBackfillSQL test pattern.
+const chatLimitBackfillSQLSQLite = `
+	UPDATE users
+	SET chat_limit = 1073741824
+	WHERE chat_limit = 0
+	  AND code <> 'guest'`
+
+// TestBackfillChatLimit pins three contracts of backfillChatLimitWith:
+//
+//  1. A non-guest user whose chat_limit is 0 is set to the sentinel (2^30).
+//  2. A guest user whose chat_limit is 0 is left untouched.
+//  3. A non-guest user whose chat_limit is already non-zero is left untouched.
+//  4. rows_affected == 1 (exactly the first row changed).
+//
+// Mutation coverage:
+//   - Drop `code <> 'guest'` → guest row changes → RED on assertion (2).
+//   - Drop `chat_limit = 0`  → already-5 row changes → RED on assertion (3).
+func TestBackfillChatLimit(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	// Table name must match User.TableName() == "users"; minimal columns only.
+	if err := gdb.Exec(`CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		code TEXT,
+		chat_limit INTEGER
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO users (code, chat_limit) VALUES
+		('user',  0),
+		('guest', 0),
+		('user',  5)`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	rows, err := backfillChatLimitWith(gdb, chatLimitBackfillSQLSQLite)
+	if err != nil {
+		t.Fatalf("backfillChatLimitWith: %v", err)
+	}
+	if rows != 1 {
+		t.Fatalf("expected rows_affected == 1 (only the chat_limit=0 non-guest row), got %d", rows)
+	}
+
+	type row struct {
+		Code      string
+		ChatLimit int
+	}
+	var results []row
+	if err := gdb.Raw(`SELECT code, chat_limit FROM users ORDER BY id`).Scan(&results).Error; err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(results))
+	}
+
+	const sentinel = 1073741824 // 2^30
+
+	// Row 1: non-guest, was 0 → must become sentinel.
+	if results[0].ChatLimit != sentinel {
+		t.Errorf("row1 (user, was 0): want chat_limit=%d, got %d", sentinel, results[0].ChatLimit)
+	}
+	// Row 2: guest, was 0 → must remain 0 (untouched by code <> 'guest' guard).
+	if results[1].ChatLimit != 0 {
+		t.Errorf("row2 (guest, was 0): want chat_limit=0, got %d", results[1].ChatLimit)
+	}
+	// Row 3: non-guest, was 5 → must remain 5 (untouched by chat_limit = 0 guard).
+	if results[2].ChatLimit != 5 {
+		t.Errorf("row3 (user, was 5): want chat_limit=5, got %d", results[2].ChatLimit)
+	}
+}
