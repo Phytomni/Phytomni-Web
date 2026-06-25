@@ -67,6 +67,10 @@ func initConfig(*cli.Context) error {
 	// only when Redis is reachable). Flip to false to bypass it without
 	// disabling revocation/rate-limit.
 	viper.SetDefault("obscache.enabled", true)
+	// Chat quota gate: default OFF (dark launch). When OFF, CheckChatAllowed
+	// always allows — zero behavior change from today. Set to true in app.yml
+	// to activate per-user chat_limit enforcement.
+	viper.SetDefault("chatlimit.enforce", false)
 	if viper.GetBool("redis.enabled") {
 		if err := rxRedis.InitFromViper(); err != nil {
 			rxLog.Sugar().Warnf("redis init failed; user/product features degrade fail-open: %v", err)
