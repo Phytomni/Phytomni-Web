@@ -63,6 +63,21 @@ func backfillFirstLoginStatusWith(db *gorm.DB, sql string) (int64, error) {
 	return result.RowsAffected, nil
 }
 
+// reportDuplicateEmails returns every email address that appears more than once
+// in the users table. It never modifies any row — callers must not delete or
+// update based on this list without explicit operator approval (see design §6-3).
+// Used by the `migrate dedupe-emails` subcommand so operators can identify
+// existing duplicates before a UNIQUE index is added to users.email.
+func reportDuplicateEmails(db *gorm.DB) ([]string, error) {
+	var dups []string
+	err := db.Model(&model.User{}).
+		Select("email").
+		Group("email").
+		Having("COUNT(*) > 1").
+		Pluck("email", &dups).Error
+	return dups, err
+}
+
 // Migrate is the CLI command `go run main.go migrate up`. It performs the
 // first-login backfill: revert first_login_status from '1' to '0' for users
 // whose password_change_at and created_at are within 5 seconds of each other.
@@ -115,6 +130,28 @@ func Migrate() *cli.Command {
 				Action: func(ctx *cli.Context) error {
 					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
 						"ALTER TABLE question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT '图廊图片OBS路径(JSON数组)' AFTER download_path")
+				},
+			},
+			{
+				Name:        "dedupe-emails",
+				Usage:       "报告 users.email 重复项(仅读,不删行)",
+				Description: "Report email addresses that appear more than once in the users table. Read-only — no rows are modified. Run before adding a UNIQUE index on users.email so the operator can manually resolve existing duplicates.",
+				Action: func(ctx *cli.Context) error {
+					dups, err := reportDuplicateEmails(model.Default())
+					if err != nil {
+						rxLog.Sugar().Errorw("dedupe-emails report failed", "err", err)
+						return err
+					}
+					if len(dups) == 0 {
+						rxLog.Sugar().Info("dedupe-emails: no duplicate emails found")
+						return nil
+					}
+					for _, email := range dups {
+						rxLog.Sugar().Warnw("duplicate email found", "email", email)
+					}
+					rxLog.Sugar().Warnw("dedupe-emails: operator action required before adding UNIQUE index",
+						"duplicate_count", len(dups))
+					return nil
 				},
 			},
 			{

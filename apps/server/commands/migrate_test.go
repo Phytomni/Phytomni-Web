@@ -209,6 +209,55 @@ func TestBackfillFirstLoginStatus_Idempotent(t *testing.T) {
 	}
 }
 
+// TestReportDuplicateEmails 钉死 reportDuplicateEmails 的两个关键契约:
+// (1) 恰好返回有重复的那个 email,独立 email 不在结果中;
+// (2) 调用后行数不变(仅报告,绝不删行)。
+// 此 "report-only" 断言是核心不变量:删掉行数检查本测试仍绿,但契约就失守了。
+func TestReportDuplicateEmails(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	// Table name must match User.TableName() == "users".
+	if err := gdb.Exec(`CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT,
+		created_at TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	// Two rows share the same email; one row has a unique email.
+	if err := gdb.Exec(`INSERT INTO users (email, created_at) VALUES
+		('dup@example.com', '2026-01-01 10:00:00'),
+		('dup@example.com', '2026-01-02 10:00:00'),
+		('unique@example.com', '2026-01-03 10:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	db.Set("phytomni-server", gdb)
+
+	dups, err := reportDuplicateEmails(model.Default())
+	if err != nil {
+		t.Fatalf("reportDuplicateEmails: %v", err)
+	}
+
+	// Contract (1): exactly the duplicate email is returned, length == 1.
+	if len(dups) != 1 {
+		t.Fatalf("expected 1 duplicate email, got %d: %v", len(dups), dups)
+	}
+	if dups[0] != "dup@example.com" {
+		t.Errorf("expected 'dup@example.com', got %q", dups[0])
+	}
+
+	// Contract (2): row count is unchanged — report-only, no deletes.
+	var total int64
+	if err := gdb.Raw("SELECT COUNT(*) FROM users").Scan(&total).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("report-only invariant violated: expected 3 rows, got %d", total)
+	}
+}
+
 // TestBackfillFirstLoginStatus_SurfacesError pins that a failing statement
 // propagates rather than being swallowed: the production seam returns the error
 // so `migrate up` exits non-zero instead of reporting a phantom success.
