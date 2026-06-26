@@ -19,7 +19,9 @@ describe("agentProgress", () => {
   it("maps known agents to their half-life", () => {
     expect(AGENT_PROGRESS.ChatAgent.halfLifeMs).toBe(7500);
     expect(AGENT_PROGRESS.KnowledgeAgent.halfLifeMs).toBe(45000);
+    expect(AGENT_PROGRESS.DataAgent.halfLifeMs).toBe(45000);
     expect(AGENT_PROGRESS.ReviewAgent.halfLifeMs).toBe(150000);
+    expect(AGENT_PROGRESS.BriefGeneAgent.halfLifeMs).toBe(150000);
   });
   it("falls back to ChatAgent config for unknown/empty agent", () => {
     expect(progressConfigFor("NopeAgent")).toBe(DEFAULT_PROGRESS);

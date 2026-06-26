@@ -11,11 +11,23 @@ const getMessage = (messages: unknown, path: string) =>
   }, messages);
 
 describe("e2e UX i18n keys", () => {
-  const keys = ["chat.sendAriaLabel", "chat.abortAriaLabel", "chat.timeoutFailed"];
+  const keys = [
+    "chat.sendAriaLabel",
+    "chat.abortAriaLabel",
+    "chat.timeoutFailed",
+    "chat.eta.fast",
+    "chat.eta.medium",
+    "chat.eta.slow",
+    "chat.elapsedPrefix",
+  ];
   for (const key of keys) {
     it(`has zh-CN + en-US copy for ${key}`, () => {
-      expect(getMessage(zhCN, key), `${key} zh-CN`).toEqual(expect.any(String));
-      expect(getMessage(enUS, key), `${key} en-US`).toEqual(expect.any(String));
+      const zh = getMessage(zhCN, key);
+      const en = getMessage(enUS, key);
+      expect(zh, `${key} zh-CN`).toEqual(expect.any(String));
+      expect((zh as string).length, `${key} zh-CN non-empty`).toBeGreaterThan(0);
+      expect(en, `${key} en-US`).toEqual(expect.any(String));
+      expect((en as string).length, `${key} en-US non-empty`).toBeGreaterThan(0);
     });
   }
 });
