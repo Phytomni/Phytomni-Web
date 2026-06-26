@@ -1120,7 +1120,7 @@
               @select="handleSelect"
               @search="handleSearch"
               submit-type="enter"
-              @keydown.enter.capture="guardEnterSubmit"
+              @keydown.enter.capture="onComposerEnterCapture"
             >
               <!-- 自定义 内容头部功能列表 -->
               <template #header>
@@ -1460,6 +1460,7 @@ import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import { isValidPendingRecord, matchesChat, safeParse } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
 import { formatLogContentWithColors } from "./utils/agent-log";
+import { guardEnterSubmit } from "./utils/guardEnterSubmit";
 import type { Chat, ChatMessage } from "./types";
 
 const uploadRef = ref<UploadInstance>();
@@ -1468,10 +1469,8 @@ const senderRef = ref();
 // mention 下拉开启时吞掉 Enter 的 capture 阶段守卫，防止 MentionSender
 // 内部的 handleKeyDown 在 dropdown 仍可见时触发 submit()。
 // popoverVisible 是 MentionSender 通过 __expose 暴露的 ComputedRef。
-const guardEnterSubmit = (e: KeyboardEvent) => {
-  if (senderRef.value?.popoverVisible) {
-    e.stopPropagation();
-  }
+const onComposerEnterCapture = (e: KeyboardEvent) => {
+  guardEnterSubmit(e, senderRef.value?.popoverVisible);
 };
 
 const timestamp = ref(Date.now());
