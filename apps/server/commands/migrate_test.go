@@ -423,7 +423,11 @@ func TestRenameAgentToolNames(t *testing.T) {
 		}
 	}
 
-	if n2, _ := renameAgentToolNames(gdb, "tool_names", "tool_name"); n2 != 0 {
+	n2, err2 := renameAgentToolNames(gdb, "tool_names", "tool_name")
+	if err2 != nil {
+		t.Fatalf("second run error: %v", err2)
+	}
+	if n2 != 0 {
 		t.Errorf("second run affected %d rows; want 0", n2)
 	}
 }
