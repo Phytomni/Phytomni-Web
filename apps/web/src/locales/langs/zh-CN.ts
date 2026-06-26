@@ -355,6 +355,7 @@ export default {
     stepResult: "步骤结果",
     finalAnswer: "最终回答",
     sendFailed: "发送消息失败，请稍后重试。",
+    timeoutFailed: "请求处理超时，请缩小查询范围或稍后重试。",
     sendAriaLabel: "发送",
     abortAriaLabel: "中止回答",
     generationStopped: "已停止生成",

@@ -11,7 +11,7 @@ const getMessage = (messages: unknown, path: string) =>
   }, messages);
 
 describe("e2e UX i18n keys", () => {
-  const keys = ["chat.sendAriaLabel", "chat.abortAriaLabel"];
+  const keys = ["chat.sendAriaLabel", "chat.abortAriaLabel", "chat.timeoutFailed"];
   for (const key of keys) {
     it(`has zh-CN + en-US copy for ${key}`, () => {
       expect(getMessage(zhCN, key), `${key} zh-CN`).toEqual(expect.any(String));

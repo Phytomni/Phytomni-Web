@@ -522,9 +522,10 @@ export function useSendMessage(opts: {
 
       // 只有在未被中止的情况下才添加错误消息
       if (!isAborted.value) {
+        const isTimeout = error.response?.status === 504;
         currentChat.value.messages.push({
           role: "assistant",
-          content: t("chat.sendFailed"),
+          content: isTimeout ? t("chat.timeoutFailed") : t("chat.sendFailed"),
           steps: [],
           status: "",
           upload_path: "",

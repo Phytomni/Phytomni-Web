@@ -358,6 +358,7 @@ export default {
     stepResult: "Step Result",
     finalAnswer: "Final Answer",
     sendFailed: "Failed to send message, please try again later.",
+    timeoutFailed: "The request timed out. Try narrowing your query or retry later.",
     sendAriaLabel: "Send",
     abortAriaLabel: "Stop answering",
     generationStopped: "Generation stopped",
