@@ -1,12 +1,44 @@
 package commands
 
 import (
+	"fmt"
+
 	rxLog "phytomni-server/log"
 	"phytomni-server/model"
 
 	"github.com/urfave/cli/v2"
 	"gorm.io/gorm"
 )
+
+// agentToolNameRenames maps every retired agent name to its canonical Bot
+// tool name. Applied to tool_names (input tokens) and question_agent_logs
+// (persisted render key). Idempotent: each UPDATE's WHERE pins the old value.
+var agentToolNameRenames = map[string]string{
+	"ChatAgents":       "ChatAgent",
+	"KnowledgeAgents":  "KnowledgeAgent",
+	"DatabaseAgents":   "DataAgent",
+	"ReviewAgents":     "ReviewAgent",
+	"AnalysisAgents":   "AnalystAgent",
+	"BriefReviewAgent": "BriefGeneAgent",
+}
+
+// renameAgentToolNames runs agentToolNameRenames as idempotent UPDATEs against
+// the given table/column and returns total rows affected. table/column are
+// hardcoded constants from the subcommands (never user input), so the
+// fmt.Sprintf is injection-safe; values are bound parameters.
+func renameAgentToolNames(db *gorm.DB, table, column string) (int64, error) {
+	var total int64
+	for oldName, newName := range agentToolNameRenames {
+		res := db.Exec(
+			fmt.Sprintf("UPDATE %s SET %s = ? WHERE %s = ?", table, column, column),
+			newName, oldName)
+		if res.Error != nil {
+			return total, res.Error
+		}
+		total += res.RowsAffected
+	}
+	return total, nil
+}
 
 // addColumnIfMissing runs an idempotent additive ALTER: if model already has
 // col it logs and no-ops, otherwise it executes ddl. The add-bot-run-id and
@@ -225,6 +257,34 @@ func Migrate() *cli.Command {
 				Action: func(ctx *cli.Context) error {
 					return addUniqueIndexIfMissing(model.Default(), &model.User{}, "uniq_users_email",
 						"CREATE UNIQUE INDEX uniq_users_email ON users(email)")
+				},
+			},
+			{
+				Name:        "rename-tool-names",
+				Usage:       "把 tool_names 输入 token 改成 Bot 规范名",
+				Description: "Rename the agent @-tokens in tool_names to the canonical Bot tool names. Idempotent. Run together with the canonical-maps deploy.",
+				Action: func(ctx *cli.Context) error {
+					n, err := renameAgentToolNames(model.Default(), "tool_names", "tool_name")
+					if err != nil {
+						rxLog.Sugar().Errorw("rename-tool-names failed", "err", err)
+						return err
+					}
+					rxLog.Sugar().Infow("rename-tool-names complete", "rows_affected", n)
+					return nil
+				},
+			},
+			{
+				Name:        "backfill-agent-tool-names",
+				Usage:       "回填 question_agent_logs.tool_name 为 Bot 规范名",
+				Description: "Backfill persisted history tool_name to canonical Bot names so old rows render under the new frontend. Idempotent — safe to re-run.",
+				Action: func(ctx *cli.Context) error {
+					n, err := renameAgentToolNames(model.Default(), "question_agent_logs", "tool_name")
+					if err != nil {
+						rxLog.Sugar().Errorw("backfill-agent-tool-names failed", "err", err)
+						return err
+					}
+					rxLog.Sugar().Infow("backfill-agent-tool-names complete", "rows_affected", n)
+					return nil
 				},
 			},
 			{

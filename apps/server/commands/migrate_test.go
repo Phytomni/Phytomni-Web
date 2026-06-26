@@ -383,3 +383,47 @@ func TestBackfillChatLimit(t *testing.T) {
 		t.Errorf("row3 (user, was 5): want chat_limit=5, got %d", results[2].ChatLimit)
 	}
 }
+
+func TestRenameAgentToolNames(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE tool_names (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		tool_name TEXT,
+		description TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO tool_names (tool_name) VALUES
+		('ChatAgents'),
+		('DatabaseAgents'),
+		('BriefReviewAgent'),
+		('ReviewAgent')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	n, err := renameAgentToolNames(gdb, "tool_names", "tool_name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 {
+		t.Errorf("rows affected = %d; want 3", n)
+	}
+
+	var names []string
+	if err := gdb.Raw(`SELECT tool_name FROM tool_names ORDER BY id`).Scan(&names).Error; err != nil {
+		t.Fatalf("scan names: %v", err)
+	}
+	want := []string{"ChatAgent", "DataAgent", "BriefGeneAgent", "ReviewAgent"}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Errorf("row %d = %q; want %q", i, names[i], want[i])
+		}
+	}
+
+	if n2, _ := renameAgentToolNames(gdb, "tool_names", "tool_name"); n2 != 0 {
+		t.Errorf("second run affected %d rows; want 0", n2)
+	}
+}
