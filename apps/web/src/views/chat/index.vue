@@ -1094,7 +1094,7 @@
             <!-- 中止按钮 - 移到MentionSender外部，确保在发送时仍可点击 -->
             <div v-if="isSending" class="abort-button-overlay">
               <el-tooltip content="中止回答" placement="top">
-                <el-button round color="#f56c6c" @click="abortCurrentRequest">
+                <el-button round color="#f56c6c" :aria-label="$t('chat.abortAriaLabel')" @click="abortCurrentRequest">
                   <el-icon>
                     <Close />
                   </el-icon>
@@ -1175,7 +1175,7 @@
                         :content="$t('chat.uploadFile')"
                         placement="top"
                       >
-                        <el-button round plain color="#626aef">
+                        <el-button round plain color="#626aef" :aria-label="$t('chat.uploadFile')">
                           <el-icon>
                             <Paperclip />
                           </el-icon>
@@ -1221,7 +1221,7 @@
                       :content="$t('chat.inputPlaceholderTip')"
                       placement="top"
                     >
-                      <el-button round color="#cbcdcd">
+                      <el-button round color="#cbcdcd" :aria-label="$t('chat.sendAriaLabel')">
                         <el-icon>
                           <Promotion />
                         </el-icon>
@@ -1229,7 +1229,7 @@
                     </el-tooltip>
                   </div>
                   <div v-else class="send-btn" @click="sendMessage">
-                    <el-button round color="#626aef">
+                    <el-button round color="#626aef" :aria-label="$t('chat.sendAriaLabel')">
                       <el-icon>
                         <Promotion />
                       </el-icon>
