@@ -59,6 +59,7 @@ export default defineConfig({
         "src/views/chat/composables/useAgentImages.ts",
         "src/views/chat/composables/useComposer.ts",
         "src/views/chat/composables/useAgentsPanel.ts",
+        "src/views/chat/utils/agentProgress.ts",
       ],
       thresholds: {
         lines: 80,
