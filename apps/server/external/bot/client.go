@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -29,6 +30,22 @@ func NewClient() *Client {
 		baseURL: BotConfig.BaseURL,
 		userKey: BotConfig.UserAPIKey,
 	}
+}
+
+// ErrBotTimeout marks a Web→Bot relay call that exceeded the HTTP client
+// timeout (or had its context deadline expire) before the Bot replied. It is a
+// wrapped sentinel so queryErrorStatus can map it to 504 instead of a generic
+// 500. Distinct from APIError, which is a decoded non-2xx Bot *response*.
+var ErrBotTimeout = errors.New("bot relay timed out")
+
+// isTimeoutErr reports whether err is a transport/deadline timeout (client
+// Timeout trip, context deadline, or a net.Error with Timeout()).
+func isTimeoutErr(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 // APIError is a non-2xx Bot response decoded into a typed error so callers can
@@ -114,6 +131,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out inte
 	req.Header.Set("Authorization", "Bearer "+c.userKey)
 	resp, err := c.http.Do(req)
 	if err != nil {
+		if isTimeoutErr(err) {
+			return fmt.Errorf("%w: %v", ErrBotTimeout, err)
+		}
 		return err
 	}
 	defer resp.Body.Close()

@@ -26,6 +26,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusServiceUnavailable, "服务暂不可用"
 	case errors.Is(err, api_service.ErrUnknownTool):
 		return http.StatusBadRequest, "未知的工具类型"
+	case errors.Is(err, rxBot.ErrBotTimeout):
+		return http.StatusGatewayTimeout, "请求处理超时，请缩小查询范围或稍后重试"
 	}
 	if msg, ok := rxBot.SurfaceableMessage(err); ok {
 		return http.StatusBadRequest, msg

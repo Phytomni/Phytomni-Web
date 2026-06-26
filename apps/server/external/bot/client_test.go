@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newTestClient points a Client at an httptest server.
@@ -145,5 +146,21 @@ func TestBotErrorIsTyped(t *testing.T) {
 	}
 	if ae.Status != 400 || ae.Message != "无法解析基因" || ae.RequestID != "r1" {
 		t.Errorf("APIError fields wrong: %+v", ae)
+	}
+}
+
+func TestDoJSON_WrapsTimeoutAsErrBotTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond) // 比 client 超时长，逼出真实 client-timeout 错误
+	}))
+	defer srv.Close()
+	c := &Client{
+		http:    &http.Client{Timeout: 20 * time.Millisecond},
+		baseURL: srv.URL,
+		userKey: "ptm_test",
+	}
+	err := c.doJSON(context.Background(), http.MethodGet, "/v1/agents", nil, nil)
+	if !errors.Is(err, ErrBotTimeout) {
+		t.Fatalf("err = %v, want wrapped ErrBotTimeout", err)
 	}
 }
