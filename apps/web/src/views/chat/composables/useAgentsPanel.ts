@@ -13,6 +13,11 @@ import InSilicoResearchAgentImg from "@/assets/images/chat/InSilicoResearchAgent
 import GeneNetworkAgentImg from "@/assets/images/chat/GeneNetworkAgent.png";
 import DigitalDesignAgentImg from "@/assets/images/chat/DigitalDesignAgent.png";
 import DefaultAgentImg from "@/assets/images/chat/Agents.png";
+import {
+  CANONICAL_AGENT_DISPLAY_NAMES,
+  CANONICAL_AGENT_I18N_KEYS,
+  type CanonicalAgentTool,
+} from "@/constants/agents";
 
 export function useAgentsPanel(opts: {
   t: (key: string) => string;
@@ -96,43 +101,50 @@ export function useAgentsPanel(opts: {
     },
     {
       id: 2,
-      name: "Knowledge Agent",
+      name: CANONICAL_AGENT_DISPLAY_NAMES.KnowledgeAgent,
+      toolName: "KnowledgeAgent",
       icon: "Search",
       route: "/knowledge-agent",
     },
     {
       id: 3,
-      name: "Data Agent",
+      name: CANONICAL_AGENT_DISPLAY_NAMES.DataAgent,
+      toolName: "DataAgent",
       icon: "DataLine",
       route: "/data-agent",
     },
     {
       id: 4,
-      name: "Analyst Agent",
+      name: CANONICAL_AGENT_DISPLAY_NAMES.AnalystAgent,
+      toolName: "AnalystAgent",
       icon: "Edit",
       route: "/analyst-agent",
     },
     {
       id: 5,
-      name: "Brief Gene Agent",
+      name: CANONICAL_AGENT_DISPLAY_NAMES.BriefGeneAgent,
+      toolName: "BriefGeneAgent",
       icon: "Edit",
       route: "/brief-gene-agent",
     },
     {
       id: 6,
-      name: "Gene Network Agent",
+      name: CANONICAL_AGENT_DISPLAY_NAMES.GeneNetworkAgent,
+      toolName: "GeneNetworkAgent",
       icon: "Edit",
       route: "/gene-network-agent",
     },
     {
       id: 7,
-      name: "Deep Genome Agent",
+      name: CANONICAL_AGENT_DISPLAY_NAMES.DeepGenomeAgent,
+      toolName: "DeepGenomeAgent",
       icon: "Edit",
       route: "/deep-genome-agent",
     },
     {
       id: 8,
-      name: "Digital Design Agent",
+      name: CANONICAL_AGENT_DISPLAY_NAMES.DigitalDesignAgent,
+      toolName: "DigitalDesignAgent",
       icon: "Edit",
       route: "/digital-design-agent",
     },
@@ -140,6 +152,12 @@ export function useAgentsPanel(opts: {
 
   // 获取智能体提示信息
   const getAgentTooltip = (agentName: string) => {
+    const canonicalKey =
+      CANONICAL_AGENT_I18N_KEYS[agentName as CanonicalAgentTool];
+    if (canonicalKey) {
+      return t(canonicalKey) || agentName;
+    }
+
     //首字母小写
     const agentKey = agentName.charAt(0).toLowerCase() + agentName.slice(1);
     return t(`chat.agents.${agentKey}`) || agentName;
@@ -165,6 +183,9 @@ export function useAgentsPanel(opts: {
 
   // 显示更多信息弹出窗口
   const showMoreInfo = (agentName: string) => {
+    const displayName =
+      CANONICAL_AGENT_DISPLAY_NAMES[agentName as CanonicalAgentTool] ||
+      agentName;
     const messageBox = ElMessageBox.alert(
       `<div class="agent-info-dialog">
       <div class="agent-detail">
@@ -174,11 +195,11 @@ export function useAgentsPanel(opts: {
         <div class="agent-image">
           <img src="${getAgentImage(
             agentName
-          )}" style="width: 100%; height: 300px;" alt="${agentName}">
+          )}" style="width: 100%; height: 300px;" alt="${displayName}">
         </div>
       </div>
     </div>`,
-      agentName,
+      displayName,
       {
         dangerouslyUseHTMLString: true,
         confirmButtonText: t("common.close"),

@@ -391,7 +391,7 @@ export default {
       BI: "BI",
       GA: "GA",
       search: "Search",
-      geneFunction: "Gene Function Agent",
+      briefGene: "Brief Gene Agent",
       review: "Review Agent",
       chatAgent:
         "Your AI assistant for answering plant research questions in natural language.",
@@ -400,6 +400,8 @@ export default {
       analystAgent: "Transforms raw data into meaningful plant insights.",
       reviewAgent:
         "Generates AI-powered literature reviews for agricultural research.",
+      briefGeneAgent:
+        "Creates rapid gene-function briefs and research leads.",
       deepGenomeAgent: "Decodes plant genomes for smarter breeding strategies.",
       inSilicoResearchAgent:
         "Simulates plant experiments digitally to accelerate discovery.",
@@ -424,7 +426,7 @@ export default {
       openKnowledgeAgent: "Open Knowledge Agent",
       openDatabaseAgent: "Open Database Agent",
       openAnalysisAgent: "Open Analysis Agent",
-      openGeneFunctionAgent: "Open Gene Function Agent",
+      openBriefGeneAgent: "Open Brief Gene Agent",
       openReviewAgent: "Open Review Agent",
       openKnowledgeBase: "Open Knowledge Base",
       sendMessageFailed: "Failed to send message:",
