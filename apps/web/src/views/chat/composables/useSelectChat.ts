@@ -102,10 +102,7 @@ export function useSelectChat(opts: {
                   content: answerData.final_answer,
                 });
               } else {
-                if (
-                  item.tool_name === "ChatAgents" ||
-                  item.tool_name === "ChatAgent"
-                ) {
+                if (item.tool_name === "ChatAgent") {
                   messages.push({
                     role: "assistant",
                     content: item.answer,
@@ -129,11 +126,9 @@ export function useSelectChat(opts: {
                     content: item.answer,
                   });
                 } else if (
-                  item.tool_name === "KnowledgeAgents" ||
-                  item.tool_name === "ReviewAgents" ||
                   item.tool_name === "KnowledgeAgent" ||
                   item.tool_name === "ReviewAgent" ||
-                  item.tool_name === "BriefReviewAgent"
+                  item.tool_name === "BriefGeneAgent"
                 ) {
                   const contentData = isValidJSON(item.answer)
                     ? JSON.parse(item.answer)
@@ -161,10 +156,7 @@ export function useSelectChat(opts: {
                     role: "assistant",
                     content: item.answer,
                   });
-                } else if (
-                  item.tool_name === "DatabaseAgents" ||
-                  item.tool_name === "DataAgent"
-                ) {
+                } else if (item.tool_name === "DataAgent") {
                   const contentData = isValidJSON(item.answer)
                     ? JSON.parse(item.answer)
                     : item.answer;
@@ -214,30 +206,6 @@ export function useSelectChat(opts: {
                     showLog: false,
                     instantMessage: false,
                     compute_resource: item?.compute_resource || "",
-                  });
-                  historyMessages.push({
-                    role: "assistant",
-                    content: item.answer,
-                  });
-                } else if (item.tool_name === "AnalysisAgents") {
-                  // const contentData = JSON.parse(item.answer);
-                  messages.push({
-                    role: "assistant",
-                    content: "任务执行中，请等待",
-                    status: item?.status || "",
-                    upload_path: item?.upload_path || "",
-                    download_path: item?.download_path || "",
-                    id: item.id,
-                    task_id: item.task_id,
-                    tool_name: item.tool_name,
-                    followUpQuestions: item.follow_up_questions
-                      ? typeof item.follow_up_questions === "string"
-                        ? JSON.parse(item.follow_up_questions)
-                        : item.follow_up_questions
-                      : [],
-                    showFollowUpQuestions: true, // 历史消息默认显示后续问题
-                    showLog: false,
-                    instantMessage: false,
                   });
                   historyMessages.push({
                     role: "assistant",

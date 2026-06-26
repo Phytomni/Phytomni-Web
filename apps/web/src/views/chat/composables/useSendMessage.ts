@@ -167,10 +167,7 @@ export function useSendMessage(opts: {
           }
         } else {
           if (response.data.tool_name) {
-            if (
-              response.data.tool_name === "ChatAgents" ||
-              response.data === "ChatAgent"
-            ) {
+            if (response.data.tool_name === "ChatAgent") {
               assistantMessage = {
                 role: "assistant",
                 content: response.data.answer,
@@ -257,11 +254,9 @@ export function useSendMessage(opts: {
                 );
               }
             } else if (
-              response.data.tool_name === "KnowledgeAgents" ||
-              response.data.tool_name === "ReviewAgents" ||
               response.data.tool_name === "KnowledgeAgent" ||
               response.data.tool_name === "ReviewAgent" ||
-              response.data.tool_name === "BriefReviewAgent"
+              response.data.tool_name === "BriefGeneAgent"
             ) {
               const contentData = isValidJSON(response.data.answer)
                 ? JSON.parse(response.data.answer)
@@ -291,10 +286,7 @@ export function useSendMessage(opts: {
                   response.data.reaction_type
                 );
               }
-            } else if (
-              response.data.tool_name === "DatabaseAgents" ||
-              response.data.tool_name === "DataAgent"
-            ) {
+            } else if (response.data.tool_name === "DataAgent") {
               const contentData = isValidJSON(response.data.answer)
                 ? JSON.parse(response.data.answer)
                 : response.data.answer;
@@ -310,34 +302,6 @@ export function useSendMessage(opts: {
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
                 original: response.data.answer,
-                tool_name: response.data.tool_name,
-                id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
-                showFollowUpQuestions: false,
-                showLog: false,
-              };
-
-              // 同步新消息的点赞状态
-              if (response.data.id && response.data.reaction_type) {
-                chatState.reactions[response.data.id.toString()] = parseInt(
-                  response.data.reaction_type
-                );
-              }
-            } else if (response.data.tool_name === "AnalysisAgents") {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
-              const tableData = convertToTableData(contentData);
-              assistantMessage = {
-                role: "assistant",
-                content: "任务执行中，请等待",
-                status: response.data?.status || "",
-                upload_path: response.data?.upload_path || "",
-                instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
                 followUpQuestions: response.data.follow_up_questions
