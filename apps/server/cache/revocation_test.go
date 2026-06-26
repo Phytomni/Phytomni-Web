@@ -2,8 +2,11 @@ package cache
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
+
+	"github.com/go-redis/redis/v8"
 )
 
 func TestBlockAndIsBlocked(t *testing.T) {
@@ -151,5 +154,47 @@ func TestUserEpoch_TTLExpiry(t *testing.T) {
 	mr.FastForward(2 * time.Minute)
 	if got := GetUserEpoch(ctx, "carol@x.com"); got != 0 {
 		t.Errorf("GetUserEpoch after TTL expiry = %d, want 0", got)
+	}
+}
+
+// 一个 down-but-not-refused 的 Redis(tarpit:接受连接但永不回包)会让每次 op
+// 阻塞在读上。带 80ms per-op 超时 → 调用快速 fail-open;去掉超时包装 → 阻塞到
+// 客户端 ReadTimeout(此处 2s)→ 本测的延迟上界断言 RED。这是"删超时包装"的变异杀手。
+func TestRevocation_OpTimeoutBoundsLatency(t *testing.T) {
+	resetFailOpenForTest()
+	startMiniredisRaw(t)
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { lis.Close() })
+	go func() {
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn // 持住连接,永不读写
+		}
+	}()
+	tarpit := redis.NewClient(&redis.Options{
+		Addr:        lis.Addr().String(),
+		ReadTimeout: 2 * time.Second,
+		DialTimeout: time.Second,
+		MaxRetries:  -1, // 关闭重试,使变异版耗时有界(~2s)
+	})
+	clients[defaultName] = tarpit
+	t.Cleanup(func() { tarpit.Close(); clients = nil })
+
+	ctx := context.Background()
+	start := time.Now()
+	if IsBlocked(ctx, HashToken("x")) {
+		t.Error("tarpit Redis must fail-open to not-blocked")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("IsBlocked took %v; per-op 80ms timeout not applied", elapsed)
 	}
 }

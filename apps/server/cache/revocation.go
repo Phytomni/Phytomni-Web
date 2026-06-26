@@ -20,6 +20,12 @@ const (
 
 var errNoRedisClient = errors.New("redis client not configured")
 
+// revokeOpTimeout 限定单次撤销检查/写入的 Redis 操作耗时:AuthMiddleware 每个鉴权
+// 请求都跑 IsBlocked+GetUserEpoch,"慢但活"的 Redis 不应把每个请求拖到数十秒——超时
+// 即 fail-open(读)/返回 error(写)。镜像 ratelimit.go/obscache.go;80ms 远大于
+// 同机房 RTT,勿设 sub-RTT(否则健康 Redis 也被误降级)。
+const revokeOpTimeout = 80 * time.Millisecond
+
 // HashToken returns hex(sha256(raw)). The blocklist keys on the FULL token string
 // (signature included), SHA-256, never truncated — so the logout writer and the
 // AuthMiddleware checker derive byte-identical keys and there is no truncation
@@ -39,7 +45,9 @@ func Block(ctx context.Context, tokenHash string, ttl time.Duration) error {
 		ObserveFailOpen("revocation_block")
 		return errNoRedisClient
 	}
-	if err := c.Set(ctx, revokeTokenPrefix+tokenHash, "1", ttl).Err(); err != nil {
+	pctx, cancel := context.WithTimeout(ctx, revokeOpTimeout)
+	defer cancel()
+	if err := c.Set(pctx, revokeTokenPrefix+tokenHash, "1", ttl).Err(); err != nil {
 		ObserveFailOpen("revocation_block")
 		return err
 	}
@@ -56,7 +64,9 @@ func IsBlocked(ctx context.Context, tokenHash string) bool {
 		ObserveFailOpen("revocation_check")
 		return false
 	}
-	n, err := c.Exists(ctx, revokeTokenPrefix+tokenHash).Result()
+	pctx, cancel := context.WithTimeout(ctx, revokeOpTimeout)
+	defer cancel()
+	n, err := c.Exists(pctx, revokeTokenPrefix+tokenHash).Result()
 	if err != nil {
 		ObserveFailOpen("revocation_check")
 		return false
@@ -73,7 +83,9 @@ func SetUserEpoch(ctx context.Context, email string, epoch time.Time, ttl time.D
 		ObserveFailOpen("revocation_epoch_set")
 		return errNoRedisClient
 	}
-	if err := c.Set(ctx, revokeUserPrefix+email, strconv.FormatInt(epoch.Unix(), 10), ttl).Err(); err != nil {
+	pctx, cancel := context.WithTimeout(ctx, revokeOpTimeout)
+	defer cancel()
+	if err := c.Set(pctx, revokeUserPrefix+email, strconv.FormatInt(epoch.Unix(), 10), ttl).Err(); err != nil {
 		ObserveFailOpen("revocation_epoch_set")
 		return err
 	}
@@ -89,7 +101,9 @@ func GetUserEpoch(ctx context.Context, email string) int64 {
 		ObserveFailOpen("revocation_epoch_get")
 		return 0
 	}
-	v, err := c.Get(ctx, revokeUserPrefix+email).Result()
+	pctx, cancel := context.WithTimeout(ctx, revokeOpTimeout)
+	defer cancel()
+	v, err := c.Get(pctx, revokeUserPrefix+email).Result()
 	if err != nil {
 		if err != redis.Nil {
 			ObserveFailOpen("revocation_epoch_get")
