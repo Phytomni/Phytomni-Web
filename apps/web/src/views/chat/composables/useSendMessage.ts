@@ -66,6 +66,12 @@ export function useSendMessage(opts: {
     if (!currentMessage.trim()) return;
 
     chatState.isSending = true;
+    chatState.sendStartedAt = Date.now();
+    chatState.activeAgentName =
+      newMessageValue.matches.length > 0
+        ? newMessageValue.matches[0]
+        : "ChatAgent";
+    chatState.completing = false;
     chatState.messageInput = "";
 
     const isNewChat =
@@ -138,6 +144,12 @@ export function useSendMessage(opts: {
         queryData as any,
         currentRequestId.value
       );
+
+      // 收到响应:先把进度条快动画补到 100%(CSS 300ms),再换入答案。
+      if (!isAborted.value) {
+        chatState.completing = true;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
 
       if (response.data) {
         let assistantMessage: ChatMessage | undefined;
@@ -595,6 +607,9 @@ export function useSendMessage(opts: {
       }
 
       chatState.isSending = false;
+      chatState.sendStartedAt = null;
+      chatState.completing = false;
+      chatState.activeAgentName = "";
 
       await scrollToBottom();
     }

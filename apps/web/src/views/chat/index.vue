@@ -1017,6 +1017,11 @@
                 <span class="dot"></span>
                 <span class="dot"></span>
               </div>
+              <SendProgress
+                :started-at="getChatState(currentChatId).sendStartedAt"
+                :agent-name="getChatState(currentChatId).activeAgentName"
+                :completing="getChatState(currentChatId).completing"
+              />
             </div>
           </div>
         </div>
@@ -1414,6 +1419,7 @@
 import { onMounted, ref, nextTick, watch, computed } from "vue";
 import Sidebar from "./sidebar.vue";
 import { MentionSender } from "vue-element-plus-x";
+import SendProgress from "./components/SendProgress.vue";
 import {
   Close as IconClose,
   Document,
