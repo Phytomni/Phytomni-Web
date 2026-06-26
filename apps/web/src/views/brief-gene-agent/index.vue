@@ -1,5 +1,5 @@
 <template>
-  <div class="brief-review-agent-container">
+  <div class="brief-gene-agent-container">
     <div class="chat-header">
       <div class="header-content">
         <el-button
@@ -11,8 +11,8 @@
           返回
         </el-button>
         <div class="header-text">
-          <h1>{{ $t("agents.briefReview.title") }}</h1>
-          <p>{{ $t("agents.briefReview.subtitle") }}</p>
+          <h1>{{ $t("agents.briefGene.title") }}</h1>
+          <p>{{ $t("agents.briefGene.subtitle") }}</p>
         </div>
       </div>
     </div>
@@ -37,7 +37,7 @@
         <div class="message-content">
           <div class="message-text">
             <MarkdownViewer
-              :content="briefReviewAgentResponse"
+              :content="briefGeneAgentResponse"
               :instantMessage="true"
             />
             <div class="tip-text">{{ $t("common.Tip") }}</div>
@@ -61,7 +61,7 @@ const goBack = () => {
 const botAvatar =
   "/avatars/bot.svg";
 
-const briefReviewAgentResponse = `**Title**: Advances in Single-Cell RNA Sequencing (scRNA-seq) Methodology and Its Applications in Plant Biology
+const briefGeneAgentResponse = `**Title**: Advances in Single-Cell RNA Sequencing (scRNA-seq) Methodology and Its Applications in Plant Biology
 
 **Results**:
 
@@ -83,7 +83,7 @@ In conclusion, single-cell RNA sequencing has revolutionized our understanding o
 </script>
 
 <style lang="scss" scoped>
-.brief-review-agent-container {
+.brief-gene-agent-container {
   height: 100vh;
   display: flex;
   flex-direction: column;

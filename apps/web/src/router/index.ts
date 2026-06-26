@@ -93,10 +93,10 @@ export const constantRoutes = [
         meta: { title: "Analyst Agent", layout: "nolayout" },
       },
       {
-        path: "/brief-review-agent",
-        name: "briefReviewAgent",
-        component: () => import("@/views/brief-review-agent/index.vue"),
-        meta: { title: "Brief Review Agent", layout: "nolayout" },
+        path: "/brief-gene-agent",
+        name: "briefGeneAgent",
+        component: () => import("@/views/brief-gene-agent/index.vue"),
+        meta: { title: "Brief Gene Agent", layout: "nolayout" },
       },
       {
         path: "/gene-network-agent",

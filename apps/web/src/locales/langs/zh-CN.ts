@@ -635,9 +635,9 @@ export default {
       title: "Data Agent",
       subtitle: "数据智能体 - 提供多组学数据分析和处理服务",
     },
-    briefReview: {
-      title: "Brief Review Agent",
-      subtitle: "简要综述智能体 - 提供研究主题的快速综述和总结服务",
+    briefGene: {
+      title: "基因简报智能体",
+      subtitle: "基因简报智能体 - 提供基因功能与研究线索的快速简报服务",
     },
     knowledge: {
       title: "Knowledge Agent",

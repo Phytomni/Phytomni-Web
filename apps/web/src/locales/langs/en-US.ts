@@ -659,10 +659,10 @@ export default {
       subtitle:
         "Data Agent - Provides multi-omics data analysis and processing services",
     },
-    briefReview: {
-      title: "Brief Review Agent",
+    briefGene: {
+      title: "Brief Gene Agent",
       subtitle:
-        "Brief Review Agent - Provides rapid review and summary services for research topics",
+        "Brief Gene Agent - Provides rapid gene-function briefs and research leads",
     },
     knowledge: {
       title: "Knowledge Agent",

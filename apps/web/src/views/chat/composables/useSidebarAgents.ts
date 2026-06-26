@@ -35,10 +35,10 @@ export function useSidebarAgents(router: Router) {
     },
     {
       id: 5,
-      name: "Brief Review Agent",
+      name: "Brief Gene Agent",
       icon: "Edit",
-      route: "/brief-review-agent",
-      img: "/BriefReviewAgent.jpg",
+      route: "/brief-gene-agent",
+      img: "/BriefGeneAgent.jpg",
     },
     {
       id: 6,

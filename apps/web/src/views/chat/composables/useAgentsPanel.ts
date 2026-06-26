@@ -7,7 +7,7 @@ import KnowledgeAgentImg from "@/assets/images/chat/KnowledgeAgent.png";
 import DataAgentImg from "@/assets/images/chat/DataAgent.png";
 import AnalystAgentImg from "@/assets/images/chat/AnalystAgent.png";
 import ReviewAgentImg from "@/assets/images/chat/ReviewAgent.png";
-import BriefReviewAgentImg from "@/assets/images/chat/BriefReviewAgent.png";
+import BriefGeneAgentImg from "@/assets/images/chat/BriefGeneAgent.png";
 import DeepGenomeAgentImg from "@/assets/images/chat/DeepGenomeAgent.png";
 import InSilicoResearchAgentImg from "@/assets/images/chat/InSilicoResearchAgent.png";
 import GeneNetworkAgentImg from "@/assets/images/chat/GeneNetworkAgent.png";
@@ -114,9 +114,9 @@ export function useAgentsPanel(opts: {
     },
     {
       id: 5,
-      name: "Brief Review Agent",
+      name: "Brief Gene Agent",
       icon: "Edit",
-      route: "/brief-review-agent",
+      route: "/brief-gene-agent",
     },
     {
       id: 6,
@@ -153,7 +153,7 @@ export function useAgentsPanel(opts: {
       DataAgent: DataAgentImg,
       AnalystAgent: AnalystAgentImg,
       ReviewAgent: ReviewAgentImg,
-      BriefReviewAgent: BriefReviewAgentImg,
+      BriefGeneAgent: BriefGeneAgentImg,
       DeepGenomeAgent: DeepGenomeAgentImg,
       InSilicoResearchAgent: InSilicoResearchAgentImg,
       GeneNetworkAgent: GeneNetworkAgentImg,

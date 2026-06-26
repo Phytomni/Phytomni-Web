@@ -1763,7 +1763,7 @@ const startNewChat = () => {
 };
 
 // 打开聊天代理
-const openChatAgents = () => {
+const openChatAgent = () => {
   // 如果左侧侧边栏是展开的，先收起
   if (!leftSidebarCollapsed.value) {
     leftSidebarCollapsed.value = true;
@@ -1774,27 +1774,22 @@ const openChatAgents = () => {
 };
 
 // 知识代理人
-const openKnowledgeAgents = () => {
+const openKnowledgeAgent = () => {
   // 这里实现知识代理人功能
 };
 
 // 数据库代理
-const openDatabaseAgents = () => {
+const openDataAgent = () => {
   // 这里实现数据库代理功能
 };
 
 // 分析代理
-const openAnalysisAgents = () => {
+const openAnalystAgent = () => {
   // 这里实现分析代理功能
 };
 
-// 基因功能代理
-const openGeneFunctionAgents = () => {
-  // 这里实现基因功能代理功能
-};
-
 // 审查代理人
-const openReviewAgents = () => {
+const openReviewAgent = () => {
   // 这里实现审查代理人功能
 };
 
