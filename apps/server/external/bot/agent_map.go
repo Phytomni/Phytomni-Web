@@ -5,19 +5,17 @@ import (
 	"fmt"
 )
 
-// aliasToSlug maps the tool names the Web app historically sends (singular and
-// plural forms) to Bot canonical agent slugs. This table is Web-owned and
-// deliberately decoupled from Bot's advisory legacy_aliases metadata.
+// aliasToSlug maps the canonical tool names the Web app sends to Bot agent
+// slugs. This table is Web-owned and deliberately decoupled from Bot's advisory
+// legacy_aliases metadata.
 var aliasToSlug = map[string]string{
-	"ChatAgent": "chat", "ChatAgents": "chat",
-	"KnowledgeAgent": "knowledge", "KnowledgeAgents": "knowledge",
-	"DataAgent": "data", "DatabaseAgents": "data",
-	"AnalystAgent": "analyst", "AnalysisAgents": "analyst",
-	"ReviewAgent": "review", "ReviewAgents": "review",
+	"ChatAgent":       "chat",
+	"KnowledgeAgent":  "knowledge",
+	"DataAgent":       "data",
+	"ReviewAgent":     "review",
+	"BriefGeneAgent":  "brief_gene",
+	"AnalystAgent":    "analyst",
 	"DeepGenomeAgent": "deep_genome",
-	// BriefReviewAgent is a brief-review variant backed by Bot's brief_gene
-	// sync agent; the Web app keeps the BriefReviewAgent vocabulary for rendering.
-	"BriefReviewAgent": "brief_gene",
 }
 
 // slugToChatModel maps the sync chat-family slugs to their /v1/chat/completions

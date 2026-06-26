@@ -64,7 +64,7 @@ var slugToToolName = map[string]string{
 	"analyst":     "AnalystAgent",
 	"review":      "ReviewAgent",
 	"deep_genome": "DeepGenomeAgent",
-	"brief_gene":  "BriefReviewAgent",
+	"brief_gene":  "BriefGeneAgent",
 }
 
 // Query is the gateway orchestration: upload files to Bot, dispatch to the

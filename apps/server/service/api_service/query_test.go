@@ -15,11 +15,12 @@ func TestSlugRoutingDecision(t *testing.T) {
 		isChat   bool
 	}{
 		{"", "chat", true},
-		{"ChatAgents", "chat", true},
+		{"ChatAgent", "chat", true},
 		{"KnowledgeAgent", "knowledge", true},
-		{"ReviewAgents", "review", true},
+		{"ReviewAgent", "review", true},
 		{"AnalystAgent", "analyst", false},
 		{"DeepGenomeAgent", "deep_genome", false},
+		{"BriefGeneAgent", "brief_gene", false},
 	}
 	for _, c := range cases {
 		slug, ok := rxBot.SlugFor(c.tool)
@@ -38,7 +39,7 @@ func TestSlugRoutingDecision(t *testing.T) {
 // TestToolNameMapCoversAgents ensures every renderable tool_name the Web app needs
 // has a slug mapping, so persisted rows carry a tool_name the Web app can branch on.
 func TestToolNameMapCoversAgents(t *testing.T) {
-	want := []string{"ChatAgent", "KnowledgeAgent", "DataAgent", "AnalystAgent", "ReviewAgent", "DeepGenomeAgent"}
+	want := []string{"ChatAgent", "KnowledgeAgent", "DataAgent", "AnalystAgent", "ReviewAgent", "DeepGenomeAgent", "BriefGeneAgent"}
 	have := make(map[string]bool)
 	for _, v := range slugToToolName {
 		have[v] = true
