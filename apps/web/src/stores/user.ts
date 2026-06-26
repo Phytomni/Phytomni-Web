@@ -17,6 +17,7 @@ import {
   removeExpiresIn,
 } from "@/utils/auth";
 import { getUserTool } from "@/api/chat";
+import { CANONICAL_AT_ABLE_TOOLS } from "@/constants/agents";
 import Cookies from "js-cookie";
 interface UserToolResponse {
   code: number;
@@ -46,14 +47,7 @@ export default defineStore({
   state: (): IState => ({
     name: localStorage.getItem("userName") || "",
     avatar: "",
-    roles: [
-      "ChatAgents",
-      "KnowledgeAgents",
-      "DatabaseAgents",
-      "AnalysisAgents",
-      "GeneFunctionAgents",
-      "ReviewAgents",
-    ],
+    roles: [...CANONICAL_AT_ABLE_TOOLS],
     permissions: [],
     permission_list: [], // 权限列表
     userType: "",
