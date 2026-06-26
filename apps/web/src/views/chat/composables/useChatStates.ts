@@ -19,6 +19,9 @@ export function useChatStates() {
         refreshingMessages: Record<string, boolean>;
         reactions: Record<string, number>; // 添加点赞点踩状态
         updatingLog: Record<string, boolean>; // 添加更新日志状态
+        sendStartedAt: number | null; // 本次发送起点;null = 未发送
+        activeAgentName: string; // 本次发送的规范 agent 名(选 τ + ETA 文案)
+        completing: boolean; // true = 触发进度条 99→100 快动画
       }
     >
   >({});
@@ -38,6 +41,9 @@ export function useChatStates() {
         refreshingMessages: {},
         reactions: {}, // 初始化点赞点踩状态
         updatingLog: {}, // 初始化更新日志状态
+        sendStartedAt: null,
+        activeAgentName: "",
+        completing: false,
       };
     }
     return chatStates.value[dialogueId];

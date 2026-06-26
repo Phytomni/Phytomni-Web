@@ -59,6 +59,9 @@ describe("useChatStates parallel chat state", () => {
       refreshingMessages: {},
       reactions: {},
       updatingLog: {},
+      sendStartedAt: null,
+      activeAgentName: "",
+      completing: false,
     });
     // 已写入到 chatStates 这个 map 中
     expect(s.chatStates.value["fresh-id"]).toBe(state);
