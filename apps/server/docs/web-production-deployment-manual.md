@@ -453,3 +453,20 @@ That is an instant revert with **no DB or code rollback needed** — `/query` re
 
 - [`bot-cutover-ops-runbook.md`](bot-cutover-ops-runbook.md) — Bot key mint/rotation, staged cutover, rollback, degraded mode (detailed).
 - [`Phytomni-Bot/docs/deployment.md`](https://github.com/Phytomni/Phytomni-Bot/blob/main/docs/deployment.md) — Bot bring-up (separate team).
+
+## Agent naming convergence (operator runbook)
+
+Order (run inside a maintenance window; the C1→Go-deploy gap briefly 400s brief_gene):
+
+1. Backfill history (safe anytime, idempotent):
+   go run main.go migrate backfill-agent-tool-names
+   # or manual: UPDATE question_agent_logs SET tool_name='BriefGeneAgent' WHERE tool_name='BriefReviewAgent';
+   #            UPDATE question_agent_logs SET tool_name='ChatAgent'      WHERE tool_name='ChatAgents'; ...(5 plural→singular)
+
+2. Rename input tokens, then immediately deploy the new Go binary:
+   go run main.go migrate rename-tool-names
+   # or manual: UPDATE tool_names SET tool_name='ChatAgent' WHERE tool_name='ChatAgents'; ...(5 rows incl BriefReviewAgent→BriefGeneAgent)
+
+3. Deploy the new frontend (canonical render-switches, fixed chat compare, canonical fallback, BriefGene cosmetics).
+
+Rollback: redeploy prior Go + frontend; the rename map is reversible (swap old/new in the UPDATEs). Stale browser tabs send old tokens and 400 until reloaded — expected for the clean break.
