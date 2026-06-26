@@ -22,11 +22,9 @@ func NewAgent(toolName string) (FileDownloader, error) {
 		return &KnowledgeAgent{}, nil
 	case "DataAgent":
 		return &DataAgent{}, nil
-	case "BriefReviewAgent", "ReviewAgent":
-		// 两个名字指向同一个 formatter:engineer 副本 + production rename
-		// 用 BriefReviewAgent;上游 Bot MCP 仍注册 ReviewAgent 作为 tool name,
-		// QuestionAgentLog.tool_name 取决于 LLM 拿到的 schema,任一都要兼容
-		// 否则 /v1/download/* 会报 "unknown tool"。
+	case "BriefGeneAgent", "ReviewAgent":
+		// BriefGeneAgent 与 ReviewAgent 共享同一个 formatter;
+		// 两者都是 Bot 侧 canonical tool name,否则 /v1/download/* 会报 "unknown tool"。
 		return &ReviewAgent{}, nil
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
