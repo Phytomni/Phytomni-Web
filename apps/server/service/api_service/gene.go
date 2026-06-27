@@ -26,6 +26,16 @@ func (ps *Service) GeneList(ctx context.Context, current, size int) ([]*model.Ge
 }
 
 func (ps *Service) GeneSearch(ctx context.Context, current, size int, title string) ([]*model.GeneExample, int64, int, error) {
+	// Normalize pagination params: a missing `current`/`size` defaults to 0,
+	// which makes the totalPages (total+size-1)/size expression
+	// integer-divide-by-zero panic. Fall back to sane defaults — the browser
+	// always sends current=1&size=10; this guards bare probes.
+	if size <= 0 {
+		size = 10
+	}
+	if current <= 0 {
+		current = 1
+	}
 	allData, err := ps.fetchGeneFiles(title)
 	if err != nil {
 		// 如果目录读取失败，可以记录日志并返回空列表，或者直接返回错误

@@ -4,8 +4,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 
 	rxBot "phytomni-server/external/bot"
 )
@@ -152,5 +156,36 @@ func TestApiDownloadAnalystAgentObsImages_MalformedJSON(t *testing.T) {
 	}
 	if len(urls) != 0 {
 		t.Fatalf("malformed image_paths must not yield signed urls, got %v", urls)
+	}
+}
+
+// TestGeneSearch_ZeroPageSizeNoPanic: the handler reads pagination query params
+// via strconv.Atoi, defaulting to 0 when absent. size=0 used to make the
+// totalPages (total+size-1)/size expression integer-divide-by-zero panic. The
+// guard must fall back to sane defaults and return normally. Point gene_file_path
+// at a temp dir holding one valid file so fetchGeneFiles returns 1 row → total>0
+// → the totalPages line is reached.
+func TestGeneSearch_ZeroPageSizeNoPanic(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Os01g0107900_result.md"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+	viper.Set("gene_file_path", dir)
+	t.Cleanup(func() { viper.Set("gene_file_path", "") })
+
+	ps := NewService()
+	// size=0, current=0 — old code panicked here; the guard normalizes and returns.
+	list, total, totalPages, err := ps.GeneSearch(context.Background(), 0, 0, "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected total=1, got %d", total)
+	}
+	if totalPages != 1 {
+		t.Fatalf("expected totalPages=1, got %d", totalPages)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(list))
 	}
 }

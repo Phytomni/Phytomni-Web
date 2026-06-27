@@ -71,11 +71,19 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		bot_run_id TEXT,
 		server_id TEXT,
 		task_id TEXT,
+		task_log TEXT,
+		title_query TEXT,
+		follow_up_questions TEXT,
+		file_name TEXT,
+		upload_path TEXT,
 		compute_resource TEXT,
+		server_file_path TEXT,
 		log_status TEXT,
 		status TEXT,
 		download_path TEXT,
 		image_paths TEXT,
+		reaction_type TEXT,
+		collect_type TEXT,
 		created_at DATETIME,
 		updated_at DATETIME,
 		delete_at DATETIME
@@ -443,5 +451,35 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	var paths []string
 	if err := json.Unmarshal([]byte(ip), &paths); err != nil || len(paths) != 1 || paths[0] != "/obs/p/r1/a.png" {
 		t.Errorf("image_paths = %q (%v)", ip, err)
+	}
+}
+
+// TestAsyncTaskList_ZeroPageSizeNoPanic: the handler reads pagination query
+// params via strconv.Atoi, defaulting to 0 when absent. size=0 used to make the
+// totalPages (total+size-1)/size expression integer-divide-by-zero panic (gin
+// Recovery turned it into 500). The normalization guard must fall back to sane
+// defaults and return a normal page instead of panicking.
+func TestAsyncTaskList_ZeroPageSizeNoPanic(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, dialogue_id, status, server_id, created_at) VALUES
+		(1, 'alice', 'd1', 'SUCCEEDED', 'srv-1', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ps := NewService()
+
+	// size=0, current=0 — old code panicked here; the guard normalizes and returns.
+	list, total, totalPages, err := ps.AsyncTaskList(context.Background(), "alice", 0, 0)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected total=1, got %d", total)
+	}
+	if totalPages != 1 {
+		t.Fatalf("expected totalPages=1, got %d", totalPages)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(list))
 	}
 }

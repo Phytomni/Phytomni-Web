@@ -18,6 +18,19 @@ import (
 
 func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, size int) ([]*common.ApiAsyncTaskListResponse, int64, int, error) {
 
+	// Normalize pagination params: the handler reads `current`/`size` query
+	// params via strconv.Atoi, defaulting to 0 when absent. size=0 makes the
+	// totalPages (total+size-1)/size expression integer-divide-by-zero panic
+	// (gin Recovery turns it into 500). Fall back to sane defaults instead of
+	// rejecting — the browser always sends current=1&size=10; this only guards
+	// bare curl/monitoring probes.
+	if size <= 0 {
+		size = 10
+	}
+	if current <= 0 {
+		current = 1
+	}
+
 	var QuestionAgentLogList []*common.ApiAsyncTaskListResponse
 
 	// 归属过滤的可复用查询:用 Session 固化 user_name + 状态 + 资源条件,让 Count
