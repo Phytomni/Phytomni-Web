@@ -12,41 +12,43 @@ import (
 	"github.com/spf13/viper"
 )
 
-// jwtSecret 从 viper 读取 jwt.secret_key,用于 HS256 签发/校验本服务的用户 token。
-// (Bot 不消费 Web 用户 JWT——它用 ptm_ 服务密钥,故此密钥无跨仓共享方。)
+// jwtSecret reads jwt.secret_key from viper for HS256 signing/verification of
+// this service's user tokens. (Bot does not consume Web user JWTs — it uses a
+// ptm_ service key, so this secret has no cross-repo consumer.)
 func jwtSecret() []byte {
 	return []byte(viper.GetString("jwt.secret_key"))
 }
 
-// JWT Claims结构体
 type Claims struct {
 	Username string `json:"username"`
 	jwt.StandardClaims
 }
 
-// TokenLifetime 是用户 JWT 的有效期。GenerateToken 用它算 exp,撤销层用它做
-// per-user epoch 键的 TTL——共用一个常量防止两边漂移。
+// TokenLifetime is the user JWT lifetime. GenerateToken uses it for exp and the
+// revocation layer uses it as the TTL for the per-user epoch key — sharing one
+// constant prevents drift between the two sides.
 const TokenLifetime = 24 * time.Hour
 
-// IatSkew 是发行方对 iat 的反向偏移量,用于吸收多实例/NTP 时钟偏差。
-// GenerateToken 将 iat 设为 now-IatSkew;撤销层在比较 iat 与 epoch/floor 时
-// 同步减去 IatSkew,确保"revoke if token was genuinely issued before the event"
-// 语义——两边共享同一常量防止漂移。
-// 撤销事件的写入方(logout-all、改密)必须将 epoch 设为 now(真实事件时间),
-// 切勿加 IatSkew——比较时已减去 IatSkew,net 效果="仅撤销此刻之前签发的
-// token";若写入 now+IatSkew 会双重计数 skew,令改密后 60s 内的恢复 token
-// 被误撤销(C1 lockout 的 epoch 路径变体)。
+// IatSkew is the issuer's backward offset on iat, absorbing multi-instance/NTP
+// clock skew. GenerateToken sets iat = now-IatSkew; the revocation layer
+// subtracts IatSkew when comparing iat against epoch/floor, so the semantics are
+// "revoke if token was genuinely issued before the event" — both sides share the
+// same constant to prevent drift.
+// Revocation-event writers (logout-all, password change) MUST set epoch to now
+// (the real event time) and never add IatSkew — the comparison already subtracts
+// IatSkew, so the net effect is "revoke only tokens issued before this moment";
+// writing now+IatSkew would double-count skew and wrongly revoke recovery tokens
+// issued within 60s after a password change (the C1 lockout epoch-path variant).
 const IatSkew = 60 * time.Second
 
-// 生成JWT token
 func GenerateToken(username string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
 		Username: username,
 		StandardClaims: jwt.StandardClaims{
-			// iat = now-iatSkew:吸收多实例/NTP 偏移、永不未来时(golang-jwt v3 的
-			// verifyIat 无 leeway,严格 now>=iat)。撤销层按 iat 与 epoch/floor 比较。
-			IssuedAt:  now.Add(-IatSkew).Unix(),
+			// iat = now-iatSkew: absorbs multi-instance/NTP skew and is never in the future
+			// (golang-jwt v3 verifyIat has no leeway, strict now>=iat). The revocation layer
+			// compares iat against epoch/floor.
 			ExpiresAt: now.Add(TokenLifetime).Unix(),
 		},
 	}
@@ -55,7 +57,6 @@ func GenerateToken(username string) (string, error) {
 	return token.SignedString(jwtSecret())
 }
 
-// JWT中间件
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := c.GetHeader("Authorization")
@@ -69,7 +70,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 检查Authorization头是否以"Bearer "开头
+
 		if len(tokenString) < 7 || tokenString[:7] != "Bearer " {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"detail": gin.H{
@@ -80,7 +81,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 提取出token
+
 		token := tokenString[7:]
 		claims := &Claims{}
 		parsedToken, err := jwt.ParseWithClaims(token, claims, func(parsedToken *jwt.Token) (interface{}, error) {
@@ -98,35 +99,38 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 撤销检查(验签+exp 已通过):只降级"增强",绝不降级认证本身。
-		// iatSkew 与 GenerateToken 的后退量一致,比较时减去,确保"仅当 token 真正
-		// 在事件发生前签发"语义——防止密码修改后立即重登触发 60s 锁出。
+		// Revocation check (signature+exp already passed): only degrades the "enhancement",
+		// never authentication itself. iatSkew matches GenerateToken's backward offset and is
+		// subtracted in the comparison so the semantics are "revoke only if the token was
+		// genuinely issued before the event" — prevents a 60s lockout on immediate re-login
+		// after a password change.
 		skewSec := int64(IatSkew / time.Second)
-		// 1) 单 token 黑名单(Redis,fail-open)。
+		// 1) Single-token blacklist (Redis, fail-open).
 		if rxCache.IsBlocked(c.Request.Context(), rxCache.HashToken(token)) {
 			revokedResponse(c)
 			return
 		}
-		// 2) per-user epoch(Redis,fail-open):iat<epoch-skew 即撤销,含 iat=0 legacy。
-		// epoch 是 ~1.7e9 unix 值,epoch-skewSec>0 始终成立,故 iat=0 legacy 仍被撤销。
+		// 2) Per-user epoch (Redis, fail-open): revoke if iat < epoch-skew, including iat=0 legacy.
+		// epoch is a ~1.7e9 unix value so epoch-skewSec > 0 always holds, hence iat=0 legacy is revoked.
 		if epoch := rxCache.GetUserEpoch(c.Request.Context(), claims.Username); epoch > 0 && claims.IssuedAt < epoch-skewSec {
 			revokedResponse(c)
 			return
 		}
-		// 3) 持久 floor(MySQL,Redis 挂时仍生效):iat<floor-skew 即撤销。
-		// iat=0 legacy 豁免(部署不触发全员重登);NULL/未找到/DB 错 → 跳过(fail-open)。
+		// 3) Persistent floor (MySQL, still effective when Redis is down): revoke if iat < floor-skew.
+		// iat=0 legacy is exempt (deploys do not force a full re-login); NULL/not-found/DB error → skip (fail-open).
 		if floor, ok := passwordChangeFloor(c, claims.Username); ok && claims.IssuedAt > 0 && claims.IssuedAt < floor-skewSec {
 			revokedResponse(c)
 			return
 		}
 
 		c.Set("username", claims.Username)
-		c.Set("token", token) // 将token存储到context中
+		c.Set("token", token)
 		c.Next()
 	}
 }
 
-// revokedResponse 以 401 中止一个已撤销的会话(与无效 token 同壳,不泄露撤销原因)。
+// revokedResponse aborts a revoked session with 401 (same shell as an invalid
+// token; does not leak the revocation reason).
 func revokedResponse(c *gin.Context) {
 	c.JSON(http.StatusUnauthorized, gin.H{
 		"detail": gin.H{
@@ -137,10 +141,12 @@ func revokedResponse(c *gin.Context) {
 	c.Abort()
 }
 
-// passwordChangeFloor 读用户的 password_change_at 作为 min-acceptable-iat 底线。
-// 内联查 model(不经 service 层,避免 middleware↔api_service 导入环;镜像
-// first_login_gate.go)。返回 (unix, true) 仅当行存在且该列非 NULL;否则 (0,false)
-// → 调用方跳过 floor(fail-open:NULL/未找到/DB 错都不拒)。
+// passwordChangeFloor reads the user's password_change_at as the min-acceptable-iat
+// floor. It queries model inline (bypassing the service layer to avoid a
+// middleware↔api_service import cycle; mirrors first_login_gate.go). It returns
+// (unix, true) only when the row exists and the column is non-NULL; otherwise
+// (0, false) and the caller skips the floor (fail-open: NULL/not-found/DB error
+// never reject).
 func passwordChangeFloor(c *gin.Context, email string) (int64, bool) {
 	var user model.User
 	if err := model.DB(c).Select("password_change_at").

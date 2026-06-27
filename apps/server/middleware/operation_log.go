@@ -53,8 +53,9 @@ func looksSensitive(key string) bool {
 	return false
 }
 
-// redactValue 递归遍历任意 JSON 值,对 map 中命中 looksSensitive 的 key
-// 整体打码(不再深入其值),对其余 map 值与数组元素继续递归。标量原样返回。
+// redactValue recursively walks an arbitrary JSON value. Map keys matching
+// looksSensitive are masked wholesale (no descent into their value); other
+// map values and array elements are recursed. Scalars are returned as-is.
 func redactValue(v interface{}) interface{} {
 	switch node := v.(type) {
 	case map[string]interface{}:
@@ -76,8 +77,9 @@ func redactValue(v interface{}) interface{} {
 	}
 }
 
-// redactJSONBody 解析 JSON body 并递归遮蔽所有命中 looksSensitive 的 key
-// (含嵌套 object / array)。解析失败 → 返回打码占位,绝不回落原文。
+// redactJSONBody parses a JSON body and recursively masks every key matching
+// looksSensitive (including nested objects/arrays). On parse failure it returns
+// a redacted placeholder and never falls back to the raw bytes.
 func redactJSONBody(body []byte) string {
 	if len(body) == 0 {
 		return ""
@@ -144,11 +146,11 @@ func redactURLEncodedBody(body []byte) string {
 	return maskParsedQuery(values, string(body))
 }
 
-// redactBodyByContentType 按 Content-Type 分流脱敏 request body,绝不落原文:
-//   - multipart/form-data        → 整体丢弃占位(里面通常是文件)
-//   - x-www-form-urlencoded      → redactURLEncodedBody(ParseQuery 失败也不回落原文)
-//   - JSON                       → redactJSONBody 递归遮蔽
-//   - 其他 / 无法识别            → 打码占位,绝不存原文
+// redactBodyByContentType routes request-body redaction by content-type and never stores raw plaintext:
+//   - multipart/form-data        → dropped wholesale placeholder (usually a file)
+//   - x-www-form-urlencoded      → redactURLEncodedBody (never falls back to raw even on ParseQuery failure)
+//   - JSON                       → redactJSONBody recursive masking
+//   - other / unrecognized       → redacted placeholder, never the raw body
 func redactBodyByContentType(contentType string, body []byte) string {
 	switch {
 	case strings.Contains(contentType, "multipart/form-data"):
@@ -164,30 +166,25 @@ func redactBodyByContentType(contentType string, body []byte) string {
 	}
 }
 
-// OperationLog 用户操作日志中间件
 func OperationLog() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. 开始时间
 		startTime := time.Now()
 
-		// 2. 获取 Request Body
 		var bodyBytes []byte
-		// 检查 Content-Type，如果是文件上传则不读取 Body
 		contentType := c.ContentType()
 		if !strings.Contains(contentType, "multipart/form-data") {
 			if c.Request.Body != nil {
 				bodyBytes, _ = io.ReadAll(c.Request.Body)
 			}
-			// 读取完后，需要重新赋值回去，否则后续的 BindJson 等操作会读不到数据
+			// Restore the body so downstream BindJSON/etc. can still read it.
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		// 3. 尝试获取并设置用户ID (在执行业务逻辑前，以便 DB Logger 可以获取)
-		// 注意：AuthMiddleware 运行在 OperationLog 之前 (在 router 中配置)，所以 username 此时应该可用
+		// Resolve user_id before c.Next() so the DB logger can attribute SQL rows.
+		// AuthMiddleware runs before OperationLog (configured in router), so username is already set here.
 		var userId int64
 		var userEmail string
 
-		// 3.1 尝试直接从 Context 获取 (如果前面的中间件已设置)
 		if v, exists := c.Get("user_id"); exists {
 			switch val := v.(type) {
 			case int:
@@ -199,30 +196,24 @@ func OperationLog() gin.HandlerFunc {
 			}
 		}
 
-		// 3.2 如果没有 user_id，尝试从 username 获取
 		if v, exists := c.Get("username"); exists {
 			if username, ok := v.(string); ok {
 				userEmail = username
 			}
 		}
 
-		// 3.3 如果有 email 但没有 id，查询数据库
 		if userId == 0 && userEmail != "" {
 			var user model.User
-			// 使用 model.Default() 查询，并禁用日志记录，防止产生“无主”的 SQL 日志
-			// 这条查询本身就是为了获取 UserID，此时还没有 UserID，如果记录日志会导致 sql_operation_logs 中出现大量 user_id 为空的记录
+			// Query with logger.Discard: this lookup exists only to obtain the user_id, which we do not
+			// have yet, so logging it would flood sql_operation_logs with rows whose user_id is empty.
 			if err := model.Default().Session(&gorm.Session{Logger: logger.Discard}).Select("id").Where("email = ?", userEmail).First(&user).Error; err == nil {
 				userId = user.Id
-				// 关键：将 user_id 设置回 Context，以便后续的 Service 层调用 model.DB(c) 时能传递给 Logger
+				// Propagate user_id back into the context so later service-layer model.DB(c) calls hand it to the logger.
 				c.Set("user_id", userId)
 			}
 		}
 
-		// 4. 执行业务逻辑
 		c.Next()
-
-		// 5. 异步记录日志 (API日志)
-		// ...
 
 		latency := time.Since(startTime).Milliseconds()
 		statusCode := c.Writer.Status()
@@ -232,22 +223,20 @@ func OperationLog() gin.HandlerFunc {
 		path := c.Request.URL.Path
 		queryParams := c.Request.URL.RawQuery
 
-		// 尝试获取错误信息
 		var errorMessage string
 		if len(c.Errors) > 0 {
 			errorMessage = c.Errors.String()
 		}
 
-		// Body 脱敏处理 — 按 Content-Type 分流,绝不落原文:
-		// urlencoded 走 redactQueryParams 同款打码(覆盖 /login / /register /
-		// /modify/password 的 PostForm 凭据),JSON 递归遮蔽,其余打码占位。
+		// Body redaction — route by content-type, never store raw plaintext:
+		// urlencoded uses the same masking as redactQueryParams (covers /login, /register,
+		// /modify/password PostForm credentials), JSON is recursively masked, everything else is a placeholder.
 		bodyStr := redactBodyByContentType(contentType, bodyBytes)
 
-		// 同一套脱敏规则覆盖 query string,避免 ?token=xxx / ?api_key=xxx
-		// 之类的 URL 形态把凭据写进 audit log。
+		// The same redaction rules cover the query string so ?token=xxx / ?api_key=xxx
+		// URL forms cannot leak credentials into the audit log.
 		queryParams = redactQueryParams(queryParams)
 
-		// 异步写入数据库
 		go func(
 			uid int64,
 			uEmail string,
@@ -270,10 +259,9 @@ func OperationLog() gin.HandlerFunc {
 				CreatedAt:    time.Now(),
 			}
 
-			// 写入数据库
-			// 注意：这里需要确保 model.Default() 返回的 DB 实例是并发安全的
+			// model.Default() must return a concurrency-safe *gorm.DB instance.
 			if err := model.Default().Create(&logEntry).Error; err != nil {
-				// 只记 err 元数据,绝不记 body —— body 可能含已脱敏前的敏感片段
+				// Log only the error metadata, never the body — the body may still hold sensitive fragments pre-redaction.
 				rxLog.Sugar().Errorw("operation log insert failed", "err", err)
 			}
 		}(userId, userEmail, method, path, queryParams, bodyStr, clientIP, userAgent, errorMessage, statusCode, latency)
