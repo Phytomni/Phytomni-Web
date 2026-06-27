@@ -2,9 +2,6 @@
   <div class="send-progress">
     <div class="send-progress__meta">
       <span class="send-progress__eta">{{ $t(etaKey) }}</span>
-      <span class="send-progress__elapsed">
-        {{ $t("chat.elapsedPrefix") }} {{ elapsedLabel }}
-      </span>
     </div>
     <div class="send-progress__track">
       <div
@@ -65,13 +62,6 @@ const widthPct = computed(() => {
   if (props.completing) return 100;
   return progressAt(elapsedMs.value, config.value.halfLifeMs);
 });
-
-const elapsedLabel = computed(() => {
-  const total = Math.floor(elapsedMs.value / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-});
 </script>
 
 <style scoped>
@@ -83,7 +73,6 @@ const elapsedLabel = computed(() => {
 }
 .send-progress__meta {
   display: flex;
-  justify-content: space-between;
   font-size: 12px;
   color: #909399;
 }

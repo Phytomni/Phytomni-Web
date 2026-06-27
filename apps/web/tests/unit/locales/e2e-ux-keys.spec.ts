@@ -18,7 +18,6 @@ describe("e2e UX i18n keys", () => {
     "chat.eta.fast",
     "chat.eta.medium",
     "chat.eta.slow",
-    "chat.elapsedPrefix",
   ];
   for (const key of keys) {
     it(`has zh-CN + en-US copy for ${key}`, () => {

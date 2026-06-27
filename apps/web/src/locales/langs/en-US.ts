@@ -366,7 +366,6 @@ export default {
       medium: "Usually 1–3 min",
       slow: "Usually 3–10 min",
     },
-    elapsedPrefix: "Elapsed",
     generationStopped: "Generation stopped",
     relatedDocuments: "Reference Material",
     welcomeTitle: "Hi, I'm Phytomni. Great to meet you!",
