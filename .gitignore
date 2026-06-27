@@ -1,6 +1,11 @@
-# ==================== 通用忽略规则 ====================
+# ====================================================================
+# Phytomni-Web .gitignore
+# Polyglot monorepo: apps/web (Vue+Vite+TS) + apps/server (Go) + repo-wide
+# Python tooling (pyproject.toml hosts the scan_secrets pytest runner).
+# Grouped by concern; dead rules pruned on 2026-06-27.
+# ====================================================================
 
-# 操作系统生成的文件
+# ---- OS-generated files ----
 .DS_Store
 .DS_Store?
 ._*
@@ -10,104 +15,82 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 
-# IDE和编辑器文件
+# ---- IDE / editor ----
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# 日志文件
+# ---- Logs ----
 *.log
 
-# 环境变量文件（包含敏感信息）
+# ---- Generic temp / scratch ----
+tmp/
+temp/
+.cache/
 
+# ---- Secrets & local env (templates use *.example suffix) ----
+# Root dotenv (generic)
 .env.local
 .env.production
 .env.development
+# Go service config (real credentials; template: apps/server/config/app.yml.example)
+apps/server/config/app.yml
+# Frontend Vite mode env (templates: apps/web/.env.dev.example, .env.production.example)
+apps/web/.env
+apps/web/.env.dev
+apps/web/.env.dev.local
+apps/web/.env.prod
+apps/web/.env.staging
 
-# 临时文件和缓存
-tmp/
-temp/
-
-
-
-# ==================== Go语言特定规则 ====================
-
-# Go二进制文件
+# ---- Go (apps/server) ----
 *.exe
 *.out
 *.app
-
-# Go编译文件
-bin/
-pkg/
-
-# Go测试文件
 *.test
 *.prof
-
-# Go模块缓存
+bin/
+pkg/
 go/pkg/mod/
 
-# ==================== Python特定规则 ====================
-
-# Python虚拟环境
+# ---- Python (repo-wide tooling: scripts/ + pyproject.toml) ----
+# Virtual environments
 .venv/
 venv/
 env/
-
-# Python字节码缓存
+# Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Python 测试/类型检查缓存(repo-wide tooling 的本地产物)
+# Tool caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# Jupyter笔记本缓存
-.ipynb_checkpoints/
-
-# Python包构建产物
+# Packaging artifacts
 build/
 dist/
 *.egg-info/
-
-# Python特定文件
+# Version pins / lockfiles (uv.lock kept OUT of VCS for tooling env)
 .python-version
 uv.lock
+# Jupyter
+.ipynb_checkpoints/
 
-# 数据库文件（SQLite）
+# ---- Databases (SQLite; includes .codegraph/codegraph.db) ----
 *.db
 *.sqlite
 *.sqlite3
 server_tasks.db
 
-
-
-# Python 端 dotenv — nky_client_python/ 已从 git 移除（切流删 Python /query 服务），
-# 但本地工作副本可能仍存留含真凭据的 .env；保留此忽略规则直到本地目录被物理删除。
-nky_client_python/.env
-# Go 配置文件（含真凭据；模板见 apps/server/config/app.yml.example）
-apps/server/config/app.yml
-# 前端 Vite mode-specific env（模板见 apps/web/.env.dev.example 等）
-apps/web/.env
-apps/web/.env.dev
-apps/web/.env.prod
-apps/web/.env.staging
-
-# Claude Code
+# ---- Local agent / AI-tool context (per-machine, never shared) ----
 .claude
 CLAUDE.md
-
-# Local agent context
 .codex
 AGENTS.md
 .agents
 skills-lock.json
 .superpowers
-
 .cursor
 .codegraph
+.understand-anything
