@@ -4,7 +4,7 @@ import (
 	"os"
 )
 
-// GetEnvironment 当前运行环境
+// GetEnvironment returns the current runtime environment.
 func GetEnvironment() string {
 	env := os.Getenv("ENV")
 	switch env {

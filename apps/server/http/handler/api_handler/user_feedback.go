@@ -16,7 +16,6 @@ func (ph *Handler) UserFeedback(ctx *gin.Context) {
 		return
 	}
 
-	// 登录生成有权限的工具
 	userId, err := ph.service.UserFeedback(ctx, name.(string), feedbackType, feedbackContent)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})

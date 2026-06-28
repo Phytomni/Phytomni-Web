@@ -10,12 +10,14 @@ import (
 	"phytomni-server/model"
 )
 
-// TestAddBotRunID_Idempotent 钉死 add-bot-run-id 的幂等守卫:当 bot_run_id 列已存在时,
-// HasColumn 返回 true,命令应短路、不再执行 ALTER。
+// TestAddBotRunID_Idempotent pins the idempotency guard for add-bot-run-id: when
+// bot_run_id already exists, HasColumn returns true and the command must
+// short-circuit without executing ALTER.
 //
-// 直接测命令 Action 闭包不可达(未导出),因此复刻命令体内的同一守卫
-// db.Migrator().HasColumn(&model.QuestionAgentLog{}, "bot_run_id"):该守卫为真即代表
-// 命令会走 "skip" 分支。建表时即带 bot_run_id 列。
+// The command's Action closure is unexported and unreachable from tests, so this
+// replicates the same guard (db.Migrator().HasColumn(&model.QuestionAgentLog{},
+// "bot_run_id")): a true result proves the command would take the "skip" branch.
+// The table is created with bot_run_id already present.
 func TestAddBotRunID_Idempotent(t *testing.T) {
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -35,9 +37,11 @@ func TestAddBotRunID_Idempotent(t *testing.T) {
 	}
 }
 
-// TestAddBotRunID_AddsWhenAbsent 钉死守卫的另一半:列不存在时 HasColumn 返回 false,
-// 加列后再查应为 true。生产 DDL 带 `AFTER server_id`(MySQL 专有),SQLite 不支持该子句,
-// 故此处用等价的无 AFTER 形式验证守卫语义,而非复刻生产 SQL 文本。
+// TestAddBotRunID_AddsWhenAbsent pins the other half of the guard: when the column
+// is absent, HasColumn returns false, and after the ADD it must return true. The
+// production DDL uses `AFTER server_id` (MySQL-only syntax that SQLite rejects),
+// so an equivalent DDL without AFTER is used to verify the guard semantics without
+// replicating the exact production SQL.
 func TestAddBotRunID_AddsWhenAbsent(t *testing.T) {
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -247,10 +251,11 @@ func TestBackfillFirstLoginStatus_Idempotent(t *testing.T) {
 	}
 }
 
-// TestReportDuplicateEmails 钉死 reportDuplicateEmails 的两个关键契约:
-// (1) 恰好返回有重复的那个 email,独立 email 不在结果中;
-// (2) 调用后行数不变(仅报告,绝不删行)。
-// 此 "report-only" 断言是核心不变量:删掉行数检查本测试仍绿,但契约就失守了。
+// TestReportDuplicateEmails pins two key contracts of reportDuplicateEmails:
+// (1) exactly the duplicate email is returned; unique emails are not included.
+// (2) the row count is unchanged after the call — report-only, no deletes.
+// The "report-only" assertion is a core invariant: dropping the row-count check
+// would still leave the test green, but the contract would be violated.
 func TestReportDuplicateEmails(t *testing.T) {
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {

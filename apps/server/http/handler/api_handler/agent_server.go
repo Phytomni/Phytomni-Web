@@ -25,8 +25,9 @@ func (ph *Handler) ServerCreateTask(ctx *gin.Context) {
 }
 
 func (ph *Handler) ServerUpdateTask(ctx *gin.Context) {
-	// 新路径 PATCH /api/v1/server/tasks/:id 从路径取 server_id;旧别名
-	// POST /v1/nky/server/update_task 仍从 body 取(外部客户端 backport 前)。
+	// New path PATCH /api/v1/server/tasks/:id takes server_id from the path; the
+	// legacy alias POST /v1/nky/server/update_task still takes it from the body
+	// (until external clients backport).
 	serverId := ctx.Param("id")
 	if serverId == "" {
 		serverId = ctx.PostForm("server_id")

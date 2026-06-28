@@ -12,8 +12,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupChatGateDB 建一个含 users 的 in-memory SQLite,用于验证 CheckChatAllowed 边界。
-// 只建 users 表中 CheckChatAllowed 路径实际读写的列(email/code/chat_limit)。
+// setupChatGateDB opens an in-memory SQLite with a minimal users table for
+// testing CheckChatAllowed boundaries. Only the columns read/written by that
+// path (email/code/chat_limit) are included.
 func setupChatGateDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -35,7 +36,7 @@ func setupChatGateDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// seed 在测试库中插入一条 user 行并返回其 email。
+// seedChatGateUser inserts a user row into the test DB.
 func seedChatGateUser(t *testing.T, gdb *gorm.DB, email, code string, chatLimit int) {
 	t.Helper()
 	if err := gdb.Exec(
@@ -46,9 +47,10 @@ func seedChatGateUser(t *testing.T, gdb *gorm.DB, email, code string, chatLimit 
 	}
 }
 
-// TestCheckChatAllowed_EnforceOff 验证暗发布开关:enforce=false(默认)时,
-// 任何用户(含 chat_limit=0)均放行,行为与今日完全一致。
-// 变异守卫:如果删除 enforce 短路 → chat_limit=0 用户会被拒 → 该 case 变红。
+// TestCheckChatAllowed_EnforceOff verifies the dark-launch switch: when
+// enforce=false (default), all users (including chat_limit=0) are allowed,
+// matching today's behavior.
+// mutation guard: remove the enforce short-circuit → chat_limit=0 user is rejected → RED.
 func TestCheckChatAllowed_EnforceOff(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
@@ -62,8 +64,8 @@ func TestCheckChatAllowed_EnforceOff(t *testing.T) {
 	}
 }
 
-// TestCheckChatAllowed_EnforceOn_UserZero 验证 enforce=ON 时,
-// code='user' + chat_limit=0 → ErrChatQuotaExhausted。
+// TestCheckChatAllowed_EnforceOn_UserZero verifies that enforce=ON with
+// code='user' + chat_limit=0 returns ErrChatQuotaExhausted.
 func TestCheckChatAllowed_EnforceOn_UserZero(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
@@ -78,8 +80,8 @@ func TestCheckChatAllowed_EnforceOn_UserZero(t *testing.T) {
 	}
 }
 
-// TestCheckChatAllowed_EnforceOn_UserNonZero 验证 enforce=ON 时,
-// code='user' + chat_limit=5 → 放行(额度充足)。
+// TestCheckChatAllowed_EnforceOn_UserNonZero verifies that enforce=ON with
+// code='user' + chat_limit=5 allows the request (quota available).
 func TestCheckChatAllowed_EnforceOn_UserNonZero(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
@@ -93,9 +95,9 @@ func TestCheckChatAllowed_EnforceOn_UserNonZero(t *testing.T) {
 	}
 }
 
-// TestCheckChatAllowed_EnforceOn_AdminBypass 验证 enforce=ON 时,
-// code='admin' + chat_limit=0 → 放行(角色旁路)。
-// 变异守卫:如果从 chatGateBypassCodes 删除 admin → 该 case 变红。
+// TestCheckChatAllowed_EnforceOn_AdminBypass verifies that enforce=ON with
+// code='admin' + chat_limit=0 is allowed (role bypass).
+// mutation guard: remove admin from chatGateBypassCodes → RED.
 func TestCheckChatAllowed_EnforceOn_AdminBypass(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
@@ -109,8 +111,8 @@ func TestCheckChatAllowed_EnforceOn_AdminBypass(t *testing.T) {
 	}
 }
 
-// TestCheckChatAllowed_EnforceOn_SuperAdminBypass 验证 enforce=ON 时,
-// code='super_admin' + chat_limit=0 → 放行(角色旁路)。
+// TestCheckChatAllowed_EnforceOn_SuperAdminBypass verifies that enforce=ON with
+// code='super_admin' + chat_limit=0 is allowed (role bypass).
 func TestCheckChatAllowed_EnforceOn_SuperAdminBypass(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
@@ -124,9 +126,9 @@ func TestCheckChatAllowed_EnforceOn_SuperAdminBypass(t *testing.T) {
 	}
 }
 
-// TestCheckChatAllowed_EnforceOn_VipUserBypass 验证 enforce=ON 时,
-// code='vip_user' + chat_limit=0 → 放行(暂不限额,角色旁路)。
-// 变异守卫:如果从 chatGateBypassCodes 删除 vip_user → 该 case 变红。
+// TestCheckChatAllowed_EnforceOn_VipUserBypass verifies that enforce=ON with
+// code='vip_user' + chat_limit=0 is allowed (role bypass; no quota limit yet).
+// mutation guard: remove vip_user from chatGateBypassCodes → RED.
 func TestCheckChatAllowed_EnforceOn_VipUserBypass(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
@@ -140,8 +142,9 @@ func TestCheckChatAllowed_EnforceOn_VipUserBypass(t *testing.T) {
 	}
 }
 
-// TestCheckChatAllowed_EnforceOn_GuestBlocked 验证 enforce=ON 时,
-// code='guest' + chat_limit=0 → ErrChatQuotaExhausted(guest 走普通闸,不旁路)。
+// TestCheckChatAllowed_EnforceOn_GuestBlocked verifies that enforce=ON with
+// code='guest' + chat_limit=0 returns ErrChatQuotaExhausted (guest takes the
+// normal gate and is not bypassed).
 func TestCheckChatAllowed_EnforceOn_GuestBlocked(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
@@ -156,23 +159,25 @@ func TestCheckChatAllowed_EnforceOn_GuestBlocked(t *testing.T) {
 	}
 }
 
-// TestCheckChatAllowed_FailOpen 验证 enforce=ON 但 user 不在库中时 fail-open:
-// 返回 nil 而不是拒绝——避免 DB 抖动误拒真实用户。
-// 变异守卫:如果把 err 分支改为 return ErrChatQuotaExhausted → 该 case 变红。
+// TestCheckChatAllowed_FailOpen verifies fail-open when enforce=ON but the user
+// is not in the DB: returns nil instead of rejecting, to avoid spurious
+// rejections during DB turbulence.
+// mutation guard: change the err branch to return ErrChatQuotaExhausted → RED.
 func TestCheckChatAllowed_FailOpen(t *testing.T) {
-	setupChatGateDB(t) // 空库,没有任何行
+	setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
 
 	viper.Set("chatlimit.enforce", true)
 
 	ps := NewService()
-	// 不存在的 email → DB 返回 ErrRecordNotFound → 应 fail-open(nil)
+	// Non-existent email → DB returns ErrRecordNotFound → must fail-open (nil).
 	if err := ps.CheckChatAllowed(context.Background(), "nobody@example.com"); err != nil {
 		t.Errorf("fail-open: missing user must allow, got %v", err)
 	}
 }
 
-// TestCheckChatAllowed_FailOpen_EmptyEmail 与上同理,空 email 也 fail-open。
+// TestCheckChatAllowed_FailOpen_EmptyEmail verifies that an empty email also
+// triggers fail-open (same rationale as the missing-user case).
 func TestCheckChatAllowed_FailOpen_EmptyEmail(t *testing.T) {
 	setupChatGateDB(t)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })

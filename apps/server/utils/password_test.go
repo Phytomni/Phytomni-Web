@@ -70,9 +70,11 @@ func TestVerifyPassword_FailsClosedOnMalformed(t *testing.T) {
 }
 
 func TestVerifyPassword_AcceptsAllBcryptVariants(t *testing.T) {
-	// bcrypt.GenerateFromPassword 只产出 $2a$,但 $2a$/$2b$/$2y$ 摘要同构、可互验。
-	// 生产库可能存在其它工具(或 PHP)写入的 $2b$/$2y$ 行,VerifyPassword 的三前缀
-	// 分支必须都接受。删掉 $2b/$2y 任一前缀 case 即让此测试 RED(mutation 锚点)。
+	// bcrypt.GenerateFromPassword only emits $2a$, but $2a$/$2b$/$2y$ digests are
+	// structurally identical and cross-verifiable. Production may contain $2b$/$2y$
+	// rows written by other tools (or PHP), so VerifyPassword's three-prefix branch
+	// must accept all of them. Deleting either the $2b/$2y prefix case turns this
+	// test RED (mutation anchor).
 	base, _ := HashPassword("goodpass") // $2a$...
 	for _, pfx := range []string{"$2b$", "$2y$"} {
 		stored := pfx + strings.TrimPrefix(base, "$2a$")

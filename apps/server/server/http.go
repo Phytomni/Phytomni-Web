@@ -17,10 +17,8 @@ import (
 
 func NewHttp(options ...HttpOption) *Http {
 
-	// 默认设置
 	viper.SetDefault("app.trusted_proxies", []string{"192.0.0.0/8", "172.16.0.0/12"})
 
-	// 初始化gin
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
 	if utils.Debug() {
@@ -33,23 +31,20 @@ func NewHttp(options ...HttpOption) *Http {
 		g.Use(gzip.Gzip(gzip.BestSpeed))
 	}
 
-	// 默认中间件
 	g.Use(httpmw.RequestID(), httpmw.Recovery())
 
-	// 开启维护模式，维护模式请求全部禁止
 	if viper.GetBool("http.maintenance") {
 		g.Use(httpmw.UnderMaintenance())
 	}
 
-	// 健康检查
 	g.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
 
-	// 就绪检查:汇报 Redis 状态 + fail-open 计数,供运维监控"enabled 但不可达"。
-	// 始终 200(fail-open:Redis 挂应用仍可服务);redis 字段供告警。
+	// /readyz always returns 200 (fail-open: Redis down does not make the app unready);
+	// redis field and fail-open counter let ops detect "enabled but unreachable" Redis.
 	g.GET("/readyz", readyzHandler)
 
 	srv := &Http{
@@ -105,6 +100,5 @@ func (h *Http) GracefulStart(ctx context.Context) {
 		}
 		log.Println("Http server stopped")
 
-		// todo:: 这里并没有平滑重启pprof 和 gops，目前看没必要
 	}
 }

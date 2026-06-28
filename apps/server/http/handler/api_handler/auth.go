@@ -18,9 +18,9 @@ import (
 )
 
 func (ph *Handler) GetUserProfile(ctx *gin.Context) {
-	// profile 接口为"查自己"语义:邮箱只从 AuthMiddleware 注入的 JWT 身份
-	// (ctx.Get("username"))取,绝不信任前端传来的 ?email=,以关闭 IDOR。
-	// 前端仍发 ?email=,后端忽略,合法自查行为不变。
+	// "View self" semantics: email is taken exclusively from the JWT identity
+	// injected by AuthMiddleware (ctx.Get("username")); the ?email= query param
+	// sent by the frontend is intentionally ignored to close IDOR.
 	name, ok := ctx.Get("username")
 	email, _ := name.(string)
 	if !ok || email == "" {
@@ -42,8 +42,9 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 	password := ctx.PostForm("password")
 
 	if email == "" || password == "" {
-		// 前端响应拦截器只读 res.data.message,错误信封必须用 "message" 承载
-		// 已本地化的文案,而非旧的 "error" 键(否则本地化文案被通用回落吞掉)。
+		// The frontend response interceptor reads only res.data.message; the error
+		// envelope must use "message" (not the legacy "error" key) so the i18n
+		// string is preserved rather than swallowed by the generic fallback.
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
 			"message": i18n.T(ctx, "register.credentials_required"),
@@ -60,7 +61,7 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 			})
 			return
 		}
-		// fail-closed:COUNT 出错也拒注册(低危、可重试),不静默放行
+		// fail-closed: a COUNT error also rejects registration (low risk, retryable)
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{
 			"code":    http.StatusServiceUnavailable,
 			"message": i18n.T(ctx, "register.service_unavailable"),
@@ -68,7 +69,6 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 		return
 	}
 
-	// 检查密码长度（示例）
 	if len(password) < 8 || len(password) > 16 {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
@@ -77,7 +77,6 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 		return
 	}
 
-	// 密码复杂度校验
 	if !utils.ValidatePasswordComplexity(password) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
@@ -86,7 +85,6 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 		return
 	}
 
-	// 检查用户是否已存在
 	if exists := ph.service.CheckEmailExists(ctx, email); exists {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "register.username_exists"), "token": ""})
 		return
@@ -127,7 +125,6 @@ func (ph *Handler) Register(ctx *gin.Context) {
 		return
 	}
 
-	// 检查密码长度（示例）
 	if len(password) < 8 || len(password) > 16 {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
@@ -136,7 +133,6 @@ func (ph *Handler) Register(ctx *gin.Context) {
 		return
 	}
 
-	// 密码复杂度校验
 	if !utils.ValidatePasswordComplexity(password) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
@@ -152,7 +148,6 @@ func (ph *Handler) Register(ctx *gin.Context) {
 		})
 		return
 	}
-	// 检查是否有注册的权限
 	name, _ := ctx.Get("username")
 	permission, _ := ph.service.GetUserRegisterPermission(ctx, name.(string))
 	if !permission {
@@ -160,20 +155,17 @@ func (ph *Handler) Register(ctx *gin.Context) {
 		return
 	}
 
-	// 检查用户是否已存在
 	if exists := ph.service.CheckEmailExists(ctx, email); exists {
 		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "用户名已存在", "token": ""})
 		return
 	}
 
-	// 注册用户
 	_, err := ph.service.RegisterAddUser(ctx, email, password, code, id, phone, organization, position)
 	if err != nil {
 		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": err.Error(), "token": ""})
 		return
 	}
 
-	// 注册成功后直接生成token
 	token, err := middleware.GenerateToken(email)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "生成token失败", "token": ""})
@@ -193,7 +185,6 @@ func (ph *Handler) ModifyPassword(ctx *gin.Context) {
 		return
 	}
 
-	// 密码复杂度校验
 	if !utils.ValidatePasswordComplexity(newPassword) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
@@ -239,7 +230,6 @@ func (ph *Handler) Login(ctx *gin.Context) {
 	email := ctx.PostForm("email")
 	password := ctx.PostForm("password")
 
-	// 检查用户是否已存在
 	if exists := ph.service.CheckEmailExists(ctx, email); !exists {
 		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "auth.user_not_found")})
 		return
@@ -266,21 +256,12 @@ func (ph *Handler) Login(ctx *gin.Context) {
 		return
 	}
 
-	// 登录生成有权限的工具
-	//ToolList, permission := ph.service.GetUserToolPermission(userResquest.Email)
-	//if len(ToolList) == 0 {
-	//	ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "获取工具列表失败", "token": ""})
-	//	return
-	//}
-
-	// 登录成功后直接生成token
 	token, tokenErr := middleware.GenerateToken(email)
 	if tokenErr != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "auth.token_generation_failed"), "token": ""})
 		return
 	}
 
-	// 校验当前密码复杂度，如果过低则添加提示
 	if userRes.PasswordWarning == "" && !utils.ValidatePasswordComplexity(password) {
 		userRes.PasswordWarning = i18n.T(ctx, "password_warning.weak_complexity")
 	}

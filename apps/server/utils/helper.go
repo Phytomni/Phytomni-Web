@@ -11,7 +11,6 @@ import (
 	"unicode"
 )
 
-// SearchValue 查询值是否在数组，切片，map中
 func SearchValue(needle interface{}, haystack interface{}) bool {
 	val := reflect.ValueOf(haystack)
 	switch val.Kind() {
@@ -34,7 +33,6 @@ func SearchValue(needle interface{}, haystack interface{}) bool {
 	return false
 }
 
-// RemoveDuplicateElement 数组去重
 func RemoveDuplicateElement[T comparable](list []T) []T {
 	var result = make([]T, 0, len(list))
 	var m = map[T]struct{}{}
@@ -49,7 +47,6 @@ func RemoveDuplicateElement[T comparable](list []T) []T {
 	return result
 }
 
-// SearchIndex 查找切片下标
 func SearchIndex(slice []string, element string) int {
 	for i, v := range slice {
 		if v == element {
@@ -59,7 +56,6 @@ func SearchIndex(slice []string, element string) int {
 	return -1
 }
 
-// ArraySlice 返回切片中的选定部分
 func ArraySlice[T any](s []T, offset, length uint) []T {
 	if offset > uint(len(s)) {
 		offset = uint(len(s)) - 1
@@ -71,7 +67,6 @@ func ArraySlice[T any](s []T, offset, length uint) []T {
 	return s[offset:]
 }
 
-// TruncateString 截取指定的字符串
 func TruncateString(s string, num int) string {
 	runes := []rune(s)
 	if len(runes) <= num {
@@ -80,28 +75,19 @@ func TruncateString(s string, num int) string {
 	return string(runes[:num])
 }
 
-// ClearMobileText 清除手机号
 func ClearMobileText(text string) (cleanedText string) {
-	// 定义手机号的正则表达式
 	phoneRegex := regexp.MustCompile(`1[3456789]\d{9}`)
-
-	// 查找所有匹配的手机号
 	matches := phoneRegex.FindAllString(text, -1)
 
 	if matches != nil {
-		//fmt.Println("找到的手机号：", matches)
-		// 将手机号去除
 		cleanedText = phoneRegex.ReplaceAllString(text, "[手机号敏感数据不予显示]")
-		//fmt.Println("去除手机号后的文本：", cleanedText)
 	} else {
 		cleanedText = text
-		//fmt.Println("未找到手机号")
 	}
 
 	return
 }
 
-// RemoveDuplicates 切片去重
 func RemoveDuplicates(slice []int64) []int64 {
 	encountered := map[int64]bool{}
 	result := []int64{}
@@ -116,14 +102,11 @@ func RemoveDuplicates(slice []int64) []int64 {
 	return result
 }
 
-// RegContent 正则匹配敏感词
 func RegContent(matchContent string, sensitiveWords []string) string {
 	if len(sensitiveWords) < 1 {
 		return matchContent
 	}
-	banWords := make([]string, 0) // 收集匹配到的敏感词
-
-	// 构造正则匹配字符
+	banWords := make([]string, 0)
 	regStr := strings.Join(sensitiveWords, "|")
 	wordReg := regexp.MustCompile(regStr)
 	//println("regStr -> ", regStr)
@@ -143,12 +126,9 @@ func RegContent(matchContent string, sensitiveWords []string) string {
 	return string(textBytes)
 }
 
-// ExistDir 创建目录
 func ExistDir(path string) {
-	// 判断路径是否存在
 	_, err := os.ReadDir(path)
 	if err != nil {
-		// 不存在就创建
 		err = os.MkdirAll(path, fs.ModePerm)
 		if err != nil {
 			fmt.Println(err)
@@ -168,7 +148,6 @@ func SplitFilePath(path string) (dir, name, suffix string) {
 	return
 }
 
-// IsDigits 检查字符串是否全是数字
 func IsDigits(s string) bool {
 	for _, r := range s {
 		if !unicode.IsDigit(r) {

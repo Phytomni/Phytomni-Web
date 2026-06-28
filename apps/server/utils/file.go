@@ -10,7 +10,6 @@ import (
 	"os"
 )
 
-// ReadFileContent 使用 os 包中的 Open 函数打开文件，然后使用 io 包中的 Read 方法逐字节或指定大小读取文件内容。
 func ReadFileContent(filename string) ([]byte, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -20,7 +19,7 @@ func ReadFileContent(filename string) ([]byte, error) {
 	defer file.Close()
 
 	content := make([]byte, 0)
-	buf := make([]byte, 1024) // 指定读取的缓冲区大小
+	buf := make([]byte, 1024)
 
 	for {
 		n, err := file.Read(buf)
@@ -36,7 +35,6 @@ func ReadFileContent(filename string) ([]byte, error) {
 	return content, nil
 }
 
-// ReadFileContentLineByLine 使用 os 包中的 Open 函数打开文件，然后使用 bufio 包中的 Scanner 对象逐行读取文件内容
 func ReadFileContentLineByLine(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -57,7 +55,6 @@ func ReadFileContentLineByLine(filename string) ([]string, error) {
 	return content, nil
 }
 
-// readFileContentOnce 使用 ioutil 包中的 ReadFile 函数一次性读取整个文件的内容
 func readFileContentOnce(filename string) ([]byte, error) {
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -67,9 +64,7 @@ func readFileContentOnce(filename string) ([]byte, error) {
 	return content, nil
 }
 
-// AppendToFile 将字符串内容追加到指定的文件
 func AppendToFile(fileName, text string) error {
-	// 打开文件，使用 os.O_APPEND 追加模式
 	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -82,7 +77,6 @@ func AppendToFile(fileName, text string) error {
 		return fmt.Errorf("failed to write to file: %w", err)
 	}
 
-	// 确保数据被刷新到文件中
 	err = writer.Flush()
 	if err != nil {
 		return fmt.Errorf("failed to flush writer: %w", err)
@@ -91,7 +85,6 @@ func AppendToFile(fileName, text string) error {
 	return nil
 }
 
-// IsDirectory 判断指定的目录是否存在
 func IsDirectory(path string) (bool, error) {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -104,7 +97,6 @@ func IsDirectory(path string) (bool, error) {
 }
 
 func CreateFile(fileName string) {
-	// 创建文件，使用 os.O_CREATE | os.O_WRONLY 标志
 	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("创建文件 %s 时出错: %v\n", fileName, err)

@@ -12,16 +12,15 @@ import (
 )
 
 func (ph *Handler) GetOperationLogs(ctx *gin.Context) {
-	// 操作员身份(管理员鉴权在 service 层执行)
+	// Operator identity (admin authorization is enforced in the service layer)
 	operatorName, exists := ctx.Get("username")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未登录"})
 		return
 	}
 
-	// 获取参数
-	// GET 查询:参数从查询串取(POST→GET 后由 body 改为 query)
-	userIdsStr := ctx.Query("user_ids") // 逗号分隔的ID字符串，例如 "1,2,3"
+	// GET query params (after the POST→GET migration, params moved from body to query)
+	userIdsStr := ctx.Query("user_ids") // comma-separated id string, e.g. "1,2,3"
 	startTime := ctx.Query("start_time")
 	endTime := ctx.Query("end_time")
 
@@ -36,7 +35,6 @@ func (ph *Handler) GetOperationLogs(ctx *gin.Context) {
 		}
 	}
 
-	// 调用服务层
 	logs, err := ph.service.GetOperationLogs(ctx, operatorName.(string), userIds, startTime, endTime)
 	if err != nil {
 		if errors.Is(err, api_service.ErrOperationLogForbidden) {

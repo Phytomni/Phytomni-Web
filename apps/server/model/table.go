@@ -11,9 +11,9 @@ type User struct {
 	Code             string     `json:"code"`
 	Description      string     `json:"description"`
 	FirstLoginStatus string     `gorm:"column:first_login_status;type:enum('0','1');default:'0';not null;comment:登陆状态" json:"first_login_status"`
-	CreatedAt        time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
-	UpdatedAt        time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
-	DeleteAt         *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
+	CreatedAt        time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
+	DeleteAt         *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
 	PasswordChangeAt *time.Time `gorm:"column:password_change_at;type:datetime;comment:密码最后修改时间" json:"password_change_at"`
 	LoginFailedCount int        `gorm:"column:login_failed_count;type:int(11);default:0;comment:登录失败次数" json:"login_failed_count"`
 	LockedUntil      *time.Time `gorm:"column:locked_until;type:datetime;comment:锁定截至时间" json:"locked_until"`
@@ -59,7 +59,7 @@ type QuestionAgentLog struct {
 	TitleQuery        string     `gorm:"column:title_query;type:text;comment:title问题;NOT NULL" json:"title_query"`
 	Answer            string     `gorm:"column:answer;type:text;comment:答案;NOT NULL" json:"answer"`
 	FollowUpQuestions string     `gorm:"column:follow_up_questions;type:text;comment:提示语;NOT NULL" json:"follow_up_questions"`
-	TaskId            string     `gorm:"column:task_id;type:varchar(50);comment:任务id;NOT NULL" json:"task_id"` //任务id
+	TaskId            string     `gorm:"column:task_id;type:varchar(50);comment:任务id;NOT NULL" json:"task_id"`
 	TaskLog           string     `gorm:"column:task_log;type:longtext;comment:任务日志;NOT NULL" json:"task_log"`
 	FileName          string     `gorm:"column:file_name;type:varchar(255);comment:文件名" json:"file_name"`
 	UploadPath        string     `gorm:"column:upload_path;type:varchar(255);comment:上传路径" json:"upload_path"`
@@ -72,9 +72,9 @@ type QuestionAgentLog struct {
 	LogStatus         string     `gorm:"column:log_status;type:varchar(30);comment:日志状态;NOT NULL" json:"log_status"`
 	ReactionType      string     `gorm:"column:reaction_type;type:enum('0','1','2');default:'0';not null;comment:点赞状态" json:"reaction_type"`
 	CollectType       string     `gorm:"column:collect_type;type:enum('0','1');default:'0';not null;comment:收藏状态" json:"collect_type"`
-	CreatedAt         time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
-	UpdatedAt         time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
-	DeleteAt          *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
+	CreatedAt         time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
+	UpdatedAt         time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
+	DeleteAt          *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
 }
 
 func (m *QuestionAgentLog) TableName() string {
@@ -99,9 +99,9 @@ type GeneExample struct {
 	Content     string     `gorm:"column:content;type:longtext;comment:内容;NOT NULL" json:"content"`
 	SpeciesCode string     `gorm:"column:species_code;type:varchar(255);comment:物种代码;NOT NULL" json:"species_code"`
 	GeneId      string     `gorm:"column:gene_id;type:varchar(255);comment:基因id;NOT NULL" json:"gene_id"`
-	CreatedAt   time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
-	UpdatedAt   time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
-	DeleteAt    *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
+	CreatedAt   time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
+	DeleteAt    *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
 }
 
 func (m *GeneExample) TableName() string {
@@ -125,9 +125,9 @@ type ServerToolLogs struct {
 	ServerFilePath string     `gorm:"column:server_file_path;type:varchar(255);comment:server文件路径" json:"server_file_path"`
 	ServerStatus   string     `gorm:"column:server_status;type:varchar(30);comment:server状态;NOT NULL" json:"server_status"`
 	SyncStatus     int        `gorm:"column:sync_status;type:int(1);comment:同步状态:0-未同步，1-已同步;NOT NULL" json:"sync_status"`
-	CreatedAt      time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
-	UpdatedAt      time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
-	DeleteAt       *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
+	CreatedAt      time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
+	DeleteAt       *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
 }
 
 func (m *ServerToolLogs) TableName() string {
@@ -139,9 +139,9 @@ type UserFeedback struct {
 	UserId          int        `gorm:"column:user_id;type:int(10);comment:用户id;NOT NULL" json:"user_id"`
 	FeedbackType    string     `gorm:"column:feedback_type;type:varchar(255);comment:反馈类型;NOT NULL" json:"feedback_type"`
 	FeedbackContent string     `gorm:"column:feedback_content;type:text;comment:反馈内容;NOT NULL" json:"feedback_content"`
-	CreatedAt       time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
-	UpdatedAt       time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
-	DeleteAt        *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
+	CreatedAt       time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
+	UpdatedAt       time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
+	DeleteAt        *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
 }
 
 func (m *UserFeedback) TableName() string {

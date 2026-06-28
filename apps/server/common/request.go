@@ -2,7 +2,6 @@ package common
 
 import "time"
 
-// 用户结构体
 type UserResquest struct {
 	Id       int    `json:"id"`
 	Email    string `json:"email" binding:"required"`

@@ -9,17 +9,21 @@ import (
 	"github.com/spf13/viper"
 )
 
-// ErrChatQuotaExhausted 账户额度不足/待激活(handler 映射 403)。
+// ErrChatQuotaExhausted indicates insufficient/inactive account quota (handler maps to 403).
 var ErrChatQuotaExhausted = errors.New("账户额度不足，请联系管理员开通")
 
-// chatGateBypassCodes 不受 ChatLimit 闸约束的角色。vip_user 暂不限额;
-// 未来对 vip_user 限额时从此集合移除并纳入计量。单一集合便于调整。
+// chatGateBypassCodes are roles exempt from the ChatLimit gate. vip_user is not
+// metered for now; to enforce a vip_user limit in the future, remove it from this
+// set and add metering. A single set keeps it easy to adjust.
 var chatGateBypassCodes = map[string]bool{"admin": true, "super_admin": true, "vip_user": true}
 
-// CheckChatAllowed 判定该用户能否发起 /query。总开关 chatlimit.enforce 默认 OFF
-// (暗发布:OFF 时一律放行,与今日行为一致、零回归)。ON 时:旁路角色放行;否则
-// 要求 chat_limit > 0。fail-open:载入 user 出错放行(不因 DB 抖动误拒真人;
-// 与限流层一致(认证永不降级)。自助注册者 chat_limit=0 → 失活直到 admin 授额度。
+// CheckChatAllowed decides whether the user may issue a /query. The master switch
+// chatlimit.enforce defaults to OFF (dark launch: OFF passes everything through,
+// matching today's behavior with zero regression). When ON: bypass roles pass;
+// otherwise chat_limit > 0 is required. fail-open: a user-load error passes
+// through (do not falsely reject real users on DB flakiness; consistent with the
+// rate-limit layer — authentication never degrades). Self-registered users have
+// chat_limit=0 → inactive until an admin grants quota.
 func (ps *Service) CheckChatAllowed(ctx context.Context, email string) error {
 	if !viper.GetBool("chatlimit.enforce") {
 		return nil

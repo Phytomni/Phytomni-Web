@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// AsyncTaskInfo 必须按归属用户过滤:自增 id 可枚举,任意登录用户
-// 不得用他人的 id 越权读取任务行(query/answer/任务元数据)。
+// AsyncTaskInfo must filter by owner: the auto-increment id is enumerable, so
+// no authenticated user may read another user's task row (query/answer/task
+// metadata) via someone else's id.
 func TestApiAsyncTaskInfo_ScopesToOwner(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
@@ -17,11 +18,11 @@ func TestApiAsyncTaskInfo_ScopesToOwner(t *testing.T) {
 	}
 	ps := NewService()
 
-	// 越权:alice 用 bob 的 id=81 查询 → 必须拿不到。
+	// Cross-owner: alice queries bob's id=81 → must get nothing.
 	if info, err := ps.AsyncTaskInfo(context.Background(), 81, "alice"); err == nil {
 		t.Errorf("IDOR: alice fetched bob's task id=81 (user_name=%q)", info.UserName)
 	}
-	// 正常:alice 查自己的 id=80 → 拿到。
+	// Normal: alice queries her own id=80 → gets it.
 	info, err := ps.AsyncTaskInfo(context.Background(), 80, "alice")
 	if err != nil {
 		t.Fatalf("owner should fetch own task, got %v", err)

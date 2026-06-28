@@ -10,13 +10,16 @@ import (
 	"github.com/spf13/viper"
 )
 
-// ErrRegisterRateLimited 注册 per-IP 持久底线超阈(handler 映射为 429)。
+// ErrRegisterRateLimited is returned when the per-IP durable registration floor
+// is exceeded (handler maps this to 429).
 var ErrRegisterRateLimited = errors.New("注册过于频繁，请稍后再试")
 
 const registerFloorPath = "/api/v1/auth/registrations"
 
-// registerFloorConfig 读注册底线阈值/窗口。比 Redis 限流层(10/h)更宽——只兜
-// 断网/持续滥用,非正常态二道闸。viper 缺省回落(改动需重启)。
+// registerFloorConfig reads the registration floor threshold and window. The
+// floor is intentionally wider than the Redis rate-limit layer (10/h) — it
+// only catches sustained abuse / Redis-down scenarios, not normal traffic.
+// Viper fallback applies; changes require a restart.
 func registerFloorConfig() (int64, time.Duration) {
 	limit := viper.GetInt64("register.durable_floor.limit")
 	if limit <= 0 {
@@ -29,15 +32,22 @@ func registerFloorConfig() (int64, time.Duration) {
 	return limit, window
 }
 
-// CheckRegisterFloor 注册前的持久 per-IP 底线:窗口内同 IP 对注册 path 的 op-log 行数
-// >= 阈值 → ErrRegisterRateLimited。空 IP → 放行(无法识别身份)。
-// **fail-closed**:COUNT 出错返回该错误(handler 拒注册;洪泛时 DB 出错正是该拒之时,
-// 且 MySQL 退化时后续 Create 本就失败)。
+// CheckRegisterFloor enforces a durable per-IP registration floor: if the number
+// of op-log rows for the registration path from the same IP within the window is
+// >= threshold, it returns ErrRegisterRateLimited. Empty IP passes through
+// (unidentifiable caller).
 //
-// IP 按**精确等值**匹配 OperationLog 中间件写入的原始 c.ClientIP() 值(走 client_ip
-// 上的存值;IPv4 常态命中)。IPv6 /48 聚合是未来增强(需中间件侧也存掩码值或 SQL 范围
-// 查),本期按全地址等值——故不做掩码,保持读写两侧一致 +
-// 索引友好。读现有 user_operation_logs(path、created_at 已索引),无新表/列/索引。
+// fail-closed: a COUNT error is returned as-is (handler rejects registration;
+// a DB error during flooding is exactly when rejection is appropriate, and MySQL
+// degradation would cause the subsequent Create to fail anyway).
+//
+// IP matching is exact equality against the raw c.ClientIP() value written by
+// the OperationLog middleware (IPv4 is the common case). IPv6 /48 aggregation
+// is a future enhancement (would require the middleware to also store the masked
+// value, or a SQL range query); for now, full-address equality keeps read and
+// write sides consistent and index-friendly. Reads the existing
+// user_operation_logs table (path and created_at are already indexed); no new
+// tables, columns, or indexes required.
 func (ps *Service) CheckRegisterFloor(ctx context.Context, clientIP string) error {
 	if clientIP == "" {
 		return nil

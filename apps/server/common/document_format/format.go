@@ -23,19 +23,19 @@ func NewAgent(toolName string) (FileDownloader, error) {
 	case "DataAgent":
 		return &DataAgent{}, nil
 	case "BriefGeneAgent", "ReviewAgent":
-		// BriefGeneAgent 与 ReviewAgent 共享同一个 formatter;
-		// 两者都是 Bot 侧 canonical tool name,否则 /v1/download/* 会报 "unknown tool"。
+		// BriefGeneAgent and ReviewAgent share the same formatter; both are
+		// canonical Bot-side tool names, otherwise /v1/download/* reports "unknown tool".
 		return &ReviewAgent{}, nil
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
 	}
 }
 
-// ChatAgent 实现
+// ChatAgent implementation
 type ChatAgent struct{}
 
 func (a *ChatAgent) Download(format string, answer string) ([]byte, string, error) {
-	timestamp := time.Now().Unix() // 获取当前 Unix 时间戳（秒级）
+	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("chat_%d", timestamp)
 	switch format {
 	case "Word":
@@ -55,12 +55,10 @@ func (a *ChatAgent) Download(format string, answer string) ([]byte, string, erro
 	}
 }
 
-// KnowledgeAgent 实现
+// KnowledgeAgent implementation
 type KnowledgeAgent struct{}
 
-// KnowledgeAgent 的实现
 func (a *KnowledgeAgent) Download(format string, answer string) ([]byte, string, error) {
-	// 解析answer为Document结构
 	var doc knowledge_agent.Document
 	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
 		return nil, "", fmt.Errorf("解析answer失败: %v", err)
@@ -90,7 +88,6 @@ func (a *KnowledgeAgent) Download(format string, answer string) ([]byte, string,
 type DataAgent struct{}
 
 func (a *DataAgent) Download(format string, answer string) ([]byte, string, error) {
-	// 解析answer为TableData结构
 	var data data_agent.TableData
 	if err := json.Unmarshal([]byte(answer), &data); err != nil {
 		return nil, "", fmt.Errorf("解析answer失败: %v", err)
@@ -120,7 +117,6 @@ func (a *DataAgent) Download(format string, answer string) ([]byte, string, erro
 type ReviewAgent struct{}
 
 func (a *ReviewAgent) Download(format string, answer string) ([]byte, string, error) {
-	// 解析answer为Document结构
 	var doc review_agent.Document
 	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
 		return nil, "", fmt.Errorf("解析answer失败: %v", err)

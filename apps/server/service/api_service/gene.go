@@ -38,8 +38,6 @@ func (ps *Service) GeneSearch(ctx context.Context, current, size int, title stri
 	}
 	allData, err := ps.fetchGeneFiles(title)
 	if err != nil {
-		// 如果目录读取失败，可以记录日志并返回空列表，或者直接返回错误
-		// 这里选择返回错误
 		return nil, 0, 0, err
 	}
 
@@ -66,7 +64,6 @@ func (ps *Service) GeneSearch(ctx context.Context, current, size int, title stri
 	return allData[start:end], total, totalPages, nil
 }
 
-// fetchGeneFiles 从指定目录读取文件并封装
 func (ps *Service) fetchGeneFiles(title string) ([]*model.GeneExample, error) {
 	// main.go initConfig sets a viper.SetDefault for gene_file_path so
 	// the lookup never returns ""; if it ever does, the os.ReadDir below
@@ -87,7 +84,6 @@ func (ps *Service) fetchGeneFiles(title string) ([]*model.GeneExample, error) {
 		item := parseGeneFile(entry.Name())
 		if item != nil {
 			if title != "" {
-				// 模糊匹配
 				if !strings.Contains(item.SpeciesCode, title) && !strings.Contains(item.GeneId, title) {
 					continue
 				}
@@ -124,7 +120,7 @@ func parseGeneFile(filename string) *model.GeneExample {
 		FileName:    filename,
 		SpeciesCode: speciesCode,
 		GeneId:      geneId,
-		// Id, CreatedAt, UpdatedAt, Content, DeleteAt 不需要填充
+		// Id, CreatedAt, UpdatedAt, Content, DeleteAt are intentionally omitted.
 	}
 }
 func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.GeneExample, error) {
@@ -135,8 +131,7 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 
 	fullPath := fmt.Sprintf("%s/%s", path, fileName)
 
-	// 安全检查：确保文件路径在目标目录内，防止目录遍历攻击
-	// 这里简化处理，只检查文件名是否包含 ..
+	// Prevent path traversal: reject filenames containing "..", "/", or "\".
 	if strings.Contains(fileName, "..") || strings.Contains(fileName, "/") || strings.Contains(fileName, "\\") {
 		return nil, errors.New("invalid filename")
 	}
@@ -169,7 +164,8 @@ func (ps *Service) GeneDetailsStorage(ctx context.Context, fileName, content, sp
 	return err
 }
 
-// findObsKeyBySuffix 在 Bot 中转列出的 keys 中找第一个匹配后缀的对象(忽略大小写)。
+// findObsKeyBySuffix returns the first key (case-insensitive) in the Bot-relayed
+// listing that matches the given suffix.
 func findObsKeyBySuffix(keys []string, suffix string) string {
 	for _, k := range keys {
 		if strings.HasSuffix(strings.ToLower(k), suffix) {
@@ -179,8 +175,9 @@ func findObsKeyBySuffix(keys []string, suffix string) string {
 	return ""
 }
 
-// friendlyRelayErr 把 Bot 中转对前缀外/桶外路径的拒绝(切流前历史
-// download_path 的特征)翻译成用户可读的提示;其余错误原样透传。
+// friendlyRelayErr translates a Bot relay rejection for an out-of-prefix or
+// out-of-bucket path (characteristic of pre-cutover legacy download_paths) into
+// a user-readable message; all other errors pass through unchanged.
 func friendlyRelayErr(err error) error {
 	if rxBot.IsLegacyPathErr(err) {
 		return errors.New("该结果文件属于切流前的历史数据,已不再提供下载")
@@ -188,9 +185,11 @@ func friendlyRelayErr(err error) error {
 	return err
 }
 
-// relayDownloadURL 为一个 OBS 对象签出指向本服务流式下载端点的短时 token URL。
-// 浏览器侧(window.open / <img src>)无法携带 Authorization 头,鉴权落在
-// query token 上;相对路径经前端 /api/v1 代理回到本服务。
+// relayDownloadURL issues a short-lived token URL pointing at this service's
+// streaming download endpoint for the given OBS key. The browser side
+// (window.open / <img src>) cannot carry an Authorization header, so auth
+// falls back to the query token; the relative path is proxied back to this
+// service via the frontend /api/v1 proxy.
 func relayDownloadURL(obsKey string) (string, error) {
 	token, err := middleware.GenerateDownloadToken(obsKey, middleware.DownloadTokenTTL)
 	if err != nil {
@@ -200,7 +199,6 @@ func relayDownloadURL(obsKey string) (string, error) {
 }
 
 func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {
-	// 判断是否有权限生成下载链接
 	var questionAgentLog model.QuestionAgentLog
 	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&questionAgentLog).RowsAffected; result == 0 {
@@ -220,7 +218,8 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 }
 
 func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
-	// 归属校验 + 取 reconcile 写入的图片路径(切流后由完成态 reconcile 填充)
+	// Ownership check + read the image paths written by the reconciler
+	// (populated by the completed-state reconcile pass after cutover).
 	var row model.QuestionAgentLog
 	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
@@ -231,14 +230,15 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	var keys []string
 	if row.ImagePaths != "" {
 		if err := json.Unmarshal([]byte(row.ImagePaths), &keys); err != nil {
-			// 非空但非法 JSON:DB 损坏 / Bot 契约漂移 —— 报警后退回列举(保可用),
-			// 不静默把损坏状态当作正常的旧行(legacy)处理。
+			// Non-empty but invalid JSON: DB corruption or Bot contract drift.
+			// Warn and fall back to enumeration (keep the endpoint usable);
+			// do not silently treat the corrupt state as a legacy empty row.
 			rxLog.Sugar().Warnw("image_paths 非法 JSON,退回 OBS 前缀列举", "download_path", obsPath, "err", err)
 			keys = nil
 		}
 	}
 	if len(keys) == 0 {
-		// 旧行 / image_paths 为空:退回按前缀列举(保持今日行为)
+		// Legacy row or empty image_paths: fall back to prefix enumeration (preserves current behaviour).
 		var err error
 		client := rxBot.NewClient()
 		keys, err = listObsKeysCached(ctx, client, obsPath, row.Status == statusSucceeded)
@@ -247,10 +247,12 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 		}
 	}
 
-	// containment 锚点 = run 根(path.Dir(download_path))。写入侧 download_path 只存
-	// dirs[0],但 image_paths 跨同一 run 的多个 sibling output_dir 扁平存放,故锚点
-	// 不能是 download_path 本身(会误杀 sibling 图),取其父目录。download token 对
-	// 任意 key 签名、无前缀绑定,签发循环是该 object 唯一授权闸,越界路径在此丢弃。
+	// Containment anchor = run root (path.Dir(download_path)). The writer stores
+	// only dirs[0] in download_path, but image_paths can span multiple sibling
+	// output_dirs within the same run — so the anchor cannot be download_path
+	// itself (that would incorrectly reject sibling images); use its parent dir.
+	// The download token signs any key without a prefix binding, so this loop is
+	// the sole authorization gate for each object; out-of-bounds paths are dropped.
 	anchor := path.Dir(obsPath)
 	var imageUrls []string
 	for _, k := range keys {
@@ -258,13 +260,13 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 			continue
 		}
 		if anchor != "" && anchor != "." && !strings.HasPrefix(k, anchor+"/") {
-			// 越界路径:跳过 + 报警(fail-safe:丢可疑、服务其余、可观测)
+			// Out-of-bounds path: skip + warn (fail-safe: drop suspicious, serve the rest, keep observable).
 			rxLog.Sugar().Warnw("图片路径越出 run 根,跳过签发", "key", k, "anchor", anchor)
 			continue
 		}
 		u, err := relayDownloadURL(k)
 		if err != nil {
-			// 单个签发失败跳过,保持原"跳过坏文件"行为;加 warn 以可观测。
+			// Skip individual signing failures (preserves prior "skip bad file" behaviour); warn for observability.
 			rxLog.Sugar().Warnw("图片签发失败,跳过", "key", k, "err", err)
 			continue
 		}
@@ -278,9 +280,11 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	return imageUrls, nil
 }
 
-// GetDownloadObsFile 服务邮件里的下载链接:校验 obs_path 归属于该用户的
-// 消息记录(邮件链接无法携带任何凭据,这层库内归属校验是该入口仅有的访问
-// 控制),经 Bot 中转找到结果 zip 并返回字节流,由 handler 直接写回浏览器。
+// GetDownloadObsFile serves email download links: verifies that obs_path belongs
+// to a message record owned by the given user (email links cannot carry any
+// credential, so this in-DB ownership check is the only access control for this
+// entry point), then finds the result zip via the Bot relay and returns the byte
+// stream for the handler to write directly to the browser.
 func (ps *Service) GetDownloadObsFile(ctx context.Context, username, obsPath string) (io.ReadCloser, string, int64, error) {
 	var questionAgentLog model.QuestionAgentLog
 	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).

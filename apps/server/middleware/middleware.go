@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"phytomni-server/common"
 	"strings"
 
@@ -14,7 +13,7 @@ func GlobalMiddleware() gin.HandlerFunc {
 	}
 }
 
-// CheckWechatMiddleware 验证是否为微信小程序访问
+// CheckWechatMiddleware verifies the request comes from the WeChat mini-program.
 func CheckWechatMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if !checkRequestUserAgent(ctx) {
@@ -36,22 +35,19 @@ func checkRequestUserAgent(c *gin.Context) bool {
 	return true
 }
 
-// CORS 中间件
+// CORS middleware
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		// 设置允许的来源（这里用 * 表示允许所有，也可以指定特定域名）
+		// Allowed origin (* = all; can be restricted to a specific domain)
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		// 允许的请求方法
+		// Allowed request methods
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		// 允许的请求头
+		// Allowed request headers
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization")
-		// 是否允许携带认证信息
-		//c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 
-		// 处理 OPTIONS 预检请求
+		// Handle the OPTIONS preflight request
 		if c.Request.Method == "OPTIONS" {
-			fmt.Println("进入了OPTIONS")
 			c.AbortWithStatus(204)
 			return
 		}

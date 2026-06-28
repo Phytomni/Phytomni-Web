@@ -10,10 +10,9 @@ type UserResponse struct {
 	Email            string `json:"email"`
 	Password         string `json:"-"` // never serialized to clients (bcrypt hash; carried internally only)
 	FirstLoginStatus string `json:"first_login_status"`
-	PasswordWarning  string `json:"password_warning,omitempty"` // 密码过期提示信息
+	PasswordWarning  string `json:"password_warning,omitempty"`
 }
 
-// 定义文档列表项结构体
 type DocItem struct {
 	Content string  `json:"content"`
 	Score   float64 `json:"score"`
@@ -36,8 +35,8 @@ type UserLostData struct {
 	Email        string     `json:"email"`
 	Code         string     `json:"code"`
 	Description  string     `json:"description"`
-	LockedUntil  *time.Time `json:"locked_until"`  // 锁定截至时间
-	LastLoginAt  *time.Time `json:"last_login_at"` // 最后登录时间
+	LockedUntil  *time.Time `json:"locked_until"`
+	LastLoginAt  *time.Time `json:"last_login_at"`
 	Phone        string     `json:"phone"`
 	Organization string     `json:"organization"`
 	Position     string     `json:"position"`
@@ -58,7 +57,7 @@ type ApiAsyncTaskListResponse struct {
 	UserName        string     `gorm:"column:user_name;type:varchar(255);comment:用户名;NOT NULL" json:"user_name"`
 	Query           string     `gorm:"column:query;type:longtext;comment:问题;NOT NULL" json:"query"`
 	Answer          string     `gorm:"column:answer;type:text;comment:答案;NOT NULL" json:"answer"`
-	TaskId          string     `gorm:"column:task_id;type:varchar(50);comment:任务id;NOT NULL" json:"task_id"` //任务id
+	TaskId          string     `gorm:"column:task_id;type:varchar(50);comment:任务id;NOT NULL" json:"task_id"`
 	TaskLog         string     `gorm:"column:task_log;type:longtext;comment:任务日志;NOT NULL" json:"task_log"`
 	FileName        string     `gorm:"column:file_name;type:varchar(255);comment:文件名" json:"file_name"`
 	UploadPath      string     `gorm:"column:upload_path;type:varchar(255);comment:上传路径" json:"upload_path"`
@@ -69,10 +68,10 @@ type ApiAsyncTaskListResponse struct {
 	Status          string     `gorm:"column:status;type:varchar(30);comment:任务状态;NOT NULL" json:"status"`
 	LogStatus       string     `gorm:"column:log_status;type:varchar(30);comment:日志状态;NOT NULL" json:"log_status"`
 	ReactionType    string     `gorm:"column:reaction_type;type:enum('0','1','2');default:'0';not null;comment:点赞状态" json:"reaction_type"`
-	CreatedAt       time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"` // 修改为 datetime 类型
-	UpdatedAt       time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"` // 修改为 datetime 类型
-	DeleteAt        *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`    // 修改为 datetime 类型，允许 NULL
-	FDialogueId     string     `gorm:"-" json:"f_dialogue_id"`                                          // 不映射到数据库
+	CreatedAt       time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
+	UpdatedAt       time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
+	DeleteAt        *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
+	FDialogueId     string     `gorm:"-" json:"f_dialogue_id"`
 }
 
 type ApiAsyncTaskListResponsePages struct {
@@ -90,5 +89,5 @@ type ApiQueryCollectListResponse struct {
 
 type UserProfileResponse struct {
 	UserLostData
-	DialogueCount int64 `json:"dialogue_count"` // 对话总数
+	DialogueCount int64 `json:"dialogue_count"`
 }

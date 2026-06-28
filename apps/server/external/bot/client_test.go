@@ -151,7 +151,7 @@ func TestBotErrorIsTyped(t *testing.T) {
 
 func TestDoJSON_WrapsTimeoutAsErrBotTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond) // 比 client 超时长，逼出真实 client-timeout 错误
+		time.Sleep(200 * time.Millisecond) // longer than the client timeout, to force a real client-timeout error
 	}))
 	defer srv.Close()
 	c := &Client{

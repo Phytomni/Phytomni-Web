@@ -40,17 +40,21 @@ func readGalleryCols(t *testing.T, gdb *gorm.DB, id int64) (downloadPath, imageP
 	return downloadPath, imagePaths
 }
 
-// setupTestDB 建一个空的 in-memory SQLite,创建 question_agent_logs 的最小列集,
-// 注册到全局 db registry,返回 *gorm.DB 供测试 seed 数据。
+// setupTestDB opens an in-memory SQLite DB, creates the minimal question_agent_logs
+// column set, registers it in the global db registry, and returns *gorm.DB for
+// seeding test data.
 //
-// 之所以手写 CREATE TABLE 而不是 AutoMigrate `QuestionAgentLog`:
-// 该 model 多个 `type:enum` GORM tag(MySQL 专有),SQLite AutoMigrate 不识别;
-// 手写 CREATE TABLE 只列 answer-check / update-log / bot-sync 路径实际读写的列
-// (id/user_name/dialogue_id/f_id/bot_run_id/status/answer + task_id/server_id/
-// compute_resource/log_status/delete_at),其余字段 GORM Scan 时按零值填。
+// Hand-writing CREATE TABLE instead of AutoMigrate(QuestionAgentLog): the model
+// carries several `type:enum` GORM tags (MySQL-only) that SQLite AutoMigrate does
+// not recognise. The DDL includes only the columns read/written by the answer-check
+// / update-log / bot-sync paths (id/user_name/dialogue_id/f_id/bot_run_id/status/
+// answer + task_id/server_id/compute_resource/log_status/delete_at); all other
+// fields scan as zero values.
 //
-// 连接池钉 1:`:memory:` 下每条连接是独立 DB,写后读若落到不同连接会读空;
-// update-log / bot-sync 测试是"写回再读校验",必须单连接才稳。
+// Connection pool pinned to 1: each :memory: connection is its own database; if a
+// write and its verification read land on different connections the read returns
+// nothing. update-log / bot-sync tests write then verify — single connection is
+// the only way to make that stable.
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -95,9 +99,10 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// TestApiAnswerCheck_NoHistory 验证 F-001 fix 的核心场景:
-// 无 parent 行时,函数返回空 list 而不是 [empty_struct] 单元素 list。
-// 没 fix 时:First() ErrRecordNotFound,但 QuestionAgentLog=&{Id:0} 被 prepend,len(got)=1。
+// TestApiAnswerCheck_NoHistory pins the F-001 fix core case: when there is no
+// parent row, the function returns an empty list instead of a [empty_struct]
+// single-element list. Without the fix: First() returned ErrRecordNotFound but
+// QuestionAgentLog=&{Id:0} was still prepended, producing len(got)=1.
 func TestApiAnswerCheck_NoHistory(t *testing.T) {
 	setupTestDB(t)
 	ps := NewService()
@@ -112,7 +117,8 @@ func TestApiAnswerCheck_NoHistory(t *testing.T) {
 	}
 }
 
-// TestApiAnswerCheck_HappyPath 验证正常路径:1 parent + 2 children 返回 3 行,parent 在 index 0。
+// TestApiAnswerCheck_HappyPath verifies the normal path: 1 parent + 2 children
+// returns 3 rows with the parent at index 0.
 func TestApiAnswerCheck_HappyPath(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
@@ -141,11 +147,12 @@ func TestApiAnswerCheck_HappyPath(t *testing.T) {
 	}
 }
 
-// TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers 把 F-001 的"f_id=0 误匹配"语义钉死:
-// alice 查 bob 的 dialogue,应该一行不返,而不是把 bob 的 parent 通过 f_id=0 走漏过去。
-// 没 fix 时:alice/dlg-bob 查无 parent → First() ErrRecordNotFound → QuestionAgentLog.Id=0
-//
-//	→ second query WHERE f_id=0 命中 bob 的 parent(id=21, f_id=0)→ 返回 2 行(空 parent + bob 行)。
+// TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers pins the F-001 "f_id=0 false
+// match" semantics: alice querying bob's dialogue must return zero rows, not leak
+// bob's parent through the f_id=0 wildcard second query.
+// Without the fix: alice/dlg-bob has no parent → First() ErrRecordNotFound →
+// QuestionAgentLog.Id=0 → second query WHERE f_id=0 matched bob's parent (id=21,
+// f_id=0) → 2 rows returned (empty parent + bob row).
 func TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
@@ -156,7 +163,7 @@ func TestApiAnswerCheck_DoesNotLeakParentsAcrossUsers(t *testing.T) {
 	}
 
 	ps := NewService()
-	// alice 试图打开 bob 的 dialogue (越权场景 + missing parent 场景共一)
+	// alice attempts to open bob's dialogue (cross-owner + missing-parent combined)
 	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-bob")
 
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestRedactJSONBodyNested 验证递归遮蔽:嵌套对象内的敏感 key 同样打码。
+// TestRedactJSONBodyNested verifies recursive redaction: sensitive keys inside nested objects are masked too.
 func TestRedactJSONBodyNested(t *testing.T) {
 	out := redactJSONBody([]byte(`{"user":{"password":"x"}}`))
 	if strings.Contains(out, `"x"`) || strings.Contains(out, ":\"x\"") {
@@ -17,7 +17,7 @@ func TestRedactJSONBodyNested(t *testing.T) {
 	}
 }
 
-// TestRedactBodyURLEncoded 验证 urlencoded body 的敏感参数被打码、明文不落库。
+// TestRedactBodyURLEncoded verifies that sensitive params in a urlencoded body are masked and plaintext never lands in the DB.
 func TestRedactBodyURLEncoded(t *testing.T) {
 	out := redactBodyByContentType(
 		"application/x-www-form-urlencoded",
@@ -38,12 +38,14 @@ func TestRedactBodyURLEncoded(t *testing.T) {
 	}
 }
 
-// TestRedactBodyURLEncodedMalformed 锁死 body 脱敏不变量:一个含无效百分号编码的
-// urlencoded body(例如密码里有裸 '%')会让 url.ParseQuery 报错;此时绝不能回落原文,
-// 否则 /login、/modify/password 的明文凭据会直接落进 user_operation_logs。
-// 这正是 query-string 路径(redactQueryParams)有意保留原文、而 body 路径必须打码的分叉点。
+// TestRedactBodyURLEncodedMalformed pins the body-redaction invariant: a urlencoded
+// body with invalid percent-encoding (e.g. a bare '%' in the password) makes
+// url.ParseQuery fail; in that case we must NOT fall back to the raw body, or the
+// plaintext credentials of /login, /modify/password would land directly in
+// user_operation_logs. This is exactly the fork point where the query-string path
+// (redactQueryParams) intentionally keeps the raw text while the body path must mask it.
 func TestRedactBodyURLEncodedMalformed(t *testing.T) {
-	// "100%pass" 里的 "%pa" 不是合法十六进制 → ParseQuery 失败。
+	// "%pa" in "100%pass" is not valid hex → ParseQuery fails.
 	out := redactBodyByContentType(
 		"application/x-www-form-urlencoded",
 		[]byte("email=a@b.com&new_password=100%pass"),

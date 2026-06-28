@@ -8,9 +8,10 @@ import (
 	"net/url"
 )
 
-// OBS 中转(Bot /v1/relay/obs/*)。切流后 Web Go 不再持有华为 OBS ak/sk,
-// 列目录与取文件全部经 Bot 中转完成;Bot 侧要求 key 带 relay:obs scope,
-// 且部署开启 RELAY_ENABLED,否则分别返回 403 / 404。
+// OBS relay (Bot /v1/relay/obs/*). After the cutover, Web Go no longer holds
+// the Huawei OBS ak/sk; both directory listing and object fetch go through the
+// Bot relay. The Bot side requires the key to carry the relay:obs scope and the
+// deployment to have RELAY_ENABLED, otherwise it returns 403 / 404 respectively.
 
 // ListObsKeys lists object keys under prefix via the Bot OBS relay.
 // Bot confines list prefixes to its user-data output root and 403s anything
@@ -53,7 +54,7 @@ func (c *Client) GetObsObjectStream(ctx context.Context, path string) (io.ReadCl
 // IsLegacyPathErr reports whether err is the relay rejecting a path/prefix
 // outside its serving root (400/403) — the signature of a pre-cutover
 // download_path whose objects are no longer served (forward-only cutover,
-// no historical ETL). Callers map this to a user-readable "已下线" message.
+// no historical ETL). Callers map this to a user-readable "discontinued" message.
 func IsLegacyPathErr(err error) bool {
 	var ae *APIError
 	if errors.As(err, &ae) {

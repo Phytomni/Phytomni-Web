@@ -10,7 +10,7 @@ type Cron interface {
 	Run()
 }
 
-// InitFromSecond 秒级
+// InitFromSecond runs cron jobs at second-level granularity.
 func InitFromSecond(cronList []Cron) error {
 	if !viper.GetBool("cron.switch") {
 		return nil
@@ -21,7 +21,7 @@ func InitFromSecond(cronList []Cron) error {
 	return nil
 }
 
-// InitFromMinute 分级
+// InitFromMinute runs cron jobs at minute-level granularity.
 func InitFromMinute(cronList []Cron) error {
 	if !viper.GetBool("cron.switch") {
 		return nil

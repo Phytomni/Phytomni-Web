@@ -28,8 +28,10 @@ func (r *TaskReconciler) Run() {
 		return
 	}
 
-	// 所有异步 agent(analyst + deep_genome)都由 Bot 提交远端并持有 bot_run_id;
-	// 统一交给 SyncBotRuns 按 bot_run_id 轮询 Bot run 状态回收(无 bot_run_id 的历史
-	// 行由 SyncBotRuns 内部跳过)。退役产品 EIHealth 的 IAM 直连轮询已移除。
+	// All async agents (analyst + deep_genome) are submitted to the remote by Bot
+	// and carry a bot_run_id; they are reconciled uniformly by SyncBotRuns, which
+	// polls Bot run state by bot_run_id (historical rows without a bot_run_id are
+	// skipped inside SyncBotRuns). The retired EIHealth product's direct IAM poll
+	// has been removed.
 	api_service.SyncBotRuns(questionAgentList)
 }

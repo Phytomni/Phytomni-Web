@@ -56,7 +56,7 @@ func (ph *Handler) GeneList(ctx *gin.Context) {
 	}
 }
 func (ph *Handler) GeneDetails(ctx *gin.Context) {
-	fileName := ctx.Param("id") // RESTful:gene 资源 id 即 file_name,从路径 /genes/:id 取
+	fileName := ctx.Param("id")
 	if fileName == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "参数 file_name 不能为空"})
 		return
@@ -72,11 +72,9 @@ func (ph *Handler) GeneDetails(ctx *gin.Context) {
 }
 
 func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
-	// 获取表单参数
 	speciesCode := ctx.PostForm("species_code")
 	geneId := ctx.PostForm("gene_id")
 
-	// 1. 首先读取doc_list内容（只读一次）
 	docListFile, _, err := ctx.Request.FormFile("doc_list")
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -87,7 +85,6 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 	}
 	defer docListFile.Close()
 
-	// 读取doc_list文件内容
 	docContent, err := io.ReadAll(docListFile)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -97,7 +94,6 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 		return
 	}
 
-	// 解析doc_list JSON内容
 	var docList struct {
 		DocList []struct {
 			Title string `json:"title"`
@@ -111,7 +107,6 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 		return
 	}
 
-	// 提取title并添加序号
 	var titlesBuilder strings.Builder
 	for i, doc := range docList.DocList {
 		if doc.Title != "" {
@@ -120,7 +115,6 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 	}
 	titlesStr := titlesBuilder.String()
 
-	// 2. 处理表单数据
 	form, err := ctx.MultipartForm()
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -131,7 +125,6 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 	}
 	defer form.RemoveAll()
 
-	// 3. 处理文本文件
 	var successFiles []string
 	fileHeaders := form.File["files"]
 	for _, fileHeader := range fileHeaders {
@@ -148,11 +141,9 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 			continue
 		}
 
-		// 拼接文件内容和doc_list的titles
 		combinedContent := fmt.Sprintf("%s\n\n--- DOC TITLES ---\n%s",
 			string(fileContent), titlesStr)
 
-		// 存储到数据库
 		err = ph.service.GeneDetailsStorage(ctx, fileHeader.Filename, combinedContent, speciesCode, geneId)
 		if err != nil {
 			log.Printf("Failed to store file %s: %v", fileHeader.Filename, err)
@@ -162,18 +153,15 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 		successFiles = append(successFiles, fileHeader.Filename)
 	}
 
-	//// 4. 处理图片文件
 	imageHeaders := form.File["images"]
-	imageSavePath := "/root/project/html/dist/images" // 图片存储路径
+	imageSavePath := "/root/project/html/dist/images"
 	var savedImages []string
 
-	// 确保目录存在
 	if err = os.MkdirAll(imageSavePath, 0755); err != nil {
 		log.Printf("Failed to create directory %s: %v", imageSavePath, err)
 	}
 
 	for _, imageHeader := range imageHeaders {
-		// 打开上传的图片文件
 		imageFile, err := imageHeader.Open()
 		if err != nil {
 			log.Printf("Failed to open image %s: %v", imageHeader.Filename, err)
@@ -182,7 +170,6 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 		defer imageFile.Close()
 		fmt.Println(imageHeader.Filename)
 
-		//	// 创建目标文件
 		imagePath := filepath.Join(imageSavePath, imageHeader.Filename)
 		outFile, err := os.Create(imagePath)
 		if err != nil {
@@ -191,7 +178,6 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 		}
 		defer outFile.Close()
 
-		// 复制文件内容
 		if _, err := io.Copy(outFile, imageFile); err != nil {
 			log.Printf("Failed to save image %s: %v", imagePath, err)
 			continue
@@ -209,7 +195,6 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 		return
 	}
 
-	// 返回处理结果
 	ctx.JSON(errs.SucResp(successFiles))
 }
 
@@ -230,7 +215,7 @@ func (ph *Handler) DownloadAnalystAgentObsImages(ctx *gin.Context) {
 	obsPath := ctx.Query("obs_path")
 	username, _ := ctx.Get("username")
 
-	// 简单处理 username，防止 panic
+	// Guard nil username before type-asserting to avoid a panic.
 	uStr := ""
 	if username != nil {
 		uStr = username.(string)
@@ -245,9 +230,10 @@ func (ph *Handler) DownloadAnalystAgentObsImages(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(imageUrls))
 }
 
-// inlineSafeImageTypes 列出可安全内联渲染的位图类型。SVG(image/svg+xml)
-// 与任何 *+xml 被刻意排除 —— 它们可携带内嵌脚本,同源 inline 提供即构成
-// 存储型 XSS;这些一律强制走附件下载。
+// inlineSafeImageTypes lists raster MIME types that are safe to serve inline.
+// SVG (image/svg+xml) and any *+xml are intentionally excluded — they can
+// carry embedded scripts and serving them inline same-origin would constitute
+// stored XSS. Those are always forced to attachment download.
 var inlineSafeImageTypes = map[string]bool{
 	"image/png":  true,
 	"image/jpeg": true,
@@ -256,14 +242,15 @@ var inlineSafeImageTypes = map[string]bool{
 	"image/bmp":  true,
 }
 
-// sanitizeFilename 去掉可能撑破 Content-Disposition 引号文件名的字符
-// (双引号、CR、LF),避免头注入。
+// sanitizeFilename strips characters that could break a quoted Content-Disposition
+// filename (double-quote, CR, LF) to prevent header injection.
 func sanitizeFilename(name string) string {
 	return strings.NewReplacer(`"`, "", "\r", "", "\n", "").Replace(name)
 }
 
-// GetDownloadObsFile 服务邮件中的下载链接。切流后不再 302 到 OBS 签名
-// URL,而是经 Bot 中转把结果 zip 字节流直接写回浏览器。
+// GetDownloadObsFile serves email download links. After the cutover it no
+// longer 302-redirects to an OBS signed URL; instead it streams the result
+// zip bytes back through the Bot relay.
 func (ph *Handler) GetDownloadObsFile(ctx *gin.Context) {
 	obsPath := ctx.Query("obs_path")
 	username := ctx.Query("username")
@@ -280,9 +267,10 @@ func (ph *Handler) GetDownloadObsFile(ctx *gin.Context) {
 	ctx.DataFromReader(http.StatusOK, length, "application/octet-stream", rc, nil)
 }
 
-// RelayFileDownload 流式输出一个 OBS 对象(经 Bot 中转)。鉴权走 query
-// 短时 token(middleware.ParseDownloadToken):window.open / <img src> /
-// 邮件链接均无法携带 Authorization 头,这是浏览器直连下载面的统一入口。
+// RelayFileDownload streams an OBS object through the Bot relay. Auth is via
+// a short-lived query token (middleware.ParseDownloadToken): window.open,
+// <img src>, and email links cannot carry an Authorization header, so this
+// is the unified browser-direct download entry point.
 func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 	key, err := middleware.ParseDownloadToken(ctx.Query("t"))
 	if err != nil {
@@ -292,7 +280,7 @@ func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 
 	rc, length, err := rxBot.NewClient().GetObsObjectStream(ctx, key)
 	if err != nil {
-		// 不透传 Bot 内部错误细节给浏览器直连面
+		// Do not expose Bot internal error details to the browser-direct surface.
 		ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": "文件获取失败"})
 		return
 	}
@@ -303,13 +291,14 @@ func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	// 仅位图图片内联渲染(<img> 场景);SVG/任何 *+xml 强制走附件下载,
-	// 杜绝同源存储型 XSS。其余一律附件。
+	// Only raster images are served inline (<img> scenario); SVG and any *+xml
+	// are forced to attachment to prevent same-origin stored XSS.
 	disposition := "attachment"
 	if inlineSafeImageTypes[contentType] {
 		disposition = "inline"
 	}
-	// 浏览器直连面:禁 MIME 嗅探 + 最严 CSP 沙箱,任何内联响应都不执行脚本。
+	// Browser-direct surface: no MIME sniffing + strictest CSP sandbox so no
+	// script executes even for inline responses.
 	ctx.Header("X-Content-Type-Options", "nosniff")
 	ctx.Header("Content-Security-Policy", "default-src 'none'; sandbox")
 	ctx.Header("Content-Disposition", disposition+`; filename="`+sanitizeFilename(filename)+`"`)
@@ -317,21 +306,19 @@ func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 }
 
 func (ph *Handler) DownloadObsRenderingFile(ctx *gin.Context) {
-	id, _ := strconv.Atoi(ctx.PostForm("id")) //主id
-	format := ctx.PostForm("document_format") //文件格式
+	id, _ := strconv.Atoi(ctx.PostForm("id"))
+	format := ctx.PostForm("document_format")
 
 	if id == 0 || format == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "参数缺失"})
 		return
 	}
-	// 获取文件内容和文件名
 	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, id, format)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
 		return
 	}
 
-	// 设置响应头
 	ctx.Header("Content-Disposition", "attachment; filename="+filename)
 	ctx.Header("Content-Type", "application/octet-stream")
 	ctx.Header("Content-Length", strconv.Itoa(len(content)))

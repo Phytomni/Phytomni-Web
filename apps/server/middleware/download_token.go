@@ -7,9 +7,11 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
-// 下载短时 token:浏览器侧的 window.open / <img src> / 邮件链接无法携带
-// Authorization 头,所以文件下载端点改用 query 参数里的短时 JWT 鉴权 —
-// token 绑定一个具体的 OBS object key,过期即失效,复用 jwt.secret_key 签名。
+// Short-lived download token: the browser's window.open / <img src> / email
+// links cannot carry an Authorization header, so file-download endpoints
+// authenticate via a short-lived JWT in a query parameter — the token is bound
+// to one specific OBS object key, expires automatically, and is signed with the
+// shared jwt.secret_key.
 
 // DownloadTokenTTL is the lifetime of a chat-surface download URL. The
 // frontend opens/renders the URL immediately after fetching it, so a short

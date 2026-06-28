@@ -12,9 +12,10 @@ import (
 	"phytomni-server/db"
 )
 
-// setupRegisterFloorDB 建一个含 user_operation_logs 的 in-memory SQLite,
-// 注册到全局 db registry,返回 *gorm.DB 供测试 seed 数据。
-// 手写 CREATE TABLE(不 AutoMigrate)以避免 MySQL enum tag 在 SQLite 下失败。
+// setupRegisterFloorDB opens an in-memory SQLite with a user_operation_logs
+// table, registers it in the global db registry, and returns the *gorm.DB for
+// test seeding. Hand-writes CREATE TABLE (no AutoMigrate) to avoid MySQL enum
+// tag failures on SQLite.
 func setupRegisterFloorDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

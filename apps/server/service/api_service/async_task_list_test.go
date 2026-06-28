@@ -10,8 +10,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupAsyncListDB 建含 ApiAsyncTaskListResponse 全部映射列的表。
-// 最小 DDL 缺 task_log 等列会让 Find(&[]ApiAsyncTaskListResponse) 报 "no such column"。
+// setupAsyncListDB creates a table with every column mapped by
+// ApiAsyncTaskListResponse. A minimal DDL missing task_log etc. would make
+// Find(&[]ApiAsyncTaskListResponse) fail with "no such column".
 func setupAsyncListDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -36,8 +37,9 @@ func setupAsyncListDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// AsyncTaskList 必须做跨用户列表隔离:Count 返回的 total 与分页 Find 返回的行
-// 都只能是调用者本人的任务,绝不能把别的用户的任务带出来。
+// AsyncTaskList must enforce cross-user list isolation: both the total from
+// Count and the rows from the paged Find can only be the caller's own tasks —
+// another user's tasks must never leak out.
 func TestApiAsyncTaskList_ScopesToOwner(t *testing.T) {
 	gdb := setupAsyncListDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs

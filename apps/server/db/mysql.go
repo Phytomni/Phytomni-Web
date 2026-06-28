@@ -35,11 +35,12 @@ func InitMysqlDB() error {
 			dbGorm = mysql.Open(cfg.Dsn)
 		}
 
-		// 设置自定义 Logger
-		// 开启 ParameterizedQueries：审计日志 sql_content 落库为 ? 占位符而非明文
-		// 字面值（邮箱/聊天内容/密码 hash 等不再随 SQL 入审计表）。
-		// ParameterizedQueries 设在底层 logger.Config 上(gorm.Config 无此字段);
-		// SqlLogger.ParamsFilter 转发到这个 base logger,使其返回 nil vars。
+		// Custom logger with ParameterizedQueries enabled: the audit-log
+		// sql_content is stored as ? placeholders rather than plaintext literal
+		// values (emails / chat content / password hashes no longer enter the
+		// audit table inside the SQL). ParameterizedQueries is set on the base
+		// logger.Config (gorm.Config has no such field); SqlLogger.ParamsFilter
+		// forwards to this base logger so it returns nil vars.
 		baseLogger := logger.New(stdLog.New(os.Stdout, "\r\n", stdLog.LstdFlags), logger.Config{
 			SlowThreshold:             200 * time.Millisecond,
 			LogLevel:                  logger.Warn,
@@ -76,8 +77,8 @@ func MustGet(name string) *gorm.DB {
 	return db
 }
 
-// Set 注册一个命名 *gorm.DB 实例。供测试在不走 viper-based InitMysqlDB 的情况下
-// 注入 in-memory SQLite;production 仍走 InitMysqlDB。
+// Set registers a named *gorm.DB instance. Lets tests inject in-memory SQLite
+// without going through the viper-based InitMysqlDB; production still uses InitMysqlDB.
 func Set(name string, gormDB *gorm.DB) {
 	if dbs == nil {
 		dbs = make(map[string]*gorm.DB)

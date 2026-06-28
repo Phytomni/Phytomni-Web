@@ -13,7 +13,6 @@ import (
 
 func (ps *Service) GetUserProfile(ctx context.Context, email string) (*common.UserProfileResponse, error) {
 	var user model.User
-	// 1. 查询用户基本信息
 	if err := model.DB(ctx).Model(&model.User{}).Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("auth.user_not_found")
@@ -21,7 +20,6 @@ func (ps *Service) GetUserProfile(ctx context.Context, email string) (*common.Us
 		return nil, err
 	}
 
-	// 2. 查询对话总数 (f_id = 0 代表对话)
 	var dialogueCount int64
 	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", email, 0).Count(&dialogueCount).Error; err != nil {
 		return nil, err
@@ -111,39 +109,27 @@ func (ps *Service) GetUserList(ctx *gin.Context, current, size int, code string)
 
 	switch code {
 	case "admin":
-		// 计算总记录数
 		db := model.DB(ctx).Model(&model.User{}).Where("code != ? and code !=?", "super_admin", "admin")
 		if err := db.Count(&total).Error; err != nil {
 			return nil, 0, 0, err
 		}
-
-		// 计算总页数
 		totalPages := int((total + int64(size) - 1) / int64(size))
-
-		// 执行分页查询
 		offset := (current - 1) * size
 		if err := db.Offset(offset).Limit(size).Find(&users).Error; err != nil {
 			return nil, 0, 0, err
 		}
-
 		return users, total, totalPages, nil
 
 	case "super_admin":
-		// 计算总记录数
 		db := model.DB(ctx).Model(&model.User{}).Where("code != ?", "super_admin")
 		if err := db.Count(&total).Error; err != nil {
 			return nil, 0, 0, err
 		}
-
-		// 计算总页数
 		totalPages := int((total + int64(size) - 1) / int64(size))
-
-		// 执行分页查询
 		offset := (current - 1) * size
 		if err := db.Offset(offset).Limit(size).Find(&users).Error; err != nil {
 			return nil, 0, 0, err
 		}
-
 		return users, total, totalPages, nil
 	}
 
@@ -158,7 +144,6 @@ func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int
 
 	db := model.DB(ctx).Model(&model.User{}).Debug()
 
-	//判断权限是否为管理员或超级管理员
 	var adminUser *model.User
 	if db.Where("email = ?", name).First(&adminUser); adminUser.Code != "admin" && adminUser.Code != "super_admin" {
 		return 0, errors.New("您没有修改用户权限的权利，请通知管理员")
@@ -178,7 +163,6 @@ func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int
 	}
 	description := descriptionMap[code]
 
-	//修改用户权限
 	updateData := map[string]interface{}{
 		"code":         code,
 		"description":  description,
@@ -188,7 +172,6 @@ func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int
 		"position":     position,
 	}
 
-	// 如果是游客，允许修改对话限制
 	if code == "guest" {
 		updateData["chat_limit"] = chatLimit
 	}
@@ -207,7 +190,6 @@ func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int
 func (ps *Service) UnlockUser(ctx context.Context, operatorName string, targetUserId int) error {
 	db := model.DB(ctx).Model(&model.User{}).Debug()
 
-	// 1. 检查操作者权限
 	var operator *model.User
 	if err := db.Where("email = ?", operatorName).First(&operator).Error; err != nil {
 		return errors.New("操作员不存在")
@@ -216,8 +198,6 @@ func (ps *Service) UnlockUser(ctx context.Context, operatorName string, targetUs
 		return errors.New("无权执行此操作")
 	}
 
-	// 2. 解锁目标用户
-	// 将 locked_until 设置为 NULL，login_failed_count 重置为 0
 	result := db.Where("id = ?", targetUserId).Updates(map[string]interface{}{
 		"locked_until":       nil,
 		"login_failed_count": 0,

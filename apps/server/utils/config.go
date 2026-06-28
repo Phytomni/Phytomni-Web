@@ -8,18 +8,16 @@ import (
 
 func LoadConfigInFile(filename string) error {
 
-	// 如果指定了文件，则从指定文件读取，如果没指定则按默认规则加载
-	// 默认规则为：当前目录/{env}.{ext}
-	// ext 支持的类型有 json yaml 等
+	// When a file is specified, read from it; otherwise load by the default rule.
+	// Default rule: current-directory/{env}.{ext}; ext supports json, yaml, etc.
 	if filename == "" {
 		env := GetEnvironment()
 		log.Printf("Current environment: %s", env)
-		// 检查 config 目录是否存在
 		if _, err := os.Stat("config"); os.IsNotExist(err) {
 			log.Fatal("config directory does not exist")
 		}
 
-		// 1. 读取配置文件 「app」
+		// 1. read the "app" config file
 		if FilesExists([]string{"config/app.yml", "config/app.yaml", "config/app.json"}) {
 			v := viper.New()
 			v.AddConfigPath("config")
@@ -34,7 +32,7 @@ func LoadConfigInFile(filename string) error {
 			}
 		}
 
-		// 2. 读取配置文件 「env」 ，会覆盖 app 里的配置
+		// 2. read the "env" config file, overriding values from app
 		if FilesExists([]string{"config/" + env + ".yml", "config/" + env + ".yaml", "config/" + env + ".json"}) {
 			v := viper.New()
 			v.AddConfigPath("config")
@@ -49,7 +47,7 @@ func LoadConfigInFile(filename string) error {
 			}
 		}
 
-		// 3. 读取自定义配置 「custom」，会覆盖环境默认配置
+		// 3. read the "custom" config, overriding the environment defaults
 		if FilesExists([]string{"config/custom.yml", "config/custom.yaml", "config/custom.json"}) {
 			v := viper.New()
 			v.AddConfigPath("config")

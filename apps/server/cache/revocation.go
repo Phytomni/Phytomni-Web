@@ -20,10 +20,12 @@ const (
 
 var errNoRedisClient = errors.New("redis client not configured")
 
-// revokeOpTimeout 限定单次撤销检查/写入的 Redis 操作耗时:AuthMiddleware 每个鉴权
-// 请求都跑 IsBlocked+GetUserEpoch,"慢但活"的 Redis 不应把每个请求拖到数十秒——超时
-// 即 fail-open(读)/返回 error(写)。镜像 ratelimit.go/obscache.go;80ms 远大于
-// 同机房 RTT,勿设 sub-RTT(否则健康 Redis 也被误降级)。
+// revokeOpTimeout caps the Redis round-trip for a single revocation check/write.
+// AuthMiddleware runs IsBlocked + GetUserEpoch on every authenticated request, so
+// a slow-but-alive Redis must not drag each request out to tens of seconds —
+// timeout means fail-open (read) / return error (write). Mirrors
+// ratelimit.go/obscache.go; 80ms is well above same-datacenter RTT — do not set
+// it sub-RTT (a healthy Redis would then be wrongly degraded).
 const revokeOpTimeout = 80 * time.Millisecond
 
 // HashToken returns hex(sha256(raw)). The blocklist keys on the FULL token string

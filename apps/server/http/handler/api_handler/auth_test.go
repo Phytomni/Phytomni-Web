@@ -18,11 +18,13 @@ import (
 	"phytomni-server/utils"
 )
 
-// setupProfileTestDB 建一个 in-memory SQLite,创建 GetUserProfile 实际查的两张表
-// (users / question_agent_logs) 的最小列集,注册到全局 db registry。
+// setupProfileTestDB opens an in-memory SQLite DB, creates the minimal column set
+// for the two tables GetUserProfile reads (users / question_agent_logs), and
+// registers the DB in the global registry.
 //
-// 手写 CREATE TABLE 而非 AutoMigrate:User 带 MySQL 专有的 type:enum tag,
-// SQLite AutoMigrate 不识别;这里只列 profile 路径读到的列,其余按零值填充。
+// Hand-writing CREATE TABLE instead of AutoMigrate: User carries MySQL-only
+// type:enum GORM tags that SQLite AutoMigrate rejects; only the columns the
+// profile path reads are listed here, all others scan as zero values.
 func setupProfileTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -61,10 +63,9 @@ func setupProfileTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// newProfileRequestContext 构造一个带 query string 的 GET *gin.Context,
-// 写到 httptest.ResponseRecorder;username 由调用方决定是否 Set(模拟
-// AuthMiddleware 注入的 JWT 身份)。镜像 common/i18n/i18n_test.go 的
-// gin.CreateTestContext 用法。
+// newProfileRequestContext builds a GET *gin.Context with a query string,
+// writing to an httptest.ResponseRecorder. Whether to Set "username" (to
+// simulate the JWT identity injected by AuthMiddleware) is the caller's choice.
 func newProfileRequestContext(t *testing.T, rawQuery string) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -75,8 +76,9 @@ func newProfileRequestContext(t *testing.T, rawQuery string) (*gin.Context, *htt
 }
 
 // TestApiGetUserProfile_IgnoresQueryEmailUsesJWT pins the AF-001 fix:
-// Alice 的身份 + ?email=bob,后端必须无视 query,返回 Alice 自己的资料。
-// 未 fix 时:handler 读 ctx.Query("email")=="bob@x.com" → 返回 Bob 的资料(IDOR)。
+// Alice's JWT identity + ?email=bob — the backend must ignore the query param
+// and return Alice's own profile. Without the fix, handler reads
+// ctx.Query("email")=="bob@x.com" and returns Bob's data (IDOR).
 func TestApiGetUserProfile_IgnoresQueryEmailUsesJWT(t *testing.T) {
 	gdb := setupProfileTestDB(t)
 	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES
@@ -87,7 +89,7 @@ func TestApiGetUserProfile_IgnoresQueryEmailUsesJWT(t *testing.T) {
 
 	ph := NewHandler()
 	c, w := newProfileRequestContext(t, "email=bob@x.com")
-	c.Set("username", "alice@x.com") // AuthMiddleware 注入的身份
+	c.Set("username", "alice@x.com") // JWT identity injected by AuthMiddleware
 
 	ph.GetUserProfile(c)
 
@@ -107,9 +109,10 @@ func TestApiGetUserProfile_IgnoresQueryEmailUsesJWT(t *testing.T) {
 	}
 }
 
-// TestApiGetUserProfile_MissingUsernameReturns401 钉死缺身份分支:
-// 没有 AuthMiddleware 注入的 username 时,handler 必须 401,不得回落到
-// ?email= 或返回任何资料。未 fix 时:handler 读 ctx.Query("email") → 200。
+// TestApiGetUserProfile_MissingUsernameReturns401 pins the missing-identity path:
+// when no AuthMiddleware-injected username is present, handler must 401 and
+// must not fall back to ?email= or return any profile data. Without the fix,
+// handler reads ctx.Query("email") and returns 200.
 func TestApiGetUserProfile_MissingUsernameReturns401(t *testing.T) {
 	gdb := setupProfileTestDB(t)
 	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES
@@ -119,7 +122,7 @@ func TestApiGetUserProfile_MissingUsernameReturns401(t *testing.T) {
 
 	ph := NewHandler()
 	c, w := newProfileRequestContext(t, "email=bob@x.com")
-	// 故意不 Set username
+	// deliberately no "username" Set (simulates missing AuthMiddleware injection)
 
 	ph.GetUserProfile(c)
 
@@ -128,8 +131,9 @@ func TestApiGetUserProfile_MissingUsernameReturns401(t *testing.T) {
 	}
 }
 
-// newRegisterPostContext 构造一个带 x-www-form-urlencoded body 的 POST
-// *gin.Context,并绑定 Localize 中间件,使 i18n.T 能解析键。
+// newRegisterPostContext builds a POST *gin.Context with an
+// x-www-form-urlencoded body and wires in the Localize middleware so i18n.T
+// can resolve keys.
 func newRegisterPostContext(t *testing.T, form url.Values) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -142,9 +146,10 @@ func newRegisterPostContext(t *testing.T, form url.Values) (*gin.Context, *httpt
 	return c, w
 }
 
-// TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope 钉死错误信封键:
-// 空凭证分支必须把本地化文案放在 "message"(前端拦截器只读 res.data.message),
-// 不得用旧的 "error" 键 —— 否则本地化文案在前端被通用回落吞掉。
+// TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope pins the error-envelope key:
+// the empty-credentials branch must place the localized text in "message"
+// (the frontend interceptor reads only res.data.message), not the legacy "error"
+// key — otherwise the localized string is swallowed by the generic fallback.
 func TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope(t *testing.T) {
 	ph := NewHandler()
 	c, w := newRegisterPostContext(t, url.Values{})

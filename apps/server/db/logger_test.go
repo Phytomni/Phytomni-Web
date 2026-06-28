@@ -10,15 +10,17 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// openLoggedTestDB 复刻 mysql.go 的 logger 装配：把 NewSqlLogger 包在底层
-// logger 外，并开启 ParameterizedQueries，再注册到全局 registry。
-// 用 in-memory SQLite（glebarez，纯 Go 无 CGO），其 Dialector.Explain 在 vars
-// 为空时保留 ? 占位符，可如实复现生产参数化行为。
+// openLoggedTestDB replicates the logger assembly from mysql.go: wraps
+// NewSqlLogger around the base logger with ParameterizedQueries enabled, then
+// registers the DB in the global registry.
+// Uses in-memory SQLite (glebarez, pure-Go no CGO); its Dialector.Explain
+// preserves ? placeholders when vars is empty, faithfully reproducing
+// production parameterization behavior.
 func openLoggedTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
 	base := logger.New(testWriter{t}, logger.Config{
-		LogLevel:             logger.Info, // Info 级才会让 Trace 走 fc()
+		LogLevel:             logger.Info, // Info level is required for Trace to call fc()
 		ParameterizedQueries: true,
 	})
 
@@ -28,15 +30,16 @@ func openLoggedTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	// :memory: SQLite 每条连接是独立库;限制单连接,确保异步 logger goroutine
-	// 的写入与轮询读取命中同一个内存库(否则 Trace 的异步写会落到另一条空连接)。
+	// Each :memory: SQLite connection is its own independent database.
+	// Pin to one connection so async logger goroutine writes and poll reads
+	// both hit the same in-memory DB (without this, Trace's async write lands
+	// on a different, empty connection).
 	sqlDB, derr := gdb.DB()
 	if derr != nil {
 		t.Fatalf("get sql.DB: %v", derr)
 	}
 	sqlDB.SetMaxOpenConns(1)
 
-	// 审计日志落盘表（Trace 异步写这张表）。
 	ddl := `CREATE TABLE sql_operation_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id INTEGER,
@@ -53,23 +56,23 @@ func openLoggedTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("create sql_operation_logs: %v", err)
 	}
 
-	// 被审计的业务表。
 	if err := gdb.Exec(`CREATE TABLE s_probe_users (id INTEGER PRIMARY KEY, email TEXT)`).Error; err != nil {
 		t.Fatalf("create s_probe_users: %v", err)
 	}
 
-	Set("phytomni-server", gdb) // 异步写库经 Get("phytomni-server") 取连接
+	Set("phytomni-server", gdb) // async writer resolves the connection via Get("phytomni-server")
 	return gdb
 }
 
-// testWriter 把底层 logger 的输出导向 t.Log，避免污染测试输出。
+// testWriter routes base logger output to t.Log to avoid polluting test output.
 type testWriter struct{ t *testing.T }
 
 func (w testWriter) Printf(format string, args ...interface{}) {
 	w.t.Logf(format, args...)
 }
 
-// fetchLatestSQLContent 轮询等待异步 logger goroutine 落盘后取最新一行 sql_content。
+// fetchLatestSQLContent polls until the async logger goroutine has flushed,
+// then returns the most recent sql_content row matching the LIKE pattern.
 func fetchLatestSQLContent(t *testing.T, gdb *gorm.DB, like string) string {
 	t.Helper()
 	for i := 0; i < 50; i++ {
@@ -89,21 +92,24 @@ func fetchLatestSQLContent(t *testing.T, gdb *gorm.DB, like string) string {
 	return ""
 }
 
-// TestSqlLogger_ParameterizedQueries 验证 AF-003：带敏感字面值的查询
-// 落审计表后，sql_content 必须是占位符形态（含 ?），且不含明文邮箱。
+// TestSqlLogger_ParameterizedQueries pins AF-003: after a query with sensitive
+// literal values is recorded, sql_content must be parameterized (contain ?)
+// and must not contain the plaintext email.
 func TestSqlLogger_ParameterizedQueries(t *testing.T) {
 	gdb := openLoggedTestDB(t)
 
 	const secretEmail = "victim@example.com"
 
-	// 触发一次带字面值的查询；查 s_probe_users 让落盘行的 sql_content 可定位。
+	// Trigger a query with a literal value; using s_probe_users makes the
+	// resulting audit row identifiable by table name.
 	var dummy []map[string]interface{}
 	if err := gdb.Table("s_probe_users").Where("email = ?", secretEmail).Find(&dummy).Error; err != nil {
 		t.Fatalf("probe query: %v", err)
 	}
 
-	// 用 SELECT 前缀精确匹配探针查询行,排除同样含 "s_probe_users" 的
-	// CREATE TABLE 审计行(避免竞争到 DDL 行导致偶发失败)。
+	// Match with SELECT prefix to target the probe query row specifically,
+	// excluding the CREATE TABLE audit row that also mentions s_probe_users
+	// (avoids flaky races where the DDL row wins the ORDER BY id DESC race).
 	got := fetchLatestSQLContent(t, gdb, "SELECT%s_probe_users%")
 
 	if strings.Contains(got, secretEmail) {
@@ -129,10 +135,11 @@ func auditRow() map[string]interface{} {
 	}
 }
 
-// TestWriteSQLAuditLog_SurfacesInsertError 验证 AF-004:审计表缺失时,插入错误
-// 必须被返回(而非静默丢弃)。删掉 Create(...).Error 的返回 → 此测试转红。
+// TestWriteSQLAuditLog_SurfacesInsertError pins AF-004: when the audit table is
+// absent, the insert error must be returned, not silently dropped.
+// Remove the Create(...).Error return → this test turns red.
 func TestWriteSQLAuditLog_SurfacesInsertError(t *testing.T) {
-	// sql_operation_logs 故意不建表。
+	// sql_operation_logs intentionally not created.
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -144,9 +151,10 @@ func TestWriteSQLAuditLog_SurfacesInsertError(t *testing.T) {
 	}
 }
 
-// TestWriteSQLAuditLog_OKWhenTablePresent 验证正常路径:表存在时插入成功、返回 nil。
+// TestWriteSQLAuditLog_OKWhenTablePresent pins the happy path: when the audit
+// table exists, the insert succeeds and returns nil.
 func TestWriteSQLAuditLog_OKWhenTablePresent(t *testing.T) {
-	openLoggedTestDB(t) // 注册带 sql_operation_logs 的连接到 registry
+	openLoggedTestDB(t) // registers a connection with sql_operation_logs in the registry
 	if err := writeSQLAuditLog(auditRow()); err != nil {
 		t.Fatalf("insert into present audit table should succeed: %v", err)
 	}

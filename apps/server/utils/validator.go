@@ -12,8 +12,8 @@ func DefaultIntFifty(number *int) {
 	}
 }
 
-// ValidatePasswordComplexity 校验密码复杂度
-// 要求包含：大小写字母、数字及标点符号
+// ValidatePasswordComplexity checks password complexity:
+// requires uppercase, lowercase, digits, and punctuation/special characters.
 func ValidatePasswordComplexity(password string) bool {
 	if len(password) < 8 {
 		return false
@@ -33,7 +33,7 @@ func ValidatePasswordComplexity(password string) bool {
 		case '0' <= char && char <= '9':
 			hasNumber = true
 		default:
-			// 假设非字母数字即为特殊字符/标点符号
+			// treat any non-alphanumeric rune as a special/punctuation character
 			hasSpecial = true
 		}
 	}

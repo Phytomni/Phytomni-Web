@@ -10,8 +10,9 @@ import (
 	"phytomni-server/db"
 )
 
-// setupQueryTestDB 建 question_agent_logs 的 in-memory SQLite,列集对齐
-// resolveDialogue 读取的 id/user_name/dialogue_id/f_id。手写 DDL 理由同 agent_task_test.go。
+// setupQueryTestDB opens an in-memory SQLite with a question_agent_logs table
+// whose columns match what resolveDialogue reads (id/user_name/dialogue_id/f_id).
+// Hand-written DDL for the same reason as agent_task_test.go.
 func setupQueryTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -30,8 +31,9 @@ func setupQueryTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// TestResolveDialogue_RefreshScopedToOwner 钉死 refresh 归属隔离:alice 不能 refresh bob 的行
-// (resolveDialogue 的 WHERE user_name = ? 把跨用户访问压成 ErrRecordNotFound)。
+// TestResolveDialogue_RefreshScopedToOwner pins refresh ownership isolation:
+// alice must not refresh bob's row (the WHERE user_name=? clause in
+// resolveDialogue collapses cross-owner access into ErrRecordNotFound).
 func TestResolveDialogue_RefreshScopedToOwner(t *testing.T) {
 	gdb := setupQueryTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
@@ -46,8 +48,8 @@ func TestResolveDialogue_RefreshScopedToOwner(t *testing.T) {
 	}
 }
 
-// TestResolveDialogue_ThreadScopedToOwner 钉死 threading 归属隔离:alice 不能把子轮挂到
-// bob 的 parent 上(同一 user_name 闸)。
+// TestResolveDialogue_ThreadScopedToOwner pins threading ownership isolation:
+// alice must not thread a child turn onto bob's parent (same user_name gate).
 func TestResolveDialogue_ThreadScopedToOwner(t *testing.T) {
 	gdb := setupQueryTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
@@ -62,8 +64,8 @@ func TestResolveDialogue_ThreadScopedToOwner(t *testing.T) {
 	}
 }
 
-// TestResolveDialogue_OwnerThreadsOwnParent 钉死正常路径:owner 挂到自己的 parent,
-// 返回 parent 的 dialogue_id 且 f_id == in.Id。
+// TestResolveDialogue_OwnerThreadsOwnParent pins the happy path: an owner
+// threading onto their own parent returns the parent's dialogue_id with f_id==in.Id.
 func TestResolveDialogue_OwnerThreadsOwnParent(t *testing.T) {
 	gdb := setupQueryTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
@@ -84,8 +86,8 @@ func TestResolveDialogue_OwnerThreadsOwnParent(t *testing.T) {
 	}
 }
 
-// TestResolveDialogue_NewConversation 钉死新会话路径:Id=0/RefreshId=0 生成全新 dialogue_id、
-// f_id=0。
+// TestResolveDialogue_NewConversation pins the new-conversation path: Id=0/RefreshId=0
+// generates a fresh dialogue_id with f_id=0.
 func TestResolveDialogue_NewConversation(t *testing.T) {
 	setupQueryTestDB(t)
 	ps := NewService()

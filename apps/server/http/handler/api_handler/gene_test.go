@@ -2,7 +2,7 @@ package api_handler
 
 import "testing"
 
-// SVG / *+xml 必须永远不可内联 —— 它们能携带脚本,同源 inline 即存储型 XSS。
+// SVG / *+xml must NEVER be inline-able — they can carry scripts, so same-origin inline serving is stored XSS.
 func TestInlineSafeExcludesSVGAndXML(t *testing.T) {
 	for _, ct := range []string{"image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"} {
 		if !inlineSafeImageTypes[ct] {

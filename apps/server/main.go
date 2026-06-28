@@ -25,7 +25,7 @@ func main() {
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:        "config",
-			Value:       "", // 默认从config目录读取
+			Value:       "", // defaults to reading from the config directory
 			Usage:       "specify the location of the configuration file",
 			Required:    false,
 			Destination: &configFile,

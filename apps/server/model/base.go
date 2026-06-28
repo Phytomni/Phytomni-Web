@@ -11,8 +11,8 @@ func Default() *gorm.DB {
 	return db.MustGet("phytomni-server")
 }
 
-// DB 获取带有 Context 的 DB 实例，用于传递 UserID 等信息给 Logger
-// 在 Service 层请使用 model.DB(ctx) 替代 model.Default()
+// DB returns a Context-bound DB instance, used to pass UserID and similar info
+// to the Logger. In the Service layer, use model.DB(ctx) instead of model.Default().
 func DB(ctx context.Context) *gorm.DB {
 	return Default().WithContext(ctx)
 }

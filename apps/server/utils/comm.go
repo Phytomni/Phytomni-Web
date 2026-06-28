@@ -13,15 +13,12 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-// node 实例
 var node, _ = snowflake.NewNode(1)
 
-// SnowflakeGenUUID 雪花算法UUID
 func SnowflakeGenUUID() string {
 	return node.Generate().String()
 }
 
-// GenDefaultPwd 生成默认密码
 func GenDefaultPwd(n int) string {
 	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -35,7 +32,6 @@ func GenDefaultPwd(n int) string {
 	return fmt.Sprintf("%s%s", string(b), number)
 }
 
-// GetStructRequiredMsg 获取结构体必填项
 func GetStructRequiredMsg(s any) string {
 
 	var strList []string
@@ -56,7 +52,7 @@ func GetStructRequiredMsg(s any) string {
 	return fmt.Sprintf("\n导入说明：\n1、其中%s为必填字段；\n", strings.Join(strList, "、"))
 }
 
-// SliceOffset 返回切片中的选定部分
+// SliceOffset returns a selected sub-slice.
 func SliceOffset[T any](s []T, offset, length uint) []T {
 	if offset > uint(len(s)) {
 		offset = uint(len(s)) - 1
@@ -68,7 +64,7 @@ func SliceOffset[T any](s []T, offset, length uint) []T {
 	return s[offset:]
 }
 
-// ReplaceHtml 替换html标签
+// ReplaceHtml strips HTML tags.
 func ReplaceHtml(text string) string {
 	return regexp.MustCompile("<[^>]*>").ReplaceAllString(text, "")
 }
@@ -82,7 +78,7 @@ func FormatSliceUintString(idS []uint) (str string) {
 	return
 }
 
-// Contains 判断切片是否存在元素
+// Contains reports whether the slice contains the element.
 func Contains[T comparable](s []T, e T) bool {
 	for _, v := range s {
 		if v == e {

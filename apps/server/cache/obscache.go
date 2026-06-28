@@ -8,24 +8,32 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-// obsCacheOpTimeout 限定单次 OBS 列举缓存的 Redis 操作耗时:下载是交互路径,"慢但活"
-// 的 Redis 不应拖慢它——超时即 fail-open(miss→回源列举)。80ms 远大于同机房 RTT,
-// 只在 Redis 真卡时触发(与 ratelimit.go 同构)。
+// obsCacheOpTimeout caps the Redis round-trip for a single OBS listing cache
+// operation. Downloads are on the interactive path — a slow-but-alive Redis
+// must not stall them; timeout triggers fail-open (miss → re-fetch from OBS).
+// 80ms is well above same-datacenter RTT and only fires when Redis is truly
+// stuck (same pattern as ratelimit.go).
 const obsCacheOpTimeout = 80 * time.Millisecond
 
-// obsKeyPrefix Redis key 前缀。终值 = obsKeyPrefix + obsPath。obsPath 由
-// question_agent_logs.download_path 的 varchar(255) 上界约束,直接拼接便于 redis-cli
-// 排障;非机密,无需 hash。
+// obsKeyPrefix is the Redis key prefix. Final key = obsKeyPrefix + obsPath.
+// obsPath is bounded by the question_agent_logs.download_path varchar(255)
+// column; direct concatenation aids redis-cli debugging — it is not secret
+// and does not need to be hashed.
 const obsKeyPrefix = "obs:keys:"
 
-// GetObsKeys 取 obsPath 的已缓存对象 key 列表。
-// fail-open(镜像 ratelimit.go / revocation.go):nil client / Redis error / 超时 /
-// 反序列化失败 → ObserveFailOpen("obscache") + (nil,false)(miss,调用方回源列举)。
-// 命中 → ObserveObsCacheHit() + (keys,true)。
-// 注意:redis.Nil(键不存在=正常冷 miss)不是降级——静默返回 (nil,false),不计 fail-open
-// (否则每次首列都会虚增 failopen_count 并刷 WARN)。
+// GetObsKeys returns the cached object-key list for obsPath.
 //
-// 不变量:本函数只按 obsPath 取数据,绝不接收/编码任何用户身份——鉴权在调用方完成。
+// fail-open (mirrors ratelimit.go / revocation.go): nil client / Redis error /
+// timeout / deserialisation failure → ObserveFailOpen("obscache") + (nil,false)
+// (miss; caller re-fetches from OBS).
+// Cache hit → ObserveObsCacheHit() + (keys,true).
+//
+// redis.Nil (key absent = normal cold miss) is NOT a degradation — silently
+// returns (nil,false) without counting fail-open (otherwise every first listing
+// inflates failopen_count and triggers spurious WARNs).
+//
+// Invariant: this function only looks up data by obsPath and never accepts or
+// encodes any user identity — authorisation is the caller's responsibility.
 func GetObsKeys(ctx context.Context, obsPath string) ([]string, bool) {
 	c := Client(defaultName)
 	if c == nil {
@@ -38,7 +46,7 @@ func GetObsKeys(ctx context.Context, obsPath string) ([]string, bool) {
 	raw, err := c.Get(pctx, obsKeyPrefix+obsPath).Bytes()
 	if err != nil {
 		if err == redis.Nil {
-			return nil, false // 正常 miss,非降级
+			return nil, false // normal cold miss, not a degradation
 		}
 		ObserveFailOpen("obscache")
 		return nil, false
@@ -52,12 +60,17 @@ func GetObsKeys(ctx context.Context, obsPath string) ([]string, bool) {
 	return keys, true
 }
 
-// PutObsKeys 把 obsPath 的对象 key 列表以 ttl 写入 Redis(JSON 编码)。
-// fail-open:nil client / 序列化失败 / Redis error / 超时 → ObserveFailOpen + 静默返回
-// (写缓存失败绝不影响本次下载)。空列表绝不缓存(终态后文件可能晚到,缓空=长期假空)。
+// PutObsKeys writes the object-key list for obsPath into Redis with the given
+// TTL (JSON-encoded).
+//
+// fail-open: nil client / serialisation failure / Redis error / timeout →
+// ObserveFailOpen + silent return (a cache-write failure must never affect the
+// in-flight download).
+// Empty lists are never cached: when a task has just completed, files may
+// arrive later, so caching an empty result would produce long-lived false misses.
 func PutObsKeys(ctx context.Context, obsPath string, keys []string, ttl time.Duration) {
 	if len(keys) == 0 {
-		return // 空列举不缓(防御性;调用方亦先判,双保险)
+		return // defensive guard; callers also check, but double-safe
 	}
 	c := Client(defaultName)
 	if c == nil {

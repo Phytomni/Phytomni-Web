@@ -299,7 +299,7 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 	answer := rec.Answer
 	if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
 		answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
-		// analyst 类:回填图廊代表性前缀 + 全量图片路径(均仅非空才写,no-clobber)
+		// analyst class: backfill the gallery representative prefix + full image paths (both written only when non-empty, no-clobber)
 		if dirs, paths, ok2 := rxBot.ParseRunArtifacts(rec.Result); ok2 {
 			if len(dirs) > 0 && dirs[0] != "" {
 				updates["download_path"] = dirs[0]

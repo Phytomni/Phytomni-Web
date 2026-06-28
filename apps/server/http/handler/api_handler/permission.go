@@ -10,14 +10,13 @@ import (
 )
 
 func (ph *Handler) UnlockUser(ctx *gin.Context) {
-	// 获取当前登录用户名（操作员）
 	operatorName, exists := ctx.Get("username")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未登录"})
 		return
 	}
 
-	// 获取要解锁的用户ID(RESTful:从路径参数 /users/:id/unlock 取)
+	// RESTful: target user id from path param /users/:id/unlock
 	userIdStr := ctx.Param("id")
 	if userIdStr == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "用户ID不能为空"})
@@ -29,7 +28,6 @@ func (ph *Handler) UnlockUser(ctx *gin.Context) {
 		return
 	}
 
-	// 调用Service执行解锁
 	err = ph.service.UnlockUser(ctx, operatorName.(string), userId)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
@@ -42,7 +40,6 @@ func (ph *Handler) UnlockUser(ctx *gin.Context) {
 func (ph *Handler) PermissionUserTool(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 
-	// 登录生成有权限的工具
 	ToolList, permissionList, permission := ph.service.GetUserToolPermission(ctx, name.(string))
 	if len(ToolList) == 0 && len(permissionList) == 0 {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "获取工具列表失败", "token": ""})
@@ -50,7 +47,7 @@ func (ph *Handler) PermissionUserTool(ctx *gin.Context) {
 	}
 
 	if ToolList == nil {
-		ToolList = []string{} // 确保不是 nil
+		ToolList = []string{} // ensure non-nil for JSON encoding
 	}
 
 	LoginRes := &common.LoginResponse{
@@ -63,7 +60,6 @@ func (ph *Handler) PermissionUserTool(ctx *gin.Context) {
 }
 
 func (ph *Handler) PermissionUserList(ctx *gin.Context) {
-	// 检查是否有查看用户列表的权限
 	name, _ := ctx.Get("username")
 
 	current, _ := strconv.Atoi(ctx.Query("current"))
@@ -75,7 +71,6 @@ func (ph *Handler) PermissionUserList(ctx *gin.Context) {
 		return
 	}
 
-	// 生成所有用户的列表展示
 	userList, total, totalPages, err := ph.service.GetUserList(ctx, current, size, code)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "查询用户列表失败", "token": ""})
@@ -94,7 +89,7 @@ func (ph *Handler) PermissionUserList(ctx *gin.Context) {
 func (ph *Handler) ModifyPermission(ctx *gin.Context) {
 
 	name, _ := ctx.Get("username")
-	userId, _ := strconv.Atoi(ctx.Param("id")) // RESTful:用户 id 从路径 /users/:id/permissions 取
+	userId, _ := strconv.Atoi(ctx.Param("id")) // RESTful: user id from path /users/:id/permissions
 	code := ctx.PostForm("code")
 	password := ctx.PostForm("password")
 	phone := ctx.PostForm("phone")
@@ -102,7 +97,7 @@ func (ph *Handler) ModifyPermission(ctx *gin.Context) {
 	position := ctx.PostForm("position")
 	chatLimit, _ := strconv.Atoi(ctx.PostForm("chat_limit"))
 
-	// 展示在列表中有id的则为有权限修改密码的用户
+	// A non-empty password means the admin is resetting this user's password.
 	if password != "" {
 		if len(password) < 8 || len(password) > 16 {
 			ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "密码格式不正确", "token": ""})

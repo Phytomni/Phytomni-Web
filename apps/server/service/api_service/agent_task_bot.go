@@ -44,9 +44,10 @@ func SyncBotRuns(rows []model.QuestionAgentLog) {
 			continue // still running, unchanged, or malformed — nothing to write
 		}
 		updates := map[string]interface{}{"status": newStatus}
-		// analyst 类:formatted 存在即非 deep_genome。
-		// 答案非空才写(避免抹掉已渲染答案);同分支回填图廊路径,使 deep_genome
-		// 的 final_report 路径保持原样、不产生 download_path。
+		// analyst class: presence of formatted means it is not deep_genome.
+		// Only write a non-empty answer (avoid wiping an already-rendered answer);
+		// the same branch backfills gallery paths, leaving deep_genome's
+		// final_report path untouched and producing no download_path.
 		if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
 			if shaped := rxBot.ShapeAnswer(rec.Agent, answerText, f); shaped != "" {
 				updates["answer"] = shaped

@@ -12,10 +12,11 @@ import (
 	"phytomni-server/db"
 )
 
-// setupGateTestDB 建 in-memory SQLite 的 users(只需 email + first_login_status,
-// 即 LoginStatusMiddleware 实际 Select 的列)并注册到全局 registry。
-// 手写 DDL 而非 AutoMigrate 的理由同 service 层测试:first_login_status 的
-// MySQL `type:enum` tag SQLite 不识别。
+// setupGateTestDB opens an in-memory SQLite DB with a minimal users table
+// (email + first_login_status — the only columns LoginStatusMiddleware selects)
+// and registers it in the global registry. Uses hand-written DDL rather than
+// AutoMigrate for the same reason as service-layer tests: the MySQL type:enum
+// tag on first_login_status is not recognised by SQLite.
 func setupGateTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -33,8 +34,9 @@ func setupGateTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// runGate 在一个 gin 测试 context 上跑 LoginStatusMiddleware 并返回写出的 recorder。
-// username==nil 表示不注入 username key(模拟缺失鉴权上下文)。
+// runGate runs LoginStatusMiddleware on a gin test context and returns the
+// response recorder. Passing username==nil skips injecting the "username" key,
+// simulating a missing auth context.
 func runGate(t *testing.T, gdb *gorm.DB, username interface{}, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -48,8 +50,8 @@ func runGate(t *testing.T, gdb *gorm.DB, username interface{}, path string) *htt
 	return w
 }
 
-// TestLoginStatusMiddleware_FirstLoginBlocksOtherPaths 钉死强制改密闸:first_login_status='0'
-// 的用户访问非白名单路径被 403 拦截。
+// TestLoginStatusMiddleware_FirstLoginBlocksOtherPaths pins the forced-password-change gate:
+// a user with first_login_status='0' is blocked with 403 on any non-allowlisted path.
 func TestLoginStatusMiddleware_FirstLoginBlocksOtherPaths(t *testing.T) {
 	gdb := setupGateTestDB(t)
 	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('alice@x.com', '0')`).Error; err != nil {
@@ -61,8 +63,8 @@ func TestLoginStatusMiddleware_FirstLoginBlocksOtherPaths(t *testing.T) {
 	}
 }
 
-// TestLoginStatusMiddleware_FirstLoginAllowsPasswordChange 钉死白名单:first-login 用户
-// 可以访问 /api/v1/users/me/password(不被拦截)。
+// TestLoginStatusMiddleware_FirstLoginAllowsPasswordChange pins the allowlist:
+// a first-login user may access /api/v1/users/me/password (not blocked).
 func TestLoginStatusMiddleware_FirstLoginAllowsPasswordChange(t *testing.T) {
 	gdb := setupGateTestDB(t)
 	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('alice@x.com', '0')`).Error; err != nil {
@@ -74,8 +76,8 @@ func TestLoginStatusMiddleware_FirstLoginAllowsPasswordChange(t *testing.T) {
 	}
 }
 
-// TestLoginStatusMiddleware_NonFirstLoginPasses 钉死:已改密用户(first_login_status='1')
-// 任意路径放行。
+// TestLoginStatusMiddleware_NonFirstLoginPasses pins that a user who has already
+// changed their password (first_login_status='1') is passed through on any path.
 func TestLoginStatusMiddleware_NonFirstLoginPasses(t *testing.T) {
 	gdb := setupGateTestDB(t)
 	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('bob@x.com', '1')`).Error; err != nil {
@@ -87,7 +89,7 @@ func TestLoginStatusMiddleware_NonFirstLoginPasses(t *testing.T) {
 	}
 }
 
-// TestLoginStatusMiddleware_MissingContextAborts 钉死 fail-closed:缺 username 上下文 → 401。
+// TestLoginStatusMiddleware_MissingContextAborts pins fail-closed behavior: missing username context → 401.
 func TestLoginStatusMiddleware_MissingContextAborts(t *testing.T) {
 	gdb := setupGateTestDB(t)
 	w := runGate(t, gdb, nil, "/api/v1/users/me")

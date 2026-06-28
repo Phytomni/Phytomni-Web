@@ -16,10 +16,11 @@ import (
 	"phytomni-server/utils/errs"
 )
 
-// setupUserTestDB 建一个空的 in-memory SQLite,手写 users 最小列集并注册到全局 db
-// registry。手写 CREATE TABLE(而非 AutoMigrate User)的理由同 agent_task_test.go:
-// User 的 first_login_status 带 MySQL 专有 `type:enum` GORM tag,SQLite AutoMigrate
-// 不识别;这里只列 GetUserInfo / UnlockUser 实际读写的列。
+// setupUserTestDB opens an in-memory SQLite DB, hand-writes a minimal users
+// schema, and registers it in the global db registry. Hand-writing CREATE TABLE
+// instead of AutoMigrate(User): User.FirstLoginStatus carries a MySQL-only
+// `type:enum` GORM tag that breaks SQLite AutoMigrate. Only the columns read
+// or written by GetUserInfo / UnlockUser are included.
 func setupUserTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -52,8 +53,9 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// TestGetUserInfo_LockoutOnFifthFailure 钉死锁定阈值:第 5 次密码错误应锁定 15 分钟。
-// 没守护时,误改阈值/锁定窗口不会被任何测试发现。
+// TestGetUserInfo_LockoutOnFifthFailure pins the lockout threshold: the 5th
+// wrong password must lock the account for 15 minutes. Without this guard, a
+// threshold or window change goes undetected by any test.
 func TestGetUserInfo_LockoutOnFifthFailure(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	if err := gdb.Exec(`INSERT INTO users
@@ -80,8 +82,9 @@ func TestGetUserInfo_LockoutOnFifthFailure(t *testing.T) {
 	}
 }
 
-// TestGetUserInfo_RejectsWhileLocked 钉死:锁定窗口内即使密码正确也拒绝(命中 user.go 的
-// locked_until 提前返回分支)。
+// TestGetUserInfo_RejectsWhileLocked pins that even a correct password is
+// rejected while the lockout window is active (hits the locked_until
+// early-return branch in user.go).
 func TestGetUserInfo_RejectsWhileLocked(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	future := time.Now().Add(10 * time.Minute)
@@ -102,7 +105,8 @@ func TestGetUserInfo_RejectsWhileLocked(t *testing.T) {
 	}
 }
 
-// TestGetUserInfo_PasswordExpiryWarning 钉死 90 天密码过期提示:登录成功但带 PasswordWarning。
+// TestGetUserInfo_PasswordExpiryWarning pins the 90-day expiry warning:
+// login succeeds but the response carries a non-empty PasswordWarning.
 func TestGetUserInfo_PasswordExpiryWarning(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	old := time.Now().Add(-91 * 24 * time.Hour)
@@ -126,7 +130,8 @@ func TestGetUserInfo_PasswordExpiryWarning(t *testing.T) {
 	}
 }
 
-// TestGetUserInfo_SuccessResetsFailureCount 钉死成功登录重置 login_failed_count。
+// TestGetUserInfo_SuccessResetsFailureCount pins that a successful login
+// resets login_failed_count to zero.
 func TestGetUserInfo_SuccessResetsFailureCount(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	recent := time.Now().Add(-1 * time.Hour)
@@ -150,8 +155,9 @@ func TestGetUserInfo_SuccessResetsFailureCount(t *testing.T) {
 	}
 }
 
-// TestApiUnlockUser_RejectsNonAdmin 钉死解锁授权闸:非 admin/super_admin 操作者被拒,
-// 且目标用户保持锁定(未被越权解锁)。
+// TestApiUnlockUser_RejectsNonAdmin pins the unlock authorization gate: a
+// non-admin/super_admin operator is rejected, and the target user remains
+// locked (not unlocked by privilege escalation).
 func TestApiUnlockUser_RejectsNonAdmin(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	future := time.Now().Add(10 * time.Minute)
@@ -178,8 +184,8 @@ func TestApiUnlockUser_RejectsNonAdmin(t *testing.T) {
 	}
 }
 
-// TestApiUnlockUser_AdminUnlocks 钉死成功路径:admin 操作者把目标 locked_until 清空、
-// login_failed_count 归零。
+// TestApiUnlockUser_AdminUnlocks pins the success path: an admin operator
+// clears the target's locked_until and resets login_failed_count to zero.
 func TestApiUnlockUser_AdminUnlocks(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	future := time.Now().Add(10 * time.Minute)
@@ -210,7 +216,8 @@ func TestApiUnlockUser_AdminUnlocks(t *testing.T) {
 	}
 }
 
-// TestApiUnlockUser_SuperAdminUnlocks 钉死 super_admin 同样有权解锁(闸的第二个分支)。
+// TestApiUnlockUser_SuperAdminUnlocks pins that super_admin can also unlock
+// (the second branch in the authorization gate).
 func TestApiUnlockUser_SuperAdminUnlocks(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	future := time.Now().Add(10 * time.Minute)
@@ -364,13 +371,16 @@ func TestUpdateUserPassWord_StoresBcrypt(t *testing.T) {
 	}
 }
 
-// TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt 钉死 design §10/§274:
-// 懒升级把密码从 MD5 换成 bcrypt,但**绝不动** password_change_at —— 凭证本身没变,
-// 升级是存储格式迁移,不是改密。若动了它,90 天过期计时会被静默重置。
-// mutation:给 user.go 的升级 Update 加上 "password_change_at": time.Now() → 本测试 RED。
+// TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt pins design §10/§274:
+// lazy upgrade changes the password storage from MD5 to bcrypt but must NOT
+// touch password_change_at — the credential itself did not change; it is a
+// storage-format migration, not a password change. Touching it would silently
+// reset the 90-day expiry timer.
+// mutation: add "password_change_at": time.Now() to the upgrade Update → RED.
 func TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt(t *testing.T) {
 	gdb := setupUserTestDB(t)
-	// 固定一个非零的历史 password_change_at(40 天前,未过 90 天,不触发警告也不为 NULL)。
+	// Fixed historical password_change_at (40 days ago: under 90-day threshold,
+	// no expiry warning, non-NULL).
 	changedAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 	if err := gdb.Exec(`INSERT INTO users (id, email, password, code, password_change_at) VALUES (1, 'a@x.com', ?, 'user', ?)`,
 		utils.MD5String("goodpass"), changedAt).Error; err != nil {
@@ -396,11 +406,14 @@ func TestGetUserInfo_LazyUpgradePreservesPasswordChangeAt(t *testing.T) {
 	}
 }
 
-// TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite 钉死 design §274 的并发 no-clobber:
-// 升级用守卫 CAS(WHERE id=? AND password=登录起始读到的 MD5 值)。若另一路并发写在
-// read 与 upgrade 之间已把行改成新 bcrypt,本路 CAS 必须 RowsAffected==0、不覆盖那个新值。
-// 用 GORM After-query 回调 + sync.Once 在 users 被查出后、升级前注入一次竞争 bcrypt 写。
-// mutation:把升级 Where 改成只 "id = ?"(去掉 AND password=) → 本测试 RED(竞争写被覆盖)。
+// TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite pins design §274's
+// concurrent no-clobber: the upgrade uses a guarded CAS
+// (WHERE id=? AND password=<original MD5>) so if another concurrent write has
+// already changed the row between our read and upgrade, the CAS must produce
+// RowsAffected==0 without overwriting the newer value.
+// Uses a GORM After-query callback + sync.Once to inject a competing bcrypt
+// write between the users query and the upgrade.
+// mutation: change the upgrade Where to only "id = ?" (remove AND password=) → RED (concurrent write overwritten).
 func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (1, 'a@x.com', ?, 'user')`,
@@ -408,18 +421,19 @@ func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	// 竞争者:一个已落库的 bcrypt(代表另一并发会话的改密结果)。
+	// Competing value: a bcrypt hash representing another concurrent session's password rotation.
 	racingHash, _ := utils.HashPassword("rotated-by-someone-else")
 
 	var once sync.Once
 	cbName := "test_inject_concurrent_pw_write"
 	if err := gdb.Callback().Query().After("gorm:query").Register(cbName, func(tx *gorm.DB) {
-		// 只在查询 users 时、且仅一次:模拟竞争写恰好落在 login 的 read 与 upgrade 之间。
+		// Fire only on users queries, and only once: simulate a racing write
+		// landing between login's read and upgrade.
 		if tx.Statement == nil || tx.Statement.Table != "users" {
 			return
 		}
 		once.Do(func() {
-			// 用裸 SQL 直写,避免再次触发本回调造成递归。
+			// Use raw SQL to avoid re-triggering this callback recursively.
 			gdb.Exec(`UPDATE users SET password = ? WHERE id = 1`, racingHash)
 		})
 	}); err != nil {
@@ -440,8 +454,10 @@ func TestGetUserInfo_LazyUpgradeNoClobberOnConcurrentWrite(t *testing.T) {
 	}
 }
 
-// TestApiModifyPassword_BcryptOldVerifies 钉死 design §10:改密时旧密码已是 bcrypt
-// (用户先前已懒升级)也能正确验证并改成新 bcrypt。原有用例只覆盖 MD5 旧密码。
+// TestApiModifyPassword_BcryptOldVerifies pins design §10: when the existing
+// hash is already bcrypt (user was previously lazy-upgraded), changing the
+// password must verify the old value correctly and store the new one as bcrypt.
+// The prior test only covered an MD5 old password.
 func TestApiModifyPassword_BcryptOldVerifies(t *testing.T) {
 	gdb := setupUserTestDB(t)
 	oldHash, _ := utils.HashPassword("oldpass")
@@ -460,17 +476,19 @@ func TestApiModifyPassword_BcryptOldVerifies(t *testing.T) {
 	if ok, _, _ := utils.VerifyPassword(stored, "newpass"); !ok {
 		t.Error("stored new hash does not verify the new password")
 	}
-	// 旧密码不应再能验证(确实换了)。
+	// Old password must no longer verify after the change.
 	if ok, _, _ := utils.VerifyPassword(stored, "oldpass"); ok {
 		t.Error("old password still verifies after change")
 	}
 }
 
-// TestWriteSites_FailClosedOnHashError 钉死三个写入站点的 fail-closed:bcrypt_cost 越界
-// 使 HashPassword 报错时,注册/管理员建号/管理员重置都必须返回失败且**不写入任何行/不改密**,
-// 绝不静默落库明文或空哈希。mutation:任一站点把 `if herr != nil { return ... }` 删掉 → 对应子测试 RED。
+// TestWriteSites_FailClosedOnHashError pins fail-closed behavior at all three
+// write sites: when bcrypt_cost is out-of-range (causing HashPassword to error),
+// register/admin-create/admin-reset must all return an error and must NOT write
+// any row or overwrite the existing password with an empty or plain-text hash.
+// mutation: remove `if herr != nil { return ... }` at any site → that sub-test goes RED.
 func TestWriteSites_FailClosedOnHashError(t *testing.T) {
-	viper.Set("bcrypt_cost", 99) // 越界 → HashPassword 报错
+	viper.Set("bcrypt_cost", 99) // out of range → HashPassword errors
 	defer viper.Set("bcrypt_cost", 0)
 
 	t.Run("UserRegister", func(t *testing.T) {
@@ -501,7 +519,8 @@ func TestWriteSites_FailClosedOnHashError(t *testing.T) {
 
 	t.Run("UpdateUserPassWord", func(t *testing.T) {
 		gdb := setupUserTestDB(t)
-		// seed 一个已知 MD5,断言重置失败后密码原样不变(没被空哈希覆盖)。
+		// Seed with a known MD5; assert that a reset failure leaves the
+		// password unchanged (not overwritten with an empty hash).
 		if err := gdb.Exec(`INSERT INTO users (id, email, password, code) VALUES (7, 'u@x.com', ?, 'user')`, utils.MD5String("orig")).Error; err != nil {
 			t.Fatalf("seed: %v", err)
 		}
@@ -561,7 +580,7 @@ func setupUserTestDBWithUniqueEmail(t *testing.T) *gorm.DB {
 // message, not a raw GORM or driver error string. The unique index must be
 // present on the test DB so the second insert genuinely violates the constraint.
 // mutation: remove the errors.Is(err, gorm.ErrDuplicatedKey) branch → this
-// test goes red because the generic "用户注册失败" message is not the
+// test goes red because the generic "user registration failed" message is not the
 // duplicate-specific one being asserted.
 func TestUserRegister_DuplicateEmailFriendlyError(t *testing.T) {
 	setupUserTestDBWithUniqueEmail(t)

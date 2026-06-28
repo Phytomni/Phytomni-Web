@@ -33,9 +33,10 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 
 	var QuestionAgentLogList []*common.ApiAsyncTaskListResponse
 
-	// 归属过滤的可复用查询:用 Session 固化 user_name + 状态 + 资源条件,让 Count
-	// 和分页 Find 各自从同一组 scoped 条件克隆——既不互相污染,也不会退化成全表
-	// (跨用户列表隔离显式可读,不依赖链式实例的隐式状态)。
+	// Reusable owner-scoped query: Session freezes user_name + status + resource
+	// conditions so Count and paged Find each clone from the same scoped base —
+	// no cross-contamination and no accidental full-table scan (cross-user
+	// isolation is explicit, not reliant on implicit chain-instance state).
 	scoped := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("user_name = ?", username).
 		Where("status = ? or status = ? or status = ?", "RUNNING", "SUCCEEDED", "FAILED").
@@ -68,7 +69,8 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 
 func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (QuestionAgentLogList *model.QuestionAgentLog, err error) {
 
-	// 按 id + 归属用户查询,防止任意登录用户用可枚举的自增 id 越权读取他人任务行。
+	// Scope by id AND owner: the auto-increment id is enumerable, so without the
+	// user_name filter any authenticated user could read another user's task row.
 	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().
 		Where("id = ? and user_name = ?", id, username).First(&QuestionAgentLogList).Error; err != nil {
 		return nil, errors.New("任务不存在")
@@ -95,7 +97,6 @@ func (ps *Service) AnalystAgentGetLog(ctx context.Context, id int, name string) 
 }
 
 func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.QueryListRequest, error) {
-	// 查询主列表（f_id = 0 的记录）
 	var QuestionAgentLogList []*common.QueryListRequest
 	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", username, 0).
 		Order("created_at DESC").
@@ -106,10 +107,10 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 
 	var QADataList []*common.QueryListRequest
 	for _, v := range QuestionAgentLogList {
-		var DataList common.QueryListRequest // 改为非指针，避免 nil 问题
-		createdAt := v.CreatedAt             // 默认使用主记录的 CreatedAt
+		var DataList common.QueryListRequest // non-pointer: zero value is safe when GORM finds no record
+		createdAt := v.CreatedAt
 
-		// 查询关联的最新记录（f_id = v.Id）
+		// latest child record for this parent
 		err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("f_id = ? AND delete_at IS NULL", v.Id).
 			Order("created_at DESC").
 			Limit(1).
@@ -117,7 +118,7 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				log.Printf("No record found for f_id=%d", v.Id) // 显式记录
+				log.Printf("No record found for f_id=%d", v.Id)
 			} else {
 				return nil, err
 			}
@@ -131,11 +132,10 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 			Id:         v.Id,
 			DialogueId: v.DialogueId,
 			TitleQuery: v.TitleQuery,
-			CreatedAt:  createdAt, // 动态赋值
+			CreatedAt:  createdAt,
 		}
 		QADataList = append(QADataList, QAData)
 	}
-	// 按照 CreatedAt 从最新到最晚排序
 	sort.Slice(QADataList, func(i, j int) bool {
 		return QADataList[i].CreatedAt.After(QADataList[j].CreatedAt)
 	})
@@ -145,9 +145,11 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 
 func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.QuestionAgentLog, err error) {
 	var QuestionAgentLog *model.QuestionAgentLog
-	// First() 在没匹配时给出 ErrRecordNotFound,但 QuestionAgentLog 仍是 &{Id:0} 空结构;
-	// 若直接接着用 QuestionAgentLog.Id 查 children,会以 f_id=0 (parent 约定值) 误匹配所有 dialogue 的根行。
-	// Defensive guard:RecordNotFound 视为"新对话",返回空 list;其他错误上抛。
+	// First() returns ErrRecordNotFound when there is no match but still fills the
+	// struct with &{Id:0}; if that Id were used to query children, f_id=0 (the
+	// parent-row sentinel) would match every root row across all dialogues.
+	// Defensive guard: treat RecordNotFound as a new/empty dialogue and return nil;
+	// propagate all other errors.
 	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("user_name = ? and dialogue_id = ?", username, dialogueId).First(&QuestionAgentLog).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -161,24 +163,18 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("user_name = ? and f_id = ? and delete_at IS NULL", username, QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error; err != nil {
 		return nil, err
 	}
-	// 创建一个新的切片，将 QuestionAgentLog 放在首位
 	newList := make([]*model.QuestionAgentLog, 0, len(QuestionAgentLogList)+1)
 	newList = append(newList, QuestionAgentLog)
 	newList = append(newList, QuestionAgentLogList...)
 	QuestionAgentLogList = newList
 
-	// Bot 是内容 source of truth:网关激活时用 Bot 内容覆盖 MySQL 过渡字段,
-	// 保留 Web-only 的 id / reaction_type / upload_path。proxy_enabled=false
-	// 或 Bot 不可达时维持 MySQL legacy 字段(降级,不报错),与切流前行为一致。
+	// Bot is the content source of truth when the gateway is active: overlay MySQL
+	// transition fields with Bot content, leaving Web-only fields (id,
+	// reaction_type, upload_path) intact. proxy_enabled=false or Bot unreachable
+	// falls back to MySQL legacy fields (degrade, not error).
 	if rxBot.BotConfig != nil && rxBot.BotConfig.ProxyEnabled {
 		ps.overlayBotContent(ctx, dialogueId, QuestionAgentLogList)
 	}
-	//todo: 将有obs下载路径的回答进行替换展示,逻辑待定
-	//for _, v := range QuestionAgentLogList {
-	//	if v.DownloadPath != "" && v.ToolName == "AnalysisAgent" {
-	//		v.Answer = v.DownloadPath
-	//	}
-	//}
 	return
 }
 
@@ -200,7 +196,6 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 	}
 	resp, err := rxBot.NewClient().ListRuns(ctx, dialogueId)
 	if err != nil {
-		// 降级:回落 legacy 字段(语义不变);Bot 读路径失败记 warn 日志以便观测/告警。
 		rxLog.Sugar().Warnw("answer-check bot list runs failed, using legacy fields", "dialogue_id", dialogueId, "err", err)
 		return
 	}

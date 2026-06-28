@@ -19,8 +19,9 @@ import (
 	"phytomni-server/middleware"
 )
 
-// buildChatGateEnv 搭建真实 Api() 路由 + miniredis + SQLite,users 表包含
-// CheckChatAllowed 所需的 code / chat_limit 列。每个测试独立调用以避免状态串联。
+// buildChatGateEnv wires a real Api() router + miniredis + SQLite with the
+// minimal users table columns CheckChatAllowed reads (code / chat_limit).
+// Each test calls this independently to prevent state leakage.
 func buildChatGateEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -57,8 +58,9 @@ func buildChatGateEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 		sqlDB.SetMaxOpenConns(1)
 	}
 
-	// users: 含 CheckChatAllowed 读取的 code / chat_limit 以及 AuthMiddleware /
-	// LoginStatusMiddleware 所需的 first_login_status / password_change_at。
+	// users: includes code / chat_limit (read by CheckChatAllowed) plus
+	// first_login_status / password_change_at (needed by AuthMiddleware /
+	// LoginStatusMiddleware).
 	if err := gdb.Exec(`CREATE TABLE users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		email TEXT,
@@ -70,7 +72,7 @@ func buildChatGateEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 		t.Fatalf("create users: %v", err)
 	}
 
-	// user_operation_logs: OperationLog 中间件在成功响应后写审计行。
+	// user_operation_logs: OperationLog middleware writes an audit row after each successful response.
 	if err := gdb.Exec(`CREATE TABLE user_operation_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id INTEGER,
@@ -96,8 +98,9 @@ func buildChatGateEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 	return engine, gdb
 }
 
-// queryRequest 向 /api/v1/conversations/0/messages 发送带 token 的 multipart POST,
-// 携带最小合法 body(query 字段非空),返回 HTTP 状态码。
+// queryRequest sends an authenticated multipart POST to
+// /api/v1/conversations/0/messages with a minimal valid body (non-empty query
+// field) and returns the HTTP status code.
 func queryRequest(engine *gin.Engine, token string) int {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -112,16 +115,16 @@ func queryRequest(engine *gin.Engine, token string) int {
 	return w.Code
 }
 
-// TestE2E_ChatGate_EnforceOn_ZeroLimit 验证闸接线:enforce=ON,code='user',
-// chat_limit=0 → /query 返回 403(额度耗尽)。
-// 变异守卫:如果删除 Query 中的 CheckChatAllowed 调用,该测试无 403 → 变红。
+// TestE2E_ChatGate_EnforceOn_ZeroLimit pins gate wiring: enforce=ON, code='user',
+// chat_limit=0 → /query returns 403 (quota exhausted).
+// Mutation guard: removing the CheckChatAllowed call in Query eliminates the 403 → red.
 func TestE2E_ChatGate_EnforceOn_ZeroLimit(t *testing.T) {
 	engine, gdb := buildChatGateEnv(t)
 
 	viper.Set("chatlimit.enforce", true)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", nil) })
 
-	// 插入 chat_limit=0 的普通用户(first_login_status='1' 通过 LoginStatusMiddleware)
+	// regular user with chat_limit=0 (first_login_status='1' passes LoginStatusMiddleware)
 	gdb.Exec(`INSERT INTO users (email, code, chat_limit, first_login_status) VALUES ('inert@x.com', 'user', 0, '1')`)
 
 	tok, err := middleware.GenerateToken("inert@x.com")
@@ -135,9 +138,10 @@ func TestE2E_ChatGate_EnforceOn_ZeroLimit(t *testing.T) {
 	}
 }
 
-// TestE2E_ChatGate_EnforceOn_FundedUser 验证 chat_limit=5 用户不被闸拒:
-// 响应不是 403——允许请求继续(可能因 Bot 未启动而得其他错误码,但非闸拒绝)。
-// 变异守卫:如果闸误拒 chat_limit>0 的用户,该测试变红。
+// TestE2E_ChatGate_EnforceOn_FundedUser pins that a chat_limit=5 user is not
+// blocked by the gate: response is not 403 — request proceeds (may fail with
+// another status if Bot is not running, but not a gate rejection).
+// Mutation guard: if the gate incorrectly rejects chat_limit>0 users → red.
 func TestE2E_ChatGate_EnforceOn_FundedUser(t *testing.T) {
 	engine, gdb := buildChatGateEnv(t)
 
@@ -157,9 +161,9 @@ func TestE2E_ChatGate_EnforceOn_FundedUser(t *testing.T) {
 	}
 }
 
-// TestE2E_ChatGate_EnforceOff_ZeroLimit 验证暗发布默认状态:enforce=OFF 时,
-// chat_limit=0 用户不因闸得 403(零回归)。
-// 变异守卫:如果 enforce 短路被删除,该测试变红。
+// TestE2E_ChatGate_EnforceOff_ZeroLimit pins the dark-launch default: when
+// enforce=OFF, a chat_limit=0 user must not get a 403 from the gate (zero regression).
+// Mutation guard: if the enforce short-circuit is removed → red.
 func TestE2E_ChatGate_EnforceOff_ZeroLimit(t *testing.T) {
 	engine, gdb := buildChatGateEnv(t)
 

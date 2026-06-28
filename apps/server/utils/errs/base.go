@@ -10,7 +10,7 @@ const FailedCode = 10001
 
 var (
 
-	// Failed 操作失败
+	// Failed is the generic operation-failure error.
 	Failed = &Err{
 		code:     FailedCode,
 		httpCode: 200,

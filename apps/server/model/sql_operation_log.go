@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// SqlOperationLog SQL操作日志表
+// SqlOperationLog is the SQL operation audit-log table.
 type SqlOperationLog struct {
 	Id            int64     `gorm:"column:id;primaryKey;autoIncrement;comment:主键ID" json:"id"`
 	UserId        int64     `gorm:"column:user_id;comment:用户ID" json:"user_id"`

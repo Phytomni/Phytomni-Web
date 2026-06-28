@@ -19,11 +19,13 @@ func NewSqlLogger(l logger.Interface) *SqlLogger {
 	return &SqlLogger{Interface: l}
 }
 
-// ParamsFilter 转发到底层 logger 的 ParamsFilter。
-// GORM 在 callbacks.go 里对 db.Logger（即本 *SqlLogger）做 ParamsFilter 类型断言，
-// 但内嵌的 logger.Interface 方法集不含 ParamsFilter，断言会失败、参数化形同虚设。
-// 这里显式实现并转发：底层 logger 开启 ParameterizedQueries 时返回 nil vars，
-// 使 sql_content 落库为 ?, ? 占位符而非明文字面值。
+// ParamsFilter forwards to the underlying logger's ParamsFilter. GORM type-asserts
+// db.Logger (this *SqlLogger) to gorm.ParamsFilter in callbacks.go, but the
+// embedded logger.Interface method set does not include ParamsFilter, so the
+// assertion would fail and parameterization would be a no-op. This explicit
+// implementation forwards the call so ParameterizedQueries=true causes the
+// underlying logger to return nil vars, storing "?, ?" placeholders in
+// sql_content instead of plaintext literal values.
 func (l *SqlLogger) ParamsFilter(ctx context.Context, sql string, params ...interface{}) (string, []interface{}) {
 	if filter, ok := l.Interface.(gorm.ParamsFilter); ok {
 		return filter.ParamsFilter(ctx, sql, params...)
@@ -31,45 +33,36 @@ func (l *SqlLogger) ParamsFilter(ctx context.Context, sql string, params ...inte
 	return sql, params
 }
 
-// LogMode 实现 gorm/logger.Interface 的 LogMode 方法
-// 这一步非常关键，因为 service 层经常使用 .Debug()，它会调用 LogMode。
-// 如果不重写此方法，.Debug() 会返回底层的 logger 实例，导致我们的 Trace 钩子丢失。
+// LogMode implements gorm/logger.Interface. This override is critical: the
+// service layer frequently calls .Debug(), which calls LogMode. Without it,
+// .Debug() would return the underlying logger instance and our Trace hook
+// would be lost.
 func (l *SqlLogger) LogMode(level logger.LogLevel) logger.Interface {
 	newLogger := l.Interface.LogMode(level)
 	return &SqlLogger{Interface: newLogger}
 }
 
-// Trace 实现 gorm/logger.Interface
 func (l *SqlLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	// 1. 执行原有的日志逻辑 (比如打印到控制台)
 	l.Interface.Trace(ctx, begin, fc, err)
 
-	// 2. 获取 SQL 和执行结果
 	sqlStr, _ := fc()
 	elapsed := time.Since(begin)
 
-	// 3. 异步记录到数据库
-	// 注意：必须异步，否则会阻塞主业务，且如果在事务中可能会有问题
-	// 但为了确保 Context 中的值还能取到，我们需要提取值
-	// 如果 Context 是 gin.Context，在异步中可能不安全，所以要先取值
-
+	// Must be async: sync would block the main goroutine and could deadlock
+	// inside a transaction. Extract context values now — gin.Context is not
+	// safe to access from a different goroutine after the handler returns.
 	userId := ctx.Value("user_id")
-	userEmail := ctx.Value("username") // jwt 中设置的是 "username"
-
-	// 如果没有用户信息，且不是特定操作，可能不记录？
-	// 用户要求记录数据库操作记录且要正确记录是哪个用户
-	// 如果无法获取用户，也应该记录，只是 user_id 为空
+	userEmail := ctx.Value("username") // JWT middleware stores the email as "username"
 
 	go func(uid, email interface{}, sql string, duration time.Duration, err error) {
-		// 简单的 SQL 解析
 		opType, tableName := parseSql(sql)
 
-		// 过滤掉日志表本身的操作，防止死循环
+		// Skip inserts into the audit tables themselves to prevent infinite recursion.
 		if tableName == "sql_operation_logs" || tableName == "user_operation_logs" {
 			return
 		}
 
-		// 过滤掉 SELECT 1 等心跳包
+		// Skip heartbeat queries (SELECT 1, etc.).
 		if tableName == "" && strings.Contains(sql, "SELECT 1") {
 			return
 		}
@@ -92,8 +85,7 @@ func (l *SqlLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql s
 
 		emailStr, _ := email.(string)
 
-		// 构造日志对象 (这里不能引用 model 包，因为 model 引用了 db 包，会导致循环依赖)
-		// 所以使用 map 或者定义局部结构体
+		// Cannot import model here (model imports db → cycle); use a map instead.
 		logEntry := map[string]interface{}{
 			"user_id":        uidInt,
 			"user_email":     emailStr,
@@ -106,8 +98,9 @@ func (l *SqlLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql s
 			"created_at":     time.Now(),
 		}
 
-		// 写入审计行；插入失败不再静默丢弃,经 zap 上报使缺表/掉库可观测。
-		// zap 不产生 SQL,故在 SQL logger 内部调用它不会再次触发 Trace 递归。
+		// Write the audit row; failures are no longer silently dropped — zap
+		// surfaces a missing table or dead DB. Zap produces no SQL, so calling
+		// it inside the SQL logger cannot re-enter Trace recursively.
 		if werr := writeSQLAuditLog(logEntry); werr != nil {
 			rxLog.Sugar().Warnw("sql audit log insert failed",
 				"table", tableName, "op", opType, "err", werr)
@@ -131,7 +124,6 @@ func writeSQLAuditLog(logEntry map[string]interface{}) error {
 		Create(logEntry).Error
 }
 
-// parseSql 简单的 SQL 解析
 func parseSql(sql string) (opType string, tableName string) {
 	sql = strings.TrimSpace(sql)
 	upperSql := strings.ToUpper(sql)
@@ -172,7 +164,6 @@ func parseSql(sql string) (opType string, tableName string) {
 		opType = "OTHER"
 	}
 
-	// 去除可能存在的反引号
 	tableName = strings.Trim(tableName, "`\"")
 	return
 }

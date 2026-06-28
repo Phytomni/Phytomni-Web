@@ -157,9 +157,11 @@ func TestUserEpoch_TTLExpiry(t *testing.T) {
 	}
 }
 
-// 一个 down-but-not-refused 的 Redis(tarpit:接受连接但永不回包)会让每次 op
-// 阻塞在读上。带 80ms per-op 超时 → 调用快速 fail-open;去掉超时包装 → 阻塞到
-// 客户端 ReadTimeout(此处 2s)→ 本测的延迟上界断言 RED。这是"删超时包装"的变异杀手。
+// A down-but-not-refused Redis (a tarpit: accepts the connection but never
+// replies) would block every op on the read. With the 80ms per-op timeout the
+// call fails open quickly; remove the timeout wrapper and it blocks until the
+// client ReadTimeout (2s here), making this latency-bound assertion RED. This is
+// the mutation killer for "remove the timeout wrapper".
 func TestRevocation_OpTimeoutBoundsLatency(t *testing.T) {
 	resetFailOpenForTest()
 	startMiniredisRaw(t)
@@ -177,14 +179,14 @@ func TestRevocation_OpTimeoutBoundsLatency(t *testing.T) {
 			if err != nil {
 				return
 			}
-			_ = conn // 持住连接,永不读写
+			_ = conn // hold the connection, never read/write
 		}
 	}()
 	tarpit := redis.NewClient(&redis.Options{
 		Addr:        lis.Addr().String(),
 		ReadTimeout: 2 * time.Second,
 		DialTimeout: time.Second,
-		MaxRetries:  -1, // 关闭重试,使变异版耗时有界(~2s)
+		MaxRetries:  -1, // disable retries so the mutated version stays time-bounded (~2s)
 	})
 	clients[defaultName] = tarpit
 	t.Cleanup(func() { tarpit.Close(); clients = nil })

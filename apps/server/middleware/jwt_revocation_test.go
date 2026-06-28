@@ -160,27 +160,27 @@ func TestAuthMiddleware_EpochRevokesLegacyIatZero(t *testing.T) {
 	}
 }
 
-// TestAuthMiddleware_FreshTokenAfterPasswordChangeNotRevokedByFloor 复现 C1 bug:
-// 密码修改后 5s 内重登,恢复 token 的 iat=now-60s < floor=now-5s,旧逻辑会 401。
-// 修复后 floor-60s 阈值低于 iat,应返回 200。
+// TestAuthMiddleware_FreshTokenAfterPasswordChangeNotRevokedByFloor reproduces C1 bug:
+// re-login within 5s of a password change yields a token with iat=now-60s < floor=now-5s;
+// the old logic would return 401. After the fix, floor-60s is below iat, so 200 is expected.
 func TestAuthMiddleware_FreshTokenAfterPasswordChangeNotRevokedByFloor(t *testing.T) {
 	r, _, gdb := setupRevocationEnv(t)
-	// password_change_at = 5s ago;无 Redis epoch(NULL 行)。
+	// password_change_at = 5s ago; no Redis epoch (NULL row).
 	changeAt := time.Now().Add(-5 * time.Second)
 	gdb.Exec(`INSERT INTO users (id, email, password_change_at) VALUES (1, 'alice@x.com', ?)`, changeAt)
-	// 恢复 token:iat = now-60s(GenerateToken 后退 iatSkew),但 token 签发于 changeAt 之后。
+	// fresh token: iat = now-60s (GenerateToken subtracts iatSkew), but issued after changeAt.
 	auth := bearer(t, "alice@x.com")
 	if code := do(r, auth); code != 200 {
 		t.Fatalf("fresh token after password change (floor layer): want 200, got %d — C1 lockout not fixed", code)
 	}
 }
 
-// TestAuthMiddleware_FreshTokenAfterPasswordChangeNotRevokedByEpoch 复现 C1 bug:
-// epoch 设为 5s 前,恢复 token iat=now-60s,旧逻辑会 401。
-// 修复后 epoch-60s 阈值低于 iat,应返回 200。
+// TestAuthMiddleware_FreshTokenAfterPasswordChangeNotRevokedByEpoch reproduces C1 bug:
+// epoch set 5s ago, fresh token iat=now-60s; old logic returned 401.
+// After the fix, epoch-60s is below iat, so 200 is expected.
 func TestAuthMiddleware_FreshTokenAfterPasswordChangeNotRevokedByEpoch(t *testing.T) {
 	r, _, gdb := setupRevocationEnv(t)
-	// NULL password_change_at;epoch = 5s ago。
+	// NULL password_change_at; epoch = 5s ago.
 	gdb.Exec(`INSERT INTO users (id, email) VALUES (1, 'alice@x.com')`)
 	if err := rxCache.SetUserEpoch(testCtx(), "alice@x.com", time.Now().Add(-5*time.Second), time.Hour); err != nil {
 		t.Fatalf("epoch: %v", err)

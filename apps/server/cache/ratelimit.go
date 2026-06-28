@@ -5,19 +5,26 @@ import (
 	"time"
 )
 
-// rateLimitOpTimeout 限定单次限流 Redis 操作的最长耗时:登录是同步热路径,"慢但活"
-// 的 Redis 不应拖垮它——超时即 fail-open 放行(G 加固)。切勿设到 sub-RTT(会让
-// 健康 Redis 也静默 no-op,把限流器变摆设);80ms 远大于本地/同机房 RTT,只在
-// Redis 真卡时触发。
+// rateLimitOpTimeout caps the maximum duration of a single rate-limit Redis
+// operation. Login is a synchronous hot path — a slow-but-alive Redis must not
+// stall it; timeout triggers fail-open (pass-through). Do not set this below
+// the RTT: a sub-RTT value would silently no-op on a healthy Redis and turn
+// the rate limiter into a no-op. 80ms is well above local / same-datacenter RTT
+// and only fires when Redis is truly stuck.
 const rateLimitOpTimeout = 80 * time.Millisecond
 
-// Allow 对 key 在 window 窗口内做固定窗口计数,返回本次请求是否在 limit 之内。
-// fail-open(镜像 revocation.go):nil client / Redis error / 超时 → 记一次
-// ObserveFailOpen(path) 并返回 true(放行)。只有 Redis 活且 count>limit 才返回 false。
+// Allow performs a fixed-window count for key within window and returns whether
+// this request is within limit.
 //
-// 原子建桶:SetNX(key,0,window) 仅在 key 不存在时连同 TTL 一起写,故计数 key 永远
-// 带 TTL——绝不会出现"无 TTL 的 key 永久封死某身份"(那会把 fail-open 限流器变成
-// 意外 fail-closed)。窗口随该身份在窗口内的首个请求开始。
+// fail-open (mirrors revocation.go): nil client / Redis error / timeout records
+// one ObserveFailOpen(path) and returns true (pass-through). false is only
+// returned when Redis is live and count > limit.
+//
+// Atomic bucket creation: SetNX(key, 0, window) writes the key with a TTL only
+// when it does not already exist, so a count key always has a TTL — there is no
+// way to get a key without a TTL that permanently locks out an identity (which
+// would turn a fail-open rate limiter into an accidental fail-closed one). The
+// window starts on the first request from that identity within the window.
 func Allow(ctx context.Context, path, key string, limit int64, window time.Duration) bool {
 	c := Client(defaultName)
 	if c == nil {

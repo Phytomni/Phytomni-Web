@@ -45,24 +45,28 @@ func resetFailOpenForTest() {
 	warnMu.Unlock()
 }
 
-// rateLimitBlocked 记录被限流中间件以 429 拦下的请求数(仅"确认超限",不含
-// Redis-down 的 fail-open 放行——后者计入 failOpenCount)。与 failOpenCount 同构
-// (atomic + getter + /readyz 字段),便于运维区分"限流真触发"与"Redis 挂降级"。
+// rateLimitBlocked counts requests blocked with 429 by the rate-limit middleware
+// (confirmed over-limit only; Redis-down fail-open pass-throughs count in
+// failOpenCount instead). Same structure as failOpenCount (atomic + getter +
+// /readyz field) so ops can distinguish "rate limit truly fired" from "Redis down".
 var rateLimitBlocked int64
 
-// ObserveRateLimitBlocked 在限流中间件确认超限、返回 429 时调用。
+// ObserveRateLimitBlocked is called by the rate-limit middleware when it
+// confirms an over-limit request and returns 429.
 func ObserveRateLimitBlocked() { atomic.AddInt64(&rateLimitBlocked, 1) }
 
-// RateLimitBlockedCount 返回进程启动以来被限流拦下的请求总数(/readyz 暴露)。
+// RateLimitBlockedCount returns the total number of requests rate-limited since
+// process start (exposed via /readyz).
 func RateLimitBlockedCount() int64 { return atomic.LoadInt64(&rateLimitBlocked) }
 
-// obsCacheHit 记录 OBS 列举缓存的真命中数(仅命中,不含 miss/fail-open)。与
-// failOpenCount/rateLimitBlocked 同构(atomic + getter + /readyz 字段),供运维判断
-// 缓存有效性与 TTL 调优。
+// obsCacheHit counts genuine OBS listing cache hits (hits only; misses and
+// fail-opens are not counted here). Same structure as failOpenCount and
+// rateLimitBlocked so ops can assess cache effectiveness and tune TTLs.
 var obsCacheHit int64
 
-// ObserveObsCacheHit 在 GetObsKeys 命中时调用。
+// ObserveObsCacheHit is called by GetObsKeys on a cache hit.
 func ObserveObsCacheHit() { atomic.AddInt64(&obsCacheHit, 1) }
 
-// ObsCacheHitCount 返回进程启动以来的 OBS 列举缓存命中总数(/readyz 暴露)。
+// ObsCacheHitCount returns the total OBS listing cache hits since process start
+// (exposed via /readyz).
 func ObsCacheHitCount() int64 { return atomic.LoadInt64(&obsCacheHit) }

@@ -11,8 +11,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupOperationLogDB 建一个含 users(操作员鉴权)+ user_operation_logs(审计表)
-// 的 in-memory SQLite,用于验证 operation-log 端点的管理员鉴权边界。
+// setupOperationLogDB opens an in-memory SQLite with users (operator auth) +
+// user_operation_logs (audit table), used to verify the admin-only authorization
+// boundary on the operation-log endpoint.
 func setupOperationLogDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -36,7 +37,7 @@ func setupOperationLogDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// 普通登录用户调用 → ErrOperationLogForbidden,且一行审计记录都拿不到。
+// A normal logged-in user → ErrOperationLogForbidden, and not a single audit row is returned.
 func TestApiGetOperationLogs_DeniesNonAdmin(t *testing.T) {
 	gdb := setupOperationLogDB(t)
 	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES (1, 'alice@example.com', 'user')`).Error; err != nil {
@@ -56,7 +57,7 @@ func TestApiGetOperationLogs_DeniesNonAdmin(t *testing.T) {
 	}
 }
 
-// 未知操作员(token 用户在 users 查不到)同样拒绝,不暴露审计数据。
+// An unknown operator (token user not found in users) is also denied, exposing no audit data.
 func TestApiGetOperationLogs_DeniesUnknownOperator(t *testing.T) {
 	setupOperationLogDB(t)
 	ps := NewService()
@@ -65,7 +66,7 @@ func TestApiGetOperationLogs_DeniesUnknownOperator(t *testing.T) {
 	}
 }
 
-// 管理员调用 → 放行;空 user_ids 返回全部记录。
+// An admin → allowed; empty user_ids returns all rows.
 func TestApiGetOperationLogs_AllowsAdmin(t *testing.T) {
 	gdb := setupOperationLogDB(t)
 	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES (1, 'root@example.com', 'super_admin')`).Error; err != nil {
