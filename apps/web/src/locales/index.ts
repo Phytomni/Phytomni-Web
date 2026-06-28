@@ -1,10 +1,4 @@
-/*
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-06-17
- * @Description: 国际化配置入口文件
- * 既往不恋！当下不杂！！未来不迎！！！
- */
+// i18n configuration entry point.
 import { createI18n } from "vue-i18n";
 import enUS from "./langs/en-US";
 import zhCN from "./langs/zh-CN";
@@ -12,10 +6,10 @@ import elementEnLocale from "element-plus/es/locale/lang/en";
 import elementZhLocale from "element-plus/es/locale/lang/zh-cn";
 import { useAppStore } from "@/stores";
 
-// 定义支持的语言类型
+// Supported locales
 type SupportedLocales = "zh-CN" | "en-US";
 
-// 语言包
+// Message bundles
 const messages = {
   "en-US": {
     ...enUS,
@@ -27,23 +21,20 @@ const messages = {
   },
 };
 
-// 创建 i18n 实例vue-i18n
+// Create the vue-i18n instance
 export const i18n = createI18n({
-  legacy: false, // 使用组合式API
-  locale: localStorage.getItem("language") || "en-US", // 默认语言
-  fallbackLocale: "en-US", // 回退语言
+  legacy: false, // use the composition API
+  locale: localStorage.getItem("language") || "en-US", // default locale
+  fallbackLocale: "en-US", // fallback locale
   messages,
-  // silentTranslationWarn: true, // 禁用翻译警告
-  // missingWarn: false, // 禁用缺失警告
-  // silentFallbackWarn: true, // 禁用回退警告
 
-  // 添加以下配置用于调试
+  // Debug-oriented warning config
   missingWarn: true,
   fallbackWarn: true,
   silentTranslationWarn: false,
 });
 
-// 切换语言方法
+// Switch language
 export function setLanguage(lang: SupportedLocales) {
   try {
     if (i18n.mode === "legacy") {
@@ -52,15 +43,15 @@ export function setLanguage(lang: SupportedLocales) {
       (i18n.global.locale as any).value = lang;
     }
 
-    // 更新store中的语言设置
+    // Update the language in the store
     const appStore = useAppStore();
     appStore.setLanguage(lang);
 
-    // 设置Element Plus的语言
+    // Set the Element Plus locale
     const htmlEl = document.documentElement;
     htmlEl.setAttribute("lang", lang);
 
-    // 添加调试信息
+    // Debug logging
     console.log("Language changed:", {
       lang,
       localStorage: localStorage.getItem("language"),
@@ -75,7 +66,7 @@ export function setLanguage(lang: SupportedLocales) {
   }
 }
 
-// 获取当前语言
+// Get current locale
 export function getLanguage(): SupportedLocales {
   return (i18n.global.locale as any).value as SupportedLocales;
 }

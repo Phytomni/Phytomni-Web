@@ -4,8 +4,9 @@ import { createPinia, setActivePinia, type Pinia } from "pinia";
 import LangSwitch from "@/components/LangSwitch.vue";
 import { useAppStore } from "@/stores";
 
-// 每个测试持一份 pinia,既 setActivePinia 用于 useAppStore() 直读,
-// 又作为 mount() 的全局插件传给组件 —— 两边共享同一份 store。
+// Each test holds one pinia: setActivePinia uses it for direct useAppStore() reads,
+// and it is also passed to the component as mount()'s global plugin — both sides
+// share the same store.
 let pinia: Pinia;
 
 vi.mock("@/locales", async () => {

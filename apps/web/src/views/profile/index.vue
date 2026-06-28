@@ -7,7 +7,7 @@
       </div>
 
       <div class="profile-sections">
-        <!-- 基本信息 -->
+        <!-- Basic info -->
         <div class="profile-section">
           <div class="section-header">
             <h3>{{ $t("profile.basicInfo.title") }}</h3>
@@ -43,7 +43,7 @@
           </div>
         </div>
 
-        <!-- 账户安全 -->
+        <!-- Account security -->
         <div class="profile-section">
           <div class="section-header">
             <h3>{{ $t("profile.security.title") }}</h3>
@@ -80,7 +80,7 @@
           </div>
         </div>
 
-        <!-- 使用统计 -->
+        <!-- Usage statistics -->
         <div class="profile-section">
           <div class="section-header">
             <h3>{{ $t("profile.usage.title") }}</h3>
@@ -107,7 +107,7 @@
       </div>
     </div>
 
-    <!-- 修改密码对话框 -->
+    <!-- Change password dialog -->
     <el-dialog
       v-model="passwordDialogVisible"
       :title="$t('profile.security.changePassword')"
@@ -185,10 +185,10 @@ const { t } = useI18n();
 const router = useRouter();
 const UserStore = userStore();
 
-// 响应式数据
+// Reactive data
 const passwordDialogVisible = ref(false);
 
-// 基本信息表单
+// Basic info form
 const basicInfoForm = reactive({
   username: "",
   email: "",
@@ -197,23 +197,23 @@ const basicInfoForm = reactive({
   position: "",
 });
 
-// 密码表单
+// Password form
 const passwordForm = reactive({
   oldPassword: "",
   newPassword: "",
   confirmPassword: "",
 });
 
-// 使用统计
+// Usage statistics
 const usageStats = reactive({
   totalChats: 0,
   lastLogin: "--",
 });
 
-// 表单引用
+// Form reference
 const passwordFormRef = ref();
 
-// 新密码强度验证函数 - 验证密码是否满足复杂度要求
+// New-password strength validation function - checks the password meets complexity requirements
 const validateNewPasswordStrength = (
   rule: any,
   value: string,
@@ -224,37 +224,37 @@ const validateNewPasswordStrength = (
     return;
   }
 
-  // 至少8位
+  // At least 8 characters
   if (value.length < 8) {
     callback(new Error(t("user.validation.passwordMinLength8")));
     return;
   }
 
-  // 最多16位
+  // At most 16 characters
   if (value.length > 16) {
     callback(new Error(t("user.validation.passwordMaxLength16")));
     return;
   }
 
-  // 包含大写字母
+  // Must contain an uppercase letter
   if (!/[A-Z]/.test(value)) {
     callback(new Error(t("user.validation.passwordNeedUppercase")));
     return;
   }
 
-  // 包含小写字母
+  // Must contain a lowercase letter
   if (!/[a-z]/.test(value)) {
     callback(new Error(t("user.validation.passwordNeedLowercase")));
     return;
   }
 
-  // 包含数字
+  // Must contain a digit
   if (!/[0-9]/.test(value)) {
     callback(new Error(t("user.validation.passwordNeedNumber")));
     return;
   }
 
-  // 包含特殊符号
+  // Must contain a special character
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
     callback(new Error(t("user.validation.passwordNeedSpecial")));
     return;
@@ -263,7 +263,7 @@ const validateNewPasswordStrength = (
   callback();
 };
 
-// 密码验证规则
+// Password validation rules
 const passwordRules = {
   oldPassword: [
     {
@@ -301,7 +301,7 @@ const passwordRules = {
   ],
 };
 
-// 获取权限标签类型
+// Get the permission tag type
 const getPermissionTagType = (permission: string) => {
   switch (permission) {
     case "admin":
@@ -313,16 +313,16 @@ const getPermissionTagType = (permission: string) => {
   }
 };
 
-// 修改密码
+// Change password
 const changePassword = () => {
   passwordDialogVisible.value = true;
-  // 重置表单
+  // Reset the form
   passwordForm.oldPassword = "";
   passwordForm.newPassword = "";
   passwordForm.confirmPassword = "";
 };
 
-// 处理密码修改
+// Handle password change
 const handlePasswordChange = async () => {
   if (!passwordFormRef.value) return;
   await passwordFormRef.value.validate(async (valid: boolean) => {
@@ -335,8 +335,8 @@ const handlePasswordChange = async () => {
       if (response.code === 200) {
         passwordDialogVisible.value = false;
         ElMessage.success(t("profile.passwordChangeSuccess"));
-        // 改密成功 → 强制 logout 与 /change-password 路由语义对齐
-        // (防老 JWT 在新密码生效后继续可用)。
+        // Password change succeeded -> force logout to align with /change-password route semantics
+        // (prevents an old JWT from staying usable after the new password takes effect).
         await UserStore.FedLogOut().finally(() => router.replace("/login"));
       } else {
         ElMessage.error(
@@ -344,7 +344,7 @@ const handlePasswordChange = async () => {
         );
       }
     } catch (error: any) {
-      console.error("密码修改失败:", error);
+      console.error("Failed to change password:", error);
       ElMessage.warning(
         error?.response?.data?.message || t("profile.passwordChangeFailed")
       );
@@ -352,7 +352,7 @@ const handlePasswordChange = async () => {
   });
 };
 
-// 格式化日期时间
+// Format the date and time
 const formatDateTime = (dateStr: string | null): string => {
   if (!dateStr) return "--";
   try {
@@ -368,7 +368,7 @@ const formatDateTime = (dateStr: string | null): string => {
   }
 };
 
-// 获取用户信息
+// Fetch user info
 const fetchUserInfo = async () => {
   try {
     const email = UserStore.name;
@@ -381,26 +381,26 @@ const fetchUserInfo = async () => {
     if (res.code === 200 && res.data) {
       const data = res.data;
 
-      // 填充基本信息
+      // Populate basic info
       basicInfoForm.username = data.email || "";
       basicInfoForm.email = data.email || "";
       basicInfoForm.phone = data.phone || "";
       basicInfoForm.organization = data.organization || "";
       basicInfoForm.position = data.position || "";
 
-      // 填充使用统计
+      // Populate usage statistics
       usageStats.totalChats = data.dialogue_count || 0;
       usageStats.lastLogin = formatDateTime(data.last_login_at);
     } else {
       ElMessage.error(res.message || t("profile.fetchUserInfoFailed"));
     }
   } catch (error) {
-    console.error("获取用户信息失败:", error);
+    console.error("Failed to fetch user info:", error);
     ElMessage.error(t("profile.fetchUserInfoError"));
   }
 };
 
-// 组件挂载时获取数据
+// Fetch data when the component mounts
 onMounted(() => {
   fetchUserInfo();
 });
@@ -561,7 +561,7 @@ onMounted(() => {
   gap: 12px;
 }
 
-// 响应式设计
+// Responsive design
 @media (max-width: 768px) {
   .profile-container {
     padding: 16px;
@@ -625,7 +625,7 @@ onMounted(() => {
   }
 }
 
-// 深色模式适配
+// Dark mode adaptation
 .theme-dark .profile-container {
   background-color: var(--color-background);
 }
@@ -698,7 +698,7 @@ onMounted(() => {
   }
 }
 
-// 深色模式下对话框样式适配
+// Dialog style adaptation in dark mode
 .theme-dark :deep(.el-dialog) {
   background-color: var(--color-background-card);
   border: 1px solid var(--color-border);
@@ -712,7 +712,7 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
-// 输入框在深色模式下的适配
+// Input style adaptation in dark mode
 .theme-dark :deep(.el-input__wrapper) {
   background-color: var(--color-background);
   border-color: var(--color-border);

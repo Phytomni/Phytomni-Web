@@ -40,7 +40,7 @@ export function useRefreshMessage(opts: {
       return;
     }
 
-    // 获取对应的用户消息
+    // get the corresponding user message
     const userMessage = currentChat.value.messages[messageIndex - 1];
     if (!userMessage || userMessage.role !== "user") {
       return;
@@ -56,11 +56,11 @@ export function useRefreshMessage(opts: {
       return;
     }
 
-    // 设置刷新状态 - 同时使用messageIndex和messageId作为键值
+    // set the refresh state - keyed by both messageIndex and messageId
     const refreshKey = `${messageIndex}_${messageId}`;
     chatState.refreshingMessages[refreshKey] = true;
 
-    // 设置整体发送状态为true，显示加载状态
+    // set the overall sending state to true to show a loading state
     chatState.isSending = true;
 
     try {
@@ -70,17 +70,17 @@ export function useRefreshMessage(opts: {
       queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
       queryData.append("refresh_id", messageId);
 
-      // 添加工具参数（如果有的话）
+      // add the tool param (if any)
       if (message.tool_name) {
         queryData.append("tool", message.tool_name);
       }
 
-      // 添加历史记录（如果有的话）
+      // add the history (if any)
       if (chatState.historyQuestion) {
         queryData.append("history", JSON.stringify(chatState.historyQuestion));
       }
 
-      // 添加文件（如果有的话）
+      // add files (if any)
       if (chatState.fileList.length > 0) {
         chatState.fileList.forEach((fileItem: any) => {
           queryData.append("files", fileItem.file);
@@ -99,7 +99,7 @@ export function useRefreshMessage(opts: {
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
             instantMessage: true,
-            id: response.data.id || messageId, // 如果没有新ID，保留原ID
+            id: response.data.id || messageId, // keep the original id if there is no new one
             tool_name: response.data.tool_name,
             followUpQuestions: response.data.follow_up_questions
               ? typeof response.data.follow_up_questions === "string"
@@ -110,7 +110,7 @@ export function useRefreshMessage(opts: {
             showLog: false,
           };
 
-          // 同步刷新后消息的点赞状态
+          // sync the reaction state of the refreshed message
           if (response.data.id && response.data.reaction_type) {
             chatState.reactions[response.data.id.toString()] = parseInt(
               response.data.reaction_type
@@ -126,7 +126,7 @@ export function useRefreshMessage(opts: {
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
                 tool_name: response.data.tool_name,
-                id: response.data.id || messageId, // 如果没有新ID，保留原ID
+                id: response.data.id || messageId, // keep the original id if there is no new one
                 followUpQuestions: response.data.follow_up_questions
                   ? typeof response.data.follow_up_questions === "string"
                     ? JSON.parse(response.data.follow_up_questions)
@@ -155,12 +155,12 @@ export function useRefreshMessage(opts: {
                   : [],
                 showFollowUpQuestions: false,
                 showLog: false,
-                server_file_path: response.data.server_file_path, // 添加服务器文件路径
+                server_file_path: response.data.server_file_path, // add the server file path
               };
 
-              // 如果有服务器文件路径，异步读取文件内容
+              // if there is a server file path, read the file content asynchronously
               if (response.data.server_file_path) {
-                // 先显示加载状态
+                // show a loading state first
                 if (newAssistantMessage) {
                   newAssistantMessage.content = "正在加载文件内容...";
                 }
@@ -176,18 +176,18 @@ export function useRefreshMessage(opts: {
                     } else if (newAssistantMessage) {
                       newAssistantMessage.content = "文件内容为空或加载失败";
                     }
-                    // 强制更新视图
+                    // force a view update
                     nextTick(() => {
                       timestamp.value = Date.now();
                       scrollToBottom();
                     });
                   })
                   .catch((error) => {
-                    console.error("读取DeepGenomeAgent文件失败:", error);
+                    console.error("Failed to read DeepGenomeAgent file:", error);
                     if (newAssistantMessage) {
                       newAssistantMessage.content = "文件加载失败，请稍后重试";
                     }
-                    // 强制更新视图
+                    // force a view update
                     nextTick(() => {
                       timestamp.value = Date.now();
                       scrollToBottom();
@@ -202,7 +202,7 @@ export function useRefreshMessage(opts: {
               const contentData = isValidJSON(response.data.answer)
                 ? JSON.parse(response.data.answer)
                 : response.data.answer;
-              // 打印刷新消息的 doc_list 数据
+              // log the refreshed message's doc_list data
               newAssistantMessage = {
                 role: "assistant",
                 content: contentData.content,
@@ -221,7 +221,7 @@ export function useRefreshMessage(opts: {
                 showLog: false,
               };
 
-              // 同步刷新后消息的点赞状态
+              // sync the reaction state of the refreshed message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
@@ -254,7 +254,7 @@ export function useRefreshMessage(opts: {
                 showLog: false,
               };
 
-              // 同步刷新后消息的点赞状态
+              // sync the reaction state of the refreshed message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
@@ -279,7 +279,7 @@ export function useRefreshMessage(opts: {
                 compute_resource: response.data?.compute_resource || "",
               };
 
-              // 同步刷新后消息的点赞状态
+              // sync the reaction state of the refreshed message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
@@ -294,7 +294,7 @@ export function useRefreshMessage(opts: {
               upload_path: response.data?.upload_path || "",
               instantMessage: true,
               tool_name: response.data?.tool_name || "",
-              id: response.data.id || messageId, // 如果没有新ID，保留原ID
+              id: response.data.id || messageId, // keep the original id if there is no new one
               followUpQuestions: response.data.follow_up_questions
                 ? typeof response.data.follow_up_questions === "string"
                   ? JSON.parse(response.data.follow_up_questions)
@@ -306,47 +306,47 @@ export function useRefreshMessage(opts: {
           }
         }
 
-        // 更新消息
+        // update the message
         if (newAssistantMessage) {
           currentChat.value.messages[messageIndex] = newAssistantMessage;
 
-          // 清理旧的刷新状态
+          // clean up the old refresh state
           if (chatState.refreshingMessages[refreshKey]) {
             delete chatState.refreshingMessages[refreshKey];
           }
 
-          // 为新消息设置刷新状态 - 使用新的键值
+          // set the refresh state for the new message - using the new key
           const newRefreshKey = `${messageIndex}_${
             newAssistantMessage.id || "temp"
           }`;
           chatState.refreshingMessages[newRefreshKey] = false;
 
-          // 自动滚动到最新消息
+          // auto-scroll to the latest message
           await scrollToBottom();
         }
       }
     } catch (error: any) {
-      console.error("刷新消息失败:", error);
+      console.error("Failed to refresh message:", error);
       ElMessage.error("刷新失败，请重试");
     } finally {
-      // 确保滚动到底部
+      // ensure it scrolls to the bottom
       nextTick(() => {
         scrollToBottom();
       });
 
-      // 清理旧的刷新状态
+      // clean up the old refresh state
       if (chatState.refreshingMessages[refreshKey]) {
         delete chatState.refreshingMessages[refreshKey];
       }
 
-      // 重置整体发送状态
+      // reset the overall sending state
       chatState.isSending = false;
 
-      // 刷新侧边栏历史记录数据，确保显示最新的对话信息
+      // refresh the sidebar history data to show the latest conversation info
       try {
         await getHistoryQuestionData();
       } catch (error) {
-        console.error("刷新侧边栏数据失败:", error);
+        console.error("Failed to refresh sidebar data:", error);
       }
     }
   };

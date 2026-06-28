@@ -1,18 +1,24 @@
-// XSS 防护:DeepGenomeResultViewer 的 processInlineMarkdown 会把 deep_genome
-// agent(经 Bot 中转)markdown 里的 <a> 标签先 escapeHtml 成实体、再用正则
-// "复活"成裸 <a>,最终经 v-html 注入 DOM。复活时属性串是原样透传的,所以恶意
-// agent 输出或被投毒的 RAG 语料能在 anchor 上塞入事件处理器或危险协议 href ——
-// v-html(innerHTML)会让它们在点击甚至悬停时执行,而本应用 token 存于非
-// HttpOnly cookie,document.cookie 可被窃。
+// XSS protection: DeepGenomeResultViewer's processInlineMarkdown takes <a> tags
+// from deep_genome agent markdown (relayed via Bot), first escapeHtml-s them into
+// entities, then "resurrects" them into bare <a> via regex, and finally injects
+// the result into the DOM via v-html. On resurrection the attribute string is
+// passed through verbatim, so malicious agent output or a poisoned RAG corpus can
+// inject event handlers or dangerous-scheme hrefs onto the anchor — v-html
+// (innerHTML) lets them execute on click or even hover, and this app stores its
+// token in a non-HttpOnly cookie, so document.cookie can be stolen.
 //
-// 清洗用「属性名白名单」而非「on* 黑名单」:HTML 不要求属性间靠空白分隔——引号
-// 闭合后可紧跟下一个属性(如 href="x"onmouseover="y" 是两个属性),靠 \son 边界
-// 的黑名单正则会被这种写法绕过。这里正确 tokenize 出 name=value 对,只保留显式
-// 白名单中的属性名,其余(含全部 on*、style、formaction 等)一律丢弃;href 再做
-// 协议白名单校验。只需清洗属性:正文从不被反转义(escapeHtml 后保持实体),唯一
-// 被复活成裸 HTML 的就是 <a> 的属性串,故这是该路径上唯一的注入原语。
+// Sanitize with an "attribute-NAME allow-list", not an "on* deny-list": HTML does
+// not require attributes to be whitespace-separated — after a closing quote the
+// next attribute can follow immediately (e.g. href="x"onmouseover="y" is two
+// attributes), so a deny-list regex relying on a \son boundary is bypassed by that
+// form. Here we correctly tokenize name=value pairs and keep only attribute names
+// on the explicit allow-list; everything else (all on*, style, formaction, etc.)
+// is dropped; href then gets a scheme allow-list check. Only the attributes need
+// sanitizing: the body is never un-escaped (stays entities after escapeHtml), and
+// the only thing resurrected into bare HTML is the <a> attribute string, so that
+// is the sole injection primitive on this path.
 
-// 允许保留的属性名(小写比较)。其余一律丢弃。
+// Attribute names allowed to remain (compared lowercase). Everything else is dropped.
 const ALLOWED_ATTRS = new Set([
   "href",
   "title",
@@ -22,18 +28,18 @@ const ALLOWED_ATTRS = new Set([
   "download",
 ]);
 
-// href 允许的协议;无协议(相对路径 / #锚点 / 绝对路径)默认放行。
+// Schemes allowed for href; no scheme (relative path / #anchor / absolute path) is allowed by default.
 const SAFE_SCHEMES = new Set(["http", "https", "mailto"]);
 
 interface Attr {
   name: string;
-  value: string | null; // null = 布尔属性(如 download)
+  value: string | null; // null = boolean attribute (e.g. download)
 }
 
 const isSpace = (c: string): boolean =>
   c === " " || c === "\t" || c === "\n" || c === "\r" || c === "\f";
 
-// 正确 tokenize:属性可由空白分隔,也可紧跟在上一属性引号值闭合之后。
+// Correct tokenize: attributes may be whitespace-separated or follow immediately after the previous attribute's closing quote.
 function parseAttributes(input: string): Attr[] {
   const attrs: Attr[] = [];
   const n = input.length;
@@ -54,7 +60,7 @@ function parseAttributes(input: string): Attr[] {
       i++;
     }
     if (!name) {
-      i++; // 跳过孤立的 = / > 等,保证推进
+      i++; // skip stray = / > etc. to keep advancing
       continue;
     }
 
@@ -72,7 +78,7 @@ function parseAttributes(input: string): Attr[] {
           v += input[i];
           i++;
         }
-        i++; // 跳过闭合引号
+        i++; // skip the closing quote
         value = v;
       } else {
         let v = "";
@@ -102,9 +108,11 @@ function decodeEntities(s: string): string {
     .replace(/&newline;/gi, "\n");
 }
 
-// 协议白名单:先解码实体、剥控制/空白字符再判 scheme,挡掉 java&Tab;script: 之类混淆。
-// 用 codepoint 过滤而非含控制字符的正则(后者触发 eslint no-control-regex):
-// 剥掉 <= 0x20 的控制字符与空白,以及 0x7f–0xa0(DEL / C1 控制 / NBSP)。
+// Scheme allow-list: decode entities and strip control/whitespace chars before
+// reading the scheme, to defeat obfuscation like java&Tab;script:. Filter by
+// codepoint rather than a regex containing control chars (the latter trips eslint
+// no-control-regex): strip control/whitespace chars <= 0x20, plus 0x7f–0xa0
+// (DEL / C1 controls / NBSP).
 function isSafeHref(rawValue: string): boolean {
   const stripped = Array.from(decodeEntities(rawValue))
     .filter((ch) => {
@@ -113,11 +121,11 @@ function isSafeHref(rawValue: string): boolean {
     })
     .join("");
   const schemeMatch = stripped.match(/^([a-z][a-z0-9+.-]*):/i);
-  if (!schemeMatch) return true; // 无 scheme:相对路径 / #锚点 / 绝对路径
+  if (!schemeMatch) return true; // no scheme: relative path / #anchor / absolute path
   return SAFE_SCHEMES.has(schemeMatch[1].toLowerCase());
 }
 
-// 重新输出到 v-html 前转义属性值,防止属性逃逸。
+// Escape the attribute value before re-emitting into v-html, to prevent attribute breakout.
 function escapeAttrValue(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -127,10 +135,10 @@ function escapeAttrValue(value: string): string {
 }
 
 /**
- * 清洗将被注入 v-html 的 <a> 标签属性串。
+ * Sanitize the attribute string of an <a> tag headed for a v-html sink.
  *
- * @param attributes `<a` 与 `>` 之间的原始属性串(已反转义为裸字符)。
- * @returns 清洗后的属性串:仅保留白名单属性,危险协议 href 中和为 `#`。
+ * @param attributes the raw attribute string between `<a` and `>` (already un-escaped to bare chars).
+ * @returns the sanitized attribute string: only allow-listed attributes are kept, and a dangerous-scheme href is neutralized to `#`.
  */
 export function sanitizeAnchorAttributes(attributes: string): string {
   if (!attributes) return "";
@@ -144,7 +152,7 @@ export function sanitizeAnchorAttributes(attributes: string): string {
       const href = isSafeHref(attr.value ?? "") ? attr.value ?? "" : "#";
       kept.push(`href="${escapeAttrValue(href)}"`);
     } else if (attr.value === null) {
-      kept.push(name); // 布尔属性,如 download
+      kept.push(name); // boolean attribute, e.g. download
     } else {
       kept.push(`${name}="${escapeAttrValue(attr.value)}"`);
     }
@@ -154,13 +162,14 @@ export function sanitizeAnchorAttributes(attributes: string): string {
 }
 
 /**
- * 校验单个 href URL,用于把 URL 直接插进固定 `<a href="...">` 的场景
- * (doi / pmid / .md 链接)——这些点不透传任意属性,但 URL 本身可能携带危险
- * 协议(如 `[x](javascript:alert(1)//.md)` 借 `.md` 后缀混进 javascript:)。
+ * Validate a single href URL, for cases that insert a URL straight into a fixed
+ * `<a href="...">` (doi / pmid / .md links) — these sites do not pass through
+ * arbitrary attributes, but the URL itself may carry a dangerous scheme (e.g.
+ * `[x](javascript:alert(1)//.md)` sneaks javascript: in behind a `.md` suffix).
  *
- * @param url 待插入 href 的原始 URL。
- * @returns 协议在白名单内则返回转义后的 URL(可安全放进 v-html 的属性),
- *          否则返回 `"#"`。
+ * @param url the raw URL to be inserted as href.
+ * @returns the escaped URL when the scheme is on the allow-list (safe to put into
+ *          a v-html attribute), otherwise `"#"`.
  */
 export function sanitizeHref(url: string): string {
   if (!url) return "#";

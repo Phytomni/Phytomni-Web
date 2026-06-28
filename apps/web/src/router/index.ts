@@ -1,12 +1,3 @@
-/*
- * 组件注释
- * @Author: machinist_wq
- * @Date: 2022-08-18 21:07:26
- * @LastEditors: error: git config user.name & please set dead value or install git
- * @LastEditTime: 2025-05-10 09:42:12
- * @Description:
- * 既往不恋！当下不杂！！未来不迎！！！
- */
 import {
   createRouter,
   createWebHistory,
@@ -31,7 +22,7 @@ export const dynamicRoutes = [
 ];
 
 export const constantRoutes = [
-  // 独立的路由（不需要布局）
+  // standalone routes (no layout needed)
   {
     path: "/login",
     name: "login",
@@ -62,7 +53,7 @@ export const constantRoutes = [
     component: () => import("@/views/error/404.vue"),
     meta: { title: "404错误", layout: "nolayout" },
   },
-  // 需要布局的路由
+  // routes that need the layout
   {
     path: "/",
     component: () => import("@/layout/index.vue"),
@@ -214,73 +205,6 @@ export const constantRoutes = [
       },
     ],
   },
-  /* --------------------------------------- */
-  // {
-  //   path: '/',
-  //   component: () => import('@/layout/index.vue'),
-  //   redirect: '/gene-display',
-  //   children: [
-  //     {
-  //       path: 'gene-display',
-  //       name: 'geneDisplay',
-  //       component: () => import('@/views/gene-display/index.vue'),
-  //       meta: { title: '基因展示' },
-  //     },
-  //     {
-  //       path: 'gene-display/detail',
-  //       name: 'geneDetail',
-  //       component: () => import('@/views/gene-display/detail.vue'),
-  //       meta: { title: '基因详情' },
-  //     },
-  //     {
-  //       path: 'log-list',
-  //       name: 'logList',
-  //       component: () => import('@/views/log-list/index.vue'),
-  //       meta: { title: '日志列表' },
-  //     },
-  //     {
-  //       path: 'user-list',
-  //       name: 'userList',
-  //       component: () => import('@/views/user-list/index.vue'),
-  //       meta: { title: '用户列表' },
-  //     },
-  //     {
-  //       path: 'permi-manage',
-  //       name: 'permi-manage',
-  //       component: () => import('@/views/permi-manage/index.vue'),
-  //       meta: { title: '权限管理' },
-  //     },
-  //   ],
-  // },
-  // {
-  //   path: '/change-password',
-  //   name: 'changePassword',
-  //   component: () => import('@/views/change-password/index.vue'),
-  //   meta: { title: '修改密码' },
-  // },
-  // {
-  //   path: '/login',
-  //   name: 'login',
-  //   component: () => import('@/views/login/index.vue'),
-  // },
-  // {
-  //   path: '/chat',
-  //   name: 'chat',
-  //   component: () => import('@/views/chat/index.vue'),
-  //   meta: { title: '聊天界面' },
-  // },
-  // {
-  //   path: '/401',
-  //   name: 'Unauthorized',
-  //   component: () => import('@/views/error/401.vue'),
-  //   meta: { title: '401错误' },
-  // },
-  // {
-  //   path: '/:pathMatch(.*)*',
-  //   name: 'NotFound',
-  //   component: () => import('@/views/error/404.vue'),
-  //   meta: { title: '404错误' },
-  // },
 ];
 
 const router = createRouter({
@@ -288,9 +212,4 @@ const router = createRouter({
   // history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: constantRoutes,
 });
-/* // 防止连续点击多次路由报错
-let routerPush = router.prototype.push;
-Router.prototype.push = function push(location) {
-  return routerPush.call(this, location).catch(err => err);
-}; */
 export default router;

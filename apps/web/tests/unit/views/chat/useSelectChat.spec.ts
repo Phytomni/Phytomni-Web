@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref } from "vue";
 import { useSelectChat } from "@/views/chat/composables/useSelectChat";
 
-// Mock getAnswerCheck API（selectChat 唯一调用的接口）
+// Mock getAnswerCheck API (the only API selectChat calls)
 vi.mock("@/api/chat", () => ({
   getAnswerCheck: vi.fn(),
 }));
@@ -12,7 +12,7 @@ import { getAnswerCheck } from "@/api/chat";
 const mockGetAnswerCheck = vi.mocked(getAnswerCheck);
 
 describe("useSelectChat", () => {
-  // 每个 dialogueId 对应一份可变状态记录，重复 getChatState(id) 返回同一对象
+  // Each dialogueId maps to one mutable state record; repeated getChatState(id) returns the same object
   let states: Map<string, { reactions: Record<string, number>; historyQuestion: any }>;
   let getChatState: (dialogueId: string) => any;
   let currentChatId: ReturnType<typeof ref<string>>;
@@ -70,13 +70,13 @@ describe("useSelectChat", () => {
     const { selectChat } = makeComposable();
     await selectChat("d1");
 
-    // currentChatId 在 await 之前同步写入
+    // currentChatId is written synchronously before the await
     expect(currentChatId.value).toBe("d1");
 
-    // reaction 水合(字符串 "1" → 数字 1)
+    // reaction hydration (string "1" → number 1)
     expect(getChatState("d1").reactions["msg-1"]).toBe(1);
 
-    // messages 重建:一条 user + 一条 assistant
+    // messages rebuilt: one user + one assistant
     expect(currentChat.value).not.toBeNull();
     const messages = currentChat.value.messages;
     expect(Array.isArray(messages)).toBe(true);
@@ -92,26 +92,26 @@ describe("useSelectChat", () => {
     expect(assistantMsg.tool_name).toBe("ChatAgent");
     expect(assistantMsg.id).toBe("msg-1");
 
-    // currentChat 合并了原 chat 记录字段
+    // currentChat merges in the original chat record's fields
     expect(currentChat.value.dialogue_id).toBe("d1");
     expect(currentChat.value.title).toBe("t");
 
-    // historyQuestion 被设置(非 null,含两条精简记录)
+    // historyQuestion is set (non-null, holding two condensed records)
     const hq = getChatState("d1").historyQuestion;
     expect(Array.isArray(hq)).toBe(true);
     expect(hq.length).toBe(2);
     expect(hq[0]).toEqual({ role: "user", content: "你好" });
     expect(hq[1]).toEqual({ role: "assistant", content: "你好，我是助手" });
 
-    // URL 更新
+    // URL updated
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
 
-    // 有消息时滚动到底部
+    // Scroll to bottom when there are messages
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
   it("加载前重置 reaction 状态:陈旧条目在水合前被清空", async () => {
-    // 预置陈旧 reaction(指向同一 d1 记录)
+    // Seed a stale reaction (pointing to the same d1 record)
     const stale = getChatState("d1");
     stale.reactions = { "old-msg": 2 };
 
@@ -132,14 +132,14 @@ describe("useSelectChat", () => {
     await selectChat("d1");
 
     const reactions = getChatState("d1").reactions;
-    // 陈旧条目被清除
+    // The stale entry is cleared
     expect(reactions["old-msg"]).toBeUndefined();
-    // 新条目被水合
+    // The new entry is hydrated
     expect(reactions["msg-1"]).toBe(1);
   });
 
   it("non-200 响应:不重建 messages、不重置 historyQuestion,但仍更新 URL", async () => {
-    // 预置非空 historyQuestion 以验证 non-200 分支不触碰它
+    // Seed a non-empty historyQuestion to verify the non-200 branch does not touch it
     const st = getChatState("d1");
     st.historyQuestion = [{ role: "user", content: "保留我" }];
 
@@ -148,20 +148,20 @@ describe("useSelectChat", () => {
     const { selectChat } = makeComposable();
     await selectChat("d1");
 
-    // currentChatId 同步写入仍发生
+    // The synchronous currentChatId write still happens
     expect(currentChatId.value).toBe("d1");
-    // non-200 分支跳过 currentChat 赋值
+    // The non-200 branch skips the currentChat assignment
     expect(currentChat.value).toBeNull();
-    // historyQuestion 未被重置
+    // historyQuestion is not reset
     expect(getChatState("d1").historyQuestion).toEqual([
       { role: "user", content: "保留我" },
     ]);
-    // URL 始终更新(在 if 块之外)
+    // The URL is always updated (outside the if block)
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
   });
 
   it("并发切换安全:mid-fetch 切换 currentChatId 后 reaction 和 historyQuestion 写回参数 dialogueId 而非 live currentChatId", async () => {
-    // 手动控制 getAnswerCheck 的 resolve 时机
+    // Manually control when getAnswerCheck resolves
     let resolveCheck!: (v: any) => void;
     const pendingCheck = new Promise<any>((resolve) => {
       resolveCheck = resolve;
@@ -170,13 +170,13 @@ describe("useSelectChat", () => {
 
     const { selectChat } = makeComposable();
 
-    // 1. 启动 selectChat("d1")，但不 await — fetch 挂起
+    // 1. Start selectChat("d1") but don't await — the fetch hangs
     const p = selectChat("d1");
 
-    // 2. 在 await 期间用户切换到 d2
+    // 2. During the await, the user switches to d2
     currentChatId.value = "d2";
 
-    // 3. resolve fetch，携带 ChatAgent 风格的 reaction_type
+    // 3. Resolve the fetch with a ChatAgent-style reaction_type
     resolveCheck({
       code: 200,
       data: [
@@ -192,11 +192,11 @@ describe("useSelectChat", () => {
 
     await p;
 
-    // reaction 水合写到参数 d1，不写到 live currentChatId d2
+    // reaction hydration writes to the argument d1, not to the live currentChatId d2
     expect(getChatState("d1").reactions["msg-concurrent"]).toBe(2);
     expect(getChatState("d2").reactions["msg-concurrent"]).toBeUndefined();
 
-    // historyQuestion 也写到 d1
+    // historyQuestion is also written to d1
     const hq = getChatState("d1").historyQuestion;
     expect(Array.isArray(hq)).toBe(true);
     expect(hq.length).toBe(2);

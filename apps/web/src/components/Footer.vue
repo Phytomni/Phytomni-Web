@@ -1,9 +1,3 @@
-<!--
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2025-01-XX
- * @Description: 备案信息组件
- -->
 <template>
   <div class="footer-container">
     <div class="footer-content">
@@ -20,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-// 备案信息组件，无需额外逻辑
+// ICP footer component; no extra logic needed
 </script>
 
 <style scoped lang="scss">
@@ -56,7 +50,7 @@
   }
 }
 
-// 暗色主题适配
+// dark theme adaptation
 :global(.theme-dark) .footer-container {
   border-top-color: rgba(255, 255, 255, 0.1);
 }

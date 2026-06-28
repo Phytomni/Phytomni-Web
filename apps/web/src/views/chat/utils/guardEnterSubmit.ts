@@ -1,8 +1,10 @@
-// guardEnterSubmit: 在 @mention 输入框里,MentionSender 的 handleKeyDown 会在
-// Enter 上无条件 submit()——即使 mention 下拉还开着(内层 el-mention 只 preventDefault
-// 不 stopPropagation,且下拉关闭跑在 handleKeyDown 之后的 nextTick)。于是在捕获阶段:
-// 下拉可见时 stopPropagation 拦掉这次过早的 submit;下拉关闭后(popoverVisible=false)
-// Enter 正常提交。返回是否拦截,便于测试断言。
+// guardEnterSubmit: in the @mention input, MentionSender's handleKeyDown calls
+// submit() unconditionally on Enter — even while the mention dropdown is still open
+// (the inner el-mention only preventDefault, not stopPropagation, and the dropdown
+// closes on a nextTick after handleKeyDown). So in the capture phase: while the
+// dropdown is visible, stopPropagation cancels this premature submit; after the
+// dropdown closes (popoverVisible=false) Enter submits normally. Returns whether it
+// intercepted, for test assertions.
 export function guardEnterSubmit(
   e: Pick<KeyboardEvent, "stopPropagation">,
   popoverVisible: boolean | undefined

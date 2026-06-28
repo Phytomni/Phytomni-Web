@@ -10,14 +10,14 @@ export function useReactions(opts: {
 }) {
   const { currentChatId, getChatState, scrollToBottom } = opts;
 
-  // 获取点赞点踩状态
+  // get the reaction state
   const getReactionState = (messageId: string) => {
     if (!currentChatId.value) return 0;
     const chatState = getChatState(currentChatId.value);
     return chatState?.reactions?.[messageId] || 0;
   };
 
-  // 处理点赞点踩
+  // handle the reaction
   const handleReaction = async (messageId: string, reactionType: number) => {
     if (!currentChatId.value || !messageId) return;
 
@@ -26,12 +26,12 @@ export function useReactions(opts: {
 
     const currentReaction = chatState.reactions?.[messageId] || 0;
 
-    // 如果点击的是当前状态，则取消（传值0）
-    // 如果点击的是不同状态，则切换到新状态
+    // if clicking the current state, cancel it (send 0)
+    // if clicking a different state, switch to it
     const newReaction = currentReaction === reactionType ? 0 : reactionType;
 
     try {
-      // 调用API
+      // call the API
       const formData = new FormData();
       formData.append("id", messageId);
       formData.append("reaction_type", newReaction.toString());
@@ -39,13 +39,13 @@ export function useReactions(opts: {
       const response = await getReactionType(formData);
 
       if (response.code === 200) {
-        // 更新本地状态
+        // update local state
         chatState.reactions = {
           ...chatState.reactions,
           [messageId]: newReaction,
         };
 
-        // 显示成功提示
+        // show a success message
         if (newReaction === 0) {
           ElMessage.success("已取消");
         } else if (newReaction === 1) {
@@ -54,7 +54,7 @@ export function useReactions(opts: {
           ElMessage.success("已点踩");
         }
 
-        // 确保滚动到底部
+        // ensure it scrolls to the bottom
         nextTick(() => {
           scrollToBottom();
         });
@@ -62,17 +62,17 @@ export function useReactions(opts: {
         ElMessage.error("操作失败，请重试");
       }
     } catch (error) {
-      console.error("点赞点踩失败:", error);
+      console.error("Reaction failed:", error);
       ElMessage.error("操作失败，请重试");
     }
 
-    // 确保滚动到底部
+    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
   };
 
-  // 获取点赞点踩提示
+  // get the reaction tooltip
   const getReactionTooltip = (messageId: string, reactionType: number) => {
     const currentReaction = getReactionState(messageId);
     if (reactionType === 1) {

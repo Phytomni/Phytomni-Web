@@ -1,14 +1,6 @@
-/*
- * 组件注释
- * @Author: error: git config user.name & please set dead value or install git
- * @Date: 2025-07-17
- * @LastEditors: error: git config user.name & please set dead value or install git
- * @Description:
- * 既往不恋！当下不杂！！未来不迎！！！
- */
 import request from "@/utils/request";
 
-// 任务管理列表
+// Task list
 export const getTaskList = (params?: { current?: number; size?: number }) => {
   return request({
     url: "/api/v1/async-tasks",

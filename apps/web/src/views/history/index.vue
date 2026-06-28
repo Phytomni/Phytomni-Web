@@ -1,6 +1,6 @@
 <template>
   <div class="history-container">
-    <!-- 历史记录列表 -->
+    <!-- History list -->
     <div class="history-content">
       <div v-if="loading" class="loading-container">
         <el-icon class="is-loading"><Loading /></el-icon>
@@ -94,7 +94,7 @@
       </div>
     </div>
 
-    <!-- 重命名对话框 -->
+    <!-- Rename dialog -->
     <el-dialog
       v-model="renameDialogVisible"
       :title="$t('chat.actions.rename')"
@@ -126,7 +126,7 @@
       </template>
     </el-dialog>
 
-    <!-- 删除确认对话框 -->
+    <!-- Delete confirmation dialog -->
     <el-dialog
       v-model="deleteDialogVisible"
       :title="$t('chat.actions.deleteConfirm')"
@@ -175,7 +175,7 @@ import {
   renameHistory,
 } from "@/api/chat";
 
-// 定义History接口 - 匹配API返回的数据结构
+// History interface - matches the data structure returned by the API
 interface History {
   id: number;
   dialogue_id: string;
@@ -186,12 +186,12 @@ interface History {
 const { t } = useI18n();
 const router = useRouter();
 
-// 响应式数据
+// Reactive state
 const loading = ref(false);
 const refreshing = ref(false);
 const historyList = ref<History[]>([]);
 
-// 重命名对话框相关
+// Rename dialog state
 const renameDialogVisible = ref(false);
 const renameForm = ref({
   title: "",
@@ -202,11 +202,11 @@ const renameRules = {
 };
 const historyToRename = ref<History | null>(null);
 
-// 删除确认对话框相关
+// Delete confirmation dialog state
 const deleteDialogVisible = ref(false);
 const historyToDelete = ref<History | null>(null);
 
-// 获取历史记录数据
+// Fetch history data
 const fetchHistoryData = async () => {
   loading.value = true;
   try {
@@ -218,7 +218,7 @@ const fetchHistoryData = async () => {
       historyList.value = [];
     }
   } catch (error) {
-    console.error("获取历史记录失败:", error);
+    console.error("Failed to fetch history:", error);
     ElMessage.error("获取历史记录失败");
     historyList.value = [];
   } finally {
@@ -226,31 +226,31 @@ const fetchHistoryData = async () => {
   }
 };
 
-// 刷新历史记录
+// Refresh the history list
 const refreshHistory = async () => {
   refreshing.value = true;
   try {
     await fetchHistoryData();
     ElMessage.success("刷新成功");
   } catch (error) {
-    console.error("刷新失败:", error);
+    console.error("Refresh failed:", error);
     ElMessage.error("刷新失败");
   } finally {
     refreshing.value = false;
   }
 };
 
-// 打开对话
+// Open a conversation
 const openChat = (history: History) => {
   router.push(`/chat?dialogue_id=${history.dialogue_id}`);
 };
 
-// 跳转到聊天页面
+// Navigate to the chat page
 const goToChat = () => {
   router.push("/chat");
 };
 
-// 处理历史记录操作
+// Handle history-item actions
 const handleHistoryAction = (command: string, history: History) => {
   switch (command) {
     case "rename":
@@ -265,21 +265,21 @@ const handleHistoryAction = (command: string, history: History) => {
   }
 };
 
-// 重命名确认
+// Rename confirmation
 const handleRenameConfirm = async () => {
   if (!renameFormRef.value || !historyToRename.value) return;
 
   try {
     const valid = await renameFormRef.value.validate();
     if (valid) {
-      // 调用重命名 API
+      // Call the rename API
       const formData = new FormData();
       formData.append("id", historyToRename.value.id.toString());
       formData.append("rename", renameForm.value.title);
 
       const res = await renameHistory(formData);
       if (res.code === 200) {
-        // 更新本地数据
+        // Update local data
         const index = historyList.value.findIndex(
           (h) => h.id === historyToRename.value!.id
         );
@@ -294,23 +294,23 @@ const handleRenameConfirm = async () => {
       }
     }
   } catch (error) {
-    console.error("重命名失败:", error);
+    console.error("Rename failed:", error);
     ElMessage.error("重命名失败，请重试");
   }
 };
 
-// 删除确认
+// Delete confirmation
 const handleDeleteConfirm = async () => {
   if (!historyToDelete.value) return;
 
   try {
-    // 调用删除 API
+    // Call the delete API
     const formData = new FormData();
     formData.append("id", historyToDelete.value.id.toString());
 
     const res = await deleteHistory(formData);
     if (res.code === 200) {
-      // 从本地列表中移除
+      // Remove from the local list
       const index = historyList.value.findIndex(
         (h) => h.id === historyToDelete.value!.id
       );
@@ -324,12 +324,12 @@ const handleDeleteConfirm = async () => {
       ElMessage.error(res.message || "删除失败");
     }
   } catch (error) {
-    console.error("删除失败:", error);
+    console.error("Delete failed:", error);
     ElMessage.error("删除失败，请重试");
   }
 };
 
-// 处理重命名对话框关闭
+// Handle rename dialog close
 const handleRenameDialogClose = () => {
   historyToRename.value = null;
   renameForm.value.title = "";
@@ -338,7 +338,7 @@ const handleRenameDialogClose = () => {
   }
 };
 
-// 格式化日期
+// Format a date
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("zh-CN", {
@@ -350,7 +350,7 @@ const formatDate = (dateString: string) => {
   });
 };
 
-// 组件挂载时获取数据
+// Fetch data when the component is mounted
 onMounted(() => {
   fetchHistoryData();
 });
@@ -565,7 +565,7 @@ onMounted(() => {
   }
 }
 
-// 响应式设计
+// Responsive design
 @media (max-width: 768px) {
   .history-container {
     padding: 16px;
@@ -589,7 +589,7 @@ onMounted(() => {
   }
 }
 
-// 深色模式适配
+// Dark mode adaptation
 .theme-dark .history-container {
   background-color: var(--color-background);
 }
@@ -686,7 +686,7 @@ onMounted(() => {
   }
 }
 
-// 深色模式下对话框样式适配
+// Dialog style adaptation in dark mode
 .theme-dark :deep(.el-dialog) {
   background-color: var(--color-background-card);
   border: 1px solid var(--color-border);
@@ -709,7 +709,7 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
-// 下拉菜单深色模式适配
+// Dropdown menu adaptation in dark mode
 .theme-dark :deep(.el-dropdown-menu) {
   background-color: var(--color-background-card);
   border-color: var(--color-border);

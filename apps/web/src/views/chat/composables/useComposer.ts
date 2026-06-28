@@ -11,42 +11,42 @@ export function useComposer(opts: {
 }) {
   const { messageInput, isSending, currentChatId, scrollToBottom } = opts;
 
-  // 当前激活的按钮
+  // the currently active button
   const activeButton = ref<string>();
 
-  // 处理按钮点击
+  // handle button click
   const handleButtonClick = (buttonType: string) => {
-    // 如果正在发送或刷新，阻止操作
+    // block the action while sending or refreshing
     if (isSending.value) return;
 
-    // 如果点击的是当前已选中的按钮，则取消选中
+    // if clicking the already-selected button, deselect it
     if (activeButton.value === buttonType) {
       activeButton.value = "";
-      // 从输入框中移除对应的 @tool, 标记
+      // remove the corresponding @tool, marker from the input
       const command = "@" + buttonType + ",";
       messageInput.value = messageInput.value.replace(command, "");
       return;
     }
 
-    // 如果之前有其他按钮被选中，先移除
+    // if another button was selected before, remove it first
     if (activeButton.value) {
       const oldCommand = "@" + activeButton.value + ",";
       messageInput.value = messageInput.value.replace(oldCommand, "");
     }
 
-    // 设置新的选中按钮
+    // set the newly selected button
     activeButton.value = buttonType;
     const command = "@" + buttonType + ",";
     const newMessageValue = extractAtValues(messageInput.value);
     messageInput.value = `${command}${newMessageValue.cleanedText}`;
 
-    // 确保滚动到底部
+    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
   };
 
-  // 监听输入内容
+  // watch the input content
   watch(messageInput, (newVal) => {
     if (activeButton.value && currentChatId.value) {
       const command = "@" + activeButton.value + ",";
@@ -60,9 +60,9 @@ export function useComposer(opts: {
     }
   });
 
-  // 处理tool选择时更新全文
+  // update the full text when a tool is selected
   const handleCommand = (command: string) => {
-    // 如果正在发送或刷新，阻止操作
+    // block the action while sending or refreshing
     if (isSending.value) return;
 
     const regex = /@([^,]+),/;
@@ -72,7 +72,7 @@ export function useComposer(opts: {
     const newMessageValue = extractAtValues(messageInput.value);
     messageInput.value = `${command}${newMessageValue.cleanedText}`;
 
-    // 确保滚动到底部
+    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
@@ -81,7 +81,7 @@ export function useComposer(opts: {
   const handleSelect = (option: MentionOption) => {
     activeButton.value = option.value;
 
-    // 确保滚动到底部
+    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
@@ -89,7 +89,7 @@ export function useComposer(opts: {
   const handleSearch = (searchValue: string, prefix: string) => {
     // console.log(searchValue,'searchValue',prefix)
 
-    // 确保滚动到底部
+    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });

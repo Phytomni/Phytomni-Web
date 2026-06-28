@@ -1,6 +1,6 @@
 <template>
   <div class="favorites-container">
-    <!-- 收藏列表 -->
+    <!-- Favorites list -->
     <div class="favorites-content">
       <div v-if="loading" class="loading-container">
         <el-icon class="is-loading"><Loading /></el-icon>
@@ -93,7 +93,7 @@
       </div>
     </div>
 
-    <!-- 重命名对话框 -->
+    <!-- Rename dialog -->
     <el-dialog
       v-model="renameDialogVisible"
       :title="$t('chat.actions.rename')"
@@ -143,7 +143,7 @@ import { getCollectHistory, renameHistory, collectHistory } from "@/api/chat";
 
 const router = useRouter();
 
-// 定义收藏项接口
+// Favorite item interface definition
 interface FavoriteItem {
   id: number;
   dialogue_id: string;
@@ -152,12 +152,12 @@ interface FavoriteItem {
   isFavorite: boolean;
 }
 
-// 响应式数据
+// Reactive data
 const loading = ref(false);
 const refreshing = ref(false);
 const favoritesList = ref<FavoriteItem[]>([]);
 
-// 重命名对话框相关
+// Rename dialog state
 const renameDialogVisible = ref(false);
 const renameForm = ref({
   title: "",
@@ -168,16 +168,16 @@ const renameRules = {
 };
 const favoriteToRename = ref<FavoriteItem | null>(null);
 
-// 获取收藏列表
+// Fetch favorites list
 const fetchFavorites = async () => {
   loading.value = true;
   try {
-    const response = await getCollectHistory(); // 获取所有收藏
+    const response = await getCollectHistory(); // Fetch all favorites
     if (response.code === 200 && response.data) {
       favoritesList.value = response.data.map((item: any) => ({
         id: item.id,
         dialogue_id: item.dialogue_id,
-        title: item.title_query || item.title || item.query, // 优先使用 title_query
+        title: item.title_query || item.title || item.query, // Prefer title_query
         date: item.created_at || item.date,
         isFavorite: true,
       }));
@@ -185,21 +185,21 @@ const fetchFavorites = async () => {
       ElMessage.error(response.message || "获取收藏列表失败");
     }
   } catch (error) {
-    console.error("获取收藏列表失败:", error);
+    console.error("Failed to fetch favorites list:", error);
     ElMessage.error("获取收藏列表失败");
   } finally {
     loading.value = false;
   }
 };
 
-// 刷新收藏列表
+// Refresh favorites list
 const refreshFavorites = async () => {
   refreshing.value = true;
   await fetchFavorites();
   refreshing.value = false;
 };
 
-// 处理收藏项操作
+// Handle favorite item actions
 const handleFavoriteAction = (command: string, favorite: FavoriteItem) => {
   switch (command) {
     case "rename":
@@ -213,18 +213,18 @@ const handleFavoriteAction = (command: string, favorite: FavoriteItem) => {
   }
 };
 
-// 取消收藏
+// Remove from favorites
 const handleUnfavorite = async (favorite: FavoriteItem) => {
   console.log(favorite, "favorite");
   try {
     const formData = new FormData();
     formData.append("id", favorite.id.toString());
-    formData.append("collect_type", "0"); // 0表示取消收藏
+    formData.append("collect_type", "0"); // 0 means remove from favorites
 
     const response = await collectHistory(formData);
     if (response.code === 200) {
       ElMessage.success("已取消收藏");
-      // 从列表中移除
+      // Remove from the list
       const index = favoritesList.value.findIndex(
         (item) => item.id === favorite.id
       );
@@ -235,12 +235,12 @@ const handleUnfavorite = async (favorite: FavoriteItem) => {
       ElMessage.error(response.message || "取消收藏失败");
     }
   } catch (error) {
-    console.error("取消收藏失败:", error);
+    console.error("Failed to remove from favorites:", error);
     ElMessage.error("取消收藏失败");
   }
 };
 
-// 重命名确认
+// Confirm rename
 const handleRenameConfirm = async () => {
   if (!renameFormRef.value || !favoriteToRename.value) return;
 
@@ -254,7 +254,7 @@ const handleRenameConfirm = async () => {
       const response = await renameHistory(formData);
       if (response.code === 200) {
         ElMessage.success("重命名成功");
-        // 更新本地数据
+        // Update local data
         const index = favoritesList.value.findIndex(
           (item) => item.id === favoriteToRename.value!.id
         );
@@ -268,12 +268,12 @@ const handleRenameConfirm = async () => {
       }
     }
   } catch (error) {
-    console.error("重命名失败:", error);
+    console.error("Failed to rename:", error);
     ElMessage.error("重命名失败");
   }
 };
 
-// 处理重命名对话框关闭
+// Handle rename dialog close
 const handleRenameDialogClose = () => {
   favoriteToRename.value = null;
   renameForm.value.title = "";
@@ -282,22 +282,22 @@ const handleRenameDialogClose = () => {
   }
 };
 
-// 打开聊天
+// Open chat
 const openChat = (favorite: FavoriteItem) => {
   router.push(`/chat?dialogue_id=${favorite.dialogue_id}`);
 };
 
-// 返回聊天页面
+// Go back to chat page
 const goBack = () => {
   router.push("/chat");
 };
 
-// 跳转到聊天页面
+// Navigate to chat page
 const goToChat = () => {
   router.push("/chat");
 };
 
-// 格式化日期
+// Format date
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("zh-CN", {
@@ -309,7 +309,7 @@ const formatDate = (dateString: string) => {
   });
 };
 
-// 组件挂载时获取收藏列表
+// Fetch favorites list on component mount
 onMounted(() => {
   fetchFavorites();
 });
@@ -528,14 +528,14 @@ onMounted(() => {
   }
 }
 
-// 对话框样式
+// Dialog styles
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
 }
 
-// 响应式设计
+// Responsive design
 @media (max-width: 768px) {
   .favorites-container {
     padding: 16px;

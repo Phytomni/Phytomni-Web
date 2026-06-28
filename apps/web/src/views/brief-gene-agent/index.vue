@@ -18,7 +18,7 @@
     </div>
 
     <div class="chat-messages">
-      <!-- 用户提问 -->
+      <!-- User question -->
       <div class="message user-message">
         <div class="message-content">
           <div class="message-text">
@@ -29,7 +29,7 @@
         </div>
       </div>
 
-      <!-- AI回答 -->
+      <!-- AI answer -->
       <div class="message ai-message">
         <div class="message-avatar">
           <el-avatar :size="36" :src="botAvatar" />

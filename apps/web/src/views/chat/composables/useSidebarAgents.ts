@@ -3,15 +3,15 @@ import type { Router } from "vue-router";
 import { CANONICAL_AGENT_DISPLAY_NAMES } from "@/constants/agents";
 
 export function useSidebarAgents(router: Router) {
-  // 是否显示 agents 列表
+  // whether to show the agents list
   const showAgentsList = ref(false);
 
-  // 切换 agents 列表显示
+  // toggle the agents list
   const exploreAgent = () => {
     showAgentsList.value = !showAgentsList.value;
   };
 
-  // 预设的 agents 数据(快捷入口,对应已注册路由)
+  // preset agents data (quick links to registered routes)
   const presetAgents = ref([
     {
       id: 2,
@@ -71,7 +71,7 @@ export function useSidebarAgents(router: Router) {
     },
   ]);
 
-  // 点击 agent 跳转
+  // navigate on agent click
   const handleAgentClick = (agent: { route: string }) => {
     router.push(agent.route);
     showAgentsList.value = false;

@@ -78,7 +78,7 @@ export function useSendMessage(opts: {
       !currentChat.value?.messages || currentChat.value.messages.length === 0;
     if (isNewChat) currentChat.value = { messages: [] };
 
-    // 创建用户消息，包含附件文件信息
+    // build the user message, including attached file info
     const userMessage = {
       role: "user",
       content: currentMessage,
@@ -86,7 +86,7 @@ export function useSendMessage(opts: {
         chatState.fileList.length > 0 ? [...chatState.fileList] : undefined,
     };
 
-    // 将文件信息添加到消息内容中，确保能保存在历史记录中
+    // append file info to the message content so it persists in history
     let messageContent = currentMessage;
     if (chatState.fileList.length > 0) {
       const fileInfo = chatState.fileList
@@ -95,7 +95,7 @@ export function useSendMessage(opts: {
       messageContent = `${currentMessage}\n\n${fileInfo}`;
     }
 
-    // 更新用户消息内容，包含文件信息
+    // update the user message content to include file info
     userMessage.content = messageContent;
 
     currentChat.value.messages.push(userMessage);
@@ -120,7 +120,7 @@ export function useSendMessage(opts: {
     try {
       const urlChatId = getDialogueIdFromChatId();
       const queryData = new FormData();
-      queryData.append("query", messageContent); // 使用包含文件信息的消息内容
+      queryData.append("query", messageContent); // use the message content that includes file info
       queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
       queryData.append(
         "tool",
@@ -137,7 +137,7 @@ export function useSendMessage(opts: {
         });
       }
 
-      // 生成请求ID
+      // generate a request ID
       currentRequestId.value = Date.now().toString();
 
       const response = await getQueryAbortable(
@@ -145,7 +145,7 @@ export function useSendMessage(opts: {
         currentRequestId.value
       );
 
-      // 收到响应:先把进度条快动画补到 100%(CSS 300ms),再换入答案。
+      // On response: first fast-animate the progress bar to 100% (CSS 300ms), then swap in the answer.
       if (!isAborted.value) {
         chatState.completing = true;
         await new Promise((resolve) => setTimeout(resolve, 300));
@@ -171,7 +171,7 @@ export function useSendMessage(opts: {
             showLog: false,
           };
 
-          // 同步新消息的点赞状态
+          // sync the reaction state of the new message
           if (response.data.id && response.data.reaction_type) {
             chatState.reactions[response.data.id.toString()] = parseInt(
               response.data.reaction_type
@@ -197,7 +197,7 @@ export function useSendMessage(opts: {
                 showLog: false,
               };
 
-              // 同步新消息的点赞状态
+              // sync the reaction state of the new message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
@@ -223,12 +223,12 @@ export function useSendMessage(opts: {
                   : [],
                 showFollowUpQuestions: false,
                 showLog: false,
-                server_file_path: response.data.server_file_path, // 添加服务器文件路径
+                server_file_path: response.data.server_file_path, // add the server file path
               };
 
-              // 如果有服务器文件路径，异步读取文件内容
+              // if there is a server file path, read the file content asynchronously
               if (response.data.server_file_path) {
-                // 先显示加载状态
+                // show a loading state first
                 if (assistantMessage) {
                   assistantMessage.content = "正在加载文件内容...";
                 }
@@ -240,18 +240,18 @@ export function useSendMessage(opts: {
                     } else if (assistantMessage) {
                       assistantMessage.content = "文件内容为空或加载失败";
                     }
-                    // 强制更新视图
+                    // force a view update
                     nextTick(() => {
                       timestamp.value = Date.now();
                       scrollToBottom();
                     });
                   })
                   .catch((error) => {
-                    console.error("读取DeepGenomeAgent文件失败:", error);
+                    console.error("Failed to read DeepGenomeAgent file:", error);
                     if (assistantMessage) {
                       assistantMessage.content = "文件加载失败，请稍后重试";
                     }
-                    // 强制更新视图
+                    // force a view update
                     nextTick(() => {
                       timestamp.value = Date.now();
                       scrollToBottom();
@@ -259,7 +259,7 @@ export function useSendMessage(opts: {
                   });
               }
 
-              // 同步新消息的点赞状态
+              // sync the reaction state of the new message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
@@ -273,7 +273,7 @@ export function useSendMessage(opts: {
               const contentData = isValidJSON(response.data.answer)
                 ? JSON.parse(response.data.answer)
                 : response.data.answer;
-              // 打印新消息的 doc_list 数据
+              // log the new message's doc_list data
               assistantMessage = {
                 role: "assistant",
                 content: contentData.content,
@@ -292,7 +292,7 @@ export function useSendMessage(opts: {
                 showLog: false,
               };
 
-              // 同步新消息的点赞状态
+              // sync the reaction state of the new message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
@@ -325,7 +325,7 @@ export function useSendMessage(opts: {
                 showLog: false,
               };
 
-              // 同步新消息的点赞状态
+              // sync the reaction state of the new message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
@@ -350,14 +350,14 @@ export function useSendMessage(opts: {
                 compute_resource: response.data?.compute_resource || "",
               };
 
-              // 同步新消息的点赞状态
+              // sync the reaction state of the new message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
                 );
               }
             } else {
-              // 处理其他未知的工具类型，使用默认格式
+              // handle other unknown tool types with the default format
               assistantMessage = {
                 role: "assistant",
                 content: response.data?.answer || "抱歉，我无法回答这个问题。",
@@ -376,7 +376,7 @@ export function useSendMessage(opts: {
                 showLog: false,
               };
 
-              // 同步新消息的点赞状态
+              // sync the reaction state of the new message
               if (response.data.id && response.data.reaction_type) {
                 chatState.reactions[response.data.id.toString()] = parseInt(
                   response.data.reaction_type
@@ -404,12 +404,12 @@ export function useSendMessage(opts: {
           }
         }
 
-        // 确保 assistantMessage 已创建，避免推送 undefined
+        // ensure assistantMessage was created to avoid pushing undefined
         if (assistantMessage) {
           currentChat.value.messages.push(assistantMessage);
         } else {
-          // 如果 assistantMessage 未创建，创建默认消息
-          console.warn("assistantMessage 未创建，使用默认消息");
+          // if assistantMessage was not created, create a default message
+          console.warn("assistantMessage was not created; using a default message");
           currentChat.value.messages.push({
             role: "assistant",
             content: response.data?.answer || "抱歉，我无法回答这个问题。",
@@ -442,16 +442,16 @@ export function useSendMessage(opts: {
     } catch (error: any) {
       console.error(t("chat.logs.sendMessageFailed"), error);
 
-      // 检查是否是请求被中止
+      // check whether the request was aborted
       if (
         error.name === "AbortError" ||
         error.code === "ERR_CANCELED" ||
         isAborted.value
       ) {
-        return; // 中止请求时不显示错误消息
+        return; // don't show an error message when the request is aborted
       }
 
-      // 检查是否是token过期错误
+      // check whether it's a token-expired error
       if (
         error.response &&
         error.response.data &&
@@ -464,7 +464,7 @@ export function useSendMessage(opts: {
           callback: () => {
             const UserStore = userStore();
             UserStore.FedLogOut().finally(() => {
-              // 清除所有缓存和cookie
+              // clear all caches and cookies
               localStorage.clear();
               sessionStorage.clear();
               document.cookie.split(";").forEach(function (c) {
@@ -482,16 +482,16 @@ export function useSendMessage(opts: {
         return;
       }
 
-      // 检查是否是网络错误或超时错误，如果是，先验证消息是否已成功发送
+      // check for a network/timeout error; if so, first verify whether the message was sent successfully
       if (isNetworkError(error) && !isAborted.value) {
         try {
-          // 等待一小段时间，让服务器有时间处理请求
+          // wait a short while to give the server time to process the request
           await new Promise((resolve) => setTimeout(resolve, 1000));
 
-          // 如果是新对话，通过刷新历史记录来检查
+          // for a new chat, check by refreshing the history
           if (isNewChat) {
             await getHistoryQuestionData();
-            // 如果历史记录中有新对话，说明消息已成功发送
+            // if the history has a new chat, the message was sent successfully
             if (chatList.value.length > 0) {
               const newChat = chatList.value[0];
               const checkRes = await getAnswerCheck({
@@ -506,7 +506,7 @@ export function useSendMessage(opts: {
               }
             }
           } else {
-            // 如果是已有对话，直接检查当前对话
+            // for an existing chat, check the current conversation directly
             const urlDialogueId = getChatIdFromUrl();
             if (urlDialogueId) {
               const checkRes = await getAnswerCheck({
@@ -517,7 +517,7 @@ export function useSendMessage(opts: {
                 checkRes.data &&
                 checkRes.data.length > 0
               ) {
-                // 检查最后一条消息是否包含我们刚发送的消息
+                // check whether the last message contains the one we just sent
                 const lastItem = checkRes.data[checkRes.data.length - 1];
                 if (lastItem && lastItem.query === messageContent) {
                   await selectChat(urlDialogueId);
@@ -527,12 +527,12 @@ export function useSendMessage(opts: {
             }
           }
         } catch (verifyError) {
-          console.error("验证消息状态失败:", verifyError);
-          // 验证失败，继续显示错误
+          console.error("Failed to verify message status:", verifyError);
+          // verification failed; continue to show the error
         }
       }
 
-      // 只有在未被中止的情况下才添加错误消息
+      // only add an error message if not aborted
       if (!isAborted.value) {
         const isTimeout = error.response?.status === 504;
         currentChat.value.messages.push({
@@ -550,10 +550,10 @@ export function useSendMessage(opts: {
         });
       }
     } finally {
-      // 清理请求ID
+      // clean up the request ID
       currentRequestId.value = "";
 
-      // 无论是否是新对话，都刷新侧边栏历史记录数据
+      // refresh the sidebar history data whether or not it's a new chat
       await getHistoryQuestionData();
 
       // Clear the pending record using the captured sendingDialogueId. Using
@@ -564,27 +564,27 @@ export function useSendMessage(opts: {
       }
 
       if (isNewChat) {
-        // 如果是新对话，选择新创建的对话
+        // for a new chat, select the newly created conversation
         if (chatList.value.length > 0) {
           const newChat = chatList.value[0];
           currentChatId.value = newChat.dialogue_id;
           updateUrlWithChatId(newChat.dialogue_id);
         }
       } else {
-        // 如果是已存在的对话，更新当前对话的标题（如果发生了变化）
+        // for an existing chat, update the current conversation's title (if it changed)
         if (
           currentChat.value?.messages &&
           currentChat.value.messages.length > 0
         ) {
           const userMessage =
-            currentChat.value.messages[currentChat.value.messages.length - 2]; // 倒数第二条是用户消息
+            currentChat.value.messages[currentChat.value.messages.length - 2]; // the second-to-last is the user message
           if (userMessage && userMessage.role === "user") {
-            // 查找当前对话在列表中的位置并更新标题
+            // find the current conversation in the list and update its title
             const currentChatIndex = chatList.value.findIndex(
               (chat) => chat.dialogue_id === currentChatId.value
             );
             if (currentChatIndex !== -1) {
-              // 截取用户消息内容作为标题（限制长度）
+              // take the user message content as the title (length-limited)
               const newTitle =
                 userMessage.content.length > 50
                   ? userMessage.content.substring(0, 50) + "..."
@@ -595,10 +595,10 @@ export function useSendMessage(opts: {
         }
       }
 
-      // 清空文件列表
+      // clear the file list
       if (chatState.fileList.length > 0) {
         chatState.fileList = [];
-        // 确保文件列表清空后关闭header
+        // close the header after clearing the file list
         nextTick(() => {
           if (senderRef.value) {
             senderRef.value.closeHeader();

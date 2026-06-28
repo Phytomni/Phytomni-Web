@@ -1,10 +1,4 @@
-/*
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-06-17
- * @Description: 应用全局状态管理
- * 既往不恋！当下不杂！！未来不迎！！！
- */
+// Application-wide state (current UI language).
 import { defineStore } from "pinia";
 import Cookies from "js-cookie";
 

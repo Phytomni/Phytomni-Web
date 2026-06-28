@@ -18,7 +18,7 @@
     </div>
 
     <div class="chat-messages">
-      <!-- 用户提问 -->
+      <!-- User question -->
       <div class="message user-message">
         <div class="message-content">
           <div class="message-text">
@@ -28,7 +28,7 @@
         </div>
       </div>
 
-      <!-- AI回答 -->
+      <!-- AI answer -->
       <div class="message ai-message">
         <div class="message-avatar">
           <el-avatar :size="36" :src="botAvatar" />
@@ -74,12 +74,12 @@ const goBack = () => {
 const botAvatar =
   "/avatars/bot.svg";
 
-// 下载状态管理
+// Download state management
 const isDownloading = ref(false);
 const currentDownloadIndex = ref(0);
 const currentDownloadFile = ref("");
 
-// 下载分析结果 - 支持分卷下载
+// Download analysis results - supports multi-volume download
 const downloadResults = () => {
   const fileParts = [
     "network_results.zip.001",
@@ -92,23 +92,23 @@ const downloadResults = () => {
   const basePath =
     "/static/downloads/5.Gene Netwrok Agent/3.NetwrokAgent/results/";
 
-  // 开始下载
+  // Start downloading
   isDownloading.value = true;
   currentDownloadIndex.value = 0;
   currentDownloadFile.value = fileParts[0];
 
-  // 显示开始下载提示
+  // Show download-start notice
   ElMessage({
     message: `开始下载 ${fileParts.length} 个分卷文件，请等待所有文件下载完成`,
     type: "info",
     duration: 4000,
   });
 
-  // 依次下载每个分卷文件
+  // Download each volume file in sequence
   fileParts.forEach((fileName, index) => {
     setTimeout(() => {
       try {
-        // 更新当前下载状态
+        // Update current download state
         currentDownloadIndex.value = index;
         currentDownloadFile.value = fileName;
 
@@ -120,7 +120,7 @@ const downloadResults = () => {
         link.click();
         document.body.removeChild(link);
 
-        // 最后一个文件下载完成
+        // Last file finished downloading
         if (index === fileParts.length - 1) {
           setTimeout(() => {
             isDownloading.value = false;
@@ -132,7 +132,7 @@ const downloadResults = () => {
           }, 1000);
         }
       } catch (error) {
-        console.error(`下载文件 ${fileName} 失败:`, error);
+        console.error(`Failed to download file ${fileName}:`, error);
         isDownloading.value = false;
         ElMessage({
           message: `下载文件 ${fileName} 失败，请重试`,
@@ -140,7 +140,7 @@ const downloadResults = () => {
           duration: 3000,
         });
       }
-    }, index * 1000); // 每个文件间隔1秒下载，避免浏览器限制
+    }, index * 1000); // Download files 1 second apart to avoid browser limits
   });
 };
 </script>

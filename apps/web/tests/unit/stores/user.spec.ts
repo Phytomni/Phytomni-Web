@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import userStore from "@/stores/user";
 
-// FedLogOut 的契约:尽力清空 localStorage + sessionStorage(best-effort,
-// 一处抛错不阻断另一处),全部成功则 resolve(true),任一抛错则带上失败的
-// 存储名 reject —— 调用方据此在 .finally 里继续跳转 /login。下面的用例钉死
-// 这两条语义,任何把 reject 改成 resolve、或第一处抛错后提前返回的回归都会变红。
+// FedLogOut's contract: best-effort clearing of localStorage + sessionStorage (a
+// throw in one does not block the other); resolve(true) if all succeed, reject with
+// the failing storage name(s) if any throw — the caller relies on this to proceed
+// with the /login redirect in .finally. The cases below pin down these two semantics;
+// any regression that turns reject into resolve, or returns early after the first
+// throw, will go red.
 describe("userStore.FedLogOut", () => {
   beforeEach(() => {
     setActivePinia(createPinia());

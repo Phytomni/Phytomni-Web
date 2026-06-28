@@ -4,8 +4,9 @@ import { defineComponent, nextTick, ref } from "vue";
 import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Harness: 轻量组件，在 setup 上下文中调用 composable，使 onUnmounted
-// 生命周期钩子在 unmount 时正常触发。返回值通过 expose 供测试访问。
+// Harness: a lightweight component that calls the composable inside a setup context,
+// so the onUnmounted lifecycle hook fires correctly on unmount. The return value is
+// exposed for the test to access.
 // ──────────────────────────────────────────────────────────────────────────────
 
 function makeHarness(opts?: {
@@ -35,7 +36,7 @@ function makeHarness(opts?: {
 
 // ──────────────────────────────────────────────────────────────────────────────
 // IntersectionObserver stub
-// happy-dom 不实现 IntersectionObserver；安装一个最小 mock。
+// happy-dom does not implement IntersectionObserver; install a minimal mock.
 // ──────────────────────────────────────────────────────────────────────────────
 
 type IoCallback = (entries: IntersectionObserverEntry[]) => void;
@@ -52,7 +53,7 @@ class MockIntersectionObserver {
     MockIntersectionObserver.lastInstance = this;
   }
 
-  /** 测试用：手动触发 callback */
+  /** For tests: manually trigger the callback */
   trigger(entries: Partial<IntersectionObserverEntry>[]) {
     this._callback(entries as IntersectionObserverEntry[]);
   }
@@ -66,7 +67,7 @@ describe("useDeepGenomeToc — initial state", () => {
   it("activeHeadingId 初始值为空字符串", () => {
     const { Harness } = makeHarness();
     const wrapper = mount(Harness);
-    // vue-test-utils 对 setup() 返回的 ref 自动 unwrap，所以直接访问 .activeHeadingId
+    // vue-test-utils auto-unwraps refs returned from setup(), so we access .activeHeadingId directly
     expect(wrapper.vm.activeHeadingId).toBe("");
     wrapper.unmount();
   });
@@ -75,15 +76,15 @@ describe("useDeepGenomeToc — initial state", () => {
     const headings = ref<Array<{ id: string; [key: string]: unknown }>>([]);
     const nestedHeadings = ref<Array<{ id: string; children?: unknown[]; [key: string]: unknown }>>([]);
     const mainContentRef = ref<any>(null);
-    // 直接调用 composable 验证返回键（不需要 mount，因为只检查属性名）
-    // 注意：useDeepGenomeToc 调用 onUnmounted，必须在 setup 上下文中；用 makeHarness mount 即可
+    // Call the composable directly to verify the returned keys (no mount needed, since we only check property names)
+    // Note: useDeepGenomeToc calls onUnmounted, which must run inside a setup context; mounting via makeHarness suffices
     const { Harness } = makeHarness();
     const wrapper = mount(Harness);
     const result = wrapper.vm as Record<string, unknown>;
     expect(result).toHaveProperty("activeHeadingId");
     expect(result).toHaveProperty("handleNavSelect");
     expect(result).toHaveProperty("setupIntersectionObserver");
-    // 内部符号不对外暴露
+    // Internal symbols are not exposed externally
     expect(result["jumpTo"]).toBeUndefined();
     expect(result["expandParentMenus"]).toBeUndefined();
     expect(result["observerRef"]).toBeUndefined();
@@ -94,7 +95,7 @@ describe("useDeepGenomeToc — initial state", () => {
 
 describe("useDeepGenomeToc — handleNavSelect", () => {
   afterEach(() => {
-    // 清理挂载在 document.body 上的测试元素
+    // Clean up test elements mounted on document.body
     document.querySelectorAll("[data-testid='toc-heading']").forEach((el) => el.remove());
   });
 
@@ -122,7 +123,7 @@ describe("useDeepGenomeToc — handleNavSelect", () => {
     const { Harness } = makeHarness();
     const wrapper = mount(Harness);
 
-    // id 不存在于 DOM 中
+    // id does not exist in the DOM
     const scrollSpy = vi.fn();
     wrapper.vm.handleNavSelect("non-existent-id-xyz");
     await nextTick();
@@ -150,7 +151,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
   it("为每个 headings 中存在 id 的 DOM 元素调用一次 observe", () => {
     const ids = ["h-one", "h-two"];
 
-    // 在 DOM 中创建对应元素
+    // Create the corresponding elements in the DOM
     ids.forEach((id) => {
       const el = document.createElement("h2");
       el.id = id;
@@ -165,7 +166,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
 
     const io = MockIntersectionObserver.lastInstance!;
     expect(io).not.toBeNull();
-    // observe 应该被调用两次，每个 heading 一次
+    // observe should be called twice, once per heading
     expect(io.observe).toHaveBeenCalledTimes(2);
 
     wrapper.unmount();

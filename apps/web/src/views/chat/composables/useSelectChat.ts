@@ -29,36 +29,36 @@ export function useSelectChat(opts: {
     currentChatId.value = dialogueId;
     const chat = chatList.value.find((c: Chat) => c.dialogue_id === dialogueId);
 
-    // 确保对话状态存在
+    // ensure the conversation state exists
     getChatState(dialogueId);
 
-    // 在这里调用 getAnswerCheck 接口 获取对话记录
+    // call getAnswerCheck to get the conversation records
     const res = await getAnswerCheck({ dialogue_id: dialogueId });
 
     if (res.code === 200) {
-      // 处理返回的数据，转换为消息格式
+      // process the returned data into message format
       const messages: ChatMessage[] = [];
       const historyMessages: ChatMessage[] = [];
       const chatState = getChatState(dialogueId);
       if (!chatState) return;
       chatState.historyQuestion = null;
 
-      // 初始化点赞点踩状态
+      // initialize reaction state
       chatState.reactions = {};
 
-      // 遍历返回的数组，转换为消息格式
+      // iterate the returned array and convert to message format
       if (res.data && Array.isArray(res.data)) {
         res.data.forEach((item: ChatResponse) => {
-          // 同步服务器返回的点赞点踩状态
+          // sync the reaction state returned by the server
           if (item.id && item.reaction_type) {
             chatState.reactions[item.id.toString()] = parseInt(
               item.reaction_type
             );
           }
 
-          // 添加用户消息
+          // add the user message
           if (item.query) {
-            // 解析消息内容，提取文件信息
+            // parse the message content and extract file info
             const { content, attachedFiles } = parseMessageWithFiles(item.query);
 
             messages.push({
@@ -72,7 +72,7 @@ export function useSelectChat(opts: {
             });
           }
 
-          // 添加助手消息
+          // add the assistant message
           if (item.answer) {
             try {
               const answerData = isValidJSON(item.answer)
@@ -93,7 +93,7 @@ export function useSelectChat(opts: {
                       ? JSON.parse(item.follow_up_questions)
                       : item.follow_up_questions
                     : [],
-                  showFollowUpQuestions: true, // 历史消息默认显示后续问题
+                  showFollowUpQuestions: true, // history messages show follow-up questions by default
                   showLog: false,
                   instantMessage: false,
                 });
@@ -117,7 +117,7 @@ export function useSelectChat(opts: {
                         ? JSON.parse(item.follow_up_questions)
                         : item.follow_up_questions
                       : [],
-                    showFollowUpQuestions: true, // 历史消息默认显示后续问题
+                    showFollowUpQuestions: true, // history messages show follow-up questions by default
                     showLog: false,
                     instantMessage: false,
                   });
@@ -133,7 +133,7 @@ export function useSelectChat(opts: {
                   const contentData = isValidJSON(item.answer)
                     ? JSON.parse(item.answer)
                     : item.answer;
-                  // 打印 doc_list 数据
+                  // log the doc_list data
                   messages.push({
                     role: "assistant",
                     content: contentData.content,
@@ -148,7 +148,7 @@ export function useSelectChat(opts: {
                         ? JSON.parse(item.follow_up_questions)
                         : item.follow_up_questions
                       : [],
-                    showFollowUpQuestions: true, // 历史消息默认显示后续问题
+                    showFollowUpQuestions: true, // history messages show follow-up questions by default
                     showLog: false,
                     instantMessage: false,
                   });
@@ -179,7 +179,7 @@ export function useSelectChat(opts: {
                         ? JSON.parse(item.follow_up_questions)
                         : item.follow_up_questions
                       : [],
-                    showFollowUpQuestions: true, // 历史消息默认显示后续问题
+                    showFollowUpQuestions: true, // history messages show follow-up questions by default
                     showLog: false,
                     instantMessage: false,
                   });
@@ -202,7 +202,7 @@ export function useSelectChat(opts: {
                         ? JSON.parse(item.follow_up_questions)
                         : item.follow_up_questions
                       : [],
-                    showFollowUpQuestions: true, // 历史消息默认显示后续问题
+                    showFollowUpQuestions: true, // history messages show follow-up questions by default
                     showLog: false,
                     instantMessage: false,
                     compute_resource: item?.compute_resource || "",
@@ -216,7 +216,7 @@ export function useSelectChat(opts: {
                     ? JSON.parse(item.answer)
                     : item.answer;
 
-                  // 创建消息对象
+                  // create the message object
                   const deepGenomeMessage = {
                     role: "assistant",
                     content: contentData?.content || item.answer,
@@ -231,14 +231,14 @@ export function useSelectChat(opts: {
                         ? JSON.parse(item.follow_up_questions)
                         : item.follow_up_questions
                       : [],
-                    showFollowUpQuestions: true, // 历史消息默认显示后续问题
+                    showFollowUpQuestions: true, // history messages show follow-up questions by default
                     instantMessage: false,
-                    server_file_path: item.server_file_path, // 添加服务器文件路径
+                    server_file_path: item.server_file_path, // add the server file path
                   };
 
-                  // 如果有服务器文件路径，异步读取文件内容
+                  // if there is a server file path, read the file content asynchronously
                   if (item.server_file_path) {
-                    // 先显示加载状态
+                    // show a loading state first
                     deepGenomeMessage.content = "正在加载文件内容...";
 
                     readServerFile(item.server_file_path)
@@ -248,16 +248,16 @@ export function useSelectChat(opts: {
                         } else {
                           deepGenomeMessage.content = "文件内容为空或加载失败";
                         }
-                        // 强制更新视图
+                        // force a view update
                         nextTick(() => {
                           timestamp.value = Date.now();
                           scrollToBottom();
                         });
                       })
                       .catch((error) => {
-                        console.error("读取DeepGenomeAgent文件失败:", error);
+                        console.error("Failed to read DeepGenomeAgent file:", error);
                         deepGenomeMessage.content = "文件加载失败，请稍后重试";
-                        // 强制更新视图
+                        // force a view update
                         nextTick(() => {
                           timestamp.value = Date.now();
                           scrollToBottom();
@@ -285,7 +285,7 @@ export function useSelectChat(opts: {
                         ? JSON.parse(item.follow_up_questions)
                         : item.follow_up_questions
                       : [],
-                    showFollowUpQuestions: true, // 历史消息默认显示后续问题
+                    showFollowUpQuestions: true, // history messages show follow-up questions by default
                     instantMessage: false,
                   });
                   historyMessages.push({
@@ -310,7 +310,7 @@ export function useSelectChat(opts: {
                     ? JSON.parse(item.follow_up_questions)
                     : item.follow_up_questions
                   : [],
-                showFollowUpQuestions: true, // 历史消息默认显示后续问题
+                showFollowUpQuestions: true, // history messages show follow-up questions by default
                 showLog: false,
                 instantMessage: false,
               });
@@ -325,13 +325,13 @@ export function useSelectChat(opts: {
       }
 
       chatState.historyQuestion = historyMessages;
-      // 更新当前对话的消息
+      // update the current conversation's messages
       currentChat.value = {
         ...chat,
         messages: messages,
       };
 
-      // 自动滚动到最新对话
+      // auto-scroll to the latest conversation
       if (messages.length > 0) {
         await scrollToBottom();
       }

@@ -1,6 +1,6 @@
 <template>
   <div class="feedback-container">
-    <!-- 反馈表单 -->
+    <!-- Feedback form -->
     <div class="feedback-content">
       <div class="feedback-form-container">
         <el-form
@@ -52,19 +52,19 @@ import { feedback } from "@/api/feedback";
 
 const router = useRouter();
 
-// 反馈表单数据
+// Feedback form data
 const feedbackForm = ref({
   feedback_type: "用户反馈",
   feedback_content: "",
 });
 
-// 表单引用
+// Form ref
 const feedbackFormRef = ref();
 
-// 提交状态
+// Submission state
 const submitting = ref(false);
 
-// 表单验证规则
+// Form validation rules
 const feedbackRules = {
   feedback_content: [
     { required: true, message: "请输入反馈内容", trigger: "blur" },
@@ -73,12 +73,12 @@ const feedbackRules = {
   ],
 };
 
-// 返回上一页
+// Go back to previous page
 const goBack = () => {
   router.go(-1);
 };
 
-// 重置表单
+// Reset form
 const resetForm = () => {
   feedbackForm.value.feedback_content = "";
   if (feedbackFormRef.value) {
@@ -86,7 +86,7 @@ const resetForm = () => {
   }
 };
 
-// 提交反馈
+// Submit feedback
 const submitFeedback = async () => {
   if (!feedbackFormRef.value) return;
 
@@ -95,7 +95,7 @@ const submitFeedback = async () => {
     if (valid) {
       submitting.value = true;
 
-      // 调用真实API接口
+      // Call the real API endpoint
       const formData = new FormData();
       formData.append("feedback_type", feedbackForm.value.feedback_type);
       formData.append("feedback_content", feedbackForm.value.feedback_content);
@@ -103,13 +103,13 @@ const submitFeedback = async () => {
       const response = await feedback(formData);
 
       if (response.code === 200) {
-        // 显示成功提示
+        // Show success message
         ElMessage.success("反馈提交成功，感谢您的宝贵意见！");
 
-        // 重置表单
+        // Reset form
         resetForm();
 
-        // 延迟返回上一页
+        // Go back to previous page after a delay
         setTimeout(() => {
           router.go(-1);
         }, 1500);
@@ -118,7 +118,7 @@ const submitFeedback = async () => {
       }
     }
   } catch (error) {
-    console.error("提交反馈失败:", error);
+    console.error("Failed to submit feedback:", error);
     ElMessage.error("提交失败，请重试");
   } finally {
     submitting.value = false;
@@ -193,7 +193,7 @@ const submitFeedback = async () => {
   }
 }
 
-// 响应式设计
+// Responsive design
 @media (max-width: 768px) {
   .feedback-container {
     padding: 16px;

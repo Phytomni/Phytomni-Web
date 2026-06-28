@@ -1,12 +1,3 @@
-<!--
- * 组件注释
- * @Author: wuq-l
- * @Date: 2022-08-18 21:07:25
- * @LastEditors: error: git config user.name & please set dead value or install git
- * @LastEditTime: 2025-05-09 16:46:41
- * @Description:
- * 人生无常！大肠包小肠......
--->
 <template>
   <div class="app-container">
     <RouterView />
@@ -20,8 +11,8 @@ import Footer from "@/components/Footer.vue";
 
 const route = useRoute();
 
-// 判断是否为无布局路由,如果是则显示备案信息
-// 排除聊天页面,因为它有自己的 footer
+// Show the ICP footer on no-layout routes only;
+// exclude the chat page, which has its own footer
 const showFooter = computed(() => {
   if (route.meta?.layout === "nolayout" && route.path !== "/chat") {
     return true;

@@ -1,8 +1,8 @@
 import type { UploadFile } from "../types";
 
-// 解析消息内容，提取文件信息
+// Parse message content and extract file info
 export const parseMessageWithFiles = (messageContent: string) => {
-  // 检查是否包含文件信息标记
+  // check whether file-info markers are present
   const fileInfoRegex = /\[附件: ([^\]]+)\]/g;
   const fileMatches = messageContent.match(fileInfoRegex);
 
@@ -13,7 +13,7 @@ export const parseMessageWithFiles = (messageContent: string) => {
     };
   }
 
-  // 提取文件信息
+  // extract file info
   const attachedFiles: UploadFile[] = [];
   fileMatches.forEach((match) => {
     const fileInfo = match.match(/\[附件: ([^(]+) \(([^)]+)\)\]/);
@@ -21,7 +21,7 @@ export const parseMessageWithFiles = (messageContent: string) => {
       const fileName = fileInfo[1].trim();
       const fileSizeStr = fileInfo[2].trim();
 
-      // 解析文件大小
+      // parse the file size
       let fileSize = 0;
       if (fileSizeStr.includes("KB")) {
         fileSize = parseFloat(fileSizeStr) * 1024;
@@ -34,13 +34,13 @@ export const parseMessageWithFiles = (messageContent: string) => {
       attachedFiles.push({
         name: fileName,
         size: fileSize,
-        type: "", // 历史记录中无法获取文件类型
-        file: null as any, // 历史记录中无法获取文件对象
+        type: "", // file type is unavailable from history
+        file: null as any, // file object is unavailable from history
       });
     }
   });
 
-  // 移除文件信息标记，获取纯文本内容
+  // remove file-info markers to get the plain text content
   const cleanContent = messageContent.replace(fileInfoRegex, "").trim();
 
   return {

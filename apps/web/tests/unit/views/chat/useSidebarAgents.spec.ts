@@ -38,11 +38,11 @@ describe("useSidebarAgents", () => {
     const router = makeRouter();
     const { showAgentsList, exploreAgent, handleAgentClick } = useSidebarAgents(router);
 
-    // 先打开列表
+    // First open the list
     exploreAgent();
     expect(showAgentsList.value).toBe(true);
 
-    // 点击后跳转并关闭列表
+    // After clicking, navigate and close the list
     handleAgentClick({ route: "/x" });
     expect(router.push).toHaveBeenCalledWith("/x");
     expect(showAgentsList.value).toBe(false);

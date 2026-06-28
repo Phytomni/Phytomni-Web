@@ -1,20 +1,13 @@
-<!--
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-05-09
- * @Description: 用户列表页面，包含用户表格、操作按钮和编辑弹窗
- * 既往不恋！当下不杂！！未来不迎！！！
--->
 <template>
   <div class="user-list-container">
-    <!-- 顶部操作栏 -->
+    <!-- Top operation bar -->
     <div class="operation-bar">
       <el-button type="primary" @click="handleAdd">
         <el-icon><Plus /></el-icon>{{ $t("user.add") }}
       </el-button>
     </div>
 
-    <!-- 用户表格 -->
+    <!-- User table -->
     <div class="table-container">
       <el-table
         :data="tableData"
@@ -127,7 +120,7 @@
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
+      <!-- Pagination -->
       <div class="pagination-container">
         <el-pagination
           v-model:current-page="currentPage"
@@ -141,7 +134,7 @@
       </div>
     </div>
 
-    <!-- 用户编辑弹窗 -->
+    <!-- User edit dialog -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogType === 'add' ? $t('user.add') : $t('user.edit')"
@@ -234,7 +227,7 @@
       </template>
     </el-dialog>
 
-    <!-- 用户查看弹窗 -->
+    <!-- User view dialog -->
     <el-dialog
       v-model="viewDialogVisible"
       :title="$t('user.detail')"
@@ -290,7 +283,7 @@ import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 
-// 定义用户数据接口
+// Define the user data interface
 interface UserData {
   id: number;
   email: string;
@@ -307,21 +300,21 @@ interface UserData {
   chat_limit: number | null;
 }
 
-// 表格相关
+// Table-related
 const loading = ref(false);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
 const tableData = ref<UserData[]>([]);
 
-// 表单相关
+// Form-related
 const dialogVisible = ref(false);
 const viewDialogVisible = ref(false);
 const dialogType = ref<"add" | "edit">("add");
 const userFormRef = ref();
 const currentUser = ref<UserData | null>(null);
 
-// 表单数据
+// Form data
 const userForm = reactive({
   id: 0,
   email: "",
@@ -333,51 +326,51 @@ const userForm = reactive({
   chat_limit: null as number | null,
 });
 
-// 密码强度验证函数 - 验证密码是否满足复杂度要求
+// Password strength validation function - checks the password meets complexity requirements
 const validatePasswordStrength = (rule: any, value: string, callback: any) => {
-  // 编辑模式下，密码为空时不验证（表示不修改密码）
+  // In edit mode, skip validation when the password is empty (means keep current password)
   if (dialogType.value === "edit" && !value) {
     callback();
     return;
   }
 
-  // 新增模式下，密码为空时提示必填
+  // In add mode, prompt that the password is required when empty
   if (dialogType.value === "add" && !value) {
     callback(new Error(t("user.validation.passwordRequired")));
     return;
   }
 
-  // 至少8位
+  // At least 8 characters
   if (value.length < 8) {
     callback(new Error(t("user.validation.passwordMinLength8")));
     return;
   }
 
-  // 最多16位
+  // At most 16 characters
   if (value.length > 16) {
     callback(new Error(t("user.validation.passwordMaxLength16")));
     return;
   }
 
-  // 包含大写字母
+  // Must contain an uppercase letter
   if (!/[A-Z]/.test(value)) {
     callback(new Error(t("user.validation.passwordNeedUppercase")));
     return;
   }
 
-  // 包含小写字母
+  // Must contain a lowercase letter
   if (!/[a-z]/.test(value)) {
     callback(new Error(t("user.validation.passwordNeedLowercase")));
     return;
   }
 
-  // 包含数字
+  // Must contain a digit
   if (!/[0-9]/.test(value)) {
     callback(new Error(t("user.validation.passwordNeedNumber")));
     return;
   }
 
-  // 包含特殊符号
+  // Must contain a special character
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
     callback(new Error(t("user.validation.passwordNeedSpecial")));
     return;
@@ -386,7 +379,7 @@ const validatePasswordStrength = (rule: any, value: string, callback: any) => {
   callback();
 };
 
-// 表单验证规则
+// Form validation rules
 const formRules = reactive({
   email: [
     {
@@ -415,7 +408,7 @@ const formRules = reactive({
   ],
 });
 
-// 获取角色名称
+// Get the role name
 const getRoleName = (code: string): string => {
   const codeMap: Record<string, string> = {
     super_admin: "super_admin",
@@ -426,7 +419,7 @@ const getRoleName = (code: string): string => {
   return codeMap[code] || code;
 };
 
-// 获取数据的方法
+// Method to fetch data
 const fetchData = async () => {
   loading.value = true;
   try {
@@ -444,7 +437,7 @@ const fetchData = async () => {
   }
 };
 
-// 分页方法
+// Pagination methods
 const handleSizeChange = (size: number) => {
   pageSize.value = size;
   fetchData();
@@ -455,7 +448,7 @@ const handleCurrentChange = (page: number) => {
   fetchData();
 };
 
-// 新增用户
+// Add a user
 const handleAdd = () => {
   dialogType.value = "add";
   userForm.id = 0;
@@ -470,7 +463,7 @@ const handleAdd = () => {
   dialogVisible.value = true;
 };
 
-// 编辑用户
+// Edit a user
 const handleEdit = (row: UserData) => {
   dialogType.value = "edit";
 
@@ -486,13 +479,13 @@ const handleEdit = (row: UserData) => {
   dialogVisible.value = true;
 };
 
-// 查看用户
+// View a user
 const handleView = (row: UserData) => {
   currentUser.value = row;
   viewDialogVisible.value = true;
 };
 
-// 解锁用户
+// Unlock a user
 const handleUnlock = (row: UserData) => {
   ElMessageBox.confirm(
     t("user.unlockConfirmMessage", { email: row.email }),
@@ -513,22 +506,22 @@ const handleUnlock = (row: UserData) => {
           ElMessage.error(res.message || t("user.unlockFailed"));
         }
       } catch (error: any) {
-        console.error("解锁用户失败:", error);
+        console.error("Failed to unlock user:", error);
         ElMessage.error(error.message || t("user.unlockFailed"));
       }
     })
     .catch(() => {
-      // 用户取消操作
+      // User cancelled the operation
     });
 };
 
-// 关闭弹窗
+// Close the dialog
 const closeDialog = () => {
   resetForm();
   dialogVisible.value = false;
 };
 
-// 重置表单
+// Reset the form
 const resetForm = () => {
   userForm.id = 0;
   userForm.email = "";
@@ -538,13 +531,13 @@ const resetForm = () => {
   userForm.organization = "";
   userForm.position = "";
   userForm.chat_limit = null;
-  // 清除表单验证状态
+  // Clear the form validation state
   if (userFormRef.value) {
     userFormRef.value.clearValidate();
   }
 };
 
-// 提交表单
+// Submit the form
 const handleSubmit = async () => {
   if (!userFormRef.value) return;
 
@@ -552,7 +545,7 @@ const handleSubmit = async () => {
     if (valid) {
       try {
         if (dialogType.value === "add") {
-          // 新增用户 - 使用 POST /api/v1/users 接口，FormData格式
+          // Add user - uses the POST /api/v1/users endpoint, FormData format
           const formData = new FormData();
           formData.append("email", userForm.email);
           formData.append("password", userForm.password);
@@ -560,7 +553,7 @@ const handleSubmit = async () => {
           formData.append("phone", userForm.phone);
           formData.append("organization", userForm.organization);
           formData.append("position", userForm.position);
-          // 如果是 guest 用户，添加 chat_limit 参数
+          // For guest users, append the chat_limit parameter
           if (userForm.code === "guest" && userForm.chat_limit !== null) {
             formData.append("chat_limit", userForm.chat_limit.toString());
           }
@@ -576,19 +569,19 @@ const handleSubmit = async () => {
             ElMessage.error(res.message || "用户添加失败");
           }
         } else {
-          // 编辑用户 - 使用 PUT /api/v1/users/:id/permissions 接口，FormData格式
+          // Edit user - uses the PUT /api/v1/users/:id/permissions endpoint, FormData format
           const formData = new FormData();
           formData.append("id", userForm.id.toString());
           formData.append("code", userForm.code);
-          // 如果密码不为空，则修改密码
+          // If the password is not empty, change the password
           if (userForm.password) {
             formData.append("password", userForm.password);
           }
-          // 添加手机号、机构、职位
+          // Append phone, organization, and position
           formData.append("phone", userForm.phone);
           formData.append("organization", userForm.organization);
           formData.append("position", userForm.position);
-          // 如果是 guest 用户，添加 chat_limit 参数
+          // For guest users, append the chat_limit parameter
           if (userForm.code === "guest" && userForm.chat_limit !== null) {
             formData.append("chat_limit", userForm.chat_limit.toString());
           }
@@ -605,20 +598,20 @@ const handleSubmit = async () => {
           }
         }
       } catch (error: any) {
-        console.error("操作失败:", error);
+        console.error("Operation failed:", error);
         ElMessage.error(
           error.message ||
             (dialogType.value === "add" ? "用户添加失败" : "用户信息修改失败")
         );
       }
     } else {
-      console.log("表单验证失败", fields);
+      console.log("Form validation failed", fields);
       ElMessage.warning(t("user.validation.formValidationFailed"));
     }
   });
 };
 
-// 页面加载时获取数据
+// Fetch data when the page loads
 onMounted(() => {
   fetchData();
 });
@@ -673,7 +666,7 @@ onMounted(() => {
   }
 }
 
-/* 表头样式 */
+/* Table header styles */
 :deep(.table-header-row) {
   background-color: #409eff !important;
 }

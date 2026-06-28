@@ -1,25 +1,25 @@
-// 格式化详细引用信息
+// Format a detailed citation string
 export const formatDetailedCitation = (doc: any): string => {
   const parts = [];
 
-  // 作者
+  // author
   if (doc.au) {
     parts.push(doc.au);
   }
 
-  // 标题
+  // title
   if (doc.ti) {
-    // 移除HTML标签
+    // strip HTML tags
     const cleanTitle = doc.ti.replace(/<[^>]*>/g, "");
     parts.push(`"${cleanTitle}"`);
   }
 
-  // 期刊名称
+  // journal name
   if (doc.so) {
     parts.push(doc.so);
   }
 
-  // 卷号、页码和年份组合
+  // volume, pages, and year combined
   let volumePageYear = "";
   if (doc.vl) {
     if (doc.bp && doc.ep) {
@@ -33,7 +33,7 @@ export const formatDetailedCitation = (doc: any): string => {
     volumePageYear = `${doc.bp}-${doc.ep}`;
   }
 
-  // 添加年份（用括号包围）
+  // add the year (wrapped in parentheses)
   if (doc.py) {
     if (volumePageYear) {
       volumePageYear += `, (${doc.py})`;
@@ -42,7 +42,7 @@ export const formatDetailedCitation = (doc: any): string => {
     }
   }
 
-  // 如果有卷号页码年份信息，添加到parts中
+  // if volume/page/year info exists, add it to parts
   if (volumePageYear) {
     parts.push(volumePageYear);
   }

@@ -18,7 +18,7 @@
     </div>
 
     <div class="chat-messages">
-      <!-- 第一轮对话 -->
+      <!-- First conversation round -->
       <div class="message user-message">
         <div class="message-content">
           <div class="message-text">
@@ -39,7 +39,7 @@
         </div>
       </div>
 
-      <!-- 第二轮对话 -->
+      <!-- Second conversation round -->
       <div class="message user-message">
         <div class="message-content">
           <div class="message-text">
@@ -61,7 +61,7 @@
         </div>
       </div>
 
-      <!-- 第三轮对话 -->
+      <!-- Third conversation round -->
       <div class="message user-message">
         <div class="message-content">
           <div class="message-text">
@@ -98,18 +98,18 @@ const goBack = () => {
 const botAvatar =
   "/avatars/bot.svg";
 
-// 第一轮对话响应
+// First-round conversation response
 const round1Response = `|  Transcript ID  |
 | :-------------: |
 | Os01t0177400-01 |
 `;
 
-// 第二轮对话响应
+// Second-round conversation response
 const round2Response = `| LENGTH([sequence_2]) |
 | :------------------: |
 |         1113         |`;
 
-// 第三轮对话响应
+// Third-round conversation response
 const round3Response = `| Query Gene ID | Query Species | Homology Gene ID | Homology Species |
 | ------------- | :-----------: | :--------------: | :--------------: |
 | Os01g0177400  |      osa      | Zm00001eb122500  |       zma        |`;

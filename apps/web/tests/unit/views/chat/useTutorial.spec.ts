@@ -4,8 +4,8 @@ import { defineComponent } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { useTutorial } from "@/views/chat/composables/useTutorial";
 
-// Harness: 一个轻量组件,仅调用 useTutorial,使 onMounted/onUnmounted
-// 生命周期钩子在 mount/unmount 时正常触发。
+// Harness: a lightweight component that only calls useTutorial, so the
+// onMounted/onUnmounted lifecycle hooks fire correctly on mount/unmount.
 const Harness = defineComponent({
   setup() {
     useTutorial();
@@ -18,7 +18,7 @@ describe("useTutorial keydown listener lifecycle", () => {
   let removeSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    // 每个测试前激活一个全新的 Pinia 实例(useTutorial 内部 userStore() 需要)
+    // Activate a fresh Pinia instance before each test (needed by useTutorial's internal userStore())
     setActivePinia(createPinia());
     addSpy = vi.spyOn(document, "addEventListener");
     removeSpy = vi.spyOn(document, "removeEventListener");
@@ -32,19 +32,19 @@ describe("useTutorial keydown listener lifecycle", () => {
   it("adds the keydown listener on mount and removes the SAME handler on unmount (no leak)", () => {
     const wrapper = mount(Harness);
 
-    // mount 后应有且仅有一次 keydown 的 add
+    // After mount there should be exactly one keydown add
     const keydownAdds = addSpy.mock.calls.filter((c) => c[0] === "keydown");
     expect(keydownAdds.length).toBe(1);
     const handler = keydownAdds[0][1];
 
     wrapper.unmount();
 
-    // unmount 后应有且仅有一次 keydown 的 remove,且是同一个函数引用
+    // After unmount there should be exactly one keydown remove, with the same function reference
     const keydownRemoves = removeSpy.mock.calls.filter(
       (c) => c[0] === "keydown"
     );
     expect(keydownRemoves.length).toBe(1);
-    // 被移除的 handler 必须与 add 时完全相同(同一引用),否则泄漏依然存在
+    // The removed handler must be exactly the one added (same reference), otherwise the leak persists
     expect(keydownRemoves[0][1]).toBe(handler);
   });
 });

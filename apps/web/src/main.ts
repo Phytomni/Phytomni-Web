@@ -1,78 +1,70 @@
-/*
- * 组件注释
- * @Author: wuq-l
- * @Date: 2022-08-18 21:07:26
- * @LastEditors: error: git config user.name & please set dead value or install git
- * @LastEditTime: 2025-05-15 11:37:53
- * @Description: main 文件入口
- * 人生无常！大肠包小肠......
- */
+// Application entry point.
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import ElementPlus from "element-plus";
 import enElementLocale from "element-plus/es/locale/lang/en";
 import zhElementLocale from "element-plus/es/locale/lang/zh-cn";
-import i18n, { setLanguage } from "./locales"; // 导入国际化配置
+import i18n, { setLanguage } from "./locales"; // import i18n config
 import { useAppStore, useThemeStore } from "@/stores";
 
 import App from "./App.vue";
 import router from "./router";
 import directive from "./directive";
-// 注册指令
+// register directives
 import plugins from "./plugins"; // plugins
 import { download } from "@/utils/request";
 import "element-plus/dist/index.css";
-import "./assets/main.css"; // 全局样式
-import "./assets/theme.css"; // 主题样式
+import "./assets/main.css"; // global styles
+import "./assets/theme.css"; // theme styles
 import "./permission"; // permission control
 
 const app = createApp(App);
 
-// 初始化
+// init
 const pinia = createPinia();
 app.use(pinia);
 
-// 初始化 store
+// init stores
 const appStore = useAppStore();
 const themeStore = useThemeStore();
 
-// 确保在使用 i18n 之前已经正确加载了语言包
+// Ensure the locale bundle is loaded before using i18n
 const currentLang =
   appStore.language || localStorage.getItem("language") || "en-US";
 
-// 初始化 i18n
+// init i18n
 app.use(i18n);
 
-// 设置语言
+// set language
 setLanguage(currentLang);
 
-// 初始化主题
+// init theme
 themeStore.initTheme();
 
-// 添加调试信息
+// Debug logging
 console.log("Theme initialized:", {
   theme: themeStore.theme,
   currentTheme: themeStore.currentTheme,
   systemTheme: (themeStore as any).systemTheme,
 });
 
-// 全局方法挂载
+// mount global methods
 app.config.globalProperties.download = download;
 
 app.use(router);
 app.use(plugins);
 app.use(directive);
 
-// 使用element-plus 并且设置全局的大小
+// use Element Plus with a global component size
 app.use(ElementPlus, {
   locale: currentLang === "zh-CN" ? zhElementLocale : enElementLocale,
-  // 支持 large、default、small
+  // supports large, default, small
   size: "default",
 });
 
 app.mount("#app");
 
-// 页面卸载时清理主题监听器
+// Clean up the theme listener on page unload
 window.addEventListener("beforeunload", () => {
   themeStore.cleanup();
 });

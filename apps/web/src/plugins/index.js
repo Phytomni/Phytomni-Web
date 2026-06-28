@@ -1,6 +1,6 @@
 import cache from "./cache";
 
 export default function installPlugins(app) {
-  // 缓存对象
+  // Cache object
   app.config.globalProperties.$cache = cache;
 }

@@ -1,10 +1,3 @@
-<!--
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-06-17
- * @Description: 语言切换组件
- * 既往不恋！当下不杂！！未来不迎！！！
--->
 <template>
   <div class="lang-switch">
     <el-dropdown @command="handleCommand" trigger="click">
@@ -38,17 +31,17 @@ import { useAppStore } from "@/stores";
 const { locale } = useI18n();
 const appStore = useAppStore();
 
-// 获取当前语言
+// current language
 const currentLang = computed(() => {
   return appStore.language;
 });
 
-// 显示的语言标签
+// displayed language label
 const currentLangLabel = computed(() => {
   return currentLang.value === "zh-CN" ? "中文" : "English";
 });
 
-// 切换语言
+// switch language
 const handleCommand = (command: string) => {
   setLanguage(command as "zh-CN" | "en-US");
 };

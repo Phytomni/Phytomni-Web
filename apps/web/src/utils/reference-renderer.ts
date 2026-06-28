@@ -1,13 +1,14 @@
 import { escapeHtml, sanitizeHref } from "@/utils/sanitize-markup";
 import { formatDetailedCitation } from "@/utils/citation";
 
-// 处理参考文献列表，生成格式化后的 HTML(从 DeepGenomeResultViewer 的
-// displayReferences computed 原样抽出)。
+// Build the formatted HTML for the reference list (extracted verbatim from
+// DeepGenomeResultViewer's displayReferences computed).
 //
-// XSS 清洗不变量(v-html sink):references 来自 Bot `formatted.references`
-// reshape,字段受 agent 输出 / RAG 语料影响,最终注入 v-html。所有 agent 文本
-// 字段(title / citation au-so / dl 文本 / pm 文本 / 普通字符串 / JSON)一律
-// escapeHtml;DOI / PubMed 的 href 一律经 sanitizeHref 做协议白名单校验。
+// XSS sanitization invariant (v-html sink): references come from a reshape of
+// Bot's `formatted.references`, whose fields are influenced by agent output / RAG
+// corpus and are ultimately injected via v-html. Every agent text field (title /
+// citation au-so / dl text / pm text / plain string / JSON) is escapeHtml-ed; the
+// DOI / PubMed href always goes through sanitizeHref for a scheme allow-list check.
 export const buildDisplayReferences = (
   references: any[]
 ): Array<{ html: string; id: string }> => {
@@ -26,7 +27,7 @@ export const buildDisplayReferences = (
     } else if (doc.au || doc.ti) {
       const citation = formatDetailedCitation(doc);
 
-      // 构建 DOI 和 PMID 链接部分
+      // build the DOI and PMID link parts
       let linkPart = "";
       const hasLink = doc.dl || doc.pm;
 
@@ -52,15 +53,16 @@ export const buildDisplayReferences = (
       }
 
       return {
-        // citation 是纯文本(au/so/卷页年),先转义;linkPart 是本组件生成的
-        // 已消毒锚点(sanitizeHref + escapeHtml),保留原样不再转义。
+        // citation is plain text (au/so/volume-page-year), escaped first; linkPart is
+        // a sanitized anchor produced by this component (sanitizeHref + escapeHtml),
+        // kept as-is and not re-escaped.
         html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
           citation
         )}${linkPart}</div>`,
         id: `ref-${refIndex}`,
       };
     } else {
-      // 处理普通字符串类型的引用
+      // handle plain-string references
       if (typeof doc === "string") {
         return {
           html: `<div>${refIndex}. ${escapeHtml(doc)}</div>`,
@@ -68,7 +70,7 @@ export const buildDisplayReferences = (
         };
       }
 
-      // 默认情况
+      // default case
       return {
         html: `<div>${refIndex}. ${escapeHtml(JSON.stringify(doc))}</div>`,
         id: `ref-${refIndex}`,

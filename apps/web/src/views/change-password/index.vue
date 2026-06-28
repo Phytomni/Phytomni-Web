@@ -1,10 +1,3 @@
-<!--
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-05-09
- * @Description: 修改密码页面
- * 既往不恋！当下不杂！！未来不迎！！！
--->
 <template>
   <div class="change-password-page">
     <div class="page-header">
@@ -97,13 +90,13 @@ import { changePassword } from "@/api/auth";
 const { t } = useI18n();
 const router = useRouter();
 
-// 表单引用
+// Form ref
 const passwordFormRef = ref();
 
-// 表单数据
+// Form data
 const passwordForm = reactive({
-  id: "", // 用户ID
-  code: "", // 用户代码/权限代码
+  id: "", // User ID
+  code: "", // User code / permission code
   username: "",
   oldPassword: "",
   newPassword: "",
@@ -116,12 +109,12 @@ const passwordForm = reactive({
 const UserStore = userStore();
 const isFirstLogin = computed(() => UserStore.login_status === "0");
 
-// 返回上一页
+// Go back to the previous page
 const goBack = () => {
   router.back();
 };
 
-// 密码验证函数 - 验证确认密码是否与新密码一致
+// Password validator - check that the confirm password matches the new password
 const validateConfirmPassword = (rule: any, value: string, callback: any) => {
   if (value === "") {
     callback(new Error(t("changePassword.confirmPasswordRequired")));
@@ -132,38 +125,38 @@ const validateConfirmPassword = (rule: any, value: string, callback: any) => {
   }
 };
 
-// 密码强度验证函数 - 验证新密码是否满足复杂度要求
+// Password strength validator - check that the new password meets complexity requirements
 const validatePasswordStrength = (rule: any, value: string, callback: any) => {
   if (!value) {
     callback();
     return;
   }
 
-  // 至少8位
+  // At least 8 characters
   if (value.length < 8) {
     callback(new Error(t("changePassword.passwordMinLength8")));
     return;
   }
 
-  // 包含大写字母
+  // Contains an uppercase letter
   if (!/[A-Z]/.test(value)) {
     callback(new Error(t("changePassword.passwordNeedUppercase")));
     return;
   }
 
-  // 包含小写字母
+  // Contains a lowercase letter
   if (!/[a-z]/.test(value)) {
     callback(new Error(t("changePassword.passwordNeedLowercase")));
     return;
   }
 
-  // 包含数字
+  // Contains a digit
   if (!/[0-9]/.test(value)) {
     callback(new Error(t("changePassword.passwordNeedNumber")));
     return;
   }
 
-  // 包含特殊符号
+  // Contains a special character
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
     callback(new Error(t("changePassword.passwordNeedSpecial")));
     return;
@@ -172,7 +165,7 @@ const validatePasswordStrength = (rule: any, value: string, callback: any) => {
   callback();
 };
 
-// 表单验证规则
+// Form validation rules
 const formRules = reactive({
   username: [
     {
@@ -208,7 +201,7 @@ const formRules = reactive({
         if (value === passwordForm.oldPassword) {
           callback(new Error(t("changePassword.passwordSame")));
         } else {
-          // 当新密码变化时，如果已经输入了确认密码，则重新验证确认密码
+          // When the new password changes, re-validate the confirm password if it has already been entered
           if (passwordForm.confirmPassword !== "") {
             passwordFormRef.value.validateField("confirmPassword");
           }
@@ -228,7 +221,7 @@ const formRules = reactive({
   ],
 });
 
-// 重置表单
+// Reset the form
 const resetForm = () => {
   passwordForm.oldPassword = "";
   passwordForm.newPassword = "";
@@ -236,26 +229,27 @@ const resetForm = () => {
   passwordFormRef.value.resetFields();
 };
 
-// 提交表单
+// Submit the form
 const submitForm = async () => {
   if (!passwordFormRef.value) return;
 
   await passwordFormRef.value.validate(async (valid: boolean, fields: any) => {
     if (valid) {
       try {
-        // 准备API请求数据 - 使用FormData格式
+        // Prepare the API request payload - using FormData format
         const formData = new FormData();
         formData.append("password", passwordForm.oldPassword);
         formData.append("new_password", passwordForm.newPassword);
-        // 调用修改密码接口
+        // Call the change-password endpoint
         const response = await changePassword(formData);
 
         if (response.code === 200) {
           ElMessage.success(t("changePassword.passwordChangeSuccess"));
           const UserStore = userStore();
           UserStore.FedLogOut().finally(() => {
-            // Tutorial hand-off (TW-D15): 改密完成 = 教学触发的唯一自然锚点。
-            // sessionStorage 在 FedLogOut 内 .clear() 之后才写,新写入存活到 tab 关闭。
+            // Tutorial hand-off (TW-D15): a completed password change is the only
+            // natural anchor for triggering the tutorial. sessionStorage is written
+            // after FedLogOut's .clear(), so the new write survives until the tab closes.
             try {
               sessionStorage.setItem("tutorial_pending", "1");
             } catch (err) {
@@ -269,28 +263,28 @@ const submitForm = async () => {
           );
         }
       } catch (error: any) {
-        console.error("修改密码失败:", error);
+        console.error("Failed to change password:", error);
         ElMessage.warning(
           error.response.data.message || t("changePassword.passwordChangeRetry")
         );
       }
     } else {
-      console.log("表单验证失败", fields);
+      console.log("Form validation failed", fields);
       ElMessage.warning(t("changePassword.formValidationFailed"));
       return false;
     }
   });
 };
 
-// 页面加载时，可以获取当前登录用户信息
+// On page load, fetch the current logged-in user's info
 onMounted(() => {
-  // 从用户存储中获取当前登录用户的信息
+  // Read the current logged-in user's info from the user store
   const UserStore = userStore();
   if (UserStore.name) {
     passwordForm.username = UserStore.name;
   }
-  // 注意：用户ID和代码需要从其他地方获取，或者让用户手动输入
-  // 这里可以根据实际业务需求进行调整
+  // Note: the user ID and code must be obtained elsewhere, or entered manually by the user
+  // Adjust this according to the actual business requirements
 });
 </script>
 
@@ -350,7 +344,7 @@ onMounted(() => {
     }
   }
 }
-/* 深色模式适配 */
+/* Dark mode adaptation */
 .theme-dark .change-password-page {
   background-color: var(--color-background);
 }
@@ -373,12 +367,12 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
-/* 深色模式下 Element Plus 表单样式适配 */
+/* Element Plus form style adaptation in dark mode */
 .theme-dark :deep(.el-form-item__label) {
   color: var(--el-text-color-primary);
 }
 
-/* 让输入框使用 Element Plus 默认的深色主题样式，不单独设置背景色 */
+/* Let inputs use Element Plus's default dark theme styling, without setting a separate background color */
 .theme-dark :deep(.el-input__inner) {
   color: var(--el-text-color-primary);
 }
@@ -387,7 +381,7 @@ onMounted(() => {
   color: var(--el-text-color-placeholder);
 }
 
-/* 深色模式下按钮样式 */
+/* Button styling in dark mode */
 .theme-dark :deep(.el-button) {
   background-color: #f5f5f5;
   border-color: #dcdcdc;

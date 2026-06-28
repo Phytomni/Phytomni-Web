@@ -12,7 +12,7 @@ describe("formatDetailedCitation", () => {
       ep: "110",
       py: "2023",
     };
-    // 期望: au. "cleanTitle". so. vl, bp-ep, (py)
+    // Expected: au. "cleanTitle". so. vl, bp-ep, (py)
     expect(formatDetailedCitation(doc)).toBe(
       'Smith J, Doe A. "Plant Genomics Review". Nature Plants. 12, 100-110, (2023)'
     );

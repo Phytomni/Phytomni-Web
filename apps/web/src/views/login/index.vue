@@ -156,7 +156,7 @@ const handleSubmit = () => {
 };
 
 const handleLogin = () => {
-  // 创建FormData对象
+  // Create a FormData object
   const loginFormData = new FormData();
   loginFormData.append("email", formData.email);
   loginFormData.append("password", formData.password);
@@ -177,16 +177,17 @@ const handleLogin = () => {
         if (res.code === 200) {
           ElMessage.success("Login successful");
           setToken(res.data!.token);
-          //保存用户名
+          // Save the user name
           useUserStore.SET_USER_NAME(res.data!.user_name);
-          //保存登录状态
+          // Save the login status
           useUserStore.SET_LOGIN_STATUS(res.data!.login_status);
 
-          // 检查是否是首次登录，需要修改密码
+          // Check whether this is the first login and the password must be changed
           if (res.data!.login_status === "0") {
-            // Tutorial 触发不在此 set — 改密成功后由 change-password.vue 写
-            // sessionStorage.tutorial_pending,chat/index.vue checkTutorialStatus
-            // 一次性消费再翻 SET_SEEN_TUTORIAL('0')(TW-D15)。
+            // The tutorial trigger is not set here — after a successful password change,
+            // change-password.vue writes sessionStorage.tutorial_pending, and
+            // chat/index.vue checkTutorialStatus consumes it once and then flips
+            // SET_SEEN_TUTORIAL('0') (TW-D15).
             ElNotification({
               title: t("login.firstLoginTitle"),
               message: t("login.firstLoginMessage"),
@@ -198,13 +199,13 @@ const handleLogin = () => {
             return;
           }
 
-          // 检查密码警告信息
+          // Check the password warning message
           if (res.data!.password_warning) {
             ElNotification({
               title: t("login.passwordWarningTitle"),
               message: res.data!.password_warning,
               type: "warning",
-              duration: 0, // 不自动关闭，需要用户手动关闭
+              duration: 0, // Do not auto-close; requires the user to close it manually
               position: "top-right",
             });
           }
@@ -213,7 +214,7 @@ const handleLogin = () => {
         } else {
           const errorMessage = res.message || t("login.loginFailed");
 
-          // 后端通过 res.data.locked 标记上报锁定态(替代旧的子串嗅探)
+          // The backend reports the locked state via the res.data.locked flag (replacing the old substring sniffing)
           if (res.data?.locked === true) {
             ElNotification({
               title: t("login.accountLockedTitle"),
@@ -233,7 +234,7 @@ const handleLogin = () => {
       const errorMessage =
         response?.message || err.message || t("login.loginFailed");
 
-      // 后端通过 response.locked 标记上报锁定态(替代旧的子串嗅探)
+      // The backend reports the locked state via the response.locked flag (replacing the old substring sniffing)
       if (response?.locked === true) {
         ElNotification({
           title: t("login.accountLockedTitle"),
@@ -519,7 +520,7 @@ const goToRegister = () => {
 }
 </style>
 
-<!-- 全局样式：调整 ElNotification 关闭按钮位置 + mobile 响应式宽度 -->
+<!-- Global styles: adjust the ElNotification close-button position + mobile responsive width -->
 <style lang="scss">
 .el-notification {
   .el-notification__closeBtn {
@@ -528,8 +529,8 @@ const goToRegister = () => {
   }
 }
 
-/* Mobile viewport 下默认 330px notif 会与 right:16px 锚点叠加溢出
-   320-360px 设备,收为 calc(100vw - 24px) + 12px 双边距 */
+/* On a mobile viewport the default 330px notification would overlap the right:16px anchor and overflow;
+   for 320-360px devices, shrink it to calc(100vw - 24px) + 12px margins on both sides */
 @media (max-width: 768px) {
   .el-notification {
     width: calc(100vw - 24px);

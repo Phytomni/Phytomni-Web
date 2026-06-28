@@ -54,7 +54,7 @@ describe("useDeepGenomeImageViewer — handleMouseDown / handleMouseUp", () => {
     const { imageStyle, handleMouseDown, handleMouseUp } =
       useDeepGenomeImageViewer();
 
-    // 模拟左键点击（button = 0）
+    // Simulate a left-button click (button = 0)
     const downEvent = new MouseEvent("mousedown", {
       button: 0,
       clientX: 100,
@@ -63,7 +63,7 @@ describe("useDeepGenomeImageViewer — handleMouseDown / handleMouseUp", () => {
     handleMouseDown(downEvent);
     expect(imageStyle.value.cursor).toBe("grabbing");
 
-    // 松开后恢复为 grab
+    // Restores to grab after release
     handleMouseUp();
     expect(imageStyle.value.cursor).toBe("grab");
   });

@@ -1,7 +1,8 @@
 <!--
-  操作日志查看页 — 占位中(功能延期,非已落地特性)。
-  后端 /api/v1/operation-logs 现已收敛为仅管理员可读;此页待实现
-  「管理员鉴权感知 + 分页 + 日期筛选」的审计日志查看 UI,在此之前保持占位。
+  Operation-log viewer page — placeholder (feature deferred, not a shipped feature).
+  The backend /api/v1/operation-logs is now restricted to admin-only reads; this page
+  awaits an audit-log viewer UI with "admin-auth awareness + pagination + date filtering".
+  It stays a placeholder until then.
 -->
 <template>
   <div class="log-list">

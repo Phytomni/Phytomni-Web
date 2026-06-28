@@ -1,15 +1,6 @@
-/*
- * 组件注释
- * @Author: error: git config user.name & please set dead value or install git
- * @Date: 2025-04-29 15:21:50
- * @LastEditors: error: git config user.name & please set dead value or install git
- * @LastEditTime: 2025-05-12 09:53:49
- * @Description:
- * 既往不恋！当下不杂！！未来不迎！！！
- */
 import request, { createAbortableRequest } from "@/utils/request";
 
-// 历史问题列表
+// History question list
 export const getHistoryQuestionList = () => {
   return request({
     url: "/api/v1/conversations",
@@ -17,7 +8,7 @@ export const getHistoryQuestionList = () => {
   });
 };
 
-// 对话(发送消息;RESTful:会话 id 进路径,id=0 为新会话)
+// Conversation (send message; RESTful: conversation id in path, id=0 is a new conversation)
 export const getQuery = (
   data:
     | {
@@ -36,7 +27,7 @@ export const getQuery = (
   });
 };
 
-// 可中止的对话请求(同上)
+// Abortable conversation request (same as above)
 export const getQueryAbortable = (
   data:
     | {
@@ -57,7 +48,7 @@ export const getQueryAbortable = (
   });
 };
 
-// 查询对话(某会话的全部子级对话)
+// Query conversation (all child messages of a conversation)
 export const getAnswerCheck = (data: { dialogue_id: string }) => {
   return request({
     url: `/api/v1/conversations/${data.dialogue_id}/messages`,
@@ -65,7 +56,7 @@ export const getAnswerCheck = (data: { dialogue_id: string }) => {
   });
 };
 
-// 获取用户权限工具
+// Get user tool permissions
 export const getUserTool = () => {
   return request({
     url: "/api/v1/users/me/tool-permissions",
@@ -73,7 +64,7 @@ export const getUserTool = () => {
   });
 };
 
-// 获取对话下载链接
+// Get conversation download URL (analyst-agent OBS file)
 export const getChatdownloadURL = (data: { obs_path: string }) => {
   return request({
     url: "/api/v1/downloads/analyst-agent/obs-file",
@@ -82,7 +73,7 @@ export const getChatdownloadURL = (data: { obs_path: string }) => {
   });
 };
 
-// 获取对话下载链接
+// Get rendering-file download URL
 export const getFileDownUrlApi = (
   data: { id: string; document_format: string } | FormData
 ) => {
@@ -94,14 +85,14 @@ export const getFileDownUrlApi = (
   });
 };
 
-// 获取分析日志(RESTful:任务 id 进路径)
+// Get analyst log (RESTful: task id in path)
 export const getAnalystAgentLog = (data: { id: string }) => {
   return request({
     url: `/api/v1/async-tasks/${data.id}/analyst-log`,
     method: "get",
   });
 };
-// 点赞点踩(RESTful:会话 id 进路径)
+// Reaction like/dislike (RESTful: conversation id in path)
 export const getReactionType = (
   data: { id: string; reaction_type: string } | FormData
 ) => {
@@ -112,7 +103,7 @@ export const getReactionType = (
     data: data,
   });
 };
-// 删除历史对话(RESTful:会话 id 进路径,无需请求体)
+// Delete conversation (RESTful: conversation id in path, no request body)
 export const deleteHistory = (
   data: { id: string; reaction_type: string } | FormData
 ) => {
@@ -122,7 +113,7 @@ export const deleteHistory = (
     method: "delete",
   });
 };
-// 重命名对话(RESTful:会话 id 进路径,rename 留在请求体)
+// Rename conversation (RESTful: conversation id in path, rename stays in body)
 export const renameHistory = (
   data: { id: string; rename: string } | FormData
 ) => {
@@ -133,7 +124,7 @@ export const renameHistory = (
     data: data,
   });
 };
-// 收藏对话(RESTful:会话 id 进路径,collect_type 留在请求体)
+// Favorite conversation (RESTful: conversation id in path, collect_type stays in body)
 export const collectHistory = (
   data: { id: string; collect_type: string } | FormData
 ) => {
@@ -144,7 +135,7 @@ export const collectHistory = (
     data: data,
   });
 };
-// 获取收藏对话列表(RESTful:并入会话列表,?favorite=true 过滤)
+// Get favorites (RESTful: merged into the conversation list, filtered by ?favorite=true)
 export const getCollectHistory = () => {
   return request({
     url: "/api/v1/conversations",
@@ -153,7 +144,7 @@ export const getCollectHistory = () => {
   });
 };
 
-// 更新分析日志(RESTful:异步任务子资源回写)
+// Update analyst log (RESTful: async-task subresource write-back)
 export const updateAnalystAgentLog = (
   data: { task_id: string; compute_resource: string } | FormData
 ) => {
@@ -164,7 +155,7 @@ export const updateAnalystAgentLog = (
   });
 };
 
-// 获取 AnalystAgent obs 图片下载链接(GeneNetworkAgent / DigitalDesignAgent 渲染依赖)
+// Get AnalystAgent OBS image download URLs (GeneNetworkAgent / DigitalDesignAgent rendering dependency)
 export const getObsImages = (data: { obs_path: string }) => {
   return request({
     url: "/api/v1/downloads/analyst-agent/obs-images",

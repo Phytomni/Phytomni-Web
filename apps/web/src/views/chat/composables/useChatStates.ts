@@ -3,7 +3,7 @@ import type { Ref } from "vue";
 import type { UploadFile } from "../types";
 
 export function useChatStates() {
-  // 所有对话的状态管理
+  // state management for all conversations
   const chatStates = ref<
     Record<
       string,
@@ -17,16 +17,16 @@ export function useChatStates() {
         logData: Record<string, any>;
         loadingLog: Record<string, boolean>;
         refreshingMessages: Record<string, boolean>;
-        reactions: Record<string, number>; // 添加点赞点踩状态
-        updatingLog: Record<string, boolean>; // 添加更新日志状态
-        sendStartedAt: number | null; // 本次发送起点;null = 未发送
-        activeAgentName: string; // 本次发送的规范 agent 名(选 τ + ETA 文案)
-        completing: boolean; // true = 触发进度条 99→100 快动画
+        reactions: Record<string, number>; // reaction (like/dislike) state
+        updatingLog: Record<string, boolean>; // log-updating state
+        sendStartedAt: number | null; // start of this send; null = not sending
+        activeAgentName: string; // canonical agent name for this send (selects τ + ETA copy)
+        completing: boolean; // true = trigger the 99→100 fast progress animation
       }
     >
   >({});
 
-  // 获取或创建对话状态
+  // get or create the conversation state
   const getChatState = (dialogueId: string) => {
     if (!chatStates.value[dialogueId]) {
       chatStates.value[dialogueId] = {
@@ -39,8 +39,8 @@ export function useChatStates() {
         logData: {},
         loadingLog: {},
         refreshingMessages: {},
-        reactions: {}, // 初始化点赞点踩状态
-        updatingLog: {}, // 初始化更新日志状态
+        reactions: {}, // initialize reaction state
+        updatingLog: {}, // initialize log-updating state
         sendStartedAt: null,
         activeAgentName: "",
         completing: false,
@@ -49,11 +49,11 @@ export function useChatStates() {
     return chatStates.value[dialogueId];
   };
 
-  // 当前选中的对话
+  // the currently selected conversation
   const currentChatId = ref("");
   const currentChat: Ref<any> = ref(null);
 
-  // 输入框内容 - 现在基于当前对话
+  // input content - now based on the current conversation
   const messageInput = computed({
     get: () => {
       if (!currentChatId.value) return "";
@@ -69,7 +69,7 @@ export function useChatStates() {
     },
   });
 
-  // 发送消息的加载状态 - 现在基于当前对话
+  // message-sending loading state - now based on the current conversation
   const isSending = computed({
     get: () => {
       if (!currentChatId.value) return false;
@@ -85,7 +85,7 @@ export function useChatStates() {
     },
   });
 
-  // 文件列表 - 现在基于当前对话
+  // file list - now based on the current conversation
   const fileList = computed({
     get: () => {
       if (!currentChatId.value) return [];
@@ -101,7 +101,7 @@ export function useChatStates() {
     },
   });
 
-  // 复制状态 - 现在基于当前对话
+  // copy state - now based on the current conversation
   const copyVisible = computed({
     get: () => {
       if (!currentChatId.value) return 0;
@@ -132,7 +132,7 @@ export function useChatStates() {
     },
   });
 
-  // 日志状态管理 - 现在基于当前对话
+  // log state management - now based on the current conversation
   const logData = computed({
     get: () => {
       if (!currentChatId.value) return {};
@@ -163,7 +163,7 @@ export function useChatStates() {
     },
   });
 
-  // 刷新状态管理 - 现在基于当前对话
+  // refresh state management - now based on the current conversation
   const refreshingMessages = computed({
     get: () => {
       if (!currentChatId.value) return {};
@@ -179,7 +179,7 @@ export function useChatStates() {
     },
   });
 
-  // 历史问题 - 现在基于当前对话
+  // history question - now based on the current conversation
   const historyQuestion = computed({
     get: () => {
       if (!currentChatId.value) return null;
@@ -195,7 +195,7 @@ export function useChatStates() {
     },
   });
 
-  // 更新日志状态管理 - 现在基于当前对话
+  // log-updating state management - now based on the current conversation
   const updatingLog = computed({
     get: () => {
       if (!currentChatId.value) return {};

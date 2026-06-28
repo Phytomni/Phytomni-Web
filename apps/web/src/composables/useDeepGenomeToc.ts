@@ -10,32 +10,32 @@ export interface DeepGenomeTocOpts {
 export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
   const { headings, nestedHeadings, mainContentRef } = opts;
 
-  // 当前激活的标题 ID
+  // currently active heading ID
   const activeHeadingId = ref("");
 
-  // Intersection Observer 相关变量
+  // Intersection Observer state
   const observerRef = ref<IntersectionObserver | null>(null);
   const observedElements = ref<Set<Element>>(new Set());
 
-  // 滚动到指定 id 的标题（内部使用，不对外暴露）
+  // scroll to the heading with the given id (internal, not exposed)
   const jumpTo = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
-      // 使用 nextTick 确保 DOM 更新后再滚动
+      // use nextTick to scroll after the DOM updates
       nextTick(() => {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     }
   };
 
-  // 导航菜单选中事件处理
+  // navigation menu select handler
   const handleNavSelect = (index: string) => {
     jumpTo(index);
   };
 
-  // 改进的自动展开父菜单函数（内部使用，不对外暴露）
+  // improved auto-expand of parent menus (internal, not exposed)
   const expandParentMenus = (id: string) => {
-    // 首先找到当前激活项在嵌套结构中的路径
+    // first find the active item's path in the nested structure
     const findPath = (
       items: Array<{ id: string; children?: unknown[]; [key: string]: unknown }>,
       targetId: string,
@@ -63,7 +63,7 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
     const path = findPath(nestedHeadings.value, id);
     if (!path) return;
 
-    // 展开路径中所有的父菜单（除了最后一个，即当前激活项本身）
+    // expand all parent menus along the path (except the last, which is the active item itself)
     for (let i = 0; i < path.length - 1; i++) {
       const menuId = path[i];
       const subMenuItem = document.querySelector(
@@ -71,18 +71,18 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
       );
 
       if (subMenuItem && !subMenuItem.classList.contains("is-opened")) {
-        // 使用 Element Plus 的方法展开菜单
+        // expand the menu via Element Plus's mechanism
         const subMenuTitle = subMenuItem.querySelector(".el-sub-menu__title");
         if (subMenuTitle) {
-          (subMenuTitle as HTMLElement).click(); // 模拟点击展开
+          (subMenuTitle as HTMLElement).click(); // simulate a click to expand
         }
       }
     }
   };
 
-  // 使用 Intersection Observer 监测标题元素
+  // observe heading elements with an Intersection Observer
   const setupIntersectionObserver = () => {
-    // 创建 Intersection Observer 实例
+    // create the Intersection Observer instance
     const observer = new IntersectionObserver(
       (entries: IntersectionObserverEntry[]) => {
         const visibleHeadings: Array<{ id: string; top: number }> = [];
@@ -91,7 +91,7 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
           const headingId = entry.target.id;
 
           if (entry.isIntersecting) {
-            // 元素进入可视区域
+            // element entered the viewport
             visibleHeadings.push({
               id: headingId,
               top: entry.boundingClientRect.top,
@@ -99,9 +99,9 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
           }
         });
 
-        // 如果有可见的标题元素，找到最上方的那个作为当前激活的标题
+        // if there are visible headings, pick the topmost as the active heading
         if (visibleHeadings.length > 0) {
-          // 按视口中的位置排序，选择最上方的标题
+          // sort by viewport position and choose the topmost heading
           visibleHeadings.sort((a, b) => a.top - b.top);
 
           const currentActiveId = visibleHeadings[0].id;
@@ -113,18 +113,18 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
         }
       },
       {
-        // 设置根元素为滚动容器
+        // set the root to the scroll container
         root: mainContentRef.value?.$el || mainContentRef.value,
-        // 设置交叉比例，当元素有20%进入视口时触发
+        // trigger when 20% of the element is in the viewport
         threshold: 0.2,
-        // 设置边距，提前或延后触发
+        // margin to trigger earlier or later
         rootMargin: "-10% 0px -70% 0px",
       }
     );
 
     observerRef.value = observer;
 
-    // 观察所有标题元素
+    // observe all heading elements
     headings.value.forEach((heading) => {
       const element = document.getElementById(heading.id);
       if (element && !observedElements.value.has(element)) {
@@ -134,14 +134,14 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
     });
   };
 
-  // 确保在组件卸载时清理 Intersection Observer
+  // clean up the Intersection Observer on unmount
   onUnmounted(() => {
     if (observerRef.value) {
-      // 停止观察所有元素
+      // stop observing all elements
       observedElements.value.forEach((element) => {
         observerRef.value!.unobserve(element);
       });
-      // 断开观察者连接
+      // disconnect the observer
       observerRef.value.disconnect();
       observerRef.value = null;
       observedElements.value.clear();

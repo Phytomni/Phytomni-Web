@@ -1,10 +1,3 @@
-<!--
- * 组件注释
- * @Author: AI assistant
- * @Date: 2025-07-17
- * @Description: 助手任务管理页面，包含对话列表信息表格
- * 既往不恋！当下不杂！！未来不迎！！！
--->
 <template>
   <div class="gene-display-container">
     <div class="search-container">

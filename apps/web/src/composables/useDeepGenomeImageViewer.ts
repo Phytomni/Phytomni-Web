@@ -2,7 +2,7 @@ import { ref, reactive, computed } from "vue";
 import type { Ref } from "vue";
 
 export function useDeepGenomeImageViewer() {
-  // 点击悬浮放大弹窗相关变量
+  // state for the click-to-enlarge popup
   const imageViewerVisible = ref(false);
   const currentImageSrc = ref("");
   const currentImageAlt = ref("");
@@ -15,7 +15,7 @@ export function useDeepGenomeImageViewer() {
   const dragStart = reactive({ x: 0, y: 0 });
   const imageOffset = reactive({ x: 0, y: 0 });
 
-  // 动态样式
+  // dynamic style
   const imageStyle = computed(() => {
     return {
       transform: `scale(${scale.value}) translate(${imageOffset.x}px, ${imageOffset.y}px)`,
@@ -26,12 +26,12 @@ export function useDeepGenomeImageViewer() {
     };
   });
 
-  // 图片查看器相关方法（openImageViewer 内部使用，不对外暴露）
+  // image viewer methods (openImageViewer is internal, not exposed)
   const openImageViewer = (src: string, alt: string) => {
     currentImageSrc.value = src;
     currentImageAlt.value = alt;
     imageViewerVisible.value = true;
-    // 重置缩放和位置
+    // reset zoom and position
     scale.value = 1;
     imageOffset.x = 0;
     imageOffset.y = 0;
@@ -46,44 +46,44 @@ export function useDeepGenomeImageViewer() {
 
     if (!container || !img) return;
 
-    // 获取容器边界
+    // get the container bounds
     const containerRect = container.getBoundingClientRect();
 
-    // 计算鼠标相对于容器的位置
+    // compute the mouse position relative to the container
     const mouseX = event.clientX - containerRect.left;
     const mouseY = event.clientY - containerRect.top;
 
-    // 获取图片原始尺寸
+    // get the image's natural size
     const originalWidth = img.naturalWidth;
     const originalHeight = img.naturalHeight;
 
-    // 计算当前图片尺寸
+    // compute the current image size
     const currentWidth = originalWidth * scale.value;
     const currentHeight = originalHeight * scale.value;
 
-    // 计算鼠标相对于图片的位置（缩放后的）
+    // compute the mouse position relative to the image (after scaling)
     const currentImageX =
       (containerRect.width - currentWidth) / 2 + imageOffset.x * scale.value;
     const currentImageY =
       (containerRect.height - currentHeight) / 2 + imageOffset.y * scale.value;
 
-    // 计算鼠标在图片上的相对位置（百分比）
+    // compute the mouse position on the image (as a percentage)
     const mousePercentX = (mouseX - currentImageX) / currentWidth;
     const mousePercentY = (mouseY - currentImageY) / currentHeight;
 
-    // 调整缩放比例（乘法缩放，区别于 useImageZoomPan 的加法缩放）
+    // adjust the zoom (multiplicative, unlike useImageZoomPan's additive zoom)
     const delta = event.deltaY > 0 ? 0.9 : 1.1;
     const newScale = Math.max(minScale, Math.min(maxScale, scale.value * delta));
 
-    // 计算新的图片尺寸
+    // compute the new image size
     const newWidth = originalWidth * newScale;
     const newHeight = originalHeight * newScale;
 
-    // 计算新的偏移量，保持鼠标位置不变
+    // compute the new offset, keeping the mouse position fixed
     const newImageX = mouseX - mousePercentX * newWidth;
     const newImageY = mouseY - mousePercentY * newHeight;
 
-    // 转换回原始缩放比例下的偏移量（不 clamp，区别于 useImageZoomPan）
+    // convert back to the offset under the original scale (no clamp, unlike useImageZoomPan)
     imageOffset.x = (newImageX - (containerRect.width - newWidth) / 2) / newScale;
     imageOffset.y =
       (newImageY - (containerRect.height - newHeight) / 2) / newScale;
@@ -91,9 +91,9 @@ export function useDeepGenomeImageViewer() {
     scale.value = newScale;
   };
 
-  // 拖拽移动图片
+  // drag to move the image
   const handleMouseDown = (event: MouseEvent) => {
-    if (event.button !== 0) return; // 只响应左键
+    if (event.button !== 0) return; // respond to the left button only
     isDragging.value = true;
     dragStart.x = event.clientX - imageOffset.x;
     dragStart.y = event.clientY - imageOffset.y;
@@ -115,31 +115,31 @@ export function useDeepGenomeImageViewer() {
   };
 
   const setupImageClickListeners = () => {
-    // 移除旧的事件监听器，避免重复绑定
+    // remove old listeners to avoid double-binding
     const existingImages = document.querySelectorAll(".clickable-image");
     existingImages.forEach((img) => {
       const newImg = img.cloneNode(true);
       img.parentNode!.replaceChild(newImg, img);
     });
 
-    // 添加新的事件监听器和处理高宽比
+    // add new listeners and handle the aspect ratio
     const images = document.querySelectorAll(".clickable-image");
     images.forEach((img) => {
-      // 加载图片以获取其原始宽高
+      // load the image to get its natural width/height
       const tempImg = new Image();
       tempImg.src =
         (img as HTMLImageElement).getAttribute("data-src") ||
         (img as HTMLImageElement).src;
 
       tempImg.onload = () => {
-        // 计算高宽比
+        // compute the aspect ratio
         const aspectRatio = tempImg.height / tempImg.width;
 
-        // 如果高宽比小于0.5625，则设置宽度为100%
+        // if the aspect ratio is below 0.5625, set width to 100%
         if (aspectRatio < 0.5625) {
           (img as HTMLElement).style.width = "100%";
         } else {
-          // 否则不单独设置宽度，使用默认的百分比宽度
+          // otherwise don't set width separately; use the default percentage width
           (img as HTMLElement).style.width = "70%";
         }
       };

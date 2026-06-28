@@ -1,12 +1,8 @@
 <template>
   <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
-    <!-- 顶部标题栏 -->
+    <!-- Top title bar -->
     <div class="sidebar-header">
       <div class="app-title">
-        <!-- <div
-          class="logo"
-          @click="expandSidebar"
-          :class="{ clickable: sidebarCollapsed }"></div> -->
         <img
           src="../../assets/images/chat/logo.png"
           class="logo"
@@ -27,7 +23,7 @@
         </el-icon>
       </el-button>
     </div>
-    <!-- 新对话和知识库按钮 -->
+    <!-- New chat and knowledge base buttons -->
     <div
       class="new-chat-container"
       :class="{
@@ -56,7 +52,7 @@
         </el-icon>
         <span v-if="!sidebarCollapsed">{{ $t("chat.exploreAgent") }}</span>
       </el-button>
-      <!-- agents 快捷入口下拉 -->
+      <!-- Agents quick-access dropdown -->
       <div v-if="showAgentsList" class="agents-dropdown">
         <div class="agent-list">
           <div
@@ -77,7 +73,6 @@
         <el-icon>
           <Search />
         </el-icon>
-        <!-- <span v-if="!sidebarCollapsed">{{ $t('chat.knowledgeBase') }}</span> -->
         <span v-if="!sidebarCollapsed">{{ $t("chat.geneDetail") }}</span>
       </el-button>
       <el-button
@@ -102,10 +97,10 @@
       </el-button>
     </div>
 
-    <!-- 对话历史列表，按时间分组 -->
+    <!-- Chat history list, grouped by time -->
     <div class="chat-history" :class="{ 'show-tutorial': showTutorial }">
       <template v-if="!sidebarCollapsed">
-        <!-- 今天 -->
+        <!-- Today -->
         <div class="time-group" v-if="todayChats.length">
           <div class="time-label" @click="toggleExpand('today')">
             <span>{{ $t("chat.timeGroup.today") }}</span>
@@ -131,7 +126,7 @@
                 @click="selectChat(chat.dialogue_id)"
               >
                 <span class="chat-title">{{ chat.title }}</span>
-                <!-- 操作图标 -->
+                <!-- Action icons -->
                 <div class="chat-actions" @click.stop>
                   <el-dropdown
                     trigger="click"
@@ -170,7 +165,7 @@
           </div>
         </div>
 
-        <!-- 昨天 -->
+        <!-- Yesterday -->
         <div class="time-group" v-if="yesterdayChats.length">
           <div class="time-label" @click="toggleExpand('yesterday')">
             <span>{{ $t("chat.timeGroup.yesterday") }}</span>
@@ -196,7 +191,7 @@
                 @click="selectChat(chat.dialogue_id)"
               >
                 <span class="chat-title">{{ chat.title }}</span>
-                <!-- 操作图标 -->
+                <!-- Action icons -->
                 <div class="chat-actions" @click.stop>
                   <el-dropdown
                     trigger="click"
@@ -235,7 +230,7 @@
           </div>
         </div>
 
-        <!-- 7天内 -->
+        <!-- Within 7 days -->
         <div class="time-group" v-if="weekChats.length">
           <div class="time-label" @click="toggleExpand('week')">
             <span>{{ $t("chat.timeGroup.week") }}</span>
@@ -261,7 +256,7 @@
                 @click="selectChat(chat.dialogue_id)"
               >
                 <span class="chat-title">{{ chat.title }}</span>
-                <!-- 操作图标 -->
+                <!-- Action icons -->
                 <div class="chat-actions" @click.stop>
                   <el-dropdown
                     trigger="click"
@@ -300,7 +295,7 @@
           </div>
         </div>
 
-        <!-- 一周前 -->
+        <!-- More than a week ago -->
         <div class="time-group" v-if="olderChats.length">
           <div class="time-label" @click="toggleExpand('older')">
             <span>{{ $t("chat.timeGroup.older") }}</span>
@@ -326,7 +321,7 @@
                 @click="selectChat(chat.dialogue_id)"
               >
                 <span class="chat-title">{{ chat.title }}</span>
-                <!-- 操作图标 -->
+                <!-- Action icons -->
                 <div class="chat-actions" @click.stop>
                   <el-dropdown
                     trigger="click"
@@ -367,7 +362,7 @@
       </template>
     </div>
 
-    <!-- 用户信息 -->
+    <!-- User info -->
     <div class="user-info">
       <el-dropdown trigger="hover" @command="handleCommand">
         <div class="user-avatar-container">
@@ -384,7 +379,7 @@
         </div>
         <template #dropdown>
           <el-dropdown-menu>
-            <!-- 历史记录 -->
+            <!-- History -->
             <el-dropdown-item
               v-if="hasPermission('历史记录')"
               command="history"
@@ -392,7 +387,7 @@
             >
               {{ $t("user.history") }}
             </el-dropdown-item>
-            <!-- 个人资料管理 -->
+            <!-- Profile management -->
             <el-dropdown-item
               v-if="hasPermission('个人资料管理')"
               command="profile"
@@ -400,7 +395,7 @@
             >
               {{ $t("user.profile") }}
             </el-dropdown-item>
-            <!-- 网盘空间 -->
+            <!-- Cloud storage -->
             <el-dropdown-item
               v-if="hasPermission('网盘空间')"
               command="cloudStorage"
@@ -408,7 +403,7 @@
             >
               {{ $t("user.cloudStorage") }}
             </el-dropdown-item>
-            <!-- 用户管理 -->
+            <!-- User management -->
             <el-dropdown-item
               v-if="hasPermission('用户管理')"
               command="userManagement"
@@ -416,7 +411,7 @@
             >
               {{ $t("user.list") }}
             </el-dropdown-item>
-            <!-- 角色权限分配 -->
+            <!-- Role permission assignment -->
             <el-dropdown-item
               v-if="hasPermission('角色权限分配')"
               command="permissionManagement"
@@ -424,7 +419,7 @@
             >
               {{ $t("permission.title") }}
             </el-dropdown-item>
-            <!-- 系统监控 -->
+            <!-- System monitoring -->
             <el-dropdown-item
               v-if="hasPermission('系统监控')"
               command="systemMonitor"
@@ -432,7 +427,7 @@
             >
               {{ $t("user.systemMonitor") }}
             </el-dropdown-item>
-            <!-- 全局策略配置 -->
+            <!-- Global policy configuration -->
             <el-dropdown-item
               v-if="hasPermission('全局策略配置')"
               command="globalConfig"
@@ -440,7 +435,7 @@
             >
               {{ $t("user.globalConfig") }}
             </el-dropdown-item>
-            <!-- 管理员管理 -->
+            <!-- Admin management -->
             <el-dropdown-item
               v-if="hasPermission('管理员管理')"
               command="adminManagement"
@@ -448,15 +443,15 @@
             >
               {{ $t("user.adminManagement") }}
             </el-dropdown-item>
-            <!-- 用户反馈 -->
+            <!-- User feedback -->
             <el-dropdown-item command="feedback" :icon="ChatDotRound">
               {{ $t("user.feedback") }}
             </el-dropdown-item>
-            <!-- 修改密码 -->
+            <!-- Change password -->
             <el-dropdown-item command="changePassword" :icon="Lock">
               {{ $t("user.changePassword") }}
             </el-dropdown-item>
-            <!-- 登出 -->
+            <!-- Logout -->
             <el-dropdown-item command="logout" :icon="SwitchButton" divided>
               <span style="color: #f56c6c">{{ $t("user.logout") }}</span>
             </el-dropdown-item>
@@ -465,7 +460,7 @@
       </el-dropdown>
     </div>
 
-    <!-- 重命名对话框 -->
+    <!-- Rename dialog -->
     <el-dialog
       v-model="renameDialogVisible"
       :title="$t('chat.actions.rename')"
@@ -497,7 +492,7 @@
       </template>
     </el-dialog>
 
-    <!-- 删除确认对话框 -->
+    <!-- Delete confirmation dialog -->
     <el-dialog
       v-model="deleteDialogVisible"
       :title="$t('chat.actions.deleteConfirm')"
@@ -558,7 +553,7 @@ import { useSidebarAgents } from "./composables/useSidebarAgents";
 import { useChatHistoryActions } from "./composables/useChatHistoryActions";
 import { useSidebarNavigation } from "./composables/useSidebarNavigation";
 
-// 定义接收的属性
+// Define the received props
 const props = defineProps({
   chatList: {
     type: Array as () => Chat[],
@@ -580,7 +575,7 @@ const props = defineProps({
 const router = useRouter();
 const UserStore = userStore();
 const { todayChats, yesterdayChats, weekChats, olderChats } = useChatHistoryGroups(toRef(props, "chatList"));
-// 定义向父组件发送的事件
+// Define the events emitted to the parent component
 const emit = defineEmits([
   "selectChat",
   "startNewChat",
@@ -627,10 +622,10 @@ const { handleCommand, hasPermission, startNewChat, openKnowledgeBase, openFavor
   onSelectChat: (dialogueId) => emit("selectChat", dialogueId),
 });
 
-// 当前激活的按钮
+// Currently active button
 const activeButton = ref("");
 
-// 处理按钮点击
+// Handle button click
 const handleButtonClick = (buttonType: string, action: () => void) => {
   activeButton.value = buttonType;
   if (buttonType !== "explore-agent") {
@@ -639,7 +634,7 @@ const handleButtonClick = (buttonType: string, action: () => void) => {
   action();
 };
 
-// 4 个时间分组的展开/收缩状态
+// Expand/collapse state for the 4 time groups
 const expandedGroups = ref({
   today: true,
   yesterday: true,
@@ -647,7 +642,7 @@ const expandedGroups = ref({
   older: true,
 });
 
-// 切换分组展开/收缩
+// Toggle group expand/collapse
 const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   expandedGroups.value[group] = !expandedGroups.value[group];
 };
@@ -655,7 +650,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
 </script>
 
 <style lang="scss" scoped>
-// 侧边栏样式
+// Sidebar styles
 .sidebar {
   width: 250px;
   background-color: #f9fbff;
@@ -674,7 +669,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   }
 }
 
-// 响应式样式
+// Responsive styles
 @media (max-width: 1200px) {
   .sidebar {
     position: fixed;
@@ -691,7 +686,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
     position: relative;
     box-shadow: none;
 
-    // 在大屏幕上确保侧边栏正常显示
+    // Ensure the sidebar displays correctly on large screens
     &.collapsed {
       width: 60px;
     }
@@ -884,7 +879,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
     }
   }
 
-  /* agents 快捷入口下拉样式 */
+  /* Agents quick-access dropdown styles */
   .agents-dropdown {
     margin-left: 8px;
     background: transparent;
@@ -1042,7 +1037,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
 </style>
 
 <style lang="scss">
-/* 全局样式，不使用scoped，确保能影响tooltip */
+/* Global styles, not scoped, to make sure they can affect the tooltip */
 .chat-tooltip {
   max-width: 600px !important;
   white-space: normal !important;
@@ -1050,7 +1045,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   line-height: 1.5;
 }
 
-/* 移除dropdown的焦点样式 */
+/* Remove the dropdown focus styles */
 .el-dropdown:focus-visible {
   outline: none !important;
 }
@@ -1071,7 +1066,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   margin-left: 0 !important;
 }
 
-/* 对话框样式 */
+/* Dialog styles */
 .dialog-footer {
   display: flex;
   justify-content: flex-end;

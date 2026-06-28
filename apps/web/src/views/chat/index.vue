@@ -1,16 +1,16 @@
 <template>
   <div class="chat-container">
-    <!-- 教学引导遮罩层 -->
+    <!-- Tutorial guide overlay -->
     <div
       v-if="showTutorial"
       class="tutorial-overlay"
       @click="handleTutorialOverlayClick"
     >
-      <!-- 第一步：左侧侧边栏高亮 -->
+      <!-- Step 1: highlight the left sidebar -->
       <div v-if="currentTutorialStep === 1" class="tutorial-step-1">
-        <!-- 左侧侧边栏高亮区域 -->
+        <!-- Left sidebar highlight area -->
         <div class="sidebar-highlight-area"></div>
-        <!-- 教学内容 -->
+        <!-- Tutorial content -->
         <div class="tutorial-content sidebar-tutorial">
           <h3>{{ $t("tutorial.step1.title") }}</h3>
           <p>{{ $t("tutorial.step1.content") }}</p>
@@ -25,11 +25,11 @@
         </div>
       </div>
 
-      <!-- 第二步：底部案例栏高亮 -->
+      <!-- Step 2: highlight the bottom case bar -->
       <div v-if="currentTutorialStep === 2" class="tutorial-step-2">
-        <!-- 底部案例栏高亮区域 -->
+        <!-- Bottom case bar highlight area -->
         <div class="bottom-highlight-area"></div>
-        <!-- 教学内容 -->
+        <!-- Tutorial content -->
         <div class="tutorial-content bottom-tutorial">
           <h3>{{ $t("tutorial.step2.title") }}</h3>
           <p>{{ $t("tutorial.step2.content") }}</p>
@@ -47,11 +47,11 @@
         </div>
       </div>
 
-      <!-- 第三步：对话栏高亮 -->
+      <!-- Step 3: highlight the chat bar -->
       <div v-if="currentTutorialStep === 3" class="tutorial-step-3">
-        <!-- 对话输入区高亮区域 -->
+        <!-- Chat input area highlight area -->
         <div class="input-highlight-area"></div>
-        <!-- 教学内容 -->
+        <!-- Tutorial content -->
         <div class="tutorial-content input-tutorial">
           <h3>{{ $t("tutorial.step3.title") }}</h3>
           <p>{{ $t("tutorial.step3.content") }}</p>
@@ -70,7 +70,7 @@
       </div>
     </div>
 
-    <!-- 左侧侧边栏 -->
+    <!-- Left sidebar -->
     <Sidebar
       :chatList="chatList"
       :currentChatId="currentChatId"
@@ -85,7 +85,7 @@
       @chatDeleted="handleChatDeleted"
       @chatFavorited="handleChatFavorited"
     />
-    <!-- 中间聊天区域 -->
+    <!-- Center chat area -->
     <div class="chat-main">
       <div class="chat-header">
         <router-link v-if="UserStore.permission !== 'guest'" to="/help">
@@ -106,7 +106,7 @@
         </div>
       </div>
 
-      <!-- 消息区域 -->
+      <!-- Message area -->
       <div class="message-container" ref="messageContainer" :key="timestamp">
         <template v-if="currentChat?.messages?.length">
           <div
@@ -115,12 +115,12 @@
             class="message"
             :class="message.role"
           >
-            <!-- 只有助手消息才显示头像 -->
+            <!-- Only assistant messages show an avatar -->
             <div v-if="message.role === 'assistant'" class="message-avatar">
               <el-avatar :size="36" :src="botAvatar" />
             </div>
             <div class="message-content">
-              <!-- 用户消息或没有思考步骤的回答 -->
+              <!-- User message, or an answer without reasoning steps -->
               <div
                 v-if="
                   message.role === 'user' ||
@@ -129,7 +129,7 @@
                 class="message-text"
                 :class="{ 'has-user': message.role === 'user' }"
               >
-                <!-- 日志视图 - 左右两栏布局 -->
+                <!-- Log view - two-column layout -->
                 <div
                   v-if="
                     message.role === 'assistant' &&
@@ -153,7 +153,7 @@
                   <div class="log-view-right">
                     <h4>执行日志 (ID: {{ message.id }})</h4>
 
-                    <!-- 更新日志按钮 -->
+                    <!-- Update log button -->
                     <div class="log-actions">
                       <el-button
                         type="primary"
@@ -182,7 +182,7 @@
                       v-else-if="logData[message.id || '']"
                       class="log-content"
                     >
-                      <!-- 新的日志渲染逻辑 -->
+                      <!-- New log rendering logic -->
                       <div
                         v-if="typeof logData[message.id || ''] === 'string'"
                         class="log-text-content"
@@ -196,7 +196,7 @@
                           "
                         ></pre>
                       </div>
-                      <!-- 原有的表格渲染逻辑（向后兼容） -->
+                      <!-- Legacy table rendering logic (backward compatible) -->
                       <el-table
                         v-else-if="Array.isArray(logData[message.id || ''])"
                         :data="logData[message.id || '']"
@@ -218,9 +218,9 @@
                   </div>
                 </div>
 
-                <!-- 普通消息内容 -->
+                <!-- Normal message content -->
                 <div v-else>
-                  <!-- GeneNetworkAgent 图片显示 -->
+                  <!-- GeneNetworkAgent image display -->
                   <div
                     v-if="
                       message.role === 'assistant' &&
@@ -255,7 +255,7 @@
                       {{ $t("common.noData") }}
                     </div>
                   </div>
-                  <!-- DigitalDesignAgent 图片显示 -->
+                  <!-- DigitalDesignAgent image display -->
                   <div
                     v-else-if="
                       message.role === 'assistant' &&
@@ -290,8 +290,8 @@
                       {{ $t("common.noData") }}
                     </div>
                   </div>
-                  <!-- DeepGenomeAgent 的返回使用专用查看器组件,带 references 列表;
-                       其他 tool_name 回落到通用 MarkdownViewer -->
+                  <!-- DeepGenomeAgent responses use a dedicated viewer component with a references list;
+                       other tool_name values fall back to the generic MarkdownViewer -->
                   <DeepGenomeResultViewer
                     v-else-if="
                       message.doc_list &&
@@ -314,7 +314,7 @@
                   />
                 </div>
 
-                <!-- 用户消息的文件列表显示 -->
+                <!-- File list display for user messages -->
                 <div
                   v-if="
                     message.role === 'user' &&
@@ -381,7 +381,7 @@
                       </div>
                     </div>
                   </div>
-                  <!-- 调试信息：显示完整的 doc_list 数据 平常隐藏-->
+                  <!-- Debug info: shows the full doc_list data; hidden by default -->
                   <div
                     v-if="false"
                     class="debug-info"
@@ -423,7 +423,7 @@
                   }}</span>
                 </el-button>
 
-                <!-- 基于 download_path 的下载按钮 -->
+                <!-- Download button based on download_path -->
                 <el-button
                   @click="() => downloadFileDirect(message?.download_path)"
                   v-if="
@@ -443,7 +443,7 @@
                   }}</span>
                 </el-button>
 
-                <!-- 日志按钮 - 仅在AnalystAgent类型下显示 -->
+                <!-- Log button - only shown for the AnalystAgent type -->
                 <div
                   v-if="
                     message.role === 'assistant' &&
@@ -466,7 +466,7 @@
                   </el-button>
                 </div>
 
-                <!-- 后续问题显示 -->
+                <!-- Follow-up questions display -->
                 <FollowUpQuestions
                   v-if="
                     message.role === 'assistant' &&
@@ -557,7 +557,7 @@
                       </div>
                     </el-tooltip>
 
-                    <!-- 点赞点踩按钮 -->
+                    <!-- Upvote / downvote buttons -->
                     <div
                       v-if="message.role === 'assistant' && message.id"
                       class="reaction-buttons"
@@ -635,7 +635,7 @@
                   {{ $t("common.Tip") }}
                 </div>
               </div>
-              <!-- 表格数据展示 -->
+              <!-- Table data display -->
               <div v-else-if="message.tableHeaders" class="table-response">
                 <el-table :data="message.content" border style="width: 100%">
                   <el-table-column
@@ -664,7 +664,7 @@
                   }}</span>
                 </el-button>
 
-                <!-- 基于 download_path 的下载按钮 -->
+                <!-- Download button based on download_path -->
                 <el-button
                   @click="() => downloadFileDirect(message?.download_path)"
                   v-if="
@@ -684,7 +684,7 @@
                   }}</span>
                 </el-button>
 
-                <!-- 后续问题显示 -->
+                <!-- Follow-up questions display -->
                 <FollowUpQuestions
                   v-if="
                     message.followUpQuestions &&
@@ -738,7 +738,7 @@
                     </div>
                   </el-tooltip>
 
-                  <!-- 点赞点踩按钮 -->
+                  <!-- Upvote / downvote buttons -->
                   <div
                     v-if="message.role === 'assistant' && message.id"
                     class="reaction-buttons"
@@ -808,9 +808,9 @@
                   </el-dropdown>
                 </div>
               </div>
-              <!-- 有思考步骤的助手回答  暂时没有作用 2025/07/21-->
+              <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
               <div v-else class="ai-response">
-                <!-- 思考步骤 -->
+                <!-- Reasoning steps -->
                 <div v-if="message.steps && message.steps.length > 0">
                   <div class="steps-title">{{ $t("chat.stepResult") }}：</div>
                   <div
@@ -827,9 +827,8 @@
                     <div class="step-text">{{ step }}</div>
                   </div>
                 </div>
-                <!-- 最终答案 -->
+                <!-- Final answer -->
                 <div class="final-answer">
-                  <!-- <div class="answer-content">{{ message.content }}</div> -->
                   <MarkdownViewer
                     :instantMessage="
                       (message?.instantMessage &&
@@ -858,7 +857,7 @@
                   }}</span>
                 </el-button>
 
-                <!-- 基于 download_path 的下载按钮 -->
+                <!-- Download button based on download_path -->
                 <el-button
                   @click="() => downloadFileDirect(message?.download_path)"
                   v-if="
@@ -878,7 +877,7 @@
                   }}</span>
                 </el-button>
 
-                <!-- 后续问题显示 -->
+                <!-- Follow-up questions display -->
                 <FollowUpQuestions
                   v-if="
                     message.followUpQuestions &&
@@ -930,7 +929,7 @@
                     </div>
                   </el-tooltip>
 
-                  <!-- 点赞点踩按钮 -->
+                  <!-- Upvote / downvote buttons -->
                   <div
                     v-if="message.role === 'assistant' && message.id"
                     class="reaction-buttons"
@@ -1004,7 +1003,7 @@
           </div>
         </template>
 
-        <!-- Loading消息 -->
+        <!-- Loading message -->
         <div v-if="isSending" class="message assistant">
           <div class="message-avatar">
             <el-avatar :size="36" :src="botAvatar" />
@@ -1027,14 +1026,13 @@
         </div>
       </div>
 
-      <!-- 输入区域 -->
+      <!-- Input area -->
       <div
         class="input-container"
         :style="{ bottom: currentChat?.messages?.length ? '2%' : '30%' }"
       >
         <div v-if="!currentChat?.messages?.length" class="empty-chat">
           <div class="welcome-container">
-            <!-- <h3>{{ $t('chat.welcome') }}</h3> -->
             <div class="welcome-container-text">
               <div class="welcome-container-text1">
                 <img
@@ -1047,46 +1045,6 @@
                 {{ $t("chat.welcomeSubtitle") }}
               </div>
             </div>
-            <!-- <div class="suggestion-list">
-              <div class="suggestion-item" @click="usePrompt($t('chat.suggestions.brca1'))">
-                {{ $t('chat.suggestions.brca1') }}
-              </div>
-              <div class="suggestion-item" @click="usePrompt($t('chat.suggestions.mapk'))">
-                {{ $t('chat.suggestions.mapk') }}
-              </div>
-              <div class="suggestion-item" @click="usePrompt($t('chat.suggestions.tp53'))">
-                {{ $t('chat.suggestions.tp53') }}
-              </div>
-            </div> -->
-            <!-- <div class="feature-container">
-              <div class="feature-title">{{ $t('chat.features.title') }}</div>
-              <div class="feature-list">
-                <div class="feature-item">
-                  <el-icon><el-icon-search /></el-icon>
-                  <span>{{ $t('chat.features.research') }}</span>
-                </div>
-                <div class="feature-item">
-                  <el-icon><el-icon-data-analysis /></el-icon>
-                  <span>{{ $t('chat.features.analysis') }}</span>
-                </div>
-                <div class="feature-item">
-                  <el-icon><el-icon-reading /></el-icon>
-                  <span>{{ $t('chat.features.knowledge') }}</span>
-                </div>
-                <div class="feature-item">
-                  <el-icon><el-icon-data-line /></el-icon>
-                  <span>{{ $t('chat.features.design') }}</span>
-                </div>
-                <div class="feature-item">
-                  <el-icon><el-icon-collection-tag /></el-icon>
-                  <span>{{ $t('chat.features.organize') }}</span>
-                </div>
-                <div class="feature-item">
-                  <el-icon><el-icon-eleme /></el-icon>
-                  <span>{{ $t('chat.features.assistant') }}</span>
-                </div>
-              </div>
-            </div> -->
           </div>
         </div>
         <div
@@ -1096,7 +1054,7 @@
           }"
         >
           <div class="input-box">
-            <!-- 中止按钮 - 移到MentionSender外部，确保在发送时仍可点击 -->
+            <!-- Abort button - moved outside MentionSender so it stays clickable while sending -->
             <div v-if="isSending" class="abort-button-overlay">
               <el-tooltip content="中止回答" placement="top">
                 <el-button round color="#f56c6c" :aria-label="$t('chat.abortAriaLabel')" @click="abortCurrentRequest">
@@ -1127,10 +1085,10 @@
               submit-type="enter"
               @keydown.enter.capture="onComposerEnterCapture"
             >
-              <!-- 自定义 内容头部功能列表 -->
+              <!-- Custom header feature list -->
               <template #header>
                 <div class="header-self-wrap">
-                  <!-- 文件列表区域 - 只在发送前显示 -->
+                  <!-- File list area - only shown before sending -->
                   <div
                     v-if="fileList.length > 0 && !isSending"
                     class="file-list-container"
@@ -1154,7 +1112,7 @@
                 </div>
               </template>
 
-              <!-- 自定义 内容左下功能列表 -->
+              <!-- Custom bottom-left feature list -->
               <template #prefix>
                 <div
                   style="
@@ -1215,10 +1173,10 @@
                 </div>
               </template>
 
-              <!-- 自定义 内容右下功能列表 -->
+              <!-- Custom bottom-right feature list -->
               <template #action-list>
                 <div style="display: flex; align-items: center; gap: 8px">
-                  <!-- 发送按钮 -->
+                  <!-- Send button -->
                   <div
                     v-if="!messageInput.trim() || isSending"
                     class="send-btn"
@@ -1244,7 +1202,7 @@
                 </div>
               </template>
 
-              <!-- 自定义 底部插槽 -->
+              <!-- Custom footer slot -->
               <template #footer>
                 <div
                   v-if="!currentChat?.messages?.length"
@@ -1255,7 +1213,7 @@
                     padding: 12px;
                   "
                 >
-                  <!-- 权限加载状态 -->
+                  <!-- Permission loading state -->
                   <div v-if="rolesLoading" class="roles-loading">
                     <el-icon class="is-loading">
                       <Loading />
@@ -1263,7 +1221,7 @@
                     加载智能体权限中...
                   </div>
 
-                  <!-- 智能体按钮区域 -->
+                  <!-- Agent button area -->
                   <template v-else-if="rolesTool.length > 0">
                     <div
                       style="
@@ -1360,7 +1318,7 @@
       </div>
     </div>
 
-    <!-- 右侧侧边栏 -->
+    <!-- Right sidebar -->
     <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
       <div class="sidebar-header">
         <h3>{{ $t("chat.detailInfo") }}</h3>
@@ -1385,7 +1343,7 @@
       </div>
     </div>
 
-    <!-- Agents架构图弹窗 -->
+    <!-- Agents architecture diagram dialog -->
     <el-dialog
       v-model="agentsViewVisible"
       title="Phytomni智能体架构"
@@ -1472,9 +1430,10 @@ import type { Chat, ChatMessage } from "./types";
 const uploadRef = ref<UploadInstance>();
 const senderRef = ref();
 
-// mention 下拉开启时吞掉 Enter 的 capture 阶段守卫，防止 MentionSender
-// 内部的 handleKeyDown 在 dropdown 仍可见时触发 submit()。
-// popoverVisible 是 MentionSender 通过 __expose 暴露的 ComputedRef。
+// Capture-phase guard that swallows Enter while the mention dropdown is open,
+// preventing MentionSender's internal handleKeyDown from triggering submit()
+// while the dropdown is still visible.
+// popoverVisible is a ComputedRef exposed by MentionSender via __expose.
 const onComposerEnterCapture = (e: KeyboardEvent) => {
   guardEnterSubmit(e, senderRef.value?.popoverVisible);
 };
@@ -1485,20 +1444,20 @@ const submitUpload = () => {
   uploadRef.value!.submit();
 };
 const { t } = useI18n();
-// 抽屉状态
+// Drawer state
 const drawerVisible = ref(false);
 
-// 左侧侧边栏状态
+// Left sidebar state
 const leftSidebarCollapsed = ref(false);
 
-// Agents架构图弹窗
+// Agents architecture diagram dialog
 const agentsViewVisible = ref(false);
 const { scale, isDragging, imageOffset, containerRef, imageRef, imageStyle, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp } = useImageZoomPan(agentsViewVisible);
 
-// 监听右侧侧边栏状态，当右侧打开时，确保左侧是收起的
+// Watch the right sidebar state; when the right side opens, ensure the left side is collapsed
 watch(drawerVisible, (newValue) => {
   if (newValue === true && !leftSidebarCollapsed.value) {
-    // 右侧打开，左侧需要收起
+    // Right side opened, so collapse the left side
     leftSidebarCollapsed.value = true;
   }
 });
@@ -1506,29 +1465,29 @@ watch(drawerVisible, (newValue) => {
 const botAvatar =
   "/avatars/bot.svg";
 
-// 显示Agents架构图弹窗
+// Show the Agents architecture diagram dialog
 const showAgentsView = () => {
   agentsViewVisible.value = true;
 };
 
-// 对话列表
+// Chat list
 const chatList = ref<Chat[]>([]);
 
-// 修复：将静态引用改为计算属性，确保响应式更新
+// Fix: changed a static reference to a computed property to ensure reactive updates
 const rolesTool = computed(() => userStore().roles);
 const UserStore = userStore();
 
-// 添加权限加载状态管理
+// Add permission loading state management
 const rolesLoading = ref(false);
 
-// 定义按钮权限映射关系
+// Define the button permission mapping
 const buttonPermissions = {
   RAG: "RAG",
   BI: "BI",
   GA: "GA",
   联网搜索: "联网搜索",
 };
-//下载显示白名单
+// Download display whitelist
 const downloadWhiteList = [
   "ChatAgent",
   "KnowledgeAgent",
@@ -1536,7 +1495,7 @@ const downloadWhiteList = [
   "ReviewAgent",
 ];
 
-// 检查按钮权限
+// Check button permission
 const hasButtonPermission = (buttonType: string) => {
   const permission =
     buttonPermissions[buttonType as keyof typeof buttonPermissions];
@@ -1545,14 +1504,14 @@ const hasButtonPermission = (buttonType: string) => {
 
 const router = useRouter();
 
-// 优化权限加载逻辑
+// Optimize the permission loading logic
 const loadUserTools = async () => {
   if (!userStore().roles.length) {
     rolesLoading.value = true;
     try {
       await userStore().getUserTools();
     } catch (error) {
-      console.error("加载用户权限失败:", error);
+      console.error("Failed to load user permissions:", error);
     } finally {
       rolesLoading.value = false;
     }
@@ -1560,85 +1519,85 @@ const loadUserTools = async () => {
 };
 
 onMounted(async () => {
-  // 先加载权限信息
+  // Load permission info first
   await loadUserTools();
 
-  // 获取历史问题列表
+  // Fetch the history question list
   getHistoryQuestionData().then(() => {
-    // 恢复未完成的会话
+    // Restore incomplete sessions
     restorePendingChats();
 
-    // 获取URL中的chatId
+    // Get the chatId from the URL
     const urlChatId = getChatIdFromUrl();
 
-    // chatId 不存在默认为新对话
+    // If chatId is absent, default to a new chat
     if (urlChatId) {
-      // 首先检查是否是未完成的会话
+      // First check whether it is an incomplete session
       if (loadPendingChat(urlChatId)) {
         currentChatId.value = urlChatId;
         return;
       }
 
-      // 查找是否存在对应的聊天
+      // Look up whether a corresponding chat exists
       const chatExists = chatList.value.find(
         (chat) => chat.dialogue_id === urlChatId
       );
       if (chatExists) {
-        // 如果存在，选择该聊天
+        // If it exists, select that chat
         selectChat(urlChatId);
       } else if (chatList.value.length > 0) {
-        // 如果不存在但有聊天记录，更新URL为第一条聊天记录的ID
+        // If it does not exist but there are chat records, update the URL to the first record's ID
         const firstChatId = chatList.value[0].dialogue_id;
         updateUrlWithChatId(firstChatId);
         selectChat(firstChatId);
       } else {
-        // 如果没有聊天记录，创建一个新对话状态
+        // If there are no chat records, create a new chat state
         startNewChat();
       }
     } else {
-      // 如果没有聊天记录，创建一个新对话状态
+      // If there are no chat records, create a new chat state
       startNewChat();
     }
   });
 
-  // 检查是否需要显示教学引导
+  // Check whether the tutorial guide needs to be shown
   checkTutorialStatus();
 
 });
 
-// 获取历史问题数据
+// Fetch history question data
 const getHistoryQuestionData = () => {
   return new Promise<void>((resolve) => {
     getHistoryQuestionList()
       .then((res: any) => {
         if (res.code === 200 && res.data) {
-          // 处理返回的数据，保留原始结构
+          // Process the returned data while keeping the original structure
           const formattedData = res.data.map((item: any) => {
             return {
               id: item.id,
               dialogue_id: item.dialogue_id,
-              title: item.title_query || item.query, // 优先使用 title_query，如果没有则使用 query
-              date: item.created_at, // 保留原始时间字符串
-              isFavorite: false, // 默认未收藏
+              title: item.title_query || item.query, // Prefer title_query, fall back to query
+              date: item.created_at, // Keep the original time string
+              isFavorite: false, // Not favorited by default
             };
           });
 
-          // 检查localStorage中的临时对话数据
-          // 用统一 helpers 扫描 + 清 localStorage 临时记录
+          // Check the temporary chat data in localStorage
+          // Scan + clean temporary localStorage records via the shared helpers
           restorePendingChats();
 
-          // 更新chatList，保持API返回的顺序
+          // Update chatList, preserving the order returned by the API
           chatList.value = formattedData;
 
-          // 如果当前有新对话状态，尝试将其与API返回的数据关联
+          // If there is currently a new chat state, try to associate it with the API-returned data
           if (currentChatId.value && currentChatId.value.startsWith("new_")) {
-            // 查找是否有新创建的对话（通过比较用户消息内容）
+            // Find whether there is a newly created chat (by comparing user message content)
             const currentUserMessage = currentChat.value?.messages?.find(
               (msg: ChatMessage) => msg.role === "user"
             );
             if (currentUserMessage) {
               const matchingChat = formattedData.find((chat: Chat) => {
-                // 比较对话标题与用户消息内容
+                // Compare the chat title with the user message content
                 return (
                   chat.title === currentUserMessage.content ||
                   chat.title.includes(
@@ -1651,7 +1610,7 @@ const getHistoryQuestionData = () => {
               });
 
               if (matchingChat) {
-                // 找到匹配的对话，更新当前对话ID
+                // Found a matching chat, update the current chat ID
                 currentChatId.value = matchingChat.dialogue_id;
                 updateUrlWithChatId(matchingChat.dialogue_id);
               }
@@ -1661,7 +1620,7 @@ const getHistoryQuestionData = () => {
         resolve();
       })
       .catch((err: any) => {
-        console.error("获取历史问题数据失败:", err);
+        console.error("Failed to fetch history question data:", err);
         resolve();
       });
   });
@@ -1682,7 +1641,7 @@ const restorePendingChats = () => {
     const pendingChatData = safeParse(localStorage.getItem(key));
 
     if (!isValidPendingRecord(pendingChatData)) {
-      // 不合契约的记录(corrupt / legacy / 部分写)— 静默清
+      // Records that violate the contract (corrupt / legacy / partial write) — silently clean
       if (pendingChatData !== null) {
         localStorage.removeItem(key);
       }
@@ -1700,18 +1659,18 @@ const restorePendingChats = () => {
         updateUrlWithChatId(matchingChat.dialogue_id);
       }
     }
-    // 无 match → 保 localStorage,供后续 loadPendingChat 走 URL 加载
+    // No match → keep in localStorage so a later loadPendingChat can load it via the URL
   });
 };
 
-// 从 localStorage 加载特定的未完成会话(给 onMounted 中按 url chatId 用)
+// Load a specific incomplete session from localStorage (used by onMounted keyed on the url chatId)
 const loadPendingChat = (dialogueId: string) => {
   const key = `pending_chat_${dialogueId}`;
   const pendingChatData = safeParse(localStorage.getItem(key));
 
   if (!isValidPendingRecord(pendingChatData)) {
     if (pendingChatData !== null) {
-      localStorage.removeItem(key); // corrupt / 不合契约 → 清
+      localStorage.removeItem(key); // corrupt / contract violation → clean
     }
     return false;
   }
@@ -1720,7 +1679,7 @@ const loadPendingChat = (dialogueId: string) => {
   return true;
 };
 
-// 平行对话状态(每个 dialogueId 独立的 UI 状态)+ 当前对话 + 10 个 computed 代理
+// Parallel chat state (independent UI state per dialogueId) + current chat + 10 computed proxies
 const {
   chatStates,
   getChatState,
@@ -1737,7 +1696,7 @@ const {
   updatingLog,
 } = useChatStates();
 
-// 复制对话 + 文件下载
+// Copy conversation + file download
 const { fallbackCopyText, downloadFile, downloadFileDirect, getFileDownUrl } =
   useCopyDownload({
     copyVisible,
@@ -1745,7 +1704,7 @@ const { fallbackCopyText, downloadFile, downloadFileDirect, getFileDownUrl } =
     t,
   });
 
-// Agent 图片抓取状态(GeneNetworkAgent / DigitalDesignAgent)
+// Agent image fetch state (GeneNetworkAgent / DigitalDesignAgent)
 const {
   geneNetworkImages,
   geneNetworkImagesLoading,
@@ -1753,77 +1712,77 @@ const {
   digitalDesignImagesLoading,
 } = useAgentImages(currentChat);
 
-// 中止请求相关
+// Abort-request related
 const currentRequestId = ref<string>("");
 const isAborted = ref(false);
 
-// 开始新对话
+// Start a new chat
 const startNewChat = () => {
-  // 创建新对话的状态
+  // Create the state for a new chat
   const newDialogueId = "new_" + Date.now();
   getChatState(newDialogueId);
 
-  // 设置当前对话ID为新创建的ID
+  // Set the current chat ID to the newly created ID
   currentChatId.value = newDialogueId;
   currentChat.value = { messages: [] };
 
-  // 移除URL中的id参数
+  // Remove the id parameter from the URL
   const url = new URL(window.location.href);
   url.searchParams.delete("dialogue_id");
   window.history.pushState({}, "", url.toString());
 
-  // 确保滚动到底部
+  // Ensure scrolling to the bottom
   nextTick(() => {
     scrollToBottom();
   });
 };
 
-// 打开聊天代理
+// Open the chat agent
 const openChatAgent = () => {
-  // 如果左侧侧边栏是展开的，先收起
+  // If the left sidebar is expanded, collapse it first
   if (!leftSidebarCollapsed.value) {
     leftSidebarCollapsed.value = true;
   }
 
-  // 打开右侧侧边栏
+  // Open the right sidebar
   drawerVisible.value = true;
 };
 
-// 知识代理人
+// Knowledge agent
 const openKnowledgeAgent = () => {
-  // 这里实现知识代理人功能
+  // Implement the knowledge agent feature here
 };
 
-// 数据库代理
+// Database agent
 const openDataAgent = () => {
-  // 这里实现数据库代理功能
+  // Implement the database agent feature here
 };
 
-// 分析代理
+// Analyst agent
 const openAnalystAgent = () => {
-  // 这里实现分析代理功能
+  // Implement the analyst agent feature here
 };
 
-// 审查代理人
+// Review agent
 const openReviewAgent = () => {
-  // 这里实现审查代理人功能
+  // Implement the review agent feature here
 };
 
-// 打开知识库
+// Open the knowledge base
 const openKnowledgeBase = () => {
-  // 如果左侧侧边栏是展开的，先收起
+  // If the left sidebar is expanded, collapse it first
   if (!leftSidebarCollapsed.value) {
     leftSidebarCollapsed.value = true;
   }
 
-  // 打开右侧侧边栏
+  // Open the right sidebar
   drawerVisible.value = true;
 };
 
-// 消息容器引用，用于自动滚动
+// Message container ref, used for auto-scrolling
 const messageContainer = ref<HTMLElement | null>(null);
 
-// 自动滚动到最新消息
+// Auto-scroll to the latest message
 const scrollToBottom = async () => {
   await nextTick();
   if (messageContainer.value) {
@@ -1831,7 +1790,7 @@ const scrollToBottom = async () => {
   }
 };
 
-// 消息输入框工具按钮 + 提及选择状态机 — 逻辑抽取至 useComposer 组合式函数
+// Input toolbar buttons + mention-selection state machine — logic extracted into the useComposer composable
 const {
   activeButton,
   handleButtonClick,
@@ -1840,7 +1799,7 @@ const {
   handleSearch,
 } = useComposer({ messageInput, isSending, currentChatId, scrollToBottom });
 
-// 日志面板切换 + 日志更新 — 逻辑抽取至 useLogView 组合式函数
+// Log panel toggle + log update — logic extracted into the useLogView composable
 const { toggleLogView, updateLog } = useLogView({
   isSending,
   currentChat,
@@ -1849,7 +1808,7 @@ const { toggleLogView, updateLog } = useLogView({
   scrollToBottom,
 });
 
-// 文件上传处理 — 状态与逻辑抽取至 useFileUpload 组合式函数
+// File upload handling — state and logic extracted into the useFileUpload composable
 const { handleFileChange, removeFile } = useFileUpload({
   fileList,
   currentChatId,
@@ -1858,14 +1817,14 @@ const { handleFileChange, removeFile } = useFileUpload({
   scrollToBottom,
 });
 
-// 消息点赞点踩功能 — 状态与逻辑抽取至 useReactions 组合式函数
+// Message upvote/downvote feature — state and logic extracted into the useReactions composable
 const { getReactionState, handleReaction, getReactionTooltip } = useReactions({
   currentChatId,
   getChatState,
   scrollToBottom,
 });
 
-// 智能体面板 — 状态与逻辑抽取至 useAgentsPanel 组合式函数
+// Agents panel — state and logic extracted into the useAgentsPanel composable
 const {
   presetAgents,
   containerStyle,
@@ -1875,18 +1834,18 @@ const {
   showMoreInfo,
 } = useAgentsPanel({ t, isSending, router, scrollToBottom });
 
-// 中止当前请求
+// Abort the current request
 const abortCurrentRequest = async () => {
   if (!currentRequestId.value) return;
 
   try {
-    // 导入中止请求的方法
+    // Import the abort-request helper
     const requestModule = (await import("@/utils/request")) as any;
     const success = requestModule.abortRequest(currentRequestId.value);
     if (success) {
       isAborted.value = true;
 
-      // 添加中止消息
+      // Add an abort message
       if (currentChat.value?.messages) {
         const abortMessage: ChatMessage = {
           role: "assistant",
@@ -1897,28 +1856,27 @@ const abortCurrentRequest = async () => {
         currentChat.value.messages.push(abortMessage);
       }
 
-      // 重置状态
+      // Reset state
       const chatState = getChatState(currentChatId.value);
       if (chatState) {
         chatState.isSending = false;
       }
 
       currentRequestId.value = "";
-      // isAborted.value = false;
 
       await scrollToBottom();
     }
   } catch (error) {
-    console.error("中止请求失败:", error);
+    console.error("Failed to abort request:", error);
   }
 };
 
-// 使用预设问题
+// Use a preset question
 const usePrompt = (prompt: string) => {
   if (isSending.value) return;
   messageInput.value = prompt;
 
-  // 确保滚动到底部
+  // Ensure scrolling to the bottom
   nextTick(() => {
     scrollToBottom();
   });
@@ -1926,7 +1884,7 @@ const usePrompt = (prompt: string) => {
   sendMessage();
 };
 
-// 相关链接
+// Related links
 const currentLinks = ref([
   {
     title: t("chat.links.brca1"),
@@ -1942,18 +1900,18 @@ const currentLinks = ref([
   },
 ]);
 
-// 侧边栏控制函数
+// Sidebar control function
 const handleSidebarCollapse = (isCollapsed: boolean) => {
-  // 更新左侧侧边栏状态
+  // Update the left sidebar state
   leftSidebarCollapsed.value = isCollapsed;
 
-  // 如果左侧侧边栏展开且右侧侧边栏也是展开的，则关闭右侧
+  // If the left sidebar is expanded and the right sidebar is also open, close the right side
   if (!isCollapsed && drawerVisible.value) {
     drawerVisible.value = false;
   }
 };
 
-// 侧边栏重命名会话后,由父组件更新自己持有的 chatList(子组件改为 emit,不改 prop)
+// After the sidebar renames a session, the parent updates the chatList it holds (the child emits instead of mutating the prop)
 const handleChatRenamed = (updatedChat: Chat) => {
   const index = chatList.value.findIndex(
     (c) => c.dialogue_id === updatedChat.dialogue_id
@@ -1963,14 +1921,14 @@ const handleChatRenamed = (updatedChat: Chat) => {
   }
 };
 
-// 父组件持有 chatList,删除由此处从列表移除(子组件只发 chatDeleted 事件)。
+// The parent holds chatList; deletion removes the item from the list here (the child only emits the chatDeleted event).
 const handleChatDeleted = (deletedChat: Chat) => {
   chatList.value = chatList.value.filter(
     (c) => c.dialogue_id !== deletedChat.dialogue_id
   );
 };
 
-// 收藏状态同样由父组件更新(子组件只发 chatFavorited 事件)。
+// The favorite state is likewise updated by the parent (the child only emits the chatFavorited event).
 const handleChatFavorited = (updatedChat: Chat) => {
   const index = chatList.value.findIndex(
     (c) => c.dialogue_id === updatedChat.dialogue_id
@@ -1980,14 +1938,14 @@ const handleChatFavorited = (updatedChat: Chat) => {
   }
 };
 
-// 更新URL中的聊天ID
+// Update the chat ID in the URL
 const updateUrlWithChatId = (dialogueId: string) => {
   const url = new URL(window.location.href);
   url.searchParams.set("dialogue_id", dialogueId);
   window.history.pushState({}, "", url.toString());
 };
 
-// 选择对话 — 历史记录加载逻辑抽取至 useSelectChat 组合式函数
+// Select a chat — history-loading logic extracted into the useSelectChat composable
 const { selectChat } = useSelectChat({
   getChatState,
   currentChatId,
@@ -1998,12 +1956,12 @@ const { selectChat } = useSelectChat({
   timestamp,
 });
 
-// 从URL读取聊天ID
+// Read the chat ID from the URL
 const getChatIdFromUrl = () => {
   const urlParams = new URLSearchParams(window.location.search);
   return urlParams.get("dialogue_id");
 };
-// 根据聊天ID读取对话ID
+// Read the dialogue ID based on the chat ID
 const getDialogueIdFromChatId = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const dialogueId = urlParams.get("dialogue_id");
@@ -2013,7 +1971,7 @@ const getDialogueIdFromChatId = () => {
   return chatRealId;
 };
 
-// 发送消息 — 发送逻辑抽取至 useSendMessage 组合式函数
+// Send message — send logic extracted into the useSendMessage composable
 const { sendMessage } = useSendMessage({
   getChatState,
   currentChatId,
@@ -2033,22 +1991,22 @@ const { sendMessage } = useSendMessage({
   scrollToBottom,
 });
 
-// 处理Markdown打字效果完成事件
+// Handle the Markdown typing-effect completion event
 const handleMarkdownFinish = (messageIndex: number) => {
   if (currentChat.value?.messages && currentChat.value.messages[messageIndex]) {
-    // 设置后续问题显示状态为true
+    // Set the follow-up question display state to true
     currentChat.value.messages[messageIndex].showFollowUpQuestions = true;
 
-    // 确保滚动到底部
+    // Ensure scrolling to the bottom
     nextTick(() => {
       scrollToBottom();
     });
   }
 };
 
-// 处理后续问题点击事件
+// Handle the follow-up question click event
 const handleFollowUpQuestionClick = (question: string) => {
-  // 如果正在发送或刷新，阻止操作
+  // If sending or refreshing, block the action
   if (isSending.value) return;
 
   if (!currentChatId.value) return;
@@ -2056,21 +2014,21 @@ const handleFollowUpQuestionClick = (question: string) => {
   const chatState = getChatState(currentChatId.value);
   if (!chatState) return;
 
-  // 将点击的问题设置为输入内容
+  // Set the clicked question as the input content
   chatState.messageInput = question;
 
-  // 确保滚动到底部
+  // Ensure scrolling to the bottom
   nextTick(() => {
     scrollToBottom();
   });
 
-  // 自动发送消息
+  // Auto-send the message
   nextTick(() => {
     sendMessage();
   });
 };
 
-// 消息刷新（重新生成助手回答）— 逻辑抽取至 useRefreshMessage 组合式函数
+// Message refresh (regenerate the assistant answer) — logic extracted into the useRefreshMessage composable
 const { refreshMessage } = useRefreshMessage({
   currentChat,
   currentChatId,
@@ -2081,7 +2039,7 @@ const { refreshMessage } = useRefreshMessage({
   timestamp,
 });
 
-// 教学引导功能 — 状态与逻辑抽取至 useTutorial 组合式函数
+// Tutorial guide feature — state and logic extracted into the useTutorial composable
 const {
   showTutorial,
   currentTutorialStep,
@@ -2093,33 +2051,33 @@ const {
   checkTutorialStatus,
 } = useTutorial();
 
-// 测试并行对话功能
+// Test the parallel chat feature
 const testParallelChats = () => {
-  // 创建两个测试对话
+  // Create two test chats
   const chat1Id = "test_chat_1";
   const chat2Id = "test_chat_2";
 
-  // 初始化对话状态
+  // Initialize the chat state
   getChatState(chat1Id);
   getChatState(chat2Id);
 
-  // 设置不同的输入内容
+  // Set different input contents
   chatStates.value[chat1Id].messageInput = "对话1的测试消息";
   chatStates.value[chat2Id].messageInput = "对话2的测试消息";
 
-  // 设置不同的发送状态
+  // Set different sending states
   chatStates.value[chat1Id].isSending = true;
   chatStates.value[chat2Id].isSending = false;
 
-  // 验证状态独立性
+  // Verify state independence
 };
 
-// 在开发环境下添加测试按钮
+// Add a test button in the development environment
 const isDevelopment = import.meta.env.DEV;
 
-// 复制消息内容 + 引用的文档列表(从 inline @click 提取,绕开 vue-tsc
-// 0.39.5 在模板多语句箭头函数内解析局部 const 时把它误映射到
-// component instance 的 bug —— 详见 index.vue 中 2 处 @click 用法)
+// Copy message content + cited document list (extracted from an inline @click to work around a
+// vue-tsc 0.39.5 bug where it mis-maps a local const declared inside a multi-statement template
+// arrow function onto the component instance — see the 2 @click usages in index.vue)
 const copyMessageWithDocs = (message: any, index: number) => {
   const docs =
     message.doc_list && message.doc_list.length > 0
@@ -2148,7 +2106,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   overflow: hidden;
 }
 
-// 聊天主界面
+// Chat main view
 .chat-main {
   flex: 1;
   display: flex;
@@ -2250,7 +2208,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
       background-color: transparent;
 
       .message-text {
-        // background-color: #e6f7ff;
       }
     }
 
@@ -2283,13 +2240,12 @@ const copyMessageWithDocs = (message: any, index: number) => {
       position: relative;
       word-break: break-word;
       white-space: pre-wrap;
-      // background-color: #f5f5f5;
       box-shadow: 0 0 10px 0 rgba(212, 210, 210, 0.35);
       width: 100%;
       padding: 12px;
       border-radius: 8px;
 
-      // GeneNetworkAgent 图片样式
+      // GeneNetworkAgent image styles
       .gene-network-images {
         .images-loading {
           display: flex;
@@ -2474,8 +2430,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   background-color: #fff;
 
   .input-container-warpper {
-    // padding: 8px 4px 8px 8px;
-    // border-top: 1px solid #e6e6e6;
     position: relative;
     left: 50%;
     transform: translateX(-50%);
@@ -2493,9 +2447,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 
   .input-box {
-    // display: flex;
-    // gap: 12px;
-    // align-items: flex-end;
     .header-self-wrap {
       padding: 3px 2px 2px 3px;
       box-sizing: border-box;
@@ -2504,8 +2455,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
       flex-direction: column;
 
       .file-list-container {
-        // margin-bottom: 10px;
-
         .file-list-header {
           display: flex;
           justify-content: space-between;
@@ -2562,25 +2511,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
         }
       }
     }
-
-    // .el-textarea {
-    //   flex: 1;
-    // }
-
-    // .upload-btn {
-    //   position: absolute;
-    //   right: 70px;
-    //   bottom: -3px;
-    //   width: 20px;
-    //   height: 20px;
-    //   cursor: pointer;
-    //   z-index: 1000;
-
-    //   img {
-    //     width: 100%;
-    //     height: 100%;
-    //   }
-    // }
 
     .send-btn,
     .abort-btn {
@@ -2642,7 +2572,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-// 右侧侧边栏样式
+// Right sidebar styles
 .right-sidebar {
   width: 0;
   height: 100%;
@@ -2745,7 +2675,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-// 加载动画
+// Loading animation
 .loading-message {
   display: flex;
   align-items: center;
@@ -2813,7 +2743,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   margin-bottom: 8px;
 
   .doc-simple {
-    // 简单格式（只有title）
+    // Simple format (title only)
   }
 
   .doc-detailed {
@@ -2856,7 +2786,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-// 消息中的文件显示样式
+// File display styles within messages
 .message-files {
   margin-top: 12px;
   padding: 12px;
@@ -2877,7 +2807,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
     gap: 8px;
 
     .file-item-display {
-      // 文件项样式继承自 FilesCard 组件
+      // File item styles are inherited from the FilesCard component
     }
   }
 }
@@ -2906,7 +2836,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   bottom: 19px;
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 12px;
-  // box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   z-index: 998;
 
   &.show-tutorial {
@@ -2994,7 +2923,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   z-index: 1000 !important;
   background: #fff !important;
 }
-// 为了确保容器可以覆盖其他内容
+// Ensure the container can overlay other content
 .input-container {
   position: relative;
 }
@@ -3007,7 +2936,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   font-size: 18px !important;
 }
 
-// 日志按钮样式
+// Log button styles
 .log-button-container {
   margin-top: 8px;
   margin-bottom: 8px;
@@ -3020,7 +2949,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-// 日志视图容器
+// Log view container
 .log-view-container {
   display: flex;
   gap: 20px;
@@ -3090,51 +3019,51 @@ const copyMessageWithDocs = (message: any, index: number) => {
           color: #333;
           white-space: pre-wrap;
           word-break: break-word;
-          background-color: #1e1e1e; // 深色背景，更适合显示彩色文本
+          background-color: #1e1e1e; // Dark background, better suited for showing colored text
           border-radius: 4px;
           padding: 8px;
           border: 1px solid #e9ecef;
 
-          // 确保span标签内的颜色能够正确显示
+          // Ensure colors inside span tags display correctly
           span {
             display: inline;
 
             &[style*="color: #ff0000"] {
-              color: #ff6b6b !important; // 红色
+              color: #ff6b6b !important; // Red
             }
 
             &[style*="color: #00ff00"] {
-              color: #51cf66 !important; // 绿色
+              color: #51cf66 !important; // Green
             }
 
             &[style*="color: #ffff00"] {
-              color: #ffd43b !important; // 黄色
+              color: #ffd43b !important; // Yellow
             }
 
             &[style*="color: #0000ff"] {
-              color: #74c0fc !important; // 蓝色
+              color: #74c0fc !important; // Blue
             }
 
             &[style*="color: #ff00ff"] {
-              color: #f783ac !important; // 洋红色
+              color: #f783ac !important; // Magenta
             }
 
             &[style*="color: #00ffff"] {
-              color: #63e6be !important; // 青色
+              color: #63e6be !important; // Cyan
             }
 
             &[style*="color: #ffffff"] {
-              color: #f8f9fa !important; // 白色
+              color: #f8f9fa !important; // White
             }
           }
 
-          // 加粗文本样式
+          // Bold text styles
           strong {
             font-weight: bold;
             color: #f8f9fa;
           }
 
-          // 下划线文本样式
+          // Underline text styles
           u {
             text-decoration: underline;
             color: #f8f9fa;
@@ -3162,7 +3091,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-// 点赞点踩按钮样式
+// Upvote / downvote button styles
 .reaction-buttons {
   display: flex;
   gap: 4px;
@@ -3188,7 +3117,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-// 智能体项目包装器样式
+// Agent item wrapper styles
 .agent-item-wrapper {
   display: flex;
   align-items: center;
@@ -3196,7 +3125,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   margin-right: 12px;
 }
 
-// 更多按钮样式
+// More button styles
 .more-button {
   color: #909399;
   font-size: 12px;
@@ -3213,7 +3142,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-// 权限加载状态样式
+// Permission loading state styles
 .roles-loading {
   display: flex;
   align-items: center;
@@ -3228,7 +3157,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-// 智能体信息弹出窗口样式
+// Agent info dialog styles
 :deep(.agent-info-dialog) {
   .el-message-box__content {
     padding: 20px;
@@ -3286,7 +3215,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 强制覆盖Element Plus弹窗样式 */
+/* Force-override Element Plus dialog styles */
 :deep(.el-message-box.agent-info-dialog) {
   --el-messagebox-width: 800px !important;
   max-width: 800px !important;
@@ -3311,7 +3240,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   max-width: 800px !important;
 }
 
-/* 全局样式覆盖，确保优先级最高 */
+/* Global style override to ensure the highest priority */
 :global(.el-message-box.agent-info-dialog) {
   --el-messagebox-width: 800px !important;
   max-width: 800px !important;
@@ -3335,7 +3264,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   max-width: 800px !important;
 }
 
-/* 教学引导遮罩层样式 */
+/* Tutorial guide overlay styles */
 .tutorial-overlay {
   position: fixed;
   top: 0;
@@ -3357,23 +3286,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 第一步：左侧侧边栏高亮 */
+/* Step 1: highlight the left sidebar */
 .tutorial-step-1 {
   position: relative;
   width: 100%;
   height: 100%;
-
-  // .sidebar-highlight-area {
-  //   position: absolute;
-  //   top: 0;
-  //   left: 0;
-  //   width: 250px;
-  //   height: 100%;
-  //   background: linear-gradient(90deg, rgba(64, 158, 255, 0.1), rgba(64, 158, 255, 0.05));
-  //   border-right: 3px solid #409eff;
-  //   box-shadow: 0 0 20px rgba(64, 158, 255, 0.3);
-  //   z-index: 1001;
-  // }
 
   .sidebar-tutorial {
     position: absolute;
@@ -3384,23 +3301,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 第二步：底部案例栏高亮 */
+/* Step 2: highlight the bottom case bar */
 .tutorial-step-2 {
   position: relative;
   width: 100%;
   height: 100%;
-
-  // .bottom-highlight-area {
-  //   position: absolute;
-  //   bottom: 0;
-  //   left: 0;
-  //   width: 100%;
-  //   height: 200px;
-  //   background: linear-gradient(0deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05));
-  //   border-top: 3px solid #67c23a;
-  //   box-shadow: 0 -10px 20px rgba(103, 194, 58, 0.3);
-  //   z-index: 1001;
-  // }
 
   .bottom-tutorial {
     position: absolute;
@@ -3411,25 +3316,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 第三步：对话输入区高亮 */
+/* Step 3: highlight the chat input area */
 .tutorial-step-3 {
   position: relative;
   width: 100%;
   height: 100%;
-
-  // .input-highlight-area {
-  //   position: absolute;
-  //   top: 50%;
-  //   left: 50%;
-  //   transform: translate(-50%, -50%);
-  //   width: 600px;
-  //   height: 300px;
-  //   background: linear-gradient(45deg, rgba(255, 123, 114, 0.1), rgba(255, 123, 114, 0.05));
-  //   border: 3px solid #ff7b72;
-  //   border-radius: 15px;
-  //   box-shadow: 0 0 30px rgba(255, 123, 114, 0.3);
-  //   z-index: 1001;
-  // }
 
   .input-tutorial {
     position: absolute;
@@ -3440,7 +3331,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 响应式设计 */
+/* Responsive design */
 @media (max-width: 768px) {
   .tutorial-indicator {
     bottom: 10px;
@@ -3470,7 +3361,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 通用教学内容样式 */
+/* Common tutorial content styles */
 .tutorial-content {
   position: relative;
   width: 90%;
@@ -3550,7 +3441,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 响应式设计 */
+/* Responsive design */
 @media (max-width: 768px) {
   .tutorial-content {
     width: 95%;
@@ -3578,7 +3469,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
     }
   }
 
-  /* 移动端高亮区域调整 */
+  /* Mobile highlight area adjustments */
   .tutorial-step-1 {
     .sidebar-tutorial {
       left: 220px;
@@ -3598,7 +3489,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 小屏幕设备优化 */
+/* Small-screen device optimizations */
 @media (max-width: 480px) {
   .tutorial-content {
     width: 98%;
@@ -3627,7 +3518,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
     }
   }
 
-  /* 超小屏幕高亮区域调整 */
+  /* Extra-small screen highlight area adjustments */
   .tutorial-step-1 {
     .sidebar-tutorial {
       left: 170px;
@@ -3654,7 +3545,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   width: 100%;
   text-align: right;
 }
-/* 通用动画定义 */
+/* Common animation definitions */
 @keyframes tutorial-pulse {
   0%,
   100% {
@@ -3713,7 +3604,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* Agents架构图弹窗样式 */
+/* Agents architecture diagram dialog styles */
 .agents-view-container {
   display: flex;
   justify-content: center;
@@ -3728,7 +3619,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* 弹窗标题样式 */
+/* Dialog title styles */
 :deep(.el-dialog__header) {
   text-align: center;
   padding: 20px 20px 10px;
@@ -3740,12 +3631,12 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-/* 弹窗内容样式 */
+/* Dialog content styles */
 :deep(.el-dialog__body) {
   padding: 10px 20px 30px;
 }
 
-/* 响应式设计 */
+/* Responsive design */
 @media (max-width: 900px) {
   .agents-view-image {
     width: 100% !important;

@@ -1,15 +1,6 @@
-/*
- * 组件注释
- * @Author: error: git config user.name & please set dead value or install git
- * @Date: 2025-05-12 12:10:59
- * @LastEditors: error: git config user.name & please set dead value or install git
- * @LastEditTime: 2025-05-12 14:15:35
- * @Description:
- * 既往不恋！当下不杂！！未来不迎！！！
- */
 import request from "@/utils/request";
 
-// 基因展示
+// Gene list
 export const getGeneList = (params?: {
   title?: string;
   current?: number;
@@ -21,7 +12,7 @@ export const getGeneList = (params?: {
     params,
   });
 };
-// 基因详情展示
+// Gene detail
 export const getGeneDetails = (params?: {
   file_name?: string;
   current?: number;

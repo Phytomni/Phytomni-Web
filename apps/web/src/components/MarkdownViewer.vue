@@ -1,6 +1,6 @@
 <template>
   <div class="markdown-viewer">
-    <!-- 当需要打字效果时使用 Typewriter 组件 -->
+    <!-- Use the Typewriter component when the typing effect is needed -->
     <Typewriter
       v-if="instantMessage"
       :typing="{
@@ -11,7 +11,7 @@
       :is-markdown="true"
       @finish="handleFinish"
     />
-    <!-- 当不需要打字效果时直接渲染 markdown 内容 -->
+    <!-- Render the markdown directly when no typing effect is needed -->
     <div v-else class="markdown-content" v-html="renderedContent"></div>
   </div>
 </template>
@@ -30,47 +30,49 @@ const emit = defineEmits<{
   finish: [];
 }>();
 
-// 当不需要打字效果时，直接渲染内容
+// Render content directly when no typing effect is needed
 const renderedContent = computed(() => {
   if (!props.instantMessage) {
-    // 先把整段正文 HTML 转义,再跑 markdown 正则:转义后正文里任何裸标签都成实体,
-    // 只有下面我们生成的结构标签是真 HTML。本组件渲染 agent(经 Bot 中转)内容,
-    // 经 v-html 注入,故内容必须先消毒(打字态走 Typewriter+DOMPurify,另行处理)。
+    // First HTML-escape the entire body, then run the markdown regexes: after
+    // escaping, any bare tag in the body becomes an entity, and only the structural
+    // tags we generate below are real HTML. This component renders agent content
+    // (relayed via Bot) injected through v-html, so it must be sanitized first (the
+    // typing state goes through Typewriter+DOMPurify, handled separately).
     let content = escapeHtml(props.content)
-      // 代码块
+      // code blocks
       .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
-      // 行内代码
+      // inline code
       .replace(/`([^`]+)`/g, "<code>$1</code>")
-      // 粗体
+      // bold
       .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-      // 斜体
+      // italics
       .replace(/\*(.*?)\*/g, "<em>$1</em>")
-      // 标题
+      // headings
       .replace(/^### (.*$)/gim, "<h3>$1</h3>")
       .replace(/^## (.*$)/gim, "<h2>$1</h2>")
       .replace(/^# (.*$)/gim, "<h1>$1</h1>")
-      // 图片(src 过协议白名单;alt 已随正文整体转义)
+      // images (src goes through the scheme allow-list; alt is escaped along with the whole body)
       .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
         return `<img src="${sanitizeEscapedHref(
           src
         )}" alt="${alt}" style="max-width: 50%; height: auto; border-radius: 4px; margin: 8px 0;" />`;
       })
-      // 链接(href 过协议白名单;链接文字已随正文整体转义)
+      // links (href goes through the scheme allow-list; link text is escaped along with the whole body)
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, href) => {
         return `<a href="${sanitizeEscapedHref(
           href
         )}" target="_blank">${text}</a>`;
       })
-      // 列表
+      // lists
       .replace(/^\* (.*$)/gim, "<li>$1</li>")
       .replace(/^- (.*$)/gim, "<li>$1</li>")
-      // 换行
+      // line breaks
       .replace(/\n/g, "<br>");
 
-    // 处理列表
+    // handle lists
     content = content.replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>");
 
-    // 处理段落中的图片（确保图片前后有适当的间距）
+    // handle images within paragraphs (ensure proper spacing around images)
     content = content.replace(
       /(<img[^>]*>)/g,
       '<p style="text-align: center; margin: 16px 0;">$1</p>'
@@ -296,7 +298,7 @@ const handleFinish = () => {
 }
 .cif-container {
   width: 100%;
-  height: 600px; // 固定高度，或使用 min-height
+  height: 600px; // fixed height, or use min-height
   min-height: 300px;
   position: relative;
   background: var(--el-fill-color-light);

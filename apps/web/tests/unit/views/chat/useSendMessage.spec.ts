@@ -2,27 +2,27 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref } from "vue";
 import { useSendMessage } from "@/views/chat/composables/useSendMessage";
 
-// getQueryAbortable（主发送）+ getAnswerCheck（网络错误恢复）是 composable
-// 内部直接 import 的接口，必须 mock。
+// getQueryAbortable (main send) + getAnswerCheck (network-error recovery) are APIs the
+// composable imports directly, so they must be mocked.
 vi.mock("@/api/chat", () => ({
   getQueryAbortable: vi.fn(),
   getAnswerCheck: vi.fn(),
 }));
 
-// element-plus 的 ElMessage/ElMessageBox 在 pending 写入失败 / 403 弹窗里被调用。
+// element-plus's ElMessage/ElMessageBox are invoked on a failed pending write / the 403 dialog.
 vi.mock("element-plus", () => ({
   ElMessage: { warning: vi.fn() },
   ElMessageBox: { alert: vi.fn() },
 }));
 
-// pending-chat 工具：localStorage 写入/清除（new_ 前缀对话才走这条路径）。
+// pending-chat utilities: localStorage write/clear (only new_-prefixed dialogues take this path).
 vi.mock("@/utils/pending-chat", () => ({
   writePendingChat: vi.fn(),
   clearPendingChat: vi.fn(),
   isLocalStorageChat: vi.fn(() => false),
 }));
 
-// network-error 判定：默认非网络错误。
+// network-error detection: default is not a network error.
 vi.mock("@/utils/network-error", () => ({
   isNetworkError: vi.fn(() => false),
 }));
@@ -40,7 +40,7 @@ type ChatStateRecord = {
 };
 
 describe("useSendMessage", () => {
-  // 每个 dialogueId 一份可变状态，重复 getChatState(id) 返回同一对象
+  // One mutable state per dialogueId; repeated getChatState(id) returns the same object
   let states: Map<string, ChatStateRecord>;
   let getChatState: (dialogueId: string) => ChatStateRecord;
   let currentChatId: ReturnType<typeof ref<string>>;
@@ -132,7 +132,7 @@ describe("useSendMessage", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    // 推送了一条 user 消息 + 一条 assistant 消息
+    // Pushed one user message + one assistant message
     const msgs = currentChat.value.messages;
     expect(msgs.length).toBe(2);
     expect(msgs[0].role).toBe("user");
@@ -140,30 +140,30 @@ describe("useSendMessage", () => {
     expect(msgs[1].role).toBe("assistant");
     expect(msgs[1].content).toBe("我是助手");
 
-    // 通过捕获的 chatState 完成清理
+    // Cleanup is done via the captured chatState
     const stateA = getChatState("A");
     expect(stateA.messageInput).toBe("");
     expect(stateA.isSending).toBe(false);
     expect(stateA.fileList).toEqual([]);
 
-    // 同步了 reaction
+    // The reaction was synced
     expect(stateA.reactions["msg-1"]).toBe(1);
 
-    // 调用了一次请求
+    // The request was called once
     expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
   });
 
   it("🔒 capture invariant: 发送中切换 currentChatId，清理仍落在被捕获的原对话 A", async () => {
     states.get("A")!.messageInput = "原对话消息";
 
-    // A 是已存在的对话(messages 非空) => isNewChat=false，finally 不会把
-    // currentChatId 复位回 A；这样切到 B 后若清理误读 currentChatId.value
-    // 就会落在 B 上，从而暴露 capture 不变量被破坏。
+    // A is an existing dialogue (messages non-empty) => isNewChat=false, so finally
+    // won't reset currentChatId back to A; that way, after switching to B, if cleanup
+    // mis-reads currentChatId.value it would land on B, exposing a broken capture invariant.
     currentChat.value = {
       messages: [{ role: "user", content: "之前的消息" }],
     };
 
-    // 手动控制的 promise，模拟一个挂起的请求
+    // A manually-controlled promise, simulating a pending request
     let resolveQuery!: (v: any) => void;
     const pending = new Promise((resolve) => {
       resolveQuery = resolve;
@@ -172,20 +172,20 @@ describe("useSendMessage", () => {
 
     const { sendMessage } = makeComposable();
 
-    // 不 await，让请求挂起
+    // Don't await, let the request hang
     const sendPromise = sendMessage();
 
-    // 等待同步阶段 + scrollToBottom 之前的微任务跑完
+    // Wait for the synchronous phase + the microtasks before scrollToBottom to run
     await Promise.resolve();
     await Promise.resolve();
 
-    // 此刻原对话 A 正处于发送中
+    // At this point the original dialogue A is mid-send
     expect(getChatState("A").isSending).toBe(true);
 
-    // 用户切到对话 B
+    // User switches to dialogue B
     currentChatId.value = "B";
 
-    // 请求完成
+    // The request completes
     resolveQuery({
       data: {
         tool_name: "ChatAgents",
@@ -197,14 +197,14 @@ describe("useSendMessage", () => {
     });
     await sendPromise;
 
-    // 清理落在被捕获的 A：isSending 复位、fileList 清空
+    // Cleanup lands on the captured A: isSending reset, fileList cleared
     expect(getChatState("A").isSending).toBe(false);
     expect(getChatState("A").fileList).toEqual([]);
 
-    // B 的 isSending 从未被触碰（始终 false，且未被设为 true）
+    // B's isSending is never touched (always false, and never set to true)
     expect(getChatState("B").isSending).toBe(false);
 
-    // reaction 同步到捕获的 A 而非当前 B
+    // reaction is synced to the captured A, not the current B
     expect(getChatState("A").reactions["msg-late"]).toBe(2);
     expect(getChatState("B").reactions["msg-late"]).toBeUndefined();
   });

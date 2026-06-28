@@ -11,7 +11,7 @@ export function useChatHistoryActions(opts: {
   onChatFavorited: (chat: Chat) => void;
   onSelectChat: (id: string) => void;
 }) {
-  // 重命名对话框相关
+  // rename dialog state
   const renameDialogVisible = ref(false);
   const renameForm = ref({
     title: "",
@@ -22,11 +22,11 @@ export function useChatHistoryActions(opts: {
   };
   const chatToRename = ref<Chat | null>(null);
 
-  // 删除确认对话框相关
+  // delete confirmation dialog state
   const deleteDialogVisible = ref(false);
   const chatToDelete = ref<Chat | null>(null);
 
-  // 处理聊天历史项操作
+  // handle chat history item actions
   const handleChatAction = (command: string, chat: Chat) => {
     switch (command) {
       case "rename":
@@ -44,7 +44,7 @@ export function useChatHistoryActions(opts: {
     }
   };
 
-  // 重命名确认
+  // confirm rename
   const handleRenameConfirm = async () => {
     if (!renameFormRef.value || !chatToRename.value) return;
 
@@ -63,80 +63,80 @@ export function useChatHistoryActions(opts: {
           };
           renameDialogVisible.value = false;
           chatToRename.value = null;
-          // 父组件持有 chatList,由它在收到事件后更新本地列表;子组件不直接改 prop。
+          // the parent owns chatList and updates its local list on this event; the child does not mutate the prop directly.
           opts.onChatRenamed(updatedChat);
-          // 显示成功提示
+          // show a success message
           ElMessage.success("重命名成功");
         } else {
           ElMessage.error(response.message || "重命名失败");
         }
       }
     } catch (error) {
-      console.error("重命名失败:", error);
+      console.error("Rename failed:", error);
       ElMessage.error("重命名失败，请重试");
     }
   };
 
-  // 删除确认
+  // confirm delete
   const handleDeleteConfirm = async () => {
     if (!chatToDelete.value) return;
 
     try {
       const formData = new FormData();
       formData.append("id", chatToDelete.value.id.toString());
-      formData.append("reaction_type", "0"); // 0表示删除
+      formData.append("reaction_type", "0"); // 0 means delete
 
       const response = await deleteHistory(formData);
       if (response.code === 200) {
-        // 由父组件(chatList 的 owner)从列表中移除,子组件不直接改写 props.chatList。
+        // the parent (owner of chatList) removes it from the list; the child does not mutate props.chatList directly.
         const deletedChat = opts.chatList().find(
           (c) => c.dialogue_id === chatToDelete.value!.dialogue_id
         );
         if (deletedChat) {
-          // 通知父组件聊天已删除
+          // notify the parent that the chat was deleted
           opts.onChatDeleted(deletedChat);
         }
         deleteDialogVisible.value = false;
-        // 刷新当前聊天
+        // refresh the current chat
         if (opts.currentChatId() === chatToDelete.value!.dialogue_id) {
           opts.onSelectChat("");
         }
         chatToDelete.value = null;
-        // 显示成功提示
+        // show a success message
         ElMessage.success("删除成功");
       } else {
         ElMessage.error(response.message || "删除失败");
       }
     } catch (error) {
-      console.error("删除失败:", error);
+      console.error("Delete failed:", error);
       ElMessage.error("删除失败，请重试");
     }
   };
 
-  // 切换收藏状态
+  // toggle favorite state
   const toggleFavorite = async (chat: Chat) => {
     try {
       const formData = new FormData();
       formData.append("id", chat.id.toString());
-      formData.append("collect_type", chat.isFavorite ? "0" : "1"); // 0取消收藏，1收藏
+      formData.append("collect_type", chat.isFavorite ? "0" : "1"); // 0 = unfavorite, 1 = favorite
 
       const response = await collectHistory(formData);
       if (response.code === 200) {
         const updatedChat = { ...chat, isFavorite: !chat.isFavorite };
-        // 由父组件(chatList 的 owner)更新收藏状态,子组件不直接改写 props.chatList。
+        // the parent (owner of chatList) updates the favorite state; the child does not mutate props.chatList directly.
         opts.onChatFavorited(updatedChat);
-        // 显示成功提示
+        // show a success message
         ElMessage.success(updatedChat.isFavorite ? "已收藏" : "已取消收藏");
       } else {
         ElMessage.error(response.message || "操作失败");
       }
     } catch (error) {
-      console.error("收藏操作失败:", error);
+      console.error("Favorite action failed:", error);
       ElMessage.error("操作失败，请重试");
     }
   };
 
-  // 处理重命名对话框关闭
+  // handle rename dialog close
   const handleRenameDialogClose = () => {
     chatToRename.value = null;
     renameForm.value.title = "";

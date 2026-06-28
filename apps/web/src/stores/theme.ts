@@ -1,10 +1,4 @@
-/*
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-12-19
- * @Description: 主题管理
- * 既往不恋！当下不杂！！未来不迎！！！
- */
+// Theme management store.
 import { defineStore } from "pinia";
 import Cookies from "js-cookie";
 
@@ -15,23 +9,23 @@ export const useThemeStore = defineStore("theme", {
     theme: (Cookies.get("theme") as ThemeType) || "system",
     mediaQuery: null as MediaQueryList | null,
     mediaQueryListener: null as ((e: MediaQueryListEvent) => void) | null,
-    // 添加一个内部状态来跟踪实际的系统主题
+    // internal state tracking the actual system theme
     systemTheme: (window.matchMedia("(prefers-color-scheme: dark)").matches
       ? "dark"
       : "light") as "light" | "dark",
   }),
 
   getters: {
-    // 获取当前实际应用的主题
+    // the theme currently applied
     currentTheme: (state): "light" | "dark" => {
       if (state.theme === "system") {
-        // 使用内部状态，确保响应式更新
+        // use the internal state to ensure reactive updates
         return state.systemTheme;
       }
       return state.theme;
     },
 
-    // 获取主题标签
+    // get the theme label
     themeLabel: (state): string => {
       switch (state.theme) {
         case "light":
@@ -47,12 +41,12 @@ export const useThemeStore = defineStore("theme", {
   },
 
   actions: {
-    // 设置主题
+    // set the theme
     setTheme(theme: ThemeType) {
       this.theme = theme;
       Cookies.set("theme", theme);
 
-      // 如果切换到"跟随系统"模式，重新设置系统主题监听器
+      // when switching to "follow system" mode, re-set the system theme listener
       if (theme === "system") {
         this.setupSystemThemeListener();
       }
@@ -60,27 +54,27 @@ export const useThemeStore = defineStore("theme", {
       this.applyTheme();
     },
 
-    // 应用主题到 DOM
+    // apply the theme to the DOM
     applyTheme() {
       const actualTheme = this.currentTheme;
       const root = document.documentElement;
 
-      // 移除之前的主题类
+      // remove the previous theme class
       root.classList.remove("theme-light", "theme-dark");
 
-      // 添加当前主题类
+      // add the current theme class
       root.classList.add(`theme-${actualTheme}`);
 
-      // 设置 CSS 变量
+      // set CSS variables
       this.setCSSVariables(actualTheme);
     },
 
-    // 设置 CSS 变量
+    // set CSS variables
     setCSSVariables(theme: "light" | "dark") {
       const root = document.documentElement;
 
       if (theme === "dark") {
-        // 深色主题变量
+        // dark theme variables
         root.style.setProperty("--color-background", "#1a1a1a");
         root.style.setProperty("--color-background-soft", "#1a1a1a");
         root.style.setProperty("--color-background-mute", "#1a1a1a");
@@ -107,7 +101,7 @@ export const useThemeStore = defineStore("theme", {
         root.style.setProperty("--el-fill-color", "#2a2a2a");
         root.style.setProperty("--el-fill-color-lighter", "#333333");
 
-        // 深色主题按钮变量
+        // dark theme button variables
         root.style.setProperty("--sidebar-btn-bg", "#2a2a2a");
         root.style.setProperty("--sidebar-btn-bg-hover", "#3a3a3a");
         root.style.setProperty("--sidebar-btn-color", "#ffffff");
@@ -126,7 +120,7 @@ export const useThemeStore = defineStore("theme", {
           "0 4px 12px rgba(0, 0, 0, 0.4)"
         );
 
-        // 深色主题页面变量
+        // dark theme page variables
         root.style.setProperty("--page-card-bg", "#2a2a2a");
         root.style.setProperty("--page-card-border", "rgba(84, 84, 84, 0.48)");
         root.style.setProperty(
@@ -138,7 +132,7 @@ export const useThemeStore = defineStore("theme", {
           "rgba(235, 235, 235, 0.6)"
         );
       } else {
-        // 浅色主题变量
+        // light theme variables
         root.style.setProperty("--color-background", "#ffffff");
         root.style.setProperty("--color-background-soft", "#f8f8f8");
         root.style.setProperty("--color-background-mute", "#f2f2f2");
@@ -162,7 +156,7 @@ export const useThemeStore = defineStore("theme", {
         root.style.setProperty("--el-fill-color", "#f0f2f5");
         root.style.setProperty("--el-fill-color-lighter", "#fafafa");
 
-        // 浅色主题按钮变量
+        // light theme button variables
         root.style.setProperty("--sidebar-btn-bg", "#f0f2ff");
         root.style.setProperty("--sidebar-btn-bg-hover", "#e0e7ff");
         root.style.setProperty("--sidebar-btn-color", "#4b6bfb");
@@ -181,7 +175,7 @@ export const useThemeStore = defineStore("theme", {
           "0 4px 12px rgba(0, 0, 0, 0.15)"
         );
 
-        // 浅色主题页面变量
+        // light theme page variables
         root.style.setProperty("--page-card-bg", "#ffffff");
         root.style.setProperty("--page-card-border", "rgba(60, 60, 60, 0.12)");
         root.style.setProperty(
@@ -192,53 +186,53 @@ export const useThemeStore = defineStore("theme", {
       }
     },
 
-    // 初始化主题
+    // initialize the theme
     initTheme() {
-      // 设置系统主题变化监听器
+      // set up the system theme change listener
       this.setupSystemThemeListener();
 
-      // 同步系统主题状态
+      // sync the system theme state
       this.syncSystemTheme();
 
-      // 应用初始主题
+      // apply the initial theme
       this.applyTheme();
 
-      // 启动定期同步定时器（作为备用方案）
+      // start the periodic sync timer (as a fallback)
       this.startSyncTimer();
     },
 
-    // 设置系统主题变化监听器
+    // set up the system theme change listener
     setupSystemThemeListener() {
-      // 移除旧的监听器（如果存在）
+      // remove the old listener (if any)
       if (this.mediaQuery && this.mediaQueryListener) {
         this.mediaQuery.removeEventListener("change", this.mediaQueryListener);
       }
 
-      // 创建新的媒体查询对象
+      // create a new media query object
       this.mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-      // 创建监听器函数
+      // create the listener function
       this.mediaQueryListener = () => {
         if (this.theme === "system") {
-          // 更新内部系统主题状态
+          // update the internal system theme state
           this.systemTheme = this.mediaQuery?.matches ? "dark" : "light";
-          // 应用主题
+          // apply the theme
           this.applyTheme();
         }
       };
 
-      // 添加监听器
+      // add the listener
       this.mediaQuery.addEventListener("change", this.mediaQueryListener);
     },
 
-    // 清理监听器
+    // clean up the listener
     cleanup() {
       if (this.mediaQuery && this.mediaQueryListener) {
         this.mediaQuery.removeEventListener("change", this.mediaQueryListener);
       }
     },
 
-    // 同步系统主题状态
+    // sync the system theme state
     syncSystemTheme() {
       if (this.theme === "system") {
         const newSystemTheme = window.matchMedia("(prefers-color-scheme: dark)")
@@ -252,9 +246,9 @@ export const useThemeStore = defineStore("theme", {
       }
     },
 
-    // 启动定期同步定时器
+    // start the periodic sync timer
     startSyncTimer() {
-      // 每2秒检查一次系统主题状态
+      // check the system theme state every 2 seconds
       setInterval(() => {
         this.syncSystemTheme();
       }, 2000);

@@ -13,7 +13,7 @@
       </template>
 
       <el-form :model="configForm" label-width="200px" class="config-form">
-        <!-- 系统基础配置 -->
+        <!-- System basic settings -->
         <el-divider content-position="left">{{
           $t("globalConfig.basicSettings")
         }}</el-divider>
@@ -47,7 +47,7 @@
           <span class="unit">{{ $t("globalConfig.minutes") }}</span>
         </el-form-item>
 
-        <!-- 安全策略配置 -->
+        <!-- Security policy settings -->
         <el-divider content-position="left">{{
           $t("globalConfig.securitySettings")
         }}</el-divider>
@@ -88,7 +88,7 @@
           />
         </el-form-item>
 
-        <!-- 功能配置 -->
+        <!-- Feature settings -->
         <el-divider content-position="left">{{
           $t("globalConfig.featureSettings")
         }}</el-divider>
@@ -116,7 +116,7 @@
           <span class="unit">{{ $t("globalConfig.records") }}</span>
         </el-form-item>
 
-        <!-- 操作按钮 -->
+        <!-- Action buttons -->
         <el-form-item>
           <el-button type="primary" @click="handleSave" :loading="saving">
             {{ $t("common.save") }}
@@ -131,7 +131,7 @@
       </el-form>
     </el-card>
 
-    <!-- 配置历史 -->
+    <!-- Configuration history -->
     <el-card class="history-card">
       <template #header>
         <div class="card-header">
@@ -170,7 +170,7 @@ import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 
-// 配置表单数据
+// Configuration form data
 const configForm = reactive({
   systemName: "Phytomni",
   maxFileSize: 10,
@@ -184,7 +184,7 @@ const configForm = reactive({
   maxChatHistory: 100,
 });
 
-// 配置历史数据
+// Configuration history data
 const configHistory = ref([
   {
     timestamp: "2024-01-15 10:30:00",
@@ -198,20 +198,20 @@ const configHistory = ref([
   },
 ]);
 
-// 状态
+// State
 const saving = ref(false);
 const testing = ref(false);
 
-// 保存配置
+// Save configuration
 const handleSave = async () => {
   saving.value = true;
   try {
-    // 这里应该调用API保存配置
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // 模拟API调用
+    // This should call an API to save the configuration
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
 
     ElMessage.success(t("globalConfig.saveSuccess"));
 
-    // 添加到历史记录
+    // Add to history records
     configHistory.value.unshift({
       timestamp: new Date().toLocaleString("zh-CN"),
       operator: "admin",
@@ -224,7 +224,7 @@ const handleSave = async () => {
   }
 };
 
-// 重置配置
+// Reset configuration
 const handleReset = async () => {
   try {
     await ElMessageBox.confirm(
@@ -237,7 +237,7 @@ const handleReset = async () => {
       }
     );
 
-    // 重置为默认值
+    // Reset to default values
     Object.assign(configForm, {
       systemName: "Phytomni",
       maxFileSize: 10,
@@ -253,18 +253,21 @@ const handleReset = async () => {
 
     ElMessage.success(t("globalConfig.resetSuccess"));
   } catch {
-    // 用户取消
+    // User cancelled
   }
 };
 
-// 测试配置
+// Test configuration
 const handleTest = () => {
-  // 配置测试端点尚未接入后端。此前用 setTimeout 模拟并恒报“测试通过”,会让用户
-  // 误以为配置已通过后端校验;改为明确提示功能暂不可用,待真实校验接口落地后再恢复。
+  // The config-test endpoint is not wired to the backend yet. It previously used
+  // setTimeout to simulate and always reported "test passed", which would mislead
+  // users into thinking the config had passed backend validation; switched to an
+  // explicit "feature unavailable" notice, to be restored once a real validation
+  // endpoint lands.
   ElMessage.info(t("globalConfig.testUnavailable"));
 };
 
-// 查看历史详情
+// View history details
 const handleViewHistory = (row: any) => {
   ElMessageBox.alert(
     `操作时间: ${row.timestamp}\n操作人: ${row.operator}\n变更内容: ${row.changes}`,
@@ -275,10 +278,10 @@ const handleViewHistory = (row: any) => {
   );
 };
 
-// 组件挂载时加载配置
+// Load configuration on component mount
 onMounted(() => {
-  // 这里应该调用API加载当前配置
-  console.log("加载全局策略配置...");
+  // This should call an API to load the current configuration
+  console.log("Loading global policy configuration...");
 });
 </script>
 

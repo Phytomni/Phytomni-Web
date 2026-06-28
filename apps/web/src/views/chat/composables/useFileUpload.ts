@@ -12,7 +12,7 @@ export function useFileUpload(opts: {
   const { fileList, currentChatId, getChatState, senderRef, scrollToBottom } =
     opts;
 
-  // 监听文件列表 控制列表显示
+  // watch the file list to control list visibility
   watch(
     () => fileList.value,
     (newVal, oldVal) => {
@@ -24,7 +24,7 @@ export function useFileUpload(opts: {
     }
   );
 
-  // 文件处理相关函数
+  // file-handling functions
   const handleFileChange = (file: any) => {
     if (!currentChatId.value) {
       return;
@@ -42,16 +42,16 @@ export function useFileUpload(opts: {
       file: file.raw,
     };
 
-    // 使用响应式更新方式
+    // update reactively
     chatState.fileList = [...chatState.fileList, newFile];
 
-    // 确保文件列表更新后立即显示
+    // show the list immediately after it updates
     nextTick(() => {
       if (senderRef.value && chatState.fileList.length > 0) {
         senderRef.value.openHeader();
       }
 
-      // 确保滚动到底部
+      // ensure it scrolls to the bottom
       scrollToBottom();
     });
   };
@@ -62,18 +62,18 @@ export function useFileUpload(opts: {
     const chatState = getChatState(currentChatId.value);
     if (!chatState) return;
 
-    // 使用响应式更新方式
+    // update reactively
     const newFileList = [...chatState.fileList];
     newFileList.splice(index, 1);
     chatState.fileList = newFileList;
 
-    // 如果文件列表为空，关闭header
+    // close the header if the file list is empty
     nextTick(() => {
       if (senderRef.value && chatState.fileList.length === 0) {
         senderRef.value.closeHeader();
       }
 
-      // 确保滚动到底部
+      // ensure it scrolls to the bottom
       scrollToBottom();
     });
   };

@@ -1,12 +1,4 @@
-/*
- * 组件注释
- * @Author: wuq-l
- * @Date: 2022-08-31 21:58:29
- * @LastEditors: wuq-l
- * @LastEditTime: 2022-09-01 15:38:32
- * @Description: hasPermi 是否满足展示需求
- * 人生无常！大肠包小肠......
- */
+// v-hasPermi: removes the element unless the user holds one of the required permission flags.
 import { userStore } from "@/stores";
 export default function (
   el: { parentNode: { removeChild: (arg0: any) => any } },

@@ -1,22 +1,14 @@
-<!--
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-12-19
- * @Description: 管理员管理页面，展示除自己外的所有用户
- * 既往不恋！当下不杂！！未来不迎！！！
--->
 <template>
   <div class="admin-management-container">
-    <!-- 顶部操作栏 -->
+    <!-- Top operation bar -->
     <div class="operation-bar">
       <div class="no-add-notice">
         <el-button type="primary" disabled>
-          <!-- <el-icon><Plus /></el-icon>新增用户 -->
         </el-button>
       </div>
     </div>
 
-    <!-- 用户表格 -->
+    <!-- User table -->
     <div class="table-container">
       <div class="table-title">用户列表</div>
       <el-table
@@ -70,7 +62,7 @@
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
+      <!-- Pagination -->
       <div class="pagination-container">
         <el-pagination
           v-model:current-page="currentPage"
@@ -84,7 +76,7 @@
       </div>
     </div>
 
-    <!-- 用户编辑弹窗 -->
+    <!-- User edit dialog -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogType === 'add' ? $t('user.add') : $t('user.edit')"
@@ -146,7 +138,7 @@
       </template>
     </el-dialog>
 
-    <!-- 用户查看弹窗 -->
+    <!-- User view dialog -->
     <el-dialog
       v-model="viewDialogVisible"
       :title="$t('user.detail')"
@@ -184,7 +176,7 @@ import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 
-// 定义用户数据接口
+// User data interface
 interface UserData {
   id: number;
   email: string;
@@ -195,21 +187,21 @@ interface UserData {
   lastLogin: string;
 }
 
-// 表格相关
+// Table-related state
 const loading = ref(false);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
 const tableData = ref<UserData[]>([]);
 
-// 表单相关
+// Form-related state
 const dialogVisible = ref(false);
 const viewDialogVisible = ref(false);
 const dialogType = ref<"add" | "edit">("add");
 const userFormRef = ref();
 const currentUser = ref<UserData | null>(null);
 
-// 表单数据
+// Form data
 const userForm = reactive({
   id: 0,
   email: "",
@@ -217,7 +209,7 @@ const userForm = reactive({
   code: "",
 });
 
-// 表单验证规则
+// Form validation rules
 const formRules = reactive({
   email: [
     {
@@ -253,7 +245,7 @@ const formRules = reactive({
   ],
 });
 
-// 获取角色名称
+// Get the role display name
 const getRoleName = (code: string): string => {
   const codeMap: Record<string, string> = {
     super_admin: "super_admin",
@@ -264,7 +256,7 @@ const getRoleName = (code: string): string => {
   return codeMap[code] || code;
 };
 
-// 获取数据的方法
+// Method to fetch data
 const fetchData = async () => {
   loading.value = true;
   try {
@@ -282,7 +274,7 @@ const fetchData = async () => {
   }
 };
 
-// 分页方法
+// Pagination methods
 const handleSizeChange = (size: number) => {
   pageSize.value = size;
   fetchData();
@@ -293,7 +285,7 @@ const handleCurrentChange = (page: number) => {
   fetchData();
 };
 
-// 新增用户
+// Add a user
 const handleAdd = () => {
   dialogType.value = "add";
   userForm.id = 0;
@@ -304,7 +296,7 @@ const handleAdd = () => {
   dialogVisible.value = true;
 };
 
-// 编辑用户
+// Edit a user
 const handleEdit = (row: UserData) => {
   dialogType.value = "edit";
 
@@ -316,31 +308,31 @@ const handleEdit = (row: UserData) => {
   dialogVisible.value = true;
 };
 
-// 查看用户
+// View a user
 const handleView = (row: UserData) => {
   currentUser.value = row;
   viewDialogVisible.value = true;
 };
 
-// 关闭弹窗
+// Close the dialog
 const closeDialog = () => {
   resetForm();
   dialogVisible.value = false;
 };
 
-// 重置表单
+// Reset the form
 const resetForm = () => {
   userForm.id = 0;
   userForm.email = "";
   userForm.password = "";
   userForm.code = "";
-  // 清除表单验证状态
+  // Clear the form validation state
   if (userFormRef.value) {
     userFormRef.value.clearValidate();
   }
 };
 
-// 提交表单
+// Submit the form
 const handleSubmit = async () => {
   if (!userFormRef.value) return;
 
@@ -348,7 +340,7 @@ const handleSubmit = async () => {
     if (valid) {
       try {
         if (dialogType.value === "add") {
-          // 新增用户 - 使用 POST /api/v1/users 接口，FormData格式
+          // Add a user - via POST /api/v1/users, FormData format
           const formData = new FormData();
           formData.append("email", userForm.email);
           formData.append("password", userForm.password);
@@ -365,11 +357,11 @@ const handleSubmit = async () => {
             ElMessage.error(res.message || "用户添加失败");
           }
         } else {
-          // 编辑用户 - 使用 PUT /api/v1/users/:id/permissions 接口，FormData格式
+          // Edit a user - via PUT /api/v1/users/:id/permissions, FormData format
           const formData = new FormData();
           formData.append("id", userForm.id.toString());
           formData.append("code", userForm.code);
-          // 如果密码不为空，则修改密码
+          // If the password is non-empty, update the password
           if (userForm.password) {
             formData.append("password", userForm.password);
           }
@@ -386,19 +378,19 @@ const handleSubmit = async () => {
           }
         }
       } catch (error: any) {
-        console.error("操作失败:", error);
+        console.error("Operation failed:", error);
         ElMessage.error(
           error.message ||
             (dialogType.value === "add" ? "用户添加失败" : "用户信息修改失败")
         );
       }
     } else {
-      console.log("表单验证失败", fields);
+      console.log("Form validation failed", fields);
     }
   });
 };
 
-// 页面加载时获取数据
+// Fetch data on page load
 onMounted(() => {
   fetchData();
 });
@@ -478,7 +470,7 @@ onMounted(() => {
   }
 }
 
-/* 表头样式 */
+/* Table header styling */
 :deep(.table-header-row) {
   background-color: #409eff !important;
 }

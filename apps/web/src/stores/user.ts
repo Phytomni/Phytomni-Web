@@ -1,13 +1,4 @@
-/*
- * 组件注释
- * @Author: wuq-l
- * @Date: 2022-09-01 09:29:17
- * @LastEditors: Machinst_wq
- * @LastEditTime: 2025-05-28 18:04:58
- * @Description: 用户信息
- * 人生无常！大肠包小肠......
- */
-
+// User info store.
 import { defineStore } from "pinia";
 import {
   getToken,
@@ -34,11 +25,11 @@ interface IState {
   avatar?: string;
   roles: string[];
   permissions: string[];
-  permission_list: string[]; // 新增权限列表字段
+  permission_list: string[]; // permission list field
   userType: string;
   token: string | undefined;
   permission: string;
-  login_status: string; // 新增登录状态字段
+  login_status: string; // login status field
   seen_tutorial: string; // UX-only flag, decoupled from password state
 }
 
@@ -49,16 +40,16 @@ export default defineStore({
     avatar: "",
     roles: [...CANONICAL_AT_ABLE_TOOLS],
     permissions: [],
-    permission_list: [], // 权限列表
+    permission_list: [], // permission list
     userType: "",
     token: getToken(),
     permission: "",
-    login_status: localStorage.getItem("loginStatus") || "1", // 默认非首次登录
+    login_status: localStorage.getItem("loginStatus") || "1", // default: not first login
     // seen_tutorial: '0' = tutorial pending (first login or explicit replay request).
     // Single mutator is SET_SEEN_TUTORIAL below. Initial value comes from
     // localStorage; runtime mutations come from checkTutorialStatus on the
     // chat surface (auto-trigger on first login via sessionStorage hand-off
-    // from change-password.vue) or from the sidebar's "开始教学" button
+    // from change-password.vue) or from the sidebar's "Start Tutorial" button
     // (replay path for returning users).
     seen_tutorial: localStorage.getItem("seenTutorial") || "1",
   }),
@@ -82,16 +73,16 @@ export default defineStore({
           });
       });
     },
-    // 前端 登出
+    // frontend logout
     FedLogOut() {
       return new Promise((resolve, reject) => {
         this.SET_ROLES([]);
         this.SET_PERMISSIONS([]);
         removeToken();
-        // 清除用户名
+        // clear the username
         this.name = "";
         localStorage.removeItem("userName");
-        // 清除Cookie
+        // clear cookies
         removeExpiresIn();
         Object.keys(Cookies.get()).forEach((cookieName) => {
           Cookies.remove(cookieName);
@@ -120,7 +111,7 @@ export default defineStore({
       });
     },
 
-    /* 同步更新数据 */
+    /* synchronous state updates */
     SET_NAME(permission: string) {
       this.permission = permission;
     },

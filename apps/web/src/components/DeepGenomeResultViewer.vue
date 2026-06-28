@@ -1,6 +1,6 @@
 <template>
   <el-container style="height: 100vh; background: #fff; overflow: hidden">
-    <!-- 侧边栏导航 -->
+    <!-- Sidebar navigation -->
     <el-aside
       width="400px"
       style="
@@ -16,9 +16,9 @@
         :unique-opened="true"
         style="background-color: #fff !important; border-radius: 8px"
       >
-        <!-- 层级目录渲染 -->
+        <!-- Hierarchical TOC rendering -->
         <template v-for="item in nestedHeadings" :key="item.id">
-          <!-- H2 标题 -->
+          <!-- H2 heading -->
           <el-menu-item
             v-if="
               item.level === 2 && (!item.children || item.children.length === 0)
@@ -29,7 +29,7 @@
             <span v-html="item.text"></span>
           </el-menu-item>
 
-          <!-- H2 标题（带子标题） -->
+          <!-- H2 heading (with sub-headings) -->
           <el-sub-menu
             v-else-if="
               item.level === 2 && item.children && item.children.length > 0
@@ -41,7 +41,7 @@
               <span v-html="item.text"></span>
             </template>
 
-            <!-- H3 子标题 -->
+            <!-- H3 sub-heading -->
             <template v-for="child in item.children" :key="child.id">
               <el-menu-item
                 v-if="
@@ -54,7 +54,7 @@
                 <span v-html="child.text"></span>
               </el-menu-item>
 
-              <!-- H3 子标题（带子标题） -->
+              <!-- H3 sub-heading (with sub-headings) -->
               <el-sub-menu
                 v-else-if="
                   child.level === 3 &&
@@ -68,7 +68,7 @@
                   <span v-html="child.text"></span>
                 </template>
 
-                <!-- H4 子标题 -->
+                <!-- H4 sub-heading -->
                 <el-menu-item
                   v-for="grandChild in child.children"
                   :key="grandChild.id"
@@ -81,7 +81,7 @@
             </template>
           </el-sub-menu>
 
-          <!-- 直接的 H3 或 H4 标题（当没有父 H2 时） -->
+          <!-- Direct H3 or H4 heading (when there is no parent H2) -->
           <el-menu-item
             v-else-if="item.level >= 3"
             :index="item.id"
@@ -93,9 +93,9 @@
       </el-menu>
     </el-aside>
 
-    <!-- 主内容区 -->
+    <!-- Main content area -->
     <el-main style="padding: 20px; overflow-y: auto" ref="mainContentRef">
-      <!-- 下载按钮组 -->
+      <!-- Download button group -->
       <div
         style="
           position: sticky;
@@ -117,7 +117,7 @@
         </el-button>
       </div>
       <div v-for="(block, index) in contentBlocks" :key="index">
-        <!-- H1 Title (居中) -->
+        <!-- H1 Title (centered) -->
         <h1
           v-if="block.type === 'h1'"
           :id="block.id"
@@ -141,7 +141,7 @@
           <template #header>
             <h3 :id="block.id" v-html="block.header"></h3>
           </template>
-          <!-- 使用 v-html 渲染包含 el-card 和 table 的 HTML -->
+          <!-- Render HTML containing el-card and table via v-html -->
           <div v-html="block.body"></div>
         </el-card>
 
@@ -159,7 +159,7 @@
       </div>
 
       <h2>References</h2>
-      <!-- 参考文献部分 -->
+      <!-- References section -->
       <el-card class="mb-20 reference-card" id="section4">
         <div v-if="displayReferences && displayReferences.length > 0">
           <div
@@ -170,7 +170,7 @@
             v-html="ref.html"
           ></div>
         </div>
-        <!-- 显示引用为空的提示 -->
+        <!-- Show an empty-references hint -->
         <div
           v-else-if="!props.references || props.references.length === 0"
           style="text-align: center; color: #999"
@@ -181,7 +181,7 @@
     </el-main>
   </el-container>
 
-  <!-- 图片查看器弹窗 -->
+  <!-- Image viewer dialog -->
   <el-dialog
     v-model="imageViewerVisible"
     title="图片查看"
@@ -240,7 +240,7 @@ import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 import { parseDeepGenomeMarkdown } from "@/utils/deep-genome-markdown";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
 
-// 模拟从 json.txt 获取的 Markdown 内容
+// Props: markdown content and the references list.
 const props = defineProps({
   markdown: {
     type: String,
@@ -257,7 +257,7 @@ const headings = ref([]);
 const nestedHeadings = ref([]);
 const mainContentRef = ref(null);
 
-// 图片查看器（缩放/拖拽/点击放大弹窗）— 已提取至 composable
+// Image viewer (zoom/drag/click-to-enlarge dialog) — extracted into a composable
 const {
   imageViewerVisible,
   currentImageSrc,
@@ -273,17 +273,18 @@ const {
   setupImageClickListeners,
 } = useDeepGenomeImageViewer();
 
-// 计算属性：处理参考文献列表，生成格式化后的HTML
-// 渲染逻辑(含 v-html 清洗不变量)抽到 @/utils/reference-renderer 直接单测。
+// Computed: process the reference list into formatted HTML.
+// Rendering logic (incl. the v-html sanitization invariant) is extracted to
+// @/utils/reference-renderer for direct unit testing.
 const displayReferences = computed(() =>
   buildDisplayReferences(props.references)
 );
 
-// 处理CIF容器的函数
+// Process CIF containers
 const processCifContainers = async () => {
   await nextTick();
 
-  // 查找所有未处理的CIF容器
+  // find all unprocessed CIF containers
   const cifContainers = document.querySelectorAll(
     '.cif-container[data-src$=".cif"]:not([data-processed])'
   );
@@ -292,11 +293,11 @@ const processCifContainers = async () => {
     const src = container.getAttribute("data-src") || "";
     const alt = container.getAttribute("data-alt") || "";
 
-    // 标记为已处理
+    // mark as processed
     container.setAttribute("data-processed", "true");
 
     try {
-      // 动态加载3Dmol.js
+      // dynamically load 3Dmol.js
       const load3DMol = () => {
         return new Promise((resolve, reject) => {
           if (window.$3Dmol) {
@@ -320,15 +321,15 @@ const processCifContainers = async () => {
         });
       };
 
-      // 加载3Dmol.js并渲染结构
+      // load 3Dmol.js and render the structure
       load3DMol()
         .then(() => {
-          // 生成唯一ID
+          // generate a unique id
           const viewerId = `cif-viewer-${Date.now()}-${Math.floor(
             Math.random() * 1000
           )}`;
 
-          // 清空容器并创建查看器元素
+          // clear the container and create the viewer element
           container.innerHTML = "";
           const viewerDiv = document.createElement("div");
           viewerDiv.id = viewerId;
@@ -336,21 +337,21 @@ const processCifContainers = async () => {
           viewerDiv.style.height = "600px";
           container.appendChild(viewerDiv);
 
-          // 生成文件路径
+          // build the file path
           let publicSrc = src;
           if (!src.startsWith("http")) {
-            // 确保路径正确
+            // ensure the path is correct
             if (!src.startsWith("/")) {
               publicSrc = `/${src}`;
             }
           }
 
-          // 创建3Dmol查看器
+          // create the 3Dmol viewer
           const viewer = window.$3Dmol.createViewer(viewerDiv, {
             backgroundColor: "#f5f5f5",
           });
 
-          // 尝试加载CIF文件
+          // try loading the CIF file
           const loadCifFile = async () => {
             try {
               const response = await fetch(publicSrc);
@@ -361,10 +362,10 @@ const processCifContainers = async () => {
               }
               const cifContent = await response.text();
 
-              // 添加模型到查看器
+              // add the model to the viewer
               viewer.addModel(cifContent, "cif");
 
-              // 设置样式和视图
+              // set style and view
               viewer.setStyle({}, { cartoon: { color: "spectrum" } });
               viewer.zoomTo();
               viewer.render();
@@ -377,7 +378,7 @@ const processCifContainers = async () => {
             }
           };
 
-          // 执行加载
+          // run the load
           loadCifFile();
         })
         .catch((error) => {
@@ -393,38 +394,38 @@ const processCifContainers = async () => {
   });
 };
 
-// 下载功能相关方法（已提取至 composable）
+// Download methods (extracted into a composable)
 const { downloadPDF, downloadMarkdown } = useDeepGenomeDownloads({
   props,
   mainContentRef,
   displayReferences,
 });
 
-// TOC 导航 + IntersectionObserver 激活追踪 — 已提取至 composable
+// TOC navigation + IntersectionObserver active tracking — extracted into a composable
 const { activeHeadingId, handleNavSelect, setupIntersectionObserver } =
   useDeepGenomeToc({ headings, nestedHeadings, mainContentRef });
 
-// 在 onMounted 中设置 Intersection Observer
+// Set up the Intersection Observer in onMounted
 onMounted(async () => {
   const parsed = parseDeepGenomeMarkdown(props.markdown);
   contentBlocks.value = parsed.contentBlocks;
   headings.value = parsed.headings;
   nestedHeadings.value = parsed.nestedHeadings;
 
-  // 使用 nextTick 确保 DOM 更新后处理 CIF 容器和添加图片点击事件
+  // Use nextTick to process CIF containers and add image click handlers after the DOM updates
   await nextTick();
   processCifContainers();
   setupImageClickListeners();
 
-  // 等待标题元素渲染完成后设置 Intersection Observer
+  // Wait for heading elements to render, then set up the Intersection Observer
   setTimeout(() => {
     setupIntersectionObserver();
   }, 100);
 
-  // 初始化设置第一个激活项
+  // initialize the first active item
   await nextTick(() => {
     if (headings.value.length > 0) {
-      // 直接使用第一个标题作为初始激活项
+      // use the first heading as the initial active item
       // activeHeadingId.value = headings.value[0].id;
       // expandParentMenus(headings.value[0].id);
     }
@@ -441,8 +442,8 @@ onMounted(async () => {
   border: none !important;
   overflow: hidden;
 }
-/* 侧边栏菜单层级样式 */
-/* 一级菜单 (H2) - 缩进10px, 字体粗细600 */
+/* Sidebar menu level styles */
+/* Level-1 menu (H2) - 10px indent, font-weight 600 */
 .menu-level-2 {
   span {
     font-weight: 600 !important;
@@ -472,22 +473,22 @@ onMounted(async () => {
   background: #fff;
 }
 
-/* 侧边栏菜单激活状态样式 */
+/* Sidebar menu active-state styles */
 .el-menu-item.is-active {
   color: #fff !important;
   background-color: #409eff !important;
 }
 
-/* 侧边栏菜单项hover状态 */
+/* Sidebar menu item hover state */
 .el-menu-item:hover {
   span {
     color: #409eff !important;
   }
 }
 
-/* 添加对 image-card 类的样式支持 */
+/* Style support for the image-card class */
 
-/* 图片和图注样式 */
+/* Image and caption styles */
 figure {
   margin: 0;
   text-align: center;
@@ -509,7 +510,7 @@ figcaption {
 .markdown-table td {
   border: 1px solid #ddd;
   padding: 8px;
-  text-align: left; /* 默认或根据 alignStyle */
+  text-align: left; /* default, or per alignStyle */
 }
 .markdown-table th {
   background-color: #f2f2f2;
@@ -535,7 +536,7 @@ h3 {
   color: #000;
 }
 
-/* 深色主题下的侧边栏样式 */
+/* Sidebar styles under the dark theme */
 .theme-dark .el-aside {
   background-color: #1f1f1f !important;
 }
@@ -553,7 +554,7 @@ h3 {
   background-color: rgba(64, 158, 255, 0.1) !important;
 }
 
-/* 深色主题下的菜单项文本颜色 */
+/* Menu item text color under the dark theme */
 .theme-dark .menu-level-2 span,
 .theme-dark .menu-level-3 span,
 .theme-dark .menu-level-4 span {
@@ -642,14 +643,14 @@ h3 {
     color: #000;
   }
 }
-/* 侧边栏菜单项文本样式 */
+/* Sidebar menu item text styles */
 .menu-level-2 span,
 .menu-level-3 span,
 .menu-level-4 span {
   color: #000;
 }
 
-/* 参考文献样式 */
+/* Reference styles */
 .doc-citation {
   line-height: 1.6;
   margin-bottom: 10px;
@@ -683,7 +684,7 @@ h3 {
   color: #000;
 }
 
-/* 图片查看器样式 */
+/* Image viewer styles */
 .image-view-container {
   background-color: #f0f0f0;
 }
@@ -698,7 +699,7 @@ h3 {
   background-color: #1f1f1f;
 }
 
-/* 下载下拉菜单样式 */
+/* Download dropdown styles */
 .download-dropdown {
   z-index: 2000 !important;
   position: fixed !important;
@@ -706,19 +707,19 @@ h3 {
   left: auto !important;
 }
 
-/* 确保主内容区域不影响下拉菜单显示 */
+/* ensure the main content area doesn't affect dropdown display */
 .el-main {
   overflow: visible !important;
   position: relative;
 }
 
-/* 确保sticky按钮容器不影响下拉菜单 */
+/* ensure the sticky button container doesn't affect the dropdown */
 [style*="position: sticky"] {
   overflow: visible !important;
   position: sticky;
 }
 
-/* 确保下拉菜单可见，同时保留滚动功能 */
+/* keep the dropdown visible while preserving scrolling */
 .el-container {
   overflow: hidden !important;
 }
@@ -732,7 +733,7 @@ h3 {
   overflow: visible !important;
 }
 
-/* 为下拉菜单添加背景和边框，确保可见性 */
+/* add background and border to the dropdown for visibility */
 .download-dropdown .el-dropdown-menu {
   background-color: #fff !important;
   border: 1px solid #dcdfe6 !important;
@@ -740,7 +741,7 @@ h3 {
   padding: 5px 0 !important;
 }
 
-/* 确保菜单项正确显示激活状态 */
+/* ensure menu items show the active state correctly */
 ::v-deep .el-menu-item.is-active {
   color: #409eff !important;
   background-color: #ecf5ff !important;
@@ -750,7 +751,7 @@ h3 {
   color: #409eff !important;
 }
 
-/* 改进菜单项的hover效果 */
+/* improve the menu item hover effect */
 ::v-deep .el-menu-item:hover {
   background-color: #f5f7fa !important;
 }

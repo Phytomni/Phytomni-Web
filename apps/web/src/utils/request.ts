@@ -18,26 +18,26 @@ const CancelToken = axios.CancelToken;
 const source = CancelToken.source();
 
 let downloadLoadingInstance: ReturnType<typeof ElLoading.service> | undefined;
-// 是否显示重新登录
+// whether to show the re-login prompt
 export const isRelogin = { show: false };
 
-//不设置header，让浏览器自动识别
+// don't set the header; let the browser detect it automatically
 // axios.defaults.headers['Content-Type'] = 'application/json;charset=utf-8';
-// 创建axios实例
+// create the axios instance
 // const baseURL = import.meta.env.VITE_BASE_API;
 const baseURL = "";
 
 const service: AxiosInstance = axios.create({
-  // axios中请求配置有baseURL选项，表示请求URL公共部分
+  // axios request config has a baseURL option for the common URL prefix
   baseURL: baseURL,
-  // 超时
+  // timeout
   timeout: 100000000,
 });
 
-// 存储活跃的请求控制器
+// store active request controllers
 const activeControllers = new Map<string, AbortController>();
 
-// request拦截器
+// request interceptor
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // `isToken` / `repeatSubmit` are custom call-site sentinels stashed on
@@ -46,18 +46,18 @@ service.interceptors.request.use(
     // without breaking the public contract.
     const headerFlags = config.headers as unknown as Record<string, unknown>;
     const isToken = headerFlags?.isToken === false;
-    // 是否需要防止数据重复提交
+    // whether to prevent duplicate submissions
     const isRepeatSubmit = headerFlags?.repeatSubmit === false;
     config.headers["platform"] = "bcemis";
     if (getToken() && !isToken) {
-      config.headers["Authorization"] = "Bearer " + getToken(); // 让每个请求携带自定义token 请根据实际情况自行修改
+      config.headers["Authorization"] = "Bearer " + getToken(); // attach a custom token to every request; adjust as needed
     }
     if (getToken()) {
       config.headers["satoken"] = getToken();
     }
-    // 让后端按 vue-i18n 当前 locale 返回本地化错误消息
+    // have the backend return localized error messages per the current vue-i18n locale
     config.headers["Accept-Language"] = i18n.global.locale.value;
-    // get请求映射params参数
+    // map params for GET requests
     if (config.method === "get" && config.params) {
       let url = config.url + "?" + tansParams(config.params);
       url = url.slice(0, -1);
@@ -84,18 +84,18 @@ service.interceptors.request.use(
       ) {
         cache.session.setJSON("sessionObj", requestObj);
       } else {
-        const s_url = sessionObj.url; // 请求地址
-        const s_data = sessionObj.data; // 请求数据
-        const s_time = sessionObj.time; // 请求时间
-        const interval = 1000; // 间隔时间(ms)，小于此时间视为重复提交
-        // 预检拦截
+        const s_url = sessionObj.url; // request URL
+        const s_data = sessionObj.data; // request data
+        const s_time = sessionObj.time; // request time
+        const interval = 1000; // interval (ms); requests within this window are treated as duplicate submissions
+        // pre-flight check
         if (
           s_data === requestObj.data &&
           requestObj.time - s_time < interval &&
           s_url === requestObj.url
         ) {
           config.cancelToken = source.token;
-          // cancel函数可以不用传参，也可以传入取消后执行的操作，取消后可提示用户需要登录
+          // the cancel function can take no args, or an action to run after cancellation; you can prompt the user to log in
         } else {
           cache.session.setJSON("sessionObj", requestObj);
         }
@@ -105,9 +105,9 @@ service.interceptors.request.use(
     return config;
   },
   (error: unknown) => {
-    // 只打印脱敏后的消息,绝不打印原始 error 对象:axios error 携带
-    // config.headers(此处含 Authorization Bearer + satoken),整体打印会把
-    // 活令牌写进浏览器控制台。
+    // Only log the redacted message; never log the raw error object: an axios error
+    // carries config.headers (here including the Authorization Bearer + satoken), so
+    // logging the whole thing would write live tokens into the browser console.
     console.log(
       "request error:",
       error instanceof Error ? error.message : String(error)
@@ -123,17 +123,17 @@ service.interceptors.request.use(
 // runtime path.
 type ErrorCodeLookup = Record<string, (() => string) | string>;
 
-// 响应拦截器
+// response interceptor
 service.interceptors.response.use(
   (res: AxiosResponse) => {
-    // 未设置状态码则默认成功状态
+    // default to a success status when no code is set
     const code = res.data.code || 200;
-    // 获取错误信息
+    // get the error message
     const msg =
       (errorCode as ErrorCodeLookup)[code] ||
       res.data.message ||
       (errorCode as ErrorCodeLookup)["default"];
-    // 二进制数据则直接返回
+    // return binary data directly
     if (res.headers["content-type"] === "application/octet-stream") {
       return res;
     }
@@ -154,7 +154,7 @@ service.interceptors.response.use(
             isRelogin.show = false;
             const UserStore = userStore();
             UserStore.FedLogOut().finally(() => {
-              // 清除所有缓存和cookie
+              // clear all caches and cookies
               localStorage.clear();
               sessionStorage.clear();
               document.cookie.split(";").forEach(function (c) {
@@ -191,8 +191,8 @@ service.interceptors.response.use(
     }
   },
   (error: any) => {
-    // 脱敏日志 —— 原始 axios error 内嵌 config.headers(Bearer 令牌 + satoken),
-    // 这里只暴露用于排障的非敏感字段。
+    // Redacted log — the raw axios error embeds config.headers (Bearer token + satoken),
+    // so we expose only the non-sensitive fields useful for debugging.
     console.log("response error:", {
       status: error?.response?.status,
       url: error?.config?.url,
@@ -204,7 +204,7 @@ service.interceptors.response.use(
       isRelogin.show = false;
       const UserStore = userStore();
       UserStore.FedLogOut().finally(() => {
-        // 清除所有缓存和cookie
+        // clear all caches and cookies
         localStorage.clear();
         sessionStorage.clear();
         document.cookie.split(";").forEach(function (c) {
@@ -220,8 +220,8 @@ service.interceptors.response.use(
     }
 
     if (message === "数据正在处理，请勿重复提交") return;
-    // 优先展示服务端返回的可读 message(Go 网关错误体 {code, message};
-    // 旧 Python 服务的 detail 字符串),否则回落 axios 通用错误文案。
+    // Prefer the readable server-returned message (Go gateway error body {code, message};
+    // legacy Python service detail string), otherwise fall back to axios's generic error text.
     const serverMessage =
       response?.data?.message ||
       (typeof response?.data?.detail === "string" ? response.data.detail : "");
@@ -248,7 +248,7 @@ service.interceptors.response.use(
   }
 );
 
-// 通用下载方法
+// generic download method
 export function download(
   url: string,
   params: unknown,
@@ -296,7 +296,7 @@ export function download(
     });
 }
 
-// 创建可中止的请求 — accept the public AxiosRequestConfig shape (headers
+// Create an abortable request — accept the public AxiosRequestConfig shape (headers
 // optional) so call sites can pass plain config literals; the stored
 // `requestId` is just a tag used to address controller entries.
 export const createAbortableRequest = (
@@ -305,20 +305,20 @@ export const createAbortableRequest = (
   const controller = new AbortController();
   const requestId = config.requestId || Date.now().toString();
 
-  // 存储控制器
+  // store the controller
   activeControllers.set(requestId, controller);
 
-  // 添加中止信号到配置
+  // add the abort signal to the config
   config.signal = controller.signal;
   config.requestId = requestId;
 
   return service(config).finally(() => {
-    // 请求完成后清理控制器
+    // clean up the controller after the request completes
     activeControllers.delete(requestId);
   });
 };
 
-// 中止指定请求
+// abort a specific request
 export const abortRequest = (requestId: string): boolean => {
   const controller = activeControllers.get(requestId);
   if (controller) {
@@ -329,7 +329,7 @@ export const abortRequest = (requestId: string): boolean => {
   return false;
 };
 
-// 中止所有活跃请求
+// abort all active requests
 export const abortAllRequests = (): void => {
   activeControllers.forEach((controller) => {
     controller.abort();
@@ -338,23 +338,3 @@ export const abortAllRequests = (): void => {
 };
 
 export default service;
-// // 使用方法;
-// import request from '@/utils/request';
-// // 登录方法
-// export function login(name, pwd, code, uuid) {
-//   return request({
-//     url: '/auth/sso/doLogin',
-//     headers: {
-//       isToken: false,
-//     },
-//     method: 'get',
-//     params: { name, pwd, code, uuid },
-//   });
-// }
-// // 刷新方法
-// export function refreshToken() {
-//   return request({
-//     url: '/auth/refresh',
-//     method: 'post',
-//   });
-// }

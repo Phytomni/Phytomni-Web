@@ -74,7 +74,7 @@ const handleQuestionClick = (question: string) => {
       margin-bottom: 0;
     }
 
-    // 添加点击提示
+    // Add a click hint
     &::after {
       content: "";
       position: absolute;

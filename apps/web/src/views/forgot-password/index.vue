@@ -5,7 +5,7 @@
         <div class="logo" style="width: 40px; height: 40px"></div>
       </div>
       <div class="slogan">
-        <!-- 可以添加忘记密码页面的标语 -->
+        <!-- A slogan for the forgot-password page can be added here -->
       </div>
     </div>
     <div class="forgot-password-right">

@@ -1,13 +1,6 @@
-<!--
- * 组件注释
- * @Author: AI assistant
- * @Date: 2024-05-10
- * @Description: 基因详情页面
- * 既往不恋！当下不杂！！未来不迎！！！
--->
 <template>
   <div class="gene-detail-container" v-loading="loading">
-    <!-- 使用 DeepGenomeResultViewer 组件展示内容 -->
+    <!-- Display content using the DeepGenomeResultViewer component -->
     <DeepGenomeResultViewer
       v-if="MDContent"
       :markdown="processedContent"
@@ -49,7 +42,7 @@ const loading = ref(false);
 const MDContent = ref("");
 const references = ref<any[]>([]);
 
-// 解析 DOC TITLES 为参考文献
+// Parse DOC TITLES into references
 const parseDocTitles = (
   content: string
 ): { mainContent: string; refs: any[] } => {
@@ -65,12 +58,12 @@ const parseDocTitles = (
     .substring(separatorIndex + separator.length)
     .trim();
 
-  // 解析文献列表（格式：数字. 标题）
+  // Parse the reference list (format: number. title)
   const refs = docTitlesSection
     .split("\n")
     .filter((line) => line.trim())
     .map((line) => {
-      // 匹配格式：1. 标题
+      // Match the format: 1. title
       const match = line.match(/^\d+\.\s+(.+)$/);
       if (match) {
         return { title: match[1].trim() };
@@ -85,10 +78,10 @@ const parseDocTitles = (
 const processedContent = computed(() => {
   if (!MDContent.value) return "";
 
-  // 先移除 DOC TITLES 部分
+  // First remove the DOC TITLES section
   const { mainContent } = parseDocTitles(MDContent.value);
 
-  // 替换所有图片引用，并将实际换行符转换为字面 \n（DeepGenomeResultViewer 组件需要）
+  // Replace all image references, and convert actual newlines into literal \n (required by the DeepGenomeResultViewer component)
   return mainContent
     .replace(/!\[Tree Image\]\(.*?tree\.png/g, `![Tree Image](${treeImg}`)
     .replace(
@@ -122,11 +115,11 @@ const processedContent = computed(() => {
       /!\[Mutation Image\]\(.*?psap_scores\.png/g,
       `![Mutation Image](${psapScoresImg}`
     )
-    .replace(/\r\n/g, "\\n") // 将 CRLF 转换为字面 \n
-    .replace(/\n/g, "\\n"); // 将 LF 转换为字面 \n
+    .replace(/\r\n/g, "\\n") // Convert CRLF into literal \n
+    .replace(/\n/g, "\\n"); // Convert LF into literal \n
 });
 
-// 获取基因详情
+// Fetch gene details
 const fetchGeneDetail = async (file_name: string) => {
   loading.value = true;
   try {
@@ -135,11 +128,11 @@ const fetchGeneDetail = async (file_name: string) => {
     if (res.code === 200 && res.data) {
       MDContent.value = res.data.content;
 
-      // 解析 DOC TITLES 为参考文献
+      // Parse DOC TITLES into references
       const { refs } = parseDocTitles(res.data.content);
       references.value = refs;
 
-      // 如果API返回了references，则优先使用它
+      // If the API returned references, prefer them
       if (res.data.references && res.data.references.length > 0) {
         references.value = res.data.references;
       }
@@ -154,7 +147,7 @@ const fetchGeneDetail = async (file_name: string) => {
   }
 };
 
-// 获取路由参数
+// Get route parameters
 onMounted(() => {
   const id = route.query.file_name as string;
   if (id) {

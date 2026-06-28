@@ -18,7 +18,7 @@
     </div>
 
     <div class="chat-messages">
-      <!-- 用户提问 -->
+      <!-- User question -->
       <div class="message user-message">
         <div class="message-content">
           <div class="message-text">
@@ -49,7 +49,7 @@
         </div>
       </div>
 
-      <!-- AI 回答 -->
+      <!-- AI answer -->
       <div class="message ai-message">
         <div class="message-avatar">
           <el-avatar :size="36" :src="botAvatar" />
@@ -61,7 +61,7 @@
               :references="docList"
             />
             <div class="message-fotter">
-              <!-- 点赞点踩按钮 -->
+              <!-- Like / dislike buttons -->
               <div class="reaction-buttons">
                 <el-tooltip
                   effect="dark"
@@ -147,8 +147,8 @@ const handleReaction = (reactionType: number) => {
 
 const botAvatar = "/logo.png";
 
-// DeepGenomeResultViewer 的 references 列表(demo 数据,与 docList 中的 file_id
-// / au / ti 字段对齐 viewer 期望的 schema)
+// References list for DeepGenomeResultViewer (demo data; the file_id / au / ti
+// fields in docList align with the schema the viewer expects)
 const docList = [
   {
     file_id: "65c0d139-67b8-4dab-bb4a-b8e9b57dd990",
@@ -224,8 +224,8 @@ const docList = [
   },
 ];
 
-// Deep Genome Agent demo response(verbatim 来源于 frontend 仓库,保留
-// [1][2] 引用格式与 docList 对齐)
+// Deep Genome Agent demo response (verbatim from the frontend repo; the
+// [1][2] citation format is preserved to align with docList)
 const deepGenomeAgentResponse = `
 # Deep Genome Analysis of Os01g0177400
 

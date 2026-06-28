@@ -1,13 +1,3 @@
-/*
- * 组件注释
- * @Author: wuq-l
- * @Date: 2022-08-31 21:32:03
- * @LastEditors: machinist_wq
- * @LastEditTime: 2023-01-30 11:11:30
- * @Description:
- * 人生无常！大肠包小肠......
- */
-
 import Cookies from "js-cookie";
 const TokenKey = "Admin-Token";
 
@@ -32,8 +22,8 @@ export function removeToken() {
 }
 
 /**
- * 参数处理
- * @param {*} params  参数
+ * Serialize params into a query string.
+ * @param {*} params  the params object
  */
 export function tansParams(params: { [x: string]: any }) {
   let result = "";
@@ -61,7 +51,7 @@ export function tansParams(params: { [x: string]: any }) {
   return result;
 }
 
-// 验证是否为blob格式
+// Validate whether the data is a blob
 export async function blobValidate(data: { text: () => any }) {
   try {
     const text = await data.text();

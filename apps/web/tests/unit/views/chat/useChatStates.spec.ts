@@ -2,8 +2,9 @@ import { describe, it, expect } from "vitest";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import type { UploadFile } from "@/views/chat/types";
 
-// 这是对刚刚抽取(行为未变)的平行对话状态的特征(characterization)测试,
-// 是「多对话并行、UI 状态互不串台」运行时不变量的单元可测形式。
+// This is a characterization test of the just-extracted (behavior-unchanged) parallel
+// chat state, the unit-testable form of the "multiple dialogues in parallel, UI state
+// never bleeds across them" runtime invariant.
 
 describe("useChatStates parallel chat state", () => {
   it("isolates per-dialogue state via proxies — switching currentChatId flips state without bleed", () => {
@@ -17,28 +18,28 @@ describe("useChatStates parallel chat state", () => {
       },
     ];
 
-    // 写入 A 的状态
+    // Write A's state
     s.currentChatId.value = "A";
     s.messageInput.value = "hello-A";
     s.isSending.value = true;
     s.fileList.value = fileA;
 
-    // 切到 B —— 所有代理应返回干净默认值(证明无串台)
+    // Switch to B — all proxies should return clean defaults (proving no bleed)
     s.currentChatId.value = "B";
     expect(s.messageInput.value).toBe("");
     expect(s.isSending.value).toBe(false);
     expect(s.fileList.value).toEqual([]);
 
-    // 写入 B 自己的内容
+    // Write B's own content
     s.messageInput.value = "hello-B";
 
-    // 切回 A —— A 的状态必须原样保留
+    // Switch back to A — A's state must be preserved as-is
     s.currentChatId.value = "A";
     expect(s.messageInput.value).toBe("hello-A");
     expect(s.isSending.value).toBe(true);
     expect(s.fileList.value).toEqual(fileA);
 
-    // B 不受 A 影响
+    // B is unaffected by A
     s.currentChatId.value = "B";
     expect(s.messageInput.value).toBe("hello-B");
   });
@@ -63,7 +64,7 @@ describe("useChatStates parallel chat state", () => {
       activeAgentName: "",
       completing: false,
     });
-    // 已写入到 chatStates 这个 map 中
+    // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
   });
 
@@ -71,7 +72,7 @@ describe("useChatStates parallel chat state", () => {
     const s = useChatStates();
     s.currentChatId.value = "";
 
-    // getter 返回各自默认值
+    // getters return their respective defaults
     expect(s.messageInput.value).toBe("");
     expect(s.isSending.value).toBe(false);
     expect(s.fileList.value).toEqual([]);
@@ -83,7 +84,7 @@ describe("useChatStates parallel chat state", () => {
     expect(s.historyQuestion.value).toBeNull();
     expect(s.updatingLog.value).toEqual({});
 
-    // setter 在无 currentChatId 时为 no-op:写入后读回仍是默认值
+    // setters are no-ops when there is no currentChatId: reading back after writing still yields defaults
     s.messageInput.value = "ignored";
     s.isSending.value = true;
     s.copyVisible.value = 5;
@@ -91,7 +92,7 @@ describe("useChatStates parallel chat state", () => {
     expect(s.isSending.value).toBe(false);
     expect(s.copyVisible.value).toBe(0);
 
-    // 无 currentChatId 时不应创建任何对话状态
+    // No chat state should be created when there is no currentChatId
     expect(Object.keys(s.chatStates.value)).toHaveLength(0);
   });
 });

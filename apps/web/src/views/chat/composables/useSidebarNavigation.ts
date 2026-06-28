@@ -7,48 +7,48 @@ export function useSidebarNavigation(opts: {
   onStartTutorial: () => void;
   onSelectChat: (dialogueId: string) => void;
 }) {
-  // 用户管理
+  // user management
   const handleUserManagement = () => opts.router.push("/user-list");
 
-  // 系统监控
+  // system monitoring
   const handleSystemMonitor = () => opts.router.push("/log-list");
 
-  // 权限管理
+  // permission management
   const handlePermissionManagement = () => opts.router.push("/permi-manage");
 
-  // 全局策略配置
+  // global config
   const handleGlobalConfig = () => opts.router.push("/global-config");
 
-  // 管理员管理
+  // admin management
   const handleAdminManagement = () => opts.router.push("/admin-management");
 
-  // 用户反馈
+  // user feedback
   const handleFeedback = () => opts.router.push("/feedback");
 
-  // 修改密码
+  // change password
   const handleChangePassword = () => opts.router.push("/change-password");
 
-  // 登出
+  // logout
   const handleLogout = () => {
     opts.userStore.FedLogOut().finally(() => opts.router.replace("/login"));
   };
 
-  // 处理历史记录点击事件
+  // handle history click
   const handleHistory = () => {
     opts.router.push("/history");
   };
 
-  // 处理个人资料点击事件
+  // handle profile click
   const handleProfile = () => {
     opts.router.push("/profile");
   };
 
-  // 处理网盘空间点击事件
+  // handle cloud-storage click
   const handleCloudStorage = () => {
     opts.router.push("/cloud-storage");
   };
 
-  // 用户菜单相关
+  // user menu
   const handleCommand = (command: string) => {
     switch (command) {
       case "userManagement":
@@ -87,28 +87,28 @@ export function useSidebarNavigation(opts: {
     }
   };
 
-  // 处理新对话点击事件
+  // handle new-chat click
   const startNewChat = () => opts.onStartNewChat();
 
-  // 处理知识库点击事件
+  // handle knowledge-base click
   const openKnowledgeBase = () => {
     opts.router.push("/gene-display");
   };
 
-  // 处理收藏页点击事件
+  // handle favorites click
   const openFavorites = () => {
     opts.router.push("/favorites");
   };
 
-  // 处理开始教学点击事件
+  // handle start-tutorial click
   const startTutorial = () => {
     opts.onStartTutorial();
   };
 
-  // 处理选择对话事件
+  // handle select-chat
   const selectChat = (dialogueId: string) => opts.onSelectChat(dialogueId);
 
-  // 权限检查方法
+  // permission check
   const hasPermission = (permission: string) => {
     return opts.userStore.permission_list.includes(permission);
   };

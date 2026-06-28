@@ -2,21 +2,21 @@ import { ref, reactive, computed, watch, type Ref } from "vue";
 import { clampPanOffset } from "@/utils/image-viewer";
 
 export function useImageZoomPan(agentsViewVisible: Ref<boolean>) {
-  // Agents架构图弹窗 — 缩放与拖拽状态
+  // Agents architecture-diagram popup — zoom and drag state
   const scale = ref(1);
   const minScale = 1;
   const maxScale = 5;
 
-  // 鼠标拖拽
+  // mouse drag
   const isDragging = ref(false);
   const dragStart = reactive({ x: 0, y: 0 });
   const imageOffset = reactive({ x: 0, y: 0 });
 
-  // DOM 引用
+  // DOM refs
   const containerRef = ref<HTMLDivElement>();
   const imageRef = ref<HTMLImageElement>();
 
-  // 动态样式
+  // dynamic style
   const imageStyle = computed(() => {
     return {
       transform: `scale(${scale.value}) translate(${imageOffset.x}px, ${imageOffset.y}px)`,
@@ -26,7 +26,7 @@ export function useImageZoomPan(agentsViewVisible: Ref<boolean>) {
     };
   });
 
-  // 滚轮缩放
+  // wheel zoom
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
 
@@ -34,17 +34,17 @@ export function useImageZoomPan(agentsViewVisible: Ref<boolean>) {
     const img = imageRef.value;
     if (!container || !img) return;
 
-    // 获取容器边界
+    // get the container bounds
     const containerRect = container.getBoundingClientRect();
 
-    // 计算鼠标相对于容器的位置
+    // compute the mouse position relative to the container
     const mouseX = e.clientX - containerRect.left;
     const mouseY = e.clientY - containerRect.top;
 
-    // 当前缩放
+    // current scale
     let newScale = scale.value;
 
-    // 滚轮方向
+    // wheel direction
     if (e.deltaY < 0) {
       newScale = Math.min(maxScale, scale.value + 0.1);
     } else {
@@ -53,17 +53,17 @@ export function useImageZoomPan(agentsViewVisible: Ref<boolean>) {
 
     if (Math.abs(newScale - scale.value) < 0.01) return;
 
-    // 关键：计算缩放后的新偏移，实现以鼠标为中心缩放
-    // 原始图片尺寸
+    // key: compute the new offset after scaling, zooming about the mouse
+    // natural image size
     const originalWidth = img.naturalWidth;
     const originalHeight = img.naturalHeight;
 
-    // 图片尚未加载完(naturalWidth/Height 为 0)时直接退出，避免后续除零
-    // 产生 NaN/Infinity 偏移把图片甩出视野。
+    // bail out while the image is still loading (naturalWidth/Height is 0) to avoid
+    // a later divide-by-zero producing NaN/Infinity offsets that fling the image off-screen.
     if (!originalWidth || !originalHeight) return;
 
-    // 计算鼠标在图片上的逻辑位置（相对于图片左上角）
-    // 当前图片左上角相对于容器的位置
+    // compute the mouse's logical position on the image (relative to the top-left)
+    // current top-left of the image relative to the container
     const currentImageX =
       (containerRect.width - originalWidth * scale.value) / 2 +
       imageOffset.x * scale.value;
@@ -71,19 +71,19 @@ export function useImageZoomPan(agentsViewVisible: Ref<boolean>) {
       (containerRect.height - originalHeight * scale.value) / 2 +
       imageOffset.y * scale.value;
 
-    // 鼠标在图片上的相对坐标（相对于图片左上角）
+    // mouse coordinates relative to the image's top-left
     const mouseOnImageX = mouseX - currentImageX;
     const mouseOnImageY = mouseY - currentImageY;
 
-    // 计算鼠标在原始图片上的相对位置（0-1范围）
+    // compute the mouse's relative position on the natural image (0-1 range)
     const mouseRatioX = mouseOnImageX / (originalWidth * scale.value);
     const mouseRatioY = mouseOnImageY / (originalHeight * scale.value);
 
-    // 计算新的图片左上角位置，使鼠标指向的点保持不变
+    // compute the new top-left so the point under the mouse stays fixed
     const newImageX = mouseX - originalWidth * newScale * mouseRatioX;
     const newImageY = mouseY - originalHeight * newScale * mouseRatioY;
 
-    // 计算新的偏移量，并 clamp 在可视范围内(防止越过容器中心拖丢图片）
+    // compute the new offset and clamp it to the visible range (prevent dragging past the container center and losing the image)
     imageOffset.x = clampPanOffset(
       (newImageX - (containerRect.width - originalWidth * newScale) / 2) /
         newScale,
@@ -100,9 +100,9 @@ export function useImageZoomPan(agentsViewVisible: Ref<boolean>) {
     scale.value = newScale;
   };
 
-  // 拖拽移动图片
+  // drag to move the image
   const handleMouseDown = (e: MouseEvent) => {
-    if (e.button !== 0) return; // 只响应左键
+    if (e.button !== 0) return; // respond to the left button only
     isDragging.value = true;
     dragStart.x = e.clientX - imageOffset.x;
     dragStart.y = e.clientY - imageOffset.y;
@@ -128,7 +128,7 @@ export function useImageZoomPan(agentsViewVisible: Ref<boolean>) {
     isDragging.value = false;
   };
 
-  // 关闭架构图弹窗时复位缩放/拖拽状态，避免下次打开仍停留在上次缩放的位置。
+  // reset zoom/drag state when the diagram popup closes, so it doesn't reopen at the previous zoom.
   watch(agentsViewVisible, (visible) => {
     if (!visible) {
       scale.value = 1;

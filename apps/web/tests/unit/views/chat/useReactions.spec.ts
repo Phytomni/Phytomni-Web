@@ -68,15 +68,15 @@ describe("useReactions", () => {
       const { handleReaction } = makeComposable();
       await handleReaction("m1", 1);
 
-      // 检查 FormData 参数
+      // Check the FormData parameters
       const formData: FormData = mockGetReactionType.mock.calls[0][0];
       expect(formData.get("id")).toBe("m1");
       expect(formData.get("reaction_type")).toBe("0");
 
-      // 检查本地状态
+      // Check the local state
       expect(chatState.reactions["m1"]).toBe(0);
 
-      // 检查成功提示
+      // Check the success message
       expect(mockElSuccess).toHaveBeenCalledWith("已取消");
     });
 

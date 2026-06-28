@@ -11,8 +11,8 @@ vi.mock("@/api/chat", () => ({
 
 import { useAgentImages } from "@/views/chat/composables/useAgentImages";
 
-// 特征(characterization)测试 — 锁定 watch 监听逻辑:
-// 正确 tool_name + download_path 触发抓取,缺字段则不触发。
+// Characterization test — locks down the watch logic:
+// a correct tool_name + download_path triggers the fetch; a missing field does not.
 
 describe("useAgentImages", () => {
   beforeEach(() => {
@@ -141,7 +141,7 @@ describe("useAgentImages", () => {
         {
           role: "assistant",
           tool_name: "GeneNetworkAgent",
-          // download_path 故意缺失
+          // download_path intentionally omitted
           id: "msg-005",
         },
       ],
@@ -178,11 +178,11 @@ describe("useAgentImages", () => {
     await flushPromises();
     expect(mockGetObsImages).toHaveBeenCalledOnce();
 
-    // 再次赋值同一对话(模拟 deep watch 再触发)
+    // Reassign the same dialogue (simulating the deep watch firing again)
     currentChat.value = { messages: [msg, { role: "user", content: "hi" }] };
     await flushPromises();
 
-    // 因 geneNetworkImages[msg.id] 已存在,不应再次调用
+    // Since geneNetworkImages[msg.id] already exists, it should not be called again
     expect(mockGetObsImages).toHaveBeenCalledOnce();
     expect(geneNetworkImages["msg-006"]).toEqual(["http://obs/x.png"]);
   });

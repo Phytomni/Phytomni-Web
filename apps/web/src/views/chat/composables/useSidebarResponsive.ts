@@ -4,19 +4,19 @@ export function useSidebarResponsive(opts: {
   collapsed: () => boolean; // () => props.collapsed
   onCollapseChange: (value: boolean) => void; // (v) => emit("handleSidebarCollapse", v)
 }) {
-  // 侧边栏折叠状态
+  // sidebar collapse state
   const sidebarCollapsed = ref(opts.collapsed());
 
-  // 响应式断点（小于此宽度时自动收起侧边栏）
+  // responsive breakpoint (auto-collapse the sidebar below this width)
   const RESPONSIVE_BREAKPOINT = 1200;
 
-  // 防抖定时器
+  // debounce timer
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // 用户偏好设置 - 是否启用自动展开功能
+  // user preference - whether auto-expand is enabled
   const autoExpandEnabled = ref(true);
 
-  // 检查窗口大小并自动调整侧边栏状态
+  // check the window size and auto-adjust the sidebar state
   const checkWindowSize = () => {
     const windowWidth = window.innerWidth;
     if (windowWidth < RESPONSIVE_BREAKPOINT && !sidebarCollapsed.value) {
@@ -30,17 +30,17 @@ export function useSidebarResponsive(opts: {
     }
   };
 
-  // 监听窗口大小变化（带防抖）
+  // watch window size changes (debounced)
   const handleResize = () => {
     if (resizeTimer) {
       clearTimeout(resizeTimer);
     }
     resizeTimer = setTimeout(() => {
       checkWindowSize();
-    }, 100); // 100ms 防抖延迟
+    }, 100); // 100ms debounce delay
   };
 
-  // 监听外部传入的状态变化
+  // watch externally provided state changes
   watch(
     () => opts.collapsed(),
     (newVal) => {
@@ -48,53 +48,53 @@ export function useSidebarResponsive(opts: {
     }
   );
 
-  // 监听内部状态变化，通知父组件
+  // watch internal state changes and notify the parent
   watch(sidebarCollapsed, (newVal) => {
     opts.onCollapseChange(newVal);
   });
 
-  // 监听自动展开设置变化，保存到localStorage
+  // watch the auto-expand setting and persist to localStorage
   watch(autoExpandEnabled, (newVal) => {
     localStorage.setItem("sidebarAutoExpand", JSON.stringify(newVal));
   });
 
-  // 展开侧边栏 - 只有当侧边栏是折叠状态时才能展开
+  // expand the sidebar - only when it is collapsed
   const expandSidebar = () => {
     if (sidebarCollapsed.value) {
       sidebarCollapsed.value = false;
-      // 用户手动展开时，暂时禁用自动展开功能
+      // temporarily disable auto-expand when the user expands manually
       autoExpandEnabled.value = false;
-      // 3秒后重新启用自动展开功能
+      // re-enable auto-expand after 3 seconds
       setTimeout(() => {
         autoExpandEnabled.value = true;
       }, 3000);
     }
   };
 
-  // 折叠侧边栏
+  // collapse the sidebar
   const collapseSidebar = () => {
     sidebarCollapsed.value = true;
-    // 用户手动收起时，暂时禁用自动展开功能
+    // temporarily disable auto-expand when the user collapses manually
     autoExpandEnabled.value = false;
-    // 3秒后重新启用自动展开功能
+    // re-enable auto-expand after 3 seconds
     setTimeout(() => {
       autoExpandEnabled.value = true;
     }, 3000);
   };
 
-  // 组件挂载时检查窗口大小并添加监听器
+  // on mount, check the window size and add listeners
   onMounted(() => {
     checkWindowSize();
     window.addEventListener("resize", handleResize);
 
-    // 从localStorage读取用户偏好设置
+    // read the user preference from localStorage
     const savedAutoExpand = localStorage.getItem("sidebarAutoExpand");
     if (savedAutoExpand !== null) {
       autoExpandEnabled.value = JSON.parse(savedAutoExpand);
     }
   });
 
-  // 组件卸载时移除监听器和清理定时器
+  // on unmount, remove listeners and clear the timer
   onUnmounted(() => {
     window.removeEventListener("resize", handleResize);
     if (resizeTimer) {

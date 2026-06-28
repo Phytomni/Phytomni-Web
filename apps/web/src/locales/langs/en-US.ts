@@ -1,10 +1,4 @@
-/*
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-06-17
- * @Description: English language pack
- * 既往不恋！当下不杂！！未来不迎！！！
- */
+// English language pack.
 export default {
   // Common parts
   common: {
@@ -586,7 +580,7 @@ export default {
     item: "items/page",
     items: "items",
   },
-  // 任务管理
+  // Task management
   taskManager: {
     question: "Question",
     status: "Status",

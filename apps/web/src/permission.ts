@@ -1,8 +1,4 @@
-/*
- * 组件注释
- * @Author: wuq-l
- * @Description: 路由守卫、权限以及动态获取路由（含 first-login enforcement）
- */
+// Route guards, permissions, and dynamic route loading (incl. first-login enforcement).
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
 import router from "@/router";

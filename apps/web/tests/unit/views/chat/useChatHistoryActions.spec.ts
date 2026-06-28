@@ -100,7 +100,7 @@ describe("useChatHistoryActions", () => {
       mockRenameHistory.mockResolvedValueOnce({ code: 200 } as any);
 
       const c = makeComposable();
-      // 打开重命名,设置 chatToRename + renameForm.title
+      // Open rename, setting chatToRename + renameForm.title
       c.handleChatAction("rename", chat);
       c.renameForm.value.title = "新标题";
       c.renameFormRef.value = { validate: vi.fn().mockResolvedValue(true) };
@@ -210,7 +210,7 @@ describe("useChatHistoryActions", () => {
 
       const c = makeComposable();
       c.handleChatAction("favorite", chat);
-      // 等待内部异步 toggleFavorite 完成
+      // Wait for the internal async toggleFavorite to finish
       await Promise.resolve();
       await Promise.resolve();
 
@@ -221,7 +221,7 @@ describe("useChatHistoryActions", () => {
       expect(onChatFavorited).toHaveBeenCalledTimes(1);
       const emitted = onChatFavorited.mock.calls[0][0];
       expect(emitted.isFavorite).toBe(true);
-      // 关键: 原对象未被改写 (emit 的是副本)
+      // Key point: the original object is not mutated (a copy is emitted)
       expect(chat.isFavorite).toBe(false);
       expect(emitted).not.toBe(chat);
       expect(mockElSuccess).toHaveBeenCalledWith("已收藏");

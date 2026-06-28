@@ -1,18 +1,22 @@
-// 图片查看器(Agents 架构图弹窗)的缩放/拖拽辅助。
+// Zoom/pan helpers for the image viewer (the Agents architecture-diagram popup).
 //
-// 抽成纯函数便于单测,且把健壮性兜底集中在一处:
-//   - 图片未加载完时 naturalWidth/Height 为 0,缩放数学会出现除零 → NaN/Infinity,
-//     clampPanOffset 对非有限输入与 dim===0 一律归零,顺带吞掉这种脏值;
-//   - scale<=1(未放大)时锁定平移为 0;放大时把平移限制在「图片中心不越过容器
-//     中心」的范围内,防止把图片拖出可视区域。
+// Extracted into pure functions for unit testing, and to centralize the robustness
+// fallbacks in one place:
+//   - while the image is still loading naturalWidth/Height is 0, so the zoom math
+//     divides by zero → NaN/Infinity; clampPanOffset zeroes out non-finite inputs
+//     and dim===0, swallowing such dirty values along the way;
+//   - at scale<=1 (not zoomed) the pan is locked to 0; when zoomed, the pan is
+//     constrained so the image center cannot cross the container center, preventing
+//     the image from being dragged out of the visible area.
 
 /**
- * 把以图片中心为原点、scale 缩放下的单轴平移量限制在合理范围内。
+ * Clamp the single-axis pan offset (origin at the image center, under `scale`) to a
+ * reasonable range.
  *
- * @param offset 期望的平移量(图片坐标系,scale 之前的单位)。
- * @param naturalDim 图片该轴的自然尺寸(naturalWidth / naturalHeight)。
- * @param scale 当前缩放倍数。
- * @returns 限制后的平移量;非有限输入 / 未加载 / 未放大时返回 0。
+ * @param offset the desired pan offset (image coordinate system, units before scale).
+ * @param naturalDim the image's natural size on that axis (naturalWidth / naturalHeight).
+ * @param scale the current zoom factor.
+ * @returns the clamped pan offset; 0 for non-finite input / not loaded / not zoomed.
  */
 export function clampPanOffset(
   offset: number,

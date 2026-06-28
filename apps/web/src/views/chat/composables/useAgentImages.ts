@@ -3,14 +3,14 @@ import type { Ref } from "vue";
 import { getObsImages } from "@/api/chat";
 
 export function useAgentImages(currentChat: Ref<any>) {
-  // GeneNetworkAgent / DigitalDesignAgent 图片下载状态(按 message id 索引,
-  // 与 frontend chat/index.vue 保持一致)
+  // GeneNetworkAgent / DigitalDesignAgent image download state (indexed by message id,
+  // consistent with the frontend chat/index.vue)
   const geneNetworkImages = reactive<Record<string, string[]>>({});
   const geneNetworkImagesLoading = reactive<Record<string, boolean>>({});
   const digitalDesignImages = reactive<Record<string, string[]>>({});
   const digitalDesignImagesLoading = reactive<Record<string, boolean>>({});
 
-  // 获取 GeneNetworkAgent 图片(单个 download_path)
+  // fetch GeneNetworkAgent images (single download_path)
   const fetchGeneNetworkImages = async (
     messageId: string,
     downloadPath: string
@@ -26,14 +26,14 @@ export function useAgentImages(currentChat: Ref<any>) {
         geneNetworkImages[messageId] = [];
       }
     } catch (error) {
-      console.error("获取 GeneNetworkAgent 图片失败:", error);
+      console.error("Failed to fetch GeneNetworkAgent images:", error);
       geneNetworkImages[messageId] = [];
     } finally {
       geneNetworkImagesLoading[messageId] = false;
     }
   };
 
-  // 获取 DigitalDesignAgent 图片(download_path 可能是数组或 JSON 字符串)
+  // fetch DigitalDesignAgent images (download_path may be an array or a JSON string)
   const fetchDigitalDesignImages = async (
     messageId: string,
     downloadPaths: string[]
@@ -60,14 +60,14 @@ export function useAgentImages(currentChat: Ref<any>) {
       }
       digitalDesignImages[messageId] = allImages;
     } catch (error) {
-      console.error("获取 DigitalDesignAgent 图片失败:", error);
+      console.error("Failed to fetch DigitalDesignAgent images:", error);
       digitalDesignImages[messageId] = [];
     } finally {
       digitalDesignImagesLoading[messageId] = false;
     }
   };
 
-  // 监听 currentChat 消息变化,自动按 tool_name 抓取 obs 图片
+  // watch currentChat messages and auto-fetch obs images by tool_name
   watch(
     () => currentChat.value?.messages,
     (messages) => {

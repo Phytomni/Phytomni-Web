@@ -126,7 +126,7 @@ describe("useCopyDownload", () => {
     it("happy path → 创建对象 URL 并点击下载链接", async () => {
       const createObjectURL = vi.fn().mockReturnValue("blob:fake");
       const revokeObjectURL = vi.fn();
-      // happy-dom 提供 window.URL；补齐对象 URL 工厂以观察调用
+      // happy-dom provides window.URL; fill in the object-URL factory to observe calls
       (window.URL as any).createObjectURL = createObjectURL;
       (window.URL as any).revokeObjectURL = revokeObjectURL;
 
@@ -145,7 +145,7 @@ describe("useCopyDownload", () => {
       const { getFileDownUrl } = makeComposable();
       await getFileDownUrl("7", "pdf");
 
-      // 验证 FormData 参数
+      // Verify the FormData parameters
       const formData: FormData = mockGetFileDownUrlApi.mock.calls[0][0] as FormData;
       expect(formData.get("document_format")).toBe("pdf");
       expect(formData.get("id")).toBe("7");

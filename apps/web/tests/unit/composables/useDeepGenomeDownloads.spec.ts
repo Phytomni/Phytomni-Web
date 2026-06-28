@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref, computed } from "vue";
 
-// file-saver mock — hoisted 以便 vi.mock factory 引用
+// file-saver mock — hoisted so the vi.mock factory can reference it
 const mockSaveAs = vi.hoisted(() => vi.fn());
 
 vi.mock("file-saver", () => ({
@@ -12,7 +12,7 @@ vi.mock("element-plus", () => ({
   ElMessage: { error: vi.fn() },
 }));
 
-// convertFilePath: 透传原始路径（单元测试不测路径转换逻辑）
+// convertFilePath: pass through the original path (the unit test does not exercise path-conversion logic)
 vi.mock("@/utils/markdown-inline", () => ({
   processInlineMarkdown: vi.fn((s: string) => s),
   convertFilePath: vi.fn((s: string) => s),
@@ -21,7 +21,7 @@ vi.mock("@/utils/markdown-inline", () => ({
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 特征(characterization)测试 — downloadMarkdown
+// Characterization test — downloadMarkdown
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeDownloads — downloadMarkdown", () => {
@@ -85,7 +85,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     const text = await (blob as Blob).text();
 
     expect(text).toContain("## References");
-    // 编号从 1 开始，移除了原有 HTML 中的编号前缀
+    // Numbering starts at 1, with the original numbering prefix in the HTML removed
     expect(text).toContain("1. Smith et al. 2023");
     expect(text).toContain("2. Jones 2022");
   });
@@ -121,17 +121,17 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// smoke — downloadPDF（DOM/print-heavy: 验证不抛异常）
+// smoke — downloadPDF (DOM/print-heavy: verify it does not throw)
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
   it("给定 stub mainContentRef 时不抛异常", async () => {
-    // 构造一个带 $el 的最小 stub，模拟 ElMain 组件实例
+    // Build a minimal stub with $el, simulating an ElMain component instance
     const fakeEl = document.createElement("div");
     fakeEl.appendChild(document.createElement("p"));
     const mainContentRef = ref({ $el: fakeEl });
 
-    // mock window.print 避免真实打印
+    // mock window.print to avoid a real print
     const printSpy = vi.spyOn(window, "print").mockResolvedValue(undefined);
 
     const opts = {

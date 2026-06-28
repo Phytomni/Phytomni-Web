@@ -27,35 +27,35 @@ export function useAgentsPanel(opts: {
 }) {
   const { t, isSending, router, scrollToBottom } = opts;
 
-  // 基础高度
+  // base height
   const baseHeight = 140;
-  // 展开时的高度
+  // expanded height
   const expandedHeight = 480;
-  // 额外的覆盖高度
+  // extra overlay height
   const overlayHeight = 10;
 
-  // 是否展开
+  // whether expanded
   const isExpanded = ref(false);
 
-  // 是否正在动画中
+  // whether currently animating
   const isAnimating = ref(false);
 
-  // 计算当前容器高度
+  // compute the current container height
   const containerHeight = computed(() => {
     return isExpanded.value ? expandedHeight : baseHeight;
   });
 
-  // 计算当前容器的样式
+  // compute the current container style
   const containerStyle = computed(() => ({
     height: `${containerHeight.value}px`,
     transform: isExpanded.value ? `translateY(-${overlayHeight}px)` : "none",
   }));
 
-  // 处理滚动
+  // handle scroll
   const handleScroll = (event: WheelEvent) => {
     if (isAnimating.value) return;
 
-    // 向下滚动且未展开
+    // scrolling down and not expanded
     if (event.deltaY > 0 && !isExpanded.value) {
       isAnimating.value = true;
       isExpanded.value = true;
@@ -63,7 +63,7 @@ export function useAgentsPanel(opts: {
         isAnimating.value = false;
       }, 500);
     }
-    // 向上滚动且已展开
+    // scrolling up and expanded
     else if (event.deltaY < 0 && isExpanded.value) {
       isAnimating.value = true;
       isExpanded.value = false;
@@ -72,18 +72,18 @@ export function useAgentsPanel(opts: {
       }, 500);
     }
 
-    // 确保滚动到底部
+    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
   };
 
-  // 处理agent点击
+  // handle agent click
   const handleAgentClick = (agent: any) => {
-    // 如果正在发送或刷新，阻止操作
+    // block the action while sending or refreshing
     if (isSending.value) return;
 
-    // 确保滚动到底部
+    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
@@ -91,7 +91,7 @@ export function useAgentsPanel(opts: {
     router.push(agent.route);
   };
 
-  // 预设的agents数据
+  // preset agents data
   const presetAgents = ref([
     {
       id: 1,
@@ -150,7 +150,7 @@ export function useAgentsPanel(opts: {
     },
   ]);
 
-  // 获取智能体提示信息
+  // get the agent tooltip
   const getAgentTooltip = (agentName: string) => {
     const canonicalKey =
       CANONICAL_AGENT_I18N_KEYS[agentName as CanonicalAgentTool];
@@ -158,12 +158,12 @@ export function useAgentsPanel(opts: {
       return t(canonicalKey) || agentName;
     }
 
-    //首字母小写
+    // lowercase the first letter
     const agentKey = agentName.charAt(0).toLowerCase() + agentName.slice(1);
     return t(`chat.agents.${agentKey}`) || agentName;
   };
 
-  // 获取智能体对应的图片路径
+  // get the agent's image path
   const getAgentImage = (agentName: string) => {
     const imageMap: Record<string, string> = {
       ChatAgent: ChatAgentImg,
@@ -181,7 +181,7 @@ export function useAgentsPanel(opts: {
     return imageMap[agentName] || DefaultAgentImg;
   };
 
-  // 显示更多信息弹出窗口
+  // show the "more info" popup
   const showMoreInfo = (agentName: string) => {
     const displayName =
       CANONICAL_AGENT_DISPLAY_NAMES[agentName as CanonicalAgentTool] ||
@@ -207,7 +207,7 @@ export function useAgentsPanel(opts: {
       }
     );
 
-    // 强制设置弹窗尺寸
+    // force the dialog size
     nextTick(() => {
       const messageBoxElement = document.querySelector(
         ".el-message-box.agent-info-dialog"

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ref } from "vue";
 import { useAgentsPanel } from "@/views/chat/composables/useAgentsPanel";
 
-// Mock element-plus ElMessageBox —— alert 返回空对象足以覆盖 showMoreInfo 主路径
+// Mock element-plus ElMessageBox — alert returning an empty object is enough to cover the showMoreInfo main path
 vi.mock("element-plus", () => ({
   ElMessageBox: {
     alert: vi.fn(() => ({})),
@@ -13,8 +13,8 @@ import { ElMessageBox } from "element-plus";
 
 const mockAlert = vi.mocked(ElMessageBox.alert);
 
-// 特征(characterization)测试 — 锁定智能体面板:
-// presetAgents 八项 + 首项 eager t、点击发送门控、滚动展开/收起、提示键转换。
+// Characterization test — locks down the agents panel:
+// presetAgents' eight items + eager t on the first item, click send-gating, scroll expand/collapse, tooltip key conversion.
 
 describe("useAgentsPanel", () => {
   const t = (k: string) => k;
@@ -48,7 +48,7 @@ describe("useAgentsPanel", () => {
     it("有 8 个条目，且首项 name 是 eager 解析的 t('chat.geneDetail')", () => {
       const { panel } = makeComposable();
       expect(panel.presetAgents.value).toHaveLength(8);
-      // 首项使用注入的 t 在 ref 创建时即时求值
+      // The first item uses the injected t, evaluated eagerly at ref creation time
       expect(panel.presetAgents.value[0].name).toBe("chat.geneDetail");
     });
   });
@@ -77,17 +77,17 @@ describe("useAgentsPanel", () => {
       vi.useFakeTimers();
       const { panel } = makeComposable();
 
-      // 初始基础高度
+      // Initial base height
       expect(panel.containerStyle.value.height).toBe("140px");
 
-      // 向下滚动 → 展开
+      // Scroll down → expand
       panel.handleScroll({ deltaY: 100 } as WheelEvent);
       expect(panel.containerStyle.value.height).toBe("480px");
 
-      // 等待 isAnimating 门控释放(500ms)
+      // Wait for the isAnimating gate to release (500ms)
       vi.advanceTimersByTime(500);
 
-      // 向上滚动 → 收起
+      // Scroll up → collapse
       panel.handleScroll({ deltaY: -100 } as WheelEvent);
       expect(panel.containerStyle.value.height).toBe("140px");
     });
@@ -96,15 +96,15 @@ describe("useAgentsPanel", () => {
       vi.useFakeTimers();
       const { panel } = makeComposable();
 
-      // 向下滚动 → 展开,并置 isAnimating=true(500ms 门控)
+      // Scroll down → expand, and set isAnimating=true (500ms gate)
       panel.handleScroll({ deltaY: 100 } as WheelEvent);
       expect(panel.containerStyle.value.height).toBe("480px");
 
-      // 500ms 未到:反向滚动应被门控吞掉,仍保持展开
+      // Before 500ms elapses: the reverse scroll should be swallowed by the gate, staying expanded
       panel.handleScroll({ deltaY: -100 } as WheelEvent);
       expect(panel.containerStyle.value.height).toBe("480px");
 
-      // 推进过动画窗口后,反向滚动才生效 → 收起
+      // Only after advancing past the animation window does the reverse scroll take effect → collapse
       vi.advanceTimersByTime(500);
       panel.handleScroll({ deltaY: -100 } as WheelEvent);
       expect(panel.containerStyle.value.height).toBe("140px");

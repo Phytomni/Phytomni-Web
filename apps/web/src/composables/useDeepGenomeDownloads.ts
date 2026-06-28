@@ -16,9 +16,9 @@ export interface DeepGenomeDownloadsOpts {
 export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
   const { props, mainContentRef, displayReferences } = opts;
 
-  // 下载功能相关方法
+  // Download methods
   const downloadPDF = async () => {
-    // 创建打印容器
+    // create the print container
     const printContainer = document.createElement("div");
     printContainer.id = "print-container";
     printContainer.style.position = "absolute";
@@ -32,7 +32,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     printContainer.style.display = "none";
     printContainer.style.boxSizing = "border-box";
 
-    // 复制当前内容
+    // copy the current content
     const contentWrapper = document.createElement("div");
     contentWrapper.style.maxWidth = "210mm";
     contentWrapper.style.margin = "0 auto";
@@ -41,23 +41,23 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     contentWrapper.style.overflow = "visible";
     contentWrapper.style.height = "auto";
 
-    // 复制所有内容块
+    // copy all content blocks
     const contentBlocksCopy = document.createElement("div");
     contentBlocksCopy.style.pageBreakInside = "auto";
     contentBlocksCopy.style.overflow = "visible";
     contentBlocksCopy.style.height = "auto";
 
-    // 直接获取el-main内部的所有内容（不包括el-main本身）
+    // grab everything inside el-main (excluding el-main itself)
     const originalElMain = mainContentRef.value.$el;
     const contentInsideElMain = document.createElement("div");
 
-    // 克隆el-main内部的所有子节点
+    // clone all child nodes inside el-main
     for (let i = 0; i < originalElMain.children.length; i++) {
       const childClone = originalElMain.children[i].cloneNode(true);
       contentInsideElMain.appendChild(childClone);
     }
 
-    // 移除下载按钮组（通过更精确的选择器）
+    // remove the download button group (via a more specific selector)
     const downloadButtonGroup = contentInsideElMain.querySelector(
       'div[style*="position: sticky"]'
     );
@@ -65,10 +65,10 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       downloadButtonGroup.remove();
     }
 
-    // 移除所有可能影响打印的高度限制和溢出设置
+    // remove all height/overflow constraints that could affect printing
     const allElements = contentInsideElMain.querySelectorAll("*");
     allElements.forEach((element) => {
-      // 移除内联样式中的高度和溢出限制
+      // remove height/overflow limits from inline styles
       (element as HTMLElement).style.height = "auto";
       (element as HTMLElement).style.maxHeight = "none";
       (element as HTMLElement).style.overflow = "visible";
@@ -80,29 +80,29 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     contentWrapper.appendChild(contentBlocksCopy);
     printContainer.appendChild(contentWrapper);
 
-    // 添加到文档
+    // append to the document
     document.body.appendChild(printContainer);
 
-    // 显示打印容器
+    // show the print container
     printContainer.style.display = "block";
 
-    // 等待所有内容渲染完成
+    // wait for all content to render
     await nextTick();
 
-    // 添加打印样式
+    // add print styles
     const style = document.createElement("style");
     style.innerHTML = `
     @media print {
-      /* 基本打印设置 */
+      /* basic print setup */
       body * { display: none; }
       #print-container { display: block !important; position: static !important; }
 
-      /* 确保print-container内的所有元素都显示 */
+      /* ensure all elements inside print-container are shown */
       #print-container * {
         display: block !important;
       }
 
-      /* 确保内联元素正常显示 */
+      /* ensure inline elements display normally */
       #print-container span,
       #print-container a,
       #print-container strong,
@@ -112,7 +112,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
         display: inline !important;
       }
 
-      /* 修复表格显示问题 - 确保表格正确布局 */
+      /* fix table display - ensure correct table layout */
       #print-container table {
         display: table !important;
         width: 100% !important;
@@ -147,7 +147,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
         font-weight: bold !important;
       }
 
-      /* 移除所有可能影响打印的高度限制和溢出设置 */
+      /* remove all height/overflow constraints that could affect printing */
       * {
         height: auto !important;
         max-height: none !important;
@@ -156,13 +156,13 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
         position: static !important;
       }
 
-      /* 强制分页设置 */
+      /* forced pagination settings */
       #print-container {
         page-break-before: avoid;
         page-break-after: avoid;
       }
 
-      /* 避免在不合适的地方分页 */
+      /* avoid page breaks in unsuitable places */
       h1, h2, h3, h4 {
         page-break-after: avoid;
         page-break-inside: avoid;
@@ -172,18 +172,18 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
         page-break-inside: avoid;
       }
 
-      /* 确保图片正确显示 */
+      /* ensure images display correctly */
       img {
         max-width: 100% !important;
         height: auto !important;
       }
 
-      /* 修复参考文献编号显示问题 */
+      /* fix reference-number display */
       #print-container a[href^="#ref-"] {
         display: inline-block !important;
       }
 
-      /* 确保内容可以正确分页显示多页 */
+      /* ensure content paginates correctly across multiple pages */
       #print-container,
       #print-container > div,
       #print-container .content-wrapper,
@@ -196,26 +196,26 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
   `;
     document.head.appendChild(style);
 
-    // 触发打印
+    // trigger print
     try {
       await window.print();
     } catch (error) {
       ElMessage.error("打印失败");
-      console.error("打印错误:", error);
+      console.error("Print error:", error);
     }
 
-    // 移除打印容器
+    // remove the print container
     document.body.removeChild(printContainer);
   };
 
   const downloadMarkdown = () => {
-    // 创建转换后的Markdown内容
+    // build the converted Markdown content
     let convertedMarkdown = props.markdown;
 
-    // 处理换行符 - 将转义的\n转换为实际的换行符
+    // handle line breaks - convert escaped \n into real newlines
     convertedMarkdown = convertedMarkdown.replace(/\\n/g, "\n");
 
-    // 转换图片路径
+    // convert image paths
     convertedMarkdown = convertedMarkdown.replace(
       /!\[(.*?)\]\((.*?)\)/g,
       (match, alt, src) => {
@@ -224,11 +224,11 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       }
     );
 
-    // 转换链接路径
+    // convert link paths
     convertedMarkdown = convertedMarkdown.replace(
       /\[([^\]]+?)\]\(([^)]+?)\)/g,
       (match, text, url) => {
-        // 跳过已经是http/https开头的链接
+        // skip links that already start with http/https
         if (url.startsWith("http://") || url.startsWith("https://")) {
           return match;
         }
@@ -237,7 +237,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       }
     );
 
-    // 添加参考文献部分
+    // add the references section
     if (displayReferences.value && displayReferences.value.length > 0) {
       convertedMarkdown += "\n\n## References\n";
 
@@ -245,28 +245,28 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
         const refIndex = index + 1;
         let refText = "";
 
-        // 从HTML中提取纯文本内容，移除HTML标签
+        // extract plain text from HTML, stripping HTML tags
         if (ref.html) {
-          // 创建临时元素来解析HTML
+          // create a temporary element to parse the HTML
           const tempElement = document.createElement("div");
           tempElement.innerHTML = ref.html;
 
-          // 获取纯文本内容并去掉参考文献编号（因为我们会手动添加）
+          // get plain text and drop the reference number (we add it manually)
           let plainText = tempElement.textContent || tempElement.innerText || "";
           plainText = plainText.trim();
 
-          // 移除开头的编号和点号（如 "1. "）
+          // remove the leading number and dot (e.g. "1. ")
           plainText = plainText.replace(/^\d+\.\s+/, "");
 
           refText = plainText;
         }
 
-        // 添加格式化的参考文献条目
+        // add the formatted reference entry
         convertedMarkdown += `${refIndex}. ${refText}\n`;
       });
     }
 
-    // 创建Blob对象并下载
+    // create a Blob and download it
     const blob = new Blob([convertedMarkdown], {
       type: "text/markdown;charset=utf-8",
     });

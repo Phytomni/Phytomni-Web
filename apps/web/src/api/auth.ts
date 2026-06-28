@@ -1,15 +1,6 @@
-/*
- * 组件注释
- * @Author: error: git config user.name & please set dead value or install git
- * @Date: 2025-05-10 10:31:50
- * @LastEditors: error: git config user.name & please set dead value or install git
- * @LastEditTime: 2025-05-12 11:00:13
- * @Description:
- * 既往不恋！当下不杂！！未来不迎！！！
- */
 import request from "@/utils/request";
 
-// 获取用户列表
+// User list
 export const getUserList = (data: {
   current: string | number;
   size: string | number;
@@ -21,7 +12,7 @@ export const getUserList = (data: {
   });
 };
 
-// 自主注册(D5:自助注册落 /auth/registrations,与管理员建号 POST /users 区分)
+// Self-service registration (D5: lands on /auth/registrations, distinct from admin-created accounts via POST /users)
 export const register = (data: any) => {
   return request({
     url: "/api/v1/auth/registrations",
@@ -30,7 +21,7 @@ export const register = (data: any) => {
   });
 };
 
-// 修改权限(RESTful:用户 id 进路径 /users/:id/permissions)
+// Update permissions (RESTful: user id in path /users/:id/permissions)
 export const changePermission = (data: any) => {
   const id = data instanceof FormData ? data.get("id") : data?.id;
   return request({
@@ -39,7 +30,7 @@ export const changePermission = (data: any) => {
     data: data,
   });
 };
-// 修改个人密码
+// Change own password
 export const changePassword = (data: any) => {
   return request({
     url: "/api/v1/users/me/password",
@@ -47,7 +38,7 @@ export const changePassword = (data: any) => {
     data: data,
   });
 };
-// 新增用户(管理员建号,D5)
+// Add user (admin-created account, D5)
 export const addUser = (data: any) => {
   return request({
     url: "/api/v1/users",
@@ -56,7 +47,7 @@ export const addUser = (data: any) => {
   });
 };
 
-// 解锁用户(RESTful:用户 id 进路径,无需请求体)
+// Unlock user (RESTful: user id in path, no request body)
 export const unlockUser = (userId: number) => {
   return request({
     url: `/api/v1/users/${userId}/unlock`,
@@ -64,7 +55,7 @@ export const unlockUser = (userId: number) => {
   });
 };
 
-// 获取用户资料(后端从 JWT 取邮箱、忽略 ?email=,IDOR 关闭;前端仍传以保持兼容)
+// Get user profile (backend reads email from JWT and ignores ?email=, closing IDOR; frontend still passes it for compatibility)
 export const getUserProfile = (email: string) => {
   return request({
     url: "/api/v1/users/me",

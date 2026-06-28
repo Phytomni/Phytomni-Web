@@ -1,7 +1,3 @@
-/* * 组件注释 * @Author: error: git config user.name & please set dead value or
-install git * @Date: 2025-05-09 16:38:25 * @LastEditors: error: git config
-user.name & please set dead value or install git * @LastEditTime: 2025-05-09
-17:00:32 * @Description: * 既往不恋！当下不杂！！未来不迎！！！ */
 <template>
   <div class="layout-container">
     <RouterView v-if="noLayoutRoute" />
@@ -59,12 +55,12 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
                 <el-icon><Star /></el-icon>
                 <span>{{ $t("menu.favorites") }}</span>
               </el-menu-item>
-              <!-- 历史记录 -->
+              <!-- History -->
               <el-menu-item v-if="hasPermission('历史记录')" index="/history">
                 <el-icon><Clock /></el-icon>
                 <span>{{ $t("user.history") }}</span>
               </el-menu-item>
-              <!-- 个人资料管理 -->
+              <!-- Profile management -->
               <el-menu-item
                 v-if="hasPermission('个人资料管理')"
                 index="/profile"
@@ -72,7 +68,7 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
                 <el-icon><User /></el-icon>
                 <span>{{ $t("user.profile") }}</span>
               </el-menu-item>
-              <!-- 网盘空间 -->
+              <!-- Cloud storage -->
               <el-menu-item
                 v-if="hasPermission('网盘空间')"
                 index="/cloud-storage"
@@ -88,17 +84,17 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
                 <el-icon><Document /></el-icon>
                 <span>{{ $t("menu.taskManager") }}</span>
               </el-menu-item>
-              <!-- 用户管理 -->
+              <!-- User management -->
               <el-menu-item v-if="hasPermission('用户管理')" index="/user-list">
                 <el-icon><User /></el-icon>
                 <span>{{ $t("menu.userList") }}</span>
               </el-menu-item>
-              <!-- 系统监控 -->
+              <!-- System monitoring -->
               <el-menu-item v-if="hasPermission('系统监控')" index="/log-list">
                 <el-icon><List /></el-icon>
                 <span>{{ $t("menu.logList") }}</span>
               </el-menu-item>
-              <!-- 角色权限分配 -->
+              <!-- Role permission assignment -->
               <el-menu-item
                 v-if="hasPermission('角色权限分配')"
                 index="/permi-manage"
@@ -106,7 +102,7 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
                 <el-icon><Lock /></el-icon>
                 <span>{{ $t("menu.permissionManage") }}</span>
               </el-menu-item>
-              <!-- 全局策略配置 -->
+              <!-- Global config -->
               <el-menu-item
                 v-if="hasPermission('全局策略配置')"
                 index="/global-config"
@@ -114,7 +110,7 @@ user.name & please set dead value or install git * @LastEditTime: 2025-05-09
                 <el-icon><Setting /></el-icon>
                 <span>{{ $t("menu.globalConfig") }}</span>
               </el-menu-item>
-              <!-- 管理员管理 -->
+              <!-- Admin management -->
               <el-menu-item
                 v-if="hasPermission('管理员管理')"
                 index="/admin-management"
@@ -167,29 +163,29 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const UserStore = userStore();
-// 当前激活的菜单项
+// the currently active menu item
 const activeMenu = computed(() => {
   return route.path;
 });
 
-// 判断是否是无布局路由
+// whether this is a no-layout route
 const noLayoutRoute = computed(() => {
   return route.meta.layout === "nolayout";
 });
 
-// 判断是否隐藏侧边栏
+// whether to hide the sidebar
 const hideSidebar = computed(() => {
   return route.meta.hideSidebar === true;
 });
 
-// 侧边栏折叠状态
+// sidebar collapse state
 const isCollapse = ref(false);
 
-// 切换侧边栏折叠状态
+// toggle the sidebar collapse state
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value;
 };
-// 登出
+// logout
 const handleLogout = () => {
   const UserStore = userStore();
   UserStore.FedLogOut().finally(() => router.replace("/login"));
@@ -198,7 +194,7 @@ const handleBack = () => {
   router.push("/chat");
 };
 
-// 权限检查方法
+// permission check
 const hasPermission = (permission: string) => {
   return UserStore.permission_list.includes(permission);
 };

@@ -1,7 +1,7 @@
 <template>
   <div class="help-page">
     <div class="help-container">
-      <!-- 页面头部 -->
+      <!-- Page header -->
       <div class="help-header">
         <div class="header-content">
           <h1 class="help-title">{{ $t("help.title") }}</h1>
@@ -14,10 +14,10 @@
         </div>
       </div>
 
-      <!-- 帮助内容 -->
+      <!-- Help content -->
       <div class="help-content">
         <div class="content-layout">
-          <!-- 侧边栏目录 -->
+          <!-- Sidebar table of contents -->
           <div class="toc-sidebar">
             <div class="toc-title">{{ $t("help.tableOfContents") }}</div>
             <nav class="toc-nav">
@@ -35,7 +35,7 @@
             </nav>
           </div>
 
-          <!-- 主内容区域 -->
+          <!-- Main content area -->
           <div class="main-content" ref="mainContentRef">
             <MarkdownViewer :content="helpContent" />
           </div>
@@ -56,27 +56,27 @@ import { ElMessage } from "element-plus";
 const router = useRouter();
 const { t } = useI18n();
 
-// 返回上一页
+// Go back to the previous page
 const goBack = () => {
   try {
-    // 检查token是否存在
+    // Check whether the token exists
     if (!getToken()) {
       ElMessage.warning(t("help.goBackTokenExpired"));
       router.replace("/login");
       return;
     }
-    // 尝试返回上一页
+    // Try to go back to the previous page
     router.back();
   } catch (error) {
-    // 处理路由返回异常
-    console.error("返回上一页失败:", error);
+    // Handle router navigation errors
+    console.error("Failed to go back:", error);
     ElMessage.error(t("help.goBackFailed"));
-    // 如果返回失败，导航到默认页面
+    // If going back fails, navigate to the default page
     router.push("/");
   }
 };
 
-// 目录数据结构
+// Table of contents data structure
 const tableOfContents = ref([
   { id: "what-is-phytomni", title: "What is Phytomni?", level: 1 },
   { id: "getting-started", title: "Getting Started", level: 1 },
@@ -89,19 +89,19 @@ const tableOfContents = ref([
   { id: "limitations", title: "Limitations and Best Practices", level: 1 },
 ]);
 
-// 当前激活的目录项
+// Currently active table-of-contents item
 const activeSection = ref("what-is-phytomni");
 
-// 获取主内容区域元素
+// Reference to the main content area element
 const mainContentRef = ref<HTMLElement | null>(null);
 
-// 点击目录项跳转
+// Jump to a section when a TOC item is clicked
 const scrollToSection = (sectionId: string) => {
   const element = document.getElementById(sectionId);
   if (element && mainContentRef.value) {
-    // 计算元素在主内容区域内的相对位置
-    const elementTop = element.offsetTop - 20; // 添加20px的上边距，避免标题被遮挡
-    // 滚动到指定位置
+    // Compute the element's relative position within the main content area
+    const elementTop = element.offsetTop - 20; // Add 20px top margin so the heading is not obscured
+    // Scroll to the target position
     mainContentRef.value.scrollTo({
       top: elementTop,
       behavior: "smooth",
@@ -110,12 +110,12 @@ const scrollToSection = (sectionId: string) => {
   }
 };
 
-// 监听滚动，更新当前激活的章节
+// Listen for scroll events to update the currently active section
 const handleScroll = () => {
   if (!mainContentRef.value) return;
 
   const sections = tableOfContents.value.map((item) => item.id);
-  const scrollPosition = mainContentRef.value.scrollTop + 100; // 使用main-content的滚动位置
+  const scrollPosition = mainContentRef.value.scrollTop + 100; // Use main-content's scroll position
 
   for (let i = sections.length - 1; i >= 0; i--) {
     const element = document.getElementById(sections[i]);
@@ -127,22 +127,22 @@ const handleScroll = () => {
 };
 
 onMounted(() => {
-  // 绑定到main-content的滚动事件
+  // Bind to main-content's scroll event
   if (mainContentRef.value) {
     mainContentRef.value.addEventListener("scroll", handleScroll);
   }
-  // 初始化时检查当前激活的章节
+  // Check the currently active section on initialization
   handleScroll();
 });
 
 onUnmounted(() => {
-  // 解绑滚动事件
+  // Unbind the scroll event
   if (mainContentRef.value) {
     mainContentRef.value.removeEventListener("scroll", handleScroll);
   }
 });
 
-// Markdown内容
+// Markdown content
 const helpContent = `<div id="what-is-phytomni"><h1>1. What is Phytomni?</h1></div>
 
 Phytomni is an intelligent agentic AI system for scientific discovery and design in plant research, which can assist researchers to significantly accelerate scientific discovery, including:
@@ -222,7 +222,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 .help-page {
   height: 100vh;
   padding: 20px;
-  overflow: hidden; /* 移除页面级别的滚动条 */
+  overflow: hidden; /* Remove the page-level scrollbar */
 }
 
 .help-container {
@@ -276,16 +276,16 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   padding: 40px;
 }
 
-/* 内容布局 */
+/* Content layout */
 .content-layout {
   display: flex;
   gap: 40px;
   max-width: 1400px;
   margin: 0 auto;
-  padding-left: 320px; /* 为固定目录留出空间 */
+  padding-left: 320px; /* Leave space for the fixed table of contents */
 }
 
-/* 侧边栏目录样式 */
+/* Sidebar table-of-contents styling */
 .toc-sidebar {
   width: 280px;
   flex-shrink: 0;
@@ -364,13 +364,13 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   background: #dbeafe;
 }
 
-/* 主内容区域 */
+/* Main content area */
 .main-content {
   flex: 1;
   min-width: 0;
-  overflow-y: auto; /* 让主内容区域可以独立滚动 */
-  margin-left: 0; /* 移除左侧margin，因为目录现在在help-container内部 */
-  padding-right: 15px; /* 增加右侧内边距，避免滚动条遮挡内容 */
+  overflow-y: auto; /* Let the main content area scroll independently */
+  margin-left: 0; /* Remove the left margin, since the TOC is now inside help-container */
+  padding-right: 15px; /* Increase right padding so the scrollbar does not obscure content */
 }
 
 .help-section {
@@ -397,7 +397,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   border-radius: 2px;
 }
 
-/* 快速开始样式 */
+/* Getting-started styling */
 .step-list {
   display: flex;
   flex-direction: column;
@@ -440,7 +440,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   margin: 0;
 }
 
-/* 功能介绍样式 */
+/* Feature introduction styling */
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -511,23 +511,23 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   font-weight: bold;
 }
 
-/* 深色模式适配 */
+/* Dark mode adaptation */
 .theme-dark .help-page {
   background-color: var(--color-background) !important;
   overflow: hidden;
-  height: 100vh; /* 确保深色模式下高度也正确设置 */
+  height: 100vh; /* Ensure the height is also set correctly in dark mode */
 }
 
-/* 深色模式下确保body也不会出现滚动条 */
+/* Ensure the body has no scrollbar in dark mode either */
 .theme-dark body {
   overflow: hidden;
 }
 
-/* 深色模式下的主内容区域 */
+/* Main content area in dark mode */
 .theme-dark .main-content {
-  margin-left: 0; /* 移除左侧边距，因为目录现在在help-container内部 */
-  overflow-y: auto; /* 确保深色模式下主内容也可以独立滚动 */
-  padding-right: 15px; /* 增加右侧内边距，避免滚动条遮挡内容 */
+  margin-left: 0; /* Remove the left margin, since the TOC is now inside help-container */
+  overflow-y: auto; /* Ensure the main content can also scroll independently in dark mode */
+  padding-right: 15px; /* Increase right padding so the scrollbar does not obscure content */
 }
 
 .theme-dark .help-container {
@@ -621,12 +621,12 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
   color: var(--el-color-success) !important;
 }
 
-/* 响应式设计 */
+/* Responsive design */
 @media (max-width: 1024px) {
   .content-layout {
     flex-direction: column;
     gap: 30px;
-    padding-left: 0; /* 移除左侧padding */
+    padding-left: 0; /* Remove the left padding */
   }
 
   .toc-sidebar {

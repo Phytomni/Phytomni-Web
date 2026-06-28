@@ -2,45 +2,45 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { userStore } from "@/stores";
 
 export function useTutorial() {
-  // 教学引导功能状态管理
+  // tutorial state management
   const showTutorial = ref(false);
   const currentTutorialStep = ref(1);
 
-  // 开始教学引导
+  // start the tutorial
   const startTutorial = () => {
     showTutorial.value = true;
     currentTutorialStep.value = 1;
   };
 
-  // 下一步教学
+  // next tutorial step
   const nextTutorialStep = () => {
     if (currentTutorialStep.value < 3) {
       currentTutorialStep.value++;
     }
   };
 
-  // 上一步教学
+  // previous tutorial step
   const prevTutorialStep = () => {
     if (currentTutorialStep.value > 1) {
       currentTutorialStep.value--;
     }
   };
 
-  // 完成教学
+  // complete the tutorial
   const completeTutorial = () => {
     showTutorial.value = false;
     currentTutorialStep.value = 1;
-    // 教学完成,标记用户已看过引导
+    // tutorial done; mark the user as having seen it
     userStore().SET_SEEN_TUTORIAL("1");
   };
 
-  // 处理教学遮罩层点击
+  // handle tutorial overlay click
   const handleTutorialOverlayClick = (event: Event) => {
-    // 阻止事件冒泡，避免意外关闭教学
+    // stop propagation to avoid accidentally closing the tutorial
     event.stopPropagation();
   };
 
-  // 处理键盘导航
+  // handle keyboard navigation
   const handleTutorialKeydown = (event: KeyboardEvent) => {
     if (!showTutorial.value) return;
 
@@ -65,7 +65,7 @@ export function useTutorial() {
     }
   };
 
-  // 键盘事件监听器生命周期 — 挂载时注册,卸载时清除(防泄漏)
+  // keyboard listener lifecycle — register on mount, remove on unmount (prevent leaks)
   onMounted(() => {
     document.addEventListener("keydown", handleTutorialKeydown);
   });
@@ -73,25 +73,26 @@ export function useTutorial() {
     document.removeEventListener("keydown", handleTutorialKeydown);
   });
 
-  // 检查是否需要显示教学引导
+  // check whether to show the tutorial
   const checkTutorialStatus = () => {
-    // Tutorial hand-off (TW-D15): change-password.vue 在 FedLogOut 之后写
-    // sessionStorage.tutorial_pending='1';此处一次性消费 + 同步 Pinia,
-    // 让「改密成功 → 首次进 chat = 看教学」自然触发路径成立。
+    // Tutorial hand-off (TW-D15): change-password.vue writes
+    // sessionStorage.tutorial_pending='1' after FedLogOut; here we consume it once and
+    // sync Pinia, so the path "password change succeeds → first chat visit = see tutorial"
+    // triggers naturally.
     try {
       if (sessionStorage.getItem("tutorial_pending") === "1") {
         sessionStorage.removeItem("tutorial_pending");
         userStore().SET_SEEN_TUTORIAL("0");
       }
     } catch (err) {
-      // sessionStorage 不可用(incognito 严格 / 容量满):静默放弃教学
+      // sessionStorage unavailable (strict incognito / quota full): silently skip the tutorial
       console.warn("sessionStorage unavailable for tutorial hand-off", err);
     }
 
-    // 从用户 store 获取教学态,'0' 表示未看过引导
+    // read the tutorial state from the user store; '0' means not yet seen
     const tutorialUnseen = userStore().seen_tutorial === "0";
     if (tutorialUnseen) {
-      // 未看过教学引导时显示，确保页面完全加载
+      // show it when unseen, ensuring the page is fully loaded
       setTimeout(() => {
         startTutorial();
       }, 1000);

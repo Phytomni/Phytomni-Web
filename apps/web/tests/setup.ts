@@ -3,7 +3,7 @@ import { createI18n } from "vue-i18n";
 import { config } from "@vue/test-utils";
 import ElementPlus from "element-plus";
 
-// 全局 i18n stub — LangSwitch 等组件 mount 时需要
+// Global i18n stub — needed when mounting components like LangSwitch
 const i18n = createI18n({
   legacy: false,
   locale: "zh-CN",
@@ -14,10 +14,11 @@ const i18n = createI18n({
   },
 });
 
-// 注意:这里不注册 pinia 全局插件 —— 每个测试通过 beforeEach 调用
-// setActivePinia(createPinia()) 自行建立 active pinia,组件 mount 时
-// useStore() 走 getActivePinia() 回退路径。两份 pinia 实例会导致测试和
-// 组件内部读到不同 store(L0 调试已证)。
+// Note: we do NOT register the pinia global plugin here — each test sets up its
+// own active pinia by calling setActivePinia(createPinia()) in beforeEach, so when
+// a component mounts useStore() falls back through the getActivePinia() path. Two
+// pinia instances would make the test and the component read different stores
+// (proven during L0 debugging).
 config.global.plugins = [i18n, ElementPlus];
 
 afterEach(() => {

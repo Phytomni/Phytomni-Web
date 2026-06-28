@@ -1,10 +1,3 @@
-<!--
- * 组件注释
- * @Author: AI Assistant
- * @Date: 2024-12-19
- * @Description: 主题切换组件
- * 既往不恋！当下不杂！！未来不迎！！！
--->
 <template>
   <div class="theme-switch">
     <el-dropdown @command="handleCommand" trigger="click">
@@ -55,12 +48,12 @@ import { useThemeStore, type ThemeType } from "@/stores";
 
 const themeStore = useThemeStore();
 
-// 获取当前实际应用的主题
+// the theme currently applied
 const currentTheme = computed(() => {
   return themeStore.currentTheme;
 });
 
-// 切换主题
+// switch theme
 const handleCommand = (command: ThemeType) => {
   themeStore.setTheme(command);
 };

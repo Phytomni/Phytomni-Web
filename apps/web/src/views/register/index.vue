@@ -5,7 +5,7 @@
         <div class="logo" style="width: 40px; height: 40px"></div>
       </div>
       <div class="slogan">
-        <!-- 可以添加注册页面的标语 -->
+        <!-- A registration page slogan can be added here -->
       </div>
     </div>
     <div class="register-right">
@@ -107,7 +107,7 @@ const formData = reactive({
   confirmPassword: "",
 });
 
-// 自定义验证规则：确认密码
+// Custom validation rule: confirm password
 const validateConfirmPassword = (rule: any, value: string, callback: any) => {
   if (value === "") {
     callback(new Error(t("register.validation.confirmPasswordRequired")));
@@ -118,50 +118,50 @@ const validateConfirmPassword = (rule: any, value: string, callback: any) => {
   }
 };
 
-// 密码强度验证函数 - 验证密码是否满足复杂度要求
+// Password strength validation function - checks whether the password meets complexity requirements
 const validatePasswordStrength = (rule: any, value: string, callback: any) => {
   if (!value) {
     callback();
     return;
   }
 
-  // 至少8位
+  // At least 8 characters
   if (value.length < 8) {
     callback(new Error(t("register.validation.passwordMinLength8")));
     return;
   }
 
-  // 最多16位
+  // At most 16 characters
   if (value.length > 16) {
     callback(new Error(t("register.validation.passwordMaxLength16")));
     return;
   }
 
-  // 包含大写字母
+  // Must contain an uppercase letter
   if (!/[A-Z]/.test(value)) {
     callback(new Error(t("register.validation.passwordNeedUppercase")));
     return;
   }
 
-  // 包含小写字母
+  // Must contain a lowercase letter
   if (!/[a-z]/.test(value)) {
     callback(new Error(t("register.validation.passwordNeedLowercase")));
     return;
   }
 
-  // 包含数字
+  // Must contain a digit
   if (!/[0-9]/.test(value)) {
     callback(new Error(t("register.validation.passwordNeedNumber")));
     return;
   }
 
-  // 包含特殊符号
+  // Must contain a special character
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
     callback(new Error(t("register.validation.passwordNeedSpecial")));
     return;
   }
 
-  // 当密码变化时，如果已经输入了确认密码，则重新验证确认密码
+  // When the password changes, re-validate the confirm-password field if it has already been entered
   if (formData.confirmPassword !== "") {
     formRef.value?.validateField("confirmPassword");
   }
@@ -215,39 +215,31 @@ const handleSubmit = () => {
 };
 
 const handleRegister = () => {
-  console.log("开始注册...");
+  console.log("Starting registration...");
   const data = new FormData();
   data.append("email", formData.email);
   data.append("password", formData.password);
-  // TODO: 调用注册接口
   register(data)
     .then((res: any) => {
-      console.log("注册响应:", res);
+      console.log("Registration response:", res);
       if (res.code === 200) {
-        console.log("注册成功");
+        console.log("Registration successful");
         ElMessage.success("Registration successful");
         router.replace("/login");
       } else {
-        console.log("注册失败，状态码:", res.code);
+        console.log("Registration failed, status code:", res.code);
         ElMessage.error(
           "Registration failed: " + (res.message || "Unknown error")
         );
       }
     })
     .catch((err: any) => {
-      console.log("注册异常:", err);
+      console.log("Registration error:", err);
       ElMessage.error(err.message || "Registration failed");
     })
     .finally(() => {
       loading.value = false;
     });
-
-  // 临时模拟注册成功
-  // setTimeout(() => {
-  //   ElMessage.success('Registration successful');
-  //   loading.value = false;
-  //   router.replace('/login');
-  // }, 2000);
 };
 
 const goToLogin = () => {

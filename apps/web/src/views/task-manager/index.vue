@@ -37,16 +37,6 @@
             {{ moment(row.updated_at).format("YYYY-MM-DD") }}
           </template>
         </el-table-column>
-        <!-- <el-table-column prop="upload_path" :label="$t('taskManager.downloadURL')" width="150" >
-          <template #default="{ row }">
-            <el-button @click="handleDownClick(row)" v-if="row?.status && row?.status=='SUCCEEDED' && row?.upload_path && row?.upload_path !=='' " type="primary">
-              <el-icon style="vertical-align: middle">
-                <Download />
-              </el-icon>
-              <span style="vertical-align: middle">{{ $t('taskManager.downloadURL') }}</span>
-            </el-button>
-          </template>
-        </el-table-column> -->
         <el-table-column
           prop="dialogue_id"
           :label="$t('taskManager.operate')"
@@ -167,7 +157,7 @@ const handleDownClick = async (data: TaskData) => {
   console.log(data, "data");
 
   if (!data?.download_path) return;
-  // 在这里调用 getChatdownloadURL 接口 获取下载链接
+  // Call the getChatdownloadURL API here to obtain the download link
   const res = await getChatdownloadURL({ obs_path: data.download_path });
   if (res.code == 200) {
     window.open(res.data, "_blank", "noopener,noreferrer");
@@ -216,7 +206,7 @@ onMounted(() => {
   .itemQuery {
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3; /* 控制显示行数 */
+    -webkit-line-clamp: 3; /* Limit the number of displayed lines */
     overflow: hidden;
     text-overflow: ellipsis;
   }
