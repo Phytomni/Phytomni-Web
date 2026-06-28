@@ -48,7 +48,7 @@ func TestApiQueryAnalystUpdateLog_HappyPath(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
-		(61, 'alice', 'q', '任务创建成功：t-ok', 'AnalystAgent', 't-ok', 'run-ok', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		(61, 'alice', 'q', 'Task created: t-ok', 'AnalystAgent', 't-ok', 'run-ok', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-ok","agent":"analyst","status":"succeeded","answer":"plain","result":{"formatted":{"answer":"report ready"}}}`)
@@ -129,7 +129,7 @@ func TestApiQueryAnalystUpdateLog_WritesGalleryPaths(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
-		(64, 'alice', 'q', '任务创建成功：t-g', 'AnalystAgent', 't-g', 'run-g', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		(64, 'alice', 'q', 'Task created: t-g', 'AnalystAgent', 't-g', 'run-g', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-g","agent":"network","status":"succeeded","result":{"formatted":{"answer":"done"},"artifacts":[{"task_id":"t1","output_dir":"/obs/p/r1","paths":["/obs/p/r1/a.png","/obs/p/r1/t.csv"]},{"task_id":"t2","output_dir":"/obs/p/r2","paths":["/obs/p/r2/b.png"]}]}}`)
@@ -160,7 +160,7 @@ func TestApiQueryAnalystUpdateLog_FinalReport(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
-		(66, 'alice', 'q', 'server任务创建成功：t-dg', 'DeepGenomeAgent', 't-dg', 'run-dg', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		(66, 'alice', 'q', 'Server task created: t-dg', 'DeepGenomeAgent', 't-dg', 'run-dg', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-dg","agent":"deep_genome","status":"succeeded","result":{"final_report":"# Gene Report"}}`)

@@ -108,7 +108,7 @@ func TestShapeAnswer_Plain(t *testing.T) {
 	if got := ShapeAnswer("chat", "hello", &Formatted{}); got != "hello" {
 		t.Errorf("chat passthrough = %q", got)
 	}
-	if got := ShapeAnswer("analyst", "任务创建成功：x", nil); got != "任务创建成功：x" {
+	if got := ShapeAnswer("analyst", "Task created: x", nil); got != "Task created: x" {
 		t.Errorf("analyst passthrough = %q", got)
 	}
 }

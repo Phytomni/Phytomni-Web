@@ -341,7 +341,7 @@ func TestSyncBotRuns_WritesReportAndStatusOnChange(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
-		(50, 'dlg-d', 'alice', 'q', 'server任务创建成功：t1', 'DeepGenomeAgent', 'run-d', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		(50, 'dlg-d', 'alice', 'q', 'Server task created: t1', 'DeepGenomeAgent', 'run-d', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-d","agent":"deep_genome","status":"succeeded","result":{"final_report":"# Gene Report"}}`)
@@ -440,7 +440,7 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
-		(54, 'dlg-a', 'alice', 'q', '任务创建成功：t1', 'AnalystAgent', 'run-a', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		(54, 'dlg-a', 'alice', 'q', 'Task created: t1', 'AnalystAgent', 'run-a', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	runRecordServer(t, `{"run_id":"run-a","agent":"network","status":"succeeded","result":{"formatted":{"answer":"analysis done"},"artifacts":[{"task_id":"t1","output_dir":"/obs/p/r1","paths":["/obs/p/r1/a.png"]}]}}`)

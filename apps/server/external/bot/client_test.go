@@ -91,7 +91,7 @@ func contains(s, sub string) bool {
 
 func TestSurfaceableMessage(t *testing.T) {
 	// 4xx (except auth) with a message → surface it.
-	if msg, ok := SurfaceableMessage(&APIError{Status: 400, Message: "无法解析基因"}); !ok || msg != "无法解析基因" {
+	if msg, ok := SurfaceableMessage(&APIError{Status: 400, Message: "cannot parse gene"}); !ok || msg != "cannot parse gene" {
 		t.Errorf("400 should surface: ok=%v msg=%q", ok, msg)
 	}
 	if _, ok := SurfaceableMessage(&APIError{Status: 413, Message: "too big"}); !ok {
@@ -139,12 +139,12 @@ func TestAPIErrorTruncatesRawBody(t *testing.T) {
 
 func TestBotErrorIsTyped(t *testing.T) {
 	err := botError("POST", "/v1/agents/deep_genome/runs", 400,
-		[]byte(`{"error":{"type":"invalid","code":400,"message":"无法解析基因","request_id":"r1"}}`))
+		[]byte(`{"error":{"type":"invalid","code":400,"message":"cannot parse gene","request_id":"r1"}}`))
 	var ae *APIError
 	if !errors.As(err, &ae) {
 		t.Fatalf("botError should return *APIError, got %T", err)
 	}
-	if ae.Status != 400 || ae.Message != "无法解析基因" || ae.RequestID != "r1" {
+	if ae.Status != 400 || ae.Message != "cannot parse gene" || ae.RequestID != "r1" {
 		t.Errorf("APIError fields wrong: %+v", ae)
 	}
 }

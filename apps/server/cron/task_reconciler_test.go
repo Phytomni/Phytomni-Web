@@ -47,7 +47,7 @@ func TestReconciler_RoutesRunningRowToBot(t *testing.T) {
 	gdb := setupReconcilerDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
-		(60, 'dlg-r', 'alice', 'q', '任务创建成功：t1', 'AnalystAgent', 'run-r', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		(60, 'dlg-r', 'alice', 'q', 'Task created: t1', 'AnalystAgent', 'run-r', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

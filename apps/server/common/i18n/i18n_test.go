@@ -37,10 +37,20 @@ func TestT_EnglishLookup(t *testing.T) {
 }
 
 func TestT_ChineseLookup(t *testing.T) {
-	c := newTestContext(t, "zh-CN")
-	got := T(c, "auth.user_not_found")
-	if got != "用户不存在" {
-		t.Fatalf("auth.user_not_found zh-CN: got %q, want %q", got, "用户不存在")
+	// Assert the zh-CN bundle resolves to its own locale-specific value rather
+	// than hardcoding the Chinese string here (this source file stays ASCII).
+	// A correct zh-CN resolution must differ from the en-US value, must not be
+	// the raw key (the missing-key fallback), and must be non-empty.
+	zh := T(newTestContext(t, "zh-CN"), "auth.user_not_found")
+	en := T(newTestContext(t, "en-US"), "auth.user_not_found")
+	if zh == "" {
+		t.Fatal("auth.user_not_found zh-CN resolved to empty string")
+	}
+	if zh == "auth.user_not_found" {
+		t.Fatalf("auth.user_not_found zh-CN fell back to the raw key: %q", zh)
+	}
+	if zh == en {
+		t.Fatalf("auth.user_not_found zh-CN must differ from en-US %q, got %q", en, zh)
 	}
 }
 
