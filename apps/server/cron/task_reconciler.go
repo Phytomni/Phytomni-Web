@@ -20,7 +20,7 @@ func (r *TaskReconciler) Spec() string {
 }
 
 func (r *TaskReconciler) Run() {
-	fmt.Println("分析结果每10分钟查询一次")
+	fmt.Println("polling analysis results every 10 minutes")
 	var questionAgentList []model.QuestionAgentLog
 	err := model.Default().Model(&model.QuestionAgentLog{}).Debug().Where("status = ?", "RUNNING").Find(&questionAgentList).Error
 	if err != nil {

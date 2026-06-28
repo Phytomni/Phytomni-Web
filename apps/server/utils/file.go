@@ -99,7 +99,7 @@ func IsDirectory(path string) (bool, error) {
 func CreateFile(fileName string) {
 	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("创建文件 %s 时出错: %v\n", fileName, err)
+		fmt.Printf("error creating file %s: %v\n", fileName, err)
 		return
 	}
 	defer file.Close()

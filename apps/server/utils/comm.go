@@ -42,14 +42,14 @@ func GetStructRequiredMsg(s any) string {
 		if strings.HasPrefix(validate, "required") {
 			mapString := schema.ParseTagSetting(gorm, ";")
 			if mapString["COMMENT"] != "" {
-				mapString["COMMENT"] = strings.Replace(mapString["COMMENT"], "类型ID", "类型", 1)
-				mapString["COMMENT"] = strings.Replace(mapString["COMMENT"], "栏目ID", "栏目", 1)
+				mapString["COMMENT"] = strings.Replace(mapString["COMMENT"], "type ID", "type", 1)
+				mapString["COMMENT"] = strings.Replace(mapString["COMMENT"], "section ID", "section", 1)
 				strList = append(strList, mapString["COMMENT"])
 			}
 		}
 	}
 
-	return fmt.Sprintf("\n导入说明：\n1、其中%s为必填字段；\n", strings.Join(strList, "、"))
+	return fmt.Sprintf("\nImport notes:\n1. %s are required fields;\n", strings.Join(strList, ", "))
 }
 
 // SliceOffset returns a selected sub-slice.

@@ -46,18 +46,18 @@ func GenerateWord(doc Document) ([]byte, error) {
 	if _, err := os.Stat(templateFile); os.IsNotExist(err) {
 		r, err := docx.ReadDocxFile("./common/document_format/knowledge_agent/template.docx")
 		if err != nil {
-			return nil, fmt.Errorf("读取空模板失败: %v", err)
+			return nil, fmt.Errorf("failed to read empty template: %v", err)
 		}
 		docx1 := r.Editable()
 		docx1.Replace("old", "{{content}}", -1)
 		if err := docx1.WriteToFile(templateFile); err != nil {
-			return nil, fmt.Errorf("创建模板文件失败: %v", err)
+			return nil, fmt.Errorf("failed to create template file: %v", err)
 		}
 	}
 
 	r, err := docx.ReadDocxFile(templateFile)
 	if err != nil {
-		return nil, fmt.Errorf("读取模板文件失败: %v", err)
+		return nil, fmt.Errorf("failed to read template file: %v", err)
 	}
 	defer r.Close()
 
@@ -67,7 +67,7 @@ func GenerateWord(doc Document) ([]byte, error) {
 
 	buf := new(bytes.Buffer)
 	if err := docx1.Write(buf); err != nil {
-		return nil, fmt.Errorf("生成DOCX失败: %v", err)
+		return nil, fmt.Errorf("failed to generate DOCX: %v", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -103,7 +103,7 @@ func GeneratePDF(doc Document) ([]byte, error) {
 
 	buf := new(bytes.Buffer)
 	if err := pdf.Output(buf); err != nil {
-		return nil, fmt.Errorf("生成PDF失败: %v", err)
+		return nil, fmt.Errorf("failed to generate PDF: %v", err)
 	}
 	return buf.Bytes(), nil
 }

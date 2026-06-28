@@ -43,7 +43,7 @@ func CalculateAfterDate(dateInt int, days int) (result int) {
 	dateStr := strconv.Itoa(dateInt)
 	date, err := time.Parse(DEFAULT_LAYOUT_DATE_YMD, dateStr)
 	if err != nil {
-		fmt.Println("日期解析错误:", err)
+		fmt.Println("date parse error:", err)
 		return
 	}
 	sevenDaysLater := date.AddDate(0, 0, days)
@@ -55,7 +55,7 @@ func CalculateBeforeDate(dateInt int, days int) (result string) {
 	dateStr := strconv.Itoa(dateInt)
 	t, err := time.Parse(DEFAULT_LAYOUT_DATE_YMD, dateStr)
 	if err != nil {
-		fmt.Println("日期解析错误:", err)
+		fmt.Println("date parse error:", err)
 		return
 	}
 	before7Days := t.AddDate(0, 0, -days)

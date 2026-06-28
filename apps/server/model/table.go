@@ -10,18 +10,18 @@ type User struct {
 	Password         string     `json:"password"`
 	Code             string     `json:"code"`
 	Description      string     `json:"description"`
-	FirstLoginStatus string     `gorm:"column:first_login_status;type:enum('0','1');default:'0';not null;comment:登陆状态" json:"first_login_status"`
-	CreatedAt        time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
-	UpdatedAt        time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
-	DeleteAt         *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
-	PasswordChangeAt *time.Time `gorm:"column:password_change_at;type:datetime;comment:密码最后修改时间" json:"password_change_at"`
-	LoginFailedCount int        `gorm:"column:login_failed_count;type:int(11);default:0;comment:登录失败次数" json:"login_failed_count"`
-	LockedUntil      *time.Time `gorm:"column:locked_until;type:datetime;comment:锁定截至时间" json:"locked_until"`
-	LastLoginAt      *time.Time `gorm:"column:last_login_at;type:datetime;comment:最后登录时间" json:"last_login_at"`
-	Phone            string     `gorm:"column:phone;type:varchar(20);comment:手机号" json:"phone"`
-	Organization     string     `gorm:"column:organization;type:varchar(255);comment:所属机构" json:"organization"`
-	Position         string     `gorm:"column:position;type:varchar(255);comment:职位" json:"position"`
-	ChatLimit        int        `gorm:"column:chat_limit;type:int(11);default:0;comment:剩余对话次数" json:"chat_limit"`
+	FirstLoginStatus string     `gorm:"column:first_login_status;type:enum('0','1');default:'0';not null;comment:login status" json:"first_login_status"`
+	CreatedAt        time.Time  `gorm:"column:created_at;type:datetime;comment:created at;" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"column:updated_at;type:datetime;comment:updated at;" json:"updated_at"`
+	DeleteAt         *time.Time `gorm:"column:delete_at;type:datetime;comment:deleted at" json:"delete_at"`
+	PasswordChangeAt *time.Time `gorm:"column:password_change_at;type:datetime;comment:password last changed at" json:"password_change_at"`
+	LoginFailedCount int        `gorm:"column:login_failed_count;type:int(11);default:0;comment:login failed count" json:"login_failed_count"`
+	LockedUntil      *time.Time `gorm:"column:locked_until;type:datetime;comment:locked until" json:"locked_until"`
+	LastLoginAt      *time.Time `gorm:"column:last_login_at;type:datetime;comment:last login at" json:"last_login_at"`
+	Phone            string     `gorm:"column:phone;type:varchar(20);comment:phone number" json:"phone"`
+	Organization     string     `gorm:"column:organization;type:varchar(255);comment:organization" json:"organization"`
+	Position         string     `gorm:"column:position;type:varchar(255);comment:position" json:"position"`
+	ChatLimit        int        `gorm:"column:chat_limit;type:int(11);default:0;comment:remaining chat count" json:"chat_limit"`
 }
 
 func (User) TableName() string {
@@ -29,7 +29,7 @@ func (User) TableName() string {
 }
 
 type ToolName struct {
-	Id          int64  `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
+	Id          int64  `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
 	ToolName    string `json:"tool_name"`
 	Description string `json:"description"`
 }
@@ -49,32 +49,32 @@ func (UserToolName) TableName() string {
 }
 
 type QuestionAgentLog struct {
-	Id                int64      `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
-	DialogueId        string     `gorm:"column:dialogue_id;type:varchar(255);comment:状态:对话id;NOT NULL" json:"dialogue_id"`
-	FId               int64      `gorm:"column:f_id;type:int(11);comment:状态:父id;NOT NULL" json:"f_id"`
-	ServerId          string     `gorm:"column:server_id;type:varchar(255);comment:状态:server_id;NOT NULL" json:"server_id"`
-	BotRunId          string     `gorm:"column:bot_run_id;type:varchar(64);comment:Bot run_id 跨服务关联键;NULL" json:"bot_run_id"`
-	UserName          string     `gorm:"column:user_name;type:varchar(255);comment:用户名;NOT NULL" json:"user_name"`
-	Query             string     `gorm:"column:query;type:text;comment:问题;NOT NULL" json:"query"`
-	TitleQuery        string     `gorm:"column:title_query;type:text;comment:title问题;NOT NULL" json:"title_query"`
-	Answer            string     `gorm:"column:answer;type:text;comment:答案;NOT NULL" json:"answer"`
-	FollowUpQuestions string     `gorm:"column:follow_up_questions;type:text;comment:提示语;NOT NULL" json:"follow_up_questions"`
-	TaskId            string     `gorm:"column:task_id;type:varchar(50);comment:任务id;NOT NULL" json:"task_id"`
-	TaskLog           string     `gorm:"column:task_log;type:longtext;comment:任务日志;NOT NULL" json:"task_log"`
-	FileName          string     `gorm:"column:file_name;type:varchar(255);comment:文件名" json:"file_name"`
-	UploadPath        string     `gorm:"column:upload_path;type:varchar(255);comment:上传路径" json:"upload_path"`
-	DownloadPath      string     `gorm:"column:download_path;type:varchar(255);comment:下载路径" json:"download_path"`
-	ImagePaths        string     `gorm:"column:image_paths;type:text;comment:图廊图片OBS路径(JSON数组);NULL" json:"image_paths"`
-	ComputeResource   string     `gorm:"column:compute_resource;type:varchar(50);comment:资源选择" json:"compute_resource"`
-	ServerFilePath    string     `gorm:"column:server_file_path;type:varchar(255);comment:server文件路径" json:"server_file_path"`
-	ToolName          string     `gorm:"column:tool_name;type:varchar(30);comment:工具类型;NOT NULL" json:"tool_name"`
-	Status            string     `gorm:"column:status;type:varchar(30);comment:任务状态;NOT NULL" json:"status"`
-	LogStatus         string     `gorm:"column:log_status;type:varchar(30);comment:日志状态;NOT NULL" json:"log_status"`
-	ReactionType      string     `gorm:"column:reaction_type;type:enum('0','1','2');default:'0';not null;comment:点赞状态" json:"reaction_type"`
-	CollectType       string     `gorm:"column:collect_type;type:enum('0','1');default:'0';not null;comment:收藏状态" json:"collect_type"`
-	CreatedAt         time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
-	UpdatedAt         time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
-	DeleteAt          *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
+	Id                int64      `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
+	DialogueId        string     `gorm:"column:dialogue_id;type:varchar(255);comment:state: dialogue id;NOT NULL" json:"dialogue_id"`
+	FId               int64      `gorm:"column:f_id;type:int(11);comment:state: parent id;NOT NULL" json:"f_id"`
+	ServerId          string     `gorm:"column:server_id;type:varchar(255);comment:state: server_id;NOT NULL" json:"server_id"`
+	BotRunId          string     `gorm:"column:bot_run_id;type:varchar(64);comment:Bot run_id cross-service join key;NULL" json:"bot_run_id"`
+	UserName          string     `gorm:"column:user_name;type:varchar(255);comment:user name;NOT NULL" json:"user_name"`
+	Query             string     `gorm:"column:query;type:text;comment:question;NOT NULL" json:"query"`
+	TitleQuery        string     `gorm:"column:title_query;type:text;comment:title question;NOT NULL" json:"title_query"`
+	Answer            string     `gorm:"column:answer;type:text;comment:answer;NOT NULL" json:"answer"`
+	FollowUpQuestions string     `gorm:"column:follow_up_questions;type:text;comment:follow-up prompts;NOT NULL" json:"follow_up_questions"`
+	TaskId            string     `gorm:"column:task_id;type:varchar(50);comment:task id;NOT NULL" json:"task_id"`
+	TaskLog           string     `gorm:"column:task_log;type:longtext;comment:task log;NOT NULL" json:"task_log"`
+	FileName          string     `gorm:"column:file_name;type:varchar(255);comment:file name" json:"file_name"`
+	UploadPath        string     `gorm:"column:upload_path;type:varchar(255);comment:upload path" json:"upload_path"`
+	DownloadPath      string     `gorm:"column:download_path;type:varchar(255);comment:download path" json:"download_path"`
+	ImagePaths        string     `gorm:"column:image_paths;type:text;comment:gallery image OBS paths (JSON array);NULL" json:"image_paths"`
+	ComputeResource   string     `gorm:"column:compute_resource;type:varchar(50);comment:compute resource" json:"compute_resource"`
+	ServerFilePath    string     `gorm:"column:server_file_path;type:varchar(255);comment:server file path" json:"server_file_path"`
+	ToolName          string     `gorm:"column:tool_name;type:varchar(30);comment:tool type;NOT NULL" json:"tool_name"`
+	Status            string     `gorm:"column:status;type:varchar(30);comment:task status;NOT NULL" json:"status"`
+	LogStatus         string     `gorm:"column:log_status;type:varchar(30);comment:log status;NOT NULL" json:"log_status"`
+	ReactionType      string     `gorm:"column:reaction_type;type:enum('0','1','2');default:'0';not null;comment:reaction status" json:"reaction_type"`
+	CollectType       string     `gorm:"column:collect_type;type:enum('0','1');default:'0';not null;comment:collect status" json:"collect_type"`
+	CreatedAt         time.Time  `gorm:"column:created_at;type:datetime;comment:created at;" json:"created_at"`
+	UpdatedAt         time.Time  `gorm:"column:updated_at;type:datetime;comment:updated at;" json:"updated_at"`
+	DeleteAt          *time.Time `gorm:"column:delete_at;type:datetime;comment:deleted at" json:"delete_at"`
 }
 
 func (m *QuestionAgentLog) TableName() string {
@@ -82,11 +82,11 @@ func (m *QuestionAgentLog) TableName() string {
 }
 
 type GeneList struct {
-	Id       int64  `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
-	Title    string `gorm:"column:title;type:varchar(255);comment:标题;NOT NULL" json:"title"`
-	Synopsis string `gorm:"column:synopsis;type:varchar(255);comment:简介;NOT NULL" json:"synopsis"`
-	Picture  string `gorm:"column:picture;type:varchar(255);comment:图片;NOT NULL" json:"picture"`
-	Content  string `gorm:"column:content;type:longtext;comment:内容;NOT NULL" json:"content"`
+	Id       int64  `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
+	Title    string `gorm:"column:title;type:varchar(255);comment:title;NOT NULL" json:"title"`
+	Synopsis string `gorm:"column:synopsis;type:varchar(255);comment:synopsis;NOT NULL" json:"synopsis"`
+	Picture  string `gorm:"column:picture;type:varchar(255);comment:picture;NOT NULL" json:"picture"`
+	Content  string `gorm:"column:content;type:longtext;comment:content;NOT NULL" json:"content"`
 }
 
 func (m *GeneList) TableName() string {
@@ -94,14 +94,14 @@ func (m *GeneList) TableName() string {
 }
 
 type GeneExample struct {
-	Id          int64      `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
-	FileName    string     `gorm:"column:file_name;type:varchar(255);comment:文件名;NOT NULL" json:"file_name"`
-	Content     string     `gorm:"column:content;type:longtext;comment:内容;NOT NULL" json:"content"`
-	SpeciesCode string     `gorm:"column:species_code;type:varchar(255);comment:物种代码;NOT NULL" json:"species_code"`
-	GeneId      string     `gorm:"column:gene_id;type:varchar(255);comment:基因id;NOT NULL" json:"gene_id"`
-	CreatedAt   time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
-	UpdatedAt   time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
-	DeleteAt    *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
+	Id          int64      `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
+	FileName    string     `gorm:"column:file_name;type:varchar(255);comment:file name;NOT NULL" json:"file_name"`
+	Content     string     `gorm:"column:content;type:longtext;comment:content;NOT NULL" json:"content"`
+	SpeciesCode string     `gorm:"column:species_code;type:varchar(255);comment:species code;NOT NULL" json:"species_code"`
+	GeneId      string     `gorm:"column:gene_id;type:varchar(255);comment:gene id;NOT NULL" json:"gene_id"`
+	CreatedAt   time.Time  `gorm:"column:created_at;type:datetime;comment:created at;" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at;type:datetime;comment:updated at;" json:"updated_at"`
+	DeleteAt    *time.Time `gorm:"column:delete_at;type:datetime;comment:deleted at" json:"delete_at"`
 }
 
 func (m *GeneExample) TableName() string {
@@ -109,8 +109,8 @@ func (m *GeneExample) TableName() string {
 }
 
 type UserPermission struct {
-	Id   int64  `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
-	Name string `gorm:"column:name;type:varchar(255);comment:权限名;NOT NULL" json:"name"`
+	Id   int64  `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
+	Name string `gorm:"column:name;type:varchar(255);comment:permission name;NOT NULL" json:"name"`
 }
 
 func (m *UserPermission) TableName() string {
@@ -118,16 +118,16 @@ func (m *UserPermission) TableName() string {
 }
 
 type ServerToolLogs struct {
-	Id             int        `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
+	Id             int        `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
 	ServerId       string     `gorm:"column:server_id;type:varchar(255);comment:server_id;NOT NULL" json:"server_id"`
-	ToolResult     string     `gorm:"column:tool_result;type:longtext;comment:工具执行结果;NOT NULL" json:"tool_result"`
-	ToolName       string     `gorm:"column:tool_name;type:varchar(30);comment:工具类型;NOT NULL" json:"tool_name"`
-	ServerFilePath string     `gorm:"column:server_file_path;type:varchar(255);comment:server文件路径" json:"server_file_path"`
-	ServerStatus   string     `gorm:"column:server_status;type:varchar(30);comment:server状态;NOT NULL" json:"server_status"`
-	SyncStatus     int        `gorm:"column:sync_status;type:int(1);comment:同步状态:0-未同步，1-已同步;NOT NULL" json:"sync_status"`
-	CreatedAt      time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
-	UpdatedAt      time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
-	DeleteAt       *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
+	ToolResult     string     `gorm:"column:tool_result;type:longtext;comment:tool execution result;NOT NULL" json:"tool_result"`
+	ToolName       string     `gorm:"column:tool_name;type:varchar(30);comment:tool type;NOT NULL" json:"tool_name"`
+	ServerFilePath string     `gorm:"column:server_file_path;type:varchar(255);comment:server file path" json:"server_file_path"`
+	ServerStatus   string     `gorm:"column:server_status;type:varchar(30);comment:server status;NOT NULL" json:"server_status"`
+	SyncStatus     int        `gorm:"column:sync_status;type:int(1);comment:sync status: 0-unsynced, 1-synced;NOT NULL" json:"sync_status"`
+	CreatedAt      time.Time  `gorm:"column:created_at;type:datetime;comment:created at;" json:"created_at"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at;type:datetime;comment:updated at;" json:"updated_at"`
+	DeleteAt       *time.Time `gorm:"column:delete_at;type:datetime;comment:deleted at" json:"delete_at"`
 }
 
 func (m *ServerToolLogs) TableName() string {
@@ -135,13 +135,13 @@ func (m *ServerToolLogs) TableName() string {
 }
 
 type UserFeedback struct {
-	Id              int        `gorm:"column:id;type:int(10) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
-	UserId          int        `gorm:"column:user_id;type:int(10);comment:用户id;NOT NULL" json:"user_id"`
-	FeedbackType    string     `gorm:"column:feedback_type;type:varchar(255);comment:反馈类型;NOT NULL" json:"feedback_type"`
-	FeedbackContent string     `gorm:"column:feedback_content;type:text;comment:反馈内容;NOT NULL" json:"feedback_content"`
-	CreatedAt       time.Time  `gorm:"column:created_at;type:datetime;comment:创建时间;" json:"created_at"`
-	UpdatedAt       time.Time  `gorm:"column:updated_at;type:datetime;comment:更新时间;" json:"updated_at"`
-	DeleteAt        *time.Time `gorm:"column:delete_at;type:datetime;comment:删除时间" json:"delete_at"`
+	Id              int        `gorm:"column:id;type:int(10) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
+	UserId          int        `gorm:"column:user_id;type:int(10);comment:user id;NOT NULL" json:"user_id"`
+	FeedbackType    string     `gorm:"column:feedback_type;type:varchar(255);comment:feedback type;NOT NULL" json:"feedback_type"`
+	FeedbackContent string     `gorm:"column:feedback_content;type:text;comment:feedback content;NOT NULL" json:"feedback_content"`
+	CreatedAt       time.Time  `gorm:"column:created_at;type:datetime;comment:created at;" json:"created_at"`
+	UpdatedAt       time.Time  `gorm:"column:updated_at;type:datetime;comment:updated at;" json:"updated_at"`
+	DeleteAt        *time.Time `gorm:"column:delete_at;type:datetime;comment:deleted at" json:"delete_at"`
 }
 
 func (m *UserFeedback) TableName() string {
@@ -149,19 +149,19 @@ func (m *UserFeedback) TableName() string {
 }
 
 type UserOperationLog struct {
-	Id           int64     `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键ID" json:"id"`
-	UserId       int64     `gorm:"column:user_id;type:bigint(20);default:0;comment:用户ID(未登录为0);index" json:"user_id"`
-	UserEmail    string    `gorm:"column:user_email;type:varchar(255);comment:用户邮箱;index" json:"user_email"`
-	Method       string    `gorm:"column:method;type:varchar(10);comment:请求方法" json:"method"`
-	Path         string    `gorm:"column:path;type:varchar(255);comment:请求路径;index" json:"path"`
-	QueryParams  string    `gorm:"column:query_params;type:text;comment:URL参数" json:"query_params"`
-	BodyParams   string    `gorm:"column:body_params;type:longtext;comment:请求体(已脱敏)" json:"body_params"`
-	ClientIp     string    `gorm:"column:client_ip;type:varchar(50);comment:客户端IP" json:"client_ip"`
-	UserAgent    string    `gorm:"column:user_agent;type:varchar(500);comment:用户代理" json:"user_agent"`
-	StatusCode   int       `gorm:"column:status_code;type:int(11);comment:HTTP状态码" json:"status_code"`
-	Latency      int64     `gorm:"column:latency;type:bigint(20);comment:耗时(毫秒)" json:"latency"`
-	ErrorMessage string    `gorm:"column:error_message;type:text;comment:错误信息" json:"error_message"`
-	CreatedAt    time.Time `gorm:"column:created_at;type:datetime;comment:创建时间;index" json:"created_at"`
+	Id           int64     `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
+	UserId       int64     `gorm:"column:user_id;type:bigint(20);default:0;comment:user ID (0 if not logged in);index" json:"user_id"`
+	UserEmail    string    `gorm:"column:user_email;type:varchar(255);comment:user email;index" json:"user_email"`
+	Method       string    `gorm:"column:method;type:varchar(10);comment:request method" json:"method"`
+	Path         string    `gorm:"column:path;type:varchar(255);comment:request path;index" json:"path"`
+	QueryParams  string    `gorm:"column:query_params;type:text;comment:URL params" json:"query_params"`
+	BodyParams   string    `gorm:"column:body_params;type:longtext;comment:request body (redacted)" json:"body_params"`
+	ClientIp     string    `gorm:"column:client_ip;type:varchar(50);comment:client IP" json:"client_ip"`
+	UserAgent    string    `gorm:"column:user_agent;type:varchar(500);comment:user agent" json:"user_agent"`
+	StatusCode   int       `gorm:"column:status_code;type:int(11);comment:HTTP status code" json:"status_code"`
+	Latency      int64     `gorm:"column:latency;type:bigint(20);comment:latency (ms)" json:"latency"`
+	ErrorMessage string    `gorm:"column:error_message;type:text;comment:error message" json:"error_message"`
+	CreatedAt    time.Time `gorm:"column:created_at;type:datetime;comment:created at;index" json:"created_at"`
 }
 
 func (m *UserOperationLog) TableName() string {

@@ -32,22 +32,22 @@ func UploadLimits() (fileBytes int64, totalBytes int64, count int) {
 }
 
 // CheckFiles validates an upload batch against the effective limits, returning
-// a user-readable (Chinese) error on the first violation. sizes are per-file
+// a user-readable error on the first violation. sizes are per-file
 // byte counts from the multipart headers.
 func CheckFiles(sizes []int64) error {
 	fileBytes, totalBytes, count := UploadLimits()
 	if len(sizes) > count {
-		return fmt.Errorf("上传文件数 %d 超过上限 %d", len(sizes), count)
+		return fmt.Errorf("number of uploaded files %d exceeds the limit %d", len(sizes), count)
 	}
 	var total int64
 	for _, s := range sizes {
 		if s > fileBytes {
-			return fmt.Errorf("单个文件超过上限 %d 字节", fileBytes)
+			return fmt.Errorf("a single file exceeds the limit of %d bytes", fileBytes)
 		}
 		total += s
 	}
 	if total > totalBytes {
-		return fmt.Errorf("上传总量超过上限 %d 字节", totalBytes)
+		return fmt.Errorf("total upload exceeds the limit of %d bytes", totalBytes)
 	}
 	return nil
 }

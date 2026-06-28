@@ -14,7 +14,7 @@ var (
 	Failed = &Err{
 		code:     FailedCode,
 		httpCode: 200,
-		message:  "操作失败",
+		message:  "operation failed",
 	}
 )
 

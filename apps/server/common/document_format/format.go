@@ -61,7 +61,7 @@ type KnowledgeAgent struct{}
 func (a *KnowledgeAgent) Download(format string, answer string) ([]byte, string, error) {
 	var doc knowledge_agent.Document
 	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
-		return nil, "", fmt.Errorf("解析answer失败: %v", err)
+		return nil, "", fmt.Errorf("failed to parse answer: %v", err)
 	}
 
 	timestamp := time.Now().Unix()
@@ -90,7 +90,7 @@ type DataAgent struct{}
 func (a *DataAgent) Download(format string, answer string) ([]byte, string, error) {
 	var data data_agent.TableData
 	if err := json.Unmarshal([]byte(answer), &data); err != nil {
-		return nil, "", fmt.Errorf("解析answer失败: %v", err)
+		return nil, "", fmt.Errorf("failed to parse answer: %v", err)
 	}
 
 	timestamp := time.Now().Unix()
@@ -119,7 +119,7 @@ type ReviewAgent struct{}
 func (a *ReviewAgent) Download(format string, answer string) ([]byte, string, error) {
 	var doc review_agent.Document
 	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
-		return nil, "", fmt.Errorf("解析answer失败: %v", err)
+		return nil, "", fmt.Errorf("failed to parse answer: %v", err)
 	}
 
 	timestamp := time.Now().Unix()

@@ -21,8 +21,8 @@ const (
 const (
 	SUCCESS_MSG                = "success"
 	FAIL_MSG                   = "fail"
-	FORBID_MSG                 = "非法请求，禁止访问"
-	ERR_RES_PARAMS_ILLEGAL_MSG = "参数传递不合法"
+	FORBID_MSG                 = "forbidden request"
+	ERR_RES_PARAMS_ILLEGAL_MSG = "invalid parameters"
 )
 
 var (

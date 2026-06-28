@@ -179,11 +179,11 @@ func reportDuplicateEmails(db *gorm.DB) ([]string, error) {
 func Migrate() *cli.Command {
 	return &cli.Command{
 		Name:  "migrate",
-		Usage: "first-login 状态回填",
+		Usage: "first-login status backfill",
 		Subcommands: []*cli.Command{
 			{
 				Name:        "up",
-				Usage:       "第一次登录状态修复",
+				Usage:       "fix first-login status",
 				Description: "first_login_status backfill. Idempotent — safe to re-run.",
 				Action: func(ctx *cli.Context) error {
 					rows, err := backfillFirstLoginStatus(model.Default())
@@ -198,7 +198,7 @@ func Migrate() *cli.Command {
 			},
 			{
 				Name:        "backfill-chat-limit",
-				Usage:       "置存量非 guest 用户的 chat_limit 哨兵值",
+				Usage:       "set the chat_limit sentinel for existing non-guest users",
 				Description: "Run before the ChatLimit enforcement gate goes live. Sets chat_limit=0 non-guest users to the large-positive sentinel so they are not retroactively blocked. New self-registered accounts stay at 0 (inert). Idempotent — safe to re-run.",
 				Action: func(ctx *cli.Context) error {
 					rows, err := backfillChatLimit(model.Default())
@@ -212,7 +212,7 @@ func Migrate() *cli.Command {
 			},
 			{
 				Name:        "add-bot-run-id",
-				Usage:       "给 question_agent_logs 加 bot_run_id 列",
+				Usage:       "add the bot_run_id column to question_agent_logs",
 				Description: "Add the nullable bot_run_id join column. Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual.",
 				Action: func(ctx *cli.Context) error {
 					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "bot_run_id",
@@ -221,16 +221,16 @@ func Migrate() *cli.Command {
 			},
 			{
 				Name:        "add-image-paths",
-				Usage:       "给 question_agent_logs 加 image_paths 列",
+				Usage:       "add the image_paths column to question_agent_logs",
 				Description: "Add the nullable image_paths text column (gallery image OBS paths, stored as a JSON array). Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual (see docs/web-production-deployment-manual.md §5.3). Without this column every /query returns 500 (Unknown column 'image_paths').",
 				Action: func(ctx *cli.Context) error {
 					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
-						"ALTER TABLE question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT '图廊图片OBS路径(JSON数组)' AFTER download_path")
+						"ALTER TABLE question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT 'gallery image OBS paths (JSON array)' AFTER download_path")
 				},
 			},
 			{
 				Name:        "dedupe-emails",
-				Usage:       "报告 users.email 重复项(仅读,不删行)",
+				Usage:       "report duplicate users.email entries (read-only, no rows deleted)",
 				Description: "Report email addresses that appear more than once in the users table. Read-only — no rows are modified. Run before adding a UNIQUE index on users.email so the operator can manually resolve existing duplicates.",
 				Action: func(ctx *cli.Context) error {
 					dups, err := reportDuplicateEmails(model.Default())
@@ -252,7 +252,7 @@ func Migrate() *cli.Command {
 			},
 			{
 				Name:        "add-email-unique-index",
-				Usage:       "给 users.email 加唯一索引",
+				Usage:       "add a unique index on users.email",
 				Description: "Add a UNIQUE index on users(email). Idempotent — no-op if the index already exists. Run dedupe-emails first to confirm no duplicate emails exist; production DDL stays manual.",
 				Action: func(ctx *cli.Context) error {
 					return addUniqueIndexIfMissing(model.Default(), &model.User{}, "uniq_users_email",
@@ -261,7 +261,7 @@ func Migrate() *cli.Command {
 			},
 			{
 				Name:        "rename-tool-names",
-				Usage:       "把 tool_names 输入 token 改成 Bot 规范名",
+				Usage:       "rename tool_names input tokens to canonical Bot names",
 				Description: "Rename the agent @-tokens in tool_names to the canonical Bot tool names. Idempotent. Run together with the canonical-maps deploy.",
 				Action: func(ctx *cli.Context) error {
 					n, err := renameAgentToolNames(model.Default(), "tool_names", "tool_name")
@@ -275,7 +275,7 @@ func Migrate() *cli.Command {
 			},
 			{
 				Name:        "backfill-agent-tool-names",
-				Usage:       "回填 question_agent_logs.tool_name 为 Bot 规范名",
+				Usage:       "backfill question_agent_logs.tool_name to canonical Bot names",
 				Description: "Backfill persisted history tool_name to canonical Bot names so old rows render under the new frontend. Idempotent — safe to re-run.",
 				Action: func(ctx *cli.Context) error {
 					n, err := renameAgentToolNames(model.Default(), "question_agent_logs", "tool_name")
@@ -289,7 +289,7 @@ func Migrate() *cli.Command {
 			},
 			{
 				Name:        "all",
-				Usage:       "建全部表(dev/CI fresh-schema)",
+				Usage:       "create all tables (dev/CI fresh-schema)",
 				Description: "AutoMigrate every model into a fresh schema. Dev/CI only — production DDL stays manual. The enum tags in model/table.go carry value lists, so fresh-schema AutoMigrate generates valid MariaDB DDL.",
 				Action: func(ctx *cli.Context) error {
 					db := model.Default()

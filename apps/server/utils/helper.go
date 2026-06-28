@@ -80,7 +80,7 @@ func ClearMobileText(text string) (cleanedText string) {
 	matches := phoneRegex.FindAllString(text, -1)
 
 	if matches != nil {
-		cleanedText = phoneRegex.ReplaceAllString(text, "[手机号敏感数据不予显示]")
+		cleanedText = phoneRegex.ReplaceAllString(text, "[phone number redacted]")
 	} else {
 		cleanedText = text
 	}

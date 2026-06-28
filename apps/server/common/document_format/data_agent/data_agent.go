@@ -36,7 +36,7 @@ func ExportToExecl(data TableData) ([]byte, error) {
 
 	buf := new(bytes.Buffer)
 	if err := f.Write(buf); err != nil {
-		return nil, fmt.Errorf("生成Excel失败: %v", err)
+		return nil, fmt.Errorf("failed to generate Excel: %v", err)
 	}
 	return buf.Bytes(), nil
 }

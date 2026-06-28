@@ -18,7 +18,7 @@ func (ts *TestSecond) Spec() string {
 }
 
 func (ts *TestSecond) Run() {
-	log.SugarContext(utils.BuildRequestIdCtx()).Infow("每秒执行一次")
+	log.SugarContext(utils.BuildRequestIdCtx()).Infow("runs once per second")
 }
 
 type TestMinute struct {
@@ -33,5 +33,5 @@ func (tm *TestMinute) Spec() string {
 }
 
 func (tm *TestMinute) Run() {
-	log.SugarContext(utils.BuildRequestIdCtx()).Infow("没分执行一次")
+	log.SugarContext(utils.BuildRequestIdCtx()).Infow("runs once per minute")
 }

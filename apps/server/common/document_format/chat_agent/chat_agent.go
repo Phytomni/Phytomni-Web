@@ -14,7 +14,7 @@ func GenerateMarkdown(content string) ([]byte, error) {
 func GenerateWord(content string) ([]byte, error) {
 	r, err := docx.ReadDocxFile("./common/document_format/external_format/empty.docx")
 	if err != nil {
-		return nil, fmt.Errorf("无法读取模板文件: %v", err)
+		return nil, fmt.Errorf("cannot read template file: %v", err)
 	}
 	defer r.Close()
 
@@ -23,7 +23,7 @@ func GenerateWord(content string) ([]byte, error) {
 
 	buf := new(bytes.Buffer)
 	if err := docx1.Write(buf); err != nil {
-		return nil, fmt.Errorf("生成DOCX失败: %v", err)
+		return nil, fmt.Errorf("failed to generate DOCX: %v", err)
 	}
 	return buf.Bytes(), nil
 }
