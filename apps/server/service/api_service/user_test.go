@@ -594,7 +594,7 @@ func TestUserRegister_DuplicateEmailFriendlyError(t *testing.T) {
 	if err == nil {
 		t.Fatal("second registration with same email must return an error")
 	}
-	const want = "该邮箱已被注册"
+	const want = "email already registered"
 	if err.Error() != want {
 		t.Errorf("expected friendly message %q, got %q", want, err.Error())
 	}
@@ -615,7 +615,7 @@ func TestRegisterAddUser_DuplicateEmailFriendlyError(t *testing.T) {
 	if err == nil {
 		t.Fatal("second admin-create with same email must return an error")
 	}
-	const want = "该邮箱已被注册"
+	const want = "email already registered"
 	if err.Error() != want {
 		t.Errorf("expected friendly message %q, got %q", want, err.Error())
 	}

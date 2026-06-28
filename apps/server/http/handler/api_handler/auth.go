@@ -24,7 +24,7 @@ func (ph *Handler) GetUserProfile(ctx *gin.Context) {
 	name, ok := ctx.Get("username")
 	email, _ := name.(string)
 	if !ok || email == "" {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未登录"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "not logged in"})
 		return
 	}
 
@@ -120,7 +120,7 @@ func (ph *Handler) Register(ctx *gin.Context) {
 	if email == "" || password == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":  http.StatusBadRequest,
-			"error": "用户名或密码不能为空",
+			"error": "username or password cannot be empty",
 		})
 		return
 	}
@@ -128,7 +128,7 @@ func (ph *Handler) Register(ctx *gin.Context) {
 	if len(password) < 8 || len(password) > 16 {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "密码长度至少为8位",
+			"message": "password must be at least 8 characters",
 		})
 		return
 	}
@@ -136,7 +136,7 @@ func (ph *Handler) Register(ctx *gin.Context) {
 	if !utils.ValidatePasswordComplexity(password) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "密码必须包含大小写字母、数字及标点符号",
+			"message": "password must contain uppercase, lowercase, numbers, and punctuation",
 		})
 		return
 	}
@@ -144,19 +144,19 @@ func (ph *Handler) Register(ctx *gin.Context) {
 	if !govalidator.IsEmail(email) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "用户名必须是有效的邮箱格式",
+			"message": "username must be a valid email address",
 		})
 		return
 	}
 	name, _ := ctx.Get("username")
 	permission, _ := ph.service.GetUserRegisterPermission(ctx, name.(string))
 	if !permission {
-		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "你不是管理员，没有创建用户的权限", "token": ""})
+		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "you are not an administrator and cannot create users", "token": ""})
 		return
 	}
 
 	if exists := ph.service.CheckEmailExists(ctx, email); exists {
-		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "用户名已存在", "token": ""})
+		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "username already exists", "token": ""})
 		return
 	}
 
@@ -168,7 +168,7 @@ func (ph *Handler) Register(ctx *gin.Context) {
 
 	token, err := middleware.GenerateToken(email)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "生成token失败", "token": ""})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to generate token", "token": ""})
 		return
 	}
 	ctx.JSON(errs.SucResp(token))

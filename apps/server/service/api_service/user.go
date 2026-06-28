@@ -139,27 +139,27 @@ func (ps *Service) GetUserList(ctx *gin.Context, current, size int, code string)
 func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int, code, phone, organization, position string, chatLimit int) (int, error) {
 
 	if code != "user" && code != "vip_user" && code != "admin" && code != "guest" {
-		return 0, errors.New("权限格式错误,没有这样的权限")
+		return 0, errors.New("invalid permission format, no such permission")
 	}
 
 	db := model.DB(ctx).Model(&model.User{}).Debug()
 
 	var adminUser *model.User
 	if db.Where("email = ?", name).First(&adminUser); adminUser.Code != "admin" && adminUser.Code != "super_admin" {
-		return 0, errors.New("您没有修改用户权限的权利，请通知管理员")
+		return 0, errors.New("you are not allowed to modify user permissions, please notify an administrator")
 	}
 
 	if adminUser.Code == "admin" {
 		if code != "user" && code != "vip_user" && code != "guest" {
-			return 0, errors.New("您没有赋予此权限的权利")
+			return 0, errors.New("you are not allowed to grant this permission")
 		}
 	}
 
 	descriptionMap := map[string]string{
-		"admin":    "管理员",
-		"vip_user": "vip用户",
-		"user":     "普通用户",
-		"guest":    "游客",
+		"admin":    "Administrator",
+		"vip_user": "VIP User",
+		"user":     "Regular User",
+		"guest":    "Guest",
 	}
 	description := descriptionMap[code]
 
@@ -181,7 +181,7 @@ func (ps *Service) ModifyPermission(ctx context.Context, name string, userId int
 		return 0, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return 0, errors.New("用户信息修改失败，未变更")
+		return 0, errors.New("failed to update user info, no change")
 	}
 
 	return userId, nil
@@ -192,10 +192,10 @@ func (ps *Service) UnlockUser(ctx context.Context, operatorName string, targetUs
 
 	var operator *model.User
 	if err := db.Where("email = ?", operatorName).First(&operator).Error; err != nil {
-		return errors.New("操作员不存在")
+		return errors.New("operator not found")
 	}
 	if operator.Code != "admin" && operator.Code != "super_admin" {
-		return errors.New("无权执行此操作")
+		return errors.New("not authorized to perform this operation")
 	}
 
 	result := db.Where("id = ?", targetUserId).Updates(map[string]interface{}{
@@ -205,10 +205,10 @@ func (ps *Service) UnlockUser(ctx context.Context, operatorName string, targetUs
 	})
 
 	if result.Error != nil {
-		return errors.New("解锁失败: " + result.Error.Error())
+		return errors.New("unlock failed: " + result.Error.Error())
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("用户不存在")
+		return errors.New("user not found")
 	}
 
 	return nil

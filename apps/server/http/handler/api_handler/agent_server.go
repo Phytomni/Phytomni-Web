@@ -15,7 +15,7 @@ func (ph *Handler) ServerCreateTask(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code": http.StatusInternalServerError,
-			"msg":  "数据库存储创建任务失败" + err.Error(),
+			"msg":  "failed to store task in database" + err.Error(),
 			"data": nil,
 		})
 		return
@@ -40,7 +40,7 @@ func (ph *Handler) ServerUpdateTask(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code": http.StatusInternalServerError,
-			"msg":  "数据库任务数据变更失败" + err.Error(),
+			"msg":  "failed to update task data in database" + err.Error(),
 			"data": nil,
 		})
 		return

@@ -11,7 +11,7 @@ import (
 // operation-log audit table. That table contains cross-user PII (email / IP /
 // UA / request metadata) and is restricted to admin queries only.
 // The handler maps this error to 403.
-var ErrOperationLogForbidden = errors.New("无权访问操作日志")
+var ErrOperationLogForbidden = errors.New("not authorized to access operation logs")
 
 func (ps *Service) GetOperationLogs(ctx context.Context, operatorName string, userIds []int64, startTime, endTime string) ([]model.UserOperationLog, error) {
 	// Authorisation gate: audit logs are admin-only; normal users must not enumerate other users' records.

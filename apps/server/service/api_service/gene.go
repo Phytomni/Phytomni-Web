@@ -180,7 +180,7 @@ func findObsKeyBySuffix(keys []string, suffix string) string {
 // a user-readable message; all other errors pass through unchanged.
 func friendlyRelayErr(err error) error {
 	if rxBot.IsLegacyPathErr(err) {
-		return errors.New("该结果文件属于切流前的历史数据,已不再提供下载")
+		return errors.New("this result file is pre-cutover historical data and is no longer available for download")
 	}
 	return err
 }
@@ -202,7 +202,7 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 	var questionAgentLog model.QuestionAgentLog
 	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&questionAgentLog).RowsAffected; result == 0 {
-		return "", errors.New("没有查找到对应的obs路径数据")
+		return "", errors.New("no matching obs path data found")
 	}
 
 	client := rxBot.NewClient()
@@ -212,7 +212,7 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 	}
 	zipKey := findObsKeyBySuffix(keys, ".zip")
 	if zipKey == "" {
-		return "", errors.New("在指定目录下未找到zip文件")
+		return "", errors.New("no zip file found in the specified directory")
 	}
 	return relayDownloadURL(zipKey)
 }
@@ -224,7 +224,7 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&row).RowsAffected; result == 0 {
-		return nil, errors.New("没有查找到对应的obs路径数据")
+		return nil, errors.New("no matching obs path data found")
 	}
 
 	var keys []string
@@ -233,7 +233,7 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 			// Non-empty but invalid JSON: DB corruption or Bot contract drift.
 			// Warn and fall back to enumeration (keep the endpoint usable);
 			// do not silently treat the corrupt state as a legacy empty row.
-			rxLog.Sugar().Warnw("image_paths 非法 JSON,退回 OBS 前缀列举", "download_path", obsPath, "err", err)
+			rxLog.Sugar().Warnw("image_paths invalid JSON, falling back to OBS prefix enumeration", "download_path", obsPath, "err", err)
 			keys = nil
 		}
 	}
@@ -261,20 +261,20 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 		}
 		if anchor != "" && anchor != "." && !strings.HasPrefix(k, anchor+"/") {
 			// Out-of-bounds path: skip + warn (fail-safe: drop suspicious, serve the rest, keep observable).
-			rxLog.Sugar().Warnw("图片路径越出 run 根,跳过签发", "key", k, "anchor", anchor)
+			rxLog.Sugar().Warnw("image path escapes run root, skipping signing", "key", k, "anchor", anchor)
 			continue
 		}
 		u, err := relayDownloadURL(k)
 		if err != nil {
 			// Skip individual signing failures (preserves prior "skip bad file" behaviour); warn for observability.
-			rxLog.Sugar().Warnw("图片签发失败,跳过", "key", k, "err", err)
+			rxLog.Sugar().Warnw("image signing failed, skipping", "key", k, "err", err)
 			continue
 		}
 		imageUrls = append(imageUrls, u)
 	}
 
 	if len(imageUrls) == 0 {
-		return nil, errors.New("在指定目录下未找到png图片文件")
+		return nil, errors.New("no png image file found in the specified directory")
 	}
 
 	return imageUrls, nil
@@ -289,7 +289,7 @@ func (ps *Service) GetDownloadObsFile(ctx context.Context, username, obsPath str
 	var questionAgentLog model.QuestionAgentLog
 	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&questionAgentLog).RowsAffected; result == 0 {
-		return nil, "", 0, errors.New("没有查找到对应的obs路径数据")
+		return nil, "", 0, errors.New("no matching obs path data found")
 	}
 
 	client := rxBot.NewClient()
@@ -299,7 +299,7 @@ func (ps *Service) GetDownloadObsFile(ctx context.Context, username, obsPath str
 	}
 	zipKey := findObsKeyBySuffix(keys, ".zip")
 	if zipKey == "" {
-		return nil, "", 0, errors.New("在指定目录下未找到zip文件")
+		return nil, "", 0, errors.New("no zip file found in the specified directory")
 	}
 
 	rc, length, err := client.GetObsObjectStream(ctx, zipKey)

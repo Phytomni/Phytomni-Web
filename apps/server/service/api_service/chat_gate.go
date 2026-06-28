@@ -10,7 +10,7 @@ import (
 )
 
 // ErrChatQuotaExhausted indicates insufficient/inactive account quota (handler maps to 403).
-var ErrChatQuotaExhausted = errors.New("账户额度不足，请联系管理员开通")
+var ErrChatQuotaExhausted = errors.New("account has no chat quota; contact an administrator")
 
 // chatGateBypassCodes are roles exempt from the ChatLimit gate. vip_user is not
 // metered for now; to enforce a vip_user limit in the future, remove it from this

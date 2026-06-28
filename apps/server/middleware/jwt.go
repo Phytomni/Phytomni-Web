@@ -65,7 +65,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"detail": gin.H{
 					"code":  common.FORBID,
-					"error": "缺少授权头",
+					"error": "missing authorization header",
 				},
 			})
 			c.Abort()
@@ -76,7 +76,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"detail": gin.H{
 					"code":  common.FORBID,
-					"error": "无效的授权头格式",
+					"error": "invalid authorization header format",
 				},
 			})
 			c.Abort()
@@ -93,7 +93,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"detail": gin.H{
 					"code":  common.FORBID,
-					"error": "无效的token",
+					"error": "invalid token",
 				},
 			})
 			c.Abort()
@@ -136,7 +136,7 @@ func revokedResponse(c *gin.Context) {
 	c.JSON(http.StatusUnauthorized, gin.H{
 		"detail": gin.H{
 			"code":  common.FORBID,
-			"error": "会话已失效,请重新登录",
+			"error": "session expired, please log in again",
 		},
 	})
 	c.Abort()

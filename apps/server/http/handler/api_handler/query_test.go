@@ -14,7 +14,7 @@ func TestQueryErrorStatus_BotTimeout(t *testing.T) {
 	if status != http.StatusGatewayTimeout {
 		t.Errorf("status = %d, want 504", status)
 	}
-	if msg == "" || msg == "请求处理失败" {
+	if msg == "" || msg == "request failed" {
 		t.Errorf("msg = %q, want a specific timeout message", msg)
 	}
 }

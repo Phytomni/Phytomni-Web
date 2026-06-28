@@ -12,7 +12,7 @@ import (
 
 // ErrRegisterRateLimited is returned when the per-IP durable registration floor
 // is exceeded (handler maps this to 429).
-var ErrRegisterRateLimited = errors.New("注册过于频繁，请稍后再试")
+var ErrRegisterRateLimited = errors.New("too many registrations, please try again later")
 
 const registerFloorPath = "/api/v1/auth/registrations"
 

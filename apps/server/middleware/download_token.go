@@ -44,7 +44,7 @@ func ParseDownloadToken(token string) (string, error) {
 		return jwtSecret(), nil
 	})
 	if err != nil || !parsed.Valid || claims.ObsKey == "" {
-		return "", errors.New("无效或已过期的下载链接")
+		return "", errors.New("invalid or expired download link")
 	}
 	return claims.ObsKey, nil
 }

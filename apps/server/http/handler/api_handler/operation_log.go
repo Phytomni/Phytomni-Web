@@ -15,7 +15,7 @@ func (ph *Handler) GetOperationLogs(ctx *gin.Context) {
 	// Operator identity (admin authorization is enforced in the service layer)
 	operatorName, exists := ctx.Get("username")
 	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未登录"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "not logged in"})
 		return
 	}
 

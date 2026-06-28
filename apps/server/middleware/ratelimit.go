@@ -73,7 +73,7 @@ func rateLimit(name string, keyFn func(*gin.Context) string) gin.HandlerFunc {
 		c.Header("Retry-After", strconv.Itoa(int(cfg.window.Seconds())))
 		c.JSON(http.StatusTooManyRequests, gin.H{
 			"code":    http.StatusTooManyRequests,
-			"message": "请求过于频繁，请稍后再试",
+			"message": "too many requests, please try again later",
 		})
 		c.Abort()
 	}

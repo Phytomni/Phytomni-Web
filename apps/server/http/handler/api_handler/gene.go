@@ -58,7 +58,7 @@ func (ph *Handler) GeneList(ctx *gin.Context) {
 func (ph *Handler) GeneDetails(ctx *gin.Context) {
 	fileName := ctx.Param("id")
 	if fileName == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "参数 file_name 不能为空"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "parameter file_name cannot be empty"})
 		return
 	}
 
@@ -281,7 +281,7 @@ func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 	rc, length, err := rxBot.NewClient().GetObsObjectStream(ctx, key)
 	if err != nil {
 		// Do not expose Bot internal error details to the browser-direct surface.
-		ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": "文件获取失败"})
+		ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": "failed to fetch file"})
 		return
 	}
 	defer rc.Close()
@@ -310,7 +310,7 @@ func (ph *Handler) DownloadObsRenderingFile(ctx *gin.Context) {
 	format := ctx.PostForm("document_format")
 
 	if id == 0 || format == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "参数缺失"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "missing parameter"})
 		return
 	}
 	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, id, format)

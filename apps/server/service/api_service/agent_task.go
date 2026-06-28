@@ -73,10 +73,10 @@ func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (
 	// user_name filter any authenticated user could read another user's task row.
 	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().
 		Where("id = ? and user_name = ?", id, username).First(&QuestionAgentLogList).Error; err != nil {
-		return nil, errors.New("任务不存在")
+		return nil, errors.New("task not found")
 	}
 	if QuestionAgentLogList.TaskId == "" {
-		return nil, errors.New("任务不存在")
+		return nil, errors.New("task not found")
 	}
 
 	return
@@ -87,10 +87,10 @@ func (ps *Service) AnalystAgentGetLog(ctx context.Context, id int, name string) 
 	var questionAgentLogList *model.QuestionAgentLog
 	err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("id = ?", id).First(&questionAgentLogList).Error
 	if questionAgentLogList.TaskId == "" {
-		return "", errors.New("日志任务不存在")
+		return "", errors.New("log task not found")
 	}
 	if name != questionAgentLogList.UserName {
-		return "", errors.New("日志与用户不匹配")
+		return "", errors.New("log does not match user")
 	}
 
 	return questionAgentLogList.TaskLog, nil
@@ -244,10 +244,10 @@ func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (in
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("delete_at", time.Now())
 	if result.Error != nil {
-		return 0, errors.New("删除问答记录失败")
+		return 0, errors.New("failed to delete Q&A record")
 	}
 	if result.RowsAffected == 0 {
-		return 0, errors.New("未找到匹配的记录")
+		return 0, errors.New("no matching record found")
 	}
 
 	return id, nil
@@ -258,10 +258,10 @@ func (ps *Service) QueryListRename(ctx context.Context, name string, id int, ren
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("title_query", rename)
 	if result.Error != nil {
-		return "", errors.New("修改title问题列表失败")
+		return "", errors.New("failed to update title query list")
 	}
 	if result.RowsAffected == 0 {
-		return "", errors.New("未找到title问题匹配的记录")
+		return "", errors.New("no matching title query record found")
 	}
 
 	return rename, nil
@@ -272,10 +272,10 @@ func (ps *Service) QueryReactionType(ctx context.Context, id int, reactionType, 
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("reaction_type", reactionType)
 	if result.Error != nil {
-		return 0, errors.New("修改点评记录失败")
+		return 0, errors.New("failed to update reaction record")
 	}
 	if result.RowsAffected == 0 {
-		return 0, errors.New("未找到匹配的点赞/点踩记录")
+		return 0, errors.New("no matching like/dislike record found")
 	}
 
 	return id, nil
@@ -286,10 +286,10 @@ func (ps *Service) QueryCollect(ctx context.Context, id int, collectType, name s
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("collect_type", collectType)
 	if result.Error != nil {
-		return 0, errors.New("修改收藏记录失败")
+		return 0, errors.New("failed to update favorite record")
 	}
 	if result.RowsAffected == 0 {
-		return 0, errors.New("未找到匹配的收藏记录")
+		return 0, errors.New("no matching favorite record found")
 	}
 
 	return id, nil
@@ -303,7 +303,7 @@ func (ps *Service) QueryCollectList(ctx context.Context, name string) ([]*common
 		Order("created_at DESC").
 		Find(&CollectList).Error
 	if err != nil {
-		return nil, errors.New("collect_list查询失败")
+		return nil, errors.New("collect_list query failed")
 	}
 
 	return CollectList, nil

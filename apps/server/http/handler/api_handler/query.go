@@ -23,16 +23,16 @@ import (
 func queryErrorStatus(err error) (int, string) {
 	switch {
 	case errors.Is(err, api_service.ErrGatewayDisabled):
-		return http.StatusServiceUnavailable, "服务暂不可用"
+		return http.StatusServiceUnavailable, "service temporarily unavailable"
 	case errors.Is(err, api_service.ErrUnknownTool):
-		return http.StatusBadRequest, "未知的工具类型"
+		return http.StatusBadRequest, "unknown tool type"
 	case errors.Is(err, rxBot.ErrBotTimeout):
-		return http.StatusGatewayTimeout, "请求处理超时，请缩小查询范围或稍后重试"
+		return http.StatusGatewayTimeout, "request timed out, please narrow your query or try again later"
 	}
 	if msg, ok := rxBot.SurfaceableMessage(err); ok {
 		return http.StatusBadRequest, msg
 	}
-	return http.StatusInternalServerError, "请求处理失败"
+	return http.StatusInternalServerError, "request failed"
 }
 
 // Query is the gateway entry for chat sends. It parses the multipart form
@@ -65,7 +65,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 	if formErr != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(formErr, &maxErr) || strings.Contains(formErr.Error(), "request body too large") {
-			ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": http.StatusRequestEntityTooLarge, "message": "上传内容过大"})
+			ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": http.StatusRequestEntityTooLarge, "message": "upload content too large"})
 			return
 		}
 	}
@@ -76,7 +76,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		History: ctx.DefaultPostForm("history", "[]"),
 	}
 	if strings.TrimSpace(in.Query) == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "查询内容不能为空"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "query content cannot be empty"})
 		return
 	}
 	// RESTful: conversation id from path /conversations/:id/messages (id=0 means a
@@ -98,13 +98,13 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		for _, fh := range files {
 			f, err := fh.Open()
 			if err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "无法读取上传文件"})
+				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "cannot read uploaded file"})
 				return
 			}
 			data, err := io.ReadAll(f)
 			_ = f.Close()
 			if err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "无法读取上传文件"})
+				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "cannot read uploaded file"})
 				return
 			}
 			in.Files = append(in.Files, api_service.QueryFile{Filename: fh.Filename, Data: data})

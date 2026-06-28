@@ -23,7 +23,7 @@ func (ps *Service) RegisterAddUser(ctx context.Context, email string, password s
 	userInfo.Email = email
 	hashed, herr := utils.HashPassword(password)
 	if herr != nil {
-		return false, errors.New("管理员新增用户注册失败")
+		return false, errors.New("admin failed to create user")
 	}
 	userInfo.Password = hashed
 	userInfo.Code = code
@@ -37,27 +37,27 @@ func (ps *Service) RegisterAddUser(ctx context.Context, email string, password s
 	userInfo.PasswordChangeAt = &now
 	switch userInfo.Code {
 	case "admin":
-		description = "管理员"
+		description = "Administrator"
 	case "vip_user":
-		description = "vip用户"
+		description = "VIP User"
 	case "user":
-		description = "普通用户"
+		description = "Regular User"
 	case "guest":
-		description = "游客"
+		description = "Guest"
 
 		userInfo.ChatLimit = viper.GetInt("guest_default_chat_limit")
 	}
 	userInfo.Description = description
 
 	if code != "user" && code != "vip_user" && code != "guest" {
-		return false, errors.New("错误的权限赋值，您没有这样的权限")
+		return false, errors.New("invalid permission assignment, you do not have this permission")
 	}
 
 	if err := model.DB(ctx).Model(&model.User{}).Debug().Create(&userInfo).Error; err != nil {
 		if stdErrors.Is(err, gorm.ErrDuplicatedKey) {
-			return false, errors.New("该邮箱已被注册")
+			return false, errors.New("email already registered")
 		}
-		return false, errors.New("管理员新增用户注册失败")
+		return false, errors.New("admin failed to create user")
 	}
 	return true, nil
 }
@@ -71,24 +71,24 @@ func (ps *Service) ModifyPassword(ctx context.Context, name, Password, newPasswo
 	var userInfo model.User
 	db := model.DB(ctx).Model(&model.User{}).Debug()
 	if err := db.Where("email = ?", name).First(&userInfo).Error; err != nil || userInfo.Id == 0 {
-		return "", errors.New("原密码输入错误,请重试")
+		return "", errors.New("old password is incorrect, please retry")
 	}
 
 	ok, _, _ := utils.VerifyPassword(userInfo.Password, Password)
 	if !ok {
-		return "", errors.New("原密码输入错误,请重试")
+		return "", errors.New("old password is incorrect, please retry")
 	}
 
 	newHash, herr := utils.HashPassword(newPassword)
 	if herr != nil {
-		return "", errors.New("密码修改失败")
+		return "", errors.New("failed to change password")
 	}
 
 	if err := db.Where("id = ?", userInfo.Id).Updates(map[string]interface{}{
 		"password":           newHash,
 		"password_change_at": time.Now(),
 	}).Error; err != nil {
-		return "", errors.New("密码修改失败")
+		return "", errors.New("failed to change password")
 	}
 	// Set per-user epoch = now (the real event time). AuthMiddleware compares iat < epoch-IatSkew
 	// and GenerateToken sets iat = now-IatSkew; the skew cancels on both sides, so the net effect
@@ -98,7 +98,7 @@ func (ps *Service) ModifyPassword(ctx context.Context, name, Password, newPasswo
 	// epoch-path variant). fail-open: a Redis outage only logs — the persistent
 	// password_change_at floor is the offline backstop.
 	if err := rxCache.SetUserEpoch(ctx, name, time.Now(), middleware.TokenLifetime); err != nil {
-		log.Printf("改密设撤销 epoch 失败(fail-open,不影响改密) email=%s: %v", name, err)
+		log.Printf("failed to set revocation epoch on password change (fail-open, does not block change) email=%s: %v", name, err)
 	}
 	return name, nil
 }
@@ -107,7 +107,7 @@ func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id i
 
 	pwdHash, herr := utils.HashPassword(password)
 	if herr != nil {
-		log.Printf("更新用户密码失败(哈希出错): %v", herr)
+		log.Printf("failed to update user password (hash error): %v", herr)
 		return false
 	}
 	result := model.DB(ctx).Model(&model.User{}).
@@ -118,12 +118,12 @@ func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id i
 		})
 	if result.Error != nil {
 
-		log.Printf("更新用户密码失败: %v", result.Error)
+		log.Printf("failed to update user password: %v", result.Error)
 		return false
 	}
 	if result.RowsAffected == 0 {
 
-		log.Printf("未找到ID为 %d 的用户", id)
+		log.Printf("no user found with ID %d", id)
 		return false
 	}
 	// Resolve id→email and set the per-user epoch = now (the real event time). AuthMiddleware's
@@ -135,10 +135,10 @@ func (ps *Service) UpdateUserPassWord(ctx context.Context, password string, id i
 	var target model.User
 	if err := model.DB(ctx).Select("email").Where("id = ?", id).First(&target).Error; err == nil && target.Email != "" {
 		if err := rxCache.SetUserEpoch(ctx, target.Email, time.Now(), middleware.TokenLifetime); err != nil {
-			log.Printf("管理员改密设撤销 epoch 失败(fail-open) id=%d: %v", id, err)
+			log.Printf("admin password change: failed to set revocation epoch (fail-open) id=%d: %v", id, err)
 		}
 	} else if err != nil {
-		log.Printf("管理员改密解析目标 email 失败(fail-open) id=%d: %v", id, err)
+		log.Printf("admin password change: failed to resolve target email (fail-open) id=%d: %v", id, err)
 	}
 	return true
 
@@ -200,17 +200,17 @@ func (ps *Service) GetUserInfo(ctx context.Context, email string, password strin
 				Where("id = ? AND password = ?", user.Id, user.Password).
 				Update("password", newHash)
 			if res.Error != nil {
-				log.Printf("懒升级 bcrypt 失败(忽略,不影响登录) id=%d: %v", user.Id, res.Error)
+				log.Printf("lazy bcrypt upgrade failed (ignored, does not affect login) id=%d: %v", user.Id, res.Error)
 			}
 		} else {
-			log.Printf("懒升级 bcrypt 跳过(哈希出错) id=%d: %v", user.Id, herr)
+			log.Printf("lazy bcrypt upgrade skipped (hash error) id=%d: %v", user.Id, herr)
 		}
 	}
 
 	if user.PasswordChangeAt != nil {
 
 		if time.Since(*user.PasswordChangeAt) > 90*24*time.Hour {
-			userInfo.PasswordWarning = "您的密码已使用超过90天，建议您尽快更换密码。"
+			userInfo.PasswordWarning = "Your password is older than 90 days. Please update it soon."
 		}
 	} else {
 		// No PasswordChangeAt: treat as not-expired (no warning). A future policy could
@@ -228,7 +228,7 @@ func (ps *Service) GetUserInfo(ctx context.Context, email string, password strin
 func (ps *Service) UserRegister(ctx context.Context, email, password string) error {
 	mdPassword, herr := utils.HashPassword(password)
 	if herr != nil {
-		return errors.New("用户注册失败")
+		return errors.New("user registration failed")
 	}
 	now := time.Now()
 	db := model.DB(ctx).Model(&model.User{}).Debug()
@@ -236,14 +236,14 @@ func (ps *Service) UserRegister(ctx context.Context, email, password string) err
 		Email:            email,
 		Password:         mdPassword,
 		Code:             "user",
-		Description:      "普通用户",
+		Description:      "Regular User",
 		PasswordChangeAt: &now,
 	}).Error
 	if err != nil {
 		if stdErrors.Is(err, gorm.ErrDuplicatedKey) {
-			return errors.New("该邮箱已被注册")
+			return errors.New("email already registered")
 		}
-		return errors.New("用户注册失败")
+		return errors.New("user registration failed")
 	}
 	return nil
 }

@@ -109,7 +109,7 @@ func (ph *Handler) QueryReactionType(ctx *gin.Context) {
 	if reactionType != "0" && reactionType != "1" && reactionType != "2" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "reaction_type值不合法",
+			"message": "invalid reaction_type value",
 		})
 		return
 	}
@@ -132,7 +132,7 @@ func (ph *Handler) QueryCollect(ctx *gin.Context) {
 	if collectType != "0" && collectType != "1" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "collect_type值不合法",
+			"message": "invalid collect_type value",
 		})
 		return
 	}

@@ -11,7 +11,7 @@ func (ps *Service) UserFeedback(ctx context.Context, email, feedbackType, feedba
 	var user *model.User
 	err = model.DB(ctx).Model(&model.User{}).Debug().Where("email =?", email).First(&user).Error
 	if err != nil {
-		return 0, errors.New("用户不存在")
+		return 0, errors.New("user not found")
 	}
 
 	userFeedbackData := &model.UserFeedback{
@@ -24,7 +24,7 @@ func (ps *Service) UserFeedback(ctx context.Context, email, feedbackType, feedba
 	}
 	err = model.DB(ctx).Model(&model.UserFeedback{}).Debug().Create(userFeedbackData).Error
 	if err != nil {
-		return 0, errors.New("反馈存储失败")
+		return 0, errors.New("failed to store feedback")
 	}
 
 	return userFeedbackData.Id, nil

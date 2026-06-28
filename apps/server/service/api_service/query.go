@@ -181,9 +181,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			}
 			if slug == "deep_genome" {
 				serverID = taskID
-				out.Answer = "server任务创建成功：" + serverID
+				out.Answer = "Server task created: " + serverID
 			} else {
-				out.Answer = "任务创建成功：" + taskID
+				out.Answer = "Task created: " + taskID
 			}
 		}
 	}

@@ -12,7 +12,7 @@ func (ph *Handler) UserFeedback(ctx *gin.Context) {
 	feedbackType := ctx.PostForm("feedback_type")
 	feedbackContent := ctx.PostForm("feedback_content")
 	if feedbackType == "" || feedbackContent == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "反馈类型或反馈内容不能为空"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "feedback type and content cannot be empty"})
 		return
 	}
 
