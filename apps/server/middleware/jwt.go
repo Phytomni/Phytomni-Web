@@ -49,6 +49,7 @@ func GenerateToken(username string) (string, error) {
 			// iat = now-iatSkew: absorbs multi-instance/NTP skew and is never in the future
 			// (golang-jwt v3 verifyIat has no leeway, strict now>=iat). The revocation layer
 			// compares iat against epoch/floor.
+			IssuedAt:  now.Add(-IatSkew).Unix(),
 			ExpiresAt: now.Add(TokenLifetime).Unix(),
 		},
 	}
