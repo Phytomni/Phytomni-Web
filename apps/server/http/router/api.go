@@ -87,20 +87,4 @@ func Api(r *gin.RouterGroup) {
 	{
 		relayDownloadRouter.GET("/relay-file", apiHandler.RelayFileDownload) // token-authenticated OBS relay streaming download
 	}
-
-	// /api/v1/server: public (no JWT) external server entry point.
-	serverRouter := r.Group("api/v1/server").Use(i18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
-	serverTaskHandler := api_handler.NewHandler()
-	{
-		serverRouter.POST("/tasks", serverTaskHandler.ServerCreateTask)      // external client creates a task via server
-		serverRouter.PATCH("/tasks/:id", serverTaskHandler.ServerUpdateTask) // external client updates a task (server_id in path)
-	}
-
-	// Legacy external alias: external clients still call /v1/nky/server/*; remove after they
-	// backport to /api/v1/server/tasks (design §2.1: no permanent compatibility layer).
-	legacyServerRouter := r.Group("v1/nky/server").Use(i18n.Localize(), middleware.CORS(), middleware.GlobalMiddleware())
-	{
-		legacyServerRouter.POST("/create_task", serverTaskHandler.ServerCreateTask) // alias → POST /api/v1/server/tasks
-		legacyServerRouter.POST("/update_task", serverTaskHandler.ServerUpdateTask) // alias → PATCH /api/v1/server/tasks/:id
-	}
 }

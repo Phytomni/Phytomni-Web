@@ -55,21 +55,39 @@ func TestRelayFileRouteSkipsJWTAuth(t *testing.T) {
 	}
 }
 
-// TestServerTaskRouteSkipsJWTAuth: the external server-task API is open (clients
-// call it without a JWT). A no-Authorization POST must reach ServerCreateTask
-// (which inserts a row → success) rather than be rejected by AuthMiddleware.
-func TestServerTaskRouteSkipsJWTAuth(t *testing.T) {
+// TestLoginRouteSkipsJWTAuth: the login endpoint is open — you must be able to
+// authenticate WITHOUT already holding a JWT. A no-Authorization POST must reach
+// the Login handler (which, with an empty body, fails CheckEmailExists and returns
+// 409 Conflict) rather than be rejected 401/403 by AuthMiddleware. This locks the
+// "login is not behind AuthMiddleware" wiring invariant after the server-task
+// probe was removed. ratelimit.enabled stays at its default (OFF) so the per-IP
+// limiter does not turn this into a 429.
+func TestLoginRouteSkipsJWTAuth(t *testing.T) {
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.Exec(`CREATE TABLE server_tool_logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		server_id TEXT, tool_result TEXT, tool_name TEXT, server_file_path TEXT,
-		server_status TEXT, sync_status INTEGER,
-		created_at DATETIME, updated_at DATETIME, delete_at DATETIME
-	)`).Error; err != nil {
-		t.Fatalf("create table: %v", err)
+	// Login reads users; the OperationLog middleware post-writes user_operation_logs.
+	// Hand-write the minimal columns (User carries MySQL type:enum tags that SQLite
+	// AutoMigrate rejects); unlisted columns scan as zero values.
+	ddl := []string{
+		`CREATE TABLE users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT, password TEXT, code TEXT,
+			first_login_status TEXT, login_failed_count INTEGER DEFAULT 0,
+			locked_until DATETIME, last_login_at DATETIME, password_change_at DATETIME,
+			created_at DATETIME, updated_at DATETIME
+		)`,
+		`CREATE TABLE user_operation_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER, client_ip TEXT, path TEXT, method TEXT,
+			created_at DATETIME
+		)`,
+	}
+	for _, stmt := range ddl {
+		if err := gdb.Exec(stmt).Error; err != nil {
+			t.Fatalf("create table: %v", err)
+		}
 	}
 	db.Set("phytomni-server", gdb)
 
@@ -77,13 +95,13 @@ func TestServerTaskRouteSkipsJWTAuth(t *testing.T) {
 	engine := gin.New()
 	Api(engine.Group("/"))
 
-	form := url.Values{"server_id": {"srv-wiring-1"}, "server_status": {"running"}, "tool_name": {"demo"}}
+	form := url.Values{"email": {""}, "password": {""}}
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/tasks", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/sessions", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	engine.ServeHTTP(w, req)
 
 	if w.Code == http.StatusUnauthorized || w.Code == http.StatusForbidden {
-		t.Fatalf("server/tasks rejected the no-JWT request with %d; it must NOT sit behind AuthMiddleware (got body=%s)", w.Code, w.Body.String())
+		t.Fatalf("auth/sessions rejected the no-JWT request with %d; login must NOT sit behind AuthMiddleware (got body=%s)", w.Code, w.Body.String())
 	}
 }

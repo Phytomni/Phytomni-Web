@@ -179,27 +179,26 @@ func TestApiV1AuthLifecycleRoutes(t *testing.T) {
 	)
 }
 
-// TestApiV1CrossBoundaryAliases pins the cross-boundary endpoints (Bot writeback,
-// external server tasks): the new RESTful routes are live, AND the old paths stay
-// registered as aliases until the off-repo consumers (Bot, external clients)
-// backport — so unlike the other groups these old routes must NOT disappear yet.
+// TestApiV1CrossBoundaryAliases pins the surviving Bot-writeback cross-boundary
+// endpoints (new RESTful path + retained old alias, kept until the Bot backport).
+// The external server-task surface (POST /api/v1/server/tasks + the /v1/nky/server
+// aliases) was removed once it was confirmed to have no real external caller —
+// the four routes below MUST stay gone (negative assertion guards against a
+// regression re-registering them).
 func TestApiV1CrossBoundaryAliases(t *testing.T) {
 	routes := routeSet(t)
 	assertRoutes(t, routes,
 		[]string{
 			"PATCH /api/v1/async-tasks/analyst-log",
+		},
+		[]string{
 			"POST /api/v1/server/tasks",
 			"PATCH /api/v1/server/tasks/:id",
+			"POST /v1/nky/server/create_task",
+			"POST /v1/nky/server/update_task",
 		},
-		nil,
 	)
-	for _, alias := range []string{
-		"POST /query/analyst/update_log",
-		"POST /v1/nky/server/create_task",
-		"POST /v1/nky/server/update_task",
-	} {
-		if !routes[alias] {
-			t.Errorf("cross-boundary alias %q should still be registered", alias)
-		}
+	if !routes["POST /query/analyst/update_log"] {
+		t.Errorf("Bot-writeback alias %q should still be registered", "POST /query/analyst/update_log")
 	}
 }
