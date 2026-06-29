@@ -23,7 +23,7 @@ how to roll back.
    Vite `80→5173`, DB name `nongke→phytomni`, **all tables `s_*` → unprefixed
    plural**. The running binary will not boot against the old config/schema.
 2. **RESTful `/api/v1`** — every business endpoint moved; nginx needs a new
-   `/api/v1` location; two cross-boundary old aliases retained temporarily.
+   `/api/v1` location; one cross-boundary old alias retained temporarily.
 3. **Redis subsystem live** (token revocation, rate limit, OBS cache) —
    requires a reachable Redis; all features fail-open if Redis is down.
 4. **Auth hardening** — server-side logout, unique email index, register flood
@@ -83,7 +83,7 @@ real values, never paste them into tickets or logs.
 | DB name | `nongke` | `phytomni` | DSN changes; `CREATE DATABASE` + data copy or `RENAME` |
 | DB registry key | `nky_client_go` | `phytomni-server` | `app.yml` `db:` block key changes |
 | Table names | `s_user`, `s_question_agent_logs`, … (11 tables, `s_` prefix, singular) | `users`, `question_agent_logs`, … (unprefixed, plural) | `RENAME TABLE` for each; GORM `TableName()` rewritten |
-| API paths | `/auth/*`, `/v1/*`, `/query` (verb-in-path) | `/api/v1/*` RESTful + retained aliases | nginx needs `/api/v1` location; frontend rebuilt |
+| API paths | `/auth/*`, `/v1/*`, `/query` (verb-in-path) | `/api/v1/*` RESTful + retained alias | nginx needs `/api/v1` location; frontend rebuilt |
 | Redis | Commented out at boot; cache package present but inert | Activated (`redis.enabled` default true); revocation + ratelimit + OBS cache | Requires reachable Redis; all fail-open if down |
 | Auth | Login only; no server logout; MD5/bcrypt lazy upgrade already live | + `POST /api/v1/auth/logout` + `/logout-all` (token revocation); unique email index; register flood floor; ChatLimit gate (OFF) | New endpoints; one-time unique-index migration; dark-launched gate |
 | Sentry | Wired (inert) | Removed | Drop dep; no config action |
@@ -100,7 +100,7 @@ real values, never paste them into tickets or logs.
 | Component | Port | Role |
 |---|---|---|
 | nginx | `:443` (TLS, `phytomni.cn`) | TLS termination + reverse proxy by path + serves the SPA |
-| Go service | `:8080` (**was `:8082`**) | Serves `/api/v1/*` + retained aliases `/query/analyst/update_log`, `/v1/nky/server/*`. Sole MySQL writer |
+| Go service | `:8080` (**was `:8082`**) | Serves `/api/v1/*` + retained alias `/query/analyst/update_log`. Sole MySQL writer |
 | Bot | `:8000` (internal) | Unchanged — Go relays chat here; deployed by the Bot team |
 | MySQL | `:3306` | **`phytomni` database** (was `nongke`) |
 | Redis | `:6379` (**now required**) | Token revocation + rate limit + OBS listing cache (all fail-open) |
@@ -121,8 +121,8 @@ real values, never paste them into tickets or logs.
 
 ```
                           ┌──────────────────────────────────────────┐
- Browser ── HTTPS ──▶ nginx│ /api/v1, /query/analyst/update_log,       │──▶ MySQL :3306 (phytomni, plural tables)
- (phytomni.cn :443)        │   /v1/nky/server/*  ─▶ Go     :8080       │──▶ Redis :6379 (revocation/ratelimit/obscache)
+ Browser ── HTTPS ──▶ nginx│ /api/v1, /query/analyst/update_log        │──▶ MySQL :3306 (phytomni, plural tables)
+ (phytomni.cn :443)        │                     ─▶ Go     :8080       │──▶ Redis :6379 (revocation/ratelimit/obscache)
                           └──────────────────────────────────────────┘
                                                   │ relay (Bearer <PTM_WEB_KEY>)
                                                   ▼
@@ -423,16 +423,16 @@ team before any removal.
 
 ### 7.1 Reverse-proxy rules (to Go `:8080`)
 
-The Go service now serves `/api/v1/*` plus two retained aliases. nginx must
-proxy them to `127.0.0.1:8080`:
+The Go service now serves `/api/v1/*` plus one retained alias. nginx must
+proxy it to `127.0.0.1:8080`:
 
 ```nginx
 # NEW: RESTful business API
 location /api/v1 { proxy_pass http://127.0.0.1:8080; }
 
-# RETAINED aliases (until Bot / external client backport)
+# RETAINED alias (until Bot backport) — the /v1/nky/server/* block was removed
+# with the Go server-task surface (no real external caller).
 location /query/analyst/update_log { proxy_pass http://127.0.0.1:8080; }
-location /v1/nky/server/           { proxy_pass http://127.0.0.1:8080; }
 
 # CHANGED port: was :8082 — keep only if you still serve /query here
 # (the /query send endpoint is now POST /api/v1/conversations/:id/messages,
@@ -589,11 +589,10 @@ roll back:
 - **`/api/v1` is frontend+backend coupled.** The old frontend calls `/auth` +
   `/v1`; the new frontend calls `/api/v1`. Never serve the new frontend
   against the old binary or vice versa — deploy them together (§8).
-- **Retained aliases.** `/query/analyst/update_log` (Bot writeback) and
-  `/v1/nky/server/*` (external server client) still serve on the new binary.
-  Remove the nginx locations only after the Bot backports to
-  `PATCH /api/v1/async-tasks/analyst-log` and the external client backports to
-  `/api/v1/server/*`.
+- **Retained alias.** `/query/analyst/update_log` (Bot writeback) still serves
+  on the new binary. Remove the nginx location only after the Bot backports to
+  `PATCH /api/v1/async-tasks/analyst-log`. (The `/v1/nky/server/*` external
+  server alias was removed — no real external caller.)
 - **Orphan config blocks.** `email:` and `huawei:` in `app.yml` have no
   consumers. Leaving them is harmless; removing them is cosmetic.
 - **ChatLimit dark launch.** `chatlimit.enforce` defaults to `false` — no

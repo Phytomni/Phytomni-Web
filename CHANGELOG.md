@@ -50,6 +50,18 @@ or more commits on the branch.
 - **Frontend dev proxy + API docs refreshed**; two missed frontend wrappers
   fixed in the `/api/v1` sweep; open-route wiring locked with tests.
 
+## 🔥 Removed — external server-task surface
+
+- **Server-task HTTP surface removed** — the external task-registration routes
+  `POST /api/v1/server/tasks` / `PATCH /api/v1/server/tasks/:id` and their
+  `/v1/nky/server/{create,update}_task` aliases, plus the
+  `ServerCreateTask`/`ServerUpdateTask` handler & service, are deleted. They had
+  no real external caller (external server clients call Bot, not Go; task status
+  is driven by the `SyncBotRuns` cron over `question_agent_logs`). The
+  `server_tool_logs` table and `model.ServerToolLogs` are kept (historical rows
+  preserved; not dropped). Ops removes the nginx `/v1/nky/server/` block on the
+  next maintenance window.
+
 ## ✨ Auth & registration hardening
 
 - **Server-side logout + token revocation** — `POST /api/v1/auth/logout`

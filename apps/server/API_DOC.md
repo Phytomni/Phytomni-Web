@@ -235,27 +235,3 @@ No Token required to access.
 *   **Parameters**:
     *   `id` (int, required): Record ID
     *   `document_format` (string, required): Target format
-
----
-
-## 3. Server-Internal Endpoints (Server)
-Path prefix `/api/v1/server`.
-
-#### Create Task
-*   **URL**: `/api/v1/server/tasks`
-*   **Method**: `POST`
-*   **Description**: **Note: The legacy path `POST /v1/nky/server/create_task` continues to be served as a temporary alias until external callers complete migration.**
-*   **Parameters**:
-    *   `server_id` (string, required): Service ID
-    *   `server_status` (string, required): Status
-    *   `tool_name` (string, required): Tool name
-
-#### Update Task
-*   **URL**: `/api/v1/server/tasks/{id}`
-*   **Method**: `PATCH`
-*   **Description**: **Note: The legacy path `POST /v1/nky/server/update_task` continues to be served as a temporary alias until external callers complete migration.**
-*   **Parameters**:
-    *   `id` (string, path, required): Service ID (formerly request body field `server_id`, now migrated to URL path segment)
-    *   `tool_result` (string, required): Result
-    *   `server_file_path` (string, required): File path
-    *   `server_status` (string, required): Status

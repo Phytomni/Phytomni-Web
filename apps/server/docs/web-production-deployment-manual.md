@@ -6,7 +6,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 
 > **⚠️ This release includes an API path reorganization (RESTful `/api/v1`):** the Go business API has been consolidated under the RESTful `/api/v1` prefix (both verbs and resource paths change); the authoritative mapping is in [`API_DOC.md`](../API_DOC.md). Ops notes:
 > - **The nginx reverse proxy must add an `/api/v1` location** pointing at the Go service; the frontend only calls `/api/v1`, and the old `/auth`, `/v1`, `/query` frontend surfaces are retired.
-> - **Cross-boundary legacy aliases remain temporarily**: the Bot still calls `POST /query/analyst/update_log` and external server clients still call `/v1/nky/server/*` — these two old routes stay served as aliases on the Go side, to be removed by ops after the Bot / external clients are backported.
+> - **Cross-boundary legacy alias remains temporarily**: the Bot still calls `POST /query/analyst/update_log` — this old route stays served as an alias on the Go side, to be removed by ops after the Bot is backported. (The former `/v1/nky/server/*` external server entry point was removed — confirmed to have no real external caller; external server clients call Bot, not Go.)
 > - If the curl/nginx examples below still reference old paths, the new contract always takes `API_DOC.md`'s `/api/v1` as authoritative; a full operations-level path reconciliation lands together with this release at cutover.
 
 ---
@@ -61,7 +61,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 | Component | Port | Role |
 |---|---|---|
 | nginx | `:443` (TLS, `phytomni.cn`) | TLS termination + reverse proxy by path + serves the SPA |
-| Go service | `:8080` | Serves `/api/v1/*` (plus the retained back-compat aliases `/query/analyst/update_log` and `/v1/nky/server/*`). Sole MySQL writer |
+| Go service | `:8080` | Serves `/api/v1/*` (plus the retained back-compat alias `/query/analyst/update_log`). Sole MySQL writer |
 | Bot | `:8000` | **Internal only.** Go relays chat here; the browser never reaches it directly. Deployed by the Bot team |
 | MySQL | `:3306` | `phytomni` database |
 | Legacy Python chat service | **(verify on-server)** | Retired at cutover; remove from nginx once `/query` points at Go |
