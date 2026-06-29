@@ -1,5 +1,5 @@
-/* 主题样式文件 */
-/* 浅色主题 */
+/* Theme stylesheet */
+/* Light theme */
 .theme-light {
   --color-background: #ffffff;
   --color-background-soft: #f8f8f8;
@@ -9,7 +9,7 @@
   --color-heading: #2c3e50;
   --color-text: #2c3e50;
   
-  /* Element Plus 变量 */
+  /* Element Plus variables */
   --el-bg-color: #ffffff;
   --el-bg-color-page: #ffffff;
   --el-text-color-primary: #2c3e50;
@@ -20,7 +20,7 @@
   --el-fill-color: #f0f2f5;
 }
 
-/* 深色主题 */
+/* Dark theme */
 .theme-dark {
   --color-background: #1a1a1a;
   --color-background-soft: #1a1a1a;
@@ -30,7 +30,7 @@
   --color-heading: #ffffff;
   --color-text: rgba(235, 235, 235, 0.64);
   
-  /* Element Plus 变量 */
+  /* Element Plus variables */
   --el-bg-color: #1a1a1a;
   --el-bg-color-page: #1a1a1a;
   --el-text-color-primary: #ffffff;
@@ -41,14 +41,14 @@
   --el-fill-color: #2a2a2a;
 }
 
-/* 全局主题过渡效果 */
+/* Global theme transition */
 * {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
-/* 深色主题下的特殊样式调整 */
+/* Special style overrides for dark theme */
 .theme-dark {
-  /* 头部样式调整 */
+  /* Header style overrides */
   .el-header {
     background-color: var(--el-bg-color) !important;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
@@ -60,7 +60,7 @@
   .input-container-bottom{
     background: var(--color-background) !important;
   }
-  /* 侧边栏样式调整 */
+  /* Sidebar style overrides */
   .sidebar {
     background-color: var(--el-bg-color-soft) !important;
     box-shadow: 2px 0 8px 0 rgba(0, 0, 0, 0.3);
@@ -92,17 +92,17 @@
     }
   }
   
-  /* 主内容区域样式调整 */
+  /* Main content area style overrides */
   .main-content {
     background-color: var(--el-bg-color) !important;
   }
-  
-  /* 表格样式调整 - 使用单一黑色背景 */
+
+  /* Table style overrides - using a single black background */
   .el-table {
     background-color: #1a1a1a !important;
     color: var(--el-text-color-primary) !important;
     
-    /* 表头样式 */
+    /* Table header styles */
     .el-table__header-wrapper {
       background-color: #1a1a1a !important;
       
@@ -117,7 +117,7 @@
       }
     }
     
-    /* 表格主体样式 */
+    /* Table body styles */
     .el-table__body-wrapper {
       background-color: #1a1a1a !important;
       
@@ -133,7 +133,7 @@
             border-bottom-color: var(--el-border-color) !important;
           }
           
-          /* hover效果使用浅灰色 */
+          /* Hover effect uses light grey */
           &:hover {
             background-color: #2a2a2a !important;
             
@@ -143,7 +143,7 @@
           }
         }
         
-        /* 偶数行也使用相同背景色 */
+        /* Even rows use the same background color */
         tr.el-table__row:nth-child(even) {
           background-color: #1a1a1a !important;
           
@@ -162,12 +162,12 @@
       }
     }
     
-    /* 表格边框样式 */
+    /* Table border styles */
     .el-table__border-line {
       background-color: var(--el-border-color) !important;
     }
     
-    /* 表格分割线 */
+    /* Table dividers */
     .el-table--border {
       border-color: var(--el-border-color) !important;
       
@@ -177,7 +177,7 @@
     }
   }
   
-  /* 分页组件样式调整 */
+  /* Pagination component style overrides */
   .el-pagination {
     background-color: #1a1a1a !important;
     color: var(--el-text-color-primary) !important;
@@ -223,7 +223,7 @@
     }
   }
   
-  /* 聊天侧边栏样式调整 */
+  /* Chat sidebar style overrides */
   .chat-container .sidebar {
     background-color: #1a1a1a !important;
     border-right-color: var(--el-border-color) !important;
@@ -278,7 +278,7 @@
     }
   }
   
-  /* 聊天主区域样式调整 */
+  /* Chat main area style overrides */
   .chat-container .chat-main {
     background-color: #1a1a1a !important;
     
@@ -341,7 +341,7 @@
        }
      }
      
-     /* 欢迎容器深色主题样式 */
+     /* Welcome container dark theme styles */
      .welcome-container {
        .welcome-container-text {
          color: #ffffffd6 !important;
@@ -391,7 +391,7 @@
      }
    }
   
-  /* 通用组件深色模式样式 */
+  /* General component dark mode styles */
   .el-card {
     background-color: #1a1a1a !important;
     border-color: var(--el-border-color) !important;
@@ -460,9 +460,9 @@
   }
 }
 
-/* 浅色主题下的特殊样式调整 */
+/* Special style overrides for light theme */
 .theme-light {
-  /* 头部样式调整 */
+  /* Header style overrides */
   .el-header {
     background-color: var(--el-bg-color) !important;
     box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
@@ -470,7 +470,7 @@
   .input-container-bottom{
     background: var(--color-background) !important;
   }
-  /* 侧边栏样式调整 */
+  /* Sidebar style overrides */
   .sidebar {
     background-color: #f9fbff !important;
     box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
@@ -502,12 +502,12 @@
     }
   }
   
-  /* 主内容区域样式调整 */
+  /* Main content area style overrides */
   .main-content {
     background-color: var(--el-bg-color) !important;
   }
-  
-  /* 浅色主题下的表格样式 */
+
+  /* Table styles for light theme */
   .el-table {
     background-color: var(--el-bg-color) !important;
     color: var(--el-text-color-primary) !important;
@@ -569,7 +569,7 @@
     }
   }
   
-  /* 浅色主题下的分页样式 */
+  /* Pagination styles for light theme */
   .el-pagination {
     background-color: var(--el-bg-color) !important;
     color: var(--el-text-color-primary) !important;
@@ -615,7 +615,7 @@
     }
   }
   
-  /* 浅色主题下的通用组件样式 */
+  /* General component styles for light theme */
   .el-card {
     background-color: var(--el-bg-color) !important;
     border-color: var(--el-border-color) !important;
@@ -673,7 +673,7 @@
     }
   }
   
-  /* 浅色主题下的欢迎容器样式 */
+  /* Welcome container styles for light theme */
   .welcome-container {
     .welcome-container-text {
       color: var(--el-text-color-primary) !important;
