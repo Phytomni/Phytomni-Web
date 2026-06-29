@@ -52,28 +52,28 @@ export function useSidebarNavigation(opts: {
   const handleCommand = (command: string) => {
     switch (command) {
       case "userManagement":
-        if (hasPermission("用户管理")) handleUserManagement();
+        if (hasPermission("User management")) handleUserManagement();
         break;
       case "systemMonitor":
-        if (hasPermission("系统监控")) handleSystemMonitor();
+        if (hasPermission("System monitor")) handleSystemMonitor();
         break;
       case "permissionManagement":
-        if (hasPermission("角色权限分配")) handlePermissionManagement();
+        if (hasPermission("Role permission assignment")) handlePermissionManagement();
         break;
       case "globalConfig":
-        if (hasPermission("全局策略配置")) handleGlobalConfig();
+        if (hasPermission("Global config")) handleGlobalConfig();
         break;
       case "adminManagement":
-        if (hasPermission("管理员管理")) handleAdminManagement();
+        if (hasPermission("Admin management")) handleAdminManagement();
         break;
       case "history":
-        if (hasPermission("历史记录")) handleHistory();
+        if (hasPermission("History")) handleHistory();
         break;
       case "profile":
-        if (hasPermission("个人资料管理")) handleProfile();
+        if (hasPermission("Profile management")) handleProfile();
         break;
       case "cloudStorage":
-        if (hasPermission("网盘空间")) handleCloudStorage();
+        if (hasPermission("Cloud storage")) handleCloudStorage();
         break;
       case "feedback":
         handleFeedback();

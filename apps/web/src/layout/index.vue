@@ -56,13 +56,13 @@
                 <span>{{ $t("menu.favorites") }}</span>
               </el-menu-item>
               <!-- History -->
-              <el-menu-item v-if="hasPermission('历史记录')" index="/history">
+              <el-menu-item v-if="hasPermission('History')" index="/history">
                 <el-icon><Clock /></el-icon>
                 <span>{{ $t("user.history") }}</span>
               </el-menu-item>
               <!-- Profile management -->
               <el-menu-item
-                v-if="hasPermission('个人资料管理')"
+                v-if="hasPermission('Profile management')"
                 index="/profile"
               >
                 <el-icon><User /></el-icon>
@@ -70,7 +70,7 @@
               </el-menu-item>
               <!-- Cloud storage -->
               <el-menu-item
-                v-if="hasPermission('网盘空间')"
+                v-if="hasPermission('Cloud storage')"
                 index="/cloud-storage"
               >
                 <el-icon><Folder /></el-icon>
@@ -85,18 +85,18 @@
                 <span>{{ $t("menu.taskManager") }}</span>
               </el-menu-item>
               <!-- User management -->
-              <el-menu-item v-if="hasPermission('用户管理')" index="/user-list">
+              <el-menu-item v-if="hasPermission('User management')" index="/user-list">
                 <el-icon><User /></el-icon>
                 <span>{{ $t("menu.userList") }}</span>
               </el-menu-item>
               <!-- System monitoring -->
-              <el-menu-item v-if="hasPermission('系统监控')" index="/log-list">
+              <el-menu-item v-if="hasPermission('System monitor')" index="/log-list">
                 <el-icon><List /></el-icon>
                 <span>{{ $t("menu.logList") }}</span>
               </el-menu-item>
               <!-- Role permission assignment -->
               <el-menu-item
-                v-if="hasPermission('角色权限分配')"
+                v-if="hasPermission('Role permission assignment')"
                 index="/permi-manage"
               >
                 <el-icon><Lock /></el-icon>
@@ -104,7 +104,7 @@
               </el-menu-item>
               <!-- Global config -->
               <el-menu-item
-                v-if="hasPermission('全局策略配置')"
+                v-if="hasPermission('Global config')"
                 index="/global-config"
               >
                 <el-icon><Setting /></el-icon>
@@ -112,7 +112,7 @@
               </el-menu-item>
               <!-- Admin management -->
               <el-menu-item
-                v-if="hasPermission('管理员管理')"
+                v-if="hasPermission('Admin management')"
                 index="/admin-management"
               >
                 <el-icon><User /></el-icon>

@@ -34,31 +34,31 @@ describe("useSidebarNavigation", () => {
   }
 
   // hasPermission
-  it("hasPermission 当权限在列表中时返回 true", () => {
+  it("hasPermission returns true when the permission is in the list", () => {
     const router = makeRouter();
-    const userStore = makeUserStore(["用户管理", "系统监控"]);
+    const userStore = makeUserStore(["User management", "System monitor"]);
     const { hasPermission } = useSidebarNavigation(makeOpts(router, userStore));
-    expect(hasPermission("用户管理")).toBe(true);
-    expect(hasPermission("系统监控")).toBe(true);
+    expect(hasPermission("User management")).toBe(true);
+    expect(hasPermission("System monitor")).toBe(true);
   });
 
-  it("hasPermission 当权限不在列表中时返回 false", () => {
+  it("hasPermission returns false when the permission is not in the list", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { hasPermission } = useSidebarNavigation(makeOpts(router, userStore));
-    expect(hasPermission("用户管理")).toBe(false);
+    expect(hasPermission("User management")).toBe(false);
   });
 
   // handleCommand — permission-gated: userManagement
-  it("handleCommand('userManagement') 有权限时跳转 /user-list", () => {
+  it("handleCommand('userManagement') navigates to /user-list when permitted", () => {
     const router = makeRouter();
-    const userStore = makeUserStore(["用户管理"]);
+    const userStore = makeUserStore(["User management"]);
     const { handleCommand } = useSidebarNavigation(makeOpts(router, userStore));
     handleCommand("userManagement");
     expect(router.push).toHaveBeenCalledWith("/user-list");
   });
 
-  it("handleCommand('userManagement') 无权限时不跳转", () => {
+  it("handleCommand('userManagement') does not navigate without permission", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { handleCommand } = useSidebarNavigation(makeOpts(router, userStore));
@@ -67,15 +67,15 @@ describe("useSidebarNavigation", () => {
   });
 
   // handleCommand — permission-gated: systemMonitor
-  it("handleCommand('systemMonitor') 有权限时跳转 /log-list", () => {
+  it("handleCommand('systemMonitor') navigates to /log-list when permitted", () => {
     const router = makeRouter();
-    const userStore = makeUserStore(["系统监控"]);
+    const userStore = makeUserStore(["System monitor"]);
     const { handleCommand } = useSidebarNavigation(makeOpts(router, userStore));
     handleCommand("systemMonitor");
     expect(router.push).toHaveBeenCalledWith("/log-list");
   });
 
-  it("handleCommand('systemMonitor') 无权限时不跳转", () => {
+  it("handleCommand('systemMonitor') does not navigate without permission", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { handleCommand } = useSidebarNavigation(makeOpts(router, userStore));
@@ -84,7 +84,7 @@ describe("useSidebarNavigation", () => {
   });
 
   // handleCommand — ungated: feedback
-  it("handleCommand('feedback') 无需权限跳转 /feedback", () => {
+  it("handleCommand('feedback') navigates to /feedback without requiring permission", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { handleCommand } = useSidebarNavigation(makeOpts(router, userStore));
@@ -93,7 +93,7 @@ describe("useSidebarNavigation", () => {
   });
 
   // handleCommand — ungated: changePassword
-  it("handleCommand('changePassword') 无需权限跳转 /change-password", () => {
+  it("handleCommand('changePassword') navigates to /change-password without requiring permission", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { handleCommand } = useSidebarNavigation(makeOpts(router, userStore));
@@ -102,7 +102,7 @@ describe("useSidebarNavigation", () => {
   });
 
   // handleCommand — logout
-  it("handleCommand('logout') 调用 FedLogOut 并在 resolve 后调用 router.replace('/login')", async () => {
+  it("handleCommand('logout') calls FedLogOut and then router.replace('/login') after it resolves", async () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { handleCommand } = useSidebarNavigation(makeOpts(router, userStore));
@@ -114,7 +114,7 @@ describe("useSidebarNavigation", () => {
   });
 
   // emit-up callbacks
-  it("startNewChat() 调用 onStartNewChat 回调", () => {
+  it("startNewChat() calls the onStartNewChat callback", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const opts = makeOpts(router, userStore);
@@ -123,7 +123,7 @@ describe("useSidebarNavigation", () => {
     expect(opts.onStartNewChat).toHaveBeenCalled();
   });
 
-  it("startTutorial() 调用 onStartTutorial 回调", () => {
+  it("startTutorial() calls the onStartTutorial callback", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const opts = makeOpts(router, userStore);
@@ -132,7 +132,7 @@ describe("useSidebarNavigation", () => {
     expect(opts.onStartTutorial).toHaveBeenCalled();
   });
 
-  it("selectChat(id) 调用 onSelectChat 并传入对话 id", () => {
+  it("selectChat(id) calls onSelectChat with the dialogue id", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const opts = makeOpts(router, userStore);
@@ -142,7 +142,7 @@ describe("useSidebarNavigation", () => {
   });
 
   // route-push handlers
-  it("openKnowledgeBase() 跳转 /gene-display", () => {
+  it("openKnowledgeBase() navigates to /gene-display", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { openKnowledgeBase } = useSidebarNavigation(makeOpts(router, userStore));
@@ -150,7 +150,7 @@ describe("useSidebarNavigation", () => {
     expect(router.push).toHaveBeenCalledWith("/gene-display");
   });
 
-  it("openFavorites() 跳转 /favorites", () => {
+  it("openFavorites() navigates to /favorites", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { openFavorites } = useSidebarNavigation(makeOpts(router, userStore));

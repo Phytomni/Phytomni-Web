@@ -381,7 +381,7 @@
           <el-dropdown-menu>
             <!-- History -->
             <el-dropdown-item
-              v-if="hasPermission('历史记录')"
+              v-if="hasPermission('History')"
               command="history"
               :icon="Document"
             >
@@ -389,7 +389,7 @@
             </el-dropdown-item>
             <!-- Profile management -->
             <el-dropdown-item
-              v-if="hasPermission('个人资料管理')"
+              v-if="hasPermission('Profile management')"
               command="profile"
               :icon="User"
             >
@@ -397,7 +397,7 @@
             </el-dropdown-item>
             <!-- Cloud storage -->
             <el-dropdown-item
-              v-if="hasPermission('网盘空间')"
+              v-if="hasPermission('Cloud storage')"
               command="cloudStorage"
               :icon="Folder"
             >
@@ -405,7 +405,7 @@
             </el-dropdown-item>
             <!-- User management -->
             <el-dropdown-item
-              v-if="hasPermission('用户管理')"
+              v-if="hasPermission('User management')"
               command="userManagement"
               :icon="User"
             >
@@ -413,7 +413,7 @@
             </el-dropdown-item>
             <!-- Role permission assignment -->
             <el-dropdown-item
-              v-if="hasPermission('角色权限分配')"
+              v-if="hasPermission('Role permission assignment')"
               command="permissionManagement"
               :icon="Lock"
             >
@@ -421,7 +421,7 @@
             </el-dropdown-item>
             <!-- System monitoring -->
             <el-dropdown-item
-              v-if="hasPermission('系统监控')"
+              v-if="hasPermission('System monitor')"
               command="systemMonitor"
               :icon="Monitor"
             >
@@ -429,7 +429,7 @@
             </el-dropdown-item>
             <!-- Global policy configuration -->
             <el-dropdown-item
-              v-if="hasPermission('全局策略配置')"
+              v-if="hasPermission('Global config')"
               command="globalConfig"
               :icon="Setting"
             >
@@ -437,7 +437,7 @@
             </el-dropdown-item>
             <!-- Admin management -->
             <el-dropdown-item
-              v-if="hasPermission('管理员管理')"
+              v-if="hasPermission('Admin management')"
               command="adminManagement"
               :icon="User"
             >
