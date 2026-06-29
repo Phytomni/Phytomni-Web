@@ -4,16 +4,16 @@ This manual takes the **currently-deployed production Web stack** to **this rele
 
 The headline change: **the legacy Python chat service is retired. The Go service becomes the sole `/query` gateway and relays chat traffic to the Bot.** The Bot is deployed and operated by a separate team — this manual covers only the **Web side** of that integration (URL, key, ports, boot check, relay routes) and links the Bot's own deployment doc where Bot bring-up is needed.
 
-> **⚠️ 本次发布含 API 路径重整(RESTful `/api/v1`):** Go 业务 API 已整体收敛到 RESTful 的 `/api/v1` 前缀(动词与资源路径均变),权威映射见 [`API_DOC.md`](../API_DOC.md)。运维须知:
-> - **nginx 反代须新增 `/api/v1` location** 指向 Go 服务;前端只打 `/api/v1`,旧 `/auth`、`/v1`、`/query` 前端面已废弃。
-> - **跨边界旧别名暂留**:Bot 仍调 `POST /query/analyst/update_log`、外部 server 客户端仍调 `/v1/nky/server/*`——这两条旧路由 Go 侧继续作为别名服务,待 Bot / 外部客户端 backport 后由运维移除。
-> - 下文 curl/nginx 示例若仍引用旧路径,新契约一律以 `API_DOC.md` 的 `/api/v1` 为准;完整运营级路径核对在 cutover 时随本次发布一并落地。
+> **⚠️ This release includes an API path reorganization (RESTful `/api/v1`):** the Go business API has been consolidated under the RESTful `/api/v1` prefix (both verbs and resource paths change); the authoritative mapping is in [`API_DOC.md`](../API_DOC.md). Ops notes:
+> - **The nginx reverse proxy must add an `/api/v1` location** pointing at the Go service; the frontend only calls `/api/v1`, and the old `/auth`, `/v1`, `/query` frontend surfaces are retired.
+> - **Cross-boundary legacy aliases remain temporarily**: the Bot still calls `POST /query/analyst/update_log` and external server clients still call `/v1/nky/server/*` — these two old routes stay served as aliases on the Go side, to be removed by ops after the Bot / external clients are backported.
+> - If the curl/nginx examples below still reference old paths, the new contract always takes `API_DOC.md`'s `/api/v1` as authoritative; a full operations-level path reconciliation lands together with this release at cutover.
 
 ---
 
 ## 0. Scope & conventions
 
-**Audience.** Ops/运维 with: shell on the production host (`/root/...`), MySQL admin, nginx admin, and the ability to edit `config/app.yml` and restart the Go service.
+**Audience.** Ops with: shell on the production host (`/root/...`), MySQL admin, nginx admin, and the ability to edit `config/app.yml` and restart the Go service.
 
 **Wording.** This guide never uses version numbers. It says **"the current production stack"** for what is running today and **"this release" / "the new build"** for what you are deploying.
 
@@ -196,11 +196,11 @@ Run after the backup in §3. All statements are **additive and safe** on existin
 
 ```sql
 ALTER TABLE s_user
-  MODIFY COLUMN first_login_status ENUM('0','1') NOT NULL DEFAULT '0' COMMENT '登陆状态';
+  MODIFY COLUMN first_login_status ENUM('0','1') NOT NULL DEFAULT '0' COMMENT 'login status';
 ALTER TABLE s_question_agent_logs
-  MODIFY COLUMN reaction_type ENUM('0','1','2') NOT NULL DEFAULT '0' COMMENT '点赞状态';
+  MODIFY COLUMN reaction_type ENUM('0','1','2') NOT NULL DEFAULT '0' COMMENT 'reaction status';
 ALTER TABLE s_question_agent_logs
-  MODIFY COLUMN collect_type ENUM('0','1') NOT NULL DEFAULT '0' COMMENT '收藏状态';
+  MODIFY COLUMN collect_type ENUM('0','1') NOT NULL DEFAULT '0' COMMENT 'collect status';
 ```
 
 ### 5.2 Add `bot_run_id` (idempotent CLI)
@@ -213,7 +213,7 @@ Equivalent DDL (for reference only — prefer the command above):
 
 ```sql
 ALTER TABLE s_question_agent_logs
-  ADD COLUMN bot_run_id VARCHAR(64) NULL COMMENT 'Bot run_id 跨服务关联键' AFTER server_id;
+  ADD COLUMN bot_run_id VARCHAR(64) NULL COMMENT 'Bot run_id cross-service join key' AFTER server_id;
 ```
 
 ### 5.3 Add `image_paths` (idempotent CLI)
@@ -226,7 +226,7 @@ Equivalent DDL (for reference only — prefer the command above):
 
 ```sql
 ALTER TABLE s_question_agent_logs
-  ADD COLUMN image_paths TEXT NULL COMMENT '图廊图片OBS路径(JSON数组)' AFTER download_path;
+  ADD COLUMN image_paths TEXT NULL COMMENT 'gallery image OBS paths (JSON array)' AFTER download_path;
 ```
 
 > **Do not skip this.** The Go model writes `image_paths` on every chat-log insert. Without the column, **every `/query` returns 500** (`Unknown column 'image_paths'`) even though the Bot answered. This was reproduced in a live end-to-end run. The `add-image-paths` subcommand is dev/CI fresh-schema convenience; production DDL still runs manually (use the CLI or the SQL above, your choice).

@@ -327,7 +327,7 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [35] Application of sonication- and vacuum infiltration-assisted Agrobacterium-mediated transformation of rice embryo (Oryza sativa L.)
 
-[36] 基于Spark的WOA-BP水稻产量预测
+[36] Spark-based WOA-BP rice yield prediction
 
 [37] Deep Learning-Based Classification of Rice Varieties from Seed Coat Images
 
@@ -335,9 +335,9 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [39] Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice
 
-[40] 中国与南亚水稻恢复系资源产量性状的配合力分析（英文）
+[40] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)
 
-[41] 中国与南亚水稻恢复系资源产量性状的配合力分析（英文）
+[41] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)
 
 [42] 00002HUHLL7G7JP0MPDO7JP1M9R
 
@@ -345,7 +345,7 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [44] Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice
 
-[45] 中国与南亚水稻恢复系资源产量性状的配合力分析（英文）
+[45] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)
 
 [46] Rice cultivar cll18
 
@@ -381,7 +381,7 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [62] Application of sonication- and vacuum infiltration-assisted Agrobacterium-mediated transformation of rice embryo (Oryza sativa L.)
 
-[63] 水稻广亲和性的遗传机制及其利用
+[63] Genetic mechanism of wide compatibility in rice and its utilization
 
 [64] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots
 
@@ -413,9 +413,9 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [78] Rice cultivar cll18
 
-[79] 中国与南亚水稻恢复系资源产量性状的配合力分析（英文）
+[79] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)
 
-[80] 中国与南亚水稻恢复系资源产量性状的配合力分析（英文）
+[80] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)
 
 [81] 00002HUHLL7G7JP0MPDO7JP1M9R
 
@@ -427,7 +427,7 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [85] Heterologous expression and antimicrobial activity of OsGASR3 from rice (Oryza sativa L.).
 
-[86] 中国与南亚水稻恢复系资源产量性状的配合力分析（英文）
+[86] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)
 
 [87] Rice cultivar cl181-ar
 
@@ -447,17 +447,17 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [95] 00002HUHLL7G7JP0MPDO7JP1M9R
 
-[96] OsGA3ox通过合成不同活性GA调控水稻育性及株高
+[96] OsGA3ox regulates rice fertility and plant height by synthesizing GAs of different activities
 
-[97] OsGA3ox通过合成不同活性GA调控水稻育性及株高
+[97] OsGA3ox regulates rice fertility and plant height by synthesizing GAs of different activities
 
 [98] Morphophysiological Changes During Vegetative Stage Drought Stress in the Local Pigmented Rice (Oryza sativa L.) from East Nusa Tenggara
 
 [99] The crystal structure of rice (Oryza sativa L.) Os4BGlu12, an oligosaccharide and tuberonic acid glucoside-hydrolyzing β-glucosidase with significant thioglucohydrolase activity.
 
-[100] 水稻广亲和性的遗传机制及其利用
+[100] Genetic mechanism of wide compatibility in rice and its utilization
 
-[101] 水稻广亲和性的遗传机制及其利用
+[101] Genetic mechanism of wide compatibility in rice and its utilization
 
 [102] Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.).
 
@@ -471,9 +471,9 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [107] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress
 
-[108] 水稻细胞质雄性不育系18A的创制及应用价值初探
+[108] Creation of rice cytoplasmic male-sterile line 18A and a preliminary study of its application value
 
-[109] 水稻细胞质雄性不育系18A的创制及应用价值初探
+[109] Creation of rice cytoplasmic male-sterile line 18A and a preliminary study of its application value
 
 [110] Isolated nucleic acid sequence conferring stress tolerance/susceptibility in rice
 
@@ -489,7 +489,7 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [116] The effects of field pre-harvest sprouting on the morphological structure and physicochemical properties of rice (Oryza sativa L.) starch
 
-[117] 中国与南亚水稻恢复系资源产量性状的配合力分析（英文）
+[117] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)
 
 [118] Rice cultivar cl181-ar
 
@@ -557,7 +557,7 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [150] Expression and in silico structural analysis of a rice ( Oryza sativa ) hemoglobin 5
 
-[151] 双季优质稻产量和品质形成对开放式主动增温的响应
+[151] Response of yield and quality formation in double-cropping high-quality rice to open-field active warming
 
 [152] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice
 
@@ -565,9 +565,9 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [154] Chemical constituents of brown rice grain (Oryza sativa)
 
-[155] 水稻广亲和性的遗传机制及其利用
+[155] Genetic mechanism of wide compatibility in rice and its utilization
 
-[156] 早熟恢复系DR02生育期特性的遗传分析
+[156] Genetic analysis of growth-period traits of the early-maturing restorer line DR02
 
 [157] Rice glutaredoxin GRXS15 confers broad-spectrum resistance to Xanthomonas oryzae pv. oryzae and Fusarium fujikuroi
 
@@ -701,7 +701,7 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [222] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots
 
-[223] 双季优质稻产量和品质形成对开放式主动增温的响应
+[223] Response of yield and quality formation in double-cropping high-quality rice to open-field active warming
 
 [224] Characterization and fine mapping of nonstop glumes 2 (nsg2) mutant in rice (Oryza sativa L.)
 
@@ -747,11 +747,11 @@ To validate computational findings and explore the molecular mechanisms underlyi
 
 [245] Computational and Transcriptomic Analysis Unraveled OsMATE34 as a Putative Anthocyanin Transporter in Black Rice (Oryza sativa L.) Caryopsis
 
-[246] 早熟恢复系DR02生育期特性的遗传分析
+[246] Genetic analysis of growth-period traits of the early-maturing restorer line DR02
 
-[247] 水稻广亲和性的遗传机制及其利用
+[247] Genetic mechanism of wide compatibility in rice and its utilization
 
-[248] 早熟恢复系DR02生育期特性的遗传分析
+[248] Genetic analysis of growth-period traits of the early-maturing restorer line DR02
 
 [249] Hybrid rice HR180001
 

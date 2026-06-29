@@ -1,32 +1,32 @@
-# API 接口文档
+# API Documentation
 
-## 基础信息
+## Base Information
 
-> **API 前缀变更说明**: Go 业务 API 现已统一迁移至 `/api/v1` 前缀的 RESTful 方案。所有受保护业务接口的路径均以 `/api/v1` 开头，动词语义由 HTTP Method 承载。CORS 预检（OPTIONS）由 CORS 中间件自动处理，不作为显式路由列出。
+> **API Prefix Change Notice**: The Go business API has been fully migrated to the RESTful `/api/v1` prefix scheme. All protected business endpoint paths begin with `/api/v1`; verb semantics are carried by the HTTP Method. CORS preflight (OPTIONS) is handled automatically by the CORS middleware and is not listed as an explicit route.
 
 *   **Base URL**: `http://localhost:8080`
-*   **Content-Type**: `application/x-www-form-urlencoded` (除非特别说明)
+*   **Content-Type**: `application/x-www-form-urlencoded` (unless otherwise specified)
 
 ---
 
-## 1. 认证模块 (Auth)
-无需 Token 即可访问。
+## 1. Authentication Module (Auth)
+No Token required to access.
 
-### 1.1 用户注册
+### 1.1 User Registration
 *   **URL**: `/api/v1/auth/registrations`
 *   **Method**: `POST`
-*   **Description**: 自主注册普通用户
+*   **Description**: Self-register as a regular user
 *   **Parameters**:
-    *   `email` (string, required): 邮箱
-    *   `password` (string, required): 密码
+    *   `email` (string, required): Email address
+    *   `password` (string, required): Password
 
-### 1.2 用户登录
+### 1.2 User Login
 *   **URL**: `/api/v1/auth/sessions`
 *   **Method**: `POST`
-*   **Description**: 登录并获取 Token
+*   **Description**: Log in and obtain a Token
 *   **Parameters**:
-    *   `email` (string, required): 邮箱
-    *   `password` (string, required): 密码
+    *   `email` (string, required): Email address
+    *   `password` (string, required): Password
 *   **Response**:
     ```json
     {
@@ -40,222 +40,222 @@
     }
     ```
 
-### 1.3 下载OBS文件
+### 1.3 Download OBS File
 *   **URL**: `/api/v1/downloads/obs-file`
 *   **Method**: `GET`
-*   **Description**: 生成并重定向到下载链接
+*   **Description**: Generate and redirect to a download link
 *   **Parameters**:
-    *   `obs_path` (string, required): OBS路径
-    *   `username` (string, required): 用户名
+    *   `obs_path` (string, required): OBS path
+    *   `username` (string, required): Username
 
 ---
 
-## 2. 业务模块 (V1)
-**注意**: 所有接口需要在 Header 中携带 `Authorization: Bearer <token>`
+## 2. Business Module (V1)
+**Note**: All endpoints require `Authorization: Bearer <token>` in the request Header.
 
-### 2.1 问答与对话管理
+### 2.1 Q&A and Conversation Management
 
-#### 查询问答列表
+#### List Conversations
 *   **URL**: `/api/v1/conversations`
 *   **Method**: `GET`
-*   **Description**: 查看用户所有历史问答列表
+*   **Description**: Retrieve all historical Q&A entries for the current user
 
-#### 查询子级对话
+#### Get Child Messages
 *   **URL**: `/api/v1/conversations/{id}/messages`
 *   **Method**: `GET`
-*   **Description**: 根据对话ID查找全部子级对话
+*   **Description**: Retrieve all child messages by conversation ID
 *   **Parameters**:
-    *   `id` (int, path, required): 对话ID（原 `dialogue_id` 查询参数，已迁移至 URL 路径段）
+    *   `id` (int, path, required): Conversation ID (formerly the `dialogue_id` query parameter, now migrated to URL path segment)
 
-#### 删除问题
+#### Delete Conversation
 *   **URL**: `/api/v1/conversations/{id}`
 *   **Method**: `DELETE`
-*   **Description**: 软删除指定问题
+*   **Description**: Soft-delete the specified conversation
 *   **Parameters**:
-    *   `id` (int, path, required): 问题ID（已迁移至 URL 路径段，无需请求体）
+    *   `id` (int, path, required): Conversation ID (migrated to URL path segment; no request body required)
 
-#### 重命名问题
+#### Rename Conversation
 *   **URL**: `/api/v1/conversations/{id}`
 *   **Method**: `PATCH`
-*   **Description**: 重命名问题列表项
+*   **Description**: Rename a conversation list item
 *   **Parameters**:
-    *   `id` (int, path, required): 问题ID（已迁移至 URL 路径段）
-    *   `rename` (string, body, required): 新名称
+    *   `id` (int, path, required): Conversation ID (migrated to URL path segment)
+    *   `rename` (string, body, required): New name
 
-#### 点赞/点踩
+#### Like / Dislike
 *   **URL**: `/api/v1/conversations/{id}/reaction`
 *   **Method**: `PUT`
-*   **Description**: 对对话进行评价
+*   **Description**: Rate a conversation
 *   **Parameters**:
-    *   `id` (int, path, required): 记录ID（已迁移至 URL 路径段）
-    *   `reaction_type` (string, body, required): 类型 (0:无, 1:赞, 2:踩)
+    *   `id` (int, path, required): Record ID (migrated to URL path segment)
+    *   `reaction_type` (string, body, required): Type (0: none, 1: like, 2: dislike)
 
-#### 收藏对话
+#### Favorite Conversation
 *   **URL**: `/api/v1/conversations/{id}/favorite`
 *   **Method**: `PUT`
-*   **Description**: 收藏或取消收藏对话
+*   **Description**: Favorite or un-favorite a conversation
 *   **Parameters**:
-    *   `id` (int, path, required): 记录ID（已迁移至 URL 路径段）
-    *   `collect_type` (string, body, required): 类型 (0:取消, 1:收藏)
+    *   `id` (int, path, required): Record ID (migrated to URL path segment)
+    *   `collect_type` (string, body, required): Type (0: cancel, 1: favorite)
 
-#### 收藏列表
+#### Favorites List
 *   **URL**: `/api/v1/conversations?favorite=true`
 *   **Method**: `GET`
-*   **Description**: 获取用户收藏的所有对话
+*   **Description**: Retrieve all conversations favorited by the current user
 
-### 2.2 用户与权限管理
+### 2.2 User and Permission Management
 
-#### 管理员注册用户
+#### Admin Register User
 
 *   **URL**: `/api/v1/users`
 *   **Method**: `POST`
-*   **Description**: 仅管理员可用，用于注册其他管理员或VIP用户
+*   **Description**: Admin-only; used to register other admins or VIP users
 *   **Parameters**:
-    *   `email` (string, required): 邮箱
-    *   `password` (string, required): 密码
-    *   `code` (string, required): 角色 (admin/vip_user/user)
-    *   `id` (int, optional): 操作人ID
+    *   `email` (string, required): Email address
+    *   `password` (string, required): Password
+    *   `code` (string, required): Role (admin/vip_user/user)
+    *   `id` (int, optional): Operator ID
 
-#### 修改密码
+#### Change Password
 *   **URL**: `/api/v1/users/me/password`
 *   **Method**: `PUT`
-*   **Description**: 用户自行修改密码
+*   **Description**: User changes their own password
 *   **Parameters**:
-    *   `password` (string, required): 旧密码
-    *   `new_password` (string, required): 新密码
+    *   `password` (string, required): Current password
+    *   `new_password` (string, required): New password
 
-#### 用户列表
+#### User List
 *   **URL**: `/api/v1/users`
 *   **Method**: `GET`
-*   **Description**: 管理员查看用户列表
+*   **Description**: Admin view of the user list
 *   **Parameters**:
-    *   `current` (int, optional): 当前页
-    *   `size` (int, optional): 页大小
+    *   `current` (int, optional): Current page
+    *   `size` (int, optional): Page size
 
-#### 修改用户权限
+#### Update User Permissions
 *   **URL**: `/api/v1/users/{id}/permissions`
 *   **Method**: `PUT`
-*   **Description**: 管理员修改用户权限或密码
+*   **Description**: Admin updates a user's role or password
 *   **Parameters**:
-    *   `id` (int, path, required): 目标用户ID（已迁移至 URL 路径段，不再通过请求体传递）
-    *   `code` (string, body, optional): 新角色代码
-    *   `password` (string, body, optional): 重置密码
+    *   `id` (int, path, required): Target user ID (migrated to URL path segment; no longer passed in request body)
+    *   `code` (string, body, optional): New role code
+    *   `password` (string, body, optional): Reset password
 
-#### 管理员手动解锁用户
+#### Admin Manually Unlock User
 *   **URL**: `/api/v1/users/{id}/unlock`
 *   **Method**: `POST`
-*   **Description**: 管理员手动解除用户账户的锁定状态（包括登录失败计数清零）
+*   **Description**: Admin manually removes the lock on a user account (including resetting the failed-login counter to zero)
 *   **Parameters**:
-    *   `id` (int, path, required): 目标用户ID（原请求体字段 `user_id`，已迁移至 URL 路径段）
+    *   `id` (int, path, required): Target user ID (formerly request body field `user_id`, now migrated to URL path segment)
 
-#### 用户工具权限
+#### User Tool Permissions
 *   **URL**: `/api/v1/users/me/tool-permissions`
 *   **Method**: `GET`
-*   **Description**: 获取当前用户可用的工具权限
+*   **Description**: Retrieve the tool permissions available to the current user
 
-#### 用户反馈
+#### User Feedback
 *   **URL**: `/api/v1/user-feedback`
 *   **Method**: `POST`
-*   **Description**: 提交用户反馈
+*   **Description**: Submit user feedback
 *   **Parameters**:
-    *   `feedback_type` (string, required): 反馈类型
-    *   `feedback_content` (string, required): 内容
+    *   `feedback_type` (string, required): Feedback type
+    *   `feedback_content` (string, required): Content
 
-### 2.3 任务与日志 (Agent)
+### 2.3 Tasks and Logs (Agent)
 
-#### 任务列表
+#### Task List
 *   **URL**: `/api/v1/async-tasks`
 *   **Method**: `GET`
 *   **Parameters**:
-    *   `current` (int, optional): 当前页
-    *   `size` (int, optional): 页大小
+    *   `current` (int, optional): Current page
+    *   `size` (int, optional): Page size
 
-#### 任务状态
+#### Task Status
 *   **URL**: `/api/v1/async-tasks/{id}`
 *   **Method**: `GET`
 *   **Parameters**:
-    *   `id` (int, path, required): 任务ID（已迁移至 URL 路径段，原为查询参数 `id`）
+    *   `id` (int, path, required): Task ID (migrated to URL path segment; formerly query parameter `id`)
 
-#### 获取分析日志
+#### Get Analyst Log
 *   **URL**: `/api/v1/async-tasks/{id}/analyst-log`
 *   **Method**: `GET`
 *   **Parameters**:
-    *   `id` (int, path, required): 日志ID（已迁移至 URL 路径段，原为查询参数 `id`）
+    *   `id` (int, path, required): Log ID (migrated to URL path segment; formerly query parameter `id`)
 
-#### 更新分析日志（Bot 回写接口）
+#### Update Analyst Log (Bot Write-back Endpoint)
 *   **URL**: `/api/v1/async-tasks/analyst-log`
 *   **Method**: `PATCH`
-*   **Description**: 跨仓 Bot 回写接口。**注意：旧路径 `POST /query/analyst/update_log` 作为临时别名继续提供服务，直至 Bot 侧完成迁移。**
+*   **Description**: Cross-repo Bot write-back endpoint. **Note: The legacy path `POST /query/analyst/update_log` continues to be served as a temporary alias until the Bot side completes migration.**
 
-#### 查询操作日志
+#### Query Operation Logs
 *   **URL**: `/api/v1/operation-logs`
 *   **Method**: `GET`
-*   **Description**: 查询用户操作日志，支持按用户ID和时间范围筛选。仅管理员可访问（admin/super_admin）。
+*   **Description**: Query user operation logs with filtering by user ID and time range. Accessible to admins only (admin/super_admin).
 *   **Parameters**:
-    *   `user_ids` (string, query, optional): 用户ID列表，逗号分隔，例如 "1,2,3"（原请求体字段，已迁移至查询字符串）
-    *   `start_time` (string, query, optional): 开始时间，格式 "2006-01-02 15:04:05"（原请求体字段，已迁移至查询字符串）
-    *   `end_time` (string, query, optional): 结束时间，格式 "2006-01-02 15:04:05"（原请求体字段，已迁移至查询字符串）
+    *   `user_ids` (string, query, optional): Comma-separated list of user IDs, e.g. "1,2,3" (formerly request body field, now migrated to query string)
+    *   `start_time` (string, query, optional): Start time, format "2006-01-02 15:04:05" (formerly request body field, now migrated to query string)
+    *   `end_time` (string, query, optional): End time, format "2006-01-02 15:04:05" (formerly request body field, now migrated to query string)
 
-### 2.4 基因数据与文件下载
+### 2.4 Gene Data and File Downloads
 
-#### 基因列表
+#### Gene List
 *   **URL**: `/api/v1/genes`
 *   **Method**: `GET`
 *   **Parameters**:
-    *   `current` (int, optional): 当前页
-    *   `size` (int, optional): 页大小
-    *   `title` (string, optional): 搜索标题
+    *   `current` (int, optional): Current page
+    *   `size` (int, optional): Page size
+    *   `title` (string, optional): Search title
 
-#### 基因详情
+#### Gene Details
 *   **URL**: `/api/v1/genes/{id}`
 *   **Method**: `GET`
 *   **Parameters**:
-    *   `id` (string, path, required): 基因文件名（原查询参数 `file_name`，已迁移至 URL 路径段）
+    *   `id` (string, path, required): Gene file name (formerly query parameter `file_name`, now migrated to URL path segment)
 
-#### 基因数据存储
+#### Store Gene Data
 *   **URL**: `/api/v1/gene-examples`
 *   **Method**: `POST`
 *   **Content-Type**: `multipart/form-data`
 *   **Parameters**:
-    *   `species_code` (string, required): 物种代码
-    *   `gene_id` (string, required): 基因ID
-    *   `doc_list` (file, required): JSON文件
-    *   `files` (file[], required): 文件列表
-    *   `images` (file[], required): 图片列表
+    *   `species_code` (string, required): Species code
+    *   `gene_id` (string, required): Gene ID
+    *   `doc_list` (file, required): JSON file
+    *   `files` (file[], required): File list
+    *   `images` (file[], required): Image list
 
-#### 下载Analyst文件
+#### Download Analyst File
 *   **URL**: `/api/v1/downloads/analyst-agent/obs-file`
 *   **Method**: `GET`
 *   **Parameters**:
-    *   `obs_path` (string, required): OBS路径
+    *   `obs_path` (string, required): OBS path
 
-#### 文件格式转换下载
+#### Download File with Format Conversion
 *   **URL**: `/api/v1/downloads/rendering-file`
 *   **Method**: `POST`
 *   **Parameters**:
-    *   `id` (int, required): 记录ID
-    *   `document_format` (string, required): 目标格式
+    *   `id` (int, required): Record ID
+    *   `document_format` (string, required): Target format
 
 ---
 
-## 3. 服务端内部接口 (Server)
-路径前缀 `/api/v1/server`。
+## 3. Server-Internal Endpoints (Server)
+Path prefix `/api/v1/server`.
 
-#### 创建任务
+#### Create Task
 *   **URL**: `/api/v1/server/tasks`
 *   **Method**: `POST`
-*   **Description**: **注意：旧路径 `POST /v1/nky/server/create_task` 作为临时别名继续提供服务，直至外部调用方完成迁移。**
+*   **Description**: **Note: The legacy path `POST /v1/nky/server/create_task` continues to be served as a temporary alias until external callers complete migration.**
 *   **Parameters**:
-    *   `server_id` (string, required): 服务ID
-    *   `server_status` (string, required): 状态
-    *   `tool_name` (string, required): 工具名
+    *   `server_id` (string, required): Service ID
+    *   `server_status` (string, required): Status
+    *   `tool_name` (string, required): Tool name
 
-#### 更新任务
+#### Update Task
 *   **URL**: `/api/v1/server/tasks/{id}`
 *   **Method**: `PATCH`
-*   **Description**: **注意：旧路径 `POST /v1/nky/server/update_task` 作为临时别名继续提供服务，直至外部调用方完成迁移。**
+*   **Description**: **Note: The legacy path `POST /v1/nky/server/update_task` continues to be served as a temporary alias until external callers complete migration.**
 *   **Parameters**:
-    *   `id` (string, path, required): 服务ID（原请求体字段 `server_id`，已迁移至 URL 路径段）
-    *   `tool_result` (string, required): 结果
-    *   `server_file_path` (string, required): 文件路径
-    *   `server_status` (string, required): 状态
+    *   `id` (string, path, required): Service ID (formerly request body field `server_id`, now migrated to URL path segment)
+    *   `tool_result` (string, required): Result
+    *   `server_file_path` (string, required): File path
+    *   `server_status` (string, required): Status

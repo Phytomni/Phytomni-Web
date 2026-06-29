@@ -36,7 +36,7 @@ how to roll back.
 
 ## 0. Scope & conventions
 
-**Audience.** Ops/运维 with: shell on the production host (`/root/...`), MySQL
+**Audience.** Ops with: shell on the production host (`/root/...`), MySQL
 admin, nginx admin, Redis admin, and the ability to edit `config/app.yml` and
 restart the Go service.
 
@@ -598,7 +598,7 @@ roll back:
   consumers. Leaving them is harmless; removing them is cosmetic.
 - **ChatLimit dark launch.** `chatlimit.enforce` defaults to `false` — no
   behavior change at deploy. Flipping to `true` blocks self-registered users
-  (`chat_limit=0`) from `/query` (403 `账户额度不足`). Bypass for
+  (`chat_limit=0`) from `/query` (403 `Account has no chat quota`). Bypass for
   admin/super_admin/vip_user. Decide deliberately before flipping.
 - **Rate limit dark launch.** `ratelimit.enabled` defaults to `false`. Flip
   only after confirming `login`/`register`/`query` limits suit your traffic.

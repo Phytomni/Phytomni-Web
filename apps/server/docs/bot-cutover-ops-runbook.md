@@ -8,7 +8,7 @@ file or into commits.
 Architecture reference: the internal Web↔Bot target-architecture document (maintained separately, not in this repo).
 The gateway is dormant until `bot.proxy_enabled=true`.
 
-> **⚠️ API 路径重整(RESTful `/api/v1`):** 异步结果回写已迁到 `PATCH /api/v1/async-tasks/analyst-log`;Bot 当前仍调旧 `POST /query/analyst/update_log`,该旧路由 Go 侧作为别名暂留,待 Bot backport 到新路径后由运维移除。下文若引用旧 `/query/...` 路径,新契约以 [`API_DOC.md`](../API_DOC.md) 的 `/api/v1` 为准。
+> **⚠️ API path reorganization (RESTful `/api/v1`):** async result write-back has moved to `PATCH /api/v1/async-tasks/analyst-log`; the Bot currently still calls the old `POST /query/analyst/update_log`, which stays served as an alias on the Go side and will be removed by ops once the Bot is backported to the new path. Where the text below references old `/query/...` paths, the new contract takes [`API_DOC.md`](../API_DOC.md)'s `/api/v1` as authoritative.
 
 ## 1. Bot service token (ops-only)
 
@@ -123,7 +123,7 @@ keeping an instant rollback live throughout verification:
      `ptm_<web>` key carries the `relay:obs` scope (§2). Downloads whose
      stored path predates the cutover (legacy EIHealth prefixes/buckets
      outside Bot's output root) are rejected by Bot and surface to users
-     as "历史数据已不再提供下载" — expected, forward-only policy.
+     as "historical data is no longer available for download" — expected, forward-only policy.
 
 ## 7. Phase 6 ETL trigger (Option Y only — currently deferred)
 

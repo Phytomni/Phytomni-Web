@@ -53,39 +53,39 @@ ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDhNlP2Lqes5MXsbuhl8ZTxCzm4mI0tvwDzI2+5CUlg
 
 # Chat AI
 
-一个支持多对话并行处理的智能聊天系统。
+An intelligent chat system that supports parallel handling of multiple conversations.
 
-## 新功能特性
+## Features
 
-### 对话独立性
-- 每个对话都有独立的状态管理
-- 支持多对话并行处理
-- 每个对话维护独立的：
-  - 发送状态 (`isSending`)
-  - 输入内容 (`messageInput`)
-  - 文件列表 (`fileList`)
-  - 历史记录 (`historyQuestion`)
-  - 复制状态 (`copyVisible`, `copyTimeRef`)
-  - 日志数据 (`logData`, `loadingLog`)
-  - 刷新状态 (`refreshingMessages`)
+### Conversation independence
+- Each conversation has its own independent state management
+- Supports parallel handling of multiple conversations
+- Each conversation maintains its own:
+  - Sending state (`isSending`)
+  - Input content (`messageInput`)
+  - File list (`fileList`)
+  - History (`historyQuestion`)
+  - Copy state (`copyVisible`, `copyTimeRef`)
+  - Log data (`logData`, `loadingLog`)
+  - Refresh state (`refreshingMessages`)
 
-### 并行处理能力
-- 可以在多个对话中同时发送消息
-- 每个对话的加载状态互不影响
-- 支持在不同对话间快速切换
-- 保持每个对话的完整上下文
+### Parallel processing
+- Can send messages in multiple conversations at the same time
+- Each conversation's loading state is independent of the others
+- Supports fast switching between conversations
+- Preserves the full context of each conversation
 
-### 状态管理优化
-- 使用 `chatStates` 对象管理所有对话状态
-- 通过 `getChatState()` 函数获取或创建对话状态
-- 使用 computed 属性实现响应式状态绑定
-- 确保对话切换时状态正确恢复
+### State management
+- Uses the `chatStates` object to manage all conversation state
+- Gets or creates conversation state via the `getChatState()` function
+- Uses computed properties for reactive state binding
+- Ensures state is correctly restored when switching conversations
 
-## 技术实现
+## Implementation
 
-### 核心架构
+### Core architecture
 ```typescript
-// 对话状态管理
+// Conversation state management
 const chatStates = ref<Record<string, {
   isSending: boolean;
   messageInput: string;
@@ -98,20 +98,20 @@ const chatStates = ref<Record<string, {
   refreshingMessages: Record<string, boolean>;
 }>>({});
 
-// 获取或创建对话状态
+// Get or create conversation state
 const getChatState = (dialogueId: string) => {
   if (!chatStates.value[dialogueId]) {
     chatStates.value[dialogueId] = {
-      // 初始化状态
+      // Initialize state
     };
   }
   return chatStates.value[dialogueId];
 };
 ```
 
-### 响应式状态绑定
+### Reactive state binding
 ```typescript
-// 输入框内容 - 基于当前对话
+// Input content — based on the current conversation
 const messageInput = computed({
   get: () => {
     if (!currentChatId.value) return '';
@@ -124,16 +124,16 @@ const messageInput = computed({
 });
 ```
 
-## 使用方法
+## Usage
 
-1. **创建新对话**：点击侧边栏的"新对话"按钮
-2. **切换对话**：在侧边栏点击任意对话进行切换
-3. **并行发送**：可以在不同对话中同时发送消息
-4. **状态保持**：切换对话时会保持每个对话的完整状态
+1. **Create a new conversation**: click the "New conversation" button in the sidebar
+2. **Switch conversations**: click any conversation in the sidebar to switch to it
+3. **Parallel send**: send messages in different conversations at the same time
+4. **State persistence**: switching conversations preserves each conversation's full state
 
-## 开发说明
+## Development notes
 
-- 所有对话相关的状态都通过 `chatStates` 进行管理
-- 使用 `currentChatId` 来标识当前活跃的对话
-- 通过 computed 属性实现状态的响应式更新
-- 确保每个对话的独立性，避免状态冲突
+- All conversation-related state is managed through `chatStates`
+- Use `currentChatId` to identify the currently active conversation
+- Reactive state updates are implemented via computed properties
+- Ensure each conversation's independence to avoid state conflicts

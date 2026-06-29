@@ -1,91 +1,91 @@
-# 新增页面功能总结
+# New Pages Feature Summary
 
-## 概述
-根据权限接口返回的 `permission_list`，我们成功创建了三个对应的页面，并在 sidebar 中添入了入口按钮。
+## Overview
+Based on the `permission_list` returned by the permissions API, three corresponding pages have been created and entry buttons added to the sidebar.
 
-## 新增页面
+## New Pages
 
-### 1. 历史记录页面 (`/history`)
-- **文件位置**: `src/views/history/index.vue`
-- **功能描述**: 显示用户的聊天历史记录
-- **主要功能**:
-  - 历史记录列表展示（网格布局）
-  - 支持重命名和删除操作
-  - 点击可跳转到对应的聊天对话
-  - 响应式设计，支持移动端
+### 1. History Page (`/history`)
+- **File location**: `src/views/history/index.vue`
+- **Description**: Displays the user's chat history
+- **Key features**:
+  - History list display (grid layout)
+  - Supports rename and delete operations
+  - Click to navigate to the corresponding chat conversation
+  - Responsive design with mobile support
 
-### 2. 个人资料管理页面 (`/profile`)
-- **文件位置**: `src/views/profile/index.vue`
-- **功能描述**: 管理用户个人信息和账户安全
-- **主要功能**:
-  - 基本信息编辑（用户名、邮箱、手机号、机构、职位）
-  - 账户安全设置（密码修改）
-  - 用户权限显示
-  - 使用统计展示（对话数、文件数、存储使用、最后登录）
+### 2. Profile Management Page (`/profile`)
+- **File location**: `src/views/profile/index.vue`
+- **Description**: Manage user personal information and account security
+- **Key features**:
+  - Basic info editing (username, email, phone number, organization, position)
+  - Account security settings (password change)
+  - User permission display
+  - Usage statistics (conversation count, file count, storage usage, last login)
 
-### 3. 网盘空间页面 (`/cloud-storage`)
-- **文件位置**: `src/views/cloud-storage/index.vue`
-- **功能描述**: 文件存储和管理系统
-- **主要功能**:
-  - 存储统计概览（总文件数、已用存储、可用存储、使用率）
-  - 文件上传和文件夹创建
-  - 文件列表展示（支持列表和网格两种视图）
-  - 文件操作（下载、重命名、移动、分享、删除）
-  - 面包屑导航
-  - 搜索功能
+### 3. Cloud Storage Page (`/cloud-storage`)
+- **File location**: `src/views/cloud-storage/index.vue`
+- **Description**: File storage and management system
+- **Key features**:
+  - Storage statistics overview (total files, used storage, available storage, usage rate)
+  - File upload and folder creation
+  - File list display (supports list and grid views)
+  - File operations (download, rename, move, share, delete)
+  - Breadcrumb navigation
+  - Search functionality
 
-## 路由配置
-在 `src/router/index.ts` 中添加了三个新路由：
+## Route Configuration
+Three new routes have been added in `src/router/index.ts`:
 ```typescript
 {
   path: '/history',
   name: 'history',
   component: () => import('@/views/history/index.vue'),
-  meta: { title: '历史记录' },
+  meta: { title: 'History' },
 },
 {
   path: '/profile',
   name: 'profile',
   component: () => import('@/views/profile/index.vue'),
-  meta: { title: '个人资料管理' },
+  meta: { title: 'Profile' },
 },
 {
   path: '/cloud-storage',
   name: 'cloudStorage',
   component: () => import('@/views/cloud-storage/index.vue'),
-  meta: { title: '网盘空间' },
+  meta: { title: 'Cloud storage' },
 },
 ```
 
-## 国际化支持
-在 `src/locales/langs/zh-CN.ts` 和 `src/locales/langs/en-US.ts` 中添加了对应的多语言文本支持。
+## Internationalization Support
+Corresponding multilingual text has been added to `src/locales/langs/zh-CN.ts` and `src/locales/langs/en-US.ts`.
 
-## Sidebar 入口
-在 `src/views/chat/sidebar.vue` 中添加了三个新的按钮：
-- 历史记录按钮（Document 图标）
-- 个人资料按钮（User 图标）
-- 网盘空间按钮（Folder 图标）
+## Sidebar Entries
+Three new buttons have been added in `src/views/chat/sidebar.vue`:
+- History button (Document icon)
+- Profile button (User icon)
+- Cloud Storage button (Folder icon)
 
-按钮样式与现有的收藏页按钮保持一致，支持折叠状态下的圆形图标显示。
+Button styles are consistent with the existing favorites button and support circular icon display in collapsed state.
 
-## 技术特点
-1. **响应式设计**: 所有页面都支持桌面端和移动端
-2. **组件化**: 使用 Element Plus 组件库，保持 UI 一致性
-3. **TypeScript 支持**: 完整的类型定义和接口设计
-4. **国际化**: 支持中英文切换
-5. **状态管理**: 使用 Vue 3 Composition API
-6. **错误处理**: 完善的错误提示和加载状态
+## Technical Highlights
+1. **Responsive design**: All pages support desktop and mobile
+2. **Component-based**: Uses the Element Plus component library for UI consistency
+3. **TypeScript support**: Complete type definitions and interface design
+4. **Internationalization**: Supports Chinese/English language switching
+5. **State management**: Uses Vue 3 Composition API
+6. **Error handling**: Comprehensive error prompts and loading states
 
-## 注意事项
-1. 目前使用的是模拟数据，实际使用时需要连接真实的 API 接口
-2. 文件上传功能需要配置实际的上传服务
-3. 权限验证需要根据实际的后端权限系统进行调整
-4. 建议在生产环境中添加更多的安全验证和错误处理
+## Notes
+1. Currently using mock data; real API endpoints must be connected before production use
+2. File upload functionality requires configuration of an actual upload service
+3. Permission verification needs to be adjusted according to the actual backend permission system
+4. It is recommended to add more security validation and error handling in the production environment
 
-## 后续优化建议
-1. 添加文件预览功能
-2. 实现文件分享和协作功能
-3. 添加文件版本管理
-4. 优化大文件上传体验
-5. 添加文件搜索和过滤功能
-6. 实现文件同步功能
+## Future Optimization Suggestions
+1. Add file preview functionality
+2. Implement file sharing and collaboration features
+3. Add file version management
+4. Optimize the large-file upload experience
+5. Add file search and filtering functionality
+6. Implement file synchronization functionality
