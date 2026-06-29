@@ -471,7 +471,11 @@ for `index.html`.
 - **TLS** on `:443` (cert paths on-server only — **verify on-server**).
 - **Per-IP rate limiting** (`limit_req_zone` + `limit_req`) — keep; the new
   app-level ratelimit is additive, not a replacement.
-- **Logs** to `/root/gauss/app/logs`.
+- **Logs** — the current setup writes logs to `/root/gauss/app/logs`, a path
+  under the gaussapp host dir. gaussapp is being retired (BI now connects to
+  Huawei GaussDB directly from the Bot), so do not carry `/root/gauss/*` forward
+  as a preserved dependency — repoint any logging still targeting it onto a
+  gaussapp-independent path before the directory is removed.
 - The separate **`/aiquery`** and **`/oneauth`** satellite proxies (unchanged).
 
 ---
