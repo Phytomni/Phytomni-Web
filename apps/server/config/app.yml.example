@@ -58,25 +58,29 @@ redis:
       type: single-node
   default: web
 
-# 限流/防滥(Redis 易失节流,全程 fail-open)。总开关默认 OFF(暗发布):上线后由
-# 运维确认再置 true。Redis 挂时一律放行,绝不因限流而拒绝登录(MySQL 账户锁定仍是
-# 持久底线)。limit/window 改动需重启生效。
+# Rate limiting / abuse control (Redis-backed throttle, fail-open throughout).
+# Master switch defaults to OFF (dark launch): flip to true only after ops
+# confirms in production. When Redis is down everything is allowed through —
+# never reject a login because of rate limiting (the MySQL account lockout is
+# still the persistent floor). limit/window changes need a restart to apply.
 ratelimit:
   enabled: false
-  login: # 公开登录 per-IP
+  login: # public login, per-IP
     limit: 60
     window: 60s
-  register: # 公开注册 per-IP
+  register: # public registration, per-IP
     limit: 10
     window: 1h
-  query: # /query per-user(护 Bot relay 成本)
+  query: # /query, per-user (guards Bot relay cost)
     limit: 30
     window: 60s
 
 
-# OBS 列举缓存(终态任务的 Web→Bot→OBS 列目录结果,fail-open)。默认 ON;仅 Redis
-# 可用且任务 status=SUCCEEDED 且列举非空时缓存。置 false 可单独旁路缓存而不影响
-# token 撤销/限流。ttl 改动需重启生效。
+# OBS listing cache (Web→Bot→OBS directory-listing results for terminal-state
+# tasks, fail-open). Defaults to ON; caches only when Redis is available and the
+# task status=SUCCEEDED and the listing is non-empty. Set false to bypass just
+# this cache without affecting token revocation / rate limiting. ttl changes
+# need a restart to apply.
 obscache:
   enabled: true
   ttl: 1h

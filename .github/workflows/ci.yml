@@ -1,12 +1,13 @@
 name: CI
 
-# 把 scripts/validate_web_local.sh 的全部 G-checks 从"开发者本地手跑"提升到
-# "PR + main push 自动跑",作 contributor-side 防御兜底:即便有人没装
-# scripts/install_git_hooks.sh,CI 也会在 PR 上拦红;另外多跑一次
-# scripts/scan_secrets.py --all 把全 tree secret 扫描固化到 CI(不仅 changed files)。
+# Promotes all of scripts/validate_web_local.sh's G-checks from "run locally by
+# the developer" to "run automatically on PR + main push", as a contributor-side
+# defense backstop: even if someone hasn't installed scripts/install_git_hooks.sh,
+# CI still blocks the PR red; it also runs scripts/scan_secrets.py --all once more
+# to pin the whole-tree secret scan into CI (not just changed files).
 #
-# 加 status check 为 required merge gate 是 GitHub repo settings 的事
-# (Branches → required status checks),不在本 workflow 范围。
+# Making the status check a required merge gate is a GitHub repo setting
+# (Branches → required status checks), outside the scope of this workflow.
 
 on:
   pull_request:
@@ -23,7 +24,7 @@ jobs:
       - name: Checkout (full history for git diff)
         uses: actions/checkout@v4
         with:
-          # validate_web_local.sh G-1 / G0 用 git diff;fetch-depth: 0 让两者拿到完整 ref
+          # validate_web_local.sh G-1 / G0 use git diff; fetch-depth: 0 gives both the full ref
           fetch-depth: 0
 
       - name: Setup Node 20 (apps/web vue-tsc / eslint / vite)

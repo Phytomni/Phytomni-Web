@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G7.5, G11, G12)
 #
-# Runs every check listed in .claude/plans/production-backport.md §"全量门禁清单":
+# Runs every check listed in .claude/plans/production-backport.md:
 #   G-1  staged/unstaged secret scan
 #   G0   git diff whitespace check
 #   G1   apps/web vue-tsc --noEmit
