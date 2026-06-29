@@ -146,7 +146,7 @@ const showStatus = (data: TaskData) => {
       return t("common.finished");
     case "FAILED":
       return t("common.failed");
-    case "RUNNING，":
+    case "RUNNING":
       return t("common.running");
     default:
       return "";
