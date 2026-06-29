@@ -45,7 +45,7 @@ describe("useAgentsPanel", () => {
   });
 
   describe("presetAgents", () => {
-    it("有 8 个条目，且首项 name 是 eager 解析的 t('chat.geneDetail')", () => {
+    it("has 8 items, and the first item's name is the eagerly resolved t('chat.geneDetail')", () => {
       const { panel } = makeComposable();
       expect(panel.presetAgents.value).toHaveLength(8);
       // The first item uses the injected t, evaluated eagerly at ref creation time
@@ -54,13 +54,13 @@ describe("useAgentsPanel", () => {
   });
 
   describe("handleAgentClick", () => {
-    it("isSending=false → router.push 被调用", () => {
+    it("isSending=false → router.push is called", () => {
       const { panel, router } = makeComposable();
       panel.handleAgentClick({ route: "/x" });
       expect(router.push).toHaveBeenCalledWith("/x");
     });
 
-    it("isSending=true → router.push 不再被调用(发送门控生效)", () => {
+    it("isSending=true → router.push is no longer called (send gating in effect)", () => {
       const isSending = ref(false);
       const { panel, router } = makeComposable({ isSending });
       panel.handleAgentClick({ route: "/x" });
@@ -73,7 +73,7 @@ describe("useAgentsPanel", () => {
   });
 
   describe("handleScroll", () => {
-    it("向下滚动 → 展开(480px);动画窗口后向上滚动 → 收起(140px)", () => {
+    it("scroll down → expand (480px); after the animation window, scroll up → collapse (140px)", () => {
       vi.useFakeTimers();
       const { panel } = makeComposable();
 
@@ -92,7 +92,7 @@ describe("useAgentsPanel", () => {
       expect(panel.containerStyle.value.height).toBe("140px");
     });
 
-    it("动画窗口内的反向滚动被 isAnimating 门控吞掉(去抖)", () => {
+    it("reverse scroll within the animation window is swallowed by the isAnimating gate (debounce)", () => {
       vi.useFakeTimers();
       const { panel } = makeComposable();
 
@@ -112,12 +112,12 @@ describe("useAgentsPanel", () => {
   });
 
   describe("getAgentTooltip", () => {
-    it("首字母小写键转换 → t('chat.agents.chatAgent')", () => {
+    it("lowercases the first letter into a key → t('chat.agents.chatAgent')", () => {
       const { panel } = makeComposable();
       expect(panel.getAgentTooltip("ChatAgent")).toBe("chat.agents.chatAgent");
     });
 
-    it("t 返回空值时回退到原始 agentName(|| 兜底分支)", () => {
+    it("falls back to the raw agentName when t returns empty (|| fallback branch)", () => {
       const emptyT = (_k: string) => "";
       const panel = useAgentsPanel({
         t: emptyT,
@@ -130,7 +130,7 @@ describe("useAgentsPanel", () => {
   });
 
   describe("showMoreInfo", () => {
-    it("调用 ElMessageBox.alert", () => {
+    it("calls ElMessageBox.alert", () => {
       const { panel } = makeComposable();
       panel.showMoreInfo("ChatAgent");
       expect(mockAlert).toHaveBeenCalledTimes(1);

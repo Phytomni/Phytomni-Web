@@ -219,7 +219,7 @@ service.interceptors.response.use(
       });
     }
 
-    if (message === "数据正在处理，请勿重复提交") return;
+    if (message === "Data is being processed, please do not resubmit") return;
     // Prefer the readable server-returned message (Go gateway error body {code, message};
     // legacy Python service detail string), otherwise fall back to axios's generic error text.
     const serverMessage =
@@ -255,7 +255,7 @@ export function download(
   filename: string
 ): Promise<void> {
   downloadLoadingInstance = ElLoading.service({
-    text: "正在下载数据，请稍候",
+    text: "Downloading data, please wait",
     spinner: "el-icon-loading",
     background: "rgba(0, 0, 0, 0.7)",
   });
@@ -291,7 +291,7 @@ export function download(
     })
     .catch((r) => {
       console.error(r);
-      ElMessage.error("下载文件出现错误，请联系管理员！");
+      ElMessage.error("An error occurred while downloading, please contact the administrator!");
       downloadLoadingInstance?.close();
     });
 }

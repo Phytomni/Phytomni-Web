@@ -94,7 +94,7 @@ export function useRefreshMessage(opts: {
         if (response.data.final_answer) {
           newAssistantMessage = {
             role: "assistant",
-            content: response.data.final_answer || "抱歉，我无法回答这个问题。",
+            content: response.data.final_answer || "Sorry, I cannot answer this question.",
             steps: response.data.steps || [],
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
@@ -162,7 +162,7 @@ export function useRefreshMessage(opts: {
               if (response.data.server_file_path) {
                 // show a loading state first
                 if (newAssistantMessage) {
-                  newAssistantMessage.content = "正在加载文件内容...";
+                  newAssistantMessage.content = "Loading file content...";
                 }
 
                 readServerFile(response.data.server_file_path)
@@ -174,7 +174,7 @@ export function useRefreshMessage(opts: {
                     ) {
                       newAssistantMessage.content = fileContent;
                     } else if (newAssistantMessage) {
-                      newAssistantMessage.content = "文件内容为空或加载失败";
+                      newAssistantMessage.content = "File content is empty or failed to load";
                     }
                     // force a view update
                     nextTick(() => {
@@ -185,7 +185,7 @@ export function useRefreshMessage(opts: {
                   .catch((error) => {
                     console.error("Failed to read DeepGenomeAgent file:", error);
                     if (newAssistantMessage) {
-                      newAssistantMessage.content = "文件加载失败，请稍后重试";
+                      newAssistantMessage.content = "Failed to load file, please try again later";
                     }
                     // force a view update
                     nextTick(() => {
@@ -327,7 +327,7 @@ export function useRefreshMessage(opts: {
       }
     } catch (error: any) {
       console.error("Failed to refresh message:", error);
-      ElMessage.error("刷新失败，请重试");
+      ElMessage.error("Refresh failed, please try again");
     } finally {
       // ensure it scrolls to the bottom
       nextTick(() => {

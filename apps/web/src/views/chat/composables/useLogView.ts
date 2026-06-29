@@ -109,7 +109,7 @@ export function useLogView(opts: {
       const response = await updateAnalystAgentLog(formData);
 
       if (response.code === 200) {
-        ElMessage.success("日志更新成功");
+        ElMessage.success("Log updated successfully");
 
         // reload the log data
         if (currentChat.value?.messages) {
@@ -153,11 +153,11 @@ export function useLogView(opts: {
           }
         }
       } else {
-        ElMessage.error("日志更新失败");
+        ElMessage.error("Failed to update log");
       }
     } catch (error) {
       console.error("Failed to update log:", error);
-      ElMessage.error("日志更新失败，请重试");
+      ElMessage.error("Failed to update log, please try again");
     } finally {
       chatState.updatingLog[messageId] = false;
 

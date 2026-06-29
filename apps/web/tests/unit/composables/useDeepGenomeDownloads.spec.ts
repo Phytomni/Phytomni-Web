@@ -41,7 +41,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     };
   }
 
-  it("调用 saveAs 并使用 props.filename 作为文件名", () => {
+  it("calls saveAs using props.filename as the file name", () => {
     const opts = makeOpts("# Hello", "report.md", []);
     const { downloadMarkdown } = useDeepGenomeDownloads(opts);
     downloadMarkdown();
@@ -52,7 +52,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     expect(blob).toBeInstanceOf(Blob);
   });
 
-  it("filename 未定义时回退到 document.md", () => {
+  it("falls back to document.md when filename is undefined", () => {
     const opts = makeOpts("content", undefined, []);
     const { downloadMarkdown } = useDeepGenomeDownloads(opts);
     downloadMarkdown();
@@ -61,7 +61,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     expect(filename).toBe("document.md");
   });
 
-  it("Blob 包含 markdown 内容", async () => {
+  it("Blob contains the markdown content", async () => {
     const opts = makeOpts("# Test\nsome content", "out.md", []);
     const { downloadMarkdown } = useDeepGenomeDownloads(opts);
     downloadMarkdown();
@@ -72,7 +72,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     expect(text).toContain("some content");
   });
 
-  it("有参考文献时序列化输出包含 ## References 和条目", async () => {
+  it("serialized output includes ## References and entries when references exist", async () => {
     const refs = [
       { html: "<div>1. Smith et al. 2023</div>", id: "ref-1" },
       { html: "<div>2. Jones 2022</div>", id: "ref-2" },
@@ -90,7 +90,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     expect(text).toContain("2. Jones 2022");
   });
 
-  it("无参考文献时不追加 References 节", async () => {
+  it("does not append a References section when there are no references", async () => {
     const opts = makeOpts("Body.", "out.md", []);
     const { downloadMarkdown } = useDeepGenomeDownloads(opts);
     downloadMarkdown();
@@ -100,7 +100,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     expect(text).not.toContain("## References");
   });
 
-  it("转义的 \\n 被展开为实际换行符", async () => {
+  it("escaped \\n is expanded into an actual newline", async () => {
     const opts = makeOpts("line1\\nline2", "out.md", []);
     const { downloadMarkdown } = useDeepGenomeDownloads(opts);
     downloadMarkdown();
@@ -110,7 +110,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     expect(text).toContain("line1\nline2");
   });
 
-  it("Blob MIME type 为 text/markdown", () => {
+  it("Blob MIME type is text/markdown", () => {
     const opts = makeOpts("text", "out.md", []);
     const { downloadMarkdown } = useDeepGenomeDownloads(opts);
     downloadMarkdown();
@@ -125,7 +125,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
-  it("给定 stub mainContentRef 时不抛异常", async () => {
+  it("does not throw given a stub mainContentRef", async () => {
     // Build a minimal stub with $el, simulating an ElMain component instance
     const fakeEl = document.createElement("div");
     fakeEl.appendChild(document.createElement("p"));

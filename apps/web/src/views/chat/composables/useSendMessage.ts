@@ -90,7 +90,7 @@ export function useSendMessage(opts: {
     let messageContent = currentMessage;
     if (chatState.fileList.length > 0) {
       const fileInfo = chatState.fileList
-        .map((file: any) => `[附件: ${file.name} (${formatFileSize(file.size)})]`)
+        .map((file: any) => `[Attachment: ${file.name} (${formatFileSize(file.size)})]`)
         .join("\n");
       messageContent = `${currentMessage}\n\n${fileInfo}`;
     }
@@ -156,7 +156,7 @@ export function useSendMessage(opts: {
         if (response.data.final_answer) {
           assistantMessage = {
             role: "assistant",
-            content: response.data.final_answer || "抱歉，我无法回答这个问题。",
+            content: response.data.final_answer || "Sorry, I cannot answer this question.",
             steps: response.data.steps || [],
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
@@ -230,7 +230,7 @@ export function useSendMessage(opts: {
               if (response.data.server_file_path) {
                 // show a loading state first
                 if (assistantMessage) {
-                  assistantMessage.content = "正在加载文件内容...";
+                  assistantMessage.content = "Loading file content...";
                 }
 
                 readServerFile(response.data.server_file_path)
@@ -238,7 +238,7 @@ export function useSendMessage(opts: {
                     if (fileContent && fileContent.trim() && assistantMessage) {
                       assistantMessage.content = fileContent;
                     } else if (assistantMessage) {
-                      assistantMessage.content = "文件内容为空或加载失败";
+                      assistantMessage.content = "File content is empty or failed to load";
                     }
                     // force a view update
                     nextTick(() => {
@@ -249,7 +249,7 @@ export function useSendMessage(opts: {
                   .catch((error) => {
                     console.error("Failed to read DeepGenomeAgent file:", error);
                     if (assistantMessage) {
-                      assistantMessage.content = "文件加载失败，请稍后重试";
+                      assistantMessage.content = "Failed to load file, please try again later";
                     }
                     // force a view update
                     nextTick(() => {
@@ -360,7 +360,7 @@ export function useSendMessage(opts: {
               // handle other unknown tool types with the default format
               assistantMessage = {
                 role: "assistant",
-                content: response.data?.answer || "抱歉，我无法回答这个问题。",
+                content: response.data?.answer || "Sorry, I cannot answer this question.",
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 download_path: response.data?.download_path || "",
@@ -412,7 +412,7 @@ export function useSendMessage(opts: {
           console.warn("assistantMessage was not created; using a default message");
           currentChat.value.messages.push({
             role: "assistant",
-            content: response.data?.answer || "抱歉，我无法回答这个问题。",
+            content: response.data?.answer || "Sorry, I cannot answer this question.",
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
             download_path: response.data?.download_path || "",
@@ -427,7 +427,7 @@ export function useSendMessage(opts: {
       } else {
         currentChat.value.messages.push({
           role: "assistant",
-          content: "抱歉，我无法回答这个问题。",
+          content: "Sorry, I cannot answer this question.",
           steps: [],
           status: "",
           upload_path: "",
@@ -458,8 +458,8 @@ export function useSendMessage(opts: {
         error.response.data.detail &&
         error.response.data.detail.code === 403
       ) {
-        ElMessageBox.alert("登录已过期，请重新登录", "系统提示", {
-          confirmButtonText: "我知道了",
+        ElMessageBox.alert("Your session has expired, please log in again", "Notice", {
+          confirmButtonText: "OK",
           type: "warning",
           callback: () => {
             const UserStore = userStore();

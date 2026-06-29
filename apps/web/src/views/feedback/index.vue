@@ -54,7 +54,7 @@ const router = useRouter();
 
 // Feedback form data
 const feedbackForm = ref({
-  feedback_type: "用户反馈",
+  feedback_type: "user_feedback",
   feedback_content: "",
 });
 
@@ -67,9 +67,9 @@ const submitting = ref(false);
 // Form validation rules
 const feedbackRules = {
   feedback_content: [
-    { required: true, message: "请输入反馈内容", trigger: "blur" },
-    { min: 10, message: "反馈内容至少10个字符", trigger: "blur" },
-    { max: 1000, message: "反馈内容不能超过1000个字符", trigger: "blur" },
+    { required: true, message: "Please enter feedback content", trigger: "blur" },
+    { min: 10, message: "Feedback must be at least 10 characters", trigger: "blur" },
+    { max: 1000, message: "Feedback cannot exceed 1000 characters", trigger: "blur" },
   ],
 };
 
@@ -104,7 +104,7 @@ const submitFeedback = async () => {
 
       if (response.code === 200) {
         // Show success message
-        ElMessage.success("反馈提交成功，感谢您的宝贵意见！");
+        ElMessage.success("Feedback submitted, thank you for your input!");
 
         // Reset form
         resetForm();
@@ -114,12 +114,12 @@ const submitFeedback = async () => {
           router.go(-1);
         }, 1500);
       } else {
-        ElMessage.error(response.message || "提交失败，请重试");
+        ElMessage.error(response.message || "Submit failed, please try again");
       }
     }
   } catch (error) {
     console.error("Failed to submit feedback:", error);
-    ElMessage.error("提交失败，请重试");
+    ElMessage.error("Submit failed, please try again");
   } finally {
     submitting.value = false;
   }

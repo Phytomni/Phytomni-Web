@@ -239,14 +239,14 @@ export function useSelectChat(opts: {
                   // if there is a server file path, read the file content asynchronously
                   if (item.server_file_path) {
                     // show a loading state first
-                    deepGenomeMessage.content = "正在加载文件内容...";
+                    deepGenomeMessage.content = "Loading file content...";
 
                     readServerFile(item.server_file_path)
                       .then((fileContent) => {
                         if (fileContent && fileContent.trim()) {
                           deepGenomeMessage.content = fileContent;
                         } else {
-                          deepGenomeMessage.content = "文件内容为空或加载失败";
+                          deepGenomeMessage.content = "File content is empty or failed to load";
                         }
                         // force a view update
                         nextTick(() => {
@@ -256,7 +256,7 @@ export function useSelectChat(opts: {
                       })
                       .catch((error) => {
                         console.error("Failed to read DeepGenomeAgent file:", error);
-                        deepGenomeMessage.content = "文件加载失败，请稍后重试";
+                        deepGenomeMessage.content = "Failed to load file, please try again later";
                         // force a view update
                         nextTick(() => {
                           timestamp.value = Date.now();

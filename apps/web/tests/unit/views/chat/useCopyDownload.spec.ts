@@ -47,7 +47,7 @@ describe("useCopyDownload", () => {
   }
 
   describe("fallbackCopyText", () => {
-    it("安全上下文 → 调用 clipboard.writeText、设置 copyVisible、success 提示", () => {
+    it("secure context → calls clipboard.writeText, sets copyVisible, shows success message", () => {
       vi.useFakeTimers();
       const writeText = vi.fn().mockResolvedValue(undefined);
       vi.stubGlobal("isSecureContext", true);
@@ -65,7 +65,7 @@ describe("useCopyDownload", () => {
   });
 
   describe("downloadFile", () => {
-    it("接口返回 200 → window.open 打开返回的下载链接", async () => {
+    it("API returns 200 → window.open opens the returned download link", async () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
       mockGetChatdownloadURL.mockResolvedValueOnce({
@@ -84,7 +84,7 @@ describe("useCopyDownload", () => {
       );
     });
 
-    it("接口非 200 → 不打开窗口", async () => {
+    it("API not 200 → does not open a window", async () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
       mockGetChatdownloadURL.mockResolvedValueOnce({ code: 500 } as any);
@@ -97,7 +97,7 @@ describe("useCopyDownload", () => {
   });
 
   describe("downloadFileDirect", () => {
-    it("有路径 → window.open 直接打开", () => {
+    it("with a path → window.open opens directly", () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
 
@@ -111,7 +111,7 @@ describe("useCopyDownload", () => {
       );
     });
 
-    it("空路径 → 不打开窗口", () => {
+    it("empty path → does not open a window", () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
 
@@ -123,7 +123,7 @@ describe("useCopyDownload", () => {
   });
 
   describe("getFileDownUrl", () => {
-    it("happy path → 创建对象 URL 并点击下载链接", async () => {
+    it("happy path → creates an object URL and clicks the download link", async () => {
       const createObjectURL = vi.fn().mockReturnValue("blob:fake");
       const revokeObjectURL = vi.fn();
       // happy-dom provides window.URL; fill in the object-URL factory to observe calls

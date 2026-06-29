@@ -29,13 +29,13 @@ export const useThemeStore = defineStore("theme", {
     themeLabel: (state): string => {
       switch (state.theme) {
         case "light":
-          return "浅色";
+          return "Light";
         case "dark":
-          return "深色";
+          return "Dark";
         case "system":
-          return "跟随系统";
+          return "Follow system";
         default:
-          return "跟随系统";
+          return "Follow system";
       }
     },
   },

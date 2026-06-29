@@ -99,7 +99,7 @@ const downloadResults = () => {
 
   // Show download-start notice
   ElMessage({
-    message: `开始下载 ${fileParts.length} 个分卷文件，请等待所有文件下载完成`,
+    message: `Downloading ${fileParts.length} split file(s), please wait until all downloads finish`,
     type: "info",
     duration: 4000,
   });
@@ -125,7 +125,7 @@ const downloadResults = () => {
           setTimeout(() => {
             isDownloading.value = false;
             ElMessage({
-              message: "所有分卷文件下载完成！请将所有文件放在同一目录下解压",
+              message: "All split files downloaded! Put them in the same directory and extract",
               type: "success",
               duration: 5000,
             });
@@ -135,7 +135,7 @@ const downloadResults = () => {
         console.error(`Failed to download file ${fileName}:`, error);
         isDownloading.value = false;
         ElMessage({
-          message: `下载文件 ${fileName} 失败，请重试`,
+          message: `Failed to download ${fileName}, please try again`,
           type: "error",
           duration: 3000,
         });

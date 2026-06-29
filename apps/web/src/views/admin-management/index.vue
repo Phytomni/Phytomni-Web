@@ -250,8 +250,8 @@ const getRoleName = (code: string): string => {
   const codeMap: Record<string, string> = {
     super_admin: "super_admin",
     admin: "admin",
-    user: "普通用户",
-    vip_user: "vip用户",
+    user: "Regular user",
+    vip_user: "VIP user",
   };
   return codeMap[code] || code;
 };
@@ -348,13 +348,13 @@ const handleSubmit = async () => {
 
           const res = await addUser(formData);
           if (res.code === 200) {
-            ElMessage.success("用户添加成功");
+            ElMessage.success("User added successfully");
             currentPage.value = 1;
             pageSize.value = 10;
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.message || "用户添加失败");
+            ElMessage.error(res.message || "Failed to add user");
           }
         } else {
           // Edit a user - via PUT /api/v1/users/:id/permissions, FormData format
@@ -368,20 +368,20 @@ const handleSubmit = async () => {
 
           const res = await changePermission(formData);
           if (res.code === 200) {
-            ElMessage.success("用户信息修改成功");
+            ElMessage.success("User updated successfully");
             currentPage.value = 1;
             pageSize.value = 10;
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.message || "用户信息修改失败");
+            ElMessage.error(res.message || "Failed to update user");
           }
         }
       } catch (error: any) {
         console.error("Operation failed:", error);
         ElMessage.error(
           error.message ||
-            (dialogType.value === "add" ? "用户添加失败" : "用户信息修改失败")
+            (dialogType.value === "add" ? "Failed to add user" : "Failed to update user")
         );
       }
     } else {

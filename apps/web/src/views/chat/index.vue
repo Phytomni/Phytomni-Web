@@ -1485,7 +1485,7 @@ const buttonPermissions = {
   RAG: "RAG",
   BI: "BI",
   GA: "GA",
-  联网搜索: "联网搜索",
+  webSearch: "web search",
 };
 // Download display whitelist
 const downloadWhiteList = [
@@ -2062,8 +2062,8 @@ const testParallelChats = () => {
   getChatState(chat2Id);
 
   // Set different input contents
-  chatStates.value[chat1Id].messageInput = "对话1的测试消息";
-  chatStates.value[chat2Id].messageInput = "对话2的测试消息";
+  chatStates.value[chat1Id].messageInput = "Test message for chat 1";
+  chatStates.value[chat2Id].messageInput = "Test message for chat 2";
 
   // Set different sending states
   chatStates.value[chat1Id].isSending = true;
@@ -2093,7 +2093,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
           .join("\n")
       : "";
   const text =
-    message.content + (docs && docs !== "" ? "\n参考资料:\n" : "") + docs;
+    message.content + (docs && docs !== "" ? "\nReferences:\n" : "") + docs;
   fallbackCopyText(text, index + 1);
 };
 </script>

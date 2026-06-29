@@ -2,8 +2,10 @@ import type { UploadFile } from "../types";
 
 // Parse message content and extract file info
 export const parseMessageWithFiles = (messageContent: string) => {
-  // check whether file-info markers are present
-  const fileInfoRegex = /\[附件: ([^\]]+)\]/g;
+  // check whether file-info markers are present; accept both the current
+  // "Attachment" marker and the legacy "附件" marker still embedded in
+  // already-persisted chat history
+  const fileInfoRegex = /\[(?:Attachment|附件): ([^\]]+)\]/g;
   const fileMatches = messageContent.match(fileInfoRegex);
 
   if (!fileMatches || fileMatches.length === 0) {
@@ -16,7 +18,7 @@ export const parseMessageWithFiles = (messageContent: string) => {
   // extract file info
   const attachedFiles: UploadFile[] = [];
   fileMatches.forEach((match) => {
-    const fileInfo = match.match(/\[附件: ([^(]+) \(([^)]+)\)\]/);
+    const fileInfo = match.match(/\[(?:Attachment|附件): ([^(]+) \(([^)]+)\)\]/);
     if (fileInfo) {
       const fileName = fileInfo[1].trim();
       const fileSizeStr = fileInfo[2].trim();

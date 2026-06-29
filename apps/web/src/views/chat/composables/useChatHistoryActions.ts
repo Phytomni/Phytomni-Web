@@ -18,7 +18,7 @@ export function useChatHistoryActions(opts: {
   });
   const renameFormRef = ref();
   const renameRules = {
-    title: [{ required: true, message: "请输入标题", trigger: "blur" }],
+    title: [{ required: true, message: "Please enter a title", trigger: "blur" }],
   };
   const chatToRename = ref<Chat | null>(null);
 
@@ -66,14 +66,14 @@ export function useChatHistoryActions(opts: {
           // the parent owns chatList and updates its local list on this event; the child does not mutate the prop directly.
           opts.onChatRenamed(updatedChat);
           // show a success message
-          ElMessage.success("重命名成功");
+          ElMessage.success("Renamed successfully");
         } else {
-          ElMessage.error(response.message || "重命名失败");
+          ElMessage.error(response.message || "Rename failed");
         }
       }
     } catch (error) {
       console.error("Rename failed:", error);
-      ElMessage.error("重命名失败，请重试");
+      ElMessage.error("Rename failed, please try again");
     }
   };
 
@@ -103,13 +103,13 @@ export function useChatHistoryActions(opts: {
         }
         chatToDelete.value = null;
         // show a success message
-        ElMessage.success("删除成功");
+        ElMessage.success("Deleted successfully");
       } else {
-        ElMessage.error(response.message || "删除失败");
+        ElMessage.error(response.message || "Delete failed");
       }
     } catch (error) {
       console.error("Delete failed:", error);
-      ElMessage.error("删除失败，请重试");
+      ElMessage.error("Delete failed, please try again");
     }
   };
 
@@ -126,13 +126,15 @@ export function useChatHistoryActions(opts: {
         // the parent (owner of chatList) updates the favorite state; the child does not mutate props.chatList directly.
         opts.onChatFavorited(updatedChat);
         // show a success message
-        ElMessage.success(updatedChat.isFavorite ? "已收藏" : "已取消收藏");
+        ElMessage.success(
+          updatedChat.isFavorite ? "Added to favorites" : "Removed from favorites"
+        );
       } else {
-        ElMessage.error(response.message || "操作失败");
+        ElMessage.error(response.message || "Operation failed");
       }
     } catch (error) {
       console.error("Favorite action failed:", error);
-      ElMessage.error("操作失败，请重试");
+      ElMessage.error("Operation failed, please try again");
     }
   };
 

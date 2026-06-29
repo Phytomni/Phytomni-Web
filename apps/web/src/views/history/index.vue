@@ -198,7 +198,7 @@ const renameForm = ref({
 });
 const renameFormRef = ref();
 const renameRules = {
-  title: [{ required: true, message: "请输入标题", trigger: "blur" }],
+  title: [{ required: true, message: "Please enter a title", trigger: "blur" }],
 };
 const historyToRename = ref<History | null>(null);
 
@@ -214,12 +214,12 @@ const fetchHistoryData = async () => {
     if (res.code === 200 && res.data) {
       historyList.value = res.data;
     } else {
-      ElMessage.error(res.message || "获取历史记录失败");
+      ElMessage.error(res.message || "Failed to load history");
       historyList.value = [];
     }
   } catch (error) {
     console.error("Failed to fetch history:", error);
-    ElMessage.error("获取历史记录失败");
+    ElMessage.error("Failed to load history");
     historyList.value = [];
   } finally {
     loading.value = false;
@@ -231,10 +231,10 @@ const refreshHistory = async () => {
   refreshing.value = true;
   try {
     await fetchHistoryData();
-    ElMessage.success("刷新成功");
+    ElMessage.success("Refreshed successfully");
   } catch (error) {
     console.error("Refresh failed:", error);
-    ElMessage.error("刷新失败");
+    ElMessage.error("Refresh failed");
   } finally {
     refreshing.value = false;
   }
@@ -288,14 +288,14 @@ const handleRenameConfirm = async () => {
         }
         renameDialogVisible.value = false;
         historyToRename.value = null;
-        ElMessage.success("重命名成功");
+        ElMessage.success("Renamed successfully");
       } else {
-        ElMessage.error(res.message || "重命名失败");
+        ElMessage.error(res.message || "Rename failed");
       }
     }
   } catch (error) {
     console.error("Rename failed:", error);
-    ElMessage.error("重命名失败，请重试");
+    ElMessage.error("Rename failed, please try again");
   }
 };
 
@@ -319,13 +319,13 @@ const handleDeleteConfirm = async () => {
       }
       deleteDialogVisible.value = false;
       historyToDelete.value = null;
-      ElMessage.success("删除成功");
+      ElMessage.success("Deleted successfully");
     } else {
-      ElMessage.error(res.message || "删除失败");
+      ElMessage.error(res.message || "Delete failed");
     }
   } catch (error) {
     console.error("Delete failed:", error);
-    ElMessage.error("删除失败，请重试");
+    ElMessage.error("Delete failed, please try again");
   }
 };
 

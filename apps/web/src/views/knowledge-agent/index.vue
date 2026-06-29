@@ -98,7 +98,7 @@ const knowledgeAgentResponse = `Epigenetic modifications, including DNA methylat
 
 In summary, epigenetic modifications like DNA methylation and histone modifications are integral to how crops adapt to drought stress. They regulate gene expression, contribute to stress memory, and offer potential pathways for breeding more resilient crops. Advances in technology are making it possible to manipulate these modifications, paving the way for sustainable agricultural practices in the face of climate change.
 
-**参考资料:**
+**References:**
 1. Molecular Mechanisms and Regulatory Pathways Underlying Drought Stress Response in Rice.pdf
 2. Assessment of DNA methylation pattern under drought stress using methylation-sensitive randomly amplified polymorphism analysis in rice.pdf
 3. DNA methylation-mediated modulation of rapid desiccation tolerance acquisition and dehydration stress memory in the resurrection plant Boea hygrometrica.pdf

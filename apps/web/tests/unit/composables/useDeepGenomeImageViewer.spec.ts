@@ -6,51 +6,51 @@ import { useDeepGenomeImageViewer } from "@/composables/useDeepGenomeImageViewer
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeImageViewer — initial state", () => {
-  it("imageViewerVisible 初始为 false", () => {
+  it("imageViewerVisible is initially false", () => {
     const { imageViewerVisible } = useDeepGenomeImageViewer();
     expect(imageViewerVisible.value).toBe(false);
   });
 
-  it("currentImageSrc 初始为空字符串", () => {
+  it("currentImageSrc is initially an empty string", () => {
     const { currentImageSrc } = useDeepGenomeImageViewer();
     expect(currentImageSrc.value).toBe("");
   });
 
-  it("currentImageAlt 初始为空字符串", () => {
+  it("currentImageAlt is initially an empty string", () => {
     const { currentImageAlt } = useDeepGenomeImageViewer();
     expect(currentImageAlt.value).toBe("");
   });
 });
 
 describe("useDeepGenomeImageViewer — imageStyle computed", () => {
-  it("初始 imageStyle 包含 scale(1) translate(0px, 0px)", () => {
+  it("initial imageStyle includes scale(1) translate(0px, 0px)", () => {
     const { imageStyle } = useDeepGenomeImageViewer();
     expect(imageStyle.value.transform).toBe("scale(1) translate(0px, 0px)");
   });
 
-  it("初始 cursor 为 grab（未拖拽）", () => {
+  it("initial cursor is grab (not dragging)", () => {
     const { imageStyle } = useDeepGenomeImageViewer();
     expect(imageStyle.value.cursor).toBe("grab");
   });
 
-  it("包含 transition: transform 0.2s ease（区别于 useImageZoomPan）", () => {
+  it("includes transition: transform 0.2s ease (distinct from useImageZoomPan)", () => {
     const { imageStyle } = useDeepGenomeImageViewer();
     expect(imageStyle.value.transition).toBe("transform 0.2s ease");
   });
 
-  it("transformOrigin 为 0 0", () => {
+  it("transformOrigin is 0 0", () => {
     const { imageStyle } = useDeepGenomeImageViewer();
     expect(imageStyle.value.transformOrigin).toBe("0 0");
   });
 
-  it("display 为 block", () => {
+  it("display is block", () => {
     const { imageStyle } = useDeepGenomeImageViewer();
     expect(imageStyle.value.display).toBe("block");
   });
 });
 
 describe("useDeepGenomeImageViewer — handleMouseDown / handleMouseUp", () => {
-  it("handleMouseDown(左键) 将 cursor 切换为 grabbing", () => {
+  it("handleMouseDown (left button) switches cursor to grabbing", () => {
     const { imageStyle, handleMouseDown, handleMouseUp } =
       useDeepGenomeImageViewer();
 
@@ -68,7 +68,7 @@ describe("useDeepGenomeImageViewer — handleMouseDown / handleMouseUp", () => {
     expect(imageStyle.value.cursor).toBe("grab");
   });
 
-  it("handleMouseDown(右键) 不启动拖拽", () => {
+  it("handleMouseDown (right button) does not start dragging", () => {
     const { imageStyle, handleMouseDown } = useDeepGenomeImageViewer();
 
     const rightClick = new MouseEvent("mousedown", { button: 2 });
@@ -78,7 +78,7 @@ describe("useDeepGenomeImageViewer — handleMouseDown / handleMouseUp", () => {
 });
 
 describe("useDeepGenomeImageViewer — return surface", () => {
-  it("返回所有模板需要的符号", () => {
+  it("returns all symbols the template needs", () => {
     const result = useDeepGenomeImageViewer();
     expect(result).toHaveProperty("imageViewerVisible");
     expect(result).toHaveProperty("currentImageSrc");
@@ -94,7 +94,7 @@ describe("useDeepGenomeImageViewer — return surface", () => {
     expect(result).toHaveProperty("setupImageClickListeners");
   });
 
-  it("内部符号不对外暴露（openImageViewer / scale / isDragging 等）", () => {
+  it("internal symbols are not exposed (openImageViewer / scale / isDragging, etc.)", () => {
     const result = useDeepGenomeImageViewer() as Record<string, unknown>;
     expect(result["openImageViewer"]).toBeUndefined();
     expect(result["scale"]).toBeUndefined();

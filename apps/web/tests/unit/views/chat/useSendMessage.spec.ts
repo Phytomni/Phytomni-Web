@@ -117,12 +117,12 @@ describe("useSendMessage", () => {
     });
   }
 
-  it("happy path: 推送 user+assistant 消息、清空输入/文件、isSending 复位、同步 reaction", async () => {
-    states.get("A")!.messageInput = "你好世界";
+  it("happy path: pushes user+assistant messages, clears input/files, resets isSending, syncs reaction", async () => {
+    states.get("A")!.messageInput = "Hello world";
     mockGetQueryAbortable.mockResolvedValueOnce({
       data: {
         tool_name: "ChatAgents",
-        answer: "我是助手",
+        answer: "I'm the assistant",
         id: "msg-1",
         reaction_type: "1",
         follow_up_questions: [],
@@ -136,9 +136,9 @@ describe("useSendMessage", () => {
     const msgs = currentChat.value.messages;
     expect(msgs.length).toBe(2);
     expect(msgs[0].role).toBe("user");
-    expect(msgs[0].content).toContain("你好世界");
+    expect(msgs[0].content).toContain("Hello world");
     expect(msgs[1].role).toBe("assistant");
-    expect(msgs[1].content).toBe("我是助手");
+    expect(msgs[1].content).toBe("I'm the assistant");
 
     // Cleanup is done via the captured chatState
     const stateA = getChatState("A");
@@ -153,14 +153,14 @@ describe("useSendMessage", () => {
     expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
   });
 
-  it("🔒 capture invariant: 发送中切换 currentChatId，清理仍落在被捕获的原对话 A", async () => {
-    states.get("A")!.messageInput = "原对话消息";
+  it("🔒 capture invariant: switching currentChatId mid-send, cleanup still lands on the captured original dialogue A", async () => {
+    states.get("A")!.messageInput = "Original dialogue message";
 
     // A is an existing dialogue (messages non-empty) => isNewChat=false, so finally
     // won't reset currentChatId back to A; that way, after switching to B, if cleanup
     // mis-reads currentChatId.value it would land on B, exposing a broken capture invariant.
     currentChat.value = {
-      messages: [{ role: "user", content: "之前的消息" }],
+      messages: [{ role: "user", content: "Previous message" }],
     };
 
     // A manually-controlled promise, simulating a pending request
@@ -189,7 +189,7 @@ describe("useSendMessage", () => {
     resolveQuery({
       data: {
         tool_name: "ChatAgents",
-        answer: "迟到的回答",
+        answer: "Late answer",
         id: "msg-late",
         reaction_type: "2",
         follow_up_questions: [],
@@ -209,7 +209,7 @@ describe("useSendMessage", () => {
     expect(getChatState("B").reactions["msg-late"]).toBeUndefined();
   });
 
-  it("empty input guard: messageInput 为空时提前返回，不调用 getQueryAbortable", async () => {
+  it("empty input guard: returns early when messageInput is empty, does not call getQueryAbortable", async () => {
     states.get("A")!.messageInput = "";
 
     const { sendMessage } = makeComposable();

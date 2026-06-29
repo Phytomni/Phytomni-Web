@@ -164,7 +164,7 @@ const renameForm = ref({
 });
 const renameFormRef = ref();
 const renameRules = {
-  title: [{ required: true, message: "请输入标题", trigger: "blur" }],
+  title: [{ required: true, message: "Please enter a title", trigger: "blur" }],
 };
 const favoriteToRename = ref<FavoriteItem | null>(null);
 
@@ -182,11 +182,11 @@ const fetchFavorites = async () => {
         isFavorite: true,
       }));
     } else {
-      ElMessage.error(response.message || "获取收藏列表失败");
+      ElMessage.error(response.message || "Failed to load favorites");
     }
   } catch (error) {
     console.error("Failed to fetch favorites list:", error);
-    ElMessage.error("获取收藏列表失败");
+    ElMessage.error("Failed to load favorites");
   } finally {
     loading.value = false;
   }
@@ -223,7 +223,7 @@ const handleUnfavorite = async (favorite: FavoriteItem) => {
 
     const response = await collectHistory(formData);
     if (response.code === 200) {
-      ElMessage.success("已取消收藏");
+      ElMessage.success("Removed from favorites");
       // Remove from the list
       const index = favoritesList.value.findIndex(
         (item) => item.id === favorite.id
@@ -232,11 +232,11 @@ const handleUnfavorite = async (favorite: FavoriteItem) => {
         favoritesList.value.splice(index, 1);
       }
     } else {
-      ElMessage.error(response.message || "取消收藏失败");
+      ElMessage.error(response.message || "Failed to remove favorite");
     }
   } catch (error) {
     console.error("Failed to remove from favorites:", error);
-    ElMessage.error("取消收藏失败");
+    ElMessage.error("Failed to remove favorite");
   }
 };
 
@@ -253,7 +253,7 @@ const handleRenameConfirm = async () => {
 
       const response = await renameHistory(formData);
       if (response.code === 200) {
-        ElMessage.success("重命名成功");
+        ElMessage.success("Renamed successfully");
         // Update local data
         const index = favoritesList.value.findIndex(
           (item) => item.id === favoriteToRename.value!.id
@@ -264,12 +264,12 @@ const handleRenameConfirm = async () => {
         renameDialogVisible.value = false;
         favoriteToRename.value = null;
       } else {
-        ElMessage.error(response.message || "重命名失败");
+        ElMessage.error(response.message || "Rename failed");
       }
     }
   } catch (error) {
     console.error("Failed to rename:", error);
-    ElMessage.error("重命名失败");
+    ElMessage.error("Rename failed");
   }
 };
 

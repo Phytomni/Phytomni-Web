@@ -19,21 +19,21 @@
             :disabled="themeStore.theme === 'light'"
           >
             <el-icon><Sunny /></el-icon>
-            浅色主题
+            Light
           </el-dropdown-item>
           <el-dropdown-item
             command="dark"
             :disabled="themeStore.theme === 'dark'"
           >
             <el-icon><Moon /></el-icon>
-            深色主题
+            Dark
           </el-dropdown-item>
           <el-dropdown-item
             command="system"
             :disabled="themeStore.theme === 'system'"
           >
             <el-icon><Monitor /></el-icon>
-            跟随系统
+            Follow system
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>

@@ -43,7 +43,7 @@
 import { computed } from "vue";
 
 const message = computed(() => {
-  return "找不到网页！";
+  return "Page not found!";
 });
 </script>
 

@@ -64,7 +64,7 @@ class MockIntersectionObserver {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeToc — initial state", () => {
-  it("activeHeadingId 初始值为空字符串", () => {
+  it("activeHeadingId is initially an empty string", () => {
     const { Harness } = makeHarness();
     const wrapper = mount(Harness);
     // vue-test-utils auto-unwraps refs returned from setup(), so we access .activeHeadingId directly
@@ -72,7 +72,7 @@ describe("useDeepGenomeToc — initial state", () => {
     wrapper.unmount();
   });
 
-  it("返回面包含 activeHeadingId / handleNavSelect / setupIntersectionObserver", () => {
+  it("return surface includes activeHeadingId / handleNavSelect / setupIntersectionObserver", () => {
     const headings = ref<Array<{ id: string; [key: string]: unknown }>>([]);
     const nestedHeadings = ref<Array<{ id: string; children?: unknown[]; [key: string]: unknown }>>([]);
     const mainContentRef = ref<any>(null);
@@ -99,7 +99,7 @@ describe("useDeepGenomeToc — handleNavSelect", () => {
     document.querySelectorAll("[data-testid='toc-heading']").forEach((el) => el.remove());
   });
 
-  it("目标元素存在时，调用 scrollIntoView(smooth, center)", async () => {
+  it("calls scrollIntoView(smooth, center) when the target element exists", async () => {
     const id = "heading-test-scroll";
     const el = document.createElement("h2");
     el.id = id;
@@ -119,7 +119,7 @@ describe("useDeepGenomeToc — handleNavSelect", () => {
     wrapper.unmount();
   });
 
-  it("目标元素不存在时，scrollIntoView 不被调用", async () => {
+  it("does not call scrollIntoView when the target element does not exist", async () => {
     const { Harness } = makeHarness();
     const wrapper = mount(Harness);
 
@@ -148,7 +148,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
     document.querySelectorAll("[data-testid='toc-io-heading']").forEach((el) => el.remove());
   });
 
-  it("为每个 headings 中存在 id 的 DOM 元素调用一次 observe", () => {
+  it("calls observe once for each headings id that has a matching DOM element", () => {
     const ids = ["h-one", "h-two"];
 
     // Create the corresponding elements in the DOM
@@ -172,7 +172,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
     wrapper.unmount();
   });
 
-  it("headings 中 id 不存在于 DOM 时，observe 不被调用", () => {
+  it("does not call observe when a headings id is not present in the DOM", () => {
     const { Harness } = makeHarness({ headingIds: ["ghost-id-not-in-dom"] });
     const wrapper = mount(Harness);
 
@@ -184,7 +184,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
     wrapper.unmount();
   });
 
-  it("unmount 时调用 observer.disconnect，完成清理", () => {
+  it("calls observer.disconnect on unmount to complete cleanup", () => {
     const id = "h-cleanup";
     const el = document.createElement("h2");
     el.id = id;

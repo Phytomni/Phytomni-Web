@@ -560,13 +560,13 @@ const handleSubmit = async () => {
 
           const res = await addUser(formData);
           if (res.code === 200) {
-            ElMessage.success("用户添加成功");
+            ElMessage.success("User added successfully");
             currentPage.value = 1;
             pageSize.value = 10;
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.message || "用户添加失败");
+            ElMessage.error(res.message || "Failed to add user");
           }
         } else {
           // Edit user - uses the PUT /api/v1/users/:id/permissions endpoint, FormData format
@@ -588,20 +588,20 @@ const handleSubmit = async () => {
 
           const res = await changePermission(formData);
           if (res.code === 200) {
-            ElMessage.success("用户信息修改成功");
+            ElMessage.success("User updated successfully");
             currentPage.value = 1;
             pageSize.value = 10;
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.message || "用户信息修改失败");
+            ElMessage.error(res.message || "Failed to update user");
           }
         }
       } catch (error: any) {
         console.error("Operation failed:", error);
         ElMessage.error(
           error.message ||
-            (dialogType.value === "add" ? "用户添加失败" : "用户信息修改失败")
+            (dialogType.value === "add" ? "Failed to add user" : "Failed to update user")
         );
       }
     } else {

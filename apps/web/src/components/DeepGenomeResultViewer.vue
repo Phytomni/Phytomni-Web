@@ -372,8 +372,8 @@ const processCifContainers = async () => {
               viewer.animate();
             } catch (error) {
               console.error("Error loading or rendering CIF file:", error);
-              viewerDiv.innerHTML = `<div class="error">无法加载或渲染CIF文件: ${
-                error instanceof Error ? error.message : "未知错误"
+              viewerDiv.innerHTML = `<div class="error">Failed to load or render the CIF file: ${
+                error instanceof Error ? error.message : "Unknown error"
               }</div>`;
             }
           };
@@ -383,12 +383,12 @@ const processCifContainers = async () => {
         })
         .catch((error) => {
           console.error("Error loading 3Dmol.js:", error);
-          container.innerHTML = `<div class="error">无法加载3Dmol.js库: ${error.message}</div>`;
+          container.innerHTML = `<div class="error">Failed to load the 3Dmol.js library: ${error.message}</div>`;
         });
     } catch (error) {
       console.error("Unexpected error processing CIF container:", error);
-      container.innerHTML = `<div class="error">处理CIF文件时发生错误: ${
-        error instanceof Error ? error.message : "未知错误"
+      container.innerHTML = `<div class="error">An error occurred while processing the CIF file: ${
+        error instanceof Error ? error.message : "Unknown error"
       }</div>`;
     }
   });

@@ -47,11 +47,11 @@ export function useReactions(opts: {
 
         // show a success message
         if (newReaction === 0) {
-          ElMessage.success("已取消");
+          ElMessage.success("Cancelled");
         } else if (newReaction === 1) {
-          ElMessage.success("已点赞");
+          ElMessage.success("Liked");
         } else if (newReaction === 2) {
-          ElMessage.success("已点踩");
+          ElMessage.success("Disliked");
         }
 
         // ensure it scrolls to the bottom
@@ -59,11 +59,11 @@ export function useReactions(opts: {
           scrollToBottom();
         });
       } else {
-        ElMessage.error("操作失败，请重试");
+        ElMessage.error("Operation failed, please try again");
       }
     } catch (error) {
       console.error("Reaction failed:", error);
-      ElMessage.error("操作失败，请重试");
+      ElMessage.error("Operation failed, please try again");
     }
 
     // ensure it scrolls to the bottom
@@ -76,9 +76,9 @@ export function useReactions(opts: {
   const getReactionTooltip = (messageId: string, reactionType: number) => {
     const currentReaction = getReactionState(messageId);
     if (reactionType === 1) {
-      return currentReaction === 1 ? "取消点赞" : "点赞";
+      return currentReaction === 1 ? "Undo like" : "Like";
     } else if (reactionType === 2) {
-      return currentReaction === 2 ? "取消点踩" : "点踩";
+      return currentReaction === 2 ? "Undo dislike" : "Dislike";
     }
     return "";
   };

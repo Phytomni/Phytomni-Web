@@ -59,10 +59,10 @@ describe("useRefreshMessage", () => {
     // Index 0 = user message, index 1 = assistant message
     currentChat = ref({
       messages: [
-        { role: "user", content: "原始问题" },
+        { role: "user", content: "Original question" },
         {
           role: "assistant",
-          content: "旧回答",
+          content: "Old answer",
           id: "msg-1",
           tool_name: "ChatAgent",
         },
@@ -86,12 +86,12 @@ describe("useRefreshMessage", () => {
     });
   }
 
-  it("Happy path: KnowledgeAgent 重建助手消息、水合 reaction、清理刷新状态、复位 isSending、finally 拉取历史", async () => {
+  it("Happy path: KnowledgeAgent rebuilds the assistant message, hydrates reaction, clears refresh state, resets isSending, fetches history in finally", async () => {
     // KnowledgeAgent branch: the JSON answer parses out content/doc_list, and it also syncs the reaction
     mockGetQuery.mockResolvedValueOnce({
       data: {
         tool_name: "KnowledgeAgent",
-        answer: JSON.stringify({ content: "新回答", doc_list: [{ pm: "1" }] }),
+        answer: JSON.stringify({ content: "New answer", doc_list: [{ pm: "1" }] }),
         id: "msg-2",
         reaction_type: "1",
         status: "done",
@@ -104,7 +104,7 @@ describe("useRefreshMessage", () => {
     // currentChat.value.messages[1] is replaced by the rebuilt assistant message
     const rebuilt = currentChat.value.messages[1];
     expect(rebuilt.role).toBe("assistant");
-    expect(rebuilt.content).toBe("新回答");
+    expect(rebuilt.content).toBe("New answer");
     expect(rebuilt.doc_list).toEqual([{ pm: "1" }]);
     expect(rebuilt.tool_name).toBe("KnowledgeAgent");
     expect(rebuilt.id).toBe("msg-2");
@@ -123,7 +123,7 @@ describe("useRefreshMessage", () => {
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
   });
 
-  it("🔒 CAPTURE INVARIANT: await 期间切换对话，清理仍落在发起对话 A、B 不被触碰", async () => {
+  it("🔒 CAPTURE INVARIANT: switching dialogue during await, cleanup still lands on the initiating dialogue A, B is not touched", async () => {
     // Manually control when getQuery resolves
     let resolveQuery!: (value: any) => void;
     const pending = new Promise((resolve) => {
@@ -145,7 +145,7 @@ describe("useRefreshMessage", () => {
 
     // Now resolve getQuery and wait for the whole thing to finish
     resolveQuery({
-      data: { tool_name: "ChatAgent", answer: "迟到的回答", id: "msg-2" },
+      data: { tool_name: "ChatAgent", answer: "Late answer", id: "msg-2" },
     });
     await p;
 
@@ -162,14 +162,14 @@ describe("useRefreshMessage", () => {
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
   });
 
-  it("Failure path: getQuery 拒绝 → ElMessage.error 调用、isSending 在 finally 复位", async () => {
+  it("Failure path: getQuery rejects → ElMessage.error called, isSending reset in finally", async () => {
     mockGetQuery.mockRejectedValueOnce(new Error("network down"));
 
     const { refreshMessage } = makeComposable();
     await refreshMessage(1);
 
     // The error message is triggered
-    expect(elMessageErrorSpy).toHaveBeenCalledWith("刷新失败，请重试");
+    expect(elMessageErrorSpy).toHaveBeenCalledWith("Refresh failed, please try again");
 
     // isSending is reset to false in finally
     expect(getChatState("A").isSending).toBe(false);

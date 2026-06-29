@@ -53,15 +53,15 @@ describe("useSelectChat", () => {
     });
   }
 
-  it("ChatAgent 历史记录:同步 currentChatId、水合 reaction、重建 messages、设置 historyQuestion、更新 URL", async () => {
+  it("ChatAgent history: syncs currentChatId, hydrates reaction, rebuilds messages, sets historyQuestion, updates URL", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce({
       code: 200,
       data: [
         {
           id: "msg-1",
           reaction_type: "1",
-          query: "你好",
-          answer: "你好，我是助手",
+          query: "Hello",
+          answer: "Hello, I'm the assistant",
           tool_name: "ChatAgent",
         },
       ],
@@ -84,11 +84,11 @@ describe("useSelectChat", () => {
 
     const userMsg = messages[0];
     expect(userMsg.role).toBe("user");
-    expect(userMsg.content).toBe("你好");
+    expect(userMsg.content).toBe("Hello");
 
     const assistantMsg = messages[1];
     expect(assistantMsg.role).toBe("assistant");
-    expect(assistantMsg.content).toBe("你好，我是助手");
+    expect(assistantMsg.content).toBe("Hello, I'm the assistant");
     expect(assistantMsg.tool_name).toBe("ChatAgent");
     expect(assistantMsg.id).toBe("msg-1");
 
@@ -100,8 +100,8 @@ describe("useSelectChat", () => {
     const hq = getChatState("d1").historyQuestion;
     expect(Array.isArray(hq)).toBe(true);
     expect(hq.length).toBe(2);
-    expect(hq[0]).toEqual({ role: "user", content: "你好" });
-    expect(hq[1]).toEqual({ role: "assistant", content: "你好，我是助手" });
+    expect(hq[0]).toEqual({ role: "user", content: "Hello" });
+    expect(hq[1]).toEqual({ role: "assistant", content: "Hello, I'm the assistant" });
 
     // URL updated
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
@@ -110,7 +110,7 @@ describe("useSelectChat", () => {
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
-  it("加载前重置 reaction 状态:陈旧条目在水合前被清空", async () => {
+  it("resets reaction state before loading: stale entries are cleared before hydration", async () => {
     // Seed a stale reaction (pointing to the same d1 record)
     const stale = getChatState("d1");
     stale.reactions = { "old-msg": 2 };
@@ -121,8 +121,8 @@ describe("useSelectChat", () => {
         {
           id: "msg-1",
           reaction_type: "1",
-          query: "问题",
-          answer: "回答",
+          query: "Question",
+          answer: "Answer",
           tool_name: "ChatAgent",
         },
       ],
@@ -138,10 +138,10 @@ describe("useSelectChat", () => {
     expect(reactions["msg-1"]).toBe(1);
   });
 
-  it("non-200 响应:不重建 messages、不重置 historyQuestion,但仍更新 URL", async () => {
+  it("non-200 response: does not rebuild messages or reset historyQuestion, but still updates URL", async () => {
     // Seed a non-empty historyQuestion to verify the non-200 branch does not touch it
     const st = getChatState("d1");
-    st.historyQuestion = [{ role: "user", content: "保留我" }];
+    st.historyQuestion = [{ role: "user", content: "keep me" }];
 
     mockGetAnswerCheck.mockResolvedValueOnce({ code: 500, data: [] } as any);
 
@@ -154,13 +154,13 @@ describe("useSelectChat", () => {
     expect(currentChat.value).toBeNull();
     // historyQuestion is not reset
     expect(getChatState("d1").historyQuestion).toEqual([
-      { role: "user", content: "保留我" },
+      { role: "user", content: "keep me" },
     ]);
     // The URL is always updated (outside the if block)
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
   });
 
-  it("并发切换安全:mid-fetch 切换 currentChatId 后 reaction 和 historyQuestion 写回参数 dialogueId 而非 live currentChatId", async () => {
+  it("concurrent-switch safety: after mid-fetch currentChatId switch, reaction and historyQuestion write back to the argument dialogueId, not the live currentChatId", async () => {
     // Manually control when getAnswerCheck resolves
     let resolveCheck!: (v: any) => void;
     const pendingCheck = new Promise<any>((resolve) => {
@@ -183,8 +183,8 @@ describe("useSelectChat", () => {
         {
           id: "msg-concurrent",
           reaction_type: "2",
-          query: "并发问题",
-          answer: "并发回答",
+          query: "Concurrent question",
+          answer: "Concurrent answer",
           tool_name: "ChatAgent",
         },
       ],

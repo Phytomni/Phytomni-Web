@@ -7,13 +7,13 @@ describe("useSidebarAgents", () => {
     return { push: vi.fn() } as unknown as Router;
   }
 
-  it("showAgentsList 初始值为 false", () => {
+  it("showAgentsList is initially false", () => {
     const router = makeRouter();
     const { showAgentsList } = useSidebarAgents(router);
     expect(showAgentsList.value).toBe(false);
   });
 
-  it("exploreAgent() 切换 showAgentsList(false→true→false)", () => {
+  it("exploreAgent() toggles showAgentsList (false→true→false)", () => {
     const router = makeRouter();
     const { showAgentsList, exploreAgent } = useSidebarAgents(router);
     expect(showAgentsList.value).toBe(false);
@@ -23,7 +23,7 @@ describe("useSidebarAgents", () => {
     expect(showAgentsList.value).toBe(false);
   });
 
-  it("presetAgents 有 7 个条目，每条均含 route、name、img", () => {
+  it("presetAgents has 7 entries, each with route, name, and img", () => {
     const router = makeRouter();
     const { presetAgents } = useSidebarAgents(router);
     expect(presetAgents.value).toHaveLength(7);
@@ -34,7 +34,7 @@ describe("useSidebarAgents", () => {
     }
   });
 
-  it("handleAgentClick 调用 router.push 并将 showAgentsList 重置为 false", () => {
+  it("handleAgentClick calls router.push and resets showAgentsList to false", () => {
     const router = makeRouter();
     const { showAgentsList, exploreAgent, handleAgentClick } = useSidebarAgents(router);
 

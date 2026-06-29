@@ -30,7 +30,7 @@ function makeChat(overrides: Partial<Chat> = {}): Chat {
   return {
     id: 1,
     dialogue_id: "d1",
-    title: "原标题",
+    title: "Original title",
     isFavorite: false,
     ...overrides,
   } as Chat;
@@ -66,16 +66,16 @@ describe("useChatHistoryActions", () => {
   }
 
   describe("handleChatAction", () => {
-    it("rename → 打开重命名对话框并预填标题", () => {
-      const chat = makeChat({ title: "我的对话" });
+    it("rename → opens rename dialog and prefills the title", () => {
+      const chat = makeChat({ title: "My conversation" });
       const c = makeComposable();
       c.handleChatAction("rename", chat);
 
       expect(c.renameDialogVisible.value).toBe(true);
-      expect(c.renameForm.value.title).toBe("我的对话");
+      expect(c.renameForm.value.title).toBe("My conversation");
     });
 
-    it("delete → 设置 chatToDelete 并打开删除对话框", () => {
+    it("delete → sets chatToDelete and opens the delete dialog", () => {
       const chat = makeChat();
       const c = makeComposable();
       c.handleChatAction("delete", chat);
@@ -84,7 +84,7 @@ describe("useChatHistoryActions", () => {
       expect(c.chatToDelete.value).toStrictEqual(chat);
     });
 
-    it("favorite → 触发收藏流程(collectHistory 被调用)", () => {
+    it("favorite → triggers the favorite flow (collectHistory called)", () => {
       const chat = makeChat({ isFavorite: false });
       mockCollectHistory.mockResolvedValueOnce({ code: 200 } as any);
       const c = makeComposable();
@@ -95,31 +95,31 @@ describe("useChatHistoryActions", () => {
   });
 
   describe("handleRenameConfirm", () => {
-    it("validate 通过 + 200 → onChatRenamed 收到 {...chat, title}, 对话框关闭", async () => {
-      const chat = makeChat({ id: 7, title: "旧标题" });
+    it("validate passes + 200 → onChatRenamed receives {...chat, title}, dialog closes", async () => {
+      const chat = makeChat({ id: 7, title: "Old title" });
       mockRenameHistory.mockResolvedValueOnce({ code: 200 } as any);
 
       const c = makeComposable();
       // Open rename, setting chatToRename + renameForm.title
       c.handleChatAction("rename", chat);
-      c.renameForm.value.title = "新标题";
+      c.renameForm.value.title = "New title";
       c.renameFormRef.value = { validate: vi.fn().mockResolvedValue(true) };
 
       await c.handleRenameConfirm();
 
       const formData: FormData = mockRenameHistory.mock.calls[0][0];
       expect(formData.get("id")).toBe("7");
-      expect(formData.get("rename")).toBe("新标题");
+      expect(formData.get("rename")).toBe("New title");
 
       expect(onChatRenamed).toHaveBeenCalledTimes(1);
-      expect(onChatRenamed).toHaveBeenCalledWith({ ...chat, title: "新标题" });
+      expect(onChatRenamed).toHaveBeenCalledWith({ ...chat, title: "New title" });
       expect(c.renameDialogVisible.value).toBe(false);
-      expect(mockElSuccess).toHaveBeenCalledWith("重命名成功");
+      expect(mockElSuccess).toHaveBeenCalledWith("Renamed successfully");
     });
 
-    it("非 200 → ElMessage.error, 不调用 onChatRenamed", async () => {
+    it("non-200 → ElMessage.error, does not call onChatRenamed", async () => {
       const chat = makeChat();
-      mockRenameHistory.mockResolvedValueOnce({ code: 500, message: "重命名失败" } as any);
+      mockRenameHistory.mockResolvedValueOnce({ code: 500, message: "Rename failed" } as any);
 
       const c = makeComposable();
       c.handleChatAction("rename", chat);
@@ -128,10 +128,10 @@ describe("useChatHistoryActions", () => {
       await c.handleRenameConfirm();
 
       expect(onChatRenamed).not.toHaveBeenCalled();
-      expect(mockElError).toHaveBeenCalledWith("重命名失败");
+      expect(mockElError).toHaveBeenCalledWith("Rename failed");
     });
 
-    it("renameHistory reject → catch 分支 ElMessage.error", async () => {
+    it("renameHistory reject → catch branch ElMessage.error", async () => {
       const chat = makeChat();
       mockRenameHistory.mockRejectedValueOnce(new Error("network error"));
 
@@ -142,12 +142,12 @@ describe("useChatHistoryActions", () => {
       await c.handleRenameConfirm();
 
       expect(onChatRenamed).not.toHaveBeenCalled();
-      expect(mockElError).toHaveBeenCalledWith("重命名失败，请重试");
+      expect(mockElError).toHaveBeenCalledWith("Rename failed, please try again");
     });
   });
 
   describe("handleDeleteConfirm", () => {
-    it("200 + 列表中存在匹配项 → onChatDeleted 收到该项", async () => {
+    it("200 + matching item in list → onChatDeleted receives that item", async () => {
       const chat = makeChat({ id: 3, dialogue_id: "dx" });
       chatListData = [chat];
       mockDeleteHistory.mockResolvedValueOnce({ code: 200 } as any);
@@ -159,10 +159,10 @@ describe("useChatHistoryActions", () => {
       expect(onChatDeleted).toHaveBeenCalledTimes(1);
       expect(onChatDeleted).toHaveBeenCalledWith(chat);
       expect(c.deleteDialogVisible.value).toBe(false);
-      expect(mockElSuccess).toHaveBeenCalledWith("删除成功");
+      expect(mockElSuccess).toHaveBeenCalledWith("Deleted successfully");
     });
 
-    it("currentChatId 等于被删除 dialogue_id → onSelectChat('')", async () => {
+    it("currentChatId equals deleted dialogue_id → onSelectChat('')", async () => {
       const chat = makeChat({ dialogue_id: "dx" });
       chatListData = [chat];
       currentChatIdValue = "dx";
@@ -175,7 +175,7 @@ describe("useChatHistoryActions", () => {
       expect(onSelectChat).toHaveBeenCalledWith("");
     });
 
-    it("currentChatId 不等于被删除 dialogue_id → onSelectChat 不调用", async () => {
+    it("currentChatId not equal to deleted dialogue_id → onSelectChat not called", async () => {
       const chat = makeChat({ dialogue_id: "dx" });
       chatListData = [chat];
       currentChatIdValue = "other";
@@ -188,10 +188,10 @@ describe("useChatHistoryActions", () => {
       expect(onSelectChat).not.toHaveBeenCalled();
     });
 
-    it("非 200 → ElMessage.error, 不调用任何 emit", async () => {
+    it("non-200 → ElMessage.error, no emit called", async () => {
       const chat = makeChat({ dialogue_id: "dx" });
       chatListData = [chat];
-      mockDeleteHistory.mockResolvedValueOnce({ code: 500, message: "删除失败" } as any);
+      mockDeleteHistory.mockResolvedValueOnce({ code: 500, message: "Delete failed" } as any);
 
       const c = makeComposable();
       c.handleChatAction("delete", chat);
@@ -199,12 +199,12 @@ describe("useChatHistoryActions", () => {
 
       expect(onChatDeleted).not.toHaveBeenCalled();
       expect(onSelectChat).not.toHaveBeenCalled();
-      expect(mockElError).toHaveBeenCalledWith("删除失败");
+      expect(mockElError).toHaveBeenCalledWith("Delete failed");
     });
   });
 
-  describe("toggleFavorite (收藏由父组件持有, 不本地改写)", () => {
-    it("isFavorite=false + 200 → emit 副本 isFavorite=true, 原对象不被改写", async () => {
+  describe("toggleFavorite (favorite owned by parent, not mutated locally)", () => {
+    it("isFavorite=false + 200 → emit copy with isFavorite=true, original not mutated", async () => {
       const chat = makeChat({ id: 5, isFavorite: false });
       mockCollectHistory.mockResolvedValueOnce({ code: 200 } as any);
 
@@ -224,10 +224,10 @@ describe("useChatHistoryActions", () => {
       // Key point: the original object is not mutated (a copy is emitted)
       expect(chat.isFavorite).toBe(false);
       expect(emitted).not.toBe(chat);
-      expect(mockElSuccess).toHaveBeenCalledWith("已收藏");
+      expect(mockElSuccess).toHaveBeenCalledWith("Added to favorites");
     });
 
-    it("isFavorite=true + 200 → emit false, collect_type='0', 原对象不被改写", async () => {
+    it("isFavorite=true + 200 → emit false, collect_type='0', original not mutated", async () => {
       const chat = makeChat({ id: 6, isFavorite: true });
       mockCollectHistory.mockResolvedValueOnce({ code: 200 } as any);
 
@@ -242,12 +242,12 @@ describe("useChatHistoryActions", () => {
       const emitted = onChatFavorited.mock.calls[0][0];
       expect(emitted.isFavorite).toBe(false);
       expect(chat.isFavorite).toBe(true);
-      expect(mockElSuccess).toHaveBeenCalledWith("已取消收藏");
+      expect(mockElSuccess).toHaveBeenCalledWith("Removed from favorites");
     });
   });
 
   describe("handleRenameDialogClose", () => {
-    it("重置状态并调用 resetFields", () => {
+    it("resets state and calls resetFields", () => {
       const chat = makeChat({ title: "T" });
       const c = makeComposable();
       c.handleChatAction("rename", chat);

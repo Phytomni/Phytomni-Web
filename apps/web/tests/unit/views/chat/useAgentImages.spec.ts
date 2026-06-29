@@ -19,7 +19,7 @@ describe("useAgentImages", () => {
     mockGetObsImages.mockReset();
   });
 
-  it("GeneNetworkAgent: 有 download_path + id 时调用 getObsImages 并写入 geneNetworkImages", async () => {
+  it("GeneNetworkAgent: with download_path + id, calls getObsImages and writes geneNetworkImages", async () => {
     mockGetObsImages.mockResolvedValue({
       code: 200,
       data: ["http://obs/img1.png", "http://obs/img2.png"],
@@ -51,7 +51,7 @@ describe("useAgentImages", () => {
     expect(geneNetworkImagesLoading["msg-001"]).toBe(false);
   });
 
-  it("DigitalDesignAgent: download_path 为字符串单值时解析后调用 getObsImages", async () => {
+  it("DigitalDesignAgent: when download_path is a single string value, parses it then calls getObsImages", async () => {
     mockGetObsImages.mockResolvedValue({
       code: 200,
       data: "http://obs/design.png",
@@ -82,7 +82,7 @@ describe("useAgentImages", () => {
     expect(digitalDesignImagesLoading["msg-002"]).toBe(false);
   });
 
-  it("DigitalDesignAgent: download_path 为 JSON 字符串数组时逐条抓取", async () => {
+  it("DigitalDesignAgent: when download_path is a JSON string array, fetches each one", async () => {
     mockGetObsImages
       .mockResolvedValueOnce({ code: 200, data: ["http://obs/a.png"] })
       .mockResolvedValueOnce({ code: 200, data: ["http://obs/b.png"] });
@@ -112,7 +112,7 @@ describe("useAgentImages", () => {
     ]);
   });
 
-  it("负路径: tool_name 为 ChatAgent 时不触发抓取", async () => {
+  it("negative path: does not trigger fetch when tool_name is ChatAgent", async () => {
     const currentChat = ref<any>(null);
     useAgentImages(currentChat);
 
@@ -132,7 +132,7 @@ describe("useAgentImages", () => {
     expect(mockGetObsImages).not.toHaveBeenCalled();
   });
 
-  it("负路径: 缺少 download_path 时不触发抓取", async () => {
+  it("negative path: does not trigger fetch when download_path is missing", async () => {
     const currentChat = ref<any>(null);
     useAgentImages(currentChat);
 
@@ -152,7 +152,7 @@ describe("useAgentImages", () => {
     expect(mockGetObsImages).not.toHaveBeenCalled();
   });
 
-  it("负路径: currentChat 为 null 时不触发抓取", async () => {
+  it("negative path: does not trigger fetch when currentChat is null", async () => {
     const currentChat = ref<any>(null);
     useAgentImages(currentChat);
 
@@ -161,7 +161,7 @@ describe("useAgentImages", () => {
     expect(mockGetObsImages).not.toHaveBeenCalled();
   });
 
-  it("去重: GeneNetworkAgent 同一 id 第二次变化不重复抓取", async () => {
+  it("dedup: GeneNetworkAgent does not re-fetch on a second change with the same id", async () => {
     mockGetObsImages.mockResolvedValue({ code: 200, data: ["http://obs/x.png"] });
 
     const currentChat = ref<any>(null);

@@ -111,7 +111,7 @@ export const processInlineMarkdown = (line: string): string => {
     (_: string, text: string, url: string) => {
       // convert the path
       const cleanUrl = convertFilePath(url);
-      return `<div class="cif-container" data-src="${cleanUrl}" data-alt="${text}">${text} (CIF 文件)</div>`;
+      return `<div class="cif-container" data-src="${cleanUrl}" data-alt="${text}">${text} (CIF file)</div>`;
     }
   );
   // handle reference citations, ensuring a citation does not sit on its own line

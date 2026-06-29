@@ -20,6 +20,6 @@ export default function (
       el.parentNode && el.parentNode.removeChild(el);
     }
   } else {
-    throw new Error("`请设置操作权限标签值`");
+    throw new Error("Please set the operation permission tag value");
   }
 }

@@ -200,7 +200,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     try {
       await window.print();
     } catch (error) {
-      ElMessage.error("打印失败");
+      ElMessage.error("Print failed");
       console.error("Print error:", error);
     }
 

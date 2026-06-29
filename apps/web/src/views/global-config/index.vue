@@ -189,12 +189,12 @@ const configHistory = ref([
   {
     timestamp: "2024-01-15 10:30:00",
     operator: "admin",
-    changes: "修改了文件上传大小限制",
+    changes: "Updated file upload size limit",
   },
   {
     timestamp: "2024-01-14 15:20:00",
     operator: "admin",
-    changes: "更新了密码策略配置",
+    changes: "Updated password policy config",
   },
 ]);
 
@@ -215,7 +215,7 @@ const handleSave = async () => {
     configHistory.value.unshift({
       timestamp: new Date().toLocaleString("zh-CN"),
       operator: "admin",
-      changes: "保存了全局策略配置",
+      changes: "Saved global policy config",
     });
   } catch (error) {
     ElMessage.error(t("globalConfig.saveFailed"));
@@ -270,7 +270,7 @@ const handleTest = () => {
 // View history details
 const handleViewHistory = (row: any) => {
   ElMessageBox.alert(
-    `操作时间: ${row.timestamp}\n操作人: ${row.operator}\n变更内容: ${row.changes}`,
+    `Time: ${row.timestamp}\nOperator: ${row.operator}\nChanges: ${row.changes}`,
     t("globalConfig.historyDetail"),
     {
       confirmButtonText: t("common.confirm"),
