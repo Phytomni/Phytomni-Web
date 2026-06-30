@@ -196,6 +196,16 @@ func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunReque
 	return &out, nil
 }
 
+// RouteQuery dispatches an Expert-mode query to Bot's MCP semantic router,
+// which selects and runs the appropriate agent and returns the agent.run shape.
+func (c *Client) RouteQuery(ctx context.Context, req RouteQueryRequest) (*RouteQueryResponse, error) {
+	var out RouteQueryResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/v1/query/route", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ListRuns fetches every run for a dialogue in one call (server-side filter).
 func (c *Client) ListRuns(ctx context.Context, dialogueID string) (*RunsListResponse, error) {
 	q := url.Values{}

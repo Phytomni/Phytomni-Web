@@ -74,6 +74,21 @@ type AgentRunResponse struct {
 	Result  AgentRunResult `json:"result"`
 }
 
+// RouteQueryRequest is the body for POST /v1/query/route — Bot's MCP semantic
+// router. ForcedTool=nil means autonomous routing (the v1 Expert contract).
+type RouteQueryRequest struct {
+	UserQuery   string        `json:"user_query"`
+	History     []ChatMessage `json:"history,omitempty"`
+	OBSFileList []string      `json:"obs_file_list,omitempty"`
+	DialogueID  string        `json:"dialogue_id,omitempty"`
+	ForcedTool  *string       `json:"forced_tool"`
+}
+
+// RouteQueryResponse mirrors AgentRunResponse exactly: Bot's route endpoint
+// MUST return the same envelope (resolved `agent` slug + result.formatted +
+// status/task_ids) so ShapeAnswer and SyncBotRuns reconcile correctly.
+type RouteQueryResponse = AgentRunResponse
+
 // RunRecord is one row from GET /v1/runs / GET /v1/runs/{id}. The top-level
 // query/answer/tool_name/model/status are lifted by Bot from the result so
 // the read path (answer-check) can merge them without parsing result JSON.
