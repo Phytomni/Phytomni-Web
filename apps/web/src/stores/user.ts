@@ -17,6 +17,7 @@ interface UserToolResponse {
     permission: string;
     tool_list: string[];
     permission_list?: string[];
+    expert_enabled?: boolean;
   };
 }
 
@@ -31,6 +32,7 @@ interface IState {
   permission: string;
   login_status: string; // login status field
   seen_tutorial: string; // UX-only flag, decoupled from password state
+  expertEnabled: boolean; // Expert routing dark-launch flag (server-delivered)
 }
 
 export default defineStore({
@@ -52,6 +54,7 @@ export default defineStore({
     // from change-password.vue) or from the sidebar's "Start Tutorial" button
     // (replay path for returning users).
     seen_tutorial: localStorage.getItem("seenTutorial") || "1",
+    expertEnabled: false,
   }),
   getters: {},
   actions: {
@@ -63,6 +66,7 @@ export default defineStore({
               this.SET_NAME(res.data.permission);
               this.SET_ROLES(res.data.tool_list);
               this.SET_PERMISSION_LIST(res.data.permission_list || []);
+              this.SET_EXPERT_ENABLED(res.data.expert_enabled ?? false);
               resolve(true);
             } else {
               reject(new Error("Failed to get user tools"));
@@ -133,6 +137,9 @@ export default defineStore({
     },
     SET_PERMISSION_LIST(permissionList: string[]) {
       this.permission_list = permissionList;
+    },
+    SET_EXPERT_ENABLED(enabled: boolean) {
+      this.expertEnabled = enabled;
     },
     /**
      * Server-write-only by convention AND enforced by G11 in

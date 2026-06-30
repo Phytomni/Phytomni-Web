@@ -57,3 +57,27 @@ describe("userStore.FedLogOut", () => {
     expect(sessionClear).toHaveBeenCalled();
   });
 });
+
+vi.mock("@/api/chat", () => ({ getUserTool: vi.fn() }));
+import { getUserTool } from "@/api/chat";
+
+describe("userStore.expertEnabled", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+  });
+
+  it("defaults to false", () => {
+    expect(userStore().expertEnabled).toBe(false);
+  });
+
+  it("is set from the tool-permissions expert_enabled flag", async () => {
+    (getUserTool as any).mockResolvedValue({
+      code: 200,
+      data: { permission: "user", tool_list: [], permission_list: [], expert_enabled: true },
+    });
+    const store = userStore();
+    await store.getUserTools();
+    expect(store.expertEnabled).toBe(true);
+  });
+});
