@@ -381,6 +381,34 @@ team before any removal.
 > `AutoMigrate` for dev/CI fresh schemas only; production DDL stays manual
 > (the statements above).
 
+### 5.6 Expert chat mode `mode` column + flag — PENDING (future feature, additive)
+
+> **Not part of this release's cutover.** The Instant/Expert chat-mode selector
+> ships with Expert **dark** (`bot.expert_enabled` defaults `false`). Do these
+> steps only when turning Expert on — and only **after** the Bot
+> `POST /v1/query/route` endpoint is deployed.
+
+The gateway adds an additive `question_agent_logs.mode` column (plain
+`ADD COLUMN`, default-covered, online, rollbackable) and a `bot.expert_enabled`
+config flag. To enable Expert, in order:
+
+1. Add the column (existing rows get the default `'instant'`):
+
+   ```sql
+   ALTER TABLE question_agent_logs
+     ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'instant';
+   ```
+
+2. Deploy the Bot `POST /v1/query/route` endpoint (Bot work-order; out of scope
+   for this repo).
+
+3. Set `bot.expert_enabled: true` in the live `config/app.yml` and restart the
+   Go service. (`app.yml.example` already documents the key under the `bot:`
+   block, default `false`.)
+
+Until all three are done Expert stays dark: the SPA disables the Expert pill and
+the gateway returns **503** for any `mode=expert` request — no Bot call.
+
 ---
 
 ## 6. Backend deploy (Go)

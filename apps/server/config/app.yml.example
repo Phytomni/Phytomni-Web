@@ -165,9 +165,10 @@ bcrypt_cost: 10
 # `expert_enabled`   — dark-launch master switch for the Expert routing mode.
 #                      While false the gateway returns 503 for mode=expert
 #                      (no Bot call) and the SPA disables the Expert pill. Set
-#                      true only after Bot's POST /v1/query/route endpoint is
-#                      deployed. Zero value false = safe dormant default,
-#                      mirroring proxy_enabled.
+#                      true only after the question_agent_logs.mode column ALTER
+#                      and Bot's POST /v1/query/route endpoint are deployed (see
+#                      deploy manual §5.6). Zero value false = safe dormant
+#                      default, mirroring proxy_enabled.
 # Rotate `user_api_key` per Bot runbook ~90 days; ops procedure is
 # (1) issue new key via service-token curl above,
 # (2) edit production app.yml,
