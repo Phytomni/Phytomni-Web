@@ -41,6 +41,11 @@ export function useSelectChat(opts: {
       const historyMessages: ChatMessage[] = [];
       const chatState = getChatState(dialogueId);
       if (!chatState) return;
+      // Reconstruct the per-conversation routing mode from the persisted parent
+      // row so refreshes/threads in this conversation route correctly. Default
+      // to "instant" for legacy rows that predate the mode column.
+      chatState.mode =
+        (res.data[0] && res.data[0].mode === "expert") ? "expert" : "instant";
       chatState.historyQuestion = null;
 
       // initialize reaction state
