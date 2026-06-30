@@ -73,6 +73,12 @@ var slugToToolName = map[string]string{
 	"brief_gene":  "BriefGeneAgent",
 }
 
+// ExpertModeEnabled reports whether Expert routing is live. It is the single
+// source of truth shared by the /query gateway gate and the UI pill flag.
+func (ps *Service) ExpertModeEnabled() bool {
+	return rxBot.BotConfig != nil && rxBot.BotConfig.ExpertEnabled
+}
+
 // Query is the gateway orchestration: upload files to Bot, dispatch to the
 // resolved agent, persist a Web-side row (Bot owns the content; Web keeps the
 // ownership/threading record plus a transitional content fallback), and return

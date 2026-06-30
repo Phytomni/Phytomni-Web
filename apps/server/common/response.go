@@ -22,6 +22,7 @@ type LoginResponse struct {
 	ToolList       []string `json:"tool_list"`
 	PermissionList []string `json:"permission_list"`
 	Permission     string   `json:"permission"`
+	ExpertEnabled  bool     `json:"expert_enabled"`
 }
 
 type UserListResponse struct {

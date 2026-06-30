@@ -120,3 +120,25 @@ func TestQuery_InstantUnchanged(t *testing.T) {
 		t.Errorf("instant must hit /v1/chat/completions, hit %q", hit)
 	}
 }
+
+// TestExpertModeEnabled_TracksBotConfig pins the UI flag source: it mirrors
+// BotConfig.ExpertEnabled (single source of truth) — false when BotConfig is
+// nil OR the flag is off, true only when ExpertEnabled is true.
+func TestExpertModeEnabled_TracksBotConfig(t *testing.T) {
+	// Register cleanup before mutating the global so it runs even if a future
+	// regression panics on the nil path (mirrors botRouter's t.Cleanup idiom).
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	rxBot.BotConfig = nil
+	if NewService().ExpertModeEnabled() {
+		t.Error("nil BotConfig must report ExpertModeEnabled=false")
+	}
+	rxBot.BotConfig = &rxBot.Config{ExpertEnabled: false}
+	if NewService().ExpertModeEnabled() {
+		t.Error("ExpertEnabled=false must report ExpertModeEnabled=false")
+	}
+	rxBot.BotConfig = &rxBot.Config{ExpertEnabled: true}
+	if !NewService().ExpertModeEnabled() {
+		t.Error("ExpertModeEnabled must be true when BotConfig.ExpertEnabled=true")
+	}
+}

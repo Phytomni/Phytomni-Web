@@ -54,6 +54,7 @@ func (ph *Handler) PermissionUserTool(ctx *gin.Context) {
 		ToolList:       ToolList,
 		PermissionList: permissionList,
 		Permission:     permission,
+		ExpertEnabled:  ph.service.ExpertModeEnabled(),
 	}
 
 	ctx.JSON(errs.SucResp(LoginRes))
