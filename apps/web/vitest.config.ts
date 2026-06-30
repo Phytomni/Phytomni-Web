@@ -46,6 +46,7 @@ export default defineConfig({
         "src/utils/sanitize-markup.ts",
         "src/utils/image-viewer.ts",
         "src/components/LangSwitch.vue",
+        "src/components/ChatModeSelector.vue",
         "src/permission.ts",
         "src/views/forgot-password/index.vue",
         "src/utils/citation.ts",

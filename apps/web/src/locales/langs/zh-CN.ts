@@ -366,6 +366,11 @@ export default {
     generationStopped: "已停止生成",
     relatedDocuments: "参考资料",
     welcomeTitle: "嗨，我是Phytomni，很高兴见到您！",
+    mode: {
+      instant: "快速模式",
+      expert: "专家模式",
+      comingSoon: "即将上线",
+    },
     welcomeSubtitle: "我可以检索信息并为您执行自动化分析，请随时给我您的任务。",
     inputPlaceholderTip: "请输入您的问题",
     uploadFile: "支持文件上传(最多10个，接受.pdf,.doc,.xlsx,.ppt,.txt,.png)",

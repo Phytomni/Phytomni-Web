@@ -1046,6 +1046,11 @@
               </div>
             </div>
           </div>
+          <ChatModeSelector
+            v-model="chatMode"
+            :expert-enabled="expertModeEnabled"
+            class="empty-chat-mode"
+          />
         </div>
         <div
           class="input-container-warpper"
@@ -1222,7 +1227,7 @@
                   </div>
 
                   <!-- Agent button area -->
-                  <template v-else-if="rolesTool.length > 0">
+                  <template v-else-if="rolesTool.length > 0 && chatMode === 'instant'">
                     <div
                       style="
                         width: 100px;
@@ -1282,7 +1287,9 @@
       </div>
       <div
         v-if="
-          !currentChat?.messages?.length && UserStore.permission !== 'guest'
+          !currentChat?.messages?.length &&
+          UserStore.permission !== 'guest' &&
+          chatMode === 'instant'
         "
         class="input-container-bottom"
         :class="{ 'show-tutorial': showTutorial && currentTutorialStep === 2 }"
@@ -1378,6 +1385,7 @@ import { onMounted, ref, nextTick, watch, computed } from "vue";
 import Sidebar from "./sidebar.vue";
 import { MentionSender } from "vue-element-plus-x";
 import SendProgress from "./components/SendProgress.vue";
+import ChatModeSelector from "@/components/ChatModeSelector.vue";
 import {
   Close as IconClose,
   Document,
@@ -1476,6 +1484,7 @@ const chatList = ref<Chat[]>([]);
 // Fix: changed a static reference to a computed property to ensure reactive updates
 const rolesTool = computed(() => userStore().roles);
 const UserStore = userStore();
+const expertModeEnabled = computed(() => userStore().expertEnabled);
 
 // Add permission loading state management
 const rolesLoading = ref(false);

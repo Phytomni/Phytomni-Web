@@ -363,6 +363,11 @@ export default {
     generationStopped: "Generation stopped",
     relatedDocuments: "Reference Material",
     welcomeTitle: "Hi, I'm Phytomni. Great to meet you!",
+    mode: {
+      instant: "Instant",
+      expert: "Expert",
+      comingSoon: "Coming soon",
+    },
     welcomeSubtitle:
       "I can retrieve information and perform automated analysis for you. Feel free to give me your tasks.",
     inputPlaceholderTip: "Please enter your question",
