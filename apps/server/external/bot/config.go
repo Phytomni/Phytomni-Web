@@ -19,6 +19,10 @@ type Config struct {
 	// ProxyEnabled is the master switch for the /query gateway. While false the
 	// gateway stays dormant and /query keeps flowing to the Python service.
 	ProxyEnabled bool `json:"proxy_enabled" yaml:"proxy_enabled" mapstructure:"proxy_enabled"`
+	// ExpertEnabled is the dark-launch master switch for the Expert routing
+	// mode. While false the gateway returns ErrExpertDisabled for mode=expert
+	// (no Bot call). Zero value false = safe dormant default, like ProxyEnabled.
+	ExpertEnabled bool `json:"expert_enabled" yaml:"expert_enabled" mapstructure:"expert_enabled"`
 	// KeyAuditRedact, when true, requires loggers to emit only the key prefix.
 	KeyAuditRedact bool `json:"key_audit_redact" yaml:"key_audit_redact" mapstructure:"key_audit_redact"`
 	// MaxUploadFileBytes / MaxUploadFileCount / MaxUploadTotalBytes bound the
