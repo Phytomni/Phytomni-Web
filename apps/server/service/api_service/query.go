@@ -24,6 +24,11 @@ var ErrGatewayDisabled = errors.New("bot gateway is disabled")
 // bad tool name is a caller mistake, not a server fault.
 var ErrUnknownTool = errors.New("unknown tool")
 
+// ErrExpertDisabled is returned when mode=expert is requested while the Expert
+// routing gateway is dark (BotConfig.ExpertEnabled=false). The handler maps it
+// to 503 so a deliberately-dark Expert mode is distinguishable from a fault.
+var ErrExpertDisabled = errors.New("expert mode not available")
+
 // QueryFile is one uploaded attachment, read into memory by the handler.
 type QueryFile struct {
 	Filename string

@@ -26,6 +26,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusServiceUnavailable, "service temporarily unavailable"
 	case errors.Is(err, api_service.ErrUnknownTool):
 		return http.StatusBadRequest, "unknown tool type"
+	case errors.Is(err, api_service.ErrExpertDisabled):
+		return http.StatusServiceUnavailable, "expert mode not available"
 	case errors.Is(err, rxBot.ErrBotTimeout):
 		return http.StatusGatewayTimeout, "request timed out, please narrow your query or try again later"
 	}
