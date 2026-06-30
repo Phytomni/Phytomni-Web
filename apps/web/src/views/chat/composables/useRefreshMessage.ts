@@ -69,6 +69,7 @@ export function useRefreshMessage(opts: {
       queryData.append("query", userMessage.content);
       queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
       queryData.append("refresh_id", messageId);
+      queryData.append("mode", chatState.mode);
 
       // add the tool param (if any)
       if (message.tool_name) {
