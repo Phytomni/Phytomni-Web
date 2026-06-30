@@ -42,6 +42,7 @@ type QueryInput struct {
 	Tool      string
 	RefreshId int64 // !=0 = re-answer an existing turn (UPDATE that row)
 	History   string
+	Mode      string // "instant" (default) | "expert"
 	Files     []QueryFile
 }
 
@@ -88,6 +89,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
+	// Expert mode is dark-launched: refuse early (no Bot call) when disabled.
+	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
+		return nil, ErrExpertDisabled
+	}
 	client := rxBot.NewClient()
 
 	// 1. Upload attachments to Bot OBS; keep names/paths for the Web row and
@@ -125,7 +130,40 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		Status:       "SUCCEEDED",
 	}
 	var botRunID, serverID, taskID, logStatus string
-	if chatModel, isChat := rxBot.ChatModelFor(slug); isChat {
+	if in.Mode == "expert" {
+		resp, err := client.RouteQuery(ctx, rxBot.RouteQueryRequest{
+			UserQuery:   in.Query,
+			History:     parseHistory(in.History),
+			OBSFileList: obsPaths,
+			DialogueID:  dialogueID,
+			ForcedTool:  nil,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if resp.ID != nil {
+			botRunID = *resp.ID
+		}
+		// Reshape by the slug Bot's router CHOSE (never "expert"), so cited/table
+		// formatting survives and SyncBotRuns reconciles async runs by agent slug.
+		resolvedSlug := resp.Agent
+		if name, ok := slugToToolName[resolvedSlug]; ok {
+			out.ToolName = name
+		}
+		if resp.Status == "succeeded" {
+			if resp.Result.Formatted != nil {
+				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
+			}
+		} else {
+			out.Status = "RUNNING"
+			logStatus = "sync_running"
+			if len(resp.TaskIDs) > 0 {
+				taskID = resp.TaskIDs[0]
+			}
+			out.Answer = "Task created: " + taskID
+		}
+	} else if chatModel, isChat := rxBot.ChatModelFor(slug); isChat {
 		req := rxBot.ChatCompletionRequest{
 			Model:      chatModel,
 			Messages:   []rxBot.ChatMessage{{Role: "user", Content: in.Query}},
@@ -218,6 +256,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		ToolName:          out.ToolName,
 		Status:            out.Status,
 		LogStatus:         logStatus,
+		Mode:              in.Mode,
 		ReactionType:      "0",
 		CollectType:       "0",
 	}
@@ -273,6 +312,18 @@ func (ps *Service) resolveDialogue(ctx context.Context, username string, in Quer
 		return "", 0, err
 	}
 	return parent.DialogueId, in.Id, nil
+}
+
+// parseHistory converts the flat history JSON string the Web app sends into the
+// structured [{role, content}] array Bot's router consumes. Best-effort: a
+// malformed/empty string yields nil (no history), never an error.
+func parseHistory(s string) []rxBot.ChatMessage {
+	if s == "" || s == "[]" {
+		return nil
+	}
+	var msgs []rxBot.ChatMessage
+	_ = json.Unmarshal([]byte(s), &msgs)
+	return msgs
 }
 
 // QueryAnalystUpdateLog syncs a finished remote task's result back into the

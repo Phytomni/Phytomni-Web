@@ -76,6 +76,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		Query:   ctx.PostForm("query"),
 		Tool:    ctx.PostForm("tool"),
 		History: ctx.DefaultPostForm("history", "[]"),
+		Mode:    ctx.DefaultPostForm("mode", "instant"),
 	}
 	if strings.TrimSpace(in.Query) == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "query content cannot be empty"})

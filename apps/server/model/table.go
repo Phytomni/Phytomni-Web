@@ -68,6 +68,7 @@ type QuestionAgentLog struct {
 	ComputeResource   string     `gorm:"column:compute_resource;type:varchar(50);comment:compute resource" json:"compute_resource"`
 	ServerFilePath    string     `gorm:"column:server_file_path;type:varchar(255);comment:server file path" json:"server_file_path"`
 	ToolName          string     `gorm:"column:tool_name;type:varchar(30);comment:tool type;NOT NULL" json:"tool_name"`
+	Mode              string     `gorm:"column:mode;type:varchar(20);default:'instant';NOT NULL" json:"mode"`
 	Status            string     `gorm:"column:status;type:varchar(30);comment:task status;NOT NULL" json:"status"`
 	LogStatus         string     `gorm:"column:log_status;type:varchar(30);comment:log status;NOT NULL" json:"log_status"`
 	ReactionType      string     `gorm:"column:reaction_type;type:enum('0','1','2');default:'0';not null;comment:reaction status" json:"reaction_type"`
