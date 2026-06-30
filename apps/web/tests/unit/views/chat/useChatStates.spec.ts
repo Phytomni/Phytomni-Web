@@ -63,6 +63,7 @@ describe("useChatStates parallel chat state", () => {
       sendStartedAt: null,
       activeAgentName: "",
       completing: false,
+      mode: "instant",
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
@@ -94,5 +95,23 @@ describe("useChatStates parallel chat state", () => {
 
     // No chat state should be created when there is no currentChatId
     expect(Object.keys(s.chatStates.value)).toHaveLength(0);
+  });
+});
+
+describe("useChatStates mode", () => {
+  it("defaults mode to instant and proxies chatMode to the current conversation", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "c1";
+    expect(s.chatMode.value).toBe("instant");
+    s.chatMode.value = "expert";
+    expect(s.getChatState("c1").mode).toBe("expert");
+  });
+
+  it("keeps mode independent per conversation", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "a";
+    s.chatMode.value = "expert";
+    s.currentChatId.value = "b";
+    expect(s.chatMode.value).toBe("instant");
   });
 });

@@ -22,6 +22,7 @@ export function useChatStates() {
         sendStartedAt: number | null; // start of this send; null = not sending
         activeAgentName: string; // canonical agent name for this send (selects τ + ETA copy)
         completing: boolean; // true = trigger the 99→100 fast progress animation
+        mode: "instant" | "expert"; // per-conversation routing mode (locked after first send)
       }
     >
   >({});
@@ -44,6 +45,7 @@ export function useChatStates() {
         sendStartedAt: null,
         activeAgentName: "",
         completing: false,
+        mode: "instant",
       };
     }
     return chatStates.value[dialogueId];
@@ -82,6 +84,18 @@ export function useChatStates() {
       if (chatState) {
         chatState.isSending = value;
       }
+    },
+  });
+
+  // routing mode - per the current conversation (locked after the first send)
+  const chatMode = computed({
+    get: (): "instant" | "expert" => {
+      if (!currentChatId.value) return "instant";
+      return getChatState(currentChatId.value).mode;
+    },
+    set: (value: "instant" | "expert") => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).mode = value;
     },
   });
 
@@ -218,6 +232,7 @@ export function useChatStates() {
     currentChat,
     messageInput,
     isSending,
+    chatMode,
     fileList,
     copyVisible,
     copyTimeRef,

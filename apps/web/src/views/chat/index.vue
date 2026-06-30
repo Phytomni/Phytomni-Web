@@ -1687,6 +1687,7 @@ const {
   currentChat,
   messageInput,
   isSending,
+  chatMode,
   fileList,
   copyVisible,
   copyTimeRef,
