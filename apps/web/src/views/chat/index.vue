@@ -1685,6 +1685,8 @@ const loadPendingChat = (dialogueId: string) => {
   }
 
   currentChat.value = { messages: pendingChatData.messages };
+  getChatState(dialogueId).mode =
+    pendingChatData.mode === "expert" ? "expert" : "instant";
   return true;
 };
 
