@@ -111,6 +111,7 @@ export function useSendMessage(opts: {
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
       writePendingChat(sendingDialogueId, sendingMessages, {
         title: sendingTitle,
+        mode: chatState.mode,
         onError: () => ElMessage.warning(t("chat.pendingWriteFailed")),
       });
     }
@@ -124,10 +125,13 @@ export function useSendMessage(opts: {
       queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
       queryData.append(
         "tool",
-        newMessageValue.matches.length > 0
-          ? newMessageValue.matches.join(",")
-          : ""
+        chatState.mode === "expert"
+          ? ""
+          : newMessageValue.matches.length > 0
+            ? newMessageValue.matches.join(",")
+            : ""
       );
+      queryData.append("mode", chatState.mode);
       if (chatState.historyQuestion) {
         queryData.append("history", JSON.stringify(chatState.historyQuestion));
       }

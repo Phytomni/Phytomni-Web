@@ -449,3 +449,16 @@ describe("isLocalStorageChat", () => {
     expect(isLocalStorageChat(" new_123")).toBe(false);
   });
 });
+
+describe("writePendingChat mode", () => {
+  it("persists the mode field into the record when provided", () => {
+    writePendingChat("new_1", [{ role: "user", content: "hi" }], {
+      title: "hi",
+      mode: "expert",
+    });
+    const rec = safeParse<Record<string, unknown>>(
+      localStorage.getItem("pending_chat_new_1")
+    );
+    expect(rec?.mode).toBe("expert");
+  });
+});

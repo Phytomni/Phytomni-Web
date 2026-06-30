@@ -107,6 +107,7 @@ export function writePendingChat(
   messages: PendingChatRecord["messages"],
   options?: {
     title?: string;
+    mode?: "instant" | "expert";
     onError?: (error: unknown) => void;
   }
 ): void {
@@ -164,6 +165,7 @@ export function writePendingChat(
       date: new Date().toISOString(),
       messages: sanitizedMessages,
       isPending: true as const,
+      ...(options?.mode ? { mode: options.mode } : {}),
     };
     localStorage.setItem(
       `pending_chat_${dialogueId}`,
