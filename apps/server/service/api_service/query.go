@@ -164,7 +164,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		} else {
 			out.Status = "RUNNING"
 			logStatus = "sync_running"
-			if len(resp.TaskIDs) > 0 {
+			if resp.Result.DedupHit {
+				taskID = resp.Result.TaskID
+			} else if len(resp.TaskIDs) > 0 {
 				taskID = resp.TaskIDs[0]
 			}
 			out.Answer = "Task created: " + taskID

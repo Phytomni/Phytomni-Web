@@ -121,6 +121,70 @@ func TestQuery_InstantUnchanged(t *testing.T) {
 	}
 }
 
+// expertRouteServer returns an httptest Bot whose /v1/query/route answers with
+// the supplied body, so a test can exercise the Expert RUNNING / dedup arms.
+func expertRouteServer(t *testing.T, routeBody string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/query/route" {
+			_, _ = w.Write([]byte(routeBody))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+}
+
+// TestQuery_ExpertRunningArm covers the Expert async (non-"succeeded") arm: a
+// "running" route response must persist Status=RUNNING with the run id and the
+// task id from task_ids, and surface the task id in the answer.
+func TestQuery_ExpertRunningArm(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	expertRouteServer(t, `{"id":"run-async","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-async-1"],"result":{}}`)
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out.Status != "RUNNING" {
+		t.Errorf("expected out.Status=RUNNING, got %q", out.Status)
+	}
+	if !strings.Contains(out.Answer, "task-async-1") {
+		t.Errorf("expected answer to contain task-async-1, got %q", out.Answer)
+	}
+	var botRunID, taskID string
+	gdb.Raw(`SELECT COALESCE(bot_run_id,''), COALESCE(task_id,'') FROM question_agent_logs WHERE id=?`, out.Id).
+		Row().Scan(&botRunID, &taskID)
+	if botRunID != "run-async" {
+		t.Errorf("expected persisted bot_run_id=run-async, got %q", botRunID)
+	}
+	if taskID != "task-async-1" {
+		t.Errorf("expected persisted task_id=task-async-1, got %q", taskID)
+	}
+}
+
+// TestQuery_ExpertRunningArmDedupHit locks Finding C: a dedup-hit running
+// response (task_ids empty, result.dedup_hit=true, result.task_id set) must
+// resolve the task id from result.task_id. Without the DedupHit fallback the
+// persisted task_id is "" and the row strands RUNNING forever.
+func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	expertRouteServer(t, `{"id":"run-dedup","object":"agent.run","agent":"analyst","status":"running","task_ids":[],"result":{"dedup_hit":true,"task_id":"dedup-77"}}`)
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	var taskID string
+	gdb.Raw(`SELECT COALESCE(task_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&taskID)
+	if taskID != "dedup-77" {
+		t.Errorf("expected persisted task_id=dedup-77 (DedupHit fallback), got %q", taskID)
+	}
+}
+
 // TestExpertModeEnabled_TracksBotConfig pins the UI flag source: it mirrors
 // BotConfig.ExpertEnabled (single source of truth) — false when BotConfig is
 // nil OR the flag is off, true only when ExpertEnabled is true.
