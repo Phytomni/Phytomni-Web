@@ -19,12 +19,9 @@ export const buildDisplayReferences = (
   return references.map((doc, index) => {
     const refIndex = index + 1;
 
-    if (doc.title) {
-      return {
-        html: `<div>${refIndex}. ${escapeHtml(String(doc.title))}</div>`,
-        id: `ref-${refIndex}`,
-      };
-    } else if (doc.au || doc.ti) {
+    if (doc.au || doc.ti) {
+      // Rich branch FIRST: an enriched doc carries BOTH title and au/ti, and must render the full
+      // bibliography rather than collapsing to the title-only row (WI1 priority flip).
       const citation = formatDetailedCitation(doc);
 
       // build the DOI and PMID link parts
@@ -59,6 +56,11 @@ export const buildDisplayReferences = (
         html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
           citation
         )}${linkPart}</div>`,
+        id: `ref-${refIndex}`,
+      };
+    } else if (doc.title) {
+      return {
+        html: `<div>${refIndex}. ${escapeHtml(String(doc.title))}</div>`,
         id: `ref-${refIndex}`,
       };
     } else {

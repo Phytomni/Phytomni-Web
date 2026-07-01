@@ -139,4 +139,23 @@ describe("buildDisplayReferences — XSS invariant", () => {
     expect(out[1].html).toContain("2. plain");
     expect(out[2].html).toContain("3. ");
   });
+
+  it("renders the rich branch when a doc carries BOTH title and au/ti (flip)", () => {
+    const [ref] = buildDisplayReferences([
+      { title: "file.pdf", au: "Smith J", ti: "Gene study", so: "Nature", py: 2020 },
+    ]);
+    // rich branch fired (doc-citation wrapper), title-only branch did NOT
+    expect(ref.html).toContain('<div class="doc-citation">');
+    expect(ref.html).toContain("Smith J");
+    expect(ref.html).not.toContain("file.pdf");
+    expect(ref.id).toBe("ref-1");
+  });
+
+  it("neutralizes a javascript: DOI even when the enriched doc also has a title", () => {
+    const [ref] = buildDisplayReferences([
+      { title: "file.pdf", au: "A", ti: "T", so: "S", dl: "javascript:alert(1)" },
+    ]);
+    expect(ref.html).toContain('<a href="#" target="_blank" class="doi-link">');
+    expect(ref.html).not.toContain('href="javascript:');
+  });
 });
