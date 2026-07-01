@@ -133,3 +133,32 @@ describe("convertFilePath", () => {
     expect(convertFilePath("")).toBe("");
   });
 });
+
+describe("processInlineMarkdown citation namespacing", () => {
+  it("namespaces the [N] anchor with ns when provided", () => {
+    const out = processInlineMarkdown("see [1] and [2]", "m4");
+    expect(out).toContain('href="#m4-ref-1"');
+    expect(out).toContain('href="#m4-ref-2"');
+  });
+
+  it("falls back to #ref-N when ns is absent (back-compat)", () => {
+    const out = processInlineMarkdown("see [1]");
+    expect(out).toContain('href="#ref-1"');
+  });
+
+  it("widens the citation match to three digits", () => {
+    const out = processInlineMarkdown("see [123]", "m4");
+    expect(out).toContain('href="#m4-ref-123"');
+  });
+
+  it("does not emit the inert @click attribute", () => {
+    const out = processInlineMarkdown("see [1]", "m4");
+    expect(out).not.toContain("@click");
+    expect(out).not.toContain("jumpTo");
+  });
+
+  it("sanitizes illegal characters out of ns", () => {
+    const out = processInlineMarkdown("see [1]", 'a b"<x');
+    expect(out).toContain('href="#abx-ref-1"');
+  });
+});

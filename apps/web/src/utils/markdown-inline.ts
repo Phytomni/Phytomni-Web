@@ -25,8 +25,14 @@ export const convertFilePath = (path: string): string => {
 // function does inline processing on the bare string and never escapes itself
 // (escaping belongs to the caller; see the v-html sanitization invariant /
 // @/utils/sanitize-markup).
-export const processInlineMarkdown = (line: string): string => {
+export const processInlineMarkdown = (line: string, ns = ""): string => {
   if (!line) return line;
+
+  // ns namespaces the [N] citation anchors so they target reference N of the SAME message
+  // (multiple DeepGenome/cited answers render into one chat document). ns is developer-supplied,
+  // never agent text; sanitize defensively. Empty ns keeps the bare #ref-N (back-compat).
+  const safeNs = ns.replace(/[^A-Za-z0-9-]/g, "");
+  const refHref = (n: string) => (safeNs ? `#${safeNs}-ref-${n}` : `#ref-${n}`);
 
   // First restore the escaped HTML <a> tags (supports various attribute combinations)
   // Match pattern: &lt;a href=&quot;...&quot; ... &gt;...&lt;/a&gt;
@@ -114,10 +120,13 @@ export const processInlineMarkdown = (line: string): string => {
       return `<div class="cif-container" data-src="${cleanUrl}" data-alt="${text}">${text} (CIF file)</div>`;
     }
   );
-  // handle reference citations, ensuring a citation does not sit on its own line
+  // handle reference citations, ensuring a citation does not sit on its own line. The anchor is a
+  // native #ns-ref-N fragment jump (v-html content is not compiled, so the old @click was inert
+  // dead text — dropped here). The digit run is widened to three to match multi-hundred references.
   line = line.replace(
-    /\[(\d{1,2})\]/g,
-    '<a href="#ref-$1" @click.prevent="jumpTo(\'ref-$1\')" style="display: inline-block;">[$1]</a>'
+    /\[(\d{1,3})\]/g,
+    (_m: string, n: string) =>
+      `<a href="${refHref(n)}" style="display: inline-block;">[${n}]</a>`
   );
   // handle bold
   line = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
