@@ -36,9 +36,9 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            <MarkdownViewer
-              :content="briefGeneAgentResponse"
-              :instantMessage="true"
+            <CitedAnswer
+              :content="briefGeneAnswer.content"
+              :references="briefGeneAnswer.references"
             />
             <div class="tip-text">{{ $t("common.Tip") }}</div>
           </div>
@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import { useRouter } from "vue-router";
 import { ArrowLeft } from "@element-plus/icons-vue";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import CitedAnswer from "@/components/CitedAnswer.vue";
 
 const router = useRouter();
 const goBack = () => {
@@ -61,7 +61,8 @@ const goBack = () => {
 const botAvatar =
   "/avatars/bot.svg";
 
-const briefGeneAgentResponse = `**Title**: Advances in Single-Cell RNA Sequencing (scRNA-seq) Methodology and Its Applications in Plant Biology
+const briefGeneAnswer = {
+  content: `**Title**: Advances in Single-Cell RNA Sequencing (scRNA-seq) Methodology and Its Applications in Plant Biology
 
 **Results**:
 
@@ -79,7 +80,107 @@ Cell-type-specific responses to abiotic stresses in plants
 
 Abiotic stresses, such as drought, salinity, and cold, trigger complex physiological and biochemical changes in plants, which occur in a cell-type-specific manner [17]. Advances in cell-type-specific isolation techniques, such as laser capture microdissection (LCM) and fluorescent activated cell sorting (FACS), have enabled the transcriptional profiling of specific plant cell types, providing insights into their responses to abiotic stresses.
 
-In conclusion, single-cell RNA sequencing has revolutionized our understanding of plant stress responses by enabling the analysis of gene expression at the individual cell level. This technology has revealed the complexity and heterogeneity of plant stress responses, providing insights into the molecular mechanisms underlying plant adaptation to environmental challenges.`;
+In conclusion, single-cell RNA sequencing has revolutionized our understanding of plant stress responses by enabling the analysis of gene expression at the individual cell level. This technology has revealed the complexity and heterogeneity of plant stress responses, providing insights into the molecular mechanisms underlying plant adaptation to environmental challenges.`,
+  references: [
+    {
+      file_id: "bg-1",
+      title:
+        "Single-cell RNA sequencing in plant biology: methods and applications.pdf",
+    },
+    {
+      file_id: "bg-2",
+      title:
+        "Protoplast isolation strategies for plant single-cell transcriptomics.pdf",
+    },
+    {
+      file_id: "bg-3",
+      title: "Computational tools for single-cell RNA-seq data integration.pdf",
+    },
+    {
+      file_id: "bg-4",
+      title:
+        "Single-cell transcriptomics reveals developmental trajectories in plant root tissues.pdf",
+    },
+    {
+      file_id: "bg-5",
+      title:
+        "Resolving cellular heterogeneity in plant organs with scRNA-seq.pdf",
+    },
+    {
+      file_id: "bg-6",
+      title: "Advances in laser capture microdissection for plant tissues.pdf",
+    },
+    {
+      file_id: "bg-7",
+      title:
+        "Fluorescence-activated cell sorting of plant protoplasts for transcriptomic profiling.pdf",
+    },
+    {
+      file_id: "bg-8",
+      title:
+        "Single-cell atlases of crop species under environmental stress.pdf",
+    },
+    {
+      file_id: "bg-9",
+      title: "Single-cell transcriptomic atlas of plant stress responses",
+      au: "Author, A. et al",
+      ti: "Single-cell transcriptomic atlas of plant stress responses",
+      so: "NATURE PLANTS",
+      vl: "7",
+      bp: "100",
+      ep: "112",
+      py: "2021",
+      di: "10.1038/s41477-021-00000-0",
+      dl: "http://dx.doi.org/10.1038/s41477-021-00000-0",
+      pm: "33333333",
+    },
+    {
+      file_id: "bg-10",
+      title:
+        "Cell-type-specific molecular responses to biotic stress in plants.pdf",
+    },
+    {
+      file_id: "bg-11",
+      title: "Single-cell profiling of Arabidopsis guard cell ABA responses",
+      au: "Chen, L. et al",
+      ti: "Single-cell profiling of Arabidopsis guard cell ABA responses",
+      so: "NATURE PLANTS",
+      vl: "8",
+      bp: "215",
+      ep: "228",
+      py: "2022",
+      di: "10.1038/s41477-022-00001-1",
+      dl: "http://dx.doi.org/10.1038/s41477-022-00001-1",
+      pm: "35444444",
+    },
+    {
+      file_id: "bg-12",
+      title: "Guard cell signaling networks in abscisic acid response.pdf",
+    },
+    {
+      file_id: "bg-13",
+      title: "Transcriptional profiling of plant cell types under drought.pdf",
+    },
+    {
+      file_id: "bg-14",
+      title: "Cell-type-specific salinity stress responses in crop roots.pdf",
+    },
+    {
+      file_id: "bg-15",
+      title: "Cold stress transcriptomics at single-cell resolution in plants.pdf",
+    },
+    {
+      file_id: "bg-16",
+      title:
+        "Comparative single-cell analysis of abiotic stress signaling pathways.pdf",
+    },
+    {
+      file_id: "bg-17",
+      title:
+        "Cell-type-specific responses to abiotic stress revealed by single-cell transcriptomics.pdf",
+    },
+  ],
+};
 </script>
 
 <style lang="scss" scoped>
