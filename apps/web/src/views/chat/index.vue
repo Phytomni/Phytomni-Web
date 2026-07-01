@@ -301,6 +301,7 @@
                     "
                     :markdown="message.content.replace(/\n/g, '\\n')"
                     :references="message.doc_list || []"
+                    :ns="'m' + index"
                   />
                   <CitedAnswer
                     v-else-if="

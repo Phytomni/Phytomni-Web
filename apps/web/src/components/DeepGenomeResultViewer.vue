@@ -250,6 +250,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  ns: {
+    type: String,
+    default: "",
+  },
 });
 
 const contentBlocks = ref([]);
@@ -277,7 +281,7 @@ const {
 // Rendering logic (incl. the v-html sanitization invariant) is extracted to
 // @/utils/reference-renderer for direct unit testing.
 const displayReferences = computed(() =>
-  buildDisplayReferences(props.references)
+  buildDisplayReferences(props.references, props.ns)
 );
 
 // Process CIF containers
@@ -407,7 +411,7 @@ const { activeHeadingId, handleNavSelect, setupIntersectionObserver } =
 
 // Set up the Intersection Observer in onMounted
 onMounted(async () => {
-  const parsed = parseDeepGenomeMarkdown(props.markdown);
+  const parsed = parseDeepGenomeMarkdown(props.markdown, props.ns);
   contentBlocks.value = parsed.contentBlocks;
   headings.value = parsed.headings;
   nestedHeadings.value = parsed.nestedHeadings;

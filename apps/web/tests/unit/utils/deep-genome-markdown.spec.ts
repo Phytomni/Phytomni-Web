@@ -209,3 +209,37 @@ describe("parseDeepGenomeMarkdown — v-html XSS invariant (escapeHtml pipeline)
     expect(body).not.toContain('<a href="javascript:');
   });
 });
+
+describe("parseDeepGenomeMarkdown — ns threading (per-message citation namespacing)", () => {
+  // A heading prefix is required so the paragraph lands in a standalone-content
+  // block (a bare heading-less line is computed but never stored — no
+  // isInStandalone* flag is set, so contentBlocks would be empty and the ns
+  // assertion could not reach the inline-markdown output).
+  it("threads ns into inline [N] citation anchors (#m5-ref-1)", () => {
+    const md = join("## Sec", "Some text with a citation [1] here.");
+    const parsed = parseDeepGenomeMarkdown(md, "m5");
+    const body = findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
+    expect(body).toContain("#m5-ref-1");
+    expect(body).not.toContain('"#ref-1"');
+  });
+
+  it("keeps the bare #ref-N anchor when ns is empty (back-compat)", () => {
+    const md = join("## Sec", "Some text with a citation [1] here.");
+    const parsed = parseDeepGenomeMarkdown(md);
+    const body = findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
+    expect(body).toContain("#ref-1");
+    expect(body).not.toContain("#m5-ref-1");
+  });
+
+  it("threads ns into table-cell citation anchors", () => {
+    const md = join(
+      "## Data",
+      "| Gene | Note |",
+      "| --- | --- |",
+      "| BRCA1 | see [2] |"
+    );
+    const parsed = parseDeepGenomeMarkdown(md, "m9");
+    const body = findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
+    expect(body).toContain("#m9-ref-2");
+  });
+});

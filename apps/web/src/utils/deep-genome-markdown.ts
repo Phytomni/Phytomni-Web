@@ -50,12 +50,19 @@ export interface NestedHeading extends Heading {
 }
 
 // --- Conversion logic ---
-export function parseDeepGenomeMarkdown(text: string): {
+export function parseDeepGenomeMarkdown(
+  text: string,
+  ns = ""
+): {
   contentBlocks: ContentBlock[];
   headings: Heading[];
   nestedHeadings: NestedHeading[];
 } {
   const lines = text.split("\\n"); // split into lines
+  // ns namespaces the inline [N] citation anchors so they target reference N of the SAME message.
+  // All processInlineMarkdown calls below go through this alias so ns threads uniformly.
+  const safeNs = ns.replace(/[^A-Za-z0-9-]/g, "");
+  const inlineMd = (s: string): string => processInlineMarkdown(s, safeNs);
   const blocks: ContentBlock[] = [];
   let currentH3CardContent = "";
   let currentH3CardHeader = "";
@@ -146,7 +153,7 @@ export function parseDeepGenomeMarkdown(text: string): {
         .map((cell) => cell.trim())
         .filter((cell) => cell.length > 0);
       tableHeaders = headerCells.map((cell) =>
-        processInlineMarkdown(escapeHtml(cell))
+        inlineMd(escapeHtml(cell))
       );
 
       i++; // skip the delimiter row
@@ -166,7 +173,7 @@ export function parseDeepGenomeMarkdown(text: string): {
           .map((cell) => cell.trim())
           .filter((cell) => cell.length > 0);
         const processedRow = dataCells.map((cell) =>
-          processInlineMarkdown(escapeHtml(cell))
+          inlineMd(escapeHtml(cell))
         );
         tableRows.push(processedRow);
         isTableRowProcessed = true; // mark the table data row as processed
@@ -199,7 +206,7 @@ export function parseDeepGenomeMarkdown(text: string): {
 
         if (/^####\s(.*)/.test(line)) {
           const match = line.match(/^####\s(.*)/);
-          const content = processInlineMarkdown(escapeHtml(match![1]));
+          const content = inlineMd(escapeHtml(match![1]));
           const id = createHeadingId("h4");
           headingsList.push({ id, text: content, level: 4 });
           if (isInH3Card) {
@@ -232,7 +239,7 @@ export function parseDeepGenomeMarkdown(text: string): {
           }
 
           const match = line.match(/^###\s(.*)/);
-          const content = processInlineMarkdown(escapeHtml(match![1]));
+          const content = inlineMd(escapeHtml(match![1]));
           currentH3CardId = createHeadingId("h3");
           currentH3CardHeader = content;
           currentH3CardContent = "";
@@ -245,7 +252,7 @@ export function parseDeepGenomeMarkdown(text: string): {
           currentLineProcessed = true;
         } else if (/^##\s(.*)/.test(line)) {
           const match = line.match(/^##\s(.*)/);
-          const content = processInlineMarkdown(escapeHtml(match![1]));
+          const content = inlineMd(escapeHtml(match![1]));
           const id = createHeadingId("h2");
           headingsList.push({ id, text: content, level: 2 });
 
@@ -276,7 +283,7 @@ export function parseDeepGenomeMarkdown(text: string): {
           currentLineProcessed = true;
         } else if (/^#\s(.*)/.test(line)) {
           const match = line.match(/^#\s(.*)/);
-          const content = processInlineMarkdown(escapeHtml(match![1]));
+          const content = inlineMd(escapeHtml(match![1]));
           const id = createHeadingId("h1");
           headingsList.push({ id, text: content, level: 1 });
 
@@ -307,7 +314,7 @@ export function parseDeepGenomeMarkdown(text: string): {
           currentLineProcessed = true;
         } else {
           // handle a normal text line immediately following the table's end
-          const processedLineContent = `<p>${processInlineMarkdown(
+          const processedLineContent = `<p>${inlineMd(
             escapeHtml(line)
           )}</p>`;
           const isLineContentEmpty = line.trim() === "";
@@ -344,7 +351,7 @@ export function parseDeepGenomeMarkdown(text: string): {
     // --- Other content handling logic ---
     if (/^####\s(.*)/.test(line)) {
       const match = line.match(/^####\s(.*)/);
-      const content = processInlineMarkdown(escapeHtml(match![1]));
+      const content = inlineMd(escapeHtml(match![1]));
       const id = createHeadingId("h4");
       headingsList.push({ id, text: content, level: 4 });
       if (isInH3Card) {
@@ -376,7 +383,7 @@ export function parseDeepGenomeMarkdown(text: string): {
       }
 
       const match = line.match(/^###\s(.*)/);
-      const content = processInlineMarkdown(escapeHtml(match![1]));
+      const content = inlineMd(escapeHtml(match![1]));
       currentH3CardId = createHeadingId("h3");
       currentH3CardHeader = content;
       currentH3CardContent = "";
@@ -388,7 +395,7 @@ export function parseDeepGenomeMarkdown(text: string): {
       });
     } else if (/^##\s(.*)/.test(line)) {
       const match = line.match(/^##\s(.*)/);
-      const content = processInlineMarkdown(escapeHtml(match![1]));
+      const content = inlineMd(escapeHtml(match![1]));
       const id = createHeadingId("h2");
       headingsList.push({ id, text: content, level: 2 });
 
@@ -428,7 +435,7 @@ export function parseDeepGenomeMarkdown(text: string): {
       isInStandaloneContentAfterH2 = true;
     } else if (/^#\s(.*)/.test(line)) {
       const match = line.match(/^#\s(.*)/);
-      const content = processInlineMarkdown(escapeHtml(match![1]));
+      const content = inlineMd(escapeHtml(match![1]));
       const id = createHeadingId("h1");
       headingsList.push({ id, text: content, level: 1 });
 
@@ -458,7 +465,7 @@ export function parseDeepGenomeMarkdown(text: string): {
       blocks.push({ type: "h1", id, content });
     } else {
       // handle normal paragraphs, images, links, etc.
-      const processedLineContent = `<p>${processInlineMarkdown(
+      const processedLineContent = `<p>${inlineMd(
         escapeHtml(line)
       )}</p>`;
       const isLineContentEmpty = line.trim() === "";
@@ -498,7 +505,7 @@ export function parseDeepGenomeMarkdown(text: string): {
           // escapeHtml first, then inline processing (same path as headings/paragraphs/table cells),
           // so raw HTML in the agent/RAG caption (e.g. <img onerror>) becomes inert text
           // and does not execute via the v-html sink; legitimate **bold** is still converted to strong.
-          captionText = processInlineMarkdown(escapeHtml(captionText));
+          captionText = inlineMd(escapeHtml(captionText));
           // build the caption HTML
           captionHtml = `<p style="text-align: center; margin-top: 8px;">${captionText}</p>`;
           // skip all lines from i+1 to j (including blank lines and the caption line)
