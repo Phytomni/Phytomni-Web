@@ -39,6 +39,7 @@
             <CitedAnswer
               :content="briefGeneAnswer.content"
               :references="briefGeneAnswer.references"
+              :ns="'bg'"
             />
             <div class="tip-text">{{ $t("common.Tip") }}</div>
           </div>

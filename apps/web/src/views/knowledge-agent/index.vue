@@ -39,6 +39,7 @@
             <CitedAnswer
               :content="knowledgeAnswer.content"
               :references="knowledgeAnswer.references"
+              :ns="'kb'"
             />
             <div class="tip-text">{{ $t("common.Tip") }}</div>
           </div>
