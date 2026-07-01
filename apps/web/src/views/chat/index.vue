@@ -2046,10 +2046,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
     message.doc_list && message.doc_list.length > 0
       ? message.doc_list
           .map((item: any, idx: number) => {
-            if (item.title) {
-              return `${idx + 1}. ${item.title}`;
-            } else if (item.au || item.ti) {
+            if (item.au || item.ti) {
               return `${idx + 1}. ${formatDetailedCitation(item)}`;
+            } else if (item.title) {
+              return `${idx + 1}. ${item.title}`;
             }
             return `${idx + 1}. ${JSON.stringify(item)}`;
           })
