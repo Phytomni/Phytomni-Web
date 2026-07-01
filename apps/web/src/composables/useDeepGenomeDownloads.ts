@@ -179,7 +179,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       }
 
       /* fix reference-number display */
-      #print-container a[href^="#ref-"] {
+      #print-container a[href*="-ref-"] {
         display: inline-block !important;
       }
 
