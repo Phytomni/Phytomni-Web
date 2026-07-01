@@ -20,8 +20,8 @@ const mountCited = (props: Record<string, unknown>) =>
     global: {
       stubs: {
         MarkdownViewer: {
-          template: '<div class="mv-stub">{{ content }}|{{ instantMessage }}</div>',
-          props: ["content", "instantMessage"],
+          template: '<div class="mv-stub">{{ content }}|{{ instantMessage }}|{{ ns }}</div>',
+          props: ["content", "instantMessage", "ns"],
         },
       },
     },
@@ -50,5 +50,28 @@ describe("CitedAnswer", () => {
     const wrapper = mountCited({ content: "hello", references: [], instantMessage: true });
     expect(wrapper.find(".mv-stub").text()).toContain("hello");
     expect(wrapper.find(".mv-stub").text()).toContain("true");
+  });
+
+  it("namespaces reference-row ids with the ns prop", () => {
+    const wrapper = mountCited({
+      content: "body",
+      references: [{ title: "Doc A" }, { au: "Smith", ti: "T", so: "Nature" }],
+      ns: "m3",
+    });
+    const rows = wrapper.findAll(".doc-list-item");
+    expect(rows[0].attributes("id")).toBe("m3-ref-1");
+    expect(rows[1].attributes("id")).toBe("m3-ref-2");
+  });
+
+  it("gives two CitedAnswers with different ns disjoint ids (multi-message regression lock)", () => {
+    const a = mountCited({ content: "a", references: [{ title: "A" }], ns: "m0" });
+    const b = mountCited({ content: "b", references: [{ title: "B" }], ns: "m1" });
+    expect(a.find(".doc-list-item").attributes("id")).toBe("m0-ref-1");
+    expect(b.find(".doc-list-item").attributes("id")).toBe("m1-ref-1");
+  });
+
+  it("passes ns through to MarkdownViewer", () => {
+    const wrapper = mountCited({ content: "hi", references: [], ns: "m3" });
+    expect(wrapper.find(".mv-stub").text()).toContain("m3");
   });
 });

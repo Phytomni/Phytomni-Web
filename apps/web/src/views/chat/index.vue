@@ -310,6 +310,7 @@
                     "
                     :content="message.content"
                     :references="message.doc_list"
+                    :ns="'m' + index"
                     :instant-message="
                       (message?.instantMessage &&
                         currentChat.messages.length - 1 == index) ||

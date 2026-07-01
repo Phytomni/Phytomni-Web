@@ -3,6 +3,7 @@
     <MarkdownViewer
       :content="content"
       :instant-message="instantMessage"
+      :ns="ns"
       @finish="$emit('finish')"
     />
     <div v-if="references && references.length > 0" class="doc-list">
@@ -32,12 +33,13 @@ const props = defineProps<{
   content: string;
   references?: any[];
   instantMessage?: boolean;
+  ns?: string;
 }>();
 
 defineEmits<{ finish: [] }>();
 
 const displayReferences = computed(() =>
-  buildDisplayReferences(props.references || [])
+  buildDisplayReferences(props.references || [], props.ns)
 );
 </script>
 
