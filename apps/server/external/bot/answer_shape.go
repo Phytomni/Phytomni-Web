@@ -34,15 +34,27 @@ func ChatAnswerText(resp *ChatCompletionResponse) string {
 	return resp.Formatted.Answer
 }
 
-// citedAnswer emits {"content": answerText, "doc_list": [{"title": ...}]}.
-// Bot references carry only {file_id, title}; an empty title falls back to the
-// file_id so the Web app's `v-if="doc.title"` branch still renders the row.
+// citedAnswer emits {"content": answerText, "doc_list": [{"title": ..., <bibliographic>}]}.
+// Bot references always carry {file_id, title}; on a bibliographic-library hit they additionally
+// carry au/ti/so/vl/bp/ep/py/di/dl/pm (any may be absent; pm may be null). title is always written
+// (empty title falls back to file_id) so the Web app's title row + the document_format consumers
+// stay safe; the additional fields are written only when non-empty so unenriched docs stay title-only.
 func citedAnswer(answerText string, f *Formatted) string {
 	docList := []map[string]interface{}{}
 	if f != nil && len(f.References) > 0 {
 		var refs []struct {
 			FileID json.RawMessage `json:"file_id"`
 			Title  string          `json:"title"`
+			Au     string          `json:"au"`
+			Ti     string          `json:"ti"`
+			So     string          `json:"so"`
+			Vl     string          `json:"vl"`
+			Bp     string          `json:"bp"`
+			Ep     string          `json:"ep"`
+			Py     string          `json:"py"`
+			Di     string          `json:"di"`
+			Dl     string          `json:"dl"`
+			Pm     *string         `json:"pm"`
 		}
 		if err := json.Unmarshal(f.References, &refs); err == nil {
 			for _, r := range refs {
@@ -50,7 +62,20 @@ func citedAnswer(answerText string, f *Formatted) string {
 				if title == "" && len(r.FileID) > 0 {
 					title = string(unquote(r.FileID))
 				}
-				docList = append(docList, map[string]interface{}{"title": title})
+				el := map[string]interface{}{"title": title}
+				putIfSet(el, "au", r.Au)
+				putIfSet(el, "ti", r.Ti)
+				putIfSet(el, "so", r.So)
+				putIfSet(el, "vl", r.Vl)
+				putIfSet(el, "bp", r.Bp)
+				putIfSet(el, "ep", r.Ep)
+				putIfSet(el, "py", r.Py)
+				putIfSet(el, "di", r.Di)
+				putIfSet(el, "dl", r.Dl)
+				if r.Pm != nil && *r.Pm != "" {
+					el["pm"] = *r.Pm
+				}
+				docList = append(docList, el)
 			}
 		}
 	}
@@ -59,6 +84,14 @@ func citedAnswer(answerText string, f *Formatted) string {
 		return answerText
 	}
 	return string(out)
+}
+
+// putIfSet writes key=value into el only when value is non-empty, keeping unenriched
+// reference elements title-only.
+func putIfSet(el map[string]interface{}, key, value string) {
+	if value != "" {
+		el[key] = value
+	}
 }
 
 // tableAnswer emits {"headers": [...], "rows": [[...]]}. The table lives in

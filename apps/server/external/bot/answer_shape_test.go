@@ -29,6 +29,47 @@ func TestShapeAnswer_Cited(t *testing.T) {
 	}
 }
 
+func TestShapeAnswer_CitedEnriched(t *testing.T) {
+	refs := `[
+		{"file_id":"f1","title":"Doc A","au":"Murai, M. et al","ti":"Pleiotropic effect","so":"PLANT BREEDING","vl":"122","bp":"410","ep":"415","py":"2003","di":"10.1/x","dl":"http://dx.doi.org/10.1/x","pm":null},
+		{"file_id":"f2","title":"Doc B"}
+	]`
+	f := &Formatted{References: json.RawMessage(refs)}
+	got := ShapeAnswer("knowledge", "body [1][2]", f)
+
+	var parsed struct {
+		Content string                   `json:"content"`
+		DocList []map[string]interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("not valid JSON: %v (%s)", err, got)
+	}
+	if len(parsed.DocList) != 2 {
+		t.Fatalf("doc_list len = %d", len(parsed.DocList))
+	}
+	// enriched element carries the bibliographic keys
+	if parsed.DocList[0]["title"] != "Doc A" {
+		t.Errorf("doc[0].title = %v", parsed.DocList[0]["title"])
+	}
+	if parsed.DocList[0]["au"] != "Murai, M. et al" {
+		t.Errorf("doc[0].au = %v", parsed.DocList[0]["au"])
+	}
+	if parsed.DocList[0]["so"] != "PLANT BREEDING" {
+		t.Errorf("doc[0].so = %v", parsed.DocList[0]["so"])
+	}
+	// pm was JSON null -> the key must be absent (not written)
+	if _, ok := parsed.DocList[0]["pm"]; ok {
+		t.Errorf("doc[0].pm should be absent for null, got %v", parsed.DocList[0]["pm"])
+	}
+	// title-only element stays title-only (no enriched keys leak in)
+	if parsed.DocList[1]["title"] != "Doc B" {
+		t.Errorf("doc[1].title = %v", parsed.DocList[1]["title"])
+	}
+	if _, ok := parsed.DocList[1]["au"]; ok {
+		t.Errorf("doc[1] should be title-only, au present = %v", parsed.DocList[1]["au"])
+	}
+}
+
 func TestShapeAnswer_CitedEmptyRefs(t *testing.T) {
 	got := ShapeAnswer("review", "md", &Formatted{})
 	var parsed struct {
