@@ -16,9 +16,9 @@ import MarkdownViewer from "@/components/MarkdownViewer.vue";
 // neutralized. (The live-typing path runs through Typewriter + DOMPurify, which
 // is sanitized upstream and not exercised here.) Assertions read the REAL
 // parsed DOM: if a breakout succeeded, jsdom would surface a live attribute.
-function render(content: string) {
+function render(content: string, ns = "m0") {
   return mount(MarkdownViewer, {
-    props: { content, instantMessage: false },
+    props: { content, instantMessage: false, ns },
     global: { stubs: { Typewriter: true } },
   });
 }
@@ -52,22 +52,31 @@ describe("MarkdownViewer — XSS hardening of the v-html render path", () => {
 });
 
 describe("MarkdownViewer citation linkification", () => {
-  it("linkifies [N] and [N,M] markers into #ref anchors", () => {
-    const html = render("See [1] and [2,3].").html();
-    expect(html).toContain('href="#ref-1"');
-    expect(html).toContain('href="#ref-2"');
-    expect(html).toContain('href="#ref-3"');
+  it("linkifies [N] and [N,M] markers into #ns-ref anchors", () => {
+    const html = render("See [1] and [2,3].", "m0").html();
+    expect(html).toContain('href="#m0-ref-1"');
+    expect(html).toContain('href="#m0-ref-2"');
+    expect(html).toContain('href="#m0-ref-3"');
   });
 
   it("treats [1](url) as a markdown link, not a citation (ordering)", () => {
-    const html = render("[1](https://x.test)").html();
+    const html = render("[1](https://x.test)", "m0").html();
     expect(html).toContain('href="https://x.test"');
-    expect(html).not.toContain("#ref-1");
+    expect(html).not.toContain("#m0-ref-1");
   });
 
   it("keeps a smuggled tag inert (escapeHtml runs before linkification)", () => {
-    const html = render("[<img onerror=alert(1)>]").html();
+    const html = render("[<img onerror=alert(1)>]", "m0").html();
     expect(html).not.toContain("<img");
     expect(html).toContain("&lt;img");
+  });
+
+  it("does NOT linkify when no ns is supplied (scope gate)", () => {
+    const html = mount(MarkdownViewer, {
+      props: { content: "See [1].", instantMessage: false },
+      global: { stubs: { Typewriter: true } },
+    }).html();
+    expect(html).not.toContain("ref-1");
+    expect(html).toContain("[1]");
   });
 });

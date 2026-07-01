@@ -25,6 +25,7 @@ import { linkifyCitations } from "@/utils/linkify-citations";
 const props = defineProps<{
   content: string;
   instantMessage?: boolean;
+  ns?: string;
 }>();
 
 const emit = defineEmits<{
@@ -82,7 +83,7 @@ const renderedContent = computed(() => {
     // citation markers: [N] / [N,M] -> anchors into the ref-N reference rows. Runs last (after the
     // markdown link regex and after escapeHtml) so a real [1](url) stays a link and smuggled tags
     // are already inert. See @/utils/linkify-citations for the XSS rationale.
-    content = linkifyCitations(content);
+    content = linkifyCitations(content, props.ns);
 
     return content;
   }
