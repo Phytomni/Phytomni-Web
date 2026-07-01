@@ -50,3 +50,24 @@ describe("MarkdownViewer — XSS hardening of the v-html render path", () => {
     expect(w.find("img").attributes("src")).toBe("/attachments/p.png");
   });
 });
+
+describe("MarkdownViewer citation linkification", () => {
+  it("linkifies [N] and [N,M] markers into #ref anchors", () => {
+    const html = render("See [1] and [2,3].").html();
+    expect(html).toContain('href="#ref-1"');
+    expect(html).toContain('href="#ref-2"');
+    expect(html).toContain('href="#ref-3"');
+  });
+
+  it("treats [1](url) as a markdown link, not a citation (ordering)", () => {
+    const html = render("[1](https://x.test)").html();
+    expect(html).toContain('href="https://x.test"');
+    expect(html).not.toContain("#ref-1");
+  });
+
+  it("keeps a smuggled tag inert (escapeHtml runs before linkification)", () => {
+    const html = render("[<img onerror=alert(1)>]").html();
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img");
+  });
+});

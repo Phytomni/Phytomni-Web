@@ -20,6 +20,7 @@
 import { Typewriter } from "vue-element-plus-x";
 import { computed } from "vue";
 import { escapeHtml, sanitizeEscapedHref } from "@/utils/sanitize-markup";
+import { linkifyCitations } from "@/utils/linkify-citations";
 
 const props = defineProps<{
   content: string;
@@ -77,6 +78,11 @@ const renderedContent = computed(() => {
       /(<img[^>]*>)/g,
       '<p style="text-align: center; margin: 16px 0;">$1</p>'
     );
+
+    // citation markers: [N] / [N,M] -> anchors into the ref-N reference rows. Runs last (after the
+    // markdown link regex and after escapeHtml) so a real [1](url) stays a link and smuggled tags
+    // are already inert. See @/utils/linkify-citations for the XSS rationale.
+    content = linkifyCitations(content);
 
     return content;
   }
