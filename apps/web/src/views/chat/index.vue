@@ -302,6 +302,21 @@
                     :markdown="message.content.replace(/\n/g, '\\n')"
                     :references="message.doc_list || []"
                   />
+                  <CitedAnswer
+                    v-else-if="
+                      message.doc_list &&
+                      message.doc_list.length > 0 &&
+                      message.role === 'assistant'
+                    "
+                    :content="message.content"
+                    :references="message.doc_list"
+                    :instant-message="
+                      (message?.instantMessage &&
+                        currentChat.messages.length - 1 == index) ||
+                      false
+                    "
+                    @finish="() => handleMarkdownFinish(index)"
+                  />
                   <MarkdownViewer
                     v-else
                     :instantMessage="
@@ -336,73 +351,6 @@
                         :show-del-icon="false"
                       />
                     </div>
-                  </div>
-                </div>
-                <div
-                  v-if="
-                    message.tool_name !== 'DeepGenomeAgent' &&
-                    message.doc_list &&
-                    message.doc_list.length > 0
-                  "
-                >
-                  <div class="doc-list-title">
-                    {{ $t("chat.relatedDocuments") }}：
-                  </div>
-                  <div
-                    class="doc-list-item"
-                    v-for="(doc, docIndex) in message.doc_list"
-                    :key="docIndex"
-                  >
-                    <div v-if="doc.title" class="doc-simple">
-                      {{ docIndex + 1 + "、" }}{{ doc.title }}
-                    </div>
-                    <div v-else-if="doc.au || doc.ti" class="doc-detailed">
-                      <div class="doc-citation">
-                        {{ docIndex + 1 }}. {{ formatDetailedCitation(doc)
-                        }}<span v-if="doc.dl || doc.pm"
-                          >.
-                          <span v-if="doc.dl" class="doc-link-inline"
-                            >doi:<a
-                              :href="doc.dl"
-                              target="_blank"
-                              class="doi-link"
-                              >{{ doc.dl }}</a
-                            ></span
-                          ><span v-if="doc.dl && doc.pm">; </span
-                          ><span v-if="doc.pm" class="doc-link-inline"
-                            >pmid:<a
-                              :href="`https://pubmed.ncbi.nlm.nih.gov/${doc.pm}`"
-                              target="_blank"
-                              class="pmid-link"
-                              >{{ doc.pm }}</a
-                            ></span
-                          ></span
-                        >
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Debug info: shows the full doc_list data; hidden by default -->
-                  <div
-                    v-if="false"
-                    class="debug-info"
-                    style="
-                      margin-top: 8px;
-                      padding: 8px;
-                      background-color: #f5f5f5;
-                      border-radius: 4px;
-                      font-size: 12px;
-                      color: #666;
-                    "
-                  >
-                    <strong>调试信息 (doc_list):</strong>
-                    <pre
-                      style="
-                        margin: 4px 0;
-                        white-space: pre-wrap;
-                        word-break: break-word;
-                      "
-                      >{{ JSON.stringify(message.doc_list, null, 2) }}</pre
-                    >
                   </div>
                 </div>
                 <el-button
@@ -1425,6 +1373,7 @@ import {
 } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
