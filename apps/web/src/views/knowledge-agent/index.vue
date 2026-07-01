@@ -36,9 +36,9 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            <MarkdownViewer
-              :content="knowledgeAgentResponse"
-              :instantMessage="true"
+            <CitedAnswer
+              :content="knowledgeAnswer.content"
+              :references="knowledgeAnswer.references"
             />
             <div class="tip-text">{{ $t("common.Tip") }}</div>
           </div>
@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import { useRouter } from "vue-router";
 import { ArrowLeft } from "@element-plus/icons-vue";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import CitedAnswer from "@/components/CitedAnswer.vue";
 
 const router = useRouter();
 const goBack = () => {
@@ -61,7 +61,8 @@ const goBack = () => {
 const botAvatar =
   "/avatars/bot.svg";
 
-const knowledgeAgentResponse = `Epigenetic modifications, including DNA methylation and histone modifications, play crucial roles in regulating adaptive responses to drought stress in crops by altering gene expression and chromatin structure, thereby enabling plants to better cope with water deficit conditions. Here's a detailed look at how these modifications contribute to drought stress responses:
+const knowledgeAnswer = {
+  content: `Epigenetic modifications, including DNA methylation and histone modifications, play crucial roles in regulating adaptive responses to drought stress in crops by altering gene expression and chromatin structure, thereby enabling plants to better cope with water deficit conditions. Here's a detailed look at how these modifications contribute to drought stress responses:
 
 ### DNA Methylation
 1. **Gene Expression Regulation**: DNA methylation involves the addition of methyl groups to the cytosine residues in DNA, which can either activate or silence genes depending on the context. This modification is crucial for regulating genes involved in drought stress responses. For example, in rice, hypo-methylation has been associated with the upregulation of stress-responsive genes, enhancing drought tolerance [1]. Conversely, hyper-methylation can lead to gene silencing, potentially reducing the plant's ability to respond to drought [2].
@@ -96,29 +97,122 @@ const knowledgeAgentResponse = `Epigenetic modifications, including DNA methylat
 
 5. **Global Impact**: These epigenetic changes can have a broad impact on plant physiology, affecting processes such as stomatal regulation, water absorption, and metabolic adjustments, all of which are critical for drought tolerance [11][10].
 
-In summary, epigenetic modifications like DNA methylation and histone modifications are integral to how crops adapt to drought stress. They regulate gene expression, contribute to stress memory, and offer potential pathways for breeding more resilient crops. Advances in technology are making it possible to manipulate these modifications, paving the way for sustainable agricultural practices in the face of climate change.
-
-**References:**
-1. Molecular Mechanisms and Regulatory Pathways Underlying Drought Stress Response in Rice.pdf
-2. Assessment of DNA methylation pattern under drought stress using methylation-sensitive randomly amplified polymorphism analysis in rice.pdf
-3. DNA methylation-mediated modulation of rapid desiccation tolerance acquisition and dehydration stress memory in the resurrection plant Boea hygrometrica.pdf
-4. Exploration of Epigenetics for Improvement of Drought and Other Stress Resistance in Crops A Review.pdf
-5. In Response to Abiotic Stress, DNA Methylation Confers EpiGenetic Changes in Plants.
-6. Small DNA Methylation, Big Player in Plant Abiotic Stress Responses and Memory.pdf
-7. Epigenetic Modifications of Hormonal Signaling Pathways in Plant Drought Response and Tolerance for Sustainable Food Security.
-8. Epigenetic regulation in plant abiotic stress responses.pdf
-9. Epigenomics in stress tolerance of plants under the climate change.
-10. Histone Acetylation Changes in Plant Response to Drought Stress.
-11. Epigenetic regulation of stress responses in plants.pdf
-12. Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf
-13. Histone Modifications Form Epigenetic Regulatory Networks to Regulate Abiotic Stress Response.pdf
-14. Epigenetic regulation of stress responses in plants.pdf
-15. Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf
-16. Epigenetic regulation of stress responses in plants.pdf
-17. Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf
-18. Epigenetic regulation of stress responses in plants.pdf
-19. Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf
-20. Epigenetic regulation of stress responses in plants.pdf`;
+In summary, epigenetic modifications like DNA methylation and histone modifications are integral to how crops adapt to drought stress. They regulate gene expression, contribute to stress memory, and offer potential pathways for breeding more resilient crops. Advances in technology are making it possible to manipulate these modifications, paving the way for sustainable agricultural practices in the face of climate change.`,
+  references: [
+    {
+      file_id: "kb-1",
+      title:
+        "Molecular Mechanisms and Regulatory Pathways Underlying Drought Stress Response in Rice.pdf",
+    },
+    {
+      file_id: "kb-2",
+      title:
+        "Assessment of DNA methylation pattern under drought stress using methylation-sensitive randomly amplified polymorphism analysis in rice.pdf",
+    },
+    {
+      file_id: "kb-3",
+      title:
+        "DNA methylation-mediated modulation of rapid desiccation tolerance acquisition and dehydration stress memory in the resurrection plant Boea hygrometrica.pdf",
+      au: "Murai, M. et al",
+      ti: "DNA methylation-mediated modulation of rapid desiccation tolerance",
+      so: "PLANT BREEDING",
+      vl: "122",
+      bp: "410",
+      ep: "415",
+      py: "2003",
+      di: "10.1046/j.1439-0523.2003.00843.x",
+      dl: "http://dx.doi.org/10.1046/j.1439-0523.2003.00843.x",
+      pm: "32358569",
+    },
+    {
+      file_id: "kb-4",
+      title:
+        "Exploration of Epigenetics for Improvement of Drought and Other Stress Resistance in Crops A Review.pdf",
+    },
+    {
+      file_id: "kb-5",
+      title:
+        "In Response to Abiotic Stress, DNA Methylation Confers EpiGenetic Changes in Plants.",
+      au: "Kumar, S. et al",
+      ti: "In Response to Abiotic Stress, DNA Methylation Confers EpiGenetic Changes in Plants",
+      so: "FRONTIERS IN PLANT SCIENCE",
+      vl: "11",
+      bp: "1",
+      ep: "12",
+      py: "2020",
+      di: "10.3389/fpls.2020.00001",
+      dl: "http://dx.doi.org/10.3389/fpls.2020.00001",
+      pm: "31001305",
+    },
+    {
+      file_id: "kb-6",
+      title:
+        "Small DNA Methylation, Big Player in Plant Abiotic Stress Responses and Memory.pdf",
+    },
+    {
+      file_id: "kb-7",
+      title:
+        "Epigenetic Modifications of Hormonal Signaling Pathways in Plant Drought Response and Tolerance for Sustainable Food Security.",
+    },
+    {
+      file_id: "kb-8",
+      title: "Epigenetic regulation in plant abiotic stress responses.pdf",
+    },
+    {
+      file_id: "kb-9",
+      title: "Epigenomics in stress tolerance of plants under the climate change.",
+    },
+    {
+      file_id: "kb-10",
+      title: "Histone Acetylation Changes in Plant Response to Drought Stress.",
+    },
+    {
+      file_id: "kb-11",
+      title: "Epigenetic regulation of stress responses in plants.pdf",
+    },
+    {
+      file_id: "kb-12",
+      title:
+        "Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf",
+    },
+    {
+      file_id: "kb-13",
+      title:
+        "Histone Modifications Form Epigenetic Regulatory Networks to Regulate Abiotic Stress Response.pdf",
+    },
+    {
+      file_id: "kb-14",
+      title: "Epigenetic regulation of stress responses in plants.pdf",
+    },
+    {
+      file_id: "kb-15",
+      title:
+        "Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf",
+    },
+    {
+      file_id: "kb-16",
+      title: "Epigenetic regulation of stress responses in plants.pdf",
+    },
+    {
+      file_id: "kb-17",
+      title:
+        "Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf",
+    },
+    {
+      file_id: "kb-18",
+      title: "Epigenetic regulation of stress responses in plants.pdf",
+    },
+    {
+      file_id: "kb-19",
+      title:
+        "Role of Epigenetic Factors in Response to Stress and Establishment of Somatic Memory of Stress Exposure in Plants.pdf",
+    },
+    {
+      file_id: "kb-20",
+      title: "Epigenetic regulation of stress responses in plants.pdf",
+    },
+  ],
+};
 </script>
 
 <style lang="scss" scoped>
