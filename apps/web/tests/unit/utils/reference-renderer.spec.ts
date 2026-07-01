@@ -158,4 +158,19 @@ describe("buildDisplayReferences — XSS invariant", () => {
     expect(ref.html).toContain('<a href="#" target="_blank" class="doi-link">');
     expect(ref.html).not.toContain('href="javascript:');
   });
+
+  it("namespaces ids with ns when provided", () => {
+    const out = buildDisplayReferences([{ title: "A" }, { au: "X", ti: "Y", so: "Z" }], "m3");
+    expect(out.map((r) => r.id)).toEqual(["m3-ref-1", "m3-ref-2"]);
+  });
+
+  it("falls back to bare ref-N when ns is empty or absent (back-compat)", () => {
+    expect(buildDisplayReferences([{ title: "A" }]).map((r) => r.id)).toEqual(["ref-1"]);
+    expect(buildDisplayReferences([{ title: "A" }], "").map((r) => r.id)).toEqual(["ref-1"]);
+  });
+
+  it("sanitizes illegal characters out of ns before building the id", () => {
+    const [ref] = buildDisplayReferences([{ title: "A" }], 'a b"<x');
+    expect(ref.id).toBe("abx-ref-1");
+  });
 });

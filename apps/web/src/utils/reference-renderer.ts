@@ -10,18 +10,26 @@ import { formatDetailedCitation } from "@/utils/citation";
 // citation au-so / dl text / pm text / plain string / JSON) is escapeHtml-ed; the
 // DOI / PubMed href always goes through sanitizeHref for a scheme allow-list check.
 export const buildDisplayReferences = (
-  references: any[]
+  references: any[],
+  ns = ""
 ): Array<{ html: string; id: string }> => {
   if (!references || references.length === 0) {
     return [];
   }
+
+  // ns namespaces the anchor ids so [N] links jump to reference N of the SAME
+  // message (multiple cited/DeepGenome answers render into one chat document, so
+  // a bare `ref-N` would collide). ns is developer-supplied (m<index> / kb / bg),
+  // never agent text; sanitize defensively so it can never inject markup into an id.
+  const safeNs = ns.replace(/[^A-Za-z0-9-]/g, "");
+  const refId = (n: number) => (safeNs ? `${safeNs}-ref-${n}` : `ref-${n}`);
 
   return references.map((doc, index) => {
     const refIndex = index + 1;
 
     if (doc.au || doc.ti) {
       // Rich branch FIRST: an enriched doc carries BOTH title and au/ti, and must render the full
-      // bibliography rather than collapsing to the title-only row (WI1 priority flip).
+      // bibliography rather than collapsing to the title-only row (enriched wins over title-only).
       const citation = formatDetailedCitation(doc);
 
       // build the DOI and PMID link parts
@@ -56,26 +64,26 @@ export const buildDisplayReferences = (
         html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
           citation
         )}${linkPart}</div>`,
-        id: `ref-${refIndex}`,
+        id: refId(refIndex),
       };
     } else if (doc.title) {
       return {
         html: `<div>${refIndex}. ${escapeHtml(String(doc.title))}</div>`,
-        id: `ref-${refIndex}`,
+        id: refId(refIndex),
       };
     } else {
       // handle plain-string references
       if (typeof doc === "string") {
         return {
           html: `<div>${refIndex}. ${escapeHtml(doc)}</div>`,
-          id: `ref-${refIndex}`,
+          id: refId(refIndex),
         };
       }
 
       // default case
       return {
         html: `<div>${refIndex}. ${escapeHtml(JSON.stringify(doc))}</div>`,
-        id: `ref-${refIndex}`,
+        id: refId(refIndex),
       };
     }
   });
