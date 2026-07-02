@@ -96,28 +96,41 @@ describe("useCopyDownload", () => {
     });
   });
 
-  describe("downloadFileDirect", () => {
-    it("with a path → window.open opens directly", () => {
+  describe("download_path signing", () => {
+    it("downloadFile signs the internal path and opens only the returned relay URL", async () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
+      mockGetChatdownloadURL.mockResolvedValueOnce({
+        code: 200,
+        data: "/api/v1/downloads/relay-file?t=signed",
+      } as any);
 
-      const { downloadFileDirect } = makeComposable();
-      downloadFileDirect("http://p");
+      const { downloadFile } = makeComposable();
+      await downloadFile("/obs/internal/run/out");
 
+      expect(mockGetChatdownloadURL).toHaveBeenCalledWith({
+        obs_path: "/obs/internal/run/out",
+      });
       expect(open).toHaveBeenCalledWith(
-        "http://p",
+        "/api/v1/downloads/relay-file?t=signed",
+        "_blank",
+        "noopener,noreferrer"
+      );
+      expect(open).not.toHaveBeenCalledWith(
+        "/obs/internal/run/out",
         "_blank",
         "noopener,noreferrer"
       );
     });
 
-    it("empty path → does not open a window", () => {
+    it("downloadFile with an empty path does not call the signer or open a window", async () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
 
-      const { downloadFileDirect } = makeComposable();
-      downloadFileDirect("");
+      const { downloadFile } = makeComposable();
+      await downloadFile("");
 
+      expect(mockGetChatdownloadURL).not.toHaveBeenCalled();
       expect(open).not.toHaveBeenCalled();
     });
   });

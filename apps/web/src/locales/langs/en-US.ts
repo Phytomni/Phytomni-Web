@@ -345,6 +345,8 @@ export default {
     newChat: "Start New",
     exploreAgent: "Explore Agents",
     exploreAgentCases: "Explore Agent Cases",
+    agentsArchitectureTitle: "Phytomni Agent Architecture",
+    agentsArchitectureAlt: "Phytomni agent architecture diagram",
     knowledgeBase: "Knowledge",
     geneDetail: "Gene Display",
     thinkingSteps: "Thinking Steps",

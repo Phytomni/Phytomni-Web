@@ -51,19 +51,12 @@ export function useCopyDownload(opts: {
     }
   };
 
-  // download link
-  const downloadFile = async (url: string) => {
-    // call getChatdownloadURL to get the download link
-    const res = await getChatdownloadURL({ obs_path: url });
-    if (res.code == 200) {
+  // sign and open an internal OBS download reference
+  const downloadFile = async (downloadPath: string) => {
+    if (!downloadPath) return;
+    const res = await getChatdownloadURL({ obs_path: downloadPath });
+    if (res.code == 200 && res.data) {
       window.open(res.data, "_blank", "noopener,noreferrer");
-    }
-  };
-
-  // download the file directly (based on download_path)
-  const downloadFileDirect = (downloadPath: string) => {
-    if (downloadPath) {
-      window.open(downloadPath, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -106,5 +99,5 @@ export function useCopyDownload(opts: {
     }
   };
 
-  return { fallbackCopyText, downloadFile, downloadFileDirect, getFileDownUrl };
+  return { fallbackCopyText, downloadFile, getFileDownUrl };
 }

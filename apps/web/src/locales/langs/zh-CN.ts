@@ -348,6 +348,8 @@ export default {
     newChat: "开启新对话",
     exploreAgent: "智能体示例",
     exploreAgentCases: "智能体示例",
+    agentsArchitectureTitle: "Phytomni智能体架构",
+    agentsArchitectureAlt: "Phytomni智能体架构图",
     knowledgeBase: "知识库",
     geneDetail: "基因展示",
     thinkingSteps: "思考步骤",

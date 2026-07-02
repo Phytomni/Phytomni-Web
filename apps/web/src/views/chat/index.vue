@@ -375,7 +375,7 @@
 
                 <!-- Download button based on download_path -->
                 <el-button
-                  @click="() => downloadFileDirect(message?.download_path)"
+                  @click="() => downloadFile(message?.download_path)"
                   v-if="
                     message?.download_path &&
                     message?.download_path !== '' &&
@@ -616,7 +616,7 @@
 
                 <!-- Download button based on download_path -->
                 <el-button
-                  @click="() => downloadFileDirect(message?.download_path)"
+                  @click="() => downloadFile(message?.download_path)"
                   v-if="
                     message?.download_path &&
                     message?.download_path !== '' &&
@@ -809,7 +809,7 @@
 
                 <!-- Download button based on download_path -->
                 <el-button
-                  @click="() => downloadFileDirect(message?.download_path)"
+                  @click="() => downloadFile(message?.download_path)"
                   v-if="
                     message?.download_path &&
                     message?.download_path !== '' &&
@@ -1303,7 +1303,7 @@
     <!-- Agents architecture diagram dialog -->
     <el-dialog
       v-model="agentsViewVisible"
-      title="Phytomni智能体架构"
+      :title="t('chat.agentsArchitectureTitle')"
       :close-on-click-modal="true"
       :close-on-press-escape="true"
       width="800px"
@@ -1322,7 +1322,7 @@
         <img
           ref="imageRef"
           :src="AgentsViewImg"
-          alt="Phytomni智能体架构图"
+          :alt="t('chat.agentsArchitectureAlt')"
           class="agents-view-image"
           :style="imageStyle"
         />
@@ -1660,7 +1660,7 @@ const {
 } = useChatStates();
 
 // Copy conversation + file download
-const { fallbackCopyText, downloadFile, downloadFileDirect, getFileDownUrl } =
+const { fallbackCopyText, downloadFile, getFileDownUrl } =
   useCopyDownload({
     copyVisible,
     copyTimeRef,
