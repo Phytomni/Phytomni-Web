@@ -41,9 +41,8 @@ func queryErrorStatus(err error) (int, string) {
 
 // Query is the gateway entry for chat sends. It parses the multipart form
 // the Web app posts, hands it to the service, and returns the row the Web app renders.
-// The Web app consumes this as JSON via axios; an SSE pass-through path (the Bot
-// client exposes ChatCompletionStream) is wired once the Web app adopts streaming
-// — today it never sends stream=true.
+// The Web app consumes this as JSON via axios; streaming chat support is not
+// currently wired through this gateway.
 func (ph *Handler) Query(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 

@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -120,19 +119,13 @@ func RegContent(matchContent string, sensitiveWords []string) string {
 		}
 		return replaceBytes
 	})
-	//fmt.Println("srcText        -> ", matchContent)
-	//fmt.Println("replaceText    -> ", string(textBytes))
-	//fmt.Println("sensitiveWords -> ", banWords)
 	return string(textBytes)
 }
 
 func ExistDir(path string) {
 	_, err := os.ReadDir(path)
 	if err != nil {
-		err = os.MkdirAll(path, fs.ModePerm)
-		if err != nil {
-			fmt.Println(err)
-		}
+		_ = os.MkdirAll(path, fs.ModePerm)
 	}
 }
 
