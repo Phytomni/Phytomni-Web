@@ -120,11 +120,11 @@ func TestApiV1AsyncTaskRoutes(t *testing.T) {
 }
 
 // TestApiV1AuditGeneDownloadRoutes pins the §5.6 migration of the audit, gene and
-// download surfaces, including the three distinct download middleware chains: the
-// JWT analyst-agent/rendering downloads under the authed group, the no-JWT email
-// obs-file (still logged), and the no-JWT/no-log token relay-file. operation-logs
-// flips POST→GET (admin gate stays in the service) and gene details key on the
-// file name as the resource id.
+// download surfaces, including three distinct download surfaces: the disabled
+// legacy email obs-file route, the JWT analyst-agent/rendering downloads under
+// the authed group, and the no-JWT/no-log token relay-file. operation-logs flips
+// POST→GET (admin gate stays in the service) and gene details key on the file
+// name as the resource id.
 func TestApiV1AuditGeneDownloadRoutes(t *testing.T) {
 	routes := routeSet(t)
 	assertRoutes(t, routes,

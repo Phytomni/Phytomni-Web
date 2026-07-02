@@ -19,11 +19,11 @@ func Api(r *gin.RouterGroup) {
 		apiAuthRouter.POST("/registrations", middleware.PerIPRateLimit("register"), authHandler.UserRegister) // self-registration (per-IP rate limited)
 	}
 
-	// /api/v1/downloads (email direct links): obs-file links carry obs_path+username without JWT,
-	// but operation logs are recorded (matching the old auth group middleware chain).
+	// /api/v1/downloads keeps the disabled legacy email-link route visible. It
+	// returns 410 without reading username/obs_path; email revival needs a separate plan.
 	apiDownloadEmailRouter := r.Group("api/v1/downloads").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS(), middleware.OperationLog())
 	{
-		apiDownloadEmailRouter.GET("/obs-file", authHandler.GetDownloadObsFile) // result download link from email
+		apiDownloadEmailRouter.GET("/obs-file", authHandler.GetDownloadObsFile) // legacy email route → 410 Gone
 	}
 
 	// /api/v1 authenticated group (JWT + forced-password-change gate): user and admin endpoints.

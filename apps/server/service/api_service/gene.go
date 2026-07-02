@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path"
@@ -280,35 +279,6 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	}
 
 	return imageUrls, nil
-}
-
-// GetDownloadObsFile serves email download links: verifies that obs_path belongs
-// to a message record owned by the given user (email links cannot carry any
-// credential, so this in-DB ownership check is the only access control for this
-// entry point), then finds the result zip via the Bot relay and returns the byte
-// stream for the handler to write directly to the browser.
-func (ps *Service) GetDownloadObsFile(ctx context.Context, username, obsPath string) (io.ReadCloser, string, int64, error) {
-	var questionAgentLog model.QuestionAgentLog
-	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
-		First(&questionAgentLog).RowsAffected; result == 0 {
-		return nil, "", 0, errors.New("no matching obs path data found")
-	}
-
-	client := rxBot.NewClient()
-	keys, err := listObsKeysCached(ctx, client, obsPath, questionAgentLog.Status == statusSucceeded)
-	if err != nil {
-		return nil, "", 0, friendlyRelayErr(err)
-	}
-	zipKey := findObsKeyBySuffix(keys, ".zip")
-	if zipKey == "" {
-		return nil, "", 0, errors.New("no zip file found in the specified directory")
-	}
-
-	rc, length, err := client.GetObsObjectStream(ctx, zipKey)
-	if err != nil {
-		return nil, "", 0, friendlyRelayErr(err)
-	}
-	return rc, path.Base(zipKey), length, nil
 }
 
 func (ps *Service) DownloadObsRenderingFile(ctx context.Context, id int, format string) ([]byte, string, error) {

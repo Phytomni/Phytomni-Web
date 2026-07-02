@@ -271,23 +271,14 @@ func sanitizeFilename(name string) string {
 	return strings.NewReplacer(`"`, "", "\r", "", "\n", "").Replace(name)
 }
 
-// GetDownloadObsFile serves email download links. After the cutover it no
-// longer 302-redirects to an OBS signed URL; instead it streams the result
-// zip bytes back through the Bot relay.
+// GetDownloadObsFile is the legacy email-link download endpoint. Email links
+// are currently disabled; keep the route present so old links fail predictably
+// with 410 Gone instead of a confusing 404.
 func (ph *Handler) GetDownloadObsFile(ctx *gin.Context) {
-	obsPath := ctx.Query("obs_path")
-	username := ctx.Query("username")
-
-	rc, filename, length, err := ph.service.GetDownloadObsFile(ctx, username, obsPath)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
-		return
-	}
-	defer rc.Close()
-
-	ctx.Header("X-Content-Type-Options", "nosniff")
-	ctx.Header("Content-Disposition", `attachment; filename="`+sanitizeFilename(filename)+`"`)
-	ctx.DataFromReader(http.StatusOK, length, "application/octet-stream", rc, nil)
+	ctx.JSON(http.StatusGone, gin.H{
+		"code":    http.StatusGone,
+		"message": "email download links are currently unavailable",
+	})
 }
 
 // RelayFileDownload streams an OBS object through the Bot relay. Auth is via
