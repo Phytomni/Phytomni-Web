@@ -15,6 +15,7 @@ import (
 	rxLog "phytomni-server/log"
 	"phytomni-server/middleware"
 	"phytomni-server/model"
+	"phytomni-server/utils"
 	"strings"
 	"time"
 
@@ -151,17 +152,18 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 }
 
 func (ps *Service) GeneDetailsStorage(ctx context.Context, fileName, content, speciesCode, geneId string) error {
-
+	safeName, err := utils.CleanUploadFilename(fileName)
+	if err != nil {
+		return err
+	}
 	gene := &model.GeneExample{
-		FileName:    fileName,
+		FileName:    safeName,
 		Content:     content,
 		SpeciesCode: speciesCode,
 		GeneId:      geneId,
 		CreatedAt:   time.Time{},
 	}
-	err := model.DB(ctx).Model(&model.GeneExample{}).Create(gene).Error
-
-	return err
+	return model.DB(ctx).Model(&model.GeneExample{}).Create(gene).Error
 }
 
 // findObsKeyBySuffix returns the first key (case-insensitive) in the Bot-relayed

@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"phytomni-server/common"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/middleware"
+	"phytomni-server/utils"
 	"phytomni-server/utils/errs"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +20,10 @@ import (
 	"strconv"
 	"strings"
 )
+
+// geneExampleImageSavePath is the directory where gene-example image uploads
+// are persisted. Overridable in tests to avoid touching the production path.
+var geneExampleImageSavePath = "/root/project/html/dist/images"
 
 func (ph *Handler) GeneList(ctx *gin.Context) {
 	current, _ := strconv.Atoi(ctx.Query("current"))
@@ -128,62 +132,81 @@ func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
 	var successFiles []string
 	fileHeaders := form.File["files"]
 	for _, fileHeader := range fileHeaders {
+		safeName, err := utils.CleanUploadFilename(fileHeader.Filename)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "error": "Invalid upload filename"})
+			return
+		}
 		file, err := fileHeader.Open()
 		if err != nil {
-			log.Printf("Failed to open file %s: %v", fileHeader.Filename, err)
+			log.Printf("Failed to open file %s: %v", safeName, err)
 			continue
 		}
 
 		fileContent, err := io.ReadAll(file)
-		file.Close()
+		_ = file.Close()
 		if err != nil {
-			log.Printf("Failed to read file %s: %v", fileHeader.Filename, err)
+			log.Printf("Failed to read file %s: %v", safeName, err)
 			continue
 		}
 
 		combinedContent := fmt.Sprintf("%s\n\n--- DOC TITLES ---\n%s",
 			string(fileContent), titlesStr)
 
-		err = ph.service.GeneDetailsStorage(ctx, fileHeader.Filename, combinedContent, speciesCode, geneId)
+		err = ph.service.GeneDetailsStorage(ctx, safeName, combinedContent, speciesCode, geneId)
 		if err != nil {
-			log.Printf("Failed to store file %s: %v", fileHeader.Filename, err)
+			log.Printf("Failed to store file %s: %v", safeName, err)
 			continue
 		}
 
-		successFiles = append(successFiles, fileHeader.Filename)
+		successFiles = append(successFiles, safeName)
 	}
 
 	imageHeaders := form.File["images"]
-	imageSavePath := "/root/project/html/dist/images"
+	imageSavePath := geneExampleImageSavePath
 	var savedImages []string
 
-	if err = os.MkdirAll(imageSavePath, 0755); err != nil {
-		log.Printf("Failed to create directory %s: %v", imageSavePath, err)
+	if len(imageHeaders) > 0 {
+		if err = os.MkdirAll(imageSavePath, 0755); err != nil {
+			log.Printf("Failed to create directory %s: %v", imageSavePath, err)
+		}
 	}
 
 	for _, imageHeader := range imageHeaders {
+		safeName, err := utils.CleanUploadFilename(imageHeader.Filename)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "error": "Invalid upload filename"})
+			return
+		}
 		imageFile, err := imageHeader.Open()
 		if err != nil {
-			log.Printf("Failed to open image %s: %v", imageHeader.Filename, err)
+			log.Printf("Failed to open image %s: %v", safeName, err)
 			continue
 		}
-		defer imageFile.Close()
-		fmt.Println(imageHeader.Filename)
 
-		imagePath := filepath.Join(imageSavePath, imageHeader.Filename)
+		imagePath, err := utils.SafeJoinUploadPath(imageSavePath, safeName)
+		if err != nil {
+			_ = imageFile.Close()
+			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "error": "Invalid upload filename"})
+			return
+		}
 		outFile, err := os.Create(imagePath)
 		if err != nil {
+			_ = imageFile.Close()
 			log.Printf("Failed to create file %s: %v", imagePath, err)
 			continue
 		}
-		defer outFile.Close()
 
 		if _, err := io.Copy(outFile, imageFile); err != nil {
+			_ = imageFile.Close()
+			_ = outFile.Close()
 			log.Printf("Failed to save image %s: %v", imagePath, err)
 			continue
 		}
+		_ = imageFile.Close()
+		_ = outFile.Close()
 
-		savedImages = append(savedImages, imageHeader.Filename)
+		savedImages = append(savedImages, safeName)
 		log.Printf("Successfully saved image: %s", imagePath)
 	}
 
