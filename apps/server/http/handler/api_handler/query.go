@@ -28,6 +28,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, "unknown tool type"
 	case errors.Is(err, api_service.ErrExpertDisabled):
 		return http.StatusServiceUnavailable, "expert mode not available"
+	case errors.Is(err, api_service.ErrMissingBotRunID):
+		return http.StatusConflict, "task is not syncable through bot run state"
 	case errors.Is(err, rxBot.ErrBotTimeout):
 		return http.StatusGatewayTimeout, "request timed out, please narrow your query or try again later"
 	}
@@ -132,7 +134,11 @@ func (ph *Handler) Query(ctx *gin.Context) {
 // Web row. The Web app posts task_id plus compute_resource.
 func (ph *Handler) QueryAnalystUpdateLog(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
-	taskID := ctx.PostForm("task_id")
+	taskID := strings.TrimSpace(ctx.PostForm("task_id"))
+	if taskID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "task_id is required"})
+		return
+	}
 	computeResource := ctx.PostForm("compute_resource")
 
 	result, err := ph.service.QueryAnalystUpdateLog(ctx, name.(string), taskID, computeResource)

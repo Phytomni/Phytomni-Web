@@ -37,8 +37,8 @@ func TestApiQueryAnalystUpdateLog_MissingBotRunID(t *testing.T) {
 	ps := NewService()
 
 	_, err := ps.QueryAnalystUpdateLog(context.Background(), "alice", "t-norun", "cr-1")
-	if err == nil || !strings.Contains(err.Error(), "no bot_run_id") {
-		t.Fatalf("want a no-bot_run_id error, got %v", err)
+	if !errors.Is(err, ErrMissingBotRunID) {
+		t.Fatalf("want ErrMissingBotRunID, got %v", err)
 	}
 }
 

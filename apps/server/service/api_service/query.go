@@ -29,6 +29,10 @@ var ErrUnknownTool = errors.New("unknown tool")
 // to 503 so a deliberately-dark Expert mode is distinguishable from a fault.
 var ErrExpertDisabled = errors.New("expert mode not available")
 
+// ErrMissingBotRunID is returned when a Web row exists but cannot be synced
+// through Bot run state because it has no bot_run_id.
+var ErrMissingBotRunID = errors.New("row has no bot_run_id to sync")
+
 // QueryFile is one uploaded attachment, read into memory by the handler.
 type QueryFile struct {
 	Filename string
@@ -346,7 +350,7 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 		return "", err
 	}
 	if row.BotRunId == "" {
-		return "", errors.New("row has no bot_run_id to sync")
+		return "", ErrMissingBotRunID
 	}
 	rec, err := rxBot.NewClient().GetRun(ctx, row.BotRunId)
 	if err != nil {
