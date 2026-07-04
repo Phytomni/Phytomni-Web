@@ -1,6 +1,7 @@
 package api_service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -32,6 +33,12 @@ var ErrExpertDisabled = errors.New("expert mode not available")
 // ErrMissingBotRunID is returned when a Web row exists but cannot be synced
 // through Bot run state because it has no bot_run_id.
 var ErrMissingBotRunID = errors.New("row has no bot_run_id to sync")
+
+// ErrStreamUnsupported marks a /query streaming request the SSE branch cannot
+// serve (non-chat slug, or mode=expert which routes via /v1/query/route). The
+// handler maps it to 400; expert traffic normally never reaches it because the
+// handler's stream gate already excludes mode=expert (defense in depth).
+var ErrStreamUnsupported = errors.New("streaming not supported for this request")
 
 // QueryFile is one uploaded attachment, read into memory by the handler.
 type QueryFile struct {
@@ -400,4 +407,157 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 		return "", err
 	}
 	return answer, nil
+}
+
+// QueryStream is the SSE variant of Query for chat-family slugs. It opens the
+// Bot AG-UI stream, forwards each frame to the browser via forward(), tees the
+// stream into an accumulator, and on stream end persists the Web row exactly
+// like the blocking Query path (same resolveDialogue threading, same
+// QuestionAgentLog columns). A forward() error (browser disconnect) stops
+// forwarding but never aborts persistence — the answer accumulated so far is
+// still written so history is not lost.
+func (ps *Service) QueryStream(ctx context.Context, username string, in QueryInput, forward func(frame []byte) error) (*QueryData, error) {
+	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
+		return nil, ErrGatewayDisabled
+	}
+	if in.Mode == "expert" {
+		// Expert routes via RouteQuery (POST /v1/query/route, no streaming
+		// primitive). The handler gate keeps expert out of this branch; this
+		// guard is defense in depth so SlugFor("")->"chat" can never collapse
+		// an Expert turn into a streamed ChatAgent run (slug-gate invariant,
+		// query_expert_test.go).
+		return nil, fmt.Errorf("%w: expert mode", ErrStreamUnsupported)
+	}
+	slug, ok := rxBot.SlugFor(in.Tool)
+	if !ok {
+		return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
+	}
+	chatModel, isChat := rxBot.ChatModelFor(slug)
+	if !isChat {
+		// Non-chat slugs have no Bot streaming primitive today (handoff P1).
+		return nil, fmt.Errorf("%w: tool %q has no Bot streaming primitive (handoff P1)", ErrStreamUnsupported, in.Tool)
+	}
+
+	client := rxBot.NewClient()
+
+	// Upload attachments before opening the stream so upload errors still
+	// surface as a normal (non-SSE) error to the handler.
+	var obsPaths, fileNames []string
+	for _, f := range in.Files {
+		up, err := client.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
+		if err != nil {
+			return nil, err
+		}
+		obsPaths = append(obsPaths, up.Path)
+		fileNames = append(fileNames, f.Filename)
+	}
+
+	dialogueID, fID, err := ps.resolveDialogue(ctx, username, in)
+	if err != nil {
+		return nil, err
+	}
+
+	req := rxBot.ChatCompletionRequest{
+		Model:      chatModel,
+		Messages:   []rxBot.ChatMessage{{Role: "user", Content: in.Query}},
+		DialogueID: dialogueID,
+	}
+	if len(obsPaths) > 0 {
+		req.OBSFileList = obsPaths
+	}
+	rc, err := client.ChatCompletionStream(ctx, req)
+	if err != nil {
+		// Pre-first-byte failure (auth / unsupported) surfaces as a normal
+		// error so the handler can still return a non-SSE status.
+		return nil, err
+	}
+	defer rc.Close()
+
+	// Forward + tee, splitting the SSE body on blank-line frame separators.
+	acc := &rxBot.AGUIAccumulator{}
+	scanner := bufio.NewScanner(rc)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Split(splitSSEFrames)
+	for scanner.Scan() {
+		frame := scanner.Bytes()
+		// Forward the raw frame (with trailing blank line) to the browser.
+		out := append(append([]byte{}, frame...), '\n', '\n')
+		if forward != nil {
+			_ = forward(out) // disconnect: stop caring about the browser, keep teeing
+		}
+		if ev, ok := rxBot.ParseAGUIFrame(frame); ok {
+			acc.Observe(ev)
+		}
+	}
+
+	// Build + persist the row, mirroring the blocking path's columns.
+	out := &QueryData{
+		ToolName:     slugToToolName[slug],
+		ReactionType: "0",
+		DialogueId:   dialogueID,
+		Status:       "SUCCEEDED",
+	}
+	out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
+	out.FollowUpQuestions = acc.FollowUpJSON()
+
+	titleQuery := ""
+	if fID == 0 && in.RefreshId == 0 {
+		titleQuery = in.Query
+	}
+	row := model.QuestionAgentLog{
+		DialogueId:        dialogueID,
+		FId:               fID,
+		BotRunId:          acc.RunID(),
+		UserName:          username,
+		Query:             in.Query,
+		TitleQuery:        titleQuery,
+		Answer:            out.Answer,
+		FollowUpQuestions: out.FollowUpQuestions,
+		FileName:          strings.Join(fileNames, ","),
+		UploadPath:        strings.Join(obsPaths, ","),
+		ToolName:          out.ToolName,
+		Status:            out.Status,
+		Mode:              in.Mode,
+		ReactionType:      "0",
+		CollectType:       "0",
+	}
+	if in.RefreshId != 0 {
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ?", in.RefreshId, username).Updates(&row).Error; err != nil {
+			return nil, err
+		}
+		// Mirror the blocking path: clear transitional task columns explicitly
+		// (map Updates does not skip zero values).
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ?", in.RefreshId, username).
+			Updates(map[string]interface{}{
+				"server_id":        "",
+				"task_id":          "",
+				"log_status":       "",
+				"server_file_path": "",
+			}).Error; err != nil {
+			return nil, err
+		}
+		out.Id = in.RefreshId
+	} else {
+		if err := model.DB(ctx).Create(&row).Error; err != nil {
+			return nil, err
+		}
+		out.Id = row.Id
+	}
+	out.UploadPath = strings.Join(obsPaths, ",")
+	return out, nil
+}
+
+// splitSSEFrames is a bufio.SplitFunc that yields one SSE frame per call,
+// splitting on the blank-line ("\n\n") separator. The trailing separator is
+// consumed but not included in the token.
+func splitSSEFrames(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if i := bytes.Index(data, []byte("\n\n")); i >= 0 {
+		return i + 2, data[:i], nil
+	}
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
