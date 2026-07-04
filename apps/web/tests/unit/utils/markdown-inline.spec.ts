@@ -213,9 +213,23 @@ describe("processInlineMarkdown — regex-reentrancy XSS guard", () => {
     expect(out).toContain('href="#m4-ref-3"');
   });
 
-  it("leaves no vault sentinel or token in the output", () => {
-    const out = renderInline('<a href="/a">a</a> ![i](/b.png) [1] **c**', "m1");
-    expect(out).not.toContain(" ");
+  it("expands nested tokens fully - a clickable image leaves no sentinel", () => {
+    // The .md-link pass stashes an anchor whose inner text is the image
+    // pass's token; a single-pass expand would leak the inner sentinel.
+    // expandVault must reach a fixed point.
+    const out = renderInline("[![alt](/p.png)](/doc.md)");
+    expect(out).toContain('href="/doc.md"');
+    expect(out).toContain("<img");
+    expect(out).toContain('alt="alt"');
+    expect(out).not.toContain(String.fromCharCode(0));
+    expect(out).not.toMatch(/MD\d+/);
+  });
+
+  it("leaves no vault sentinel or token in the output (nested)", () => {
+    // Nested constructs (image inside link) are the case that can leak; a
+    // flat sibling input cannot, so this must exercise nesting.
+    const out = renderInline("[![i](/b.png)](/c.md) and [1] **bold**", "m1");
+    expect(out).not.toContain(String.fromCharCode(0));
     expect(out).not.toMatch(/MD\d+/);
   });
 });
