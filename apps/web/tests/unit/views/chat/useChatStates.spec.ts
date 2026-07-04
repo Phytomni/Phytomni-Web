@@ -64,6 +64,8 @@ describe("useChatStates parallel chat state", () => {
       activeAgentName: "",
       completing: false,
       mode: "instant",
+      isStreaming: false,
+      streamingMessageId: null,
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);

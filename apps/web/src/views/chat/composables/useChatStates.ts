@@ -23,6 +23,8 @@ export function useChatStates() {
         activeAgentName: string; // canonical agent name for this send (selects τ + ETA copy)
         completing: boolean; // true = trigger the 99→100 fast progress animation
         mode: "instant" | "expert"; // per-conversation routing mode (locked after first send)
+        isStreaming: boolean; // true while an AG-UI stream is in flight for this dialogue
+        streamingMessageId: string | null; // request id of the in-flight stream
       }
     >
   >({});
@@ -46,6 +48,8 @@ export function useChatStates() {
         activeAgentName: "",
         completing: false,
         mode: "instant",
+        isStreaming: false,
+        streamingMessageId: null,
       };
     }
     return chatStates.value[dialogueId];
