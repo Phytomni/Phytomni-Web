@@ -3,6 +3,7 @@ import {
   processInlineMarkdown,
   convertFilePath,
 } from "@/utils/markdown-inline";
+import { escapeHtml } from "@/utils/sanitize-markup";
 
 // processInlineMarkdown is the inline-markdown processor extracted from
 // DeepGenomeResultViewer. It carries the LOAD-BEARING v-html XSS invariant: the
@@ -160,5 +161,61 @@ describe("processInlineMarkdown citation namespacing", () => {
   it("sanitizes illegal characters out of ns", () => {
     const out = processInlineMarkdown("see [1]", 'a b"<x');
     expect(out).toContain('href="#abx-ref-1"');
+  });
+});
+
+// Regex-reentrancy guard (emitted-HTML vault). The inline passes run in
+// sequence over the whole line; without the vault, a later image/citation pass
+// re-scans the <a href="..."> markup the resurrection pass just produced and
+// can splice a tag INSIDE the href value whose " breaks out of the attribute,
+// letting the browser's tag-soup parser recover an on*-handler (a real,
+// executable XSS at the v-html sink). The sink escapes first, so these mirror
+// the real pipeline: escapeHtml -> processInlineMarkdown.
+describe("processInlineMarkdown — regex-reentrancy XSS guard", () => {
+  const renderInline = (raw: string, ns = ""): string =>
+    processInlineMarkdown(escapeHtml(raw), ns);
+
+  it("does not break out of a resurrected href via image-markdown (onclick)", () => {
+    const out = renderInline(
+      '<a href="![x](onclick=window.__poc=1//)">click</a>'
+    );
+    // The image pass must NOT re-enter the anchor's href: no live <img>, and
+    // above all no attribute the browser could parse as an event handler.
+    expect(/<[^>]*\sonclick=/i.test(out)).toBe(false);
+    expect(out).not.toContain("<img");
+  });
+
+  it("does not break out of a resurrected href via image-markdown (onmouseover)", () => {
+    const out = renderInline('<a href="![x](onmouseover=alert(1)//)">x</a>');
+    expect(/<[^>]*\sonmouseover=/i.test(out)).toBe(false);
+    expect(out).not.toContain("<img");
+  });
+
+  it("does not re-enter a resurrected href via citation-markdown", () => {
+    // A [N]-shaped payload inside a resurrected href must stay literal text in
+    // the attribute, not spawn a second nested anchor.
+    const out = renderInline('<a href="/x?q=[1]">link</a>');
+    expect((out.match(/<a\s/g) ?? []).length).toBe(1);
+  });
+
+  // Regression: legitimate markdown outside any resurrected tag still renders.
+  it("still renders a standalone image", () => {
+    const out = renderInline("![photo](/attachments/pic.png)");
+    expect(out).toContain("<img");
+    expect(out).toContain('alt="photo"');
+    expect(out).toContain("clickable-image");
+  });
+
+  it("still renders a standalone citation and a resurrected anchor together", () => {
+    const out = renderInline('<a href="/docs/x.pdf">doc</a> see [3]', "m4");
+    expect(out).toContain('href="/docs/x.pdf"');
+    expect(out).toContain(">doc</a>");
+    expect(out).toContain('href="#m4-ref-3"');
+  });
+
+  it("leaves no vault sentinel or token in the output", () => {
+    const out = renderInline('<a href="/a">a</a> ![i](/b.png) [1] **c**', "m1");
+    expect(out).not.toContain(" ");
+    expect(out).not.toMatch(/MD\d+/);
   });
 });
