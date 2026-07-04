@@ -318,6 +318,16 @@ export const createAbortableRequest = (
   });
 };
 
+// registerAbortController lets a non-axios transport (the fetch-based stream
+// path) register its AbortController under the same requestId key that
+// abortRequest() looks up, so the existing abort UI works for both paths.
+export function registerAbortController(
+  requestId: string,
+  controller: AbortController
+): void {
+  activeControllers.set(requestId, controller);
+}
+
 // abort a specific request
 export const abortRequest = (requestId: string): boolean => {
   const controller = activeControllers.get(requestId);

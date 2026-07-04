@@ -35,6 +35,22 @@ export interface ChatMessage {
   compute_resource?: string; // compute resource info
   task_id?: string; // task ID
   server_file_path?: string; // server file path
+  streaming?: boolean; // true while AG-UI stream is in flight (renderer shows cursor)
+  blocks?: ContentBlock[]; // typed content blocks (streaming path); content stays for the axios path
+}
+
+// ContentBlock is one typed unit in a streaming assistant message. authority
+// marks who composed it ("web" = Web renders structured data; "agent" =
+// future agent-surface blocks). interactive flags user-interactive blocks.
+// The registry (blockRegistry.ts) maps `type` to a Vue renderer.
+export interface ContentBlock {
+  type: "markdown" | "tool" | "step" | "reasoning" | string;
+  authority: "web" | "agent";
+  interactive?: boolean;
+  text?: string; // markdown/reasoning accumulated text
+  toolName?: string; // tool block: structured tool identifier (Web maps to copy)
+  label?: string; // step block: structured step identifier
+  count?: number; // tool_result hit count
 }
 
 export interface ChatResponse {
