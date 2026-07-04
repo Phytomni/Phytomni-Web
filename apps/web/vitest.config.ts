@@ -63,6 +63,8 @@ export default defineConfig({
         "src/views/chat/utils/agentProgress.ts",
         "src/views/chat/streaming/aguiEvents.ts",
         "src/views/chat/streaming/eventReducer.ts",
+        "src/views/chat/streaming/incrementalMarkdown.ts",
+        "src/views/chat/streaming/blockRegistry.ts",
       ],
       thresholds: {
         lines: 80,
