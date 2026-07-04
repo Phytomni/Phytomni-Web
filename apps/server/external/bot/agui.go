@@ -26,16 +26,21 @@ type AGUIRunError struct {
 // are AG-UI events. The event type is taken from the data JSON "type" field
 // (authoritative), falling back to the "event:" line.
 func ParseAGUIFrame(frame []byte) (AGUIEvent, bool) {
-	var eventLine, dataLine string
+	var eventLine string
+	var dataLines []string
 	for _, raw := range bytes.Split(frame, []byte("\n")) {
 		line := strings.TrimRight(string(raw), "\r")
 		switch {
 		case strings.HasPrefix(line, "event:"):
 			eventLine = strings.TrimSpace(line[len("event:"):])
 		case strings.HasPrefix(line, "data:"):
-			dataLine = strings.TrimSpace(line[len("data:"):])
+			// SSE joins consecutive data: lines with "\n"; strip only the
+			// single optional leading space after the colon, never inner
+			// whitespace (it may be significant JSON string content).
+			dataLines = append(dataLines, strings.TrimPrefix(line[len("data:"):], " "))
 		}
 	}
+	dataLine := strings.TrimSpace(strings.Join(dataLines, "\n"))
 	if dataLine == "" || dataLine == "[DONE]" {
 		return AGUIEvent{}, false
 	}
@@ -70,7 +75,14 @@ type AGUIAccumulator struct {
 func (a *AGUIAccumulator) Observe(ev AGUIEvent) {
 	switch ev.Type {
 	case "RunStarted":
-		a.runID = stringField(ev.Data, "run_id")
+		// Guard against a later RunStarted (retry / duplicate frame) with a
+		// blank run_id clobbering an already-captured registry id — a blank
+		// bot_run_id would strand the persisted row out of the GA cron's
+		// WHERE status='RUNNING' reconcile set (same zero-value-clobber
+		// invariant SyncBotRuns / QueryAnalystUpdateLog already enforce).
+		if id := stringField(ev.Data, "run_id"); id != "" {
+			a.runID = id
+		}
 	case "TextMessageContent":
 		a.answer.WriteString(stringField(ev.Data, "delta"))
 	case "RunError":

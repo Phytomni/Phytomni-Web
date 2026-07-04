@@ -61,3 +61,39 @@ func TestAccumulator_RunError(t *testing.T) {
 		t.Fatalf("Err = %v, want message boom", a.Err())
 	}
 }
+
+func TestAccumulator_RunStartedBlankIDDoesNotClobber(t *testing.T) {
+	a := &AGUIAccumulator{}
+	feed := []string{
+		`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run_42"}`,
+		// a later RunStarted with a blank run_id (retry / duplicate) must not
+		// wipe the captured id.
+		`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":""}`,
+	}
+	for _, f := range feed {
+		if ev, ok := ParseAGUIFrame([]byte(f)); ok {
+			a.Observe(ev)
+		}
+	}
+	if got := a.RunID(); got != "run_42" {
+		t.Fatalf("RunID = %q, want run_42 (blank later RunStarted must not clobber)", got)
+	}
+}
+
+func TestParseAGUIFrame_MultiLineDataJoined(t *testing.T) {
+	// SSE concatenates consecutive data: lines with "\n"; a JSON object split
+	// across two data: lines must reassemble into one valid event.
+	frame := `event: TextMessageContent` + "\n" +
+		`data: {"type":"TextMessageContent",` + "\n" +
+		`data: "delta":"hi"}`
+	ev, ok := ParseAGUIFrame([]byte(frame))
+	if !ok {
+		t.Fatal("multi-line data frame should parse")
+	}
+	if ev.Type != "TextMessageContent" {
+		t.Fatalf("Type = %q, want TextMessageContent", ev.Type)
+	}
+	if got := stringField(ev.Data, "delta"); got != "hi" {
+		t.Fatalf("delta = %q, want hi", got)
+	}
+}
