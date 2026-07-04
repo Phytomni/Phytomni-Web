@@ -221,7 +221,7 @@ describe("processInlineMarkdown — regex-reentrancy XSS guard", () => {
     expect(out).toContain('href="/doc.md"');
     expect(out).toContain("<img");
     expect(out).toContain('alt="alt"');
-    expect(out).not.toContain(String.fromCharCode(0));
+    expect(out).not.toContain(String.fromCharCode(0xe000));
     expect(out).not.toMatch(/MD\d+/);
   });
 
@@ -229,7 +229,7 @@ describe("processInlineMarkdown — regex-reentrancy XSS guard", () => {
     // Nested constructs (image inside link) are the case that can leak; a
     // flat sibling input cannot, so this must exercise nesting.
     const out = renderInline("[![i](/b.png)](/c.md) and [1] **bold**", "m1");
-    expect(out).not.toContain(String.fromCharCode(0));
+    expect(out).not.toContain(String.fromCharCode(0xe000));
     expect(out).not.toMatch(/MD\d+/);
   });
 });
