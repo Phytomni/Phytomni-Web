@@ -220,9 +220,21 @@
 
                 <!-- Normal message content -->
                 <div v-else>
+                  <!-- Streaming assistant messages (AG-UI content blocks) render via
+                       StreamMessage; P0 mount passes no ns (no references yet, citation
+                       gate keeps [N] literal, consistent with the no-ns MarkdownViewer
+                       branch below). Non-streaming messages fall through unchanged. -->
+                  <StreamMessage
+                    v-if="
+                      message.role === 'assistant' &&
+                      (message.streaming ||
+                        (message.blocks && message.blocks.length))
+                    "
+                    :blocks="message.blocks || []"
+                  />
                   <!-- GeneNetworkAgent image display -->
                   <div
-                    v-if="
+                    v-else-if="
                       message.role === 'assistant' &&
                       message.tool_name === 'GeneNetworkAgent'
                     "
@@ -953,8 +965,13 @@
           </div>
         </template>
 
-        <!-- Loading message -->
-        <div v-if="isSending" class="message assistant">
+        <!-- Loading message: fake ETA progress, suppressed while an AG-UI stream is in
+             flight — the placeholder message already shows real streaming content, so
+             showing both would double up the "is responding" indicator on screen. -->
+        <div
+          v-if="isSending && !getChatState(currentChatId).isStreaming"
+          class="message assistant"
+        >
           <div class="message-avatar">
             <el-avatar :size="36" :src="botAvatar" />
           </div>
@@ -1335,6 +1352,7 @@ import { onMounted, ref, nextTick, watch, computed } from "vue";
 import Sidebar from "./sidebar.vue";
 import { MentionSender } from "vue-element-plus-x";
 import SendProgress from "./components/SendProgress.vue";
+import StreamMessage from "./components/StreamMessage.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
 import {
   Close as IconClose,

@@ -370,6 +370,16 @@ export default {
       expert: "Expert",
       comingSoon: "Coming soon",
     },
+    tools: {
+      generic: "Calling a tool",
+      knowledge_search: "Searching literature",
+    },
+    steps: {
+      retrieving: "Retrieving",
+    },
+    toolHits: "{count} hits",
+    streamInterrupted: "Connection interrupted, please retry.",
+    reasoning: { show: "Show reasoning", hide: "Hide reasoning" },
     welcomeSubtitle:
       "I can retrieve information and perform automated analysis for you. Feel free to give me your tasks.",
     inputPlaceholderTip: "Please enter your question",

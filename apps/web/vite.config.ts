@@ -66,6 +66,16 @@ export default defineConfig(({ mode, command }) => {
         "/api/v1": {
           target: devProxyApi,
           changeOrigin: true,
+          // SSE: forward each event chunk immediately instead of buffering to EOF.
+          configure: (proxy) => {
+            proxy.on("proxyRes", (proxyRes) => {
+              if (
+                proxyRes.headers["content-type"]?.includes("text/event-stream")
+              ) {
+                (proxyRes as any).socket?.setNoDelay?.(true);
+              }
+            });
+          },
         },
       },
     },

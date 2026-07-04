@@ -373,6 +373,16 @@ export default {
       expert: "专家模式",
       comingSoon: "即将上线",
     },
+    tools: {
+      generic: "正在调用工具",
+      knowledge_search: "正在检索文献",
+    },
+    steps: {
+      retrieving: "正在检索",
+    },
+    toolHits: "命中 {count} 条",
+    streamInterrupted: "连接中断，请重试。",
+    reasoning: { show: "展开思考过程", hide: "收起思考过程" },
     welcomeSubtitle: "我可以检索信息并为您执行自动化分析，请随时给我您的任务。",
     inputPlaceholderTip: "请输入您的问题",
     uploadFile: "支持文件上传(最多10个，接受.pdf,.doc,.xlsx,.ppt,.txt,.png)",

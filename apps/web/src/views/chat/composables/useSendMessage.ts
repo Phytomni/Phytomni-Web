@@ -16,6 +16,8 @@ import {
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck } from "@/api/chat";
+import { shouldStream } from "../streaming/sendBranch";
+import { useStreamMessage } from "./useStreamMessage";
 
 export function useSendMessage(opts: {
   getChatState: (dialogueId: string) => any;
@@ -143,6 +145,35 @@ export function useSendMessage(opts: {
 
       // generate a request ID
       currentRequestId.value = Date.now().toString();
+
+      // Stream branch: chat-family + instant mode + dark-launch flag. The
+      // insertion point is inside the existing try, so returning here still
+      // runs the enclosing finally (request-id cleanup, history refresh,
+      // pending-chat clear, title update, fileList clear) exactly once —
+      // no duplicate cleanup needed, and none is done here.
+      const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
+      if (shouldStream(chatState.activeAgentName, chatState.mode, streamFlag)) {
+        const placeholder: ChatMessage = {
+          role: "assistant",
+          content: "",
+          streaming: true,
+          blocks: [],
+          instantMessage: false,
+          tool_name: "ChatAgent",
+          followUpQuestions: [],
+          showFollowUpQuestions: false,
+          showLog: false,
+        };
+        currentChat.value.messages.push(placeholder);
+        const { streamMessage } = useStreamMessage({ getChatState, t });
+        await streamMessage({
+          dialogueId: sendingDialogueId,
+          formData: queryData,
+          requestId: currentRequestId.value,
+          placeholder,
+        });
+        return;
+      }
 
       const response = await getQueryAbortable(
         queryData as any,
