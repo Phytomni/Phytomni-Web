@@ -41,4 +41,13 @@ describe("parseAGUIFrame multi-line data", () => {
     expect(ev?.type).toBe("TextMessageContent");
     expect(ev?.data.delta).toBe("hi");
   });
+
+  it("returns null for malformed JSON", () => {
+    expect(parseAGUIFrame("data: {bad json")).toBeNull();
+  });
+
+  it("falls back to the event: line when data has no type", () => {
+    const ev = parseAGUIFrame('event: RunFinished\ndata: {"run_id":"r1"}');
+    expect(ev?.type).toBe("RunFinished");
+  });
 });

@@ -33,6 +33,25 @@ describe("reduceAGUIEvent", () => {
     expect(tool?.count).toBe(12);
   });
 
+  it("breaks text into separate markdown blocks when a tool interleaves", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, { type: "TextMessageContent", data: { delta: "before " } });
+    s = reduceAGUIEvent(s, { type: "ToolCallStart", data: { tool_name: "knowledge_search" } });
+    s = reduceAGUIEvent(s, { type: "TextMessageContent", data: { delta: "after" } });
+    const md = s.blocks.filter((b) => b.type === "markdown");
+    expect(md.map((b) => b.text)).toEqual(["before ", "after"]);
+  });
+
+  it("patches count onto the MOST RECENT tool block", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, { type: "ToolCallStart", data: { tool_name: "first" } });
+    s = reduceAGUIEvent(s, { type: "ToolCallStart", data: { tool_name: "second" } });
+    s = reduceAGUIEvent(s, { type: "ToolCallResult", data: { result_summary: { count: 7 } } });
+    const tools = s.blocks.filter((b) => b.type === "tool");
+    expect(tools[0].count).toBeUndefined();
+    expect(tools[1].count).toBe(7);
+  });
+
   it("adds a reasoning block from ReasoningMessageContent", () => {
     let s = initReducerState();
     s = reduceAGUIEvent(s, { type: "ReasoningMessageContent", data: { delta: "weighing retrieval hits" } });
