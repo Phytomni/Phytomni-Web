@@ -16,6 +16,18 @@ function sseStream(frames: string[]): ReadableStream<Uint8Array> {
   });
 }
 
+// chunkedStream enqueues an arbitrary sequence of byte chunks verbatim, so a
+// single SSE frame (or its JSON) can be split across two reader.read() calls.
+function chunkedStream(chunks: string[]): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(enc.encode(c));
+      controller.close();
+    },
+  });
+}
+
 describe("useStreamMessage", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
@@ -115,5 +127,22 @@ describe("useStreamMessage", () => {
     const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
     await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
     expect((placeholder as any).doc_list).toEqual([{ title: "T1" }]);
+  });
+
+  it("reassembles a frame whose bytes are split across two reader chunks", async () => {
+    // The reader hands back arbitrary byte boundaries; a frame (here mid-JSON)
+    // split across two reads must be buffered via `rest` and reduced whole.
+    const body = chunkedStream([
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent",',
+      '"delta":"split-safe"}\n\nevent: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
+    ]);
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
+    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const md = placeholder.blocks!.find((b) => b.type === "markdown");
+    expect(md?.text).toBe("split-safe");
+    expect(placeholder.streaming).toBe(false);
   });
 });
