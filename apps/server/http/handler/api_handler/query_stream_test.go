@@ -85,3 +85,32 @@ func TestWantsStream(t *testing.T) {
 		t.Fatal("wantsStream must be false for Accept: application/json")
 	}
 }
+
+func TestQuery_StreamPreFirstByteErrorIsJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	// Flag ON so the SSE branch is entered, but ProxyEnabled false so
+	// QueryStream returns ErrGatewayDisabled BEFORE forwarding any frame.
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: false, StreamEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set("username", "alice@example.com")
+	c.Request = newStreamTestRequest(t, "instant")
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+
+	ph := NewHandler()
+	ph.Query(c)
+	// A pre-first-byte failure must ship as a normal JSON error, NOT an SSE
+	// response: the lazy-header pattern keeps Content-Type unset until the
+	// first frame, so ctx.JSON can label the body application/json.
+	if ct := w.Header().Get("Content-Type"); strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("pre-first-byte error must not carry an SSE content type; got %q", ct)
+	}
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503 (ErrGatewayDisabled)", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("error body must be application/json; got %q", ct)
+	}
+}

@@ -141,12 +141,26 @@ func (ph *Handler) Query(ctx *gin.Context) {
 	if streamEnabled() && wantsStream(ctx) && in.Mode != "expert" {
 		flusher, canFlush := ctx.Writer.(http.Flusher)
 		if canFlush {
-			ctx.Header("Content-Type", "text/event-stream")
-			ctx.Header("Cache-Control", "no-cache")
-			ctx.Header("Connection", "keep-alive")
-			ctx.Header("X-Accel-Buffering", "no")
-			ctx.Status(http.StatusOK)
+			// Write the SSE headers lazily — only when the first frame is
+			// actually forwarded. If QueryStream fails BEFORE any frame
+			// (ErrGatewayDisabled, the expert/non-chat ErrStreamUnsupported
+			// guards, ErrUnknownTool — all returned pre-first-byte), the
+			// headers are still unset, so the error can ship as a normal JSON
+			// response with the correct Content-Type. Staging the SSE headers
+			// up front would pin Content-Type: text/event-stream onto a JSON
+			// error body (Gin's writeContentType only sets it when the header
+			// map is empty), and an SSE-aware client would silently fail to
+			// parse the error.
+			headerSent := false
 			forward := func(frame []byte) error {
+				if !headerSent {
+					ctx.Header("Content-Type", "text/event-stream")
+					ctx.Header("Cache-Control", "no-cache")
+					ctx.Header("Connection", "keep-alive")
+					ctx.Header("X-Accel-Buffering", "no")
+					ctx.Status(http.StatusOK)
+					headerSent = true
+				}
 				if _, werr := ctx.Writer.Write(frame); werr != nil {
 					return werr
 				}
@@ -155,13 +169,15 @@ func (ph *Handler) Query(ctx *gin.Context) {
 			}
 			_, serr := ph.service.QueryStream(ctx, name.(string), in, forward)
 			if serr != nil {
-				// If nothing was written yet, a pre-stream error can still be a
-				// normal status; once frames flushed, emit an SSE error frame.
 				status, msg := queryErrorStatus(serr)
-				if ctx.Writer.Written() {
+				if headerSent {
+					// Frames already flushed: HTTP status is locked, so surface
+					// the failure as an in-band SSE error frame.
 					_, _ = fmt.Fprintf(ctx.Writer, "event: RunError\ndata: {\"type\":\"RunError\",\"message\":%q}\n\n", msg)
 					flusher.Flush()
 				} else {
+					// Pre-first-byte failure: no SSE headers were written, so a
+					// normal JSON error with the right Content-Type still ships.
 					ctx.JSON(status, gin.H{"code": status, "message": msg})
 				}
 			}
