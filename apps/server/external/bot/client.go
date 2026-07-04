@@ -158,6 +158,35 @@ func (c *Client) ChatCompletion(ctx context.Context, req ChatCompletionRequest) 
 	return &out, nil
 }
 
+// ChatCompletionStream opens a streaming chat completion and returns the raw
+// SSE body for the caller to io.Copy through to the Web app. Precondition
+// failures (auth, unsupported model) surface as a decoded error here, before
+// any frame is forwarded, because Bot validates them up front. The caller
+// owns closing the returned ReadCloser.
+func (c *Client) ChatCompletionStream(ctx context.Context, req ChatCompletionRequest) (io.ReadCloser, error) {
+	req.Stream = true
+	b, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/chat/completions", bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.userKey)
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, botError(http.MethodPost, "/v1/chat/completions", resp.StatusCode, raw)
+	}
+	return resp.Body, nil
+}
+
 // InvokeAgent submits a run to a remote/long-running agent by slug.
 func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, error) {
 	var out AgentRunResponse
