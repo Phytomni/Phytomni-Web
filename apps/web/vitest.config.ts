@@ -61,6 +61,8 @@ export default defineConfig({
         "src/views/chat/composables/useComposer.ts",
         "src/views/chat/composables/useAgentsPanel.ts",
         "src/views/chat/utils/agentProgress.ts",
+        "src/views/chat/streaming/aguiEvents.ts",
+        "src/views/chat/streaming/eventReducer.ts",
       ],
       thresholds: {
         lines: 80,
