@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 )
 
 // sseChatServer stubs the Bot with a fixed AG-UI SSE stream (RunStarted + two
@@ -107,5 +108,54 @@ func TestQueryStream_ExpertRefused(t *testing.T) {
 	}
 	if botHits != 0 {
 		t.Fatalf("expert must not touch the Bot streaming endpoint (hits=%d)", botHits)
+	}
+}
+
+func TestQueryStream_PersistsBotRunID(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	sseChatServer(t) // fixture RunStarted carries run_id "run_77"
+	svc := &Service{}
+	out, err := svc.QueryStream(context.Background(), "carol@example.com",
+		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil)
+	if err != nil {
+		t.Fatalf("QueryStream error: %v", err)
+	}
+	var botRunID string
+	if err := gdb.Raw(`SELECT COALESCE(bot_run_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Scan(&botRunID).Error; err != nil {
+		t.Fatalf("read bot_run_id: %v", err)
+	}
+	if botRunID != "run_77" {
+		t.Fatalf("persisted bot_run_id = %q, want run_77", botRunID)
+	}
+}
+
+func TestQueryStream_RefreshClearsTaskColumns(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	sseChatServer(t)
+	svc := &Service{}
+	seed := model.QuestionAgentLog{
+		DialogueId: "d1", UserName: "dan@example.com", Query: "old",
+		ServerId: "srv-1", TaskId: "task-1", LogStatus: "RUNNING",
+		ServerFilePath: "obs://old/path", Status: "RUNNING", Mode: "instant",
+	}
+	if err := gdb.Create(&seed).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	out, err := svc.QueryStream(context.Background(), "dan@example.com",
+		QueryInput{Query: "hi", Id: 0, RefreshId: seed.Id, Tool: "", Mode: "instant"}, nil)
+	if err != nil {
+		t.Fatalf("QueryStream refresh error: %v", err)
+	}
+	if out.Id != seed.Id {
+		t.Fatalf("refresh must update in place: out.Id=%d, want %d", out.Id, seed.Id)
+	}
+	var serverID, taskID, logStatus, serverFilePath string
+	row := gdb.Raw(`SELECT COALESCE(server_id,''), COALESCE(task_id,''), COALESCE(log_status,''), COALESCE(server_file_path,'') FROM question_agent_logs WHERE id=?`, seed.Id)
+	if err := row.Row().Scan(&serverID, &taskID, &logStatus, &serverFilePath); err != nil {
+		t.Fatalf("read task columns: %v", err)
+	}
+	if serverID != "" || taskID != "" || logStatus != "" || serverFilePath != "" {
+		t.Fatalf("stale task columns not cleared: server_id=%q task_id=%q log_status=%q server_file_path=%q",
+			serverID, taskID, logStatus, serverFilePath)
 	}
 }

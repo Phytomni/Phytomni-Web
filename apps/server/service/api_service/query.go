@@ -280,32 +280,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		CollectType:       "0",
 	}
 
-	if in.RefreshId != 0 {
-		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ?", in.RefreshId, username).Updates(&row).Error; err != nil {
-			return nil, err
-		}
-		// Updates(&struct) skips zero-valued columns, so re-answering a turn
-		// whose agent type changed (e.g. analyst -> chat) would leave the old
-		// task identifiers behind. Clear the transitional task columns
-		// explicitly with the new turn's values (which may be empty).
-		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ?", in.RefreshId, username).
-			Updates(map[string]interface{}{
-				"server_id":        serverID,
-				"task_id":          taskID,
-				"log_status":       logStatus,
-				"server_file_path": "",
-			}).Error; err != nil {
-			return nil, err
-		}
-		out.Id = in.RefreshId
-	} else {
-		if err := model.DB(ctx).Create(&row).Error; err != nil {
-			return nil, err
-		}
-		out.Id = row.Id
+	id, err := ps.persistQuestionLog(ctx, username, in.RefreshId, &row)
+	if err != nil {
+		return nil, err
 	}
+	out.Id = id
 	out.UploadPath = strings.Join(obsPaths, ",")
 	return out, nil
 }
@@ -409,6 +388,39 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 	return answer, nil
 }
 
+// persistQuestionLog writes one QuestionAgentLog row, shared by the blocking
+// Query and streaming QueryStream paths: a plain INSERT on a fresh turn, or a
+// two-step UPDATE on refresh (struct Updates for the row, then an explicit map
+// Updates to clear the transitional task columns — server_id/task_id/
+// log_status/server_file_path — which struct Updates would skip as zero
+// values, stranding a prior agent type's identifiers on a re-answered turn).
+// It returns the row id (the refresh id on update, the new autoincrement id on
+// insert). Callers build `row` with their own column values; this helper owns
+// only the persistence branch so the two paths cannot drift.
+func (ps *Service) persistQuestionLog(ctx context.Context, username string, refreshID int64, row *model.QuestionAgentLog) (int64, error) {
+	if refreshID != 0 {
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ?", refreshID, username).Updates(row).Error; err != nil {
+			return 0, err
+		}
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ?", refreshID, username).
+			Updates(map[string]interface{}{
+				"server_id":        row.ServerId,
+				"task_id":          row.TaskId,
+				"log_status":       row.LogStatus,
+				"server_file_path": "",
+			}).Error; err != nil {
+			return 0, err
+		}
+		return refreshID, nil
+	}
+	if err := model.DB(ctx).Create(row).Error; err != nil {
+		return 0, err
+	}
+	return row.Id, nil
+}
+
 // QueryStream is the SSE variant of Query for chat-family slugs. It opens the
 // Bot AG-UI stream, forwards each frame to the browser via forward(), tees the
 // stream into an accumulator, and on stream end persists the Web row exactly
@@ -490,12 +502,25 @@ func (ps *Service) QueryStream(ctx context.Context, username string, in QueryInp
 		}
 	}
 
+	// Ground the persisted status in what actually happened on the wire, not a
+	// hardcoded optimism: a mid-stream read error (network drop, ctx cancel,
+	// frame over the 1MB scanner cap) or a RunError event both mean the answer
+	// is partial/failed. A blank status would strand the row out of the GA
+	// cron's WHERE status='RUNNING' poll set, so use "FAILED" (a terminal
+	// non-RUNNING state) rather than "" for these paths.
+	status := "SUCCEEDED"
+	if err := scanner.Err(); err != nil {
+		status = "FAILED"
+	} else if acc.Err() != nil {
+		status = "FAILED"
+	}
+
 	// Build + persist the row, mirroring the blocking path's columns.
 	out := &QueryData{
 		ToolName:     slugToToolName[slug],
 		ReactionType: "0",
 		DialogueId:   dialogueID,
-		Status:       "SUCCEEDED",
+		Status:       status,
 	}
 	out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
 	out.FollowUpQuestions = acc.FollowUpJSON()
@@ -521,30 +546,11 @@ func (ps *Service) QueryStream(ctx context.Context, username string, in QueryInp
 		ReactionType:      "0",
 		CollectType:       "0",
 	}
-	if in.RefreshId != 0 {
-		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ?", in.RefreshId, username).Updates(&row).Error; err != nil {
-			return nil, err
-		}
-		// Mirror the blocking path: clear transitional task columns explicitly
-		// (map Updates does not skip zero values).
-		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ?", in.RefreshId, username).
-			Updates(map[string]interface{}{
-				"server_id":        "",
-				"task_id":          "",
-				"log_status":       "",
-				"server_file_path": "",
-			}).Error; err != nil {
-			return nil, err
-		}
-		out.Id = in.RefreshId
-	} else {
-		if err := model.DB(ctx).Create(&row).Error; err != nil {
-			return nil, err
-		}
-		out.Id = row.Id
+	id, err := ps.persistQuestionLog(ctx, username, in.RefreshId, &row)
+	if err != nil {
+		return nil, err
 	}
+	out.Id = id
 	out.UploadPath = strings.Join(obsPaths, ",")
 	return out, nil
 }
