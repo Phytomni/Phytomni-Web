@@ -2,6 +2,7 @@ package api_handler
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -32,6 +33,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusConflict, "task is not syncable through bot run state"
 	case errors.Is(err, rxBot.ErrBotTimeout):
 		return http.StatusGatewayTimeout, "request timed out, please narrow your query or try again later"
+	case errors.Is(err, api_service.ErrStreamUnsupported):
+		return http.StatusBadRequest, "streaming not supported for this request"
 	}
 	if msg, ok := rxBot.SurfaceableMessage(err); ok {
 		return http.StatusBadRequest, msg
@@ -39,10 +42,23 @@ func queryErrorStatus(err error) (int, string) {
 	return http.StatusInternalServerError, "request failed"
 }
 
+// wantsStream reports whether the caller opted into SSE via the Accept header.
+func wantsStream(ctx *gin.Context) bool {
+	return strings.Contains(ctx.GetHeader("Accept"), "text/event-stream")
+}
+
+// streamEnabled reports whether the AG-UI streaming dark-launch flag is on.
+func streamEnabled() bool {
+	return rxBot.BotConfig != nil && rxBot.BotConfig.StreamEnabled
+}
+
 // Query is the gateway entry for chat sends. It parses the multipart form
 // the Web app posts, hands it to the service, and returns the row the Web app renders.
-// The Web app consumes this as JSON via axios; streaming chat support is not
-// currently wired through this gateway.
+// The Web app consumes this as JSON via axios by default. A caller can opt into
+// AG-UI SSE pass-through by sending Accept: text/event-stream; when the
+// bot.stream_enabled dark-launch flag is also on and the turn is Instant (not
+// mode=expert), the response streams as text/event-stream frames instead of the
+// blocking JSON envelope.
 func (ph *Handler) Query(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 
@@ -113,6 +129,46 @@ func (ph *Handler) Query(ctx *gin.Context) {
 			}
 			in.Files = append(in.Files, api_service.QueryFile{Filename: fh.Filename, Data: data})
 		}
+	}
+
+	// SSE branch (dark-launch). Only for chat-family slugs when the caller
+	// accepts text/event-stream, the flag is on, the turn is Instant, and
+	// the writer can flush. Expert must fall through to the blocking path,
+	// which owns RouteQuery dispatch and the expert_enabled dark gate — the
+	// frontend forces tool="" in Expert, so slug alone cannot tell the two
+	// apart. The route middleware (auth, per-user rate limit) and the
+	// multipart parse above have already run, so the gate order holds.
+	if streamEnabled() && wantsStream(ctx) && in.Mode != "expert" {
+		flusher, canFlush := ctx.Writer.(http.Flusher)
+		if canFlush {
+			ctx.Header("Content-Type", "text/event-stream")
+			ctx.Header("Cache-Control", "no-cache")
+			ctx.Header("Connection", "keep-alive")
+			ctx.Header("X-Accel-Buffering", "no")
+			ctx.Status(http.StatusOK)
+			forward := func(frame []byte) error {
+				if _, werr := ctx.Writer.Write(frame); werr != nil {
+					return werr
+				}
+				flusher.Flush()
+				return nil
+			}
+			_, serr := ph.service.QueryStream(ctx, name.(string), in, forward)
+			if serr != nil {
+				// If nothing was written yet, a pre-stream error can still be a
+				// normal status; once frames flushed, emit an SSE error frame.
+				status, msg := queryErrorStatus(serr)
+				if ctx.Writer.Written() {
+					_, _ = fmt.Fprintf(ctx.Writer, "event: RunError\ndata: {\"type\":\"RunError\",\"message\":%q}\n\n", msg)
+					flusher.Flush()
+				} else {
+					ctx.JSON(status, gin.H{"code": status, "message": msg})
+				}
+			}
+			return
+		}
+		// Writer cannot flush (test double / unusual proxy): fall through to
+		// the blocking path rather than panicking.
 	}
 
 	data, err := ph.service.Query(ctx, name.(string), in)
