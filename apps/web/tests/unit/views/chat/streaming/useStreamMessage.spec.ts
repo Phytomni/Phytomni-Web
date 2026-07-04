@@ -62,4 +62,58 @@ describe("useStreamMessage", () => {
     expect(placeholder.streaming).toBe(false);
     expect(placeholder.content).toContain("boom");
   });
+
+  it("shows the interrupted copy and finalizes when the HTTP response is not ok", async () => {
+    (fetch as any).mockResolvedValue(new Response(null, { status: 503 }));
+    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    // A non-ok stream throws before the read loop; the catch marks it resend-able.
+    expect(placeholder.content).toBe("chat.streamInterrupted");
+    expect(placeholder.streaming).toBe(false);
+    expect(chatState.isStreaming).toBe(false);
+    expect(chatState.streamingMessageId).toBeNull();
+  });
+
+  it("shows the interrupted copy on a mid-stream network error", async () => {
+    (fetch as any).mockRejectedValue(new Error("network down"));
+    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
+    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    expect(placeholder.content).toBe("chat.streamInterrupted");
+    expect(placeholder.streaming).toBe(false);
+  });
+
+  it("does NOT show the interrupted copy when the user aborts (AbortError)", async () => {
+    const abortErr = new Error("aborted");
+    abortErr.name = "AbortError";
+    (fetch as any).mockRejectedValue(abortErr);
+    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
+    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    // A deliberate user abort is not an interruption — no error copy, but still finalized.
+    expect(placeholder.content).toBe("");
+    expect(placeholder.streaming).toBe(false);
+    expect(chatState.isStreaming).toBe(false);
+  });
+
+  it("captures phyto.references into placeholder.doc_list on finalize", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r1"}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"T1"}]}}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
+    ]);
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
+    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    expect((placeholder as any).doc_list).toEqual([{ title: "T1" }]);
+  });
 });
