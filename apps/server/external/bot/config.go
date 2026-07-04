@@ -23,6 +23,10 @@ type Config struct {
 	// mode. While false the gateway returns ErrExpertDisabled for mode=expert
 	// (no Bot call). Zero value false = safe dormant default, like ProxyEnabled.
 	ExpertEnabled bool `json:"expert_enabled" yaml:"expert_enabled" mapstructure:"expert_enabled"`
+	// StreamEnabled is the dark-launch switch for AG-UI SSE streaming on /query.
+	// While false the gateway keeps using the blocking ChatCompletion path; flip
+	// to true (per deploy) to serve text/event-stream for chat-family slugs.
+	StreamEnabled bool `json:"stream_enabled" yaml:"stream_enabled" mapstructure:"stream_enabled"`
 	// KeyAuditRedact, when true, requires loggers to emit only the key prefix.
 	KeyAuditRedact bool `json:"key_audit_redact" yaml:"key_audit_redact" mapstructure:"key_audit_redact"`
 	// MaxUploadFileBytes / MaxUploadFileCount / MaxUploadTotalBytes bound the
