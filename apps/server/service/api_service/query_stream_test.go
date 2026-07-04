@@ -159,3 +159,32 @@ func TestQueryStream_RefreshClearsTaskColumns(t *testing.T) {
 			serverID, taskID, logStatus, serverFilePath)
 	}
 }
+
+func TestQueryStream_RunErrorPersistsFailed(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	// Bot stream that starts then emits a RunError instead of RunFinished.
+	body := strings.Join([]string{
+		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_err\"}\n",
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"partial\"}\n",
+		"event: RunError\ndata: {\"type\":\"RunError\",\"code\":\"bot_failure\",\"message\":\"boom\"}\n",
+	}, "\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+	svc := &Service{}
+	out, err := svc.QueryStream(context.Background(), "erin@example.com",
+		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil)
+	if err != nil {
+		t.Fatalf("QueryStream error: %v", err)
+	}
+	// A RunError mid-stream must persist a terminal non-RUNNING status, not the
+	// hardcoded SUCCEEDED — otherwise a failed run masquerades as a good one.
+	status, _ := readStatusAnswer(t, gdb, out.Id)
+	if status != "FAILED" {
+		t.Fatalf("persisted status = %q, want FAILED (RunError must not persist SUCCEEDED)", status)
+	}
+}
