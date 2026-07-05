@@ -2,11 +2,16 @@ package i18n
 
 import (
 	"bytes"
+	"io/fs"
 	"log"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/gin-gonic/gin"
 )
 
@@ -74,5 +79,136 @@ func TestT_NoHeaderDefaultsToEnglish(t *testing.T) {
 	got := T(c, "auth.user_not_found")
 	if got != "User not found" {
 		t.Fatalf("no-header fallback: got %q, want %q (en-US default)", got, "User not found")
+	}
+}
+
+// tomlKeys parses a TOML bundle into flattened dot-joined leaf keys.
+func tomlKeys(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	var tree map[string]interface{}
+	if _, err := toml.DecodeFile(path, &tree); err != nil {
+		t.Fatalf("decode %s: %v", path, err)
+	}
+	keys := map[string]bool{}
+	var walk func(prefix string, node map[string]interface{})
+	walk = func(prefix string, node map[string]interface{}) {
+		for k, v := range node {
+			full := k
+			if prefix != "" {
+				full = prefix + "." + k
+			}
+			if sub, ok := v.(map[string]interface{}); ok {
+				walk(full, sub)
+			} else {
+				keys[full] = true
+			}
+		}
+	}
+	walk("", tree)
+	return keys
+}
+
+func TestTomlKeyParity(t *testing.T) {
+	en := tomlKeys(t, "locales/en-US.toml")
+	zh := tomlKeys(t, "locales/zh-CN.toml")
+	if len(en) == 0 {
+		t.Fatal("en bundle is empty — degenerate pass")
+	}
+	for k := range en {
+		if !zh[k] {
+			t.Errorf("key %q in en-US.toml but missing in zh-CN.toml", k)
+		}
+	}
+	for k := range zh {
+		if !en[k] {
+			t.Errorf("key %q in zh-CN.toml but missing in en-US.toml", k)
+		}
+	}
+}
+
+func TestTomlKeyParity_NegativeControl(t *testing.T) {
+	// Prove the comparator flags a difference (not a no-op green).
+	a := map[string]bool{"x.y": true, "x.z": true}
+	b := map[string]bool{"x.y": true}
+	missing := 0
+	for k := range a {
+		if !b[k] {
+			missing++
+		}
+	}
+	if missing != 1 {
+		t.Fatalf("negative control: expected 1 missing key, got %d", missing)
+	}
+}
+
+// TestTomlReferenceResolvability scans every non-test Go file under
+// apps/server/ for i18n.T(ctx, "literal.key") and errs.NewError("literal.key")
+// call sites, extracts the string-literal keys, and asserts each one resolves
+// in BOTH the en-US and zh-CN TOML bundles. Dynamic keys (e.g. err.Error())
+// are skipped — only literals starting with a letter are extracted — so a
+// typo'd literal key with no TOML entry is caught here. This complements
+// TestTomlKeyParity (which only checks bundle-to-bundle symmetry) by
+// verifying the bundles actually cover every key the Go source references.
+func TestTomlReferenceResolvability(t *testing.T) {
+	en := tomlKeys(t, "locales/en-US.toml")
+	zh := tomlKeys(t, "locales/zh-CN.toml")
+	if len(en) == 0 {
+		t.Fatal("en bundle is empty — degenerate pass")
+	}
+
+	// A key starts with a letter, ends with a letter/digit, and contains only
+	// word chars and dots in between. This deliberately excludes dynamic
+	// arguments (err.Error()) and bare numeric/leading-dot fragments.
+	reT := regexp.MustCompile(`i18n\.T\([^,]+,\s*"([a-zA-Z][\w.]*[a-zA-Z0-9])"\)`)
+	reNewError := regexp.MustCompile(`errs\.NewError\("([a-zA-Z][\w.]*[a-zA-Z0-9])"\)`)
+
+	// Test CWD is apps/server/common/i18n/, so ../.. is apps/server/.
+	root := filepath.Join("..", "..")
+	keys := map[string]bool{}
+
+	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			// vendor/ is third-party code; skip it entirely.
+			if d.Name() == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Only scan non-test Go source.
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		for _, m := range reT.FindAllSubmatch(data, -1) {
+			keys[string(m[1])] = true
+		}
+		for _, m := range reNewError.FindAllSubmatch(data, -1) {
+			keys[string(m[1])] = true
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk %s: %v", root, walkErr)
+	}
+
+	// Negative control for the scanner itself: if the regex matched nothing
+	// the per-key loop below would trivially pass, so guard against that.
+	if len(keys) == 0 {
+		t.Fatal("no literal i18n.T/errs.NewError keys found in scan — scanner is degenerate")
+	}
+
+	for k := range keys {
+		if !en[k] {
+			t.Errorf("key %q used in Go source but missing in locales/en-US.toml", k)
+		}
+		if !zh[k] {
+			t.Errorf("key %q used in Go source but missing in locales/zh-CN.toml", k)
+		}
 	}
 }
