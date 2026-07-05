@@ -97,3 +97,38 @@ func TestParseAGUIFrame_MultiLineDataJoined(t *testing.T) {
 		t.Fatalf("delta = %q, want hi", got)
 	}
 }
+
+func TestParseAGUIFrame_MalformedJSONRejected(t *testing.T) {
+	// A data line that is not valid JSON must be dropped (ok=false), not
+	// surfaced as a partial event.
+	if _, ok := ParseAGUIFrame([]byte(`data: {"type":`)); ok {
+		t.Fatal("malformed JSON frame must not parse")
+	}
+}
+
+func TestAccumulator_UnknownEventIgnored(t *testing.T) {
+	// An event type the reducer does not handle must be a no-op, not a panic or
+	// a spurious state change — forward-compatibility with new AG-UI events.
+	a := &AGUIAccumulator{}
+	ev, ok := ParseAGUIFrame([]byte(`event: StepStarted` + "\n" + `data: {"type":"StepStarted","step_name":"retrieving"}`))
+	if !ok {
+		t.Fatal("StepStarted frame should parse")
+	}
+	a.Observe(ev)
+	if a.AnswerText() != "" || a.RunID() != "" || a.Err() != nil {
+		t.Fatalf("unknown event mutated state: answer=%q runID=%q err=%v", a.AnswerText(), a.RunID(), a.Err())
+	}
+}
+
+func TestAccumulator_EmptyDeltaIsNoOp(t *testing.T) {
+	// A TextMessageContent with no delta must leave the answer untouched.
+	a := &AGUIAccumulator{}
+	ev, ok := ParseAGUIFrame([]byte(`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent"}`))
+	if !ok {
+		t.Fatal("frame should parse")
+	}
+	a.Observe(ev)
+	if a.AnswerText() != "" {
+		t.Fatalf("empty delta appended %q, want empty", a.AnswerText())
+	}
+}
