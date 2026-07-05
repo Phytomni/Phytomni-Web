@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"phytomni-server/common/i18n"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,6 +18,7 @@ func TestGetDownloadObsFileDisabled(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/downloads/obs-file?username=alice&obs_path=/obs/p/r1", nil)
+	i18n.Localize()(c)
 
 	NewHandler().GetDownloadObsFile(c)
 

@@ -18,13 +18,6 @@ const (
 	ERR_RES_PARAMS_ILLEGAL = 10002
 )
 
-const (
-	SUCCESS_MSG                = "success"
-	FAIL_MSG                   = "fail"
-	FORBID_MSG                 = "forbidden request"
-	ERR_RES_PARAMS_ILLEGAL_MSG = "invalid parameters"
-)
-
 var (
 	GVA_REDIS *redis.Client
 )

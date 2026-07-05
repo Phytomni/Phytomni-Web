@@ -85,7 +85,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 	if formErr != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(formErr, &maxErr) || strings.Contains(formErr.Error(), "request body too large") {
-			ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": http.StatusRequestEntityTooLarge, "message": "upload content too large"})
+			ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": http.StatusRequestEntityTooLarge, "message": i18n.T(ctx, "query.upload_too_large")})
 			return
 		}
 	}
@@ -97,7 +97,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		Mode:    ctx.DefaultPostForm("mode", "instant"),
 	}
 	if strings.TrimSpace(in.Query) == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "query content cannot be empty"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.query_empty")})
 		return
 	}
 	// RESTful: conversation id from path /conversations/:id/messages (id=0 means a
@@ -113,19 +113,19 @@ func (ph *Handler) Query(ctx *gin.Context) {
 			sizes[i] = fh.Size
 		}
 		if verr := rxBot.CheckFiles(sizes); verr != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": verr.Error()})
+			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.TMaybe(ctx, verr.Error())})
 			return
 		}
 		for _, fh := range files {
 			f, err := fh.Open()
 			if err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "cannot read uploaded file"})
+				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.file_unreadable")})
 				return
 			}
 			data, err := io.ReadAll(f)
 			_ = f.Close()
 			if err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "cannot read uploaded file"})
+				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.file_unreadable")})
 				return
 			}
 			in.Files = append(in.Files, api_service.QueryFile{Filename: fh.Filename, Data: data})
@@ -214,7 +214,7 @@ func (ph *Handler) QueryAnalystUpdateLog(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	taskID := strings.TrimSpace(ctx.PostForm("task_id"))
 	if taskID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "task_id is required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.task_id_required")})
 		return
 	}
 	computeResource := ctx.PostForm("compute_resource")

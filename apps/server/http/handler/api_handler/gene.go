@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"phytomni-server/common"
+	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/middleware"
 	"phytomni-server/utils"
@@ -33,7 +34,7 @@ func (ph *Handler) GeneList(ctx *gin.Context) {
 	if title != "" {
 		list, total, totalPages, err := ph.service.GeneSearch(ctx, current, size, title)
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 			return
 		}
 
@@ -47,7 +48,7 @@ func (ph *Handler) GeneList(ctx *gin.Context) {
 	} else {
 		list, total, totalPages, err := ph.service.GeneList(ctx, current, size)
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		}
 
 		data := &common.GeneListResponse{
@@ -62,13 +63,13 @@ func (ph *Handler) GeneList(ctx *gin.Context) {
 func (ph *Handler) GeneDetails(ctx *gin.Context) {
 	fileName := ctx.Param("id")
 	if fileName == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "parameter file_name cannot be empty"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.file_name_required")})
 		return
 	}
 
 	list, err := ph.service.GeneDetails(ctx, fileName)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -227,7 +228,7 @@ func (ph *Handler) DownloadAnalystAgentObsFile(ctx *gin.Context) {
 
 	obsPath, err := ph.service.DownloadAnalystAgentObsFile(ctx, username.(string), obsPath)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -246,7 +247,7 @@ func (ph *Handler) DownloadAnalystAgentObsImages(ctx *gin.Context) {
 
 	imageUrls, err := ph.service.DownloadAnalystAgentObsImages(ctx, uStr, obsPath)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -277,7 +278,7 @@ func sanitizeFilename(name string) string {
 func (ph *Handler) GetDownloadObsFile(ctx *gin.Context) {
 	ctx.JSON(http.StatusGone, gin.H{
 		"code":    http.StatusGone,
-		"message": "email download links are currently unavailable",
+		"message": i18n.T(ctx, "gene.email_download_unavailable"),
 	})
 }
 
@@ -288,14 +289,14 @@ func (ph *Handler) GetDownloadObsFile(ctx *gin.Context) {
 func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 	key, err := middleware.ParseDownloadToken(ctx.Query("t"))
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": err.Error()})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
 	rc, length, err := rxBot.NewClient().GetObsObjectStream(ctx, key)
 	if err != nil {
 		// Do not expose Bot internal error details to the browser-direct surface.
-		ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": "failed to fetch file"})
+		ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": i18n.T(ctx, "gene.fetch_failed")})
 		return
 	}
 	defer rc.Close()
@@ -324,12 +325,12 @@ func (ph *Handler) DownloadObsRenderingFile(ctx *gin.Context) {
 	format := ctx.PostForm("document_format")
 
 	if id == 0 || format == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "missing parameter"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.missing_parameter")})
 		return
 	}
 	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, id, format)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 

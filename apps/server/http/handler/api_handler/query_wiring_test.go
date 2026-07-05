@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	api_service "phytomni-server/service/api_service"
 
@@ -32,6 +33,7 @@ func newQueryRequest(t *testing.T, query string) (*gin.Context, *httptest.Respon
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &buf)
 	c.Request.Header.Set("Content-Type", mw.FormDataContentType())
 	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	i18n.Localize()(c)
 	return c, w
 }
 
@@ -85,6 +87,7 @@ func newUpdateLogRequest(t *testing.T, fields map[string]string) (*gin.Context, 
 	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/async-tasks/analyst-log", &buf)
 	c.Request.Header.Set("Content-Type", mw.FormDataContentType())
 	c.Set("username", "alice")
+	i18n.Localize()(c)
 	return c, w
 }
 

@@ -24,13 +24,13 @@ func (ph *Handler) GetUserProfile(ctx *gin.Context) {
 	name, ok := ctx.Get("username")
 	email, _ := name.(string)
 	if !ok || email == "" {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "not logged in"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "common.not_logged_in")})
 		return
 	}
 
 	profile, err := ph.service.GetUserProfile(ctx, email)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -100,7 +100,7 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 
 	err := ph.service.UserRegister(ctx, email, password)
 	if err != nil {
-		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusConflict, "message": err.Error()})
+		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusConflict, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -128,7 +128,7 @@ func (ph *Handler) Register(ctx *gin.Context) {
 	if len(password) < 8 || len(password) > 16 {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "password must be at least 8 characters",
+			"message": i18n.T(ctx, "register.password_too_short"),
 		})
 		return
 	}
@@ -136,7 +136,7 @@ func (ph *Handler) Register(ctx *gin.Context) {
 	if !utils.ValidatePasswordComplexity(password) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "password must contain uppercase, lowercase, numbers, and punctuation",
+			"message": i18n.T(ctx, "register.password_complexity"),
 		})
 		return
 	}
@@ -144,31 +144,31 @@ func (ph *Handler) Register(ctx *gin.Context) {
 	if !govalidator.IsEmail(email) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "username must be a valid email address",
+			"message": i18n.T(ctx, "register.email_invalid_format"),
 		})
 		return
 	}
 	name, _ := ctx.Get("username")
 	permission, _ := ph.service.GetUserRegisterPermission(ctx, name.(string))
 	if !permission {
-		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "you are not an administrator and cannot create users", "token": ""})
+		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "user_admin.not_admin_create"), "token": ""})
 		return
 	}
 
 	if exists := ph.service.CheckEmailExists(ctx, email); exists {
-		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": "username already exists", "token": ""})
+		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "register.username_exists"), "token": ""})
 		return
 	}
 
 	_, err := ph.service.RegisterAddUser(ctx, email, password, code, id, phone, organization, position)
 	if err != nil {
-		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": err.Error(), "token": ""})
+		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error()), "token": ""})
 		return
 	}
 
 	token, err := middleware.GenerateToken(email)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to generate token", "token": ""})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "auth.token_generation_failed"), "token": ""})
 		return
 	}
 	ctx.JSON(errs.SucResp(token))
@@ -203,7 +203,7 @@ func (ph *Handler) ModifyPassword(ctx *gin.Context) {
 
 	email, err := ph.service.ModifyPassword(ctx, name.(string), password, newPassword)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 

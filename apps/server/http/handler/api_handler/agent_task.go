@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"phytomni-server/common"
+	"phytomni-server/common/i18n"
 	"phytomni-server/utils/errs"
 	"strconv"
 )
@@ -15,7 +16,7 @@ func (ph *Handler) AsyncTaskList(ctx *gin.Context) {
 
 	list, total, totalPages, err := ph.service.AsyncTaskList(ctx, name.(string), current, size)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 	data := &common.ApiAsyncTaskListResponsePages{
@@ -33,7 +34,7 @@ func (ph *Handler) AsyncTaskInfo(ctx *gin.Context) {
 
 	info, err := ph.service.AsyncTaskInfo(ctx, id, name.(string))
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 	ctx.JSON(errs.SucResp(info))
@@ -44,7 +45,7 @@ func (ph *Handler) AnalystAgentGetLog(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	taskId, err := ph.service.AnalystAgentGetLog(ctx, id, name.(string))
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -55,7 +56,7 @@ func (ph *Handler) QueryList(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 	list, err := ph.service.QueryList(ctx, name.(string))
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 	ctx.JSON(errs.SucResp(list))
@@ -66,7 +67,7 @@ func (ph *Handler) AnswerCheck(ctx *gin.Context) {
 	dialogueId := ctx.Param("id") // RESTful: conversation id from path /conversations/:id/messages
 	list, err := ph.service.AnswerCheck(ctx, name.(string), dialogueId)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -79,7 +80,7 @@ func (ph *Handler) QueryListDelete(ctx *gin.Context) {
 
 	queryId, err := ph.service.QueryListDelete(ctx, name.(string), id)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -93,7 +94,7 @@ func (ph *Handler) QueryListRename(ctx *gin.Context) {
 
 	r, err := ph.service.QueryListRename(ctx, name.(string), id, rename)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -109,14 +110,14 @@ func (ph *Handler) QueryReactionType(ctx *gin.Context) {
 	if reactionType != "0" && reactionType != "1" && reactionType != "2" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "invalid reaction_type value",
+			"message": i18n.T(ctx, "agent_task.invalid_reaction_type"),
 		})
 		return
 	}
 
 	id, err := ph.service.QueryReactionType(ctx, id, reactionType, name.(string))
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -132,14 +133,14 @@ func (ph *Handler) QueryCollect(ctx *gin.Context) {
 	if collectType != "0" && collectType != "1" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "invalid collect_type value",
+			"message": i18n.T(ctx, "agent_task.invalid_collect_type"),
 		})
 		return
 	}
 
 	id, err := ph.service.QueryCollect(ctx, id, collectType, name.(string))
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
@@ -152,7 +153,7 @@ func (ph *Handler) QueryCollectList(ctx *gin.Context) {
 
 	collectList, err := ph.service.QueryCollectList(ctx, name.(string))
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 

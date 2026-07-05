@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"phytomni-server/common"
+	"phytomni-server/common/i18n"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -29,7 +30,7 @@ func checkRequestUserAgent(c *gin.Context) bool {
 	uaText := c.Request.Header.Get("User-Agent")
 	isFlag := strings.Contains(strings.ToLower(uaText), common.MINI_WECHAT)
 	if !isFlag {
-		common.ReturnResponse(common.FORBID, map[string]interface{}{}, common.FORBID_MSG, c)
+		common.ReturnResponse(common.FORBID, map[string]interface{}{}, i18n.T(c, "common.forbidden"), c)
 		return false
 	}
 	return true

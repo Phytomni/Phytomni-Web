@@ -39,3 +39,35 @@ empty_body = "Feedback type and content cannot be empty"
 
 [chat]
 quota_exhausted = "Account has no chat quota; contact an administrator"
+
+[gene]
+file_name_required = "parameter file_name cannot be empty"
+fetch_failed = "failed to fetch file"
+missing_parameter = "missing parameter"
+email_download_unavailable = "email download links are currently unavailable"
+
+[common]
+not_logged_in = "not logged in"
+forbidden = "forbidden request"
+
+[query]
+upload_too_large = "upload content too large"
+query_empty = "query content cannot be empty"
+file_unreadable = "cannot read uploaded file"
+task_id_required = "task_id is required"
+
+[permission]
+user_id_required = "user ID cannot be empty"
+user_id_invalid = "invalid user ID"
+tool_list_failed = "failed to get tool list"
+no_admin = "no administrator or super administrator permission"
+user_list_failed = "failed to query user list"
+password_format_invalid = "invalid password format"
+change_password_failed = "failed to change password"
+
+[user_admin]
+not_admin_create = "you are not an administrator and cannot create users"
+
+[agent_task]
+invalid_reaction_type = "invalid reaction_type value"
+invalid_collect_type = "invalid collect_type value"

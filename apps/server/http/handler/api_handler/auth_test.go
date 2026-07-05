@@ -72,6 +72,7 @@ func newProfileRequestContext(t *testing.T, rawQuery string) (*gin.Context, *htt
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/users/me?"+rawQuery, nil)
+	i18n.Localize()(c)
 	return c, w
 }
 
@@ -217,5 +218,40 @@ func TestApiLogin_ResponseOmitsPasswordHash(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "\"password\"") {
 		t.Errorf("login response leaked a password field: %s", w.Body.String())
+	}
+}
+
+// TestApiGetUserProfile_NotLoggedIn_Localized asserts the missing-identity
+// 401 message localizes via Accept-Language. The auth judgment (no username
+// → 401, no fallback to ?email=) is unchanged; only the message text follows
+// the locale.
+func TestApiGetUserProfile_NotLoggedIn_Localized(t *testing.T) {
+	for _, tc := range []struct{ lang, want string }{
+		{"en-US", "not logged in"},
+		{"zh-CN", "未登录"},
+	} {
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+		req.Header.Set("Accept-Language", tc.lang)
+		c.Request = req
+		i18n.Localize()(c)
+
+		ph := NewHandler()
+		// deliberately no "username" Set (simulates missing AuthMiddleware injection)
+		ph.GetUserProfile(c)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("lang=%s: expected 401, got %d (body=%s)", tc.lang, w.Code, w.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("lang=%s: decode body %s: %v", tc.lang, w.Body.String(), err)
+		}
+		msg, _ := body["message"].(string)
+		if msg != tc.want {
+			t.Errorf("lang=%s: message = %q, want %q", tc.lang, msg, tc.want)
+		}
 	}
 }

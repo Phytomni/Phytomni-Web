@@ -3,6 +3,7 @@ package api_handler
 import (
 	"errors"
 	"net/http"
+	"phytomni-server/common/i18n"
 	"phytomni-server/service/api_service"
 	"phytomni-server/utils/errs"
 	"strconv"
@@ -15,7 +16,7 @@ func (ph *Handler) GetOperationLogs(ctx *gin.Context) {
 	// Operator identity (admin authorization is enforced in the service layer)
 	operatorName, exists := ctx.Get("username")
 	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "not logged in"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "common.not_logged_in")})
 		return
 	}
 
@@ -38,10 +39,10 @@ func (ph *Handler) GetOperationLogs(ctx *gin.Context) {
 	logs, err := ph.service.GetOperationLogs(ctx, operatorName.(string), userIds, startTime, endTime)
 	if err != nil {
 		if errors.Is(err, api_service.ErrOperationLogForbidden) {
-			ctx.JSON(http.StatusForbidden, gin.H{"code": http.StatusForbidden, "message": err.Error()})
+			ctx.JSON(http.StatusForbidden, gin.H{"code": http.StatusForbidden, "message": i18n.TMaybe(ctx, err.Error())})
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
