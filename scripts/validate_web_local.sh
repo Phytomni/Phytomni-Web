@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G7.5, G11, G12)
+# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G7.5, G11, G12, G13)
 #
 # Runs every check listed in .claude/plans/production-backport.md:
 #   G-1  staged/unstaged secret scan
@@ -15,6 +15,8 @@
 #   G11  apps/web SET_LOGIN_STATUS invariant — definition only in stores/user.ts,
 #        call only in views/login/index.vue
 #   G12  apps/web vitest run + coverage threshold
+#   G13  i18n hardcoded-copy scanner (CJK / ElMessage / gin.H ratchet against
+#        scripts/i18n_allowlist.md)
 #
 # Exit 0 means safe to commit. Any failure aborts via `set -e`.
 
@@ -121,5 +123,8 @@ stray="$( grep -rl 'SET_LOGIN_STATUS' apps/web/src/ \
 
 step "G12 apps/web: vitest run + coverage threshold"
 ( cd apps/web && npm run coverage )
+
+step "G13 i18n: hardcoded-copy scanner (ratchet against allowlist)"
+python3 scripts/check_i18n.py --check
 
 step "validate_web_local.sh: ALL GATES PASS"
