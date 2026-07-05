@@ -12,45 +12,7 @@ deleted), the scanner enters STRICT mode.
 - [ ] `apps/web/src/views/user-list/index.vue` | `：`
 
 ## B: Frontend ElMessage/ElMessageBox literals
-- [ ] `apps/web/src/composables/useDeepGenomeDownloads.ts` | `Print failed`
-- [ ] `apps/web/src/utils/request.ts` | `An error occurred while downloading, please contact the administrator!`
-- [ ] `apps/web/src/views/admin-management/index.vue` | `User added successfully`
-- [ ] `apps/web/src/views/admin-management/index.vue` | `User updated successfully`
-- [ ] `apps/web/src/views/chat/composables/useChatHistoryActions.ts` | `Delete failed, please try again`
-- [ ] `apps/web/src/views/chat/composables/useChatHistoryActions.ts` | `Deleted successfully`
-- [ ] `apps/web/src/views/chat/composables/useChatHistoryActions.ts` | `Operation failed, please try again`
-- [ ] `apps/web/src/views/chat/composables/useChatHistoryActions.ts` | `Rename failed, please try again`
-- [ ] `apps/web/src/views/chat/composables/useChatHistoryActions.ts` | `Renamed successfully`
-- [ ] `apps/web/src/views/chat/composables/useLogView.ts` | `Failed to update log`
-- [ ] `apps/web/src/views/chat/composables/useLogView.ts` | `Failed to update log, please try again`
-- [ ] `apps/web/src/views/chat/composables/useLogView.ts` | `Log updated successfully`
-- [ ] `apps/web/src/views/chat/composables/useReactions.ts` | `Cancelled`
-- [ ] `apps/web/src/views/chat/composables/useReactions.ts` | `Disliked`
-- [ ] `apps/web/src/views/chat/composables/useReactions.ts` | `Liked`
-- [ ] `apps/web/src/views/chat/composables/useReactions.ts` | `Operation failed, please try again`
-- [ ] `apps/web/src/views/chat/composables/useRefreshMessage.ts` | `Refresh failed, please try again`
-- [ ] `apps/web/src/views/chat/composables/useSendMessage.ts` | `Your session has expired, please log in again`
-- [ ] `apps/web/src/views/favorites/index.vue` | `Failed to load favorites`
-- [ ] `apps/web/src/views/favorites/index.vue` | `Failed to remove favorite`
-- [ ] `apps/web/src/views/favorites/index.vue` | `Removed from favorites`
-- [ ] `apps/web/src/views/favorites/index.vue` | `Rename failed`
-- [ ] `apps/web/src/views/favorites/index.vue` | `Renamed successfully`
-- [ ] `apps/web/src/views/feedback/index.vue` | `Feedback submitted, thank you for your input!`
-- [ ] `apps/web/src/views/feedback/index.vue` | `Submit failed, please try again`
 - [ ] `apps/web/src/views/global-config/index.vue` | `Time: ${row.timestamp}\nOperator: ${row.operator}\nChanges: ${row.changes}`
-- [ ] `apps/web/src/views/history/index.vue` | `Delete failed, please try again`
-- [ ] `apps/web/src/views/history/index.vue` | `Deleted successfully`
-- [ ] `apps/web/src/views/history/index.vue` | `Failed to load history`
-- [ ] `apps/web/src/views/history/index.vue` | `Refresh failed`
-- [ ] `apps/web/src/views/history/index.vue` | `Refreshed successfully`
-- [ ] `apps/web/src/views/history/index.vue` | `Rename failed, please try again`
-- [ ] `apps/web/src/views/history/index.vue` | `Renamed successfully`
-- [ ] `apps/web/src/views/login/index.vue` | `Login successful`
-- [ ] `apps/web/src/views/login/index.vue` | `Registration successful`
-- [ ] `apps/web/src/views/register/index.vue` | `Registration failed:`
-- [ ] `apps/web/src/views/register/index.vue` | `Registration successful`
-- [ ] `apps/web/src/views/user-list/index.vue` | `User added successfully`
-- [ ] `apps/web/src/views/user-list/index.vue` | `User updated successfully`
 
 ## C: Go gin.H message literals
 - [ ] `apps/server/http/handler/api_handler/agent_task.go` | `invalid collect_type value`

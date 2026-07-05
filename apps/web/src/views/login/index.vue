@@ -175,7 +175,7 @@ const handleLogin = () => {
         message?: string;
       }) => {
         if (res.code === 200) {
-          ElMessage.success("Login successful");
+          ElMessage.success(t("login.loginSuccess"));
           setToken(res.data!.token);
           // Save the user name
           useUserStore.SET_USER_NAME(res.data!.user_name);
@@ -259,12 +259,12 @@ const handleRegister = () => {
   register(registerFormData)
     .then((res: { code: number }) => {
       if (res.code === 200) {
-        ElMessage.success("Registration successful");
+        ElMessage.success(t("common.registrationSuccess"));
         isLogin.value = true;
       }
     })
     .catch((err: { message: string }) => {
-      ElMessage.error(err.message || "Registration failed");
+      ElMessage.error(err.message || t("login.registerFailed"));
     })
     .finally(() => {
       loading.value = false;

@@ -46,11 +46,13 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { ArrowLeft } from "@element-plus/icons-vue";
 import { feedback } from "@/api/feedback";
 
 const router = useRouter();
+const { t } = useI18n();
 
 // Feedback form data
 const feedbackForm = ref({
@@ -104,7 +106,7 @@ const submitFeedback = async () => {
 
       if (response.code === 200) {
         // Show success message
-        ElMessage.success("Feedback submitted, thank you for your input!");
+        ElMessage.success(t("feedback.submitSuccess"));
 
         // Reset form
         resetForm();
@@ -114,12 +116,12 @@ const submitFeedback = async () => {
           router.go(-1);
         }, 1500);
       } else {
-        ElMessage.error(response.message || "Submit failed, please try again");
+        ElMessage.error(response.message || t("feedback.submitFailed"));
       }
     }
   } catch (error) {
     console.error("Failed to submit feedback:", error);
-    ElMessage.error("Submit failed, please try again");
+    ElMessage.error(t("feedback.submitFailed"));
   } finally {
     submitting.value = false;
   }

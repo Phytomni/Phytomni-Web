@@ -224,18 +224,18 @@ const handleRegister = () => {
       console.log("Registration response:", res);
       if (res.code === 200) {
         console.log("Registration successful");
-        ElMessage.success("Registration successful");
+        ElMessage.success(t("common.registrationSuccess"));
         router.replace("/login");
       } else {
         console.log("Registration failed, status code:", res.code);
         ElMessage.error(
-          "Registration failed: " + (res.message || "Unknown error")
+          t("login.registerFailed") + ": " + (res.message || "Unknown error")
         );
       }
     })
     .catch((err: any) => {
       console.log("Registration error:", err);
-      ElMessage.error(err.message || "Registration failed");
+      ElMessage.error(err.message || t("login.registerFailed"));
     })
     .finally(() => {
       loading.value = false;

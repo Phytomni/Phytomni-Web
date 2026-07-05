@@ -348,13 +348,13 @@ const handleSubmit = async () => {
 
           const res = await addUser(formData);
           if (res.code === 200) {
-            ElMessage.success("User added successfully");
+            ElMessage.success(t("common.userAddedSuccess"));
             currentPage.value = 1;
             pageSize.value = 10;
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.message || "Failed to add user");
+            ElMessage.error(res.message || t("user.addFailed"));
           }
         } else {
           // Edit a user - via PUT /api/v1/users/:id/permissions, FormData format
@@ -368,20 +368,20 @@ const handleSubmit = async () => {
 
           const res = await changePermission(formData);
           if (res.code === 200) {
-            ElMessage.success("User updated successfully");
+            ElMessage.success(t("common.userUpdatedSuccess"));
             currentPage.value = 1;
             pageSize.value = 10;
             fetchData();
             closeDialog();
           } else {
-            ElMessage.error(res.message || "Failed to update user");
+            ElMessage.error(res.message || t("user.editFailed"));
           }
         }
       } catch (error: any) {
         console.error("Operation failed:", error);
         ElMessage.error(
           error.message ||
-            (dialogType.value === "add" ? "Failed to add user" : "Failed to update user")
+            (dialogType.value === "add" ? t("user.addFailed") : t("user.editFailed"))
         );
       }
     } else {

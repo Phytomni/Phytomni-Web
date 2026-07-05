@@ -2,6 +2,7 @@ import { nextTick } from "vue";
 import type { Ref } from "vue";
 import type { ChatMessage, Chat } from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
+import i18n from "@/locales";
 import {
   extractAtValues,
   formatFileSize,
@@ -493,9 +494,12 @@ export function useSendMessage(opts: {
         error.response.data.detail &&
         error.response.data.detail.code === 403
       ) {
-        ElMessageBox.alert("Your session has expired, please log in again", "Notice", {
-          confirmButtonText: "OK",
-          type: "warning",
+        ElMessageBox.alert(
+          i18n.global.t("common.sessionExpired"),
+          i18n.global.t("common.notice"),
+          {
+            confirmButtonText: i18n.global.t("request.confirmButtonText"),
+            type: "warning",
           callback: () => {
             const UserStore = userStore();
             UserStore.FedLogOut().finally(() => {

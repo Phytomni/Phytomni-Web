@@ -291,7 +291,7 @@ export function download(
     })
     .catch((r) => {
       console.error(r);
-      ElMessage.error("An error occurred while downloading, please contact the administrator!");
+      ElMessage.error(i18n.global.t("chat.downloadError"));
       downloadLoadingInstance?.close();
     });
 }

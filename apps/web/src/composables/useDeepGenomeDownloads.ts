@@ -2,6 +2,7 @@ import { nextTick } from "vue";
 import type { Ref, ComputedRef } from "vue";
 import { saveAs } from "file-saver";
 import { ElMessage } from "element-plus";
+import i18n from "@/locales";
 import { convertFilePath } from "@/utils/markdown-inline";
 
 export interface DeepGenomeDownloadsOpts {
@@ -200,7 +201,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     try {
       await window.print();
     } catch (error) {
-      ElMessage.error("Print failed");
+      ElMessage.error(i18n.global.t("chat.printFailed"));
       console.error("Print error:", error);
     }
 

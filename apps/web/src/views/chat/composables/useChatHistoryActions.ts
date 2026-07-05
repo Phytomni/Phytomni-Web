@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
+import i18n from "@/locales";
 import { collectHistory, renameHistory, deleteHistory } from "@/api/chat";
 import type { Chat } from "../types";
 
@@ -66,14 +67,14 @@ export function useChatHistoryActions(opts: {
           // the parent owns chatList and updates its local list on this event; the child does not mutate the prop directly.
           opts.onChatRenamed(updatedChat);
           // show a success message
-          ElMessage.success("Renamed successfully");
+          ElMessage.success(i18n.global.t("common.renamedSuccess"));
         } else {
-          ElMessage.error(response.message || "Rename failed");
+          ElMessage.error(response.message || i18n.global.t("common.renameFailedRetry"));
         }
       }
     } catch (error) {
       console.error("Rename failed:", error);
-      ElMessage.error("Rename failed, please try again");
+      ElMessage.error(i18n.global.t("common.renameFailedRetry"));
     }
   };
 
@@ -103,13 +104,13 @@ export function useChatHistoryActions(opts: {
         }
         chatToDelete.value = null;
         // show a success message
-        ElMessage.success("Deleted successfully");
+        ElMessage.success(i18n.global.t("common.deletedSuccess"));
       } else {
-        ElMessage.error(response.message || "Delete failed");
+        ElMessage.error(response.message || i18n.global.t("common.deleteFailedRetry"));
       }
     } catch (error) {
       console.error("Delete failed:", error);
-      ElMessage.error("Delete failed, please try again");
+      ElMessage.error(i18n.global.t("common.deleteFailedRetry"));
     }
   };
 
@@ -127,14 +128,16 @@ export function useChatHistoryActions(opts: {
         opts.onChatFavorited(updatedChat);
         // show a success message
         ElMessage.success(
-          updatedChat.isFavorite ? "Added to favorites" : "Removed from favorites"
+          updatedChat.isFavorite
+            ? i18n.global.t("favorites.addedSuccess")
+            : i18n.global.t("favorites.removedSuccess")
         );
       } else {
-        ElMessage.error(response.message || "Operation failed");
+        ElMessage.error(response.message || i18n.global.t("common.opFailedRetry"));
       }
     } catch (error) {
       console.error("Favorite action failed:", error);
-      ElMessage.error("Operation failed, please try again");
+      ElMessage.error(i18n.global.t("common.opFailedRetry"));
     }
   };
 

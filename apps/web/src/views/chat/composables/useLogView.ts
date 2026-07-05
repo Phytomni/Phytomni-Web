@@ -2,6 +2,7 @@ import { nextTick } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
 import type { ChatMessage } from "../types";
 import { ElMessage } from "element-plus";
+import i18n from "@/locales";
 import { getAnalystAgentLog, updateAnalystAgentLog } from "@/api/chat";
 
 export function useLogView(opts: {
@@ -109,7 +110,7 @@ export function useLogView(opts: {
       const response = await updateAnalystAgentLog(formData);
 
       if (response.code === 200) {
-        ElMessage.success("Log updated successfully");
+        ElMessage.success(i18n.global.t("chat.logUpdatedSuccess"));
 
         // reload the log data
         if (currentChat.value?.messages) {
@@ -153,11 +154,11 @@ export function useLogView(opts: {
           }
         }
       } else {
-        ElMessage.error("Failed to update log");
+        ElMessage.error(i18n.global.t("chat.logUpdateFailed"));
       }
     } catch (error) {
       console.error("Failed to update log:", error);
-      ElMessage.error("Failed to update log, please try again");
+      ElMessage.error(i18n.global.t("chat.logUpdateFailedRetry"));
     } finally {
       chatState.updatingLog[messageId] = false;
 

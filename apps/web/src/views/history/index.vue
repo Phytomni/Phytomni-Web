@@ -214,12 +214,12 @@ const fetchHistoryData = async () => {
     if (res.code === 200 && res.data) {
       historyList.value = res.data;
     } else {
-      ElMessage.error(res.message || "Failed to load history");
+      ElMessage.error(res.message || t("history.loadFailed"));
       historyList.value = [];
     }
   } catch (error) {
     console.error("Failed to fetch history:", error);
-    ElMessage.error("Failed to load history");
+    ElMessage.error(t("history.loadFailed"));
     historyList.value = [];
   } finally {
     loading.value = false;
@@ -231,10 +231,10 @@ const refreshHistory = async () => {
   refreshing.value = true;
   try {
     await fetchHistoryData();
-    ElMessage.success("Refreshed successfully");
+    ElMessage.success(t("common.refreshedSuccess"));
   } catch (error) {
     console.error("Refresh failed:", error);
-    ElMessage.error("Refresh failed");
+    ElMessage.error(t("common.refreshFailed"));
   } finally {
     refreshing.value = false;
   }
@@ -288,14 +288,14 @@ const handleRenameConfirm = async () => {
         }
         renameDialogVisible.value = false;
         historyToRename.value = null;
-        ElMessage.success("Renamed successfully");
+        ElMessage.success(t("common.renamedSuccess"));
       } else {
-        ElMessage.error(res.message || "Rename failed");
+        ElMessage.error(res.message || t("common.renameFailedRetry"));
       }
     }
   } catch (error) {
     console.error("Rename failed:", error);
-    ElMessage.error("Rename failed, please try again");
+    ElMessage.error(t("common.renameFailedRetry"));
   }
 };
 
@@ -319,13 +319,13 @@ const handleDeleteConfirm = async () => {
       }
       deleteDialogVisible.value = false;
       historyToDelete.value = null;
-      ElMessage.success("Deleted successfully");
+      ElMessage.success(t("common.deletedSuccess"));
     } else {
-      ElMessage.error(res.message || "Delete failed");
+      ElMessage.error(res.message || t("common.deleteFailedRetry"));
     }
   } catch (error) {
     console.error("Delete failed:", error);
-    ElMessage.error("Delete failed, please try again");
+    ElMessage.error(t("common.deleteFailedRetry"));
   }
 };
 

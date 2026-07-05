@@ -130,6 +130,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   ArrowLeft,
@@ -142,6 +143,7 @@ import {
 import { getCollectHistory, renameHistory, collectHistory } from "@/api/chat";
 
 const router = useRouter();
+const { t } = useI18n();
 
 // Favorite item interface definition
 interface FavoriteItem {
@@ -182,11 +184,11 @@ const fetchFavorites = async () => {
         isFavorite: true,
       }));
     } else {
-      ElMessage.error(response.message || "Failed to load favorites");
+      ElMessage.error(response.message || t("favorites.loadFailed"));
     }
   } catch (error) {
     console.error("Failed to fetch favorites list:", error);
-    ElMessage.error("Failed to load favorites");
+    ElMessage.error(t("favorites.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -223,7 +225,7 @@ const handleUnfavorite = async (favorite: FavoriteItem) => {
 
     const response = await collectHistory(formData);
     if (response.code === 200) {
-      ElMessage.success("Removed from favorites");
+      ElMessage.success(t("favorites.removedSuccess"));
       // Remove from the list
       const index = favoritesList.value.findIndex(
         (item) => item.id === favorite.id
@@ -232,11 +234,11 @@ const handleUnfavorite = async (favorite: FavoriteItem) => {
         favoritesList.value.splice(index, 1);
       }
     } else {
-      ElMessage.error(response.message || "Failed to remove favorite");
+      ElMessage.error(response.message || t("favorites.removeFailed"));
     }
   } catch (error) {
     console.error("Failed to remove from favorites:", error);
-    ElMessage.error("Failed to remove favorite");
+    ElMessage.error(t("favorites.removeFailed"));
   }
 };
 
@@ -253,7 +255,7 @@ const handleRenameConfirm = async () => {
 
       const response = await renameHistory(formData);
       if (response.code === 200) {
-        ElMessage.success("Renamed successfully");
+        ElMessage.success(t("common.renamedSuccess"));
         // Update local data
         const index = favoritesList.value.findIndex(
           (item) => item.id === favoriteToRename.value!.id
@@ -264,12 +266,12 @@ const handleRenameConfirm = async () => {
         renameDialogVisible.value = false;
         favoriteToRename.value = null;
       } else {
-        ElMessage.error(response.message || "Rename failed");
+        ElMessage.error(response.message || t("common.renameFailedRetry"));
       }
     }
   } catch (error) {
     console.error("Failed to rename:", error);
-    ElMessage.error("Rename failed");
+    ElMessage.error(t("common.renameFailedRetry"));
   }
 };
 

@@ -2,6 +2,7 @@ import { nextTick } from "vue";
 import type { Ref } from "vue";
 import type { ChatMessage } from "../types";
 import { ElMessage } from "element-plus";
+import i18n from "@/locales";
 import { getQuery } from "@/api/chat";
 import { isValidJSON, convertToTableData } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
@@ -328,7 +329,7 @@ export function useRefreshMessage(opts: {
       }
     } catch (error: any) {
       console.error("Failed to refresh message:", error);
-      ElMessage.error("Refresh failed, please try again");
+      ElMessage.error(i18n.global.t("common.refreshFailedRetry"));
     } finally {
       // ensure it scrolls to the bottom
       nextTick(() => {

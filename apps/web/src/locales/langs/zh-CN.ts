@@ -35,6 +35,19 @@ export default {
     Tip: "(AI 生成)",
     aiDisclaimer: "由AI生成，请仔细审查",
     followSystem: "跟随系统",
+    opFailedRetry: "操作失败,请重试",
+    renamedSuccess: "重命名成功",
+    renameFailedRetry: "重命名失败,请重试",
+    deletedSuccess: "删除成功",
+    deleteFailedRetry: "删除失败,请重试",
+    refreshedSuccess: "刷新成功",
+    refreshFailed: "刷新失败",
+    refreshFailedRetry: "刷新失败,请重试",
+    userAddedSuccess: "用户添加成功",
+    userUpdatedSuccess: "用户更新成功",
+    registrationSuccess: "注册成功",
+    sessionExpired: "登录已过期,请重新登录",
+    notice: "提示",
   },
 
   // 错误页
@@ -510,6 +523,14 @@ export default {
       contentColumn: "日志内容",
       noData: "暂无日志数据",
     },
+    logUpdatedSuccess: "日志更新成功",
+    logUpdateFailed: "日志更新失败",
+    logUpdateFailedRetry: "日志更新失败,请重试",
+    liked: "已点赞",
+    disliked: "已点踩",
+    cancelled: "已取消",
+    printFailed: "打印失败",
+    downloadError: "下载过程中出错,请联系管理员!",
   },
 
   // 历史记录模块
@@ -518,6 +539,15 @@ export default {
     noHistoryDescription:
       "您还没有任何聊天历史记录，开始聊天并查看您的对话历史吧",
     historyCount: "共 {count} 条历史记录",
+    loadFailed: "加载历史记录失败",
+  },
+
+  // 收藏模块
+  favorites: {
+    loadFailed: "加载收藏失败",
+    removedSuccess: "已取消收藏",
+    removeFailed: "取消收藏失败",
+    addedSuccess: "已添加到收藏",
   },
 
   // 个人资料管理模块

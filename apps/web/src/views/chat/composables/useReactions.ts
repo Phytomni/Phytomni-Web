@@ -1,6 +1,7 @@
 import { nextTick } from "vue";
 import type { Ref } from "vue";
 import { ElMessage } from "element-plus";
+import i18n from "@/locales";
 import { getReactionType } from "@/api/chat";
 
 export function useReactions(opts: {
@@ -47,11 +48,11 @@ export function useReactions(opts: {
 
         // show a success message
         if (newReaction === 0) {
-          ElMessage.success("Cancelled");
+          ElMessage.success(i18n.global.t("chat.cancelled"));
         } else if (newReaction === 1) {
-          ElMessage.success("Liked");
+          ElMessage.success(i18n.global.t("chat.liked"));
         } else if (newReaction === 2) {
-          ElMessage.success("Disliked");
+          ElMessage.success(i18n.global.t("chat.disliked"));
         }
 
         // ensure it scrolls to the bottom
@@ -59,11 +60,11 @@ export function useReactions(opts: {
           scrollToBottom();
         });
       } else {
-        ElMessage.error("Operation failed, please try again");
+        ElMessage.error(i18n.global.t("common.opFailedRetry"));
       }
     } catch (error) {
       console.error("Reaction failed:", error);
-      ElMessage.error("Operation failed, please try again");
+      ElMessage.error(i18n.global.t("common.opFailedRetry"));
     }
 
     // ensure it scrolls to the bottom
