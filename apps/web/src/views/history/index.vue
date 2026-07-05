@@ -28,7 +28,7 @@
             size="small"
           >
             <el-icon><Refresh /></el-icon>
-            {{ $t("common.refresh") }}
+            {{ $t("chat.refresh") }}
           </el-button>
         </div>
 

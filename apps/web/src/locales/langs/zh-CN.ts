@@ -673,6 +673,8 @@ export default {
       title: "基因深度分析智能体",
       subtitle: "基因深度分析智能体 - 提供物种和基因的深度分析服务",
       taskCreated: "任务创建成功",
+      downloadPDF: "下载 PDF",
+      downloadMD: "下载 Markdown",
     },
     geneNetwork: {
       title: "基因网络智能体",

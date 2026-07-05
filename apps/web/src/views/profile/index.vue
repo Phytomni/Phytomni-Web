@@ -281,7 +281,7 @@ const passwordRules = {
   confirmPassword: [
     {
       required: true,
-      message: () => t("user.validation.passwordMismatch"),
+      message: () => t("changePassword.passwordMismatch"),
       trigger: "blur",
     },
     {
@@ -291,7 +291,7 @@ const passwordRules = {
         callback: (error?: Error) => void
       ) => {
         if (value !== passwordForm.newPassword) {
-          callback(new Error(t("user.validation.passwordMismatch")));
+          callback(new Error(t("changePassword.passwordMismatch")));
         } else {
           callback();
         }

@@ -385,7 +385,6 @@ export default {
     inputPlaceholderTip: "Please enter your question",
     uploadFile:
       "Support file upload(max 10, accept .pdf,.doc,.xlsx,.ppt,.txt,.png)",
-    noPermission: "You do not have permission to use this model",
     timeGroup: {
       today: "Today",
       yesterday: "Yesterday",
@@ -695,6 +694,8 @@ export default {
       subtitle:
         "Deep Genome Agent - Provides in-depth analysis services for species and genes",
       taskCreated: "Task created successfully",
+      downloadPDF: "Download PDF",
+      downloadMD: "Download Markdown",
     },
     geneNetwork: {
       title: "Gene Network Agent",
