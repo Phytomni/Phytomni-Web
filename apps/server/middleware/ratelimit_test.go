@@ -7,6 +7,7 @@ import (
 	"time"
 
 	rxCache "phytomni-server/cache"
+	"phytomni-server/common/i18n"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -49,8 +50,13 @@ func setRLConfig(t *testing.T, name string, enabled bool, limit int64, window ti
 func newRLEngine(mw ...gin.HandlerFunc) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	handlers := append(mw, func(c *gin.Context) { c.String(http.StatusOK, "ok") })
-	r.GET("/probe", handlers...)
+	// i18n.Localize() binds the localizer so i18n.T in the 429 path doesn't
+	// panic (the real router mounts i18n.Localize() ahead of this middleware).
+	chain := make([]gin.HandlerFunc, 0, len(mw)+2)
+	chain = append(chain, i18n.Localize())
+	chain = append(chain, mw...)
+	chain = append(chain, func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+	r.GET("/probe", chain...)
 	return r
 }
 
@@ -145,7 +151,7 @@ func TestPerUserRateLimit_KeysOnUsername(t *testing.T) {
 	setRLConfig(t, "query", true, 1, time.Minute)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/probe", func(c *gin.Context) {
+	r.GET("/probe", i18n.Localize(), func(c *gin.Context) {
 		if u := c.Query("u"); u != "" {
 			c.Set("username", u)
 		}

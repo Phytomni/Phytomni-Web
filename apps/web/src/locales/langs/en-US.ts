@@ -716,6 +716,7 @@ export default {
     operator: "Operator",
     changes: "Changes",
     historyDetail: "History Detail",
+    historyDetailContent: "Time: {time}\nOperator: {operator}\nChanges: {changes}",
     saveSuccess: "Configuration saved successfully",
     saveFailed: "Failed to save configuration",
     resetConfirm:

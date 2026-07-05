@@ -5,11 +5,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"phytomni-server/common/i18n"
+	"phytomni-server/db"
+
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-
-	"phytomni-server/db"
 )
 
 // setupGateTestDB opens an in-memory SQLite DB with a minimal users table
@@ -46,6 +47,9 @@ func runGate(t *testing.T, gdb *gorm.DB, username interface{}, path string) *htt
 	if username != nil {
 		ctx.Set("username", username)
 	}
+	// Bind the i18n localizer so i18n.T in the 401/403/500 paths doesn't
+	// panic (the real router mounts i18n.Localize() ahead of this middleware).
+	i18n.Localize()(ctx)
 	LoginStatusMiddleware()(ctx)
 	return w
 }

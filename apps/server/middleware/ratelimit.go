@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	rxCache "phytomni-server/cache"
+	"phytomni-server/common/i18n"
 	"strconv"
 	"time"
 
@@ -73,7 +74,7 @@ func rateLimit(name string, keyFn func(*gin.Context) string) gin.HandlerFunc {
 		c.Header("Retry-After", strconv.Itoa(int(cfg.window.Seconds())))
 		c.JSON(http.StatusTooManyRequests, gin.H{
 			"code":    http.StatusTooManyRequests,
-			"message": "too many requests, please try again later",
+			"message": i18n.T(c, "common.rate_limited"),
 		})
 		c.Abort()
 	}

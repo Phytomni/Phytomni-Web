@@ -4,6 +4,9 @@ invalid_credentials = "Invalid username or password"
 token_generation_failed = "Failed to generate token"
 account_locked = "Account locked. Please try again later."
 account_locked_threshold = "Too many failed login attempts. Account locked for 15 minutes."
+missing_context = "missing authentication context"
+user_lookup_failed = "user lookup failed"
+first_login_must_change_password = "first-login users must change their initial password before accessing other endpoints"
 
 [register]
 email_required = "Email is required"
@@ -49,6 +52,7 @@ email_download_unavailable = "email download links are currently unavailable"
 [common]
 not_logged_in = "not logged in"
 forbidden = "forbidden request"
+rate_limited = "too many requests, please try again later"
 
 [query]
 upload_too_large = "upload content too large"

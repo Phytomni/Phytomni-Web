@@ -270,7 +270,11 @@ const handleTest = () => {
 // View history details
 const handleViewHistory = (row: any) => {
   ElMessageBox.alert(
-    `Time: ${row.timestamp}\nOperator: ${row.operator}\nChanges: ${row.changes}`,
+    t("globalConfig.historyDetailContent", {
+      time: row.timestamp,
+      operator: row.operator,
+      changes: row.changes,
+    }),
     t("globalConfig.historyDetail"),
     {
       confirmButtonText: t("common.confirm"),

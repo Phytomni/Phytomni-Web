@@ -4,6 +4,9 @@ invalid_credentials = "用户名或密码错误"
 token_generation_failed = "生成token失败"
 account_locked = "账户已锁定，请稍后再试"
 account_locked_threshold = "登录失败次数过多，账户已锁定15分钟"
+missing_context = "缺少认证上下文"
+user_lookup_failed = "用户查询失败"
+first_login_must_change_password = "首次登录用户必须先修改初始密码才能访问其他接口"
 
 [register]
 email_required = "邮箱不能为空"
@@ -49,6 +52,7 @@ email_download_unavailable = "邮件下载链接当前不可用"
 [common]
 not_logged_in = "未登录"
 forbidden = "禁止的请求"
+rate_limited = "请求过于频繁，请稍后再试"
 
 [query]
 upload_too_large = "上传内容过大"

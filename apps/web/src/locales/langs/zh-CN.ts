@@ -700,6 +700,7 @@ export default {
     operator: "操作人",
     changes: "变更内容",
     historyDetail: "历史详情",
+    historyDetailContent: "时间：{time}\n操作人：{operator}\n变更：{changes}",
     saveSuccess: "配置保存成功",
     saveFailed: "配置保存失败",
     resetConfirm: "确定要重置所有配置为默认值吗？",

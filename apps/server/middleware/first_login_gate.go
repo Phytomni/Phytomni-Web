@@ -10,6 +10,7 @@ package middleware
 import (
 	"net/http"
 
+	"phytomni-server/common/i18n"
 	rxLog "phytomni-server/log"
 	"phytomni-server/model"
 
@@ -33,7 +34,7 @@ func LoginStatusMiddleware() gin.HandlerFunc {
 		if !ok {
 			ctx.JSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,
-				"message": "missing authentication context",
+				"message": i18n.T(ctx, "auth.missing_context"),
 			})
 			ctx.Abort()
 			return
@@ -42,7 +43,7 @@ func LoginStatusMiddleware() gin.HandlerFunc {
 		if username == "" {
 			ctx.JSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,
-				"message": "missing authentication context",
+				"message": i18n.T(ctx, "auth.missing_context"),
 			})
 			ctx.Abort()
 			return
@@ -55,7 +56,7 @@ func LoginStatusMiddleware() gin.HandlerFunc {
 				"username", username, "err", err)
 			ctx.JSON(http.StatusInternalServerError, gin.H{
 				"code":    http.StatusInternalServerError,
-				"message": "user lookup failed",
+				"message": i18n.T(ctx, "auth.user_lookup_failed"),
 			})
 			ctx.Abort()
 			return
@@ -76,7 +77,7 @@ func LoginStatusMiddleware() gin.HandlerFunc {
 
 		ctx.JSON(http.StatusForbidden, gin.H{
 			"code":    http.StatusForbidden,
-			"message": "first-login users must change their initial password before accessing other endpoints",
+			"message": i18n.T(ctx, "auth.first_login_must_change_password"),
 		})
 		ctx.Abort()
 	}
