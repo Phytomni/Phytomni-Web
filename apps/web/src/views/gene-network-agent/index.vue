@@ -8,7 +8,7 @@
           @click="goBack"
           class="back-button"
         >
-          返回
+          {{ $t("common.back") }}
         </el-button>
         <div class="header-text">
           <h1>{{ $t("agents.geneNetwork.title") }}</h1>
@@ -35,7 +35,8 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            任务创建成功8ab4434b-772a-44f0-aaa5-fa163e7f84a3
+            {{ $t("agents.geneNetwork.taskCreated")
+            }}8ab4434b-772a-44f0-aaa5-fa163e7f84a3
             <div class="download-section">
               <el-button
                 type="primary"
@@ -44,10 +45,10 @@
                 :loading="isDownloading"
                 class="download-button"
               >
-                {{ isDownloading ? "正在下载..." : "下载分析结果" }}
+                {{ isDownloading ? $t("agents.geneNetwork.downloading") : $t("agents.geneNetwork.downloadResults") }}
               </el-button>
               <div v-if="isDownloading" class="download-progress">
-                <p>正在下载分卷文件 {{ currentDownloadIndex + 1 }}/5</p>
+                <p>{{ $t("agents.geneNetwork.volumeProgress", { current: currentDownloadIndex + 1, total: 5 }) }}</p>
                 <p class="file-name">{{ currentDownloadFile }}</p>
               </div>
             </div>

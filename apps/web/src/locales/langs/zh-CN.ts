@@ -34,6 +34,21 @@ export default {
     finished: "已完成",
     Tip: "(AI 生成)",
     aiDisclaimer: "由AI生成，请仔细审查",
+    followSystem: "跟随系统",
+  },
+
+  // 错误页
+  errorPage: {
+    back: "返回",
+    goHome: "回首页",
+    e401Title: "401错误!",
+    e401NoAccess: "您没有访问权限！",
+    e401Detail:
+      "对不起，您没有访问权限，请不要进行非法操作！您可以返回主页面",
+    e404Title: "404错误!",
+    e404NotFound: "页面不存在！",
+    e404Detail:
+      "对不起，您正在寻找的页面不存在。尝试检查URL的错误，然后按浏览器上的刷新按钮或尝试在我们的应用程序中找到其他内容。",
   },
 
   // 应用信息
@@ -256,6 +271,9 @@ export default {
   // 用户管理
   user: {
     list: "用户列表",
+    listTitle: "用户列表",
+    passwordEditPlaceholder: "留空则不修改密码",
+    unnamedUser: "未设置用户名",
     add: "新增用户",
     edit: "编辑用户",
     username: "用户名",
@@ -480,6 +498,18 @@ export default {
     hideLog: "隐藏日志",
     showLog: "显示日志",
     downloadFile: "下载文件",
+    testParallel: "测试并行对话",
+    refreshReply: "刷新回复",
+    abortTooltip: "中止回答",
+    loadingAgentPerms: "加载智能体权限中...",
+    log: {
+      replyContent: "回复内容",
+      execLog: "执行日志 (ID: {id})",
+      updateLog: "更新日志",
+      loading: "加载日志中...",
+      contentColumn: "日志内容",
+      noData: "暂无日志数据",
+    },
   },
 
   // 历史记录模块
@@ -675,14 +705,21 @@ export default {
       taskCreated: "任务创建成功",
       downloadPDF: "下载 PDF",
       downloadMD: "下载 Markdown",
+      imageViewerTitle: "图片查看",
     },
     geneNetwork: {
       title: "基因网络智能体",
       subtitle: "基因网络智能体 - 提供基因网络分析和表型性状关联服务",
+      taskCreated: "任务创建成功",
+      downloadResults: "下载分析结果",
+      downloading: "正在下载...",
+      volumeProgress: "正在下载分卷文件 {current}/{total}",
     },
     digitalDesign: {
       title: "数字设计智能体",
       subtitle: "数字设计智能体 - 提供基于基因ID的蛋白质结构预测和设计服务",
+      taskCreated: "任务创建成功",
+      downloadResults: "下载分析结果",
     },
   },
 

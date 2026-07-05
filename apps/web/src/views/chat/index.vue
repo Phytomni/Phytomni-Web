@@ -101,7 +101,7 @@
             @click="testParallelChats"
             style="margin-left: 10px"
           >
-            测试并行对话
+            {{ $t("chat.testParallel") }}
           </el-button>
         </div>
       </div>
@@ -139,7 +139,7 @@
                   class="log-view-container"
                 >
                   <div class="log-view-left">
-                    <h4>回复内容</h4>
+                    <h4>{{ $t("chat.log.replyContent") }}</h4>
                     <MarkdownViewer
                       :instantMessage="
                         (message?.instantMessage &&
@@ -151,7 +151,7 @@
                     />
                   </div>
                   <div class="log-view-right">
-                    <h4>执行日志 (ID: {{ message.id }})</h4>
+                    <h4>{{ $t("chat.log.execLog", { id: message.id }) }}</h4>
 
                     <!-- Update log button -->
                     <div class="log-actions">
@@ -165,7 +165,7 @@
                         <el-icon>
                           <Refresh />
                         </el-icon>
-                        更新日志
+                        {{ $t("chat.log.updateLog") }}
                       </el-button>
                     </div>
 
@@ -176,7 +176,7 @@
                       <el-icon class="is-loading">
                         <Loading />
                       </el-icon>
-                      加载日志中...
+                      {{ $t("chat.log.loading") }}
                     </div>
                     <div
                       v-else-if="logData[message.id || '']"
@@ -205,13 +205,13 @@
                       >
                         <el-table-column
                           prop="content"
-                          label="日志内容"
+                          :label="$t('chat.log.contentColumn')"
                           align="left"
                         />
                       </el-table>
                     </div>
                     <div v-else class="log-error">
-                      暂无日志数据 (loadingLog:
+                      {{ $t("chat.log.noData") }} (loadingLog:
                       {{ loadingLog[message.id || ""] }}, logData:
                       {{ !!logData[message.id || ""] }})
                     </div>
@@ -501,7 +501,7 @@
                     </div>
                     <el-tooltip
                       effect="dark"
-                      content="刷新回复"
+                      :content="$t('chat.refreshReply')"
                       placement="top-start"
                     >
                       <div class="message-fotter-item">
@@ -682,7 +682,7 @@
                   </div>
                   <el-tooltip
                     effect="dark"
-                    content="刷新回复"
+                    :content="$t('chat.refreshReply')"
                     placement="top-start"
                   >
                     <div class="message-fotter-item">
@@ -875,7 +875,7 @@
                   </div>
                   <el-tooltip
                     effect="dark"
-                    content="刷新回复"
+                    :content="$t('chat.refreshReply')"
                     placement="top-start"
                   >
                     <div class="message-fotter-item">
@@ -1028,7 +1028,7 @@
           <div class="input-box">
             <!-- Abort button - moved outside MentionSender so it stays clickable while sending -->
             <div v-if="isSending" class="abort-button-overlay">
-              <el-tooltip content="中止回答" placement="top">
+              <el-tooltip :content="$t('chat.abortTooltip')" placement="top">
                 <el-button round color="#f56c6c" :aria-label="$t('chat.abortAriaLabel')" @click="abortCurrentRequest">
                   <el-icon>
                     <Close />
@@ -1190,7 +1190,7 @@
                     <el-icon class="is-loading">
                       <Loading />
                     </el-icon>
-                    加载智能体权限中...
+                    {{ $t("chat.loadingAgentPerms") }}
                   </div>
 
                   <!-- Agent button area -->

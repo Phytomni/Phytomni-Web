@@ -8,7 +8,7 @@
           @click="goBack"
           class="back-button"
         >
-          返回
+          {{ $t("common.back") }}
         </el-button>
         <div class="header-text">
           <h1>{{ $t("agents.digitalDesign.title") }}</h1>
@@ -35,7 +35,8 @@
         </div>
         <div class="message-content">
           <div class="message-text">
-            任务创建成功3b5564b-772a-44f0-abc5-fb163e7d13c4
+            {{ $t("agents.digitalDesign.taskCreated")
+            }}3b5564b-772a-44f0-abc5-fb163e7d13c4
             <div class="download-section">
               <el-button
                 type="primary"
@@ -43,7 +44,7 @@
                 @click="downloadResults"
                 class="download-button"
               >
-                下载分析结果
+                {{ $t("agents.digitalDesign.downloadResults") }}
               </el-button>
             </div>
             <div class="tip-text">{{ $t("common.Tip") }}</div>

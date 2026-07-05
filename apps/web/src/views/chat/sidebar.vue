@@ -371,7 +371,7 @@
             src="/avatars/user.svg"
           />
           <span v-if="!sidebarCollapsed" class="username">
-            {{ UserStore.name || "未设置用户名" }}
+            {{ UserStore.name || $t("user.unnamedUser") }}
           </span>
           <el-icon v-if="!sidebarCollapsed">
             <ArrowDown />

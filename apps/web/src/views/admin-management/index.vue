@@ -10,7 +10,7 @@
 
     <!-- User table -->
     <div class="table-container">
-      <div class="table-title">用户列表</div>
+      <div class="table-title">{{ $t("user.listTitle") }}</div>
       <el-table
         :data="tableData"
         border
@@ -108,7 +108,7 @@
             type="password"
             autocomplete="new-password"
             show-password
-            :placeholder="dialogType === 'edit' ? '留空则不修改密码' : ''"
+            :placeholder="dialogType === 'edit' ? $t('user.passwordEditPlaceholder') : ''"
           />
         </el-form-item>
         <el-form-item :label="$t('user.role')" prop="code">

@@ -33,7 +33,7 @@
             :disabled="themeStore.theme === 'system'"
           >
             <el-icon><Monitor /></el-icon>
-            Follow system
+            {{ $t("common.followSystem") }}
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>

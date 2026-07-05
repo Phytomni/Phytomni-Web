@@ -184,7 +184,7 @@
   <!-- Image viewer dialog -->
   <el-dialog
     v-model="imageViewerVisible"
-    title="图片查看"
+    :title="$t('agents.deepGenome.imageViewerTitle')"
     :close-on-click-modal="true"
     :close-on-press-escape="true"
     width="800px"

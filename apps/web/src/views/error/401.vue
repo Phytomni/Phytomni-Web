@@ -1,16 +1,16 @@
 <template>
   <div class="errPage-container">
     <el-button icon="arrow-left" class="pan-back-btn" @click="back">
-      返回
+      {{ $t("errorPage.back") }}
     </el-button>
     <el-row>
       <el-col :span="12">
-        <h1 class="text-jumbo text-ginormous">401错误!</h1>
-        <h2>您没有访问权限！</h2>
-        <h6>对不起，您没有访问权限，请不要进行非法操作！您可以返回主页面</h6>
+        <h1 class="text-jumbo text-ginormous">{{ $t("errorPage.e401Title") }}</h1>
+        <h2>{{ $t("errorPage.e401NoAccess") }}</h2>
+        <h6>{{ $t("errorPage.e401Detail") }}</h6>
         <ul class="list-unstyled">
           <li class="link-type">
-            <router-link to="/"> 回首页 </router-link>
+            <router-link to="/"> {{ $t("errorPage.goHome") }} </router-link>
           </li>
         </ul>
       </el-col>

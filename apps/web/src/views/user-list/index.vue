@@ -166,7 +166,7 @@
             type="password"
             autocomplete="new-password"
             show-password
-            :placeholder="dialogType === 'edit' ? '留空则不修改密码' : ''"
+            :placeholder="dialogType === 'edit' ? $t('user.passwordEditPlaceholder') : ''"
           />
         </el-form-item>
         <el-form-item :label="$t('user.role')" prop="code">
