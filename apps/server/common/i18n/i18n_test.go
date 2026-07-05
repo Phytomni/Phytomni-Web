@@ -61,8 +61,9 @@ func TestT_ChineseLookup(t *testing.T) {
 
 func TestT_MissingKeyFallsBackAndLogs(t *testing.T) {
 	var buf bytes.Buffer
+	orig := log.Writer()
 	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(orig)
 
 	c := newTestContext(t, "en-US")
 	got := T(c, "no.such.key")
@@ -210,5 +211,47 @@ func TestTomlReferenceResolvability(t *testing.T) {
 		if !zh[k] {
 			t.Errorf("key %q used in Go source but missing in locales/zh-CN.toml", k)
 		}
+	}
+}
+
+// TestTMaybe_KeyShapedIsTranslated asserts that a string matching the i18n
+// key shape is resolved through the bundle just like T() would.
+func TestTMaybe_KeyShapedIsTranslated(t *testing.T) {
+	c := newTestContext(t, "en-US")
+	got := TMaybe(c, "auth.user_not_found")
+	if got != "User not found" {
+		t.Fatalf("key-shaped: got %q, want translated value", got)
+	}
+}
+
+// TestTMaybe_NonKeyReturnedVerbatim asserts that a non-key-shaped string
+// (e.g. a raw GORM error) is returned untouched AND emits no missing-key
+// warning log — the core property that lets handlers safely wrap err.Error()
+// passthroughs with TMaybe without spamming logs.
+func TestTMaybe_NonKeyReturnedVerbatim(t *testing.T) {
+	var buf bytes.Buffer
+	orig := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(orig)
+
+	c := newTestContext(t, "en-US")
+	msg := "record not found: users id=42"
+	got := TMaybe(c, msg)
+	if got != msg {
+		t.Fatalf("non-key: got %q, want verbatim %q", got, msg)
+	}
+	if strings.Contains(buf.String(), "[i18n] missing key") {
+		t.Fatalf("non-key must not log a missing-key warning; log=%q", buf.String())
+	}
+}
+
+// TestTMaybe_KeyShapedButMissingFallsBack asserts that a key-shaped string
+// with no bundle entry still falls back to the key text (T()'s standard
+// missing-key behavior), so a typo'd key degrades visibly rather than 500'ing.
+func TestTMaybe_KeyShapedButMissingFallsBack(t *testing.T) {
+	c := newTestContext(t, "en-US")
+	got := TMaybe(c, "no.such.key")
+	if got != "no.such.key" {
+		t.Fatalf("key-shaped missing: got %q, want fallback to key", got)
 	}
 }

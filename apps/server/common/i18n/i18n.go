@@ -2,6 +2,7 @@ package i18n
 
 import (
 	"log"
+	"regexp"
 	"sync"
 
 	"github.com/BurntSushi/toml"
@@ -61,4 +62,24 @@ func T(c *gin.Context, key string, args ...interface{}) string {
 	}
 	_ = args // plumbed; current messages have no interpolation
 	return msg
+}
+
+// keyShape matches an i18n key like "auth.user_not_found" — one or more
+// dot-separated lowercase/underscore/digit segments, at least two segments.
+// A single segment ("error") or any uppercase/space/punctuation content
+// (raw GORM/network errors) is treated as a non-key and skipped by TMaybe.
+var keyShape = regexp.MustCompile(`^[a-z_]+(\.[a-z0-9_]+)+$`)
+
+// TMaybe translates s only when it looks like an i18n key; otherwise it
+// returns s verbatim WITHOUT emitting a missing-key warning. Use it at the
+// handler boundary for err.Error() passthroughs: a service-layer error
+// carrying an i18n key gets localized, while a raw internal error (GORM,
+// network, etc.) flows through untouched and un-logged. This generalizes
+// the existing auth.go pattern (i18n.T on err.Error()) so that non-key
+// errors no longer trigger missing-key log spam.
+func TMaybe(c *gin.Context, s string) string {
+	if keyShape.MatchString(s) {
+		return T(c, s)
+	}
+	return s
 }
