@@ -111,6 +111,28 @@ func TestQueryStream_ExpertRefused(t *testing.T) {
 	}
 }
 
+func TestQueryStream_NonChatSlugRefused(t *testing.T) {
+	setupExpertTestDB(t)
+	botHits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		botHits++
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+	svc := &Service{}
+	// AnalystAgent -> "analyst", a remote-agent slug with no chat model, so it
+	// has no Bot streaming primitive and must be refused before any Bot call.
+	_, err := svc.QueryStream(context.Background(), "eve@example.com",
+		QueryInput{Query: "hi", Id: 0, Tool: "AnalystAgent", Mode: "instant"}, nil)
+	if !errors.Is(err, ErrStreamUnsupported) {
+		t.Fatalf("err = %v, want ErrStreamUnsupported (non-chat slug cannot stream)", err)
+	}
+	if botHits != 0 {
+		t.Fatalf("a non-chat slug must not touch the Bot streaming endpoint (hits=%d)", botHits)
+	}
+}
+
 func TestQueryStream_PersistsBotRunID(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	sseChatServer(t) // fixture RunStarted carries run_id "run_77"

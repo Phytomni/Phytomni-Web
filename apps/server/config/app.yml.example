@@ -169,7 +169,7 @@ bcrypt_cost: 10
 #                      and Bot's POST /v1/query/route endpoint are deployed (see
 #                      deploy manual §5.6). Zero value false = safe dormant
 #                      default, mirroring proxy_enabled.
-# `stream_enabled`    — dark-launch switch for AG-UI SSE streaming on /query.
+# `stream_enabled`   — dark-launch switch for AG-UI SSE streaming on /query.
 #                      While false the gateway keeps using the blocking
 #                      ChatCompletion path; flip to true (per deploy) to serve
 #                      text/event-stream for chat-family slugs. Zero value false

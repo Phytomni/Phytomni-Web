@@ -1,6 +1,7 @@
 package api_handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -131,25 +132,28 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		}
 	}
 
-	// SSE branch (dark-launch). Only for chat-family slugs when the caller
-	// accepts text/event-stream, the flag is on, the turn is Instant, and
-	// the writer can flush. Expert must fall through to the blocking path,
-	// which owns RouteQuery dispatch and the expert_enabled dark gate — the
-	// frontend forces tool="" in Expert, so slug alone cannot tell the two
-	// apart. The route middleware (auth, per-user rate limit) and the
+	// SSE branch (dark-launch). Taken when the caller accepts
+	// text/event-stream, the flag is on, and the turn is Instant. The
+	// chat-family restriction is enforced downstream in QueryStream (via
+	// ChatModelFor); a non-chat slug reaching here is refused with
+	// ErrStreamUnsupported before any frame. Expert must fall through to the
+	// blocking path, which owns RouteQuery dispatch and the expert_enabled dark
+	// gate — the frontend forces tool="" in Expert, so slug alone cannot tell
+	// the two apart. The route middleware (auth, per-user rate limit) and the
 	// multipart parse above have already run, so the gate order holds.
 	if streamEnabled() && wantsStream(ctx) && in.Mode != "expert" {
 		flusher, canFlush := ctx.Writer.(http.Flusher)
 		if canFlush {
 			// Write the SSE headers lazily — only when the first frame is
-			// actually forwarded. If QueryStream fails BEFORE any frame
-			// (ErrGatewayDisabled, the expert/non-chat ErrStreamUnsupported
-			// guards, ErrUnknownTool — all returned pre-first-byte), the
-			// headers are still unset, so the error can ship as a normal JSON
-			// response with the correct Content-Type. Staging the SSE headers
-			// up front would pin Content-Type: text/event-stream onto a JSON
-			// error body (Gin's writeContentType only sets it when the header
-			// map is empty), and an SSE-aware client would silently fail to
+			// actually forwarded. If QueryStream fails BEFORE any frame (a
+			// pre-first-byte error: ErrGatewayDisabled, the expert/non-chat
+			// ErrStreamUnsupported guards, ErrUnknownTool, or an upload /
+			// dialogue-resolve / stream-open failure), the headers are still
+			// unset, so the error can ship as a normal JSON response with the
+			// correct Content-Type. Staging the SSE headers up front would pin
+			// Content-Type: text/event-stream onto a JSON error body (Gin's
+			// writeContentType only sets it when the header map is empty), and
+			// an SSE-aware client would silently fail to
 			// parse the error.
 			headerSent := false
 			forward := func(frame []byte) error {
@@ -172,8 +176,11 @@ func (ph *Handler) Query(ctx *gin.Context) {
 				status, msg := queryErrorStatus(serr)
 				if headerSent {
 					// Frames already flushed: HTTP status is locked, so surface
-					// the failure as an in-band SSE error frame.
-					_, _ = fmt.Fprintf(ctx.Writer, "event: RunError\ndata: {\"type\":\"RunError\",\"message\":%q}\n\n", msg)
+					// the failure as an in-band SSE error frame. Encode the
+					// message with json.Marshal so any character is escaped to
+					// valid JSON (fmt's %q is Go-quoting, not JSON-quoting).
+					msgJSON, _ := json.Marshal(msg)
+					_, _ = fmt.Fprintf(ctx.Writer, "event: RunError\ndata: {\"type\":\"RunError\",\"message\":%s}\n\n", msgJSON)
 					flusher.Flush()
 				} else {
 					// Pre-first-byte failure: no SSE headers were written, so a

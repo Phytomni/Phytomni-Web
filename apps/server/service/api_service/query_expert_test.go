@@ -13,6 +13,7 @@ import (
 
 	"phytomni-server/db"
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 )
 
 // setupExpertTestDB opens an in-memory SQLite with the columns Query writes,
@@ -118,6 +119,46 @@ func TestQuery_InstantUnchanged(t *testing.T) {
 	}
 	if hit != "/v1/chat/completions" {
 		t.Errorf("instant must hit /v1/chat/completions, hit %q", hit)
+	}
+}
+
+// TestQuery_RefreshClearsTaskColumns dynamically exercises the blocking Query
+// path's RefreshId!=0 two-step UPDATE branch — the same branch QueryStream
+// shares via persistQuestionLog. The streaming sibling test proves the shared
+// helper clears the transitional task columns; this locks the blocking caller
+// against a regression too (its byte-equivalence was otherwise only verified
+// statically, since every other TestQuery_* uses the insert path).
+func TestQuery_RefreshClearsTaskColumns(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var hit string
+	botRouter(t, &hit)
+
+	// Seed a prior async-agent row with transitional task columns set.
+	seed := model.QuestionAgentLog{
+		DialogueId: "d1", UserName: "dan", Query: "old",
+		ServerId: "srv-1", TaskId: "task-1", LogStatus: "RUNNING",
+		ServerFilePath: "obs://old/path", Status: "RUNNING", Mode: "instant",
+	}
+	if err := gdb.Create(&seed).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Re-answer that turn via the blocking chat path (RefreshId points at it).
+	out, err := NewService().Query(context.Background(), "dan",
+		QueryInput{Query: "hi", RefreshId: seed.Id, Mode: "instant"})
+	if err != nil {
+		t.Fatalf("Query refresh: %v", err)
+	}
+	if out.Id != seed.Id {
+		t.Fatalf("refresh must update in place: out.Id=%d, want %d", out.Id, seed.Id)
+	}
+	var serverID, taskID, logStatus, serverFilePath string
+	row := gdb.Raw(`SELECT COALESCE(server_id,''), COALESCE(task_id,''), COALESCE(log_status,''), COALESCE(server_file_path,'') FROM question_agent_logs WHERE id=?`, seed.Id)
+	if err := row.Row().Scan(&serverID, &taskID, &logStatus, &serverFilePath); err != nil {
+		t.Fatalf("read task columns: %v", err)
+	}
+	if serverID != "" || taskID != "" || logStatus != "" || serverFilePath != "" {
+		t.Fatalf("stale task columns not cleared: server_id=%q task_id=%q log_status=%q server_file_path=%q",
+			serverID, taskID, logStatus, serverFilePath)
 	}
 }
 
