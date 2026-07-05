@@ -321,19 +321,19 @@ export const createAbortableRequest = (
 // registerAbortController lets a non-axios transport (the fetch-based stream
 // path) register its AbortController under the same requestId key that
 // abortRequest() looks up, so the existing abort UI works for both paths.
-export function registerAbortController(
+export const registerAbortController = (
   requestId: string,
   controller: AbortController
-): void {
+): void => {
   activeControllers.set(requestId, controller);
-}
+};
 
 // unregisterAbortController drops a controller the fetch path registered once
 // its stream settles, mirroring the axios path's .finally cleanup so the map
 // does not accumulate a stale entry per streamed message.
-export function unregisterAbortController(requestId: string): void {
+export const unregisterAbortController = (requestId: string): void => {
   activeControllers.delete(requestId);
-}
+};
 
 // abort a specific request
 export const abortRequest = (requestId: string): boolean => {

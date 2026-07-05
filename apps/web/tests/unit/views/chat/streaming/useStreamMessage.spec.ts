@@ -95,7 +95,7 @@ describe("useStreamMessage", () => {
     expect(chatState.streamingMessageId).toBeNull();
   });
 
-  it("shows the interrupted copy on a mid-stream network error", async () => {
+  it("shows the interrupted copy when the fetch itself fails (network error)", async () => {
     (fetch as any).mockRejectedValue(new Error("network down"));
     const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
     const chatState: any = { isStreaming: false, streamingMessageId: null };

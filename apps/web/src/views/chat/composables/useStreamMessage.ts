@@ -1,4 +1,5 @@
 import { getToken } from "@/utils/auth";
+import i18n from "@/locales";
 import {
   registerAbortController,
   unregisterAbortController,
@@ -43,6 +44,7 @@ export function useStreamMessage(opts: {
         signal: controller.signal,
         headers: {
           Accept: "text/event-stream",
+          "Accept-Language": i18n.global.locale.value,
           platform: "bcemis",
           Authorization: "Bearer " + getToken(),
           satoken: getToken() ?? "",
