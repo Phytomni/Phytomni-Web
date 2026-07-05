@@ -1,5 +1,8 @@
 import { getToken } from "@/utils/auth";
-import { registerAbortController } from "@/utils/request";
+import {
+  registerAbortController,
+  unregisterAbortController,
+} from "@/utils/request";
 import { splitSSEFrames, parseAGUIFrame } from "../streaming/aguiEvents";
 import { initReducerState, reduceAGUIEvent } from "../streaming/eventReducer";
 import type { ChatMessage } from "../types";
@@ -67,6 +70,12 @@ export function useStreamMessage(opts: {
       }
       // Finalize.
       placeholder.followUpQuestions = state.followUp;
+      if (state.followUp.length) {
+        // StreamMessage/MarkdownBlock emit no @finish (unlike the blocking
+        // MarkdownViewer path), so reveal the follow-up chips here — otherwise
+        // captured phyto.follow_up questions stay hidden until a history reload.
+        placeholder.showFollowUpQuestions = true;
+      }
       if (state.references.length) {
         // P1 cited streaming: expose captured references so the ns-aware
         // cited render path can engage after finalize (ns invariant).
@@ -84,6 +93,7 @@ export function useStreamMessage(opts: {
       placeholder.instantMessage = true;
       chatState.isStreaming = false;
       chatState.streamingMessageId = null;
+      unregisterAbortController(requestId); // mirror the axios .finally cleanup
     }
   };
 

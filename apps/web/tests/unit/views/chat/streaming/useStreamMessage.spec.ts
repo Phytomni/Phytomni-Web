@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/utils/auth", () => ({ getToken: () => "tok" }));
-vi.mock("@/utils/request", () => ({ registerAbortController: vi.fn() }));
+vi.mock("@/utils/request", () => ({
+  registerAbortController: vi.fn(),
+  unregisterAbortController: vi.fn(),
+}));
 
 import { useStreamMessage } from "@/views/chat/composables/useStreamMessage";
+import { unregisterAbortController } from "@/utils/request";
 import type { ChatMessage } from "@/views/chat/types";
 
 function sseStream(frames: string[]): ReadableStream<Uint8Array> {
@@ -144,5 +148,37 @@ describe("useStreamMessage", () => {
     const md = placeholder.blocks!.find((b) => b.type === "markdown");
     expect(md?.text).toBe("split-safe");
     expect(placeholder.streaming).toBe(false);
+  });
+
+  it("reveals follow-up questions on the live turn (no @finish from StreamMessage)", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r1"}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.follow_up","value":["q1","q2"]}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
+    ]);
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant", content: "", streaming: true, blocks: [], showFollowUpQuestions: false,
+    };
+    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
+    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    expect(placeholder.followUpQuestions).toEqual(["q1", "q2"]);
+    // The blocking path reveals chips via MarkdownViewer @finish; the stream
+    // path has no @finish, so finalize must flip the reveal flag itself.
+    expect(placeholder.showFollowUpQuestions).toBe(true);
+  });
+
+  it("unregisters the abort controller when the stream settles", async () => {
+    const body = sseStream([
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
+    ]);
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
+    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "req-9", placeholder });
+    // The map must not accumulate a stale controller per streamed message.
+    expect(unregisterAbortController).toHaveBeenCalledWith("req-9");
   });
 });
