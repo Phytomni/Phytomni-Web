@@ -48,7 +48,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 | Chat backend | A Python service (`nky_client_python`) serves `/query`, owns the MCP client, and holds Huawei OBS credentials | Removed. The Go service's `/query` handler relays to the Bot | A whole process is decommissioned; `/query` traffic moves to Go |
 | Bot dependency | None | Required. Go validates Bot agents at boot when the gateway is enabled | Bot must be up and complete before Go starts with the gateway on |
 | OBS credentials | Held by the Python/Web side; files fetched directly | Held by the Bot only; downloads go through a Bot relay | Web carries no Huawei OBS keys after cutover |
-| `app.yml` | Minimal | New `bot`, `jwt`, `email` blocks; DSN host/user change; `gene_file_path` change | Several new required keys; missing them blocks boot or features |
+| `app.yml` | Minimal | New `bot`, `jwt`, `email` blocks; DSN host/user change; `gene_obsfs_path` added | Several new required keys; missing them blocks boot or features |
 | DB schema | — | `+bot_run_id`, `+image_paths`, three enum tightenings; two legacy tables retained-but-unused | An additive migration is required before cutover |
 | nginx | `/query` upstream is the Python service | `/query` upstream is Go `:8080` | One reverse-proxy line moves at cutover |
 | First-login flow | No server-side gate | Backend gate + matching frontend guard | Backend and frontend **must** ship together |
@@ -179,7 +179,7 @@ Confirm whether the database is co-located (`localhost`) or stays on its externa
 
 ### 4.6 Other keys
 
-- `gene_file_path` — CHANGED: point at the directory holding the per-gene `.out` artifacts (e.g. `/var/lib/phytomni/gene_examples`), not the old Python path.
+- `gene_obsfs_path` — NEW: set to the obsfs FUSE mount root for gene-example data (e.g. `/obs/<bucket>/.../gene-examples`); leave empty for Bot relay fallback.
 - `bcrypt_cost: 10` — optional (default 10; allowed range `[10,31]`; the server refuses to boot outside it). Do not raise without measuring login p99 on production hardware.
 - `app.trusted_proxies`, `http.gzip`, `http.maintenance` — optional tuning; defaults are safe.
 - **OBS credentials are removed from the Web config** — they live on the Bot now. Revoke any lingering Web-side Huawei OBS access key/secret **after** soak.

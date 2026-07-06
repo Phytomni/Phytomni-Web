@@ -269,7 +269,7 @@ remain in `app.yml.example`:
 
 ### 4.9 Other keys
 
-- `gene_file_path` — unchanged value (`/var/lib/phytomni/gene_examples`).
+- `gene_obsfs_path` — set to the obsfs FUSE mount root for gene-example data (e.g. `/obs/<bucket>/.../gene-examples`); leave empty for Bot relay fallback.
 - `bcrypt_cost: 10` — unchanged; the bcrypt lazy upgrade is already live.
 - `app.trusted_proxies`, `http.gzip`, `http.maintenance` — optional tuning.
 

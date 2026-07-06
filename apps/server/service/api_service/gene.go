@@ -22,12 +22,9 @@ import (
 )
 
 // gene-example OBS/obsfs layout: md/<GENE>_result.md and img/<GENE>/<file>.
-// geneImageURLPrefix is the browser-facing path served by the GeneImage handler.
 const (
-	geneObsSubMd       = "md/"
-	geneObsSubImg      = "img/"
-	geneRelayRoot      = "gene-examples/"
-	geneImageURLPrefix = "/api/v1/gene-images/"
+	geneObsSubMd  = "md/"
+	geneRelayRoot = "gene-examples/"
 )
 
 // geneObsfsDir returns the configured obsfs mount root if it is a readable
