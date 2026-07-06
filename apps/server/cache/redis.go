@@ -12,10 +12,12 @@ var clients map[string]redis.UniversalClient
 var clientDefault map[string]*redis.Client
 
 type Config struct {
-	Type     string   `json:"type" mapstructure:"type"` // cluster, failover,single-node , default is single-node
-	Addrs    []string `json:"addrs" mapstructure:"addrs"`
-	Password string   `json:"password" mapstructure:"password"`
-	DB       int      `json:"db" mapstructure:"db"`
+	Type         string   `json:"type" mapstructure:"type"` // cluster, failover,single-node , default is single-node
+	Addrs        []string `json:"addrs" mapstructure:"addrs"`
+	Password     string   `json:"password" mapstructure:"password"`
+	DB           int      `json:"db" mapstructure:"db"`
+	PoolSize     int      `json:"pool_size" mapstructure:"pool_size"`           // 0 = go-redis default (10 * CPU cores)
+	MinIdleConns int      `json:"min_idle_conns" mapstructure:"min_idle_conns"` // 0 = go-redis default (0)
 }
 
 // applyEnvRedisPassword overrides cfg.Password with

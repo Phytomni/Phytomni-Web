@@ -64,6 +64,10 @@ redis:
       db: 0
       password:
       type: single-node
+      # Connection-pool tuning (single-node only). Omit / leave 0 to keep
+      # go-redis's built-in defaults — existing configs are unchanged.
+      # pool_size: 0        # go-redis default: 10 * CPU cores
+      # min_idle_conns: 0   # go-redis default: 0
   default: web
 
 # Rate limiting / abuse control (Redis-backed throttle, fail-open throughout).
