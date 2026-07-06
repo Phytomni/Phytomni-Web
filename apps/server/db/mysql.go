@@ -19,6 +19,18 @@ type Config struct {
 
 var dbs map[string]*gorm.DB
 
+// applyEnvDSN overrides cfg.Dsn with PHYTOMNI_DB_DSN when the env var is set
+// and non-empty. When unset (the current production state) cfg is returned
+// unchanged so existing file-only deployments are byte-identical. Extracted
+// from InitMysqlDB so the override can be unit-tested without a MySQL
+// connection (gorm.Open connects immediately).
+func applyEnvDSN(cfg Config) Config {
+	if v := os.Getenv("PHYTOMNI_DB_DSN"); v != "" {
+		cfg.Dsn = v
+	}
+	return cfg
+}
+
 func InitMysqlDB() error {
 	dbCfg := make(map[string]Config)
 	err := viper.UnmarshalKey("db", &dbCfg)
@@ -27,6 +39,7 @@ func InitMysqlDB() error {
 	}
 	dbs = make(map[string]*gorm.DB)
 	for name, cfg := range dbCfg {
+		cfg = applyEnvDSN(cfg)
 		var dbGorm gorm.Dialector
 		switch cfg.Driver {
 		case "mysql":

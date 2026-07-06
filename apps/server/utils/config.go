@@ -69,5 +69,13 @@ func LoadConfigInFile(filename string) error {
 		}
 	}
 
+	// Bind sensitive keys to env vars so deployments can keep secrets out of
+	// app.yml. BindEnv only affects Get* read paths (jwt.secret_key is read via
+	// viper.GetString); UnmarshalKey-loaded keys (db DSN, redis password) are
+	// overridden explicitly in db/mysql.go and cache/redis.go instead.
+	// When the env var is unset the file value wins, so existing deployments are
+	// byte-identical.
+	_ = viper.BindEnv("jwt.secret_key", "PHYTOMNI_JWT_SECRET")
+
 	return nil
 }

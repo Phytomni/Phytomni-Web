@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"os"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/viper"
 )
@@ -16,6 +18,19 @@ type Config struct {
 	DB       int      `json:"db" mapstructure:"db"`
 }
 
+// applyEnvRedisPassword overrides cfg.Password with
+// PHYTOMNI_REDIS_PASSWORD when the env var is set and non-empty. When unset
+// (the current production state) cfg is returned unchanged so existing
+// file-only deployments are byte-identical. Extracted from InitFromViper so
+// the override can be unit-tested without a Redis connection (NewClient pings
+// immediately).
+func applyEnvRedisPassword(cfg Config) Config {
+	if v := os.Getenv("PHYTOMNI_REDIS_PASSWORD"); v != "" {
+		cfg.Password = v
+	}
+	return cfg
+}
+
 func InitFromViper() error {
 	defaultName = viper.GetString("redis.default")
 	var cfg map[string]Config
@@ -25,6 +40,7 @@ func InitFromViper() error {
 	}
 	clients = make(map[string]redis.UniversalClient)
 	for k := range cfg {
+		cfg[k] = applyEnvRedisPassword(cfg[k])
 		if clients[k], err = NewClient(cfg[k]); err != nil {
 			return err
 		}

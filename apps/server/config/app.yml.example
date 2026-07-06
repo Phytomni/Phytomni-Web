@@ -21,6 +21,8 @@ debug: true
 # JWT signing secret — MUST equal SECRET_KEY_CLIENT in the Python
 # sibling's .env, otherwise tokens issued by one side fail verification
 # on the other. Use a long random string (e.g. `openssl rand -hex 32`).
+# Env override: set PHYTOMNI_JWT_SECRET to inject the secret from the
+# environment (env wins when set; file value is used when unset).
 # ---------------------------------------------------------------------
 jwt:
   secret_key: "your-random-jwt-secret"
@@ -30,6 +32,9 @@ jwt:
 # into sql_operation_logs, so the DSN user needs INSERT on that table
 # plus the User-family tables. Format:
 #   <user>:<pass>@tcp(<host>:<port>)/<db>?<gorm-flags>
+# Env override: set PHYTOMNI_DB_DSN to inject the DSN from the
+# environment (env wins when set and non-empty; file value is used
+# when unset or empty).
 # ---------------------------------------------------------------------
 db:
   phytomni-server:
@@ -43,6 +48,9 @@ db:
 # fails fast only when `enabled: true` but no `web` client is configured.
 # `default` MUST name a configured client (here: web) so cache.Available
 # and /readyz probe the right instance.
+# Env override: set PHYTOMNI_REDIS_PASSWORD to inject the password from
+# the environment (env wins when set and non-empty; file value is used
+# when unset or empty). Applies to all configured clients.
 # ---------------------------------------------------------------------
 redis:
   # Master switch for the Redis user/product layer. Default true = secure
