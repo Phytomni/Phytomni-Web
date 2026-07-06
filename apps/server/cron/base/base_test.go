@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"github.com/spf13/viper"
 )
 
 // jobCron adapts a func to the Cron interface for testing.
@@ -69,4 +70,29 @@ type tLogf func(format string, args ...interface{})
 func (f tLogf) Printf(format string, args ...interface{}) { f(format, args...) }
 func testLogf(t *testing.T) tLogf {
 	return func(format string, args ...interface{}) { t.Logf(format, args...) }
+}
+
+// TestEntries_ReflectsRegisteredJob proves the package retains the scheduler
+// handle after InitFromSecond so Entries() can inspect the registered schedule.
+// The admin cron-entries endpoint depends on this handle being retained; if the
+// append is dropped, Entries() returns nothing and the endpoint silently lies.
+func TestEntries_ReflectsRegisteredJob(t *testing.T) {
+	viper.Set("cron.switch", true)
+	t.Cleanup(func() {
+		viper.Set("cron.switch", false)
+		for _, c := range schedulers {
+			c.Stop()
+		}
+		schedulers = nil
+	})
+	if err := InitFromSecond([]Cron{testJob{spec: "*/5 * * * * *", run: func() {}}}); err != nil {
+		t.Fatalf("InitFromSecond: %v", err)
+	}
+	entries := Entries()
+	if len(entries) != 1 {
+		t.Fatalf("Entries() returned %d entries, want 1 (scheduler handle not retained)", len(entries))
+	}
+	if entries[0].Next.IsZero() {
+		t.Fatal("Entries()[0].Next is zero; schedule was not populated")
+	}
 }

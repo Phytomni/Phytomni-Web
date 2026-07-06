@@ -57,5 +57,21 @@ func initFromViper(c *cron.Cron, cronList []Cron) error {
 		}
 	}
 	c.Start()
+	schedulers = append(schedulers, c)
 	return nil
+}
+
+// schedulers holds every started cron.Cron so its registered entries can be
+// inspected at runtime. Populated by initFromViper; read by Entries.
+var schedulers []*cron.Cron
+
+// Entries returns a snapshot of all scheduled entries across every started
+// scheduler. Callers (the admin cron-entries endpoint) use this to inspect
+// whether background jobs are registered and when they next run.
+func Entries() []cron.Entry {
+	var out []cron.Entry
+	for _, c := range schedulers {
+		out = append(out, c.Entries()...)
+	}
+	return out
 }

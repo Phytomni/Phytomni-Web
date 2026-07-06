@@ -53,6 +53,7 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.PATCH("/async-tasks/analyst-log", apiHandler.QueryAnalystUpdateLog) // async result write-back (Bot via legacy alias /query/analyst/update_log)
 
 		apiV1Router.GET("/operation-logs", apiHandler.GetOperationLogs)   // operation log query (admin-only)
+		apiV1Router.GET("/admin/cron-entries", apiHandler.GetCronEntries) // cron schedule inspection (admin-only)
 		apiV1Router.GET("/genes", apiHandler.GeneList)                    // gene test data list
 		apiV1Router.GET("/genes/:id", apiHandler.GeneDetails)             // gene detail (resource id = file_name)
 		apiV1Router.POST("/gene-examples", apiHandler.GeneDetailsStorage) // gene example iteration data

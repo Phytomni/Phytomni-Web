@@ -130,6 +130,7 @@ func TestApiV1AuditGeneDownloadRoutes(t *testing.T) {
 	assertRoutes(t, routes,
 		[]string{
 			"GET /api/v1/operation-logs",
+			"GET /api/v1/admin/cron-entries",
 			"GET /api/v1/genes",
 			"GET /api/v1/genes/:id",
 			"POST /api/v1/gene-examples",
