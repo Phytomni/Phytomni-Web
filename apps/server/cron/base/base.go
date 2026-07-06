@@ -1,6 +1,8 @@
 package base
 
 import (
+	"sync"
+
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 	rxLog "phytomni-server/log"
@@ -57,21 +59,44 @@ func initFromViper(c *cron.Cron, cronList []Cron) error {
 		}
 	}
 	c.Start()
+	schedulersMu.Lock()
 	schedulers = append(schedulers, c)
+	schedulersMu.Unlock()
 	return nil
 }
 
 // schedulers holds every started cron.Cron so its registered entries can be
 // inspected at runtime. Populated by initFromViper; read by Entries.
+// schedulersMu guards every access so cross-package parallel tests (go test
+// ./... runs packages concurrently) cannot race a base-package test mutating
+// the slice against a service-package test reading it via Entries. Production
+// code only touches the slice during boot (single goroutine), but the mutex
+// future-proofs any runtime re-init path and keeps the race detector honest.
 var schedulers []*cron.Cron
+var schedulersMu sync.RWMutex
 
 // Entries returns a snapshot of all scheduled entries across every started
 // scheduler. Callers (the admin cron-entries endpoint) use this to inspect
 // whether background jobs are registered and when they next run.
 func Entries() []cron.Entry {
+	schedulersMu.RLock()
+	defer schedulersMu.RUnlock()
 	var out []cron.Entry
 	for _, c := range schedulers {
 		out = append(out, c.Entries()...)
 	}
 	return out
+}
+
+// resetSchedulersForTest stops every started scheduler and clears the slice
+// under the write lock. Test-only: production never resets schedulers after
+// boot. Exists so cross-package parallel tests don't race this cleanup write
+// against a service-package test's Entries() read.
+func resetSchedulersForTest() {
+	schedulersMu.Lock()
+	defer schedulersMu.Unlock()
+	for _, c := range schedulers {
+		c.Stop()
+	}
+	schedulers = nil
 }

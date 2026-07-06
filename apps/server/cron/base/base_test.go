@@ -80,10 +80,7 @@ func TestEntries_ReflectsRegisteredJob(t *testing.T) {
 	viper.Set("cron.switch", true)
 	t.Cleanup(func() {
 		viper.Set("cron.switch", false)
-		for _, c := range schedulers {
-			c.Stop()
-		}
-		schedulers = nil
+		resetSchedulersForTest()
 	})
 	if err := InitFromSecond([]Cron{testJob{spec: "*/5 * * * * *", run: func() {}}}); err != nil {
 		t.Fatalf("InitFromSecond: %v", err)
