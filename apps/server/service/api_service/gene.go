@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 
 	"phytomni-server/common/document_format"
 	rxBot "phytomni-server/external/bot"
@@ -20,6 +21,28 @@ import (
 
 	"github.com/spf13/viper"
 )
+
+// gene-example OBS/obsfs layout: md/<GENE>_result.md and img/<GENE>/<file>.
+// geneImageURLPrefix is the browser-facing path served by the GeneImage handler.
+const (
+	geneObsSubMd       = "md/"
+	geneObsSubImg      = "img/"
+	geneRelayRoot      = "gene-examples/"
+	geneImageURLPrefix = "/api/v1/gene-images/"
+)
+
+// geneObsfsDir returns the configured obsfs mount root if it is a readable
+// directory, else "" (→ caller uses the relay fallback).
+func geneObsfsDir() string {
+	p := viper.GetString("gene_obsfs_path")
+	if p == "" {
+		return ""
+	}
+	if info, err := os.Stat(p); err != nil || !info.IsDir() {
+		return ""
+	}
+	return p
+}
 
 func (ps *Service) GeneList(ctx context.Context, current, size int) ([]*model.GeneExample, int64, int, error) {
 	return ps.GeneSearch(ctx, current, size, "")
@@ -36,7 +59,7 @@ func (ps *Service) GeneSearch(ctx context.Context, current, size int, title stri
 	if current <= 0 {
 		current = 1
 	}
-	allData, err := ps.fetchGeneFiles(title)
+	allData, err := ps.fetchGeneFiles(ctx, title)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -64,32 +87,40 @@ func (ps *Service) GeneSearch(ctx context.Context, current, size int, title stri
 	return allData[start:end], total, totalPages, nil
 }
 
-func (ps *Service) fetchGeneFiles(title string) ([]*model.GeneExample, error) {
-	// main.go initConfig sets a viper.SetDefault for gene_file_path so
-	// the lookup never returns ""; if it ever does, the os.ReadDir below
-	// will surface a meaningful error instead of falling back to a
-	// developer-specific Windows path.
-	path := viper.GetString("gene_file_path")
-
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return nil, err
+func (ps *Service) fetchGeneFiles(ctx context.Context, title string) ([]*model.GeneExample, error) {
+	var names []string
+	if mount := geneObsfsDir(); mount != "" {
+		entries, err := os.ReadDir(filepath.Join(mount, geneObsSubMd))
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				names = append(names, entry.Name())
+			}
+		}
+	} else {
+		keys, err := listObsKeysCached(ctx, rxBot.NewClient(), geneRelayRoot+geneObsSubMd, true)
+		if err != nil {
+			return nil, friendlyRelayErr(err)
+		}
+		for _, key := range keys {
+			names = append(names, path.Base(key))
+		}
 	}
 
 	var list []*model.GeneExample
-	for _, entry := range entries {
-		if entry.IsDir() {
+	for _, name := range names {
+		item := parseGeneFile(name)
+		if item == nil {
 			continue
 		}
-		item := parseGeneFile(entry.Name())
-		if item != nil {
-			if title != "" {
-				if !strings.Contains(item.SpeciesCode, title) && !strings.Contains(item.GeneId, title) {
-					continue
-				}
+		if title != "" {
+			if !strings.Contains(item.SpeciesCode, title) && !strings.Contains(item.GeneId, title) {
+				continue
 			}
-			list = append(list, item)
 		}
+		list = append(list, item)
 	}
 	return list, nil
 }

@@ -38,12 +38,11 @@ func main() {
 
 func initConfig(*cli.Context) error {
 	viper.SetDefault("app", "phytomni-server")
-	// GeneList / GeneDetails read .md examples from this root;
-	// historically the call sites carried a developer's local Windows
-	// path as the fallback, which silently broke on every non-Windows
-	// deploy. SetDefault here so a missing app.yml key lands on the
-	// canonical Linux production-style path instead.
-	viper.SetDefault("gene_file_path", "/var/lib/phytomni/gene_examples")
+	// GeneList reads .md examples from the obsfs FUSE mount (OBS bucket as
+	// POSIX). An empty gene_obsfs_path means the mount is absent and the list
+	// falls back to the Bot relay listing (gene-examples/md/). SetDefault ""
+	// keeps the relay fallback as the safe dormant default.
+	viper.SetDefault("gene_obsfs_path", "")
 	if err := utils.LoadConfigInFile(configFile); err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 	"phytomni-server/utils"
 
 	"gorm.io/gorm"
@@ -163,34 +165,111 @@ func TestApiDownloadAnalystAgentObsImages_MalformedJSON(t *testing.T) {
 	}
 }
 
-// TestGeneSearch_ZeroPageSizeNoPanic: the handler reads pagination query params
-// via strconv.Atoi, defaulting to 0 when absent. size=0 used to make the
-// totalPages (total+size-1)/size expression integer-divide-by-zero panic. The
-// guard must fall back to sane defaults and return normally. Point gene_file_path
-// at a temp dir holding one valid file so fetchGeneFiles returns 1 row → total>0
-// → the totalPages line is reached.
-func TestGeneSearch_ZeroPageSizeNoPanic(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "Os01g0107900_result.md"), []byte("x"), 0o644); err != nil {
-		t.Fatalf("seed file: %v", err)
+// writeGeneObsfs seeds a temp obsfs-like mount with md/ files and points
+// gene_obsfs_path at it. Returns the mount root.
+func writeGeneObsfs(t *testing.T, mdNames []string) string {
+	t.Helper()
+	root := t.TempDir()
+	mdDir := filepath.Join(root, "md")
+	if err := os.MkdirAll(mdDir, 0o755); err != nil {
+		t.Fatalf("mkdir md: %v", err)
 	}
-	viper.Set("gene_file_path", dir)
-	t.Cleanup(func() { viper.Set("gene_file_path", "") })
+	for _, n := range mdNames {
+		if err := os.WriteFile(filepath.Join(mdDir, n), []byte("# "+n), 0o644); err != nil {
+			t.Fatalf("write %s: %v", n, err)
+		}
+	}
+	viper.Set("gene_obsfs_path", root)
+	t.Cleanup(func() { viper.Set("gene_obsfs_path", "") })
+	return root
+}
 
+// geneRelayServer points the Bot client at an httptest relay whose obs/list
+// answers with the given keys; used for the relay-fallback branch.
+func geneRelayServer(t *testing.T, keys []string) {
+	t.Helper()
+	body, err := json.Marshal(struct {
+		Keys []string `json:"keys"`
+	}{Keys: keys})
+	if err != nil {
+		t.Fatalf("marshal keys: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { srv.Close(); rxBot.BotConfig = nil })
+}
+
+// TestGeneList_ObsfsListing: with gene_obsfs_path set, the list derives rows
+// from md/ files in the mount (parseGeneFile on the entry name).
+func TestGeneList_ObsfsListing(t *testing.T) {
+	writeGeneObsfs(t, []string{"Os01g0107900_result.md", "AT1G01010_result.md"})
 	ps := NewService()
-	// size=0, current=0 — old code panicked here; the guard normalizes and returns.
+	list, total, _, err := ps.GeneList(context.Background(), 1, 10)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if total != 2 || len(list) != 2 {
+		t.Fatalf("expected 2 rows, got total=%d len=%d", total, len(list))
+	}
+	byGene := map[string]*model.GeneExample{}
+	for _, g := range list {
+		byGene[g.GeneId] = g
+	}
+	if g := byGene["Os01g0107900"]; g == nil || g.SpeciesCode != "Osa" || g.FileName != "Os01g0107900_result.md" {
+		t.Fatalf("Os01g0107900 derived wrong: %+v", g)
+	}
+	if g := byGene["AT1G01010"]; g == nil || g.SpeciesCode != "Ath" {
+		t.Fatalf("AT1G01010 derived wrong: %+v", g)
+	}
+}
+
+// TestGeneList_NonResultKeysSkipped: files without the _result.md suffix or an
+// unrecognized species prefix are filtered (parseGeneFile → nil).
+func TestGeneList_NonResultKeysSkipped(t *testing.T) {
+	writeGeneObsfs(t, []string{"Os01g0107900_result.md", "README.txt", "ZZZ_unknown_result.md"})
+	ps := NewService()
+	list, total, _, err := ps.GeneList(context.Background(), 1, 10)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if total != 1 || len(list) != 1 || list[0].GeneId != "Os01g0107900" {
+		t.Fatalf("expected only the valid gene, got total=%d list=%+v", total, list)
+	}
+}
+
+// TestGeneList_RelayFallback: with gene_obsfs_path unset, the list falls back to
+// the Bot relay listing.
+func TestGeneList_RelayFallback(t *testing.T) {
+	viper.Set("gene_obsfs_path", "")
+	geneRelayServer(t, []string{
+		"gene-examples/md/Os01g0107900_result.md",
+		"gene-examples/md/AT1G01010_result.md",
+	})
+	ps := NewService()
+	_, total, _, err := ps.GeneList(context.Background(), 1, 10)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected 2 rows from relay fallback, got %d", total)
+	}
+}
+
+// TestGeneSearch_ZeroPageSizeNoPanic: size=0 used to divide-by-zero in the
+// totalPages expression. The guard must normalize and return. One md file in
+// the mount → total>0 → the totalPages line is reached.
+func TestGeneSearch_ZeroPageSizeNoPanic(t *testing.T) {
+	writeGeneObsfs(t, []string{"Os01g0107900_result.md"})
+	ps := NewService()
 	list, total, totalPages, err := ps.GeneSearch(context.Background(), 0, 0, "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if total != 1 {
-		t.Fatalf("expected total=1, got %d", total)
-	}
-	if totalPages != 1 {
-		t.Fatalf("expected totalPages=1, got %d", totalPages)
-	}
-	if len(list) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(list))
+	if total != 1 || totalPages != 1 || len(list) != 1 {
+		t.Fatalf("expected total=1 totalPages=1 len=1, got %d/%d/%d", total, totalPages, len(list))
 	}
 }
 
