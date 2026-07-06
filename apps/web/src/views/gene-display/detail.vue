@@ -20,20 +20,7 @@ import { ElMessage } from "element-plus";
 import { getGeneDetails } from "@/api/gene-display";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import { useI18n } from "vue-i18n";
-
-// Import images
-import treeImg from "./images/tree.png";
-import tissueImg from "./images/LOC_Os01g08220_tissues.png";
-import cultivarImg from "./images/LOC_Os01g08220_cultivars.png";
-import genotypeImg from "./images/LOC_Os01g08220_genotypes.png";
-import treatmentImg from "./images/LOC_Os01g08220_treatments.png";
-import motifImg from "./images/motif.png";
-import epicImg from "./images/epic.png";
-import promoterDesignImg from "./images/promoter_design.png";
-import structureImg from "./images/OsD18_structure.png";
-import ppiImg from "./images/hap-ppi.png";
-import mutationPpiImg from "./images/mutation-ppi.png";
-import psapScoresImg from "./images/psap_scores.png";
+import { buildDisplayContent } from "./gene-markdown";
 
 const { t } = useI18n();
 
@@ -75,49 +62,7 @@ const parseDocTitles = (
   return { mainContent, refs };
 };
 
-const processedContent = computed(() => {
-  if (!MDContent.value) return "";
-
-  // First remove the DOC TITLES section
-  const { mainContent } = parseDocTitles(MDContent.value);
-
-  // Replace all image references, and convert actual newlines into literal \n (required by the DeepGenomeResultViewer component)
-  return mainContent
-    .replace(/!\[Tree Image\]\(.*?tree\.png/g, `![Tree Image](${treeImg}`)
-    .replace(
-      /!\[Tissue Image\]\(.*?tissues\.png/g,
-      `![Tissue Image](${tissueImg}`
-    )
-    .replace(
-      /!\[Cultivar Image\]\(.*?cultivars\.png/g,
-      `![Cultivar Image](${cultivarImg}`
-    )
-    .replace(
-      /!\[Genotype Image\]\(.*?genotypes\.png/g,
-      `![Genotype Image](${genotypeImg}`
-    )
-    .replace(
-      /!\[Treatment Image\]\(.*?treatments\.png/g,
-      `![Treatment Image](${treatmentImg}`
-    )
-    .replace(/!\[Motif Image\]\(.*?motif\.png/g, `![Motif Image](${motifImg}`)
-    .replace(/!\[Epic Image\]\(.*?epic\.png/g, `![Epic Image](${epicImg}`)
-    .replace(
-      /!\[PrompterDesign Image\]\(.*?promoter_design\.png/g,
-      `![PrompterDesign Image](${promoterDesignImg}`
-    )
-    .replace(
-      /!\[Sturcture Image\]\(.*?OsD18_structure\.png/g,
-      `![Structure Image](${structureImg}`
-    )
-    .replace(/!\[PPI Image\]\(.*?hap-ppi\.png/g, `![PPI Image](${ppiImg}`)
-    .replace(
-      /!\[Mutation Image\]\(.*?psap_scores\.png/g,
-      `![Mutation Image](${psapScoresImg}`
-    )
-    .replace(/\r\n/g, "\\n") // Convert CRLF into literal \n
-    .replace(/\n/g, "\\n"); // Convert LF into literal \n
-});
+const processedContent = computed(() => buildDisplayContent(MDContent.value));
 
 // Fetch gene details
 const fetchGeneDetail = async (file_name: string) => {
