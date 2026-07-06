@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -155,29 +155,37 @@ func parseGeneFile(filename string) *model.GeneExample {
 	}
 }
 func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.GeneExample, error) {
-	// See fetchGeneFiles — gene_file_path is always defaulted in
-	// initConfig, so the empty-string Windows fallback that used to
-	// live here is no longer needed.
-	path := viper.GetString("gene_file_path")
-
-	fullPath := fmt.Sprintf("%s/%s", path, fileName)
-
-	// Prevent path traversal: reject filenames containing "..", "/", or "\".
-	if strings.Contains(fileName, "..") || strings.Contains(fileName, "/") || strings.Contains(fileName, "\\") {
-		return nil, errors.New("invalid filename")
-	}
-
-	content, err := os.ReadFile(fullPath)
+	safeName, err := utils.CleanUploadFilename(fileName)
 	if err != nil {
 		return nil, err
 	}
 
-	item := parseGeneFile(fileName)
+	item := parseGeneFile(safeName)
 	if item == nil {
 		return nil, errors.New("invalid gene file format")
 	}
-	item.Content = string(content)
 
+	var content []byte
+	if mount := geneObsfsDir(); mount != "" {
+		content, err = os.ReadFile(filepath.Join(mount, geneObsSubMd, safeName))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		rc, _, rerr := rxBot.NewClient().GetObsObjectStream(ctx, geneRelayRoot+geneObsSubMd+safeName)
+		if rerr != nil {
+			return nil, friendlyRelayErr(rerr)
+		}
+		defer rc.Close()
+		content, err = io.ReadAll(rc)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// The md already carries /api/v1/gene-images/<GENE>/<file> URLs, which the
+	// frontend pipeline passes through untouched — no backend image rewrite.
+	item.Content = string(content)
 	return item, nil
 }
 

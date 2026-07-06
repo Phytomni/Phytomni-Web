@@ -184,6 +184,15 @@ func writeGeneObsfs(t *testing.T, mdNames []string) string {
 	return root
 }
 
+// writeGeneMd writes one md file into the mount's md/ dir (mount already set by
+// writeGeneObsfs) — used to assert body passthrough.
+func writeGeneMd(t *testing.T, mount, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(mount, "md", name), []byte(body), 0o644); err != nil {
+		t.Fatalf("write md %s: %v", name, err)
+	}
+}
+
 // geneRelayServer points the Bot client at an httptest relay whose obs/list
 // answers with the given keys; used for the relay-fallback branch.
 func geneRelayServer(t *testing.T, keys []string) {
@@ -270,6 +279,48 @@ func TestGeneSearch_ZeroPageSizeNoPanic(t *testing.T) {
 	}
 	if total != 1 || totalPages != 1 || len(list) != 1 {
 		t.Fatalf("expected total=1 totalPages=1 len=1, got %d/%d/%d", total, totalPages, len(list))
+	}
+}
+
+// TestGeneDetails_ObsfsRead: with the mount set, GeneDetails returns the md body
+// verbatim; image URLs already in /api/v1/gene-images/ form are left untouched
+// (no backend rewrite).
+func TestGeneDetails_ObsfsRead(t *testing.T) {
+	mount := writeGeneObsfs(t, nil)
+	body := "# Os01g0107900\n\n![tree](/api/v1/gene-images/Os01g0107900/Os01g0107900_tree.png)\n"
+	writeGeneMd(t, mount, "Os01g0107900_result.md", body)
+	ps := NewService()
+	item, err := ps.GeneDetails(context.Background(), "Os01g0107900_result.md")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if item.Content != body {
+		t.Fatalf("content mismatch:\n got: %q\nwant: %q", item.Content, body)
+	}
+	if item.SpeciesCode != "Osa" || item.GeneId != "Os01g0107900" {
+		t.Fatalf("derived metadata wrong: %+v", item)
+	}
+}
+
+// TestGeneDetails_TraversalReject: an unsafe fileName is rejected before any
+// read (CleanUploadFilename gate), for the whole set.
+func TestGeneDetails_TraversalReject(t *testing.T) {
+	writeGeneObsfs(t, nil) // mount set but no files; rejection precedes any read
+	ps := NewService()
+	for _, name := range []string{"../escape.md", "sub/escape.md", `sub\escape.md`, "", ".."} {
+		if _, err := ps.GeneDetails(context.Background(), name); err == nil {
+			t.Fatalf("GeneDetails(%q) = nil err, want rejection", name)
+		}
+	}
+}
+
+// TestGeneDetails_MissingGene: a fileName with no backing md object → clean
+// error, no panic.
+func TestGeneDetails_MissingGene(t *testing.T) {
+	writeGeneObsfs(t, nil) // empty mount
+	ps := NewService()
+	if _, err := ps.GeneDetails(context.Background(), "Os01g0107900_result.md"); err == nil {
+		t.Fatal("expected error for missing md object")
 	}
 }
 
