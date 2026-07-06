@@ -303,11 +303,26 @@ func TestGeneDetails_ObsfsRead(t *testing.T) {
 }
 
 // TestGeneDetails_TraversalReject: an unsafe fileName is rejected before any
-// read (CleanUploadFilename gate), for the whole set.
+// read (CleanUploadFilename gate), for the whole set. The name
+// "Os01g0107900/../escape_result.md" passes parseGeneFile (Os prefix +
+// _result.md suffix) and filepath.Join collapses the traversal to the planted
+// escape_result.md — so it is the CleanUploadFilename guard alone that blocks
+// the read. Delete the guard and this case returns the planted content with no
+// error, turning the test red (a true mutation-proof, not a benign miss).
 func TestGeneDetails_TraversalReject(t *testing.T) {
-	writeGeneObsfs(t, nil) // mount set but no files; rejection precedes any read
+	// Plant escape_result.md so a traversal-resolved read returns content
+	// (not a missing-file error) when the guard is deleted — the mutation
+	// must surface as a true positive, not a benign error.
+	writeGeneObsfs(t, []string{"escape_result.md"})
 	ps := NewService()
-	for _, name := range []string{"../escape.md", "sub/escape.md", `sub\escape.md`, "", ".."} {
+	for _, name := range []string{
+		"../escape.md",
+		"sub/escape.md",
+		`sub\escape.md`,
+		"",
+		"..",
+		"Os01g0107900/../escape_result.md",
+	} {
 		if _, err := ps.GeneDetails(context.Background(), name); err == nil {
 			t.Fatalf("GeneDetails(%q) = nil err, want rejection", name)
 		}
