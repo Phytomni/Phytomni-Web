@@ -1868,16 +1868,16 @@ const usePrompt = (prompt: string) => {
 // Related links
 const currentLinks = ref([
   {
-    title: t("chat.links.brca1"),
-    url: "https://www.ncbi.nlm.nih.gov/gene/672",
+    title: t("chat.links.riceStress"),
+    url: "https://ricefrend.dna.affrc.go.jp/",
   },
   {
-    title: t("chat.links.mapk"),
-    url: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3135676/",
+    title: t("chat.links.wheatYield"),
+    url: "https://plants.ensembl.org/Triticum_aestivum/",
   },
   {
-    title: t("chat.links.tp53"),
-    url: "https://p53.iarc.fr/",
+    title: t("chat.links.maizeQTL"),
+    url: "https://www.maizegdb.org/",
   },
 ]);
 

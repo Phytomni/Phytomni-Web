@@ -95,7 +95,7 @@ export function useAgentsPanel(opts: {
   const presetAgents = ref([
     {
       id: 1,
-      name: t("chat.geneDetail"),
+      name: t("chat.deepGenome"),
       icon: "Document",
       route: "/gene-display",
     },

@@ -49,7 +49,7 @@
             >
               <el-menu-item index="/gene-display">
                 <el-icon><Document /></el-icon>
-                <span>{{ $t("menu.geneDisplay") }}</span>
+                <span>{{ $t("menu.deepGenome") }}</span>
               </el-menu-item>
               <el-menu-item index="/favorites">
                 <el-icon><Star /></el-icon>

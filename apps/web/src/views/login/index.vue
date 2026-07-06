@@ -16,7 +16,6 @@
       </div>
       <div class="login-form">
         <h2 class="login-title">
-          <!-- {{ isLogin ? $t('login.title') : $t('login.registerTitle') }} -->
           {{ $t("login.title") }}
         </h2>
         <h5 class="login-subtitle">

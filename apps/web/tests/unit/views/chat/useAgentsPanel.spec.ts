@@ -45,11 +45,11 @@ describe("useAgentsPanel", () => {
   });
 
   describe("presetAgents", () => {
-    it("has 8 items, and the first item's name is the eagerly resolved t('chat.geneDetail')", () => {
+    it("has 8 items, and the first item's name is the eagerly resolved t('chat.deepGenome')", () => {
       const { panel } = makeComposable();
       expect(panel.presetAgents.value).toHaveLength(8);
       // The first item uses the injected t, evaluated eagerly at ref creation time
-      expect(panel.presetAgents.value[0].name).toBe("chat.geneDetail");
+      expect(panel.presetAgents.value[0].name).toBe("chat.deepGenome");
     });
   });
 

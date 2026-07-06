@@ -73,7 +73,7 @@
         <el-icon>
           <Search />
         </el-icon>
-        <span v-if="!sidebarCollapsed">{{ $t("chat.geneDetail") }}</span>
+        <span v-if="!sidebarCollapsed">{{ $t("chat.deepGenome") }}</span>
       </el-button>
       <el-button
         class="favorites-btn"

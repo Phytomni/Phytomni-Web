@@ -47,7 +47,7 @@ export const CANONICAL_AGENT_ZH_NAMES: Record<CanonicalAgentTool, string> = {
   DeepGenomeAgent: "基因深度分析智能体",
   InSilicoResearchAgent: "虚拟研究智能体",
   GeneNetworkAgent: "基因网络智能体",
-  DigitalDesignAgent: "数字设计智能体",
+  DigitalDesignAgent: "智能设计智能体",
 } as const;
 
 export const CANONICAL_AGENT_I18N_KEYS: Record<CanonicalAgentTool, string> = {
