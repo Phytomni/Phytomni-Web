@@ -86,6 +86,13 @@ func AuthMiddleware() gin.HandlerFunc {
 		token := tokenString[7:]
 		claims := &Claims{}
 		parsedToken, err := jwt.ParseWithClaims(token, claims, func(parsedToken *jwt.Token) (interface{}, error) {
+			// Alg-pin: only HS256 is accepted. The keyfunc is the v3 equivalent of
+			// WithValidMethods(["HS256"]) (introduced in v4+; this repo pins v3.2.2).
+			// Returning nil — never the secret — for a wrong alg means the signature
+			// is never verified against an unintended method (alg-confusion defense).
+			if parsedToken.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+				return nil, jwt.NewValidationError("unexpected signing method", jwt.ValidationErrorSignatureInvalid)
+			}
 			return jwtSecret(), nil
 		})
 

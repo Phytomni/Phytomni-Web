@@ -191,6 +191,47 @@ func TestAuthMiddleware_FreshTokenAfterPasswordChangeNotRevokedByEpoch(t *testin
 	}
 }
 
+// TestAuthMiddleware_AlgNoneTokenRejected forges a token with alg=none (signed
+// with UnsafeAllowNoneSignatureType, the only way to produce a none token).
+// The keyfunc returns []byte, not UnsafeAllowNoneSignatureType, so golang-jwt's
+// own type guard already rejects this — but the alg-pin makes the rejection
+// explicit so a future library loosening can't silently reopen the hole.
+func TestAuthMiddleware_AlgNoneTokenRejected(t *testing.T) {
+	r, _, gdb := setupRevocationEnv(t)
+	gdb.Exec(`INSERT INTO users (id, email) VALUES (1, 'alice@x.com')`)
+	claims := &Claims{Username: "alice@x.com"}
+	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	claims.IssuedAt = time.Now().Add(-IatSkew).Unix()
+	tok := jwt.NewWithClaims(jwt.SigningMethodNone, claims)
+	forged, err := tok.SignedString(jwt.UnsafeAllowNoneSignatureType)
+	if err != nil {
+		t.Fatalf("sign none: %v", err)
+	}
+	if code := do(r, "Bearer "+forged); code != 401 {
+		t.Fatalf("alg=none token: want 401, got %d", code)
+	}
+}
+
+// TestAuthMiddleware_AlgConfusionHS384Rejected forges a token with alg=HS384
+// signed with the HS256 secret. Without WithValidMethods, golang-jwt accepts
+// any HMAC variant (HS256/HS384/HS512) with a []byte key, so this token would
+// wrongly verify. The alg-pin must reject it (only HS256 is allowed).
+func TestAuthMiddleware_AlgConfusionHS384Rejected(t *testing.T) {
+	r, _, gdb := setupRevocationEnv(t)
+	gdb.Exec(`INSERT INTO users (id, email) VALUES (1, 'alice@x.com')`)
+	claims := &Claims{Username: "alice@x.com"}
+	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	claims.IssuedAt = time.Now().Add(-IatSkew).Unix()
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS384, claims)
+	forged, err := tok.SignedString([]byte(viper.GetString("jwt.secret_key")))
+	if err != nil {
+		t.Fatalf("sign hs384: %v", err)
+	}
+	if code := do(r, "Bearer "+forged); code != 401 {
+		t.Fatalf("HS384 alg-confusion token: want 401, got %d", code)
+	}
+}
+
 func testCtx() context.Context { return context.Background() }
 
 func signClaims(t *testing.T, c *Claims) string {
