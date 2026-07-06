@@ -134,6 +134,7 @@ func TestApiV1AuditGeneDownloadRoutes(t *testing.T) {
 			"GET /api/v1/genes",
 			"GET /api/v1/genes/:id",
 			"POST /api/v1/gene-examples",
+			"GET /api/v1/gene-images/:gene/:file",
 			"GET /api/v1/downloads/obs-file",
 			"GET /api/v1/downloads/analyst-agent/obs-file",
 			"GET /api/v1/downloads/analyst-agent/obs-images",

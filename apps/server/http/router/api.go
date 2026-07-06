@@ -57,6 +57,7 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/genes", apiHandler.GeneList)                    // gene test data list
 		apiV1Router.GET("/genes/:id", apiHandler.GeneDetails)             // gene detail (resource id = file_name)
 		apiV1Router.POST("/gene-examples", apiHandler.GeneDetailsStorage) // gene example iteration data
+		apiV1Router.GET("/gene-images/:gene/:file", apiHandler.GeneImage) // public gene-example image (obsfs-backed)
 
 		apiV1Router.GET("/downloads/analyst-agent/obs-file", apiHandler.DownloadAnalystAgentObsFile)     // AnalystAgent OBS file download link
 		apiV1Router.GET("/downloads/analyst-agent/obs-images", apiHandler.DownloadAnalystAgentObsImages) // AnalystAgent OBS image download links

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"phytomni-server/common"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
@@ -17,6 +18,7 @@ import (
 	"phytomni-server/utils/errs"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 
 	"strconv"
 	"strings"
@@ -318,6 +320,58 @@ func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 	ctx.Header("Content-Security-Policy", "default-src 'none'; sandbox")
 	ctx.Header("Content-Disposition", disposition+`; filename="`+sanitizeFilename(filename)+`"`)
 	ctx.DataFromReader(http.StatusOK, length, contentType, rc, nil)
+}
+
+// GeneImage serves a public gene-example image from the obsfs mount. The URL is
+// /api/v1/gene-images/:gene/:file (emitted into the md by the data pipeline).
+// Both path segments are validated (CleanUploadFilename) and the join is
+// containment-checked (SafeJoinUploadPath), so no request can read outside
+// <mount>/img/<gene>/. Gene data is public, so there is no per-user auth.
+func (ph *Handler) GeneImage(ctx *gin.Context) {
+	gene, err := utils.CleanUploadFilename(ctx.Param("gene"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.file_name_required")})
+		return
+	}
+	file, err := utils.CleanUploadFilename(ctx.Param("file"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.file_name_required")})
+		return
+	}
+
+	mount := viper.GetString("gene_obsfs_path")
+	if mount == "" {
+		// Relay image fallback is a Bot-handoff follow-up; the obsfs mount is the
+		// production path for images.
+		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "gene.fetch_failed")})
+		return
+	}
+
+	base := filepath.Join(mount, "img", gene)
+	fullPath, err := utils.SafeJoinUploadPath(base, file)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.file_name_required")})
+		return
+	}
+
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "gene.fetch_failed")})
+		return
+	}
+
+	contentType := mime.TypeByExtension(path.Ext(file))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	disposition := "attachment"
+	if inlineSafeImageTypes[contentType] {
+		disposition = "inline"
+	}
+	ctx.Header("X-Content-Type-Options", "nosniff")
+	ctx.Header("Content-Security-Policy", "default-src 'none'; sandbox")
+	ctx.Header("Content-Disposition", disposition+`; filename="`+sanitizeFilename(file)+`"`)
+	ctx.Data(http.StatusOK, contentType, data)
 }
 
 func (ph *Handler) DownloadObsRenderingFile(ctx *gin.Context) {
