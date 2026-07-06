@@ -22,7 +22,7 @@ service_unavailable = "服务暂时不可用，请稍后再试"
 password_format_invalid = "新的密码格式不正确"
 new_password_complexity = "新密码必须包含大小写字母、数字及标点符号"
 new_password_same_as_old = "新密码不能与旧密码相同"
-flag_update_failed = "密码修改成功但状态更新失败,请重新登录"
+flag_update_failed = "密码修改成功但状态更新失败，请重新登录"
 
 [role]
 admin = "管理员"
