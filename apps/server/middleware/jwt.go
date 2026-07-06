@@ -113,14 +113,17 @@ func AuthMiddleware() gin.HandlerFunc {
 		// genuinely issued before the event" — prevents a 60s lockout on immediate re-login
 		// after a password change.
 		skewSec := int64(IatSkew / time.Second)
-		// 1) Single-token blacklist (Redis, fail-open).
-		if rxCache.IsBlocked(c.Request.Context(), rxCache.HashToken(token)) {
+		// 1+2) Pipelined blocklist + per-user epoch (Redis, fail-open): one round-trip
+		// instead of two sequential reads. Fail-open per field: Redis down ->
+		// (false, 0); an epoch miss (redis.Nil) is a normal 0, not a degrade.
+		blocked, epoch := rxCache.CheckRevocation(c.Request.Context(), rxCache.HashToken(token), claims.Username)
+		if blocked {
 			revokedResponse(c)
 			return
 		}
-		// 2) Per-user epoch (Redis, fail-open): revoke if iat < epoch-skew, including iat=0 legacy.
+		// Per-user epoch: revoke if iat < epoch-skew, including iat=0 legacy.
 		// epoch is a ~1.7e9 unix value so epoch-skewSec > 0 always holds, hence iat=0 legacy is revoked.
-		if epoch := rxCache.GetUserEpoch(c.Request.Context(), claims.Username); epoch > 0 && claims.IssuedAt < epoch-skewSec {
+		if epoch > 0 && claims.IssuedAt < epoch-skewSec {
 			revokedResponse(c)
 			return
 		}

@@ -94,6 +94,39 @@ func SetUserEpoch(ctx context.Context, email string, epoch time.Time, ttl time.D
 	return nil
 }
 
+// CheckRevocation pipelines the single-token blocklist Exists and the per-user
+// epoch Get into one Redis round-trip. Fail-open per field: pipeline/exec error
+// or nil client -> (false, 0); a redis.Nil on the epoch Get is a normal miss and
+// is NOT a fail-open event (mirrors GetUserEpoch). Preserves the 80ms cap.
+func CheckRevocation(ctx context.Context, tokenHash, email string) (blocked bool, epoch int64) {
+	c := Client(defaultName)
+	if c == nil {
+		ObserveFailOpen("revocation_check")
+		return false, 0
+	}
+	pctx, cancel := context.WithTimeout(ctx, revokeOpTimeout)
+	defer cancel()
+	pipe := c.Pipeline()
+	existsCmd := pipe.Exists(pctx, revokeTokenPrefix+tokenHash)
+	getCmd := pipe.Get(pctx, revokeUserPrefix+email)
+	// Exec returns the first non-Nil error; redis.Nil (epoch miss) is expected and
+	// must NOT trigger fail-open — each cmd's .Result() is read individually below.
+	_, err := pipe.Exec(pctx)
+	if err != nil && err != redis.Nil {
+		ObserveFailOpen("revocation_check")
+		return false, 0
+	}
+	if n, e := existsCmd.Result(); e == nil && n > 0 {
+		blocked = true
+	}
+	if v, e := getCmd.Result(); e == nil {
+		if ep, perr := strconv.ParseInt(v, 10, 64); perr == nil {
+			epoch = ep
+		}
+	}
+	return blocked, epoch
+}
+
 // GetUserEpoch returns the per-user revocation epoch (unix seconds), or 0 if none
 // or unreachable. Fail-open: nil client / real error → 0 (+ observed). A missing
 // key (redis.Nil) is the normal "no epoch" case and is NOT a fail-open event.
