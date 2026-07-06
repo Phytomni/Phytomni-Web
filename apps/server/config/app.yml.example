@@ -110,11 +110,12 @@ cron:
   switch: true
 
 # ---------------------------------------------------------------------
-# Gene example file root — ApiGeneDetails reads files from here.
-# Point at the directory that holds the per-gene .out artifacts the
-# Python MCP server emits.
+# Gene example obsfs mount root. When set to a readable directory, the
+# gene list/detail and image endpoints read <root>/md/ and <root>/img/
+# directly from the OBS FUSE mount. Leave empty to fall back to the Bot
+# OBS relay (requires a Bot public-prefix handoff to serve owner-less data).
 # ---------------------------------------------------------------------
-gene_file_path: "/var/lib/phytomni/gene_examples"
+gene_obsfs_path: ""
 
 # ---------------------------------------------------------------------
 # Default chat quota for newly-created guest accounts. ApiUserRegister

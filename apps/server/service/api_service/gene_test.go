@@ -3,7 +3,6 @@ package api_service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,9 +14,6 @@ import (
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
-	"phytomni-server/utils"
-
-	"gorm.io/gorm"
 )
 
 // TestApiDownloadAnalystAgentObsImages_StoredPaths: with image_paths populated,
@@ -336,52 +332,5 @@ func TestGeneDetails_MissingGene(t *testing.T) {
 	ps := NewService()
 	if _, err := ps.GeneDetails(context.Background(), "Os01g0107900_result.md"); err == nil {
 		t.Fatal("expected error for missing md object")
-	}
-}
-
-func setupGeneExampleDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	gdb := setupTestDB(t)
-	if err := gdb.Exec(`CREATE TABLE gene_examples (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		file_name TEXT,
-		content TEXT,
-		species_code TEXT,
-		gene_id TEXT,
-		created_at DATETIME,
-		updated_at DATETIME,
-		delete_at DATETIME
-	)`).Error; err != nil {
-		t.Fatalf("create gene_examples: %v", err)
-	}
-	return gdb
-}
-
-func TestGeneDetailsStorageRejectsUnsafeFilename(t *testing.T) {
-	setupGeneExampleDB(t)
-	ps := NewService()
-	for _, name := range []string{"../escape.md", "sub/escape.md", `sub\escape.md`, "", ".."} {
-		t.Run(name, func(t *testing.T) {
-			err := ps.GeneDetailsStorage(context.Background(), name, "content", "Ath", "AT1G01010")
-			if !errors.Is(err, utils.ErrInvalidUploadFilename) {
-				t.Fatalf("GeneDetailsStorage(%q) err = %v, want ErrInvalidUploadFilename", name, err)
-			}
-		})
-	}
-}
-
-func TestGeneDetailsStorageStoresCleanFilename(t *testing.T) {
-	gdb := setupGeneExampleDB(t)
-	ps := NewService()
-
-	if err := ps.GeneDetailsStorage(context.Background(), "safe_result.md", "content", "Ath", "AT1G01010"); err != nil {
-		t.Fatalf("GeneDetailsStorage unexpected err: %v", err)
-	}
-	var fileName string
-	if err := gdb.Raw(`SELECT file_name FROM gene_examples WHERE gene_id = ?`, "AT1G01010").Scan(&fileName).Error; err != nil {
-		t.Fatalf("read stored filename: %v", err)
-	}
-	if fileName != "safe_result.md" {
-		t.Fatalf("stored filename = %q, want safe_result.md", fileName)
 	}
 }

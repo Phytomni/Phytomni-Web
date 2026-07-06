@@ -1,10 +1,6 @@
 package api_handler
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -23,10 +19,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-// geneExampleImageSavePath is the directory where gene-example image uploads
-// are persisted. Overridable in tests to avoid touching the production path.
-var geneExampleImageSavePath = "/root/project/html/dist/images"
 
 func (ph *Handler) GeneList(ctx *gin.Context) {
 	current, _ := strconv.Atoi(ctx.Query("current"))
@@ -76,152 +68,6 @@ func (ph *Handler) GeneDetails(ctx *gin.Context) {
 	}
 
 	ctx.JSON(errs.SucResp(list))
-}
-
-func (ph *Handler) GeneDetailsStorage(ctx *gin.Context) {
-	speciesCode := ctx.PostForm("species_code")
-	geneId := ctx.PostForm("gene_id")
-
-	docListFile, _, err := ctx.Request.FormFile("doc_list")
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":  http.StatusBadRequest,
-			"error": "No doc_list uploaded",
-		})
-		return
-	}
-	defer docListFile.Close()
-
-	docContent, err := io.ReadAll(docListFile)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":  http.StatusInternalServerError,
-			"error": "Failed to read doc_list content",
-		})
-		return
-	}
-
-	var docList struct {
-		DocList []struct {
-			Title string `json:"title"`
-		} `json:"doc_list"`
-	}
-	if err = json.Unmarshal(docContent, &docList); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":  http.StatusInternalServerError,
-			"error": "Failed to parse doc_list JSON",
-		})
-		return
-	}
-
-	var titlesBuilder strings.Builder
-	for i, doc := range docList.DocList {
-		if doc.Title != "" {
-			titlesBuilder.WriteString(fmt.Sprintf("%d. %s\n", i+1, doc.Title))
-		}
-	}
-	titlesStr := titlesBuilder.String()
-
-	form, err := ctx.MultipartForm()
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":  http.StatusBadRequest,
-			"error": "Failed to parse multipart form",
-		})
-		return
-	}
-	defer form.RemoveAll()
-
-	var successFiles []string
-	fileHeaders := form.File["files"]
-	for _, fileHeader := range fileHeaders {
-		safeName, err := utils.CleanUploadFilename(fileHeader.Filename)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "error": "Invalid upload filename"})
-			return
-		}
-		file, err := fileHeader.Open()
-		if err != nil {
-			log.Printf("Failed to open file %s: %v", safeName, err)
-			continue
-		}
-
-		fileContent, err := io.ReadAll(file)
-		_ = file.Close()
-		if err != nil {
-			log.Printf("Failed to read file %s: %v", safeName, err)
-			continue
-		}
-
-		combinedContent := fmt.Sprintf("%s\n\n--- DOC TITLES ---\n%s",
-			string(fileContent), titlesStr)
-
-		err = ph.service.GeneDetailsStorage(ctx, safeName, combinedContent, speciesCode, geneId)
-		if err != nil {
-			log.Printf("Failed to store file %s: %v", safeName, err)
-			continue
-		}
-
-		successFiles = append(successFiles, safeName)
-	}
-
-	imageHeaders := form.File["images"]
-	imageSavePath := geneExampleImageSavePath
-	var savedImages []string
-
-	if len(imageHeaders) > 0 {
-		if err = os.MkdirAll(imageSavePath, 0755); err != nil {
-			log.Printf("Failed to create directory %s: %v", imageSavePath, err)
-		}
-	}
-
-	for _, imageHeader := range imageHeaders {
-		safeName, err := utils.CleanUploadFilename(imageHeader.Filename)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "error": "Invalid upload filename"})
-			return
-		}
-		imageFile, err := imageHeader.Open()
-		if err != nil {
-			log.Printf("Failed to open image %s: %v", safeName, err)
-			continue
-		}
-
-		imagePath, err := utils.SafeJoinUploadPath(imageSavePath, safeName)
-		if err != nil {
-			_ = imageFile.Close()
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "error": "Invalid upload filename"})
-			return
-		}
-		outFile, err := os.Create(imagePath)
-		if err != nil {
-			_ = imageFile.Close()
-			log.Printf("Failed to create file %s: %v", imagePath, err)
-			continue
-		}
-
-		if _, err := io.Copy(outFile, imageFile); err != nil {
-			_ = imageFile.Close()
-			_ = outFile.Close()
-			log.Printf("Failed to save image %s: %v", imagePath, err)
-			continue
-		}
-		_ = imageFile.Close()
-		_ = outFile.Close()
-
-		savedImages = append(savedImages, safeName)
-		log.Printf("Successfully saved image: %s", imagePath)
-	}
-
-	if len(successFiles) == 0 && len(savedImages) == 0 {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":  http.StatusInternalServerError,
-			"error": "Failed to process all files and images",
-		})
-		return
-	}
-
-	ctx.JSON(errs.SucResp(successFiles))
 }
 
 func (ph *Handler) DownloadAnalystAgentObsFile(ctx *gin.Context) {

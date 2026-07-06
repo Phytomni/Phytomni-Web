@@ -17,7 +17,6 @@ import (
 	"phytomni-server/model"
 	"phytomni-server/utils"
 	"strings"
-	"time"
 
 	"github.com/spf13/viper"
 )
@@ -187,21 +186,6 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 	// frontend pipeline passes through untouched — no backend image rewrite.
 	item.Content = string(content)
 	return item, nil
-}
-
-func (ps *Service) GeneDetailsStorage(ctx context.Context, fileName, content, speciesCode, geneId string) error {
-	safeName, err := utils.CleanUploadFilename(fileName)
-	if err != nil {
-		return err
-	}
-	gene := &model.GeneExample{
-		FileName:    safeName,
-		Content:     content,
-		SpeciesCode: speciesCode,
-		GeneId:      geneId,
-		CreatedAt:   time.Time{},
-	}
-	return model.DB(ctx).Model(&model.GeneExample{}).Create(gene).Error
 }
 
 // findObsKeyBySuffix returns the first key (case-insensitive) in the Bot-relayed

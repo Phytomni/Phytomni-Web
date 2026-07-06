@@ -13,7 +13,6 @@ import (
 )
 
 func TestGetDownloadObsFileDisabled(t *testing.T) {
-	setupGeneUploadHandlerDB(t)
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
