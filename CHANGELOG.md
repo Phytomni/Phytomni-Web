@@ -1,17 +1,168 @@
 # Changelog
 
-All notable changes to **Phytomni-Web** are recorded here. This entry covers the
-`chore/repo-reorg` branch (137 commits, `2026-06-16` → `2026-06-27`) relative to
-`main` (`520c97a`). The format groups changes by concern; each bullet maps to one
-or more commits on the branch.
+All notable changes to **Phytomni-Web** are recorded here. Versions are dated
+snapshots of `main`; each entry maps to one or more commits landed in that
+window. Newest first.
 
 > **Conventions.** `apps/web` = Vue/Vite frontend, `apps/server` = Go gateway.
 > Emojis mirror the commit subjects. "Behavior-preserving" = pure rename/move
-> with no runtime contract change.
+> with no runtime contract change. "Dark-launched" = code shipped behind a
+> default-OFF flag, byte-identical to prior behavior until an operator flips it.
 
 ---
 
-## 📁 Repository layout & naming (behavior-preserving)
+## [0.1.2] — 2026-07-06
+
+Feature + hardening release on top of the `0.1.1` layout. Adds Instant/Expert
+chat modes (dark), an AG-UI SSE streaming spine (dark), a shared citation
+subsystem, backend i18n unification with a hardcoded-copy gate, a security-boundary
+sweep, the gene-example obsfs migration, and backend infrastructure hardening.
+**Two operator actions are required at deploy** (both operator-only, invisible to
+the local gate): the `tool_names` permission-key data migration and — only when
+activating Expert — the additive `mode` column. Everything else is additive or
+dark-launched. **Ops upgrade runbook:**
+[`docs/deployment/upgrading.md`](docs/deployment/upgrading.md).
+
+### 🌐 i18n unification (single-language policy, enforced)
+
+- **Backend user-facing strings routed through `gin-contrib/i18n`** — API
+  messages, `gin.H` bodies, and error passthroughs resolve against
+  `common/i18n/locales/{zh-CN,en-US}.toml`; a boundary translator (`TMaybe`)
+  handles error-passthrough surfaces without touching auth decisions.
+- **Vue template Chinese moved into i18n keys**; `ElMessage` toasts routed
+  through `t('key')`; backend `zh` punctuation normalized to full-width.
+- **G13 hardcoded-copy scanner locked to strict mode** with a ratcheting
+  allowlist; frontend key-parity + reference-resolvability gate (vitest) and
+  TOML bundle key-parity gate (`go test`) added. The documented kept-Chinese
+  allow-list (`zh-CN` locale values, the ICP filing id, the `中文` toggle, agent
+  names, a few legacy markers) is unchanged.
+- Frontend i18n copy revised and orphaned keys pruned.
+
+### 🔥 Removed — external server-task surface
+
+- **Server-task HTTP surface removed** — `POST /api/v1/server/tasks` /
+  `PATCH /api/v1/server/tasks/:id` and their `/v1/nky/server/{create,update}_task`
+  aliases, plus the `ServerCreateTask`/`ServerUpdateTask` handler & service, are
+  deleted. They had no real external caller (external clients call the Bot, not
+  Go; task status is driven by the `SyncBotRuns` cron over `question_agent_logs`).
+  The `server_tool_logs` table and `model.ServerToolLogs` are **kept** (historical
+  rows preserved). Ops removes the nginx `/v1/nky/server/` block on the next
+  maintenance window.
+
+### ✨ Instant / Expert chat modes (Expert dark-launched OFF)
+
+- **Per-conversation chat mode** (`chatMode` proxy into `chatStates`) with an
+  Instant/Expert selector; mode persisted on the `question_agent_logs.mode`
+  column and reconstructed from history on reload. Instant is live; **Expert is
+  gated behind `bot.expert_enabled` (default `false`)**.
+- **Expert routes to Bot `POST /v1/query/route`** (blocking) — never streams. The
+  three-way gate (handler + `QueryStream` guard + frontend `shouldStream`) is
+  consistent; a disabled Expert path maps to **503** (`ErrExpertDisabled`).
+- `expert_enabled` surfaced on the tool-permissions response so the SPA can show
+  or disable the Expert pill.
+
+### ✨ Citation subsystem (per-message namespace)
+
+- **Shared `CitedAnswer` renderer** for cited agents (chat, knowledge-agent
+  demo, brief-gene-agent demo); chat cited answers route through it and drop the
+  old inline list.
+- **`[N]` / `[N,M]` citation markers linkified** in rendered answers, scoped by
+  a per-message **namespace** (`ns` prop threaded MarkdownViewer → linkifier →
+  reference rows) so anchors resolve within one answer and stay clickable across
+  messages. Enriched citations copy as their full bibliography, not just the
+  title. DeepGenome reference ids + inline anchors namespaced per message. Print
+  CSS broadened so namespaced anchors stay inline-block.
+
+### 🌊 Chat streaming — AG-UI SSE spine (dark-launched OFF)
+
+- **AG-UI SSE frame parser + tee accumulator** on the Go side; a `QueryStream`
+  service method tee-forwards frames to the browser while accumulating the
+  answer/`run_id` and persisting a `QuestionAgentLog` row at stream end. The
+  gateway grows an SSE branch behind **`bot.stream_enabled` (default `false`)** —
+  with the flag off, `/query` keeps the blocking ChatCompletion path unchanged.
+- **Persistence equivalence** — the streamed row equals the blocking-path row
+  field-for-field including the `mode` column (shared `persistQuestionLog`);
+  status is grounded in the accumulator's `RunError` (→ `FAILED`), never
+  hardcoded success. **SSE headers deferred** until the first frame so a
+  pre-first-byte error still ships a correctly-typed JSON response.
+- **Frontend**: a `useStreamMessage` composable consumes the stream with
+  `fetch` + `ReadableStream`; a content-block registry + renderers drive safe
+  incremental markdown. Streaming modules gated under coverage. (Frontend flag
+  `VITE_STREAM_ENABLED`, default off.)
+- **Security fix folded in — regex-reentrancy XSS** in inline-markdown
+  resurrection stopped: emitted tags are stashed behind a private-use sentinel
+  and expanded to a fixed point, so a later pass can never re-scan an earlier
+  pass's `<a href>`. Guards all three `processInlineMarkdown` callers. Removed
+  the unused prior streaming client path.
+
+### 🔒 Security-boundary sweep
+
+- **Gene-example upload filenames hardened** — `CleanUploadFilename` +
+  `SafeJoinUploadPath` reject traversal; boundaries test-locked.
+- **Legacy email download links disabled** — the unauthenticated email route
+  returns a stable **410 Gone**; authenticated relay downloads intact.
+- **Chat downloads signed on click** (short-lived URL minted at click, not
+  embedded); the direct-download path removed.
+- **Analyst sync errors made explicit** — an unsyncable row without `bot_run_id`
+  returns **409** (`ErrMissingBotRunID`); a blank `task_id` returns **400**
+  before the service runs.
+
+### 🧬 Gene-example serving — obsfs mount
+
+- **Gene list + detail markdown + example images now read from the obsfs FUSE
+  mount** (`gene_obsfs_path`), a self-contained Web model that avoids the Bot
+  relay's tenant-prefix `403`; the Bot relay remains a fallback when the mount
+  path is empty. Gene detail images render from backend URLs.
+- **New public endpoint `GET /api/v1/gene-images/:gene/:file`** (obsfs-backed);
+  the traversal gate is mutation-proof test-locked. Orphan gene-example upload
+  path dropped; 12 hardcoded demo images removed.
+
+### ✨ Backend infrastructure hardening
+
+- **Cron scheduler hardened** — both reconcilers wrapped with
+  `WithChain(Recover, SkipIfStillRunning)` so the GA/token-refresh jobs survive a
+  panic and never re-enter concurrently; the scheduler handle is retained behind
+  a mutex and exposed read-only via a new admin-gated
+  **`GET /api/v1/admin/cron-entries`** (mirrors the operation-log admin gate).
+- **JWT verification pinned to HS256** via a keyfunc alg-check (golang-jwt v3
+  lacks `WithValidMethods`), blocking alg-confusion downgrades. The IatSkew
+  revocation arithmetic is untouched.
+- **12-factor secret injection** — `PHYTOMNI_JWT_SECRET` (via `viper.BindEnv`),
+  `PHYTOMNI_DB_DSN`, and `PHYTOMNI_REDIS_PASSWORD` (via explicit `os.Getenv`,
+  since `UnmarshalKey` bypasses `BindEnv`) override the file values when set;
+  **env unset ⇒ file value wins ⇒ prior behavior byte-identical**.
+- **Auth-path revocation reads pipelined** — `AuthMiddleware` folds the blocklist
+  `Exists` + per-user epoch `Get` into a single Redis round-trip
+  (`CheckRevocation`), fail-open **per field** (pipeline error / nil client ⇒
+  not-revoked; epoch miss is a normal miss, not a degrade).
+- **Redis connection-pool knobs exposed** — `pool_size` / `min_idle_conns` in the
+  redis client config (zero ⇒ go-redis defaults).
+
+### 📝 Docs
+
+- **Deployment docs updated for the obsfs config**; dead constants pruned;
+  `app.yml.example` documents the `PHYTOMNI_*` env overrides, redis pool knobs,
+  `gene_obsfs_path`, and the `expert_enabled` / `stream_enabled` dark-launch flags.
+- **Operator runbook — `tool_names` permission-key migration.** The frontend
+  permission identifiers were translated to English; they are matched verbatim
+  against the backend `permission_list` (built from `tool_names`), so the
+  frontend and an 8-row `tool_names` `UPDATE` **must ship together** or every
+  permission-gated nav/admin item silently disappears. Full SQL is in the
+  [`upgrading.md`](docs/deployment/upgrading.md) §3.1
+  and durably in the migrating commit body.
+
+---
+
+## [0.1.1] — 2026-06-27
+
+Infrastructure release: repository re-layout, the RESTful `/api/v1` sweep, the
+Redis subsystem, auth/registration hardening, external-dependency cleanup, and
+chat UX. Delivered on the `chore/repo-reorg` branch relative to the prior `main`
+tip (`520c97a`). **Requires a coordinated operator cutover** — DB/table rename,
+port move, and a frontend+backend co-deploy; see
+[`docs/deployment/history/repo-reorg-cutover.md`](docs/deployment/history/repo-reorg-cutover.md).
+
+### 📁 Repository layout & naming (behavior-preserving)
 
 - **Subprojects moved under `apps/`** — `chat-ai/` → `apps/web/`,
   `nky_client_go/` → `apps/server/`. Top-level dirs gone.
@@ -22,8 +173,8 @@ or more commits on the branch.
 - **DB name in DSN** `nongke` → `phytomni`.
 - **GORM model types dropped the `S`/`s_` prefix and pluralized** — `SUser` →
   `User` (table `s_user` → `users`), `SQuestionAgentLog` → `QuestionAgentLog`
-  (table `s_question_agent_logs` → `question_agent_logs`), and 9 more (11 total; full
-  mapping in the deployment manual §5).
+  (table `s_question_agent_logs` → `question_agent_logs`), and 9 more (11 total;
+  full mapping in the deployment manual §5).
 - **Handler/service method names dropped the `Api` prefix** (`ApiLogin` →
   `Login`, `ApiQuery` → `Query`, …); **response envelope consolidated** onto
   `common` (dead duplicate removed).
@@ -32,11 +183,11 @@ or more commits on the branch.
   honest names; **router handler groups** named by purpose.
 - **Frontend task-manager API module consolidated** into `api/task.ts`.
 - **Stale `chat-ai` codename** swept from code comments; **dead
-  `ApiQueryList`/index/user-info handlers + Pinia counter demo + scaffold
-  components** deleted.
-- `.gitignore consolidated and pruned (root + apps/web); dead rules removed, grouped by concern.
+  `ApiQueryList`/index/user-info handlers** deleted.
+- `.gitignore` consolidated and pruned (root + apps/web); dead rules removed,
+  grouped by concern.
 
-## 🔀 RESTful API — `/api/v1` (breaking, frontend-coordinated)
+### 🔀 RESTful API — `/api/v1` (breaking, frontend-coordinated)
 
 - **All business API moved under RESTful `/api/v1`** with verb-on-resource
   semantics. Auth: `POST /auth/sessions`, `POST /auth/registrations`.
@@ -50,19 +201,7 @@ or more commits on the branch.
 - **Frontend dev proxy + API docs refreshed**; two missed frontend wrappers
   fixed in the `/api/v1` sweep; open-route wiring locked with tests.
 
-## 🔥 Removed — external server-task surface
-
-- **Server-task HTTP surface removed** — the external task-registration routes
-  `POST /api/v1/server/tasks` / `PATCH /api/v1/server/tasks/:id` and their
-  `/v1/nky/server/{create,update}_task` aliases, plus the
-  `ServerCreateTask`/`ServerUpdateTask` handler & service, are deleted. They had
-  no real external caller (external server clients call Bot, not Go; task status
-  is driven by the `SyncBotRuns` cron over `question_agent_logs`). The
-  `server_tool_logs` table and `model.ServerToolLogs` are kept (historical rows
-  preserved; not dropped). Ops removes the nginx `/v1/nky/server/` block on the
-  next maintenance window.
-
-## ✨ Auth & registration hardening
+### ✨ Auth & registration hardening
 
 - **Server-side logout + token revocation** — `POST /api/v1/auth/logout`
   (single device) and `/api/v1/auth/logout-all` (all devices via per-user
@@ -79,9 +218,8 @@ or more commits on the branch.
   `chatlimit.enforce`); bypass for `admin`/`super_admin`/`vip_user`; fail-open
   on DB error. Self-registered users (`chat_limit=0`) are inactive until an
   admin grants quota.
-- Local-plan terms + dead test code dropped from the hardening commits.
 
-## ✨ Redis subsystem (fail-open throughout)
+### ✨ Redis subsystem (fail-open throughout)
 
 - **Redis user/product layer activated at boot** (`redis.enabled` default
   `true`); cheap `Available()` health check; fail-open observability counter
@@ -99,7 +237,7 @@ or more commits on the branch.
   (ownership checked outside/before cache; only raw keys cached, never signed
   URLs; only `SUCCEEDED` + non-empty).
 
-## 🗑️ Dead code & external-dependency cleanup
+### 🗑️ Dead code & external-dependency cleanup
 
 - **Sentry error-reporting wiring stripped** (inert; `gin-contrib/sentry-go`
   dropped).
@@ -116,7 +254,7 @@ or more commits on the branch.
   dependency besides Bot/MySQL); dead env config + commented logo markup
   dropped.
 
-## 💄 Chat UX & agent naming
+### 💄 Chat UX & agent naming
 
 - **Canonical agent names** — `BriefReviewAgent` surface renamed to
   `BriefGeneAgent` (zero residue); `CanonicalAgentTool` SSOT pins the Bot
@@ -128,31 +266,25 @@ or more commits on the branch.
 - **Perceived send progress** — half-life pseudo-progress model
   (`agentProgress.ts`); `SendProgress.vue` (ETA text + pseudo bar, per-agent
   config); per-dialogue progress state wired into `chatStates`; progress
-  rendered into the sending bubble. (Elapsed-seconds readout later dropped;
-  ETA + bar retained.)
+  rendered into the sending bubble.
 - **Mention Enter-guard** made testable + non-circular; send-on-Enter after
   an `@mention` fully selected fixed; **aria-labels** on composer
   send/upload/abort buttons.
 
-## ♻️ Frontend decomposition (chat view split)
+### ♻️ Frontend decomposition (chat view, cont.)
 
-The monolithic chat view was decomposed into tested composables / co-located
-modules: `useChatStates`, `useSelectChat`, `useSendMessage`, `useRefreshMessage`,
-`useFileUpload`, `useCopyDownload`, `useReactions`, `useAgentImages`,
-`useAgentsPanel`, `useComposer`, `useLogView`, `useTutorial`, `useImageZoomPan`,
-plus sidebar composables (nav, chat-history, agents dropdown, responsive
-collapse, date grouping). DeepGenome split into `useDeepGenomeDownloads`,
-image viewer, table-of-contents, and tested `@/utils/{markdown-inline,
-reference-renderer,citation}` modules. Tutorial keydown leak fixed on unmount;
-`/undefined/` asset path guarded when `.env.production` missing.
+The chat sidebar was further decomposed into tested composables (nav,
+chat-history actions, agents dropdown, responsive collapse) and the DeepGenome
+markdown parser extracted into a tested module. Backend `register`/`user`/
+`agent_task` files split by responsibility (permission handlers, user-credential
+methods, EIHealth/Bot reconcilers).
 
-## 🔒 Security fixes
+### 🔒 Security fixes
 
 - **Stop serializing the password hash** in `UserResponse`.
 - **Escape analyst-log content before `v-html`** in the chat view.
-- **Escape image-caption markdown before `v-html`** in `DeepGenomeResultViewer`.
 
-## 🧪 Tests
+### 🧪 Tests
 
 - Coverage gated on the fully-tested P1 composables/utils; `useSelectChat`
   capture-safety locked against mid-fetch chat switch; agents-panel
@@ -162,14 +294,55 @@ reference-renderer,citation}` modules. Tutorial keydown leak fixed on unmount;
   floor; ratelimit integration; unique-email migration; agent-canonical drift
   guard; 504 mapping.
 
-## 📝 Docs
+### 📝 Docs
 
-- Deployment docs synced to new layout/ports/DB name; **agent naming
-  convergence operator runbook** added; API docs refreshed for `/api/v1`.
+- **`main` → `repo-reorg` deployment & upgrade manual added**
+  ([`docs/deployment/history/repo-reorg-cutover.md`](docs/deployment/history/repo-reorg-cutover.md)):
+  DB/table rename, port move, `/api/v1` nginx location, Redis blocks, cutover
+  order, rollback. Agent-naming convergence operator runbook added; API docs
+  refreshed for `/api/v1`.
+
+---
+
+## [0.1.0] — 2026-06-16
+
+Frontend chat-view decomposition baseline plus dead-code and early-security
+hardening — the groundwork the `0.1.1` infrastructure release built on. No
+operator action; behavior-compatible.
+
+### ♻️ Frontend decomposition (chat view split)
+
+The monolithic chat view was decomposed into tested composables / co-located
+modules: `useChatStates`, `useSelectChat`, `useSendMessage`, `useRefreshMessage`,
+`useFileUpload`, `useCopyDownload`, `useReactions`, `useAgentImages`,
+`useAgentsPanel`, `useComposer`, `useLogView`, `useTutorial`, `useImageZoomPan`,
+plus a sidebar chat-history date-grouping composable. DeepGenome split into
+`useDeepGenomeDownloads`, image viewer, table-of-contents, and tested
+`@/utils/{markdown-inline,reference-renderer,citation}` modules. Tutorial keydown
+leak fixed on unmount; `/undefined/` asset path guarded when `.env.production`
+missing; util filenames normalized to kebab-case.
+
+### 🔥 Dead-code removal
+
+- **Unreferenced scaffold + dead fork components** deleted; the **Pinia counter
+  demo store** dropped; the commented-out legacy `ApiQueryList` query and dead
+  `index`/`user-info` handlers removed; orphaned imports/comments from the
+  decomposition swept.
+
+### 🔒 Security fixes
+
+- **Escape image-caption markdown before `v-html`** in `DeepGenomeResultViewer`.
+
+### 🧪 Tests
+
+- Analyst image fallback-listing containment path covered; `useSelectChat`
+  capture safety locked against a mid-fetch chat switch.
 
 ---
 
 ### Verification
 
-Local gate `./scripts/validate_web_local.sh` (12 G-checks) is green on the
-branch tip; the same gate runs in CI on PRs and pushes to `main`.
+Local gate `./scripts/validate_web_local.sh` (13 G-checks: gofmt, go vet, go
+build, `go test ./...`, vue-tsc, vite build, eslint, vitest coverage, secret
+scan, SET_LOGIN_STATUS invariant, G13 i18n hardcoded-copy scanner) is green at
+the `0.1.2` tip; the same gate runs in CI on every PR and push to `main`.
