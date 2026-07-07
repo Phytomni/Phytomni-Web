@@ -1,0 +1,164 @@
+# Configuration reference (`app.yml` + environment)
+
+**Evergreen — describes the config surface as of the current release (`0.1.2`).**
+This is the single source of truth for *what every key does*. The per-release
+[`upgrading.md`](upgrading.md) and the archived cutover manuals under
+[`history/`](history/) reference this file instead of re-documenting keys — when a
+release adds or changes a key, update it **here**.
+
+Config is loaded by Viper from `apps/server/config/app.yml` (copy from
+`app.yml.example`; git-ignored, keep it out of VCS and not world-readable).
+Secrets are placeholders — substitute real values out-of-band on the server.
+
+## Target topology & ports
+
+| Component | Port | Role |
+|---|---|---|
+| nginx | `:443` (TLS) | TLS termination + reverse proxy by path + serves the SPA |
+| Go service (`phytomni-server`) | `:8080` | `/api/v1/*` + retained alias `/query/analyst/update_log`. Sole MySQL writer |
+| Bot | `:8000` (internal) | Go relays chat here; deployed by the Bot team |
+| MySQL | `:3306` | `phytomni` database |
+| Redis | `:6379` | Token revocation + rate limit + OBS listing cache (all fail-open) |
+
+## Secret injection from the environment (optional)
+
+Three secrets can be injected from the environment instead of `app.yml`, for
+12-factor / secret-manager delivery. **When the env var is unset, the `app.yml`
+value wins** — leaving the environment untouched keeps file-based config
+byte-identical. Do **not** set an empty value (an empty `PHYTOMNI_JWT_SECRET`
+overrides the file with a blank secret).
+
+| Env var | Overrides | Mechanism |
+|---|---|---|
+| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | `viper.BindEnv` |
+| `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
+| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
+
+## `app.yml` blocks
+
+### `db` — MySQL (critical)
+
+```yaml
+db:
+  phytomni-server:                       # connection-registry key (must match)
+    dialect: mysql
+    dsn: "<DB_USER>:<DB_PASSWORD>@tcp(<PROD_DB_HOST>:3306)/phytomni?charset=utf8mb4&parseTime=True&loc=Local"
+```
+
+The `phytomni` database and its unprefixed-plural tables must exist before boot
+(created by the `0.1.1` cutover — see [`history/repo-reorg-cutover.md`](history/repo-reorg-cutover.md) §5).
+
+### `jwt` — token signing (critical)
+
+```yaml
+jwt:
+  secret_key: "<JWT_SECRET>"           # e.g. openssl rand -hex 32
+```
+
+Verification is pinned to HS256 (`0.1.2`). Keep the secret stable across
+deploys so issued tokens stay valid. Overridable via `PHYTOMNI_JWT_SECRET`.
+
+### `redis` — user/product layer (critical; fail-open)
+
+```yaml
+redis:
+  enabled: true                # default true = secure path; false ⇒ all Redis features fail-open
+  clients:
+    web:
+      addrs: ["<REDIS_HOST>:6379"]
+      db: 0
+      password: <REDIS_PASSWORD>   # empty if none; overridable via PHYTOMNI_REDIS_PASSWORD
+      type: single-node
+      # pool_size: 0             # 0 = go-redis default (10 * CPU cores)
+      # min_idle_conns: 0        # 0 = go-redis default
+  default: web
+```
+
+Backs token revocation, rate limiting, and the OBS listing cache. **Every Redis
+feature fail-opens** — a Redis outage degrades those features but never blocks
+boot or auth. `/readyz` reports Redis status + the fail-open count.
+
+### `ratelimit` — anti-abuse (dark-launched OFF)
+
+```yaml
+ratelimit:
+  enabled: false               # master switch; default OFF (dark launch)
+  login:    { limit: 60, window: 60s }    # per-IP on /auth/sessions
+  register: { limit: 10, window: 1h  }    # per-IP on /auth/registrations
+  query:    { limit: 30, window: 60s }    # per-user on /query
+```
+
+Leave `false` for zero behavior change. Redis down ⇒ always allow (auth never
+degrades). Flip after confirming limits suit your traffic.
+
+### `obscache` — gene-download listing cache (default ON; fail-open)
+
+```yaml
+obscache:
+  enabled: true
+  ttl: 1h
+```
+
+Benign optimization. Cache boundary = security boundary (ownership checked
+before the cache; only raw keys cached, never signed URLs; only `SUCCEEDED` +
+non-empty results). Set `false` to bypass without affecting revocation/ratelimit.
+
+### `chatlimit` — invitation quota gate (dark-launched OFF)
+
+```yaml
+chatlimit:
+  enforce: false               # ON ⇒ self-registered users (chat_limit=0) blocked from /query
+```
+
+`false` = everyone can chat. Flip `true` only when the invitation-quota model is
+active. Bypass for `admin`/`super_admin`/`vip_user`; fail-open on DB error.
+`guest_default_chat_limit` (default 5) sets the quota for new self-registrations.
+
+### `bot` — Bot relay (critical)
+
+```yaml
+bot:
+  base_url: "http://<BOT_HOST>:8000"
+  user_api_key: "<PTM_WEB_KEY>"          # mint/rotate per operations.md §1–3
+  timeout_seconds: 900                   # MUST exceed the slowest SYNC agent (chat ~140s / knowledge ~198s / review >300s)
+  proxy_enabled: true
+  key_audit_redact: true
+  expert_enabled: false                  # dark-launch: Expert routing (operations.md §11.1)
+  stream_enabled: false                  # dark-launch: AG-UI SSE streaming (operations.md §11.2)
+  max_upload_file_bytes: 26214400        # 25 MiB per file (matches Bot /v1/files 413)
+  max_upload_file_count: 10
+  max_upload_total_bytes: 52428800       # 50 MiB per request
+```
+
+The `ptm_<web>` key must carry the `agents` and `relay:obs` scopes; the Bot must
+run with `RELAY_ENABLED=true` or relay downloads 404. See
+[`operations.md`](operations.md).
+
+### `gene_obsfs_path` — gene-example serving
+
+```yaml
+gene_obsfs_path: ""   # obsfs FUSE mount root; empty ⇒ Bot relay fallback
+```
+
+Set to the mount root (e.g. `/obs/<bucket>/.../gene-examples`) to serve gene
+list/detail/images from obsfs (`0.1.2`); empty falls back to the Bot relay.
+
+### Other keys
+
+- `bcrypt_cost: 10` — allowed range `[10,31]`; the server refuses to boot outside
+  it. Do not raise without measuring login p99 on production hardware.
+- `app.trusted_proxies`, `http.{gzip,maintenance,switch}`, `cron.switch`,
+  `log.outputs`, `debug` — operational tuning; defaults are safe.
+
+### Orphan blocks — `email:` and `huawei:` (no consumer; safe to delete)
+
+As of `0.1.2` **neither block has a live consumer**:
+
+- **`email:`** — the SMTP package (`common/email/`) was removed in `0.1.1` (zero
+  importers). The block is dead config.
+- **`huawei:`** — the Web side no longer talks to Huawei IAM/EIHealth directly
+  (async reconciliation goes through the Bot). Dead config on the Web side. (The
+  Bot still holds Huawei OBS credentials — unchanged.)
+
+Both are **safe to leave** (nothing reads them) or delete for a clean config. No
+behavioral impact either way.

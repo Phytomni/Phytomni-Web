@@ -222,7 +222,7 @@ func Migrate() *cli.Command {
 			{
 				Name:        "add-image-paths",
 				Usage:       "add the image_paths column to question_agent_logs",
-				Description: "Add the nullable image_paths text column (gallery image OBS paths, stored as a JSON array). Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual (see docs/web-production-deployment-manual.md §5.3). Without this column every /query returns 500 (Unknown column 'image_paths').",
+				Description: "Add the nullable image_paths text column (gallery image OBS paths, stored as a JSON array). Idempotent — no-op if it already exists. Dev/CI fresh-schema only; production DDL stays manual (see docs/deployment/history/python-to-go-cutover.md §5.3). Without this column every /query returns 500 (Unknown column 'image_paths').",
 				Action: func(ctx *cli.Context) error {
 					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
 						"ALTER TABLE question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT 'gallery image OBS paths (JSON array)' AFTER download_path")

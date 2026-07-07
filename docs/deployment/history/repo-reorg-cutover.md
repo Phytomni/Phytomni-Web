@@ -1,20 +1,30 @@
-# Phytomni Web — Production Deployment & Upgrade Manual (`main` → `chore/repo-reorg`)
+# Phytomni Web — `0.1.1` Cutover (`main` → `chore/repo-reorg`) — ARCHIVED
 
-This manual takes the **currently-deployed production stack** — which is
-`main` tip (`520c97a`) — to the **`chore/repo-reorg` branch** (`90bb4ab`,
-137 commits, 2026-06-16 → 2026-06-27). It is an in-place upgrade guide for
-the ops team: what changed, the exact steps, the cutover order, how to verify,
-how to roll back.
+> **📦 ARCHIVED — historical record + rollback reference only.** This is the
+> point-in-time cutover that took production **to `0.1.1`**, and production is
+> **already running it**. It lives under `history/` because it is frozen: read it
+> to understand how production reached its current layout, to rebuild from
+> scratch, or to **roll `0.1.1` back** (the 11-table `RENAME` reversal SQL in §10
+> is the only place that rollback is written down). It is **not** pending work and
+> is **not** the doc for the next upgrade.
+>
+> - **Upgrading a `0.1.1` production to `0.1.2`?** → **[`upgrading.md`](../upgrading.md)** (the only doc you need).
+> - **Not on `0.1.1` yet?** → do the §1–§11 cutover below.
+> - Lost? → [`README.md`](../README.md) routes by production version.
 
-> **Read this first — scope correction.** The older
-> [`web-production-deployment-manual.md`](web-production-deployment-manual.md)
+This manual takes the pre-`0.1.1` production stack — `main` tip (`520c97a`) —
+to the **`chore/repo-reorg` branch** (`90bb4ab`, 137 commits,
+2026-06-16 → 2026-06-27): what changed, the exact steps, the cutover order, how
+to verify, how to roll back.
+
+> **Scope correction.** The older
+> [`python-to-go-cutover.md`](python-to-go-cutover.md)
 > describes the *original* Python→Go/Bot migration (Python retirement, bcrypt,
 > first-login gate, Bot wiring, OBS relay). **That migration is already live in
-> production** (production runs `main`, which carries all of it). This document
-> covers **only the `main` → `repo-reorg` delta** — layout/module/table/port
-> renames, the `/api/v1` RESTful sweep, Redis subsystem, auth hardening, dead
-> code, and chat UX. Do not re-run the Python-retirement or bcrypt steps from
-> the older manual; they are done.
+> production** too. This document covers **only the `main` → `repo-reorg` delta** —
+> layout/module/table/port renames, the `/api/v1` RESTful sweep, Redis subsystem,
+> auth hardening, dead code, and chat UX. Do not re-run the Python-retirement or
+> bcrypt steps from the older manual; they are done.
 
 **Headline changes (operator must act on each):**
 
@@ -53,9 +63,9 @@ real values, never paste them into tickets or logs.
 (not in any repo) are marked **(verify on-server)** — confirm in place.
 
 **Companion documents.**
-- [`web-production-deployment-manual.md`](web-production-deployment-manual.md) — the *original* Python→Go/Bot migration manual (already live; reference only).
-- [`bot-cutover-ops-runbook.md`](bot-cutover-ops-runbook.md) — Bot key mint/rotation/staged-cutover/rollback (already done; reference only).
-- [`../../CHANGELOG.md`](../../CHANGELOG.md) — full commit-level changelog for this release.
+- [`python-to-go-cutover.md`](python-to-go-cutover.md) — the *original* Python→Go/Bot migration manual (already live; reference only).
+- [`operations.md`](../operations.md) — Bot key mint/rotation/staged-cutover/rollback (already done; reference only).
+- [`CHANGELOG.md`](../../../CHANGELOG.md) — full commit-level changelog for this release.
 
 **Contents.**
 1. [What changed](#1-what-changed-vs-the-current-production-stack)
@@ -69,6 +79,7 @@ real values, never paste them into tickets or logs.
 9. [Verification & smoke](#9-verification--smoke)
 10. [Rollback](#10-rollback)
 11. [Degraded mode & known gotchas](#11-degraded-mode--known-gotchas)
+12. [`0.1.2` layer — see the dedicated upgrade doc](#12-012-layer--see-the-dedicated-upgrade-doc)
 
 ---
 
@@ -381,33 +392,22 @@ team before any removal.
 > `AutoMigrate` for dev/CI fresh schemas only; production DDL stays manual
 > (the statements above).
 
-### 5.6 Expert chat mode `mode` column + flag — PENDING (future feature, additive)
+### 5.6 Expert chat mode `mode` column + flag — moved to the `0.1.2` upgrade doc
 
-> **Not part of this release's cutover.** The Instant/Expert chat-mode selector
-> ships with Expert **dark** (`bot.expert_enabled` defaults `false`). Do these
-> steps only when turning Expert on — and only **after** the Bot
-> `POST /v1/query/route` endpoint is deployed.
+> The Instant/Expert `mode` column and `bot.expert_enabled` flag landed in
+> **`0.1.2`**, after this cutover. The authoritative steps (column DDL +
+> activation order) now live in
+> [`upgrading.md`](../upgrading.md) §3.2 / §7.1 — kept
+> there so the SQL has a single source of truth. Nothing to do for the `0.1.1`
+> cutover.
 
-The gateway adds an additive `question_agent_logs.mode` column (plain
-`ADD COLUMN`, default-covered, online, rollbackable) and a `bot.expert_enabled`
-config flag. To enable Expert, in order:
+### 5.7 Permission-key rename — moved to the `0.1.2` upgrade doc
 
-1. Add the column (existing rows get the default `'instant'`):
-
-   ```sql
-   ALTER TABLE question_agent_logs
-     ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'instant';
-   ```
-
-2. Deploy the Bot `POST /v1/query/route` endpoint (Bot work-order; out of scope
-   for this repo).
-
-3. Set `bot.expert_enabled: true` in the live `config/app.yml` and restart the
-   Go service. (`app.yml.example` already documents the key under the `bot:`
-   block, default `false`.)
-
-Until all three are done Expert stays dark: the SPA disables the Expert pill and
-the gateway returns **503** for any `mode=expert` request — no Bot call.
+> The `tool_names` Chinese→English permission-identifier migration is a
+> **`0.1.2`** change (it ships with the `0.1.2` frontend). The authoritative
+> 8-row `UPDATE` + the "ship together or the admin UI breaks" warning now live in
+> [`upgrading.md`](../upgrading.md) §3.1. Nothing to do for
+> the `0.1.1` cutover.
 
 ---
 
@@ -641,10 +641,25 @@ roll back:
 
 ---
 
+## 12. `0.1.2` layer — see the dedicated upgrade doc
+
+The `0.1.2` release (2026-06-28 → 2026-07-06) layers on top of this `0.1.1`
+cutover. Its operator steps are **additive or dark-launched** — no DB/table
+rename, no port move. They are **not** documented here; the authoritative,
+self-contained runbook is:
+
+**→ [`upgrading.md`](../upgrading.md)**
+
+That doc carries the permission-key migration, the optional config keys, the
+smoke additions, and the Expert/streaming activation gates. Full commit-level
+detail is in [`CHANGELOG.md`](../../../CHANGELOG.md) under `0.1.2`.
+
+---
+
 ## Appendix — what this release does NOT re-do
 
 The following were done in the **prior** migration (already live in
-production, described in [`web-production-deployment-manual.md`](web-production-deployment-manual.md))
+production, described in [`python-to-go-cutover.md`](python-to-go-cutover.md))
 and are **not** re-applied here:
 
 - Python chat service retirement (`/query` already relayed to Bot).

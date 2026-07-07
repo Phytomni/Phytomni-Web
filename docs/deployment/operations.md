@@ -1,14 +1,21 @@
-# Bot Cutover Ops Runbook
+# Bot & operations runbook
 
-Operator procedures for the Web Go ↔ Phytomni-Bot `/query` cutover
-(candidate-A: Web Go is the single gateway, Bot is internal-only). All
-examples are scrubbed — never paste real keys, tokens, or DSNs into this
-file or into commits.
+**Evergreen — the recurring Web ↔ Phytomni-Bot operational procedures** that stay
+valid across releases: Bot key mint/rotation, the dark-launch activation gates
+(Expert, streaming), degraded-mode behavior, and rollback. All examples are
+scrubbed — never paste real keys, tokens, or DSNs into this file or into commits.
+
+> **What's evergreen vs one-time here.** §1–§5 (service token, key mint, 90-day
+> rotation, topology, real-user isolation), §9 (degraded mode), and §11
+> (dark-launch activation gates) are **ongoing** — you will run them repeatedly.
+> §6–§8 and §10 (the original `/query` cutover, ETL trigger, post-cutover Huawei
+> cleanup) describe the **one-time Python→Go cutover that is already done**; they
+> are kept as reference alongside [`history/python-to-go-cutover.md`](history/python-to-go-cutover.md).
 
 Architecture reference: the internal Web↔Bot target-architecture document (maintained separately, not in this repo).
 The gateway is dormant until `bot.proxy_enabled=true`.
 
-> **⚠️ API path reorganization (RESTful `/api/v1`):** async result write-back has moved to `PATCH /api/v1/async-tasks/analyst-log`; the Bot currently still calls the old `POST /query/analyst/update_log`, which stays served as an alias on the Go side and will be removed by ops once the Bot is backported to the new path. Where the text below references old `/query/...` paths, the new contract takes [`API_DOC.md`](../API_DOC.md)'s `/api/v1` as authoritative.
+> **⚠️ API path reorganization (RESTful `/api/v1`):** async result write-back has moved to `PATCH /api/v1/async-tasks/analyst-log`; the Bot currently still calls the old `POST /query/analyst/update_log`, which stays served as an alias on the Go side and will be removed by ops once the Bot is backported to the new path. Where the text below references old `/query/...` paths, the new contract takes [`API_DOC.md`](../../apps/server/API_DOC.md)'s `/api/v1` as authoritative.
 
 ## 1. Bot service token (ops-only)
 
@@ -168,3 +175,44 @@ Two windows, matching the staged §6:
   reconciled and can be marked failed, e.g.
   `UPDATE question_agent_logs SET status='FAILED' WHERE status='RUNNING' AND (bot_run_id IS NULL OR bot_run_id='') AND created_at < '<cutover-date>';`
   Run only after confirming such rows exist and are genuinely stale.
+
+## 11. `0.1.2` dark-launched features — Bot-coordination activation gates
+
+Two `0.1.2` chat features ship **dark** on the Web side (default-OFF flags,
+byte-identical to today until flipped). Each flip requires a matching Bot-side
+capability **first**, or the feature breaks on activation. Both are Web↔Bot
+coordination points — keep them here so the Bot team and ops flip in lockstep.
+
+### 11.1 Expert routing mode (`bot.expert_enabled`)
+
+- **Web state:** the Instant/Expert selector and the `mode` column are live but
+  dark (`bot.expert_enabled=false`). Instant is unaffected; any `mode=expert`
+  request returns **503** while dark.
+- **Bot precondition to flip ON:** the Bot must serve
+  **`POST /v1/query/route`** (the blocking Expert routing endpoint). Expert never
+  streams — it is a blocking call regardless of the streaming flag below.
+- **Activation order:** (1) Bot deploys `/v1/query/route`; (2) ops adds the
+  `question_agent_logs.mode` column (repo-reorg manual §5.6); (3) ops sets
+  `bot.expert_enabled=true` and restarts Web Go. Rollback = flip the flag back
+  (instant; the column is additive and harmless).
+
+### 11.2 AG-UI SSE streaming (`bot.stream_enabled` + `VITE_STREAM_ENABLED`)
+
+- **Web state:** the streaming spine (Go tee-forward + `useStreamMessage`) is
+  complete but dark. With `bot.stream_enabled=false`, `/query` keeps the blocking
+  ChatCompletion path byte-for-byte.
+- **⚠️ Bot precondition to flip ON (load-bearing):** the Bot must persist the
+  **real accumulated answer** in its run record — not the `"[streamed]"`
+  placeholder. The persisted `bot_run_id` is the Bot run-**registry** id from the
+  `RunStarted` frame, which is what makes a streamed chat row overlay-matchable on
+  reload. **If the flag is flipped before Bot persists the real answer, reloading
+  a streamed conversation overwrites the real answer with the placeholder.**
+- **Activation order:** (1) Bot ships real-answer persistence in the run record;
+  (2) ops sets `bot.stream_enabled=true` **and** the frontend `VITE_STREAM_ENABLED`
+  in lockstep (a mismatch either leaves streaming dead or points a streaming SPA at
+  a blocking gateway); (3) smoke a streamed chat + reload to confirm the persisted
+  answer survives. Rollback = flip both flags back (instant; the blocking path is
+  unchanged underneath).
+- **Scope:** streaming is Instant×chat only. Expert (§11.1) and analyst/deep_genome
+  async stay non-streaming.
+

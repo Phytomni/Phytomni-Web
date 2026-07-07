@@ -1,13 +1,40 @@
-# Phytomni Web — Production Deployment & Upgrade Manual
+# Phytomni Web — Python→Go/Bot Migration (baseline) — ARCHIVED
 
-This manual takes the **currently-deployed production Web stack** to **this release**. It is an in-place upgrade guide for the ops team: it lists what changed, the exact steps to apply each change, the cutover order, how to verify, and how to roll back.
+> **📦 ARCHIVED — historical record + rollback reference only.** This is the
+> earliest point-in-time cutover: it retired the legacy Python chat service, made
+> the Go service the sole `/query` gateway relaying to the Bot, and moved auth to
+> bcrypt. **It is already live in production** (it is the baseline every later
+> release builds on). It lives under `history/` because it is frozen — read it to
+> understand the baseline, to rebuild from scratch, or to roll the baseline back.
+> It is **not** pending work.
+>
+> - **Upgrading a `0.1.1` production to `0.1.2`?** → [`upgrading.md`](../upgrading.md).
+> - **Getting to `0.1.1` from the pre-`apps/` layout?** → [`repo-reorg-cutover.md`](repo-reorg-cutover.md).
+> - Lost? → [`README.md`](../README.md) routes by production version.
+
+This manual takes the pre-baseline production Web stack to the **Python-retirement
+release**: what changed, the exact steps to apply each change, the cutover order,
+how to verify, and how to roll back.
 
 The headline change: **the legacy Python chat service is retired. The Go service becomes the sole `/query` gateway and relays chat traffic to the Bot.** The Bot is deployed and operated by a separate team — this manual covers only the **Web side** of that integration (URL, key, ports, boot check, relay routes) and links the Bot's own deployment doc where Bot bring-up is needed.
 
-> **⚠️ This release includes an API path reorganization (RESTful `/api/v1`):** the Go business API has been consolidated under the RESTful `/api/v1` prefix (both verbs and resource paths change); the authoritative mapping is in [`API_DOC.md`](../API_DOC.md). Ops notes:
+> **⚠️ This release includes an API path reorganization (RESTful `/api/v1`):** the Go business API has been consolidated under the RESTful `/api/v1` prefix (both verbs and resource paths change); the authoritative mapping is in [`API_DOC.md`](../../../apps/server/API_DOC.md). Ops notes:
 > - **The nginx reverse proxy must add an `/api/v1` location** pointing at the Go service; the frontend only calls `/api/v1`, and the old `/auth`, `/v1`, `/query` frontend surfaces are retired.
 > - **Cross-boundary legacy alias remains temporarily**: the Bot still calls `POST /query/analyst/update_log` — this old route stays served as an alias on the Go side, to be removed by ops after the Bot is backported. (The former `/v1/nky/server/*` external server entry point was removed — confirmed to have no real external caller; external server clients call Bot, not Go.)
 > - If the curl/nginx examples below still reference old paths, the new contract always takes `API_DOC.md`'s `/api/v1` as authoritative; a full operations-level path reconciliation lands together with this release at cutover.
+
+> **Version anchor.** This manual is the **Python→Go/Bot migration baseline** — the
+> release that retired the Python chat service, moved `/query` onto Go, and put
+> auth on bcrypt. **It is already live in production.** Two later releases layer on
+> top and are documented separately:
+> - **`0.1.1`** (repo re-layout, `/api/v1`, Redis, auth hardening) →
+>   [`repo-reorg-cutover.md`](repo-reorg-cutover.md) §1–§11.
+> - **`0.1.2`** (i18n, Instant/Expert dark, streaming dark, gene obsfs, backend
+>   hardening) → [`upgrading.md`](../upgrading.md), plus [`CHANGELOG.md`](../../../CHANGELOG.md).
+>
+> Read this document only to confirm the baseline is in place (or to rebuild it
+> from scratch); for a production already on the baseline, go straight to the
+> repo-reorg manual.
 
 ---
 
@@ -22,7 +49,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 **Verify-on-server markers.** A few facts live only on the production server and are **not** in any repo. They are marked **(verify on-server)** below — confirm them in place rather than assuming.
 
 **Companion documents.**
-- [`bot-cutover-ops-runbook.md`](bot-cutover-ops-runbook.md) — the detailed Bot key mint / 90-day rotation / staged-cutover / rollback procedure. This manual references it instead of duplicating it.
+- [`operations.md`](../operations.md) — the detailed Bot key mint / 90-day rotation / staged-cutover / rollback procedure. This manual references it instead of duplicating it.
 - [`Phytomni-Bot/docs/deployment.md`](https://github.com/Phytomni/Phytomni-Bot/blob/main/docs/deployment.md) — how the Bot team brings the Bot up (out of scope here).
 
 **Contents.**
@@ -184,6 +211,22 @@ Confirm whether the database is co-located (`localhost`) or stays on its externa
 - `app.trusted_proxies`, `http.gzip`, `http.maintenance` — optional tuning; defaults are safe.
 - **OBS credentials are removed from the Web config** — they live on the Bot now. Revoke any lingering Web-side Huawei OBS access key/secret **after** soak.
 
+### 4.7 Environment-variable secret injection — OPTIONAL (`0.1.2`+)
+
+As of `0.1.2`, three secrets can be injected from the environment instead of
+`app.yml`, for 12-factor / secret-manager delivery:
+
+| Env var | Overrides | Mechanism |
+|---|---|---|
+| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | `viper.BindEnv` |
+| `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
+| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
+
+**When the env var is unset, the `app.yml` value wins** — so leaving the
+environment untouched keeps the file-based config above byte-identical. Set these
+only if you want secrets out of `app.yml`; do not set an empty value (an empty
+`PHYTOMNI_JWT_SECRET` would override the file with a blank secret).
+
 ---
 
 ## 5. Database migration
@@ -316,7 +359,7 @@ curl -X POST <BOT_BASE_URL>/v1/api-keys \
   -d '{"user_id":"web","name":"chat-ai-web-app"}'
 ```
 
-Put the returned `ptm_…` value into `bot.user_api_key`. The key **must** carry the `agents` and `relay:obs` scopes (the Bot denies relay routes to scope-less keys), and the Bot must run with `RELAY_ENABLED=true`. See runbook [§2](bot-cutover-ops-runbook.md). Rotate every ~90 days per runbook [§3](bot-cutover-ops-runbook.md).
+Put the returned `ptm_…` value into `bot.user_api_key`. The key **must** carry the `agents` and `relay:obs` scopes (the Bot denies relay routes to scope-less keys), and the Bot must run with `RELAY_ENABLED=true`. See runbook [§2](../operations.md). Rotate every ~90 days per runbook [§3](../operations.md).
 
 ### 7.2 Boot-time agent validation (fail-fast)
 
@@ -348,7 +391,7 @@ The handler maps service errors to HTTP status:
 
 ### 7.5 Real-user isolation stays in Web
 
-The Bot sees a single principal (`user_id="web"`). Real per-user isolation lives entirely in the Go service: every read/write is filtered by the JWT-resolved `user_name`, never by a client-supplied id. See runbook [§5](bot-cutover-ops-runbook.md).
+The Bot sees a single principal (`user_id="web"`). Real per-user isolation lives entirely in the Go service: every read/write is filtered by the JWT-resolved `user_name`, never by a client-supplied id. See runbook [§5](../operations.md).
 
 ---
 
@@ -416,7 +459,7 @@ Staged: steps 1–7 are **reversible**; step 9 is **irreversible**. Do not do st
 8. **Soak** for your standard window, watching `/query` error rates.
 9. **Irreversible cleanup** (only if smoke + soak are green): decommission the Python service (its systemd unit) and revoke the Web-side Huawei OBS credentials.
 
-See runbook [§6](bot-cutover-ops-runbook.md) for the staged-cutover detail.
+See runbook [§6](../operations.md) for the staged-cutover detail.
 
 ---
 
@@ -438,7 +481,7 @@ See runbook [§6](bot-cutover-ops-runbook.md) for the staged-cutover detail.
 1. Set `bot.proxy_enabled: false` and restart Go.
 2. Repoint nginx `/query` back to the Python service and `systemctl reload nginx`.
 
-That is an instant revert with **no DB or code rollback needed** — `/query` returns to the Python path and the rest of the Go service keeps serving. See runbook [§8](bot-cutover-ops-runbook.md).
+That is an instant revert with **no DB or code rollback needed** — `/query` returns to the Python path and the rest of the Go service keeps serving. See runbook [§8](../operations.md).
 
 - **Frontend:** restore the dated `dist` backup and reload nginx.
 - **Go binary:** redeploy the previous binary. **bcrypt point-of-no-return:** the old binary only understands MD5, so any account that already logged in under the new binary (and was lazily upgraded to `$2…`) can no longer authenticate against the old binary and is locked out. If you must roll the binary back after bcrypt rows exist, restore the §5.6 `s_user` snapshot for the affected rows — a binary-only rollback is **not** sufficient.
@@ -448,14 +491,14 @@ That is an instant revert with **no DB or code rollback needed** — `/query` re
 
 ## 12. Degraded mode & known gotchas
 
-- **Bot down (with `proxy_enabled: true`).** `/query` returns 503 immediately; existing conversation history still renders (it reads MySQL legacy fields and makes no Bot call). To restore service before the Bot is back, fall back to the Python path (§11). See runbook [§9](bot-cutover-ops-runbook.md).
+- **Bot down (with `proxy_enabled: true`).** `/query` returns 503 immediately; existing conversation history still renders (it reads MySQL legacy fields and makes no Bot call). To restore service before the Bot is back, fall back to the Python path (§11). See runbook [§9](../operations.md).
 - **Slow RAG / upstream rerank.** A slow retrieval/rerank upstream can push a sync agent past `bot.timeout_seconds`, surfacing as a user 500. Keep `timeout_seconds` ≥900 and watch `/query` error rates; raise it if a heavy agent runs longer.
 - **First-login gate must ship backend + frontend together.** The backend gate allows first-login users only to `/api/v1/users/me/password`; the frontend guard skips its tool-probe for that route. Deploy the Go service and the frontend in the **same** release — the backend gate alone locks first-login users out of the only page that clears the flag.
 - **bcrypt lazy upgrade.** Legacy MD5 password hashes upgrade to bcrypt on the user's next successful login — no forced resets. Monitor upgrade success for a few weeks after deploy.
 
 ### Appendix — companion docs
 
-- [`bot-cutover-ops-runbook.md`](bot-cutover-ops-runbook.md) — Bot key mint/rotation, staged cutover, rollback, degraded mode (detailed).
+- [`operations.md`](../operations.md) — Bot key mint/rotation, staged cutover, rollback, degraded mode (detailed).
 - [`Phytomni-Bot/docs/deployment.md`](https://github.com/Phytomni/Phytomni-Bot/blob/main/docs/deployment.md) — Bot bring-up (separate team).
 
 ## Agent naming convergence (operator runbook)
