@@ -53,6 +53,8 @@ apps/web/.env.staging
 bin/
 pkg/
 go/pkg/mod/
+# compiled server binary (`go build -o phytomni-server .`)
+apps/server/phytomni-server
 
 # ---- Python (repo-wide tooling: scripts/ + pyproject.toml) ----
 # Virtual environments

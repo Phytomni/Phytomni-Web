@@ -85,7 +85,9 @@ func (ps *Service) GetUserToolPermission(ctx context.Context, email string) ([]s
 	model.DB(ctx).Model(&model.User{}).Debug().Where("email =?", email).First(&user)
 
 	var UserToolName []*model.UserToolName
-	model.DB(ctx).Model(&model.UserToolName{}).Debug().Where("code =?", user.Code).Find(&UserToolName)
+	// Order by tool_id so tool_list / permission_list follow tool_names.id
+	// (the canonical agent order), not the grant-row insertion order.
+	model.DB(ctx).Model(&model.UserToolName{}).Debug().Where("code =?", user.Code).Order("tool_id").Find(&UserToolName)
 
 	var ToolList []string
 	var permissionList []string
@@ -93,7 +95,9 @@ func (ps *Service) GetUserToolPermission(ctx context.Context, email string) ([]s
 		var ToolName *model.ToolName
 		db := model.DB(ctx).Model(&model.ToolName{}).Debug().Where("id =?", v.ToolId)
 		db.First(&ToolName)
-		if ToolName.Id <= 9 {
+		// ids 1-10 are the chat agents (see tool_names seed); 11+ are UI/menu
+		// permission keys.
+		if ToolName.Id <= 10 {
 			ToolList = append(ToolList, ToolName.ToolName)
 		} else {
 			permissionList = append(permissionList, ToolName.ToolName)
