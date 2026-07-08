@@ -53,6 +53,7 @@ export default defineConfig({
         "src/views/forgot-password/index.vue",
         "src/utils/citation.ts",
         "src/utils/markdown-inline.ts",
+        "src/utils/sanitizer-diff.ts",
         "src/utils/reference-renderer.ts",
         "src/views/chat/utils/message-parse.ts",
         "src/views/chat/utils/starterPrompts.ts",
