@@ -1014,6 +1014,13 @@
               </div>
             </div>
           </div>
+          <Prompts
+            class="empty-chat-starters"
+            :title="$t('chat.starter.title')"
+            :items="starterItems"
+            wrap
+            @item-click="onStarterClick"
+          />
           <ChatModeSelector
             v-model="chatMode"
             :expert-enabled="expertModeEnabled"
@@ -1351,7 +1358,7 @@
 <script setup lang="ts">
 import { onMounted, ref, nextTick, watch, computed } from "vue";
 import Sidebar from "./sidebar.vue";
-import { MentionSender } from "vue-element-plus-x";
+import { MentionSender, Prompts } from "vue-element-plus-x";
 import SendProgress from "./components/SendProgress.vue";
 import StreamMessage from "./components/StreamMessage.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
@@ -1398,6 +1405,7 @@ import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
+import { STARTER_PROMPTS, applyStarterPrompt } from "@/views/chat/utils/starterPrompts";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import { isValidPendingRecord, matchesChat, safeParse } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
@@ -1677,6 +1685,23 @@ const {
   refreshingMessages,
   updatingLog,
 } = useChatStates();
+
+// Starter prompt cards — computed so labels/descriptions react to locale changes
+const starterItems = computed(() =>
+  STARTER_PROMPTS.map((p) => ({
+    key: p.key,
+    label: t(p.labelKey),
+    description: t(p.descKey),
+  })),
+);
+
+const onStarterClick = (item: { key: string | number }) => {
+  const prompt = STARTER_PROMPTS.find((p) => p.key === item.key);
+  if (!prompt) return;
+  applyStarterPrompt(prompt, t, (text) => {
+    messageInput.value = text;
+  });
+};
 
 // Copy conversation + file download
 const { fallbackCopyText, downloadFile, getFileDownUrl } =

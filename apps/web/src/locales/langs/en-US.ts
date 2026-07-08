@@ -339,6 +339,18 @@ export default {
     reasoning: { show: "Show reasoning", hide: "Hide reasoning" },
     welcomeSubtitle:
       "I can retrieve information and perform automated analysis for you. Feel free to give me your tasks.",
+    starter: {
+      title: "Try one of these",
+      geneLabel: "Query a gene",
+      geneDesc: "Function and homologs of a gene",
+      genePrompt: "Tell me about the function and homologs of gene Os01g0177400",
+      speciesLabel: "Explore a species",
+      speciesDesc: "Key genes and pathways of a species",
+      speciesPrompt: "Which key genes are involved in drought resistance in rice?",
+      deepGenomeLabel: "Deep genome analysis",
+      deepGenomeDesc: "Run a deep genome report on a gene",
+      deepGenomePrompt: "Run a deep genome analysis for gene Os01g0177400",
+    },
     inputPlaceholderTip: "Please enter your question",
     uploadFile:
       "Support file upload(max 10, accept .pdf,.doc,.xlsx,.ppt,.txt,.png)",

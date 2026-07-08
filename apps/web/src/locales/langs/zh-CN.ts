@@ -342,6 +342,18 @@ export default {
     streamInterrupted: "连接中断，请重试。",
     reasoning: { show: "展开思考过程", hide: "收起思考过程" },
     welcomeSubtitle: "我可以检索信息并为您执行自动化分析，请随时给我您的任务。",
+    starter: {
+      title: "试试这些",
+      geneLabel: "查询基因",
+      geneDesc: "查询基因的功能与同源基因",
+      genePrompt: "请介绍基因 Os01g0177400 的功能与同源基因",
+      speciesLabel: "探索物种",
+      speciesDesc: "查询某物种的关键基因与通路",
+      speciesPrompt: "水稻抗旱涉及哪些关键基因？",
+      deepGenomeLabel: "深度基因组分析",
+      deepGenomeDesc: "对基因运行深度基因组分析报告",
+      deepGenomePrompt: "对基因 Os01g0177400 运行深度基因组分析",
+    },
     inputPlaceholderTip: "请输入您的问题",
     uploadFile: "支持文件上传（最多10个，接受.pdf,.doc,.xlsx,.ppt,.txt,.png）",
     timeGroup: {
