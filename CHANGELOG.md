@@ -2,7 +2,9 @@
 
 All notable changes to **Phytomni-Web** are recorded here. Versions are dated
 snapshots of `main`; each entry maps to one or more commits landed in that
-window. Newest first.
+window. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Newest first.
 
 > **Conventions.** `apps/web` = Vue/Vite frontend, `apps/server` = Go gateway.
 > Emojis mirror the commit subjects. "Behavior-preserving" = pure rename/move
