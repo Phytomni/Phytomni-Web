@@ -26,21 +26,23 @@ root [`README.md`](../README.md) for build/run instructions.
 | **Upgrade a `0.1.1` prod to `0.1.2`** (current) | [`deployment/upgrading.md`](deployment/upgrading.md) |
 | See the full release history | [`../CHANGELOG.md`](../CHANGELOG.md) |
 | Look up a Go API endpoint | [`../apps/server/API_DOC.md`](../apps/server/API_DOC.md) |
-| Understand the parallel-chat frontend state model | [`../apps/web/PARALLEL_CHAT_FEATURES.md`](../apps/web/PARALLEL_CHAT_FEATURES.md) |
+| Understand the parallel-chat frontend state model | [`../apps/web/docs/parallel-chat-state.md`](../apps/web/docs/parallel-chat-state.md) |
 | Run / write frontend tests | [`../apps/web/tests/README.md`](../apps/web/tests/README.md) |
+| Read a design proposal / ADR | [`design/`](design/) — forward-looking, not-yet-implemented work |
 
 ## Where docs live
 
 This repo places docs by **scope**, not by author:
 
 - **`docs/`** (here) — repo-level, cross-subproject: deployment/ops (which touch
-  frontend + backend + DB + nginx together), and this index.
+  frontend + backend + DB + nginx together), forward-looking design/ADRs
+  ([`design/`](design/)), and this index.
 - **`apps/server/`** — Go-API-specific: [`API_DOC.md`](../apps/server/API_DOC.md).
   The Go service has no README; the repo-root `CLAUDE.md` / `AGENTS.md` is its
   primary contributor doc.
 - **`apps/web/`** — frontend-specific: [`README.md`](../apps/web/README.md),
-  [`PARALLEL_CHAT_FEATURES.md`](../apps/web/PARALLEL_CHAT_FEATURES.md),
-  [`NEW_PAGES_SUMMARY.md`](../apps/web/NEW_PAGES_SUMMARY.md),
+  [`docs/parallel-chat-state.md`](../apps/web/docs/parallel-chat-state.md),
+  [`docs/pages.md`](../apps/web/docs/pages.md),
   [`tests/README.md`](../apps/web/tests/README.md) — co-located with the code
   they describe.
 
