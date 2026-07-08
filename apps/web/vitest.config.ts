@@ -47,6 +47,7 @@ export default defineConfig({
         "src/utils/image-viewer.ts",
         "src/locales/lazy.ts",
         "src/components/LangSwitch.vue",
+        "src/components/PiiWatermark.vue",
         "src/components/ChatModeSelector.vue",
         "src/permission.ts",
         "src/views/forgot-password/index.vue",

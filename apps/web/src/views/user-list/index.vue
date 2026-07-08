@@ -1,4 +1,5 @@
 <template>
+  <PiiWatermark>
   <div class="user-list-container">
     <!-- Top operation bar -->
     <div class="operation-bar">
@@ -272,6 +273,7 @@
       </template>
     </el-dialog>
   </div>
+  </PiiWatermark>
 </template>
 
 <script setup lang="ts">
@@ -280,6 +282,7 @@ import { Plus, Unlock } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { getUserList, addUser, changePermission, unlockUser } from "@/api/auth";
 import { useI18n } from "vue-i18n";
+import PiiWatermark from "@/components/PiiWatermark.vue";
 
 const { t } = useI18n();
 
