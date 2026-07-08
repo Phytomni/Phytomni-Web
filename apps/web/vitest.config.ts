@@ -45,6 +45,7 @@ export default defineConfig({
         "src/utils/network-error.ts",
         "src/utils/sanitize-markup.ts",
         "src/utils/image-viewer.ts",
+        "src/locales/lazy.ts",
         "src/components/LangSwitch.vue",
         "src/components/ChatModeSelector.vue",
         "src/permission.ts",

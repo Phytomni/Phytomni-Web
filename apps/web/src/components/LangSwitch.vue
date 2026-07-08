@@ -42,8 +42,8 @@ const currentLangLabel = computed(() => {
 });
 
 // switch language
-const handleCommand = (command: string) => {
-  setLanguage(command as "zh-CN" | "en-US");
+const handleCommand = async (command: string) => {
+  await setLanguage(command as "zh-CN" | "en-US");
 };
 </script>
 

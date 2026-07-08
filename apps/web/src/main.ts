@@ -35,9 +35,6 @@ const currentLang =
 // init i18n
 app.use(i18n);
 
-// set language
-setLanguage(currentLang);
-
 // init theme
 themeStore.initTheme();
 
@@ -62,7 +59,8 @@ app.use(ElementPlus, {
   size: "default",
 });
 
-app.mount("#app");
+// Load the active locale pack before first paint, then mount.
+setLanguage(currentLang).then(() => app.mount("#app"));
 
 // Clean up the theme listener on page unload
 window.addEventListener("beforeunload", () => {
