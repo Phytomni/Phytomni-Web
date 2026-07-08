@@ -93,6 +93,7 @@
         </div>
       </div>
     </div>
+    <el-backtop :right="40" :bottom="40" />
 
     <!-- Rename dialog -->
     <el-dialog

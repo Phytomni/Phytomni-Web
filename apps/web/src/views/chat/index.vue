@@ -992,6 +992,7 @@
           </div>
         </div>
       </div>
+      <el-backtop target=".message-container" :right="40" :bottom="80" />
 
       <!-- Input area -->
       <div
