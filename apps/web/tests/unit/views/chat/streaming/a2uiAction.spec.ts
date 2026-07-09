@@ -72,4 +72,46 @@ describe("a2uiAction", () => {
     expect(body.action_id).toBe("a9");
     expect(body.payload.fields.gene).toBe("Os01g0177400");
   });
+
+  it("fetch transport throws when response is not ok", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 500 }));
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(
+      sendA2uiAction(
+        {
+          surface_id: "s",
+          widget: "form",
+          action_id: "fail-http",
+          run_id: "r1",
+          payload: {},
+        },
+        t,
+      ),
+    ).rejects.toThrow("a2ui action HTTP 500");
+  });
+
+  it("allows retry with same action_id after transport failure", async () => {
+    const sink: A2uiActionEnvelope[] = [];
+    let attempts = 0;
+    const t = async (envelope: A2uiActionEnvelope) => {
+      attempts++;
+      if (attempts === 1) throw new Error("transport failed");
+      sink.push(envelope);
+    };
+    const env: A2uiActionEnvelope = {
+      surface_id: "s1",
+      widget: "confirm",
+      action_id: "retry-me",
+      run_id: "r1",
+      payload: { accepted: true },
+    };
+    await expect(sendA2uiAction(env, t)).rejects.toThrow("transport failed");
+    await sendA2uiAction(env, t);
+    expect(sink).toEqual([env]);
+    expect(attempts).toBe(2);
+  });
 });
