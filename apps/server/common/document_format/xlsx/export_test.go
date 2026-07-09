@@ -1,12 +1,15 @@
 package xlsx
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/xuri/excelize/v2"
 )
 
 func fixturePath(name string) string {
@@ -88,4 +91,42 @@ func TestExportTableGoldenHeadersOnly(t *testing.T) {
 
 func TestExportTableGoldenEmpty(t *testing.T) {
 	assertGolden(t, "empty", TableInput{})
+}
+
+func TestExportTablePadsShortRows(t *testing.T) {
+	out, err := ExportTable(TableInput{
+		Headers: []string{"H1", "H2", "H3"},
+		Rows:    [][]string{{"only-one"}},
+	})
+	if err != nil {
+		t.Fatalf("ExportTable: %v", err)
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(out))
+	if err != nil {
+		t.Fatalf("OpenReader: %v", err)
+	}
+	defer f.Close()
+	v, _ := f.GetCellValue("Sheet1", "C2")
+	if v != "" {
+		t.Fatalf("C2 = %q, want empty padded cell", v)
+	}
+}
+
+func TestExportTableTruncatesLongRows(t *testing.T) {
+	out, err := ExportTable(TableInput{
+		Headers: []string{"H1"},
+		Rows:    [][]string{{"keep", "drop"}},
+	})
+	if err != nil {
+		t.Fatalf("ExportTable: %v", err)
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(out))
+	if err != nil {
+		t.Fatalf("OpenReader: %v", err)
+	}
+	defer f.Close()
+	b2, _ := f.GetCellValue("Sheet1", "B2")
+	if b2 != "" {
+		t.Fatalf("B2 = %q, want truncated-away cell", b2)
+	}
 }
