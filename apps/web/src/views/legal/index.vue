@@ -51,8 +51,12 @@ const draftBanner = computed(() => t("legal.draftBanner"));
 
 <style lang="scss" scoped>
 .legal-page {
-  min-height: 100vh;
-  padding: 24px 20px 48px;
+  /* App.vue locks html/body/#app to overflow:hidden; this page is the scroll root. */
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  /* Extra bottom padding so fixed Footer does not cover the last lines. */
+  padding: 24px 20px 72px;
   background: var(--el-bg-color-page, #f5f7fa);
   color: var(--el-text-color-primary, #303133);
 }

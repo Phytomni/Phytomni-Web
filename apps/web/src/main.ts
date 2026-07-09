@@ -12,8 +12,9 @@ import directive from "./directive";
 // register directives
 import plugins from "./plugins"; // plugins
 import { download } from "@/utils/request";
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/600.css";
+// Vite 3 resolves fontsource weight files via package exports without the .css suffix.
+import "@fontsource/inter/400";
+import "@fontsource/inter/600";
 import "element-plus/dist/index.css";
 import "./styles/tokens.css";
 import "./assets/main.css"; // global styles

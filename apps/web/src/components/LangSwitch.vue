@@ -24,11 +24,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ArrowDown } from "@element-plus/icons-vue";
-import { useI18n } from "vue-i18n";
 import { setLanguage } from "@/locales";
 import { useAppStore } from "@/stores";
 
-const { locale } = useI18n();
 const appStore = useAppStore();
 
 // current language
@@ -41,7 +39,7 @@ const currentLangLabel = computed(() => {
   return currentLang.value === "zh-CN" ? "中文" : "English";
 });
 
-// switch language
+// switch language (setLanguage also syncs document.title via chat.appTitle)
 const handleCommand = async (command: string) => {
   await setLanguage(command as "zh-CN" | "en-US");
 };

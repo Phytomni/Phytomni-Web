@@ -66,7 +66,8 @@ export function beforeEachGuard(
   next: NavigationGuardNext
 ) {
   NProgress.start();
-  document.title = "Phytomni";
+  // Brand title from locale packs (en: Phytomni / zh: 农科发现大模型).
+  document.title = i18n.global.t("chat.appTitle") as string;
   // Close stale first-login notification on /login transitions
   // (logout / post-FedLogOut). Runs unconditionally — even when
   // getToken() is false — so the FedLogOut + redirect-to-/login path
