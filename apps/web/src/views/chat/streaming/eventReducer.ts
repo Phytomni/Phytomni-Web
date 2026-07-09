@@ -1,5 +1,6 @@
 import type { ContentBlock } from "../types";
 import type { AGUIEvent } from "./aguiEvents";
+import { parseA2uiCustomValue } from "./a2uiParse";
 
 // ReducerState folds the AG-UI event stream into ordered content blocks plus
 // the fields the message needs to finalize (run id, follow-ups, done/error).
@@ -67,6 +68,21 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
         // P1 cited streaming: finalize copies these into message.doc_list so
         // the ns-aware cited render path engages (citation ns invariant).
         next.references = ev.data.value.doc_list;
+      } else if (ev.data.name === "phyto.a2ui") {
+        const parsed = parseA2uiCustomValue(ev.data.value);
+        if (parsed.ok) {
+          blocks.push({
+            type: "agent-surface",
+            authority: "agent",
+            interactive: true,
+            surfaceId: parsed.value.surface_id,
+            widget: parsed.value.widget,
+            props: parsed.value.props,
+          });
+        } else {
+          // Skip bad frames; keep the stream alive. Prefer warn over throw.
+          console.warn("[phyto.a2ui] skipped frame:", parsed.reason);
+        }
       }
       break;
     case "RunFinished":
@@ -75,6 +91,12 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
     case "RunError":
       next.error = { message: String(ev.data.message ?? "stream error") };
       next.done = true;
+      // Interactive surfaces must not unlock after a failed run — stamp failed.
+      for (const b of blocks) {
+        if (b.type === "agent-surface" && b.interactive) {
+          b.failed = true;
+        }
+      }
       break;
   }
   return next;

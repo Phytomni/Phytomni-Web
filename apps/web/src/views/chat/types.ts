@@ -41,16 +41,21 @@ export interface ChatMessage {
 
 // ContentBlock is one typed unit in a streaming assistant message. authority
 // marks who composed it ("web" = Web renders structured data; "agent" =
-// future agent-surface blocks). interactive flags user-interactive blocks.
+// agent-surface blocks). interactive flags user-interactive blocks.
 // The registry (blockRegistry.ts) maps `type` to a Vue renderer.
 export interface ContentBlock {
-  type: "markdown" | "tool" | "step" | "reasoning" | string;
+  type: "markdown" | "tool" | "step" | "reasoning" | "agent-surface" | string;
   authority: "web" | "agent";
   interactive?: boolean;
   text?: string; // markdown/reasoning accumulated text
   toolName?: string; // tool block: structured tool identifier (Web maps to copy)
   label?: string; // step block: structured step identifier
   count?: number; // tool_result hit count
+  // agent-surface (phyto.a2ui):
+  surfaceId?: string;
+  widget?: "confirm" | "form" | "choice" | string;
+  props?: Record<string, unknown>;
+  failed?: boolean; // set on RunError — UI must not unlock after submit
 }
 
 export interface ChatResponse {

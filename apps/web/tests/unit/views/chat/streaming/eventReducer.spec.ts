@@ -86,4 +86,81 @@ describe("reduceAGUIEvent", () => {
     s = reduceAGUIEvent(s, { type: "RunError", data: { message: "boom" } });
     expect(s.error?.message).toBe("boom");
   });
+
+  it("pushes an agent-surface block from phyto.a2ui confirm", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, { type: "RunStarted", data: { run_id: "r1" } });
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "surf-1",
+          widget: "confirm",
+          props: { title: "OK?" },
+        },
+      },
+    });
+    const b = s.blocks.find((x) => x.type === "agent-surface");
+    expect(b?.authority).toBe("agent");
+    expect(b?.interactive).toBe(true);
+    expect(b?.surfaceId).toBe("surf-1");
+    expect(b?.widget).toBe("confirm");
+    expect(b?.props).toEqual({ title: "OK?" });
+  });
+
+  it("skips phyto.a2ui with unknown widget without adding a block", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "s",
+          widget: "chart",
+          props: {},
+        },
+      },
+    });
+    expect(s.blocks.filter((b) => b.type === "agent-surface")).toHaveLength(0);
+  });
+
+  it("skips phyto.a2ui when catalog is below v1", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v0.9.1",
+          surface_id: "s",
+          widget: "form",
+          props: {},
+        },
+      },
+    });
+    expect(s.blocks.filter((b) => b.type === "agent-surface")).toHaveLength(0);
+  });
+
+  it("marks interactive agent-surface blocks failed on RunError", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "s",
+          widget: "choice",
+          props: { title: "Pick", options: [{ id: "a", label: "A" }] },
+        },
+      },
+    });
+    s = reduceAGUIEvent(s, { type: "RunError", data: { message: "boom" } });
+    const b = s.blocks.find((x) => x.type === "agent-surface");
+    expect(b?.failed).toBe(true);
+    expect(s.error?.message).toBe("boom");
+  });
 });
