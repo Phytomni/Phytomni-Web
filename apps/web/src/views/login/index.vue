@@ -45,9 +45,13 @@
           </el-form-item>
           <div class="login-agreement">
             {{ $t("login.agreement.prefix") }}
-            <a href="#">{{ $t("login.agreement.terms") }}</a>
+            <a href="/terms" target="_blank" rel="noopener noreferrer">{{
+              $t("login.agreement.terms")
+            }}</a>
             {{ $t("login.agreement.and") }}
-            <a href="#">{{ $t("login.agreement.privacy") }}</a>
+            <a href="/privacy" target="_blank" rel="noopener noreferrer">{{
+              $t("login.agreement.privacy")
+            }}</a>
           </div>
           <div class="forgot-password">
             <a href="#" @click="goToForgotPassword">{{

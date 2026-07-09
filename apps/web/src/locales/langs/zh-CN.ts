@@ -202,6 +202,8 @@ export default {
       terms: "服务条款",
       and: "和",
       privacy: "隐私政策",
+      checkboxLabel: "我已阅读并同意服务条款和隐私政策",
+      checkboxRequired: "请先同意服务条款和隐私政策",
     },
     validation: {
       emailRequired: "请输入邮箱地址",

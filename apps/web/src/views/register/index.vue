@@ -53,10 +53,19 @@
           </el-form-item>
 
           <div class="register-agreement">
-            {{ $t("register.agreement.prefix") }}
-            <a href="#">{{ $t("register.agreement.terms") }}</a>
-            {{ $t("register.agreement.and") }}
-            <a href="#">{{ $t("register.agreement.privacy") }}</a>
+            <el-checkbox v-model="formData.agreedToLegal">
+              {{ $t("register.agreement.checkboxLabel") }}
+            </el-checkbox>
+            <div class="register-agreement-links">
+              {{ $t("register.agreement.prefix") }}
+              <a href="/terms" target="_blank" rel="noopener noreferrer">{{
+                $t("register.agreement.terms")
+              }}</a>
+              {{ $t("register.agreement.and") }}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer">{{
+                $t("register.agreement.privacy")
+              }}</a>
+            </div>
           </div>
 
           <el-button
@@ -64,6 +73,7 @@
             class="register-button"
             @click="handleSubmit"
             :loading="loading"
+            :disabled="!formData.agreedToLegal"
           >
             {{ $t("register.registerButton") }}
           </el-button>
@@ -105,6 +115,7 @@ const formData = reactive({
   email: "",
   password: "",
   confirmPassword: "",
+  agreedToLegal: false,
 });
 
 // Custom validation rule: confirm password
@@ -203,6 +214,10 @@ const formRules = reactive({
 });
 
 const handleSubmit = () => {
+  if (!formData.agreedToLegal) {
+    ElMessage.warning(t("register.agreement.checkboxRequired"));
+    return;
+  }
   if (!formRef.value) return;
   formRef.value.validate((valid: boolean) => {
     if (valid) {

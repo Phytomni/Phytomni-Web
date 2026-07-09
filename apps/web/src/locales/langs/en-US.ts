@@ -197,6 +197,10 @@ export default {
       terms: "Terms of Service",
       and: "and",
       privacy: "Privacy Policy",
+      checkboxLabel:
+        "I have read and agree to the Terms of Service and Privacy Policy",
+      checkboxRequired:
+        "Please agree to the Terms of Service and Privacy Policy",
     },
     validation: {
       emailRequired: "Please enter your email address",
