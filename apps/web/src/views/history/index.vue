@@ -175,6 +175,7 @@ import {
   deleteHistory,
   renameHistory,
 } from "@/api/chat";
+import { formatDisplayDate } from "@/locales/format-display-date";
 
 // History interface - matches the data structure returned by the API
 interface History {
@@ -184,7 +185,7 @@ interface History {
   created_at: string;
 }
 
-const { t } = useI18n();
+const { t, d } = useI18n();
 const router = useRouter();
 
 // Reactive state
@@ -339,17 +340,8 @@ const handleRenameDialogClose = () => {
   }
 };
 
-// Format a date
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+const formatDate = (dateString: string) =>
+  formatDisplayDate(d, dateString, "datetime");
 
 // Fetch data when the component is mounted
 onMounted(() => {

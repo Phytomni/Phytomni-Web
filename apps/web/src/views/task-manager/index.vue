@@ -34,7 +34,7 @@
           width="200"
         >
           <template #default="{ row }">
-            {{ moment(row.updated_at).format("YYYY-MM-DD") }}
+            {{ formatDisplayDate(d, row.updated_at, "date") }}
           </template>
         </el-table-column>
         <el-table-column
@@ -89,15 +89,15 @@
 </template>
 
 <script setup lang="ts">
-import moment from "moment";
 import { ref, onMounted } from "vue";
 import { Link, Download } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { getTaskList } from "@/api/task";
 import { getChatdownloadURL } from "@/api/chat";
+import { formatDisplayDate } from "@/locales/format-display-date";
 
-const { t } = useI18n();
+const { t, d } = useI18n();
 
 interface TaskData {
   query?: string;

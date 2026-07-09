@@ -141,9 +141,10 @@ import {
   Refresh,
 } from "@element-plus/icons-vue";
 import { getCollectHistory, renameHistory, collectHistory } from "@/api/chat";
+import { formatDisplayDate } from "@/locales/format-display-date";
 
 const router = useRouter();
-const { t } = useI18n();
+const { t, d } = useI18n();
 
 // Favorite item interface definition
 interface FavoriteItem {
@@ -299,17 +300,8 @@ const goToChat = () => {
   router.push("/chat");
 };
 
-// Format date
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+const formatDate = (dateString: string) =>
+  formatDisplayDate(d, dateString, "datetime");
 
 // Fetch favorites list on component mount
 onMounted(() => {
