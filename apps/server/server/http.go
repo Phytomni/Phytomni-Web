@@ -28,7 +28,12 @@ func NewHttp(options ...HttpOption) *Http {
 
 	g.SetTrustedProxies(viper.GetStringSlice("app.trusted_proxies"))
 	if viper.GetBool("http.gzip") {
-		g.Use(gzip.Gzip(gzip.BestSpeed))
+		g.Use(gzip.Gzip(
+			gzip.BestSpeed,
+			gzip.WithExcludedPathsRegexs([]string{
+				`^/api/v1/conversations/[^/]+/messages`,
+			}),
+		))
 	}
 
 	g.Use(httpmw.RequestID(), httpmw.Recovery())
