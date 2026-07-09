@@ -90,9 +90,14 @@ server_tasks.db
 CLAUDE.md
 .codex
 AGENTS.md
+AGENTS.local.md
+AGENTS.md.pre-compose.bak
+agents-compose.json
 .agents
 skills-lock.json
 .superpowers
 .cursor
+# Superpowers default plan/spec dump path — never commit; local plans live in .cursor/plans
+docs/superpowers/
 .codegraph
 .understand-anything
