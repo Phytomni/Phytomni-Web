@@ -56,17 +56,21 @@ export default defineStore({
     seen_tutorial: localStorage.getItem("seenTutorial") || "1",
     expertEnabled: false,
   }),
-  getters: {},
+  getters: {
+    isFirstLogin: (state): boolean => state.login_status === "0",
+  },
   actions: {
     getUserTools() {
       return new Promise((resolve, reject) => {
         getUserTool()
           .then((res: UserToolResponse) => {
             if (res.code === 200) {
-              this.SET_NAME(res.data.permission);
-              this.SET_ROLES(res.data.tool_list);
-              this.SET_PERMISSION_LIST(res.data.permission_list || []);
-              this.SET_EXPERT_ENABLED(res.data.expert_enabled ?? false);
+              this.$patch({
+                permission: res.data.permission,
+                roles: res.data.tool_list,
+                permission_list: res.data.permission_list || [],
+                expertEnabled: res.data.expert_enabled ?? false,
+              });
               resolve(true);
             } else {
               reject(new Error("Failed to get user tools"));

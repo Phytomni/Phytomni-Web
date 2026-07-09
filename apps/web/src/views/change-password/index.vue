@@ -80,7 +80,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, onMounted } from "vue";
+import { storeToRefs } from "pinia";
 import { ElMessage } from "element-plus";
 import { useRouter } from "vue-router";
 import { userStore } from "@/stores";
@@ -107,7 +108,7 @@ const passwordForm = reactive({
 // will bounce them back. Hide goBack to avoid the visible "flash and
 // return" UX. Voluntary access (login_status='1') keeps the button.
 const UserStore = userStore();
-const isFirstLogin = computed(() => UserStore.login_status === "0");
+const { isFirstLogin } = storeToRefs(UserStore);
 
 // Go back to the previous page
 const goBack = () => {
