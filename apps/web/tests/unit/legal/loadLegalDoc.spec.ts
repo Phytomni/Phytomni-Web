@@ -22,4 +22,28 @@ describe("loadLegalDoc", () => {
     const en = loadLegalDoc("privacy", "en-US");
     expect(doc.markdown).toBe(en.markdown);
   });
+
+  it("terms English draft covers research disclaimer and improvement opt-out", () => {
+    const md = loadLegalDoc("terms", "en-US").markdown.toLowerCase();
+    expect(md).toContain("peer review");
+    expect(md).toMatch(/opt-?out/);
+    expect(md).toContain("bri-zhbgs@caas.cn");
+    expect(md).toContain("chinese prevails");
+  });
+
+  it("privacy English draft covers no-sale and controller contact", () => {
+    const md = loadLegalDoc("privacy", "en-US").markdown.toLowerCase();
+    expect(md).toContain("do not sell");
+    expect(md).toContain("bri-zhbgs@caas.cn");
+    expect(md).toContain("huawei"); // OBS processor disclosure
+  });
+
+  it("Chinese terms and privacy include institute name and opt-out", () => {
+    const terms = loadLegalDoc("terms", "zh-CN").markdown;
+    const privacy = loadLegalDoc("privacy", "zh-CN").markdown;
+    expect(terms).toContain("生物技术研究所");
+    expect(terms).toContain("退出");
+    expect(privacy).toContain("生物技术研究所");
+    expect(privacy).toMatch(/出售|出卖/);
+  });
 });
