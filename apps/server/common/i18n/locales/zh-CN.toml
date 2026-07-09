@@ -75,3 +75,6 @@ not_admin_create = "您不是管理员，无法创建用户"
 [agent_task]
 invalid_reaction_type = "无效的reaction_type值"
 invalid_collect_type = "无效的collect_type值"
+
+[test]
+hello_name = "Hello {{.Name}}"

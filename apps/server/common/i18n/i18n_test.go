@@ -13,6 +13,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/gin-gonic/gin"
+	goI18n "github.com/nicksnyder/go-i18n/v2/i18n"
 )
 
 // newTestContext builds a *gin.Context with the supplied Accept-Language
@@ -253,5 +254,51 @@ func TestTMaybe_KeyShapedButMissingFallsBack(t *testing.T) {
 	got := TMaybe(c, "no.such.key")
 	if got != "no.such.key" {
 		t.Fatalf("key-shaped missing: got %q, want fallback to key", got)
+	}
+}
+
+func TestT_ZeroArgUnchanged(t *testing.T) {
+	c := newTestContext(t, "en-US")
+	got := T(c, "auth.user_not_found")
+	if got != "User not found" {
+		t.Fatalf("zero-arg: got %q, want %q", got, "User not found")
+	}
+}
+
+func TestT_TemplateDataViaMap(t *testing.T) {
+	c := newTestContext(t, "en-US")
+	// Pass a full LocalizeConfig with DefaultMessage so we do not mutate production TOML.
+	got := T(c, "test.hello_name", &goI18n.LocalizeConfig{
+		DefaultMessage: &goI18n.Message{
+			ID:    "test.hello_name",
+			Other: "Hello {{.Name}}",
+		},
+		TemplateData: map[string]string{"Name": "Ada"},
+	})
+	if got != "Hello Ada" {
+		t.Fatalf("TemplateData: got %q, want %q", got, "Hello Ada")
+	}
+}
+
+func TestT_PluralCountViaLocalizeConfig(t *testing.T) {
+	c := newTestContext(t, "en-US")
+	got := T(c, "test.cats", &goI18n.LocalizeConfig{
+		DefaultMessage: &goI18n.Message{
+			ID:    "test.cats",
+			One:   "I have {{.PluralCount}} cat.",
+			Other: "I have {{.PluralCount}} cats.",
+		},
+		PluralCount: 2,
+	})
+	if got != "I have 2 cats." {
+		t.Fatalf("PluralCount: got %q, want %q", got, "I have 2 cats.")
+	}
+}
+
+func TestT_MapArgAsTemplateData(t *testing.T) {
+	c := newTestContext(t, "en-US")
+	got := T(c, "test.hello_name", map[string]string{"Name": "Ada"})
+	if got != "Hello Ada" {
+		t.Fatalf("map TemplateData: got %q, want %q", got, "Hello Ada")
 	}
 }

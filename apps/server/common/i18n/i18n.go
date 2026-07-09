@@ -55,12 +55,36 @@ func initBundle() {
 // resolved locale, it falls back to English; if that's also missing it
 // returns the key itself and logs a warning. Never panics.
 func T(c *gin.Context, key string, args ...interface{}) string {
-	msg, err := ginI18n.GetMessage(c, key)
+	var param interface{} = key
+	if len(args) > 0 {
+		switch a := args[0].(type) {
+		case *goI18n.LocalizeConfig:
+			if a.MessageID == "" {
+				a.MessageID = key
+			}
+			param = a
+		case map[string]string:
+			param = &goI18n.LocalizeConfig{
+				MessageID:    key,
+				TemplateData: a,
+			}
+		case map[string]interface{}:
+			param = &goI18n.LocalizeConfig{
+				MessageID:    key,
+				TemplateData: a,
+			}
+		default:
+			param = &goI18n.LocalizeConfig{
+				MessageID:    key,
+				TemplateData: a,
+			}
+		}
+	}
+	msg, err := ginI18n.GetMessage(c, param)
 	if err != nil || msg == "" {
 		log.Printf("[i18n] missing key %q: %v", key, err)
 		return key
 	}
-	_ = args // plumbed; current messages have no interpolation
 	return msg
 }
 
