@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-container">
+  <PhyAppShell>
     <el-tour
       v-model="showTutorial"
       :mask="true"
@@ -24,22 +24,24 @@
       />
     </el-tour>
 
-    <!-- Left sidebar -->
-    <div ref="tourSidebarTarget" class="tour-sidebar-wrap">
-      <Sidebar
-        :chatList="chatList"
-        :currentChatId="currentChatId"
-        :collapsed="leftSidebarCollapsed"
-        @selectChat="selectChat"
-        @startNewChat="startNewChat"
-        @openKnowledgeBase="openKnowledgeBase"
-        @handleSidebarCollapse="handleSidebarCollapse"
-        @startTutorial="startTutorial"
-        @chatRenamed="handleChatRenamed"
-        @chatDeleted="handleChatDeleted"
-        @chatFavorited="handleChatFavorited"
-      />
-    </div>
+    <template #left>
+      <!-- Left sidebar -->
+      <div ref="tourSidebarTarget" class="tour-sidebar-wrap">
+        <Sidebar
+          :chatList="chatList"
+          :currentChatId="currentChatId"
+          :collapsed="leftSidebarCollapsed"
+          @selectChat="selectChat"
+          @startNewChat="startNewChat"
+          @openKnowledgeBase="openKnowledgeBase"
+          @handleSidebarCollapse="handleSidebarCollapse"
+          @startTutorial="startTutorial"
+          @chatRenamed="handleChatRenamed"
+          @chatDeleted="handleChatDeleted"
+          @chatFavorited="handleChatFavorited"
+        />
+      </div>
+    </template>
     <!-- Center chat area -->
     <div class="chat-main">
       <div class="chat-header">
@@ -81,8 +83,12 @@
                   message.role === 'user' ||
                   (!message.steps && !message.tableHeaders)
                 "
-                class="message-text"
-                :class="{ 'has-user': message.role === 'user' }"
+                :class="[
+                  'message-text',
+                  message.role === 'user'
+                    ? 'phy-bubble-user has-user'
+                    : 'phy-bubble-assistant',
+                ]"
               >
                 <!-- Log view - two-column layout -->
                 <div
@@ -971,13 +977,21 @@
               </div>
             </div>
           </div>
-          <Prompts
-            class="empty-chat-starters"
+          <PhyEmptyState
+            v-if="!currentChat?.messages?.length"
             :title="$t('chat.starter.title')"
-            :items="starterItems"
-            wrap
-            @item-click="onStarterClick"
-          />
+            class="empty-chat-starters-shell"
+          >
+            <div ref="tourCasesTarget">
+              <Prompts
+                class="empty-chat-starters"
+                :title="$t('chat.starter.title')"
+                :items="starterItems"
+                wrap
+                @item-click="onStarterClick"
+              />
+            </div>
+          </PhyEmptyState>
           <ChatModeSelector
             v-model="chatMode"
             :expert-enabled="expertModeEnabled"
@@ -985,19 +999,20 @@
           />
         </div>
         <div ref="tourInputTarget" class="input-container-warpper">
-          <div class="input-box">
-            <!-- Abort button - moved outside MentionSender so it stays clickable while sending -->
-            <div v-if="isSending" class="abort-button-overlay">
-              <el-tooltip :content="$t('chat.abortTooltip')" placement="top">
-                <el-button round color="#f56c6c" :aria-label="$t('chat.abortAriaLabel')" @click="abortCurrentRequest">
-                  <el-icon>
-                    <Close />
-                  </el-icon>
-                </el-button>
-              </el-tooltip>
-            </div>
+          <PhyComposerFrame>
+            <div class="input-box">
+              <!-- Abort button - moved outside MentionSender so it stays clickable while sending -->
+              <div v-if="isSending" class="abort-button-overlay">
+                <el-tooltip :content="$t('chat.abortTooltip')" placement="top">
+                  <el-button round color="#f56c6c" :aria-label="$t('chat.abortAriaLabel')" @click="abortCurrentRequest">
+                    <el-icon>
+                      <Close />
+                    </el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
 
-            <MentionSender
+              <MentionSender
               v-model="messageInput"
               ref="senderRef"
               :loading="isSending"
@@ -1208,8 +1223,9 @@
                   </template>
                 </div>
               </template>
-            </MentionSender>
-          </div>
+              </MentionSender>
+            </div>
+          </PhyComposerFrame>
         </div>
       </div>
       <div
@@ -1218,7 +1234,6 @@
           UserStore.permission !== 'guest' &&
           chatMode === 'instant'
         "
-        ref="tourCasesTarget"
         class="input-container-bottom"
         @wheel.prevent="handleScroll"
         :style="containerStyle"
@@ -1252,30 +1267,32 @@
       </div>
     </div>
 
-    <!-- Right sidebar -->
-    <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
-      <div class="sidebar-header">
-        <h3>{{ $t("chat.detailInfo") }}</h3>
-        <el-button type="text" @click="drawerVisible = false" class="close-btn">
-          <el-icon><icon-close /></el-icon>
-        </el-button>
-      </div>
-      <div class="sidebar-content">
-        <h3>{{ $t("chat.relatedLinks") }}</h3>
-        <div class="links-container">
-          <div
-            v-for="(link, index) in currentLinks"
-            :key="index"
-            class="link-item"
-          >
-            <el-icon>
-              <Link />
-            </el-icon>
-            <a :href="link.url" target="_blank">{{ link.title }}</a>
+    <template #right>
+      <!-- Right sidebar -->
+      <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
+        <div class="sidebar-header">
+          <h3>{{ $t("chat.detailInfo") }}</h3>
+          <el-button type="text" @click="drawerVisible = false" class="close-btn">
+            <el-icon><icon-close /></el-icon>
+          </el-button>
+        </div>
+        <div class="sidebar-content">
+          <h3>{{ $t("chat.relatedLinks") }}</h3>
+          <div class="links-container">
+            <div
+              v-for="(link, index) in currentLinks"
+              :key="index"
+              class="link-item"
+            >
+              <el-icon>
+                <Link />
+              </el-icon>
+              <a :href="link.url" target="_blank">{{ link.title }}</a>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
 
     <!-- Agents architecture diagram dialog -->
     <el-dialog
@@ -1305,7 +1322,7 @@
         />
       </div>
     </el-dialog>
-  </div>
+  </PhyAppShell>
 </template>
 <script setup lang="ts">
 import { onMounted, ref, nextTick, watch, computed } from "vue";
@@ -1314,6 +1331,11 @@ import { MentionSender, Prompts } from "vue-element-plus-x";
 import SendProgress from "./components/SendProgress.vue";
 import StreamMessage from "./components/StreamMessage.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
+import {
+  PhyAppShell,
+  PhyComposerFrame,
+  PhyEmptyState,
+} from "@/components/shell";
 import {
   Close as IconClose,
   Document,
@@ -2089,7 +2111,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
+  background-color: var(--phy-color-bg-page);
   overflow: hidden;
   transition: all 0.3s ease;
 }
@@ -2097,10 +2119,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
 .chat-footer {
   position: relative;
   z-index: 1;
-  color: #090909;
+  color: var(--phy-color-text-muted);
   font-size: 14px;
   text-align: center;
-  background: var(--color-background) !important;
+  background: var(--phy-color-bg-page) !important;
   line-height: 1;
   bottom: 4px;
 
@@ -2139,7 +2161,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
 
 .chat-header {
   padding: 0 16px;
-  border-bottom: 1px solid #e6e6e6;
+  border-bottom: 1px solid var(--phy-color-border);
   text-align: center;
   height: 62px;
   display: flex;
@@ -2169,6 +2191,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   padding: 16px;
   display: flex;
   flex-direction: column;
+  background: var(--phy-color-bg-page);
 }
 
 .message {
@@ -2185,12 +2208,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
       border-radius: 15px;
       background-color: transparent;
 
-      .message-text {
+      .message-text,
+      .has-user {
+        background-color: var(--phy-bubble-user-bg);
+        box-shadow: none;
       }
-    }
-
-    .has-user {
-      background-color: #eff6ff;
     }
   }
 
@@ -2202,6 +2224,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
       margin-left: 12px;
       background-color: transparent;
       width: 100%;
+
+      .message-text {
+        background-color: var(--phy-bubble-assistant-bg);
+        box-shadow: none;
+      }
     }
   }
 
@@ -2218,10 +2245,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
       position: relative;
       word-break: break-word;
       white-space: pre-wrap;
-      box-shadow: 0 0 10px 0 rgba(212, 210, 210, 0.35);
+      box-shadow: none;
       width: 100%;
       padding: 12px;
-      border-radius: 8px;
+      border-radius: var(--phy-radius-lg);
 
       // GeneNetworkAgent image styles
       .gene-network-images {
@@ -2261,7 +2288,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
     .ai-response {
       border-radius: 16px;
       padding: 16px;
-      box-shadow: 0 0 10px 0 rgba(212, 210, 210, 0.35);
+      box-shadow: none;
 
       .steps-title {
         font-weight: bold;
@@ -2412,9 +2439,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
     left: 50%;
     transform: translateX(-50%);
     width: 85%;
-    border: 1px solid #e7e7e7;
-    border-radius: 10px;
-    box-shadow: 0 5px 16px -4px rgba(0, 0, 0, 0.17);
   }
 
   .input-box {

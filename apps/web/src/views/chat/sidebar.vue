@@ -1,5 +1,6 @@
 <template>
-  <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+  <PhySidebarFrame :collapsed="sidebarCollapsed">
+    <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
     <!-- Top title bar -->
     <div class="sidebar-header">
       <div class="app-title">
@@ -517,7 +518,8 @@
         </span>
       </template>
     </el-dialog>
-  </div>
+    </div>
+  </PhySidebarFrame>
 </template>
 
 <script setup lang="ts">
@@ -551,6 +553,7 @@ import { useSidebarResponsive } from "./composables/useSidebarResponsive";
 import { useSidebarAgents } from "./composables/useSidebarAgents";
 import { useChatHistoryActions } from "./composables/useChatHistoryActions";
 import { useSidebarNavigation } from "./composables/useSidebarNavigation";
+import { PhySidebarFrame } from "@/components/shell";
 
 // Define the received props
 const props = defineProps({
@@ -648,10 +651,10 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
 // Sidebar styles
 .sidebar {
   width: 250px;
-  background-color: #f9fbff;
+  background-color: var(--phy-color-bg-sidebar);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #e6e6e6;
+  border-right: none;
   transition: width 0.3s ease;
 
   &.collapsed {
@@ -719,7 +722,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  border-bottom: 1px solid #e6e6e6;
+  border-bottom: 1px solid var(--phy-color-border);
   height: 62px;
 
   .app-title {
@@ -727,7 +730,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
     align-items: center;
     font-size: 24px;
     font-weight: 700;
-    color: #333;
+    color: var(--phy-color-text);
 
     .logo {
       width: 24px;
@@ -910,7 +913,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
       align-items: center;
       justify-content: space-between;
       padding: 8px 16px;
-      color: #666;
+      color: var(--phy-color-text-secondary);
       font-size: 14px;
       cursor: pointer;
       user-select: none;
@@ -933,7 +936,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
         border-radius: 8px;
         cursor: pointer;
         font-size: 14px;
-        color: #333;
+        color: var(--phy-color-text);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -961,8 +964,8 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
             border-radius: 4px;
 
             &:hover {
-              background-color: #dadada;
-              color: #606266;
+              background-color: var(--phy-color-primary-soft);
+              color: var(--phy-color-primary);
             }
           }
         }
@@ -972,11 +975,11 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
         }
 
         &:hover {
-          background-color: #f0f2f5;
+          background-color: var(--phy-color-primary-soft);
         }
 
         &.active {
-          background-color: #f0f2f5;
+          background-color: var(--phy-color-primary-soft);
           font-weight: 500;
         }
       }
@@ -988,7 +991,7 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   display: flex;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid #e6e6e6;
+  border-bottom: 1px solid var(--phy-color-border);
   gap: 8px;
 
   .user-avatar-container {
