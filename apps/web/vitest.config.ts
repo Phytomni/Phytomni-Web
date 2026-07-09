@@ -76,6 +76,7 @@ export default defineConfig({
         "src/views/chat/streaming/sendBranch.ts",
         "src/views/chat/composables/useStreamMessage.ts",
         "src/stores/actionObserver.ts",
+        "src/styles/tokens.ts",
       ],
       thresholds: {
         lines: 80,

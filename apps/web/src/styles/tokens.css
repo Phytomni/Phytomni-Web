@@ -1,0 +1,71 @@
+:root {
+  --phy-color-primary: #3a83f7;
+  --phy-color-primary-hover: #6ba4f9;
+  --phy-color-primary-soft: #d6e6fe;
+  --phy-color-accent: #14644a;
+  --phy-color-accent-hover: #3d8f72;
+  --phy-color-accent-soft: #d7ede5;
+  --phy-color-bg-page: #f7f9fc;
+  --phy-color-bg-elevated: #ffffff;
+  --phy-color-bg-sidebar: #f5f7fa;
+  --phy-color-text: #14201b;
+  --phy-color-text-secondary: #5b6b63;
+  --phy-color-text-muted: #8b9790;
+  --phy-color-border: #e6ebe7;
+
+  --phy-radius-sm: 8px;
+  --phy-radius-md: 12px;
+  --phy-radius-lg: 16px;
+  --phy-radius-pill: 999px;
+  --phy-shadow-soft: 0 1px 2px rgba(20, 32, 27, 0.04),
+    0 4px 16px rgba(20, 32, 27, 0.06);
+  --phy-motion-fast: 150ms;
+  --phy-motion-normal: 220ms;
+
+  --phy-font-shell: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+  --phy-font-reading: "Times New Roman", "FangSong", "仿宋", "STFangsong",
+    serif;
+  --phy-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Element Plus brand bridge */
+  --el-color-primary: var(--phy-color-primary);
+  --el-color-primary-light-3: #6ba4f9;
+  --el-color-primary-light-5: #9bc3fb;
+  --el-color-primary-light-7: #c5dbfd;
+  --el-color-primary-light-8: #d6e6fe;
+  --el-color-primary-light-9: #eaf2fe;
+  --el-color-primary-dark-2: #2f6fd4;
+  --el-color-success: var(--phy-color-accent);
+  --el-color-success-light-3: #3d8f72;
+  --el-color-success-light-5: #7eb59a;
+  --el-color-success-light-7: #b6d7c8;
+  --el-color-success-light-8: #d7ede5;
+  --el-color-success-light-9: #eaf6f1;
+  --el-color-success-dark-2: #0f4d39;
+
+  --el-border-radius-base: var(--phy-radius-sm);
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: var(--phy-radius-pill);
+}
+
+.phy-reading {
+  font-family: var(--phy-font-reading);
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--phy-color-text);
+  max-width: 760px;
+}
+
+.phy-reading code,
+.phy-reading pre,
+.phy-reading kbd {
+  font-family: var(--phy-font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --phy-motion-fast: 0ms;
+    --phy-motion-normal: 0ms;
+  }
+}
