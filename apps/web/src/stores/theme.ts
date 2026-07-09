@@ -86,6 +86,10 @@ export const useThemeStore = defineStore("theme", {
         );
         root.style.setProperty("--color-heading", "#ffffff");
         root.style.setProperty("--color-text", "rgba(235, 235, 235, 0.64)");
+        root.style.setProperty(
+          "--phy-color-text",
+          "rgba(235, 235, 235, 0.64)"
+        );
         root.style.setProperty("--el-bg-color", "#1a1a1a");
         root.style.setProperty("--el-bg-color-page", "#1a1a1a");
         root.style.setProperty("--el-text-color-primary", "#ffffff");
@@ -144,6 +148,7 @@ export const useThemeStore = defineStore("theme", {
         );
         root.style.setProperty("--color-heading", PHY_TOKENS.text);
         root.style.setProperty("--color-text", PHY_TOKENS.text);
+        root.style.setProperty("--phy-color-text", PHY_TOKENS.text);
         root.style.setProperty("--el-bg-color", "#ffffff");
         root.style.setProperty("--el-bg-color-page", "#ffffff");
         root.style.setProperty("--el-text-color-primary", "#2c3e50");
