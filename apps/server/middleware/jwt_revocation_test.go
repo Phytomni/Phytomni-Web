@@ -10,7 +10,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
@@ -127,7 +127,7 @@ func TestAuthMiddleware_FloorExemptsLegacyIatZero(t *testing.T) {
 	// A legacy token with iat=0 (issued before this feature). Hand-sign it so iat is unset.
 	viper.Set("jwt.secret_key", "test-secret")
 	claims := &Claims{Username: "alice@x.com"}
-	claims.ExpiresAt = time.Now().Add(time.Hour).Unix() // exp set, iat left 0
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Hour)) // exp set, iat left 0
 	legacy := signClaims(t, claims)
 	// password_change_at in the past but positive → floor>0; iat=0 is EXEMPT (no mass logout).
 	past := time.Now().Add(-24 * time.Hour)
@@ -147,7 +147,7 @@ func TestAuthMiddleware_EpochRevokesLegacyIatZero(t *testing.T) {
 
 	// Hand-sign a legacy token: IssuedAt left 0, only ExpiresAt set.
 	claims := &Claims{Username: "alice@x.com"}
-	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Hour))
 	legacy := signClaims(t, claims)
 
 	// Set a positive per-user epoch (epoch > 0, and iat=0 < epoch) → must revoke.
@@ -200,8 +200,8 @@ func TestAuthMiddleware_AlgNoneTokenRejected(t *testing.T) {
 	r, _, gdb := setupRevocationEnv(t)
 	gdb.Exec(`INSERT INTO users (id, email) VALUES (1, 'alice@x.com')`)
 	claims := &Claims{Username: "alice@x.com"}
-	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
-	claims.IssuedAt = time.Now().Add(-IatSkew).Unix()
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Hour))
+	claims.IssuedAt = jwt.NewNumericDate(time.Now().Add(-IatSkew))
 	tok := jwt.NewWithClaims(jwt.SigningMethodNone, claims)
 	forged, err := tok.SignedString(jwt.UnsafeAllowNoneSignatureType)
 	if err != nil {
@@ -220,8 +220,8 @@ func TestAuthMiddleware_AlgConfusionHS384Rejected(t *testing.T) {
 	r, _, gdb := setupRevocationEnv(t)
 	gdb.Exec(`INSERT INTO users (id, email) VALUES (1, 'alice@x.com')`)
 	claims := &Claims{Username: "alice@x.com"}
-	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
-	claims.IssuedAt = time.Now().Add(-IatSkew).Unix()
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Hour))
+	claims.IssuedAt = jwt.NewNumericDate(time.Now().Add(-IatSkew))
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS384, claims)
 	forged, err := tok.SignedString([]byte(viper.GetString("jwt.secret_key")))
 	if err != nil {

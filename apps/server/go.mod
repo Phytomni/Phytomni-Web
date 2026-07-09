@@ -15,7 +15,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-errors/errors v1.4.2
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.4.0
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/viper"
 )
 
@@ -25,19 +25,19 @@ func TestGenerateToken_SetsIatAndExp(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	if claims.IssuedAt == 0 {
+	if claims.IssuedAtUnix() == 0 {
 		t.Fatal("IssuedAt must be set (revocation floor compares against it)")
 	}
 	// iat = now-60s: must be <= now and within ~65s below `before`.
-	if claims.IssuedAt > before.Unix() {
-		t.Errorf("IssuedAt %d must not be in the future (>%d)", claims.IssuedAt, before.Unix())
+	if claims.IssuedAtUnix() > before.Unix() {
+		t.Errorf("IssuedAt %d must not be in the future (>%d)", claims.IssuedAtUnix(), before.Unix())
 	}
-	if diff := before.Unix() - claims.IssuedAt; diff < 55 || diff > 70 {
+	if diff := before.Unix() - claims.IssuedAtUnix(); diff < 55 || diff > 70 {
 		t.Errorf("IssuedAt should be ~60s before now, got %ds before", diff)
 	}
 	// exp - iat must equal TokenLifetime + 60s (exp=now+lifetime, iat=now-60s).
 	wantSpan := int64(TokenLifetime/time.Second) + 60
-	if span := claims.ExpiresAt - claims.IssuedAt; span != wantSpan {
+	if span := claims.ExpiresAtUnix() - claims.IssuedAtUnix(); span != wantSpan {
 		t.Errorf("exp-iat = %ds, want %ds (TokenLifetime+60s)", span, wantSpan)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/viper"
 )
 
@@ -21,7 +21,21 @@ func jwtSecret() []byte {
 
 type Claims struct {
 	Username string `json:"username"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
+}
+
+func (c *Claims) IssuedAtUnix() int64 {
+	if c == nil || c.IssuedAt == nil {
+		return 0
+	}
+	return c.IssuedAt.Unix()
+}
+
+func (c *Claims) ExpiresAtUnix() int64 {
+	if c == nil || c.ExpiresAt == nil {
+		return 0
+	}
+	return c.ExpiresAt.Unix()
 }
 
 // TokenLifetime is the user JWT lifetime. GenerateToken uses it for exp and the
@@ -45,12 +59,11 @@ func GenerateToken(username string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
 		Username: username,
-		StandardClaims: jwt.StandardClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
 			// iat = now-iatSkew: absorbs multi-instance/NTP skew and is never in the future
-			// (golang-jwt v3 verifyIat has no leeway, strict now>=iat). The revocation layer
-			// compares iat against epoch/floor.
-			IssuedAt:  now.Add(-IatSkew).Unix(),
-			ExpiresAt: now.Add(TokenLifetime).Unix(),
+			// and the revocation layer compares iat against epoch/floor.
+			IssuedAt:  jwt.NewNumericDate(now.Add(-IatSkew)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(TokenLifetime)),
 		},
 	}
 
@@ -85,14 +98,9 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		token := tokenString[7:]
 		claims := &Claims{}
-		parsedToken, err := jwt.ParseWithClaims(token, claims, func(parsedToken *jwt.Token) (interface{}, error) {
-			// Alg-pin: only HS256 is accepted. The keyfunc is the v3 equivalent of
-			// WithValidMethods(["HS256"]) (introduced in v4+; this repo pins v3.2.2).
-			// Returning nil — never the secret — for a wrong alg means the signature
-			// is never verified against an unintended method (alg-confusion defense).
-			if parsedToken.Method.Alg() != jwt.SigningMethodHS256.Alg() {
-				return nil, jwt.NewValidationError("unexpected signing method", jwt.ValidationErrorSignatureInvalid)
-			}
+		// WithValidMethods pins verification to HS256; alg=none and HS384 are test-locked.
+		parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+		parsedToken, err := parser.ParseWithClaims(token, claims, func(*jwt.Token) (interface{}, error) {
 			return jwtSecret(), nil
 		})
 
@@ -123,13 +131,13 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 		// Per-user epoch: revoke if iat < epoch-skew, including iat=0 legacy.
 		// epoch is a ~1.7e9 unix value so epoch-skewSec > 0 always holds, hence iat=0 legacy is revoked.
-		if epoch > 0 && claims.IssuedAt < epoch-skewSec {
+		if epoch > 0 && claims.IssuedAtUnix() < epoch-skewSec {
 			revokedResponse(c)
 			return
 		}
 		// 3) Persistent floor (MySQL, still effective when Redis is down): revoke if iat < floor-skew.
 		// iat=0 legacy is exempt (deploys do not force a full re-login); NULL/not-found/DB error → skip (fail-open).
-		if floor, ok := passwordChangeFloor(c, claims.Username); ok && claims.IssuedAt > 0 && claims.IssuedAt < floor-skewSec {
+		if floor, ok := passwordChangeFloor(c, claims.Username); ok && claims.IssuedAtUnix() > 0 && claims.IssuedAtUnix() < floor-skewSec {
 			revokedResponse(c)
 			return
 		}

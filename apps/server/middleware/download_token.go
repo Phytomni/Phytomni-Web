@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // Short-lived download token: the browser's window.open / <img src> / email
@@ -20,7 +20,7 @@ const DownloadTokenTTL = 10 * time.Minute
 
 type downloadClaims struct {
 	ObsKey string `json:"obs_key"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 // GenerateDownloadToken signs a short-lived token bound to one OBS object key.
@@ -30,8 +30,8 @@ func GenerateDownloadToken(obsKey string, ttl time.Duration) (string, error) {
 	}
 	claims := &downloadClaims{
 		ObsKey: obsKey,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(ttl).Unix(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret())
