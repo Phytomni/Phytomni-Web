@@ -1,93 +1,88 @@
 <template>
-  <div class="register-container">
-    <div class="register-left">
-      <div class="logo-container">
-        <div class="logo" style="width: 40px; height: 40px"></div>
+  <PhyAuthLayout>
+    <template #lang>
+      <LangSwitch />
+    </template>
+    <template #brand>
+      <div class="auth-brand">
+        <div class="logo" aria-hidden="true" />
+        <div class="auth-brand-title">{{ $t("chat.appTitle") }}</div>
       </div>
-      <div class="slogan">
-        <!-- A registration page slogan can be added here -->
+    </template>
+
+    <h2 class="register-title">{{ $t("register.title") }}</h2>
+    <h5 class="register-subtitle">{{ $t("register.subtitle") }}</h5>
+    <el-form ref="formRef" :model="formData" :rules="formRules" status-icon>
+      <div class="form-item-label">{{ $t("register.email") }}</div>
+      <el-form-item prop="email">
+        <el-input
+          v-model="formData.email"
+          :placeholder="$t('register.emailPlaceholder')"
+          clearable
+          size="large"
+        />
+      </el-form-item>
+
+      <div class="form-item-label">{{ $t("register.password") }}</div>
+      <el-form-item prop="password">
+        <el-input
+          v-model="formData.password"
+          type="password"
+          :placeholder="$t('register.passwordPlaceholder')"
+          show-password
+          clearable
+          size="large"
+        />
+      </el-form-item>
+
+      <div class="form-item-label">
+        {{ $t("register.confirmPassword") }}
       </div>
-    </div>
-    <div class="register-right">
-      <div class="lang-switch">
-        <LangSwitch />
+      <el-form-item prop="confirmPassword">
+        <el-input
+          v-model="formData.confirmPassword"
+          type="password"
+          :placeholder="$t('register.confirmPasswordPlaceholder')"
+          show-password
+          clearable
+          size="large"
+        />
+      </el-form-item>
+
+      <div class="register-agreement">
+        <el-checkbox v-model="formData.agreedToLegal">
+          {{ $t("register.agreement.checkboxLabel") }}
+        </el-checkbox>
+        <div class="register-agreement-links">
+          {{ $t("register.agreement.prefix") }}
+          <a href="/terms" target="_blank" rel="noopener noreferrer">{{
+            $t("register.agreement.terms")
+          }}</a>
+          {{ $t("register.agreement.and") }}
+          <a href="/privacy" target="_blank" rel="noopener noreferrer">{{
+            $t("register.agreement.privacy")
+          }}</a>
+        </div>
       </div>
-      <div class="register-form">
-        <h2 class="register-title">{{ $t("register.title") }}</h2>
-        <h5 class="register-subtitle">{{ $t("register.subtitle") }}</h5>
-        <el-form ref="formRef" :model="formData" :rules="formRules" status-icon>
-          <div class="form-item-label">{{ $t("register.email") }}</div>
-          <el-form-item prop="email">
-            <el-input
-              v-model="formData.email"
-              :placeholder="$t('register.emailPlaceholder')"
-              clearable
-              size="large"
-            />
-          </el-form-item>
 
-          <div class="form-item-label">{{ $t("register.password") }}</div>
-          <el-form-item prop="password">
-            <el-input
-              v-model="formData.password"
-              type="password"
-              :placeholder="$t('register.passwordPlaceholder')"
-              show-password
-              clearable
-              size="large"
-            />
-          </el-form-item>
+      <el-button
+        type="primary"
+        class="register-button"
+        @click="handleSubmit"
+        :loading="loading"
+        :disabled="!formData.agreedToLegal"
+      >
+        {{ $t("register.registerButton") }}
+      </el-button>
 
-          <div class="form-item-label">
-            {{ $t("register.confirmPassword") }}
-          </div>
-          <el-form-item prop="confirmPassword">
-            <el-input
-              v-model="formData.confirmPassword"
-              type="password"
-              :placeholder="$t('register.confirmPasswordPlaceholder')"
-              show-password
-              clearable
-              size="large"
-            />
-          </el-form-item>
-
-          <div class="register-agreement">
-            <el-checkbox v-model="formData.agreedToLegal">
-              {{ $t("register.agreement.checkboxLabel") }}
-            </el-checkbox>
-            <div class="register-agreement-links">
-              {{ $t("register.agreement.prefix") }}
-              <a href="/terms" target="_blank" rel="noopener noreferrer">{{
-                $t("register.agreement.terms")
-              }}</a>
-              {{ $t("register.agreement.and") }}
-              <a href="/privacy" target="_blank" rel="noopener noreferrer">{{
-                $t("register.agreement.privacy")
-              }}</a>
-            </div>
-          </div>
-
-          <el-button
-            type="primary"
-            class="register-button"
-            @click="handleSubmit"
-            :loading="loading"
-            :disabled="!formData.agreedToLegal"
-          >
-            {{ $t("register.registerButton") }}
-          </el-button>
-
-          <div class="login-container">
-            <span>{{ $t("register.haveAccount") }}</span>
-            <a href="javascript:;" class="login-link" @click="goToLogin">
-              {{ $t("register.login") }}
-            </a>
-          </div>
-        </el-form>
+      <div class="login-container">
+        <span>{{ $t("register.haveAccount") }}</span>
+        <a href="javascript:;" class="login-link" @click="goToLogin">
+          {{ $t("register.login") }}
+        </a>
       </div>
-    </div>
-  </div>
+    </el-form>
+  </PhyAuthLayout>
 </template>
 
 <script setup lang="ts">
@@ -100,6 +95,7 @@ import type { ElForm } from "element-plus";
 import { ElMessage } from "element-plus";
 import { register } from "@/api/auth";
 import LangSwitch from "@/components/LangSwitch.vue";
+import PhyAuthLayout from "@/components/shell/PhyAuthLayout.vue";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -263,217 +259,61 @@ const goToLogin = () => {
 </script>
 
 <style lang="scss" scoped>
-.register-container {
+.auth-brand {
   display: flex;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: #fff;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
 }
 
-.register-left {
-  width: 100%;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  padding: 120px 60px;
+.logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--phy-color-primary-soft);
+}
+
+.auth-brand-title {
+  font-size: 1.05rem;
+  font-weight: 600;
   color: var(--phy-color-text);
-  position: relative;
-}
-
-.logo-container {
-  display: flex;
-  align-items: center;
-  margin-bottom: 80px;
-
-  .logo {
-    width: 50px;
-    height: 50px;
-    margin-right: 15px;
-  }
-
-  .title {
-    font-size: 32px;
-    font-weight: 500;
-  }
-}
-
-.slogan {
-  margin-top: auto;
-  margin-bottom: 200px;
-
-  .main-slogan {
-    font-size: 48px;
-    font-weight: 700;
-    margin-bottom: 24px;
-    line-height: 60px;
-  }
-
-  .sub-slogan {
-    font-size: 36px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.8);
-  }
-}
-
-.register-right {
-  width: 60%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #fff;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-
-  .lang-switch {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-
-    :deep(.lang-dropdown-link) {
-      color: var(--phy-color-text-secondary);
-      font-size: 14px;
-
-      &:hover {
-        color: var(--phy-color-primary);
-      }
-    }
-  }
-}
-
-.register-form {
-  width: 75%;
-  max-width: 450px;
 }
 
 .register-title {
-  font-size: 42px;
+  margin: 0 0 4px;
+  font-size: 1.35rem;
   font-weight: 600;
-  margin-bottom: 15px;
-  text-align: center;
-  color: #333;
 }
 
 .register-subtitle {
-  font-size: 16px;
-  margin-bottom: 40px;
-  text-align: center;
-  color: #333;
-}
-
-.register-agreement {
-  font-size: 10px;
-  margin-bottom: 20px;
-  text-align: left;
-  color: #333;
-  a {
-    color: var(--el-color-primary);
-    font-weight: 500;
-    text-decoration: underline;
-  }
+  margin: 0 0 20px;
+  font-weight: 400;
+  color: var(--phy-color-text-secondary);
 }
 
 .form-item-label {
-  font-size: 16px;
-  margin-bottom: 8px;
-  color: #303133;
+  margin-bottom: 6px;
+  color: var(--phy-color-text-secondary);
+  font-size: 13px;
 }
 
-:deep(.el-input__wrapper) {
-  padding: 0 15px;
-  height: 50px;
-  box-shadow: 0 0 0 1px #dcdfe6;
-
-  &:hover {
-    box-shadow: 0 0 0 1px #c0c4cc;
-  }
-
-  &.is-focus {
-    box-shadow: 0 0 0 1px var(--el-color-primary);
+.register-agreement,
+.login-container {
+  font-size: 13px;
+  color: var(--phy-color-text-secondary);
+  a {
+    color: var(--phy-color-primary);
+    text-decoration: none;
   }
 }
 
 .register-button {
   width: 100%;
-  padding: 12px 0;
-  font-size: 16px;
-  margin-bottom: 20px;
-  background: var(--phy-color-primary);
-  border-color: var(--phy-color-primary);
-  height: 50px;
-
-  &:hover {
-    background: var(--phy-color-primary-hover);
-    border-color: var(--phy-color-primary-hover);
-  }
+  margin-top: 8px;
 }
 
 .login-container {
   text-align: center;
-  margin-top: 20px;
-
-  span {
-    color: #606266;
-  }
-
-  .login-link {
-    color: var(--el-color-primary);
-    text-decoration: none;
-    margin-left: 5px;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-}
-
-@media (max-width: 768px) {
-  .register-container {
-    flex-direction: column;
-  }
-
-  .register-left,
-  .register-right {
-    width: 100%;
-  }
-
-  .register-left {
-    height: 40vh;
-    padding: 40px 30px;
-  }
-
-  .logo-container {
-    margin-bottom: 30px;
-  }
-
-  .slogan {
-    margin-bottom: 30px;
-
-    .main-slogan {
-      font-size: 32px;
-      line-height: 40px;
-      margin-bottom: 16px;
-    }
-
-    .sub-slogan {
-      font-size: 24px;
-    }
-  }
-
-  .register-right {
-    height: 60vh;
-    padding: 40px 0;
-  }
-
-  .register-form {
-    width: 85%;
-  }
+  margin-top: 16px;
 }
 </style>
