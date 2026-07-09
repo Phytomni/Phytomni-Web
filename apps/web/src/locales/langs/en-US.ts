@@ -336,6 +336,14 @@ export default {
     },
     toolHits: "{count} hits",
     streamInterrupted: "Connection interrupted, please retry.",
+    a2ui: {
+      confirm: "Confirm",
+      cancel: "Cancel",
+      submit: "Submit",
+      expired: "This prompt is no longer active.",
+      failed: "This prompt failed. Please retry the question.",
+      locked: "Submitted",
+    },
     reasoning: { show: "Show reasoning", hide: "Hide reasoning" },
     welcomeSubtitle:
       "I can retrieve information and perform automated analysis for you. Feel free to give me your tasks.",

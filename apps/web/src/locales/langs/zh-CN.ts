@@ -340,6 +340,14 @@ export default {
     },
     toolHits: "命中 {count} 条",
     streamInterrupted: "连接中断，请重试。",
+    a2ui: {
+      confirm: "确认",
+      cancel: "取消",
+      submit: "提交",
+      expired: "该提示已失效。",
+      failed: "该提示失败，请重新提问。",
+      locked: "已提交",
+    },
     reasoning: { show: "展开思考过程", hide: "收起思考过程" },
     welcomeSubtitle: "我可以检索信息并为您执行自动化分析，请随时给我您的任务。",
     starter: {
