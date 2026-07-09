@@ -68,7 +68,7 @@ const goToLogin = () => {
 
 .forgot-password-left {
   width: 100%;
-  background: #223e36;
+  background: var(--phy-color-accent);
   display: flex;
   flex-direction: column;
   padding: 120px 60px;
@@ -118,11 +118,11 @@ const goToLogin = () => {
     right: 20px;
 
     :deep(.lang-dropdown-link) {
-      color: #223e36;
+      color: var(--phy-color-accent);
       font-size: 14px;
 
       &:hover {
-        color: #223e36;
+        color: var(--phy-color-accent);
         opacity: 0.8;
       }
     }
@@ -169,14 +169,14 @@ const goToLogin = () => {
   width: 100%;
   padding: 12px 0;
   font-size: 16px;
-  background: #1e2022;
+  background: var(--phy-color-primary);
   height: 50px;
   color: #fff;
-  border: none;
+  border-color: var(--phy-color-primary);
 
   &:hover {
-    background: #1e2022;
-    opacity: 0.9;
+    background: var(--phy-color-primary-hover);
+    border-color: var(--phy-color-primary-hover);
   }
 }
 </style>

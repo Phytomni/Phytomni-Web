@@ -299,7 +299,7 @@ const goToRegister = () => {
 .login-left {
   width: 100%;
   // background: linear-gradient(135deg, #0078d4 0%, #42d3ff 100%);
-  background: #223e36;
+  background: var(--phy-color-accent);
   display: flex;
   flex-direction: column;
   padding: 120px 60px;
@@ -372,11 +372,11 @@ const goToRegister = () => {
     right: 20px;
 
     :deep(.lang-dropdown-link) {
-      color: #223e36;
+      color: var(--phy-color-accent);
       font-size: 14px;
 
       &:hover {
-        color: #223e36;
+        color: var(--phy-color-accent);
         opacity: 0.8;
       }
     }
@@ -407,7 +407,7 @@ const goToRegister = () => {
   text-align: left;
   color: #333;
   a {
-    color: #1e2022;
+    color: var(--el-color-primary);
     font-weight: 500;
     text-decoration: underline;
   }
@@ -428,7 +428,7 @@ const goToRegister = () => {
   }
 
   &.is-focus {
-    box-shadow: 0 0 0 1px #409eff;
+    box-shadow: 0 0 0 1px var(--el-color-primary);
   }
 }
 
@@ -437,7 +437,7 @@ const goToRegister = () => {
   margin: 8px 0 20px;
 
   a {
-    color: #409eff;
+    color: var(--el-color-primary);
     text-decoration: none;
 
     &:hover {
@@ -451,12 +451,13 @@ const goToRegister = () => {
   padding: 12px 0;
   font-size: 16px;
   margin-bottom: 20px;
-  background: #1e2022;
+  background: var(--phy-color-primary);
+  border-color: var(--phy-color-primary);
   height: 50px;
 
   &:hover {
-    background: #1e2022;
-    opacity: 0.9;
+    background: var(--phy-color-primary-hover);
+    border-color: var(--phy-color-primary-hover);
   }
 }
 
@@ -469,7 +470,7 @@ const goToRegister = () => {
   }
 
   .register-link {
-    color: #409eff;
+    color: var(--el-color-primary);
     text-decoration: none;
     margin-left: 5px;
 

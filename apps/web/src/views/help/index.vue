@@ -185,7 +185,11 @@ const helpContent = SECTIONS.map((key) => {
 }
 
 .help-header {
-  background: linear-gradient(135deg, #4f46e5 0%, #3aa3ed 100%);
+  background: linear-gradient(
+    135deg,
+    var(--phy-color-primary) 0%,
+    var(--phy-color-primary-hover) 100%
+  );
   color: white;
   padding: 40px;
   display: flex;
@@ -344,7 +348,11 @@ const helpContent = SECTIONS.map((key) => {
   left: 0;
   width: 60px;
   height: 4px;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: linear-gradient(
+    135deg,
+    var(--phy-color-primary),
+    var(--phy-color-primary-hover)
+  );
   border-radius: 2px;
 }
 
@@ -362,11 +370,15 @@ const helpContent = SECTIONS.map((key) => {
   padding: 30px;
   background: #f8fafc;
   border-radius: 12px;
-  border-left: 4px solid #4f46e5;
+  border-left: 4px solid var(--phy-color-primary);
 }
 
 .step-number {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: linear-gradient(
+    135deg,
+    var(--phy-color-primary),
+    var(--phy-color-primary-hover)
+  );
   color: white;
   width: 40px;
   height: 40px;
@@ -409,13 +421,17 @@ const helpContent = SECTIONS.map((key) => {
 .feature-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  border-color: #4f46e5;
+  border-color: var(--phy-color-primary);
 }
 
 .feature-icon {
   width: 60px;
   height: 60px;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: linear-gradient(
+    135deg,
+    var(--phy-color-primary),
+    var(--phy-color-primary-hover)
+  );
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -487,7 +503,11 @@ const helpContent = SECTIONS.map((key) => {
 }
 
 .theme-dark .help-header {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+  background: linear-gradient(
+    135deg,
+    var(--phy-color-primary) 0%,
+    var(--phy-color-primary-hover) 100%
+  ) !important;
 }
 
 .theme-dark .toc-sidebar {
@@ -528,8 +548,8 @@ const helpContent = SECTIONS.map((key) => {
 .theme-dark .section-title::after {
   background: linear-gradient(
     135deg,
-    var(--el-color-primary),
-    #7c3aed
+    var(--phy-color-primary),
+    var(--phy-color-primary-hover)
   ) !important;
 }
 
