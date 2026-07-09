@@ -13,13 +13,13 @@ describe("date call-site migration contracts", () => {
     const src = read("profile/index.vue");
     expect(src).toMatch(/lastLoginAt/);
     expect(src).toMatch(/formatDisplayDate/);
-    expect(src).not.toMatch(/toLocaleDateString\(\s*[\"']zh-CN[\"']/);
-    expect(src).not.toMatch(/padStart\(2,\s*[\"']0[\"']\)/);
+    expect(src).not.toMatch(/toLocaleDateString\(\s*['"]zh-CN['"]/);
+    expect(src).not.toMatch(/padStart\(2,\s*['"]0['"]\)/);
   });
 
   it("global-config formats timestamps via formatDisplayDate and does not call toLocaleString zh-CN", () => {
     const src = read("global-config/index.vue");
     expect(src).toMatch(/formatDisplayDate/);
-    expect(src).not.toMatch(/toLocaleString\(\s*[\"']zh-CN[\"']/);
+    expect(src).not.toMatch(/toLocaleString\(\s*['"]zh-CN['"]/);
   });
 });
