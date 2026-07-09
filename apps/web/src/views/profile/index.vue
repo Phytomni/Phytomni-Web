@@ -96,7 +96,9 @@
               </div>
 
               <div class="usage-item">
-                <div class="usage-number">{{ usageStats.lastLogin }}</div>
+                <div class="usage-number">
+                  {{ formatDisplayDate(d, usageStats.lastLoginAt, "datetime") }}
+                </div>
                 <div class="usage-label">
                   {{ $t("profile.usage.lastLogin") }}
                 </div>
@@ -173,15 +175,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { userStore } from "@/stores";
 import { Lock, User } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { getUserProfile, changePassword as apiChangePassword } from "@/api/auth";
+import { formatDisplayDate } from "@/locales/format-display-date";
 
-const { t } = useI18n();
+const { t, d } = useI18n();
 const router = useRouter();
 const UserStore = userStore();
 
@@ -207,7 +210,7 @@ const passwordForm = reactive({
 // Usage statistics
 const usageStats = reactive({
   totalChats: 0,
-  lastLogin: "--",
+  lastLoginAt: null as string | null,
 });
 
 // Form reference
@@ -352,22 +355,6 @@ const handlePasswordChange = async () => {
   });
 };
 
-// Format the date and time
-const formatDateTime = (dateStr: string | null): string => {
-  if (!dateStr) return "--";
-  try {
-    const date = new Date(dateStr);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    return `${year}-${month}-${day} ${hours}:${minutes}`;
-  } catch {
-    return "--";
-  }
-};
-
 // Fetch user info
 const fetchUserInfo = async () => {
   try {
@@ -390,7 +377,7 @@ const fetchUserInfo = async () => {
 
       // Populate usage statistics
       usageStats.totalChats = data.dialogue_count || 0;
-      usageStats.lastLogin = formatDateTime(data.last_login_at);
+      usageStats.lastLoginAt = data.last_login_at ?? null;
     } else {
       ElMessage.error(res.message || t("profile.fetchUserInfoFailed"));
     }
