@@ -69,6 +69,7 @@ export default defineConfig({
         "src/views/chat/streaming/eventReducer.ts",
         "src/views/chat/streaming/incrementalMarkdown.ts",
         "src/views/chat/streaming/blockRegistry.ts",
+        "src/views/chat/streaming/a2uiParse.ts",
         "src/views/chat/streaming/sendBranch.ts",
         "src/views/chat/composables/useStreamMessage.ts",
       ],
