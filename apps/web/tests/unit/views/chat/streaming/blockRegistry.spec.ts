@@ -7,6 +7,9 @@ describe("resolveBlockRenderer", () => {
       expect(resolveBlockRenderer(t)).not.toBeNull();
     }
   });
+  it("resolves agent-surface", () => {
+    expect(resolveBlockRenderer("agent-surface")).not.toBeNull();
+  });
   it("returns null for an unregistered (future) block type", () => {
     expect(resolveBlockRenderer("mol3d")).toBeNull();
   });

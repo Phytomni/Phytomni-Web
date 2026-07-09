@@ -3,6 +3,7 @@ import MarkdownBlock from "../components/blocks/MarkdownBlock.vue";
 import ToolBlock from "../components/blocks/ToolBlock.vue";
 import StepBlock from "../components/blocks/StepBlock.vue";
 import ReasoningBlock from "../components/blocks/ReasoningBlock.vue";
+import AgentSurfaceBlock from "../components/blocks/AgentSurfaceBlock.vue";
 
 // The block registry maps a ContentBlock.type to its Vue renderer. New block
 // types (log / image / mol3d / agent-surface) register here without touching
@@ -12,6 +13,7 @@ const registry: Record<string, Component> = {
   tool: ToolBlock,
   step: StepBlock,
   reasoning: ReasoningBlock,
+  "agent-surface": AgentSurfaceBlock,
 };
 
 export function resolveBlockRenderer(type: string): Component | null {
