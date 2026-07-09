@@ -187,6 +187,11 @@ bcrypt_cost: 10
 #                      ChatCompletion path; flip to true (per deploy) to serve
 #                      text/event-stream for chat-family slugs. Zero value false
 #                      = safe dormant default, mirroring expert_enabled.
+# `a2ui_actions_enabled` — dark-launch switch for A2UI action uplink
+#                      passthrough. While false the gateway returns a
+#                      Bot-shaped 403 stub (message "a2ui disabled") after
+#                      ownership checks; flip true only when Bot
+#                      POST /v1/runs/{run_id}/a2ui-actions is ready.
 # Rotate `user_api_key` per Bot runbook ~90 days; ops procedure is
 # (1) issue new key via service-token curl above,
 # (2) edit production app.yml,
@@ -201,6 +206,7 @@ bot:
   key_audit_redact: true
   expert_enabled: false   # dark-launch: Expert routing mode OFF until Bot /v1/query/route ships
   stream_enabled: false   # dark-launch: AG-UI SSE streaming OFF until Bot P0 ships
+  a2ui_actions_enabled: false   # dark-launch: A2UI action uplink OFF until Bot accept ships
   # /query upload bounds (0 or omitted = built-in default). Tune without recompiling.
   max_upload_file_bytes: 26214400    # 25 MiB per file (matches Bot /v1/files 413)
   max_upload_file_count: 10

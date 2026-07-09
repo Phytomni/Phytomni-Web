@@ -54,3 +54,28 @@ func TestInitFromViper_StreamEnabled(t *testing.T) {
 	}
 	BotConfig = nil
 }
+
+func TestA2uiActionsEnabledDefaultsFalse(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.Set("bot.base_url", "http://localhost:8000")
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper: %v", err)
+	}
+	if BotConfig.A2uiActionsEnabled {
+		t.Fatal("A2uiActionsEnabled must default false")
+	}
+}
+
+func TestA2uiActionsEnabledTrueWhenSet(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.Set("bot.base_url", "http://localhost:8000")
+	viper.Set("bot.a2ui_actions_enabled", true)
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper: %v", err)
+	}
+	if !BotConfig.A2uiActionsEnabled {
+		t.Fatal("A2uiActionsEnabled must be true when set")
+	}
+}
