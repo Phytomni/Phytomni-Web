@@ -66,6 +66,8 @@ describe("useChatStates parallel chat state", () => {
       mode: "instant",
       isStreaming: false,
       streamingMessageId: null,
+      a2uiRunId: "",
+      a2uiActionSender: null,
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
