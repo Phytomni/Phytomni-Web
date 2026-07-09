@@ -1,5 +1,5 @@
 // Client→server action uplink for interactive agent-surface widgets.
-// Exact Bot frame shape is still open (handoff Q3); this module owns a stable
+// Server action-frame format is still open; this module owns a stable
 // envelope + swappable transport so UI work is not blocked.
 
 export interface A2uiActionEnvelope {
