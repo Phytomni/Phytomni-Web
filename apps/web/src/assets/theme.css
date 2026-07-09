@@ -54,7 +54,7 @@
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
     
     .logo-text {
-      color: #409eff !important;
+      color: var(--el-color-primary) !important;
     }
   }
   .input-container-bottom{
@@ -69,16 +69,16 @@
       background-color: transparent !important;
       
       :deep(.el-menu-item.is-active) {
-        background-color: rgba(64, 158, 255, 0.2) !important;
-        color: #409eff !important;
+        background-color: var(--phy-color-primary-soft) !important;
+        color: var(--el-color-primary) !important;
         
         &::before {
-          background-color: #409eff !important;
+          background-color: var(--el-color-primary) !important;
         }
       }
       
       :deep(.el-menu-item:hover) {
-        background-color: rgba(64, 158, 255, 0.1) !important;
+        background-color: color-mix(in srgb, var(--phy-color-primary) 10%, transparent) !important;
       }
     }
     
@@ -268,7 +268,7 @@
             }
             
             &.active {
-              background-color: rgba(64, 158, 255, 0.2) !important;
+              background-color: var(--phy-color-primary-soft) !important;
               color: var(--el-color-primary) !important;
               border-color: var(--el-color-primary) !important;
             }
@@ -307,7 +307,7 @@
         }
         
         &.user .message-content {
-          background-color: rgba(64, 158, 255, 0.1) !important;
+          background-color: color-mix(in srgb, var(--phy-color-primary) 10%, transparent) !important;
         }
         
         &.assistant .message-content {
@@ -472,28 +472,28 @@
   }
   /* Sidebar style overrides */
   .sidebar {
-    background-color: #f9fbff !important;
+    background-color: var(--phy-color-bg-sidebar) !important;
     box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
     
     .el-menu-vertical {
       background-color: transparent !important;
       
       :deep(.el-menu-item.is-active) {
-        background-color: #e6f1ff !important;
-        color: #1890ff !important;
+        background-color: var(--phy-color-primary-soft) !important;
+        color: var(--el-color-primary) !important;
         
         &::before {
-          background-color: #1890ff !important;
+          background-color: var(--el-color-primary) !important;
         }
       }
       
       :deep(.el-menu-item:hover) {
-        background-color: #e8f4ff !important;
+        background-color: color-mix(in srgb, var(--phy-color-primary) 10%, transparent) !important;
       }
     }
     
     .collapse-btn {
-      background-color: #f9fbff !important;
+      background-color: var(--phy-color-bg-sidebar) !important;
       color: #606266 !important;
       
       &:hover {

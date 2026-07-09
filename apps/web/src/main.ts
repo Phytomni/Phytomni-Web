@@ -12,7 +12,10 @@ import directive from "./directive";
 // register directives
 import plugins from "./plugins"; // plugins
 import { download } from "@/utils/request";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/600.css";
 import "element-plus/dist/index.css";
+import "./styles/tokens.css";
 import "./assets/main.css"; // global styles
 import "./assets/theme.css"; // theme styles
 import "./permission"; // permission control

@@ -1,6 +1,7 @@
 // Theme management store.
 import { defineStore } from "pinia";
 import Cookies from "js-cookie";
+import { PHY_TOKENS } from "@/styles/tokens";
 
 export type ThemeType = "light" | "dark" | "system";
 
@@ -109,7 +110,7 @@ export const useThemeStore = defineStore("theme", {
           "--sidebar-btn-border",
           "rgba(84, 84, 84, 0.48)"
         );
-        root.style.setProperty("--sidebar-btn-active-bg", "#409eff");
+        root.style.setProperty("--sidebar-btn-active-bg", PHY_TOKENS.primary);
         root.style.setProperty("--sidebar-btn-active-color", "#ffffff");
         root.style.setProperty(
           "--sidebar-btn-shadow",
@@ -134,15 +135,15 @@ export const useThemeStore = defineStore("theme", {
       } else {
         // light theme variables
         root.style.setProperty("--color-background", "#ffffff");
-        root.style.setProperty("--color-background-soft", "#f8f8f8");
+        root.style.setProperty("--color-background-soft", PHY_TOKENS.bgPage);
         root.style.setProperty("--color-background-mute", "#f2f2f2");
         root.style.setProperty("--color-border", "rgba(60, 60, 60, 0.12)");
         root.style.setProperty(
           "--color-border-hover",
           "rgba(60, 60, 60, 0.29)"
         );
-        root.style.setProperty("--color-heading", "#2c3e50");
-        root.style.setProperty("--color-text", "#2c3e50");
+        root.style.setProperty("--color-heading", PHY_TOKENS.text);
+        root.style.setProperty("--color-text", PHY_TOKENS.text);
         root.style.setProperty("--el-bg-color", "#ffffff");
         root.style.setProperty("--el-bg-color-page", "#ffffff");
         root.style.setProperty("--el-text-color-primary", "#2c3e50");
@@ -157,14 +158,14 @@ export const useThemeStore = defineStore("theme", {
         root.style.setProperty("--el-fill-color-lighter", "#fafafa");
 
         // light theme button variables
-        root.style.setProperty("--sidebar-btn-bg", "#f0f2ff");
-        root.style.setProperty("--sidebar-btn-bg-hover", "#e0e7ff");
-        root.style.setProperty("--sidebar-btn-color", "#4b6bfb");
+        root.style.setProperty("--sidebar-btn-bg", "#f0f5ff");
+        root.style.setProperty("--sidebar-btn-bg-hover", "#e5effe");
+        root.style.setProperty("--sidebar-btn-color", PHY_TOKENS.primary);
         root.style.setProperty(
           "--sidebar-btn-border",
           "rgba(60, 60, 60, 0.12)"
         );
-        root.style.setProperty("--sidebar-btn-active-bg", "#409eff");
+        root.style.setProperty("--sidebar-btn-active-bg", PHY_TOKENS.primary);
         root.style.setProperty("--sidebar-btn-active-color", "#ffffff");
         root.style.setProperty(
           "--sidebar-btn-shadow",

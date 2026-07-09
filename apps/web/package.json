@@ -16,6 +16,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "axios": "^1.2.6",
     "element-plus": "^2.10.1",
     "file-saver": "^2.0.5",
