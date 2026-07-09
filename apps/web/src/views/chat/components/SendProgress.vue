@@ -85,7 +85,7 @@ const widthPct = computed(() => {
 }
 .send-progress__fill {
   height: 100%;
-  background: #626aef;
+  background: var(--phy-color-primary);
   border-radius: 2px;
   transition: width 0.3s ease-out;
 }

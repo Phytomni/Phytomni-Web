@@ -1071,7 +1071,7 @@
                         :content="$t('chat.uploadFile')"
                         placement="top"
                       >
-                        <el-button round plain color="#626aef" :aria-label="$t('chat.uploadFile')">
+                        <el-button round plain class="phy-btn-primary" :aria-label="$t('chat.uploadFile')">
                           <el-icon>
                             <Paperclip />
                           </el-icon>
@@ -1086,7 +1086,7 @@
                     :disabled="isSending"
                     @command="handleCommand"
                   >
-                    <el-button round plain color="#626aef">
+                    <el-button round plain class="phy-btn-primary">
                       <el-icon>
                         <Menu />
                       </el-icon>
@@ -1125,7 +1125,7 @@
                     </el-tooltip>
                   </div>
                   <div v-else class="send-btn" @click="sendMessage">
-                    <el-button round color="#626aef" :aria-label="$t('chat.sendAriaLabel')">
+                    <el-button round class="phy-btn-primary" :aria-label="$t('chat.sendAriaLabel')">
                       <el-icon>
                         <Promotion />
                       </el-icon>
@@ -2070,6 +2070,20 @@ const copyMessageWithDocs = (message: any, index: number) => {
   height: 100%;
 }
 
+.phy-btn-primary {
+  --el-button-bg-color: var(--phy-color-primary);
+  --el-button-border-color: var(--phy-color-primary);
+  --el-button-hover-bg-color: var(--phy-color-primary-hover);
+  --el-button-hover-border-color: var(--phy-color-primary-hover);
+  --el-button-text-color: #fff;
+}
+
+.phy-btn-primary.is-plain {
+  --el-button-bg-color: var(--phy-color-primary-soft);
+  --el-button-text-color: var(--phy-color-primary);
+  --el-button-border-color: var(--phy-color-primary-soft);
+}
+
 // Chat main view
 .chat-main {
   flex: 1;
@@ -2097,7 +2111,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
     font-size: 12px;
 
     &:hover {
-      color: #409eff;
+      color: var(--el-color-primary);
       text-decoration: underline;
     }
 
@@ -2114,7 +2128,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
     color: #909399;
 
     &:hover {
-      color: #409eff;
+      color: var(--el-color-primary);
     }
 
     &:visited {
@@ -2260,7 +2274,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
         padding: 12px 16px;
         background-color: #fff;
         border-radius: 8px;
-        border-left: 3px solid #1890ff;
+        border-left: 3px solid var(--el-color-primary);
 
         .step-label {
           font-weight: bold;
@@ -2381,7 +2395,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
 
         .el-icon {
           font-size: 24px;
-          color: #1890ff;
+          color: var(--el-color-primary);
         }
       }
     }
@@ -2495,7 +2509,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
         cursor: pointer;
         font-size: 14px;
         font-weight: 400;
-        color: #223e36;
+        color: var(--phy-color-accent);
         border: 1.5px solid transparent;
         background-color: #fff;
         transition: all 0.3s ease;
@@ -2585,7 +2599,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
         gap: 8px;
 
         a {
-          color: #1890ff;
+          color: var(--el-color-primary);
           text-decoration: none;
 
           &:hover {
@@ -2627,7 +2641,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 
   &-item:hover {
-    color: #1890ff;
+    color: var(--el-color-primary);
     background: #e8e6e6;
   }
 }
@@ -2655,7 +2669,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background-color: #1890ff;
+      background-color: var(--el-color-primary);
       animation: dot-pulse 1.4s infinite ease-in-out;
 
       &:nth-child(1) {
@@ -2722,19 +2736,19 @@ const copyMessageWithDocs = (message: any, index: number) => {
         transition: color 0.2s ease;
 
         &.doi-link {
-          color: #1890ff;
+          color: var(--el-color-primary);
 
           &:hover {
-            color: #40a9ff;
+            color: var(--phy-color-primary-hover);
             text-decoration: underline;
           }
         }
 
         &.pmid-link {
-          color: #1890ff;
+          color: var(--el-color-primary);
 
           &:hover {
-            color: #40a9ff;
+            color: var(--phy-color-primary-hover);
             text-decoration: underline;
           }
         }
@@ -3049,13 +3063,13 @@ const copyMessageWithDocs = (message: any, index: number) => {
     transition: all 0.2s ease;
 
     &:hover {
-      color: #1890ff;
+      color: var(--el-color-primary);
       background-color: #f0f9ff;
       transform: scale(1.1);
     }
 
     &.active {
-      color: #1890ff;
+      color: var(--el-color-primary);
       background-color: #e6f7ff;
 
       &:hover {
@@ -3080,7 +3094,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   cursor: pointer;
 
   &:hover {
-    color: #1890ff;
+    color: var(--el-color-primary);
     text-decoration: underline;
   }
 
@@ -3129,7 +3143,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
           padding: 15px;
           background-color: #f8f9fa;
           border-radius: 8px;
-          border-left: 3px solid #1890ff;
+          border-left: 3px solid var(--el-color-primary);
 
           p {
             margin: 0;
@@ -3144,7 +3158,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
           padding: 15px;
           background-color: #f8f9fa;
           border-radius: 8px;
-          border-left: 3px solid #1890ff;
+          border-left: 3px solid var(--el-color-primary);
           text-align: center;
           width: 300px !important;
           height: 200px !important;

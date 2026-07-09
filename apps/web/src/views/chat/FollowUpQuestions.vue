@@ -35,7 +35,7 @@ const handleQuestionClick = (question: string) => {
   padding: 12px;
   background-color: #f8f9fa;
   border-radius: 8px;
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid var(--el-color-primary);
 
   h4 {
     margin: 0 0 8px 0;
@@ -59,8 +59,8 @@ const handleQuestionClick = (question: string) => {
 
     &:hover {
       background-color: #e6f7ff;
-      border-color: #1890ff;
-      color: #1890ff;
+      border-color: var(--el-color-primary);
+      color: var(--el-color-primary);
       transform: translateY(-1px);
       box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
     }
