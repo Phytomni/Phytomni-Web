@@ -41,10 +41,10 @@ func renameAgentToolNames(db *gorm.DB, table, column string) (int64, error) {
 }
 
 // addColumnIfMissing runs an idempotent additive ALTER: if model already has
-// col it logs and no-ops, otherwise it executes ddl. The add-bot-run-id and
-// add-image-paths subcommands share this single implementation of the
-// HasColumn idempotency guard so a test can drive the guard directly — the CLI
-// Action closures themselves are unexported and not reachable from a test.
+// col it logs and no-ops, otherwise it executes ddl. The add-bot-run-id,
+// add-image-paths, and add-mode subcommands share this single implementation of
+// the HasColumn idempotency guard so a test can drive the guard directly — the
+// CLI Action closures themselves are unexported and not reachable from a test.
 func addColumnIfMissing(db *gorm.DB, model interface{}, col, ddl string) error {
 	if db.Migrator().HasColumn(model, col) {
 		rxLog.Sugar().Infof("%s column already exists, skip", col)
@@ -226,6 +226,15 @@ func Migrate() *cli.Command {
 				Action: func(ctx *cli.Context) error {
 					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "image_paths",
 						"ALTER TABLE question_agent_logs ADD COLUMN image_paths TEXT NULL COMMENT 'gallery image OBS paths (JSON array)' AFTER download_path")
+				},
+			},
+			{
+				Name:        "add-mode",
+				Usage:       "add the mode column to question_agent_logs",
+				Description: "Add the Instant/Expert mode column (varchar(20) NOT NULL DEFAULT 'instant'). Idempotent — no-op if it already exists. Without this column every chat send returns 500 (Unknown column 'mode'). Production DDL may also be applied manually (see docs/deployment/upgrading.md §3.2).",
+				Action: func(ctx *cli.Context) error {
+					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "mode",
+						"ALTER TABLE question_agent_logs ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'instant' AFTER tool_name")
 				},
 			},
 			{

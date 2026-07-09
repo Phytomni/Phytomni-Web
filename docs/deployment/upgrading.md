@@ -165,6 +165,16 @@ ALTER TABLE question_agent_logs
   ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'instant';
 ```
 
+Or the idempotent CLI (safe to re-run; no-op if the column already exists):
+
+```bash
+cd apps/server && go run main.go migrate add-mode
+```
+
+> **Do not skip this when deploying a binary that writes `mode`.** Without the
+> column, every chat send returns 500 (`Unknown column 'mode'`), the same class
+> of failure as a missing `image_paths` column.
+
 Existing rows get `'instant'`. Until Expert is fully activated (§7.1), the SPA
 disables the Expert pill and the gateway returns **503** for any `mode=expert`
 request — no Bot call.

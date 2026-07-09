@@ -123,6 +123,57 @@ func TestAddColumnIfMissing_AddsWhenAbsent(t *testing.T) {
 	}
 }
 
+// TestAddColumnIfMissing_ModeAddsWhenAbsent pins the add-mode DDL path: absent
+// mode → ALTER runs → column present. SQLite-compatible DDL (no AFTER clause);
+// the production MySQL text lives in the add-mode subcommand.
+func TestAddColumnIfMissing_ModeAddsWhenAbsent(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		tool_name TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	db.Set("phytomni-server", gdb)
+
+	m := model.Default().Migrator()
+	if m.HasColumn(&model.QuestionAgentLog{}, "mode") {
+		t.Fatal("mode should be absent before add")
+	}
+	if err := addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "mode",
+		"ALTER TABLE question_agent_logs ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'instant'"); err != nil {
+		t.Fatalf("add column: %v", err)
+	}
+	if !m.HasColumn(&model.QuestionAgentLog{}, "mode") {
+		t.Error("mode should be present after add")
+	}
+}
+
+// TestAddColumnIfMissing_ModeSkipsWhenPresent pins the add-mode no-op path so
+// re-running migrate add-mode against a schema that already has mode is safe.
+func TestAddColumnIfMissing_ModeSkipsWhenPresent(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		tool_name TEXT,
+		mode TEXT NOT NULL DEFAULT 'instant'
+	)`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	db.Set("phytomni-server", gdb)
+
+	if err := addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "mode",
+		"ALTER TABLE question_agent_logs ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'instant'"); err != nil {
+		t.Fatalf("present-column path must no-op, got %v", err)
+	}
+}
+
 // TestAddUniqueIndexIfMissing_Idempotent pins the HasIndex-guarded idempotency
 // of addUniqueIndexIfMissing: first call creates the index, second call is a
 // no-op (no "index already exists" DDL error). After creation, inserting a
