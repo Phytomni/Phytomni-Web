@@ -8,7 +8,6 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
-	github.com/bwmarrin/snowflake v0.3.0
 	github.com/gin-contrib/gzip v1.2.2
 	github.com/gin-contrib/i18n v1.2.3
 	github.com/gin-contrib/zap v1.1.4
