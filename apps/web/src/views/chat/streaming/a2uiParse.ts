@@ -1,4 +1,4 @@
-// Validates the flat phyto.a2ui Custom value (form-D shortcut). Unknown or
+// Validates the flat phyto.a2ui Custom value. Unknown or
 // pre-v1 payloads are rejected so the reducer can skip the frame without
 // breaking the stream.
 
