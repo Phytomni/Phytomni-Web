@@ -1,5 +1,5 @@
 <template>
-  <div class="markdown-viewer">
+  <div class="markdown-viewer phy-reading">
     <!-- Use the Typewriter component when the typing effect is needed -->
     <Typewriter
       v-if="instantMessage"
@@ -98,15 +98,22 @@ const handleFinish = () => {
 <style lang="scss">
 .markdown-viewer {
   all: initial;
+  &.phy-reading {
+    font-family: var(--phy-font-reading);
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--phy-color-text);
+    max-width: 760px;
+  }
+
   * {
     all: revert;
   }
 
   .markdown-content {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
-      Helvetica, Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
     word-wrap: break-word;
     color: #1f2328;
     background-color: transparent;
@@ -210,10 +217,9 @@ const handleFinish = () => {
   }
 
   .markdown-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
-      Helvetica, Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
     word-wrap: break-word;
     color: var(--el-text-color-primary);
     background-color: transparent;

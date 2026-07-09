@@ -116,68 +116,73 @@
           {{ $t("agents.deepGenome.downloadMD") }}
         </el-button>
       </div>
-      <div v-for="(block, index) in contentBlocks" :key="index">
-        <!-- H1 Title (centered) -->
-        <h1
-          v-if="block.type === 'h1'"
-          :id="block.id"
-          class="text-center"
-          v-html="block.content"
-        ></h1>
+      <div class="deep-genome-document phy-reading">
+        <div v-for="(block, index) in contentBlocks" :key="index">
+          <!-- H1 Title (centered) -->
+          <h1
+            v-if="block.type === 'h1'"
+            :id="block.id"
+            class="text-center"
+            v-html="block.content"
+          ></h1>
 
-        <!-- H2 Title -->
-        <h2
-          v-else-if="block.type === 'h2'"
-          :id="block.id"
-          v-html="block.content"
-        ></h2>
+          <!-- H2 Title -->
+          <h2
+            v-else-if="block.type === 'h2'"
+            :id="block.id"
+            v-html="block.content"
+          ></h2>
 
-        <!-- H3 Card -->
-        <el-card
-          v-else-if="block.type === 'h3-card'"
-          class="mb-20 card"
-          shadow="hover"
-        >
-          <template #header>
-            <h3 :id="block.id" v-html="block.header"></h3>
-          </template>
-          <!-- Render HTML containing el-card and table via v-html -->
-          <div v-html="block.body"></div>
-        </el-card>
+          <!-- H3 Card -->
+          <el-card
+            v-else-if="block.type === 'h3-card'"
+            class="mb-20 card"
+            shadow="hover"
+          >
+            <template #header>
+              <h3 :id="block.id" v-html="block.header"></h3>
+            </template>
+            <!-- Render HTML containing el-card and table via v-html -->
+            <div v-html="block.body"></div>
+          </el-card>
 
-        <!-- H4 Title -->
-        <h4
-          v-else-if="block.type === 'h4'"
-          :id="block.id"
-          v-html="block.content"
-        ></h4>
+          <!-- H4 Title -->
+          <h4
+            v-else-if="block.type === 'h4'"
+            :id="block.id"
+            v-html="block.content"
+          ></h4>
 
-        <!-- Standalone Content (e.g., after h1, after h2, before h3) -->
-        <el-card v-else-if="block.type === 'standalone-content'" class="mb-20">
-          <div v-html="block.content"></div>
+          <!-- Standalone Content (e.g., after h1, after h2, before h3) -->
+          <el-card
+            v-else-if="block.type === 'standalone-content'"
+            class="mb-20"
+          >
+            <div v-html="block.content"></div>
+          </el-card>
+        </div>
+
+        <h2>References</h2>
+        <!-- References section -->
+        <el-card class="mb-20 reference-card" id="section4">
+          <div v-if="displayReferences && displayReferences.length > 0">
+            <div
+              v-for="ref in displayReferences"
+              :key="ref.id"
+              :id="ref.id"
+              style="margin-bottom: 10px"
+              v-html="ref.html"
+            ></div>
+          </div>
+          <!-- Show an empty-references hint -->
+          <div
+            v-else-if="!props.references || props.references.length === 0"
+            style="text-align: center; color: #999"
+          >
+            No references available.
+          </div>
         </el-card>
       </div>
-
-      <h2>References</h2>
-      <!-- References section -->
-      <el-card class="mb-20 reference-card" id="section4">
-        <div v-if="displayReferences && displayReferences.length > 0">
-          <div
-            v-for="ref in displayReferences"
-            :key="ref.id"
-            :id="ref.id"
-            style="margin-bottom: 10px"
-            v-html="ref.html"
-          ></div>
-        </div>
-        <!-- Show an empty-references hint -->
-        <div
-          v-else-if="!props.references || props.references.length === 0"
-          style="text-align: center; color: #999"
-        >
-          No references available.
-        </div>
-      </el-card>
     </el-main>
   </el-container>
 
@@ -442,6 +447,9 @@ onMounted(async () => {
 .mb-20 {
   margin-bottom: 20px;
 }
+.deep-genome-document {
+  margin: 0 auto;
+}
 ::v-deep .el-menu {
   border: none !important;
   overflow: hidden;
@@ -480,13 +488,13 @@ onMounted(async () => {
 /* Sidebar menu active-state styles */
 .el-menu-item.is-active {
   color: #fff !important;
-  background-color: #409eff !important;
+  background-color: var(--el-color-primary) !important;
 }
 
 /* Sidebar menu item hover state */
 .el-menu-item:hover {
   span {
-    color: #409eff !important;
+    color: var(--el-color-primary) !important;
   }
 }
 
@@ -554,7 +562,7 @@ h3 {
 }
 
 .theme-dark .el-menu-item.is-active {
-  color: #409eff !important;
+  color: var(--el-color-primary) !important;
   background-color: rgba(64, 158, 255, 0.1) !important;
 }
 
@@ -662,7 +670,7 @@ h3 {
 
 .doi-link,
 .pmid-link {
-  color: #1890ff;
+  color: var(--el-color-primary);
   text-decoration: none;
 }
 
@@ -747,12 +755,12 @@ h3 {
 
 /* ensure menu items show the active state correctly */
 ::v-deep .el-menu-item.is-active {
-  color: #409eff !important;
+  color: var(--el-color-primary) !important;
   background-color: #ecf5ff !important;
 }
 
 ::v-deep .el-menu-item.is-active span {
-  color: #409eff !important;
+  color: var(--el-color-primary) !important;
 }
 
 /* improve the menu item hover effect */
@@ -761,6 +769,6 @@ h3 {
 }
 
 ::v-deep .el-menu-item:hover span {
-  color: #409eff !important;
+  color: var(--el-color-primary) !important;
 }
 </style>

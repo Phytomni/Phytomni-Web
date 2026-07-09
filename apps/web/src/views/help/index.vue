@@ -36,7 +36,7 @@
           </div>
 
           <!-- Main content area -->
-          <div class="main-content" ref="mainContentRef">
+          <div class="main-content phy-reading" ref="mainContentRef">
             <MarkdownViewer :content="helpContent" />
           </div>
         </div>
