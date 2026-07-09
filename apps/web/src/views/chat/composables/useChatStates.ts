@@ -1,6 +1,7 @@
 import { ref, computed } from "vue";
 import type { Ref } from "vue";
 import type { UploadFile } from "../types";
+import type { A2uiActionTransport } from "../streaming/a2uiAction";
 
 export function useChatStates() {
   // state management for all conversations
@@ -25,6 +26,8 @@ export function useChatStates() {
         mode: "instant" | "expert"; // per-conversation routing mode (locked after first send)
         isStreaming: boolean; // true while an AG-UI stream is in flight for this dialogue
         streamingMessageId: string | null; // request id of the in-flight stream
+        a2uiActionSender: A2uiActionTransport | null; // fetch transport for in-flight A2UI widgets
+        a2uiRunId: string; // Bot run registry id stamped from RunStarted during stream
       }
     >
   >({});
@@ -50,6 +53,8 @@ export function useChatStates() {
         mode: "instant",
         isStreaming: false,
         streamingMessageId: null,
+        a2uiActionSender: null,
+        a2uiRunId: "",
       };
     }
     return chatStates.value[dialogueId];

@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, inject, ref, type ComputedRef } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ContentBlock } from "../../types";
 import type { A2uiActionTransport } from "../../streaming/a2uiAction";
@@ -39,32 +39,55 @@ import ChoiceWidget from "./a2ui/ChoiceWidget.vue";
 
 const props = defineProps<{
   block: ContentBlock;
-  runId: string;
-  transport: A2uiActionTransport | null;
+  runId?: string;
+  transport?: A2uiActionTransport | null;
 }>();
+
+const injectedRunId = inject<ComputedRef<string> | string>("a2uiRunId", "");
+const injectedTransport = inject<
+  ComputedRef<A2uiActionTransport | null> | A2uiActionTransport | null
+>("a2uiTransport", null);
+
+const runId = computed(() =>
+  props.runId ??
+  (typeof injectedRunId === "object" && injectedRunId && "value" in injectedRunId
+    ? injectedRunId.value
+    : String(injectedRunId ?? "")),
+);
+const transport = computed(() => {
+  if (props.transport !== undefined) return props.transport;
+  if (
+    injectedTransport &&
+    typeof injectedTransport === "object" &&
+    "value" in injectedTransport
+  ) {
+    return injectedTransport.value;
+  }
+  return (injectedTransport as A2uiActionTransport | null) ?? null;
+});
 
 const { t } = useI18n();
 const locked = ref(false);
 
 const canSend = computed(
-  () => !!props.transport && !!props.runId && !!props.block.surfaceId,
+  () => !!transport.value && !!runId.value && !!props.block.surfaceId,
 );
 const canInteract = computed(
   () => canSend.value && !locked.value && !props.block.failed,
 );
 
 async function onSubmit(value: { payload: Record<string, unknown> }) {
-  if (!canInteract.value || !props.transport) return;
+  if (!canInteract.value || !transport.value) return;
   locked.value = true;
   const envelope = {
     surface_id: props.block.surfaceId as string,
     widget: String(props.block.widget ?? ""),
     action_id: buildA2uiActionId(),
-    run_id: props.runId,
+    run_id: runId.value,
     payload: value.payload,
   };
   try {
-    await sendA2uiAction(envelope, props.transport);
+    await sendA2uiAction(envelope, transport.value);
   } catch {
     // Keep locked — failed-not-unlocked. Parent may also stamp block.failed.
   }

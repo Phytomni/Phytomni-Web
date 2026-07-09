@@ -6,6 +6,7 @@ import {
 } from "@/utils/request";
 import { splitSSEFrames, parseAGUIFrame } from "../streaming/aguiEvents";
 import { initReducerState, reduceAGUIEvent } from "../streaming/eventReducer";
+import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import type { ChatMessage } from "../types";
 
 export interface StreamInput {
@@ -35,6 +36,12 @@ export function useStreamMessage(opts: {
     registerAbortController(requestId, controller); // reuse the shared abort UI
     chatState.isStreaming = true;
     chatState.streamingMessageId = requestId;
+    chatState.a2uiActionSender = createFetchA2uiTransport({
+      conversationId: id,
+      getToken,
+      acceptLanguage: i18n.global.locale.value,
+    });
+    chatState.a2uiRunId = "";
 
     let state = initReducerState();
     try {
@@ -67,6 +74,7 @@ export function useStreamMessage(opts: {
           const ev = parseAGUIFrame(frame);
           if (!ev) continue;
           state = reduceAGUIEvent(state, ev);
+          if (state.runId) chatState.a2uiRunId = state.runId;
           placeholder.blocks = state.blocks; // reactive: re-renders StreamMessage
         }
       }
@@ -95,6 +103,8 @@ export function useStreamMessage(opts: {
       placeholder.instantMessage = true;
       chatState.isStreaming = false;
       chatState.streamingMessageId = null;
+      chatState.a2uiActionSender = null;
+      chatState.a2uiRunId = "";
       unregisterAbortController(requestId); // mirror the axios .finally cleanup
     }
   };

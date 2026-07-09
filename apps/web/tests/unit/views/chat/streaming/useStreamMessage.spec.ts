@@ -169,6 +169,41 @@ describe("useStreamMessage", () => {
     expect(placeholder.showFollowUpQuestions).toBe(true);
   });
 
+  it("registers a2ui transport, stamps run id during stream, and clears on finish", async () => {
+    const body = chunkedStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-42"}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-1","widget":"confirm","props":{"title":"OK?"}}}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-42"}\n\n',
+    ]);
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+
+    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const chatState: any = {
+      isStreaming: false,
+      streamingMessageId: null,
+      a2uiActionSender: null,
+      a2uiRunId: "",
+    };
+    const formData = new FormData();
+    formData.append("id", "42");
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+
+    const streamPromise = streamMessage({
+      dialogueId: "d1",
+      formData,
+      requestId: "req-a2ui",
+      placeholder,
+    });
+    await vi.waitFor(() => chatState.a2uiRunId === "run-42");
+    expect(chatState.a2uiActionSender).not.toBeNull();
+    await streamPromise;
+    expect(chatState.a2uiRunId).toBe("");
+    expect(chatState.a2uiActionSender).toBeNull();
+  });
+
   it("unregisters the abort controller when the stream settles", async () => {
     const body = sseStream([
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',

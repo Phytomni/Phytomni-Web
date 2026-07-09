@@ -231,6 +231,8 @@
                         (message.blocks && message.blocks.length))
                     "
                     :blocks="message.blocks || []"
+                    :run-id="getChatState(currentChatId).a2uiRunId"
+                    :transport="getChatState(currentChatId).a2uiActionSender"
                   />
                   <!-- GeneNetworkAgent image display -->
                   <div
