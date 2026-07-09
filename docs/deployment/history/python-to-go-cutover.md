@@ -218,7 +218,7 @@ As of `0.1.2`, three secrets can be injected from the environment instead of
 
 | Env var | Overrides | Mechanism |
 |---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | `viper.BindEnv` |
+| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | explicit non-empty `os.Getenv` |
 | `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
 | `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
 
@@ -226,6 +226,8 @@ As of `0.1.2`, three secrets can be injected from the environment instead of
 environment untouched keeps the file-based config above byte-identical. Set these
 only if you want secrets out of `app.yml`; do not set an empty value (an empty
 `PHYTOMNI_JWT_SECRET` would override the file with a blank secret).
+Current releases ignore an empty `PHYTOMNI_JWT_SECRET`, so the file secret still
+wins when the env var is unset or empty.
 
 ---
 

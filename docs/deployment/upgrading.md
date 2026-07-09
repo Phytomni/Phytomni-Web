@@ -77,13 +77,13 @@ Three secrets may be injected from the environment instead of `app.yml`:
 
 | Env var | Overrides | Mechanism |
 |---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | `viper.BindEnv` |
+| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | explicit non-empty `os.Getenv` |
 | `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
 | `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
 
-**Unset ⇒ the `app.yml` value wins ⇒ behavior byte-identical.** Set these only to
-keep secrets out of the file. Do **not** set an empty value — an empty
-`PHYTOMNI_JWT_SECRET` overrides the file with a blank secret.
+**Unset or empty ⇒ the `app.yml` value wins ⇒ behavior byte-identical.** Set these
+only to a non-empty value when keeping secrets out of the file. An empty
+`PHYTOMNI_JWT_SECRET` is ignored (same as unset).
 
 ### 2.2 Redis connection-pool knobs (optional)
 

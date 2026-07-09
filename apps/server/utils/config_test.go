@@ -71,3 +71,21 @@ func TestLoadConfigInFile_JWTSecret_FileValueWhenEnvUnset(t *testing.T) {
 		t.Fatalf("jwt.secret_key = %q, want %q (file value must win when env unset)", got, "file-secret-value")
 	}
 }
+
+// TestLoadConfigInFile_JWTSecret_EmptyEnvKeepsFileValue asserts that a set-but
+// empty PHYTOMNI_JWT_SECRET must NOT clobber the file secret (parity with
+// PHYTOMNI_DB_DSN / PHYTOMNI_REDIS_PASSWORD non-empty guards).
+func TestLoadConfigInFile_JWTSecret_EmptyEnvKeepsFileValue(t *testing.T) {
+	cfgPath := writeTestConfig(t, "file-secret-value")
+	t.Setenv("PHYTOMNI_JWT_SECRET", "")
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	if err := LoadConfigInFile(cfgPath); err != nil {
+		t.Fatalf("LoadConfigInFile: %v", err)
+	}
+	got := viper.GetString("jwt.secret_key")
+	if got != "file-secret-value" {
+		t.Fatalf("jwt.secret_key = %q, want %q (empty env must not clobber file)", got, "file-secret-value")
+	}
+}

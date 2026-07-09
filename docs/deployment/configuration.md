@@ -23,14 +23,13 @@ Secrets are placeholders — substitute real values out-of-band on the server.
 ## Secret injection from the environment (optional)
 
 Three secrets can be injected from the environment instead of `app.yml`, for
-12-factor / secret-manager delivery. **When the env var is unset, the `app.yml`
-value wins** — leaving the environment untouched keeps file-based config
-byte-identical. Do **not** set an empty value (an empty `PHYTOMNI_JWT_SECRET`
-overrides the file with a blank secret).
+12-factor / secret-manager delivery. **When the env var is unset or empty, the
+`app.yml` value wins** — leaving the environment untouched (or setting an empty
+string) keeps file-based config. Only a **non-empty** env value overrides the file.
 
 | Env var | Overrides | Mechanism |
 |---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | `viper.BindEnv` |
+| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | explicit non-empty `os.Getenv` |
 | `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
 | `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
 
