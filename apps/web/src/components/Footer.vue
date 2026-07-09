@@ -1,6 +1,10 @@
 <template>
   <div class="footer-container">
     <div class="footer-content">
+      <a href="/terms" class="legal-link">{{ $t("legal.termsTitle") }}</a>
+      <span class="footer-sep" aria-hidden="true">·</span>
+      <a href="/privacy" class="legal-link">{{ $t("legal.privacyTitle") }}</a>
+      <span class="footer-sep" aria-hidden="true">·</span>
       <a
         href="https://beian.miit.gov.cn/"
         target="_blank"
@@ -31,10 +35,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   font-size: 12px;
   color: #909399;
 }
 
+.legal-link,
 .icp-link {
   color: #909399;
   text-decoration: none;
@@ -59,11 +65,16 @@
   color: #909399;
 }
 
+:global(.theme-dark) .legal-link,
 :global(.theme-dark) .icp-link {
   color: #909399;
 
   &:hover {
     color: #409eff;
   }
+}
+
+.footer-sep {
+  user-select: none;
 }
 </style>
