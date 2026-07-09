@@ -28,7 +28,6 @@
       class="new-chat-container"
       :class="{
         vertical: sidebarCollapsed,
-        'show-tutorial': showTutorial,
       }"
     >
       <el-button
@@ -98,7 +97,7 @@
     </div>
 
     <!-- Chat history list, grouped by time -->
-    <div class="chat-history" :class="{ 'show-tutorial': showTutorial }">
+    <div class="chat-history">
       <template v-if="!sidebarCollapsed">
         <!-- Today -->
         <div class="time-group" v-if="todayChats.length">
@@ -567,10 +566,6 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  showTutorial: {
-    type: Boolean,
-    default: false,
-  },
 });
 const router = useRouter();
 const UserStore = userStore();
@@ -781,21 +776,6 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   gap: 8px;
   flex-wrap: wrap;
 
-  &.show-tutorial {
-    z-index: 1000 !important;
-    background: var(--color-background) !important;
-
-    .new-chat-btn,
-    .knowledge-base-btn,
-    .favorites-btn,
-    .tutorial-btn,
-    .explore-agent-btn {
-      background-color: var(--sidebar-btn-active-bg) !important;
-      color: var(--sidebar-btn-active-color) !important;
-      border-color: var(--sidebar-btn-active-bg) !important;
-    }
-  }
-
   &.vertical {
     flex-direction: column;
     align-items: center;
@@ -921,11 +901,6 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   padding: 8px;
   height: 100%;
   min-height: 400px;
-
-  &.show-tutorial {
-    z-index: 1000 !important;
-    background: var(--color-background) !important;
-  }
 
   .time-group {
     margin-bottom: 16px;

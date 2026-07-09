@@ -1,90 +1,45 @@
 <template>
   <div class="chat-container">
-    <!-- Tutorial guide overlay -->
-    <div
-      v-if="showTutorial"
-      class="tutorial-overlay"
-      @click="handleTutorialOverlayClick"
+    <el-tour
+      v-model="showTutorial"
+      :mask="true"
+      :close-on-press-escape="true"
+      @finish="completeTutorial"
+      @close="completeTutorial"
     >
-      <!-- Step 1: highlight the left sidebar -->
-      <div v-if="currentTutorialStep === 1" class="tutorial-step-1">
-        <!-- Left sidebar highlight area -->
-        <div class="sidebar-highlight-area"></div>
-        <!-- Tutorial content -->
-        <div class="tutorial-content sidebar-tutorial">
-          <h3>{{ $t("tutorial.step1.title") }}</h3>
-          <p>{{ $t("tutorial.step1.content") }}</p>
-          <div class="tutorial-actions">
-            <el-button type="primary" @click="nextTutorialStep">{{
-              $t("tutorial.nextStep")
-            }}</el-button>
-            <div class="tutorial-hint">
-              <small>{{ $t("tutorial.navigationHint") }}</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 2: highlight the bottom case bar -->
-      <div v-if="currentTutorialStep === 2" class="tutorial-step-2">
-        <!-- Bottom case bar highlight area -->
-        <div class="bottom-highlight-area"></div>
-        <!-- Tutorial content -->
-        <div class="tutorial-content bottom-tutorial">
-          <h3>{{ $t("tutorial.step2.title") }}</h3>
-          <p>{{ $t("tutorial.step2.content") }}</p>
-          <div class="tutorial-actions">
-            <el-button @click="prevTutorialStep">{{
-              $t("tutorial.prevStep")
-            }}</el-button>
-            <el-button type="primary" @click="nextTutorialStep">{{
-              $t("tutorial.nextStep")
-            }}</el-button>
-            <div class="tutorial-hint">
-              <small>{{ $t("tutorial.navigationHint") }}</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 3: highlight the chat bar -->
-      <div v-if="currentTutorialStep === 3" class="tutorial-step-3">
-        <!-- Chat input area highlight area -->
-        <div class="input-highlight-area"></div>
-        <!-- Tutorial content -->
-        <div class="tutorial-content input-tutorial">
-          <h3>{{ $t("tutorial.step3.title") }}</h3>
-          <p>{{ $t("tutorial.step3.content") }}</p>
-          <div class="tutorial-actions">
-            <el-button @click="prevTutorialStep">{{
-              $t("tutorial.prevStep")
-            }}</el-button>
-            <el-button type="primary" @click="completeTutorial">{{
-              $t("tutorial.complete")
-            }}</el-button>
-            <div class="tutorial-hint">
-              <small>{{ $t("tutorial.navigationHint") }}</small>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <el-tour-step
+        :target="tourSidebarTarget"
+        :title="t('tutorial.step1.title')"
+        :description="t('tutorial.step1.content')"
+      />
+      <el-tour-step
+        :target="tourCasesTarget"
+        :title="t('tutorial.step2.title')"
+        :description="t('tutorial.step2.content')"
+      />
+      <el-tour-step
+        :target="tourInputTarget"
+        :title="t('tutorial.step3.title')"
+        :description="t('tutorial.step3.content')"
+      />
+    </el-tour>
 
     <!-- Left sidebar -->
-    <Sidebar
-      :chatList="chatList"
-      :currentChatId="currentChatId"
-      :collapsed="leftSidebarCollapsed"
-      :showTutorial="showTutorial && currentTutorialStep === 1"
-      @selectChat="selectChat"
-      @startNewChat="startNewChat"
-      @openKnowledgeBase="openKnowledgeBase"
-      @handleSidebarCollapse="handleSidebarCollapse"
-      @startTutorial="startTutorial"
-      @chatRenamed="handleChatRenamed"
-      @chatDeleted="handleChatDeleted"
-      @chatFavorited="handleChatFavorited"
-    />
+    <div ref="tourSidebarTarget" class="tour-sidebar-wrap">
+      <Sidebar
+        :chatList="chatList"
+        :currentChatId="currentChatId"
+        :collapsed="leftSidebarCollapsed"
+        @selectChat="selectChat"
+        @startNewChat="startNewChat"
+        @openKnowledgeBase="openKnowledgeBase"
+        @handleSidebarCollapse="handleSidebarCollapse"
+        @startTutorial="startTutorial"
+        @chatRenamed="handleChatRenamed"
+        @chatDeleted="handleChatDeleted"
+        @chatFavorited="handleChatFavorited"
+      />
+    </div>
     <!-- Center chat area -->
     <div class="chat-main">
       <div class="chat-header">
@@ -1029,12 +984,7 @@
             class="empty-chat-mode"
           />
         </div>
-        <div
-          class="input-container-warpper"
-          :class="{
-            'show-tutorial': showTutorial && currentTutorialStep === 3,
-          }"
-        >
+        <div ref="tourInputTarget" class="input-container-warpper">
           <div class="input-box">
             <!-- Abort button - moved outside MentionSender so it stays clickable while sending -->
             <div v-if="isSending" class="abort-button-overlay">
@@ -1268,8 +1218,8 @@
           UserStore.permission !== 'guest' &&
           chatMode === 'instant'
         "
+        ref="tourCasesTarget"
         class="input-container-bottom"
-        :class="{ 'show-tutorial': showTutorial && currentTutorialStep === 2 }"
         @wheel.prevent="handleScroll"
         :style="containerStyle"
       >
@@ -2051,14 +2001,14 @@ const { refreshMessage } = useRefreshMessage({
 // Tutorial guide feature — state and logic extracted into the useTutorial composable
 const {
   showTutorial,
-  currentTutorialStep,
   startTutorial,
-  nextTutorialStep,
-  prevTutorialStep,
   completeTutorial,
-  handleTutorialOverlayClick,
   checkTutorialStatus,
 } = useTutorial();
+
+const tourSidebarTarget = ref<HTMLElement | null>(null);
+const tourCasesTarget = ref<HTMLElement | null>(null);
+const tourInputTarget = ref<HTMLElement | null>(null);
 
 // Test the parallel chat feature
 const testParallelChats = () => {
@@ -2113,6 +2063,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
   height: 100vh;
   width: 100%;
   overflow: hidden;
+}
+
+.tour-sidebar-wrap {
+  flex-shrink: 0;
+  height: 100%;
 }
 
 // Chat main view
@@ -2446,13 +2401,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
     border: 1px solid #e7e7e7;
     border-radius: 10px;
     box-shadow: 0 5px 16px -4px rgba(0, 0, 0, 0.17);
-
-    &.show-tutorial {
-      z-index: 1000 !important;
-      background: #fff !important;
-      border: 2px solid #1890ff;
-      box-shadow: 0 0 10px 0 rgba(24, 144, 255, 0.3);
-    }
   }
 
   .input-box {
@@ -2847,11 +2795,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   border-radius: 12px;
   z-index: 998;
 
-  &.show-tutorial {
-    z-index: 1000 !important;
-    background: #fff !important;
-  }
-
   &::before {
     content: "";
     position: absolute;
@@ -2928,10 +2871,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 }
 
-.show-tutorial {
-  z-index: 1000 !important;
-  background: #fff !important;
-}
 // Ensure the container can overlay other content
 .input-container {
   position: relative;
@@ -3273,280 +3212,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   max-width: 800px !important;
 }
 
-/* Tutorial guide overlay styles */
-.tutorial-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
-  pointer-events: auto;
-  animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Step 1: highlight the left sidebar */
-.tutorial-step-1 {
-  position: relative;
-  width: 100%;
-  height: 100%;
-
-  .sidebar-tutorial {
-    position: absolute;
-    top: 50%;
-    left: 300px;
-    transform: translateY(-50%);
-    z-index: 1002;
-  }
-}
-
-/* Step 2: highlight the bottom case bar */
-.tutorial-step-2 {
-  position: relative;
-  width: 100%;
-  height: 100%;
-
-  .bottom-tutorial {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1002;
-  }
-}
-
-/* Step 3: highlight the chat input area */
-.tutorial-step-3 {
-  position: relative;
-  width: 100%;
-  height: 100%;
-
-  .input-tutorial {
-    position: absolute;
-    top: 5%;
-    left: 50%;
-    transform: translate(-50%, 5%);
-    z-index: 1002;
-  }
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .tutorial-indicator {
-    bottom: 10px;
-    padding: 8px 16px;
-    min-width: 160px;
-
-    .tutorial-progress {
-      gap: 8px;
-
-      .progress-bar {
-        height: 3px;
-      }
-
-      .tutorial-steps {
-        gap: 6px;
-
-        .tutorial-step {
-          width: 24px;
-          height: 24px;
-
-          .step-number {
-            font-size: 11px;
-          }
-        }
-      }
-    }
-  }
-}
-
-/* Common tutorial content styles */
-.tutorial-content {
-  position: relative;
-  width: 90%;
-  max-width: 800px;
-  background-color: #fff;
-  border-radius: 15px;
-  padding: 25px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  text-align: center;
-  pointer-events: auto;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  animation: slideInUp 0.4s ease-out;
-
-  h3 {
-    margin-bottom: 15px;
-    color: #333;
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.3;
-  }
-
-  p {
-    margin-bottom: 25px;
-    color: #666;
-    line-height: 1.7;
-    font-size: 15px;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .tutorial-actions {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
-
-    .el-button {
-      padding: 12px 24px;
-      font-size: 14px;
-      border-radius: 8px;
-      min-width: 90px;
-      font-weight: 500;
-      transition: all 0.3s ease;
-
-      &:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      }
-    }
-
-    .tutorial-hint {
-      text-align: center;
-      color: #909399;
-      font-size: 12px;
-      line-height: 1.4;
-
-      small {
-        display: block;
-        padding: 8px 12px;
-        background: rgba(144, 147, 153, 0.1);
-        border-radius: 6px;
-        border: 1px solid rgba(144, 147, 153, 0.2);
-      }
-    }
-  }
-}
-
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .tutorial-content {
-    width: 95%;
-    padding: 20px;
-    margin: 10px;
-
-    h3 {
-      font-size: 18px;
-      margin-bottom: 12px;
-    }
-
-    p {
-      font-size: 14px;
-      margin-bottom: 20px;
-    }
-
-    .tutorial-actions {
-      gap: 15px;
-
-      .el-button {
-        padding: 10px 20px;
-        min-width: 80px;
-        font-size: 13px;
-      }
-    }
-  }
-
-  /* Mobile highlight area adjustments */
-  .tutorial-step-1 {
-    .sidebar-tutorial {
-      left: 220px;
-    }
-  }
-
-  .tutorial-step-2 {
-    .bottom-tutorial {
-      width: 90%;
-    }
-  }
-
-  .tutorial-step-3 {
-    .input-tutorial {
-      top: 10%;
-    }
-  }
-}
-
-/* Small-screen device optimizations */
-@media (max-width: 480px) {
-  .tutorial-content {
-    width: 98%;
-    padding: 15px;
-    margin: 5px;
-
-    h3 {
-      font-size: 16px;
-      margin-bottom: 10px;
-    }
-
-    p {
-      font-size: 13px;
-      margin-bottom: 15px;
-    }
-
-    .tutorial-actions {
-      flex-direction: column;
-      gap: 10px;
-
-      .el-button {
-        width: 100%;
-        padding: 12px 20px;
-        font-size: 14px;
-      }
-    }
-  }
-
-  /* Extra-small screen highlight area adjustments */
-  .tutorial-step-1 {
-    .sidebar-tutorial {
-      left: 170px;
-      width: 80%;
-    }
-  }
-
-  .tutorial-step-2 {
-    .bottom-tutorial {
-      width: 90%;
-    }
-  }
-
-  .tutorial-step-3 {
-    .input-tutorial {
-      width: 90%;
-    }
-  }
-}
 .tip-text {
   font-size: 12px;
   color: #909399;
@@ -3554,65 +3219,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   width: 100%;
   text-align: right;
 }
-/* Common animation definitions */
-@keyframes tutorial-pulse {
-  0%,
-  100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-
-@keyframes tutorial-bounce-left {
-  0%,
-  20%,
-  50%,
-  80%,
-  100% {
-    transform: translateY(-50%) translateX(0);
-  }
-  40% {
-    transform: translateY(-50%) translateX(-5px);
-  }
-  60% {
-    transform: translateY(-50%) translateX(-3px);
-  }
-}
-
-@keyframes tutorial-bounce-down {
-  0%,
-  20%,
-  50%,
-  80%,
-  100% {
-    transform: translateX(-50%) translateY(0);
-  }
-  40% {
-    transform: translateX(-50%) translateY(5px);
-  }
-  60% {
-    transform: translateX(-50%) translateY(3px);
-  }
-}
-
-@keyframes tutorial-bounce-up {
-  0%,
-  20%,
-  50%,
-  80%,
-  100% {
-    transform: translateX(-50%) translateY(0);
-  }
-  40% {
-    transform: translateX(-50%) translateY(-5px);
-  }
-  60% {
-    transform: translateX(-50%) translateY(-3px);
-  }
-}
-
 /* Agents architecture diagram dialog styles */
 .agents-view-container {
   display: flex;
