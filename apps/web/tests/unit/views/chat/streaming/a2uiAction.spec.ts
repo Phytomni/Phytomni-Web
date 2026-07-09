@@ -1,0 +1,75 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  buildA2uiActionId,
+  createMemoryA2uiTransport,
+  createFetchA2uiTransport,
+  sendA2uiAction,
+  _resetA2uiActionIdempotencyForTests,
+  type A2uiActionEnvelope,
+} from "@/views/chat/streaming/a2uiAction";
+
+beforeEach(() => _resetA2uiActionIdempotencyForTests());
+
+describe("a2uiAction", () => {
+  it("buildA2uiActionId returns a non-empty unique-ish id", () => {
+    const a = buildA2uiActionId();
+    const b = buildA2uiActionId();
+    expect(a.length).toBeGreaterThan(4);
+    expect(a).not.toBe(b);
+  });
+
+  it("memory transport records envelopes", async () => {
+    const sink: A2uiActionEnvelope[] = [];
+    const t = createMemoryA2uiTransport(sink);
+    const env: A2uiActionEnvelope = {
+      surface_id: "s1",
+      widget: "confirm",
+      action_id: "a1",
+      run_id: "r1",
+      payload: { accepted: true },
+    };
+    await sendA2uiAction(env, t);
+    expect(sink).toEqual([env]);
+  });
+
+  it("sendA2uiAction is idempotent on action_id", async () => {
+    const sink: A2uiActionEnvelope[] = [];
+    const t = createMemoryA2uiTransport(sink);
+    const env: A2uiActionEnvelope = {
+      surface_id: "s1",
+      widget: "confirm",
+      action_id: "same",
+      run_id: "r1",
+      payload: { accepted: false },
+    };
+    await sendA2uiAction(env, t);
+    await sendA2uiAction(env, t);
+    expect(sink).toHaveLength(1);
+  });
+
+  it("fetch transport POSTs the envelope to the provisional path", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await sendA2uiAction(
+      {
+        surface_id: "s",
+        widget: "form",
+        action_id: "a9",
+        run_id: "r9",
+        payload: { fields: { gene: "Os01g0177400" } },
+      },
+      t,
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe("/api/v1/conversations/42/a2ui-actions");
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(init.body as string);
+    expect(body.action_id).toBe("a9");
+    expect(body.payload.fields.gene).toBe("Os01g0177400");
+  });
+});
