@@ -488,7 +488,7 @@ onMounted(() => {
 
     .security-icon {
       font-size: 24px;
-      color: #409eff;
+      color: var(--el-color-primary);
     }
 
     .security-text {
@@ -524,14 +524,14 @@ onMounted(() => {
   transition: all 0.3s ease;
 
   &:hover {
-    border-color: #409eff;
-    background-color: #f0f9ff;
+    border-color: var(--el-color-primary);
+    background-color: var(--phy-color-primary-soft);
   }
 
   .usage-number {
     font-size: 28px;
     font-weight: 600;
-    color: #409eff;
+    color: var(--el-color-primary);
     margin-bottom: 8px;
   }
 

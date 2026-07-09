@@ -47,7 +47,7 @@
   transition: color 0.3s;
 
   &:hover {
-    color: #409eff;
+    color: var(--el-color-primary);
     text-decoration: underline;
   }
 
@@ -70,7 +70,7 @@
   color: #909399;
 
   &:hover {
-    color: #409eff;
+    color: var(--el-color-primary);
   }
 }
 

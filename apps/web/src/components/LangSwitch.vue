@@ -60,7 +60,7 @@ const handleCommand = async (command: string) => {
     font-size: 14px;
     min-width: 50px;
     &:hover {
-      color: #409eff;
+      color: var(--el-color-primary);
     }
   }
 }

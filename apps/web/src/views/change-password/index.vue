@@ -318,7 +318,7 @@ onMounted(() => {
     text-align: center;
     font-size: 20px;
     font-weight: 600;
-    color: #409eff;
+    color: var(--el-color-primary);
     margin: 0;
   }
 }
@@ -414,6 +414,6 @@ onMounted(() => {
   color: #303133;
 }
 .theme-dark .reset-btn:hover {
-  color: #409eff;
+  color: var(--el-color-primary);
 }
 </style>

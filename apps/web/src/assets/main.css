@@ -18,10 +18,10 @@ body {
 
 a {
   text-decoration: none;
-  color: #409eff;
+  color: var(--el-color-primary);
   transition: 0.4s;
 }
 
 a:hover {
-  color: #66b1ff;
+  color: var(--phy-color-primary-hover);
 }

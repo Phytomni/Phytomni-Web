@@ -178,13 +178,13 @@ onMounted(() => {
     }
 
     .gene-name-highlight {
-      color: #409eff;
+      color: var(--el-color-primary);
       font-weight: bold;
       cursor: pointer;
       transition: color 0.3s;
 
       &:hover {
-        color: #66b1ff;
+        color: var(--phy-color-primary-hover);
         text-decoration: underline;
       }
     }
@@ -199,11 +199,11 @@ onMounted(() => {
 }
 
 :deep(.table-header-row) {
-  background-color: #409eff !important;
+  background-color: var(--el-color-primary) !important;
 }
 
 :deep(.table-header-cell) {
-  background-color: #409eff !important;
+  background-color: var(--el-color-primary) !important;
   color: white !important;
   font-weight: bold !important;
 }

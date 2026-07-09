@@ -475,11 +475,11 @@ onMounted(() => {
 
 /* Table header styling */
 :deep(.table-header-row) {
-  background-color: #409eff !important;
+  background-color: var(--el-color-primary) !important;
 }
 
 :deep(.table-header-cell) {
-  background-color: #409eff !important;
+  background-color: var(--el-color-primary) !important;
   color: white !important;
   font-weight: bold !important;
 }

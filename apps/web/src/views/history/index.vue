@@ -720,7 +720,7 @@ onMounted(() => {
   color: #333;
 
   &:hover {
-    color: #409eff;
+    color: var(--el-color-primary);
   }
 }
 </style>

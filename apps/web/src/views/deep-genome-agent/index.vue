@@ -404,7 +404,7 @@ Future research should focus on resolving mechanistic uncertainties and explorin
     justify-content: flex-end;
 
     .message-content {
-      background: #409eff;
+      background: var(--el-color-primary);
       color: #ffffff;
       border-radius: 18px 18px 4px 18px;
       max-width: 100%;
@@ -577,7 +577,7 @@ Future research should focus on resolving mechanistic uncertainties and explorin
   }
 
   &-item:hover {
-    color: #1890ff;
+    color: var(--el-color-primary);
     background: #e8e6e6;
   }
 

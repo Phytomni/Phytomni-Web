@@ -240,7 +240,7 @@ const hasPermission = (permission: string) => {
     .logo-text {
       font-size: 20px;
       font-weight: 600;
-      color: #409eff;
+      color: var(--el-color-primary);
       margin: 0;
     }
   }
@@ -284,8 +284,8 @@ const hasPermission = (permission: string) => {
     background-color: transparent;
 
     :deep(.el-menu-item.is-active) {
-      background-color: #e6f1ff;
-      color: #1890ff;
+      background-color: var(--phy-color-primary-soft);
+      color: var(--el-color-primary);
       font-weight: bold;
 
       &::before {
@@ -295,12 +295,12 @@ const hasPermission = (permission: string) => {
         top: 0;
         bottom: 0;
         width: 4px;
-        background-color: #1890ff;
+        background-color: var(--el-color-primary);
       }
     }
 
     :deep(.el-menu-item:hover) {
-      background-color: #e8f4ff;
+      background-color: var(--phy-color-primary-soft);
     }
   }
 
