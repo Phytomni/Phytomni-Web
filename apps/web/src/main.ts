@@ -3,8 +3,6 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createActionObserverPlugin } from "@/stores/actionObserver";
 import ElementPlus from "element-plus";
-import enElementLocale from "element-plus/es/locale/lang/en";
-import zhElementLocale from "element-plus/es/locale/lang/zh-cn";
 import i18n, { setLanguage } from "./locales"; // import i18n config
 import { useAppStore, useThemeStore } from "@/stores";
 
@@ -56,8 +54,6 @@ app.use(directive);
 
 // use Element Plus with a global component size
 app.use(ElementPlus, {
-  locale: currentLang === "zh-CN" ? zhElementLocale : enElementLocale,
-  // supports large, default, small
   size: "default",
 });
 

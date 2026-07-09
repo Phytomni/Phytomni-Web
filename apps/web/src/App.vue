@@ -1,18 +1,26 @@
 <template>
-  <div class="app-container">
-    <RouterView />
-    <Footer v-if="showFooter" class="app-footer" />
-  </div>
+  <el-config-provider :locale="epLocale">
+    <div class="app-container">
+      <RouterView />
+      <Footer v-if="showFooter" class="app-footer" />
+    </div>
+  </el-config-provider>
 </template>
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterView, useRoute } from "vue-router";
+import en from "element-plus/es/locale/lang/en";
+import zhCn from "element-plus/es/locale/lang/zh-cn";
 import Footer from "@/components/Footer.vue";
+import { useAppStore } from "@/stores";
 
 const route = useRoute();
+const appStore = useAppStore();
 
-// Show the ICP footer on no-layout routes only;
-// exclude the chat page, which has its own footer
+const epLocale = computed(() =>
+  appStore.language === "zh-CN" ? zhCn : en,
+);
+
 const showFooter = computed(() => {
   if (route.meta?.layout === "nolayout" && route.path !== "/chat") {
     return true;
