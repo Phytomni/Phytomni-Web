@@ -1,13 +1,11 @@
-import type { DateTimeFormat } from "vue-i18n";
-
 // Local-TZ Intl options only — never set timeZone: "UTC".
-const date: DateTimeFormat = {
+const date: Intl.DateTimeFormatOptions = {
   year: "numeric",
   month: "numeric",
   day: "numeric",
 };
 
-const datetime: DateTimeFormat = {
+const datetime: Intl.DateTimeFormatOptions = {
   year: "numeric",
   month: "numeric",
   day: "numeric",
@@ -15,7 +13,7 @@ const datetime: DateTimeFormat = {
   minute: "numeric",
 };
 
-const timestamp: DateTimeFormat = {
+const timestamp: Intl.DateTimeFormatOptions = {
   year: "numeric",
   month: "numeric",
   day: "numeric",
