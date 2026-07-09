@@ -46,6 +46,8 @@ export default defineConfig({
         "src/utils/sanitize-markup.ts",
         "src/utils/image-viewer.ts",
         "src/locales/lazy.ts",
+        "src/locales/datetime-formats.ts",
+        "src/locales/format-display-date.ts",
         "src/components/LangSwitch.vue",
         "src/components/PiiWatermark.vue",
         "src/components/ChatModeSelector.vue",
