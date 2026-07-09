@@ -57,7 +57,7 @@ const fields = computed<Field[]>(() => {
   const raw = props.props.fields;
   return Array.isArray(raw) ? (raw as Field[]) : [];
 });
-const model = reactive<Record<string, string | number | boolean>>({});
+const model = reactive<Record<string, string | number>>({});
 
 function onSubmit() {
   if (props.disabled) return;
@@ -66,7 +66,7 @@ function onSubmit() {
       return;
     }
   }
-  const out: Record<string, string | number | boolean> = {};
+  const out: Record<string, string | number> = {};
   for (const f of fields.value) {
     if (model[f.name] !== undefined) out[f.name] = model[f.name];
   }
