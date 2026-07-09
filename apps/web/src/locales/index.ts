@@ -4,6 +4,7 @@ import enUS from "./langs/en-US";
 import elementEnLocale from "element-plus/es/locale/lang/en";
 import { useAppStore } from "@/stores";
 import { loadLocaleMessages, type SupportedLocales } from "./lazy";
+import { datetimeFormats } from "./datetime-formats";
 
 // Message bundles — en-US is eager (fallback locale, must always be present);
 // zh-CN is deferred behind a dynamic import in ./lazy.
@@ -20,6 +21,7 @@ export const i18n = createI18n({
   locale: localStorage.getItem("language") || "en-US", // default locale
   fallbackLocale: "en-US", // fallback locale
   messages,
+  datetimeFormats,
 
   // Debug-oriented warning config
   missingWarn: true,
@@ -42,7 +44,7 @@ export async function setLanguage(lang: SupportedLocales): Promise<SupportedLoca
     const appStore = useAppStore();
     appStore.setLanguage(lang);
 
-    // Set the Element Plus locale
+    // Set the document language attribute
     const htmlEl = document.documentElement;
     htmlEl.setAttribute("lang", lang);
 
