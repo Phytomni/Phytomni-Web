@@ -47,6 +47,49 @@
   --el-border-radius-base: var(--phy-radius-sm);
   --el-border-radius-small: 6px;
   --el-border-radius-round: var(--phy-radius-pill);
+
+  /* Chat bubbles — Style B @ 20% soft wash + blur */
+  --phy-bubble-tint-opacity: 0.2;
+  --phy-bubble-blur: 12px;
+  --phy-bubble-user-bg: color-mix(
+    in srgb,
+    var(--phy-color-accent-soft) 20%,
+    transparent
+  );
+  --phy-bubble-assistant-bg: color-mix(
+    in srgb,
+    var(--phy-color-primary-soft) 20%,
+    transparent
+  );
+  --phy-bubble-user-border: color-mix(
+    in srgb,
+    var(--phy-color-accent) 14%,
+    transparent
+  );
+  --phy-bubble-assistant-border: color-mix(
+    in srgb,
+    var(--phy-color-primary) 16%,
+    transparent
+  );
+  /* Fallbacks when transparency is reduced / unsupported */
+  --phy-bubble-user-bg-solid: color-mix(
+    in srgb,
+    var(--phy-color-accent-soft) 40%,
+    var(--phy-color-bg-elevated)
+  );
+  --phy-bubble-assistant-bg-solid: color-mix(
+    in srgb,
+    var(--phy-color-primary-soft) 40%,
+    var(--phy-color-bg-elevated)
+  );
+
+  /* Auth Field Horizon H1 — blue top → green bottom */
+  --phy-auth-horizon: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--phy-color-primary-soft) 55%, #fff) 0%,
+    var(--phy-color-bg-page) 48%,
+    color-mix(in srgb, var(--phy-color-accent-soft) 60%, #fff) 100%
+  );
 }
 
 .phy-reading {
@@ -61,6 +104,37 @@
 .phy-reading pre,
 .phy-reading kbd {
   font-family: var(--phy-font-mono);
+}
+
+.phy-bubble-user {
+  background: var(--phy-bubble-user-bg);
+  border: 1px solid var(--phy-bubble-user-border);
+  border-radius: var(--phy-radius-lg);
+  backdrop-filter: blur(var(--phy-bubble-blur));
+  -webkit-backdrop-filter: blur(var(--phy-bubble-blur));
+  box-shadow: 0 1px 2px rgba(20, 32, 27, 0.03);
+}
+
+.phy-bubble-assistant {
+  background: var(--phy-bubble-assistant-bg);
+  border: 1px solid var(--phy-bubble-assistant-border);
+  border-radius: var(--phy-radius-lg);
+  backdrop-filter: blur(var(--phy-bubble-blur));
+  -webkit-backdrop-filter: blur(var(--phy-bubble-blur));
+  box-shadow: 0 1px 2px rgba(20, 32, 27, 0.03);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .phy-bubble-user {
+    background: var(--phy-bubble-user-bg-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .phy-bubble-assistant {
+    background: var(--phy-bubble-assistant-bg-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

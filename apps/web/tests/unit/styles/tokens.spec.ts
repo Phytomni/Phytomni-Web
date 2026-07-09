@@ -14,6 +14,10 @@ describe("PHY_TOKENS", () => {
     expect(PHY_TOKENS.text).toBe("#14201B");
   });
 
+  it("locks chat bubble glass tint opacity at 20%", () => {
+    expect(PHY_TOKENS.bubbleTintOpacity).toBe(0.2);
+  });
+
   it("lists legacy competing brand hexes as banned", () => {
     const banned = new Set(BANNED_BRAND_HEX.map((h) => h.toLowerCase()));
     for (const hex of [
