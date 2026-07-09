@@ -214,6 +214,16 @@ export default {
     },
   },
 
+  legal: {
+    termsTitle: "Terms of Service",
+    privacyTitle: "Privacy Policy",
+    versionLabel: "Version",
+    effectiveLabel: "Effective date",
+    draftBanner:
+      "Draft pending review by Biotechnology Research Institute, CAAS. Not a final legal instrument.",
+    loadError: "Unable to load this document. Please try again later.",
+  },
+
   // Forgot password module
   forgotPassword: {
     title: "Forgot Password",

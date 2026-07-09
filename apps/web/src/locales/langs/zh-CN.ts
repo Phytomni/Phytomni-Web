@@ -219,6 +219,16 @@ export default {
     },
   },
 
+  legal: {
+    termsTitle: "服务条款",
+    privacyTitle: "隐私政策",
+    versionLabel: "版本",
+    effectiveLabel: "生效日期",
+    draftBanner:
+      "本稿待中国农业科学院生物技术研究所审定，不构成最终法律文本。",
+    loadError: "文档加载失败，请稍后重试。",
+  },
+
   // 忘记密码模块
   forgotPassword: {
     title: "忘记密码",

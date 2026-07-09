@@ -48,6 +48,18 @@ export const constantRoutes = [
     meta: { title: "401 error", layout: "nolayout" },
   },
   {
+    path: "/terms",
+    name: "terms",
+    component: () => import("@/views/legal/index.vue"),
+    meta: { title: "Terms of Service", layout: "nolayout", doc: "terms" },
+  },
+  {
+    path: "/privacy",
+    name: "privacy",
+    component: () => import("@/views/legal/index.vue"),
+    meta: { title: "Privacy Policy", layout: "nolayout", doc: "privacy" },
+  },
+  {
     path: "/:pathMatch(.*)*",
     name: "NotFound",
     component: () => import("@/views/error/404.vue"),

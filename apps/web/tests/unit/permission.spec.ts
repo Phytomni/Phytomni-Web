@@ -55,6 +55,13 @@ describe("beforeEachGuard", () => {
     expect(next).toHaveBeenCalledWith();
   });
 
+  it("1b: no token + /terms whitelist path → next() with no arg", () => {
+    mockGetToken.mockReturnValue(false);
+    const next = vi.fn();
+    beforeEachGuard(route("/terms") as any, route("/") as any, next as any);
+    expect(next).toHaveBeenCalledWith();
+  });
+
   it("2: no token + non-whitelist → redirect to /login with redirect query", () => {
     mockGetToken.mockReturnValue(false);
     const next = vi.fn();
