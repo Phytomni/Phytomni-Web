@@ -83,6 +83,7 @@ func TestApiV1ConversationRoutes(t *testing.T) {
 		[]string{
 			"GET /api/v1/conversations",
 			"GET /api/v1/conversations/:id/messages",
+			"POST /api/v1/conversations/:id/a2ui-actions",
 			"DELETE /api/v1/conversations/:id",
 			"PATCH /api/v1/conversations/:id",
 			"PUT /api/v1/conversations/:id/reaction",
