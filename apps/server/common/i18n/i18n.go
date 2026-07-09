@@ -59,10 +59,15 @@ func T(c *gin.Context, key string, args ...interface{}) string {
 	if len(args) > 0 {
 		switch a := args[0].(type) {
 		case *goI18n.LocalizeConfig:
-			if a.MessageID == "" {
-				a.MessageID = key
+			if a == nil {
+				param = key
+			} else {
+				cfg := *a
+				if cfg.MessageID == "" {
+					cfg.MessageID = key
+				}
+				param = &cfg
 			}
-			param = a
 		case map[string]string:
 			param = &goI18n.LocalizeConfig{
 				MessageID:    key,

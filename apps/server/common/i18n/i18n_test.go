@@ -302,3 +302,26 @@ func TestT_MapArgAsTemplateData(t *testing.T) {
 		t.Fatalf("map TemplateData: got %q, want %q", got, "Hello Ada")
 	}
 }
+
+func TestT_NilLocalizeConfigDoesNotPanic(t *testing.T) {
+	c := newTestContext(t, "en-US")
+	got := T(c, "auth.user_not_found", (*goI18n.LocalizeConfig)(nil))
+	if got != "User not found" {
+		t.Fatalf("nil LocalizeConfig: got %q, want %q", got, "User not found")
+	}
+}
+
+func TestT_DoesNotMutateCallerLocalizeConfig(t *testing.T) {
+	c := newTestContext(t, "en-US")
+	cfg := &goI18n.LocalizeConfig{
+		DefaultMessage: &goI18n.Message{
+			ID:    "test.hello_name",
+			Other: "Hello {{.Name}}",
+		},
+		TemplateData: map[string]string{"Name": "Ada"},
+	}
+	_ = T(c, "test.hello_name", cfg)
+	if cfg.MessageID != "" {
+		t.Fatalf("T() mutated caller MessageID to %q, want empty", cfg.MessageID)
+	}
+}
