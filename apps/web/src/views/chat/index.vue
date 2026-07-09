@@ -2209,7 +2209,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
 
       .message-text,
       .has-user {
-        background-color: var(--phy-bubble-user-bg);
         box-shadow: none;
       }
     }
@@ -2225,7 +2224,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
       width: 100%;
 
       .message-text {
-        background-color: var(--phy-bubble-assistant-bg);
         box-shadow: none;
       }
     }
