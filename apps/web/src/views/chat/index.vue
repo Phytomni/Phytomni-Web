@@ -939,7 +939,7 @@
             <el-avatar :size="36" :src="botAvatar" />
           </div>
           <div class="message-content">
-            <div class="message-text loading-message">
+            <div class="message-text loading-message phy-bubble-assistant">
               {{ $t("chat.ladingInner") }}
               <div class="loading-dots">
                 <span class="dot"></span>
@@ -985,7 +985,6 @@
             <div ref="tourCasesTarget">
               <Prompts
                 class="empty-chat-starters"
-                :title="$t('chat.starter.title')"
                 :items="starterItems"
                 wrap
                 @item-click="onStarterClick"

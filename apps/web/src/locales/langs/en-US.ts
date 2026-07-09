@@ -64,9 +64,9 @@ export default {
         'First, let\'s get to know the navigation. Quick access to functions: "Start New" initiates a brand-new task, "Deep Genome Database" allows you to view gene information, "Favorites" is for collecting frequently-used content, and there are also historical interactions categorized by time to help you efficiently find past records.',
     },
     step2: {
-      title: "Agent Demos",
+      title: "Try a starter prompt",
       content:
-        "These buttons at the bottom are demos of different agents. You can click to view specific usage cases.",
+        "These suggestion cards above the input are starter prompts. Click one to fill the composer with an example question.",
     },
     step3: {
       title: "Conversation Window",
