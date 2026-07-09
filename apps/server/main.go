@@ -59,8 +59,7 @@ func initConfig(*cli.Context) error {
 	}
 	// Redis user/product layer (token revocation, rate-limit, OBS-listing cache).
 	// FAIL-OPEN: a Redis outage must NOT block boot — features degrade instead.
-	// Use InitFromViper (fills the "clients" map read by cache.Client), NOT
-	// InitFromViperDefault (a separate clientDefault map → nil here).
+	// InitFromViper fills the "clients" map read by cache.Client.
 	viper.SetDefault("redis.enabled", true)
 	// OBS-listing cache is a benign fail-open optimization; default ON (active
 	// only when Redis is reachable). Flip to false to bypass it without

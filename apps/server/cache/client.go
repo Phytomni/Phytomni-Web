@@ -7,36 +7,6 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-func NewClientDefault(config Config) (*redis.Client, error) {
-	var rdbDefault *redis.Client
-
-	switch config.Type {
-	default:
-		rdbDefault = redis.NewClient(&redis.Options{
-			Addr:     config.Addrs[0],
-			Password: config.Password,
-			DB:       config.DB,
-		})
-	}
-
-	if err := rdbDefault.Ping(context.Background()).Err(); err != nil {
-		return rdbDefault, err
-	}
-
-	return rdbDefault, nil
-}
-
-func ClientDefault(name string) *redis.Client {
-	return clientDefault[name]
-}
-
-func ClientAndErrDefault(name string) (*redis.Client, error) {
-	if client, ok := clientDefault[name]; ok {
-		return client, nil
-	}
-	return nil, errors.New("redis client not exists")
-}
-
 // optionsFromConfig builds the redis.Options for a single-node client from the
 // given Config. PoolSize / MinIdleConns are passed through verbatim; when they
 // are zero (the unset case) go-redis applies its internal defaults (10*CPU
