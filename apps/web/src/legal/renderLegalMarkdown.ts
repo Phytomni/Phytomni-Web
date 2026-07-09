@@ -52,6 +52,12 @@ export function renderLegalMarkdown(src: string): string {
       para.push(lines[i]);
       i++;
     }
+    if (para.length === 0) {
+      // Unmatched #-prefixed or otherwise blocked line — emit as paragraph and advance
+      out.push(`<p>${renderInline(lines[i])}</p>`);
+      i++;
+      continue;
+    }
     out.push(`<p>${renderInline(para.join(" "))}</p>`);
   }
   return out.join("");

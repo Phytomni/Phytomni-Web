@@ -31,4 +31,11 @@ describe("renderLegalMarkdown", () => {
     const html = renderLegalMarkdown("[x](javascript:alert(1))");
     expect(html).not.toMatch(/href\s*=\s*["']javascript:/i);
   });
+
+  it("does not hang on #### or #without-space lines", () => {
+    const html = renderLegalMarkdown("#### Extra\n#NoSpace\nOK paragraph");
+    expect(html).toContain("Extra");
+    expect(html).toContain("NoSpace");
+    expect(html).toContain("OK paragraph");
+  });
 });
