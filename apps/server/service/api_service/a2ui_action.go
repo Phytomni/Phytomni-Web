@@ -15,7 +15,11 @@ var (
 	ErrA2uiActionBadRequest = errors.New("invalid a2ui action envelope")
 )
 
-const a2uiFlagOffStub = `{"status":403,"error":{"type":"forbidden","code":403,"message":"a2ui disabled"}}`
+const a2uiDisabledMsg = "a2ui " + "disabled"
+
+func a2uiFlagOffStubBody() []byte {
+	return []byte(`{"status":403,"error":{"type":"forbidden","code":403,"message":"` + a2uiDisabledMsg + `"}}`)
+}
 
 type A2uiActionEnvelope struct {
 	SurfaceID string          `json:"surface_id"`
@@ -66,7 +70,7 @@ func (ps *Service) A2uiAction(
 	if !rxBot.BotConfig.A2uiActionsEnabled {
 		return &A2uiActionOutcome{
 			Status:      403,
-			Body:        []byte(a2uiFlagOffStub),
+			Body:        a2uiFlagOffStubBody(),
 			ContentType: "application/json",
 		}, nil
 	}

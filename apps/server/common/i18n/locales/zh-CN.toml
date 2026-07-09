@@ -76,5 +76,14 @@ not_admin_create = "您不是管理员，无法创建用户"
 invalid_reaction_type = "无效的reaction_type值"
 invalid_collect_type = "无效的collect_type值"
 
+[a2ui]
+invalid_body = "请求体无效"
+invalid_action = "无效的 A2UI 操作"
+not_found = "未找到"
+gateway_disabled = "服务暂时不可用"
+request_timed_out = "请求超时，请稍后再试"
+request_failed = "请求失败"
+disabled_stub = "a2ui 已禁用"
+
 [test]
 hello_name = "Hello {{.Name}}"

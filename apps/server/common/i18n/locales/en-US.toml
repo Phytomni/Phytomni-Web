@@ -76,5 +76,14 @@ not_admin_create = "you are not an administrator and cannot create users"
 invalid_reaction_type = "invalid reaction_type value"
 invalid_collect_type = "invalid collect_type value"
 
+[a2ui]
+invalid_body = "invalid body"
+invalid_action = "invalid a2ui action"
+not_found = "not found"
+gateway_disabled = "service temporarily unavailable"
+request_timed_out = "request timed out, please try again later"
+request_failed = "request failed"
+disabled_stub = "a2ui disabled"
+
 [test]
 hello_name = "Hello {{.Name}}"
