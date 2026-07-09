@@ -2,10 +2,10 @@ package data_agent
 
 import (
 	"bytes"
-	"fmt"
-	"github.com/360EntSecGroup-Skylar/excelize"
-	"github.com/jung-kurt/gofpdf"
 	"strings"
+
+	"github.com/jung-kurt/gofpdf"
+	"phytomni-server/common/document_format/xlsx"
 )
 
 type TableData struct {
@@ -13,32 +13,11 @@ type TableData struct {
 	Rows    [][]string `json:"rows"`
 }
 
-func ExportToExecl(data TableData) ([]byte, error) {
-	f := excelize.NewFile()
-
-	index := f.NewSheet("Sheet1")
-
-	for i, header := range data.Headers {
-		col := string(rune('A' + i))
-		cell := fmt.Sprintf("%s%d", col, 1)
-		f.SetCellValue("Sheet1", cell, header)
-	}
-
-	for rowIdx, row := range data.Rows {
-		for colIdx, value := range row {
-			col := string(rune('A' + colIdx))
-			cell := fmt.Sprintf("%s%d", col, rowIdx+2)
-			f.SetCellValue("Sheet1", cell, value)
-		}
-	}
-
-	f.SetActiveSheet(index)
-
-	buf := new(bytes.Buffer)
-	if err := f.Write(buf); err != nil {
-		return nil, fmt.Errorf("failed to generate Excel: %v", err)
-	}
-	return buf.Bytes(), nil
+func ExportToExcel(data TableData) ([]byte, error) {
+	return xlsx.ExportTable(xlsx.TableInput{
+		Headers: data.Headers,
+		Rows:    data.Rows,
+	})
 }
 
 func ExportToPdf(data TableData) ([]byte, error) {

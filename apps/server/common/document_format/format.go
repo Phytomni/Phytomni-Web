@@ -107,7 +107,7 @@ func (a *DataAgent) Download(format string, answer string) ([]byte, string, erro
 		return content, filename, err
 	case "Xlsx":
 		filename += ".xlsx"
-		content, err := data_agent.ExportToExecl(data)
+		content, err := data_agent.ExportToExcel(data)
 		return content, filename, err
 	default:
 		return nil, "", fmt.Errorf("unsupported format: %s", format)
