@@ -485,7 +485,7 @@ export default {
       oldPasswordPlaceholder: "@:changePassword.oldPasswordPlaceholder",
       newPassword: "新密码",
       newPasswordPlaceholder: "@:changePassword.newPasswordPlaceholder",
-      confirmPassword: "@:changePassword.confirmPassword",
+      confirmPassword: "确认密码",
       confirmPasswordPlaceholder: "@:changePassword.confirmPasswordPlaceholder",
     },
     usage: {

@@ -493,7 +493,7 @@ export default {
       oldPasswordPlaceholder: "@:changePassword.oldPasswordPlaceholder",
       newPassword: "New Password",
       newPasswordPlaceholder: "@:changePassword.newPasswordPlaceholder",
-      confirmPassword: "@:changePassword.confirmPassword",
+      confirmPassword: "Confirm Password",
       confirmPasswordPlaceholder: "@:changePassword.confirmPasswordPlaceholder",
     },
     usage: {
