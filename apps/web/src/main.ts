@@ -1,6 +1,7 @@
 // Application entry point.
 import { createApp } from "vue";
 import { createPinia } from "pinia";
+import { createActionObserverPlugin } from "@/stores/actionObserver";
 import ElementPlus from "element-plus";
 import enElementLocale from "element-plus/es/locale/lang/en";
 import zhElementLocale from "element-plus/es/locale/lang/zh-cn";
@@ -22,6 +23,7 @@ const app = createApp(App);
 
 // init
 const pinia = createPinia();
+pinia.use(createActionObserverPlugin());
 app.use(pinia);
 
 // init stores

@@ -73,6 +73,7 @@ export default defineConfig({
         "src/views/chat/streaming/a2uiAction.ts",
         "src/views/chat/streaming/sendBranch.ts",
         "src/views/chat/composables/useStreamMessage.ts",
+        "src/stores/actionObserver.ts",
       ],
       thresholds: {
         lines: 80,
