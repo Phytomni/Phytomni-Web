@@ -40,7 +40,8 @@ func GenerateDownloadToken(obsKey string, ttl time.Duration) (string, error) {
 // ParseDownloadToken verifies a download token and returns the bound OBS key.
 func ParseDownloadToken(token string) (string, error) {
 	claims := &downloadClaims{}
-	parsed, err := jwt.ParseWithClaims(token, claims, func(*jwt.Token) (interface{}, error) {
+	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	parsed, err := parser.ParseWithClaims(token, claims, func(*jwt.Token) (interface{}, error) {
 		return jwtSecret(), nil
 	})
 	if err != nil || !parsed.Valid || claims.ObsKey == "" {
