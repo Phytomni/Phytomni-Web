@@ -66,7 +66,7 @@ export function beforeEachGuard(
   next: NavigationGuardNext
 ) {
   NProgress.start();
-  // Brand title from locale packs (en: Phytomni / zh: 农科发现大模型).
+  // Brand title from locale packs (en Phytomni / zh brand string).
   document.title = i18n.global.t("chat.appTitle") as string;
   // Close stale first-login notification on /login transitions
   // (logout / post-FedLogOut). Runs unconditionally — even when

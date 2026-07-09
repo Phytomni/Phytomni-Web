@@ -49,7 +49,7 @@ export async function setLanguage(lang: SupportedLocales): Promise<SupportedLoca
     htmlEl.setAttribute("lang", lang);
 
     // Keep the browser tab title in sync with the locale pack
-    // (en: Phytomni / zh: 农科发现大模型).
+    // (en Phytomni / zh brand string from chat.appTitle).
     document.title = i18n.global.t("chat.appTitle") as string;
 
     return lang;
