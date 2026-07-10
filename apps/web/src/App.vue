@@ -3,6 +3,7 @@
     <div class="app-container">
       <RouterView />
       <Footer v-if="showFooter" class="app-footer" />
+      <TransferProgressList />
     </div>
   </el-config-provider>
 </template>
@@ -12,6 +13,7 @@ import { RouterView, useRoute } from "vue-router";
 import en from "element-plus/es/locale/lang/en";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import Footer from "@/components/Footer.vue";
+import TransferProgressList from "@/components/TransferProgressList.vue";
 import { useAppStore } from "@/stores";
 
 const route = useRoute();
