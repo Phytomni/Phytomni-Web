@@ -68,9 +68,32 @@ describe("useChatStates parallel chat state", () => {
       streamingMessageId: null,
       a2uiRunId: "",
       a2uiActionSender: null,
+      uploadTransfer: null,
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
+  });
+
+  it("isolates uploadTransfer per dialogue via proxy", () => {
+    const s = useChatStates();
+    const snap = {
+      loaded: 10,
+      total: 100,
+      percent: 10,
+      etaSec: 5,
+      indeterminate: false,
+      phase: "upload" as const,
+      requestId: "r-a",
+    };
+
+    s.currentChatId.value = "A";
+    s.uploadTransfer.value = snap;
+
+    s.currentChatId.value = "B";
+    expect(s.uploadTransfer.value).toBeNull();
+
+    s.currentChatId.value = "A";
+    expect(s.uploadTransfer.value).toEqual(snap);
   });
 
   it("empty currentChatId returns safe defaults and setters are no-ops", () => {
