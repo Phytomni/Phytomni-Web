@@ -5,6 +5,11 @@ type QueryProgressOpts = {
   onUploadProgress?: (e: AxiosProgressEvent) => void;
 };
 
+type DownloadProgressOpts = {
+  requestId?: string;
+  onDownloadProgress?: (e: AxiosProgressEvent) => void;
+};
+
 // History question list
 export const getHistoryQuestionList = () => {
   return request({
@@ -84,13 +89,16 @@ export const getChatdownloadURL = (data: { obs_path: string }) => {
 
 // Get rendering-file download URL
 export const getFileDownUrlApi = (
-  data: { id: string; document_format: string } | FormData
+  data: { id: string; document_format: string } | FormData,
+  opts?: DownloadProgressOpts
 ) => {
-  return request({
+  return createAbortableRequest({
     url: "/api/v1/downloads/rendering-file",
     method: "post",
     data: data,
     responseType: "blob",
+    requestId: opts?.requestId,
+    onDownloadProgress: opts?.onDownloadProgress,
   });
 };
 
