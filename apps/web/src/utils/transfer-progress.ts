@@ -26,7 +26,7 @@ export function formatBytes(n: number): string {
   return i === 0 ? `${Math.round(v)} B` : `${v.toFixed(1)} ${units[i]}`;
 }
 
-/** Returns a whole-second ETA string key arg, or null if unknown. */
+/** Returns whole seconds as number, or null if unknown. */
 export function formatEta(etaSec: number | null): number | null {
   if (etaSec == null || !Number.isFinite(etaSec) || etaSec < 0) return null;
   return Math.max(0, Math.ceil(etaSec));

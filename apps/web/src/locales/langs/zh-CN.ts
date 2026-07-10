@@ -454,6 +454,10 @@ export default {
     disliked: "已点踩",
     cancelled: "已取消",
     printFailed: "打印失败",
+    transferCancel: "取消",
+    transferEta: "约剩余 {seconds} 秒",
+    transferSize: "{loaded} / {total}",
+    downloadCancelled: "已取消下载",
     downloadError: "下载过程中出错，请联系管理员！",
   },
 

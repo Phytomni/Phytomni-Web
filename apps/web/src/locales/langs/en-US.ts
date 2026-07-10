@@ -461,6 +461,10 @@ export default {
     disliked: "Disliked",
     cancelled: "Cancelled",
     printFailed: "Print failed",
+    transferCancel: "Cancel",
+    transferEta: "About {seconds}s left",
+    transferSize: "{loaded} / {total}",
+    downloadCancelled: "Download cancelled",
     downloadError:
       "An error occurred while downloading, please contact the administrator!",
   },
