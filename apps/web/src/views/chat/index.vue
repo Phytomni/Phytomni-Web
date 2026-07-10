@@ -946,7 +946,13 @@
                 <span class="dot"></span>
                 <span class="dot"></span>
               </div>
+              <TransferProgress
+                v-if="getChatState(currentChatId).uploadTransfer"
+                :snapshot="getChatState(currentChatId).uploadTransfer!"
+                @cancel="(id) => abortTransfer(id)"
+              />
               <SendProgress
+                v-else
                 :started-at="getChatState(currentChatId).sendStartedAt"
                 :agent-name="getChatState(currentChatId).activeAgentName"
                 :completing="getChatState(currentChatId).completing"
@@ -1327,6 +1333,7 @@
 import { onMounted, ref, nextTick, watch, computed } from "vue";
 import Sidebar from "./sidebar.vue";
 import { MentionSender, Prompts } from "vue-element-plus-x";
+import TransferProgress from "@/components/TransferProgress.vue";
 import SendProgress from "./components/SendProgress.vue";
 import StreamMessage from "./components/StreamMessage.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
@@ -1373,6 +1380,7 @@ import {
   Close,
 } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
+import { abortRequest } from "@/utils/request";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
@@ -1813,6 +1821,16 @@ const {
   getAgentTooltip,
   showMoreInfo,
 } = useAgentsPanel({ t, isSending, router, scrollToBottom });
+
+function abortTransfer(requestId: string) {
+  const ok = abortRequest(requestId);
+  if (ok) {
+    isAborted.value = true;
+    if (currentChatId.value) {
+      getChatState(currentChatId.value).uploadTransfer = null;
+    }
+  }
+}
 
 // Abort the current request
 const abortCurrentRequest = async () => {
