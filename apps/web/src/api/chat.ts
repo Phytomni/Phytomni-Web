@@ -1,4 +1,9 @@
 import request, { createAbortableRequest } from "@/utils/request";
+import type { AxiosProgressEvent } from "axios";
+
+type QueryProgressOpts = {
+  onUploadProgress?: (e: AxiosProgressEvent) => void;
+};
 
 // History question list
 export const getHistoryQuestionList = () => {
@@ -17,13 +22,15 @@ export const getQuery = (
         tool?: string;
         files?: File[];
       }
-    | FormData
+    | FormData,
+  opts?: QueryProgressOpts
 ) => {
   const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
   return request({
     url: `/api/v1/conversations/${id}/messages`,
     method: "post",
     data: data,
+    onUploadProgress: opts?.onUploadProgress,
   });
 };
 
@@ -37,7 +44,8 @@ export const getQueryAbortable = (
         files?: File[];
       }
     | FormData,
-  requestId?: string
+  requestId?: string,
+  opts?: QueryProgressOpts
 ) => {
   const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
   return createAbortableRequest({
@@ -45,6 +53,7 @@ export const getQueryAbortable = (
     method: "post",
     data: data,
     requestId: requestId,
+    onUploadProgress: opts?.onUploadProgress,
   });
 };
 

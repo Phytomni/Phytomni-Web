@@ -17,6 +17,7 @@ import {
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck } from "@/api/chat";
+import { createTransferTracker } from "@/utils/transfer-progress";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
 
@@ -176,9 +177,35 @@ export function useSendMessage(opts: {
         return;
       }
 
+      const hasFiles = chatState.fileList.length > 0;
+      const tracker = hasFiles
+        ? createTransferTracker({
+            phase: "upload",
+            requestId: currentRequestId.value,
+          })
+        : null;
+
       const response = await getQueryAbortable(
         queryData as any,
-        currentRequestId.value
+        currentRequestId.value,
+        tracker
+          ? {
+              onUploadProgress: (e) => {
+                const snap = tracker.update({
+                  loaded: e.loaded,
+                  total: e.total ?? 0,
+                });
+                getChatState(sendingDialogueId).uploadTransfer = snap;
+                if (
+                  !snap.indeterminate &&
+                  snap.loaded >= snap.total &&
+                  snap.total > 0
+                ) {
+                  getChatState(sendingDialogueId).uploadTransfer = null;
+                }
+              },
+            }
+          : undefined
       );
 
       // On response: first fast-animate the progress bar to 100% (CSS 300ms), then swap in the answer.
@@ -591,6 +618,7 @@ export function useSendMessage(opts: {
     } finally {
       // clean up the request ID
       currentRequestId.value = "";
+      getChatState(sendingDialogueId).uploadTransfer = null;
 
       // refresh the sidebar history data whether or not it's a new chat
       await getHistoryQuestionData();

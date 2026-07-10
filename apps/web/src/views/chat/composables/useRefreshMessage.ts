@@ -4,6 +4,7 @@ import type { ChatMessage } from "../types";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getQuery } from "@/api/chat";
+import { createTransferTracker } from "@/utils/transfer-progress";
 import { isValidJSON, convertToTableData } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 
@@ -52,7 +53,8 @@ export function useRefreshMessage(opts: {
       return;
     }
 
-    const chatState = getChatState(currentChatId.value);
+    const refreshDialogueId = currentChatId.value;
+    const chatState = getChatState(refreshDialogueId);
     if (!chatState) {
       return;
     }
@@ -89,7 +91,35 @@ export function useRefreshMessage(opts: {
         });
       }
 
-      const response = await getQuery(queryData as any);
+      const hasFiles = chatState.fileList.length > 0;
+      const tracker = hasFiles
+        ? createTransferTracker({
+            phase: "upload",
+            requestId: Date.now().toString(),
+          })
+        : null;
+
+      const response = await getQuery(
+        queryData as any,
+        tracker
+          ? {
+              onUploadProgress: (e) => {
+                const snap = tracker.update({
+                  loaded: e.loaded,
+                  total: e.total ?? 0,
+                });
+                getChatState(refreshDialogueId).uploadTransfer = snap;
+                if (
+                  !snap.indeterminate &&
+                  snap.loaded >= snap.total &&
+                  snap.total > 0
+                ) {
+                  getChatState(refreshDialogueId).uploadTransfer = null;
+                }
+              },
+            }
+          : undefined
+      );
 
       if (response.data) {
         let newAssistantMessage: ChatMessage | undefined;
@@ -343,6 +373,7 @@ export function useRefreshMessage(opts: {
 
       // reset the overall sending state
       chatState.isSending = false;
+      getChatState(refreshDialogueId).uploadTransfer = null;
 
       // refresh the sidebar history data to show the latest conversation info
       try {

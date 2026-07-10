@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ref } from "vue";
 import { useSendMessage } from "@/views/chat/composables/useSendMessage";
 
@@ -37,6 +37,7 @@ type ChatStateRecord = {
   fileList: any[];
   historyQuestion: any;
   reactions: Record<string, number>;
+  uploadTransfer: any | null;
 };
 
 describe("useSendMessage", () => {
@@ -64,12 +65,14 @@ describe("useSendMessage", () => {
       fileList: [],
       historyQuestion: null,
       reactions: {},
+      uploadTransfer: null,
       ...overrides,
     };
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("VITE_STREAM_ENABLED", "false");
     states = new Map();
     states.set("A", makeState());
     states.set("B", makeState({ messageInput: "" }));
@@ -94,6 +97,10 @@ describe("useSendMessage", () => {
     getDialogueIdFromChatId = vi.fn(() => undefined);
     getChatIdFromUrl = vi.fn(() => null);
     scrollToBottom = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   function makeComposable() {
@@ -151,6 +158,51 @@ describe("useSendMessage", () => {
 
     // The request was called once
     expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
+  });
+
+  it("tracks axios upload progress on the sending dialogue during blocking file send", async () => {
+    states.get("A")!.messageInput = "Upload this";
+    states.get("A")!.fileList = [
+      {
+        name: "sample.txt",
+        size: 5,
+        type: "text/plain",
+        file: new File(["hello"], "sample.txt", { type: "text/plain" }),
+      },
+    ];
+
+    let resolveQuery!: (v: any) => void;
+    let capturedRequestId = "";
+    const pending = new Promise((resolve) => {
+      resolveQuery = resolve;
+    });
+    mockGetQueryAbortable.mockImplementationOnce((_data, requestId, opts) => {
+      capturedRequestId = requestId || "";
+      opts?.onUploadProgress?.({ loaded: 50, total: 100 } as any);
+      return pending as any;
+    });
+
+    const { sendMessage } = makeComposable();
+    const sendPromise = sendMessage();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(capturedRequestId).toBeTruthy();
+    expect(getChatState("A").uploadTransfer?.requestId).toBe(capturedRequestId);
+    expect(getChatState("A").uploadTransfer?.percent).toBe(50);
+
+    resolveQuery({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "Uploaded",
+        id: "msg-upload",
+        follow_up_questions: [],
+      },
+    });
+    await sendPromise;
+
+    expect(getChatState("A").uploadTransfer).toBeNull();
   });
 
   it("🔒 capture invariant: switching currentChatId mid-send, cleanup still lands on the captured original dialogue A", async () => {
