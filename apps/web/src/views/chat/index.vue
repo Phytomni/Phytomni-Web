@@ -1823,13 +1823,14 @@ const {
 } = useAgentsPanel({ t, isSending, router, scrollToBottom });
 
 function abortTransfer(requestId: string) {
-  const ok = abortRequest(requestId);
-  if (ok) {
-    isAborted.value = true;
-    if (currentChatId.value) {
-      getChatState(currentChatId.value).uploadTransfer = null;
-    }
+  if (currentChatId.value) {
+    getChatState(currentChatId.value).uploadTransfer = null;
   }
+  if (requestId === currentRequestId.value) {
+    void abortCurrentRequest();
+    return;
+  }
+  abortRequest(requestId);
 }
 
 // Abort the current request

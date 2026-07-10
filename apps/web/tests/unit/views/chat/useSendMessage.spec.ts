@@ -205,6 +205,30 @@ describe("useSendMessage", () => {
     expect(getChatState("A").uploadTransfer).toBeNull();
   });
 
+  it("resets a prior abort before sending a later message", async () => {
+    states.get("A")!.messageInput = "Try again";
+    isAborted.value = true;
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("server failed"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { sendMessage } = makeComposable();
+    try {
+      await sendMessage();
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    expect(isAborted.value).toBe(false);
+    expect(currentChat.value.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          content: "chat.sendFailed",
+        }),
+      ])
+    );
+  });
+
   it("🔒 capture invariant: switching currentChatId mid-send, cleanup still lands on the captured original dialogue A", async () => {
     states.get("A")!.messageInput = "Original dialogue message";
 

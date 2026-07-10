@@ -128,6 +128,15 @@ service.interceptors.request.use(
 // runtime path.
 type ErrorCodeLookup = Record<string, (() => string) | string>;
 
+function isCanceledRequest(error: unknown): boolean {
+  const err = error as { code?: unknown; name?: unknown };
+  return (
+    axios.isCancel(error) ||
+    err?.code === "ERR_CANCELED" ||
+    err?.name === "CanceledError"
+  );
+}
+
 // response interceptor
 service.interceptors.response.use(
   (res: AxiosResponse) => {
@@ -203,6 +212,9 @@ service.interceptors.response.use(
       url: error?.config?.url,
       message: error?.message,
     });
+    if (isCanceledRequest(error)) {
+      return Promise.reject(error);
+    }
     const { response } = error;
     let { message } = error;
     if (response?.data?.detail?.code === 403) {
@@ -254,15 +266,6 @@ service.interceptors.response.use(
 );
 
 let downloadRequestSeq = 0;
-
-function isCanceledRequest(error: unknown): boolean {
-  const err = error as { code?: unknown; name?: unknown };
-  return (
-    axios.isCancel(error) ||
-    err?.code === "ERR_CANCELED" ||
-    err?.name === "CanceledError"
-  );
-}
 
 // generic download method
 export function download(

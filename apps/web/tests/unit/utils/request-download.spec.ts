@@ -9,10 +9,12 @@ const mocks = vi.hoisted(() => {
     post: vi.fn(),
     saveAs: vi.fn(),
     blobValidate: vi.fn(async () => true),
+    elMessage: vi.fn(),
     elMessageError: vi.fn(),
     elMessageInfo: vi.fn(),
     loadingService: vi.fn(() => ({ close: vi.fn() })),
     CanceledError,
+    responseError: undefined as undefined | ((error: unknown) => Promise<never>),
   };
 });
 
@@ -27,7 +29,11 @@ vi.mock("axios", () => ({
       defaults: {},
       interceptors: {
         request: { use: vi.fn() },
-        response: { use: vi.fn() },
+        response: {
+          use: vi.fn((_success, error) => {
+            mocks.responseError = error;
+          }),
+        },
       },
     })),
     isCancel: vi.fn(
@@ -37,10 +43,10 @@ vi.mock("axios", () => ({
 }));
 
 vi.mock("element-plus", () => ({
-  ElMessage: {
+  ElMessage: Object.assign(mocks.elMessage, {
     error: mocks.elMessageError,
     info: mocks.elMessageInfo,
-  },
+  }),
   ElMessageBox: { alert: vi.fn() },
   ElLoading: { service: mocks.loadingService },
 }));
@@ -116,5 +122,19 @@ describe("download", () => {
     expect(mocks.elMessageInfo).toHaveBeenCalledWith("chat.downloadCancelled");
     expect(mocks.elMessageError).not.toHaveBeenCalledWith("chat.downloadError");
     expect(listDownloadTransfers()).toHaveLength(0);
+  });
+
+  it("does not show a global error toast for canceled response errors", async () => {
+    const canceled = new mocks.CanceledError("canceled");
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await expect(mocks.responseError?.(canceled)).rejects.toBe(canceled);
+    } finally {
+      consoleLog.mockRestore();
+    }
+
+    expect(mocks.elMessage).not.toHaveBeenCalled();
+    expect(mocks.elMessageError).not.toHaveBeenCalled();
   });
 });

@@ -70,6 +70,7 @@ export function useSendMessage(opts: {
     if (!currentMessage.trim()) return;
 
     chatState.isSending = true;
+    isAborted.value = false;
     chatState.sendStartedAt = Date.now();
     chatState.activeAgentName =
       newMessageValue.matches.length > 0
