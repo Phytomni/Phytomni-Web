@@ -1292,8 +1292,9 @@
   </PhyAdaptiveShell>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, nextTick, watch, computed } from "vue";
+import { onMounted, provide, ref, nextTick, watch, computed } from "vue";
 import Sidebar from "./sidebar.vue";
+import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
 import { MentionSender, Prompts } from "vue-element-plus-x";
 import TransferProgress from "@/components/TransferProgress.vue";
 import SendProgress from "./components/SendProgress.vue";
@@ -1382,6 +1383,7 @@ const drawerVisible = ref(false);
 // Left sidebar state
 const leftSidebarCollapsed = ref(false);
 const leftSidebarDrawerOpen = ref(false);
+provide(CHAT_SIDEBAR_DRAWER_OPEN_KEY, leftSidebarDrawerOpen);
 
 // Agents architecture diagram dialog
 const agentsViewVisible = ref(false);

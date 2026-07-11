@@ -199,7 +199,7 @@ describe("Chat adaptive shell integration", () => {
   it("keeps header title precedence: current chat, then list, then untitled", () => {
     const headerBlock = CHAT_SOURCE.slice(
       CHAT_SOURCE.indexOf("const chatHeaderTitle"),
-      CHAT_SOURCE.indexOf("const handleHeaderCommand")
+      CHAT_SOURCE.indexOf("const toggleSidebarFromHeader")
     );
     expect(headerBlock).toContain("currentChat.value?.title");
     expect(headerBlock).toContain("chatList.value.find");

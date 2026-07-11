@@ -234,6 +234,71 @@ describe("ChatSidebarNav", () => {
     ).toBe("true");
   });
 
+  it("keeps one identity hook across expanded, compact, and drawer mounts", () => {
+    const expanded = mountNav();
+    expect(expanded.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
+      1
+    );
+    expect(
+      expanded.find('[data-testid="chat-account-identity"]').attributes(
+        "aria-hidden"
+      )
+    ).toBeUndefined();
+
+    const compact = mountNav({ collapsed: true });
+    expect(compact.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
+      1
+    );
+    expect(
+      compact.find('[data-testid="chat-account-identity"]').attributes(
+        "aria-hidden"
+      )
+    ).toBe("true");
+
+    const closedDrawer = mountNav({ offCanvas: true });
+    expect(
+      closedDrawer.findAll('[data-testid="chat-account-identity"]')
+    ).toHaveLength(1);
+    expect(
+      closedDrawer
+        .find('[data-testid="chat-account-identity"]')
+        .attributes("aria-hidden")
+    ).toBe("true");
+
+    const openDrawer = mountNav({ offCanvas: false });
+    expect(openDrawer.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
+      1
+    );
+    expect(
+      openDrawer.find('[data-testid="chat-account-identity"]').attributes(
+        "aria-hidden"
+      )
+    ).toBeUndefined();
+  });
+
+  it("exposes the primary action when the mobile drawer is open", () => {
+    const closedDrawer = mountNav({ offCanvas: true });
+    expect(closedDrawer.find('[data-testid="chat-primary-action"]').exists()).toBe(
+      true
+    );
+    expect(
+      closedDrawer.find('[data-testid="chat-account-identity"]').attributes(
+        "aria-hidden"
+      )
+    ).toBe("true");
+
+    const openDrawer = mountNav({ offCanvas: false });
+    const primaryAction = openDrawer.find('[data-testid="chat-primary-action"]');
+    expect(primaryAction.exists()).toBe(true);
+    expect(primaryAction.classes()).toContain("sidebar-primary-action");
+    expect(openDrawer.text()).toContain("t:chat.newChat");
+    expect(
+      openDrawer.find('[data-testid="chat-account-identity"]').attributes(
+        "aria-hidden"
+      )
+    ).toBeUndefined();
+  });
+
   it("emits each help utility command once under guest permission state", async () => {
     const wrapper = mountNav({ canHelp: false });
     const helpDropdown = wrapper

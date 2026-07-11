@@ -179,7 +179,7 @@
           <span
             class="username"
             data-testid="chat-account-identity"
-            :aria-hidden="collapsed ? 'true' : undefined"
+            :aria-hidden="identityAriaHidden ? 'true' : undefined"
           >
             {{ userName }}
           </span>
@@ -257,7 +257,19 @@
   </div>
 </template>
 
+<script lang="ts">
+export const CHAT_SIDEBAR_DRAWER_OPEN_KEY = Symbol("chatSidebarDrawerOpen");
+</script>
+
 <script setup lang="ts">
+import {
+  computed,
+  inject,
+  onMounted,
+  onUnmounted,
+  ref,
+  type Ref,
+} from "vue";
 import {
   ArrowDown,
   ChatDotRound,
@@ -276,8 +288,9 @@ import {
 } from "@element-plus/icons-vue";
 import LangSwitch from "@/components/LangSwitch.vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
+import { SIDEBAR_MOBILE_BREAKPOINT } from "@/views/chat/composables/useSidebarResponsive";
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     collapsed: boolean;
     activeItem: string;
@@ -293,6 +306,7 @@ withDefaults(
     canAdminManagement: boolean;
     canHelp: boolean;
     showAgentsList: boolean;
+    offCanvas?: boolean;
   }>(),
   {
     collapsed: false,
@@ -311,6 +325,43 @@ withDefaults(
     showAgentsList: false,
   }
 );
+
+const injectedDrawerOpen = inject<Ref<boolean>>(
+  CHAT_SIDEBAR_DRAWER_OPEN_KEY,
+  ref(true)
+);
+const isMobileViewport = ref(false);
+let mobileQuery: MediaQueryList | null = null;
+
+const syncMobileViewport = () => {
+  isMobileViewport.value = mobileQuery?.matches ?? false;
+};
+
+onMounted(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  mobileQuery = window.matchMedia(
+    `(max-width: ${SIDEBAR_MOBILE_BREAKPOINT - 1}px)`
+  );
+  syncMobileViewport();
+  mobileQuery.addEventListener("change", syncMobileViewport);
+});
+
+onUnmounted(() => {
+  mobileQuery?.removeEventListener("change", syncMobileViewport);
+});
+
+const isOffCanvas = computed(() => {
+  if (props.offCanvas !== undefined) {
+    return props.offCanvas;
+  }
+
+  return isMobileViewport.value && !injectedDrawerOpen.value;
+});
+
+const identityAriaHidden = computed(() => props.collapsed || isOffCanvas.value);
 
 const emit = defineEmits<{
   (event: "new-chat"): void;
