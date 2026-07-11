@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import enUS from "@/locales/langs/en-US";
+import zhCN from "@/locales/langs/zh-CN";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
@@ -18,6 +20,24 @@ const CHAT_NAV_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatSidebarNav.vue"),
   "utf8"
 );
+const HISTORY_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/history/index.vue"),
+  "utf8"
+);
+const FAVORITES_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/favorites/index.vue"),
+  "utf8"
+);
+const LAYOUT_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/layout/index.vue"),
+  "utf8"
+);
+const FORM_LABEL_SOURCES = [
+  SIDEBAR_SOURCE,
+  HISTORY_SOURCE,
+  FAVORITES_SOURCE,
+  LAYOUT_SOURCE,
+].join("\n");
 const ACTIVE_CHAT_SOURCES = [
   CHAT_SOURCE,
   SIDEBAR_SOURCE,
@@ -134,6 +154,44 @@ describe("Chat adaptive shell integration", () => {
     expect(countOccurrences(activeChatSource, 'class="time-group"')).toBe(1);
     expect(CHAT_HISTORY_SOURCE).toContain("visibleGroups");
     expect(SIDEBAR_SOURCE).not.toContain('class="time-group"');
+  });
+
+  it("defines semantic locale keys with exact copy in both locales", () => {
+    expect(enUS.chat.untitledConversation).toBe("New chat");
+    expect(zhCN.chat.untitledConversation).toBe("新对话");
+    expect(enUS.chat.conversationTitle).toBe("Conversation title");
+    expect(zhCN.chat.conversationTitle).toBe("对话标题");
+    expect(enUS.chat).not.toHaveProperty("title");
+    expect(zhCN.chat).not.toHaveProperty("title");
+  });
+
+  it("uses chat.untitledConversation for untitled header fallback, never legacy HELP copy", () => {
+    expect(CHAT_SOURCE).toContain('t("chat.untitledConversation")');
+    expect(CHAT_SOURCE).not.toMatch(/t\(["']chat\.title["']\)/);
+    expect(CHAT_SOURCE).not.toContain('"HELP"');
+    expect(CHAT_SOURCE).not.toContain("使用说明");
+  });
+
+  it("keeps header title precedence: current chat, then list, then untitled", () => {
+    const headerBlock = CHAT_SOURCE.slice(
+      CHAT_SOURCE.indexOf("const chatHeaderTitle"),
+      CHAT_SOURCE.indexOf("const handleHeaderCommand")
+    );
+    expect(headerBlock).toContain("currentChat.value?.title");
+    expect(headerBlock).toContain("chatList.value.find");
+    expect(headerBlock).toContain('t("chat.untitledConversation")');
+  });
+
+  it("uses conversationTitle for rename form labels, not legacy chat.title", () => {
+    expect(FORM_LABEL_SOURCES).toContain('$t("chat.conversationTitle")');
+    expect(FORM_LABEL_SOURCES).not.toMatch(/\$t\(["']chat\.title["']\)/);
+  });
+
+  it("truncates long header titles instead of wrapping over actions", () => {
+    expect(CHAT_SOURCE).toContain('class="chat-header-title"');
+    expect(CHAT_SOURCE).toContain("text-overflow: ellipsis");
+    expect(CHAT_SOURCE).toContain("white-space: nowrap");
+    expect(CHAT_SOURCE).toContain("min-width: 0");
   });
 
   it("removes the permanent bottom agent stage while keeping one inline selection path", () => {

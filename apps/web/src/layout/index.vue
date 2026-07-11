@@ -22,7 +22,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item @click="$router.push('/chat')">{{
-                    $t("chat.title")
+                    $t("chat.conversationTitle")
                   }}</el-dropdown-item>
                   <el-dropdown-item @click="$router.push('/change-password')">
                     {{ $t("user.changePassword") }}

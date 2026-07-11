@@ -103,7 +103,7 @@
       @close="handleRenameDialogClose"
     >
       <el-form :model="renameForm" ref="renameFormRef" :rules="renameRules">
-        <el-form-item prop="title" :label="$t('chat.title')">
+        <el-form-item prop="title" :label="$t('chat.conversationTitle')">
           <el-input
             v-model="renameForm.title"
             :placeholder="$t('chat.actions.enterNewTitle')"

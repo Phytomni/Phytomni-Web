@@ -1471,7 +1471,7 @@ const chatHeaderTitle = computed(() => {
   const listTitle = chatList.value.find(
     (chat) => chat.dialogue_id === currentChatId.value,
   )?.title;
-  return listTitle?.trim() || t("chat.title");
+  return listTitle?.trim() || t("chat.untitledConversation");
 });
 
 const handleHeaderCommand = (command: string) => {

@@ -311,7 +311,8 @@ export default {
 
   // Chat module
   chat: {
-    title: "HELP",
+    untitledConversation: "New chat",
+    conversationTitle: "Conversation title",
     appTitle: "Phytomni",
     welcome: "Welcome, please enter your question directly",
     inputPlaceholder: "Please enter your question...",

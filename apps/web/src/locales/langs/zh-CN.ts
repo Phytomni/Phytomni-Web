@@ -313,7 +313,8 @@ export default {
 
   // 聊天模块
   chat: {
-    title: "使用说明",
+    untitledConversation: "新对话",
+    conversationTitle: "对话标题",
     appTitle: "农科发现大模型",
     welcome: "欢迎使用，可直接输入您想问的问题",
     inputPlaceholder: "请输入您的问题……",
