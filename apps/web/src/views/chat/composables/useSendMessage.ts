@@ -1,6 +1,6 @@
 import { nextTick } from "vue";
 import type { Ref } from "vue";
-import type { ChatMessage, Chat } from "../types";
+import type { ChatComposerHandle, ChatMessage, Chat } from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
 import i18n from "@/locales";
 import {
@@ -25,7 +25,7 @@ export function useSendMessage(opts: {
   getChatState: (dialogueId: string) => any;
   currentChatId: Ref<string>;
   currentChat: Ref<any>;
-  senderRef: Ref<any>;
+  composerRef: Ref<ChatComposerHandle | null>;
   currentRequestId: Ref<string>;
   isAborted: Ref<boolean>;
   t: (key: string) => string;
@@ -43,7 +43,7 @@ export function useSendMessage(opts: {
     getChatState,
     currentChatId,
     currentChat,
-    senderRef,
+    composerRef,
     currentRequestId,
     isAborted,
     t,
@@ -668,8 +668,8 @@ export function useSendMessage(opts: {
         chatState.fileList = [];
         // close the header after clearing the file list
         nextTick(() => {
-          if (senderRef.value) {
-            senderRef.value.closeHeader();
+          if (composerRef.value) {
+            composerRef.value.closeHeader();
           }
         });
       }

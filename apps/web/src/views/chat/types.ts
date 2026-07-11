@@ -80,3 +80,9 @@ export interface UploadFile {
   type: string;
   file: File;
 }
+
+export interface ChatComposerHandle {
+  openHeader: () => void;
+  closeHeader: () => void;
+  readonly popoverVisible: boolean | undefined;
+}

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ref } from "vue";
 import { useSendMessage } from "@/views/chat/composables/useSendMessage";
+import type { ChatComposerHandle } from "@/views/chat/types";
 
 // getQueryAbortable (main send) + getAnswerCheck (network-error recovery) are APIs the
 // composable imports directly, so they must be mocked.
@@ -46,7 +47,7 @@ describe("useSendMessage", () => {
   let getChatState: (dialogueId: string) => ChatStateRecord;
   let currentChatId: ReturnType<typeof ref<string>>;
   let currentChat: ReturnType<typeof ref<any>>;
-  let senderRef: ReturnType<typeof ref<any>>;
+  let composerRef: ReturnType<typeof ref<ChatComposerHandle | null>>;
   let currentRequestId: ReturnType<typeof ref<string>>;
   let isAborted: ReturnType<typeof ref<boolean>>;
   let chatList: ReturnType<typeof ref<any>>;
@@ -84,7 +85,7 @@ describe("useSendMessage", () => {
     };
     currentChatId = ref("A");
     currentChat = ref({ messages: [] });
-    senderRef = ref({ closeHeader: vi.fn() });
+    composerRef = ref({ closeHeader: vi.fn(), openHeader: vi.fn(), popoverVisible: false });
     currentRequestId = ref("");
     isAborted = ref(false);
     chatList = ref([
@@ -108,7 +109,7 @@ describe("useSendMessage", () => {
       getChatState,
       currentChatId: currentChatId as any,
       currentChat,
-      senderRef,
+      composerRef,
       currentRequestId: currentRequestId as any,
       isAborted: isAborted as any,
       t: (k: string) => k,

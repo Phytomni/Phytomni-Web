@@ -1,0 +1,276 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mount, flushPromises } from "@vue/test-utils";
+import { ref, nextTick } from "vue";
+import type { UploadFile } from "@/views/chat/types";
+
+const mentionExpose = {
+  openHeader: vi.fn(),
+  closeHeader: vi.fn(),
+  popoverVisible: ref(false),
+};
+
+vi.mock("vue-element-plus-x", () => ({
+  MentionSender: {
+    name: "MentionSender",
+    inheritAttrs: false,
+    template:
+      '<div class="mention-sender-stub" v-bind="$attrs"><slot name="header" /><slot name="prefix" /><slot name="action-list" /><slot name="footer" /></div>',
+    props: [
+      "modelValue",
+      "loading",
+      "disabled",
+      "options",
+      "placeholder",
+      "autoSize",
+      "clearable",
+      "variant",
+      "triggerStrings",
+      "triggerSplit",
+      "whole",
+      "submitType",
+    ],
+    emits: ["update:modelValue", "submit", "select", "search"],
+    setup(_props: unknown, { expose }: { expose: (exposed: Record<string, unknown>) => void }) {
+      expose(mentionExpose);
+      return {};
+    },
+  },
+  FilesCard: {
+    name: "FilesCard",
+    template: '<div class="files-card-stub" @click="$emit(\'delete\')" />',
+    props: ["uid", "name", "fileSize", "showDelIcon"],
+    emits: ["delete"],
+  },
+}));
+
+import ChatComposer from "@/views/chat/components/ChatComposer.vue";
+import type { ChatComposerHandle } from "@/views/chat/types";
+
+const PRE_EXTRACTION_DOM_ORDER = [
+  "chat-composer",
+  "empty-chat-mode",
+  "input-container-warpper",
+  "phy-composer-frame",
+  "input-box",
+  "mention-sender-stub",
+  "header-self-wrap",
+  "upload-demo",
+  "send-btn",
+];
+
+const baseProps = () => ({
+  modelValue: "hello",
+  isSending: false,
+  chatMode: "instant" as const,
+  expertModeEnabled: true,
+  showModeSelector: true,
+  fileList: [] as UploadFile[],
+  rolesTool: ["RAG", "BI"],
+  rolesLoading: false,
+  hasMessages: false,
+  activeButton: "",
+  getAgentTooltip: (item: string) => item,
+});
+
+const mountComposer = (overrides: Record<string, unknown> = {}) =>
+  mount(ChatComposer, {
+    props: { ...baseProps(), ...overrides },
+    global: {
+      stubs: {
+        ChatModeSelector: {
+          name: "ChatModeSelector",
+          template: '<div class="empty-chat-mode" />',
+          props: ["modelValue", "expertEnabled"],
+          emits: ["update:modelValue"],
+        },
+        PhyComposerFrame: {
+          name: "PhyComposerFrame",
+          template: '<div class="phy-composer-frame"><slot /></div>',
+        },
+        ElUpload: {
+          name: "ElUpload",
+          template: '<div class="upload-demo"><slot name="trigger" /></div>',
+          props: ["disabled", "limit", "accept", "showFileList", "autoUpload", "multiple", "action", "onChange"],
+          emits: ["change"],
+        },
+        ElButton: {
+          name: "ElButton",
+          template: "<button><slot /></button>",
+          props: ["round", "plain", "color", "disabled", "ariaLabel"],
+        },
+        ElTooltip: {
+          name: "ElTooltip",
+          template: "<div><slot /></div>",
+          props: ["content", "placement"],
+        },
+        ElIcon: { name: "ElIcon", template: "<span><slot /></span>" },
+        ElDropdown: {
+          name: "ElDropdown",
+          template: '<div class="el-dropdown"><slot /><slot name="dropdown" /></div>',
+          props: ["placement", "trigger", "disabled"],
+          emits: ["command"],
+        },
+        ElDropdownMenu: {
+          name: "ElDropdownMenu",
+          template: "<div><slot /></div>",
+        },
+        ElDropdownItem: {
+          name: "ElDropdownItem",
+          template: "<div><slot /></div>",
+          props: ["command"],
+        },
+      },
+    },
+  });
+
+describe("ChatComposer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mentionExpose.popoverVisible.value = false;
+  });
+
+  it("renders a single stable root hook without an extra wrapper", () => {
+    const wrapper = mountComposer();
+    const roots = wrapper.findAll('[data-testid="chat-composer"]');
+    expect(roots).toHaveLength(1);
+    expect(wrapper.element).toBe(roots[0].element);
+    expect(wrapper.find('[data-testid="chat-composer"]').exists()).toBe(true);
+  });
+
+  it("keeps DOM-order parity with the pre-extraction fixture", () => {
+    const wrapper = mountComposer({ fileList: [{ name: "a.pdf", size: 1, type: "application/pdf", file: new File([], "a.pdf") }] });
+    const order: string[] = [];
+    const walk = (el: Element) => {
+      const cls = el.className?.toString() || "";
+      const testId = el.getAttribute("data-testid");
+      if (testId === "chat-composer") order.push("chat-composer");
+      if (cls.includes("empty-chat-mode")) order.push("empty-chat-mode");
+      if (cls.includes("input-container-warpper")) order.push("input-container-warpper");
+      if (cls.includes("phy-composer-frame")) order.push("phy-composer-frame");
+      if (cls.includes("input-box")) order.push("input-box");
+      if (cls.includes("mention-sender-stub")) order.push("mention-sender-stub");
+      if (cls.includes("header-self-wrap")) order.push("header-self-wrap");
+      if (cls.includes("upload-demo")) order.push("upload-demo");
+      if (cls.includes("send-btn")) order.push("send-btn");
+      Array.from(el.children).forEach(walk);
+    };
+    walk(wrapper.element);
+    for (const token of PRE_EXTRACTION_DOM_ORDER) {
+      expect(order).toContain(token);
+    }
+    expect(order.indexOf("chat-composer")).toBeLessThan(order.indexOf("empty-chat-mode"));
+    expect(order.indexOf("empty-chat-mode")).toBeLessThan(order.indexOf("input-container-warpper"));
+    expect(order.indexOf("input-container-warpper")).toBeLessThan(order.indexOf("phy-composer-frame"));
+    expect(order.indexOf("phy-composer-frame")).toBeLessThan(order.indexOf("input-box"));
+    expect(order.indexOf("input-box")).toBeLessThan(order.indexOf("mention-sender-stub"));
+  });
+
+  it("supports v-model on the mention input", async () => {
+    const wrapper = mountComposer({ modelValue: "seed" });
+    const mention = wrapper.findComponent({ name: "MentionSender" });
+    await mention.vm.$emit("update:modelValue", "next");
+    expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["next"]);
+  });
+
+  it("emits submit from MentionSender and click send path", async () => {
+    const wrapper = mountComposer({ modelValue: "go" });
+    await wrapper.findComponent({ name: "MentionSender" }).vm.$emit("submit");
+    expect(wrapper.emitted("submit")).toHaveLength(1);
+
+    const wrapperEmpty = mountComposer({ modelValue: "" });
+    expect(wrapperEmpty.find(".send-btn").exists()).toBe(true);
+  });
+
+  it("emits stop when abort overlay is visible during send", () => {
+    const wrapper = mountComposer({ isSending: true });
+    expect(wrapper.find(".abort-button-overlay").exists()).toBe(true);
+    wrapper.find(".abort-button-overlay button").trigger("click");
+    expect(wrapper.emitted("stop")).toHaveLength(1);
+  });
+
+  it("renders mode selector only in empty-chat state and emits mode updates", async () => {
+    const wrapper = mountComposer({ showModeSelector: true });
+    expect(wrapper.find(".empty-chat-mode").exists()).toBe(true);
+
+    const withMessages = mountComposer({ showModeSelector: false, hasMessages: true });
+    expect(withMessages.find(".empty-chat-mode").exists()).toBe(false);
+
+    await wrapper.findComponent({ name: "ChatModeSelector" }).vm.$emit("update:modelValue", "expert");
+    expect(wrapper.emitted("update:chatMode")?.[0]).toEqual(["expert"]);
+  });
+
+  it("shows attachment cards and emits remove-file", async () => {
+    const file: UploadFile = {
+      name: "doc.pdf",
+      size: 10,
+      type: "application/pdf",
+      file: new File(["x"], "doc.pdf"),
+    };
+    const wrapper = mountComposer({ fileList: [file] });
+    expect(wrapper.find(".file-list-container").exists()).toBe(true);
+    await wrapper.findComponent({ name: "FilesCard" }).vm.$emit("delete");
+    expect(wrapper.emitted("remove-file")?.[0]).toEqual([0]);
+  });
+
+  it("emits file-change from the upload control", async () => {
+    const wrapper = mountComposer();
+    const upload = wrapper.findComponent({ name: "ElUpload" });
+    const file = { name: "f.txt", size: 1, type: "text/plain", raw: new File([], "f.txt") };
+    upload.props("onChange")?.(file);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted("file-change")).toHaveLength(1);
+  });
+
+  it("disables upload and mention controls while sending", () => {
+    const wrapper = mountComposer({ isSending: true });
+    expect(wrapper.findComponent({ name: "MentionSender" }).props("disabled")).toBe(true);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(true);
+    expect(wrapper.find(".file-list-container").exists()).toBe(false);
+  });
+
+  it("forwards mention select/search and agent footer actions", async () => {
+    const wrapper = mountComposer();
+    const mention = wrapper.findComponent({ name: "MentionSender" });
+    await mention.vm.$emit("select", { value: "RAG" });
+    await mention.vm.$emit("search", "R");
+    expect(wrapper.emitted("select")?.[0]).toEqual([{ value: "RAG" }]);
+    expect(wrapper.emitted("search")?.[0]).toEqual(["R"]);
+
+    const agentBtn = wrapper.find(".agent-button");
+    expect(agentBtn.exists()).toBe(true);
+    await agentBtn.trigger("click");
+    expect(wrapper.emitted("agent-click")?.[0]).toEqual(["RAG"]);
+  });
+
+  it("exposes ChatComposerHandle methods consumed by composables", async () => {
+    const wrapper = mountComposer();
+    const handle = wrapper.vm as unknown as ChatComposerHandle;
+    handle.openHeader();
+    handle.closeHeader();
+    expect(mentionExpose.openHeader).toHaveBeenCalled();
+    expect(mentionExpose.closeHeader).toHaveBeenCalled();
+    expect(handle.popoverVisible).toBe(false);
+  });
+
+  it("binds tour input target to input-container-warpper without an extra focus wrapper", async () => {
+    const tourInputTarget = ref<HTMLElement | null>(null);
+    const setTourInputTarget = (el: HTMLElement | null) => {
+      tourInputTarget.value = el;
+    };
+    mountComposer({ setTourInputTarget, showModeSelector: false });
+    await flushPromises();
+    expect(tourInputTarget.value).toBeTruthy();
+    expect(tourInputTarget.value?.classList.contains("input-container-warpper")).toBe(true);
+    expect(tourInputTarget.value?.getAttribute("data-testid")).not.toBe("chat-composer");
+  });
+
+  it("blocks Enter propagation while mention dropdown is open", async () => {
+    mentionExpose.popoverVisible.value = true;
+    const wrapper = mountComposer();
+    const stopPropagation = vi.fn();
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    Object.defineProperty(event, "stopPropagation", { value: stopPropagation });
+    wrapper.find(".mention-sender-stub").element.dispatchEvent(event);
+    expect(stopPropagation).toHaveBeenCalled();
+  });
+});
