@@ -13,8 +13,14 @@ export const PHY_TOKENS = {
   textSecondary: "#5B6B63",
   textMuted: "#8B9790",
   border: "#E6EBE7",
-  /** Chat bubble soft-wash mix amount (Style B glass). */
-  bubbleTintOpacity: 0.2,
+  actionFill: "#2F6FD4",
+  actionFillHover: "#255EB8",
+  onAction: "#FFFFFF",
+  actionText: "#2F6FD4",
+  actionTextHover: "#255EB8",
+  focus: "#2F6FD4",
+  brandBlue: "#3A83F7",
+  brandBlueSoft: "#D6E6FE",
 } as const;
 
 /** Legacy competing brand colors — must not reappear as hardcodes in apps/web */

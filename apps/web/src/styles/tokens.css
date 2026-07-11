@@ -2,6 +2,15 @@
   --phy-color-primary: #3a83f7;
   --phy-color-primary-hover: #6ba4f9;
   --phy-color-primary-soft: #d6e6fe;
+  --phy-color-action-fill: #2f6fd4;
+  --phy-color-action-fill-hover: #255eb8;
+  --phy-color-on-action: #ffffff;
+  --phy-color-action-text: #2f6fd4;
+  --phy-color-action-text-hover: #255eb8;
+  --phy-color-focus: #2f6fd4;
+  --phy-color-action: var(--phy-color-action-text);
+  --phy-color-brand-blue: #3a83f7;
+  --phy-color-brand-blue-soft: #d6e6fe;
   --phy-color-accent: #14644a;
   --phy-color-accent-hover: #3d8f72;
   --phy-color-accent-soft: #d7ede5;
@@ -29,13 +38,13 @@
   --phy-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Element Plus brand bridge */
-  --el-color-primary: var(--phy-color-primary);
-  --el-color-primary-light-3: #6ba4f9;
-  --el-color-primary-light-5: #9bc3fb;
-  --el-color-primary-light-7: #c5dbfd;
-  --el-color-primary-light-8: #d6e6fe;
-  --el-color-primary-light-9: #eaf2fe;
-  --el-color-primary-dark-2: #2f6fd4;
+  --el-color-primary: var(--phy-color-action-fill);
+  --el-color-primary-light-3: #6d9ae1;
+  --el-color-primary-light-5: #97b7ea;
+  --el-color-primary-light-7: #c1d4f2;
+  --el-color-primary-light-8: #d5e2f6;
+  --el-color-primary-light-9: #eaf1fb;
+  --el-color-primary-dark-2: var(--phy-color-action-fill-hover);
   --el-color-success: var(--phy-color-accent);
   --el-color-success-light-3: #3d8f72;
   --el-color-success-light-5: #7eb59a;
@@ -48,40 +57,11 @@
   --el-border-radius-small: 6px;
   --el-border-radius-round: var(--phy-radius-pill);
 
-  /* Chat bubbles — Style B @ 20% soft wash + blur */
-  --phy-bubble-tint-opacity: 0.2;
-  --phy-bubble-blur: 12px;
-  --phy-bubble-user-bg: color-mix(
-    in srgb,
-    var(--phy-color-accent-soft) 20%,
-    transparent
-  );
-  --phy-bubble-assistant-bg: color-mix(
-    in srgb,
-    var(--phy-color-primary-soft) 20%,
-    transparent
-  );
-  --phy-bubble-user-border: color-mix(
-    in srgb,
-    var(--phy-color-accent) 14%,
-    transparent
-  );
-  --phy-bubble-assistant-border: color-mix(
-    in srgb,
-    var(--phy-color-primary) 16%,
-    transparent
-  );
-  /* Fallbacks when transparency is reduced / unsupported */
-  --phy-bubble-user-bg-solid: color-mix(
-    in srgb,
-    var(--phy-color-accent-soft) 40%,
-    var(--phy-color-bg-elevated)
-  );
-  --phy-bubble-assistant-bg-solid: color-mix(
-    in srgb,
-    var(--phy-color-primary-soft) 40%,
-    var(--phy-color-bg-elevated)
-  );
+  /* Chat bubbles — deterministic, very pale, and opaque */
+  --phy-bubble-user-bg: #eaf6f1;
+  --phy-bubble-user-border: #cfe8dc;
+  --phy-bubble-assistant-bg: #eaf2fe;
+  --phy-bubble-assistant-border: #d5e5fc;
 
   /* Auth Field Horizon H1 — blue top → green bottom */
   --phy-auth-horizon: linear-gradient(
@@ -110,8 +90,6 @@
   background: var(--phy-bubble-user-bg);
   border: 1px solid var(--phy-bubble-user-border);
   border-radius: var(--phy-radius-lg);
-  backdrop-filter: blur(var(--phy-bubble-blur));
-  -webkit-backdrop-filter: blur(var(--phy-bubble-blur));
   box-shadow: 0 1px 2px rgba(20, 32, 27, 0.03);
 }
 
@@ -119,22 +97,7 @@
   background: var(--phy-bubble-assistant-bg);
   border: 1px solid var(--phy-bubble-assistant-border);
   border-radius: var(--phy-radius-lg);
-  backdrop-filter: blur(var(--phy-bubble-blur));
-  -webkit-backdrop-filter: blur(var(--phy-bubble-blur));
   box-shadow: 0 1px 2px rgba(20, 32, 27, 0.03);
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .phy-bubble-user {
-    background: var(--phy-bubble-user-bg-solid);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-  .phy-bubble-assistant {
-    background: var(--phy-bubble-assistant-bg-solid);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
