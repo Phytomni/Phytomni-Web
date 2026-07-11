@@ -224,6 +224,7 @@ export default {
   legal: {
     termsTitle: "服务条款",
     privacyTitle: "隐私政策",
+    icpFiling: "京ICP备07026971号-9",
     versionLabel: "版本",
     effectiveLabel: "生效日期",
     draftBanner:

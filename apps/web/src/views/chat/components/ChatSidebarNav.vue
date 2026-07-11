@@ -111,7 +111,7 @@
                   href="https://beian.miit.gov.cn/"
                   target="_blank"
                   rel="noopener noreferrer"
-                >京ICP备07026971号-9</a
+                >{{ $t("legal.icpFiling") }}</a
                 >
               </div>
               <div class="help-preferences" role="group">
@@ -139,7 +139,7 @@
         href="https://beian.miit.gov.cn/"
         target="_blank"
         rel="noopener noreferrer"
-        >京ICP备07026971号-9</a
+        >{{ $t("legal.icpFiling") }}</a
       >
     </nav>
 

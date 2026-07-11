@@ -221,6 +221,7 @@ export default {
   legal: {
     termsTitle: "Terms of Service",
     privacyTitle: "Privacy Policy",
+    icpFiling: "京ICP备07026971号-9",
     versionLabel: "Version",
     effectiveLabel: "Effective date",
     draftBanner:
