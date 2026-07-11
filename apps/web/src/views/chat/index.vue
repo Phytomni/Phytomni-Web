@@ -58,6 +58,7 @@
         <div class="header-leading">
           <el-button
             class="mobile-sidebar-toggle"
+            data-testid="chat-sidebar-trigger"
             :class="{ 'is-visible': leftSidebarCollapsed }"
             text
             circle
@@ -76,29 +77,6 @@
           >
             {{ $t("chat.mode.expert") }}
           </span>
-        </div>
-        <div class="header-controls">
-          <el-dropdown
-            v-if="UserStore.permission !== 'guest'"
-            trigger="click"
-            @command="handleHeaderCommand"
-          >
-            <el-button
-              data-test="chat-header-overflow"
-              text
-              circle
-              :aria-label="$t('help.title')"
-            >
-              <el-icon><MoreFilled /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="help">
-                  {{ $t("help.title") }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
         </div>
       </header>
 
@@ -1339,7 +1317,6 @@ import {
   CircleCheck,
   CircleClose,
   CircleCloseFilled,
-  MoreFilled,
 } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
@@ -1473,10 +1450,6 @@ const chatHeaderTitle = computed(() => {
   )?.title;
   return listTitle?.trim() || t("chat.untitledConversation");
 });
-
-const handleHeaderCommand = (command: string) => {
-  if (command === "help") router.push("/help");
-};
 
 const toggleSidebarFromHeader = () => {
   if (leftSidebarCollapsed.value) {

@@ -131,10 +131,34 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain('class="chat-header"');
     expect(CHAT_SOURCE).toContain("chatHeaderTitle");
     expect(CHAT_SOURCE).toContain("chat-expert-indicator");
-    expect(CHAT_SOURCE).toContain('data-test="chat-header-overflow"');
+    expect(CHAT_SOURCE).not.toContain('data-test="chat-header-overflow"');
     expect(CHAT_SOURCE).not.toContain("<LangSwitch");
     expect(CHAT_SOURCE).not.toContain('class="chat-footer"');
     expect(CHAT_SOURCE).toContain('@showArchitecture="showAgentsView"');
+  });
+
+  it("routes help through the sidebar utility group and exposes shell capture hooks", () => {
+    expect(CHAT_SOURCE).toContain('data-testid="chat-sidebar-trigger"');
+    expect(CHAT_NAV_SOURCE).toContain('data-testid="chat-primary-action"');
+    expect(CHAT_NAV_SOURCE).toContain('data-testid="chat-account-identity"');
+    expect(CHAT_NAV_SOURCE).toContain('class="sidebar-nav-utility"');
+    expect(CHAT_NAV_SOURCE).toContain('class="sidebar-nav-secondary"');
+    expect(
+      countOccurrences(CHAT_NAV_SOURCE, 'data-testid="chat-primary-action"')
+    ).toBe(1);
+    expect(
+      countOccurrences(CHAT_NAV_SOURCE, 'data-testid="chat-account-identity"')
+    ).toBe(1);
+    expect(CHAT_NAV_SOURCE).not.toContain("box-shadow: var(--sidebar-btn-shadow)");
+    expect(CHAT_NAV_SOURCE).not.toContain("transform: scale(1.05)");
+    expect(CHAT_NAV_SOURCE).not.toContain("transform: translateY(-1px)");
+  });
+
+  it("keeps the mobile drawer trigger visible while the primary action lives in the sidebar", () => {
+    expect(CHAT_SOURCE).toContain('class="mobile-sidebar-toggle"');
+    expect(CHAT_SOURCE).toContain("toggleSidebarFromHeader");
+    expect(CHAT_SOURCE).toContain(':drawer-open="leftSidebarDrawerOpen"');
+    expect(CHAT_NAV_SOURCE).toContain('data-testid="chat-primary-action"');
   });
 
   it("uses one centered transcript scroll root with composer clearance", () => {

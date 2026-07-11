@@ -70,7 +70,14 @@ describe("ChatSidebarNav", () => {
 
     const collapsed = mountNav({ collapsed: true });
     expect(collapsed.text()).not.toContain("t:chat.newChat");
-    expect(collapsed.text()).not.toContain("Ada Lovelace");
+    expect(collapsed.find('[data-testid="chat-account-identity"]').exists()).toBe(
+      true
+    );
+    expect(
+      collapsed.find('[data-testid="chat-account-identity"]').attributes(
+        "aria-hidden"
+      )
+    ).toBe("true");
     expect(collapsed.find(".sidebar-nav").classes()).toContain("collapsed");
   });
 
@@ -154,5 +161,88 @@ describe("ChatSidebarNav", () => {
     expect(wrapper.text()).toContain("t:user.feedback");
     expect(wrapper.text()).toContain("t:user.changePassword");
     expect(wrapper.text()).toContain("t:user.logout");
+  });
+
+  it("exposes exactly one primary navigation action", () => {
+    const wrapper = mountNav();
+    const primaryActions = wrapper.findAll(
+      '[data-testid="chat-primary-action"]'
+    );
+    expect(primaryActions).toHaveLength(1);
+    expect(primaryActions[0].classes()).toContain("sidebar-primary-action");
+    expect(
+      wrapper.findAll(".sidebar-nav-row.sidebar-primary-action")
+    ).toHaveLength(1);
+  });
+
+  it("keeps secondary destinations as quiet rows without primary styling", () => {
+    const wrapper = mountNav({ activeItem: "knowledge-base" });
+    const secondaryRows = wrapper.findAll(".sidebar-nav-row:not(.sidebar-primary-action)");
+    expect(secondaryRows.length).toBeGreaterThanOrEqual(3);
+    secondaryRows.forEach((row) => {
+      expect(row.classes()).not.toContain("sidebar-primary-action");
+    });
+    expect(
+      wrapper
+        .find('[data-test="sidebar-nav-gene-display"]')
+        .classes()
+    ).toContain("is-active");
+  });
+
+  it("places help utilities in the bottom utility group once", () => {
+    const wrapper = mountNav();
+    const utility = wrapper.find(".sidebar-nav-utility");
+    expect(utility.exists()).toBe(true);
+    expect(utility.find('[data-test="sidebar-nav-tutorial"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find(".sidebar-nav-secondary").exists()).toBe(true);
+    expect(
+      wrapper.find(".sidebar-nav-secondary").find(".sidebar-nav-utility").exists()
+    ).toBe(false);
+  });
+
+  it("keeps compact accessibility labels and selected state", () => {
+    const collapsed = mountNav({ collapsed: true, activeItem: "favorites" });
+    const favorites = collapsed.find('[data-test="sidebar-nav-favorites"]');
+    expect(favorites.attributes("aria-label")).toBeTruthy();
+    expect(favorites.classes()).toContain("is-active");
+    const primary = collapsed.find('[data-testid="chat-primary-action"]');
+    expect(primary.attributes("aria-label")).toBeTruthy();
+  });
+
+  it("keeps stable capture hooks on the real controls", () => {
+    const expanded = mountNav();
+    expect(expanded.findAll('[data-testid="chat-primary-action"]')).toHaveLength(
+      1
+    );
+    expect(expanded.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
+      1
+    );
+    expect(
+      expanded.find('[data-testid="chat-account-identity"]').text()
+    ).toContain("Ada Lovelace");
+
+    const collapsed = mountNav({ collapsed: true });
+    expect(collapsed.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
+      1
+    );
+    expect(
+      collapsed.find('[data-testid="chat-account-identity"]').attributes(
+        "aria-hidden"
+      )
+    ).toBe("true");
+  });
+
+  it("emits each help utility command once under guest permission state", async () => {
+    const wrapper = mountNav({ canHelp: false });
+    const helpDropdown = wrapper
+      .findAllComponents({ name: "ElDropdown" })
+      .find((item) => item.find('[data-test="sidebar-nav-tutorial"]').exists());
+    if (!helpDropdown) throw new Error("utility help dropdown not found");
+    helpDropdown.vm.$emit("command", "tutorial");
+    expect(wrapper.emitted("tutorial")).toHaveLength(1);
+    expect(wrapper.emitted("help")).toBeUndefined();
+    expect(wrapper.emitted("show-architecture")).toBeUndefined();
   });
 });
