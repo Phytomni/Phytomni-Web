@@ -1,30 +1,10 @@
 <template>
-  <PhyAppShell>
-    <el-tour
-      v-model="showTutorial"
-      :mask="true"
-      :close-on-press-escape="true"
-      @finish="completeTutorial"
-      @close="completeTutorial"
-    >
-      <el-tour-step
-        :target="tourSidebarTarget"
-        :title="t('tutorial.step1.title')"
-        :description="t('tutorial.step1.content')"
-      />
-      <el-tour-step
-        :target="tourCasesTarget"
-        :title="t('tutorial.step2.title')"
-        :description="t('tutorial.step2.content')"
-      />
-      <el-tour-step
-        :target="tourInputTarget"
-        :title="t('tutorial.step3.title')"
-        :description="t('tutorial.step3.content')"
-      />
-    </el-tour>
-
-    <template #left>
+  <PhyAdaptiveShell
+    :sidebar-collapsed="leftSidebarCollapsed"
+    :artifact-open="false"
+    :artifact-fullscreen="false"
+  >
+    <template #sidebar>
       <!-- Left sidebar -->
       <div ref="tourSidebarTarget" class="tour-sidebar-wrap">
         <Sidebar
@@ -44,8 +24,35 @@
         />
       </div>
     </template>
-    <!-- Center chat area -->
-    <div class="chat-main">
+
+    <template #main>
+      <el-tour
+        v-model="showTutorial"
+        :mask="true"
+        :close-on-press-escape="true"
+        @finish="completeTutorial"
+        @close="completeTutorial"
+      >
+        <el-tour-step
+          :target="tourSidebarTarget"
+          :title="t('tutorial.step1.title')"
+          :description="t('tutorial.step1.content')"
+        />
+        <el-tour-step
+          :target="tourCasesTarget"
+          :title="t('tutorial.step2.title')"
+          :description="t('tutorial.step2.content')"
+        />
+        <el-tour-step
+          :target="tourInputTarget"
+          :title="t('tutorial.step3.title')"
+          :description="t('tutorial.step3.content')"
+        />
+      </el-tour>
+
+      <div class="chat-main-layout">
+        <!-- Center chat area -->
+        <div class="chat-main">
       <div class="chat-header">
         <div class="header-leading">
           <el-button
@@ -1283,9 +1290,7 @@
           >京ICP备07026971号-9</a
         >
       </div>
-    </div>
-
-    <template #right>
+        </div>
       <!-- Right sidebar -->
       <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
         <div class="sidebar-header">
@@ -1310,7 +1315,7 @@
           </div>
         </div>
       </div>
-    </template>
+      </div>
 
     <!-- Agents architecture diagram dialog -->
     <el-dialog
@@ -1340,7 +1345,8 @@
         />
       </div>
     </el-dialog>
-  </PhyAppShell>
+    </template>
+  </PhyAdaptiveShell>
 </template>
 <script setup lang="ts">
 import { onMounted, ref, nextTick, watch, computed } from "vue";
@@ -1351,7 +1357,7 @@ import SendProgress from "./components/SendProgress.vue";
 import StreamMessage from "./components/StreamMessage.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
 import {
-  PhyAppShell,
+  PhyAdaptiveShell,
   PhyComposerFrame,
   PhyEmptyState,
 } from "@/components/shell";
@@ -2112,13 +2118,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
 </script>
 
 <style lang="scss" scoped>
-.chat-container {
-  display: flex;
-  height: 100vh;
-  width: 100%;
-  overflow: hidden;
-}
-
 .tour-sidebar-wrap {
   flex-shrink: 0;
   height: 100%;
@@ -2138,14 +2137,21 @@ const copyMessageWithDocs = (message: any, index: number) => {
   --el-button-border-color: var(--phy-color-primary-soft);
 }
 
+.chat-main-layout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 // Chat main view
 .chat-main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: var(--phy-color-bg-page);
-  overflow: hidden;
-  transition: all 0.3s ease;
+  min-width: 0;
+  min-height: 0;
 }
 
 .chat-footer {
