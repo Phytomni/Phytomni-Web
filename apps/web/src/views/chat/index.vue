@@ -109,6 +109,29 @@
         ref="messageContainer"
         :key="timestamp"
       >
+        <div v-if="!currentChat?.messages?.length" class="empty-chat">
+          <PhyEmptyState
+            :title="$t('chat.welcomeTitle')"
+            :subtitle="$t('chat.welcomeSubtitle')"
+            class="empty-chat-starters-shell"
+          >
+            <template #mark>
+              <img
+                src="../../assets/images/chat/logo.png"
+                class="empty-chat-mark"
+                alt=""
+              />
+            </template>
+            <div ref="tourCasesTarget">
+              <Prompts
+                class="empty-chat-starters"
+                :items="starterItems"
+                wrap
+                @item-click="onStarterClick"
+              />
+            </div>
+          </PhyEmptyState>
+        </div>
         <div class="transcript-content">
         <template v-if="currentChat?.messages?.length">
           <div
@@ -1010,45 +1033,13 @@
       <el-backtop target=".message-container" :right="40" :bottom="80" />
 
       <!-- Input area -->
-      <div
-        class="input-container"
-        :style="{ bottom: currentChat?.messages?.length ? '2%' : '30%' }"
-      >
-        <div v-if="!currentChat?.messages?.length" class="empty-chat">
-          <div class="welcome-container">
-            <div class="welcome-container-text">
-              <div class="welcome-container-text1">
-                <img
-                  src="../../assets/images/chat/logo.png"
-                  class="logo"
-                  alt="Logo"
-                />{{ $t("chat.welcomeTitle") }}
-              </div>
-              <div class="welcome-container-text2">
-                {{ $t("chat.welcomeSubtitle") }}
-              </div>
-            </div>
-          </div>
-          <PhyEmptyState
-            v-if="!currentChat?.messages?.length"
-            :title="$t('chat.starter.title')"
-            class="empty-chat-starters-shell"
-          >
-            <div ref="tourCasesTarget">
-              <Prompts
-                class="empty-chat-starters"
-                :items="starterItems"
-                wrap
-                @item-click="onStarterClick"
-              />
-            </div>
-          </PhyEmptyState>
-          <ChatModeSelector
-            v-model="chatMode"
-            :expert-enabled="expertModeEnabled"
-            class="empty-chat-mode"
-          />
-        </div>
+      <div class="input-container">
+        <ChatModeSelector
+          v-if="!currentChat?.messages?.length"
+          v-model="chatMode"
+          :expert-enabled="expertModeEnabled"
+          class="empty-chat-mode"
+        />
         <div ref="tourInputTarget" class="input-container-warpper">
           <PhyComposerFrame>
             <div class="input-box">
@@ -1406,7 +1397,11 @@ import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
-import { STARTER_PROMPTS, applyStarterPrompt } from "@/views/chat/utils/starterPrompts";
+import {
+  STARTER_PROMPTS,
+  applyStarterPrompt,
+  getStarterPromptItems,
+} from "@/views/chat/utils/starterPrompts";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import { isValidPendingRecord, matchesChat, safeParse } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
@@ -1697,7 +1692,6 @@ const loadPendingChat = (dialogueId: string) => {
 
 // Parallel chat state (independent UI state per dialogueId) + current chat + 10 computed proxies
 const {
-  chatStates,
   getChatState,
   currentChatId,
   currentChat,
@@ -1714,13 +1708,7 @@ const {
 } = useChatStates();
 
 // Starter prompt cards — computed so labels/descriptions react to locale changes
-const starterItems = computed(() =>
-  STARTER_PROMPTS.map((p) => ({
-    key: p.key,
-    label: t(p.labelKey),
-    description: t(p.descKey),
-  })),
-);
+const starterItems = computed(() => getStarterPromptItems(t, isSending.value));
 
 const onStarterClick = (item: { key: string | number }) => {
   const prompt = STARTER_PROMPTS.find((p) => p.key === item.key);
@@ -2366,92 +2354,81 @@ const copyMessageWithDocs = (message: any, index: number) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  margin-bottom: 50px;
+  justify-content: center;
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: var(--phy-space-24) var(--phy-space-16) var(--phy-space-16);
+  box-sizing: border-box;
 
-  .welcome-container {
-    width: 80%;
-    max-width: 800px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  .empty-chat-starters-shell {
+    width: 100%;
+    padding: var(--phy-space-16) 0;
+  }
 
-    h3 {
-      text-align: center;
-      margin-bottom: 24px;
-      color: #333;
-      margin-top: 100px;
-    }
+  .empty-chat-mark {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+  }
 
-    &-text {
-      height: 100%;
+  .empty-chat-starters {
+    width: 100%;
+
+    :deep(.el-prompts-items) {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--phy-space-12);
       width: 100%;
-      text-align: center;
-      color: #090909;
     }
 
-    &-text1 {
-      text-align: center;
+    :deep(.el-prompts-item) {
+      min-width: 0;
+      padding: var(--phy-space-16);
+      border: 1px solid var(--phy-color-border-subtle);
+      border-radius: var(--phy-radius-md);
+      background: var(--phy-color-bg-elevated);
+      text-align: left;
+      transition: background-color var(--phy-motion-fast)
+          var(--phy-motion-ease-out),
+        border-color var(--phy-motion-fast) var(--phy-motion-ease-out);
+    }
 
-      font-size: 22px;
-      line-height: 1.5;
+    :deep(.el-prompts-item:hover) {
+      border-color: var(--phy-color-primary-soft);
+      background: var(--phy-color-primary-soft);
+    }
 
-      .logo {
-        width: 40px;
-        height: 40px;
-        margin-right: 10px;
-      }
+    :deep(.el-prompts-item-disabled) {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    :deep(.el-prompts-item-label) {
+      overflow-wrap: anywhere;
+      color: var(--phy-color-text);
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    :deep(.el-prompts-item-description) {
+      margin-top: var(--phy-space-8);
+      overflow-wrap: anywhere;
+      color: var(--phy-color-text-secondary);
+      font-size: 0.82rem;
+      line-height: 1.45;
     }
   }
 
-  .suggestion-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 40px;
+}
 
-    .suggestion-item {
-      background-color: #f5f5f5;
-      padding: 12px 16px;
-      border-radius: 8px;
-      cursor: pointer;
+@media (max-width: 600px) {
+  .empty-chat {
+    padding: var(--phy-space-16) var(--phy-space-12);
 
-      &:hover {
-        background-color: #e6f7ff;
-      }
-    }
-  }
-
-  .feature-container {
-    margin-top: 40px;
-
-    .feature-title {
-      text-align: center;
-      font-size: 16px;
-      margin-bottom: 16px;
-      color: #333;
-    }
-
-    .feature-list {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 16px;
-
-      .feature-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        width: 100px;
-        padding: 16px;
-        background-color: #f9f9f9;
-        border-radius: 8px;
-
-        .el-icon {
-          font-size: 24px;
-          color: var(--el-color-primary);
-        }
+    .empty-chat-starters {
+      :deep(.el-prompts-items) {
+        grid-template-columns: minmax(0, 1fr);
       }
     }
   }
@@ -2461,6 +2438,12 @@ const copyMessageWithDocs = (message: any, index: number) => {
   width: 100%;
   position: relative;
   background-color: #fff;
+
+  .empty-chat-mode {
+    display: flex;
+    justify-content: center;
+    margin: 0 auto var(--phy-space-8);
+  }
 
   .input-container-warpper {
     position: relative;
@@ -2940,14 +2923,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
 // Ensure the container can overlay other content
 .input-container {
   position: relative;
-}
-
-.welcome-container-text1 {
-  font-size: 40px !important;
-}
-
-.welcome-container-text2 {
-  font-size: 18px !important;
 }
 
 // Log button styles

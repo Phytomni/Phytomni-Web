@@ -7,6 +7,13 @@ export interface StarterPrompt {
   promptKey: string;
 }
 
+export interface StarterPromptItem {
+  key: string;
+  label: string;
+  description: string;
+  disabled: boolean;
+}
+
 export const STARTER_PROMPTS: StarterPrompt[] = [
   {
     key: "gene",
@@ -28,13 +35,25 @@ export const STARTER_PROMPTS: StarterPrompt[] = [
   },
 ];
 
+export function getStarterPromptItems(
+  t: (key: string) => string,
+  disabled = false
+): StarterPromptItem[] {
+  return STARTER_PROMPTS.map((prompt) => ({
+    key: prompt.key,
+    label: t(prompt.labelKey),
+    description: t(prompt.descKey),
+    disabled,
+  }));
+}
+
 // Fill the composer with the selected starter's prompt text. Intentionally fills
 // only — it has no send capability, so it can never auto-submit (which would
 // consume chat_limit quota before the user edits the example gene ID / species).
 export function applyStarterPrompt(
   item: { promptKey: string },
   t: (key: string) => string,
-  setInput: (text: string) => void,
+  setInput: (text: string) => void
 ): void {
   setInput(t(item.promptKey));
 }
