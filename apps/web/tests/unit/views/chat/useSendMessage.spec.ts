@@ -209,7 +209,7 @@ describe("useSendMessage", () => {
     states.get("A")!.messageInput = "Try again";
     isAborted.value = true;
     mockGetQueryAbortable.mockRejectedValueOnce(new Error("server failed"));
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
 
     const { sendMessage } = makeComposable();
     try {

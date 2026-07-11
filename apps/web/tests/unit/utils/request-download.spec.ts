@@ -126,7 +126,7 @@ describe("download", () => {
 
   it("does not show a global error toast for canceled response errors", async () => {
     const canceled = new mocks.CanceledError("canceled");
-    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(vi.fn());
 
     try {
       await expect(mocks.responseError?.(canceled)).rejects.toBe(canceled);
