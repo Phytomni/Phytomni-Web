@@ -1,6 +1,6 @@
 import { nextTick } from "vue";
 import type { Ref } from "vue";
-import type { ChatComposerHandle, ChatMessage, Chat } from "../types";
+import type { ChatComposerHandle, ChatMessage, Chat, DialogueReconciliationResult } from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
 import i18n from "@/locales";
 import {
@@ -12,7 +12,6 @@ import {
 import { readServerFile } from "../utils/agent-log";
 import {
   writePendingChat,
-  clearPendingChat,
   isLocalStorageChat,
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
@@ -30,7 +29,10 @@ export function useSendMessage(opts: {
   isAborted: Ref<boolean>;
   t: (key: string) => string;
   userStore: () => any;
-  getHistoryQuestionData: () => Promise<any> | any;
+  getHistoryQuestionData: (
+    sendingDialogueId?: string,
+    options?: { blockingDialogueId?: string }
+  ) => Promise<DialogueReconciliationResult | undefined> | DialogueReconciliationResult | undefined;
   updateUrlWithChatId: (dialogueId: string) => void;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
@@ -112,6 +114,7 @@ export function useSendMessage(opts: {
     const sendingDialogueId = currentChatId.value;
     const sendingMessages = currentChat.value.messages;
     const sendingTitle = messageContent;
+    let blockingDialogueId: string | undefined;
 
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
       writePendingChat(sendingDialogueId, sendingMessages, {
@@ -196,13 +199,13 @@ export function useSendMessage(opts: {
                   loaded: e.loaded,
                   total: e.total ?? 0,
                 });
-                getChatState(sendingDialogueId).uploadTransfer = snap;
+                chatState.uploadTransfer = snap;
                 if (
                   !snap.indeterminate &&
                   snap.loaded >= snap.total &&
                   snap.total > 0
                 ) {
-                  getChatState(sendingDialogueId).uploadTransfer = null;
+                  chatState.uploadTransfer = null;
                 }
               },
             }
@@ -216,6 +219,12 @@ export function useSendMessage(opts: {
       }
 
       if (response.data) {
+        if (
+          typeof response.data.dialogue_id === "string" &&
+          response.data.dialogue_id !== ""
+        ) {
+          blockingDialogueId = response.data.dialogue_id;
+        }
         let assistantMessage: ChatMessage | undefined;
         if (response.data.final_answer) {
           assistantMessage = {
@@ -619,26 +628,15 @@ export function useSendMessage(opts: {
     } finally {
       // clean up the request ID
       currentRequestId.value = "";
-      getChatState(sendingDialogueId).uploadTransfer = null;
+      chatState.uploadTransfer = null;
 
-      // refresh the sidebar history data whether or not it's a new chat
-      await getHistoryQuestionData();
+      const historyOpts =
+        blockingDialogueId !== undefined
+          ? { blockingDialogueId }
+          : undefined;
+      await getHistoryQuestionData(sendingDialogueId, historyOpts);
 
-      // Clear the pending record using the captured sendingDialogueId. Using
-      // currentChatId.value would clear the wrong key if the user switched
-      // chats during the await above (chatStates parallel-chat model).
-      if (isLocalStorageChat(sendingDialogueId)) {
-        clearPendingChat(sendingDialogueId);
-      }
-
-      if (isNewChat) {
-        // for a new chat, select the newly created conversation
-        if (chatList.value.length > 0) {
-          const newChat = chatList.value[0];
-          currentChatId.value = newChat.dialogue_id;
-          updateUrlWithChatId(newChat.dialogue_id);
-        }
-      } else {
+      if (!isNewChat) {
         // for an existing chat, update the current conversation's title (if it changed)
         if (
           currentChat.value?.messages &&

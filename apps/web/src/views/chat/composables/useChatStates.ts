@@ -1,6 +1,7 @@
 import { ref, computed } from "vue";
 import type { Ref } from "vue";
 import type { UploadFile } from "../types";
+import type { RekeyChatStateOutcome } from "../types";
 import type { A2uiActionTransport } from "../streaming/a2uiAction";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 
@@ -263,9 +264,29 @@ export function useChatStates() {
     },
   });
 
+  const rekeyChatState = (
+    fromDialogueId: string,
+    toDialogueId: string
+  ): RekeyChatStateOutcome => {
+    if (fromDialogueId === toDialogueId) {
+      return { outcome: "same-id" };
+    }
+    const source = chatStates.value[fromDialogueId];
+    if (!source) {
+      return { outcome: "source-absent" };
+    }
+    if (chatStates.value[toDialogueId]) {
+      return { outcome: "target-collision" };
+    }
+    chatStates.value[toDialogueId] = source;
+    delete chatStates.value[fromDialogueId];
+    return { outcome: "moved" };
+  };
+
   return {
     chatStates,
     getChatState,
+    rekeyChatState,
     currentChatId,
     currentChat,
     messageInput,

@@ -185,3 +185,111 @@ describe("useChatStates selectedAgent", () => {
     expect(Object.keys(s.chatStates.value)).toHaveLength(0);
   });
 });
+
+describe("useChatStates rekeyChatState", () => {
+  it("moves the complete state object atomically and preserves object identity", () => {
+    const s = useChatStates();
+    const tempId = "new_100";
+    const serverId = "srv-abc";
+    const state = s.getChatState(tempId);
+    state.messageInput = "foreground draft";
+    state.isSending = true;
+    state.selectedAgent = "KnowledgeAgent";
+
+    const result = s.rekeyChatState(tempId, serverId);
+
+    expect(result).toEqual({ outcome: "moved" });
+    expect(s.chatStates.value[serverId]).toBe(state);
+    expect(s.chatStates.value[tempId]).toBeUndefined();
+    expect(state.messageInput).toBe("foreground draft");
+    expect(state.isSending).toBe(true);
+  });
+
+  it("background rekey preserves object identity while foreground dialogue stays put", () => {
+    const s = useChatStates();
+    const tempA = "new_200";
+    const tempB = "new_201";
+    const stateA = s.getChatState(tempA);
+    stateA.messageInput = "background A";
+    s.getChatState(tempB).messageInput = "foreground B";
+    s.currentChatId.value = tempB;
+
+    const result = s.rekeyChatState(tempA, "srv-a");
+
+    expect(result).toEqual({ outcome: "moved" });
+    expect(s.chatStates.value["srv-a"]).toBe(stateA);
+    expect(s.chatStates.value[tempA]).toBeUndefined();
+    expect(s.currentChatId.value).toBe(tempB);
+    expect(s.getChatState(tempB).messageInput).toBe("foreground B");
+  });
+
+  it("returns same-id without mutating the map", () => {
+    const s = useChatStates();
+    s.getChatState("same-key").messageInput = "x";
+    const before = { ...s.chatStates.value };
+
+    expect(s.rekeyChatState("same-key", "same-key")).toEqual({
+      outcome: "same-id",
+    });
+    expect(s.chatStates.value).toEqual(before);
+  });
+
+  it("returns source-absent when the from key does not exist", () => {
+    const s = useChatStates();
+    expect(s.rekeyChatState("missing", "srv-x")).toEqual({
+      outcome: "source-absent",
+    });
+    expect(s.chatStates.value["srv-x"]).toBeUndefined();
+  });
+
+  it("target-collision mutates neither record", () => {
+    const s = useChatStates();
+    const source = s.getChatState("new_300");
+    source.messageInput = "source";
+    const target = s.getChatState("srv-existing");
+    target.messageInput = "target";
+
+    expect(s.rekeyChatState("new_300", "srv-existing")).toEqual({
+      outcome: "target-collision",
+    });
+    expect(s.chatStates.value["new_300"]).toBe(source);
+    expect(s.chatStates.value["srv-existing"]).toBe(target);
+    expect(source.messageInput).toBe("source");
+    expect(target.messageInput).toBe("target");
+  });
+
+  it("background A rekey while B is current leaves B and its pending scope untouched", () => {
+    localStorage.setItem(
+      "pending_chat_new_A",
+      JSON.stringify({
+        isPending: true,
+        messages: [{ role: "user", content: "msg A" }],
+      })
+    );
+    localStorage.setItem(
+      "pending_chat_new_B",
+      JSON.stringify({
+        isPending: true,
+        messages: [{ role: "user", content: "msg B" }],
+      })
+    );
+
+    const s = useChatStates();
+    const stateA = s.getChatState("new_A");
+    stateA.messageInput = "A draft";
+    s.currentChatId.value = "new_B";
+    s.getChatState("new_B").messageInput = "B draft";
+
+    s.rekeyChatState("new_A", "srv-a");
+    localStorage.removeItem("pending_chat_new_A");
+
+    expect(s.currentChatId.value).toBe("new_B");
+    expect(s.chatStates.value["srv-a"]).toBe(stateA);
+    expect(s.chatStates.value["new_A"]).toBeUndefined();
+    expect(s.getChatState("new_B").messageInput).toBe("B draft");
+    expect(localStorage.getItem("pending_chat_new_A")).toBeNull();
+    expect(localStorage.getItem("pending_chat_new_B")).not.toBeNull();
+
+    localStorage.removeItem("pending_chat_new_B");
+  });
+});

@@ -1151,10 +1151,21 @@ import {
   getStarterPromptItems,
 } from "@/views/chat/utils/starterPrompts";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
-import { isValidPendingRecord, matchesChat, safeParse } from "@/utils/pending-chat";
+import {
+  clearPendingChat,
+  isLocalStorageChat,
+  isValidPendingRecord,
+  matchesChat,
+  safeParse,
+} from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
 import { formatLogContentWithColors } from "./utils/agent-log";
-import type { Chat, ChatMessage, ChatComposerHandle } from "./types";
+import type {
+  Chat,
+  ChatMessage,
+  ChatComposerHandle,
+  DialogueReconciliationResult,
+} from "./types";
 
 const composerRef = ref<ChatComposerHandle | null>(null);
 
@@ -1264,9 +1275,6 @@ onMounted(async () => {
 
   // Fetch the history question list
   getHistoryQuestionData().then(() => {
-    // Restore incomplete sessions
-    restorePendingChats();
-
     // Get the chatId from the URL
     const urlChatId = getChatIdFromUrl();
 
@@ -1305,104 +1313,6 @@ onMounted(async () => {
 
 });
 
-// Fetch history question data
-const getHistoryQuestionData = () => {
-  return new Promise<void>((resolve) => {
-    getHistoryQuestionList()
-      .then((res: any) => {
-        if (res.code === 200 && res.data) {
-          // Process the returned data while keeping the original structure
-          const formattedData = res.data.map((item: any) => {
-            return {
-              id: item.id,
-              dialogue_id: item.dialogue_id,
-              title: item.title_query || item.query, // Prefer title_query, fall back to query
-              date: item.created_at, // Keep the original time string
-              isFavorite: false, // Not favorited by default
-            };
-          });
-
-          // Check the temporary chat data in localStorage
-          // Scan + clean temporary localStorage records via the shared helpers
-          restorePendingChats();
-
-          // Update chatList, preserving the order returned by the API
-          chatList.value = formattedData;
-
-          // If there is currently a new chat state, try to associate it with the API-returned data
-          if (currentChatId.value && currentChatId.value.startsWith("new_")) {
-            // Find whether there is a newly created chat (by comparing user message content)
-            const currentUserMessage = currentChat.value?.messages?.find(
-              (msg: ChatMessage) => msg.role === "user"
-            );
-            if (currentUserMessage) {
-              const matchingChat = formattedData.find((chat: Chat) => {
-                // Compare the chat title with the user message content
-                return (
-                  chat.title === currentUserMessage.content ||
-                  chat.title.includes(
-                    currentUserMessage.content.substring(0, 20)
-                  ) ||
-                  currentUserMessage.content.includes(
-                    chat.title.substring(0, 20)
-                  )
-                );
-              });
-
-              if (matchingChat) {
-                // Found a matching chat, update the current chat ID
-                currentChatId.value = matchingChat.dialogue_id;
-                updateUrlWithChatId(matchingChat.dialogue_id);
-              }
-            }
-          }
-        }
-        resolve();
-      })
-      .catch((err: any) => {
-        console.error("Failed to fetch history question data:", err);
-        resolve();
-      });
-  });
-};
-
-// Check localStorage for all incomplete sessions and remove placeholders that
-// already match an entry in chatList. Unlike the legacy frontend, the Web app
-// does not push placeholder entries into chatList — here chatList is driven by
-// backend fetches, and pending-chat URLs are handled by loadPendingChat, avoiding
-// conflicts with the parallel chatStates model.
-const restorePendingChats = () => {
-  const pendingChatKeys = Object.keys(localStorage).filter((key) =>
-    key.startsWith("pending_chat_")
-  );
-
-  pendingChatKeys.forEach((key) => {
-    const tempChatId = key.replace("pending_chat_", "");
-    const pendingChatData = safeParse(localStorage.getItem(key));
-
-    if (!isValidPendingRecord(pendingChatData)) {
-      // Records that violate the contract (corrupt / legacy / partial write) — silently clean
-      if (pendingChatData !== null) {
-        localStorage.removeItem(key);
-      }
-      return;
-    }
-
-    const matchingChat = chatList.value.find((chat) =>
-      matchesChat(chat, pendingChatData, tempChatId)
-    );
-
-    if (matchingChat) {
-      localStorage.removeItem(key);
-      if (currentChatId.value === tempChatId) {
-        currentChatId.value = matchingChat.dialogue_id;
-        updateUrlWithChatId(matchingChat.dialogue_id);
-      }
-    }
-    // No match → keep in localStorage so a later loadPendingChat can load it via the URL
-  });
-};
-
 // Load a specific incomplete session from localStorage (used by onMounted keyed on the url chatId)
 const loadPendingChat = (dialogueId: string) => {
   const key = `pending_chat_${dialogueId}`;
@@ -1424,6 +1334,7 @@ const loadPendingChat = (dialogueId: string) => {
 // Parallel chat state (independent UI state per dialogueId) + current chat + 10 computed proxies
 const {
   getChatState,
+  rekeyChatState,
   currentChatId,
   currentChat,
   messageInput,
@@ -1438,6 +1349,159 @@ const {
   refreshingMessages,
   updatingLog,
 } = useChatStates();
+
+const reconcileMatchedDialogue = (
+  tempId: string,
+  serverId: string,
+  pendingKey?: string
+): DialogueReconciliationResult => {
+  const wasCurrent = currentChatId.value === tempId;
+  const rekey = rekeyChatState(tempId, serverId);
+  const benign =
+    rekey.outcome === "moved" ||
+    rekey.outcome === "same-id" ||
+    rekey.outcome === "source-absent";
+  const reconciled = rekey.outcome === "moved" || rekey.outcome === "same-id";
+
+  if (benign) {
+    if (pendingKey !== undefined) {
+      localStorage.removeItem(pendingKey);
+    } else if (isLocalStorageChat(tempId)) {
+      clearPendingChat(tempId);
+    }
+  } else if (rekey.outcome === "target-collision") {
+    console.warn(
+      `[chat] dialogue reconciliation collision (temp=${tempId}, server=${serverId})`
+    );
+    return { status: "retained", tempId, reason: "collision" };
+  }
+
+  if (reconciled && wasCurrent && currentChatId.value === tempId) {
+    currentChatId.value = serverId;
+    updateUrlWithChatId(serverId);
+  }
+
+  if (reconciled) {
+    return { status: "reconciled", tempId, serverId, rekey };
+  }
+
+  return { status: "retained", tempId, reason: "unmatched" };
+};
+
+// Fetch history question data; optional sendingDialogueId drives post-send reconciliation.
+const getHistoryQuestionData = (
+  sendingDialogueId?: string,
+  options?: { blockingDialogueId?: string }
+): Promise<DialogueReconciliationResult | undefined> => {
+  return new Promise((resolve) => {
+    getHistoryQuestionList()
+      .then((res: any) => {
+        if (res.code === 200 && res.data) {
+          const formattedData = res.data.map((item: any) => {
+            return {
+              id: item.id,
+              dialogue_id: item.dialogue_id,
+              title: item.title_query || item.query,
+              date: item.created_at,
+              isFavorite: false,
+            };
+          });
+
+          chatList.value = formattedData;
+          restorePendingChats(formattedData);
+
+          if (sendingDialogueId && isLocalStorageChat(sendingDialogueId)) {
+            if (options?.blockingDialogueId) {
+              resolve(
+                reconcileMatchedDialogue(
+                  sendingDialogueId,
+                  options.blockingDialogueId
+                )
+              );
+              return;
+            }
+
+            const pendingData = safeParse(
+              localStorage.getItem(`pending_chat_${sendingDialogueId}`)
+            );
+            if (!isValidPendingRecord(pendingData)) {
+              resolve({
+                status: "retained",
+                tempId: sendingDialogueId,
+                reason: "unmatched",
+              });
+              return;
+            }
+
+            const candidates = formattedData.filter((chat: Chat) =>
+              matchesChat(
+                { dialogue_id: chat.dialogue_id, title: chat.title },
+                pendingData,
+                sendingDialogueId
+              )
+            );
+            if (candidates.length === 1) {
+              resolve(
+                reconcileMatchedDialogue(
+                  sendingDialogueId,
+                  candidates[0].dialogue_id
+                )
+              );
+              return;
+            }
+
+            const reason = candidates.length === 0 ? "no-match" : "ambiguous";
+            console.warn(
+              `[chat] dialogue reconciliation retained: ${reason} (temp=${sendingDialogueId})`
+            );
+            resolve({
+              status: "retained",
+              tempId: sendingDialogueId,
+              reason,
+            });
+            return;
+          }
+        }
+        resolve(undefined);
+      })
+      .catch((err: any) => {
+        console.error("Failed to fetch history question data:", err);
+        resolve(undefined);
+      });
+  });
+};
+
+// Scan pending localStorage records against the authoritative chat list; reconcile
+// only when matchesChat yields exactly one candidate per temp key.
+const restorePendingChats = (knownChats: Chat[]) => {
+  const pendingChatKeys = Object.keys(localStorage).filter((key) =>
+    key.startsWith("pending_chat_")
+  );
+
+  pendingChatKeys.forEach((key) => {
+    const tempChatId = key.replace("pending_chat_", "");
+    const pendingChatData = safeParse(localStorage.getItem(key));
+
+    if (!isValidPendingRecord(pendingChatData)) {
+      if (pendingChatData !== null) {
+        localStorage.removeItem(key);
+      }
+      return;
+    }
+
+    const candidates = knownChats.filter((chat) =>
+      matchesChat(
+        { dialogue_id: chat.dialogue_id, title: chat.title },
+        pendingChatData,
+        tempChatId
+      )
+    );
+
+    if (candidates.length === 1) {
+      reconcileMatchedDialogue(tempChatId, candidates[0].dialogue_id, key);
+    }
+  });
+};
 
 // Starter prompt cards — computed so labels/descriptions react to locale changes
 const starterItems = computed(() => getStarterPromptItems(t, isSending.value));

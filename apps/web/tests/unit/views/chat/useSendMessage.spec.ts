@@ -20,7 +20,7 @@ vi.mock("element-plus", () => ({
 vi.mock("@/utils/pending-chat", () => ({
   writePendingChat: vi.fn(),
   clearPendingChat: vi.fn(),
-  isLocalStorageChat: vi.fn(() => false),
+  isLocalStorageChat: vi.fn((id: string) => id.startsWith("new_")),
 }));
 
 // network-error detection: default is not a network error.
@@ -29,8 +29,11 @@ vi.mock("@/utils/network-error", () => ({
 }));
 
 import { getQueryAbortable } from "@/api/chat";
+import { clearPendingChat } from "@/utils/pending-chat";
+import { useChatStates } from "@/views/chat/composables/useChatStates";
 
 const mockGetQueryAbortable = vi.mocked(getQueryAbortable);
+const mockClearPendingChat = vi.mocked(clearPendingChat);
 
 type ChatStateRecord = {
   isSending: boolean;
@@ -295,5 +298,167 @@ describe("useSendMessage", () => {
     expect(mockGetQueryAbortable).not.toHaveBeenCalled();
     expect(currentChat.value.messages.length).toBe(0);
     expect(getChatState("A").isSending).toBe(false);
+  });
+
+  it("blocking new chat passes exact dialogue_id to getHistoryQuestionData, never chatList[0]", async () => {
+    const tempId = "new_999";
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+    states.set(tempId, makeState({ messageInput: "First message" }));
+
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "ok",
+        dialogue_id: "server-exact-id",
+        id: "msg-1",
+        follow_up_questions: [],
+      },
+    } as any);
+
+    getHistoryQuestionData.mockResolvedValueOnce({
+      status: "reconciled",
+      tempId,
+      serverId: "server-exact-id",
+      rekey: { outcome: "moved" },
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, {
+      blockingDialogueId: "server-exact-id",
+    });
+    expect(mockClearPendingChat).not.toHaveBeenCalled();
+    expect(currentChatId.value).toBe(tempId);
+  });
+
+  it("finally does not clear pending or reassign currentChatId from chatList[0]", async () => {
+    currentChatId.value = "new_888";
+    currentChat.value = { messages: [] };
+    states.set("new_888", makeState({ messageInput: "hello" }));
+    chatList.value = [
+      { id: 99, dialogue_id: "wrong-first", title: "t", date: "", isFavorite: false },
+    ];
+
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "ok",
+        id: "m1",
+        follow_up_questions: [],
+      },
+    } as any);
+    getHistoryQuestionData.mockResolvedValueOnce({
+      status: "retained",
+      tempId: "new_888",
+      reason: "no-match",
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(mockClearPendingChat).not.toHaveBeenCalled();
+    expect(currentChatId.value).toBe("new_888");
+  });
+
+  it("late finally cleanup uses captured state object and cannot resurrect the old temp key", async () => {
+    const chatStatesApi = useChatStates();
+    const tempId = "new_777";
+    const serverId = "srv-late";
+    chatStatesApi.currentChatId.value = tempId;
+    currentChatId = chatStatesApi.currentChatId;
+    const state = chatStatesApi.getChatState(tempId);
+    state.messageInput = "late send";
+    currentChat.value = { messages: [] };
+
+    getChatState = (dialogueId: string) => chatStatesApi.getChatState(dialogueId);
+
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "done",
+        dialogue_id: serverId,
+        id: "m-late",
+        follow_up_questions: [],
+      },
+    } as any);
+
+    getHistoryQuestionData.mockImplementation(async (sendingId, opts) => {
+      if (opts?.blockingDialogueId) {
+        chatStatesApi.rekeyChatState(sendingId!, opts.blockingDialogueId);
+      }
+      return {
+        status: "reconciled",
+        tempId: sendingId!,
+        serverId: opts!.blockingDialogueId!,
+        rekey: { outcome: "moved" },
+      };
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
+    expect(chatStatesApi.chatStates.value[serverId]).toBe(state);
+    expect(state.isSending).toBe(false);
+    expect(Object.keys(chatStatesApi.chatStates.value)).not.toContain(tempId);
+  });
+
+  it("upload progress writes to captured state without getChatState(tempId) after rekey", async () => {
+    const chatStatesApi = useChatStates();
+    const tempId = "new_666";
+    const serverId = "srv-upload";
+    chatStatesApi.currentChatId.value = tempId;
+    currentChatId = chatStatesApi.currentChatId;
+    const state = chatStatesApi.getChatState(tempId);
+    state.messageInput = "upload";
+    state.fileList = [
+      {
+        name: "f.txt",
+        size: 1,
+        type: "text/plain",
+        file: new File(["x"], "f.txt"),
+      },
+    ];
+    currentChat.value = { messages: [] };
+    getChatState = (id: string) => chatStatesApi.getChatState(id);
+
+    let resolveQuery!: (v: any) => void;
+    mockGetQueryAbortable.mockImplementationOnce((_d, _r, opts) => {
+      opts?.onUploadProgress?.({ loaded: 25, total: 100 } as any);
+      chatStatesApi.rekeyChatState(tempId, serverId);
+      return new Promise((resolve) => {
+        resolveQuery = resolve;
+      }) as any;
+    });
+
+    const { sendMessage } = makeComposable();
+    const sendPromise = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(state.uploadTransfer?.percent).toBe(25);
+    expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
+
+    resolveQuery({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "ok",
+        dialogue_id: serverId,
+        id: "u1",
+        follow_up_questions: [],
+      },
+    });
+    getHistoryQuestionData.mockResolvedValueOnce({
+      status: "reconciled",
+      tempId,
+      serverId,
+      rekey: { outcome: "same-id" },
+    });
+    await sendPromise;
+
+    expect(state.uploadTransfer).toBeNull();
+    expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
   });
 });

@@ -227,7 +227,7 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("min-width: 0");
   });
 
-  it("scopes agent selection through per-dialogue chat state into useComposer", () => {
+  it("keeps agent selection scoped through per-dialogue chat state into useComposer", () => {
     expect(CHAT_SOURCE).toContain("selectedAgent");
     expect(CHAT_SOURCE).toMatch(
       /useComposer\(\{[\s\S]*selectedAgent/
@@ -247,5 +247,42 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_COMPOSER_SOURCE).toContain("getAgentTooltip");
     expect(CHAT_SOURCE).toContain(':get-agent-tooltip="getAgentTooltip"');
     expect(CHAT_SOURCE).toContain('@agent-more="showMoreInfo"');
+  });
+
+  it("reconciles temporary dialogue state transactionally via coordinator", () => {
+    expect(CHAT_SOURCE).toContain("rekeyChatState");
+    expect(CHAT_SOURCE).toContain("reconcileMatchedDialogue");
+    expect(CHAT_SOURCE).toContain("restorePendingChats(formattedData)");
+    expect(CHAT_SOURCE).toMatch(
+      /getHistoryQuestionData\([\s\S]*sendingDialogueId/
+    );
+    expect(CHAT_SOURCE).toContain("blockingDialogueId");
+    expect(CHAT_SOURCE).not.toContain("chat.title.includes(");
+    expect(CHAT_SOURCE).not.toMatch(/restorePendingChats\(\s*\)/);
+
+    const coordStart = CHAT_SOURCE.indexOf("reconcileMatchedDialogue = (");
+    const coordEnd = CHAT_SOURCE.indexOf("// Starter prompt cards", coordStart);
+    const coordBlock = CHAT_SOURCE.slice(coordStart, coordEnd);
+    expect(coordBlock).toContain("const wasCurrent = currentChatId.value === tempId");
+    expect(coordBlock).toMatch(
+      /clearPendingChat|localStorage\.removeItem[\s\S]*currentChatId\.value = serverId/
+    );
+    expect(coordBlock).toContain(
+      "if (reconciled && wasCurrent && currentChatId.value === tempId)"
+    );
+
+    const sendMessageSource = readFileSync(
+      resolve(__dirname, "../../src/views/chat/composables/useSendMessage.ts"),
+      "utf8"
+    );
+    expect(sendMessageSource).toContain("blockingDialogueId");
+    expect(sendMessageSource).not.toContain("clearPendingChat(sendingDialogueId)");
+    expect(sendMessageSource).not.toMatch(
+      /chatList\.value\[0\]\.dialogue_id/
+    );
+    expect(sendMessageSource).toContain("chatState.uploadTransfer");
+    expect(sendMessageSource).not.toMatch(
+      /getChatState\(sendingDialogueId\)\.uploadTransfer/
+    );
   });
 });

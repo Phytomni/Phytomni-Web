@@ -105,6 +105,21 @@ describe("matchesChat — ID + exact title only", () => {
     const chat: ChatListEntry = { dialogue_id: "x", title: "system greeting" };
     expect(matchesChat(chat, pending, "temp-001")).toBe(false);
   });
+
+  it("ambiguous title matches yield multiple candidates for restore (caller must retain temp)", () => {
+    const pending: PendingChatRecord = {
+      isPending: true,
+      messages: [{ role: "user", content: "shared title" }],
+    };
+    const chats: ChatListEntry[] = [
+      { dialogue_id: "srv-a", title: "shared title" },
+      { dialogue_id: "srv-b", title: "shared title" },
+    ];
+    const candidates = chats.filter((c) =>
+      matchesChat(c, pending, "new_ambiguous")
+    );
+    expect(candidates).toHaveLength(2);
+  });
 });
 
 describe("safeParse — log + null on fail", () => {

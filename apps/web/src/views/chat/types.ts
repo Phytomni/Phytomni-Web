@@ -86,3 +86,24 @@ export interface ChatComposerHandle {
   closeHeader: () => void;
   readonly popoverVisible: boolean | undefined;
 }
+
+/** Atomic chatStates key move — neither record mutates on target-collision. */
+export type RekeyChatStateOutcome =
+  | { outcome: "moved" }
+  | { outcome: "same-id" }
+  | { outcome: "source-absent" }
+  | { outcome: "target-collision" };
+
+/** Coordinator result for a temporary → server dialogue reconciliation attempt. */
+export type DialogueReconciliationResult =
+  | {
+      status: "reconciled";
+      tempId: string;
+      serverId: string;
+      rekey: RekeyChatStateOutcome;
+    }
+  | {
+      status: "retained";
+      tempId: string;
+      reason: "no-match" | "ambiguous" | "collision" | "unmatched";
+    };
