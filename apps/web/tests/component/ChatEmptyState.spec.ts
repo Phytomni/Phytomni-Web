@@ -13,6 +13,10 @@ const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
   "utf8"
 );
+const CHAT_COMPOSER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatComposer.vue"),
+  "utf8"
+);
 const transcriptStart = CHAT_SOURCE.indexOf('class="message-container"');
 const transcriptEnd = CHAT_SOURCE.indexOf("<el-backtop", transcriptStart);
 const TRANSCRIPT_SOURCE = CHAT_SOURCE.slice(transcriptStart, transcriptEnd);
@@ -91,14 +95,15 @@ describe("Chat empty state", () => {
     );
     expect(wrapper.find('[data-test="starter-row"]').exists()).toBe(true);
     expect(CHAT_SOURCE).toContain('ref="tourCasesTarget"');
-    expect(CHAT_SOURCE).toContain('ref="tourInputTarget"');
+    expect(CHAT_SOURCE).toContain(
+      ':set-tour-input-target="setTourInputTarget"'
+    );
+    expect(CHAT_COMPOSER_SOURCE).toContain(':ref="bindTourInputTarget"');
+    expect(CHAT_COMPOSER_SOURCE).toContain('class="input-container-warpper"');
     const emptyStateStart = CHAT_SOURCE.indexOf(
       '<div v-if="!currentChat?.messages?.length" class="empty-chat">'
     );
-    const composerStart = CHAT_SOURCE.indexOf(
-      '<div ref="tourInputTarget"',
-      emptyStateStart
-    );
+    const composerStart = CHAT_SOURCE.indexOf("<ChatComposer", emptyStateStart);
     expect(CHAT_SOURCE.slice(emptyStateStart, composerStart)).not.toContain(
       "AgentsViewImg"
     );
