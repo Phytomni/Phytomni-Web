@@ -15,6 +15,7 @@ const baseProps = {
   canSystemMonitor: true,
   canGlobalConfig: true,
   canAdminManagement: true,
+  canHelp: true,
   showAgentsList: false,
 };
 
@@ -51,6 +52,12 @@ const mountNav = (props: Record<string, unknown> = {}, slots = {}) =>
         ElAvatar: {
           template: '<span class="avatar-stub"><slot /></span>',
         },
+        LangSwitch: {
+          template: '<button data-test="language-switch">Language</button>',
+        },
+        ThemeSwitch: {
+          template: '<button data-test="theme-switch">Theme</button>',
+        },
       },
     },
   });
@@ -75,7 +82,9 @@ describe("ChatSidebarNav", () => {
       .find('[data-test="sidebar-nav-gene-display"]')
       .trigger("click");
     await wrapper.find('[data-test="sidebar-nav-favorites"]').trigger("click");
-    await wrapper.find('[data-test="sidebar-nav-tutorial"]').trigger("click");
+    const helpDropdown = wrapper.findAllComponents({ name: "ElDropdown" })[0];
+    helpDropdown.vm.$emit("command", "tutorial");
+    helpDropdown.vm.$emit("command", "architecture");
     await wrapper
       .find('[data-test="sidebar-nav-explore-agent"]')
       .trigger("click");
@@ -85,6 +94,7 @@ describe("ChatSidebarNav", () => {
     expect(wrapper.emitted("gene-display")).toHaveLength(1);
     expect(wrapper.emitted("favorites")).toHaveLength(1);
     expect(wrapper.emitted("tutorial")).toHaveLength(1);
+    expect(wrapper.emitted("show-architecture")).toHaveLength(1);
     expect(wrapper.emitted("explore-agent")).toHaveLength(1);
     expect(wrapper.emitted("toggle-collapse")).toHaveLength(1);
   });
@@ -102,9 +112,24 @@ describe("ChatSidebarNav", () => {
       true
     );
 
-    const dropdown = wrapper.findComponent({ name: "ElDropdown" });
+    const dropdown = wrapper
+      .findAllComponents({ name: "ElDropdown" })
+      .find((item) => item.attributes("data-test") === "sidebar-nav-account");
+    if (!dropdown) throw new Error("account dropdown not found");
     dropdown.vm.$emit("command", "profile");
     expect(wrapper.emitted("account-command")).toEqual([["profile"]]);
+  });
+
+  it("keeps support and legal destinations in the sidebar", () => {
+    const wrapper = mountNav();
+    const hrefs = wrapper.findAll("a").map((link) => link.attributes("href"));
+    expect(hrefs).toContain("/terms");
+    expect(hrefs).toContain("/privacy");
+    expect(hrefs.some((href) => href?.includes("beian.miit.gov.cn"))).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="language-switch"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="theme-switch"]').exists()).toBe(true);
   });
 
   it("omits permission-hidden navigation items", () => {
@@ -123,7 +148,7 @@ describe("ChatSidebarNav", () => {
     expect(
       wrapper.find('[data-test="sidebar-nav-explore-agent"]').exists()
     ).toBe(false);
-    expect(wrapper.findAll(".dropdown-item-stub")).toHaveLength(3);
+    expect(wrapper.findAll(".dropdown-item-stub")).toHaveLength(6);
     expect(wrapper.text()).toContain("t:user.feedback");
     expect(wrapper.text()).toContain("t:user.changePassword");
     expect(wrapper.text()).toContain("t:user.logout");

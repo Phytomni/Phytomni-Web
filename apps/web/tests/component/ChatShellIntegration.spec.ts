@@ -12,7 +12,7 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("<PhyAdaptiveShell");
     expect(CHAT_SOURCE).not.toContain("<PhyAppShell");
     expect(CHAT_SOURCE).toContain(':sidebar-collapsed="leftSidebarCollapsed"');
-    expect(CHAT_SOURCE).toContain(":artifact-open=\"false\"");
+    expect(CHAT_SOURCE).toContain(':artifact-open="false"');
     expect(CHAT_SOURCE).toContain("<template #sidebar>");
     expect(CHAT_SOURCE).toContain("<template #main>");
   });
@@ -37,5 +37,22 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("<el-dialog");
     expect(CHAT_SOURCE).toContain('class="message-container"');
     expect(CHAT_SOURCE).toContain('class="input-container-warpper"');
+  });
+
+  it("keeps the Chat header focused on conversation context", () => {
+    expect(CHAT_SOURCE).toContain('class="chat-header"');
+    expect(CHAT_SOURCE).toContain("chatHeaderTitle");
+    expect(CHAT_SOURCE).toContain("chat-expert-indicator");
+    expect(CHAT_SOURCE).toContain('data-test="chat-header-overflow"');
+    expect(CHAT_SOURCE).not.toContain("<LangSwitch");
+    expect(CHAT_SOURCE).not.toContain('class="chat-footer"');
+    expect(CHAT_SOURCE).toContain('@showArchitecture="showAgentsView"');
+  });
+
+  it("uses one centered transcript scroll root with composer clearance", () => {
+    expect(CHAT_SOURCE).toContain('data-test="chat-transcript-scroll-root"');
+    expect(CHAT_SOURCE).toContain('class="transcript-content"');
+    expect(CHAT_SOURCE).toContain("phy-layout-transcript-max-width");
+    expect(CHAT_SOURCE).toContain("phy-control-height-primary");
   });
 });

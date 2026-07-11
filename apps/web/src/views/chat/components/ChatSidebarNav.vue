@@ -78,17 +78,49 @@
           <span v-if="!collapsed">{{ $t("chat.favorites") }}</span>
         </el-button>
 
-        <el-button
-          data-test="sidebar-nav-tutorial"
-          class="tutorial-btn"
-          :class="{ active: activeItem === 'tutorial' }"
-          @click="emit('tutorial')"
+        <el-dropdown
+          class="help-menu"
+          trigger="click"
+          @command="handleHelpCommand"
         >
-          <el-icon>
-            <QuestionFilled />
-          </el-icon>
-          <span v-if="!collapsed">{{ $t("tutorial.startTutorial") }}</span>
-        </el-button>
+          <el-button
+            data-test="sidebar-nav-tutorial"
+            class="tutorial-btn"
+            :class="{ active: activeItem === 'tutorial' }"
+          >
+            <el-icon>
+              <QuestionFilled />
+            </el-icon>
+            <span v-if="!collapsed">{{ $t("help.title") }}</span>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item v-if="canHelp" command="help">
+                {{ $t("help.title") }}
+              </el-dropdown-item>
+              <el-dropdown-item command="tutorial">
+                {{ $t("tutorial.startTutorial") }}
+              </el-dropdown-item>
+              <el-dropdown-item v-if="canHelp" command="architecture">
+                {{ $t("chat.agentsArchitectureTitle") }}
+              </el-dropdown-item>
+              <div class="help-legal-links" role="group">
+                <a href="/terms">{{ $t("legal.termsTitle") }}</a>
+                <a href="/privacy">{{ $t("legal.privacyTitle") }}</a>
+                <a
+                  href="https://beian.miit.gov.cn/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >京ICP备07026971号-9</a
+                >
+              </div>
+              <div class="help-preferences" role="group">
+                <LangSwitch />
+                <ThemeSwitch />
+              </div>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -96,8 +128,27 @@
       <slot name="history" />
     </div>
 
+    <nav
+      v-if="!collapsed"
+      class="sidebar-legal"
+      :aria-label="$t('legal.termsTitle')"
+    >
+      <a href="/terms">{{ $t("legal.termsTitle") }}</a>
+      <a href="/privacy">{{ $t("legal.privacyTitle") }}</a>
+      <a
+        href="https://beian.miit.gov.cn/"
+        target="_blank"
+        rel="noopener noreferrer"
+        >京ICP备07026971号-9</a
+      >
+    </nav>
+
     <div class="user-info">
-      <el-dropdown trigger="hover" @command="emit('account-command', $event)">
+      <el-dropdown
+        data-test="sidebar-nav-account"
+        trigger="hover"
+        @command="emit('account-command', $event)"
+      >
         <div class="user-avatar-container">
           <el-avatar :size="32" src="/avatars/user.svg" />
           <span v-if="!collapsed" class="username">
@@ -194,6 +245,8 @@ import {
   SwitchButton,
   User,
 } from "@element-plus/icons-vue";
+import LangSwitch from "@/components/LangSwitch.vue";
+import ThemeSwitch from "@/components/ThemeSwitch.vue";
 
 withDefaults(
   defineProps<{
@@ -209,6 +262,7 @@ withDefaults(
     canSystemMonitor: boolean;
     canGlobalConfig: boolean;
     canAdminManagement: boolean;
+    canHelp: boolean;
     showAgentsList: boolean;
   }>(),
   {
@@ -224,6 +278,7 @@ withDefaults(
     canSystemMonitor: false,
     canGlobalConfig: false,
     canAdminManagement: false,
+    canHelp: true,
     showAgentsList: false,
   }
 );
@@ -236,7 +291,19 @@ const emit = defineEmits<{
   (event: "explore-agent"): void;
   (event: "account-command", command: string): void;
   (event: "toggle-collapse"): void;
+  (event: "show-architecture"): void;
+  (event: "help"): void;
 }>();
+
+const handleHelpCommand = (command: string | number | object) => {
+  if (command === "help") {
+    emit("help");
+  } else if (command === "tutorial") {
+    emit("tutorial");
+  } else if (command === "architecture") {
+    emit("show-architecture");
+  }
+};
 </script>
 
 <style lang="scss" scoped>
@@ -429,6 +496,57 @@ const emit = defineEmits<{
   :deep(.chat-history) {
     min-height: 0;
   }
+}
+
+.sidebar-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--phy-color-border);
+  font-size: 11px;
+  line-height: 1.4;
+
+  a {
+    color: var(--phy-color-text-muted);
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--phy-color-action-text);
+      text-decoration: underline;
+    }
+  }
+}
+
+.help-legal-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 8px 12px 2px;
+  border-top: 1px solid var(--phy-color-border);
+  font-size: 12px;
+
+  a {
+    color: var(--phy-color-text-muted);
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--phy-color-action-text);
+      text-decoration: underline;
+    }
+  }
+}
+
+.help-preferences {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--phy-space-12);
+  margin-top: 8px;
+  padding: 8px 12px 2px;
+  border-top: 1px solid var(--phy-color-border);
 }
 
 .user-info {

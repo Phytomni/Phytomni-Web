@@ -18,6 +18,7 @@
           @handleSidebarCollapse="handleSidebarCollapse"
           @drawerOpenChange="leftSidebarDrawerOpen = $event"
           @startTutorial="startTutorial"
+          @showArchitecture="showAgentsView"
           @chatRenamed="handleChatRenamed"
           @chatDeleted="handleChatDeleted"
           @chatFavorited="handleChatFavorited"
@@ -53,38 +54,62 @@
       <div class="chat-main-layout">
         <!-- Center chat area -->
         <div class="chat-main">
-      <div class="chat-header">
+      <header class="chat-header">
         <div class="header-leading">
           <el-button
             class="mobile-sidebar-toggle"
+            :class="{ 'is-visible': leftSidebarCollapsed }"
             text
             circle
-            :aria-label="$t('chat.title')"
-            @click="leftSidebarDrawerOpen = true"
+            :aria-label="$t('chat.newChat')"
+            @click="toggleSidebarFromHeader"
           >
             <el-icon><Menu /></el-icon>
           </el-button>
-          <router-link v-if="UserStore.permission !== 'guest'" to="/help">
-            <h2>{{ $t("chat.title") }}</h2>
-          </router-link>
-          <div v-else></div>
+          <h2 class="chat-header-title" :title="chatHeaderTitle">
+            {{ chatHeaderTitle }}
+          </h2>
+          <span
+            v-if="chatMode === 'expert'"
+            class="chat-expert-indicator"
+            data-test="chat-expert-indicator"
+          >
+            {{ $t("chat.mode.expert") }}
+          </span>
         </div>
         <div class="header-controls">
-          <LangSwitch class="header-lang-switch" />
-          <el-button
-            v-if="isDevelopment"
-            type="primary"
-            size="small"
-            @click="testParallelChats"
-            style="margin-left: 10px"
+          <el-dropdown
+            v-if="UserStore.permission !== 'guest'"
+            trigger="click"
+            @command="handleHeaderCommand"
           >
-            {{ $t("chat.testParallel") }}
-          </el-button>
+            <el-button
+              data-test="chat-header-overflow"
+              text
+              circle
+              :aria-label="$t('help.title')"
+            >
+              <el-icon><MoreFilled /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="help">
+                  {{ $t("help.title") }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
-      </div>
+      </header>
 
       <!-- Message area -->
-      <div class="message-container" ref="messageContainer" :key="timestamp">
+      <div
+        class="message-container"
+        data-test="chat-transcript-scroll-root"
+        ref="messageContainer"
+        :key="timestamp"
+      >
+        <div class="transcript-content">
         <template v-if="currentChat?.messages?.length">
           <div
             v-for="(message, index) in currentChat.messages"
@@ -980,6 +1005,7 @@
             </div>
           </div>
         </div>
+        </div>
       </div>
       <el-backtop target=".message-container" :right="40" :bottom="80" />
 
@@ -1195,21 +1221,6 @@
 
                   <!-- Agent button area -->
                   <template v-else-if="rolesTool.length > 0 && chatMode === 'instant'">
-                    <div
-                      style="
-                        width: 100px;
-                        height: 50px;
-                        margin-right: 20px;
-                        cursor: pointer;
-                      "
-                      @click="showAgentsView"
-                    >
-                      <img
-                        src="/src/assets/images/chat/Agents.png"
-                        alt="Agents"
-                        style="width: 100%; height: 100%"
-                      />
-                    </div>
                     <div class="input-actions">
                       <div
                         v-for="(item, index) in rolesTool"
@@ -1279,16 +1290,6 @@
             </div>
           </div>
         </div>
-      </div>
-      <div class="chat-footer">
-        {{ $t("chat.footer") }}
-        <a
-          href="https://beian.miit.gov.cn/"
-          target="_blank"
-          class="icp-link"
-          :aria-label="$t('chat.icpAriaLabel')"
-          >京ICP备07026971号-9</a
-        >
       </div>
         </div>
       <!-- Right sidebar -->
@@ -1374,6 +1375,7 @@ import {
   CircleCheck,
   CircleClose,
   CircleCloseFilled,
+  MoreFilled,
 } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
@@ -1390,7 +1392,6 @@ import { useSendMessage } from "./composables/useSendMessage";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
 import { useLogView } from "./composables/useLogView";
 import { useComposer } from "./composables/useComposer";
-import LangSwitch from "@/components/LangSwitch.vue";
 import { useI18n } from "vue-i18n";
 import type { UploadInstance } from "element-plus";
 import {
@@ -1491,6 +1492,31 @@ const hasButtonPermission = (buttonType: string) => {
 };
 
 const router = useRouter();
+
+const chatHeaderTitle = computed(() => {
+  const currentTitle =
+    typeof currentChat.value?.title === "string"
+      ? currentChat.value.title.trim()
+      : "";
+  if (currentTitle) return currentTitle;
+
+  const listTitle = chatList.value.find(
+    (chat) => chat.dialogue_id === currentChatId.value,
+  )?.title;
+  return listTitle?.trim() || t("chat.title");
+});
+
+const handleHeaderCommand = (command: string) => {
+  if (command === "help") router.push("/help");
+};
+
+const toggleSidebarFromHeader = () => {
+  if (leftSidebarCollapsed.value) {
+    leftSidebarCollapsed.value = false;
+  } else {
+    leftSidebarDrawerOpen.value = true;
+  }
+};
 
 // Optimize the permission loading logic
 const loadUserTools = async () => {
@@ -2070,30 +2096,6 @@ const tourSidebarTarget = ref<HTMLElement | null>(null);
 const tourCasesTarget = ref<HTMLElement | null>(null);
 const tourInputTarget = ref<HTMLElement | null>(null);
 
-// Test the parallel chat feature
-const testParallelChats = () => {
-  // Create two test chats
-  const chat1Id = "test_chat_1";
-  const chat2Id = "test_chat_2";
-
-  // Initialize the chat state
-  getChatState(chat1Id);
-  getChatState(chat2Id);
-
-  // Set different input contents
-  chatStates.value[chat1Id].messageInput = "Test message for chat 1";
-  chatStates.value[chat2Id].messageInput = "Test message for chat 2";
-
-  // Set different sending states
-  chatStates.value[chat1Id].isSending = true;
-  chatStates.value[chat2Id].isSending = false;
-
-  // Verify state independence
-};
-
-// Add a test button in the development environment
-const isDevelopment = import.meta.env.DEV;
-
 // Copy message content + cited document list (extracted from an inline @click to work around a
 // vue-tsc 0.39.5 bug where it mis-maps a local const declared inside a multi-statement template
 // arrow function onto the component instance — see the 2 @click usages in index.vue)
@@ -2154,60 +2156,22 @@ const copyMessageWithDocs = (message: any, index: number) => {
   min-height: 0;
 }
 
-.chat-footer {
-  position: relative;
-  z-index: 1;
-  color: var(--phy-color-text-muted);
-  font-size: 14px;
-  text-align: center;
-  background: var(--phy-color-bg-page) !important;
-  line-height: 1;
-  bottom: 4px;
-
-  .icp-link {
-    color: #909399;
-    text-decoration: none;
-    transition: color 0.3s;
-    font-size: 12px;
-
-    &:hover {
-      color: var(--el-color-primary);
-      text-decoration: underline;
-    }
-
-    &:visited {
-      color: #909399;
-    }
-  }
-}
-
-.theme-dark .chat-footer {
-  color: #fff;
-
-  .icp-link {
-    color: #909399;
-
-    &:hover {
-      color: var(--el-color-primary);
-    }
-
-    &:visited {
-      color: #909399;
-    }
-  }
-}
-
 .chat-header {
-  padding: 0 16px;
+  flex-shrink: 0;
+  padding: 0 var(--phy-space-16);
   border-bottom: 1px solid var(--phy-color-border);
-  text-align: center;
-  height: 62px;
+  min-height: var(--phy-control-height-primary);
+  height: var(--phy-control-height-primary);
   display: flex;
   align-items: center;
   justify-content: space-between;
 
-  h2 {
+  .chat-header-title {
+    min-width: 0;
     margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 18px;
     font-weight: 500;
   }
@@ -2220,6 +2184,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
 
   .mobile-sidebar-toggle {
     display: none;
+
+    &.is-visible {
+      display: inline-flex;
+    }
   }
 
   .header-controls {
@@ -2228,18 +2196,32 @@ const copyMessageWithDocs = (message: any, index: number) => {
     gap: 10px;
   }
 
-  .header-lang-switch {
-    margin-left: auto;
+  .chat-expert-indicator {
+    flex-shrink: 0;
+    margin-left: var(--phy-space-8);
+    padding: 2px var(--phy-space-8);
+    border: 1px solid var(--phy-color-accent-soft);
+    border-radius: var(--phy-radius-pill);
+    color: var(--phy-color-accent);
+    font-size: 12px;
+    line-height: 1.4;
   }
 }
 
 .message-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: var(--phy-space-16) var(--phy-space-16)
+    calc(var(--phy-control-height-primary) + var(--phy-space-32));
   display: flex;
   flex-direction: column;
   background: var(--phy-color-bg-page);
+}
+
+.transcript-content {
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
 }
 
 .message {

@@ -19,12 +19,15 @@
         :can-system-monitor="hasPermission('System monitor')"
         :can-global-config="hasPermission('Global config')"
         :can-admin-management="hasPermission('Admin management')"
+        :can-help="UserStore.permission !== 'guest'"
         :show-agents-list="showAgentsList"
         @new-chat="handleButtonClick('new-chat', startNewChat)"
         @explore-agent="handleButtonClick('explore-agent', exploreAgent)"
         @gene-display="handleButtonClick('knowledge-base', openKnowledgeBase)"
         @favorites="handleButtonClick('favorites', openFavorites)"
         @tutorial="handleButtonClick('tutorial', startTutorial)"
+        @help="openHelp"
+        @show-architecture="emit('showArchitecture')"
         @account-command="handleCommand"
         @toggle-collapse="toggle"
       >
@@ -187,6 +190,7 @@ const emit = defineEmits([
   "chatDeleted",
   "chatFavorited",
   "startTutorial",
+  "showArchitecture",
 ]);
 
 const {
@@ -230,6 +234,8 @@ const { handleCommand, hasPermission, startNewChat, openKnowledgeBase, openFavor
   onStartTutorial: () => emit("startTutorial"),
   onSelectChat: (dialogueId) => emit("selectChat", dialogueId),
 });
+
+const openHelp = () => router.push("/help");
 
 // Currently active button
 const activeButton = ref("");
