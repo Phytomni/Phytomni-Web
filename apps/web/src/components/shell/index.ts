@@ -8,3 +8,5 @@ export { default as PhyPageHeader } from "./PhyPageHeader.vue";
 export { default as PhyWorkspaceShell } from "./PhyWorkspaceShell.vue";
 export { default as PhyDataToolbar } from "./PhyDataToolbar.vue";
 export { default as PhyTableFrame } from "./PhyTableFrame.vue";
+export { default as PhyAdaptiveShell } from "./PhyAdaptiveShell.vue";
+export { default as PhyAdaptiveSidebar } from "./PhyAdaptiveSidebar.vue";
