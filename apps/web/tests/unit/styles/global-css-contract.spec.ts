@@ -34,6 +34,18 @@ describe("global CSS contract", () => {
     expect(GLOBAL_CSS).not.toContain(".el-button + .el-button");
   });
 
+  it("keeps universal selectors free of global layout and transition side effects", () => {
+    const universalBlocks = [
+      ...GLOBAL_CSS.matchAll(
+        /(?:^|})\s*((?:\*(?:::[a-z-]+)?\s*,?\s*)+)\{([^{}]*)\}/gi
+      ),
+    ];
+    for (const [, , declarations] of universalBlocks) {
+      expect(declarations).not.toMatch(/\bposition\s*:\s*relative\b/i);
+      expect(declarations).not.toMatch(/(?:-webkit-)?transition\s*:/i);
+    }
+  });
+
   it("keeps reduced-motion support in the semantic token owner", () => {
     expect(TOKENS_CSS).toContain("@media (prefers-reduced-motion: reduce)");
     expect(TOKENS_CSS).toContain("--phy-motion-fast: 0ms;");
