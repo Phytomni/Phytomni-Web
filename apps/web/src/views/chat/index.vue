@@ -14,7 +14,6 @@
           :drawer-open="leftSidebarDrawerOpen"
           @selectChat="selectChat"
           @startNewChat="startNewChat"
-          @openKnowledgeBase="openKnowledgeBase"
           @handleSidebarCollapse="handleSidebarCollapse"
           @drawerOpenChange="leftSidebarDrawerOpen = $event"
           @startTutorial="startTutorial"
@@ -1037,30 +1036,6 @@
         />
       </div>
         </div>
-      <!-- Right sidebar -->
-      <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
-        <div class="sidebar-header">
-          <h3>{{ $t("chat.detailInfo") }}</h3>
-          <el-button type="text" @click="drawerVisible = false" class="close-btn">
-            <el-icon><icon-close /></el-icon>
-          </el-button>
-        </div>
-        <div class="sidebar-content">
-          <h3>{{ $t("chat.relatedLinks") }}</h3>
-          <div class="links-container">
-            <div
-              v-for="(link, index) in currentLinks"
-              :key="index"
-              class="link-item"
-            >
-              <el-icon>
-                <Link />
-              </el-icon>
-              <a :href="link.url" target="_blank">{{ link.title }}</a>
-            </div>
-          </div>
-        </div>
-      </div>
       </div>
 
     <!-- Agents architecture diagram dialog -->
@@ -1108,7 +1083,6 @@ import {
   PhyEmptyState,
 } from "@/components/shell";
 import {
-  Close as IconClose,
   Document,
   CopyDocument,
   SuccessFilled,
@@ -1116,7 +1090,6 @@ import {
   Menu,
   Loading,
   Refresh,
-  Link,
   CircleCheck,
   CircleClose,
   CircleCloseFilled,
@@ -1170,8 +1143,6 @@ const composerRef = ref<ChatComposerHandle | null>(null);
 
 const timestamp = ref(Date.now());
 const { t } = useI18n();
-// Drawer state
-const drawerVisible = ref(false);
 
 // Left sidebar state
 const leftSidebarCollapsed = ref(false);
@@ -1181,14 +1152,6 @@ provide(CHAT_SIDEBAR_DRAWER_OPEN_KEY, leftSidebarDrawerOpen);
 // Agents architecture diagram dialog
 const agentsViewVisible = ref(false);
 const { scale, isDragging, imageOffset, containerRef, imageRef, imageStyle, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp } = useImageZoomPan(agentsViewVisible);
-
-// Watch the right sidebar state; when the right side opens, ensure the left side is collapsed
-watch(drawerVisible, (newValue) => {
-  if (newValue === true && !leftSidebarCollapsed.value) {
-    // Right side opened, so collapse the left side
-    leftSidebarCollapsed.value = true;
-  }
-});
 
 const botAvatar =
   "/avatars/bot.svg";
@@ -1573,17 +1536,6 @@ const startNewChat = () => {
   });
 };
 
-// Open the chat agent
-const openChatAgent = () => {
-  // If the left sidebar is expanded, collapse it first
-  if (!leftSidebarCollapsed.value) {
-    leftSidebarCollapsed.value = true;
-  }
-
-  // Open the right sidebar
-  drawerVisible.value = true;
-};
-
 // Knowledge agent
 const openKnowledgeAgent = () => {
   // Implement the knowledge agent feature here
@@ -1602,17 +1554,6 @@ const openAnalystAgent = () => {
 // Review agent
 const openReviewAgent = () => {
   // Implement the review agent feature here
-};
-
-// Open the knowledge base
-const openKnowledgeBase = () => {
-  // If the left sidebar is expanded, collapse it first
-  if (!leftSidebarCollapsed.value) {
-    leftSidebarCollapsed.value = true;
-  }
-
-  // Open the right sidebar
-  drawerVisible.value = true;
 };
 
 // Message container ref, used for auto-scrolling
@@ -1726,31 +1667,9 @@ const usePrompt = (prompt: string) => {
   sendMessage();
 };
 
-// Related links
-const currentLinks = ref([
-  {
-    title: t("chat.links.riceStress"),
-    url: "https://ricefrend.dna.affrc.go.jp/",
-  },
-  {
-    title: t("chat.links.wheatYield"),
-    url: "https://plants.ensembl.org/Triticum_aestivum/",
-  },
-  {
-    title: t("chat.links.maizeQTL"),
-    url: "https://www.maizegdb.org/",
-  },
-]);
-
 // Sidebar control function
 const handleSidebarCollapse = (isCollapsed: boolean) => {
-  // Update the left sidebar state
   leftSidebarCollapsed.value = isCollapsed;
-
-  // If the left sidebar is expanded and the right sidebar is also open, close the right side
-  if (!isCollapsed && drawerVisible.value) {
-    drawerVisible.value = false;
-  }
 };
 
 // After the sidebar renames a session, the parent updates the chatList it holds (the child emits instead of mutating the prop)
@@ -2250,74 +2169,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   width: 100%;
   position: relative;
   background-color: #fff;
-}
-
-// Right sidebar styles
-.right-sidebar {
-  width: 0;
-  height: 100%;
-  background-color: #fff;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: width 0.3s ease;
-
-  &.is-open {
-    width: 350px;
-    min-width: 350px;
-  }
-
-  .sidebar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px;
-    border-bottom: 1px solid #e6e6e6;
-
-    h3 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 500;
-    }
-
-    .close-btn {
-      padding: 4px;
-    }
-  }
-
-  .sidebar-content {
-    flex: 1;
-    padding: 16px;
-    overflow-y: auto;
-    width: 350px;
-
-    h3 {
-      margin-top: 0;
-      margin-bottom: 16px;
-    }
-
-    .links-container {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-
-      .link-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-
-        a {
-          color: var(--el-color-primary);
-          text-decoration: none;
-
-          &:hover {
-            text-decoration: underline;
-          }
-        }
-      }
-    }
-  }
 }
 
 .message-user {

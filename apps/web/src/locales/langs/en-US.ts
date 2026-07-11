@@ -317,8 +317,6 @@ export default {
     welcome: "Welcome, please enter your question directly",
     inputPlaceholder: "Please enter your question...",
     send: "Send",
-    detailInfo: "Detailed Information",
-    relatedLinks: "Related Links",
     newChat: "Start New",
     exploreAgent: "Explore Agents",
     agentsArchitectureTitle: "Phytomni Agent Architecture",
@@ -401,11 +399,6 @@ export default {
         "Decodes gene regulatory networks to uncover key pathways for crop stress resistance and yield.",
       digitalDesignAgent:
         "AI-driven design of gene promoters and protein structures for synthetic biology and molecular breeding.",
-    },
-    links: {
-      riceStress: "Rice Stress-Resistance Gene Research",
-      wheatYield: "Wheat Yield Trait Analysis",
-      maizeQTL: "Maize QTL Database",
     },
     logs: {
       sendMessageFailed: "Failed to send message:",

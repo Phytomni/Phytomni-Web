@@ -129,7 +129,7 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("<template #main>");
     expect(CHAT_SOURCE).toContain('class="chat-main-layout"');
     expect(CHAT_SOURCE).toContain('class="chat-main"');
-    expect(CHAT_SOURCE).toContain('class="right-sidebar"');
+    expect(CHAT_SOURCE).not.toContain('class="right-sidebar"');
     expect(CHAT_SOURCE).toContain("<el-dialog");
     expect(CHAT_SOURCE).toContain('class="message-container"');
     expect(CHAT_SOURCE).toContain("<ChatComposer");
@@ -232,7 +232,8 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toMatch(
       /useComposer\(\{[\s\S]*selectedAgent/
     );
-    expect(CHAT_SOURCE).toContain(":active-button=\"activeButton\"");
+    expect(CHAT_SOURCE).toContain("pickerOptions");
+    expect(CHAT_SOURCE).toContain("derivePickerOptions");
   });
 
   it("removes the permanent bottom agent stage while keeping one inline selection path", () => {
@@ -242,11 +243,13 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).not.toContain("v-for=\"agent in presetAgents\"");
     expect(CHAT_SOURCE).not.toContain(".input-container-bottom {");
 
-    expect(CHAT_COMPOSER_SOURCE).toContain('class="agent-button"');
-    expect(CHAT_COMPOSER_SOURCE).toContain("emit('agent-click', item)");
-    expect(CHAT_COMPOSER_SOURCE).toContain("getAgentTooltip");
-    expect(CHAT_SOURCE).toContain(':get-agent-tooltip="getAgentTooltip"');
-    expect(CHAT_SOURCE).toContain('@agent-more="showMoreInfo"');
+    expect(CHAT_COMPOSER_SOURCE).not.toContain('class="agent-button"');
+    expect(CHAT_COMPOSER_SOURCE).toContain("<ChatAgentPicker");
+    expect(CHAT_COMPOSER_SOURCE).toContain(':selected-agent="selectedAgent"');
+    expect(CHAT_COMPOSER_SOURCE).toContain(':options="pickerOptions"');
+    expect(CHAT_SOURCE).toContain(':picker-options="pickerOptions"');
+    expect(CHAT_SOURCE).toContain(':selected-agent="selectedAgent"');
+    expect(CHAT_SOURCE).toContain('@clear-agent="clearSelectedAgent"');
   });
 
   it("reconciles temporary dialogue state transactionally via coordinator", () => {

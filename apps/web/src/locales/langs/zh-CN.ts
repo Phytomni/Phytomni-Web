@@ -319,8 +319,6 @@ export default {
     welcome: "欢迎使用，可直接输入您想问的问题",
     inputPlaceholder: "请输入您的问题……",
     send: "发 送",
-    detailInfo: "详细信息",
-    relatedLinks: "相关链接",
     newChat: "开启新对话",
     exploreAgent: "智能体示例",
     agentsArchitectureTitle: "农科发现大模型智能体架构",
@@ -396,11 +394,6 @@ export default {
       geneNetworkAgent: "解析基因调控网络，揭示农作物抗逆性与高产的关键通路。",
       digitalDesignAgent:
         "智能化设计基因启动子与蛋白质结构，为合成生物学和分子育种提供精准方案。",
-    },
-    links: {
-      riceStress: "水稻抗逆基因研究",
-      wheatYield: "小麦产量性状解析",
-      maizeQTL: "玉米 QTL 数据库",
     },
     logs: {
       sendMessageFailed: "发送消息失败：",
