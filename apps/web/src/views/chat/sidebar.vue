@@ -97,270 +97,15 @@
       </el-button>
     </div>
 
-    <!-- Chat history list, grouped by time -->
-    <div class="chat-history">
-      <template v-if="!sidebarCollapsed">
-        <!-- Today -->
-        <div class="time-group" v-if="todayChats.length">
-          <div class="time-label" @click="toggleExpand('today')">
-            <span>{{ $t("chat.timeGroup.today") }}</span>
-            <el-icon
-              class="expand-icon"
-              :class="{ expanded: expandedGroups.today }"
-            >
-              <ArrowDown />
-            </el-icon>
-          </div>
-          <div class="chat-items" v-show="expandedGroups.today">
-            <el-tooltip
-              v-for="chat in todayChats"
-              :key="chat.id"
-              :content="chat.title"
-              placement="right"
-              :show-after="1000"
-              popper-class="chat-tooltip"
-            >
-              <div
-                class="chat-item"
-                :class="{ active: currentChatId === chat.dialogue_id }"
-                @click="selectChat(chat.dialogue_id)"
-              >
-                <span class="chat-title">{{ chat.title }}</span>
-                <!-- Action icons -->
-                <div class="chat-actions" @click.stop>
-                  <el-dropdown
-                    trigger="click"
-                    @command="(command) => handleChatAction(command, chat)"
-                  >
-                    <el-icon class="action-icon">
-                      <MoreFilled />
-                    </el-icon>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="rename" :icon="Edit">
-                          {{ $t("chat.actions.rename") }}
-                        </el-dropdown-item>
-                        <el-dropdown-item command="favorite" :icon="Star">
-                          {{
-                            chat.isFavorite
-                              ? $t("chat.actions.unfavorite")
-                              : $t("chat.actions.favorite")
-                          }}
-                        </el-dropdown-item>
-                        <el-dropdown-item
-                          command="delete"
-                          :icon="Delete"
-                          divided
-                        >
-                          <span style="color: #f56c6c">{{
-                            $t("chat.actions.delete")
-                          }}</span>
-                        </el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                </div>
-              </div>
-            </el-tooltip>
-          </div>
-        </div>
-
-        <!-- Yesterday -->
-        <div class="time-group" v-if="yesterdayChats.length">
-          <div class="time-label" @click="toggleExpand('yesterday')">
-            <span>{{ $t("chat.timeGroup.yesterday") }}</span>
-            <el-icon
-              class="expand-icon"
-              :class="{ expanded: expandedGroups.yesterday }"
-            >
-              <ArrowDown />
-            </el-icon>
-          </div>
-          <div class="chat-items" v-show="expandedGroups.yesterday">
-            <el-tooltip
-              v-for="chat in yesterdayChats"
-              :key="chat.id"
-              :content="chat.title"
-              placement="right"
-              :show-after="1000"
-              popper-class="chat-tooltip"
-            >
-              <div
-                class="chat-item"
-                :class="{ active: currentChatId === chat.dialogue_id }"
-                @click="selectChat(chat.dialogue_id)"
-              >
-                <span class="chat-title">{{ chat.title }}</span>
-                <!-- Action icons -->
-                <div class="chat-actions" @click.stop>
-                  <el-dropdown
-                    trigger="click"
-                    @command="(command) => handleChatAction(command, chat)"
-                  >
-                    <el-icon class="action-icon">
-                      <MoreFilled />
-                    </el-icon>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="rename" :icon="Edit">
-                          {{ $t("chat.actions.rename") }}
-                        </el-dropdown-item>
-                        <el-dropdown-item command="favorite" :icon="Star">
-                          {{
-                            chat.isFavorite
-                              ? $t("chat.actions.unfavorite")
-                              : $t("chat.actions.favorite")
-                          }}
-                        </el-dropdown-item>
-                        <el-dropdown-item
-                          command="delete"
-                          :icon="Delete"
-                          divided
-                        >
-                          <span style="color: #f56c6c">{{
-                            $t("chat.actions.delete")
-                          }}</span>
-                        </el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                </div>
-              </div>
-            </el-tooltip>
-          </div>
-        </div>
-
-        <!-- Within 7 days -->
-        <div class="time-group" v-if="weekChats.length">
-          <div class="time-label" @click="toggleExpand('week')">
-            <span>{{ $t("chat.timeGroup.week") }}</span>
-            <el-icon
-              class="expand-icon"
-              :class="{ expanded: expandedGroups.week }"
-            >
-              <ArrowDown />
-            </el-icon>
-          </div>
-          <div class="chat-items" v-show="expandedGroups.week">
-            <el-tooltip
-              v-for="chat in weekChats"
-              :key="chat.id"
-              :content="chat.title"
-              placement="right"
-              :show-after="1000"
-              popper-class="chat-tooltip"
-            >
-              <div
-                class="chat-item"
-                :class="{ active: currentChatId === chat.dialogue_id }"
-                @click="selectChat(chat.dialogue_id)"
-              >
-                <span class="chat-title">{{ chat.title }}</span>
-                <!-- Action icons -->
-                <div class="chat-actions" @click.stop>
-                  <el-dropdown
-                    trigger="click"
-                    @command="(command) => handleChatAction(command, chat)"
-                  >
-                    <el-icon class="action-icon">
-                      <MoreFilled />
-                    </el-icon>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="rename" :icon="Edit">
-                          {{ $t("chat.actions.rename") }}
-                        </el-dropdown-item>
-                        <el-dropdown-item command="favorite" :icon="Star">
-                          {{
-                            chat.isFavorite
-                              ? $t("chat.actions.unfavorite")
-                              : $t("chat.actions.favorite")
-                          }}
-                        </el-dropdown-item>
-                        <el-dropdown-item
-                          command="delete"
-                          :icon="Delete"
-                          divided
-                        >
-                          <span style="color: #f56c6c">{{
-                            $t("chat.actions.delete")
-                          }}</span>
-                        </el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                </div>
-              </div>
-            </el-tooltip>
-          </div>
-        </div>
-
-        <!-- More than a week ago -->
-        <div class="time-group" v-if="olderChats.length">
-          <div class="time-label" @click="toggleExpand('older')">
-            <span>{{ $t("chat.timeGroup.older") }}</span>
-            <el-icon
-              class="expand-icon"
-              :class="{ expanded: expandedGroups.older }"
-            >
-              <ArrowDown />
-            </el-icon>
-          </div>
-          <div class="chat-items" v-show="expandedGroups.older">
-            <el-tooltip
-              v-for="chat in olderChats"
-              :key="chat.id"
-              :content="chat.title"
-              placement="right"
-              :show-after="1000"
-              popper-class="chat-tooltip"
-            >
-              <div
-                class="chat-item"
-                :class="{ active: currentChatId === chat.dialogue_id }"
-                @click="selectChat(chat.dialogue_id)"
-              >
-                <span class="chat-title">{{ chat.title }}</span>
-                <!-- Action icons -->
-                <div class="chat-actions" @click.stop>
-                  <el-dropdown
-                    trigger="click"
-                    @command="(command) => handleChatAction(command, chat)"
-                  >
-                    <el-icon class="action-icon">
-                      <MoreFilled />
-                    </el-icon>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="rename" :icon="Edit">
-                          {{ $t("chat.actions.rename") }}
-                        </el-dropdown-item>
-                        <el-dropdown-item command="favorite" :icon="Star">
-                          {{
-                            chat.isFavorite
-                              ? $t("chat.actions.unfavorite")
-                              : $t("chat.actions.favorite")
-                          }}
-                        </el-dropdown-item>
-                        <el-dropdown-item
-                          command="delete"
-                          :icon="Delete"
-                          divided
-                        >
-                          <span style="color: #f56c6c">{{
-                            $t("chat.actions.delete")
-                          }}</span>
-                        </el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                </div>
-              </div>
-            </el-tooltip>
-          </div>
-        </div>
-      </template>
-    </div>
+    <ChatHistoryList
+      :groups="chatHistoryGroups"
+      :current-chat-id="currentChatId"
+      :expanded-groups="expandedGroups"
+      :collapsed="sidebarCollapsed"
+      @select="selectChat"
+      @toggle-group="toggleExpand"
+      @action="handleChatAction"
+    />
 
     <!-- User info -->
     <div class="user-info">
@@ -523,7 +268,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, toRef } from "vue";
+import { computed, ref, toRef } from "vue";
 import { useRouter } from "vue-router";
 import {
   User,
@@ -533,12 +278,8 @@ import {
   Fold,
   Folder,
   Search,
-  MoreFilled,
-  Edit,
   Star,
-  Delete,
   Warning,
-  ArrowUp,
   ArrowDown,
   ChatDotRound,
   QuestionFilled,
@@ -553,6 +294,9 @@ import { useSidebarResponsive } from "./composables/useSidebarResponsive";
 import { useSidebarAgents } from "./composables/useSidebarAgents";
 import { useChatHistoryActions } from "./composables/useChatHistoryActions";
 import { useSidebarNavigation } from "./composables/useSidebarNavigation";
+import ChatHistoryList, {
+  type ChatHistoryGroup,
+} from "./components/ChatHistoryList.vue";
 import { PhySidebarFrame } from "@/components/shell";
 
 // Define the received props
@@ -573,6 +317,28 @@ const props = defineProps({
 const router = useRouter();
 const UserStore = userStore();
 const { todayChats, yesterdayChats, weekChats, olderChats } = useChatHistoryGroups(toRef(props, "chatList"));
+const chatHistoryGroups = computed<ChatHistoryGroup[]>(() => [
+  {
+    key: "today",
+    labelKey: "chat.timeGroup.today",
+    items: todayChats.value,
+  },
+  {
+    key: "yesterday",
+    labelKey: "chat.timeGroup.yesterday",
+    items: yesterdayChats.value,
+  },
+  {
+    key: "week",
+    labelKey: "chat.timeGroup.week",
+    items: weekChats.value,
+  },
+  {
+    key: "older",
+    labelKey: "chat.timeGroup.older",
+    items: olderChats.value,
+  },
+]);
 // Define the events emitted to the parent component
 const emit = defineEmits([
   "selectChat",
@@ -898,94 +664,6 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   }
 }
 
-.chat-history {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-  height: 100%;
-  min-height: 400px;
-
-  .time-group {
-    margin-bottom: 16px;
-
-    .time-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 16px;
-      color: var(--phy-color-text-secondary);
-      font-size: 14px;
-      cursor: pointer;
-      user-select: none;
-
-      .expand-icon {
-        transition: transform 0.2s ease;
-
-        &.expanded {
-          transform: rotate(180deg);
-        }
-      }
-    }
-
-    .chat-items {
-      padding: 0 8px;
-
-      .chat-item {
-        padding: 10px 16px;
-        margin: 4px 0;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        color: var(--phy-color-text);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-
-        .chat-title {
-          display: block;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          width: 100%;
-        }
-
-        .chat-actions {
-          margin-left: 10px;
-          flex-shrink: 0;
-          opacity: 0;
-          transition: opacity 0.2s ease;
-          display: flex;
-
-          .action-icon {
-            font-size: 18px;
-            color: #909399;
-            cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
-
-            &:hover {
-              background-color: var(--phy-color-primary-soft);
-              color: var(--phy-color-primary);
-            }
-          }
-        }
-
-        &:hover .chat-actions {
-          opacity: 1;
-        }
-
-        &:hover {
-          background-color: var(--phy-color-primary-soft);
-        }
-
-        &.active {
-          background-color: var(--phy-color-primary-soft);
-          font-weight: 500;
-        }
-      }
-    }
-  }
-}
 
 .user-info {
   display: flex;
