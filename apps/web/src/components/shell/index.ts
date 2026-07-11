@@ -5,3 +5,6 @@ export { default as PhyComposerFrame } from "./PhyComposerFrame.vue";
 export { default as PhyEmptyState } from "./PhyEmptyState.vue";
 export { default as PhyDocLayout } from "./PhyDocLayout.vue";
 export { default as PhyPageHeader } from "./PhyPageHeader.vue";
+export { default as PhyWorkspaceShell } from "./PhyWorkspaceShell.vue";
+export { default as PhyDataToolbar } from "./PhyDataToolbar.vue";
+export { default as PhyTableFrame } from "./PhyTableFrame.vue";
