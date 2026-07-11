@@ -1,27 +1,113 @@
-:root {
-  --phy-color-primary: #3a83f7;
-  --phy-color-primary-hover: #6ba4f9;
-  --phy-color-primary-soft: #d6e6fe;
+:root,
+.theme-light {
+  /* Semantic light mode */
+  --phy-color-bg-page: #f7f9fc;
+  --phy-color-bg-elevated: #ffffff;
+  --phy-color-bg-sidebar: #f5f7fa;
+  --phy-color-fill-subtle: #eef3f0;
+  --phy-color-overlay: rgba(10, 24, 18, 0.48);
+  --phy-color-text: #14201b;
+  --phy-color-text-secondary: #5b6b63;
+  --phy-color-text-muted: #68776f;
+  --phy-color-text-placeholder: #65736b;
+  --phy-color-text-disabled: #7c8981;
+  --phy-color-border-subtle: #e6ebe7;
+  --phy-color-border-control: #6f7d75;
   --phy-color-action-fill: #2f6fd4;
   --phy-color-action-fill-hover: #255eb8;
   --phy-color-on-action: #ffffff;
   --phy-color-action-text: #2f6fd4;
   --phy-color-action-text-hover: #255eb8;
   --phy-color-focus: #2f6fd4;
-  --phy-color-action: var(--phy-color-action-text);
   --phy-color-brand-blue: #3a83f7;
   --phy-color-brand-blue-soft: #d6e6fe;
   --phy-color-accent: #14644a;
-  --phy-color-accent-hover: #3d8f72;
+  --phy-color-accent-hover: #0f4d39;
   --phy-color-accent-soft: #d7ede5;
-  --phy-color-bg-page: #f7f9fc;
-  --phy-color-bg-elevated: #ffffff;
-  --phy-color-bg-sidebar: #f5f7fa;
-  --phy-color-text: #14201b;
-  --phy-color-text-secondary: #5b6b63;
-  --phy-color-text-muted: #8b9790;
-  --phy-color-border: #e6ebe7;
+  --phy-color-accent-text: #14644a;
+  --phy-color-bubble-user: #eaf6f1;
+  --phy-color-bubble-user-border: #cfe8dc;
+  --phy-color-bubble-assistant: #eaf2fe;
+  --phy-color-bubble-assistant-border: #d5e5fc;
 
+  /* Compatibility aliases for existing consumers. */
+  --phy-color-primary: var(--phy-color-brand-blue);
+  --phy-color-primary-hover: var(--phy-color-action-fill-hover);
+  --phy-color-primary-soft: var(--phy-color-brand-blue-soft);
+  --phy-color-action: var(--phy-color-action-text);
+  --phy-color-border: var(--phy-color-border-subtle);
+  --phy-bubble-user-bg: #eaf6f1;
+  --phy-bubble-user-border: #cfe8dc;
+  --phy-bubble-assistant-bg: #eaf2fe;
+  --phy-bubble-assistant-border: #d5e5fc;
+
+  /* Legacy page aliases remain CSS-owned while routed pages migrate. */
+  --color-background: var(--phy-color-bg-page);
+  --color-background-soft: var(--phy-color-bg-page);
+  --color-background-mute: var(--phy-color-fill-subtle);
+  --color-background-card: var(--phy-color-bg-elevated);
+  --color-background-hover: var(--phy-color-fill-subtle);
+  --color-border: var(--phy-color-border-subtle);
+  --color-border-hover: var(--phy-color-border-control);
+  --color-heading: var(--phy-color-text);
+  --color-text: var(--phy-color-text);
+  --sidebar-btn-bg: var(--phy-color-bg-elevated);
+  --sidebar-btn-bg-hover: var(--phy-color-fill-subtle);
+  --sidebar-btn-color: var(--phy-color-action-text);
+  --sidebar-btn-border: var(--phy-color-border-subtle);
+  --sidebar-btn-active-bg: var(--phy-color-brand-blue-soft);
+  --sidebar-btn-active-color: var(--phy-color-action-text);
+  --sidebar-btn-shadow: var(--phy-shadow-soft);
+  --sidebar-btn-shadow-hover: var(--phy-shadow-soft);
+  --page-card-bg: var(--phy-color-bg-elevated);
+  --page-card-border: var(--phy-color-border-subtle);
+  --page-card-shadow: var(--phy-shadow-soft);
+  --page-text-secondary: var(--phy-color-text-secondary);
+
+  /* Element Plus primary bridge. */
+  --el-color-primary: var(--phy-color-action-fill);
+  --el-color-primary-dark-2: var(--phy-color-action-fill-hover);
+  --el-color-primary-light-3: #6d9ae1;
+  --el-color-primary-light-5: #97b7ea;
+  --el-color-primary-light-7: #c1d4f2;
+  --el-color-primary-light-8: #d5e2f6;
+  --el-color-primary-light-9: #eaf1fb;
+  --el-color-primary-hover: var(--phy-color-action-fill-hover);
+  --el-color-primary-rgb: 47, 111, 212;
+
+  /* Element Plus success bridge. */
+  --el-color-success: #14644a;
+  --el-color-success-dark-2: #0f4d39;
+  --el-color-success-light-3: #3d8f72;
+  --el-color-success-light-5: #7eb59a;
+  --el-color-success-light-7: #b6d7c8;
+  --el-color-success-light-8: #d7ede5;
+  --el-color-success-light-9: #eaf6f1;
+
+  /* Element Plus surface bridge. */
+  --el-bg-color: var(--phy-color-bg-elevated);
+  --el-bg-color-page: var(--phy-color-bg-page);
+  --el-bg-color-overlay: var(--phy-color-bg-elevated);
+  --el-bg-color-soft: var(--phy-color-bg-sidebar);
+  --el-text-color-primary: var(--phy-color-text);
+  --el-text-color-regular: var(--phy-color-text-secondary);
+  --el-text-color-secondary: var(--phy-color-text-muted);
+  --el-text-color-placeholder: var(--phy-color-text-placeholder);
+  --el-text-color-disabled: var(--phy-color-text-disabled);
+  --el-border-color: var(--phy-color-border-subtle);
+  --el-border-color-light: var(--phy-color-border-subtle);
+  --el-border-color-lighter: var(--phy-color-border-subtle);
+  --el-fill-color: var(--phy-color-fill-subtle);
+  --el-fill-color-light: var(--phy-color-fill-subtle);
+  --el-fill-color-lighter: var(--phy-color-bg-elevated);
+  --el-fill-color-darker: var(--phy-color-border-subtle);
+  --el-button-bg-color: var(--phy-color-action-fill);
+  --el-button-border-color: var(--phy-color-action-fill);
+  --el-button-text-color: var(--phy-color-on-action);
+  --el-button-hover-bg-color: var(--phy-color-action-fill-hover);
+  --el-button-hover-border-color: var(--phy-color-action-fill-hover);
+
+  /* Shared geometry and typography. */
   --phy-radius-sm: 8px;
   --phy-radius-md: 12px;
   --phy-radius-lg: 16px;
@@ -30,45 +116,149 @@
     0 4px 16px rgba(20, 32, 27, 0.06);
   --phy-motion-fast: 150ms;
   --phy-motion-normal: 220ms;
-
   --phy-font-shell: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", sans-serif;
   --phy-font-reading: "Times New Roman", "FangSong", "仿宋", "STFangsong",
     serif;
   --phy-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Element Plus brand bridge */
-  --el-color-primary: var(--phy-color-action-fill);
-  --el-color-primary-light-3: #6d9ae1;
-  --el-color-primary-light-5: #97b7ea;
-  --el-color-primary-light-7: #c1d4f2;
-  --el-color-primary-light-8: #d5e2f6;
-  --el-color-primary-light-9: #eaf1fb;
-  --el-color-primary-dark-2: var(--phy-color-action-fill-hover);
-  --el-color-success: var(--phy-color-accent);
-  --el-color-success-light-3: #3d8f72;
-  --el-color-success-light-5: #7eb59a;
-  --el-color-success-light-7: #b6d7c8;
-  --el-color-success-light-8: #d7ede5;
-  --el-color-success-light-9: #eaf6f1;
-  --el-color-success-dark-2: #0f4d39;
-
-  --el-border-radius-base: var(--phy-radius-sm);
-  --el-border-radius-small: 6px;
-  --el-border-radius-round: var(--phy-radius-pill);
-
-  /* Chat bubbles — deterministic, very pale, and opaque */
-  --phy-bubble-user-bg: #eaf6f1;
-  --phy-bubble-user-border: #cfe8dc;
-  --phy-bubble-assistant-bg: #eaf2fe;
-  --phy-bubble-assistant-border: #d5e5fc;
-
-  /* Auth Field Horizon H1 — blue top → green bottom */
+  /* Auth Field Horizon H1 — blue top → green bottom. */
   --phy-auth-horizon: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--phy-color-primary-soft) 55%, #fff) 0%,
+    color-mix(in srgb, var(--phy-color-brand-blue-soft) 55%, #fff) 0%,
     var(--phy-color-bg-page) 48%,
     color-mix(in srgb, var(--phy-color-accent-soft) 60%, #fff) 100%
+  );
+}
+
+.theme-dark {
+  /* Semantic dark mode */
+  --phy-color-bg-page: #101815;
+  --phy-color-bg-elevated: #17221d;
+  --phy-color-bg-sidebar: #121d19;
+  --phy-color-fill-subtle: #1d2b24;
+  --phy-color-overlay: rgba(0, 0, 0, 0.64);
+  --phy-color-text: #f2f7f4;
+  --phy-color-text-secondary: #b7c5be;
+  --phy-color-text-muted: #9aaba2;
+  --phy-color-text-placeholder: #a5b6ad;
+  --phy-color-text-disabled: #7f9188;
+  --phy-color-border-subtle: #2a3a32;
+  --phy-color-border-control: #71857a;
+  --phy-color-action-fill: #2f6fd4;
+  --phy-color-action-fill-hover: #255eb8;
+  --phy-color-on-action: #ffffff;
+  --phy-color-action-text: #8cb8ff;
+  --phy-color-action-text-hover: #b7d4ff;
+  --phy-color-focus: #8cb8ff;
+  --phy-color-brand-blue: #3a83f7;
+  --phy-color-brand-blue-soft: #203d63;
+  --phy-color-accent: #2b7a59;
+  --phy-color-accent-hover: #347f61;
+  --phy-color-accent-soft: #193a2e;
+  --phy-color-accent-text: #7fd0ae;
+  --phy-color-bubble-user: #17352a;
+  --phy-color-bubble-user-border: #2b5b48;
+  --phy-color-bubble-assistant: #182d49;
+  --phy-color-bubble-assistant-border: #2c4d73;
+
+  /* Compatibility aliases for existing consumers. */
+  --phy-color-primary: var(--phy-color-brand-blue);
+  --phy-color-primary-hover: var(--phy-color-action-fill-hover);
+  --phy-color-primary-soft: var(--phy-color-brand-blue-soft);
+  --phy-color-action: var(--phy-color-action-text);
+  --phy-color-border: var(--phy-color-border-subtle);
+  --phy-bubble-user-bg: #17352a;
+  --phy-bubble-user-border: #2b5b48;
+  --phy-bubble-assistant-bg: #182d49;
+  --phy-bubble-assistant-border: #2c4d73;
+
+  /* Legacy page aliases remain CSS-owned while routed pages migrate. */
+  --color-background: var(--phy-color-bg-page);
+  --color-background-soft: var(--phy-color-bg-page);
+  --color-background-mute: var(--phy-color-fill-subtle);
+  --color-background-card: var(--phy-color-bg-elevated);
+  --color-background-hover: var(--phy-color-fill-subtle);
+  --color-border: var(--phy-color-border-subtle);
+  --color-border-hover: var(--phy-color-border-control);
+  --color-heading: var(--phy-color-text);
+  --color-text: var(--phy-color-text);
+  --sidebar-btn-bg: var(--phy-color-bg-elevated);
+  --sidebar-btn-bg-hover: var(--phy-color-fill-subtle);
+  --sidebar-btn-color: var(--phy-color-action-text);
+  --sidebar-btn-border: var(--phy-color-border-subtle);
+  --sidebar-btn-active-bg: var(--phy-color-brand-blue-soft);
+  --sidebar-btn-active-color: var(--phy-color-action-text);
+  --sidebar-btn-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --sidebar-btn-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --page-card-bg: var(--phy-color-bg-elevated);
+  --page-card-border: var(--phy-color-border-subtle);
+  --page-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --page-text-secondary: var(--phy-color-text-secondary);
+
+  /* Element Plus primary bridge. */
+  --el-color-primary: var(--phy-color-action-fill);
+  --el-color-primary-dark-2: var(--phy-color-action-fill-hover);
+  --el-color-primary-light-3: #295eaf;
+  --el-color-primary-light-5: #244e8c;
+  --el-color-primary-light-7: #1e3e69;
+  --el-color-primary-light-8: #1b3458;
+  --el-color-primary-light-9: #172a46;
+  --el-color-primary-hover: var(--phy-color-action-fill-hover);
+  --el-color-primary-rgb: 47, 111, 212;
+
+  /* Element Plus success bridge. */
+  --el-color-success: #2b7a59;
+  --el-color-success-dark-2: #347f61;
+  --el-color-success-light-3: #245f46;
+  --el-color-success-light-5: #204d3a;
+  --el-color-success-light-7: #1c3b2e;
+  --el-color-success-light-8: #193229;
+  --el-color-success-light-9: #172922;
+
+  /* Element Plus surface bridge. */
+  --el-bg-color: var(--phy-color-bg-elevated);
+  --el-bg-color-page: var(--phy-color-bg-page);
+  --el-bg-color-overlay: var(--phy-color-bg-elevated);
+  --el-bg-color-soft: var(--phy-color-bg-sidebar);
+  --el-text-color-primary: var(--phy-color-text);
+  --el-text-color-regular: var(--phy-color-text-secondary);
+  --el-text-color-secondary: var(--phy-color-text-muted);
+  --el-text-color-placeholder: var(--phy-color-text-placeholder);
+  --el-text-color-disabled: var(--phy-color-text-disabled);
+  --el-border-color: var(--phy-color-border-subtle);
+  --el-border-color-light: var(--phy-color-border-subtle);
+  --el-border-color-lighter: var(--phy-color-border-subtle);
+  --el-fill-color: var(--phy-color-fill-subtle);
+  --el-fill-color-light: var(--phy-color-fill-subtle);
+  --el-fill-color-lighter: var(--phy-color-bg-elevated);
+  --el-fill-color-darker: var(--phy-color-border-subtle);
+  --el-button-bg-color: var(--phy-color-action-fill);
+  --el-button-border-color: var(--phy-color-action-fill);
+  --el-button-text-color: var(--phy-color-on-action);
+  --el-button-hover-bg-color: var(--phy-color-action-fill-hover);
+  --el-button-hover-border-color: var(--phy-color-action-fill-hover);
+
+  /* Shared geometry and typography. */
+  --phy-radius-sm: 8px;
+  --phy-radius-md: 12px;
+  --phy-radius-lg: 16px;
+  --phy-radius-pill: 999px;
+  --phy-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.24),
+    0 4px 16px rgba(0, 0, 0, 0.22);
+  --phy-motion-fast: 150ms;
+  --phy-motion-normal: 220ms;
+  --phy-font-shell: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+  --phy-font-reading: "Times New Roman", "FangSong", "仿宋", "STFangsong",
+    serif;
+  --phy-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --phy-auth-horizon: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--phy-color-brand-blue-soft) 55%, #101815) 0%,
+    var(--phy-color-bg-page) 48%,
+    color-mix(in srgb, var(--phy-color-accent-soft) 60%, #101815) 100%
   );
 }
 

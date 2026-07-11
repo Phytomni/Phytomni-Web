@@ -1,50 +1,7 @@
-/* Theme stylesheet */
-/* Light theme */
-.theme-light {
-  --color-background: #ffffff;
-  --color-background-soft: #f8f8f8;
-  --color-background-mute: #f2f2f2;
-  --color-border: rgba(60, 60, 60, 0.12);
-  --color-border-hover: rgba(60, 60, 60, 0.29);
-  --color-heading: #2c3e50;
-  --color-text: #2c3e50;
-  
-  /* Element Plus variables */
-  --el-bg-color: #ffffff;
-  --el-bg-color-page: #ffffff;
-  --el-text-color-primary: #2c3e50;
-  --el-text-color-regular: #2c3e50;
-  --el-border-color: rgba(60, 60, 60, 0.12);
-  --el-border-color-light: rgba(60, 60, 60, 0.08);
-  --el-fill-color-light: #f5f7fa;
-  --el-fill-color: #f0f2f5;
-}
-
-/* Dark theme */
-.theme-dark {
-  --color-background: #1a1a1a;
-  --color-background-soft: #1a1a1a;
-  --color-background-mute: #1a1a1a;
-  --color-border: rgba(84, 84, 84, 0.48);
-  --color-border-hover: rgba(84, 84, 84, 0.65);
-  --color-heading: #ffffff;
-  --color-text: rgba(235, 235, 235, 0.64);
-  
-  /* Element Plus variables */
-  --el-bg-color: #1a1a1a;
-  --el-bg-color-page: #1a1a1a;
-  --el-text-color-primary: #ffffff;
-  --el-text-color-regular: rgba(235, 235, 235, 0.64);
-  --el-border-color: rgba(84, 84, 84, 0.48);
-  --el-border-color-light: rgba(84, 84, 84, 0.32);
-  --el-fill-color-light: #2a2a2a;
-  --el-fill-color: #2a2a2a;
-}
-
-/* Global theme transition */
-* {
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-}
+/* Theme stylesheet.
+ * Semantic values are CSS-owned by tokens.css. This file keeps component-specific
+ * compatibility overrides until their owning routed surfaces are migrated.
+ */
 
 /* Special style overrides for dark theme */
 .theme-dark {
@@ -721,4 +678,4 @@
       }
     }
   }
-} 
+}
