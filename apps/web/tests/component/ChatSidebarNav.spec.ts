@@ -83,6 +83,7 @@ describe("ChatSidebarNav", () => {
       .trigger("click");
     await wrapper.find('[data-test="sidebar-nav-favorites"]').trigger("click");
     const helpDropdown = wrapper.findAllComponents({ name: "ElDropdown" })[0];
+    helpDropdown.vm.$emit("command", "help");
     helpDropdown.vm.$emit("command", "tutorial");
     helpDropdown.vm.$emit("command", "architecture");
     await wrapper
@@ -93,6 +94,7 @@ describe("ChatSidebarNav", () => {
     expect(wrapper.emitted("new-chat")).toHaveLength(1);
     expect(wrapper.emitted("gene-display")).toHaveLength(1);
     expect(wrapper.emitted("favorites")).toHaveLength(1);
+    expect(wrapper.emitted("help")).toHaveLength(1);
     expect(wrapper.emitted("tutorial")).toHaveLength(1);
     expect(wrapper.emitted("show-architecture")).toHaveLength(1);
     expect(wrapper.emitted("explore-agent")).toHaveLength(1);

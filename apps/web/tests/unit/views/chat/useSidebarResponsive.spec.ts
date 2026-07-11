@@ -66,6 +66,54 @@ describe("useSidebarResponsive", () => {
     wrapper.unmount();
   });
 
+  it.each([
+    {
+      label: "expanded desktop",
+      width: 1440,
+      drawerOpen: false,
+      sidebarCollapsed: false,
+      isMobile: false,
+    },
+    {
+      label: "compact desktop",
+      width: 1024,
+      drawerOpen: false,
+      sidebarCollapsed: true,
+      isMobile: false,
+    },
+    {
+      label: "closed mobile drawer",
+      width: 390,
+      drawerOpen: false,
+      sidebarCollapsed: false,
+      isMobile: true,
+    },
+    {
+      label: "open mobile drawer",
+      width: 390,
+      drawerOpen: true,
+      sidebarCollapsed: false,
+      isMobile: true,
+    },
+  ])(
+    "maps the $label state without changing desktop preference semantics",
+    async ({ width, drawerOpen, sidebarCollapsed, isMobile }) => {
+      setInnerWidth(width);
+      const wrapper = mount(makeHarness({ drawerOpen: () => drawerOpen }));
+      await nextTick();
+
+      expect(wrapper.vm.isMobile).toBe(isMobile);
+      expect(wrapper.vm.sidebarCollapsed).toBe(sidebarCollapsed);
+      expect(wrapper.vm.drawerOpen).toBe(drawerOpen);
+      if (isMobile) {
+        expect(
+          localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)
+        ).toBeNull();
+      }
+      wrapper.unmount();
+    }
+  );
+
   it("derives compact state between 900 and 1279 pixels without changing preference", async () => {
     localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "false");
     const wrapper = mount(makeHarness());
@@ -78,7 +126,9 @@ describe("useSidebarResponsive", () => {
     expect(wrapper.vm.isMobile).toBe(false);
     expect(wrapper.vm.sidebarCollapsed).toBe(true);
     expect(wrapper.vm.collapsedPreference).toBe(false);
-    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("false");
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe(
+      "false"
+    );
     wrapper.unmount();
   });
 

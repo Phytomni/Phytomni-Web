@@ -13,6 +13,9 @@ const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
   "utf8"
 );
+const transcriptStart = CHAT_SOURCE.indexOf('class="message-container"');
+const transcriptEnd = CHAT_SOURCE.indexOf("<el-backtop", transcriptStart);
+const TRANSCRIPT_SOURCE = CHAT_SOURCE.slice(transcriptStart, transcriptEnd);
 
 describe("Chat empty state", () => {
   it("keeps the three starter prompts in the locked product order", () => {
@@ -98,6 +101,20 @@ describe("Chat empty state", () => {
     );
     expect(CHAT_SOURCE.slice(emptyStateStart, composerStart)).not.toContain(
       "AgentsViewImg"
+    );
+  });
+
+  it("keeps the empty and populated views as mutually exclusive transcript branches", () => {
+    expect(
+      TRANSCRIPT_SOURCE.match(/v-if="!currentChat\?\.messages\?\.length"/g)
+    ).toHaveLength(1);
+    expect(
+      TRANSCRIPT_SOURCE.match(/v-if="currentChat\?\.messages\?\.length"/g)
+    ).toHaveLength(1);
+    expect(CHAT_SOURCE).toContain('data-test="chat-transcript-scroll-root"');
+    expect(CHAT_SOURCE).toContain('class="transcript-content"');
+    expect(CHAT_SOURCE).toContain(
+      'v-for="(message, index) in currentChat.messages"'
     );
   });
 });
