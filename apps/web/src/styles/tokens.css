@@ -262,12 +262,57 @@
   );
 }
 
+/* Shared dimensions are theme-independent and intentionally defined once. */
+:root {
+  /* Approved spacing scale. */
+  --phy-space-4: 4px;
+  --phy-space-8: 8px;
+  --phy-space-12: 12px;
+  --phy-space-16: 16px;
+  --phy-space-20: 20px;
+  --phy-space-24: 24px;
+  --phy-space-32: 32px;
+  --phy-space-40: 40px;
+  --phy-space-48: 48px;
+  --phy-space-64: 64px;
+
+  /* Control heights: compact, default, and primary composer/auth sizes. */
+  --phy-control-height-compact: 32px;
+  --phy-control-height-default: 40px;
+  --phy-control-height-primary: 48px;
+
+  /* Layout measures: one source of truth for shell and content consumers. */
+  --phy-layout-sidebar-expanded-width: 272px;
+  --phy-layout-sidebar-compact-width: 56px;
+  --phy-layout-transcript-max-width: 860px;
+  --phy-layout-reading-max-width: 760px;
+  --phy-layout-artifact-chat-min-width: 360px;
+  --phy-layout-artifact-content-min-width: 560px;
+
+  /* Breakpoint reference values; media queries keep literal standards. */
+  --phy-breakpoint-small: 600px;
+  --phy-breakpoint-medium: 900px;
+  --phy-breakpoint-large: 1280px;
+
+  /* Motion scale and the shared ease-out curve. */
+  --phy-motion-slow: 360ms;
+  --phy-motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Layer order: sticky < dropdown < drawer < modal < toast < transfer overlay. */
+  --phy-z-sticky: 10;
+  --phy-z-dropdown: 100;
+  --phy-z-drawer: 1000;
+  --phy-z-modal: 2000;
+  --phy-z-toast: 3000;
+  --phy-z-transfer: 4000;
+}
+
 .phy-reading {
   font-family: var(--phy-font-reading);
   font-size: 17px;
   line-height: 1.7;
   color: var(--phy-color-text);
-  max-width: 760px;
+  max-width: var(--phy-layout-reading-max-width);
 }
 
 .phy-reading code,
@@ -294,5 +339,6 @@
   :root {
     --phy-motion-fast: 0ms;
     --phy-motion-normal: 0ms;
+    --phy-motion-slow: 0ms;
   }
 }

@@ -32,6 +32,132 @@ describe("PHY_TOKENS", () => {
     expect(PHY_TOKENS.brandBlueSoft).toBe("#D6E6FE");
   });
 
+  it("exports the approved spacing, controls, layout, and responsive values", () => {
+    expect({
+      space4: PHY_TOKENS.space4,
+      space8: PHY_TOKENS.space8,
+      space12: PHY_TOKENS.space12,
+      space16: PHY_TOKENS.space16,
+      space20: PHY_TOKENS.space20,
+      space24: PHY_TOKENS.space24,
+      space32: PHY_TOKENS.space32,
+      space40: PHY_TOKENS.space40,
+      space48: PHY_TOKENS.space48,
+      space64: PHY_TOKENS.space64,
+      controlHeightCompact: PHY_TOKENS.controlHeightCompact,
+      controlHeightDefault: PHY_TOKENS.controlHeightDefault,
+      controlHeightPrimary: PHY_TOKENS.controlHeightPrimary,
+      sidebarExpandedWidth: PHY_TOKENS.sidebarExpandedWidth,
+      sidebarCompactWidth: PHY_TOKENS.sidebarCompactWidth,
+      transcriptMaxWidth: PHY_TOKENS.transcriptMaxWidth,
+      readingMaxWidth: PHY_TOKENS.readingMaxWidth,
+      artifactChatMinWidth: PHY_TOKENS.artifactChatMinWidth,
+      artifactContentMinWidth: PHY_TOKENS.artifactContentMinWidth,
+      breakpointSmall: PHY_TOKENS.breakpointSmall,
+      breakpointMedium: PHY_TOKENS.breakpointMedium,
+      breakpointLarge: PHY_TOKENS.breakpointLarge,
+      motionFast: PHY_TOKENS.motionFast,
+      motionNormal: PHY_TOKENS.motionNormal,
+      motionSlow: PHY_TOKENS.motionSlow,
+      motionEaseOut: PHY_TOKENS.motionEaseOut,
+      zSticky: PHY_TOKENS.zSticky,
+      zDropdown: PHY_TOKENS.zDropdown,
+      zDrawer: PHY_TOKENS.zDrawer,
+      zModal: PHY_TOKENS.zModal,
+      zToast: PHY_TOKENS.zToast,
+      zTransfer: PHY_TOKENS.zTransfer,
+    }).toEqual({
+      space4: "4px",
+      space8: "8px",
+      space12: "12px",
+      space16: "16px",
+      space20: "20px",
+      space24: "24px",
+      space32: "32px",
+      space40: "40px",
+      space48: "48px",
+      space64: "64px",
+      controlHeightCompact: "32px",
+      controlHeightDefault: "40px",
+      controlHeightPrimary: "48px",
+      sidebarExpandedWidth: "272px",
+      sidebarCompactWidth: "56px",
+      transcriptMaxWidth: "860px",
+      readingMaxWidth: "760px",
+      artifactChatMinWidth: "360px",
+      artifactContentMinWidth: "560px",
+      breakpointSmall: "600px",
+      breakpointMedium: "900px",
+      breakpointLarge: "1280px",
+      motionFast: "150ms",
+      motionNormal: "220ms",
+      motionSlow: "360ms",
+      motionEaseOut: "cubic-bezier(0.22, 1, 0.36, 1)",
+      zSticky: 10,
+      zDropdown: 100,
+      zDrawer: 1000,
+      zModal: 2000,
+      zToast: 3000,
+      zTransfer: 4000,
+    });
+  });
+
+  it("keeps the token sheet as the single source for layout measures", () => {
+    const declarations = [
+      "--phy-layout-sidebar-expanded-width",
+      "--phy-layout-sidebar-compact-width",
+      "--phy-layout-transcript-max-width",
+      "--phy-layout-reading-max-width",
+      "--phy-layout-artifact-chat-min-width",
+      "--phy-layout-artifact-content-min-width",
+    ];
+
+    for (const token of declarations) {
+      expect(
+        (TOKENS_CSS.match(new RegExp(`${token}\\s*:`, "g")) ?? []).length
+      ).toBe(1);
+    }
+  });
+
+  it("matches the CSS layout, responsive, motion, and z-index contract", () => {
+    for (const declaration of [
+      "--phy-space-4: 4px;",
+      "--phy-space-8: 8px;",
+      "--phy-space-12: 12px;",
+      "--phy-space-16: 16px;",
+      "--phy-space-20: 20px;",
+      "--phy-space-24: 24px;",
+      "--phy-space-32: 32px;",
+      "--phy-space-40: 40px;",
+      "--phy-space-48: 48px;",
+      "--phy-space-64: 64px;",
+      "--phy-control-height-compact: 32px;",
+      "--phy-control-height-default: 40px;",
+      "--phy-control-height-primary: 48px;",
+      "--phy-layout-sidebar-expanded-width: 272px;",
+      "--phy-layout-sidebar-compact-width: 56px;",
+      "--phy-layout-transcript-max-width: 860px;",
+      "--phy-layout-reading-max-width: 760px;",
+      "--phy-layout-artifact-chat-min-width: 360px;",
+      "--phy-layout-artifact-content-min-width: 560px;",
+      "--phy-breakpoint-small: 600px;",
+      "--phy-breakpoint-medium: 900px;",
+      "--phy-breakpoint-large: 1280px;",
+      "--phy-motion-fast: 150ms;",
+      "--phy-motion-normal: 220ms;",
+      "--phy-motion-slow: 360ms;",
+      "--phy-motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);",
+      "--phy-z-sticky: 10;",
+      "--phy-z-dropdown: 100;",
+      "--phy-z-drawer: 1000;",
+      "--phy-z-modal: 2000;",
+      "--phy-z-toast: 3000;",
+      "--phy-z-transfer: 4000;",
+    ]) {
+      expect(TOKENS_CSS).toContain(declaration);
+    }
+  });
+
   it("maps Element Plus primary companions to the approved action scale", () => {
     for (const declaration of [
       "--el-color-primary: var(--phy-color-action-fill);",
