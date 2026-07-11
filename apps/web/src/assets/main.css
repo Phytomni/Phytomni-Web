@@ -1,13 +1,5 @@
 @import './base.css';
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-}
-
 #app {
   margin: 0;
   padding: 0;
@@ -17,11 +9,18 @@ body {
 }
 
 a {
-  text-decoration: none;
-  color: var(--el-color-primary);
-  transition: 0.4s;
+  color: var(--phy-color-action-text);
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
+  transition: color var(--phy-motion-fast) ease-out;
 }
 
 a:hover {
-  color: var(--phy-color-primary-hover);
+  color: var(--phy-color-action-text-hover);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
 }

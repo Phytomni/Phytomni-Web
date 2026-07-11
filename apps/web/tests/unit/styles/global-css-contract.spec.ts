@@ -1,0 +1,61 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const CSS_PATHS = ["base.css", "main.css", "theme.css"] as const;
+const CSS = Object.fromEntries(
+  CSS_PATHS.map((filename) => [
+    filename,
+    readFileSync(resolve(__dirname, `../../../src/assets/${filename}`), "utf8"),
+  ])
+) as Record<(typeof CSS_PATHS)[number], string>;
+const GLOBAL_CSS = Object.values(CSS).join("\n");
+const TOKENS_CSS = readFileSync(
+  resolve(__dirname, "../../../src/styles/tokens.css"),
+  "utf8"
+);
+
+describe("global CSS contract", () => {
+  it("removes Vue starter palette and system-color overrides", () => {
+    expect(GLOBAL_CSS).not.toMatch(/--vt-[a-z0-9-]+\s*:/i);
+    expect(CSS["base.css"]).not.toContain("prefers-color-scheme");
+    expect(CSS["base.css"]).not.toContain("--color-background");
+  });
+
+  it("keeps the reset minimal and avoids global layout ownership", () => {
+    const resetBlock = CSS["base.css"].match(
+      /\*\s*,\s*\*::before\s*,\s*\*::after\s*\{([\s\S]*?)\n\}/
+    )?.[1];
+    expect(resetBlock).toBeDefined();
+    expect(resetBlock).toContain("box-sizing: border-box;");
+    expect(resetBlock).not.toMatch(/position\s*:/);
+    expect(resetBlock).not.toMatch(/margin\s*:/);
+    expect(resetBlock).not.toMatch(/padding\s*:/);
+    expect(GLOBAL_CSS).not.toContain(".el-button + .el-button");
+  });
+
+  it("keeps reduced-motion support in the semantic token owner", () => {
+    expect(TOKENS_CSS).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(TOKENS_CSS).toContain("--phy-motion-fast: 0ms;");
+    expect(TOKENS_CSS).toContain("--phy-motion-normal: 0ms;");
+  });
+
+  it("limits transitions to explicit interactive anchor behavior", () => {
+    expect(CSS["base.css"]).not.toMatch(/\btransition\s*:/);
+    expect(CSS["main.css"]).toMatch(
+      /a\s*\{[\s\S]*transition:\s*color\s+var\(--phy-motion-fast\)\s+ease-out;/
+    );
+    expect(CSS["main.css"]).not.toMatch(/transition\s*:\s*all\b/);
+  });
+
+  it("provides an accessible anchor baseline", () => {
+    expect(CSS["main.css"]).toMatch(
+      /a\s*\{[\s\S]*color:\s*var\(--phy-color-action-text\);/
+    );
+    expect(CSS["main.css"]).toMatch(
+      /a\s*\{[\s\S]*text-decoration:\s*underline;/
+    );
+    expect(CSS["main.css"]).toContain("a:focus-visible");
+    expect(CSS["main.css"]).toContain("var(--phy-color-focus)");
+  });
+});
