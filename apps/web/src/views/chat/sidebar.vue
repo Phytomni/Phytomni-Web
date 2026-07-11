@@ -1,5 +1,10 @@
 <template>
-  <PhyAdaptiveSidebar :collapsed="sidebarCollapsed">
+  <PhyAdaptiveSidebar
+    :collapsed="sidebarCollapsed"
+    :drawer-open="drawerOpen"
+    @close="closeDrawer"
+    @toggle="toggle"
+  >
     <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <ChatSidebarNav
         :collapsed="sidebarCollapsed"
@@ -21,7 +26,7 @@
         @favorites="handleButtonClick('favorites', openFavorites)"
         @tutorial="handleButtonClick('tutorial', startTutorial)"
         @account-command="handleCommand"
-        @toggle-collapse="toggleCollapse"
+        @toggle-collapse="toggle"
       >
         <template #explore-agents>
           <div class="agent-list">
@@ -141,6 +146,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  drawerOpen: {
+    type: Boolean,
+    default: false,
+  },
 });
 const router = useRouter();
 const UserStore = userStore();
@@ -173,24 +182,24 @@ const emit = defineEmits([
   "startNewChat",
   "openKnowledgeBase",
   "handleSidebarCollapse",
+  "drawerOpenChange",
   "chatRenamed",
   "chatDeleted",
   "chatFavorited",
   "startTutorial",
 ]);
 
-const { sidebarCollapsed, expandSidebar, collapseSidebar } = useSidebarResponsive({
+const {
+  sidebarCollapsed,
+  drawerOpen,
+  toggle,
+  closeDrawer,
+} = useSidebarResponsive({
   collapsed: () => props.collapsed,
+  drawerOpen: () => props.drawerOpen,
   onCollapseChange: (value) => emit("handleSidebarCollapse", value),
+  onDrawerOpenChange: (value) => emit("drawerOpenChange", value),
 });
-
-const toggleCollapse = () => {
-  if (sidebarCollapsed.value) {
-    expandSidebar();
-  } else {
-    collapseSidebar();
-  }
-};
 
 const {
   renameDialogVisible,

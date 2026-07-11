@@ -31,10 +31,12 @@
           :chatList="chatList"
           :currentChatId="currentChatId"
           :collapsed="leftSidebarCollapsed"
+          :drawer-open="leftSidebarDrawerOpen"
           @selectChat="selectChat"
           @startNewChat="startNewChat"
           @openKnowledgeBase="openKnowledgeBase"
           @handleSidebarCollapse="handleSidebarCollapse"
+          @drawerOpenChange="leftSidebarDrawerOpen = $event"
           @startTutorial="startTutorial"
           @chatRenamed="handleChatRenamed"
           @chatDeleted="handleChatDeleted"
@@ -45,10 +47,21 @@
     <!-- Center chat area -->
     <div class="chat-main">
       <div class="chat-header">
-        <router-link v-if="UserStore.permission !== 'guest'" to="/help">
-          <h2>{{ $t("chat.title") }}</h2>
-        </router-link>
-        <div v-else></div>
+        <div class="header-leading">
+          <el-button
+            class="mobile-sidebar-toggle"
+            text
+            circle
+            :aria-label="$t('chat.title')"
+            @click="leftSidebarDrawerOpen = true"
+          >
+            <el-icon><Menu /></el-icon>
+          </el-button>
+          <router-link v-if="UserStore.permission !== 'guest'" to="/help">
+            <h2>{{ $t("chat.title") }}</h2>
+          </router-link>
+          <div v-else></div>
+        </div>
         <div class="header-controls">
           <LangSwitch class="header-lang-switch" />
           <el-button
@@ -1416,6 +1429,7 @@ const drawerVisible = ref(false);
 
 // Left sidebar state
 const leftSidebarCollapsed = ref(false);
+const leftSidebarDrawerOpen = ref(false);
 
 // Agents architecture diagram dialog
 const agentsViewVisible = ref(false);
@@ -2190,6 +2204,16 @@ const copyMessageWithDocs = (message: any, index: number) => {
     margin: 0;
     font-size: 18px;
     font-weight: 500;
+  }
+
+  .header-leading {
+    display: flex;
+    align-items: center;
+    gap: var(--phy-space-8);
+  }
+
+  .mobile-sidebar-toggle {
+    display: none;
   }
 
   .header-controls {
@@ -3306,7 +3330,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
 }
 
 /* Responsive design */
-@media (max-width: 900px) {
+@media (max-width: 899px) {
+  .mobile-sidebar-toggle {
+    display: inline-flex !important;
+  }
+
   .agents-view-image {
     width: 100% !important;
     height: auto !important;
