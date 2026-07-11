@@ -8,6 +8,10 @@ const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
   "utf8"
 );
+const CHAT_COMPOSER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatComposer.vue"),
+  "utf8"
+);
 const SIDEBAR_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/sidebar.vue"),
   "utf8"
@@ -70,10 +74,14 @@ describe("Chat adaptive shell integration", () => {
     );
     expect(CHAT_SOURCE).toContain('ref="tourSidebarTarget"');
     expect(CHAT_SOURCE).toContain('ref="tourCasesTarget"');
-    expect(CHAT_SOURCE).toContain('ref="tourInputTarget"');
+    expect(CHAT_SOURCE).toContain(':set-tour-input-target="setTourInputTarget"');
+    expect(CHAT_SOURCE).toContain("const setTourInputTarget");
+    expect(CHAT_COMPOSER_SOURCE).toContain(':ref="bindTourInputTarget"');
     expect(countOccurrences(CHAT_SOURCE, 'ref="tourSidebarTarget"')).toBe(1);
     expect(countOccurrences(CHAT_SOURCE, 'ref="tourCasesTarget"')).toBe(1);
-    expect(countOccurrences(CHAT_SOURCE, 'ref="tourInputTarget"')).toBe(1);
+    expect(
+      countOccurrences(CHAT_SOURCE, ':set-tour-input-target="setTourInputTarget"')
+    ).toBe(1);
     expect(CHAT_SOURCE).toContain(':target="tourSidebarTarget"');
     expect(CHAT_SOURCE).toContain(':target="tourCasesTarget"');
     expect(CHAT_SOURCE).toContain(':target="tourInputTarget"');
@@ -124,7 +132,8 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain('class="right-sidebar"');
     expect(CHAT_SOURCE).toContain("<el-dialog");
     expect(CHAT_SOURCE).toContain('class="message-container"');
-    expect(CHAT_SOURCE).toContain('class="input-container-warpper"');
+    expect(CHAT_SOURCE).toContain("<ChatComposer");
+    expect(CHAT_COMPOSER_SOURCE).toContain('class="input-container-warpper"');
   });
 
   it("keeps the Chat header focused on conversation context", () => {
@@ -225,9 +234,10 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).not.toContain("v-for=\"agent in presetAgents\"");
     expect(CHAT_SOURCE).not.toContain(".input-container-bottom {");
 
-    expect(CHAT_SOURCE).toContain('class="agent-button"');
-    expect(CHAT_SOURCE).toContain("@click=\"handleButtonClick(item)\"");
-    expect(CHAT_SOURCE).toContain("getAgentTooltip");
-    expect(CHAT_SOURCE).toContain("showMoreInfo");
+    expect(CHAT_COMPOSER_SOURCE).toContain('class="agent-button"');
+    expect(CHAT_COMPOSER_SOURCE).toContain("emit('agent-click', item)");
+    expect(CHAT_COMPOSER_SOURCE).toContain("getAgentTooltip");
+    expect(CHAT_SOURCE).toContain(':get-agent-tooltip="getAgentTooltip"');
+    expect(CHAT_SOURCE).toContain('@agent-more="showMoreInfo"');
   });
 });
