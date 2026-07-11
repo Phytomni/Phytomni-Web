@@ -154,9 +154,9 @@ export function useSendMessage(opts: {
 
       // Stream branch: chat-family + instant mode + dark-launch flag. The
       // insertion point is inside the existing try, so returning here still
-      // runs the enclosing finally (request-id cleanup, history refresh,
-      // pending-chat clear, title update, fileList clear) exactly once —
-      // no duplicate cleanup needed, and none is done here.
+      // runs the enclosing finally (request-id cleanup, history refresh via
+      // coordinator, title update, fileList clear) exactly once — no duplicate
+      // cleanup needed, and none is done here.
       const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
       if (shouldStream(chatState.activeAgentName, chatState.mode, streamFlag)) {
         const placeholder: ChatMessage = {
@@ -171,7 +171,14 @@ export function useSendMessage(opts: {
           showLog: false,
         };
         currentChat.value.messages.push(placeholder);
-        const { streamMessage } = useStreamMessage({ getChatState, t });
+        // Bind stream lookups to the captured state object so a post-rekey
+        // getChatState(oldTempId) cannot resurrect an empty temp record.
+        const getStreamChatState = (id: string) =>
+          id === sendingDialogueId ? chatState : getChatState(id);
+        const { streamMessage } = useStreamMessage({
+          getChatState: getStreamChatState,
+          t,
+        });
         await streamMessage({
           dialogueId: sendingDialogueId,
           formData: queryData,

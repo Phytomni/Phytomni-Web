@@ -252,7 +252,9 @@ describe("Chat adaptive shell integration", () => {
   it("reconciles temporary dialogue state transactionally via coordinator", () => {
     expect(CHAT_SOURCE).toContain("rekeyChatState");
     expect(CHAT_SOURCE).toContain("reconcileMatchedDialogue");
-    expect(CHAT_SOURCE).toContain("restorePendingChats(formattedData)");
+    expect(CHAT_SOURCE).toContain("restorePendingChats(formattedData");
+    expect(CHAT_SOURCE).toContain("skipRestoreTempIds");
+    expect(CHAT_SOURCE).toContain("skipTempIds?: ReadonlySet<string>");
     expect(CHAT_SOURCE).toMatch(
       /getHistoryQuestionData\([\s\S]*sendingDialogueId/
     );
@@ -281,8 +283,7 @@ describe("Chat adaptive shell integration", () => {
       /chatList\.value\[0\]\.dialogue_id/
     );
     expect(sendMessageSource).toContain("chatState.uploadTransfer");
-    expect(sendMessageSource).not.toMatch(
-      /getChatState\(sendingDialogueId\)\.uploadTransfer/
-    );
+    expect(sendMessageSource).toContain("getStreamChatState");
+    expect(sendMessageSource).toContain("id === sendingDialogueId ? chatState");
   });
 });

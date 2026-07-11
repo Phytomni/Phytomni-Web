@@ -1408,7 +1408,13 @@ const getHistoryQuestionData = (
           });
 
           chatList.value = formattedData;
-          restorePendingChats(formattedData);
+          const skipRestoreTempIds =
+            sendingDialogueId &&
+            isLocalStorageChat(sendingDialogueId) &&
+            options?.blockingDialogueId
+              ? new Set([sendingDialogueId])
+              : undefined;
+          restorePendingChats(formattedData, skipRestoreTempIds);
 
           if (sendingDialogueId && isLocalStorageChat(sendingDialogueId)) {
             if (options?.blockingDialogueId) {
@@ -1473,13 +1479,19 @@ const getHistoryQuestionData = (
 
 // Scan pending localStorage records against the authoritative chat list; reconcile
 // only when matchesChat yields exactly one candidate per temp key.
-const restorePendingChats = (knownChats: Chat[]) => {
+const restorePendingChats = (
+  knownChats: Chat[],
+  skipTempIds?: ReadonlySet<string>
+) => {
   const pendingChatKeys = Object.keys(localStorage).filter((key) =>
     key.startsWith("pending_chat_")
   );
 
   pendingChatKeys.forEach((key) => {
     const tempChatId = key.replace("pending_chat_", "");
+    if (skipTempIds?.has(tempChatId)) {
+      return;
+    }
     const pendingChatData = safeParse(localStorage.getItem(key));
 
     if (!isValidPendingRecord(pendingChatData)) {

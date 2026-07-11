@@ -1,6 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import type { UploadFile } from "@/views/chat/types";
+import {
+  clearPendingChat,
+  isLocalStorageChat,
+} from "@/utils/pending-chat";
+import type { RekeyChatStateOutcome } from "@/views/chat/types";
 
 // This is a characterization test of the just-extracted (behavior-unchanged) parallel
 // chat state, the unit-testable form of the "multiple dialogues in parallel, UI state
@@ -291,5 +296,100 @@ describe("useChatStates rekeyChatState", () => {
     expect(localStorage.getItem("pending_chat_new_B")).not.toBeNull();
 
     localStorage.removeItem("pending_chat_new_B");
+  });
+});
+
+/** Mirrors index.vue reconcileMatchedDialogue for behavioral contract tests. */
+function reconcileMatchedDialogueHarness(opts: {
+  rekeyChatState: (
+    from: string,
+    to: string
+  ) => RekeyChatStateOutcome;
+  currentChatId: { value: string };
+  updateUrlWithChatId: (id: string) => void;
+  tempId: string;
+  serverId: string;
+  pendingKey?: string;
+}) {
+  const { rekeyChatState, currentChatId, updateUrlWithChatId, tempId, serverId, pendingKey } =
+    opts;
+  const wasCurrent = currentChatId.value === tempId;
+  const rekey = rekeyChatState(tempId, serverId);
+  const benign =
+    rekey.outcome === "moved" ||
+    rekey.outcome === "same-id" ||
+    rekey.outcome === "source-absent";
+  const reconciled = rekey.outcome === "moved" || rekey.outcome === "same-id";
+
+  if (benign) {
+    if (pendingKey !== undefined) {
+      localStorage.removeItem(pendingKey);
+    } else if (isLocalStorageChat(tempId)) {
+      clearPendingChat(tempId);
+    }
+  } else if (rekey.outcome === "target-collision") {
+    return { status: "retained" as const, tempId, reason: "collision" as const };
+  }
+
+  if (reconciled && wasCurrent && currentChatId.value === tempId) {
+    currentChatId.value = serverId;
+    updateUrlWithChatId(serverId);
+  }
+
+  if (reconciled) {
+    return { status: "reconciled" as const, tempId, serverId, rekey };
+  }
+
+  return { status: "retained" as const, tempId, reason: "unmatched" as const };
+}
+
+describe("reconcileMatchedDialogue coordinator contract", () => {
+  afterEach(() => {
+    localStorage.removeItem("pending_chat_new_A");
+    localStorage.removeItem("pending_chat_new_B");
+  });
+
+  it("background A reconciles while B is current: only A moves, only A pending removed, B and URL unchanged", () => {
+    localStorage.setItem(
+      "pending_chat_new_A",
+      JSON.stringify({
+        isPending: true,
+        messages: [{ role: "user", content: "msg A" }],
+      })
+    );
+    localStorage.setItem(
+      "pending_chat_new_B",
+      JSON.stringify({
+        isPending: true,
+        messages: [{ role: "user", content: "msg B" }],
+      })
+    );
+
+    const s = useChatStates();
+    const stateA = s.getChatState("new_A");
+    stateA.messageInput = "A draft";
+    const stateB = s.getChatState("new_B");
+    stateB.messageInput = "B draft";
+    s.currentChatId.value = "new_B";
+
+    const urlUpdates: string[] = [];
+    const result = reconcileMatchedDialogueHarness({
+      rekeyChatState: s.rekeyChatState.bind(s),
+      currentChatId: s.currentChatId,
+      updateUrlWithChatId: (id) => urlUpdates.push(id),
+      tempId: "new_A",
+      serverId: "srv-a",
+      pendingKey: "pending_chat_new_A",
+    });
+
+    expect(result.status).toBe("reconciled");
+    expect(s.chatStates.value["srv-a"]).toBe(stateA);
+    expect(s.chatStates.value["new_A"]).toBeUndefined();
+    expect(s.chatStates.value["new_B"]).toBe(stateB);
+    expect(s.currentChatId.value).toBe("new_B");
+    expect(stateB.messageInput).toBe("B draft");
+    expect(localStorage.getItem("pending_chat_new_A")).toBeNull();
+    expect(localStorage.getItem("pending_chat_new_B")).not.toBeNull();
+    expect(urlUpdates).toEqual([]);
   });
 });

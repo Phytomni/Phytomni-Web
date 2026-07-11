@@ -1,13 +1,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ref } from "vue";
-import { useSendMessage } from "@/views/chat/composables/useSendMessage";
 import type { ChatComposerHandle } from "@/views/chat/types";
+
+const streamHarness = vi.hoisted(() => ({
+  capturedGetChatState: undefined as ((id: string) => unknown) | undefined,
+  streamMessage: vi.fn(async () => undefined),
+}));
 
 // getQueryAbortable (main send) + getAnswerCheck (network-error recovery) are APIs the
 // composable imports directly, so they must be mocked.
 vi.mock("@/api/chat", () => ({
   getQueryAbortable: vi.fn(),
   getAnswerCheck: vi.fn(),
+}));
+
+vi.mock("@/views/chat/composables/useStreamMessage", () => ({
+  useStreamMessage: (opts: { getChatState: (id: string) => unknown }) => {
+    streamHarness.capturedGetChatState = opts.getChatState;
+    return { streamMessage: streamHarness.streamMessage };
+  },
 }));
 
 // element-plus's ElMessage/ElMessageBox are invoked on a failed pending write / the 403 dialog.
@@ -28,6 +39,7 @@ vi.mock("@/utils/network-error", () => ({
   isNetworkError: vi.fn(() => false),
 }));
 
+import { useSendMessage } from "@/views/chat/composables/useSendMessage";
 import { getQueryAbortable } from "@/api/chat";
 import { clearPendingChat } from "@/utils/pending-chat";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
@@ -76,6 +88,8 @@ describe("useSendMessage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    streamHarness.capturedGetChatState = undefined;
+    streamHarness.streamMessage.mockResolvedValue(undefined);
     vi.stubEnv("VITE_STREAM_ENABLED", "false");
     states = new Map();
     states.set("A", makeState());
@@ -460,5 +474,35 @@ describe("useSendMessage", () => {
 
     expect(state.uploadTransfer).toBeNull();
     expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
+  });
+
+  it("stream path binds getChatState to captured state so post-rekey temp lookup cannot resurrect", async () => {
+    vi.stubEnv("VITE_STREAM_ENABLED", "true");
+    const chatStatesApi = useChatStates();
+    const tempId = "new_stream";
+    const serverId = "srv-stream";
+    chatStatesApi.currentChatId.value = tempId;
+    currentChatId = chatStatesApi.currentChatId;
+    const state = chatStatesApi.getChatState(tempId);
+    state.messageInput = "stream msg";
+    state.activeAgentName = "ChatAgent";
+    state.mode = "instant";
+    currentChat.value = { messages: [] };
+    getChatState = (id: string) => chatStatesApi.getChatState(id);
+
+    streamHarness.streamMessage.mockImplementationOnce(async () => {
+      chatStatesApi.rekeyChatState(tempId, serverId);
+      const viaWrapper = streamHarness.capturedGetChatState!(tempId);
+      expect(viaWrapper).toBe(state);
+      expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(streamHarness.capturedGetChatState).toBeDefined();
+    expect(streamHarness.streamMessage).toHaveBeenCalledTimes(1);
+    expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
+    expect(state.isSending).toBe(false);
   });
 });
