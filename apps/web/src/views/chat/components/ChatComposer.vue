@@ -12,6 +12,15 @@
       class="input-container-warpper"
     >
       <PhyComposerFrame>
+        <ChatAgentPicker
+          v-if="showAgentPicker"
+          :options="pickerOptions"
+          :roles-loading="rolesLoading"
+          :selected-agent="selectedAgent"
+          :disabled="isSending"
+          @select="emit('command', $event)"
+          @clear="emit('clear-agent')"
+        />
         <div class="input-box">
           <div v-if="isSending" class="abort-button-overlay">
             <el-tooltip :content="t('chat.abortTooltip')" placement="top">
@@ -159,63 +168,6 @@
                 </div>
               </div>
             </template>
-
-            <template #footer>
-              <div
-                v-if="!hasMessages"
-                style="
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  padding: 12px;
-                "
-              >
-                <div v-if="rolesLoading" class="roles-loading">
-                  <el-icon class="is-loading">
-                    <Loading />
-                  </el-icon>
-                  {{ t("chat.loadingAgentPerms") }}
-                </div>
-
-                <template v-else-if="rolesTool.length > 0 && chatMode === 'instant'">
-                  <div class="input-actions">
-                    <div
-                      v-for="(item, index) in rolesTool"
-                      :key="index"
-                      class="agent-item-wrapper"
-                    >
-                      <el-tooltip placement="top">
-                        <template #content>
-                          <div class="agent-tooltip-content">
-                            <p>{{ getAgentTooltip(item) }}</p>
-                          </div>
-                          <a
-                            class="more-button"
-                            @click="emit('agent-more', item)"
-                            :disabled="isSending"
-                          >
-                            {{ t("chat.more") }}
-                          </a>
-                        </template>
-                        <div
-                          class="agent-button"
-                          :class="{
-                            'agent-button-active': activeButton === item,
-                          }"
-                          @click="emit('agent-click', item)"
-                          :style="{
-                            opacity: isSending ? 0.6 : 1,
-                            cursor: isSending ? 'not-allowed' : 'pointer',
-                          }"
-                        >
-                          {{ item }}
-                        </div>
-                      </el-tooltip>
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </template>
           </MentionSender>
         </div>
       </PhyComposerFrame>
@@ -229,13 +181,15 @@ import type { VNodeRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { MentionSender, FilesCard } from "vue-element-plus-x";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
+import ChatAgentPicker, {
+  type ChatAgentPickerOption,
+} from "./ChatAgentPicker.vue";
 import { PhyComposerFrame } from "@/components/shell";
 import {
   Close,
   Paperclip,
   Promotion,
   Menu,
-  Loading,
 } from "@element-plus/icons-vue";
 import type { ChatComposerHandle, UploadFile } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
@@ -250,8 +204,8 @@ const props = defineProps<{
   rolesTool: string[];
   rolesLoading: boolean;
   hasMessages: boolean;
-  activeButton?: string;
-  getAgentTooltip: (item: string) => string;
+  selectedAgent: string;
+  pickerOptions: ChatAgentPickerOption[];
   setTourInputTarget?: (el: HTMLElement | null) => void;
 }>();
 
@@ -265,8 +219,7 @@ const emit = defineEmits<{
   command: [cmd: string];
   "file-change": [file: unknown];
   "remove-file": [index: number];
-  "agent-click": [item: string];
-  "agent-more": [item: string];
+  "clear-agent": [];
 }>();
 
 const { t } = useI18n();
@@ -276,6 +229,8 @@ const senderRef = ref<{
   popoverVisible?: boolean;
 } | null>(null);
 const uploadRef = ref();
+
+const showAgentPicker = computed(() => props.chatMode === "instant");
 
 const popoverVisible = computed(() =>
   unref(senderRef.value?.popoverVisible as boolean | undefined)
@@ -393,86 +348,6 @@ defineExpose<ChatComposerHandle>({
     right: 20px;
     z-index: 1000;
     pointer-events: auto;
-  }
-
-  .input-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-
-    .agent-button {
-      padding: 4px 10px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 400;
-      color: var(--phy-color-accent);
-      border: 1.5px solid transparent;
-      background-color: #fff;
-      transition: all 0.3s ease;
-      border: 1px solid #d4d4d4;
-
-      &:hover:not(.agent-button-disabled) {
-        border-color: #3695c4;
-        color: #2b738f;
-      }
-
-      &.agent-button-active {
-        background-color: #3695c4;
-        color: #fff;
-        border-color: #1ea0ac;
-
-        &:hover {
-          opacity: 0.8;
-          color: #fff;
-        }
-      }
-
-      &.agent-button-disabled {
-        background-color: #fff;
-        border: 1px solid #d4d4d4;
-        color: #999;
-        cursor: not-allowed;
-        opacity: 0.6;
-      }
-    }
-  }
-}
-
-.agent-item-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-right: 12px;
-}
-
-.more-button {
-  color: #909399;
-  font-size: 12px;
-  cursor: pointer;
-
-  &:hover {
-    color: var(--el-color-primary);
-    text-decoration: underline;
-  }
-
-  &:disabled {
-    color: #c0c4cc;
-    cursor: not-allowed;
-  }
-}
-
-.roles-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #909399;
-  font-size: 14px;
-  padding: 20px;
-
-  .el-icon {
-    font-size: 16px;
   }
 }
 </style>

@@ -441,6 +441,12 @@ export default {
     refreshReply: "刷新回复",
     abortTooltip: "中止回答",
     loadingAgentPerms: "加载智能体权限中……",
+    agentPicker: {
+      loading: "加载智能体权限中……",
+      empty: "当前账号暂无可用智能体",
+      searchPlaceholder: "搜索智能体……",
+      remove: "移除 {agent}",
+    },
     log: {
       replyContent: "回复内容",
       execLog: "执行日志 (ID: {id})",

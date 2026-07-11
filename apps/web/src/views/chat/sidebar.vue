@@ -126,7 +126,7 @@ import { userStore } from "@/stores";
 import type { Chat } from "./types";
 import { useChatHistoryGroups } from "./composables/useChatHistoryGroups";
 import { useSidebarResponsive } from "./composables/useSidebarResponsive";
-import { useSidebarAgents } from "./composables/useSidebarAgents";
+import { deriveSidebarRouteOptions } from "@/constants/agents";
 import { useChatHistoryActions } from "./composables/useChatHistoryActions";
 import { useSidebarNavigation } from "./composables/useSidebarNavigation";
 import ChatHistoryList, {
@@ -225,7 +225,17 @@ const {
   onSelectChat: (id) => emit("selectChat", id),
 });
 
-const { showAgentsList, exploreAgent, presetAgents, handleAgentClick } = useSidebarAgents(router);
+const showAgentsList = ref(false);
+const presetAgents = ref(deriveSidebarRouteOptions());
+
+const exploreAgent = () => {
+  showAgentsList.value = !showAgentsList.value;
+};
+
+const handleAgentClick = (agent: { route: string }) => {
+  router.push(agent.route);
+  showAgentsList.value = false;
+};
 
 const { handleCommand, hasPermission, startNewChat, openKnowledgeBase, openFavorites, startTutorial, selectChat } = useSidebarNavigation({
   router,

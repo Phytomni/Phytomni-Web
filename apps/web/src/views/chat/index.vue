@@ -1014,7 +1014,7 @@
       <div class="input-container">
         <ChatComposer
           ref="composerRef"
-          v-model="messageInput"
+          v-model="displayMessageInput"
           :is-sending="isSending"
           v-model:chat-mode="chatMode"
           :expert-mode-enabled="expertModeEnabled"
@@ -1023,8 +1023,8 @@
           :roles-tool="rolesTool"
           :roles-loading="rolesLoading"
           :has-messages="!!currentChat?.messages?.length"
-          :active-button="activeButton"
-          :get-agent-tooltip="getAgentTooltip"
+          :selected-agent="selectedAgent"
+          :picker-options="pickerOptions"
           :set-tour-input-target="setTourInputTarget"
           @submit="sendMessage"
           @stop="abortCurrentRequest"
@@ -1033,8 +1033,7 @@
           @command="handleCommand"
           @file-change="handleFileChange"
           @remove-file="removeFile"
-          @agent-click="handleButtonClick"
-          @agent-more="showMoreInfo"
+          @clear-agent="clearSelectedAgent"
         />
       </div>
         </div>
@@ -1131,12 +1130,12 @@ import { useAgentImages } from "./composables/useAgentImages";
 import { useReactions } from "./composables/useReactions";
 import { useCopyDownload } from "./composables/useCopyDownload";
 import { useFileUpload } from "./composables/useFileUpload";
-import { useAgentsPanel } from "./composables/useAgentsPanel";
+import { useComposer } from "./composables/useComposer";
+import { derivePickerOptions } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useSendMessage } from "./composables/useSendMessage";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
 import { useLogView } from "./composables/useLogView";
-import { useComposer } from "./composables/useComposer";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { abortRequest } from "@/utils/request";
@@ -1204,6 +1203,13 @@ const chatList = ref<Chat[]>([]);
 
 // Fix: changed a static reference to a computed property to ensure reactive updates
 const rolesTool = computed(() => userStore().roles);
+const pickerOptions = computed(() =>
+  derivePickerOptions(rolesTool.value).map((option) => ({
+    tool: option.tool,
+    labelKey: option.labelKey,
+    label: t(option.labelKey) || option.displayName,
+  }))
+);
 const UserStore = userStore();
 const expertModeEnabled = computed(() => userStore().expertEnabled);
 
@@ -1622,14 +1628,19 @@ const scrollToBottom = async () => {
 
 // Input toolbar buttons + mention-selection state machine — logic extracted into the useComposer composable
 const {
-  activeButton,
-  handleButtonClick,
+  displayMessageInput,
+  clearSelectedAgent,
   handleCommand,
   handleSelect,
   handleSearch,
-} = useComposer({ messageInput, isSending, currentChatId, selectedAgent, scrollToBottom });
-
-// Log panel toggle + log update — logic extracted into the useLogView composable
+} = useComposer({
+  messageInput,
+  isSending,
+  currentChatId,
+  selectedAgent,
+  scrollToBottom,
+  rolesTool,
+});
 const { toggleLogView, updateLog } = useLogView({
   isSending,
   currentChat,
@@ -1653,9 +1664,6 @@ const { getReactionState, handleReaction, getReactionTooltip } = useReactions({
   getChatState,
   scrollToBottom,
 });
-
-// Agents panel — tooltip and info dialog for MentionSender footer agent buttons
-const { getAgentTooltip, showMoreInfo } = useAgentsPanel({ t });
 
 function abortTransfer(requestId: string) {
   if (currentChatId.value) {

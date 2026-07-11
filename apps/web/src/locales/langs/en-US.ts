@@ -448,6 +448,12 @@ export default {
     refreshReply: "Refresh reply",
     abortTooltip: "Abort answer",
     loadingAgentPerms: "Loading agent permissions...",
+    agentPicker: {
+      loading: "Loading agent permissions...",
+      empty: "No agents available for your account",
+      searchPlaceholder: "Search agents…",
+      remove: "Remove {agent}",
+    },
     log: {
       replyContent: "Reply Content",
       execLog: "Execution Log (ID: {id})",

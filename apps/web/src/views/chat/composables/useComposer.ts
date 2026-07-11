@@ -1,4 +1,4 @@
-import { watch, nextTick } from "vue";
+import { computed, watch, nextTick } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
 import type { MentionOption } from "vue-element-plus-x/types/components/MentionSender/types";
 import { extractAtValues } from "../utils/format";
@@ -9,45 +9,66 @@ export function useComposer(opts: {
   currentChatId: Ref<string>;
   selectedAgent: WritableComputedRef<string>;
   scrollToBottom: () => void;
+  rolesTool: Ref<readonly string[]>;
 }) {
-  const { messageInput, isSending, currentChatId, selectedAgent, scrollToBottom } = opts;
+  const {
+    messageInput,
+    isSending,
+    currentChatId,
+    selectedAgent,
+    scrollToBottom,
+    rolesTool,
+  } = opts;
 
-  // compatibility alias — Task 3A.7 removes this name during picker cutover
-  const activeButton = selectedAgent;
+  const displayMessageInput = computed({
+    get() {
+      if (!selectedAgent.value) {
+        return messageInput.value;
+      }
+      return extractAtValues(messageInput.value).cleanedText;
+    },
+    set(val: string) {
+      if (selectedAgent.value) {
+        messageInput.value = `@${selectedAgent.value},${val}`;
+      } else {
+        messageInput.value = val;
+      }
+    },
+  });
+
+  const clearSelectedAgent = () => {
+    if (isSending.value || !selectedAgent.value) return;
+    const cleaned = extractAtValues(messageInput.value).cleanedText;
+    selectedAgent.value = "";
+    messageInput.value = cleaned;
+  };
+
+  const isPermittedTool = (tool: string) => rolesTool.value.includes(tool);
 
   // handle button click
   const handleButtonClick = (buttonType: string) => {
-    // block the action while sending or refreshing
     if (isSending.value) return;
 
-    // if clicking the already-selected button, deselect it
     if (selectedAgent.value === buttonType) {
-      selectedAgent.value = "";
-      // remove the corresponding @tool, marker from the input
-      const command = "@" + buttonType + ",";
-      messageInput.value = messageInput.value.replace(command, "");
+      clearSelectedAgent();
       return;
     }
 
-    // if another button was selected before, remove it first
     if (selectedAgent.value) {
       const oldCommand = "@" + selectedAgent.value + ",";
       messageInput.value = messageInput.value.replace(oldCommand, "");
     }
 
-    // set the newly selected button
     selectedAgent.value = buttonType;
     const command = "@" + buttonType + ",";
     const newMessageValue = extractAtValues(messageInput.value);
     messageInput.value = `${command}${newMessageValue.cleanedText}`;
 
-    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
   };
 
-  // watch the input content
   watch(messageInput, (newVal) => {
     if (selectedAgent.value && currentChatId.value) {
       const command = "@" + selectedAgent.value + ",";
@@ -61,43 +82,47 @@ export function useComposer(opts: {
     }
   });
 
-  // update the full text when a tool is selected
+  watch(rolesTool, (tools) => {
+    if (selectedAgent.value && !tools.includes(selectedAgent.value)) {
+      clearSelectedAgent();
+    }
+  });
+
   const handleCommand = (command: string) => {
-    // block the action while sending or refreshing
     if (isSending.value) return;
 
     const regex = /@([^,]+),/;
     const match = command.match(regex);
     const extractedValue = match ? match[1] : "";
+    if (!isPermittedTool(extractedValue)) return;
+
     selectedAgent.value = extractedValue;
     const newMessageValue = extractAtValues(messageInput.value);
     messageInput.value = `${command}${newMessageValue.cleanedText}`;
 
-    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
   };
 
   const handleSelect = (option: MentionOption) => {
+    if (!isPermittedTool(option.value)) return;
     selectedAgent.value = option.value;
 
-    // ensure it scrolls to the bottom
     nextTick(() => {
       scrollToBottom();
     });
   };
-  const handleSearch = (searchValue: string, prefix: string) => {
-    // console.log(searchValue,'searchValue',prefix)
 
-    // ensure it scrolls to the bottom
+  const handleSearch = (_searchValue: string, _prefix: string) => {
     nextTick(() => {
       scrollToBottom();
     });
   };
 
   return {
-    activeButton,
+    displayMessageInput,
+    clearSelectedAgent,
     handleButtonClick,
     handleCommand,
     handleSelect,

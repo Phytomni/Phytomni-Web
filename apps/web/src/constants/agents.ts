@@ -74,3 +74,70 @@ export const CANONICAL_AGENT_PAGE_TITLE_KEYS: Partial<
   GeneNetworkAgent: "agents.geneNetwork.title",
   DigitalDesignAgent: "agents.digitalDesign.title",
 } as const;
+
+export const CANONICAL_AGENT_ROUTES = {
+  KnowledgeAgent: "/knowledge-agent",
+  DataAgent: "/data-agent",
+  AnalystAgent: "/analyst-agent",
+  BriefGeneAgent: "/brief-gene-agent",
+  GeneNetworkAgent: "/gene-network-agent",
+  DeepGenomeAgent: "/deep-genome-agent",
+  DigitalDesignAgent: "/digital-design-agent",
+} as const;
+
+export type RoutedAgentTool = keyof typeof CANONICAL_AGENT_ROUTES;
+
+export type CanonicalAtAbleTool = (typeof CANONICAL_AT_ABLE_TOOLS)[number];
+
+export type PickerAgentOption = {
+  tool: CanonicalAtAbleTool;
+  labelKey: string;
+  displayName: string;
+};
+
+export function derivePickerOptions(
+  rolesTool: readonly string[]
+): PickerAgentOption[] {
+  return CANONICAL_AT_ABLE_TOOLS.filter((tool) => rolesTool.includes(tool)).map(
+    (tool) => ({
+      tool,
+      labelKey: CANONICAL_AGENT_I18N_KEYS[tool],
+      displayName: CANONICAL_AGENT_DISPLAY_NAMES[tool],
+    })
+  );
+}
+
+export type SidebarRouteOption = {
+  id: number;
+  name: string;
+  toolName: RoutedAgentTool;
+  icon: string;
+  route: string;
+  img: string;
+};
+
+const SIDEBAR_ROUTE_META: Record<
+  RoutedAgentTool,
+  { id: number; icon: string; img: string }
+> = {
+  KnowledgeAgent: { id: 2, icon: "Search", img: "/KnowledgeAgent.jpg" },
+  DataAgent: { id: 3, icon: "DataLine", img: "/DataAgent.jpg" },
+  AnalystAgent: { id: 4, icon: "Edit", img: "/AnalystAgent.jpg" },
+  BriefGeneAgent: { id: 5, icon: "Edit", img: "/BriefGeneAgent.jpg" },
+  GeneNetworkAgent: { id: 6, icon: "Edit", img: "/GeneNetworkAgent.jpg" },
+  DeepGenomeAgent: { id: 7, icon: "Edit", img: "/DeepGenomeAgent.jpg" },
+  DigitalDesignAgent: { id: 8, icon: "Edit", img: "/DigitalDesignAgent.jpg" },
+};
+
+export function deriveSidebarRouteOptions(): SidebarRouteOption[] {
+  return (Object.keys(CANONICAL_AGENT_ROUTES) as RoutedAgentTool[]).map(
+    (toolName) => ({
+      id: SIDEBAR_ROUTE_META[toolName].id,
+      name: CANONICAL_AGENT_DISPLAY_NAMES[toolName],
+      toolName,
+      icon: SIDEBAR_ROUTE_META[toolName].icon,
+      route: CANONICAL_AGENT_ROUTES[toolName],
+      img: SIDEBAR_ROUTE_META[toolName].img,
+    })
+  );
+}
