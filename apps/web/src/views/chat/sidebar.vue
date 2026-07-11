@@ -1,5 +1,5 @@
 <template>
-  <PhySidebarFrame :collapsed="sidebarCollapsed">
+  <PhyAdaptiveSidebar :collapsed="sidebarCollapsed">
     <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <ChatSidebarNav
         :collapsed="sidebarCollapsed"
@@ -107,7 +107,7 @@
       </template>
     </el-dialog>
     </div>
-  </PhySidebarFrame>
+  </PhyAdaptiveSidebar>
 </template>
 
 <script setup lang="ts">
@@ -125,7 +125,7 @@ import ChatHistoryList, {
   type ChatHistoryGroup,
 } from "./components/ChatHistoryList.vue";
 import ChatSidebarNav from "./components/ChatSidebarNav.vue";
-import { PhySidebarFrame } from "@/components/shell";
+import { PhyAdaptiveSidebar } from "@/components/shell";
 
 // Define the received props
 const props = defineProps({
@@ -252,48 +252,12 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
 <style lang="scss" scoped>
 // Sidebar styles
 .sidebar {
-  width: 250px;
-  background-color: var(--phy-color-bg-sidebar);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  border-right: none;
-  transition: width 0.3s ease;
-
-  &.collapsed {
-    width: 60px;
-  }
-}
-
-// Responsive styles
-@media (max-width: 1200px) {
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    z-index: 1000;
-    box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.15);
-  }
-}
-
-@media (min-width: 1201px) {
-  .sidebar {
-    position: relative;
-    box-shadow: none;
-
-    // Ensure the sidebar displays correctly on large screens
-    &.collapsed {
-      width: 60px;
-    }
-  }
-}
-
-@media (max-width: 768px) {
-  .sidebar {
-    &.collapsed {
-      width: 50px;
-    }
-  }
 }
 </style>
 

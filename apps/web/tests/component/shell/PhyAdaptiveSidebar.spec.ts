@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
+
+const CHAT_SIDEBAR_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/views/chat/sidebar.vue"),
+  "utf8"
+);
 
 describe("PhyAdaptiveSidebar", () => {
   it("renders expanded and collapsed presentation states", () => {
@@ -58,5 +65,30 @@ describe("PhyAdaptiveSidebar", () => {
 
     expect(wrapper.find('[data-action="toggle"]').exists()).toBe(true);
     expect(wrapper.find('[data-action="close"]').exists()).toBe(true);
+  });
+
+  it("keeps navigation, history, and account regions inside one surface", () => {
+    const wrapper = mount(PhyAdaptiveSidebar, {
+      slots: {
+        default: `
+          <div class="sidebar">
+            <nav data-test="top-navigation">Navigation</nav>
+            <section data-test="history-region">History</section>
+            <footer data-test="account-actions">Account</footer>
+          </div>
+        `,
+      },
+    });
+
+    expect(wrapper.find(".phy-adaptive-sidebar__surface").exists()).toBe(true);
+    expect(wrapper.find("[data-test=top-navigation]").exists()).toBe(true);
+    expect(wrapper.find("[data-test=history-region]").exists()).toBe(true);
+    expect(wrapper.find("[data-test=account-actions]").exists()).toBe(true);
+  });
+
+  it("removes the superseded sidebar frame and width owners", () => {
+    expect(CHAT_SIDEBAR_SOURCE).not.toContain("PhySidebarFrame");
+    expect(CHAT_SIDEBAR_SOURCE).not.toMatch(/\b(?:250|60|50)px\b/);
+    expect(CHAT_SIDEBAR_SOURCE).not.toMatch(/position:\s*fixed/);
   });
 });

@@ -67,10 +67,11 @@ const emit = defineEmits<{
 <style scoped>
 .phy-adaptive-sidebar {
   position: relative;
-  width: 100%;
+  width: var(--phy-layout-sidebar-expanded-width);
   height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   background: var(--phy-color-bg-sidebar);
   color: var(--phy-color-text);
   font-family: var(--phy-font-shell);
@@ -79,16 +80,21 @@ const emit = defineEmits<{
 .phy-adaptive-sidebar__surface {
   display: flex;
   flex-direction: column;
-  width: var(--phy-layout-sidebar-expanded-width);
+  width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   border-right: 1px solid var(--phy-color-border-subtle);
   background: var(--phy-color-bg-sidebar);
   box-shadow: var(--phy-shadow-soft);
 }
 
 .phy-adaptive-sidebar.is-collapsed .phy-adaptive-sidebar__surface {
+  width: 100%;
+}
+
+.phy-adaptive-sidebar.is-collapsed {
   width: var(--phy-layout-sidebar-compact-width);
 }
 
@@ -140,6 +146,7 @@ const emit = defineEmits<{
   .phy-adaptive-sidebar {
     position: fixed;
     inset: 0;
+    width: 100vw;
     z-index: var(--phy-z-drawer);
     pointer-events: none;
     background: transparent;
