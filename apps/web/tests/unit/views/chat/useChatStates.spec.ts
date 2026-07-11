@@ -69,6 +69,7 @@ describe("useChatStates parallel chat state", () => {
       a2uiRunId: "",
       a2uiActionSender: null,
       uploadTransfer: null,
+      selectedAgent: "",
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
@@ -140,5 +141,47 @@ describe("useChatStates mode", () => {
     s.chatMode.value = "expert";
     s.currentChatId.value = "b";
     expect(s.chatMode.value).toBe("instant");
+  });
+});
+
+describe("useChatStates selectedAgent", () => {
+  it("defaults selectedAgent to empty and proxies to the current conversation", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "c1";
+    expect(s.selectedAgent.value).toBe("");
+    s.selectedAgent.value = "KnowledgeAgent";
+    expect(s.getChatState("c1").selectedAgent).toBe("KnowledgeAgent");
+  });
+
+  it("isolates selectedAgent per dialogue — switching restores each chip without bleed", () => {
+    const s = useChatStates();
+
+    s.currentChatId.value = "A";
+    s.selectedAgent.value = "KnowledgeAgent";
+    s.messageInput.value = "@KnowledgeAgent,question A";
+
+    s.currentChatId.value = "B";
+    expect(s.selectedAgent.value).toBe("");
+    expect(s.messageInput.value).toBe("");
+
+    s.selectedAgent.value = "DataAgent";
+    s.messageInput.value = "@DataAgent,question B";
+
+    s.currentChatId.value = "A";
+    expect(s.selectedAgent.value).toBe("KnowledgeAgent");
+    expect(s.messageInput.value).toBe("@KnowledgeAgent,question A");
+
+    s.currentChatId.value = "B";
+    expect(s.selectedAgent.value).toBe("DataAgent");
+    expect(s.messageInput.value).toBe("@DataAgent,question B");
+  });
+
+  it("empty currentChatId returns empty selectedAgent and setter is a no-op", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "";
+    expect(s.selectedAgent.value).toBe("");
+    s.selectedAgent.value = "KnowledgeAgent";
+    expect(s.selectedAgent.value).toBe("");
+    expect(Object.keys(s.chatStates.value)).toHaveLength(0);
   });
 });

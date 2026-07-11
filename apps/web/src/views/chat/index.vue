@@ -1429,6 +1429,7 @@ const {
   messageInput,
   isSending,
   chatMode,
+  selectedAgent,
   fileList,
   copyVisible,
   copyTimeRef,
@@ -1550,7 +1551,7 @@ const {
   handleCommand,
   handleSelect,
   handleSearch,
-} = useComposer({ messageInput, isSending, currentChatId, scrollToBottom });
+} = useComposer({ messageInput, isSending, currentChatId, selectedAgent, scrollToBottom });
 
 // Log panel toggle + log update — logic extracted into the useLogView composable
 const { toggleLogView, updateLog } = useLogView({

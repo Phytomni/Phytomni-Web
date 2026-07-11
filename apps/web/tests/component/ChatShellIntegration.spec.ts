@@ -227,6 +227,14 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("min-width: 0");
   });
 
+  it("scopes agent selection through per-dialogue chat state into useComposer", () => {
+    expect(CHAT_SOURCE).toContain("selectedAgent");
+    expect(CHAT_SOURCE).toMatch(
+      /useComposer\(\{[\s\S]*selectedAgent/
+    );
+    expect(CHAT_SOURCE).toContain(":active-button=\"activeButton\"");
+  });
+
   it("removes the permanent bottom agent stage while keeping one inline selection path", () => {
     expect(CHAT_SOURCE).not.toContain('class="input-container-bottom"');
     expect(CHAT_SOURCE).not.toContain("@wheel.prevent=\"handleScroll\"");

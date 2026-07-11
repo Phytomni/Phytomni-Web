@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref, nextTick } from "vue";
 import { useComposer } from "@/views/chat/composables/useComposer";
+import { useChatStates } from "@/views/chat/composables/useChatStates";
 
 describe("useComposer", () => {
   let messageInput: ReturnType<typeof ref<string>>;
   let isSending: ReturnType<typeof ref<boolean>>;
   let currentChatId: ReturnType<typeof ref<string>>;
+  let selectedAgent: ReturnType<typeof ref<string>>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -13,6 +15,7 @@ describe("useComposer", () => {
     messageInput = ref("");
     isSending = ref(false);
     currentChatId = ref("A");
+    selectedAgent = ref("");
     scrollToBottom = vi.fn();
   });
 
@@ -21,6 +24,7 @@ describe("useComposer", () => {
       messageInput: messageInput as any,
       isSending: isSending as any,
       currentChatId,
+      selectedAgent: selectedAgent as any,
       scrollToBottom,
     });
   }
@@ -54,7 +58,7 @@ describe("useComposer", () => {
 
       handleButtonClick("RAG");
 
-      expect(activeButton.value).toBeUndefined();
+      expect(activeButton.value).toBe("");
       expect(messageInput.value).toBe("");
     });
   });
@@ -92,6 +96,88 @@ describe("useComposer", () => {
       await nextTick();
 
       expect(activeButton.value).toBe("");
+    });
+  });
+
+  describe("per-dialogue selectedAgent", () => {
+    it("does not leak selection or marker across A→B→A dialogue switches", () => {
+      const chatStates = useChatStates();
+      chatStates.currentChatId.value = "A";
+
+      const { activeButton, handleButtonClick } = useComposer({
+        messageInput: chatStates.messageInput,
+        isSending: chatStates.isSending,
+        currentChatId: chatStates.currentChatId,
+        selectedAgent: chatStates.selectedAgent,
+        scrollToBottom,
+      });
+
+      handleButtonClick("KnowledgeAgent");
+      expect(activeButton.value).toBe("KnowledgeAgent");
+      expect(chatStates.messageInput.value).toBe("@KnowledgeAgent,");
+
+      chatStates.currentChatId.value = "B";
+      expect(activeButton.value).toBe("");
+      expect(chatStates.messageInput.value).toBe("");
+
+      handleButtonClick("DataAgent");
+      expect(activeButton.value).toBe("DataAgent");
+      expect(chatStates.messageInput.value).toBe("@DataAgent,");
+
+      chatStates.currentChatId.value = "A";
+      expect(activeButton.value).toBe("KnowledgeAgent");
+      expect(chatStates.messageInput.value).toBe("@KnowledgeAgent,");
+
+      chatStates.currentChatId.value = "B";
+      expect(activeButton.value).toBe("DataAgent");
+      expect(chatStates.messageInput.value).toBe("@DataAgent,");
+    });
+
+    it("replaces the old agent marker when switching selection within a dialogue", () => {
+      const chatStates = useChatStates();
+      chatStates.currentChatId.value = "A";
+
+      const { activeButton, handleButtonClick } = useComposer({
+        messageInput: chatStates.messageInput,
+        isSending: chatStates.isSending,
+        currentChatId: chatStates.currentChatId,
+        selectedAgent: chatStates.selectedAgent,
+        scrollToBottom,
+      });
+
+      handleButtonClick("KnowledgeAgent");
+      chatStates.messageInput.value = "@KnowledgeAgent,keep this";
+      handleButtonClick("DataAgent");
+      expect(activeButton.value).toBe("DataAgent");
+      expect(chatStates.messageInput.value).toBe("@DataAgent,keep this");
+      expect(chatStates.getChatState("A").selectedAgent).toBe("DataAgent");
+    });
+
+    it("clears only the current dialogue selection when the marker is deleted", async () => {
+      const chatStates = useChatStates();
+      chatStates.currentChatId.value = "A";
+      chatStates.selectedAgent.value = "KnowledgeAgent";
+      chatStates.messageInput.value = "@KnowledgeAgent,text";
+
+      chatStates.currentChatId.value = "B";
+      chatStates.selectedAgent.value = "DataAgent";
+      chatStates.messageInput.value = "@DataAgent,other";
+
+      useComposer({
+        messageInput: chatStates.messageInput,
+        isSending: chatStates.isSending,
+        currentChatId: chatStates.currentChatId,
+        selectedAgent: chatStates.selectedAgent,
+        scrollToBottom,
+      });
+
+      chatStates.currentChatId.value = "A";
+      chatStates.messageInput.value = "text without marker";
+      await nextTick();
+
+      expect(chatStates.selectedAgent.value).toBe("");
+      expect(chatStates.getChatState("B").selectedAgent).toBe("DataAgent");
+      expect(chatStates.getChatState("B").messageInput).toBe("@DataAgent,other");
     });
   });
 });

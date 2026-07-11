@@ -30,6 +30,7 @@ export function useChatStates() {
         a2uiActionSender: A2uiActionTransport | null; // fetch transport for in-flight A2UI widgets
         a2uiRunId: string; // Bot run registry id stamped from RunStarted during stream
         uploadTransfer: TransferSnapshot | null;
+        selectedAgent: string;
       }
     >
   >({});
@@ -58,6 +59,7 @@ export function useChatStates() {
         a2uiActionSender: null,
         a2uiRunId: "",
         uploadTransfer: null,
+        selectedAgent: "",
       };
     }
     return chatStates.value[dialogueId];
@@ -108,6 +110,18 @@ export function useChatStates() {
     set: (value: "instant" | "expert") => {
       if (!currentChatId.value) return;
       getChatState(currentChatId.value).mode = value;
+    },
+  });
+
+  // selected Composer Agent — per the current conversation
+  const selectedAgent = computed({
+    get: (): string => {
+      if (!currentChatId.value) return "";
+      return getChatState(currentChatId.value).selectedAgent;
+    },
+    set: (value: string) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).selectedAgent = value;
     },
   });
 
@@ -257,6 +271,7 @@ export function useChatStates() {
     messageInput,
     isSending,
     chatMode,
+    selectedAgent,
     fileList,
     uploadTransfer,
     copyVisible,
