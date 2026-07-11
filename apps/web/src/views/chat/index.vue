@@ -1255,33 +1255,6 @@
           </PhyComposerFrame>
         </div>
       </div>
-      <div
-        v-if="
-          !currentChat?.messages?.length &&
-          UserStore.permission !== 'guest' &&
-          chatMode === 'instant'
-        "
-        class="input-container-bottom"
-        @wheel.prevent="handleScroll"
-        :style="containerStyle"
-      >
-        <div class="agent-list">
-          <div class="agent-page">
-            <div
-              v-for="agent in presetAgents"
-              :key="agent.id"
-              class="input-container-bottom-item"
-              @click="isSending ? null : handleAgentClick(agent)"
-              :style="{
-                opacity: isSending ? 0.6 : 1,
-                cursor: isSending ? 'not-allowed' : 'pointer',
-              }"
-            >
-              <span>{{ agent.name }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
         </div>
       <!-- Right sidebar -->
       <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
@@ -1846,15 +1819,8 @@ const { getReactionState, handleReaction, getReactionTooltip } = useReactions({
   scrollToBottom,
 });
 
-// Agents panel — state and logic extracted into the useAgentsPanel composable
-const {
-  presetAgents,
-  containerStyle,
-  handleScroll,
-  handleAgentClick,
-  getAgentTooltip,
-  showMoreInfo,
-} = useAgentsPanel({ t, isSending, router, scrollToBottom });
+// Agents panel — tooltip and info dialog for MentionSender footer agent buttons
+const { getAgentTooltip, showMoreInfo } = useAgentsPanel({ t });
 
 function abortTransfer(requestId: string) {
   if (currentChatId.value) {
@@ -2829,100 +2795,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
 
 ::v-deep(.el-textarea__inner):hover {
   box-shadow: none;
-}
-
-.input-container-bottom {
-  margin-top: 30px;
-  padding: 8px 16px;
-  overflow: hidden;
-  box-sizing: border-box;
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 19px;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 12px;
-  z-index: 998;
-
-  &::before {
-    content: "";
-    position: absolute;
-    top: -20px;
-    left: 0;
-    right: 0;
-    height: 20px;
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      rgba(255, 255, 255, 0.9)
-    );
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-
-  &::after {
-    content: "";
-    position: absolute;
-    bottom: -20px;
-    left: 0;
-    right: 0;
-    height: 20px;
-    background: linear-gradient(to top, transparent, rgba(255, 255, 255, 0.9));
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-
-  &:hover {
-    &::before,
-    &::after {
-      opacity: 1;
-    }
-  }
-
-  .agent-list {
-    height: 100%;
-  }
-
-  .agent-page {
-    height: 100%;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-around;
-    align-content: flex-start;
-    gap: 12px;
-    padding-bottom: 8px;
-  }
-
-  .input-container-bottom-item {
-    display: flex;
-    width: 22%;
-    height: 120px;
-    align-items: center;
-    justify-content: center;
-    padding: 8px 16px;
-    background-color: #156082;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-
-    &:hover {
-      background-color: rgba(21, 97, 132, 0.8);
-      transform: translateY(-2px) scale(1.02);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-
-    span {
-      color: #fff;
-      font-size: 14px;
-      white-space: nowrap;
-    }
-  }
-}
-
-// Ensure the container can overlay other content
-.input-container {
-  position: relative;
 }
 
 // Log button styles

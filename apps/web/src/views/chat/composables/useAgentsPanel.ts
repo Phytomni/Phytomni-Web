@@ -1,6 +1,4 @@
-import { ref, computed, nextTick } from "vue";
-import type { WritableComputedRef } from "vue";
-import type { Router } from "vue-router";
+import { nextTick } from "vue";
 import { ElMessageBox } from "element-plus";
 import ChatAgentImg from "@/assets/images/chat/ChatAgent.png";
 import KnowledgeAgentImg from "@/assets/images/chat/KnowledgeAgent.png";
@@ -19,138 +17,9 @@ import {
   type CanonicalAgentTool,
 } from "@/constants/agents";
 
-export function useAgentsPanel(opts: {
-  t: (key: string) => string;
-  isSending: WritableComputedRef<boolean>;
-  router: Router;
-  scrollToBottom: () => void;
-}) {
-  const { t, isSending, router, scrollToBottom } = opts;
+export function useAgentsPanel(opts: { t: (key: string) => string }) {
+  const { t } = opts;
 
-  // base height
-  const baseHeight = 140;
-  // expanded height
-  const expandedHeight = 480;
-  // extra overlay height
-  const overlayHeight = 10;
-
-  // whether expanded
-  const isExpanded = ref(false);
-
-  // whether currently animating
-  const isAnimating = ref(false);
-
-  // compute the current container height
-  const containerHeight = computed(() => {
-    return isExpanded.value ? expandedHeight : baseHeight;
-  });
-
-  // compute the current container style
-  const containerStyle = computed(() => ({
-    height: `${containerHeight.value}px`,
-    transform: isExpanded.value ? `translateY(-${overlayHeight}px)` : "none",
-  }));
-
-  // handle scroll
-  const handleScroll = (event: WheelEvent) => {
-    if (isAnimating.value) return;
-
-    // scrolling down and not expanded
-    if (event.deltaY > 0 && !isExpanded.value) {
-      isAnimating.value = true;
-      isExpanded.value = true;
-      setTimeout(() => {
-        isAnimating.value = false;
-      }, 500);
-    }
-    // scrolling up and expanded
-    else if (event.deltaY < 0 && isExpanded.value) {
-      isAnimating.value = true;
-      isExpanded.value = false;
-      setTimeout(() => {
-        isAnimating.value = false;
-      }, 500);
-    }
-
-    // ensure it scrolls to the bottom
-    nextTick(() => {
-      scrollToBottom();
-    });
-  };
-
-  // handle agent click
-  const handleAgentClick = (agent: any) => {
-    // block the action while sending or refreshing
-    if (isSending.value) return;
-
-    // ensure it scrolls to the bottom
-    nextTick(() => {
-      scrollToBottom();
-    });
-
-    router.push(agent.route);
-  };
-
-  // preset agents data
-  const presetAgents = ref([
-    {
-      id: 1,
-      name: t("chat.deepGenome"),
-      icon: "Document",
-      route: "/gene-display",
-    },
-    {
-      id: 2,
-      name: CANONICAL_AGENT_DISPLAY_NAMES.KnowledgeAgent,
-      toolName: "KnowledgeAgent",
-      icon: "Search",
-      route: "/knowledge-agent",
-    },
-    {
-      id: 3,
-      name: CANONICAL_AGENT_DISPLAY_NAMES.DataAgent,
-      toolName: "DataAgent",
-      icon: "DataLine",
-      route: "/data-agent",
-    },
-    {
-      id: 4,
-      name: CANONICAL_AGENT_DISPLAY_NAMES.AnalystAgent,
-      toolName: "AnalystAgent",
-      icon: "Edit",
-      route: "/analyst-agent",
-    },
-    {
-      id: 5,
-      name: CANONICAL_AGENT_DISPLAY_NAMES.BriefGeneAgent,
-      toolName: "BriefGeneAgent",
-      icon: "Edit",
-      route: "/brief-gene-agent",
-    },
-    {
-      id: 6,
-      name: CANONICAL_AGENT_DISPLAY_NAMES.GeneNetworkAgent,
-      toolName: "GeneNetworkAgent",
-      icon: "Edit",
-      route: "/gene-network-agent",
-    },
-    {
-      id: 7,
-      name: CANONICAL_AGENT_DISPLAY_NAMES.DeepGenomeAgent,
-      toolName: "DeepGenomeAgent",
-      icon: "Edit",
-      route: "/deep-genome-agent",
-    },
-    {
-      id: 8,
-      name: CANONICAL_AGENT_DISPLAY_NAMES.DigitalDesignAgent,
-      toolName: "DigitalDesignAgent",
-      icon: "Edit",
-      route: "/digital-design-agent",
-    },
-  ]);
-
-  // get the agent tooltip
   const getAgentTooltip = (agentName: string) => {
     const canonicalKey =
       CANONICAL_AGENT_I18N_KEYS[agentName as CanonicalAgentTool];
@@ -158,12 +27,10 @@ export function useAgentsPanel(opts: {
       return t(canonicalKey) || agentName;
     }
 
-    // lowercase the first letter
     const agentKey = agentName.charAt(0).toLowerCase() + agentName.slice(1);
     return t(`chat.agents.${agentKey}`) || agentName;
   };
 
-  // get the agent's image path
   const getAgentImage = (agentName: string) => {
     const imageMap: Record<string, string> = {
       ChatAgent: ChatAgentImg,
@@ -181,12 +48,11 @@ export function useAgentsPanel(opts: {
     return imageMap[agentName] || DefaultAgentImg;
   };
 
-  // show the "more info" popup
   const showMoreInfo = (agentName: string) => {
     const displayName =
       CANONICAL_AGENT_DISPLAY_NAMES[agentName as CanonicalAgentTool] ||
       agentName;
-    const messageBox = ElMessageBox.alert(
+    ElMessageBox.alert(
       `<div class="agent-info-dialog">
       <div class="agent-detail">
         <div class="agent-description">
@@ -207,7 +73,6 @@ export function useAgentsPanel(opts: {
       }
     );
 
-    // force the dialog size
     nextTick(() => {
       const messageBoxElement = document.querySelector(
         ".el-message-box.agent-info-dialog"
@@ -246,10 +111,6 @@ export function useAgentsPanel(opts: {
   };
 
   return {
-    presetAgents,
-    containerStyle,
-    handleScroll,
-    handleAgentClick,
     getAgentTooltip,
     showMoreInfo,
   };

@@ -135,4 +135,17 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_HISTORY_SOURCE).toContain("visibleGroups");
     expect(SIDEBAR_SOURCE).not.toContain('class="time-group"');
   });
+
+  it("removes the permanent bottom agent stage while keeping one inline selection path", () => {
+    expect(CHAT_SOURCE).not.toContain('class="input-container-bottom"');
+    expect(CHAT_SOURCE).not.toContain("@wheel.prevent=\"handleScroll\"");
+    expect(CHAT_SOURCE).not.toContain(":style=\"containerStyle\"");
+    expect(CHAT_SOURCE).not.toContain("v-for=\"agent in presetAgents\"");
+    expect(CHAT_SOURCE).not.toContain(".input-container-bottom {");
+
+    expect(CHAT_SOURCE).toContain('class="agent-button"');
+    expect(CHAT_SOURCE).toContain("@click=\"handleButtonClick(item)\"");
+    expect(CHAT_SOURCE).toContain("getAgentTooltip");
+    expect(CHAT_SOURCE).toContain("showMoreInfo");
+  });
 });
