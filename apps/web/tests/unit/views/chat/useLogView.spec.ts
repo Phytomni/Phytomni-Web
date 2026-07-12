@@ -139,6 +139,37 @@ describe("useLogView", () => {
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
   });
 
+  it("code===200 with empty/falsy data is empty success (no fetch error) and caches", async () => {
+    const message = msg({ id: "12" });
+    currentChat.value = { messages: [message] };
+    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "" });
+
+    const { setLogExpanded } = makeComposable();
+    await setLogExpanded(message, true);
+
+    expect(getChatState("A").logData["12"]).toBe("");
+    expect(getChatState("A").logErrorKinds["12"]).toBeUndefined();
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
+
+    await setLogExpanded(message, false);
+    await setLogExpanded(message, true);
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
+
+    mockGetAnalystAgentLog.mockResolvedValueOnce({ code: 200, data: null });
+    const nullMsg = msg({ id: "13" });
+    currentChat.value = { messages: [nullMsg] };
+    await setLogExpanded(nullMsg, true);
+    expect(getChatState("A").logData["13"]).toBe("");
+    expect(getChatState("A").logErrorKinds["13"]).toBeUndefined();
+
+    mockGetAnalystAgentLog.mockResolvedValueOnce({ code: 500, data: null });
+    const failMsg = msg({ id: "14" });
+    currentChat.value = { messages: [failMsg] };
+    await setLogExpanded(failMsg, true);
+    expect(getChatState("A").logErrorKinds["14"]).toBe("fetch");
+    expect(getChatState("A").logData["14"]).toBeUndefined();
+  });
+
   it("positive-decimal rowId drives GET; real taskId drives PATCH only; no fallback", async () => {
     mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "ok" });
     mockUpdateAnalystAgentLog.mockResolvedValue({ code: 200 });

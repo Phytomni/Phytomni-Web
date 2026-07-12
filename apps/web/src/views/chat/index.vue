@@ -151,10 +151,13 @@
               />
 
               <template #activity>
+                <!-- Only mount when rowId is a valid positive-decimal id;
+                     missing/invalid ids never GET/PATCH and hide the log disclosure. -->
                 <ChatActivity
                   v-if="
                     message.role === 'assistant' &&
-                    message.tool_name === 'AnalystAgent'
+                    message.tool_name === 'AnalystAgent' &&
+                    !!deriveAnalystLogRowId(message)
                   "
                   :state-key="analystLogStateKey(message)"
                   :expanded="isAnalystLogExpanded(message)"
@@ -166,30 +169,24 @@
                     :row-id="deriveAnalystLogRowId(message)"
                     :task-id="deriveAnalystLogTaskId(message)"
                     :log-data="
-                      deriveAnalystLogRowId(message)
-                        ? getChatState(currentChatId).logData[
-                            deriveAnalystLogRowId(message)!
-                          ]
-                        : undefined
+                      getChatState(currentChatId).logData[
+                        deriveAnalystLogRowId(message)!
+                      ]
                     "
                     :loading="
-                      !!deriveAnalystLogRowId(message) &&
                       !!getChatState(currentChatId).loadingLog[
                         deriveAnalystLogRowId(message)!
                       ]
                     "
                     :updating="
-                      !!deriveAnalystLogRowId(message) &&
                       !!getChatState(currentChatId).updatingLog[
                         deriveAnalystLogRowId(message)!
                       ]
                     "
                     :error-kind="
-                      deriveAnalystLogRowId(message)
-                        ? getChatState(currentChatId).logErrorKinds[
-                            deriveAnalystLogRowId(message)!
-                          ]
-                        : undefined
+                      getChatState(currentChatId).logErrorKinds[
+                        deriveAnalystLogRowId(message)!
+                      ]
                     "
                     @update="updateLog(message)"
                     @retry="retryLog(message)"
@@ -930,7 +927,7 @@ function analystLogStateKey(message: ChatMessage): string | null {
 
 function isAnalystLogExpanded(message: ChatMessage): boolean {
   const rowId = deriveAnalystLogRowId(message);
-  if (!rowId || !currentChatId.value) return true;
+  if (!rowId || !currentChatId.value) return false;
   return (
     getChatState(currentChatId.value).activityExpandedByMessage[
       analystLogActivityKey(rowId)

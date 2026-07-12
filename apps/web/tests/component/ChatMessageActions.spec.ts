@@ -15,6 +15,13 @@ const INDEX_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
   "utf8"
 );
+const CONTENT_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/chat/components/ChatMessageContent.vue"
+  ),
+  "utf8"
+);
 
 const styleBlocks = (source: string) =>
   [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
@@ -255,19 +262,30 @@ describe("ChatMessageActions", () => {
     expect(INDEX_SOURCE).not.toMatch(/message-fotter/);
     expect(INDEX_SOURCE).toMatch(/message-footer|ChatMessageActions/);
     expect(INDEX_SOURCE).toMatch(/#actions|name=["']actions["']/);
-    expect(INDEX_SOURCE).toMatch(
+    // Reply Markdown surface lives in ChatMessageContent (not index).
+    expect(CONTENT_SOURCE).toMatch(
       /<MarkdownViewer[\s\S]*surface=["']chat["']/
     );
+    // Analyst execution log folds into #activity via ChatActivity + ChatAnalystLog.
+    expect(INDEX_SOURCE).toMatch(/#activity|name=["']activity["']/);
+    expect(INDEX_SOURCE).toMatch(/ChatActivity/);
+    expect(INDEX_SOURCE).toMatch(/ChatAnalystLog/);
+    expect(INDEX_SOURCE).toMatch(/setLogExpanded/);
+    expect(INDEX_SOURCE).toMatch(/deriveAnalystLogRowId\(message\)/);
   });
 
   it("local stopped/error rows without server id keep copy but not server-backed actions", () => {
-    // index gates react/refresh/download/log on !!message.id
+    // index gates react/refresh/download on !!message.id; analyst log mounts
+    // only when deriveAnalystLogRowId(message) is a valid positive-decimal id.
     expect(INDEX_SOURCE).toMatch(
       /:can-react="message\.role === 'assistant' && !!message\.id"/
     );
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\) handleReaction/);
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\) getFileDownUrl/);
-    expect(INDEX_SOURCE).toMatch(/message\.id && toggleLogView/);
+    expect(INDEX_SOURCE).toMatch(
+      /AnalystAgent[\s\S]*!!deriveAnalystLogRowId\(message\)/
+    );
+    expect(INDEX_SOURCE).not.toMatch(/toggleLogView/);
 
     const localRow = mountActions({
       role: "assistant",
