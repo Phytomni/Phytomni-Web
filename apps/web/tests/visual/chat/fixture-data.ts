@@ -14,7 +14,11 @@ import {
   MESSAGE_FIXTURES,
   MESSAGE_IMAGE,
   FIXTURE_GENE_NETWORK_IMAGE_DATA_URL,
+  isPhase3CFixtureKey,
+  buildPhase3CTranscript,
+  getPhase3COverlay,
   type Phase3BMessageKey,
+  type Phase3CFixtureKey,
 } from "../../fixtures/chat";
 
 /** Exact visible identity for harness and redaction scripts. */
@@ -56,7 +60,7 @@ export function buildSyntheticMessages(
 }
 
 /**
- * Phase 3B keys reuse the shared fixture objects (same references as Vitest).
+ * Phase 3B/3C keys reuse shared fixture objects (same references as Vitest).
  * Frame keys keep the simple synthetic rows.
  */
 export function buildHarnessMessages(
@@ -65,12 +69,24 @@ export function buildHarnessMessages(
   if (isPhase3BMessageKey(fixture.key)) {
     return buildPhase3BTranscript(fixture.key);
   }
+  if (isPhase3CFixtureKey(fixture.key)) {
+    const overlay = getPhase3COverlay(fixture.key);
+    if (overlay.assistantMessage) {
+      return buildPhase3CTranscript(fixture.key);
+    }
+    // Progress / transfer / send-stop: frame rows + overlay widgets.
+    return buildSyntheticMessages(fixture);
+  }
   return buildSyntheticMessages(fixture);
 }
 
 /** Same object identity Vitest imports — fails if harness copied bodies. */
 export function getSharedMessageFixture(key: Phase3BMessageKey): ChatMessage {
   return MESSAGE_FIXTURES[key];
+}
+
+export function getSharedPhase3COverlay(key: Phase3CFixtureKey) {
+  return getPhase3COverlay(key);
 }
 
 export function buildSyntheticFileList(
@@ -134,4 +150,18 @@ export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   image: "",
   streaming: "",
   "interleaved-streaming": "",
+  "activity-closed": "",
+  "activity-open": "",
+  "log-loading": "",
+  "log-populated": "",
+  "log-error": "",
+  "log-missing-task": "",
+  "progress-fast": "Synthetic progress draft",
+  "progress-slow": "Synthetic progress draft",
+  "progress-completing": "Synthetic progress draft",
+  "transfer-real": "Synthetic transfer draft",
+  "a2ui-required": "",
+  "send-stop": "Synthetic stop draft",
+  "parallel-a": "Synthetic dialogue A draft",
+  "parallel-b": "Synthetic dialogue B draft",
 };

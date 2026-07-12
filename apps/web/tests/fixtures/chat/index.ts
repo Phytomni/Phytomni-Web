@@ -23,3 +23,30 @@ export {
 } from "./messages";
 
 export type { Phase3BMessageKey } from "./messages";
+
+export {
+  PHASE_3C_FIXTURE_KEYS,
+  isPhase3CFixtureKey,
+  FIXTURE_ACTIVITY_BLOCKS,
+  FIXTURE_ACTIVITY_MESSAGE_KEY,
+  FIXTURE_ACTIVITY_STATE_KEY,
+  MESSAGE_ACTIVITY_STREAMING,
+  FIXTURE_A2UI_REQUIRED_BLOCK,
+  MESSAGE_A2UI_REQUIRED,
+  MESSAGE_FOLLOW_UPS,
+  MESSAGE_ANALYST_LOG,
+  MESSAGE_ANALYST_LOG_MISSING_TASK,
+  FIXTURE_UPLOAD_TRANSFER,
+  FIXTURE_PROGRESS_STARTED_AT,
+  PHASE_3C_OVERLAYS,
+  getPhase3COverlay,
+  buildPhase3CTranscript,
+} from "./phase3c";
+
+export type {
+  Phase3CFixtureKey,
+  Phase3CLogProps,
+  Phase3CProgressProps,
+  Phase3COverlayKind,
+  Phase3COverlaySpec,
+} from "./phase3c";

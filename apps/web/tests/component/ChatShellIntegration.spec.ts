@@ -366,4 +366,37 @@ describe("Chat adaptive shell integration", () => {
     expect(selectBlock).toContain("currentChatId");
     expect(selectBlock).not.toMatch(/\bcurrentChat,/);
   });
+
+  it("temporary-ID rekey moves the whole chatStates record; collision retains active id/URL", () => {
+    const chatStatesSource = readFileSync(
+      resolve(__dirname, "../../src/views/chat/composables/useChatStates.ts"),
+      "utf8"
+    );
+    // Atomic move: assign source object then delete — identity preserved for
+    // selectedAgent, activity/log, uploadTransfer, and a2ui fields.
+    expect(chatStatesSource).toContain(
+      "chatStates.value[toDialogueId] = source"
+    );
+    expect(chatStatesSource).toContain("delete chatStates.value[fromDialogueId]");
+    expect(chatStatesSource).toContain('outcome: "target-collision"');
+    expect(chatStatesSource).toMatch(
+      /if \(chatStates\.value\[toDialogueId\]\)[\s\S]*return \{ outcome: "target-collision" \}/
+    );
+
+    const coordStart = CHAT_SOURCE.indexOf("reconcileMatchedDialogue = (");
+    const coordEnd = CHAT_SOURCE.indexOf("// Starter prompt cards", coordStart);
+    const coordBlock = CHAT_SOURCE.slice(coordStart, coordEnd);
+    expect(coordBlock).toContain('rekey.outcome === "target-collision"');
+    expect(coordBlock).toContain('reason: "collision"');
+    // Collision must not rewrite the active dialogue or URL.
+    expect(coordBlock).toMatch(
+      /if \(reconciled && wasCurrent && currentChatId\.value === tempId\)/
+    );
+    const collisionIdx = coordBlock.indexOf('outcome === "target-collision"');
+    const urlIdx = coordBlock.indexOf("updateUrlWithChatId");
+    expect(collisionIdx).toBeGreaterThan(-1);
+    // URL update lives only on the reconciled+wasCurrent branch, not collision.
+    expect(coordBlock).toContain("updateUrlWithChatId(serverId)");
+    expect(urlIdx).toBeGreaterThan(collisionIdx);
+  });
 });

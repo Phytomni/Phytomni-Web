@@ -17,11 +17,15 @@ import {
   buildSyntheticFileList,
   buildHarnessMessages,
   getSharedMessageFixture,
+  getSharedPhase3COverlay,
 } from "../../../visual/chat/fixture-data";
 import {
   PHASE_3B_MESSAGE_KEYS,
   MESSAGE_FIXTURES,
   isPhase3BMessageKey,
+  PHASE_3C_FIXTURE_KEYS,
+  isPhase3CFixtureKey,
+  getPhase3COverlay,
 } from "../../../fixtures/chat";
 
 const WEB_ROOT = resolve(__dirname, "../../../..");
@@ -108,7 +112,7 @@ function walkFiles(dir: string, acc: string[] = []): string[] {
 }
 
 describe("Chat visual fixture registry", () => {
-  it("contains every exact frame and Phase 3B message-state key", () => {
+  it("contains every exact frame, Phase 3B message-state, and Phase 3C key", () => {
     expect([...CHAT_VISUAL_FIXTURE_KEYS]).toEqual([
       "empty",
       "populated",
@@ -130,6 +134,20 @@ describe("Chat visual fixture registry", () => {
       "image",
       "streaming",
       "interleaved-streaming",
+      "activity-closed",
+      "activity-open",
+      "log-loading",
+      "log-populated",
+      "log-error",
+      "log-missing-task",
+      "progress-fast",
+      "progress-slow",
+      "progress-completing",
+      "transfer-real",
+      "a2ui-required",
+      "send-stop",
+      "parallel-a",
+      "parallel-b",
     ]);
   });
 
@@ -192,6 +210,28 @@ describe("Chat visual fixture registry", () => {
       expect(rows[1]).toBe(MESSAGE_FIXTURES[key]);
     }
   });
+
+  it("registers every Phase 3C key with shared synthetic overlays (no network)", () => {
+    for (const key of PHASE_3C_FIXTURE_KEYS) {
+      expect(CHAT_VISUAL_FIXTURE_KEYS).toContain(key);
+      expect(isPhase3CFixtureKey(key)).toBe(true);
+      expect(getSharedPhase3COverlay(key)).toBe(getPhase3COverlay(key));
+      const fixture = getChatVisualFixture(key);
+      expect(fixture.chatState).toBe("populated");
+      expect(fixture.messageCount).toBe(2);
+      const overlay = getPhase3COverlay(key);
+      expect(overlay.kind).toBeTruthy();
+      // Progress and transfer never share the same overlay kind.
+      if (overlay.kind === "progress") {
+        expect(overlay.transfer).toBeUndefined();
+        expect(overlay.progress).toBeTruthy();
+      }
+      if (overlay.kind === "transfer") {
+        expect(overlay.progress).toBeUndefined();
+        expect(overlay.transfer).toBeTruthy();
+      }
+    }
+  });
 });
 
 describe("Chat visual fixture source contracts", () => {
@@ -224,6 +264,7 @@ describe("Chat visual fixture source contracts", () => {
       resolve(VISUAL_CHAT, "main.ts"),
       resolve(VISUAL_CHAT, "ChatVisualFixtureApp.vue"),
       resolve(WEB_ROOT, "tests/fixtures/chat/messages.ts"),
+      resolve(WEB_ROOT, "tests/fixtures/chat/phase3c.ts"),
       resolve(WEB_ROOT, "tests/fixtures/chat/index.ts"),
     ];
     for (const file of harnessTs) {
@@ -244,6 +285,18 @@ describe("Chat visual fixture source contracts", () => {
     );
     expect(APP_SOURCE).toContain("isPhase3BMessageKey");
     expect(APP_SOURCE).toContain("buildHarnessMessages");
+  });
+
+  it("Phase 3C harness mounts Activity/log/progress/transfer from shared fixtures", () => {
+    expect(APP_SOURCE).toContain("isPhase3CFixtureKey");
+    expect(APP_SOURCE).toContain("getPhase3COverlay");
+    expect(APP_SOURCE).toContain("ChatActivity");
+    expect(APP_SOURCE).toContain("ChatAnalystLog");
+    expect(APP_SOURCE).toContain("SendProgress");
+    expect(APP_SOURCE).toContain("TransferProgress");
+    expect(APP_SOURCE).toMatch(/<TransferProgress[\s\S]*v-if="transferSnapshot"/);
+    expect(APP_SOURCE).toMatch(/<SendProgress[\s\S]*v-else-if="progressProps"/);
+    expect(APP_SOURCE).not.toMatch(/@\/api\b/);
   });
 });
 

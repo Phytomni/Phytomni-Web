@@ -14,6 +14,7 @@
       data-testid="chat-visual-root"
       :data-chat-state="fixture.chatState"
       :data-sidebar-drawer-state="drawerStateAttr"
+      :data-phase3c-kind="phase3cKindAttr"
       class="chat-visual-fixture-root"
     >
       <PhyAdaptiveShell
@@ -74,7 +75,10 @@
                     <el-icon><Menu /></el-icon>
                   </el-button>
                   <h2 class="chat-header-title">
-                    {{ $t("chat.untitledConversation") }}
+                    {{
+                      phase3cOverlay?.dialogueLabel ||
+                      $t("chat.untitledConversation")
+                    }}
                   </h2>
                 </div>
               </header>
@@ -115,6 +119,7 @@
                         :is-last-message="index === contentMessages.length - 1"
                         stream-run-id=""
                         :stream-transport="null"
+                        :activity-expanded-by-message="activityExpandedMap"
                         :gene-network-images="geneNetworkImages"
                         :gene-network-images-loading="EMPTY_LOADING"
                         :digital-design-images="EMPTY_IMAGES"
@@ -122,6 +127,54 @@
                       />
                     </ChatMessageRow>
                   </template>
+
+                  <!-- Phase 3C content + overlay widgets (Activity / log / A2UI / parallel) -->
+                  <template v-else-if="isPhase3CContentFixture">
+                    <ChatMessageRow
+                      v-for="(message, index) in contentMessages"
+                      :key="message.id || index"
+                      :role="message.role === 'user' ? 'user' : 'assistant'"
+                      :message-id="message.id"
+                      :streaming="!!message.streaming"
+                    >
+                      <ChatMessageContent
+                        :message="message"
+                        :index="index"
+                        :is-last-message="index === contentMessages.length - 1"
+                        stream-run-id=""
+                        :stream-transport="null"
+                        :activity-expanded-by-message="activityExpandedMap"
+                        :gene-network-images="EMPTY_IMAGES"
+                        :gene-network-images-loading="EMPTY_LOADING"
+                        :digital-design-images="EMPTY_IMAGES"
+                        :digital-design-images-loading="EMPTY_LOADING"
+                      />
+                      <template
+                        v-if="logOverlay && message.role === 'assistant'"
+                        #activity
+                      >
+                        <ChatActivity
+                          :state-key="'log:' + (logOverlay?.rowId || '')"
+                          :expanded="logOverlayExpanded"
+                          :label="$t('chat.log.activityLabel')"
+                          :hide-count="true"
+                          @update:expanded="onFixtureAction('log-expanded')"
+                        >
+                          <ChatAnalystLog
+                            :row-id="logOverlay?.rowId"
+                            :task-id="logOverlay?.taskId"
+                            :log-data="logOverlay?.logData"
+                            :loading="!!logOverlay?.loading"
+                            :updating="!!logOverlay?.updating"
+                            :error-kind="logOverlay?.errorKind"
+                            @update="onFixtureAction('log-update')"
+                            @retry="onFixtureAction('log-retry')"
+                          />
+                        </ChatActivity>
+                      </template>
+                    </ChatMessageRow>
+                  </template>
+
                   <!-- Frame fixtures: simple synthetic text rows -->
                   <template v-else>
                     <div
@@ -134,12 +187,37 @@
                       <div class="message-content">{{ message.content }}</div>
                     </div>
                   </template>
+
+                  <!-- Phase 3C progress / transfer overlays (mutually exclusive) -->
+                  <ChatMessageRow
+                    v-if="showProgressOverlay || showTransferOverlay"
+                    role="assistant"
+                    loading
+                  >
+                    <div
+                      class="message-text loading-message phy-bubble-assistant"
+                      data-testid="chat-fixture-progress-host"
+                    >
+                      {{ $t("chat.ladingInner") }}
+                      <TransferProgress
+                        v-if="transferSnapshot"
+                        :snapshot="transferSnapshot"
+                        @cancel="onFixtureAction('transfer-cancel')"
+                      />
+                      <SendProgress
+                        v-else-if="progressProps"
+                        :started-at="progressProps.startedAt"
+                        :agent-name="progressProps.agentName"
+                        :completing="progressProps.completing"
+                      />
+                    </div>
+                  </ChatMessageRow>
                 </div>
               </div>
 
               <ChatComposer
                 :model-value="composerValue"
-                :is-sending="fixture.isSending"
+                :is-sending="composerIsSending"
                 chat-mode="instant"
                 :expert-mode-enabled="false"
                 :show-mode-selector="fixture.chatState === 'empty'"
@@ -192,10 +270,23 @@ import ChatSidebarNav, {
 import ChatComposer from "@/views/chat/components/ChatComposer.vue";
 import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
+import ChatActivity from "@/views/chat/components/ChatActivity.vue";
+import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
+import SendProgress from "@/views/chat/components/SendProgress.vue";
+import TransferProgress from "@/components/TransferProgress.vue";
 import { useAppStore } from "@/stores";
 import type { ChatMessage } from "@/views/chat/types";
 import type { ChatVisualFixtureDefinition } from "./fixture-registry";
-import { isPhase3BMessageKey } from "../../fixtures/chat";
+import {
+  isPhase3BMessageKey,
+  isPhase3CFixtureKey,
+  FIXTURE_ACTIVITY_STATE_KEY,
+  getPhase3COverlay,
+  type Phase3CLogProps,
+  type Phase3CProgressProps,
+  type Phase3COverlaySpec,
+} from "../../fixtures/chat";
+import type { TransferSnapshot } from "@/utils/transfer-progress";
 import {
   SYNTHETIC_IDENTITY,
   SYNTHETIC_ROLES_TOOL,
@@ -242,18 +333,83 @@ const drawerStateAttr = computed(() => {
   return "not-mobile";
 });
 
+const phase3cOverlay = computed((): Phase3COverlaySpec | null => {
+  if (!props.fixture || !isPhase3CFixtureKey(props.fixture.key)) return null;
+  return getPhase3COverlay(props.fixture.key);
+});
+
+const phase3cKindAttr = computed(() => phase3cOverlay.value?.kind ?? undefined);
+
+const logOverlay = computed((): Phase3CLogProps | null => {
+  const overlay = phase3cOverlay.value;
+  if (!overlay || overlay.kind !== "log" || !overlay.log) return null;
+  return overlay.log;
+});
+
+const logOverlayExpanded = computed(
+  () => phase3cOverlay.value?.activityExpanded === true
+);
+
 const isMessageContentFixture = computed(
   () => !!props.fixture && isPhase3BMessageKey(props.fixture.key)
 );
 
+const isPhase3CContentFixture = computed(() => {
+  const overlay = phase3cOverlay.value;
+  if (!overlay) return false;
+  return (
+    overlay.kind === "activity" ||
+    overlay.kind === "log" ||
+    overlay.kind === "a2ui" ||
+    overlay.kind === "parallel"
+  );
+});
+
 const contentMessages = computed((): ChatMessage[] => {
-  if (!props.fixture || !isPhase3BMessageKey(props.fixture.key)) return [];
-  return buildHarnessMessages(props.fixture) as ChatMessage[];
+  if (!props.fixture) return [];
+  if (isPhase3BMessageKey(props.fixture.key) || isPhase3CContentFixture.value) {
+    return buildHarnessMessages(props.fixture) as ChatMessage[];
+  }
+  return [];
 });
 
 const frameMessages = computed((): SyntheticMessage[] => {
-  if (!props.fixture || isPhase3BMessageKey(props.fixture.key)) return [];
+  if (!props.fixture) return [];
+  if (isPhase3BMessageKey(props.fixture.key) || isPhase3CContentFixture.value) {
+    return [];
+  }
   return buildSyntheticMessages(props.fixture);
+});
+
+const activityExpandedMap = computed((): Record<string, boolean> => {
+  const overlay = phase3cOverlay.value;
+  if (!overlay || overlay.kind !== "activity") return {};
+  return {
+    [FIXTURE_ACTIVITY_STATE_KEY]: overlay.activityExpanded === true,
+  };
+});
+
+const showProgressOverlay = computed(
+  () => phase3cOverlay.value?.kind === "progress"
+);
+const showTransferOverlay = computed(
+  () => phase3cOverlay.value?.kind === "transfer"
+);
+
+const transferSnapshot = computed((): TransferSnapshot | null => {
+  const overlay = phase3cOverlay.value;
+  if (!overlay || overlay.kind !== "transfer" || !overlay.transfer) {
+    return null;
+  }
+  return overlay.transfer;
+});
+
+const progressProps = computed((): Phase3CProgressProps | null => {
+  const overlay = phase3cOverlay.value;
+  if (!overlay || overlay.kind !== "progress" || !overlay.progress) {
+    return null;
+  }
+  return overlay.progress;
 });
 
 const geneNetworkImages = computed(() =>
@@ -266,6 +422,13 @@ const fileList = computed(() =>
   props.fixture ? buildSyntheticFileList(props.fixture) : []
 );
 const pickerOptions = buildSyntheticPickerOptions();
+
+const composerIsSending = computed(
+  () =>
+    fixture.value.isSending ||
+    phase3cOverlay.value?.isSending === true ||
+    phase3cOverlay.value?.kind === "send-stop"
+);
 
 const composerValue = ref(
   props.fixture ? COMPOSER_MODEL_VALUE_BY_KEY[props.fixture.key] ?? "" : ""
