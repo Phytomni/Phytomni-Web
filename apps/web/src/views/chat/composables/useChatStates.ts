@@ -1,74 +1,60 @@
 import { ref, computed } from "vue";
-import type { Ref } from "vue";
-import type { UploadFile } from "../types";
+import type { UploadFile, ChatUIState, ChatView } from "../types";
 import type { RekeyChatStateOutcome } from "../types";
-import type { A2uiActionTransport } from "../streaming/a2uiAction";
-import type { TransferSnapshot } from "@/utils/transfer-progress";
+
+function createDefaultChatUIState(): ChatUIState {
+  return {
+    isSending: false,
+    messageInput: "",
+    fileList: [],
+    historyQuestion: null,
+    copyVisible: 0,
+    copyTimeRef: undefined,
+    logData: {},
+    loadingLog: {},
+    refreshingMessages: {},
+    reactions: {},
+    updatingLog: {},
+    sendStartedAt: null,
+    activeAgentName: "",
+    completing: false,
+    mode: "instant",
+    isStreaming: false,
+    streamingMessageId: null,
+    a2uiActionSender: null,
+    a2uiRunId: "",
+    uploadTransfer: null,
+    selectedAgent: "",
+    renderedChat: null,
+  };
+}
 
 export function useChatStates() {
   // state management for all conversations
-  const chatStates = ref<
-    Record<
-      string,
-      {
-        isSending: boolean;
-        messageInput: string;
-        fileList: UploadFile[];
-        historyQuestion: any;
-        copyVisible: number;
-        copyTimeRef: ReturnType<typeof setTimeout> | undefined;
-        logData: Record<string, any>;
-        loadingLog: Record<string, boolean>;
-        refreshingMessages: Record<string, boolean>;
-        reactions: Record<string, number>; // reaction (like/dislike) state
-        updatingLog: Record<string, boolean>; // log-updating state
-        sendStartedAt: number | null; // start of this send; null = not sending
-        activeAgentName: string; // canonical agent name for this send (selects τ + ETA copy)
-        completing: boolean; // true = trigger the 99→100 fast progress animation
-        mode: "instant" | "expert"; // per-conversation routing mode (locked after first send)
-        isStreaming: boolean; // true while an AG-UI stream is in flight for this dialogue
-        streamingMessageId: string | null; // request id of the in-flight stream
-        a2uiActionSender: A2uiActionTransport | null; // fetch transport for in-flight A2UI widgets
-        a2uiRunId: string; // Bot run registry id stamped from RunStarted during stream
-        uploadTransfer: TransferSnapshot | null;
-        selectedAgent: string;
-      }
-    >
-  >({});
+  const chatStates = ref<Record<string, ChatUIState>>({});
 
   // get or create the conversation state
-  const getChatState = (dialogueId: string) => {
+  const getChatState = (dialogueId: string): ChatUIState => {
     if (!chatStates.value[dialogueId]) {
-      chatStates.value[dialogueId] = {
-        isSending: false,
-        messageInput: "",
-        fileList: [],
-        historyQuestion: null,
-        copyVisible: 0,
-        copyTimeRef: undefined,
-        logData: {},
-        loadingLog: {},
-        refreshingMessages: {},
-        reactions: {}, // initialize reaction state
-        updatingLog: {}, // initialize log-updating state
-        sendStartedAt: null,
-        activeAgentName: "",
-        completing: false,
-        mode: "instant",
-        isStreaming: false,
-        streamingMessageId: null,
-        a2uiActionSender: null,
-        a2uiRunId: "",
-        uploadTransfer: null,
-        selectedAgent: "",
-      };
+      chatStates.value[dialogueId] = createDefaultChatUIState();
     }
     return chatStates.value[dialogueId];
   };
 
   // the currently selected conversation
   const currentChatId = ref("");
-  const currentChat: Ref<any> = ref(null);
+
+  // Writable view of chatStates[currentChatId].renderedChat — not a second owner
+  const currentChat = computed<ChatView | null>({
+    get: () => {
+      if (!currentChatId.value) return null;
+      return getChatState(currentChatId.value).renderedChat;
+    },
+    set: (value: ChatView | null) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).renderedChat = value;
+    },
+  });
 
   // input content - now based on the current conversation
   const messageInput = computed({
@@ -148,7 +134,7 @@ export function useChatStates() {
       if (!currentChatId.value) return null;
       return getChatState(currentChatId.value).uploadTransfer;
     },
-    set: (value: TransferSnapshot | null) => {
+    set: (value: ChatUIState["uploadTransfer"]) => {
       if (!currentChatId.value) return;
       getChatState(currentChatId.value).uploadTransfer = value;
     },

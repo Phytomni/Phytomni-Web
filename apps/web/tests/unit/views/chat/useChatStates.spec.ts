@@ -75,6 +75,7 @@ describe("useChatStates parallel chat state", () => {
       a2uiActionSender: null,
       uploadTransfer: null,
       selectedAgent: "",
+      renderedChat: null,
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
@@ -187,6 +188,93 @@ describe("useChatStates selectedAgent", () => {
     expect(s.selectedAgent.value).toBe("");
     s.selectedAgent.value = "KnowledgeAgent";
     expect(s.selectedAgent.value).toBe("");
+    expect(Object.keys(s.chatStates.value)).toHaveLength(0);
+  });
+});
+
+describe("useChatStates renderedChat ownership", () => {
+  it("A→B→A restores the exact renderedChat / messages / block object identities", () => {
+    const s = useChatStates();
+    const a2uiBlock = {
+      type: "agent-surface",
+      authority: "agent" as const,
+      interactive: true,
+      surfaceId: "surf-a",
+      widget: "confirm" as const,
+    };
+    const streamingPlaceholder = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [a2uiBlock],
+      id: "stream-a",
+    };
+    const messagesA = [
+      { role: "user", content: "q-A" },
+      streamingPlaceholder,
+    ];
+    const messagesB = [
+      { role: "user", content: "q-B" },
+      { role: "assistant", content: "a-B", id: "msg-b" },
+    ];
+
+    s.currentChatId.value = "A";
+    s.currentChat.value = { dialogue_id: "A", messages: messagesA };
+    // Capture identities after reactive ownership (Vue may proxy nested objects)
+    const ownedA = s.getChatState("A").renderedChat!;
+    const ownedMessagesA = ownedA.messages;
+    const ownedPlaceholder = ownedMessagesA[1];
+    const ownedBlock = ownedPlaceholder.blocks![0];
+
+    s.currentChatId.value = "B";
+    s.currentChat.value = { dialogue_id: "B", messages: messagesB };
+    const ownedB = s.getChatState("B").renderedChat!;
+    expect(s.currentChat.value).toBe(ownedB);
+    expect(s.currentChat.value).not.toBe(ownedA);
+
+    s.currentChatId.value = "A";
+    expect(s.currentChat.value).toBe(ownedA);
+    expect(s.currentChat.value!.messages).toBe(ownedMessagesA);
+    expect(s.currentChat.value!.messages[1]).toBe(ownedPlaceholder);
+    expect(s.currentChat.value!.messages[1].blocks![0]).toBe(ownedBlock);
+    expect(s.getChatState("B").renderedChat).toBe(ownedB);
+  });
+
+  it("temp→server rekey preserves the exact renderedChat and messages identity", () => {
+    const s = useChatStates();
+    const tempId = "new_400";
+    const serverId = "srv-rendered";
+    const state = s.getChatState(tempId);
+    state.renderedChat = {
+      messages: [
+        { role: "user", content: "pending" },
+        {
+          role: "assistant",
+          content: "",
+          streaming: true,
+          blocks: [{ type: "markdown", authority: "web" as const, text: "…" }],
+        },
+      ],
+    };
+    const ownedRendered = state.renderedChat!;
+    const ownedMessages = ownedRendered.messages;
+
+    const result = s.rekeyChatState(tempId, serverId);
+
+    expect(result).toEqual({ outcome: "moved" });
+    expect(s.chatStates.value[serverId]).toBe(state);
+    expect(s.chatStates.value[serverId].renderedChat).toBe(ownedRendered);
+    expect(s.chatStates.value[serverId].renderedChat!.messages).toBe(
+      ownedMessages
+    );
+  });
+
+  it("empty currentChatId yields null currentChat and setter is a no-op", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "";
+    expect(s.currentChat.value).toBeNull();
+    s.currentChat.value = { messages: [] };
+    expect(s.currentChat.value).toBeNull();
     expect(Object.keys(s.chatStates.value)).toHaveLength(0);
   });
 });

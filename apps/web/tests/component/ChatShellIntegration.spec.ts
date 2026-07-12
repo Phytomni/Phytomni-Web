@@ -312,4 +312,20 @@ describe("Chat adaptive shell integration", () => {
     expect(sendMessageSource).toContain("getStreamChatState");
     expect(sendMessageSource).toContain("id === sendingDialogueId ? chatState");
   });
+
+  it("owns live rendered messages on chatStates via renderedChat, not a second top-level cache", () => {
+    const chatStatesSource = readFileSync(
+      resolve(__dirname, "../../src/views/chat/composables/useChatStates.ts"),
+      "utf8"
+    );
+    expect(chatStatesSource).toContain("renderedChat: null");
+    expect(chatStatesSource).toContain("getChatState(currentChatId.value).renderedChat");
+    expect(CHAT_SOURCE).toContain("getChatState(dialogueId).renderedChat");
+
+    const selectStart = CHAT_SOURCE.indexOf("useSelectChat({");
+    const selectEnd = CHAT_SOURCE.indexOf("});", selectStart);
+    const selectBlock = CHAT_SOURCE.slice(selectStart, selectEnd + 2);
+    expect(selectBlock).toContain("currentChatId");
+    expect(selectBlock).not.toMatch(/\bcurrentChat,/);
+  });
 });

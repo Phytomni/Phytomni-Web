@@ -1,3 +1,6 @@
+import type { A2uiActionTransport } from "./streaming/a2uiAction";
+import type { TransferSnapshot } from "@/utils/transfer-progress";
+
 export interface Chat {
   id: number;
   dialogue_id: string;
@@ -11,6 +14,14 @@ export interface Chat {
   fileList?: UploadFile[]; // per-conversation file list
   isFavorite: boolean; // favorite state
 }
+
+/**
+ * Live rendered chat view for one dialogue: partial Chat metadata plus a
+ * concrete messages array (streaming placeholders, blocks, A2UI surfaces).
+ */
+export type ChatView = Partial<Chat> & {
+  messages: ChatMessage[];
+};
 
 export interface ChatMessage {
   role: string;
@@ -85,6 +96,36 @@ export interface ChatComposerHandle {
   openHeader: () => void;
   closeHeader: () => void;
   readonly popoverVisible: boolean | undefined;
+}
+
+/**
+ * Per-dialogue UI + rendered-message owner. Shell focus (currentChatId, URL,
+ * scroll) is separate; only `renderedChat` owns the live message tree.
+ */
+export interface ChatUIState {
+  isSending: boolean;
+  messageInput: string;
+  fileList: UploadFile[];
+  historyQuestion: any;
+  copyVisible: number;
+  copyTimeRef: ReturnType<typeof setTimeout> | undefined;
+  logData: Record<string, any>;
+  loadingLog: Record<string, boolean>;
+  refreshingMessages: Record<string, boolean>;
+  reactions: Record<string, number>;
+  updatingLog: Record<string, boolean>;
+  sendStartedAt: number | null;
+  activeAgentName: string;
+  completing: boolean;
+  mode: "instant" | "expert";
+  isStreaming: boolean;
+  streamingMessageId: string | null;
+  a2uiActionSender: A2uiActionTransport | null;
+  a2uiRunId: string;
+  uploadTransfer: TransferSnapshot | null;
+  selectedAgent: string;
+  /** Live message tree for this dialogue; default null until hydrated. */
+  renderedChat: ChatView | null;
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */

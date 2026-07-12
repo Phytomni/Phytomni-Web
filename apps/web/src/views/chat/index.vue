@@ -161,7 +161,7 @@
                       <el-button
                         type="primary"
                         size="small"
-                        @click="updateLog(message.task_id)"
+                        @click="message.task_id && updateLog(message.task_id)"
                         :loading="updatingLog[message.task_id || '']"
                         :disabled="!message.task_id"
                       >
@@ -272,7 +272,7 @@
                 <el-button
                   type="primary"
                   size="small"
-                  @click="toggleLogView(message.id)"
+                  @click="message.id && toggleLogView(message.id)"
                   :class="{ active: message.showLog }"
                 >
                   <el-icon>
@@ -315,9 +315,17 @@
                   :generated-formats="getGeneratedFormats(message.tool_name)"
                   @copy="handleMessageCopy(message, index)"
                   @refresh="() => refreshMessage(index)"
-                  @reaction="(type) => handleReaction(message.id, type)"
+                  @reaction="
+                    (type) => {
+                      if (message.id) handleReaction(message.id, type);
+                    }
+                  "
                   @direct-download="(path) => downloadFile(path)"
-                  @download-format="(format) => getFileDownUrl(message.id, format)"
+                  @download-format="
+                    (format) => {
+                      if (message.id) getFileDownUrl(message.id, format);
+                    }
+                  "
                 />
                 <div
                   v-if="
@@ -636,7 +644,6 @@ onMounted(async () => {
     if (urlChatId) {
       // First check whether it is an incomplete session
       if (loadPendingChat(urlChatId)) {
-        currentChatId.value = urlChatId;
         return;
       }
 
@@ -683,7 +690,10 @@ const loadPendingChat = (dialogueId: string) => {
     return false;
   }
 
-  currentChat.value = { messages: pendingChatData.messages };
+  currentChatId.value = dialogueId;
+  getChatState(dialogueId).renderedChat = {
+    messages: pendingChatData.messages,
+  };
   getChatState(dialogueId).mode =
     pendingChatData.mode === "expert" ? "expert" : "instant";
   return true;
@@ -1099,7 +1109,6 @@ const updateUrlWithChatId = (dialogueId: string) => {
 const { selectChat } = useSelectChat({
   getChatState,
   currentChatId,
-  currentChat,
   scrollToBottom,
   updateUrlWithChatId,
   chatList,
