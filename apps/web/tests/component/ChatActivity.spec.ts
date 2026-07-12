@@ -134,4 +134,21 @@ describe("ChatActivity", () => {
     expect(w.find(".reasoning-toggle").exists()).toBe(false);
     expect(w.find(".reasoning-body").exists()).toBe(true);
   });
+
+  it("supports label override, hideCount, and default slot body content", async () => {
+    const w = mount(ChatActivity, {
+      props: {
+        blocks: [],
+        stateKey: "log:42",
+        expanded: true,
+        label: "Execution log",
+        hideCount: true,
+      } as any,
+      slots: { default: '<div data-testid="slot-body">analyst body</div>' },
+      global: { plugins: [i18n] },
+    });
+    expect(w.text()).toContain("Execution log");
+    expect(w.text()).not.toMatch(/\b0\b/);
+    expect(w.find("[data-testid='slot-body']").text()).toBe("analyst body");
+  });
 });

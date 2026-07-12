@@ -65,6 +65,7 @@ describe("useChatStates parallel chat state", () => {
       refreshingMessages: {},
       reactions: {},
       updatingLog: {},
+      logErrorKinds: {},
       sendStartedAt: null,
       activeAgentName: "",
       completing: false,
@@ -82,6 +83,26 @@ describe("useChatStates parallel chat state", () => {
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
+  });
+
+  it("isolates logErrorKinds and log activity keys per dialogue", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "A";
+    const stateA = s.getChatState("A");
+    stateA.logErrorKinds["12"] = "fetch";
+    stateA.logData["12"] = "A-log";
+    stateA.activityExpandedByMessage["log:12"] = true;
+
+    s.currentChatId.value = "B";
+    const stateB = s.getChatState("B");
+    expect(stateB.logErrorKinds).toEqual({});
+    expect(stateB.logData).toEqual({});
+    expect(stateB.activityExpandedByMessage).toEqual({});
+
+    s.currentChatId.value = "A";
+    expect(s.getChatState("A").logErrorKinds["12"]).toBe("fetch");
+    expect(s.getChatState("A").logData["12"]).toBe("A-log");
+    expect(s.getChatState("A").activityExpandedByMessage["log:12"]).toBe(true);
   });
 
   it("isolates activityExpandedByMessage per dialogue (A→B→A restoration)", () => {

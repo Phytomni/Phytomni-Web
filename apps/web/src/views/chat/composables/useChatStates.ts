@@ -15,6 +15,7 @@ function createDefaultChatUIState(): ChatUIState {
     refreshingMessages: {},
     reactions: {},
     updatingLog: {},
+    logErrorKinds: {},
     sendStartedAt: null,
     activeAgentName: "",
     completing: false,

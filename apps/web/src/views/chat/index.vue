@@ -128,102 +128,7 @@
             <template #avatar>
               <el-avatar :size="36" :src="botAvatar" />
             </template>
-              <!-- Log view - two-column layout (replaces content when showLog) -->
-              <div
-                v-if="
-                  (message.role === 'user' ||
-                    (!message.steps && !message.tableHeaders)) &&
-                  message.role === 'assistant' &&
-                  message.tool_name === 'AnalystAgent' &&
-                  message.showLog
-                "
-                :class="['message-text', 'phy-bubble-assistant']"
-              >
-                <div class="log-view-container">
-                  <div class="log-view-left">
-                    <h4>{{ $t("chat.log.replyContent") }}</h4>
-                    <MarkdownViewer
-                      surface="chat"
-                      :instantMessage="
-                        (message?.instantMessage &&
-                          currentChat.messages.length - 1 == index) ||
-                        false
-                      "
-                      :content="message.content"
-                      @finish="() => handleMarkdownFinish(index)"
-                    />
-                  </div>
-                  <div class="log-view-right">
-                    <h4>{{ $t("chat.log.execLog", { id: message.id }) }}</h4>
-
-                    <!-- Update log button -->
-                    <div class="log-actions">
-                      <el-button
-                        type="primary"
-                        size="small"
-                        @click="message.task_id && updateLog(message.task_id)"
-                        :loading="updatingLog[message.task_id || '']"
-                        :disabled="!message.task_id"
-                      >
-                        <el-icon>
-                          <Refresh />
-                        </el-icon>
-                        {{ $t("chat.log.updateLog") }}
-                      </el-button>
-                    </div>
-
-                    <div
-                      v-if="loadingLog[message.id || '']"
-                      class="log-loading"
-                    >
-                      <el-icon class="is-loading">
-                        <Loading />
-                      </el-icon>
-                      {{ $t("chat.log.loading") }}
-                    </div>
-                    <div
-                      v-else-if="logData[message.id || '']"
-                      class="log-content"
-                    >
-                      <!-- New log rendering logic -->
-                      <div
-                        v-if="typeof logData[message.id || ''] === 'string'"
-                        class="log-text-content"
-                      >
-                        <pre
-                          class="log-pre"
-                          v-html="
-                            formatLogContentWithColors(
-                              logData[message.id || '']
-                            )
-                          "
-                        ></pre>
-                      </div>
-                      <!-- Legacy table rendering logic (backward compatible) -->
-                      <el-table
-                        v-else-if="Array.isArray(logData[message.id || ''])"
-                        :data="logData[message.id || '']"
-                        border
-                        style="width: 100%"
-                      >
-                        <el-table-column
-                          prop="content"
-                          :label="$t('chat.log.contentColumn')"
-                          align="left"
-                        />
-                      </el-table>
-                    </div>
-                    <div v-else class="log-error">
-                      {{ $t("chat.log.noData") }} (loadingLog:
-                      {{ loadingLog[message.id || ""] }}, logData:
-                      {{ !!logData[message.id || ""] }})
-                    </div>
-                  </div>
-                </div>
-
-              </div>
               <ChatMessageContent
-                v-else
                 :message="message"
                 :index="index"
                 :is-last-message="currentChat.messages.length - 1 == index"
@@ -245,7 +150,54 @@
                 "
               />
 
-              <!-- Shared message chrome: files, log toggle, follow-ups, actions -->
+              <template #activity>
+                <ChatActivity
+                  v-if="
+                    message.role === 'assistant' &&
+                    message.tool_name === 'AnalystAgent'
+                  "
+                  :state-key="analystLogStateKey(message)"
+                  :expanded="isAnalystLogExpanded(message)"
+                  :label="$t('chat.log.activityLabel')"
+                  :hide-count="true"
+                  @update:expanded="(open) => setLogExpanded(message, open)"
+                >
+                  <ChatAnalystLog
+                    :row-id="deriveAnalystLogRowId(message)"
+                    :task-id="deriveAnalystLogTaskId(message)"
+                    :log-data="
+                      deriveAnalystLogRowId(message)
+                        ? getChatState(currentChatId).logData[
+                            deriveAnalystLogRowId(message)!
+                          ]
+                        : undefined
+                    "
+                    :loading="
+                      !!deriveAnalystLogRowId(message) &&
+                      !!getChatState(currentChatId).loadingLog[
+                        deriveAnalystLogRowId(message)!
+                      ]
+                    "
+                    :updating="
+                      !!deriveAnalystLogRowId(message) &&
+                      !!getChatState(currentChatId).updatingLog[
+                        deriveAnalystLogRowId(message)!
+                      ]
+                    "
+                    :error-kind="
+                      deriveAnalystLogRowId(message)
+                        ? getChatState(currentChatId).logErrorKinds[
+                            deriveAnalystLogRowId(message)!
+                          ]
+                        : undefined
+                    "
+                    @update="updateLog(message)"
+                    @retry="retryLog(message)"
+                  />
+                </ChatActivity>
+              </template>
+
+              <!-- Shared message chrome: files, follow-ups, actions -->
               <div
                 v-if="
                   message.role === 'user' &&
@@ -268,29 +220,6 @@
                     />
                   </div>
                 </div>
-              </div>
-
-              <!-- Log button - only shown for the AnalystAgent type -->
-              <div
-                v-if="
-                  message.role === 'assistant' &&
-                  message.tool_name === 'AnalystAgent'
-                "
-                class="log-button-container"
-              >
-                <el-button
-                  type="primary"
-                  size="small"
-                  @click="message.id && toggleLogView(message.id)"
-                  :class="{ active: message.showLog }"
-                >
-                  <el-icon>
-                    <Document />
-                  </el-icon>
-                  {{
-                    message.showLog ? $t("chat.hideLog") : $t("chat.showLog")
-                  }}
-                </el-button>
               </div>
 
               <template #follow-up>
@@ -467,17 +396,14 @@ import ChatComposer from "./components/ChatComposer.vue";
 import ChatMessageRow from "./components/ChatMessageRow.vue";
 import ChatMessageContent from "./components/ChatMessageContent.vue";
 import ChatMessageActions from "./components/ChatMessageActions.vue";
+import ChatActivity from "./components/ChatActivity.vue";
+import ChatAnalystLog from "./components/ChatAnalystLog.vue";
 import type { DirectDownloadItem } from "./components/ChatMessageActions.vue";
 import {
   PhyAdaptiveShell,
   PhyEmptyState,
 } from "@/components/shell";
-import {
-  Document,
-  Menu,
-  Loading,
-  Refresh,
-} from "@element-plus/icons-vue";
+import { Menu } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
 import { useTutorial } from "./composables/useTutorial";
@@ -492,11 +418,15 @@ import { derivePickerOptions } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useSendMessage } from "./composables/useSendMessage";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
-import { useLogView } from "./composables/useLogView";
+import {
+  useLogView,
+  deriveAnalystLogRowId,
+  deriveAnalystLogTaskId,
+  analystLogActivityKey,
+} from "./composables/useLogView";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { abortRequest } from "@/utils/request";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
 import {
@@ -513,7 +443,6 @@ import {
   safeParse,
 } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
-import { formatLogContentWithColors } from "./utils/agent-log";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import type {
   Chat,
@@ -724,10 +653,7 @@ const {
   fileList,
   copyVisible,
   copyTimeRef,
-  logData,
-  loadingLog,
   refreshingMessages,
-  updatingLog,
 } = useChatStates();
 
 const reconcileMatchedDialogue = (
@@ -989,13 +915,28 @@ const {
   scrollToBottom,
   rolesTool,
 });
-const { toggleLogView, updateLog } = useLogView({
+const { setLogExpanded, updateLog, retryLog } = useLogView({
   isSending,
   currentChat,
   currentChatId,
   getChatState,
   scrollToBottom,
 });
+
+function analystLogStateKey(message: ChatMessage): string | null {
+  const rowId = deriveAnalystLogRowId(message);
+  return rowId ? analystLogActivityKey(rowId) : null;
+}
+
+function isAnalystLogExpanded(message: ChatMessage): boolean {
+  const rowId = deriveAnalystLogRowId(message);
+  if (!rowId || !currentChatId.value) return true;
+  return (
+    getChatState(currentChatId.value).activityExpandedByMessage[
+      analystLogActivityKey(rowId)
+    ] === true
+  );
+}
 
 // File upload handling — state and logic extracted into the useFileUpload composable
 const { handleFileChange, removeFile } = useFileUpload({
@@ -1711,161 +1652,6 @@ const getGeneratedFormats = (toolName?: string): string[] => {
 
 ::v-deep(.el-textarea__inner):hover {
   box-shadow: none;
-}
-
-// Log button styles
-.log-button-container {
-  margin-top: 8px;
-  margin-bottom: 8px;
-
-  .el-button {
-    &.active {
-      background-color: #67c23a;
-      border-color: #67c23a;
-    }
-  }
-}
-
-// Log view container
-.log-view-container {
-  display: flex;
-  gap: 20px;
-  margin-top: 12px;
-
-  .log-view-left,
-  .log-view-right {
-    flex: 1;
-    min-width: 0;
-
-    h4 {
-      margin: 0 0 12px 0;
-      font-size: 14px;
-      font-weight: 600;
-      color: #333;
-      border-bottom: 1px solid #e6e6e6;
-      padding-bottom: 8px;
-    }
-
-    .log-actions {
-      margin-bottom: 12px;
-      display: flex;
-      justify-content: flex-end;
-
-      .el-button {
-        font-size: 12px;
-        padding: 6px 12px;
-
-        .el-icon {
-          margin-right: 4px;
-        }
-      }
-    }
-  }
-
-  .log-view-right {
-    border-left: 1px solid #e6e6e6;
-    padding-left: 20px;
-
-    .log-loading {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #909399;
-      font-size: 14px;
-
-      .el-icon {
-        font-size: 16px;
-      }
-    }
-
-    .log-content {
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #e6e6e6;
-      border-radius: 4px;
-      padding: 12px;
-      background-color: #fff;
-
-      .log-text-content {
-        .log-pre {
-          margin: 0;
-          padding: 0;
-          font-family: "Courier New", monospace;
-          font-size: 12px;
-          line-height: 1.4;
-          color: #333;
-          white-space: pre-wrap;
-          word-break: break-word;
-          background-color: #1e1e1e; // Dark background, better suited for showing colored text
-          border-radius: 4px;
-          padding: 8px;
-          border: 1px solid #e9ecef;
-
-          // Ensure colors inside span tags display correctly
-          span {
-            display: inline;
-
-            &[style*="color: #ff0000"] {
-              color: #ff6b6b !important; // Red
-            }
-
-            &[style*="color: #00ff00"] {
-              color: #51cf66 !important; // Green
-            }
-
-            &[style*="color: #ffff00"] {
-              color: #ffd43b !important; // Yellow
-            }
-
-            &[style*="color: #0000ff"] {
-              color: #74c0fc !important; // Blue
-            }
-
-            &[style*="color: #ff00ff"] {
-              color: #f783ac !important; // Magenta
-            }
-
-            &[style*="color: #00ffff"] {
-              color: #63e6be !important; // Cyan
-            }
-
-            &[style*="color: #ffffff"] {
-              color: #f8f9fa !important; // White
-            }
-          }
-
-          // Bold text styles
-          strong {
-            font-weight: bold;
-            color: #f8f9fa;
-          }
-
-          // Underline text styles
-          u {
-            text-decoration: underline;
-            color: #f8f9fa;
-          }
-        }
-      }
-
-      .el-table {
-        font-size: 12px;
-
-        .el-table__cell {
-          padding: 8px;
-          word-break: break-word;
-          white-space: pre-wrap;
-        }
-      }
-    }
-
-    .log-error {
-      color: #f56c6c;
-      font-size: 14px;
-      text-align: center;
-      padding: 20px;
-    }
-  }
 }
 
 // Upvote / downvote button styles

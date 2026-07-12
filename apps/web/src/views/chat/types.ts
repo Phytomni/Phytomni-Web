@@ -120,6 +120,8 @@ export interface ChatUIState {
   refreshingMessages: Record<string, boolean>;
   reactions: Record<string, number>;
   updatingLog: Record<string, boolean>;
+  /** Stable enum for analyst-log errors; translate at render time. */
+  logErrorKinds: Record<string, "fetch" | "update" | undefined>;
   sendStartedAt: number | null;
   activeAgentName: string;
   completing: boolean;

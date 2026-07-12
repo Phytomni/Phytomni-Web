@@ -987,4 +987,27 @@ describe("useSendMessage", () => {
     expect(recoveryCalls).toHaveLength(0);
     expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, undefined);
   });
+
+  it("blocking AnalystAgent response does not invent task_id (Update stays unavailable)", async () => {
+    states.get("A")!.messageInput = "analyze please";
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        tool_name: "AnalystAgent",
+        answer: "job submitted",
+        id: "9001",
+        compute_resource: "analyst-agents-small",
+        follow_up_questions: [],
+        // Intentionally omit task_id — blocking QueryData does not provide it.
+      },
+    } as any);
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const assistant = getChatState("A").renderedChat!.messages[1];
+    expect(assistant.tool_name).toBe("AnalystAgent");
+    expect(assistant.id).toBe("9001");
+    expect(assistant.task_id).toBeUndefined();
+    expect("task_id" in assistant).toBe(false);
+  });
 });

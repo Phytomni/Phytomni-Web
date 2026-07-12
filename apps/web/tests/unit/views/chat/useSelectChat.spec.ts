@@ -25,6 +25,7 @@ function makeState(): ChatUIState {
     refreshingMessages: {},
     reactions: {},
     updatingLog: {},
+    logErrorKinds: {},
     sendStartedAt: null,
     activeAgentName: "",
     completing: false,
@@ -36,6 +37,9 @@ function makeState(): ChatUIState {
     uploadTransfer: null,
     selectedAgent: "",
     renderedChat: null,
+    activeRequestId: "",
+    generationStopped: false,
+    activityExpandedByMessage: {},
   };
 }
 
@@ -297,5 +301,29 @@ describe("useSelectChat", () => {
     expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d2");
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
+  });
+
+  it("history AnalystAgent hydrates the existing task_id onto the message", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce({
+      code: 200,
+      data: [
+        {
+          id: "1001",
+          query: "run analysis",
+          answer: "analysis started",
+          tool_name: "AnalystAgent",
+          task_id: "ei-task-abc",
+          compute_resource: "analyst-agents-small",
+        },
+      ],
+    } as any);
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    const assistant = getChatState("d1").renderedChat!.messages[1];
+    expect(assistant.tool_name).toBe("AnalystAgent");
+    expect(assistant.id).toBe("1001");
+    expect(assistant.task_id).toBe("ei-task-abc");
   });
 });

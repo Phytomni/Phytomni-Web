@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ref } from "vue";
+import { ref, nextTick } from "vue";
+import type { ChatMessage } from "@/views/chat/types";
 
-// Mock element-plus
 vi.mock("element-plus", () => ({
   ElMessage: {
     success: vi.fn(),
@@ -9,7 +9,6 @@ vi.mock("element-plus", () => ({
   },
 }));
 
-// Mock API module
 const mockGetAnalystAgentLog = vi.fn();
 const mockUpdateAnalystAgentLog = vi.fn();
 vi.mock("@/api/chat", () => ({
@@ -18,14 +17,51 @@ vi.mock("@/api/chat", () => ({
   updateAnalystAgentLog: (...args: any[]) => mockUpdateAnalystAgentLog(...args),
 }));
 
-import { useLogView } from "@/views/chat/composables/useLogView";
+import {
+  useLogView,
+  deriveAnalystLogRowId,
+  deriveAnalystLogTaskId,
+  analystLogActivityKey,
+} from "@/views/chat/composables/useLogView";
 import { ElMessage } from "element-plus";
+
+describe("deriveAnalystLogRowId / deriveAnalystLogTaskId", () => {
+  it("accepts only positive-decimal row ids", () => {
+    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: "42" })).toBe(
+      "42"
+    );
+    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: 7 as any })).toBe(
+      "7"
+    );
+    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: "0" })).toBeUndefined();
+    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: "-3" })).toBeUndefined();
+    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: "12a" })).toBeUndefined();
+    expect(deriveAnalystLogRowId({ role: "assistant", content: "" })).toBeUndefined();
+  });
+
+  it("accepts only non-null non-empty trimmed task ids and never falls back to row id", () => {
+    expect(
+      deriveAnalystLogTaskId({ role: "assistant", content: "", task_id: "task-1" })
+    ).toBe("task-1");
+    expect(
+      deriveAnalystLogTaskId({ role: "assistant", content: "", task_id: "  " })
+    ).toBeUndefined();
+    expect(
+      deriveAnalystLogTaskId({ role: "assistant", content: "", task_id: null as any })
+    ).toBeUndefined();
+    expect(
+      deriveAnalystLogTaskId({ role: "assistant", content: "", id: "99" })
+    ).toBeUndefined();
+  });
+});
 
 describe("useLogView", () => {
   type ChatState = {
     logData: Record<string, any>;
     loadingLog: Record<string, boolean>;
     updatingLog: Record<string, boolean>;
+    logErrorKinds: Record<string, "fetch" | "update" | undefined>;
+    activityExpandedByMessage: Record<string, boolean>;
   };
 
   let stateMap: Map<string, ChatState>;
@@ -36,7 +72,22 @@ describe("useLogView", () => {
   let getChatState: (id: string) => ChatState;
 
   function makeState(): ChatState {
-    return { logData: {}, loadingLog: {}, updatingLog: {} };
+    return {
+      logData: {},
+      loadingLog: {},
+      updatingLog: {},
+      logErrorKinds: {},
+      activityExpandedByMessage: {},
+    };
+  }
+
+  function msg(partial: Partial<ChatMessage> & { id?: string; task_id?: string }): ChatMessage {
+    return {
+      role: "assistant",
+      content: "reply",
+      tool_name: "AnalystAgent",
+      ...partial,
+    };
   }
 
   beforeEach(() => {
@@ -52,7 +103,7 @@ describe("useLogView", () => {
 
     isSending = ref(false);
     currentChatId = ref("A");
-    currentChat = ref({ messages: [{ id: "m1", showLog: false }] });
+    currentChat = ref({ messages: [] });
     scrollToBottom = vi.fn();
   });
 
@@ -66,93 +117,163 @@ describe("useLogView", () => {
     });
   }
 
-  // Test 1: toggleLogView happy path
-  it("toggleLogView happy path: flips showLog, fetches log, populates logData", async () => {
-    const logPayload = "log content string";
-    mockGetAnalystAgentLog.mockResolvedValueOnce({
-      code: 200,
-      data: logPayload,
-    });
+  it("closed does not fetch; first open fetches once; repeat open uses cache", async () => {
+    const message = msg({ id: "11" });
+    currentChat.value = { messages: [message] };
+    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "cached-log" });
 
-    const { toggleLogView } = makeComposable();
-    await toggleLogView("m1");
-
-    // showLog should have been flipped to true
-    expect(currentChat.value.messages[0].showLog).toBe(true);
-
-    // API was called
-    expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "m1" });
-
-    // logData populated on state A
-    expect(getChatState("A").logData["m1"]).toBe(logPayload);
-
-    // loadingLog is false after completion
-    expect(getChatState("A").loadingLog["m1"]).toBe(false);
-  });
-
-  // Test 2: toggleLogView gate — early return when isSending
-  it("toggleLogView gate: returns early when isSending is true", async () => {
-    isSending.value = true;
-
-    const { toggleLogView } = makeComposable();
-    await toggleLogView("m1");
+    const { setLogExpanded } = makeComposable();
 
     expect(mockGetAnalystAgentLog).not.toHaveBeenCalled();
-    // showLog stays false
-    expect(currentChat.value.messages[0].showLog).toBe(false);
+
+    await setLogExpanded(message, true);
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "11" });
+    expect(getChatState("A").logData["11"]).toBe("cached-log");
+    expect(getChatState("A").activityExpandedByMessage[analystLogActivityKey("11")]).toBe(
+      true
+    );
+
+    await setLogExpanded(message, false);
+    await setLogExpanded(message, true);
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
   });
 
-  // Test 3: CAPTURE INVARIANT
-  // updateLog captures chatState at entry; mid-flight chat switch must not
-  // redirect cleanup to the new chat.
+  it("positive-decimal rowId drives GET; real taskId drives PATCH only; no fallback", async () => {
+    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "ok" });
+    mockUpdateAnalystAgentLog.mockResolvedValue({ code: 200 });
+
+    const { setLogExpanded, updateLog } = makeComposable();
+
+    for (const bad of ["0", "-1", "x", undefined]) {
+      const m = msg({ id: bad as any, task_id: "task-real" });
+      await setLogExpanded(m, true);
+      await updateLog(m);
+    }
+    expect(mockGetAnalystAgentLog).not.toHaveBeenCalled();
+    expect(mockUpdateAnalystAgentLog).not.toHaveBeenCalled();
+
+    const distinct = msg({ id: "88", task_id: "task-88" });
+    currentChat.value = { messages: [distinct] };
+    await setLogExpanded(distinct, true);
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "88" });
+
+    await updateLog(distinct);
+    const form = mockUpdateAnalystAgentLog.mock.calls[0][0] as FormData;
+    expect(form.get("task_id")).toBe("task-88");
+    expect(form.get("task_id")).not.toBe("88");
+
+    // refetch after update uses rowId
+    expect(mockGetAnalystAgentLog.mock.calls.some((c) => c[0].id === "88")).toBe(true);
+
+    const noTask = msg({ id: "99" });
+    currentChat.value = { messages: [noTask] };
+    await setLogExpanded(noTask, true);
+    await updateLog(noTask);
+    expect(mockUpdateAnalystAgentLog).toHaveBeenCalledTimes(1); // only the distinct case
+  });
+
+  it("stores fetch/update error kinds and retry clears only that row before the correct request", async () => {
+    mockGetAnalystAgentLog.mockRejectedValueOnce(new Error("boom"));
+    const message = msg({ id: "5", task_id: "task-5" });
+    currentChat.value = { messages: [message] };
+
+    const { setLogExpanded, retryLog, updateLog } = makeComposable();
+    await setLogExpanded(message, true);
+    expect(getChatState("A").logErrorKinds["5"]).toBe("fetch");
+
+    mockGetAnalystAgentLog.mockResolvedValueOnce({ code: 200, data: "recovered" });
+    await retryLog(message);
+    expect(getChatState("A").logErrorKinds["5"]).toBeUndefined();
+    expect(mockGetAnalystAgentLog).toHaveBeenLastCalledWith({ id: "5" });
+    expect(getChatState("A").logData["5"]).toBe("recovered");
+
+    mockUpdateAnalystAgentLog.mockRejectedValueOnce(new Error("patch-fail"));
+    await updateLog(message);
+    expect(getChatState("A").logErrorKinds["5"]).toBe("update");
+
+    mockUpdateAnalystAgentLog.mockResolvedValueOnce({ code: 200 });
+    mockGetAnalystAgentLog.mockResolvedValueOnce({ code: 200, data: "after-patch" });
+    await retryLog(message);
+    expect(getChatState("A").logErrorKinds["5"]).toBeUndefined();
+    const lastPatch = mockUpdateAnalystAgentLog.mock.calls.at(-1)![0] as FormData;
+    expect(lastPatch.get("task_id")).toBe("task-5");
+    expect(mockGetAnalystAgentLog).toHaveBeenLastCalledWith({ id: "5" });
+  });
+
+  it("legacy showLog=true initializes one open map entry once; absent/false stays closed", async () => {
+    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "legacy" });
+    const legacy = msg({ id: "21", showLog: true });
+    currentChat.value = { messages: [legacy] };
+
+    makeComposable();
+    await nextTick();
+    await Promise.resolve();
+
+    const key = analystLogActivityKey("21");
+    expect(getChatState("A").activityExpandedByMessage[key]).toBe(true);
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "21" });
+
+    // User closes — key stays present as false; showLog must not reopen
+    getChatState("A").activityExpandedByMessage[key] = false;
+    legacy.showLog = true;
+    currentChat.value = { messages: [{ ...legacy }] };
+    await nextTick();
+    await Promise.resolve();
+    expect(getChatState("A").activityExpandedByMessage[key]).toBe(false);
+
+    const closed = msg({ id: "22", showLog: false });
+    currentChat.value = { messages: [closed] };
+    await nextTick();
+    expect(
+      getChatState("A").activityExpandedByMessage[analystLogActivityKey("22")]
+    ).toBeUndefined();
+  });
+
+  it("switching dialogue never exposes another dialogue's logs", async () => {
+    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "A-log" });
+    const message = msg({ id: "31" });
+    currentChat.value = { messages: [message] };
+    const { setLogExpanded } = makeComposable();
+    await setLogExpanded(message, true);
+    expect(getChatState("A").logData["31"]).toBe("A-log");
+
+    currentChatId.value = "B";
+    expect(getChatState("B").logData["31"]).toBeUndefined();
+    expect(getChatState("B").activityExpandedByMessage).toEqual({});
+  });
+
   it("🔒 capture invariant: updatingLog cleanup lands on the originating chat after mid-flight switch", async () => {
-    // Manually controlled promise for updateAnalystAgentLog
     let resolveUpdate!: (value: any) => void;
     const updatePromise = new Promise<any>((res) => {
       resolveUpdate = res;
     });
     mockUpdateAnalystAgentLog.mockReturnValueOnce(updatePromise);
+    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "ok" });
+
+    const message = msg({ id: "41", task_id: "task-41", showLog: true });
+    currentChat.value = { messages: [message] };
+    getChatState("A").activityExpandedByMessage[analystLogActivityKey("41")] = true;
 
     const { updateLog } = makeComposable();
+    const inflight = updateLog(message);
+    expect(getChatState("A").updatingLog["41"]).toBe(true);
 
-    // Start but do NOT await — let it suspend at the await updateAnalystAgentLog
-    const inflight = updateLog("m1");
-
-    // At this point, updatingLog["m1"] should be true on chat A (set before the await)
-    expect(getChatState("A").updatingLog["m1"]).toBe(true);
-
-    // Simulate mid-flight chat switch to B
     currentChatId.value = "B";
-
-    // Now resolve the pending updateAnalystAgentLog call
     resolveUpdate({ code: 200 });
-
-    // Await the full completion
     await inflight;
 
-    // Cleanup must land on A (the captured chatState), NOT B
-    expect(getChatState("A").updatingLog["m1"]).toBe(false);
+    expect(getChatState("A").updatingLog["41"]).toBe(false);
+    expect(getChatState("B").updatingLog["41"]).toBeUndefined();
+    expect(ElMessage.success).toHaveBeenCalled();
+  });
 
-    // B must be completely untouched
-    expect(getChatState("B").updatingLog["m1"]).toBeUndefined();
+  it("toggle gate: returns early when isSending is true", async () => {
+    isSending.value = true;
+    const message = msg({ id: "51" });
+    const { setLogExpanded } = makeComposable();
+    await setLogExpanded(message, true);
+    expect(mockGetAnalystAgentLog).not.toHaveBeenCalled();
+    expect(getChatState("A").activityExpandedByMessage).toEqual({});
   });
 });
-
-/*
- * MUTATION VERIFICATION (offline, not run as a test case):
- *
- * To confirm the capture-invariant test above is not a false green, the
- * following mutation was applied to a TEMP COPY of useLogView.ts:
- *
- *   In updateLog's finally block, replace:
- *     chatState.updatingLog[messageId] = false;
- *   with:
- *     getChatState(currentChatId.value).updatingLog[messageId] = false;
- *
- * With that mutation the capture-invariant test (test 3) goes RED:
- *   - getChatState("A").updatingLog["m1"] remains true  (was never cleaned up)
- *   - getChatState("B").updatingLog["m1"] becomes false (wrong chat was written)
- *
- * This confirms the test exercises the actual invariant. The temp file was
- * deleted after verification; the tracked tree is clean.
- */

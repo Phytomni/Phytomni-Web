@@ -3,15 +3,17 @@
     <!-- Missing presentation key: never hide content behind a disclosure. -->
     <template v-if="!stateKey">
       <div class="chat-activity__body chat-activity__body--forced">
-        <template v-for="(block, i) in blocks" :key="i">
-          <component
-            :is="renderer(block.type)"
-            v-if="renderer(block.type)"
-            :block="block"
-            :ns="ns"
-            :within-activity="block.type === 'reasoning'"
-          />
-        </template>
+        <slot>
+          <template v-for="(block, i) in blocks" :key="i">
+            <component
+              :is="renderer(block.type)"
+              v-if="renderer(block.type)"
+              :block="block"
+              :ns="ns"
+              :within-activity="block.type === 'reasoning'"
+            />
+          </template>
+        </slot>
       </div>
     </template>
     <template v-else>
@@ -22,8 +24,8 @@
         :aria-controls="regionId"
         @click="onToggle"
       >
-        <span class="chat-activity__label">{{ t("chat.activity.label") }}</span>
-        <span class="chat-activity__count">{{
+        <span class="chat-activity__label">{{ displayLabel }}</span>
+        <span v-if="!hideCount" class="chat-activity__count">{{
           t("chat.activity.count", { count: blocks.length })
         }}</span>
         <span class="chat-activity__status">{{ statusLabel }}</span>
@@ -34,15 +36,17 @@
         class="chat-activity__body"
         role="region"
       >
-        <template v-for="(block, i) in blocks" :key="i">
-          <component
-            :is="renderer(block.type)"
-            v-if="renderer(block.type)"
-            :block="block"
-            :ns="ns"
-            :within-activity="block.type === 'reasoning'"
-          />
-        </template>
+        <slot>
+          <template v-for="(block, i) in blocks" :key="i">
+            <component
+              :is="renderer(block.type)"
+              v-if="renderer(block.type)"
+              :block="block"
+              :ns="ns"
+              :within-activity="block.type === 'reasoning'"
+            />
+          </template>
+        </slot>
       </div>
     </template>
   </div>
@@ -57,18 +61,24 @@ import { activityRegionDomId } from "../streaming/presentation";
 
 const props = withDefaults(
   defineProps<{
-    blocks: ContentBlock[];
+    blocks?: ContentBlock[];
     /** When null/empty, render safe content expanded with no disclosure. */
     stateKey?: string | null;
     expanded?: boolean;
     streaming?: boolean;
     ns?: string;
+    /** Optional disclosure label override (e.g. analyst execution log). */
+    label?: string;
+    /** Hide the block-count chip (slot-driven bodies such as analyst logs). */
+    hideCount?: boolean;
   }>(),
   {
+    blocks: () => [],
     stateKey: null,
     expanded: false,
     streaming: false,
     ns: "",
+    hideCount: false,
   }
 );
 
@@ -80,6 +90,10 @@ const { t } = useI18n();
 
 const regionId = computed(() =>
   props.stateKey ? activityRegionDomId(props.stateKey) : ""
+);
+
+const displayLabel = computed(
+  () => props.label || t("chat.activity.label")
 );
 
 const statusLabel = computed(() =>
