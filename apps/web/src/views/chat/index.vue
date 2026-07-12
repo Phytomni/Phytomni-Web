@@ -6,9 +6,9 @@
     :data-sidebar-drawer-state="sidebarDrawerStateAttr"
   >
   <PhyAdaptiveShell
-    :sidebar-collapsed="leftSidebarCollapsed"
-    :artifact-open="false"
-    :artifact-fullscreen="false"
+    :sidebar-collapsed="effectiveSidebarCollapsed"
+    :artifact-open="artifactOpen"
+    :artifact-fullscreen="artifactOpen && isMobileViewport"
     :main-inert="isMobileViewport && leftSidebarDrawerOpen"
   >
     <template #sidebar>
@@ -18,6 +18,7 @@
           :chatList="chatList"
           :currentChatId="currentChatId"
           :collapsed="leftSidebarCollapsed"
+          :effective-collapsed="effectiveSidebarCollapsed"
           :drawer-open="leftSidebarDrawerOpen"
           @selectChat="selectChat"
           @startNewChat="startNewChat"
@@ -135,7 +136,8 @@
             :streaming="!!message.streaming"
             :wide="
               message.role === 'assistant' &&
-              message.tool_name === 'DeepGenomeAgent'
+              (message.tool_name === 'DeepGenomeAgent' ||
+                !!artifactPreviewForMessage(message))
             "
           >
             <template #avatar>
@@ -145,6 +147,7 @@
                 :message="message"
                 :index="index"
                 :is-last-message="currentChat.messages.length - 1 == index"
+                :artifact-preview="artifactPreviewForMessage(message)"
                 :activity-expanded-by-message="
                   getChatState(currentChatId).activityExpandedByMessage
                 "
@@ -153,6 +156,7 @@
                 :digital-design-images="digitalDesignImages"
                 :digital-design-images-loading="digitalDesignImagesLoading"
                 @finish="() => handleMarkdownFinish(index)"
+                @open-artifact="openArtifact(String(message.id))"
                 @update:activity-expanded="
                   (key, open) =>
                     (getChatState(currentChatId).activityExpandedByMessage[
@@ -383,6 +387,43 @@
       </div>
     </el-dialog>
     </template>
+
+    <template #artifact>
+      <ResearchArtifactShell
+        v-if="currentArtifactMessage"
+        :title="chatHeaderTitle"
+        :metadata="artifactAgentLabel(currentArtifactMessage)"
+        :status="t('common.finished')"
+        :tab="artifactTab"
+        :tab-labels="artifactTabLabels"
+        :tablist-label="t('common.operation')"
+        :artifact-id="artifactId"
+        :back-label="t('common.back')"
+        :close-label="t('common.close')"
+        :action-label="t('common.operation')"
+        @back="closeArtifact"
+        @close="closeArtifact"
+        @tab="selectArtifactTab"
+      >
+        <template #content>
+          <MarkdownViewer
+            :content="String(currentArtifactMessage.content)"
+            :ns="artifactNamespace"
+            surface="artifact"
+          />
+        </template>
+        <template #evidence>
+          <CitationReferenceList
+            v-if="currentArtifactMessage.doc_list?.length"
+            :references="currentArtifactMessage.doc_list"
+            :ns="artifactNamespace"
+          />
+          <span v-else>{{ t("common.noData") }}</span>
+        </template>
+        <template #activity>{{ t("common.noData") }}</template>
+        <template #downloads>{{ t("common.noData") }}</template>
+      </ResearchArtifactShell>
+    </template>
   </PhyAdaptiveShell>
   </div>
 </template>
@@ -413,18 +454,28 @@ import {
   PhyAdaptiveShell,
   PhyEmptyState,
 } from "@/components/shell";
+import { ResearchArtifactShell } from "@/components/research";
+import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import CitationReferenceList from "@/components/CitationReferenceList.vue";
 import { Menu } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
 import { useTutorial } from "./composables/useTutorial";
 import { useImageZoomPan } from "./composables/useImageZoomPan";
 import { useChatStates } from "./composables/useChatStates";
+import { useArtifactPanel } from "./composables/useArtifactPanel";
 import { useAgentImages } from "./composables/useAgentImages";
 import { useReactions } from "./composables/useReactions";
 import { useCopyDownload } from "./composables/useCopyDownload";
 import { useFileUpload } from "./composables/useFileUpload";
 import { useComposer } from "./composables/useComposer";
-import { derivePickerOptions } from "@/constants/agents";
+import {
+  CANONICAL_AGENT_DISPLAY_NAMES,
+  CANONICAL_AGENT_I18N_KEYS,
+  CANONICAL_AGENT_ZH_NAMES,
+  derivePickerOptions,
+} from "@/constants/agents";
+import type { CanonicalAgentTool } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useSendMessage } from "./composables/useSendMessage";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
@@ -455,6 +506,7 @@ import {
 import { formatDetailedCitation } from "@/utils/citation";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import { messageActionCapabilities } from "./utils/message-action-capabilities";
+import { artifactKindForMessage } from "./utils/artifact-policy";
 import type {
   Chat,
   ChatMessage,
@@ -466,7 +518,7 @@ import type {
 const composerRef = ref<ChatComposerHandle | null>(null);
 
 const timestamp = ref(Date.now());
-const { t } = useI18n();
+const { locale, t } = useI18n();
 
 // Left sidebar state
 const leftSidebarCollapsed = ref(false);
@@ -669,6 +721,59 @@ const {
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
+
+const {
+  artifactOpen,
+  activeArtifactMessageId,
+  artifactTab,
+  currentArtifactMessage,
+  openArtifact: setArtifactOpen,
+  closeArtifact: resetArtifactPanel,
+  selectArtifactTab,
+} = useArtifactPanel({ currentChatId, currentChat, getChatState });
+
+const effectiveSidebarCollapsed = computed(
+  () => leftSidebarCollapsed.value || artifactOpen.value
+);
+
+function canonicalAgentTool(toolName?: string): CanonicalAgentTool | null {
+  if (!toolName || !(toolName in CANONICAL_AGENT_I18N_KEYS)) return null;
+  return toolName as CanonicalAgentTool;
+}
+
+function artifactAgentLabel(message: ChatMessage): string {
+  const tool = canonicalAgentTool(message.tool_name);
+  if (!tool) return message.tool_name || "";
+  return locale.value === "zh-CN"
+    ? CANONICAL_AGENT_ZH_NAMES[tool]
+    : CANONICAL_AGENT_DISPLAY_NAMES[tool];
+}
+
+function artifactPreviewForMessage(message: ChatMessage) {
+  const artifactKind = artifactKindForMessage(message);
+  if (artifactKind === null || artifactKind === "deep-genome") return null;
+
+  const tool = canonicalAgentTool(message.tool_name);
+  if (!tool) return null;
+  return {
+    title: t("common.finished"),
+    kind: artifactAgentLabel(message),
+    summary: t(CANONICAL_AGENT_I18N_KEYS[tool]),
+    openLabel: t("common.view"),
+  };
+}
+
+const artifactId = computed(() => {
+  const id = activeArtifactMessageId.value || "none";
+  return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+});
+const artifactNamespace = computed(() => `${artifactId.value}-references`);
+const artifactTabLabels = computed(() => ({
+  content: t("common.view"),
+  evidence: t("agents.deepGenome.references"),
+  activity: t("chat.log.activityLabel"),
+  downloads: t("chat.actions.downloadAttachments"),
+}));
 
 const reconcileMatchedDialogue = (
   tempId: string,
@@ -905,6 +1010,54 @@ const openReviewAgent = () => {
 
 // Message container ref, used for auto-scrolling
 const messageContainer = ref<HTMLElement | null>(null);
+const artifactScrollPositions = new Map<string, number>();
+
+const restoreTranscriptScroll = async (
+  dialogueId: string,
+  scrollTop: number
+) => {
+  await nextTick();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (currentChatId.value === dialogueId && messageContainer.value) {
+        messageContainer.value.scrollTop = scrollTop;
+      }
+    });
+  });
+};
+
+const openArtifact = (messageId: string) => {
+  const dialogueId = currentChatId.value;
+  const scrollTop = messageContainer.value?.scrollTop;
+  setArtifactOpen(messageId);
+  if (
+    !dialogueId ||
+    scrollTop === undefined ||
+    !artifactOpen.value ||
+    activeArtifactMessageId.value !== messageId
+  ) {
+    return;
+  }
+  artifactScrollPositions.set(dialogueId, scrollTop);
+  void restoreTranscriptScroll(dialogueId, scrollTop);
+};
+
+const closeArtifact = () => {
+  resetArtifactPanel();
+};
+
+watch(
+  artifactOpen,
+  (isOpen, wasOpen) => {
+    if (isOpen || !wasOpen) return;
+    const dialogueId = currentChatId.value;
+    const scrollTop = artifactScrollPositions.get(dialogueId);
+    if (scrollTop === undefined) return;
+    artifactScrollPositions.delete(dialogueId);
+    void restoreTranscriptScroll(dialogueId, scrollTop);
+  },
+  { flush: "sync" }
+);
 
 // Auto-scroll to the latest message
 const scrollToBottom = async () => {

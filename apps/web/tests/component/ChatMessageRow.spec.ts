@@ -199,7 +199,7 @@ describe("ChatMessageRow", () => {
     );
   });
 
-  it("widens only the explicit assistant bubble without selector hacks", () => {
+  it("widens explicit assistant report surfaces without selector hacks", () => {
     const rowCss = styleBlocks(ROW_SOURCE).join("\n");
     expect(rowCss).toMatch(
       /&\.assistant\.wide\s*\{[\s\S]*?:deep\(\.message-text\.phy-bubble-assistant\)\s*\{[\s\S]*?width:\s*100%/
@@ -207,7 +207,7 @@ describe("ChatMessageRow", () => {
     expect(rowCss).not.toMatch(/:has\(/);
 
     const wideBinding =
-      /:wide="\s*message\.role === ['"]assistant['"]\s*&&\s*message\.tool_name === ['"]DeepGenomeAgent['"]\s*"/g;
+      /:wide="\s*message\.role === ['"]assistant['"]\s*&&\s*\(\s*message\.tool_name === ['"]DeepGenomeAgent['"]\s*\|\|\s*!!artifactPreviewForMessage\(message\)\s*\)\s*"/g;
     expect(CHAT_SOURCE.match(wideBinding)).toHaveLength(1);
   });
 

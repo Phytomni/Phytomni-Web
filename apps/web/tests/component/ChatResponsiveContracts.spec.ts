@@ -264,9 +264,19 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
   });
 
   it("bridges sidebar collapsed and drawer state into the adaptive shell", () => {
-    expect(CHAT_SOURCE).toContain(':sidebar-collapsed="leftSidebarCollapsed"');
+    expect(CHAT_SOURCE).toContain(
+      ':sidebar-collapsed="effectiveSidebarCollapsed"'
+    );
+    expect(CHAT_SOURCE).toContain(':collapsed="leftSidebarCollapsed"');
+    expect(CHAT_SOURCE).toContain(
+      ':effective-collapsed="effectiveSidebarCollapsed"'
+    );
+    expect(CHAT_SOURCE).toContain(':artifact-open="artifactOpen"');
+    expect(CHAT_SOURCE).toContain(
+      ':artifact-fullscreen="artifactOpen && isMobileViewport"'
+    );
     expect(CHAT_SOURCE).toContain(':drawer-open="leftSidebarDrawerOpen"');
-    expect(SIDEBAR_SOURCE).toContain(':collapsed="sidebarCollapsed"');
+    expect(SIDEBAR_SOURCE).toContain(':collapsed="renderedSidebarCollapsed"');
     expect(SIDEBAR_SOURCE).toContain(':drawer-open="drawerOpen"');
     expect(SIDEBAR_SOURCE).toContain(':off-canvas="isMobile && !drawerOpen"');
     expect(CHAT_SOURCE).toContain(

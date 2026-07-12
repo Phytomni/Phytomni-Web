@@ -24,10 +24,11 @@ describe("Chat right surface ownership", () => {
     expect(CHAT_SOURCE).not.toContain("chat.relatedLinks");
   });
 
-  it("reserves PhyAdaptiveShell as the sole future right-column owner", () => {
+  it("uses PhyAdaptiveShell as the sole artifact right-column owner", () => {
     expect(CHAT_SOURCE).toContain("<PhyAdaptiveShell");
-    expect(CHAT_SOURCE).toContain(':artifact-open="false"');
-    expect(CHAT_SOURCE).not.toContain("<template #artifact>");
+    expect(CHAT_SOURCE).toContain(':artifact-open="artifactOpen"');
+    expect(CHAT_SOURCE).toContain("<template #artifact>");
+    expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");
     expect(CHAT_SOURCE.match(/:artifact-open=/g)?.length).toBe(1);
   });
 

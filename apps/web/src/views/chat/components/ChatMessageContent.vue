@@ -106,6 +106,14 @@
       :ns="'m' + index"
       embedded
     />
+    <ResearchArtifactPreview
+      v-else-if="artifactPreview"
+      :title="artifactPreview.title"
+      :kind="artifactPreview.kind"
+      :summary="artifactPreview.summary"
+      :open-label="artifactPreview.openLabel"
+      @open="emit('open-artifact')"
+    />
     <CitedAnswer
       v-else-if="
         message.doc_list &&
@@ -175,6 +183,7 @@ import { Loading } from "@element-plus/icons-vue";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
+import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
 import StreamMessage from "./StreamMessage.vue";
 import type { ChatMessage } from "../types";
 
@@ -182,6 +191,12 @@ defineProps<{
   message: ChatMessage;
   index: number;
   isLastMessage: boolean;
+  artifactPreview?: {
+    title: string;
+    kind: string;
+    summary: string;
+    openLabel: string;
+  } | null;
   activityExpandedByMessage?: Record<string, boolean>;
   geneNetworkImages: Record<string, string[]>;
   geneNetworkImagesLoading: Record<string, boolean>;
@@ -191,6 +206,7 @@ defineProps<{
 
 const emit = defineEmits<{
   finish: [];
+  "open-artifact": [];
   "update:activity-expanded": [stateKey: string, expanded: boolean];
 }>();
 

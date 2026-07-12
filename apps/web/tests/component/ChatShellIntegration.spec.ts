@@ -63,10 +63,16 @@ describe("Chat adaptive shell integration", () => {
   it("mounts Chat on the adaptive shell with explicit layout state", () => {
     expect(CHAT_SOURCE).toContain("<PhyAdaptiveShell");
     expect(CHAT_SOURCE).not.toContain("<PhyAppShell");
-    expect(CHAT_SOURCE).toContain(':sidebar-collapsed="leftSidebarCollapsed"');
-    expect(CHAT_SOURCE).toContain(':artifact-open="false"');
+    expect(CHAT_SOURCE).toContain(
+      ':sidebar-collapsed="effectiveSidebarCollapsed"'
+    );
+    expect(CHAT_SOURCE).toContain(':artifact-open="artifactOpen"');
+    expect(CHAT_SOURCE).toContain(
+      ':artifact-fullscreen="artifactOpen && isMobileViewport"'
+    );
     expect(CHAT_SOURCE).toContain("<template #sidebar>");
     expect(CHAT_SOURCE).toContain("<template #main>");
+    expect(CHAT_SOURCE).toContain("<template #artifact>");
   });
 
   it("keeps the sidebar bridge and tutorial anchors in the Chat root", () => {
@@ -92,13 +98,25 @@ describe("Chat adaptive shell integration", () => {
   });
 
   it("keeps the expanded, compact, mobile, and drawer state bridge explicit", () => {
-    expect(CHAT_SOURCE).toContain(':sidebar-collapsed="leftSidebarCollapsed"');
+    expect(CHAT_SOURCE).toContain(
+      ':sidebar-collapsed="effectiveSidebarCollapsed"'
+    );
+    expect(CHAT_SOURCE).toContain(':collapsed="leftSidebarCollapsed"');
+    expect(CHAT_SOURCE).toContain(
+      ':effective-collapsed="effectiveSidebarCollapsed"'
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /effectiveSidebarCollapsed[\s\S]*leftSidebarCollapsed\.value \|\| artifactOpen\.value/
+    );
     expect(CHAT_SOURCE).toContain(':drawer-open="leftSidebarDrawerOpen"');
     expect(CHAT_SOURCE).toContain(
       '@drawerOpenChange="leftSidebarDrawerOpen = $event"'
     );
     expect(SIDEBAR_SOURCE).toContain("<PhyAdaptiveSidebar");
-    expect(SIDEBAR_SOURCE).toContain(':collapsed="sidebarCollapsed"');
+    expect(SIDEBAR_SOURCE).toContain(':collapsed="renderedSidebarCollapsed"');
+    expect(SIDEBAR_SOURCE).toMatch(
+      /renderedSidebarCollapsed[\s\S]*props\.effectiveCollapsed \?\? sidebarCollapsed\.value/
+    );
     expect(SIDEBAR_SOURCE).toContain(':drawer-open="drawerOpen"');
     expect(SIDEBAR_SOURCE).toContain('@close="closeDrawer"');
     expect(SIDEBAR_SOURCE).toContain('@toggle="toggle"');

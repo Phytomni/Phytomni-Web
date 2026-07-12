@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import PhyAdaptiveShell from "@/components/shell/PhyAdaptiveShell.vue";
+
+const SHELL_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/shell/PhyAdaptiveShell.vue"),
+  "utf8"
+);
 
 describe("PhyAdaptiveShell", () => {
   const slots = {
@@ -42,6 +49,12 @@ describe("PhyAdaptiveShell", () => {
     );
     expect(wrapper.find("[data-test=main]").exists()).toBe(true);
     expect(wrapper.find("[data-test=artifact]").exists()).toBe(true);
+  });
+
+  it("lets fullscreen override the higher-specificity collapsed grid", () => {
+    expect(SHELL_SOURCE).toMatch(
+      /\.phy-adaptive-shell\.phy-adaptive-shell--artifact-fullscreen\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/
+    );
   });
 
   it("owns the only viewport overflow root", () => {

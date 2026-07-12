@@ -1,6 +1,6 @@
 <template>
   <PhyAdaptiveSidebar
-    :collapsed="sidebarCollapsed"
+    :collapsed="renderedSidebarCollapsed"
     :drawer-open="drawerOpen"
     :off-canvas="isMobile && !drawerOpen"
     :close-label="$t('common.close')"
@@ -12,9 +12,9 @@
         <Close />
       </el-icon>
     </template>
-    <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+    <div class="sidebar" :class="{ collapsed: renderedSidebarCollapsed }">
       <ChatSidebarNav
-        :collapsed="sidebarCollapsed"
+        :collapsed="renderedSidebarCollapsed"
         :active-item="activeButton"
         :user-name="UserStore.name || $t('user.unnamedUser')"
         :can-explore-agents="UserStore.permission !== 'guest'"
@@ -55,7 +55,7 @@
             :groups="chatHistoryGroups"
             :current-chat-id="currentChatId"
             :expanded-groups="expandedGroups"
-            :collapsed="sidebarCollapsed"
+            :collapsed="renderedSidebarCollapsed"
             @select="selectChat"
             @toggle-group="toggleExpand"
             @action="handleChatAction"
@@ -156,6 +156,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  effectiveCollapsed: {
+    type: Boolean,
+    default: undefined,
+  },
   drawerOpen: {
     type: Boolean,
     default: false,
@@ -212,6 +216,10 @@ const {
   onCollapseChange: (value) => emit("handleSidebarCollapse", value),
   onDrawerOpenChange: (value) => emit("drawerOpenChange", value),
 });
+
+const renderedSidebarCollapsed = computed(
+  () => props.effectiveCollapsed ?? sidebarCollapsed.value
+);
 
 const {
   renameDialogVisible,

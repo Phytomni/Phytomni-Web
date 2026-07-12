@@ -81,7 +81,7 @@ withDefaults(
     minmax(0, 62fr);
 }
 
-.phy-adaptive-shell--artifact-fullscreen {
+.phy-adaptive-shell.phy-adaptive-shell--artifact-fullscreen {
   grid-template-columns: minmax(0, 1fr);
 }
 
