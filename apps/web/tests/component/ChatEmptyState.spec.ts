@@ -17,6 +17,10 @@ const CHAT_COMPOSER_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatComposer.vue"),
   "utf8"
 );
+const EMPTY_STATE_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/shell/PhyEmptyState.vue"),
+  "utf8"
+);
 const transcriptStart = CHAT_SOURCE.indexOf('class="message-container"');
 const transcriptEnd = CHAT_SOURCE.indexOf("<el-backtop", transcriptStart);
 const TRANSCRIPT_SOURCE = CHAT_SOURCE.slice(transcriptStart, transcriptEnd);
@@ -124,5 +128,28 @@ describe("Chat empty state", () => {
     expect(CHAT_SOURCE).toContain(
       'v-for="(message, index) in currentChat.messages"'
     );
+  });
+
+  it("uses a restrained editorial hierarchy and a compact featured starter", () => {
+    expect(EMPTY_STATE_SOURCE).toContain(
+      "font-size: clamp(1.5rem, 1.15rem + 0.75vw, 1.75rem)"
+    );
+    expect(EMPTY_STATE_SOURCE).toMatch(
+      /@media \(max-width: 600px\)[\s\S]*?\.phy-empty-state__title \{[\s\S]*?font-size: 1\.375rem/
+    );
+
+    const emptyChatBlock = CHAT_SOURCE.slice(
+      CHAT_SOURCE.indexOf(".empty-chat {"),
+      CHAT_SOURCE.indexOf(".input-container {")
+    );
+    expect(emptyChatBlock).toContain("justify-content: center");
+    expect(emptyChatBlock).toContain(
+      "grid-template-columns: repeat(2, minmax(0, 1fr))"
+    );
+    expect(emptyChatBlock).toMatch(
+      /\.el-prompts-item:first-child[\s\S]*?grid-column: 1 \/ -1/
+    );
+    expect(CHAT_SOURCE).toContain('class="empty-chat-starters-region"');
+    expect(CHAT_SOURCE).toContain(":aria-label=\"$t('chat.starter.title')\"");
   });
 });

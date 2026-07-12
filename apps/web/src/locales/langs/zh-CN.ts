@@ -337,7 +337,7 @@ export default {
     },
     generationStopped: "已停止生成",
     relatedDocuments: "参考资料",
-    welcomeTitle: "嗨，我是农科发现大模型，很高兴见到您！",
+    welcomeTitle: "今天想探索什么？",
     mode: {
       instant: "快速模式",
       expert: "专家模式",
@@ -369,7 +369,7 @@ export default {
       locked: "已提交",
     },
     reasoning: { show: "展开思考过程", hide: "收起思考过程" },
-    welcomeSubtitle: "我可以检索信息并为您执行自动化分析，请随时给我您的任务。",
+    welcomeSubtitle: "可以从文献、基因与物种研究，或深度基因组分析开始。",
     starter: {
       title: "试试这些",
       geneLabel: "查询基因",

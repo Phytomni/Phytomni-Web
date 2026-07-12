@@ -335,7 +335,7 @@ export default {
     },
     generationStopped: "Generation stopped",
     relatedDocuments: "Reference Material",
-    welcomeTitle: "Hi, I'm Phytomni. Great to meet you!",
+    welcomeTitle: "What would you like to explore?",
     mode: {
       instant: "Instant",
       expert: "Expert",
@@ -368,7 +368,7 @@ export default {
     },
     reasoning: { show: "Show reasoning", hide: "Hide reasoning" },
     welcomeSubtitle:
-      "I can retrieve information and perform automated analysis for you. Feel free to give me your tasks.",
+      "Start with literature, a gene or species, or a deeper genomic analysis.",
     starter: {
       title: "Try one of these",
       geneLabel: "Query a gene",

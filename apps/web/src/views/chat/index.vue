@@ -108,7 +108,12 @@
                 alt=""
               />
             </template>
-            <div ref="tourCasesTarget">
+            <div
+              ref="tourCasesTarget"
+              class="empty-chat-starters-region"
+              role="group"
+              :aria-label="$t('chat.starter.title')"
+            >
               <Prompts
                 class="empty-chat-starters"
                 :items="starterItems"
@@ -1407,22 +1412,26 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   width: min(100%, var(--phy-layout-transcript-max-width));
   margin: 0 auto;
-  padding: var(--phy-space-24) var(--phy-space-16) var(--phy-space-8);
+  padding: clamp(var(--phy-space-24), 5vh, var(--phy-space-48))
+    var(--phy-space-16) var(--phy-space-24);
   box-sizing: border-box;
-  gap: var(--phy-space-16);
 
   .empty-chat-starters-shell {
     width: 100%;
-    padding: var(--phy-space-16) 0;
+    padding: 0;
   }
 
   .empty-chat-mark {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     object-fit: contain;
+  }
+
+  .empty-chat-starters-region {
+    width: 100%;
   }
 
   .empty-chat-starters {
@@ -1430,60 +1439,96 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
 
     :deep(.el-prompts-items) {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--phy-space-12);
       width: 100%;
     }
 
     :deep(.el-prompts-item) {
       min-width: 0;
-      padding: var(--phy-space-16);
+      padding: var(--phy-space-12) var(--phy-space-16);
       border: 1px solid var(--phy-color-border-subtle);
       border-radius: var(--phy-radius-md);
       background: var(--phy-color-bg-elevated);
       text-align: left;
+      box-shadow: none;
       transition: background-color var(--phy-motion-fast)
           var(--phy-motion-ease-out),
-        border-color var(--phy-motion-fast) var(--phy-motion-ease-out);
+        border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+        transform var(--phy-motion-fast) var(--phy-motion-ease-out);
+    }
+
+    :deep(.el-prompts-item:first-child) {
+      grid-column: 1 / -1;
+      border-color: var(--phy-color-bubble-user-border);
+      background: var(--phy-color-bubble-user);
     }
 
     :deep(.el-prompts-item:hover) {
-      border-color: var(--phy-color-primary-soft);
-      background: var(--phy-color-primary-soft);
+      border-color: var(--phy-color-border-control);
+      background: var(--phy-color-fill-subtle);
+      transform: translateY(-1px);
+    }
+
+    :deep(.el-prompts-item:first-child:hover) {
+      border-color: var(--phy-color-accent);
+      background: var(--phy-color-accent-soft);
+    }
+
+    :deep(.el-prompts-item:focus-visible) {
+      outline: 2px solid var(--phy-color-focus);
+      outline-offset: 2px;
     }
 
     :deep(.el-prompts-item-disabled) {
       cursor: not-allowed;
       opacity: 0.55;
+      transform: none;
     }
 
     :deep(.el-prompts-item-label) {
       overflow-wrap: anywhere;
       color: var(--phy-color-text);
-      font-size: 0.95rem;
+      font-size: 0.9375rem;
       font-weight: 600;
       line-height: 1.35;
     }
 
+    :deep(.el-prompts-item:first-child .el-prompts-item-label) {
+      color: var(--phy-color-accent-text);
+    }
+
     :deep(.el-prompts-item-description) {
-      margin-top: var(--phy-space-8);
+      margin-top: var(--phy-space-4);
       overflow-wrap: anywhere;
       color: var(--phy-color-text-secondary);
-      font-size: 0.82rem;
-      line-height: 1.45;
+      font-size: 0.8125rem;
+      line-height: 1.4;
     }
   }
-
 }
 
-@media (max-width: 600px) {
+@media (max-width: 720px) {
   .empty-chat {
-    padding: var(--phy-space-16) var(--phy-space-12);
-
     .empty-chat-starters {
       :deep(.el-prompts-items) {
         grid-template-columns: minmax(0, 1fr);
       }
+
+      :deep(.el-prompts-item:first-child) {
+        grid-column: auto;
+      }
+    }
+  }
+}
+
+@media (max-width: 600px) {
+  .empty-chat {
+    padding: var(--phy-space-20) var(--phy-space-12) var(--phy-space-16);
+
+    .empty-chat-mark {
+      width: 36px;
+      height: 36px;
     }
   }
 }

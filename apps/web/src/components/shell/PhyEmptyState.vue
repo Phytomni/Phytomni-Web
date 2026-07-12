@@ -24,29 +24,61 @@ defineProps<{
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--phy-space-12);
-  padding: 32px 16px;
-  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: clamp(24px, 5vh, 48px) 0;
   color: var(--phy-color-text);
+  text-align: center;
 }
+
 .phy-empty-state__mark {
   display: grid;
   place-items: center;
-  min-height: var(--phy-control-height-primary);
+  margin-bottom: var(--phy-space-16);
 }
+
 .phy-empty-state__title {
   margin: 0;
-  font-size: clamp(1.25rem, 2vw, 1.75rem);
+  font-size: clamp(1.5rem, 1.15rem + 0.75vw, 1.75rem);
   font-weight: 600;
+  line-height: 1.2;
   letter-spacing: -0.02em;
 }
+
 .phy-empty-state__subtitle {
-  margin: 0;
+  max-width: 600px;
+  margin: var(--phy-space-8) 0 0;
   color: var(--phy-color-text-secondary);
-  max-width: 560px;
+  font-size: 0.9375rem;
   line-height: 1.6;
 }
+
 .phy-empty-state__chips {
   width: min(760px, 100%);
+  margin-top: var(--phy-space-24);
+}
+
+@media (max-width: 600px) {
+  .phy-empty-state {
+    padding: var(--phy-space-20) 0 var(--phy-space-12);
+  }
+
+  .phy-empty-state__mark {
+    margin-bottom: var(--phy-space-12);
+  }
+
+  .phy-empty-state__title {
+    font-size: 1.375rem;
+  }
+
+  .phy-empty-state__subtitle {
+    margin-top: var(--phy-space-8);
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+
+  .phy-empty-state__chips {
+    margin-top: var(--phy-space-20);
+  }
 }
 </style>
