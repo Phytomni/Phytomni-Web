@@ -35,6 +35,8 @@ export interface A2uiRuntimeContext {
   transport: A2uiActionTransport;
 }
 
+export type ArtifactKind = "deep-genome" | "research" | "cited-report" | null;
+
 export interface ChatMessage {
   role: string;
   content: any;
