@@ -92,15 +92,16 @@ const ariaLabel = computed(() =>
     justify-content: flex-start;
 
     .message-content {
+      flex: 1 1 0;
       margin-left: 12px;
-      width: 100%;
+      width: auto;
       max-width: 100%;
       min-width: 0;
       background-color: transparent;
     }
 
     :deep(.message-text.phy-bubble-assistant) {
-      width: 100%;
+      width: fit-content;
       max-width: 100%;
       box-sizing: border-box;
       padding: 14px 16px;
@@ -114,7 +115,8 @@ const ariaLabel = computed(() =>
   }
 
   .message-content {
-    padding: 0 12px 12px;
+    box-sizing: border-box;
+    padding-bottom: 12px;
     max-width: 100%;
     min-width: 0;
   }

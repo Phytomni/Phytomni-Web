@@ -16,6 +16,10 @@ const CONTENT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageContent.vue"),
   "utf8"
 );
+const TOKENS_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/styles/tokens.css"),
+  "utf8"
+);
 
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
@@ -165,6 +169,58 @@ describe("ChatMessageRow", () => {
     // Role alignment stays structural for forced-colors when fills are ignored.
     expect(rowCss).toMatch(/forced-colors:\s*active/);
     expect(rowCss).toMatch(/data-message-role|justify-content:\s*flex-end/);
+  });
+
+  it("keeps short assistant bubbles content-sized within the full row measure", () => {
+    const rowCss = styleBlocks(ROW_SOURCE).join("\n");
+    const assistantRule = rowCss.match(
+      /:deep\(\.message-text\.phy-bubble-assistant\)\s*\{([^}]*)\}/
+    )?.[1];
+
+    expect(assistantRule).toBeTruthy();
+    expect(assistantRule).toMatch(/width:\s*fit-content/);
+    expect(assistantRule).toMatch(/max-width:\s*100%/);
+    expect(assistantRule).not.toMatch(/(?:^|\n)\s*width:\s*100%/);
+    expect(rowCss).toMatch(
+      /&\.assistant\s*\{[\s\S]*?\.message-content\s*\{[\s\S]*?flex:\s*1\s+1\s+0/
+    );
+  });
+
+  it("keeps the 72 percent user cap inclusive of outer row spacing", () => {
+    const rowCss = styleBlocks(ROW_SOURCE).join("\n");
+    const sharedContentRule = rowCss.match(
+      /\.message-content\s*\{([^}]*)\}\s*\}/
+    )?.[1];
+
+    expect(sharedContentRule).toBeTruthy();
+    expect(sharedContentRule).toMatch(/box-sizing:\s*border-box/);
+    expect(sharedContentRule).toMatch(/padding-bottom:\s*12px/);
+    expect(sharedContentRule).not.toMatch(/padding:\s*0\s+12px/);
+  });
+
+  it("locks the exact pale light-theme role surfaces and subtle shadow", () => {
+    expect(TOKENS_SOURCE).toMatch(/--phy-bubble-user-bg:\s*#eaf6f1/i);
+    expect(TOKENS_SOURCE).toMatch(/--phy-bubble-user-border:\s*#cfe8dc/i);
+    expect(TOKENS_SOURCE).toMatch(/--phy-bubble-assistant-bg:\s*#eaf2fe/i);
+    expect(TOKENS_SOURCE).toMatch(/--phy-bubble-assistant-border:\s*#d5e5fc/i);
+    expect(TOKENS_SOURCE).toMatch(
+      /\.phy-bubble-(?:user|assistant)\s*\{[\s\S]*?box-shadow:\s*0\s+1px\s+2px\s+rgba\(20,\s*32,\s*27,\s*0\.03\)/
+    );
+  });
+
+  it("contains wide markdown, tables, and images inside the message measure", () => {
+    const contentCss = styleBlocks(CONTENT_SOURCE).join("\n");
+
+    expect(contentCss).toMatch(
+      /\.message-text\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-x:\s*auto/
+    );
+    expect(contentCss).toMatch(
+      /:deep\(pre\),[\s\S]*?:deep\(table\),[\s\S]*?:deep\(\.el-table\)[\s\S]*?max-width:\s*100%/
+    );
+    expect(contentCss).toMatch(
+      /\.table-response\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-x:\s*auto/
+    );
+    expect(contentCss).toMatch(/\.result-image\s*\{[\s\S]*?max-width:\s*100%/);
   });
 
   it("rejects glass, gradient, and raw alternate bubble fills on the row surface", () => {
