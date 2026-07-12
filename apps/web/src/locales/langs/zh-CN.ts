@@ -331,10 +331,9 @@ export default {
     timeoutFailed: "请求处理超时，请缩小查询范围或稍后重试。",
     sendAriaLabel: "发送",
     abortAriaLabel: "中止回答",
-    eta: {
-      fast: "预计约 5–30 秒",
-      medium: "预计约 1–3 分钟",
-      slow: "预计约 3–10 分钟",
+    progress: {
+      processing: "处理中",
+      valueText: "处理中，{percent}%",
     },
     generationStopped: "已停止生成",
     relatedDocuments: "参考资料",

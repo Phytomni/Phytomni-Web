@@ -277,9 +277,9 @@
           </ChatMessageRow>
         </template>
 
-        <!-- Loading message: fake ETA progress, suppressed while an AG-UI stream is in
-             flight — the placeholder message already shows real streaming content, so
-             showing both would double up the "is responding" indicator on screen. -->
+        <!-- Loading message: real TransferProgress XOR simulated SendProgress,
+             suppressed while an AG-UI stream is in flight — the placeholder already
+             shows streaming content, so both would double the "is responding" cue. -->
         <ChatMessageRow
           v-if="isSending && !getChatState(currentChatId).isStreaming"
           role="assistant"

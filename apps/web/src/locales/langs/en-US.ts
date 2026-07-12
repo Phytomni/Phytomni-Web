@@ -329,10 +329,9 @@ export default {
     timeoutFailed: "The request timed out. Try narrowing your query or retry later.",
     sendAriaLabel: "Send",
     abortAriaLabel: "Stop answering",
-    eta: {
-      fast: "Usually 5–30s",
-      medium: "Usually 1–3 min",
-      slow: "Usually 3–10 min",
+    progress: {
+      processing: "Processing",
+      valueText: "Processing, {percent}%",
     },
     generationStopped: "Generation stopped",
     relatedDocuments: "Reference Material",
