@@ -235,17 +235,19 @@
                 <ChatMessageActions
                   :role="message.role === 'user' ? 'user' : 'assistant'"
                   :copied="copyVisible === index + 1"
-                  :can-refresh="message.role !== 'user'"
+                  :can-refresh="messageActionCapabilities(message).canRefresh"
                   :refresh-busy="
                     !!refreshingMessages[`${index}_${message.id || ''}`] ||
                     (!message.steps && isSending)
                   "
-                  :can-react="message.role === 'assistant' && !!message.id"
+                  :can-react="messageActionCapabilities(message).canReact"
                   :reaction-active="
                     message.id ? getReactionState(message.id) : 0
                   "
                   :direct-downloads="getDirectDownloads(message)"
-                  :generated-formats="getGeneratedFormats(message.tool_name)"
+                  :generated-formats="
+                    messageActionCapabilities(message).generatedFormats
+                  "
                   @copy="handleMessageCopy(message, index)"
                   @refresh="() => refreshMessage(index)"
                   @reaction="
@@ -439,6 +441,7 @@ import {
 } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
+import { messageActionCapabilities } from "./utils/message-action-capabilities";
 import type {
   Chat,
   ChatMessage,
@@ -511,14 +514,6 @@ const buttonPermissions = {
   GA: "GA",
   webSearch: "web search",
 };
-// Download display whitelist
-const downloadWhiteList = [
-  "ChatAgent",
-  "KnowledgeAgent",
-  "DataAgent",
-  "ReviewAgent",
-];
-
 // Check button permission
 const hasButtonPermission = (buttonType: string) => {
   const permission =
@@ -996,8 +991,8 @@ const abortDialogueRequest = async (
     if (success) {
       chatState.generationStopped = true;
 
-      // Local stopped row: no server message id — copy may remain; server-backed
-      // actions stay gated by !!message.id in the template.
+      // Local stopped row: no server message id — copy may remain; the shared
+      // capability helper keeps every server-backed action unavailable.
       const messages = chatState.renderedChat?.messages;
       if (messages) {
         const abortMessage: ChatMessage = {
@@ -1224,13 +1219,6 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
     items.push({ kind: "file", path: message.download_path });
   }
   return items;
-};
-
-const getGeneratedFormats = (toolName?: string): string[] => {
-  if (!toolName || !downloadWhiteList.includes(toolName)) return [];
-  return toolName === "DataAgent"
-    ? ["PDF", "Markdown", "Xlsx"]
-    : ["PDF", "Markdown", "Word"];
 };
 </script>
 

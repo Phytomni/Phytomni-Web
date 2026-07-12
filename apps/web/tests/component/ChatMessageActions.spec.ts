@@ -3,6 +3,10 @@ import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
+import {
+  messageActionCapabilities,
+} from "@/views/chat/utils/message-action-capabilities";
+import type { ChatMessage } from "@/views/chat/types";
 
 const ACTIONS_SOURCE = readFileSync(
   resolve(
@@ -73,6 +77,16 @@ const mountActions = (props: Record<string, unknown> = {}) =>
         CircleCloseFilled: true,
       },
     },
+  });
+
+const mountActionsForMessage = (
+  message: ChatMessage,
+  props: Record<string, unknown> = {}
+) =>
+  mountActions({
+    role: message.role === "user" ? "user" : "assistant",
+    ...messageActionCapabilities(message),
+    ...props,
   });
 
 describe("ChatMessageActions", () => {
@@ -274,32 +288,120 @@ describe("ChatMessageActions", () => {
     expect(INDEX_SOURCE).toMatch(/deriveAnalystLogRowId\(message\)/);
   });
 
-  it("local stopped/error rows without server id keep copy but not server-backed actions", () => {
-    // index gates react/refresh/download on !!message.id; analyst log mounts
-    // only when deriveAnalystLogRowId(message) is a valid positive-decimal id.
-    expect(INDEX_SOURCE).toMatch(
-      /:can-react="message\.role === 'assistant' && !!message\.id"/
+  it.each([
+    {
+      label: "stopped",
+      message: {
+        role: "assistant",
+        content: "Generation stopped",
+        instantMessage: true,
+      } as ChatMessage,
+    },
+    {
+      label: "error",
+      message: {
+        role: "assistant",
+        content: "Message failed",
+        status: "",
+        instantMessage: true,
+      } as ChatMessage,
+    },
+  ])(
+    "local $label rows keep copy but hide server-backed actions",
+    ({ message }) => {
+      const localRow = mountActionsForMessage(message);
+
+      expect(localRow.find('[data-testid="action-copy"]').exists()).toBe(true);
+      expect(localRow.find('[data-testid="action-refresh"]').exists()).toBe(
+        false
+      );
+      expect(localRow.find('[data-testid="action-like"]').exists()).toBe(false);
+      expect(localRow.find('[data-testid="action-dislike"]').exists()).toBe(
+        false
+      );
+      expect(
+        localRow.find('[data-testid="action-generated-download"]').exists()
+      ).toBe(false);
+    }
+  );
+
+  it("keeps an id-less streaming row capability-gated while preserving a real direct download", () => {
+    const streamingRow = mountActionsForMessage(
+      {
+        role: "assistant",
+        content: "partial response",
+        streaming: true,
+        tool_name: "DataAgent",
+      },
+      {
+        directDownloads: [{ kind: "file", path: "obs://result" }],
+      }
     );
+
+    expect(streamingRow.find('[data-testid="action-copy"]').exists()).toBe(
+      true
+    );
+    expect(streamingRow.find('[data-testid="action-refresh"]').exists()).toBe(
+      false
+    );
+    expect(streamingRow.find('[data-testid="action-like"]').exists()).toBe(
+      false
+    );
+    expect(
+      streamingRow.find('[data-testid="action-generated-download"]').exists()
+    ).toBe(false);
+    expect(
+      streamingRow.find('[data-testid="action-direct-downloads"]').exists()
+    ).toBe(true);
+  });
+
+  it("opens all supported actions only for a persisted non-streaming assistant row", () => {
+    const persistedRow = mountActionsForMessage({
+      role: "assistant",
+      content: "complete response",
+      id: "42",
+      streaming: false,
+      tool_name: "DataAgent",
+    });
+
+    expect(persistedRow.find('[data-testid="action-copy"]').exists()).toBe(
+      true
+    );
+    expect(persistedRow.find('[data-testid="action-refresh"]').exists()).toBe(
+      true
+    );
+    expect(persistedRow.find('[data-testid="action-like"]').exists()).toBe(
+      true
+    );
+    expect(persistedRow.find('[data-testid="action-dislike"]').exists()).toBe(
+      true
+    );
+    expect(
+      persistedRow.find('[data-testid="action-generated-download"]').exists()
+    ).toBe(true);
+  });
+
+  it("wires refresh, reactions, and generated formats through one capability helper", () => {
+    expect(INDEX_SOURCE).toMatch(/messageActionCapabilities/);
+    expect(INDEX_SOURCE).toMatch(
+      /:can-refresh="messageActionCapabilities\(message\)\.canRefresh"/
+    );
+    expect(INDEX_SOURCE).toMatch(
+      /:can-react="messageActionCapabilities\(message\)\.canReact"/
+    );
+    expect(INDEX_SOURCE).toMatch(
+      /messageActionCapabilities\(message\)\.generatedFormats/
+    );
+    expect(INDEX_SOURCE).not.toMatch(/getGeneratedFormats/);
+    expect(INDEX_SOURCE).not.toMatch(/downloadWhiteList/);
+
+    // Analyst log mounts only when deriveAnalystLogRowId(message) is a valid
+    // positive-decimal id; its existing boundary remains independent.
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\) handleReaction/);
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\) getFileDownUrl/);
     expect(INDEX_SOURCE).toMatch(
       /AnalystAgent[\s\S]*!!deriveAnalystLogRowId\(message\)/
     );
     expect(INDEX_SOURCE).not.toMatch(/toggleLogView/);
-
-    const localRow = mountActions({
-      role: "assistant",
-      canRefresh: false,
-      canReact: false,
-      generatedFormats: [],
-      directDownloads: [],
-    });
-    expect(localRow.find('[data-testid="action-copy"]').exists()).toBe(true);
-    expect(localRow.find('[data-testid="action-refresh"]').exists()).toBe(false);
-    expect(localRow.find('[data-testid="action-like"]').exists()).toBe(false);
-    expect(localRow.find('[data-testid="action-dislike"]').exists()).toBe(false);
-    expect(
-      localRow.find('[data-testid="action-generated-download"]').exists()
-    ).toBe(false);
   });
 });
