@@ -51,6 +51,55 @@ describe("MarkdownViewer — XSS hardening of the v-html render path", () => {
   });
 });
 
+describe("MarkdownViewer surface classes", () => {
+  it("defaults to legacy surface wrapper classes", () => {
+    const w = render("hello");
+    const root = w.find(".phy-markdown");
+    expect(root.exists()).toBe(true);
+    expect(root.classes()).toContain("phy-markdown--legacy");
+    expect(root.classes()).not.toContain("phy-markdown--chat");
+  });
+
+  it("applies explicit chat surface classes without a renderer handoff", () => {
+    const w = mount(MarkdownViewer, {
+      props: { content: "hello", instantMessage: false, surface: "chat" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown");
+    expect(root.classes()).toContain("phy-markdown--chat");
+    expect(root.classes()).not.toContain("phy-markdown--legacy");
+  });
+
+  it("keeps long table/code/image overflow ownership on the chat surface", () => {
+    const fixture = [
+      "# Long heading that should wrap inside the transcript measure",
+      "",
+      "- list item one",
+      "- list item two",
+      "",
+      "```",
+      "const wide = '" + "x".repeat(120) + "';",
+      "```",
+      "",
+      "| a | b | c | d | e | f | g | h |",
+      "| - | - | - | - | - | - | - | - |",
+      "| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |",
+      "",
+      "![wide](https://example.org/p.png)",
+    ].join("\n");
+    const w = mount(MarkdownViewer, {
+      props: { content: fixture, instantMessage: false, surface: "chat", ns: "m0" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown.phy-markdown--chat");
+    expect(root.exists()).toBe(true);
+    expect(w.find("pre").exists()).toBe(true);
+    expect(w.find("img").exists()).toBe(true);
+    // Pipeline still emits the same structural tags; overflow is CSS-owned on the skin.
+    expect(w.find("img").attributes("onerror")).toBeUndefined();
+  });
+});
+
 describe("MarkdownViewer citation linkification", () => {
   it("linkifies [N] and [N,M] markers into #ns-ref anchors", () => {
     const html = render("See [1] and [2,3].", "m0").html();

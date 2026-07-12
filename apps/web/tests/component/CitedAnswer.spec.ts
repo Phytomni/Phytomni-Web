@@ -21,8 +21,9 @@ const mountCited = (props: Record<string, unknown>) =>
     global: {
       stubs: {
         MarkdownViewer: {
-          template: '<div class="mv-stub">{{ content }}|{{ instantMessage }}|{{ ns }}</div>',
-          props: ["content", "instantMessage", "ns"],
+          template:
+            '<div class="mv-stub">{{ content }}|{{ instantMessage }}|{{ ns }}|{{ surface }}</div>',
+          props: ["content", "instantMessage", "ns", "surface"],
         },
       },
       mocks: {
@@ -77,5 +78,18 @@ describe("CitedAnswer", () => {
   it("passes ns through to MarkdownViewer", () => {
     const wrapper = mountCited({ content: "hi", references: [], ns: "m3" });
     expect(wrapper.find(".mv-stub").text()).toContain("m3");
+  });
+
+  it("forwards optional surface to MarkdownViewer", () => {
+    const withSurface = mountCited({
+      content: "hi",
+      references: [],
+      surface: "chat",
+    });
+    expect(withSurface.find(".mv-stub").text()).toContain("chat");
+
+    const legacyDefault = mountCited({ content: "hi", references: [] });
+    // Absent surface is not forwarded as chat — stub interpolates empty/undefined.
+    expect(legacyDefault.find(".mv-stub").text()).not.toContain("chat");
   });
 });

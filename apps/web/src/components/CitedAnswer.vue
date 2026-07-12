@@ -4,6 +4,7 @@
       :content="content"
       :instant-message="instantMessage"
       :ns="ns"
+      :surface="surface"
       @finish="$emit('finish')"
     />
     <CitationReferenceList :references="references" :ns="ns" />
@@ -12,6 +13,7 @@
 
 <script setup lang="ts">
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import type { MarkdownSurface } from "@/components/MarkdownViewer.vue";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
 
 // Pure presentational renderer for cited-family answers (Knowledge / Review / BriefGene).
@@ -23,6 +25,7 @@ defineProps<{
   references?: any[];
   instantMessage?: boolean;
   ns?: string;
+  surface?: MarkdownSurface;
 }>();
 
 defineEmits<{ finish: [] }>();

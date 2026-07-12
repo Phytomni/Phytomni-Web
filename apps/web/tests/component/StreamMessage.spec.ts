@@ -20,6 +20,18 @@ describe("StreamMessage", () => {
     expect(w.html()).toContain("<strong>hi</strong>");
   });
 
+  it("skins the streaming markdown wrapper with chat classes without MarkdownViewer", () => {
+    const blocks: ContentBlock[] = [
+      { type: "markdown", authority: "web", text: "**hi**" },
+    ];
+    const w = mount(StreamMessage, { props: { blocks } });
+    const md = w.find(".md-block.phy-markdown.phy-markdown--chat");
+    expect(md.exists()).toBe(true);
+    expect(md.html()).toContain("<strong>hi</strong>");
+    // Streaming stays on MarkdownBlock — no MarkdownViewer handoff.
+    expect(w.find(".markdown-viewer").exists()).toBe(false);
+  });
+
   it("skips an unregistered block type without throwing", () => {
     const blocks: ContentBlock[] = [{ type: "mol3d", authority: "web" }];
     const w = mount(StreamMessage, { props: { blocks } });

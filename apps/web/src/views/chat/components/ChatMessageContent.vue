@@ -109,6 +109,7 @@
       :content="message.content"
       :references="message.doc_list"
       :ns="'m' + index"
+      surface="chat"
       :instant-message="(message?.instantMessage && isLastMessage) || false"
       @finish="emit('finish')"
     />
@@ -116,6 +117,7 @@
       v-else
       :instantMessage="(message?.instantMessage && isLastMessage) || false"
       :content="message.content"
+      surface="chat"
       @finish="emit('finish')"
     />
   </div>
@@ -155,6 +157,7 @@
       <MarkdownViewer
         :instantMessage="(message?.instantMessage && isLastMessage) || false"
         :content="message.content"
+        surface="chat"
         @finish="emit('finish')"
       />
     </div>
