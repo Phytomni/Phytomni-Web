@@ -272,6 +272,28 @@ describe("ChatMessageActions", () => {
     expect(css).not.toMatch(/message-fotter/);
   });
 
+  it("uses compact desktop controls and restores touch-sized targets", () => {
+    const css = styleBlocks(ACTIONS_SOURCE).join("\n");
+    expect(css).toMatch(
+      /\.message-footer-item\s*\{[^}]*min-width:\s*var\(--phy-control-height-default\)/
+    );
+    expect(css).toMatch(
+      /@media\s*\(hover:\s*none\),\s*\(pointer:\s*coarse\)[\s\S]*min-width:\s*calc\(var\(--phy-control-height-default\)\s*\+\s*var\(--phy-space-4\)\)/
+    );
+    expect(css).toMatch(/color:\s*var\(--phy-color-text-muted\)/);
+    expect(css).not.toMatch(/#[0-9a-f]{3,8}/i);
+  });
+
+  it("keeps selected reactions and disabled refresh visually explicit", () => {
+    const css = styleBlocks(ACTIONS_SOURCE).join("\n");
+    expect(css).toMatch(
+      /&\.reaction-btn\.active\s*\{[^}]*background:\s*var\(--phy-color-primary-soft\)/
+    );
+    expect(css).toMatch(
+      /&:disabled\s*\{[^}]*color:\s*var\(--phy-color-text-disabled\)/
+    );
+  });
+
   it("index wiring uses message-footer, actions slot, and chat log surface", () => {
     expect(INDEX_SOURCE).not.toMatch(/message-fotter/);
     expect(INDEX_SOURCE).toMatch(/message-footer|ChatMessageActions/);

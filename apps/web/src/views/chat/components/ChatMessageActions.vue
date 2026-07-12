@@ -248,16 +248,18 @@ const onGeneratedFormat = (format: string | number) => {
 
 <style scoped lang="scss">
 .message-footer {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
   width: 100%;
   height: auto;
-  display: flex;
-  gap: var(--phy-space-8, 8px);
-  flex-direction: row;
-  justify-content: flex-end;
-  align-items: center;
-  margin-top: var(--phy-space-4, 4px);
+  margin-top: var(--phy-space-4);
+  gap: var(--phy-space-4);
+  color: var(--phy-color-text-muted);
   opacity: 1;
   visibility: visible;
+  transition: opacity var(--phy-motion-fast) ease;
 
   &--user {
     justify-content: flex-end;
@@ -270,43 +272,57 @@ const onGeneratedFormat = (format: string | number) => {
 
 .message-footer-item {
   display: inline-flex;
-  justify-content: center;
+  flex: 0 0 auto;
   align-items: center;
-  min-width: 44px;
-  min-height: 44px;
-  width: 44px;
-  height: 44px;
-  padding: var(--phy-space-4, 4px);
+  justify-content: center;
+  width: var(--phy-control-height-default);
+  height: var(--phy-control-height-default);
+  min-width: var(--phy-control-height-default);
+  min-height: var(--phy-control-height-default);
+  padding: var(--phy-space-4);
   box-sizing: border-box;
-  border: none;
-  border-radius: var(--phy-radius-sm, 4px);
+  border: 0;
+  border-radius: var(--phy-radius-sm);
   background: transparent;
   color: inherit;
   cursor: pointer;
+  transition: background-color var(--phy-motion-fast) ease,
+    color var(--phy-motion-fast) ease;
 
   &:hover {
-    color: var(--phy-color-action-text, var(--el-color-primary));
-    background: var(--phy-color-fill-subtle, #eef3f0);
+    color: var(--phy-color-action-text);
+    background: var(--phy-color-fill-subtle);
   }
 
   &:focus-visible {
-    outline: 2px solid var(--phy-color-focus, var(--el-color-primary));
+    outline: 2px solid var(--phy-color-focus);
     outline-offset: 2px;
   }
 
   &.is-loading {
+    cursor: wait;
+  }
+
+  &.is-loading .el-icon {
     animation: message-footer-spin 1s linear infinite;
   }
 
   &.reaction-btn.active {
-    color: var(--phy-color-action-text, var(--el-color-primary));
+    background: var(--phy-color-primary-soft);
+    color: var(--phy-color-action-text);
+  }
+
+  &:disabled {
+    background: transparent;
+    color: var(--phy-color-text-disabled);
+    cursor: wait;
   }
 }
 
 .reaction-buttons {
   display: inline-flex;
-  gap: var(--phy-space-4, 4px);
   align-items: center;
+  gap: 0;
 }
 
 @keyframes message-footer-spin {
@@ -321,13 +337,28 @@ const onGeneratedFormat = (format: string | number) => {
 /* Hover-capable pointers may hide idle chrome; focus-within keeps keyboard use
    visible. Touch / coarse pointers keep .is-touch-visible discoverable (no
    hover reduction). Parent sets --message-footer-opacity on row hover. */
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .message-footer.is-touch-visible {
     opacity: var(--message-footer-opacity, 0);
   }
 
   .message-footer.is-touch-visible:focus-within {
     opacity: 1;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .message-footer-item {
+    width: calc(var(--phy-control-height-default) + var(--phy-space-4));
+    height: calc(var(--phy-control-height-default) + var(--phy-space-4));
+    min-width: calc(var(--phy-control-height-default) + var(--phy-space-4));
+    min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-footer-item.is-loading .el-icon {
+    animation: none;
   }
 }
 </style>
