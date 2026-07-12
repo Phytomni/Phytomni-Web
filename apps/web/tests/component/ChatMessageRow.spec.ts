@@ -233,6 +233,36 @@ describe("ChatMessageRow", () => {
     );
   });
 
+  it("keeps loading, attachment, and tip chrome on adaptive theme tokens", () => {
+    const loadingCss = CHAT_SOURCE.slice(
+      CHAT_SOURCE.indexOf(".loading-message {"),
+      CHAT_SOURCE.indexOf(".doc-list-title {")
+    );
+    const attachmentCss = CHAT_SOURCE.slice(
+      CHAT_SOURCE.indexOf(".message-files {"),
+      CHAT_SOURCE.indexOf("::v-deep(.el-textarea__inner)")
+    );
+    const tipCss = CHAT_SOURCE.slice(
+      CHAT_SOURCE.indexOf(".tip-text {"),
+      CHAT_SOURCE.indexOf("/* Agents architecture diagram dialog styles */")
+    );
+
+    expect(loadingCss).toContain(
+      "background-color: var(--phy-bubble-assistant-bg)"
+    );
+    expect(attachmentCss).toContain(
+      "background-color: var(--phy-color-bg-elevated)"
+    );
+    expect(attachmentCss).toContain(
+      "border: 1px solid var(--phy-color-border-subtle)"
+    );
+    expect(attachmentCss).toContain("color: var(--phy-color-text-secondary)");
+    expect(tipCss).toContain("color: var(--phy-color-text-muted)");
+    expect(`${loadingCss}${attachmentCss}${tipCss}`).not.toMatch(
+      /#[0-9a-f]{3,8}\b/i
+    );
+  });
+
   it("contains wide markdown, tables, and images inside the message measure", () => {
     const contentCss = styleBlocks(CONTENT_SOURCE).join("\n");
 

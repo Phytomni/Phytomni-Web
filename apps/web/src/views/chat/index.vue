@@ -1556,7 +1556,7 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
   align-items: center;
   justify-content: center;
   min-height: 40px;
-  background-color: #f5f5f5;
+  background-color: var(--phy-bubble-assistant-bg);
   padding: 12px;
   border-radius: 8px;
   width: 75px;
@@ -1665,14 +1665,14 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
 .message-files {
   margin-top: 12px;
   padding: 12px;
-  background-color: #f8f9fa;
+  background-color: var(--phy-color-bg-elevated);
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--phy-color-border-subtle);
 
   .files-title {
     font-size: 14px;
     font-weight: 500;
-    color: #495057;
+    color: var(--phy-color-text-secondary);
     margin-bottom: 8px;
   }
 
@@ -1835,7 +1835,7 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
 
 .tip-text {
   font-size: 12px;
-  color: #909399;
+  color: var(--phy-color-text-muted);
   margin-top: 10px;
   width: 100%;
   text-align: right;
