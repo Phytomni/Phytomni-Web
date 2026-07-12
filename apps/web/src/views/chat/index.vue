@@ -128,28 +128,18 @@
             <template #avatar>
               <el-avatar :size="36" :src="botAvatar" />
             </template>
-              <!-- User message, or an answer without reasoning steps -->
+              <!-- Log view - two-column layout (replaces content when showLog) -->
               <div
                 v-if="
-                  message.role === 'user' ||
-                  (!message.steps && !message.tableHeaders)
+                  (message.role === 'user' ||
+                    (!message.steps && !message.tableHeaders)) &&
+                  message.role === 'assistant' &&
+                  message.tool_name === 'AnalystAgent' &&
+                  message.showLog
                 "
-                :class="[
-                  'message-text',
-                  message.role === 'user'
-                    ? 'phy-bubble-user has-user'
-                    : 'phy-bubble-assistant',
-                ]"
+                :class="['message-text', 'phy-bubble-assistant']"
               >
-                <!-- Log view - two-column layout -->
-                <div
-                  v-if="
-                    message.role === 'assistant' &&
-                    message.tool_name === 'AnalystAgent' &&
-                    message.showLog
-                  "
-                  class="log-view-container"
-                >
+                <div class="log-view-container">
                   <div class="log-view-left">
                     <h4>{{ $t("chat.log.replyContent") }}</h4>
                     <MarkdownViewer
@@ -230,133 +220,28 @@
                   </div>
                 </div>
 
-                <!-- Normal message content -->
-                <div v-else>
-                  <!-- Streaming assistant messages (AG-UI content blocks) render via
-                       StreamMessage; P0 mount passes no ns (no references yet, citation
-                       gate keeps [N] literal, consistent with the no-ns MarkdownViewer
-                       branch below). Non-streaming messages fall through unchanged. -->
-                  <StreamMessage
-                    v-if="
-                      message.role === 'assistant' &&
-                      (message.streaming ||
-                        (message.blocks && message.blocks.length))
-                    "
-                    :blocks="message.blocks || []"
-                    :run-id="getChatState(currentChatId).a2uiRunId"
-                    :transport="getChatState(currentChatId).a2uiActionSender"
-                  />
-                  <!-- GeneNetworkAgent image display -->
-                  <div
-                    v-else-if="
-                      message.role === 'assistant' &&
-                      message.tool_name === 'GeneNetworkAgent'
-                    "
-                    class="gene-network-images"
-                  >
-                    <div
-                      v-if="geneNetworkImagesLoading[message.id || '']"
-                      class="images-loading"
-                    >
-                      <el-icon class="is-loading"><Loading /></el-icon>
-                      {{ $t("common.loading") }}
-                    </div>
-                    <div
-                      v-else-if="
-                        geneNetworkImages[message.id || '']?.length > 0
-                      "
-                      class="images-container"
-                    >
-                      <img
-                        v-for="(imgUrl, imgIndex) in geneNetworkImages[
-                          message.id || ''
-                        ]"
-                        :key="imgIndex"
-                        :src="imgUrl"
-                        :alt="'Result ' + (imgIndex + 1)"
-                        class="result-image"
-                      />
-                    </div>
-                    <div v-else class="no-images">
-                      {{ $t("common.noData") }}
-                    </div>
-                  </div>
-                  <!-- DigitalDesignAgent image display -->
-                  <div
-                    v-else-if="
-                      message.role === 'assistant' &&
-                      message.tool_name === 'DigitalDesignAgent'
-                    "
-                    class="gene-network-images"
-                  >
-                    <div
-                      v-if="digitalDesignImagesLoading[message.id || '']"
-                      class="images-loading"
-                    >
-                      <el-icon class="is-loading"><Loading /></el-icon>
-                      {{ $t("common.loading") }}
-                    </div>
-                    <div
-                      v-else-if="
-                        digitalDesignImages[message.id || '']?.length > 0
-                      "
-                      class="images-container"
-                    >
-                      <img
-                        v-for="(imgUrl, imgIndex) in digitalDesignImages[
-                          message.id || ''
-                        ]"
-                        :key="imgIndex"
-                        :src="imgUrl"
-                        :alt="'Result ' + (imgIndex + 1)"
-                        class="result-image"
-                      />
-                    </div>
-                    <div v-else class="no-images">
-                      {{ $t("common.noData") }}
-                    </div>
-                  </div>
-                  <!-- DeepGenomeAgent responses use a dedicated viewer component with a references list;
-                       other tool_name values fall back to the generic MarkdownViewer -->
-                  <DeepGenomeResultViewer
-                    v-else-if="
-                      message.doc_list &&
-                      message.doc_list.length > 0 &&
-                      message.role === 'assistant' &&
-                      message.tool_name === 'DeepGenomeAgent'
-                    "
-                    :markdown="message.content.replace(/\n/g, '\\n')"
-                    :references="message.doc_list || []"
-                    :ns="'m' + index"
-                  />
-                  <CitedAnswer
-                    v-else-if="
-                      message.doc_list &&
-                      message.doc_list.length > 0 &&
-                      message.role === 'assistant'
-                    "
-                    :content="message.content"
-                    :references="message.doc_list"
-                    :ns="'m' + index"
-                    :instant-message="
-                      (message?.instantMessage &&
-                        currentChat.messages.length - 1 == index) ||
-                      false
-                    "
-                    @finish="() => handleMarkdownFinish(index)"
-                  />
-                  <MarkdownViewer
-                    v-else
-                    :instantMessage="
-                      (message?.instantMessage &&
-                        currentChat.messages.length - 1 == index) ||
-                      false
-                    "
-                    :content="message.content"
-                    @finish="() => handleMarkdownFinish(index)"
-                  />
-                </div>
+              </div>
+              <ChatMessageContent
+                v-else
+                :message="message"
+                :index="index"
+                :is-last-message="currentChat.messages.length - 1 == index"
+                :stream-run-id="getChatState(currentChatId).a2uiRunId"
+                :stream-transport="getChatState(currentChatId).a2uiActionSender"
+                :gene-network-images="geneNetworkImages"
+                :gene-network-images-loading="geneNetworkImagesLoading"
+                :digital-design-images="digitalDesignImages"
+                :digital-design-images-loading="digitalDesignImagesLoading"
+                @finish="() => handleMarkdownFinish(index)"
+              />
 
+              <!-- Bubble-branch chrome (visibility unchanged) -->
+              <template
+                v-if="
+                  message.role === 'user' ||
+                  (!message.steps && !message.tableHeaders)
+                "
+              >
                 <!-- File list display for user messages -->
                 <div
                   v-if="
@@ -610,18 +495,11 @@
                 <div v-if="message.role === 'assistant'" class="tip-text">
                   {{ $t("common.Tip") }}
                 </div>
-              </div>
-              <!-- Table data display -->
-              <div v-else-if="message.tableHeaders" class="table-response">
-                <el-table :data="message.content" border style="width: 100%">
-                  <el-table-column
-                    v-for="header in message.tableHeaders"
-                    :key="header.prop"
-                    :prop="header.prop"
-                    :label="header.label"
-                    align="center"
-                  />
-                </el-table>
+              </template>
+
+              <!-- Table-branch chrome (visibility unchanged) -->
+              <template v-else-if="message.tableHeaders">
+
                 <el-button
                   @click="() => downloadFile(message?.upload_path)"
                   v-if="
@@ -783,38 +661,10 @@
                     </template>
                   </el-dropdown>
                 </div>
-              </div>
-              <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
-              <div v-else class="ai-response">
-                <!-- Reasoning steps -->
-                <div v-if="message.steps && message.steps.length > 0">
-                  <div class="steps-title">{{ $t("chat.stepResult") }}：</div>
-                  <div
-                    v-for="(step, stepIndex) in message.steps"
-                    :key="stepIndex"
-                    class="step-item"
-                  >
-                    <div v-if="stepIndex === 0" class="step-label">
-                      {{ $t("chat.useTool") }}
-                    </div>
-                    <div v-else class="step-label">
-                      {{ $t("chat.stepResult") }}
-                    </div>
-                    <div class="step-text">{{ step }}</div>
-                  </div>
-                </div>
-                <!-- Final answer -->
-                <div class="final-answer">
-                  <MarkdownViewer
-                    :instantMessage="
-                      (message?.instantMessage &&
-                        currentChat.messages.length - 1 == index) ||
-                      false
-                    "
-                    :content="message.content"
-                    @finish="() => handleMarkdownFinish(index)"
-                  />
-                </div>
+                            </template>
+
+              <!-- Legacy-steps-branch chrome (visibility unchanged) -->
+              <template v-else>
                 <el-button
                   @click="() => downloadFile(message?.upload_path)"
                   v-if="
@@ -974,7 +824,8 @@
                     </template>
                   </el-dropdown>
                 </div>
-              </div>
+                            </template>
+
           </ChatMessageRow>
         </template>
 
@@ -1090,9 +941,9 @@ import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
 import { Prompts } from "vue-element-plus-x";
 import TransferProgress from "@/components/TransferProgress.vue";
 import SendProgress from "./components/SendProgress.vue";
-import StreamMessage from "./components/StreamMessage.vue";
 import ChatComposer from "./components/ChatComposer.vue";
 import ChatMessageRow from "./components/ChatMessageRow.vue";
+import ChatMessageContent from "./components/ChatMessageContent.vue";
 import {
   PhyAdaptiveShell,
   PhyEmptyState,
@@ -1128,8 +979,6 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { abortRequest } from "@/utils/request";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
-import CitedAnswer from "@/components/CitedAnswer.vue";
-import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
 import {
@@ -2052,7 +1901,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
       }
     }
 
-    .message-text:hover .message-user {
+    // Content extraction keeps footers as siblings of ChatMessageContent's
+    // .message-text; hover the row content shell so user copy actions still appear.
+    .message-text:hover .message-user,
+    &:hover .message-user {
       display: block !important;
     }
 

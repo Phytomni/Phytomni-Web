@@ -1,0 +1,417 @@
+import { describe, expect, it, vi } from "vitest";
+import { mount, type VueWrapper } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+// Real MarkdownViewer / DeepGenome import graphs pull vue-element-plus-x CSS.
+vi.mock("vue-element-plus-x", () => ({
+  Typewriter: { name: "Typewriter", template: "<div></div>" },
+  FilesCard: { name: "FilesCard", template: "<div></div>" },
+  Prompts: { name: "Prompts", template: "<div></div>" },
+}));
+
+import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
+import type { ChatMessage, ContentBlock } from "@/views/chat/types";
+
+const CHAT_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/index.vue"),
+  "utf8"
+);
+
+const EMPTY_IMAGES = {} as Record<string, string[]>;
+const EMPTY_LOADING = {} as Record<string, boolean>;
+
+type Branch =
+  | "stream"
+  | "gene-network"
+  | "digital-design"
+  | "deep-genome"
+  | "cited"
+  | "markdown"
+  | "table"
+  | "legacy";
+
+/** Mirror of the live truthiness gate (empty arrays are truthy). */
+function expectedBranch(message: ChatMessage): Branch {
+  const entersBubble =
+    message.role === "user" || (!message.steps && !message.tableHeaders);
+  if (entersBubble) {
+    if (
+      message.role === "assistant" &&
+      (message.streaming || (message.blocks && message.blocks.length))
+    ) {
+      return "stream";
+    }
+    if (
+      message.role === "assistant" &&
+      message.tool_name === "GeneNetworkAgent"
+    ) {
+      return "gene-network";
+    }
+    if (
+      message.role === "assistant" &&
+      message.tool_name === "DigitalDesignAgent"
+    ) {
+      return "digital-design";
+    }
+    if (
+      message.doc_list &&
+      message.doc_list.length > 0 &&
+      message.role === "assistant" &&
+      message.tool_name === "DeepGenomeAgent"
+    ) {
+      return "deep-genome";
+    }
+    if (
+      message.doc_list &&
+      message.doc_list.length > 0 &&
+      message.role === "assistant"
+    ) {
+      return "cited";
+    }
+    return "markdown";
+  }
+  if (message.tableHeaders) {
+    return "table";
+  }
+  return "legacy";
+}
+
+function detectBranch(wrapper: VueWrapper): Branch {
+  if (wrapper.find('[data-testid="stream-message"]').exists()) return "stream";
+  if (wrapper.find('[data-testid="deep-genome"]').exists())
+    return "deep-genome";
+  if (wrapper.find('[data-testid="cited-answer"]').exists()) return "cited";
+  if (wrapper.find(".gene-network-images").exists()) {
+    const tool = (wrapper.props("message") as ChatMessage).tool_name;
+    return tool === "DigitalDesignAgent" ? "digital-design" : "gene-network";
+  }
+  if (wrapper.find(".table-response").exists()) return "table";
+  if (wrapper.find(".ai-response").exists()) return "legacy";
+  if (wrapper.find('[data-testid="markdown-viewer"]').exists())
+    return "markdown";
+  throw new Error(`Unable to detect branch from: ${wrapper.html()}`);
+}
+
+const mountContent = (
+  message: ChatMessage,
+  overrides: Record<string, unknown> = {}
+) =>
+  mount(ChatMessageContent, {
+    props: {
+      message,
+      index: 0,
+      isLastMessage: true,
+      streamRunId: "",
+      streamTransport: null,
+      geneNetworkImages: EMPTY_IMAGES,
+      geneNetworkImagesLoading: EMPTY_LOADING,
+      digitalDesignImages: EMPTY_IMAGES,
+      digitalDesignImagesLoading: EMPTY_LOADING,
+      ...overrides,
+    },
+    global: {
+      stubs: {
+        StreamMessage: {
+          name: "StreamMessage",
+          props: ["blocks", "runId", "transport", "ns"],
+          template:
+            '<div data-testid="stream-message" :data-ns="ns === undefined ? \'__absent__\' : ns" :data-run-id="runId" :data-has-transport="transport ? \'1\' : \'0\'" />',
+        },
+        DeepGenomeResultViewer: {
+          name: "DeepGenomeResultViewer",
+          props: ["markdown", "references", "ns"],
+          template:
+            '<div data-testid="deep-genome" :data-ns="ns === undefined ? \'__absent__\' : ns" />',
+        },
+        CitedAnswer: {
+          name: "CitedAnswer",
+          props: ["content", "references", "ns", "instantMessage"],
+          template:
+            '<div data-testid="cited-answer" :data-ns="ns === undefined ? \'__absent__\' : ns" />',
+        },
+        MarkdownViewer: {
+          name: "MarkdownViewer",
+          props: ["content", "instantMessage", "ns"],
+          template:
+            '<div data-testid="markdown-viewer" :data-ns="ns === undefined ? \'__absent__\' : ns" />',
+        },
+        ElTable: {
+          name: "ElTable",
+          template: '<div data-testid="el-table" />',
+        },
+        ElTableColumn: true,
+        ElIcon: true,
+        Loading: true,
+      },
+      mocks: {
+        $t: (key: string) => key,
+      },
+    },
+  });
+
+const block = (text = "hi"): ContentBlock => ({
+  type: "markdown",
+  authority: "web",
+  text,
+});
+
+describe("ChatMessageContent branch selection (truthiness gate)", () => {
+  const cases: Array<{ name: string; message: ChatMessage }> = [
+    {
+      name: "user bubble → markdown",
+      message: { role: "user", content: "hello" },
+    },
+    {
+      name: "assistant plain → markdown",
+      message: { role: "assistant", content: "answer", tool_name: "ChatAgent" },
+    },
+    {
+      name: "assistant streaming → stream",
+      message: {
+        role: "assistant",
+        content: "",
+        streaming: true,
+        blocks: [block()],
+        tool_name: "ChatAgent",
+      },
+    },
+    {
+      name: "assistant non-empty blocks → stream",
+      message: {
+        role: "assistant",
+        content: "",
+        blocks: [block()],
+        tool_name: "ChatAgent",
+      },
+    },
+    {
+      name: "GeneNetworkAgent → gene-network",
+      message: {
+        role: "assistant",
+        content: "",
+        tool_name: "GeneNetworkAgent",
+        id: "gn-1",
+      },
+    },
+    {
+      name: "DigitalDesignAgent → digital-design",
+      message: {
+        role: "assistant",
+        content: "",
+        tool_name: "DigitalDesignAgent",
+        id: "dd-1",
+      },
+    },
+    {
+      name: "DeepGenomeAgent with docs → deep-genome",
+      message: {
+        role: "assistant",
+        content: "md",
+        tool_name: "DeepGenomeAgent",
+        doc_list: [{ title: "Doc" }],
+      },
+    },
+    {
+      name: "referenced assistant → cited",
+      message: {
+        role: "assistant",
+        content: "cited body",
+        tool_name: "KnowledgeAgent",
+        doc_list: [{ title: "Doc" }],
+      },
+    },
+    {
+      name: "truthy tableHeaders → table",
+      message: {
+        role: "assistant",
+        content: [{ a: 1 }],
+        tableHeaders: [{ prop: "a", label: "A" }],
+        tool_name: "DataAgent",
+      },
+    },
+    {
+      name: "truthy steps (no table) → legacy",
+      message: {
+        role: "assistant",
+        content: "final",
+        steps: ["step-1"],
+        tool_name: "ChatAgent",
+      },
+    },
+    {
+      name: "absent steps/tableHeaders → bubble markdown",
+      message: { role: "assistant", content: "x", tool_name: "ChatAgent" },
+    },
+    {
+      name: "empty steps=[] is truthy → legacy",
+      message: {
+        role: "assistant",
+        content: "final",
+        steps: [],
+        tool_name: "ChatAgent",
+      },
+    },
+    {
+      name: "empty tableHeaders=[] is truthy → table",
+      message: {
+        role: "assistant",
+        content: [],
+        tableHeaders: [],
+        tool_name: "DataAgent",
+      },
+    },
+    {
+      name: "user with structural fields still enters bubble",
+      message: {
+        role: "user",
+        content: "q",
+        steps: ["s"],
+        tableHeaders: [{ prop: "a", label: "A" }],
+      },
+    },
+    {
+      name: "streaming + steps does not jump ahead of outer gate → legacy",
+      message: {
+        role: "assistant",
+        content: "final",
+        streaming: true,
+        blocks: [block()],
+        steps: ["s"],
+        tool_name: "ChatAgent",
+      },
+    },
+    {
+      name: "streaming + tableHeaders → table",
+      message: {
+        role: "assistant",
+        content: [],
+        streaming: true,
+        blocks: [block()],
+        tableHeaders: [{ prop: "a", label: "A" }],
+        tool_name: "DataAgent",
+      },
+    },
+    {
+      name: "blocks + empty steps=[] → legacy (mixed)",
+      message: {
+        role: "assistant",
+        content: "final",
+        blocks: [block()],
+        steps: [],
+        tool_name: "ChatAgent",
+      },
+    },
+    {
+      name: "blocks + empty tableHeaders=[] → table (mixed)",
+      message: {
+        role: "assistant",
+        content: [],
+        blocks: [block()],
+        tableHeaders: [],
+        tool_name: "DataAgent",
+      },
+    },
+  ];
+
+  for (const { name, message } of cases) {
+    it(name, () => {
+      const want = expectedBranch(message);
+      const wrapper = mountContent(message);
+      expect(detectBranch(wrapper)).toBe(want);
+    });
+  }
+});
+
+describe("ChatMessageContent namespace and stream props", () => {
+  it("forwards runId/transport to StreamMessage with no namespace", () => {
+    const transport = async () => ({ ok: true });
+    const wrapper = mountContent(
+      {
+        role: "assistant",
+        content: "",
+        streaming: true,
+        blocks: [block()],
+        tool_name: "ChatAgent",
+      },
+      { index: 4, streamRunId: "run-42", streamTransport: transport }
+    );
+    const stream = wrapper.find('[data-testid="stream-message"]');
+    expect(stream.exists()).toBe(true);
+    expect(stream.attributes("data-ns")).toBe("__absent__");
+    expect(stream.attributes("data-run-id")).toBe("run-42");
+    expect(stream.attributes("data-has-transport")).toBe("1");
+  });
+
+  it("passes page-unique ns=m${index} to DeepGenome and CitedAnswer only", () => {
+    const deep = mountContent(
+      {
+        role: "assistant",
+        content: "md",
+        tool_name: "DeepGenomeAgent",
+        doc_list: [{ title: "Doc" }],
+      },
+      { index: 7 }
+    );
+    expect(deep.find('[data-testid="deep-genome"]').attributes("data-ns")).toBe(
+      "m7"
+    );
+
+    const cited = mountContent(
+      {
+        role: "assistant",
+        content: "body",
+        tool_name: "KnowledgeAgent",
+        doc_list: [{ title: "Doc" }],
+      },
+      { index: 3 }
+    );
+    expect(
+      cited.find('[data-testid="cited-answer"]').attributes("data-ns")
+    ).toBe("m3");
+
+    const plain = mountContent(
+      { role: "assistant", content: "plain", tool_name: "ChatAgent" },
+      { index: 9 }
+    );
+    expect(
+      plain.find('[data-testid="markdown-viewer"]').attributes("data-ns")
+    ).toBe("__absent__");
+  });
+
+  it("emits finish from CitedAnswer and MarkdownViewer paths", async () => {
+    const cited = mountContent({
+      role: "assistant",
+      content: "body",
+      tool_name: "KnowledgeAgent",
+      doc_list: [{ title: "Doc" }],
+    });
+    await cited.findComponent({ name: "CitedAnswer" }).vm.$emit("finish");
+    expect(cited.emitted("finish")).toBeTruthy();
+
+    const md = mountContent({
+      role: "assistant",
+      content: "plain",
+      tool_name: "ChatAgent",
+    });
+    await md.findComponent({ name: "MarkdownViewer" }).vm.$emit("finish");
+    expect(md.emitted("finish")).toBeTruthy();
+  });
+});
+
+describe("ChatMessageContent integration in chat index", () => {
+  it("is mounted from index.vue and index no longer inlines StreamMessage/CitedAnswer branches", () => {
+    expect(CHAT_SOURCE).toContain("<ChatMessageContent");
+    expect(CHAT_SOURCE).toMatch(
+      /import ChatMessageContent from ["']\.\/components\/ChatMessageContent\.vue["']/
+    );
+    // Content renderers live in ChatMessageContent; index keeps log MarkdownViewer only.
+    expect(CHAT_SOURCE).not.toMatch(
+      /<StreamMessage[\s\S]*:blocks="message\.blocks/
+    );
+    expect(CHAT_SOURCE).not.toMatch(/<CitedAnswer[\s\S]*:ns="'m' \+ index"/);
+    expect(CHAT_SOURCE).not.toMatch(
+      /<DeepGenomeResultViewer[\s\S]*:ns="'m' \+ index"/
+    );
+  });
+});
