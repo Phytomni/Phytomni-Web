@@ -132,8 +132,6 @@
                 :message="message"
                 :index="index"
                 :is-last-message="currentChat.messages.length - 1 == index"
-                :stream-run-id="getChatState(currentChatId).a2uiRunId"
-                :stream-transport="getChatState(currentChatId).a2uiActionSender"
                 :activity-expanded-by-message="
                   getChatState(currentChatId).activityExpandedByMessage
                 "

@@ -72,8 +72,6 @@ describe("useChatStates parallel chat state", () => {
       mode: "instant",
       isStreaming: false,
       streamingMessageId: null,
-      a2uiRunId: "",
-      a2uiActionSender: null,
       uploadTransfer: null,
       selectedAgent: "",
       renderedChat: null,

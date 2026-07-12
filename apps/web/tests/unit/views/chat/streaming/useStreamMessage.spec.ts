@@ -10,6 +10,8 @@ import { useStreamMessage } from "@/views/chat/composables/useStreamMessage";
 import { unregisterAbortController } from "@/utils/request";
 import type { ChatMessage } from "@/views/chat/types";
 
+const CANONICAL_DIALOGUE_ID = "11111111-1111-4111-8111-111111111142";
+
 function sseStream(frames: string[]): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
   return new ReadableStream({
@@ -203,7 +205,7 @@ describe("useStreamMessage", () => {
     expect(placeholder.showFollowUpQuestions).toBe(true);
   });
 
-  it("registers a2ui transport, stamps run id during stream, and clears on finish", async () => {
+  it("owns canonical A2UI identity on the message and retains it after RunFinished", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => {
       release = r;
@@ -230,14 +232,20 @@ describe("useStreamMessage", () => {
         controller.close();
       },
     });
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    (fetch as any).mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "142",
+        },
+      })
+    );
 
     const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
     const chatState: any = {
       isStreaming: false,
       streamingMessageId: null,
-      a2uiActionSender: null,
-      a2uiRunId: "",
     };
     const formData = new FormData();
     formData.append("id", "42");
@@ -253,13 +261,268 @@ describe("useStreamMessage", () => {
       placeholder,
     });
     await vi.waitFor(() => {
-      expect(chatState.a2uiRunId).toBe("run-42");
+      expect(placeholder.a2uiRuntime?.runId).toBe("run-42");
     });
-    expect(chatState.a2uiActionSender).not.toBeNull();
+    expect(placeholder.id).toBe("142");
+    expect(placeholder.a2uiRuntime?.dialogueId).toBe(CANONICAL_DIALOGUE_ID);
+    expect(placeholder.a2uiRuntime?.messageId).toBe("142");
     release();
-    await streamPromise;
-    expect(chatState.a2uiRunId).toBe("");
-    expect(chatState.a2uiActionSender).toBeNull();
+    const result = await streamPromise;
+    expect(result).toEqual({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "142",
+    });
+    expect(placeholder.a2uiRuntime?.runId).toBe("run-42");
+    expect(placeholder.a2uiRuntime?.transport).toBeTypeOf("function");
+    await placeholder.a2uiRuntime!.transport({
+      surface_id: "surf-1",
+      widget: "confirm",
+      action_id: "action-canonical-1",
+      run_id: "run-42",
+      payload: { confirmed: true },
+    });
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      `/api/v1/conversations/${CANONICAL_DIALOGUE_ID}/a2ui-actions`,
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("never derives A2UI identity from the FormData parent id", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-no-headers"}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-1","widget":"confirm","props":{"title":"OK?"}}}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-no-headers"}\n\n',
+    ]);
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    const formData = new FormData();
+    formData.append("id", "42");
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    const result = await streamMessage({
+      dialogueId: "new_local",
+      formData,
+      requestId: "req-no-headers",
+      placeholder,
+    });
+
+    expect(result).toEqual({ dialogueId: undefined, messageId: undefined });
+    expect(placeholder.id).toBeUndefined();
+    expect(placeholder.a2uiRuntime).toBeUndefined();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/conversations/42/messages",
+      expect.any(Object)
+    );
+  });
+
+  it("rejects partial or client-shaped response identities", async () => {
+    const bodies = [
+      {
+        "X-Phyto-Dialogue-Id": "new_spoofed",
+        "X-Phyto-Message-Id": "42",
+      },
+      {
+        "X-Phyto-Dialogue-Id": "canonical-d2",
+        "X-Phyto-Message-Id": "not-a-row",
+      },
+      { "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID },
+    ];
+    const placeholders: ChatMessage[] = [];
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    for (const [index, headers] of bodies.entries()) {
+      (fetch as any).mockResolvedValueOnce(
+        new Response(
+          sseStream([
+            'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-x"}\n\n',
+            'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-x"}\n\n',
+          ]),
+          { status: 200, headers }
+        )
+      );
+      const placeholder: ChatMessage = {
+        role: "assistant",
+        content: "",
+        streaming: true,
+        blocks: [],
+      };
+      placeholders.push(placeholder);
+      await streamMessage({
+        dialogueId: `local-${index}`,
+        formData: new FormData(),
+        requestId: `partial-${index}`,
+        placeholder,
+      });
+    }
+
+    expect(placeholders.every((message) => !message.a2uiRuntime)).toBe(true);
+    expect(placeholders.every((message) => !message.id)).toBe(true);
+  });
+
+  it("invalidates message-owned A2UI context on RunError and abnormal EOF", async () => {
+    const response = (frames: string[], messageId: string) =>
+      new Response(sseStream(frames), {
+        status: 200,
+        headers: {
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": messageId,
+        },
+      });
+    (fetch as any)
+      .mockResolvedValueOnce(
+        response(
+          [
+            'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-error"}\n\n',
+            'event: RunError\ndata: {"type":"RunError","message":"boom"}\n\n',
+          ],
+          "201"
+        )
+      )
+      .mockResolvedValueOnce(
+        response(
+          [
+            'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-eof"}\n\n',
+          ],
+          "202"
+        )
+      );
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+    const errored: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const interrupted: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+
+    await streamMessage({
+      dialogueId: "local-error",
+      formData: new FormData(),
+      requestId: "req-error",
+      placeholder: errored,
+    });
+    await streamMessage({
+      dialogueId: "local-eof",
+      formData: new FormData(),
+      requestId: "req-eof",
+      placeholder: interrupted,
+    });
+
+    expect(errored.a2uiRuntime).toBeUndefined();
+    expect(errored.content).toBe("boom");
+    expect(interrupted.a2uiRuntime).toBeUndefined();
+    expect(interrupted.content).toBe("chat.streamInterrupted");
+  });
+
+  it("invalidates a header-established A2UI context when stream reading aborts", async () => {
+    const abortError = new Error("aborted while reading");
+    abortError.name = "AbortError";
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(abortError);
+      },
+    });
+    (fetch as any).mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "203",
+        },
+      }),
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "local-abort",
+      formData: new FormData(),
+      requestId: "req-abort-read",
+      placeholder,
+    });
+
+    expect(placeholder.id).toBe("203");
+    expect(placeholder.a2uiRuntime).toBeUndefined();
+    expect(placeholder.content).toBe("");
+  });
+
+  it("retains message-owned A2UI context after RunFinished even if transport close errors", async () => {
+    const enc = new TextEncoder();
+    let delivered = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (!delivered) {
+          delivered = true;
+          controller.enqueue(
+            enc.encode(
+              'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-finished"}\n\n' +
+                'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-finished"}\n\n'
+            )
+          );
+          return;
+        }
+        controller.error(new Error("late close failure"));
+      },
+    });
+    (fetch as any).mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "204",
+        },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "local-finished",
+      formData: new FormData(),
+      requestId: "req-finished-close",
+      placeholder,
+    });
+
+    expect(placeholder.a2uiRuntime?.runId).toBe("run-finished");
+    expect(placeholder.a2uiRuntime?.messageId).toBe("204");
+    expect(placeholder.content).toBe("");
   });
 
   it("unregisters the abort controller when the stream settles", async () => {
@@ -304,14 +567,28 @@ describe("useStreamMessage", () => {
       });
 
     (fetch as any)
-      .mockResolvedValueOnce(new Response(gatedBody("old", staleGate), { status: 200 }))
-      .mockResolvedValueOnce(new Response(gatedBody("new", freshGate), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(gatedBody("old", staleGate), {
+          status: 200,
+          headers: {
+            "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+            "X-Phyto-Message-Id": "301",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(gatedBody("new", freshGate), {
+          status: 200,
+          headers: {
+            "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+            "X-Phyto-Message-Id": "302",
+          },
+        })
+      );
 
     const chatState: any = {
       isStreaming: false,
       streamingMessageId: null,
-      a2uiActionSender: null,
-      a2uiRunId: "",
     };
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
@@ -358,11 +635,17 @@ describe("useStreamMessage", () => {
     expect(chatState.streamingMessageId).toBe("req-new");
     expect(chatState.isStreaming).toBe(true);
     expect(stalePlaceholder.streaming).toBe(false);
+    expect(stalePlaceholder.a2uiRuntime?.runId).toBe("old");
+    expect(stalePlaceholder.a2uiRuntime?.messageId).toBe("301");
+    expect(freshPlaceholder.a2uiRuntime?.runId).toBe("new");
+    expect(freshPlaceholder.a2uiRuntime?.messageId).toBe("302");
 
     releaseFresh();
     await freshPromise;
     expect(chatState.streamingMessageId).toBeNull();
     expect(chatState.isStreaming).toBe(false);
+    expect(stalePlaceholder.a2uiRuntime?.runId).toBe("old");
+    expect(freshPlaceholder.a2uiRuntime?.runId).toBe("new");
   });
 
   /**

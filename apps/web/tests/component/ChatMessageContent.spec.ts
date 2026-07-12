@@ -121,8 +121,6 @@ const mountContent = (
       message,
       index: 0,
       isLastMessage: true,
-      streamRunId: "",
-      streamTransport: null,
       geneNetworkImages: EMPTY_IMAGES,
       geneNetworkImagesLoading: EMPTY_LOADING,
       digitalDesignImages: EMPTY_IMAGES,
@@ -423,9 +421,9 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
   });
 });
 
-describe("ChatMessageContent namespace and stream props", () => {
-  it("forwards runId/transport to StreamMessage with no namespace", () => {
-    const transport = async () => ({ ok: true });
+describe("ChatMessageContent namespace and message-owned stream context", () => {
+  it("forwards the message's own runId/transport with no namespace", () => {
+    const transport = async () => undefined;
     const wrapper = mountContent(
       {
         role: "assistant",
@@ -433,14 +431,33 @@ describe("ChatMessageContent namespace and stream props", () => {
         streaming: true,
         blocks: [block()],
         tool_name: "ChatAgent",
+        a2uiRuntime: {
+          dialogueId: "dialogue-42",
+          messageId: "142",
+          runId: "run-42",
+          transport,
       },
-      { index: 4, streamRunId: "run-42", streamTransport: transport }
+      },
+      { index: 4 }
     );
     const stream = wrapper.find('[data-testid="stream-message"]');
     expect(stream.exists()).toBe(true);
     expect(stream.attributes("data-ns")).toBe("__absent__");
     expect(stream.attributes("data-run-id")).toBe("run-42");
     expect(stream.attributes("data-has-transport")).toBe("1");
+  });
+
+  it("does not leak another message's A2UI context into a context-free row", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [block()],
+      tool_name: "ChatAgent",
+    });
+    const stream = wrapper.find('[data-testid="stream-message"]');
+    expect(stream.attributes("data-run-id")).toBeUndefined();
+    expect(stream.attributes("data-has-transport")).toBe("0");
   });
 
   it("reference-free streaming fixtures invent no namespace", () => {

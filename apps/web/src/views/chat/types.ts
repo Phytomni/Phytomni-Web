@@ -23,6 +23,18 @@ export type ChatView = Partial<Chat> & {
   messages: ChatMessage[];
 };
 
+/**
+ * Runtime-only identity and uplink owned by one streamed assistant message.
+ * It is intentionally not dialogue UI state: an older streamed row must keep
+ * its own run while a later row starts in the same conversation.
+ */
+export interface A2uiRuntimeContext {
+  dialogueId: string;
+  messageId: string;
+  runId: string;
+  transport: A2uiActionTransport;
+}
+
 export interface ChatMessage {
   role: string;
   content: any;
@@ -54,6 +66,8 @@ export interface ChatMessage {
    * FormData, reactions, Artifact eligibility, or A2UI run identity.
    */
   streamPresentationKey?: string;
+  /** Runtime-only A2UI context sourced exclusively from stream response headers. */
+  a2uiRuntime?: A2uiRuntimeContext;
 }
 
 // ContentBlock is one typed unit in a streaming assistant message. authority
@@ -128,8 +142,6 @@ export interface ChatUIState {
   mode: "instant" | "expert";
   isStreaming: boolean;
   streamingMessageId: string | null;
-  a2uiActionSender: A2uiActionTransport | null;
-  a2uiRunId: string;
   uploadTransfer: TransferSnapshot | null;
   selectedAgent: string;
   /** Live message tree for this dialogue; default null until hydrated. */

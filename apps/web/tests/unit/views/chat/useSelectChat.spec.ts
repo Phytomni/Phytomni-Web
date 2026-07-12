@@ -32,8 +32,6 @@ function makeState(): ChatUIState {
     mode: "instant",
     isStreaming: false,
     streamingMessageId: null,
-    a2uiActionSender: null,
-    a2uiRunId: "",
     uploadTransfer: null,
     selectedAgent: "",
     renderedChat: null,

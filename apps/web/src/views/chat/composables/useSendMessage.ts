@@ -232,12 +232,18 @@ export function useSendMessage(opts: {
           getChatState: getStreamChatState,
           t,
         });
-        await streamMessage({
+        const streamResult = await streamMessage({
           dialogueId: sendingDialogueId,
           formData: queryData,
           requestId: requestKey,
           placeholder,
         });
+        if (
+          chatState.activeRequestId === requestKey &&
+          streamResult.dialogueId
+        ) {
+          blockingDialogueId = streamResult.dialogueId;
+        }
         return;
       }
 

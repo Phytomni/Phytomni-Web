@@ -158,8 +158,6 @@ function populateFullChatState(
   state.reactions = { "99": label === "A" ? 1 : 2 };
   state.refreshingMessages = { "0_99": label === "A" };
   state.copyVisible = label === "A" ? 1 : 2;
-  state.a2uiRunId = `run-${label}`;
-  state.a2uiActionSender = transport;
   state.renderedChat = {
     dialogue_id: label,
     messages: [
@@ -169,6 +167,12 @@ function populateFullChatState(
         content: `a-${label}`,
         id: `msg-${label}`,
         blocks: [FIXTURE_A2UI_REQUIRED_BLOCK],
+        a2uiRuntime: {
+          dialogueId: label,
+          messageId: label === "A" ? "101" : "102",
+          runId: `run-${label}`,
+          transport,
+        },
       },
     ],
   };
@@ -341,8 +345,6 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         message: MESSAGE_CITED,
         index: 1,
         isLastMessage: true,
-        streamRunId: "",
-        streamTransport: null,
         geneNetworkImages: EMPTY_IMAGES,
         geneNetworkImagesLoading: EMPTY_LOADING,
         digitalDesignImages: EMPTY_IMAGES,
@@ -372,7 +374,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
 });
 
 describe("ChatInteractionV2 — per-dialogue isolation", () => {
-  it("isolates every owned ChatUIState field across A→B→A", () => {
+  it("isolates ChatUIState and message-owned runtime across A→B→A", () => {
     const s = useChatStates();
     const transportA = createMemoryA2uiTransport([]);
     const transportB = createMemoryA2uiTransport([]);
@@ -383,7 +385,7 @@ describe("ChatInteractionV2 — per-dialogue isolation", () => {
     const ownedA = stateA;
     const ownedRenderedA = stateA.renderedChat;
     const ownedTransferA = stateA.uploadTransfer;
-    const ownedTransportA = stateA.a2uiActionSender;
+    const ownedRuntimeA = stateA.renderedChat?.messages[1].a2uiRuntime;
 
     s.currentChatId.value = "B";
     populateFullChatState(s.getChatState("B"), "B", transportB);
@@ -398,8 +400,10 @@ describe("ChatInteractionV2 — per-dialogue isolation", () => {
       true
     );
     expect(stateB.logErrorKinds["42"]).toBe("update");
-    expect(stateB.a2uiRunId).toBe("run-B");
-    expect(stateB.a2uiActionSender).toBe(transportB);
+    expect(stateB.renderedChat?.messages[1].a2uiRuntime?.runId).toBe("run-B");
+    expect(stateB.renderedChat?.messages[1].a2uiRuntime?.transport).toBe(
+      transportB
+    );
     expect(stateB.reactions["99"]).toBe(2);
     expect(stateB.refreshingMessages["0_99"]).toBe(false);
     expect(stateB.copyVisible).toBe(2);
@@ -424,8 +428,9 @@ describe("ChatInteractionV2 — per-dialogue isolation", () => {
     expect(s.getChatState("A").reactions["99"]).toBe(1);
     expect(s.getChatState("A").refreshingMessages["0_99"]).toBe(true);
     expect(s.copyVisible.value).toBe(1);
-    expect(s.getChatState("A").a2uiRunId).toBe("run-A");
-    expect(s.getChatState("A").a2uiActionSender).toBe(ownedTransportA);
+    expect(s.getChatState("A").renderedChat?.messages[1].a2uiRuntime).toBe(
+      ownedRuntimeA
+    );
     expect(s.getChatState("A").renderedChat).toBe(ownedRenderedA);
     expect(s.getChatState("B")).toBe(stateB);
   });
@@ -478,7 +483,7 @@ describe("ChatInteractionV2 — temporary ID rekey", () => {
     const ownedActivity = state.activityExpandedByMessage;
     const ownedLog = state.logData;
     const ownedKinds = state.logErrorKinds;
-    const ownedTransport = state.a2uiActionSender;
+    const ownedRuntime = state.renderedChat?.messages[1].a2uiRuntime;
 
     const result = s.rekeyChatState(tempId, serverId);
     expect(result).toEqual({ outcome: "moved" });
@@ -491,8 +496,9 @@ describe("ChatInteractionV2 — temporary ID rekey", () => {
     expect(s.chatStates.value[serverId].logData).toBe(ownedLog);
     expect(s.chatStates.value[serverId].logErrorKinds).toBe(ownedKinds);
     expect(s.chatStates.value[serverId].uploadTransfer).toBe(ownedTransfer);
-    expect(s.chatStates.value[serverId].a2uiRunId).toBe("run-A");
-    expect(s.chatStates.value[serverId].a2uiActionSender).toBe(ownedTransport);
+    expect(
+      s.chatStates.value[serverId].renderedChat?.messages[1].a2uiRuntime
+    ).toBe(ownedRuntime);
     expect(s.chatStates.value[serverId].renderedChat).toBe(ownedRendered);
   });
 

@@ -23,8 +23,8 @@
       :blocks="message.blocks || []"
       :references="message.doc_list"
       :ns="message.doc_list?.length ? 'm' + index : undefined"
-      :run-id="streamRunId"
-      :transport="streamTransport"
+      :run-id="message.a2uiRuntime?.runId"
+      :transport="message.a2uiRuntime?.transport ?? null"
       :message-id="message.id"
       :stream-presentation-key="message.streamPresentationKey"
       :activity-expanded-by-message="activityExpandedByMessage"
@@ -175,15 +175,12 @@ import MarkdownViewer from "@/components/MarkdownViewer.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import StreamMessage from "./StreamMessage.vue";
-import type { A2uiActionTransport } from "../streaming/a2uiAction";
 import type { ChatMessage } from "../types";
 
 defineProps<{
   message: ChatMessage;
   index: number;
   isLastMessage: boolean;
-  streamRunId?: string;
-  streamTransport?: A2uiActionTransport | null;
   activityExpandedByMessage?: Record<string, boolean>;
   geneNetworkImages: Record<string, string[]>;
   geneNetworkImagesLoading: Record<string, boolean>;

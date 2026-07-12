@@ -4,7 +4,9 @@ import type { ChatComposerHandle } from "@/views/chat/types";
 
 const streamHarness = vi.hoisted(() => ({
   capturedGetChatState: undefined as ((id: string) => unknown) | undefined,
-  streamMessage: vi.fn(async () => undefined),
+  streamMessage: vi.fn(
+    async (): Promise<{ dialogueId?: string; messageId?: string }> => ({})
+  ),
 }));
 
 // getQueryAbortable (main send) + getAnswerCheck (network-error recovery) are APIs the
@@ -99,7 +101,7 @@ describe("useSendMessage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     streamHarness.capturedGetChatState = undefined;
-    streamHarness.streamMessage.mockResolvedValue(undefined);
+    streamHarness.streamMessage.mockResolvedValue({});
     vi.stubEnv("VITE_STREAM_ENABLED", "false");
     states = new Map();
     states.set("A", makeState());
@@ -716,6 +718,7 @@ describe("useSendMessage", () => {
       const viaWrapper = streamHarness.capturedGetChatState!(tempId);
       expect(viaWrapper).toBe(state);
       expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
+      return {};
     });
 
     const { sendMessage } = makeComposable();
@@ -725,6 +728,26 @@ describe("useSendMessage", () => {
     expect(streamHarness.streamMessage).toHaveBeenCalledTimes(1);
     expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
     expect(state.isSending).toBe(false);
+  });
+
+  it("passes the stream response dialogue id to exact history reconciliation", async () => {
+    vi.stubEnv("VITE_STREAM_ENABLED", "true");
+    const tempId = "new_stream_headers";
+    const state = makeState({ messageInput: "stream with canonical identity" });
+    states.set(tempId, state);
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+    streamHarness.streamMessage.mockResolvedValueOnce({
+      dialogueId: "canonical-stream-dialogue",
+      messageId: "77",
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, {
+      blockingDialogueId: "canonical-stream-dialogue",
+    });
   });
 
   it("stamps streaming placeholder streamPresentationKey with the request id (not message.id)", async () => {
@@ -743,6 +766,7 @@ describe("useSendMessage", () => {
       st.streamingMessageId = null;
       st.isStreaming = false;
       input.placeholder.streaming = false;
+      return {};
     });
 
     const { sendMessage } = makeComposable();
