@@ -26,9 +26,15 @@
           <PhyAdaptiveSidebar
             :collapsed="fixture.sidebarCollapsed"
             :drawer-open="fixture.drawerOpen"
+            :close-label="$t('common.close')"
             @close="onFixtureAction('sidebar-close')"
             @toggle="onFixtureAction('sidebar-toggle')"
           >
+            <template #close>
+              <el-icon aria-hidden="true">
+                <Close />
+              </el-icon>
+            </template>
             <ChatSidebarNav
               :collapsed="fixture.sidebarCollapsed"
               active-item="new-chat"
@@ -256,7 +262,7 @@
 import { computed, nextTick, onMounted, provide, ref, watch } from "vue";
 import en from "element-plus/es/locale/lang/en";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
-import { Menu } from "@element-plus/icons-vue";
+import { Close, Menu } from "@element-plus/icons-vue";
 import {
   PhyAdaptiveShell,
   PhyAdaptiveSidebar,

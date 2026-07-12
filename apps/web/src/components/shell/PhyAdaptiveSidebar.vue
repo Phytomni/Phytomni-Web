@@ -11,7 +11,7 @@
       type="button"
       class="phy-adaptive-sidebar__scrim"
       data-action="close"
-      aria-label="Close sidebar"
+      :aria-label="closeLabel"
       @click="emit('close')"
     />
 
@@ -28,11 +28,15 @@
         </button>
       </div>
 
-      <div v-if="$slots.close" class="phy-adaptive-sidebar__close">
+      <div
+        v-if="$slots.close && drawerOpen"
+        class="phy-adaptive-sidebar__close"
+      >
         <button
           type="button"
           data-action="close"
-          aria-label="Close sidebar"
+          data-testid="sidebar-drawer-close"
+          :aria-label="closeLabel"
           @click="emit('close')"
         >
           <slot name="close" />
@@ -51,10 +55,12 @@ withDefaults(
   defineProps<{
     collapsed?: boolean;
     drawerOpen?: boolean;
+    closeLabel?: string;
   }>(),
   {
     collapsed: false,
     drawerOpen: false,
+    closeLabel: "Close sidebar",
   }
 );
 
@@ -101,6 +107,10 @@ const emit = defineEmits<{
 .phy-adaptive-sidebar__toggle,
 .phy-adaptive-sidebar__close {
   flex: 0 0 auto;
+}
+
+.phy-adaptive-sidebar__close {
+  display: none;
 }
 
 .phy-adaptive-sidebar__toggle button,
@@ -163,6 +173,19 @@ const emit = defineEmits<{
     max-width: calc(100vw - var(--phy-space-32));
     transform: translateX(-100%);
     transition: transform var(--phy-motion-normal) var(--phy-motion-ease-out);
+  }
+
+  .phy-adaptive-sidebar__close {
+    position: absolute;
+    inset-block-start: var(--phy-space-8);
+    inset-inline-end: var(--phy-space-8);
+    z-index: 2;
+    display: block;
+  }
+
+  .phy-adaptive-sidebar__close button {
+    background: var(--phy-color-fill-subtle);
+    color: var(--phy-color-text);
   }
 
   .phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__surface {

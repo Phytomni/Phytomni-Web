@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import ChatSidebarNav from "@/views/chat/components/ChatSidebarNav.vue";
+
+const NAV_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatSidebarNav.vue"),
+  "utf8"
+);
 
 const baseProps = {
   collapsed: false,
@@ -175,6 +182,20 @@ describe("ChatSidebarNav", () => {
     ).toHaveLength(1);
   });
 
+  it("locks the calm sidebar hierarchy to shared theme geometry", () => {
+    expect(NAV_SOURCE).toContain("font-size: 20px;");
+    expect(NAV_SOURCE).toContain("font-weight: 600;");
+    expect(NAV_SOURCE).toContain(
+      "var(--phy-control-height-default) + var(--phy-space-4)"
+    );
+    expect(NAV_SOURCE).toContain("border-radius: var(--phy-radius-md);");
+    expect(NAV_SOURCE).not.toContain(
+      "min-height: var(--phy-control-height-primary);"
+    );
+    expect(NAV_SOURCE).not.toContain("border-radius: 50%;");
+    expect(NAV_SOURCE).not.toContain("#f56c6c");
+  });
+
   it("keeps secondary destinations as quiet rows without primary styling", () => {
     const wrapper = mountNav({ activeItem: "knowledge-base" });
     const secondaryRows = wrapper.findAll(".sidebar-nav-row:not(.sidebar-primary-action)");
@@ -187,6 +208,11 @@ describe("ChatSidebarNav", () => {
         .find('[data-test="sidebar-nav-gene-display"]')
         .classes()
     ).toContain("is-active");
+    expect(
+      wrapper
+        .find('[data-test="sidebar-nav-gene-display"]')
+        .attributes("aria-current")
+    ).toBe("page");
   });
 
   it("places help utilities in the bottom utility group once", () => {
@@ -222,6 +248,9 @@ describe("ChatSidebarNav", () => {
     expect(
       expanded.find('[data-testid="chat-account-identity"]').text()
     ).toContain("Ada Lovelace");
+    expect(expanded.find(".app-title-label").attributes("title")).toBe(
+      "t:chat.appTitle"
+    );
 
     const collapsed = mountNav({ collapsed: true });
     expect(collapsed.findAll('[data-testid="chat-account-identity"]')).toHaveLength(

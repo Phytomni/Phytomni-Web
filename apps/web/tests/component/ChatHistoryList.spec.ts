@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import ChatHistoryList, {
   type ChatHistoryGroup,
 } from "@/views/chat/components/ChatHistoryList.vue";
 import type { Chat } from "@/views/chat/types";
+
+const HISTORY_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatHistoryList.vue"),
+  "utf8"
+);
 
 const makeChat = (overrides: Partial<Chat> = {}): Chat => ({
   id: 1,
@@ -77,6 +84,19 @@ const mountList = (overrides: Record<string, unknown> = {}) =>
   });
 
 describe("ChatHistoryList", () => {
+  it("keeps compact group and conversation geometry token-owned", () => {
+    expect(HISTORY_SOURCE).toContain("font-size: 12px;");
+    expect(HISTORY_SOURCE).toContain(
+      "min-height: var(--phy-control-height-default);"
+    );
+    expect(HISTORY_SOURCE).toContain(
+      "background-color: var(--phy-color-primary-soft);"
+    );
+    expect(HISTORY_SOURCE).not.toContain("min-height: 400px;");
+    expect(HISTORY_SOURCE).not.toContain("#909399");
+    expect(HISTORY_SOURCE).not.toContain("#f56c6c");
+  });
+
   it("renders each non-empty group once and skips empty groups", () => {
     const wrapper = mountList();
 
@@ -92,11 +112,17 @@ describe("ChatHistoryList", () => {
 
     expect(wrapper.findAll(".chat-item")[1].classes()).toContain("active");
 
-    await wrapper.findAll(".chat-item")[0].trigger("click");
+    await wrapper.findAll(".chat-select")[0].trigger("click");
     await wrapper.find(".time-label").trigger("click");
 
     expect(wrapper.emitted("select")).toEqual([["dialogue-1"]]);
     expect(wrapper.emitted("toggle-group")).toEqual([["today"]]);
+    expect(wrapper.findAll(".chat-select")[1].attributes("aria-current")).toBe(
+      "page"
+    );
+    expect(wrapper.find(".time-label").attributes("aria-expanded")).toBe(
+      "true"
+    );
   });
 
   it("emits chat actions without selecting the chat item", async () => {

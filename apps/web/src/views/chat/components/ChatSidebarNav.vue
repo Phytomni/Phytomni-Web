@@ -10,7 +10,13 @@
             alt="Logo"
             @click="collapsed && emit('toggle-collapse')"
           />
-          <span v-if="!collapsed">{{ $t("chat.appTitle") }}</span>
+          <span
+            v-if="!collapsed"
+            class="app-title-label"
+            :title="$t('chat.appTitle')"
+          >
+            {{ $t("chat.appTitle") }}</span
+          >
         </div>
         <el-button
           v-if="!collapsed"
@@ -52,6 +58,7 @@
           class="sidebar-nav-row"
           :class="{ 'is-active': activeItem === 'explore-agent' }"
           :aria-label="collapsed ? $t('chat.exploreAgent') : undefined"
+          :aria-current="activeItem === 'explore-agent' ? 'page' : undefined"
           @click="emit('explore-agent')"
         >
           <el-icon>
@@ -71,6 +78,7 @@
           class="sidebar-nav-row"
           :class="{ 'is-active': activeItem === 'knowledge-base' }"
           :aria-label="collapsed ? $t('chat.deepGenome') : undefined"
+          :aria-current="activeItem === 'knowledge-base' ? 'page' : undefined"
           @click="emit('gene-display')"
         >
           <el-icon>
@@ -87,6 +95,7 @@
           class="sidebar-nav-row"
           :class="{ 'is-active': activeItem === 'favorites' }"
           :aria-label="collapsed ? $t('chat.favorites') : undefined"
+          :aria-current="activeItem === 'favorites' ? 'page' : undefined"
           @click="emit('favorites')"
         >
           <el-icon>
@@ -248,7 +257,7 @@
               {{ $t("user.changePassword") }}
             </el-dropdown-item>
             <el-dropdown-item command="logout" :icon="SwitchButton" divided>
-              <span style="color: #f56c6c">{{ $t("user.logout") }}</span>
+              <span class="danger-label">{{ $t("user.logout") }}</span>
             </el-dropdown-item>
           </el-dropdown-menu>
         </template>
@@ -403,35 +412,60 @@ const handleHelpCommand = (command: string | number | object) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--phy-color-border);
-  height: 62px;
+  gap: var(--phy-space-8);
+  height: calc(var(--phy-control-height-default) + var(--phy-space-16));
+  padding: 0 var(--phy-space-12);
 
   .app-title {
     display: flex;
+    flex: 1;
     align-items: center;
-    font-size: 24px;
-    font-weight: 700;
+    min-width: 0;
+    font-size: 20px;
+    font-weight: 600;
     color: var(--phy-color-text);
 
     .logo {
       width: 24px;
       height: 24px;
-      margin-right: 8px;
+      flex: 0 0 auto;
+      margin-right: var(--phy-space-8);
 
       &.clickable {
         cursor: pointer;
-        transition: transform 0.2s;
+        transition: opacity var(--phy-motion-fast) ease;
 
         &:hover {
-          transform: scale(1.1);
+          opacity: 0.72;
         }
       }
+    }
+
+    .app-title-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 
   .collapse-btn {
-    padding: 4px;
+    flex: 0 0 auto;
+    width: var(--phy-control-height-default);
+    height: var(--phy-control-height-default);
+    padding: var(--phy-space-8);
+    border-radius: var(--phy-radius-sm);
+    color: var(--phy-color-text-secondary);
+
+    &:hover {
+      background: var(--phy-color-fill-subtle);
+      color: var(--phy-color-text);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--phy-color-focus);
+      outline-offset: 2px;
+    }
   }
 }
 
@@ -440,13 +474,13 @@ const handleHelpCommand = (command: string | number | object) => {
 .sidebar-nav-utility {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px;
+  gap: var(--phy-space-4);
+  padding: var(--phy-space-8);
 }
 
 .sidebar-nav-primary {
-  padding-top: 16px;
-  padding-bottom: 4px;
+  padding-top: var(--phy-space-8);
+  padding-bottom: var(--phy-space-4);
 }
 
 .sidebar-nav-secondary {
@@ -456,20 +490,21 @@ const handleHelpCommand = (command: string | number | object) => {
 .sidebar-nav-utility {
   flex-shrink: 0;
   margin-top: auto;
-  padding-top: 8px;
-  border-top: 1px solid var(--phy-color-border);
+  padding-top: var(--phy-space-8);
+  border-top: 1px solid var(--phy-color-border-subtle);
 }
 
 .sidebar-nav-row {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--phy-space-8);
   width: 100%;
   min-height: var(--phy-control-height-default);
-  padding: 8px 12px;
+  padding: var(--phy-space-8) var(--phy-space-12);
   border: 0;
-  border-radius: var(--phy-radius-sm);
+  border-radius: var(--phy-radius-md);
   background: transparent;
   color: var(--phy-color-text-secondary);
   font: inherit;
@@ -477,9 +512,8 @@ const handleHelpCommand = (command: string | number | object) => {
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+  transition: background-color var(--phy-motion-fast) ease,
+    color var(--phy-motion-fast) ease;
 
   .el-icon {
     flex-shrink: 0;
@@ -497,15 +531,24 @@ const handleHelpCommand = (command: string | number | object) => {
   }
 
   &.is-active:not(.sidebar-primary-action) {
-    background-color: var(--phy-color-accent-soft);
-    color: var(--phy-color-accent-text);
+    background-color: var(--phy-color-primary-soft);
+    color: var(--phy-color-action-text);
+
+    &::before {
+      position: absolute;
+      inset-block: var(--phy-space-8);
+      inset-inline-start: 0;
+      width: 2px;
+      border-radius: var(--phy-radius-pill);
+      background: var(--phy-color-action-fill);
+      content: "";
+    }
   }
 }
 
 .sidebar-primary-action {
-  justify-content: center;
-  min-height: var(--phy-control-height-primary);
-  border-radius: var(--phy-radius-pill);
+  min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
+  border-radius: var(--phy-radius-md);
   background-color: var(--phy-color-action-fill);
   color: var(--phy-color-on-action);
 
@@ -536,18 +579,22 @@ const handleHelpCommand = (command: string | number | object) => {
 
   .sidebar-nav-row {
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    min-height: 40px;
+    width: var(--phy-control-height-default);
+    height: var(--phy-control-height-default);
+    min-height: var(--phy-control-height-default);
     padding: 0;
     margin: 0 auto;
-    border-radius: 50%;
+    border-radius: var(--phy-radius-md);
+
+    &.is-active:not(.sidebar-primary-action)::before {
+      inset-block: var(--phy-space-8);
+    }
   }
 
   .sidebar-primary-action {
-    width: 40px;
-    height: 40px;
-    min-height: 40px;
+    width: var(--phy-control-height-default);
+    height: var(--phy-control-height-default);
+    min-height: var(--phy-control-height-default);
   }
 
   .username {
@@ -564,30 +611,31 @@ const handleHelpCommand = (command: string | number | object) => {
 }
 
 .agents-dropdown {
-  margin-left: 8px;
-  background: transparent;
-  border-radius: 8px;
-  padding: 0 0 0 12px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  z-index: 1000;
   max-height: 400px;
+  margin-left: var(--phy-space-8);
+  padding: var(--phy-space-4) 0 var(--phy-space-4) var(--phy-space-12);
   overflow-y: hidden;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
+  box-shadow: var(--phy-shadow-soft);
+  z-index: 1000;
 }
 
 :deep(.agent-list) {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--phy-space-8);
 }
 
 :deep(.input-container-bottom-item) {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 20px;
+  gap: var(--phy-space-8);
+  padding: var(--phy-space-8) var(--phy-space-12);
+  border-radius: var(--phy-radius-sm);
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color var(--phy-motion-fast) ease;
   background-color: var(--phy-color-fill-subtle);
   color: var(--phy-color-text-secondary);
 
@@ -610,9 +658,8 @@ const handleHelpCommand = (command: string | number | object) => {
 .sidebar-legal {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 8px;
-  padding: 8px 16px 12px;
-  border-top: 1px solid var(--phy-color-border);
+  gap: var(--phy-space-4) var(--phy-space-8);
+  padding: var(--phy-space-4) var(--phy-space-16) var(--phy-space-8);
   font-size: 11px;
   line-height: 1.4;
 
@@ -631,10 +678,10 @@ const handleHelpCommand = (command: string | number | object) => {
 .help-legal-links {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
-  padding: 8px 12px 2px;
-  border-top: 1px solid var(--phy-color-border);
+  gap: var(--phy-space-4);
+  margin-top: var(--phy-space-4);
+  padding: var(--phy-space-8) var(--phy-space-12) 2px;
+  border-top: 1px solid var(--phy-color-border-subtle);
   font-size: 12px;
 
   a {
@@ -653,35 +700,55 @@ const handleHelpCommand = (command: string | number | object) => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--phy-space-12);
-  margin-top: 8px;
-  padding: 8px 12px 2px;
-  border-top: 1px solid var(--phy-color-border);
+  margin-top: var(--phy-space-8);
+  padding: var(--phy-space-8) var(--phy-space-12) 2px;
+  border-top: 1px solid var(--phy-color-border-subtle);
 }
 
 .user-info {
   display: flex;
   align-items: center;
-  padding: 16px;
-  border-top: 1px solid var(--phy-color-border);
-  gap: 8px;
+  padding: var(--phy-space-8) var(--phy-space-12) var(--phy-space-12);
+  gap: var(--phy-space-8);
   flex-shrink: 0;
 
   .user-avatar-container {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--phy-space-8);
     width: 100%;
+    min-width: 0;
+    min-height: var(--phy-control-height-default);
+    padding: var(--phy-space-4);
+    border-radius: var(--phy-radius-md);
     cursor: pointer;
+
+    &:hover {
+      background: var(--phy-color-fill-subtle);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--phy-color-focus);
+      outline-offset: 2px;
+    }
 
     .el-icon {
       font-size: 12px;
       color: var(--phy-color-text-muted);
-      margin-left: 4px;
+      margin-left: var(--phy-space-4);
     }
   }
 
   :deep(.el-dropdown) {
+    width: 100%;
     outline: none !important;
+  }
+
+  .username {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -689,23 +756,19 @@ const handleHelpCommand = (command: string | number | object) => {
   width: 100%;
 }
 
-@media (max-width: 768px) {
-  .sidebar-nav.collapsed {
-    .sidebar-nav-row {
-      width: 30px;
-      height: 30px;
-      min-height: 30px;
+.danger-label {
+  color: var(--el-color-danger);
+}
 
-      .el-icon {
-        font-size: 16px;
-      }
-    }
+@media (max-width: 899px) {
+  .sidebar-header {
+    padding-inline-end: calc(
+      var(--phy-control-height-default) + var(--phy-space-16)
+    );
+  }
 
-    .sidebar-primary-action {
-      width: 30px;
-      height: 30px;
-      min-height: 30px;
-    }
+  .sidebar-header .collapse-btn {
+    display: none;
   }
 }
 </style>

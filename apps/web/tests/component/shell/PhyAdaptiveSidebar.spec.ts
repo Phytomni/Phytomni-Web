@@ -57,6 +57,10 @@ describe("PhyAdaptiveSidebar", () => {
       expect.arrayContaining(["collapsed", "drawerOpen"])
     );
     const wrapper = mount(PhyAdaptiveSidebar, {
+      props: {
+        drawerOpen: true,
+        closeLabel: "Close navigation",
+      },
       slots: {
         toggle: "Toggle",
         close: "Close",
@@ -64,7 +68,24 @@ describe("PhyAdaptiveSidebar", () => {
     });
 
     expect(wrapper.find('[data-action="toggle"]').exists()).toBe(true);
-    expect(wrapper.find('[data-action="close"]').exists()).toBe(true);
+    const closeControl = wrapper.find('[data-testid="sidebar-drawer-close"]');
+    expect(closeControl.exists()).toBe(true);
+    expect(closeControl.attributes("aria-label")).toBe("Close navigation");
+  });
+
+  it("shows the explicit close control only for an open drawer", async () => {
+    const wrapper = mount(PhyAdaptiveSidebar, {
+      props: { drawerOpen: false },
+      slots: { close: "Close" },
+    });
+
+    expect(wrapper.find('[data-testid="sidebar-drawer-close"]').exists()).toBe(
+      false
+    );
+    await wrapper.setProps({ drawerOpen: true });
+    await wrapper.find('[data-testid="sidebar-drawer-close"]').trigger("click");
+
+    expect(wrapper.emitted("close")).toHaveLength(1);
   });
 
   it("keeps navigation, history, and account regions inside one surface", () => {
@@ -90,5 +111,13 @@ describe("PhyAdaptiveSidebar", () => {
     expect(CHAT_SIDEBAR_SOURCE).not.toContain("PhySidebarFrame");
     expect(CHAT_SIDEBAR_SOURCE).not.toMatch(/\b(?:250|60|50)px\b/);
     expect(CHAT_SIDEBAR_SOURCE).not.toMatch(/position:\s*fixed/);
+  });
+
+  it("wires the production drawer to the localized close slot", () => {
+    expect(CHAT_SIDEBAR_SOURCE).toContain("<template #close>");
+    expect(CHAT_SIDEBAR_SOURCE).toContain(
+      ":close-label=\"$t('common.close')\""
+    );
+    expect(CHAT_SIDEBAR_SOURCE).toContain("<Close />");
   });
 });

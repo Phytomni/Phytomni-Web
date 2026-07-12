@@ -2,9 +2,15 @@
   <PhyAdaptiveSidebar
     :collapsed="sidebarCollapsed"
     :drawer-open="drawerOpen"
+    :close-label="$t('common.close')"
     @close="closeDrawer"
     @toggle="toggle"
   >
+    <template #close>
+      <el-icon aria-hidden="true">
+        <Close />
+      </el-icon>
+    </template>
     <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <ChatSidebarNav
         :collapsed="sidebarCollapsed"
@@ -121,7 +127,7 @@
 <script setup lang="ts">
 import { computed, ref, toRef } from "vue";
 import { useRouter } from "vue-router";
-import { Warning } from "@element-plus/icons-vue";
+import { Close, Warning } from "@element-plus/icons-vue";
 import { userStore } from "@/stores";
 import type { Chat } from "./types";
 import { useChatHistoryGroups } from "./composables/useChatHistoryGroups";
@@ -329,18 +335,18 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
 
   .warning-icon {
     font-size: 48px;
-    color: #e6a23c;
+    color: var(--el-color-warning);
     margin-bottom: 16px;
   }
 
   p {
     margin: 8px 0;
-    color: #606266;
+    color: var(--phy-color-text-secondary);
 
     &.chat-title-to-delete {
       font-weight: 500;
-      color: #333;
-      background-color: #f5f7fa;
+      color: var(--phy-color-text);
+      background-color: var(--phy-color-fill-subtle);
       padding: 8px 12px;
       border-radius: 4px;
       margin: 12px 0;

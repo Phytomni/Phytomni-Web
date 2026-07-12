@@ -15,7 +15,12 @@ export interface ChatHistoryGroup {
   <div class="chat-history">
     <template v-if="!collapsed">
       <div v-for="group in visibleGroups" :key="group.key" class="time-group">
-        <div class="time-label" @click="emit('toggle-group', group.key)">
+        <button
+          type="button"
+          class="time-label"
+          :aria-expanded="expandedGroups[group.key]"
+          @click="emit('toggle-group', group.key)"
+        >
           <span>{{ $t(group.labelKey) }}</span>
           <el-icon
             class="expand-icon"
@@ -23,7 +28,7 @@ export interface ChatHistoryGroup {
           >
             <ArrowDown />
           </el-icon>
-        </div>
+        </button>
         <div class="chat-items" v-show="expandedGroups[group.key]">
           <el-tooltip
             v-for="chat in group.items"
@@ -36,9 +41,17 @@ export interface ChatHistoryGroup {
             <div
               class="chat-item"
               :class="{ active: currentChatId === chat.dialogue_id }"
-              @click="emit('select', chat.dialogue_id)"
             >
-              <span class="chat-title">{{ chat.title }}</span>
+              <button
+                type="button"
+                class="chat-select"
+                :aria-current="
+                  currentChatId === chat.dialogue_id ? 'page' : undefined
+                "
+                @click="emit('select', chat.dialogue_id)"
+              >
+                <span class="chat-title">{{ chat.title }}</span>
+              </button>
               <div class="chat-actions" @click.stop>
                 <el-dropdown
                   trigger="click"
@@ -60,9 +73,9 @@ export interface ChatHistoryGroup {
                         }}
                       </el-dropdown-item>
                       <el-dropdown-item command="delete" :icon="Delete" divided>
-                        <span style="color: #f56c6c">{{
-                          $t("chat.actions.delete")
-                        }}</span>
+                        <span class="danger-label">
+                          {{ $t("chat.actions.delete") }}
+                        </span>
                       </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
@@ -118,25 +131,45 @@ const emitAction = (command: string, chat: Chat) => {
 .chat-history {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0 var(--phy-space-8) var(--phy-space-8);
   height: 100%;
-  min-height: 400px;
+  min-height: 0;
+  scrollbar-gutter: stable;
 
   .time-group {
-    margin-bottom: 16px;
+    margin-bottom: var(--phy-space-8);
 
     .time-label {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 16px;
-      color: var(--phy-color-text-secondary);
-      font-size: 14px;
+      width: 100%;
+      min-height: var(--phy-control-height-compact);
+      padding: var(--phy-space-4) var(--phy-space-8);
+      border: 0;
+      border-radius: var(--phy-radius-sm);
+      background: transparent;
+      color: var(--phy-color-text-muted);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-align: left;
       cursor: pointer;
       user-select: none;
 
+      &:hover {
+        color: var(--phy-color-text-secondary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--phy-color-focus);
+        outline-offset: -2px;
+      }
+
       .expand-icon {
-        transition: transform 0.2s ease;
+        font-size: 12px;
+        transition: transform var(--phy-motion-fast) ease;
 
         &.expanded {
           transform: rotate(180deg);
@@ -145,21 +178,43 @@ const emitAction = (command: string, chat: Chat) => {
     }
 
     .chat-items {
-      padding: 0 8px;
+      padding: 0;
 
       .chat-item {
-        padding: 10px 16px;
-        margin: 4px 0;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        color: var(--phy-color-text);
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        min-height: var(--phy-control-height-default);
+        margin: 1px 0;
+        border-radius: var(--phy-radius-md);
+        color: var(--phy-color-text-secondary);
+
+        .chat-select {
+          display: flex;
+          flex: 1;
+          align-items: center;
+          min-width: 0;
+          min-height: var(--phy-control-height-default);
+          padding: 0 var(--phy-space-8);
+          border: 0;
+          border-radius: inherit;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          font-size: 13px;
+          text-align: left;
+          cursor: pointer;
+
+          &:focus-visible {
+            outline: 2px solid var(--phy-color-focus);
+            outline-offset: -2px;
+          }
+        }
 
         .chat-title {
           display: block;
+          min-width: 0;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -167,40 +222,63 @@ const emitAction = (command: string, chat: Chat) => {
         }
 
         .chat-actions {
-          margin-left: 10px;
+          margin-right: var(--phy-space-4);
           flex-shrink: 0;
           opacity: 0;
-          transition: opacity 0.2s ease;
+          transition: opacity var(--phy-motion-fast) ease;
           display: flex;
 
           .action-icon {
-            font-size: 18px;
-            color: #909399;
+            font-size: 16px;
+            color: var(--phy-color-text-muted);
             cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
+            padding: var(--phy-space-4);
+            border-radius: var(--phy-radius-sm);
 
             &:hover {
               background-color: var(--phy-color-primary-soft);
-              color: var(--phy-color-primary);
+              color: var(--phy-color-action-text);
             }
           }
         }
 
-        &:hover .chat-actions {
+        &:hover .chat-actions,
+        &:focus-within .chat-actions {
           opacity: 1;
         }
 
         &:hover {
-          background-color: var(--phy-color-primary-soft);
+          background-color: var(--phy-color-fill-subtle);
+          color: var(--phy-color-text);
         }
 
         &.active {
           background-color: var(--phy-color-primary-soft);
+          color: var(--phy-color-action-text);
           font-weight: 500;
+
+          &::before {
+            position: absolute;
+            inset-block: var(--phy-space-8);
+            inset-inline-start: 0;
+            width: 2px;
+            border-radius: var(--phy-radius-pill);
+            background: var(--phy-color-action-fill);
+            content: "";
+          }
         }
       }
     }
+  }
+}
+
+.danger-label {
+  color: var(--el-color-danger);
+}
+
+@media (hover: none) {
+  .chat-history .time-group .chat-items .chat-item .chat-actions {
+    opacity: 1;
   }
 }
 </style>
