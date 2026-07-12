@@ -10,6 +10,7 @@
 (async () => {
   const GEOMETRY_KEY = "__PHY_CHAT_GEOMETRY_RESULT__";
   const MOBILE_BREAKPOINT = 900;
+  const MOBILE_HEADER_MAX_HEIGHT = 96;
   const EDGE_TOLERANCE = 0.5;
 
   function measureRect(el) {
@@ -159,6 +160,8 @@
   const lastMessage = lastRow
     ? { present: true, ...measureRect(lastRow) }
     : { present: false };
+  const rootRect = measureRect(root);
+  const transcriptRect = measureRect(transcriptEl);
 
   const drawerState = root.getAttribute("data-sidebar-drawer-state");
   const isMobileViewport = innerWidth < MOBILE_BREAKPOINT;
@@ -218,6 +221,16 @@
   if (!isMobileViewport && !desktopState) {
     reasons.push("viewport at or above 900 requires non-mobile drawer state");
   }
+  if (
+    isMobileViewport &&
+    transcriptRect.top - rootRect.top > MOBILE_HEADER_MAX_HEIGHT
+  ) {
+    reasons.push(
+      `mobile transcript starts too far below viewport (${
+        transcriptRect.top - rootRect.top
+      }px)`
+    );
+  }
 
   if (closedMobile) {
     if (triggerNodes.length !== 1 || !isVisibleInViewport(navigationTrigger)) {
@@ -245,7 +258,7 @@
       clientWidth: docClientWidth,
       scrollHeight: document.documentElement.scrollHeight,
     },
-    root: measureRect(root),
+    root: rootRect,
     transcript: {
       present: true,
       scrollTop,
@@ -254,7 +267,7 @@
       clientWidth,
       scrollWidth,
       atBottom,
-      ...measureRect(transcriptEl),
+      ...transcriptRect,
     },
     primaryAction,
     navigationTrigger,

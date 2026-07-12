@@ -190,6 +190,12 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
     );
     expect(NAV_SOURCE).toContain("CHAT_SIDEBAR_DRAWER_OPEN_KEY");
   });
+
+  it("keeps the normal mobile main surface in the first grid row", () => {
+    expect(SHELL_SOURCE).toMatch(
+      /@media\s*\(max-width:\s*899px\)[\s\S]*?\.phy-adaptive-shell--normal \.phy-adaptive-shell__sidebar,\s*\.phy-adaptive-shell--normal \.phy-adaptive-shell__main\s*\{[\s\S]*?grid-row:\s*1/
+    );
+  });
 });
 
 describe("ChatResponsiveContracts — single scroll owner and stable hooks", () => {

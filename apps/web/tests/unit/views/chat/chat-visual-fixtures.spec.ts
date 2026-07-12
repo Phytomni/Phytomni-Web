@@ -73,6 +73,7 @@ type GeometryHarnessOptions = {
   height?: number;
   documentScrollWidth?: number;
   transcriptScrollWidth?: number;
+  transcriptRect?: Rect;
   composerRect?: Rect;
   lastMessageRect?: Rect;
   drawerState?: "closed" | "open" | "not-mobile";
@@ -106,12 +107,15 @@ async function runGeometryHarness(
     getBoundingClientRect: () => bounds,
   });
 
-  const transcript = Object.assign(makeElement(rect(280, 48, width, 720)), {
-    scrollHeight: 1200,
-    clientHeight: 672,
-    clientWidth: Math.max(1, width - 280),
-    scrollWidth: options.transcriptScrollWidth ?? Math.max(1, width - 280),
-  });
+  const transcript = Object.assign(
+    makeElement(options.transcriptRect ?? rect(280, 48, width, 720)),
+    {
+      scrollHeight: 1200,
+      clientHeight: 672,
+      clientWidth: Math.max(1, width - 280),
+      scrollWidth: options.transcriptScrollWidth ?? Math.max(1, width - 280),
+    }
+  );
   let transcriptScrollTop = 0;
   Object.defineProperty(transcript, "scrollTop", {
     configurable: true,
@@ -525,6 +529,9 @@ describe("Chat visual fixture script contracts", () => {
       "closed mobile requires visible unique sidebar trigger"
     );
     expect(MEASURE_SOURCE).toContain(
+      "mobile transcript starts too far below viewport"
+    );
+    expect(MEASURE_SOURCE).toContain(
       "desktop/compact/open-mobile requires visible unique primary action"
     );
     expect(MEASURE_SOURCE).toMatch(/pass\s*=\s*false|pass:\s*false/);
@@ -595,6 +602,15 @@ describe("Chat visual fixture geometry negative controls", () => {
         includeTrigger: false,
       },
       reason: /closed mobile requires visible unique sidebar trigger/,
+    },
+    {
+      label: "mobile main-row displacement",
+      options: {
+        width: 899,
+        drawerState: "closed" as const,
+        transcriptRect: rect(0, 240, 899, 720),
+      },
+      reason: /mobile transcript starts too far below viewport/,
     },
     {
       label: "primary action visibility",

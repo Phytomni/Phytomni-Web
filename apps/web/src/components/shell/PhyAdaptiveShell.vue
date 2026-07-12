@@ -122,6 +122,12 @@ withDefaults(
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .phy-adaptive-shell--normal .phy-adaptive-shell__sidebar,
+  .phy-adaptive-shell--normal .phy-adaptive-shell__main {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
   .phy-adaptive-shell--normal .phy-adaptive-shell__sidebar {
     width: 0;
   }
