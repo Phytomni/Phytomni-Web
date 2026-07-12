@@ -137,7 +137,7 @@
   <div v-else class="ai-response">
     <!-- Reasoning steps -->
     <div v-if="message.steps && message.steps.length > 0">
-      <div class="steps-title">{{ $t("chat.stepResult") }}：</div>
+      <div class="steps-title">{{ $t("chat.stepResult") }}:</div>
       <div
         v-for="(step, stepIndex) in message.steps"
         :key="stepIndex"

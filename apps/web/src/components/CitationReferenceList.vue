@@ -1,6 +1,6 @@
 <template>
   <div v-if="references && references.length > 0" class="doc-list">
-    <div class="doc-list-title">{{ $t("chat.relatedDocuments") }}：</div>
+    <div class="doc-list-title">{{ $t("chat.relatedDocuments") }}:</div>
     <div
       v-for="ref in displayReferences"
       :key="ref.id"
