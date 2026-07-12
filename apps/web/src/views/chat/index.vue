@@ -118,18 +118,16 @@
         </div>
         <div class="transcript-content">
         <template v-if="currentChat?.messages?.length">
-          <div
+          <ChatMessageRow
             v-for="(message, index) in currentChat.messages"
             :key="index"
-            class="message"
-            :class="message.role"
-            data-testid="chat-message-row"
+            :role="message.role === 'user' ? 'user' : 'assistant'"
+            :message-id="message.id || undefined"
+            :streaming="!!message.streaming"
           >
-            <!-- Only assistant messages show an avatar -->
-            <div v-if="message.role === 'assistant'" class="message-avatar">
+            <template #avatar>
               <el-avatar :size="36" :src="botAvatar" />
-            </div>
-            <div class="message-content">
+            </template>
               <!-- User message, or an answer without reasoning steps -->
               <div
                 v-if="
@@ -977,22 +975,20 @@
                   </el-dropdown>
                 </div>
               </div>
-            </div>
-          </div>
+          </ChatMessageRow>
         </template>
 
         <!-- Loading message: fake ETA progress, suppressed while an AG-UI stream is in
              flight — the placeholder message already shows real streaming content, so
              showing both would double up the "is responding" indicator on screen. -->
-        <div
+        <ChatMessageRow
           v-if="isSending && !getChatState(currentChatId).isStreaming"
-          class="message assistant"
-          data-testid="chat-message-row"
+          role="assistant"
+          loading
         >
-          <div class="message-avatar">
+          <template #avatar>
             <el-avatar :size="36" :src="botAvatar" />
-          </div>
-          <div class="message-content">
+          </template>
             <div class="message-text loading-message phy-bubble-assistant">
               {{ $t("chat.ladingInner") }}
               <div class="loading-dots">
@@ -1012,8 +1008,7 @@
                 :completing="getChatState(currentChatId).completing"
               />
             </div>
-          </div>
-        </div>
+        </ChatMessageRow>
         </div>
       </div>
       <el-backtop target=".message-container" :right="40" :bottom="80" />
@@ -1097,6 +1092,7 @@ import TransferProgress from "@/components/TransferProgress.vue";
 import SendProgress from "./components/SendProgress.vue";
 import StreamMessage from "./components/StreamMessage.vue";
 import ChatComposer from "./components/ChatComposer.vue";
+import ChatMessageRow from "./components/ChatMessageRow.vue";
 import {
   PhyAdaptiveShell,
   PhyEmptyState,
@@ -1997,19 +1993,9 @@ const copyMessageWithDocs = (message: any, index: number) => {
 }
 
 .message {
-  display: flex;
-  margin-bottom: 16px;
-
+  // Row shell layout lives on ChatMessageRow; pierce for slotted content styles.
   &.user {
-    justify-content: flex-end;
-
-    .message-content {
-      display: flex;
-      justify-content: flex-end;
-      width: calc(100% - 48px);
-      border-radius: 15px;
-      background-color: transparent;
-
+    :deep(.message-content) {
       .message-text,
       .has-user {
         box-shadow: none;
@@ -2018,29 +2004,14 @@ const copyMessageWithDocs = (message: any, index: number) => {
   }
 
   &.assistant {
-    flex-direction: row;
-
-    .message-content {
-      border-radius: 15px;
-      margin-left: 12px;
-      background-color: transparent;
-      width: 100%;
-
+    :deep(.message-content) {
       .message-text {
         box-shadow: none;
       }
     }
   }
 
-  .message-avatar {
-    flex-shrink: 0;
-    align-self: flex-start;
-  }
-
-  .message-content {
-    padding: 0 12px 12px;
-    max-width: 100%;
-
+  :deep(.message-content) {
     .message-text {
       position: relative;
       word-break: break-word;
