@@ -156,6 +156,10 @@ func (ph *Handler) Query(ctx *gin.Context) {
 			// an SSE-aware client would silently fail to
 			// parse the error.
 			headerSent := false
+			onReady := func(identity api_service.StreamIdentity) {
+				ctx.Header("X-Phyto-Dialogue-Id", identity.DialogueID)
+				ctx.Header("X-Phyto-Message-Id", strconv.FormatInt(identity.MessageID, 10))
+			}
 			forward := func(frame []byte) error {
 				if !headerSent {
 					ctx.Header("Content-Type", "text/event-stream")
@@ -171,7 +175,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 				flusher.Flush()
 				return nil
 			}
-			_, serr := ph.service.QueryStream(ctx, name.(string), in, forward)
+			_, serr := ph.service.QueryStream(ctx, name.(string), in, onReady, forward)
 			if serr != nil {
 				status, msg := queryErrorStatus(serr)
 				if headerSent {

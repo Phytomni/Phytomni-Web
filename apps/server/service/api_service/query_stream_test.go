@@ -47,7 +47,7 @@ func TestQueryStream_PersistsAndForwards(t *testing.T) {
 		return nil
 	}
 	out, err := svc.QueryStream(context.Background(), "alice@example.com",
-		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, forward)
+		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil, forward)
 	if err != nil {
 		t.Fatalf("QueryStream error: %v", err)
 	}
@@ -73,6 +73,188 @@ func TestQueryStream_PersistsAndForwards(t *testing.T) {
 	if mode != "instant" {
 		t.Fatalf("persisted mode = %q, want instant", mode)
 	}
+	var count int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&count).Error; err != nil {
+		t.Fatalf("count stream rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("stream must finalize its RUNNING row in place; rows = %d, want 1", count)
+	}
+}
+
+func TestQueryStream_ReadyRowAndRunIDPrecedeFrames(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	sseChatServer(t)
+	svc := &Service{}
+
+	ready := false
+	identity := StreamIdentity{}
+	onReady := func(got StreamIdentity) {
+		identity = got
+		var status, dialogueID string
+		if err := gdb.Raw(
+			`SELECT COALESCE(status,''), COALESCE(dialogue_id,'') FROM question_agent_logs WHERE id=?`,
+			got.MessageID,
+		).Row().Scan(&status, &dialogueID); err != nil {
+			t.Fatalf("read ready row: %v", err)
+		}
+		if status != "RUNNING" {
+			t.Fatalf("ready row status = %q, want RUNNING", status)
+		}
+		if dialogueID == "" || dialogueID != got.DialogueID {
+			t.Fatalf("ready dialogue = %q, identity = %q", dialogueID, got.DialogueID)
+		}
+		ready = true
+	}
+	frames := 0
+	forward := func(frame []byte) error {
+		frames++
+		if !ready {
+			t.Fatal("frame forwarded before RUNNING row became ready")
+		}
+		if strings.Contains(string(frame), "RunStarted") {
+			var runID string
+			if err := gdb.Raw(
+				`SELECT COALESCE(bot_run_id,'') FROM question_agent_logs WHERE id=?`,
+				identity.MessageID,
+			).Scan(&runID).Error; err != nil {
+				t.Fatalf("read run id before forward: %v", err)
+			}
+			if runID != "run_77" {
+				t.Fatalf("RunStarted forwarded before bot_run_id was durable: got %q", runID)
+			}
+		}
+		return nil
+	}
+
+	out, err := svc.QueryStream(context.Background(), "ready@example.com",
+		QueryInput{Query: "hi", Tool: "", Mode: "instant"}, onReady, forward)
+	if err != nil {
+		t.Fatalf("QueryStream error: %v", err)
+	}
+	if !ready || frames == 0 {
+		t.Fatalf("ready=%v frames=%d, want ready and forwarded frames", ready, frames)
+	}
+	if out.Id != identity.MessageID || out.DialogueId != identity.DialogueID {
+		t.Fatalf("output identity = (%d,%q), ready identity = (%d,%q)",
+			out.Id, out.DialogueId, identity.MessageID, identity.DialogueID)
+	}
+}
+
+func TestQueryStream_InitialPersistenceFailureForwardsNothing(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	sseChatServer(t)
+	if err := gdb.Exec(`DROP TABLE question_agent_logs`).Error; err != nil {
+		t.Fatalf("drop stream table: %v", err)
+	}
+
+	ready := false
+	forwarded := false
+	_, err := (&Service{}).QueryStream(context.Background(), "broken@example.com",
+		QueryInput{Query: "hi", Tool: "", Mode: "instant"},
+		func(StreamIdentity) { ready = true },
+		func([]byte) error { forwarded = true; return nil },
+	)
+	if err == nil {
+		t.Fatal("missing stream table must fail initial persistence")
+	}
+	if ready || forwarded {
+		t.Fatalf("failed initial persistence leaked stream state: ready=%v forwarded=%v", ready, forwarded)
+	}
+}
+
+func TestQueryStream_CancelFinalizesReadyRow(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_cancel\"}\n\n"))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	identity := StreamIdentity{}
+	out, err := (&Service{}).QueryStream(ctx, "cancel@example.com",
+		QueryInput{Query: "hi", Tool: "", Mode: "instant"},
+		func(got StreamIdentity) { identity = got },
+		func([]byte) error { cancel(); return context.Canceled },
+	)
+	if err == nil {
+		t.Fatal("canceled upstream stream must report its read error")
+	}
+	if out == nil || identity.MessageID == 0 {
+		t.Fatalf("cancel must retain the ready identity: out=%+v identity=%+v", out, identity)
+	}
+	var status, runID string
+	if err := gdb.Raw(
+		`SELECT COALESCE(status,''), COALESCE(bot_run_id,'') FROM question_agent_logs WHERE id=?`,
+		identity.MessageID,
+	).Row().Scan(&status, &runID); err != nil {
+		t.Fatalf("read canceled stream row: %v", err)
+	}
+	if status != "FAILED" || runID != "run_cancel" {
+		t.Fatalf("canceled row status/run = %q/%q, want FAILED/run_cancel", status, runID)
+	}
+}
+
+func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
+	setupExpertTestDB(t)
+	body := strings.Join([]string{
+		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_action\"}\n",
+		"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.a2ui\",\"value\":{\"surface_id\":\"s1\"}}\n",
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run_action\"}\n",
+	}, "\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true,
+		A2uiActionsEnabled: false, TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	svc := &Service{}
+	identity := StreamIdentity{}
+	authorizedAtFrame := false
+	_, err := svc.QueryStream(context.Background(), "action@example.com",
+		QueryInput{Query: "hi", Tool: "", Mode: "instant"},
+		func(got StreamIdentity) { identity = got },
+		func(frame []byte) error {
+			if !strings.Contains(string(frame), "phyto.a2ui") {
+				return nil
+			}
+			outcome, actionErr := svc.A2uiAction(
+				context.Background(),
+				"action@example.com",
+				identity.DialogueID,
+				[]byte(`{"surface_id":"s1","widget":"button","action_id":"submit","run_id":"run_action","payload":{}}`),
+			)
+			if actionErr != nil {
+				t.Fatalf("A2UI action was not authorized when frame became visible: %v", actionErr)
+			}
+			// Flag-off is intentionally still a 403 stub. Reaching the outcome
+			// proves the unchanged ownership tuple was already present.
+			if outcome == nil || outcome.Status != http.StatusForbidden {
+				t.Fatalf("flag-off outcome = %+v, want 403 stub after authorization", outcome)
+			}
+			authorizedAtFrame = true
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("QueryStream error: %v", err)
+	}
+	if !authorizedAtFrame {
+		t.Fatal("interactive frame did not exercise the live A2UI authorization tuple")
+	}
 }
 
 func TestQueryStream_ForwardErrorStillPersists(t *testing.T) {
@@ -81,7 +263,7 @@ func TestQueryStream_ForwardErrorStillPersists(t *testing.T) {
 	svc := &Service{}
 	forward := func(frame []byte) error { return http.ErrBodyNotAllowed } // simulate browser disconnect
 	out, err := svc.QueryStream(context.Background(), "bob@example.com",
-		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, forward)
+		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil, forward)
 	if err != nil {
 		t.Fatalf("forward error must not fail the call (persist still happens): %v", err)
 	}
@@ -102,7 +284,7 @@ func TestQueryStream_ExpertRefused(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 	svc := &Service{}
 	_, err := svc.QueryStream(context.Background(), "eve@example.com",
-		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "expert"}, nil)
+		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "expert"}, nil, nil)
 	if !errors.Is(err, ErrStreamUnsupported) {
 		t.Fatalf("err = %v, want ErrStreamUnsupported (expert must never stream)", err)
 	}
@@ -124,7 +306,7 @@ func TestQueryStream_NonChatSlugRefused(t *testing.T) {
 	// AnalystAgent -> "analyst", a remote-agent slug with no chat model, so it
 	// has no Bot streaming primitive and must be refused before any Bot call.
 	_, err := svc.QueryStream(context.Background(), "eve@example.com",
-		QueryInput{Query: "hi", Id: 0, Tool: "AnalystAgent", Mode: "instant"}, nil)
+		QueryInput{Query: "hi", Id: 0, Tool: "AnalystAgent", Mode: "instant"}, nil, nil)
 	if !errors.Is(err, ErrStreamUnsupported) {
 		t.Fatalf("err = %v, want ErrStreamUnsupported (non-chat slug cannot stream)", err)
 	}
@@ -138,7 +320,7 @@ func TestQueryStream_PersistsBotRunID(t *testing.T) {
 	sseChatServer(t) // fixture RunStarted carries run_id "run_77"
 	svc := &Service{}
 	out, err := svc.QueryStream(context.Background(), "carol@example.com",
-		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil)
+		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil, nil)
 	if err != nil {
 		t.Fatalf("QueryStream error: %v", err)
 	}
@@ -157,19 +339,40 @@ func TestQueryStream_RefreshClearsTaskColumns(t *testing.T) {
 	svc := &Service{}
 	seed := model.QuestionAgentLog{
 		DialogueId: "d1", UserName: "dan@example.com", Query: "old",
-		ServerId: "srv-1", TaskId: "task-1", LogStatus: "RUNNING",
+		ServerId: "srv-1", BotRunId: "run-old", TaskId: "task-1", LogStatus: "RUNNING",
+		Answer:         "old answer",
 		ServerFilePath: "obs://old/path", Status: "RUNNING", Mode: "instant",
 	}
 	if err := gdb.Create(&seed).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	readyChecked := false
+	onReady := func(identity StreamIdentity) {
+		if identity.MessageID != seed.Id || identity.DialogueID != seed.DialogueId {
+			t.Fatalf("refresh ready identity = %+v, want existing row %d/%s", identity, seed.Id, seed.DialogueId)
+		}
+		var status, runID, answer string
+		if err := gdb.Raw(
+			`SELECT COALESCE(status,''), COALESCE(bot_run_id,''), COALESCE(answer,'') FROM question_agent_logs WHERE id=?`,
+			seed.Id,
+		).Row().Scan(&status, &runID, &answer); err != nil {
+			t.Fatalf("read refresh ready row: %v", err)
+		}
+		if status != "RUNNING" || runID != "" || answer != "" {
+			t.Fatalf("refresh ready row status/run/answer = %q/%q/%q", status, runID, answer)
+		}
+		readyChecked = true
+	}
 	out, err := svc.QueryStream(context.Background(), "dan@example.com",
-		QueryInput{Query: "hi", Id: 0, RefreshId: seed.Id, Tool: "", Mode: "instant"}, nil)
+		QueryInput{Query: "hi", Id: 0, RefreshId: seed.Id, Tool: "", Mode: "instant"}, onReady, nil)
 	if err != nil {
 		t.Fatalf("QueryStream refresh error: %v", err)
 	}
 	if out.Id != seed.Id {
 		t.Fatalf("refresh must update in place: out.Id=%d, want %d", out.Id, seed.Id)
+	}
+	if !readyChecked {
+		t.Fatal("refresh did not publish its durable RUNNING identity")
 	}
 	var serverID, taskID, logStatus, serverFilePath string
 	row := gdb.Raw(`SELECT COALESCE(server_id,''), COALESCE(task_id,''), COALESCE(log_status,''), COALESCE(server_file_path,'') FROM question_agent_logs WHERE id=?`, seed.Id)
@@ -199,7 +402,7 @@ func TestQueryStream_RunErrorPersistsFailed(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 	svc := &Service{}
 	out, err := svc.QueryStream(context.Background(), "erin@example.com",
-		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil)
+		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil, nil)
 	if err != nil {
 		t.Fatalf("QueryStream error: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
@@ -71,6 +72,15 @@ type QueryData struct {
 	ComputeResource   string `json:"compute_resource"`
 	ReactionType      string `json:"reaction_type"`
 	DialogueId        string `json:"dialogue_id"`
+}
+
+// StreamIdentity is the Web-owned identity of a streamed assistant message.
+// QueryStream publishes it only after the RUNNING row is durable, before any
+// Bot frame can reach the browser. The handler exposes these values as response
+// headers so the frontend never has to infer an A2UI route from a parent row.
+type StreamIdentity struct {
+	DialogueID string
+	MessageID  int64
 }
 
 // slugToToolName maps a Bot slug back to the tool_name the Web app renders by.
@@ -422,13 +432,19 @@ func (ps *Service) persistQuestionLog(ctx context.Context, username string, refr
 }
 
 // QueryStream is the SSE variant of Query for chat-family slugs. It opens the
-// Bot AG-UI stream, forwards each frame to the browser via forward(), tees the
-// stream into an accumulator, and on stream end persists the Web row exactly
-// like the blocking Query path (same resolveDialogue threading, same
-// QuestionAgentLog columns). A forward() error (browser disconnect) stops
-// forwarding but never aborts persistence — the answer accumulated so far is
-// still written so history is not lost.
-func (ps *Service) QueryStream(ctx context.Context, username string, in QueryInput, forward func(frame []byte) error) (*QueryData, error) {
+// Bot AG-UI stream, persists a RUNNING Web row, publishes that row's canonical
+// identity through onReady, then forwards each frame via forward() while teeing
+// it into an accumulator. RunStarted is persisted before it is forwarded, so
+// the existing A2UI dialogue + user + run authorization boundary is live by the
+// time an interactive frame can reach the browser. A forward() error (browser
+// disconnect) stops forwarding but never aborts the Bot read or finalization.
+func (ps *Service) QueryStream(
+	ctx context.Context,
+	username string,
+	in QueryInput,
+	onReady func(StreamIdentity),
+	forward func(frame []byte) error,
+) (*QueryData, error) {
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
@@ -485,20 +501,70 @@ func (ps *Service) QueryStream(ctx context.Context, username string, in QueryInp
 	}
 	defer rc.Close()
 
+	// The row must exist before any Bot frame is forwarded. Besides making the
+	// response identity authoritative, this closes the former A2UI window where
+	// a widget was visible while its authorization tuple did not exist yet.
+	titleQuery := ""
+	if fID == 0 && in.RefreshId == 0 {
+		titleQuery = in.Query
+	}
+	row := model.QuestionAgentLog{
+		DialogueId:        dialogueID,
+		FId:               fID,
+		UserName:          username,
+		Query:             in.Query,
+		TitleQuery:        titleQuery,
+		Answer:            "",
+		FollowUpQuestions: "",
+		FileName:          strings.Join(fileNames, ","),
+		UploadPath:        strings.Join(obsPaths, ","),
+		ToolName:          slugToToolName[slug],
+		Status:            "RUNNING",
+		Mode:              in.Mode,
+		ReactionType:      "0",
+		CollectType:       "0",
+	}
+	id, err := ps.beginQuestionStream(ctx, username, in.RefreshId, &row)
+	if err != nil {
+		return nil, err
+	}
+	identity := StreamIdentity{DialogueID: dialogueID, MessageID: id}
+	if onReady != nil {
+		onReady(identity)
+	}
+
 	// Forward + tee, splitting the SSE body on blank-line frame separators.
 	acc := &rxBot.AGUIAccumulator{}
 	scanner := bufio.NewScanner(rc)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	scanner.Split(splitSSEFrames)
+	forwarding := true
+	persistedRunID := ""
+	var streamErr error
 	for scanner.Scan() {
 		frame := scanner.Bytes()
-		// Forward the raw frame (with trailing blank line) to the browser.
-		out := append(append([]byte{}, frame...), '\n', '\n')
-		if forward != nil {
-			_ = forward(out) // disconnect: stop caring about the browser, keep teeing
-		}
 		if ev, ok := rxBot.ParseAGUIFrame(frame); ok {
 			acc.Observe(ev)
+			if ev.Type == "RunStarted" && acc.RunID() == "" {
+				streamErr = errors.New("RunStarted event is missing run_id")
+				break
+			}
+			if ev.Type == "RunStarted" && acc.RunID() != persistedRunID {
+				// Persist the cross-service join key before the browser can receive
+				// RunStarted (and therefore before any later interactive frame).
+				if err := ps.setQuestionStreamRunID(ctx, username, identity, acc.RunID()); err != nil {
+					streamErr = err
+					break
+				}
+				persistedRunID = acc.RunID()
+			}
+		}
+		// Forward the raw frame (with trailing blank line) to the browser.
+		out := append(append([]byte{}, frame...), '\n', '\n')
+		if forwarding && forward != nil {
+			if err := forward(out); err != nil {
+				forwarding = false
+			}
 		}
 	}
 
@@ -509,14 +575,20 @@ func (ps *Service) QueryStream(ctx context.Context, username string, in QueryInp
 	// cron's WHERE status='RUNNING' poll set, so use "FAILED" (a terminal
 	// non-RUNNING state) rather than "" for these paths.
 	status := "SUCCEEDED"
-	if err := scanner.Err(); err != nil {
+	if streamErr != nil {
 		status = "FAILED"
+	} else if err := scanner.Err(); err != nil {
+		status = "FAILED"
+		streamErr = err
 	} else if acc.Err() != nil {
 		status = "FAILED"
 	}
 
-	// Build + persist the row, mirroring the blocking path's columns.
+	// Finalize the row opened above. WithoutCancel preserves request-scoped DB
+	// values while ensuring a browser abort or upstream disconnect cannot leave
+	// the durable row stuck in RUNNING merely because the request context ended.
 	out := &QueryData{
+		Id:           id,
 		ToolName:     slugToToolName[slug],
 		ReactionType: "0",
 		DialogueId:   dialogueID,
@@ -524,35 +596,102 @@ func (ps *Service) QueryStream(ctx context.Context, username string, in QueryInp
 	}
 	out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
 	out.FollowUpQuestions = acc.FollowUpJSON()
-
-	titleQuery := ""
-	if fID == 0 && in.RefreshId == 0 {
-		titleQuery = in.Query
-	}
-	row := model.QuestionAgentLog{
-		DialogueId:        dialogueID,
-		FId:               fID,
-		BotRunId:          acc.RunID(),
-		UserName:          username,
-		Query:             in.Query,
-		TitleQuery:        titleQuery,
-		Answer:            out.Answer,
-		FollowUpQuestions: out.FollowUpQuestions,
-		FileName:          strings.Join(fileNames, ","),
-		UploadPath:        strings.Join(obsPaths, ","),
-		ToolName:          out.ToolName,
-		Status:            out.Status,
-		Mode:              in.Mode,
-		ReactionType:      "0",
-		CollectType:       "0",
-	}
-	id, err := ps.persistQuestionLog(ctx, username, in.RefreshId, &row)
-	if err != nil {
+	finalizeCtx, cancelFinalize := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancelFinalize()
+	if err := ps.finalizeQuestionStream(finalizeCtx, username, identity, acc.RunID(), out); err != nil {
 		return nil, err
 	}
-	out.Id = id
 	out.UploadPath = strings.Join(obsPaths, ",")
+	if streamErr != nil {
+		return out, streamErr
+	}
 	return out, nil
+}
+
+// beginQuestionStream creates a fresh row or moves a refresh target into
+// RUNNING before the first frame. Refresh explicitly clears the prior answer
+// and bot_run_id because GORM struct updates skip zero values; retaining either
+// would expose stale content or authorize actions against the previous run.
+func (ps *Service) beginQuestionStream(ctx context.Context, username string, refreshID int64, row *model.QuestionAgentLog) (int64, error) {
+	if refreshID == 0 {
+		if err := model.DB(ctx).Create(row).Error; err != nil {
+			return 0, err
+		}
+		return row.Id, nil
+	}
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND user_name = ? AND dialogue_id = ?", refreshID, username, row.DialogueId).
+		Updates(map[string]interface{}{
+			"answer":              "",
+			"bot_run_id":          "",
+			"collect_type":        row.CollectType,
+			"f_id":                row.FId,
+			"file_name":           row.FileName,
+			"follow_up_questions": "",
+			"log_status":          "",
+			"mode":                row.Mode,
+			"query":               row.Query,
+			"reaction_type":       row.ReactionType,
+			"server_file_path":    "",
+			"server_id":           "",
+			"status":              row.Status,
+			"task_id":             "",
+			"title_query":         row.TitleQuery,
+			"tool_name":           row.ToolName,
+			"upload_path":         row.UploadPath,
+		})
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	if result.RowsAffected != 1 {
+		var count int64
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ? AND dialogue_id = ?", refreshID, username, row.DialogueId).
+			Count(&count).Error; err != nil {
+			return 0, err
+		}
+		if count != 1 {
+			return 0, fmt.Errorf("stream row %d not found", refreshID)
+		}
+	}
+	return refreshID, nil
+}
+
+func (ps *Service) setQuestionStreamRunID(ctx context.Context, username string, identity StreamIdentity, runID string) error {
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND user_name = ? AND dialogue_id = ?", identity.MessageID, username, identity.DialogueID).
+		Update("bot_run_id", runID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("stream row %d not found", identity.MessageID)
+	}
+	return nil
+}
+
+func (ps *Service) finalizeQuestionStream(
+	ctx context.Context,
+	username string,
+	identity StreamIdentity,
+	runID string,
+	out *QueryData,
+) error {
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND user_name = ? AND dialogue_id = ?", identity.MessageID, username, identity.DialogueID).
+		Updates(map[string]interface{}{
+			"answer":              out.Answer,
+			"bot_run_id":          runID,
+			"follow_up_questions": out.FollowUpQuestions,
+			"status":              out.Status,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("stream row %d not found", identity.MessageID)
+	}
+	return nil
 }
 
 // splitSSEFrames is a bufio.SplitFunc that yields one SSE frame per call,

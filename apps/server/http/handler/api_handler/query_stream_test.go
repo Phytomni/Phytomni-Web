@@ -8,10 +8,38 @@ import (
 	"strings"
 	"testing"
 
+	"phytomni-server/db"
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 )
+
+func setupStreamHandlerTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if sqlDB, err := gdb.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		dialogue_id TEXT, f_id INTEGER DEFAULT 0, server_id TEXT, bot_run_id TEXT,
+		user_name TEXT, query TEXT, title_query TEXT, answer TEXT,
+		follow_up_questions TEXT, task_id TEXT, task_log TEXT, file_name TEXT,
+		upload_path TEXT, download_path TEXT, image_paths TEXT, compute_resource TEXT,
+		server_file_path TEXT, tool_name TEXT, status TEXT, log_status TEXT, mode TEXT,
+		reaction_type TEXT, collect_type TEXT, created_at DATETIME, updated_at DATETIME, delete_at DATETIME
+	)`).Error; err != nil {
+		t.Fatalf("create question_agent_logs: %v", err)
+	}
+	db.Set("phytomni-server", gdb)
+	return gdb
+}
 
 // newStreamTestRequest builds a multipart /query request with a NON-empty
 // query field: the handler 400s on empty query (query.go:82-85) BEFORE the
@@ -112,5 +140,53 @@ func TestQuery_StreamPreFirstByteErrorIsJSON(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
 		t.Fatalf("error body must be application/json; got %q", ct)
+	}
+}
+
+func TestQuery_StreamExposesDurableIdentityHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	body := strings.Join([]string{
+		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_headers\"}\n",
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"hello\"}\n",
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run_headers\"}\n",
+	}, "\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set("username", "headers@example.com")
+	c.Request = newStreamTestRequest(t, "instant")
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+
+	NewHandler().Query(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("stream status = %d, body = %q", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+	dialogueID := w.Header().Get("X-Phyto-Dialogue-Id")
+	messageID := w.Header().Get("X-Phyto-Message-Id")
+	if dialogueID == "" || messageID == "" || messageID == "0" {
+		t.Fatalf("missing stream identity headers: dialogue=%q message=%q", dialogueID, messageID)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.Where("id = ?", messageID).First(&row).Error; err != nil {
+		t.Fatalf("identity header does not reference a durable row: %v", err)
+	}
+	if row.DialogueId != dialogueID || row.BotRunId != "run_headers" || row.Status != "SUCCEEDED" {
+		t.Fatalf("header row = dialogue %q run %q status %q", row.DialogueId, row.BotRunId, row.Status)
+	}
+	if !strings.Contains(w.Body.String(), "TextMessageContent") {
+		t.Fatalf("stream body missing content frame: %q", w.Body.String())
 	}
 }
