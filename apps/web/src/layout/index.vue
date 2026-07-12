@@ -8,7 +8,6 @@
             <el-button @click="handleBack" type="primary" size="small">{{
               $t("common.back")
             }}</el-button>
-            <div style="width: 40px; height: 40px" class="logo-img"></div>
             <h1 class="logo-text">{{ $t("app.title") }}</h1>
           </div>
           <div class="header-right">
@@ -85,12 +84,18 @@
                 <span>{{ $t("menu.taskManager") }}</span>
               </el-menu-item>
               <!-- User management -->
-              <el-menu-item v-if="hasPermission('User management')" index="/user-list">
+              <el-menu-item
+                v-if="hasPermission('User management')"
+                index="/user-list"
+              >
                 <el-icon><User /></el-icon>
                 <span>{{ $t("menu.userList") }}</span>
               </el-menu-item>
               <!-- System monitoring -->
-              <el-menu-item v-if="hasPermission('System monitor')" index="/log-list">
+              <el-menu-item
+                v-if="hasPermission('System monitor')"
+                index="/log-list"
+              >
                 <el-icon><List /></el-icon>
                 <span>{{ $t("menu.logList") }}</span>
               </el-menu-item>
@@ -157,9 +162,6 @@ import { userStore } from "@/stores";
 import LangSwitch from "@/components/LangSwitch.vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import Footer from "@/components/Footer.vue";
-import { useI18n } from "vue-i18n";
-
-const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const UserStore = userStore();
@@ -203,8 +205,10 @@ const hasPermission = (permission: string) => {
 <style scoped lang="scss">
 .layout-container {
   height: 100vh;
+  height: 100dvh;
   width: 100%;
-  // overflow: hidden;
+  max-width: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -216,56 +220,60 @@ const hasPermission = (permission: string) => {
 
 .content-container {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
 .el-header {
-  background-color: #fff;
   display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
   align-items: center;
+  gap: var(--phy-space-12);
   justify-content: space-between;
-  padding: 0 20px;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
-  z-index: 10;
+  padding: 0 var(--phy-space-20);
+  border-bottom: 1px solid var(--phy-color-border-subtle);
+  background-color: var(--phy-color-bg-elevated);
+  z-index: var(--phy-z-sticky);
 
   .logo {
     display: flex;
+    min-width: 0;
     align-items: center;
-
-    .logo-img {
-      height: 40px;
-      margin-right: 10px;
-    }
+    gap: var(--phy-space-16);
 
     .logo-text {
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+      color: var(--phy-color-action-text);
       font-size: 20px;
       font-weight: 600;
-      color: var(--el-color-primary);
-      margin: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 
   .header-right {
+    display: flex;
+    min-width: 0;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--phy-space-8);
+
     .user-info {
       display: flex;
       align-items: center;
+      min-height: var(--phy-control-height-compact);
       cursor: pointer;
 
       .username {
         margin-left: 8px;
         font-size: 14px;
       }
-    }
-
-    display: flex;
-    align-items: center;
-
-    .theme-switch-component {
-      margin-right: 20px;
-    }
-
-    .lang-switch-component {
-      margin-right: 20px;
     }
   }
 }
@@ -329,7 +337,32 @@ const hasPermission = (permission: string) => {
 
 .layout-footer {
   padding: 0;
-  background-color: #fff;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background-color: var(--phy-color-bg-elevated);
+  border-top: 1px solid var(--phy-color-border-subtle);
+}
+
+@media (max-width: 599px) {
+  .el-header {
+    gap: var(--phy-space-4);
+    padding: 0 var(--phy-space-12);
+
+    .logo {
+      flex: 1 1 auto;
+      gap: var(--phy-space-8);
+
+      .logo-text {
+        max-width: 96px;
+        font-size: 17px;
+      }
+    }
+
+    .header-right {
+      gap: var(--phy-space-4);
+
+      .username {
+        display: none;
+      }
+    }
+  }
 }
 </style>

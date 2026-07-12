@@ -23,54 +23,48 @@
 
 <style scoped lang="scss">
 .footer-container {
+  box-sizing: border-box;
   width: 100%;
-  padding: 12px 0;
-  text-align: center;
-  background-color: transparent;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
   margin-top: auto;
+  padding: var(--phy-space-12) 0;
+  border-top: 1px solid var(--phy-color-border-subtle);
+  background-color: transparent;
+  text-align: center;
 }
 
 .footer-content {
   display: flex;
+  box-sizing: border-box;
+  width: 100%;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: var(--phy-space-4) var(--phy-space-8);
+  padding: 0 var(--phy-space-16);
+  color: var(--phy-color-text-muted);
   font-size: 12px;
-  color: #909399;
 }
 
 .legal-link,
 .icp-link {
-  color: #909399;
+  border-radius: var(--phy-radius-sm);
+  color: var(--phy-color-text-muted);
   text-decoration: none;
-  transition: color 0.3s;
-
-  &:hover {
-    color: var(--el-color-primary);
-    text-decoration: underline;
-  }
+  transition: color var(--phy-motion-fast) var(--phy-motion-ease-out);
 
   &:visited {
-    color: #909399;
+    color: var(--phy-color-text-muted);
   }
-}
-
-// dark theme adaptation
-:global(.theme-dark) .footer-container {
-  border-top-color: rgba(255, 255, 255, 0.1);
-}
-
-:global(.theme-dark) .footer-content {
-  color: #909399;
-}
-
-:global(.theme-dark) .legal-link,
-:global(.theme-dark) .icp-link {
-  color: #909399;
 
   &:hover {
-    color: var(--el-color-primary);
+    color: var(--phy-color-action-text-hover);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--phy-color-focus);
+    outline-offset: 2px;
   }
 }
 
