@@ -66,12 +66,19 @@ export const LONG_GENERIC_MARKDOWN = [
 export const CITED_MARKDOWN =
   "Synthetic cited answer cites the literature [1] for the claim.";
 
+/** Tiny SVG data URL — no network for GeneNetwork / DeepGenome fixture images. */
+export const FIXTURE_GENE_NETWORK_IMAGE_DATA_URL =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect fill="#9ec5fe" width="48" height="48"/></svg>'
+  );
+
 export const DEEP_GENOME_MARKDOWN = [
   "## Synthetic DeepGenome result",
   "",
   "Gene locus summary with citation [1].",
   "",
-  "![fig](https://example.com/synthetic-deep-genome.png)",
+  `![fig](${FIXTURE_GENE_NETWORK_IMAGE_DATA_URL})`,
 ].join("\n");
 
 const mdBlock = (text: string): ContentBlock => ({
@@ -214,10 +221,3 @@ export function buildPhase3BTranscript(key: Phase3BMessageKey): ChatMessage[] {
     MESSAGE_FIXTURES[key],
   ];
 }
-
-/** Tiny SVG data URL — no network for the GeneNetwork image branch. */
-export const FIXTURE_GENE_NETWORK_IMAGE_DATA_URL =
-  "data:image/svg+xml," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect fill="#9ec5fe" width="48" height="48"/></svg>'
-  );
