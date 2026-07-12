@@ -1,16 +1,6 @@
 <template>
   <div data-testid="chat-composer" class="chat-composer">
-    <ChatModeSelector
-      v-if="showModeSelector"
-      :model-value="chatMode"
-      :expert-enabled="expertModeEnabled"
-      class="empty-chat-mode"
-      @update:model-value="emit('update:chatMode', $event)"
-    />
-    <div
-      :ref="bindTourInputTarget"
-      class="chat-composer-surface"
-    >
+    <div :ref="bindTourInputTarget" class="chat-composer-surface">
       <PhyComposerFrame>
         <template #attachments>
           <div
@@ -35,31 +25,7 @@
           </div>
         </template>
 
-        <ChatAgentPicker
-          v-if="showAgentPicker"
-          :options="pickerOptions"
-          :roles-loading="rolesLoading"
-          :selected-agent="selectedAgent"
-          :disabled="isSending"
-          @select="emit('command', $event)"
-          @clear="emit('clear-agent')"
-        />
         <div class="chat-composer-body">
-          <div v-if="isSending" class="abort-button-overlay">
-            <el-tooltip :content="t('chat.abortTooltip')" placement="top">
-              <el-button
-                round
-                color="#f56c6c"
-                :aria-label="t('chat.abortAriaLabel')"
-                @click="emit('stop')"
-              >
-                <el-icon>
-                  <Close />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </div>
-
           <MentionSender
             :model-value="modelValue"
             ref="senderRef"
@@ -67,8 +33,6 @@
             :disabled="isSending"
             variant="updown"
             :auto-size="{ minRows: 1, maxRows: 5 }"
-            clearable
-            allow-speech
             :placeholder="t('chat.inputPlaceholder', { symbol: '@' })"
             :options="rolesTool.map((x) => ({ value: x }))"
             :trigger-strings="['@']"
@@ -81,86 +45,128 @@
             @search="emit('search', $event)"
             @keydown.enter.capture="onComposerEnterCapture"
           >
-            <template #prefix>
-              <div class="composer-prefix">
-                <el-upload
-                  ref="uploadRef"
-                  class="upload-demo"
-                  :limit="10"
-                  accept=".pdf,.doc,.xlsx,.ppt,.txt,.png"
-                  :show-file-list="false"
-                  :auto-upload="false"
-                  :disabled="isSending"
-                  :on-change="(file) => emit('file-change', file)"
-                  multiple
-                  action="#"
-                >
-                  <template #trigger>
-                    <el-tooltip :content="t('chat.uploadFile')" placement="top">
-                      <el-button
-                        round
-                        plain
-                        class="phy-btn-primary"
-                        :aria-label="t('chat.uploadFile')"
-                      >
-                        <el-icon>
-                          <Paperclip />
-                        </el-icon>
-                      </el-button>
-                    </el-tooltip>
-                  </template>
-                </el-upload>
-                <el-dropdown
-                  v-if="hasMessages"
-                  placement="top-start"
-                  trigger="click"
-                  :disabled="isSending"
-                  @command="emit('command', $event)"
-                >
-                  <el-button round plain class="phy-btn-primary">
-                    <el-icon>
-                      <Menu />
-                    </el-icon>
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu v-if="rolesTool.length > 0">
-                      <el-dropdown-item
-                        v-for="(item, index) in rolesTool"
-                        :key="index"
-                        :command="'@' + item + ','"
-                        >{{ item }}</el-dropdown-item
-                      >
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-            </template>
-
-            <template #action-list>
-              <div class="composer-actions">
-                <div v-if="!modelValue.trim() || isSending" class="send-btn">
-                  <el-tooltip
-                    :content="t('chat.inputPlaceholderTip')"
-                    placement="top"
-                  >
-                    <el-button round color="#cbcdcd" :aria-label="t('chat.sendAriaLabel')">
-                      <el-icon>
-                        <Promotion />
-                      </el-icon>
-                    </el-button>
-                  </el-tooltip>
-                </div>
-                <div v-else class="send-btn" @click="emit('submit')">
-                  <el-button round class="phy-btn-primary" :aria-label="t('chat.sendAriaLabel')">
-                    <el-icon>
-                      <Promotion />
-                    </el-icon>
-                  </el-button>
-                </div>
-              </div>
-            </template>
+            <template #prefix />
+            <template #action-list />
           </MentionSender>
         </div>
+
+        <template #actions>
+          <div class="composer-toolbar">
+            <div
+              v-if="showModeSelector || showAgentPicker"
+              class="composer-context-controls"
+            >
+              <ChatModeSelector
+                v-if="showModeSelector"
+                :model-value="chatMode"
+                :expert-enabled="expertModeEnabled"
+                class="composer-mode-selector"
+                @update:model-value="emit('update:chatMode', $event)"
+              />
+              <ChatAgentPicker
+                v-if="showAgentPicker"
+                :options="pickerOptions"
+                :roles-loading="rolesLoading"
+                :selected-agent="selectedAgent"
+                :disabled="isSending"
+                @select="emit('command', $event)"
+                @clear="emit('clear-agent')"
+              />
+            </div>
+
+            <div class="composer-utility-actions">
+              <el-upload
+                ref="uploadRef"
+                class="upload-demo"
+                :limit="10"
+                accept=".pdf,.doc,.xlsx,.ppt,.txt,.png"
+                :show-file-list="false"
+                :auto-upload="false"
+                :disabled="isSending"
+                :on-change="(file) => emit('file-change', file)"
+                multiple
+                action="#"
+              >
+                <template #trigger>
+                  <el-tooltip :content="t('chat.uploadFile')" placement="top">
+                    <el-button
+                      circle
+                      class="composer-tool-button"
+                      :disabled="isSending"
+                      :aria-label="t('chat.uploadFile')"
+                    >
+                      <el-icon><Paperclip /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </template>
+              </el-upload>
+              <el-dropdown
+                v-if="hasMessages && rolesTool.length > 0"
+                placement="top-start"
+                trigger="click"
+                :disabled="isSending"
+                @command="emit('command', $event)"
+              >
+                <el-button
+                  circle
+                  class="composer-tool-button"
+                  :disabled="isSending"
+                  :aria-label="t('chat.agentPicker.label')"
+                >
+                  <el-icon><Menu /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      v-for="(item, index) in rolesTool"
+                      :key="index"
+                      :command="'@' + item + ','"
+                      >{{ item }}</el-dropdown-item
+                    >
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+
+            <div class="composer-primary-action">
+              <div v-if="isSending" class="stop-btn">
+                <el-tooltip :content="t('chat.abortTooltip')" placement="top">
+                  <el-button
+                    circle
+                    class="composer-stop-button"
+                    :aria-label="t('chat.abortAriaLabel')"
+                    @click="emit('stop')"
+                  >
+                    <span class="stop-glyph" aria-hidden="true" />
+                  </el-button>
+                </el-tooltip>
+              </div>
+              <div v-else class="send-btn">
+                <el-tooltip
+                  :content="
+                    canSubmit
+                      ? t('chat.sendAriaLabel')
+                      : t('chat.inputPlaceholderTip')
+                  "
+                  placement="top"
+                >
+                  <span class="composer-tooltip-anchor">
+                    <el-button
+                      circle
+                      class="composer-send-button"
+                      :class="{ 'phy-btn-primary': canSubmit }"
+                      :disabled="!canSubmit"
+                      :aria-label="t('chat.sendAriaLabel')"
+                      @click="emit('submit')"
+                    >
+                      <el-icon><Promotion /></el-icon>
+                    </el-button>
+                  </span>
+                </el-tooltip>
+              </div>
+            </div>
+          </div>
+        </template>
       </PhyComposerFrame>
     </div>
   </div>
@@ -176,12 +182,7 @@ import ChatAgentPicker, {
   type ChatAgentPickerOption,
 } from "./ChatAgentPicker.vue";
 import { PhyComposerFrame } from "@/components/shell";
-import {
-  Close,
-  Paperclip,
-  Promotion,
-  Menu,
-} from "@element-plus/icons-vue";
+import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
 import type { ChatComposerHandle, UploadFile } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
 
@@ -222,6 +223,9 @@ const senderRef = ref<{
 const uploadRef = ref();
 
 const showAgentPicker = computed(() => props.chatMode === "instant");
+const canSubmit = computed(
+  () => Boolean(props.modelValue.trim()) && !props.isSending
+);
 
 const popoverVisible = computed(() =>
   unref(senderRef.value?.popoverVisible as boolean | undefined)
@@ -254,12 +258,6 @@ defineExpose<ChatComposerHandle>({
     calc(var(--phy-space-8) + env(safe-area-inset-bottom, 0px));
 }
 
-.empty-chat-mode {
-  display: flex;
-  justify-content: center;
-  margin: 0 auto var(--phy-space-8);
-}
-
 .chat-composer-surface {
   position: relative;
   min-height: var(--phy-control-height-primary);
@@ -276,12 +274,89 @@ defineExpose<ChatComposerHandle>({
   box-shadow: none;
 }
 
-.composer-prefix,
-.composer-actions {
+.chat-composer-body :deep(.el-sender-content) {
+  padding: var(--phy-space-4) var(--phy-space-4) 0;
+}
+
+.chat-composer-body :deep(.el-sender-updown-wrap) {
+  display: none !important;
+}
+
+.chat-composer-body :deep(.el-textarea__inner) {
+  min-height: 40px;
+  margin-bottom: 0 !important;
+  padding: var(--phy-space-8) var(--phy-space-4);
+  line-height: 1.5;
+}
+
+.composer-toolbar {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--phy-space-8);
+}
+
+.composer-context-controls,
+.composer-utility-actions,
+.composer-primary-action {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--phy-space-8);
+}
+
+.composer-context-controls {
+  min-width: 0;
   flex-wrap: wrap;
+}
+
+.composer-utility-actions {
+  gap: var(--phy-space-4);
+}
+
+.composer-tooltip-anchor {
+  display: inline-flex;
+}
+
+.composer-tool-button,
+.composer-send-button,
+.composer-stop-button {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: var(--phy-radius-pill);
+}
+
+.composer-tool-button {
+  --el-button-bg-color: var(--phy-color-fill-subtle);
+  --el-button-border-color: var(--phy-color-fill-subtle);
+  --el-button-text-color: var(--phy-color-text-secondary);
+  --el-button-hover-bg-color: var(--phy-color-primary-soft);
+  --el-button-hover-border-color: var(--phy-color-primary-soft);
+  --el-button-hover-text-color: var(--phy-color-action-text);
+}
+
+.composer-send-button:disabled {
+  --el-button-disabled-bg-color: var(--phy-color-fill-subtle);
+  --el-button-disabled-border-color: var(--phy-color-fill-subtle);
+  --el-button-disabled-text-color: var(--phy-color-text-disabled);
+}
+
+.composer-stop-button {
+  --el-button-bg-color: var(--phy-color-text);
+  --el-button-border-color: var(--phy-color-text);
+  --el-button-text-color: var(--phy-color-bg-elevated);
+  --el-button-hover-bg-color: var(--phy-color-text-secondary);
+  --el-button-hover-border-color: var(--phy-color-text-secondary);
+  --el-button-hover-text-color: var(--phy-color-bg-elevated);
+}
+
+.stop-glyph {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
 .file-list-container .file-list {
@@ -301,18 +376,23 @@ defineExpose<ChatComposerHandle>({
 }
 
 .send-btn,
-.abort-btn {
-  cursor: pointer;
+.stop-btn {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.abort-button-overlay {
-  position: absolute;
-  top: -50px;
-  right: 20px;
-  z-index: 1000;
-  pointer-events: auto;
+@media (max-width: 600px) {
+  .composer-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .composer-context-controls {
+    grid-column: 1 / -1;
+  }
+
+  .composer-context-controls :deep(.picker-combobox-wrap) {
+    width: min(168px, calc(100vw - var(--phy-space-32)));
+  }
 }
 </style>

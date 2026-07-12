@@ -153,10 +153,17 @@ describe("ChatFrameV2 — compact Composer surface", () => {
     const mentionIdx = CHAT_COMPOSER_SOURCE.indexOf("<MentionSender");
     const sendIdx = CHAT_COMPOSER_SOURCE.indexOf('class="send-btn"');
     expect(modeIdx).toBeGreaterThan(-1);
-    expect(surfaceIdx).toBeGreaterThan(modeIdx);
-    expect(pickerIdx).toBeGreaterThan(surfaceIdx);
-    expect(mentionIdx).toBeGreaterThan(pickerIdx);
-    expect(sendIdx).toBeGreaterThan(mentionIdx);
+    expect(mentionIdx).toBeGreaterThan(surfaceIdx);
+    expect(modeIdx).toBeGreaterThan(mentionIdx);
+    expect(pickerIdx).toBeGreaterThan(modeIdx);
+    expect(sendIdx).toBeGreaterThan(pickerIdx);
+    expect(CHAT_COMPOSER_SOURCE).toContain("<template #actions>");
+    expect(CHAT_COMPOSER_SOURCE).toContain("<template #action-list />");
+    expect(CHAT_COMPOSER_SOURCE).toMatch(
+      /:deep\(\.el-sender-updown-wrap\) \{[\s\S]*?display: none !important;/
+    );
+    expect(CHAT_COMPOSER_SOURCE).toContain('class="stop-btn"');
+    expect(CHAT_COMPOSER_SOURCE).not.toContain("abort-button-overlay");
   });
 
   it("binds the Tour input target to the compact surface", () => {

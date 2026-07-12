@@ -48,12 +48,13 @@ import type { ChatComposerHandle } from "@/views/chat/types";
 
 const COMPACT_DOM_ORDER = [
   "chat-composer",
-  "empty-chat-mode",
   "chat-composer-surface",
   "phy-composer-frame",
   "composer-attachments",
-  "chat-agent-picker",
   "mention-sender-stub",
+  "composer-toolbar",
+  "composer-mode-selector",
+  "chat-agent-picker",
   "upload-demo",
   "send-btn",
 ];
@@ -84,7 +85,7 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
       stubs: {
         ChatModeSelector: {
           name: "ChatModeSelector",
-          template: '<div class="empty-chat-mode" />',
+          template: '<div class="composer-mode-selector" />',
           props: ["modelValue", "expertEnabled"],
           emits: ["update:modelValue"],
         },
@@ -175,10 +176,13 @@ describe("ChatComposer", () => {
       const cls = el.className?.toString() || "";
       const testId = el.getAttribute("data-testid");
       if (testId === "chat-composer") order.push("chat-composer");
-      if (cls.includes("empty-chat-mode")) order.push("empty-chat-mode");
       if (cls.includes("chat-composer-surface")) order.push("chat-composer-surface");
       if (cls.includes("phy-composer-frame")) order.push("phy-composer-frame");
       if (cls.includes("composer-attachments")) order.push("composer-attachments");
+      if (cls.includes("composer-toolbar")) order.push("composer-toolbar");
+      if (cls.includes("composer-mode-selector")) {
+        order.push("composer-mode-selector");
+      }
       if (testId === "chat-agent-picker" || cls.includes("chat-agent-picker")) {
         order.push("chat-agent-picker");
       }
@@ -195,19 +199,16 @@ describe("ChatComposer", () => {
     expect(wrapper.find(".input-box").exists()).toBe(false);
     expect(wrapper.find(".input-container-bottom").exists()).toBe(false);
     expect(order.indexOf("chat-composer")).toBeLessThan(
-      order.indexOf("empty-chat-mode")
-    );
-    expect(order.indexOf("empty-chat-mode")).toBeLessThan(
       order.indexOf("chat-composer-surface")
     );
     expect(order.indexOf("chat-composer-surface")).toBeLessThan(
       order.indexOf("phy-composer-frame")
     );
-    expect(order.indexOf("phy-composer-frame")).toBeLessThan(
-      order.indexOf("chat-agent-picker")
+    expect(order.indexOf("mention-sender-stub")).toBeLessThan(
+      order.indexOf("composer-toolbar")
     );
-    expect(order.indexOf("chat-agent-picker")).toBeLessThan(
-      order.indexOf("mention-sender-stub")
+    expect(order.indexOf("composer-mode-selector")).toBeLessThan(
+      order.indexOf("chat-agent-picker")
     );
   });
 
@@ -218,31 +219,43 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["next"]);
   });
 
-  it("emits submit from MentionSender and click send path", async () => {
+  it("emits submit from MentionSender and the enabled primary action", async () => {
     const wrapper = mountComposer({ modelValue: "go" });
     await wrapper.findComponent({ name: "MentionSender" }).vm.$emit("submit");
     expect(wrapper.emitted("submit")).toHaveLength(1);
+    await wrapper.find(".send-btn button").trigger("click");
+    expect(wrapper.emitted("submit")).toHaveLength(2);
 
     const wrapperEmpty = mountComposer({ modelValue: "" });
     expect(wrapperEmpty.find(".send-btn").exists()).toBe(true);
+    expect(
+      wrapperEmpty.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
   });
 
-  it("emits stop when abort overlay is visible during send", () => {
+  it("replaces Send with an in-flow Stop action during generation", async () => {
     const wrapper = mountComposer({ isSending: true });
-    expect(wrapper.find(".abort-button-overlay").exists()).toBe(true);
-    wrapper.find(".abort-button-overlay button").trigger("click");
+    expect(wrapper.find(".abort-button-overlay").exists()).toBe(false);
+    expect(wrapper.find(".send-btn").exists()).toBe(false);
+    expect(wrapper.find(".stop-btn").exists()).toBe(true);
+    await wrapper.find(".stop-btn button").trigger("click");
     expect(wrapper.emitted("stop")).toHaveLength(1);
   });
 
   it("renders mode selector only in empty-chat state and emits mode updates", async () => {
     const wrapper = mountComposer({ showModeSelector: true });
-    expect(wrapper.find(".empty-chat-mode").exists()).toBe(true);
+    expect(wrapper.find(".composer-mode-selector").exists()).toBe(true);
+    expect(
+      wrapper
+        .find(".composer-mode-selector")
+        .element.closest(".phy-composer-frame")
+    ).toBeTruthy();
 
     const withMessages = mountComposer({
       showModeSelector: false,
       hasMessages: true,
     });
-    expect(withMessages.find(".empty-chat-mode").exists()).toBe(false);
+    expect(withMessages.find(".composer-mode-selector").exists()).toBe(false);
 
     await wrapper
       .findComponent({ name: "ChatModeSelector" })
@@ -291,6 +304,9 @@ describe("ChatComposer", () => {
     expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
       true
     );
+    expect(
+      wrapper.findComponent(".composer-tool-button").props("disabled")
+    ).toBe(true);
     expect(wrapper.find(".file-list-container").exists()).toBe(false);
   });
 
