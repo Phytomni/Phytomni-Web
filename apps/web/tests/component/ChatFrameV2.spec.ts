@@ -26,6 +26,10 @@ const FIXTURE_APP_SOURCE = readFileSync(
   resolve(__dirname, "../visual/chat/ChatVisualFixtureApp.vue"),
   "utf8"
 );
+const CHAT_MESSAGE_ROW_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageRow.vue"),
+  "utf8"
+);
 
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
@@ -71,10 +75,11 @@ describe("ChatFrameV2 — production capture hooks", () => {
   });
 
   it("marks persisted and loading message rows with the repeatable hook", () => {
-    expect(CHAT_SOURCE).toContain('data-testid="chat-message-row"');
+    // Hook lives once on ChatMessageRow; index mounts the shell for transcript + loading.
     expect(
-      countOccurrences(CHAT_SOURCE, 'data-testid="chat-message-row"')
-    ).toBe(2);
+      countOccurrences(CHAT_MESSAGE_ROW_SOURCE, 'data-testid="chat-message-row"')
+    ).toBe(1);
+    expect(countOccurrences(CHAT_SOURCE, "<ChatMessageRow")).toBe(2);
     expect(TRANSCRIPT_SOURCE).toContain(
       'v-for="(message, index) in currentChat.messages"'
     );
@@ -82,11 +87,12 @@ describe("ChatFrameV2 — production capture hooks", () => {
       'v-if="isSending && !getChatState(currentChatId).isStreaming"'
     );
     expect(TRANSCRIPT_SOURCE).toMatch(
-      /v-for="\(message, index\) in currentChat\.messages"[\s\S]*data-testid="chat-message-row"/
+      /<ChatMessageRow[\s\S]*v-for="\(message, index\) in currentChat\.messages"/
     );
     expect(TRANSCRIPT_SOURCE).toMatch(
-      /isSending && !getChatState\(currentChatId\)\.isStreaming[\s\S]*data-testid="chat-message-row"/
+      /<ChatMessageRow[\s\S]*v-if="isSending && !getChatState\(currentChatId\)\.isStreaming"/
     );
+    expect(TRANSCRIPT_SOURCE).toMatch(/<ChatMessageRow[\s\S]*\bloading\b/);
   });
 
   it("preserves singleton composer, primary action, sidebar trigger, and identity hooks", () => {

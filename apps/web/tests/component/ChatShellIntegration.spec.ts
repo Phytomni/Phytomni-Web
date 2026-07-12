@@ -8,6 +8,10 @@ const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
   "utf8"
 );
+const CHAT_MESSAGE_ROW_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageRow.vue"),
+  "utf8"
+);
 const CHAT_COMPOSER_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatComposer.vue"),
   "utf8"
@@ -150,8 +154,9 @@ describe("Chat adaptive shell integration", () => {
       ':data-sidebar-drawer-state="sidebarDrawerStateAttr"'
     );
     expect(
-      countOccurrences(CHAT_SOURCE, 'data-testid="chat-message-row"')
-    ).toBe(2);
+      countOccurrences(CHAT_MESSAGE_ROW_SOURCE, 'data-testid="chat-message-row"')
+    ).toBe(1);
+    expect(countOccurrences(CHAT_SOURCE, "<ChatMessageRow")).toBe(2);
   });
 
   it("keeps the Chat header focused on conversation context", () => {
