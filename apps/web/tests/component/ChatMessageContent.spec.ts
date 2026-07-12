@@ -133,9 +133,9 @@ const mountContent = (
       stubs: {
         StreamMessage: {
           name: "StreamMessage",
-          props: ["blocks", "runId", "transport", "ns"],
+          props: ["blocks", "runId", "transport", "ns", "references"],
           template:
-            '<div data-testid="stream-message" :data-ns="ns === undefined ? \'__absent__\' : ns" :data-run-id="runId" :data-has-transport="transport ? \'1\' : \'0\'" />',
+            '<div data-testid="stream-message" :data-ns="ns === undefined || ns === \'\' ? \'__absent__\' : ns" :data-run-id="runId" :data-has-transport="transport ? \'1\' : \'0\'" :data-ref-count="Array.isArray(references) && references.length ? String(references.length) : \'0\'" />',
         },
         DeepGenomeResultViewer: {
           name: "DeepGenomeResultViewer",
@@ -484,29 +484,84 @@ describe("ChatMessageContent namespace and stream props", () => {
   });
 });
 
-describe("ChatMessageContent phyto.references streaming citation gap", () => {
-  /**
-   * useStreamMessage finalizes phyto.references into message.doc_list, but
-   * non-empty blocks keep the StreamMessage branch (no ns, no reference rows).
-   * Literal [N] is the characterized current composition — not the desired end
-   * state. Closing this gap is mandatory input for a follow-up streaming
-   * citation composition change (do not treat literal markers as the goal).
-   */
-  it("keeps StreamMessage (no ns) when blocks remain after doc_list capture", () => {
+describe("ChatMessageContent live streaming citations", () => {
+  it("passes doc_list + ns=m${index} to StreamMessage when references are nonempty", () => {
     expect(MESSAGE_STREAM_REFS_CAPTURED.doc_list).toEqual([
       FIXTURE_REFERENCE_DOC,
     ]);
     expect(MESSAGE_STREAM_REFS_CAPTURED.blocks?.length).toBeGreaterThan(0);
-    expect(MESSAGE_STREAM_REFS_CAPTURED.streaming).toBe(false);
 
     const wrapper = mountContent(MESSAGE_STREAM_REFS_CAPTURED, { index: 2 });
     expect(detectBranch(wrapper)).toBe("stream");
-    expect(
-      wrapper.find('[data-testid="stream-message"]').attributes("data-ns")
-    ).toBe("__absent__");
-    // Composition has no CitedAnswer / DeepGenome reference targets yet.
+    const stream = wrapper.find('[data-testid="stream-message"]');
+    expect(stream.attributes("data-ns")).toBe("m2");
+    expect(stream.attributes("data-ref-count")).toBe("1");
+    // Still StreamMessage — never a CitedAnswer duplicate body for the same turn.
     expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+  });
+
+  it("keeps empty namespace before doc_list arrives, then wires ns without remounting", async () => {
+    const message: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [block("See [1].")],
+      tool_name: "ChatAgent",
+    };
+    const wrapper = mountContent(message, { index: 5 });
+    const stream = wrapper.find('[data-testid="stream-message"]');
+    expect(stream.attributes("data-ns")).toBe("__absent__");
+    expect(stream.attributes("data-ref-count")).toBe("0");
+
+    // Finalizer reactively assigns phyto.references → doc_list on the same message.
+    message.doc_list = [{ title: "Live Paper" }];
+    message.streaming = false;
+    await wrapper.setProps({ message: { ...message } });
+
+    const after = wrapper.find('[data-testid="stream-message"]');
+    expect(after.attributes("data-ns")).toBe("m5");
+    expect(after.attributes("data-ref-count")).toBe("1");
+    expect(detectBranch(wrapper)).toBe("stream");
+  });
+
+  it("gives two cited streams disjoint page namespaces", () => {
+    const msg = (text: string): ChatMessage => ({
+      role: "assistant",
+      content: "",
+      blocks: [block(text)],
+      doc_list: [{ title: "Doc" }],
+      tool_name: "ChatAgent",
+    });
+    const a = mountContent(msg("A [1]"), { index: 0 });
+    const b = mountContent(msg("B [1]"), { index: 1 });
+    expect(a.find('[data-testid="stream-message"]').attributes("data-ns")).toBe(
+      "m0"
+    );
+    expect(b.find('[data-testid="stream-message"]').attributes("data-ns")).toBe(
+      "m1"
+    );
+  });
+
+  /**
+   * Live-session limitation: the Go accumulator does not persist a dedicated
+   * streaming-reference field. After history reload, blocks-bearing messages
+   * without doc_list have no safe citation targets — do not invent rows here.
+   */
+  it("documents history-refresh fixtures as references-unavailable", () => {
+    // MESSAGE_STREAMING / interleaved fixtures mimic a reloaded stream without
+    // persisted phyto.references — empty ns, no reference rows.
+    for (const message of [MESSAGE_STREAMING, MESSAGE_INTERLEAVED_STREAMING]) {
+      expect(message.doc_list).toBeUndefined();
+      const wrapper = mountContent(message, { index: 3 });
+      expect(detectBranch(wrapper)).toBe("stream");
+      expect(
+        wrapper.find('[data-testid="stream-message"]').attributes("data-ns")
+      ).toBe("__absent__");
+      expect(
+        wrapper.find('[data-testid="stream-message"]').attributes("data-ref-count")
+      ).toBe("0");
+    }
   });
 });
 

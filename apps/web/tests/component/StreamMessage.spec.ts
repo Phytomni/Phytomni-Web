@@ -66,5 +66,117 @@ describe("StreamMessage", () => {
     expect(w.html()).toContain("[1]");
     expect(w.html()).not.toContain('class="citation-ref"');
     expect(w.html()).not.toContain("#ref-1");
+    expect(w.find(".doc-list").exists()).toBe(false);
+  });
+
+  it("linkifies [N] and renders CitationReferenceList only when references are nonempty", async () => {
+    const blocks: ContentBlock[] = [
+      {
+        type: "markdown",
+        authority: "web",
+        text: "See [1] for the claim.",
+      },
+    ];
+    const w = mount(StreamMessage, {
+      props: {
+        blocks,
+        ns: "",
+        references: undefined,
+      },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+    // Before references: empty ns → literal marker, no rows.
+    expect(w.html()).toContain("[1]");
+    expect(w.html()).not.toContain('class="citation-ref"');
+    expect(w.find(".doc-list").exists()).toBe(false);
+
+    // Reactive arrival of real references + page ns (same StreamMessage instance).
+    await w.setProps({
+      ns: "m2",
+      references: [{ title: "Paper One" }],
+    });
+    await nextTick();
+
+    // Streaming path: processInlineMarkdown emits #ns-ref-N anchors (not citation-ref).
+    expect(w.html()).toContain('href="#m2-ref-1"');
+    expect(w.html()).toMatch(/<a href="#m2-ref-1"[^>]*>\[1\]<\/a>/);
+    const row = w.find(".doc-list-item");
+    expect(row.exists()).toBe(true);
+    expect(row.attributes("id")).toBe("m2-ref-1");
+    expect(row.html()).toContain("Paper One");
+    // Ordered blocks stay ahead of the reference list (no collapse/remount of markdown).
+    const md = w.find(".md-block");
+    expect(md.exists()).toBe(true);
+    expect(md.html()).toContain('href="#m2-ref-1"');
+  });
+
+  it("keeps two streams' citation targets disjoint; empty references stay a no-op", () => {
+    const blocks: ContentBlock[] = [
+      { type: "markdown", authority: "web", text: "Claim [1]." },
+    ];
+    const a = mount(StreamMessage, {
+      props: { blocks, ns: "m0", references: [{ title: "A" }] },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+    const b = mount(StreamMessage, {
+      props: { blocks, ns: "m1", references: [{ title: "B" }] },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+    const none = mount(StreamMessage, {
+      props: { blocks, ns: undefined, references: [] },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+
+    expect(a.find(".doc-list-item").attributes("id")).toBe("m0-ref-1");
+    expect(b.find(".doc-list-item").attributes("id")).toBe("m1-ref-1");
+    expect(a.html()).toContain('href="#m0-ref-1"');
+    expect(b.html()).toContain('href="#m1-ref-1"');
+    expect(a.html()).not.toContain('href="#m1-ref-1"');
+    expect(b.html()).not.toContain('href="#m0-ref-1"');
+
+    expect(none.html()).toContain("[1]");
+    expect(none.html()).not.toContain('href="#');
+    expect(none.find(".doc-list").exists()).toBe(false);
+  });
+
+  it("preserves A2UI transport while references appear after blocks", async () => {
+    const sink: A2uiActionEnvelope[] = [];
+    const transport = createMemoryA2uiTransport(sink);
+    const blocks: ContentBlock[] = [
+      {
+        type: "agent-surface",
+        authority: "agent",
+        interactive: true,
+        surfaceId: "surf-refs",
+        widget: "confirm",
+        props: { title: "Go?", confirm_label: "Yes", cancel_label: "No" },
+      },
+      { type: "markdown", authority: "web", text: "See [1]." },
+    ];
+    const w = mount(StreamMessage, {
+      props: {
+        blocks,
+        runId: "run-refs",
+        transport,
+        ns: "",
+        references: undefined,
+      },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+    expect(w.find(".a2ui-confirm, .agent-surface, button").exists()).toBe(true);
+
+    await w.setProps({
+      ns: "m4",
+      references: [{ title: "R" }],
+    });
+    await nextTick();
+
+    expect(w.find(".doc-list-item").attributes("id")).toBe("m4-ref-1");
+    const buttons = w.findAll("button");
+    await buttons[buttons.length - 1].trigger("click");
+    await nextTick();
+    expect(sink).toHaveLength(1);
+    expect(sink[0].run_id).toBe("run-refs");
+    expect(sink[0].surface_id).toBe("surf-refs");
   });
 });

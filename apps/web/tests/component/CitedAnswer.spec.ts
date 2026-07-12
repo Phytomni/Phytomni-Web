@@ -14,6 +14,7 @@ import CitedAnswer from "@/components/CitedAnswer.vue";
 
 // MarkdownViewer is stubbed so these tests isolate CitedAnswer's reference-list wiring
 // (the body renderer and its XSS rules are locked in MarkdownViewer's own specs).
+// CitationReferenceList is real so CitedAnswer→list parity stays locked.
 const mountCited = (props: Record<string, unknown>) =>
   mount(CitedAnswer, {
     props,
@@ -23,6 +24,9 @@ const mountCited = (props: Record<string, unknown>) =>
           template: '<div class="mv-stub">{{ content }}|{{ instantMessage }}|{{ ns }}</div>',
           props: ["content", "instantMessage", "ns"],
         },
+      },
+      mocks: {
+        $t: (key: string) => key,
       },
     },
   });

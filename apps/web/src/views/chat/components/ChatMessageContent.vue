@@ -10,15 +10,19 @@
     ]"
   >
     <!-- Streaming assistant messages (AG-UI content blocks) render via
-         StreamMessage; P0 mount passes no ns (no references yet, citation
-         gate keeps [N] literal, consistent with the no-ns MarkdownViewer
-         branch below). Non-streaming messages fall through unchanged. -->
+         StreamMessage. Pass page ns=m${index} only when doc_list is nonempty so
+         [N] stays literal until real reference rows exist; after the finalizer
+         assigns phyto.references → doc_list, the same blocks rerender to
+         #m<index>-ref-N links. Live-session only — history reload does not
+         invent persisted streaming references. -->
     <StreamMessage
       v-if="
         message.role === 'assistant' &&
         (message.streaming || (message.blocks && message.blocks.length))
       "
       :blocks="message.blocks || []"
+      :references="message.doc_list"
+      :ns="message.doc_list?.length ? 'm' + index : undefined"
       :run-id="streamRunId"
       :transport="streamTransport"
     />

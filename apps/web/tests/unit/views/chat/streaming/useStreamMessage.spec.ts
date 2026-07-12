@@ -240,4 +240,19 @@ describe("useStreamMessage", () => {
     // The map must not accumulate a stale controller per streamed message.
     expect(unregisterAbortController).toHaveBeenCalledWith("req-9");
   });
+
+  /**
+   * Live-session limitation: phyto.references land on placeholder.doc_list only
+   * for the current stream. History reload does not invent persisted reference
+   * rows — a blocks-only message without doc_list remains references-unavailable.
+   */
+  it("documents history-refresh placeholders as references-unavailable", () => {
+    const historyReload: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: false,
+      blocks: [{ type: "markdown", authority: "web", text: "See [1]." }],
+    };
+    expect(historyReload.doc_list).toBeUndefined();
+  });
 });
