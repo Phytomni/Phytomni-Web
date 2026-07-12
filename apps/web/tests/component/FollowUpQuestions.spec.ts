@@ -44,10 +44,14 @@ describe("FollowUpQuestions", () => {
   it("uses token-only quiet inline styles without elevation or translate", () => {
     const css = styleBlocks(SOURCE).join("\n");
     expect(css).toMatch(/var\(--phy-/);
-    expect(css).not.toMatch(/#333|#555|#e6f7ff|#1890ff/i);
+    expect(css).not.toMatch(/#[0-9a-f]{3,8}/i);
     expect(css).not.toMatch(/translateY|translate3d|box-shadow/);
     expect(css).toMatch(/:focus-visible|:focus/);
-    expect(css).toMatch(/min-height:\s*(44px|2\.75rem|var\(--phy-)/);
+    expect(css).toMatch(/min-height:\s*var\(--phy-control-height-compact\)/);
+    expect(css).toMatch(
+      /@media\s*\(hover:\s*none\),\s*\(pointer:\s*coarse\)[\s\S]*min-height:\s*calc\(\s*var\(--phy-control-height-default\)\s*\+\s*var\(--phy-space-4\)\s*\)/
+    );
+    expect(css).toMatch(/border:\s*0/);
   });
 
   it("keeps the follow-up heading and compact wrapping layout", () => {
@@ -55,5 +59,7 @@ describe("FollowUpQuestions", () => {
     expect(wrapper.text()).toContain("chat.followUpQuestions");
     const css = styleBlocks(SOURCE).join("\n");
     expect(css).toMatch(/flex-wrap:\s*wrap/);
+    expect(css).toMatch(/max-width:\s*100%/);
+    expect(css).toMatch(/overflow-wrap:\s*anywhere/);
   });
 });

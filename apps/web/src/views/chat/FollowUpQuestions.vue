@@ -35,47 +35,60 @@ const handleQuestionClick = (question: string) => {
 
 <style lang="scss" scoped>
 .follow-up-questions {
-  margin-top: var(--phy-space-12, 12px);
+  max-width: 100%;
+  margin-top: var(--phy-space-12);
 
   h4 {
-    margin: 0 0 var(--phy-space-8, 8px) 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--phy-color-text);
+    margin: 0 0 var(--phy-space-4);
+    color: var(--phy-color-text-muted);
+    font-size: 12px;
+    font-weight: 500;
   }
 }
 
 .follow-up-list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--phy-space-8, 8px);
+  max-width: 100%;
+  gap: var(--phy-space-4);
 }
 
 .question-item {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  max-width: 100%;
+  min-height: var(--phy-control-height-compact);
   margin: 0;
-  padding: var(--phy-space-8, 8px) var(--phy-space-12, 12px);
-  border: 1px solid var(--phy-color-border-subtle);
-  border-radius: var(--phy-radius-sm, 6px);
+  padding: var(--phy-space-4) var(--phy-space-8);
+  border: 0;
+  border-radius: var(--phy-radius-sm);
   background: transparent;
+  color: var(--phy-color-text-secondary);
   font: inherit;
   font-size: 13px;
-  color: var(--phy-color-text-secondary);
+  line-height: 1.45;
   text-align: left;
+  overflow-wrap: anywhere;
   cursor: pointer;
   user-select: none;
+  transition: background-color var(--phy-motion-fast) ease,
+    color var(--phy-motion-fast) ease;
 
   &:hover {
     color: var(--phy-color-action-text);
-    border-color: var(--phy-color-action-text);
     background: var(--phy-color-primary-soft);
   }
 
   &:focus-visible {
     outline: 2px solid var(--phy-color-focus);
     outline-offset: 2px;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .question-item {
+    min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
+    padding: var(--phy-space-8);
   }
 }
 </style>
