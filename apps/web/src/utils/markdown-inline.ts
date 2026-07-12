@@ -1,5 +1,6 @@
 import {
   sanitizeAnchorAttributes,
+  sanitizeEscapedHref,
   sanitizeHref,
 } from "@/utils/sanitize-markup";
 
@@ -108,7 +109,7 @@ export const processInlineMarkdown = (line: string, ns = ""): string => {
   line = line.replace(
     /!\[(.*?)\]\((.*?\.cif)\)/g,
     function (match: string, alt: string, src: string) {
-      const convertedSrc = convertFilePath(src);
+      const convertedSrc = sanitizeEscapedHref(convertFilePath(src));
       return stash(
         '<div class="cif-container" data-src="' +
           convertedSrc +
@@ -122,7 +123,7 @@ export const processInlineMarkdown = (line: string, ns = ""): string => {
   line = line.replace(
     /!\[(.*?)\]\((?!.*\.cif)(.*?)\)/g,
     function (match: string, alt: string, src: string) {
-      const convertedSrc = convertFilePath(src);
+      const convertedSrc = sanitizeEscapedHref(convertFilePath(src));
       return stash(
         '<img src="' +
           convertedSrc +
@@ -155,7 +156,7 @@ export const processInlineMarkdown = (line: string, ns = ""): string => {
     /\[([^\]]+?)\]\(([^)]+?\.cif)\)/g,
     (_: string, text: string, url: string) => {
       // convert the path
-      const cleanUrl = convertFilePath(url);
+      const cleanUrl = sanitizeEscapedHref(convertFilePath(url));
       return stash(
         `<div class="cif-container" data-src="${cleanUrl}" data-alt="${text}">${text} (CIF file)</div>`
       );

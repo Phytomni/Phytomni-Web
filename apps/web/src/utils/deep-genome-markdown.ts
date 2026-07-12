@@ -2,6 +2,7 @@ import {
   processInlineMarkdown,
   convertFilePath,
 } from "@/utils/markdown-inline";
+import { sanitizeHref } from "@/utils/sanitize-markup";
 
 // Markdown parser for the deep_genome agent (relayed via Bot). Extracted verbatim
 // from DeepGenomeResultViewer.vue: a pure function that only reads the `text` arg
@@ -475,15 +476,13 @@ export function parseDeepGenomeMarkdown(
 
       if (imageMatch) {
         let imageHtml = "";
+        const safeAlt = escapeHtml(imageMatch[1]);
+        const safeSrc = sanitizeHref(convertFilePath(imageMatch[2]));
 
         if (line.match(/!\[(.*?)\]\((.*\.cif)\)/)) {
-          // convert the CIF file path
-          const convertedSrc = convertFilePath(imageMatch[2]);
-          imageHtml = `<div class="cif-container" data-src="${convertedSrc}" data-alt="${imageMatch[1]}"></div>`;
+          imageHtml = `<div class="cif-container" data-src="${safeSrc}" data-alt="${safeAlt}"></div>`;
         } else {
-          // convert the image path
-          const convertedSrc = convertFilePath(imageMatch[2]);
-          imageHtml = `<div style="text-align: center;width: 100%"><img src="${convertedSrc}" alt="${imageMatch[1]}" style="width: 70%; height: auto; cursor: zoom-in;" class="clickable-image" data-src="${convertedSrc}" data-alt="${imageMatch[1]}"></div>`;
+          imageHtml = `<div style="text-align: center;width: 100%"><img src="${safeSrc}" alt="${safeAlt}" style="width: 70%; height: auto; cursor: zoom-in;" class="clickable-image" data-src="${safeSrc}" data-alt="${safeAlt}"></div>`;
         }
         // build the image HTML
 
