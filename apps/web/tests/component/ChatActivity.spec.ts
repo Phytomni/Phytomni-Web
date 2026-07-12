@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick, reactive } from "vue";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createI18n } from "vue-i18n";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
@@ -8,6 +10,11 @@ import {
   activityDisclosureStateKey,
   activityRegionDomId,
 } from "@/views/chat/streaming/presentation";
+
+const ACTIVITY_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatActivity.vue"),
+  "utf8"
+);
 
 const i18n = createI18n({
   legacy: false,
@@ -61,6 +68,13 @@ describe("ChatActivity", () => {
     expect(w.text()).toContain("Activity");
     expect(w.text()).toContain("3");
     expect(w.text()).toContain("In progress");
+    expect(w.find(".chat-activity__status").classes()).toContain("is-running");
+    expect(w.find(".chat-activity__chevron").attributes("aria-hidden")).toBe(
+      "true"
+    );
+    expect(w.find(".chat-activity__chevron").classes()).not.toContain(
+      "is-expanded"
+    );
     expect(w.find(`#${CSS.escape(regionId)}`).exists()).toBe(false);
     expect(w.find(".tool-block").exists()).toBe(false);
   });
@@ -82,6 +96,10 @@ describe("ChatActivity", () => {
     expect(w.find("button").attributes("aria-expanded")).toBe("true");
     expect(w.find(".tool-block").exists()).toBe(true);
     expect(w.text()).toContain("Done");
+    expect(w.find(".chat-activity__status").classes()).toContain("is-done");
+    expect(w.find(".chat-activity__chevron").classes()).toContain(
+      "is-expanded"
+    );
 
     await w.find("button").trigger("click");
     expect(w.emitted("update:expanded")?.[1]).toEqual([false]);
@@ -150,5 +168,19 @@ describe("ChatActivity", () => {
     expect(w.text()).toContain("Execution log");
     expect(w.text()).not.toMatch(/\b0\b/);
     expect(w.find("[data-testid='slot-body']").text()).toBe("analyst body");
+  });
+
+  it("uses semantic tokens for a compact timeline instead of nested cards", () => {
+    const styles = ACTIVITY_SOURCE.slice(ACTIVITY_SOURCE.indexOf("<style"));
+    expect(styles).toContain("max-width: min(100%, 42rem)");
+    expect(styles).toContain("var(--phy-color-accent)");
+    expect(styles).toContain("var(--phy-color-brand-blue)");
+    expect(styles).toContain(":deep(.tool-block)");
+    expect(styles).toContain(":deep(.step-block)");
+    expect(styles).toContain(":deep(.reasoning-body)");
+    expect(styles).toContain(
+      ".chat-activity__body--forced :deep(.tool-block)::before"
+    );
+    expect(styles).not.toMatch(/#[\da-f]{3,8}\b/i);
   });
 });

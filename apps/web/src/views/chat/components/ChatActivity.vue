@@ -28,7 +28,17 @@
         <span v-if="!hideCount" class="chat-activity__count">{{
           t("chat.activity.count", { count: blocks.length })
         }}</span>
-        <span class="chat-activity__status">{{ statusLabel }}</span>
+        <span
+          class="chat-activity__status"
+          :class="streaming ? 'is-running' : 'is-done'"
+        >
+          {{ statusLabel }}
+        </span>
+        <span
+          class="chat-activity__chevron"
+          :class="{ 'is-expanded': expanded }"
+          aria-hidden="true"
+        ></span>
       </button>
       <div
         v-if="expanded"
@@ -111,35 +121,172 @@ const onToggle = () => {
 
 <style scoped lang="scss">
 .chat-activity {
-  margin: 4px 0 8px;
+  margin: 5px 0 9px;
+  max-width: min(100%, 42rem);
   min-width: 0;
 }
 
 .chat-activity__toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  min-height: 28px;
+  gap: 6px;
+  padding: 3px 4px 3px 0;
   border: 0;
   background: transparent;
-  color: var(--phy-color-text-muted, #6b7280);
+  color: var(--phy-color-text-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.35;
   cursor: pointer;
   text-align: left;
 
   &:hover {
-    color: var(--phy-color-text, #111827);
+    color: var(--phy-color-text-secondary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--phy-color-focus);
+    outline-offset: 2px;
+    border-radius: var(--phy-radius-sm);
   }
 }
 
+.chat-activity__label {
+  color: var(--phy-color-text-secondary);
+  font-weight: 600;
+}
+
 .chat-activity__count {
-  opacity: 0.85;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: var(--phy-radius-pill);
+  background: color-mix(in srgb, var(--phy-color-bg-elevated) 58%, transparent);
+  color: var(--phy-color-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.chat-activity__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--phy-color-text-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+
+  &::before {
+    width: 5px;
+    height: 5px;
+    border-radius: var(--phy-radius-pill);
+    background: var(--phy-color-brand-blue);
+    content: "";
+    opacity: 0.62;
+  }
+
+  &.is-running::before {
+    background: var(--phy-color-accent);
+    opacity: 0.9;
+  }
+}
+
+.chat-activity__chevron {
+  width: 6px;
+  height: 6px;
+  margin-left: 1px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+  transform-origin: center;
+  transition: transform var(--phy-motion-fast) ease;
+
+  &.is-expanded {
+    transform: rotate(225deg) translate(-1px, -1px);
+  }
 }
 
 .chat-activity__body {
-  margin-top: 6px;
-  padding-left: 2px;
+  margin: 2px 0 0 3px;
+  padding: 4px 0 2px 14px;
+  border-left: 1px solid
+    color-mix(
+      in srgb,
+      var(--phy-color-accent) 35%,
+      var(--phy-color-brand-blue) 65%
+    );
   min-width: 0;
+
+  &--forced {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  :deep(.tool-block),
+  :deep(.step-block),
+  :deep(.reasoning-body) {
+    position: relative;
+    min-width: 0;
+    color: var(--phy-color-text-secondary);
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+
+  :deep(.tool-block),
+  :deep(.step-block) {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  :deep(.tool-block)::before,
+  :deep(.step-block)::before,
+  :deep(.reasoning-body)::before {
+    position: absolute;
+    top: 7px;
+    left: -17px;
+    width: 5px;
+    height: 5px;
+    border: 1px solid var(--phy-color-bg-elevated);
+    border-radius: var(--phy-radius-pill);
+    background: var(--phy-color-accent);
+    content: "";
+  }
+
+  :deep(.tool-count) {
+    color: var(--phy-color-text-muted);
+    font-size: 11px;
+  }
+
+  :deep(.reasoning-body) {
+    margin-top: 2px;
+  }
+
+  :deep(.reasoning-body > :first-child) {
+    margin-top: 0;
+  }
+
+  :deep(.reasoning-body > :last-child) {
+    margin-bottom: 0;
+  }
+}
+
+.chat-activity__body--forced :deep(.tool-block)::before,
+.chat-activity__body--forced :deep(.step-block)::before,
+.chat-activity__body--forced :deep(.reasoning-body)::before {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-activity__chevron {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .chat-activity__body {
+    border-left-color: CanvasText;
+  }
 }
 </style>
