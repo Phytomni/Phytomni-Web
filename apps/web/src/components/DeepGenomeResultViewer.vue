@@ -117,7 +117,7 @@
           {{ $t("agents.deepGenome.downloadMD") }}
         </el-button>
       </div>
-      <article class="deep-genome-document phy-reading">
+      <article class="deep-genome-document phy-reading" ref="documentRef">
         <div v-for="(block, index) in contentBlocks" :key="index">
           <!-- H1 document title -->
           <h1
@@ -199,7 +199,7 @@
     :title="$t('agents.deepGenome.imageViewerTitle')"
     :close-on-click-modal="true"
     :close-on-press-escape="true"
-    width="800px"
+    width="min(800px, calc(100vw - var(--phy-space-32)))"
     center
   >
     <div
@@ -210,14 +210,6 @@
       @mouseup="handleMouseUp"
       @mouseleave="handleMouseLeave"
       ref="containerRef"
-      style="
-        overflow: hidden;
-        cursor: grab;
-        height: 600px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      "
     >
       <img
         ref="imageRef"
@@ -231,7 +223,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import {
   ElContainer,
   ElAside,
@@ -272,6 +264,10 @@ const contentBlocks = ref([]);
 const headings = ref([]);
 const nestedHeadings = ref([]);
 const mainContentRef = ref(null);
+const documentRef = ref(null);
+const cifAbortControllers = new Set();
+const cifViewers = new Set();
+let isUnmounted = false;
 
 // Image viewer (zoom/drag/click-to-enlarge dialog) — extracted into a composable
 const {
@@ -287,6 +283,7 @@ const {
   handleMouseUp,
   handleMouseLeave,
   setupImageClickListeners,
+  cleanupImageClickListeners,
 } = useDeepGenomeImageViewer();
 
 // Computed: process the reference list into formatted HTML.
@@ -296,14 +293,23 @@ const displayReferences = computed(() =>
   buildDisplayReferences(props.references, props.ns)
 );
 
+const renderCifError = (container, message) => {
+  const errorNode = document.createElement("div");
+  errorNode.className = "error";
+  errorNode.textContent = message;
+  container.replaceChildren(errorNode);
+};
+
 // Process CIF containers
 const processCifContainers = async () => {
   await nextTick();
+  if (isUnmounted) return;
 
   // find all unprocessed CIF containers
-  const cifContainers = document.querySelectorAll(
-    '.cif-container[data-src$=".cif"]:not([data-processed])'
-  );
+  const cifContainers =
+    documentRef.value?.querySelectorAll(
+      '.cif-container[data-src$=".cif"]:not([data-processed])'
+    ) ?? [];
 
   cifContainers.forEach((container) => {
     const src = container.getAttribute("data-src") || "";
@@ -339,17 +345,18 @@ const processCifContainers = async () => {
       // load 3Dmol.js and render the structure
       load3DMol()
         .then(() => {
+          if (isUnmounted) return;
+
           // generate a unique id
           const viewerId = `cif-viewer-${Date.now()}-${Math.floor(
             Math.random() * 1000
           )}`;
 
           // clear the container and create the viewer element
-          container.innerHTML = "";
+          container.replaceChildren();
           const viewerDiv = document.createElement("div");
           viewerDiv.id = viewerId;
-          viewerDiv.style.width = "100%";
-          viewerDiv.style.height = "600px";
+          viewerDiv.className = "deep-genome-cif-viewer";
           container.appendChild(viewerDiv);
 
           // build the file path
@@ -365,17 +372,24 @@ const processCifContainers = async () => {
           const viewer = window.$3Dmol.createViewer(viewerDiv, {
             backgroundColor: "#f5f5f5",
           });
+          cifViewers.add(viewer);
 
           // try loading the CIF file
           const loadCifFile = async () => {
+            const controller = new AbortController();
+            cifAbortControllers.add(controller);
+
             try {
-              const response = await fetch(publicSrc);
+              const response = await fetch(publicSrc, {
+                signal: controller.signal,
+              });
               if (!response.ok) {
                 throw new Error(
                   `Failed to load CIF file: HTTP status ${response.status}`
                 );
               }
               const cifContent = await response.text();
+              if (isUnmounted) return;
 
               // add the model to the viewer
               viewer.addModel(cifContent, "cif");
@@ -386,10 +400,16 @@ const processCifContainers = async () => {
               viewer.render();
               viewer.animate();
             } catch (error) {
+              if (controller.signal.aborted || isUnmounted) return;
               console.error("Error loading or rendering CIF file:", error);
-              viewerDiv.innerHTML = `<div class="error">Failed to load or render the CIF file: ${
-                error instanceof Error ? error.message : "Unknown error"
-              }</div>`;
+              renderCifError(
+                viewerDiv,
+                `Failed to load or render the CIF file: ${
+                  error instanceof Error ? error.message : "Unknown error"
+                }`
+              );
+            } finally {
+              cifAbortControllers.delete(controller);
             }
           };
 
@@ -397,14 +417,24 @@ const processCifContainers = async () => {
           loadCifFile();
         })
         .catch((error) => {
+          if (isUnmounted) return;
           console.error("Error loading 3Dmol.js:", error);
-          container.innerHTML = `<div class="error">Failed to load the 3Dmol.js library: ${error.message}</div>`;
+          renderCifError(
+            container,
+            `Failed to load the 3Dmol.js library: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
+          );
         });
     } catch (error) {
+      if (isUnmounted) return;
       console.error("Unexpected error processing CIF container:", error);
-      container.innerHTML = `<div class="error">An error occurred while processing the CIF file: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }</div>`;
+      renderCifError(
+        container,
+        `An error occurred while processing the CIF file: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   });
 };
@@ -430,7 +460,7 @@ onMounted(async () => {
   // Use nextTick to process CIF containers and add image click handlers after the DOM updates
   await nextTick();
   processCifContainers();
-  setupImageClickListeners();
+  setupImageClickListeners(documentRef.value);
 
   // Wait for heading elements to render, then set up the Intersection Observer
   setTimeout(() => {
@@ -445,6 +475,18 @@ onMounted(async () => {
       // expandParentMenus(headings.value[0].id);
     }
   });
+});
+
+onBeforeUnmount(() => {
+  isUnmounted = true;
+  cleanupImageClickListeners();
+  cifAbortControllers.forEach((controller) => controller.abort());
+  cifAbortControllers.clear();
+  cifViewers.forEach((viewer) => {
+    viewer.stopAnimate?.();
+    viewer.clear?.();
+  });
+  cifViewers.clear();
 });
 </script>
 
@@ -716,6 +758,15 @@ onMounted(async () => {
   background: var(--phy-color-bg-elevated);
 }
 
+.deep-genome-document :deep(.deep-genome-cif-viewer) {
+  width: 100%;
+  height: clamp(
+    calc(var(--phy-space-64) * 4),
+    56dvh,
+    calc(var(--phy-space-64) * 9)
+  );
+}
+
 .deep-genome-document :deep(figure) {
   margin: 0;
   text-align: center;
@@ -828,6 +879,17 @@ onMounted(async () => {
 
 /* Image viewer styles */
 .image-view-container {
+  box-sizing: border-box;
+  display: flex;
+  height: clamp(
+    calc(var(--phy-space-64) * 4),
+    60dvh,
+    calc(var(--phy-space-64) * 9)
+  );
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
   background-color: var(--phy-color-fill-subtle);
 }
 

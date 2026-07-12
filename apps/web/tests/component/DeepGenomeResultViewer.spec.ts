@@ -232,6 +232,64 @@ describe("DeepGenomeResultViewer — scientific document skin", () => {
   });
 });
 
+describe("DeepGenomeResultViewer — scoped responsive media viewers", () => {
+  it("scopes CIF and clickable-image setup to this viewer document root", () => {
+    expect(VIEWER_TEMPLATE).toMatch(
+      /<article\b[^>]*class="deep-genome-document phy-reading"[^>]*ref="documentRef"/
+    );
+    expect(VIEWER_SOURCE).toContain("documentRef.value?.querySelectorAll(");
+    expect(VIEWER_SOURCE).toContain(
+      "setupImageClickListeners(documentRef.value)"
+    );
+    expect(VIEWER_SOURCE).not.toMatch(
+      /document\.querySelectorAll\([\s\S]*?cif-container/
+    );
+  });
+
+  it("cleans up owned image listeners when the component unmounts", () => {
+    expect(VIEWER_SOURCE).toContain("onBeforeUnmount");
+    expect(VIEWER_SOURCE).toContain("cleanupImageClickListeners");
+    expect(VIEWER_SOURCE).toMatch(
+      /onBeforeUnmount\(\(\)\s*=>\s*\{[\s\S]*cleanupImageClickListeners\(\)/
+    );
+  });
+
+  it("renders CIF failures as text instead of interpolated HTML", () => {
+    expect(VIEWER_SOURCE).toContain("errorNode.textContent = message");
+    expect(VIEWER_SOURCE).not.toMatch(/\.innerHTML\s*=\s*`<div class="error">/);
+  });
+
+  it("cancels CIF work and releases active viewers on unmount", () => {
+    expect(VIEWER_SOURCE).toContain("new AbortController()");
+    expect(VIEWER_SOURCE).toContain("controller.abort()");
+    expect(VIEWER_SOURCE).toContain("viewer.stopAnimate?.()");
+    expect(VIEWER_SOURCE).toContain("viewer.clear?.()");
+  });
+
+  it("uses a semantic responsive class instead of fixed CIF inline dimensions", () => {
+    expect(VIEWER_SOURCE).toContain(
+      'viewerDiv.className = "deep-genome-cif-viewer"'
+    );
+    expect(VIEWER_SOURCE).not.toContain('viewerDiv.style.width = "100%"');
+    expect(VIEWER_SOURCE).not.toContain('viewerDiv.style.height = "600px"');
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-document\s+:deep\(\.deep-genome-cif-viewer\)\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*clamp\([\s\S]*var\(--phy-space-64\)/
+    );
+  });
+
+  it("keeps the image dialog inside viewport gutters with a CSS-owned height", () => {
+    expect(VIEWER_TEMPLATE).toContain(
+      'width="min(800px, calc(100vw - var(--phy-space-32)))"'
+    );
+    expect(VIEWER_TEMPLATE).not.toMatch(
+      /<div\b(?=[^>]*class="image-view-container")[^>]*\bstyle\s*=/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.image-view-container\s*\{[\s\S]*height:\s*clamp\([\s\S]*var\(--phy-space-64\)[\s\S]*overflow:\s*hidden/
+    );
+  });
+});
+
 describe("DeepGenomeResultViewer — reference text-field XSS hardening", () => {
   it("escapes a raw tag in the title-only reference branch", () => {
     const w = render([{ title: '<img src=x onerror="alert(1)">' }]);

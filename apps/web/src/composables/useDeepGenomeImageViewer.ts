@@ -1,5 +1,4 @@
 import { ref, reactive, computed } from "vue";
-import type { Ref } from "vue";
 
 export function useDeepGenomeImageViewer() {
   // state for the click-to-enlarge popup
@@ -14,6 +13,10 @@ export function useDeepGenomeImageViewer() {
   const maxScale = 5;
   const dragStart = reactive({ x: 0, y: 0 });
   const imageOffset = reactive({ x: 0, y: 0 });
+  const imageBindings = new Map<
+    HTMLImageElement,
+    { click: EventListener; probe: HTMLImageElement }
+  >();
 
   // dynamic style
   const imageStyle = computed(() => {
@@ -114,17 +117,13 @@ export function useDeepGenomeImageViewer() {
     handleMouseUp();
   };
 
-  const setupImageClickListeners = () => {
-    // remove old listeners to avoid double-binding
-    const existingImages = document.querySelectorAll(".clickable-image");
-    existingImages.forEach((img) => {
-      const newImg = img.cloneNode(true);
-      img.parentNode!.replaceChild(newImg, img);
-    });
+  const setupImageClickListeners = (root: ParentNode | null | undefined) => {
+    if (!root) return;
 
-    // add new listeners and handle the aspect ratio
-    const images = document.querySelectorAll(".clickable-image");
+    const images = root.querySelectorAll<HTMLImageElement>(".clickable-image");
     images.forEach((img) => {
+      if (imageBindings.has(img)) return;
+
       // load the image to get its natural width/height
       const tempImg = new Image();
       tempImg.src =
@@ -137,19 +136,30 @@ export function useDeepGenomeImageViewer() {
 
         // if the aspect ratio is below 0.5625, set width to 100%
         if (aspectRatio < 0.5625) {
-          (img as HTMLElement).style.width = "100%";
+          img.style.width = "100%";
         } else {
           // otherwise don't set width separately; use the default percentage width
-          (img as HTMLElement).style.width = "70%";
+          img.style.width = "70%";
         }
       };
 
-      img.addEventListener("click", () => {
-        const src = (img as HTMLImageElement).getAttribute("data-src");
-        const alt = (img as HTMLImageElement).getAttribute("data-alt");
+      const handleClick = () => {
+        const src = img.getAttribute("data-src");
+        const alt = img.getAttribute("data-alt");
         openImageViewer(src ?? "", alt ?? "");
-      });
+      };
+      img.addEventListener("click", handleClick);
+      imageBindings.set(img, { click: handleClick, probe: tempImg });
     });
+  };
+
+  const cleanupImageClickListeners = () => {
+    imageBindings.forEach(({ click, probe }, img) => {
+      img.removeEventListener("click", click);
+      probe.onload = null;
+      probe.onerror = null;
+    });
+    imageBindings.clear();
   };
 
   return {
@@ -165,5 +175,6 @@ export function useDeepGenomeImageViewer() {
     handleMouseUp,
     handleMouseLeave,
     setupImageClickListeners,
+    cleanupImageClickListeners,
   };
 }
