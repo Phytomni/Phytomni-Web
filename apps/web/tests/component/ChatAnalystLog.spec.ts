@@ -1,9 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick, ref } from "vue";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
+
+const ANALYST_LOG_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatAnalystLog.vue"),
+  "utf8"
+);
 
 const messages = {
   "en-US": {
@@ -63,6 +70,8 @@ describe("ChatAnalystLog", () => {
     expect(btn.exists()).toBe(true);
     expect(btn.attributes("disabled")).toBeDefined();
     expect(btn.text()).toContain("Update unavailable");
+    expect(btn.classes()).toContain("is-text");
+    expect(btn.classes()).not.toContain("el-button--primary");
   });
 
   it("renders string log via safe pre and array log via table", () => {
@@ -90,7 +99,12 @@ describe("ChatAnalystLog", () => {
         // happy-dom cannot host Element Plus table's MutationObserver
         stubs: {
           "el-table": {
-            props: ["data"],
+            name: "ElTable",
+            props: {
+              data: { type: Array, default: () => [] },
+              border: { type: Boolean, default: false },
+              size: { type: String, default: undefined },
+            },
             template:
               '<div class="el-table-stub"><div v-for="(r, i) in data" :key="i">{{ r.content }}</div></div>',
           },
@@ -100,6 +114,9 @@ describe("ChatAnalystLog", () => {
     });
     expect(arrayW.find(".el-table-stub").exists()).toBe(true);
     expect(arrayW.text()).toContain("row-a");
+    const table = arrayW.findComponent({ name: "ElTable" });
+    expect(table.props("border")).toBe(false);
+    expect(table.props("size")).toBe("small");
   });
 
   it("shows loading and empty states", () => {
@@ -127,6 +144,9 @@ describe("ChatAnalystLog", () => {
     });
     expect(w.text()).toContain("Failed to load log");
     expect(w.find("[data-testid='analyst-log-retry']").exists()).toBe(true);
+    expect(w.find("[data-testid='analyst-log-retry']").classes()).toContain(
+      "is-text"
+    );
 
     await w.setProps({ errorKind: "update" });
     expect(w.text()).toContain("Failed to update log");
@@ -149,5 +169,16 @@ describe("ChatAnalystLog", () => {
     await w.find("[data-testid='analyst-log-update']").trigger("click");
     await flushPromises();
     expect(w.emitted("update")?.length).toBe(1);
+  });
+
+  it("uses one quiet semantic surface instead of a nested dashboard", () => {
+    const styles = ANALYST_LOG_SOURCE.slice(
+      ANALYST_LOG_SOURCE.indexOf("<style")
+    );
+    expect(styles).toContain("var(--phy-font-mono)");
+    expect(styles).toContain("var(--phy-color-bg-elevated)");
+    expect(styles).toContain("var(--phy-color-border-subtle)");
+    expect(styles).not.toMatch(/#[\da-f]{3,8}\b/i);
+    expect(styles).not.toContain("background-color: #1e1e1e");
   });
 });

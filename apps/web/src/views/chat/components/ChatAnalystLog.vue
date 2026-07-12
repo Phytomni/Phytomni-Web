@@ -6,7 +6,7 @@
     <template v-else>
       <div class="log-actions">
         <el-button
-          type="primary"
+          text
           size="small"
           data-testid="analyst-log-update"
           :loading="updating"
@@ -33,6 +33,7 @@
             : t("chat.log.updateError")
         }}</span>
         <el-button
+          text
           size="small"
           data-testid="analyst-log-retry"
           @click="emit('retry')"
@@ -59,7 +60,7 @@
         <el-table
           v-else-if="Array.isArray(logData)"
           :data="logData"
-          border
+          size="small"
           style="width: 100%"
         >
           <el-table-column
@@ -105,11 +106,18 @@ const { t } = useI18n();
 }
 
 .log-actions {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
 
-  .el-button .el-icon {
+  :deep(.el-button) {
+    min-height: 24px;
+    padding: 2px 0;
+    color: var(--phy-color-action-text);
+    font-size: 12px;
+  }
+
+  :deep(.el-button .el-icon) {
     margin-right: 4px;
   }
 }
@@ -117,54 +125,77 @@ const { t } = useI18n();
 .log-loading {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #909399;
-  font-size: 14px;
+  gap: 6px;
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
 
   .el-icon {
-    font-size: 16px;
+    color: var(--phy-color-accent-text);
+    font-size: 14px;
   }
 }
 
 .log-content {
-  max-height: 400px;
+  max-height: 280px;
   overflow-y: auto;
-  border: 1px solid #e6e6e6;
-  border-radius: 4px;
-  padding: 12px;
-  background-color: #fff;
+  min-width: 0;
+  scrollbar-gutter: stable;
 
   .log-text-content {
+    min-width: 0;
+
     .log-pre {
       margin: 0;
-      padding: 0;
-      font-family: "Courier New", monospace;
+      padding: 10px 12px;
+      border: 1px solid var(--phy-color-border-subtle);
+      border-radius: var(--phy-radius-sm);
+      background: color-mix(
+        in srgb,
+        var(--phy-color-bg-elevated) 72%,
+        transparent
+      );
+      color: var(--phy-color-text-secondary);
+      font-family: var(--phy-font-mono);
       font-size: 12px;
-      line-height: 1.4;
-      color: #333;
+      line-height: 1.55;
       white-space: pre-wrap;
       word-break: break-word;
-      background-color: #1e1e1e;
-      color: #d4d4d4;
-      padding: 12px;
-      border-radius: 4px;
       overflow-x: auto;
     }
+  }
+
+  :deep(.el-table) {
+    --el-table-bg-color: transparent;
+    --el-table-border-color: var(--phy-color-border-subtle);
+    --el-table-header-bg-color: transparent;
+    --el-table-header-text-color: var(--phy-color-text-muted);
+    --el-table-row-hover-bg-color: var(--phy-color-fill-subtle);
+    --el-table-text-color: var(--phy-color-text-secondary);
+
+    background: transparent;
+    font-size: 12px;
   }
 }
 
 .log-error {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #f56c6c;
-  font-size: 14px;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--el-color-danger);
+  font-size: 13px;
+
+  :deep(.el-button) {
+    min-height: 24px;
+    padding: 2px 4px;
+    font-size: 12px;
+  }
 }
 
 .log-unavailable,
 .log-empty {
-  color: #909399;
-  font-size: 14px;
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
 }
 </style>
