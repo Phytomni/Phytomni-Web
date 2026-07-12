@@ -213,6 +213,13 @@ describe("ChatFrameV2 — frame state matrix via 3A.8 registry", () => {
 
   it("aligns empty-state and Composer to one transcript measure without a second scroll root", () => {
     expect(CHAT_SOURCE).toContain("phy-layout-transcript-max-width");
+    expect(CHAT_SOURCE).toContain('class="chat-header-inner"');
+    expect(CHAT_SOURCE).toMatch(
+      /\.chat-header-inner \{[\s\S]*?width: min\(100%, var\(--phy-layout-transcript-max-width\)\)/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.transcript-content \{[\s\S]*?width: min\(100%, var\(--phy-layout-transcript-max-width\)\)/
+    );
     expect(CHAT_SOURCE).toContain('class="empty-chat"');
     expect(CHAT_SOURCE).toContain('class="input-container"');
     expect(CHAT_SOURCE).toMatch(

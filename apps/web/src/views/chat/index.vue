@@ -60,28 +60,30 @@
         <!-- Center chat area -->
         <div class="chat-main">
       <header class="chat-header">
-        <div class="header-leading">
-          <el-button
-            class="mobile-sidebar-toggle"
-            data-testid="chat-sidebar-trigger"
-            :class="{ 'is-visible': leftSidebarCollapsed }"
-            text
-            circle
-            :aria-label="$t('chat.newChat')"
-            @click="toggleSidebarFromHeader"
-          >
-            <el-icon><Menu /></el-icon>
-          </el-button>
-          <h2 class="chat-header-title" :title="chatHeaderTitle">
-            {{ chatHeaderTitle }}
-          </h2>
-          <span
-            v-if="chatMode === 'expert'"
-            class="chat-expert-indicator"
-            data-test="chat-expert-indicator"
-          >
-            {{ $t("chat.mode.expert") }}
-          </span>
+        <div class="chat-header-inner">
+          <div class="header-leading">
+            <el-button
+              class="mobile-sidebar-toggle"
+              data-testid="chat-sidebar-trigger"
+              :class="{ 'is-visible': leftSidebarCollapsed }"
+              text
+              circle
+              :aria-label="$t('chat.newChat')"
+              @click="toggleSidebarFromHeader"
+            >
+              <el-icon><Menu /></el-icon>
+            </el-button>
+            <h2 class="chat-header-title" :title="chatHeaderTitle">
+              {{ chatHeaderTitle }}
+            </h2>
+            <span
+              v-if="chatMode === 'expert'"
+              class="chat-expert-indicator"
+              data-test="chat-expert-indicator"
+            >
+              {{ $t("chat.mode.expert") }}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -1276,9 +1278,23 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
   border-bottom: 1px solid var(--phy-color-border);
   min-height: var(--phy-control-height-primary);
   height: var(--phy-control-height-primary);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+
+  .chat-header-inner {
+    width: min(100%, var(--phy-layout-transcript-max-width));
+    height: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-leading {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--phy-space-8);
+  }
 
   .chat-header-title {
     min-width: 0;
@@ -1288,12 +1304,6 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
     white-space: nowrap;
     font-size: 18px;
     font-weight: 500;
-  }
-
-  .header-leading {
-    display: flex;
-    align-items: center;
-    gap: var(--phy-space-8);
   }
 
   .mobile-sidebar-toggle {
