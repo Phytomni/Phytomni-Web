@@ -1,10 +1,16 @@
 /**
  * Page-context geometry measurement for Chat visual capture.
- * Stores the result on window.__PHY_CHAT_GEOMETRY_RESULT__ and returns it.
- * Never throws solely because pass === false (assert-geometry.js hard-fails).
+ *
+ * Scrolls the transcript owner, applies every reviewed overflow / clearance /
+ * responsive-navigation contract, stores the result on
+ * window.__PHY_CHAT_GEOMETRY_RESULT__, and returns it. This measurement step
+ * never throws solely because pass === false; assert-geometry.js is the only
+ * hard-fail step so the JSON can be persisted before assertion.
  */
 (async () => {
   const GEOMETRY_KEY = "__PHY_CHAT_GEOMETRY_RESULT__";
+  const MOBILE_BREAKPOINT = 900;
+  const EDGE_TOLERANCE = 0.5;
 
   function measureRect(el) {
     if (!el) {
@@ -39,21 +45,33 @@
     };
   }
 
+  function isInsideViewport(rect) {
+    return (
+      rect.present &&
+      rect.left >= -EDGE_TOLERANCE &&
+      rect.right <= innerWidth + EDGE_TOLERANCE &&
+      rect.top >= -EDGE_TOLERANCE &&
+      rect.bottom <= innerHeight + EDGE_TOLERANCE
+    );
+  }
+
+  function isVisibleInViewport(rect) {
+    return rect.visible && isInsideViewport(rect);
+  }
+
   function frame() {
     return new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
 
-  const roots = document.querySelectorAll(
-    '[data-testid="chat-root"], [data-testid="chat-visual-root"]'
-  );
-  if (roots.length !== 1) {
-    const fail = {
+  function persistFailure(partial, error) {
+    const result = {
       viewport: { width: innerWidth, height: innerHeight },
       document: {
         scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
         scrollHeight: document.documentElement.scrollHeight,
       },
-      root: { present: false, count: roots.length },
+      root: { present: false },
       transcript: null,
       primaryAction: measureRect(null),
       navigationTrigger: measureRect(null),
@@ -61,57 +79,42 @@
       lastMessage: { present: false },
       state: null,
       pass: false,
-      error: `Expected exactly one chat-root or chat-visual-root; found ${roots.length}`,
+      error,
+      ...partial,
     };
-    window[GEOMETRY_KEY] = fail;
-    return fail;
+    window[GEOMETRY_KEY] = result;
+    return result;
+  }
+
+  const roots = document.querySelectorAll(
+    '[data-testid="chat-root"], [data-testid="chat-visual-root"]'
+  );
+  if (roots.length !== 1) {
+    return persistFailure(
+      { root: { present: false, count: roots.length } },
+      `Expected exactly one chat-root or chat-visual-root; found ${roots.length}`
+    );
   }
 
   const root = roots[0];
   const state = root.getAttribute("data-chat-state");
   if (state !== "empty" && state !== "populated") {
-    const fail = {
-      viewport: { width: innerWidth, height: innerHeight },
-      document: {
-        scrollWidth: document.documentElement.scrollWidth,
-        scrollHeight: document.documentElement.scrollHeight,
-      },
-      root: measureRect(root),
-      transcript: null,
-      primaryAction: measureRect(null),
-      navigationTrigger: measureRect(null),
-      composer: measureRect(null),
-      lastMessage: { present: false },
-      state,
-      pass: false,
-      error: `Root data-chat-state must be empty|populated; got "${String(
-        state
-      )}"`,
-    };
-    window[GEOMETRY_KEY] = fail;
-    return fail;
+    return persistFailure(
+      { root: measureRect(root), state },
+      `Root data-chat-state must be empty|populated; got "${String(state)}"`
+    );
   }
 
   const transcripts = root.querySelectorAll('[data-testid="chat-transcript"]');
   if (transcripts.length !== 1) {
-    const fail = {
-      viewport: { width: innerWidth, height: innerHeight },
-      document: {
-        scrollWidth: document.documentElement.scrollWidth,
-        scrollHeight: document.documentElement.scrollHeight,
+    return persistFailure(
+      {
+        root: measureRect(root),
+        transcript: { present: false, count: transcripts.length },
+        state,
       },
-      root: measureRect(root),
-      transcript: { present: false, count: transcripts.length },
-      primaryAction: measureRect(null),
-      navigationTrigger: measureRect(null),
-      composer: measureRect(null),
-      lastMessage: { present: false },
-      state,
-      pass: false,
-      error: `Expected exactly one chat-transcript; found ${transcripts.length}`,
-    };
-    window[GEOMETRY_KEY] = fail;
-    return fail;
+      `Expected exactly one chat-transcript; found ${transcripts.length}`
+    );
   }
 
   const transcriptEl = transcripts[0];
@@ -144,89 +147,102 @@
   const primaryAction =
     primaryNodes.length === 1
       ? measureRect(primaryNodes[0])
-      : {
-          ...measureRect(null),
-          count: primaryNodes.length,
-        };
+      : { ...measureRect(null), count: primaryNodes.length };
   const navigationTrigger =
-    triggerNodes.length === 0
-      ? { ...measureRect(null), count: 0 }
-      : triggerNodes.length === 1
+    triggerNodes.length === 1
       ? { ...measureRect(triggerNodes[0]), count: 1 }
-      : { ...measureRect(null), count: triggerNodes.length, visible: false };
+      : { ...measureRect(null), count: triggerNodes.length };
   const composer =
     composerNodes.length === 1
       ? measureRect(composerNodes[0])
       : { ...measureRect(null), count: composerNodes.length };
-
   const lastMessage = lastRow
     ? { present: true, ...measureRect(lastRow) }
     : { present: false };
 
   const drawerState = root.getAttribute("data-sidebar-drawer-state");
-  const closedMobile = drawerState === "closed" && triggerNodes.length === 1;
+  const isMobileViewport = innerWidth < MOBILE_BREAKPOINT;
+  const closedMobile = drawerState === "closed";
   const openMobile = drawerState === "open";
-
-  let pass = true;
+  const desktopState = drawerState === "not-mobile" || drawerState == null;
+  const docScrollWidth = document.documentElement.scrollWidth;
+  const docClientWidth = document.documentElement.clientWidth;
   const reasons = [];
 
-  if (primaryNodes.length !== 1) {
-    pass = false;
-    reasons.push(`primary-action count ${primaryNodes.length}`);
+  if (docScrollWidth > docClientWidth) {
+    reasons.push(
+      `document overflow scrollWidth=${docScrollWidth} > clientWidth=${docClientWidth}`
+    );
   }
+  if (scrollWidth > clientWidth) {
+    reasons.push(
+      `transcript overflow scrollWidth=${scrollWidth} > clientWidth=${clientWidth}`
+    );
+  }
+
   if (composerNodes.length !== 1 || !composer.visible) {
-    pass = false;
     reasons.push("composer missing or not visible");
+  } else if (!isInsideViewport(composer)) {
+    reasons.push("composer escapes viewport");
   }
+
+  if (lastMessage.present) {
+    if (
+      composer.present &&
+      lastMessage.bottom > composer.top + EDGE_TOLERANCE
+    ) {
+      reasons.push(
+        `lastMessage.bottom (${lastMessage.bottom}) > composer.top (${composer.top})`
+      );
+    }
+  } else if (state === "populated") {
+    reasons.push("populated state missing lastMessage");
+  }
+
   if (state === "empty" && messageRows.length !== 0) {
-    pass = false;
     reasons.push("empty state has message rows");
   }
   if (state === "populated" && messageRows.length < 1) {
-    pass = false;
     reasons.push("populated state missing message rows");
   }
-  if (state === "populated" && !lastMessage.present) {
-    pass = false;
-    reasons.push("populated state missing lastMessage");
-  }
   if (state === "empty" && lastMessage.present) {
-    pass = false;
     reasons.push("empty state must not present lastMessage");
   }
   if (!atBottom) {
-    pass = false;
     reasons.push("transcript not at bottom");
   }
+
+  if (isMobileViewport && !closedMobile && !openMobile) {
+    reasons.push("viewport below 900 requires mobile drawer state");
+  }
+  if (!isMobileViewport && !desktopState) {
+    reasons.push("viewport at or above 900 requires non-mobile drawer state");
+  }
+
   if (closedMobile) {
-    if (triggerNodes.length !== 1 || !navigationTrigger.visible) {
-      pass = false;
+    if (triggerNodes.length !== 1 || !isVisibleInViewport(navigationTrigger)) {
       reasons.push("closed mobile requires visible unique sidebar trigger");
     }
-  }
-  if (openMobile) {
-    if (!primaryAction.visible) {
-      pass = false;
-      reasons.push("open mobile requires visible primary action");
+  } else if (openMobile || desktopState) {
+    if (primaryNodes.length !== 1 || !isVisibleInViewport(primaryAction)) {
+      reasons.push(
+        "desktop/compact/open-mobile requires visible unique primary action"
+      );
     }
   }
-  if (
-    !closedMobile &&
-    triggerNodes.length > 0 &&
-    drawerState !== "closed" &&
-    drawerState !== "open"
-  ) {
-    // Desktop/compact may omit the trigger; if present outside mobile pair, keep unique.
-    if (triggerNodes.length !== 1) {
-      pass = false;
-      reasons.push("sidebar trigger must be unique when present");
-    }
+
+  if (primaryNodes.length > 1) {
+    reasons.push(`primary-action count ${primaryNodes.length}`);
+  }
+  if (triggerNodes.length > 1) {
+    reasons.push(`sidebar trigger count ${triggerNodes.length}`);
   }
 
   const result = {
     viewport: { width: innerWidth, height: innerHeight },
     document: {
-      scrollWidth: document.documentElement.scrollWidth,
+      scrollWidth: docScrollWidth,
+      clientWidth: docClientWidth,
       scrollHeight: document.documentElement.scrollHeight,
     },
     root: measureRect(root),
@@ -245,7 +261,8 @@
     composer,
     lastMessage,
     state,
-    pass,
+    drawerState,
+    pass: reasons.length === 0,
     ...(reasons.length ? { reasons } : {}),
   };
 

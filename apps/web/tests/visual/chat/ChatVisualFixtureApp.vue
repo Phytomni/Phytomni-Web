@@ -180,11 +180,13 @@
                     <div
                       v-for="message in frameMessages"
                       :key="message.id"
-                      class="message"
-                      :class="message.role"
+                      class="fixture-message-row"
+                      :class="`is-${message.role}`"
                       data-testid="chat-message-row"
                     >
-                      <div class="message-content">{{ message.content }}</div>
+                      <div class="fixture-message-content">
+                        {{ message.content }}
+                      </div>
                     </div>
                   </template>
 
@@ -528,14 +530,14 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.message {
+.fixture-message-row {
   margin-bottom: 12px;
   padding: 12px;
   border-radius: 8px;
   background: var(--phy-color-fill-subtle, #f5f7fa);
 }
 
-.message.user {
+.fixture-message-row.is-user {
   background: var(--phy-color-brand-soft, #d6e6fe);
 }
 

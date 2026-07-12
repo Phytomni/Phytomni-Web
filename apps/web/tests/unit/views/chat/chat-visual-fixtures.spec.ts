@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
+import { runInNewContext } from "node:vm";
 import { mount, flushPromises } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
@@ -52,6 +53,146 @@ const ASSERT_PATH_SOURCE = readFileSync(
   resolve(VISUAL_CHAT, "assert-chat-path.js"),
   "utf8"
 );
+
+type GeometryResult = {
+  pass: boolean;
+  reasons?: string[];
+};
+
+type Rect = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  width: number;
+  height: number;
+};
+
+type GeometryHarnessOptions = {
+  width?: number;
+  height?: number;
+  documentScrollWidth?: number;
+  transcriptScrollWidth?: number;
+  composerRect?: Rect;
+  lastMessageRect?: Rect;
+  drawerState?: "closed" | "open" | "not-mobile";
+  includeTrigger?: boolean;
+  triggerVisible?: boolean;
+  primaryVisible?: boolean;
+};
+
+const rect = (
+  left: number,
+  top: number,
+  right: number,
+  bottom: number
+): Rect => ({
+  top,
+  right,
+  bottom,
+  left,
+  width: right - left,
+  height: bottom - top,
+});
+
+async function runGeometryHarness(
+  options: GeometryHarnessOptions = {}
+): Promise<GeometryResult> {
+  const width = options.width ?? 1440;
+  const height = options.height ?? 900;
+  const drawerState = options.drawerState ?? "not-mobile";
+  const makeElement = (bounds: Rect, visible = true) => ({
+    __visible: visible,
+    getBoundingClientRect: () => bounds,
+  });
+
+  const transcript = Object.assign(makeElement(rect(280, 48, width, 720)), {
+    scrollHeight: 1200,
+    clientHeight: 672,
+    clientWidth: Math.max(1, width - 280),
+    scrollWidth: options.transcriptScrollWidth ?? Math.max(1, width - 280),
+  });
+  let transcriptScrollTop = 0;
+  Object.defineProperty(transcript, "scrollTop", {
+    configurable: true,
+    get: () => transcriptScrollTop,
+    set: (value: number) => {
+      transcriptScrollTop = Math.max(
+        0,
+        Math.min(value, transcript.scrollHeight - transcript.clientHeight)
+      );
+    },
+  });
+
+  const lastMessage = makeElement(
+    options.lastMessageRect ?? rect(360, 620, Math.min(width - 40, 1080), 700)
+  );
+  const root = Object.assign(makeElement(rect(0, 0, width, height)), {
+    getAttribute: (name: string) => {
+      if (name === "data-chat-state") return "populated";
+      if (name === "data-sidebar-drawer-state") return drawerState;
+      return null;
+    },
+    querySelectorAll: (selector: string) => {
+      if (selector === '[data-testid="chat-transcript"]') return [transcript];
+      if (selector === '[data-testid="chat-message-row"]') return [lastMessage];
+      return [];
+    },
+  });
+
+  const primary = makeElement(
+    drawerState === "closed"
+      ? rect(-260, 80, -20, 120)
+      : rect(16, 80, 240, 120),
+    options.primaryVisible ?? true
+  );
+  const trigger = makeElement(
+    rect(12, 10, 52, 50),
+    options.triggerVisible ?? true
+  );
+  const composer = makeElement(
+    options.composerRect ?? rect(Math.min(300, width / 4), 740, width - 24, 880)
+  );
+  const includeTrigger = options.includeTrigger ?? drawerState === "closed";
+  const documentMock = {
+    documentElement: {
+      scrollWidth: options.documentScrollWidth ?? width,
+      clientWidth: width,
+      scrollHeight: height,
+    },
+    querySelectorAll: (selector: string) => {
+      if (
+        selector ===
+        '[data-testid="chat-root"], [data-testid="chat-visual-root"]'
+      ) {
+        return [root];
+      }
+      if (selector === '[data-testid="chat-primary-action"]') return [primary];
+      if (selector === '[data-testid="chat-sidebar-trigger"]') {
+        return includeTrigger ? [trigger] : [];
+      }
+      if (selector === '[data-testid="chat-composer"]') return [composer];
+      return [];
+    },
+  };
+  const windowMock: Record<string, unknown> = {};
+
+  return (await runInNewContext(MEASURE_SOURCE, {
+    window: windowMock,
+    document: documentMock,
+    innerWidth: width,
+    innerHeight: height,
+    getComputedStyle: (element: { __visible?: boolean }) => ({
+      display: "block",
+      visibility: "visible",
+      opacity: element.__visible === false ? "0" : "1",
+    }),
+    requestAnimationFrame: (callback: () => void) => {
+      callback();
+      return 1;
+    },
+  })) as GeometryResult;
+}
 
 vi.mock("vue-element-plus-x", () => ({
   MentionSender: {
@@ -294,9 +435,19 @@ describe("Chat visual fixture source contracts", () => {
     expect(APP_SOURCE).toContain("ChatAnalystLog");
     expect(APP_SOURCE).toContain("SendProgress");
     expect(APP_SOURCE).toContain("TransferProgress");
-    expect(APP_SOURCE).toMatch(/<TransferProgress[\s\S]*v-if="transferSnapshot"/);
+    expect(APP_SOURCE).toMatch(
+      /<TransferProgress[\s\S]*v-if="transferSnapshot"/
+    );
     expect(APP_SOURCE).toMatch(/<SendProgress[\s\S]*v-else-if="progressProps"/);
     expect(APP_SOURCE).not.toMatch(/@\/api\b/);
+  });
+
+  it("keeps synthetic frame selectors isolated from production message roots", () => {
+    const scopedStyle = APP_SOURCE.split("<style scoped>")[1] ?? "";
+    expect(scopedStyle).not.toMatch(/^\s*\.message(?:\.user)?\s*\{/m);
+    expect(APP_SOURCE).not.toContain('class="message"');
+    expect(APP_SOURCE).toContain('class="fixture-message-row"');
+    expect(scopedStyle).toContain(".fixture-message-row.is-user");
   });
 });
 
@@ -356,7 +507,21 @@ describe("Chat visual fixture script contracts", () => {
     expect(MEASURE_SOURCE).toContain("primaryAction");
     expect(MEASURE_SOURCE).toContain("navigationTrigger");
     expect(MEASURE_SOURCE).toContain("lastMessage");
+    expect(MEASURE_SOURCE).toContain("document overflow");
+    expect(MEASURE_SOURCE).toContain("transcript overflow");
+    expect(MEASURE_SOURCE).toContain("composer escapes viewport");
+    expect(MEASURE_SOURCE).toContain("lastMessage.bottom");
+    expect(MEASURE_SOURCE).toContain(
+      "viewport below 900 requires mobile drawer state"
+    );
+    expect(MEASURE_SOURCE).toContain(
+      "closed mobile requires visible unique sidebar trigger"
+    );
+    expect(MEASURE_SOURCE).toContain(
+      "desktop/compact/open-mobile requires visible unique primary action"
+    );
     expect(MEASURE_SOURCE).toMatch(/pass\s*=\s*false|pass:\s*false/);
+    expect(MEASURE_SOURCE).not.toContain("throw new Error");
     expect(ASSERT_GEOMETRY_SOURCE).toContain("__PHY_CHAT_GEOMETRY_RESULT__");
     expect(ASSERT_GEOMETRY_SOURCE).toContain("pass: true");
     expect(ASSERT_GEOMETRY_SOURCE).toContain("throw");
@@ -380,6 +545,59 @@ describe("Chat visual fixture script contracts", () => {
     expect(REDACT_SOURCE).not.toMatch(
       /(?:const|let|var)\s+\w+\s*=\s*nodes\[0\]\.(?:textContent|innerText)/
     );
+  });
+});
+
+describe("Chat visual fixture geometry negative controls", () => {
+  it("passes a valid populated desktop layout", async () => {
+    const result = await runGeometryHarness();
+    expect(result).toMatchObject({ pass: true });
+  });
+
+  it.each([
+    {
+      label: "document overflow",
+      options: { documentScrollWidth: 1441 },
+      reason: /document overflow/,
+    },
+    {
+      label: "transcript overflow",
+      options: { transcriptScrollWidth: 1161 },
+      reason: /transcript overflow/,
+    },
+    {
+      label: "composer viewport escape",
+      options: { composerRect: rect(300, 740, 1460, 880) },
+      reason: /composer escapes viewport/,
+    },
+    {
+      label: "last-message clearance",
+      options: { lastMessageRect: rect(360, 700, 1080, 760) },
+      reason: /lastMessage\.bottom/,
+    },
+    {
+      label: "sub-900 mobile state",
+      options: { width: 899, drawerState: "not-mobile" as const },
+      reason: /viewport below 900 requires mobile drawer state/,
+    },
+    {
+      label: "closed-mobile trigger",
+      options: {
+        width: 899,
+        drawerState: "closed" as const,
+        includeTrigger: false,
+      },
+      reason: /closed mobile requires visible unique sidebar trigger/,
+    },
+    {
+      label: "primary action visibility",
+      options: { primaryVisible: false },
+      reason: /visible unique primary action/,
+    },
+  ])("rejects $label", async ({ options, reason }) => {
+    const result = await runGeometryHarness(options);
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(reason);
   });
 });
 

@@ -2,7 +2,7 @@
  * Chat responsive contracts at breakpoint boundaries.
  * Asserts deterministic class/state/hook contracts only — never geometry
  * (scrollWidth, rectangles, visibility, occlusion). Live geometry belongs to
- * tests/visual/chat/geometry-check.js in a real browser.
+ * tests/visual/chat/measure-geometry.js + assert-geometry.js in a real browser.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";

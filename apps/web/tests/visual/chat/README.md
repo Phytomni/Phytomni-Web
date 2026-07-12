@@ -224,10 +224,10 @@ agent-browser --session phy-v2-auth close
 
 ## Boundary geometry matrix (closure)
 
-Run `geometry-check.js` (measure + hard assert; throws on FAIL) at every row
-below. Save JSON stdout beside the evidence ledger. jsdom/Vitest responsive
-contracts deliberately make **no** geometry claim — only this live script proves
-overflow, primary-action visibility, viewport escape, and last-message clearance.
+Run the canonical `measure-geometry.js` → save JSON → `assert-geometry.js`
+sequence at every row below. jsdom/Vitest responsive contracts deliberately make
+**no** browser geometry claim — only this live two-eval sequence proves overflow,
+primary-action visibility, viewport escape, and last-message clearance.
 
 Required viewport pairs (plus the four canonical viewports above):
 
@@ -263,16 +263,18 @@ test -d ../../.codex/evidence/frontend-v2/3C.8
 # Example boundary row (harness). Authenticated rows use phy-v2-auth + redact.
 agent-browser --session phy-v2-fixture set viewport 899 900
 agent-browser --session phy-v2-fixture set media light
-agent-browser --session phy-v2-fixture open 'http://127.0.0.1:5174/tests/visual/chat/?state=empty&locale=en-US&theme=light'
+agent-browser --session phy-v2-fixture open 'http://127.0.0.1:5174/tests/visual/chat/?state=sidebar-mobile-closed&locale=en-US&theme=light'
 agent-browser --session phy-v2-fixture wait --fn "document.querySelector('[data-testid=chat-visual-root]')?.dataset.fixtureReady === 'true'"
-agent-browser --session phy-v2-fixture eval --stdin < tests/visual/chat/geometry-check.js | tee ../../.codex/evidence/frontend-v2/3C.8/chat__empty__899x900__en-US__light.geometry.json
-test -s ../../.codex/evidence/frontend-v2/3C.8/chat__empty__899x900__en-US__light.geometry.json
+agent-browser --session phy-v2-fixture eval --stdin < tests/visual/chat/measure-geometry.js | tee ../../.codex/evidence/frontend-v2/3C.8/chat__sidebar-mobile-closed__899x900__en-US__light.geometry.json
+test -s ../../.codex/evidence/frontend-v2/3C.8/chat__sidebar-mobile-closed__899x900__en-US__light.geometry.json
+agent-browser --session phy-v2-fixture eval --stdin < tests/visual/chat/assert-geometry.js
 ```
 
 ### Result-recording table
 
-Record one row per capture. Geometry PASS requires `geometry-check.js` exit 0;
-Blocked/Not Captured leave the wave FAIL (never a waiver).
+Record one row per capture. Geometry PASS requires saved measurement JSON plus
+`assert-geometry.js` exit 0; Blocked/Not Captured leave the wave FAIL (never a
+waiver).
 
 | viewport | locale | theme | state | fixture_source | geometry | identity_redaction | screenshot | notes |
 |---|---|---|---|---|---|---|---|---|
