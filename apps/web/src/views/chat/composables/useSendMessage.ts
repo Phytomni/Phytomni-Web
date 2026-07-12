@@ -60,7 +60,12 @@ export function useSendMessage(opts: {
 
     const sendingDialogueId = currentChatId.value;
     const chatState = getChatState(sendingDialogueId);
-    if (!chatState || !chatState.messageInput.trim() || chatState.isSending)
+    if (
+      !chatState ||
+      !chatState.messageInput.trim() ||
+      chatState.isSending ||
+      chatState.activeRequestId
+    )
       return;
 
     const newMessageValue = extractAtValues(chatState.messageInput);
@@ -286,6 +291,7 @@ export function useSendMessage(opts: {
 
       if (response.data) {
         if (
+          chatState.activeRequestId === requestKey &&
           typeof response.data.dialogue_id === "string" &&
           response.data.dialogue_id !== ""
         ) {
@@ -721,37 +727,41 @@ export function useSendMessage(opts: {
         });
       }
     } finally {
-      const historyOpts =
-        blockingDialogueId !== undefined
-          ? { blockingDialogueId }
-          : undefined;
-      await getHistoryQuestionData(sendingDialogueId, historyOpts);
+      // Capture ownership before the first await. Only the request that still
+      // owns this dialogue may reconcile a temporary id, update its title, or
+      // release lifecycle fields. A stale request must be entirely read-only.
+      const ownsLifecycle = chatState.activeRequestId === requestKey;
+      if (ownsLifecycle) {
+        const historyOpts =
+          blockingDialogueId !== undefined
+            ? { blockingDialogueId }
+            : undefined;
+        await getHistoryQuestionData(sendingDialogueId, historyOpts);
 
-      if (!isNewChat) {
-        // for an existing chat, update the sending conversation's title (if it changed)
-        if (sendingMessages.length > 0) {
-          const userMessage =
-            sendingMessages[sendingMessages.length - 2]; // the second-to-last is the user message
-          if (userMessage && userMessage.role === "user") {
-            // find the sending conversation in the list and update its title
-            const currentChatIndex = chatList.value.findIndex(
-              (chat) => chat.dialogue_id === sendingDialogueId
-            );
-            if (currentChatIndex !== -1) {
-              // take the user message content as the title (length-limited)
-              const newTitle =
-                userMessage.content.length > 50
-                  ? userMessage.content.substring(0, 50) + "..."
-                  : userMessage.content;
-              chatList.value[currentChatIndex].title = newTitle;
+        if (!isNewChat) {
+          // for an existing chat, update the sending conversation's title (if it changed)
+          if (sendingMessages.length > 0) {
+            const userMessage =
+              sendingMessages[sendingMessages.length - 2]; // the second-to-last is the user message
+            if (userMessage && userMessage.role === "user") {
+              // find the sending conversation in the list and update its title
+              const currentChatIndex = chatList.value.findIndex(
+                (chat) => chat.dialogue_id === sendingDialogueId
+              );
+              if (currentChatIndex !== -1) {
+                // take the user message content as the title (length-limited)
+                const newTitle =
+                  userMessage.content.length > 50
+                    ? userMessage.content.substring(0, 50) + "..."
+                    : userMessage.content;
+                chatList.value[currentChatIndex].title = newTitle;
+              }
             }
           }
         }
-      }
 
-      // Clear lifecycle fields only for this request — never a newer same-dialogue key
-      // and never recreate a rekeyed temp state via getChatState(oldTempId).
-      if (chatState.activeRequestId === requestKey) {
+        // Clear lifecycle fields only for this request — never a newer same-dialogue key
+        // and never recreate a rekeyed temp state via getChatState(oldTempId).
         chatState.activeRequestId = "";
         chatState.uploadTransfer = null;
         chatState.generationStopped = false;
@@ -773,10 +783,9 @@ export function useSendMessage(opts: {
         chatState.sendStartedAt = null;
         chatState.completing = false;
         chatState.activeAgentName = "";
-      }
-
-      if (isForeground(sendingDialogueId)) {
-        await scrollToBottom();
+        if (isForeground(sendingDialogueId)) {
+          await scrollToBottom();
+        }
       }
     }
   };

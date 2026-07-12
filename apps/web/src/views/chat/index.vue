@@ -983,14 +983,15 @@ const abortDialogueRequest = async (
   chatState: ChatUIState
 ) => {
   const requestId = chatState.activeRequestId;
-  if (!requestId) return;
+  if (!requestId || chatState.generationStopped) return;
+
+  // Claim the stop before aborting so a double click cannot race two abort
+  // attempts or append duplicate local stopped rows.
+  chatState.generationStopped = true;
 
   try {
-    const requestModule = (await import("@/utils/request")) as any;
-    const success = requestModule.abortRequest(requestId);
+    const success = abortRequest(requestId);
     if (success) {
-      chatState.generationStopped = true;
-
       // Local stopped row: no server message id — copy may remain; the shared
       // capability helper keeps every server-backed action unavailable.
       const messages = chatState.renderedChat?.messages;
@@ -1003,15 +1004,18 @@ const abortDialogueRequest = async (
         messages.push(abortMessage);
       }
 
-      chatState.isSending = false;
       chatState.uploadTransfer = null;
-      // Leave activeRequestId for send finally to clear only if it still matches.
+      // Leave isSending + activeRequestId for the owning send finally. This
+      // serializes a same-dialogue resend until authoritative reconciliation.
 
       if (currentChatId.value === dialogueId) {
         await scrollToBottom();
       }
+    } else {
+      chatState.generationStopped = false;
     }
   } catch (error) {
+    chatState.generationStopped = false;
     console.error("Failed to abort request:", error);
   }
 };

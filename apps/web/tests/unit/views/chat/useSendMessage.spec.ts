@@ -488,22 +488,26 @@ describe("useSendMessage", () => {
     const firstKey = getChatState("A").activeRequestId;
     expect(firstKey.startsWith("chat-request-")).toBe(true);
 
-    // Simulate Stop leaving isSending false, then a newer request claiming the key
+    // Defense in depth: even if an impossible caller swaps the key, the stale
+    // response/finally must not reconcile or clear that newer lifecycle.
     getChatState("A").isSending = false;
     getChatState("A").messageInput = "second";
     getChatState("A").activeRequestId = "chat-request-newer";
+    getHistoryQuestionData.mockClear();
 
     resolveFirst({
       data: {
         tool_name: "ChatAgent",
         answer: "old",
         id: "old",
+        dialogue_id: "stale-dialogue-id",
         follow_up_questions: [],
       },
     });
     await first;
 
     expect(getChatState("A").activeRequestId).toBe("chat-request-newer");
+    expect(getHistoryQuestionData).not.toHaveBeenCalled();
   });
 
   it("empty input guard: returns early when messageInput is empty, does not call getQueryAbortable", async () => {
@@ -822,11 +826,10 @@ describe("useSendMessage", () => {
     expect(keyA).not.toBe(keyB);
     expect(getChatState("B").isSending).toBe(true);
 
-    // Mirror abortDialogueRequest on A only: ID-less local stopped row, leave
-    // activeRequestId for send finally, clear isSending.
+    // Mirror abortDialogueRequest on A only: ID-less local stopped row, while
+    // isSending + activeRequestId remain owned until A's finally settles.
     const stateA = getChatState("A");
     stateA.generationStopped = true;
-    stateA.isSending = false;
     stateA.renderedChat!.messages.push({
       role: "assistant",
       content: "chat.generationStopped",
@@ -834,6 +837,7 @@ describe("useSendMessage", () => {
     });
     const stopped = stateA.renderedChat!.messages.at(-1);
     expect(stopped).not.toHaveProperty("id");
+    expect(stateA.isSending).toBe(true);
 
     expect(getChatState("B").isSending).toBe(true);
     expect(getChatState("B").activeRequestId).toBe(keyB);
@@ -873,10 +877,15 @@ describe("useSendMessage", () => {
     );
   });
 
-  it("Stop then immediate resend: late request-1 does not append over request-2", async () => {
-    states.get("A")!.messageInput = "first";
+  it("new chat Stop then immediate resend waits for reconciliation and preserves the draft", async () => {
+    const tempId = "new_stop_serial";
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+    const state = makeState({ messageInput: "first" });
+    states.set(tempId, state);
+    chatList.value = [];
+
     let resolveFirst!: (v: any) => void;
-    let resolveSecond!: (v: any) => void;
     mockGetQueryAbortable.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveFirst = resolve;
@@ -887,59 +896,81 @@ describe("useSendMessage", () => {
     const first = sendMessage();
     await Promise.resolve();
     await Promise.resolve();
-    const firstKey = getChatState("A").activeRequestId;
+    const firstKey = state.activeRequestId;
+    expect((mockGetQueryAbortable.mock.calls[0][0] as FormData).get("id")).toBe(
+      "0"
+    );
 
-    // Stop leaves activeRequestId, then a newer send claims the dialogue.
-    getChatState("A").generationStopped = true;
-    getChatState("A").isSending = false;
-    getChatState("A").renderedChat!.messages.push({
+    // Mirror a successful Stop. The request remains the lifecycle owner until
+    // its authoritative dialogue identity has been reconciled.
+    state.generationStopped = true;
+    state.renderedChat!.messages.push({
       role: "assistant",
       content: "chat.generationStopped",
       instantMessage: true,
     });
-    getChatState("A").messageInput = "second";
-    mockGetQueryAbortable.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveSecond = resolve;
-      }) as any
-    );
-    const second = sendMessage();
-    await Promise.resolve();
-    await Promise.resolve();
-    const secondKey = getChatState("A").activeRequestId;
-    expect(secondKey).not.toBe(firstKey);
-    expect(getChatState("A").isSending).toBe(true);
+    state.messageInput = "second draft";
+
+    await sendMessage();
+
+    expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
+    expect(state.activeRequestId).toBe(firstKey);
+    expect(state.isSending).toBe(true);
+    expect(state.messageInput).toBe("second draft");
 
     resolveFirst({
       data: {
         tool_name: "ChatAgent",
         answer: "stale-answer-1",
-        id: "m1",
+        id: "11",
+        dialogue_id: "server-stop-dialogue",
         follow_up_questions: [],
       },
     });
     await first;
 
-    expect(getChatState("A").activeRequestId).toBe(secondKey);
-    expect(getChatState("A").isSending).toBe(true);
+    expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, {
+      blockingDialogueId: "server-stop-dialogue",
+    });
+    expect(state.activeRequestId).toBe("");
+    expect(state.isSending).toBe(false);
+    expect(state.messageInput).toBe("second draft");
     expect(
-      getChatState("A").renderedChat!.messages.some(
+      state.renderedChat!.messages.some(
         (m) => m.content === "stale-answer-1"
       )
     ).toBe(false);
 
-    resolveSecond({
+    // Mirror the coordinator's successful temp -> server rekey/history list.
+    states.delete(tempId);
+    states.set("server-stop-dialogue", state);
+    currentChatId.value = "server-stop-dialogue";
+    currentChat.value = state.renderedChat;
+    chatList.value = [
+      {
+        id: 11,
+        dialogue_id: "server-stop-dialogue",
+        title: "first",
+        date: "",
+        isFavorite: false,
+      },
+    ];
+    mockGetQueryAbortable.mockResolvedValueOnce({
       data: {
         tool_name: "ChatAgent",
         answer: "answer-2",
         id: "m2",
         follow_up_questions: [],
       },
-    });
-    await second;
-    expect(getChatState("A").renderedChat!.messages.at(-1).content).toBe(
-      "answer-2"
+    } as any);
+
+    await sendMessage();
+
+    expect(mockGetQueryAbortable).toHaveBeenCalledTimes(2);
+    expect((mockGetQueryAbortable.mock.calls[1][0] as FormData).get("id")).toBe(
+      "11"
     );
+    expect(state.renderedChat!.messages.at(-1).content).toBe("answer-2");
   });
 
   it("background session-expired does not open ElMessageBox", async () => {

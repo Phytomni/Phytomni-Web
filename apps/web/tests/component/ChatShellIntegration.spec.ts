@@ -317,6 +317,12 @@ describe("Chat adaptive shell integration", () => {
     expect(sendMessageSource).toContain(
       "chatState.activeRequestId === requestKey"
     );
+    expect(sendMessageSource).toMatch(
+      /chatState\.isSending\s*\|\|[\s\S]{0,80}chatState\.activeRequestId/
+    );
+    expect(sendMessageSource).toContain(
+      "const ownsLifecycle = chatState.activeRequestId === requestKey"
+    );
     expect(sendMessageSource).not.toContain("Date.now().toString()");
     expect(sendMessageSource).not.toContain("currentRequestId");
     expect(sendMessageSource).not.toContain("isAborted");
@@ -340,6 +346,10 @@ describe("Chat adaptive shell integration", () => {
     expect(abortBlock).toContain("abortRequest(requestId)");
     expect(abortBlock).not.toContain("abortAllRequests");
     expect(abortBlock).toContain("generationStopped = true");
+    expect(abortBlock).toContain(
+      "if (!requestId || chatState.generationStopped) return"
+    );
+    expect(abortBlock).not.toContain("chatState.isSending = false");
     expect(abortBlock).not.toMatch(/\bid:\s/);
 
     const streamSource = readFileSync(
