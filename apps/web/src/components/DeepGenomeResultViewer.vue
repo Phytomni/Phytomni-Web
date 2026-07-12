@@ -100,82 +100,96 @@
     >
       <!-- Download button group -->
       <div class="deep-genome-toolbar" data-testid="deep-genome-toolbar">
-        <el-button type="primary" @click="downloadPDF">
+        <el-button
+          class="deep-genome-toolbar-button"
+          plain
+          @click="downloadPDF"
+        >
           <i class="el-icon-document"></i>
           {{ $t("agents.deepGenome.downloadPDF") }}
         </el-button>
-        <el-button type="primary" @click="downloadMarkdown">
+        <el-button
+          class="deep-genome-toolbar-button"
+          plain
+          @click="downloadMarkdown"
+        >
           <i class="el-icon-edit"></i>
           {{ $t("agents.deepGenome.downloadMD") }}
         </el-button>
       </div>
-      <div class="deep-genome-document phy-reading">
+      <article class="deep-genome-document phy-reading">
         <div v-for="(block, index) in contentBlocks" :key="index">
-          <!-- H1 Title (centered) -->
+          <!-- H1 document title -->
           <h1
             v-if="block.type === 'h1'"
             :id="block.id"
-            class="text-center"
+            class="deep-genome-title"
             v-html="block.content"
           ></h1>
 
-          <!-- H2 Title -->
+          <!-- H2 section title -->
           <h2
             v-else-if="block.type === 'h2'"
             :id="block.id"
+            class="deep-genome-heading deep-genome-heading--section"
             v-html="block.content"
           ></h2>
 
-          <!-- H3 Card -->
-          <el-card
+          <!-- H3 document section -->
+          <section
             v-else-if="block.type === 'h3-card'"
-            class="mb-20 card"
-            shadow="hover"
+            class="deep-genome-section"
           >
-            <template #header>
-              <h3 :id="block.id" v-html="block.header"></h3>
-            </template>
-            <!-- Render HTML containing el-card and table via v-html -->
-            <div v-html="block.body"></div>
-          </el-card>
+            <h3
+              :id="block.id"
+              class="deep-genome-section-title"
+              v-html="block.header"
+            ></h3>
+            <div class="deep-genome-section-body" v-html="block.body"></div>
+          </section>
 
           <!-- H4 Title -->
           <h4
             v-else-if="block.type === 'h4'"
             :id="block.id"
+            class="deep-genome-subheading"
             v-html="block.content"
           ></h4>
 
           <!-- Standalone Content (e.g., after h1, after h2, before h3) -->
-          <el-card
+          <div
             v-else-if="block.type === 'standalone-content'"
-            class="mb-20"
-          >
-            <div v-html="block.content"></div>
-          </el-card>
+            class="deep-genome-prose-block"
+            v-html="block.content"
+          ></div>
         </div>
 
-        <h2>References</h2>
         <!-- References section -->
-        <el-card class="mb-20 reference-card" id="section4">
-          <div v-if="displayReferences && displayReferences.length > 0">
+        <section class="deep-genome-references" id="section4">
+          <h2 class="deep-genome-heading deep-genome-heading--references">
+            {{ $t("agents.deepGenome.references") }}
+          </h2>
+          <div
+            v-if="displayReferences && displayReferences.length > 0"
+            class="deep-genome-reference-list"
+          >
             <div
               v-for="ref in displayReferences"
               :key="ref.id"
               :id="ref.id"
-              style="margin-bottom: 10px"
+              class="deep-genome-reference"
               v-html="ref.html"
             ></div>
           </div>
           <!-- Show an empty-references hint -->
-          <div
+          <p
             v-else-if="!props.references || props.references.length === 0"
-            style="text-align: center; color: #999"
+            class="deep-genome-empty-references"
           >
-            No references available.
-          </div>
-        </el-card>
-      </div>
+            {{ $t("agents.deepGenome.noReferences") }}
+          </p>
+        </section>
+      </article>
     </el-main>
   </el-container>
 
@@ -222,15 +236,11 @@ import {
   ElContainer,
   ElAside,
   ElMain,
-  ElCard,
   ElMenu,
   ElMenuItem,
   ElSubMenu,
   ElDialog,
   ElButton,
-  ElDropdown,
-  ElDropdownMenu,
-  ElDropdownItem,
 } from "element-plus";
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
 import { useDeepGenomeImageViewer } from "@/composables/useDeepGenomeImageViewer";
@@ -297,7 +307,6 @@ const processCifContainers = async () => {
 
   cifContainers.forEach((container) => {
     const src = container.getAttribute("data-src") || "";
-    const alt = container.getAttribute("data-alt") || "";
 
     // mark as processed
     container.setAttribute("data-processed", "true");
@@ -437,7 +446,6 @@ onMounted(async () => {
     }
   });
 });
-
 </script>
 
 <style scoped>
@@ -494,7 +502,7 @@ onMounted(async () => {
   min-height: 0;
   flex: 1 1 auto;
   padding: var(--phy-space-16);
-  overflow-x: auto !important;
+  overflow-x: hidden !important;
   overflow-y: auto !important;
   background: var(--phy-color-bg-elevated);
 }
@@ -507,14 +515,29 @@ onMounted(async () => {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--phy-space-8);
-  padding: var(--phy-space-8) 0;
+  margin-bottom: var(--phy-space-16);
+  padding: var(--phy-space-4) 0 var(--phy-space-12);
   overflow: visible;
+  border-bottom: 1px solid var(--phy-color-border-subtle);
   background: var(--phy-color-bg-elevated);
 }
 
 .deep-genome-toolbar :deep(.el-button) {
   max-width: 100%;
   margin-left: 0;
+}
+
+.deep-genome-toolbar-button {
+  color: var(--phy-color-action-text);
+  border-color: var(--phy-color-border-subtle);
+  background: transparent;
+}
+
+.deep-genome-toolbar-button:hover,
+.deep-genome-toolbar-button:focus-visible {
+  color: var(--phy-color-action-text-hover);
+  border-color: var(--phy-color-border-control);
+  background: var(--phy-color-fill-subtle);
 }
 
 @media (max-width: 700px) {
@@ -542,261 +565,270 @@ onMounted(async () => {
   }
 }
 
-.mb-20 {
-  margin-bottom: 20px;
-}
 .deep-genome-document {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--phy-layout-reading-max-width);
   margin: 0 auto;
+  padding: var(--phy-space-4) 0 var(--phy-space-32);
+  color: var(--phy-color-text-secondary);
 }
-::v-deep .el-menu {
-  border: none !important;
+
+.deep-genome-title,
+.deep-genome-heading,
+.deep-genome-section-title,
+.deep-genome-subheading,
+.deep-genome-section-body :deep(h4) {
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+  font-weight: 600;
+}
+
+.deep-genome-title {
+  margin: var(--phy-space-8) 0 var(--phy-space-32);
+  font-family: var(--phy-font-shell);
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.deep-genome-heading {
+  line-height: 1.3;
+}
+
+.deep-genome-heading--section {
+  margin: var(--phy-space-40) 0 var(--phy-space-20);
+  padding-bottom: var(--phy-space-8);
+  border-bottom: 1px solid var(--phy-color-border-subtle);
+  font-size: 22px;
+}
+
+.deep-genome-section {
+  margin-bottom: var(--phy-space-24);
+  padding-bottom: var(--phy-space-24);
+  border-bottom: 1px solid var(--phy-color-border-subtle);
+}
+
+.deep-genome-section-title {
+  margin: 0 0 var(--phy-space-12);
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.deep-genome-subheading,
+.deep-genome-section-body :deep(h4) {
+  margin: var(--phy-space-20) 0 var(--phy-space-8);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.deep-genome-prose-block,
+.deep-genome-section-body {
+  margin-bottom: var(--phy-space-24);
+  color: var(--phy-color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.deep-genome-prose-block :deep(p),
+.deep-genome-section-body :deep(p) {
+  margin: 0 0 var(--phy-space-16);
+  padding: 0;
+  color: var(--phy-color-text-secondary);
+}
+
+.deep-genome-prose-block :deep(strong),
+.deep-genome-section-body :deep(strong) {
+  color: var(--phy-color-text);
+  font-weight: 600;
+}
+
+.deep-genome-document :deep(a) {
+  color: var(--phy-color-action-text);
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
+}
+
+.deep-genome-document :deep(a:hover) {
+  color: var(--phy-color-action-text-hover);
+}
+
+.deep-genome-document :deep(a:focus-visible) {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+  border-radius: var(--phy-radius-sm);
+}
+
+.deep-genome-document :deep(.markdown-table) {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: var(--phy-space-20) 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 0;
+  border-collapse: collapse;
+  scrollbar-width: thin;
+}
+
+.deep-genome-document :deep(.markdown-table th),
+.deep-genome-document :deep(.markdown-table td) {
+  min-width: 112px;
+  padding: var(--phy-space-8) var(--phy-space-12);
+  border: 1px solid var(--phy-color-border-subtle);
+  color: var(--phy-color-text-secondary);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.deep-genome-document :deep(.markdown-table th) {
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+  font-weight: 600;
+  background: var(--phy-color-fill-subtle);
+}
+
+.deep-genome-document :deep(.image-card) {
+  box-sizing: border-box;
+  margin: var(--phy-space-24) 0;
   overflow: hidden;
-}
-/* Sidebar menu level styles */
-/* Level-1 menu (H2) - 10px indent, font-weight 600 */
-.menu-level-2 {
-  span {
-    font-weight: 600 !important;
-    color: #000 !important;
-    font-size: 16px;
-  }
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
 }
 
-.menu-level-3 span {
-  font-weight: 500 !important;
-  font-size: 14px;
+.deep-genome-document :deep(.image-card .el-card__body) {
+  color: var(--phy-color-text-secondary);
+  background: transparent;
 }
 
-.menu-level-4 span {
-  font-weight: 400 !important;
-  font-size: 14px;
+.deep-genome-document :deep(.clickable-image) {
+  max-width: 100%;
+  height: auto;
 }
 
-::v-deep .cif-container {
-  border-radius: 20px;
-  padding: 10px;
-  margin: 10px 0;
-  background: #fff !important;
-}
-.theme-dark .cif-container {
-  border-radius: 20px;
-  background: #fff;
-}
-
-/* Sidebar menu active-state styles */
-.el-menu-item.is-active {
-  color: #fff !important;
-  background-color: var(--el-color-primary) !important;
+.deep-genome-document :deep(.cif-container) {
+  box-sizing: border-box;
+  margin: var(--phy-space-24) 0;
+  padding: var(--phy-space-12);
+  overflow: hidden;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
 }
 
-/* Sidebar menu item hover state */
-.el-menu-item:hover {
-  span {
-    color: var(--el-color-primary) !important;
-  }
-}
-
-/* Style support for the image-card class */
-
-/* Image and caption styles */
-figure {
+.deep-genome-document :deep(figure) {
   margin: 0;
   text-align: center;
 }
-figcaption {
+
+.deep-genome-document :deep(figcaption) {
+  margin-top: var(--phy-space-8);
+  color: var(--phy-color-text-muted);
   font-size: 0.9em;
-  color: #000;
-  margin-top: 0.5em;
-}
-.text-center {
-  text-align: center;
-}
-.markdown-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 1em;
-}
-.markdown-table th,
-.markdown-table td {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: left; /* default, or per alignStyle */
-}
-.markdown-table th {
-  background-color: #f2f2f2;
-  font-weight: bold;
 }
 
-h1 {
-  font-size: 36px;
-  font-weight: 600;
-  color: #000;
-  margin-bottom: 20px;
-}
-h2 {
-  font-size: 28px;
-  font-weight: 600;
-  color: #000;
-  margin-top: 40px;
-  margin-bottom: 20px;
-}
-h3 {
-  font-size: 24px;
-  font-weight: 600;
-  color: #000;
+.deep-genome-references {
+  margin-top: var(--phy-space-40);
+  padding: var(--phy-space-20);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-fill-subtle);
 }
 
-/* Sidebar styles under the dark theme */
-.theme-dark .el-aside {
-  background-color: #1f1f1f !important;
+.deep-genome-heading--references {
+  margin: 0 0 var(--phy-space-12);
+  font-size: 20px;
 }
 
-.theme-dark .el-menu {
-  background-color: #1f1f1f !important;
+.deep-genome-reference {
+  padding: var(--phy-space-12) 0;
+  border-bottom: 1px solid var(--phy-color-border-subtle);
+  color: var(--phy-color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
-.theme-dark .el-menu-item {
-  color: #ddd !important;
+.deep-genome-reference:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
-.theme-dark .el-menu-item.is-active {
-  color: var(--el-color-primary) !important;
-  background-color: rgba(64, 158, 255, 0.1) !important;
-}
-
-/* Menu item text color under the dark theme */
-.theme-dark .menu-level-2 span,
-.theme-dark .menu-level-3 span,
-.theme-dark .menu-level-4 span {
-  color: #000 !important;
-}
-
-.theme-dark h3 {
-  color: #000;
-}
-.card,
-.el-card {
-  border-radius: 16px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06), 0 8px 25px rgba(0, 0, 0, 0.09),
-    0 2px 8px rgba(0, 0, 0, 0.05);
-  box-sizing: border-box;
-  border: none;
-  margin-bottom: 20px;
-  transition: all 0.3s ease;
-  background-color: #fff;
-  overflow: hidden;
-  position: relative;
-  z-index: 1;
-}
-.card:hover,
-.el-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1), 0 12px 30px rgba(0, 0, 0, 0.15),
-    0 3px 10px rgba(0, 0, 0, 0.08);
-}
-
-.theme-dark .card,
-.el-card {
-  background-color: #1f1f1f;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), 0 8px 25px rgba(0, 0, 0, 0.25),
-    0 2px 8px rgba(0, 0, 0, 0.18);
-}
-
-.theme-dark .card:hover,
-.el-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 12px 30px rgba(0, 0, 0, 0.35),
-    0 3px 10px rgba(0, 0, 0, 0.25);
-}
-.card ::v-deep .el-card__body,
-.el-card ::v-deep .el-card__body {
-  background: #f5f6f7 !important;
-
-  h4,
-  p {
-    color: #000;
-  }
-
-  h4 {
-    font-size: 18px;
-    font-weight: 500;
-    color: #000;
-    margin: 20px 0 10px;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    color: #000;
-
-    th {
-      background: #ccc;
-      text-align: center;
-    }
-  }
-
-  p {
-    padding: 10px 20px;
-
-    strong {
-      font-weight: 500;
-    }
-  }
-}
-.card ::v-deep .el-card__header {
-  background: #f5f6f7 !important;
-}
-::v-deep .el-card .el-card__body {
-  background: #f5f6f7 !important;
-
-  p,
-  div {
-    color: #000;
-  }
-}
-/* Sidebar menu item text styles */
-.menu-level-2 span,
-.menu-level-3 span,
-.menu-level-4 span {
-  color: #000;
-}
-
-/* Reference styles */
-.doc-citation {
+.deep-genome-reference :deep(.doc-citation) {
   line-height: 1.6;
-  margin-bottom: 10px;
 }
 
-.doi-link,
-.pmid-link {
-  color: var(--el-color-primary);
+.deep-genome-reference :deep(.doi-link),
+.deep-genome-reference :deep(.pmid-link) {
+  color: var(--phy-color-action-text);
   text-decoration: none;
 }
 
-.doi-link:hover,
-.pmid-link:hover {
+.deep-genome-reference :deep(.doi-link:hover),
+.deep-genome-reference :deep(.pmid-link:hover) {
+  color: var(--phy-color-action-text-hover);
   text-decoration: underline;
 }
 
-.doc-link-inline {
-  margin-left: 5px;
+.deep-genome-reference :deep(.doc-link-inline) {
+  margin-left: var(--phy-space-4);
 }
-::v-deep .image-card {
-  border: none;
-  margin: 0 60px;
-  border-radius: 20px;
-  overflow: hidden;
 
-  .el-card__body {
-    background: #fff !important;
-  }
+.deep-genome-empty-references {
+  margin: 0;
+  padding: var(--phy-space-12) 0;
+  color: var(--phy-color-text-muted);
+  text-align: center;
 }
-::v-deep .el-sub-menu__icon-arrow {
-  color: #000;
+
+.deep-genome-toc :deep(.el-menu-item),
+.deep-genome-toc :deep(.el-sub-menu__title) {
+  height: auto;
+  min-height: 38px;
+  margin: var(--phy-space-4) 0;
+  border-radius: var(--phy-radius-sm);
+  color: var(--phy-color-text-secondary);
+  line-height: 1.4;
+}
+
+.deep-genome-toc :deep(.el-menu-item span),
+.deep-genome-toc :deep(.el-sub-menu__title span) {
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deep-genome-toc :deep(.menu-level-2),
+.deep-genome-toc :deep(.menu-level-2 > .el-sub-menu__title) {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.deep-genome-toc :deep(.menu-level-3),
+.deep-genome-toc :deep(.menu-level-3 > .el-sub-menu__title),
+.deep-genome-toc :deep(.menu-level-4) {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.deep-genome-toc :deep(.el-menu-item:hover),
+.deep-genome-toc :deep(.el-sub-menu__title:hover) {
+  color: var(--phy-color-text);
+  background: var(--phy-color-fill-subtle);
+}
+
+.deep-genome-toc :deep(.el-menu-item.is-active) {
+  color: var(--phy-color-action-text);
+  background: var(--phy-color-brand-blue-soft);
+}
+
+.deep-genome-toc :deep(.el-sub-menu.is-active > .el-sub-menu__title),
+.deep-genome-toc :deep(.el-sub-menu__icon-arrow) {
+  color: var(--phy-color-action-text);
 }
 
 /* Image viewer styles */
 .image-view-container {
-  background-color: #f0f0f0;
+  background-color: var(--phy-color-fill-subtle);
 }
 
 .image-view-image {
@@ -805,42 +837,17 @@ h3 {
   transition: transform 0.2s ease;
 }
 
-.theme-dark .image-view-container {
-  background-color: #1f1f1f;
-}
-
 /* Download dropdown styles */
 .download-dropdown {
-  z-index: 2000 !important;
+  z-index: var(--phy-z-modal) !important;
   position: fixed !important;
   top: auto !important;
   left: auto !important;
 }
 
-/* add background and border to the dropdown for visibility */
 .download-dropdown .el-dropdown-menu {
-  background-color: #fff !important;
-  border: 1px solid #dcdfe6 !important;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1) !important;
-  padding: 5px 0 !important;
-}
-
-/* ensure menu items show the active state correctly */
-::v-deep .el-menu-item.is-active {
-  color: var(--el-color-primary) !important;
-  background-color: #ecf5ff !important;
-}
-
-::v-deep .el-menu-item.is-active span {
-  color: var(--el-color-primary) !important;
-}
-
-/* improve the menu item hover effect */
-::v-deep .el-menu-item:hover {
-  background-color: #f5f7fa !important;
-}
-
-::v-deep .el-menu-item:hover span {
-  color: var(--el-color-primary) !important;
+  padding: var(--phy-space-4) 0 !important;
+  border: 1px solid var(--phy-color-border-subtle) !important;
+  background-color: var(--phy-color-bg-elevated) !important;
 }
 </style>

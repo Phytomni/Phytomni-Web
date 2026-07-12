@@ -4,6 +4,8 @@ import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
+import enUS from "@/locales/langs/en-US";
+import zhCN from "@/locales/langs/zh-CN";
 
 // Locks the reference-renderer text fields. doc_list comes from the Bot
 // `formatted.references` reshape (attacker-influenceable via agent output / RAG),
@@ -61,15 +63,15 @@ describe("DeepGenomeResultViewer — adaptive shell", () => {
   it("defaults to standalone and adds an explicit embedded shell state", () => {
     const standalone = render([]);
     expect(standalone.props("embedded")).toBe(false);
-    expect(standalone.find('[data-testid="deep-genome-viewer"]').classes()).not.toContain(
-      "deep-genome-viewer--embedded"
-    );
+    expect(
+      standalone.find('[data-testid="deep-genome-viewer"]').classes()
+    ).not.toContain("deep-genome-viewer--embedded");
 
     const embedded = render([], { embedded: true });
     expect(embedded.props("embedded")).toBe(true);
-    expect(embedded.find('[data-testid="deep-genome-viewer"]').classes()).toContain(
-      "deep-genome-viewer--embedded"
-    );
+    expect(
+      embedded.find('[data-testid="deep-genome-viewer"]').classes()
+    ).toContain("deep-genome-viewer--embedded");
   });
 
   it("uses semantic shell hooks instead of hard-coded layout attributes", () => {
@@ -120,6 +122,112 @@ describe("DeepGenomeResultViewer — adaptive shell", () => {
     );
     expect(VIEWER_STYLES).toMatch(
       /\.deep-genome-viewer\s*\{[\s\S]*max-width:\s*100%[\s\S]*overflow:\s*hidden/
+    );
+  });
+});
+
+describe("DeepGenomeResultViewer — scientific document skin", () => {
+  it("renders semantic document sections instead of an Element Plus card wall", async () => {
+    const wrapper = renderMarkdown(
+      "# Rice locus report\\n" +
+        "Executive summary.\\n" +
+        "## Evidence\\n" +
+        "Section overview.\\n" +
+        "### Expression\\n" +
+        "Expression evidence."
+    );
+    await nextTick();
+    await nextTick();
+
+    expect(wrapper.find("article.deep-genome-document").exists()).toBe(true);
+    expect(wrapper.find(".deep-genome-title").text()).toBe("Rice locus report");
+    expect(wrapper.find(".deep-genome-heading--section").text()).toBe(
+      "Evidence"
+    );
+    expect(wrapper.find("section.deep-genome-section").exists()).toBe(true);
+    expect(wrapper.find(".deep-genome-section-body").text()).toContain(
+      "Expression evidence."
+    );
+    expect(VIEWER_TEMPLATE).not.toContain("<el-card");
+    expect(VIEWER_TEMPLATE).not.toContain('shadow="hover"');
+  });
+
+  it("localizes the references heading and empty state in both locale packs", () => {
+    expect(VIEWER_TEMPLATE).toContain('$t("agents.deepGenome.references")');
+    expect(VIEWER_TEMPLATE).toContain('$t("agents.deepGenome.noReferences")');
+    expect(VIEWER_TEMPLATE).not.toContain("<h2>References</h2>");
+    expect(VIEWER_TEMPLATE).not.toContain("No references available.");
+    expect(enUS.agents.deepGenome.references).toBe("References");
+    expect(enUS.agents.deepGenome.noReferences).toBe(
+      "No references available."
+    );
+    expect(zhCN.agents.deepGenome.references).toBe("参考文献");
+    expect(zhCN.agents.deepGenome.noReferences).toBe("暂无参考文献。");
+  });
+
+  it("uses only design tokens for the scoped color and surface skin", () => {
+    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-text\)/);
+    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-text-secondary\)/);
+    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-fill-subtle\)/);
+    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-border-subtle\)/);
+    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-action-text\)/);
+    expect(VIEWER_STYLES).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(VIEWER_STYLES).not.toMatch(/rgba?\(/i);
+    expect(VIEWER_STYLES).not.toMatch(/box-shadow\s*:/);
+    expect(VIEWER_STYLES).not.toMatch(/transform:\s*translateY/);
+    expect(VIEWER_STYLES).not.toMatch(/transition:\s*all/);
+    expect(VIEWER_STYLES).not.toMatch(/\.theme-dark/);
+  });
+
+  it("gives the document a restrained scientific heading hierarchy", () => {
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-title\s*\{[\s\S]*font-family:\s*var\(--phy-font-shell\)[\s\S]*font-size:\s*clamp\(/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-heading--section\s*\{[\s\S]*border-bottom:\s*1px solid var\(--phy-color-border-subtle\)/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-section-title\s*\{[\s\S]*font-size:\s*18px/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-document\s*\{[\s\S]*max-width:\s*var\(--phy-layout-reading-max-width\)/
+    );
+  });
+
+  it("keeps tables as the only local horizontal scroll surface", () => {
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-main\s*\{[\s\S]*overflow-x:\s*hidden/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-document\s+:deep\(\.markdown-table\)\s*\{[\s\S]*display:\s*block[\s\S]*max-width:\s*100%[\s\S]*overflow-x:\s*auto/
+    );
+    expect(VIEWER_STYLES).toMatch(/overscroll-behavior-inline:\s*contain/);
+  });
+
+  it("uses quiet tokenized TOC and toolbar states", () => {
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-toc\s+:deep\(\.el-menu-item\.is-active\)[\s\S]*background(?:-color)?:\s*var\(--phy-color-brand-blue-soft\)/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-toc\s+:deep\(\.el-menu-item:hover\)[\s\S]*background(?:-color)?:\s*var\(--phy-color-fill-subtle\)/
+    );
+    expect(VIEWER_TEMPLATE).toMatch(
+      /class="deep-genome-toolbar-button"[\s\S]*?plain/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-toolbar-button[\s\S]*color:\s*var\(--phy-color-action-text\)/
+    );
+  });
+
+  it("renders references and generated images as single-layer panels", () => {
+    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-references"');
+    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-reference"');
+    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-empty-references"');
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-references\s*\{[\s\S]*border:\s*1px solid var\(--phy-color-border-subtle\)[\s\S]*background:\s*var\(--phy-color-fill-subtle\)/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-document\s+:deep\(\.image-card\)\s*\{[\s\S]*border:\s*1px solid var\(--phy-color-border-subtle\)[\s\S]*background:\s*var\(--phy-color-bg-elevated\)/
     );
   });
 });
