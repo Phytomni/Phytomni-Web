@@ -12,6 +12,29 @@
       class="chat-composer-surface"
     >
       <PhyComposerFrame>
+        <template #attachments>
+          <div
+            v-if="fileList.length > 0 && !isSending"
+            class="composer-attachments file-list-container"
+          >
+            <div class="file-list">
+              <div
+                v-for="(file, index) in fileList"
+                :key="index"
+                class="file-item"
+              >
+                <FilesCard
+                  :uid="index"
+                  :name="file.name"
+                  :file-size="file.size"
+                  :show-del-icon="true"
+                  @delete="emit('remove-file', index)"
+                />
+              </div>
+            </div>
+          </div>
+        </template>
+
         <ChatAgentPicker
           v-if="showAgentPicker"
           :options="pickerOptions"
@@ -58,31 +81,6 @@
             @search="emit('search', $event)"
             @keydown.enter.capture="onComposerEnterCapture"
           >
-            <template #header>
-              <div class="header-self-wrap">
-                <div
-                  v-if="fileList.length > 0 && !isSending"
-                  class="file-list-container"
-                >
-                  <div class="file-list">
-                    <div
-                      v-for="(file, index) in fileList"
-                      :key="index"
-                      class="file-item"
-                    >
-                      <FilesCard
-                        :uid="index"
-                        :name="file.name"
-                        :file-size="file.size"
-                        :show-del-icon="true"
-                        @delete="emit('remove-file', index)"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-
             <template #prefix>
               <div class="composer-prefix">
                 <el-upload
@@ -272,20 +270,18 @@ defineExpose<ChatComposerHandle>({
   min-height: var(--phy-control-height-primary);
 }
 
+.chat-composer-body :deep(.el-sender) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .composer-prefix,
 .composer-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.header-self-wrap {
-  padding: 3px 2px 2px 3px;
-  box-sizing: border-box;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
 }
 
 .file-list-container .file-list {

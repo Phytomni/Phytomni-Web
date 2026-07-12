@@ -132,6 +132,11 @@ describe("ChatFrameV2 — compact Composer surface", () => {
     expect(CHAT_COMPOSER_SOURCE).not.toContain('class="input-box"');
     expect(CHAT_COMPOSER_SOURCE).not.toContain('class="input-container-bottom"');
     expect(CHAT_COMPOSER_SOURCE).toContain("<PhyComposerFrame");
+    expect(CHAT_COMPOSER_SOURCE).toContain("<template #attachments>");
+    expect(CHAT_COMPOSER_SOURCE).toMatch(
+      /:deep\(\.el-sender\) \{[\s\S]*?box-shadow: none;/
+    );
+    expect(CHAT_COMPOSER_SOURCE).not.toContain("<template #header>");
     expect(CHAT_COMPOSER_SOURCE).toContain("min-height: var(--phy-control-height-primary)");
     expect(CHAT_COMPOSER_SOURCE).toContain("safe-area-inset-bottom");
     expect(CHAT_COMPOSER_SOURCE).toContain(

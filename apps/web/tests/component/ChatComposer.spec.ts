@@ -51,9 +51,9 @@ const COMPACT_DOM_ORDER = [
   "empty-chat-mode",
   "chat-composer-surface",
   "phy-composer-frame",
+  "composer-attachments",
   "chat-agent-picker",
   "mention-sender-stub",
-  "header-self-wrap",
   "upload-demo",
   "send-btn",
 ];
@@ -97,7 +97,8 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
         },
         PhyComposerFrame: {
           name: "PhyComposerFrame",
-          template: '<div class="phy-composer-frame"><slot /></div>',
+          template:
+            '<div class="phy-composer-frame"><slot name="attachments" /><slot /><slot name="actions" /></div>',
         },
         ElUpload: {
           name: "ElUpload",
@@ -177,11 +178,11 @@ describe("ChatComposer", () => {
       if (cls.includes("empty-chat-mode")) order.push("empty-chat-mode");
       if (cls.includes("chat-composer-surface")) order.push("chat-composer-surface");
       if (cls.includes("phy-composer-frame")) order.push("phy-composer-frame");
+      if (cls.includes("composer-attachments")) order.push("composer-attachments");
       if (testId === "chat-agent-picker" || cls.includes("chat-agent-picker")) {
         order.push("chat-agent-picker");
       }
       if (cls.includes("mention-sender-stub")) order.push("mention-sender-stub");
-      if (cls.includes("header-self-wrap")) order.push("header-self-wrap");
       if (cls.includes("upload-demo")) order.push("upload-demo");
       if (cls.includes("send-btn")) order.push("send-btn");
       Array.from(el.children).forEach(walk);
@@ -257,6 +258,12 @@ describe("ChatComposer", () => {
       file: new File(["x"], "doc.pdf"),
     };
     const wrapper = mountComposer({ fileList: [file] });
+    expect(wrapper.find(".composer-attachments").exists()).toBe(true);
+    expect(
+      wrapper
+        .find(".composer-attachments")
+        .element.closest(".phy-composer-frame")
+    ).toBeTruthy();
     expect(wrapper.find(".file-list-container").exists()).toBe(true);
     await wrapper.findComponent({ name: "FilesCard" }).vm.$emit("delete");
     expect(wrapper.emitted("remove-file")?.[0]).toEqual([0]);
