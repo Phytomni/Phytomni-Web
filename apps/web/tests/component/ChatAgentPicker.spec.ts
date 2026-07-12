@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ChatAgentPicker from "@/views/chat/components/ChatAgentPicker.vue";
@@ -35,11 +35,16 @@ describe("ChatAgentPicker", () => {
     const combobox = wrapper.find('[role="combobox"]');
     expect(combobox.exists()).toBe(true);
     expect(combobox.attributes("aria-expanded")).toBe("false");
+    expect((combobox.element as HTMLInputElement).value).toContain(
+      "chat.agentPicker.auto"
+    );
 
-    await combobox.trigger("click");
+    await wrapper.find('[data-testid="agent-picker-trigger"]').trigger("click");
     await nextTick();
 
     expect(combobox.attributes("aria-expanded")).toBe("true");
+    expect(combobox.attributes("aria-autocomplete")).toBe("list");
+    expect((combobox.element as HTMLInputElement).value).toBe("");
     expect(wrapper.find('[role="listbox"]').exists()).toBe(true);
     const options = wrapper.findAll('[role="option"]');
     expect(options).toHaveLength(allTools.length);
@@ -111,9 +116,11 @@ describe("ChatAgentPicker", () => {
     const wrapper = mountPicker({ selectedAgent: "KnowledgeAgent" });
     const chip = wrapper.find('[data-testid="agent-picker-chip"]');
     expect(chip.exists()).toBe(true);
-    expect(chip.text()).toContain("KnowledgeAgent");
+    expect((chip.find("input").element as HTMLInputElement).value).toBe(
+      "KnowledgeAgent"
+    );
 
-    await chip.find("button").trigger("click");
+    await chip.find('[data-testid="agent-picker-clear"]').trigger("click");
     expect(wrapper.emitted("clear")).toHaveLength(1);
   });
 
@@ -136,6 +143,31 @@ describe("ChatAgentPicker", () => {
     const options = wrapper.findAll('[role="option"]');
     expect(options).toHaveLength(1);
     expect(options[0].text()).toContain("DataAgent");
+  });
+
+  it("keeps the popover open with a localized no-results state", async () => {
+    const wrapper = mountPicker();
+    const combobox = wrapper.find('[role="combobox"]');
+    await combobox.trigger("click");
+    await combobox.setValue("missing-agent");
+    await nextTick();
+
+    expect(combobox.attributes("aria-expanded")).toBe("true");
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(0);
+    expect(wrapper.text()).toContain("chat.agentPicker.noResults");
+  });
+
+  it("closes the listbox on blur", async () => {
+    const wrapper = mountPicker();
+    const combobox = wrapper.find('[role="combobox"]');
+    await combobox.trigger("click");
+    await nextTick();
+
+    await combobox.trigger("blur");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(combobox.attributes("aria-expanded")).toBe("false");
+    expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
   });
 
   it("does not emit select for a tool outside the permitted options", async () => {

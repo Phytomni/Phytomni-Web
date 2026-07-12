@@ -451,7 +451,10 @@ export default {
     agentPicker: {
       loading: "加载智能体权限中……",
       empty: "当前账号暂无可用智能体",
+      auto: "自动选择",
+      label: "选择智能体",
       searchPlaceholder: "搜索智能体……",
+      noResults: "没有匹配的智能体",
       remove: "移除 {agent}",
     },
     log: {

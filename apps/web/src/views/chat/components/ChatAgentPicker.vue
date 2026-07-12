@@ -4,76 +4,101 @@
       v-if="rolesLoading"
       class="picker-status"
       data-testid="agent-picker-loading"
+      role="status"
+      aria-live="polite"
     >
-      {{ t("chat.agentPicker.loading") }}
+      <span class="picker-status-dot" aria-hidden="true" />
+      <span>{{ t("chat.agentPicker.loading") }}</span>
     </div>
 
     <div
       v-else-if="safeOptions.length === 0"
       class="picker-status"
       data-testid="agent-picker-empty"
+      role="status"
+      aria-live="polite"
     >
-      {{ t("chat.agentPicker.empty") }}
+      <span class="picker-agent-mark" aria-hidden="true">@</span>
+      <span>{{ t("chat.agentPicker.empty") }}</span>
     </div>
 
-    <template v-else>
+    <div v-else class="picker-combobox-wrap">
       <div
-        v-if="selectedAgent"
-        class="picker-chip"
-        data-testid="agent-picker-chip"
+        class="picker-control"
+        :class="{ 'is-open': open, 'has-selection': selectedAgent }"
+        :data-testid="
+          selectedAgent ? 'agent-picker-chip' : 'agent-picker-trigger'
+        "
+        @click="focusPicker"
       >
-        <span>{{ selectedLabel }}</span>
-        <button
-          type="button"
-          class="picker-chip-remove"
-          :aria-label="t('chat.agentPicker.remove', { agent: selectedLabel })"
-          :disabled="disabled"
-          @click="emit('clear')"
-        >
-          ×
-        </button>
-      </div>
-
-      <div class="picker-combobox-wrap">
+        <span class="picker-agent-mark" aria-hidden="true">@</span>
         <input
           ref="inputRef"
           type="text"
           role="combobox"
           class="picker-combobox"
-          :value="query"
-          :placeholder="t('chat.agentPicker.searchPlaceholder')"
+          :value="inputValue"
+          :placeholder="open ? t('chat.agentPicker.searchPlaceholder') : ''"
+          :aria-label="t('chat.agentPicker.label')"
           :aria-expanded="open ? 'true' : 'false'"
           :aria-controls="listboxId"
           :aria-activedescendant="activeDescendant"
           :aria-disabled="disabled ? 'true' : 'false'"
+          aria-autocomplete="list"
+          autocomplete="off"
+          spellcheck="false"
+          :readonly="!open"
           :disabled="disabled"
+          @focus="openList"
           @input="onInput"
           @click="openList"
           @keydown="onKeydown"
           @blur="onBlur"
         />
+        <button
+          v-if="selectedAgent"
+          type="button"
+          class="picker-clear"
+          data-testid="agent-picker-clear"
+          :aria-label="t('chat.agentPicker.remove', { agent: selectedLabel })"
+          :disabled="disabled"
+          @mousedown.prevent.stop
+          @click.stop="clearSelection"
+        >
+          ×
+        </button>
+        <span v-else class="picker-chevron" aria-hidden="true" />
+      </div>
 
+      <div v-if="open" class="picker-popover">
         <ul
-          v-if="open"
           :id="listboxId"
           role="listbox"
           class="picker-listbox"
+          :aria-label="t('chat.agentPicker.label')"
         >
           <li
             v-for="(option, index) in filteredOptions"
-            :id="`agent-option-${index}`"
+            :id="optionId(index)"
             :key="option.tool"
             role="option"
-            :aria-selected="index === activeIndex ? 'true' : 'false'"
+            :aria-selected="option.tool === selectedAgent ? 'true' : 'false'"
             class="picker-option"
             :class="{ 'is-active': index === activeIndex }"
             @mousedown.prevent="selectOption(option)"
           >
             {{ option.label }}
           </li>
+          <li
+            v-if="filteredOptions.length === 0"
+            class="picker-no-results"
+            role="presentation"
+          >
+            {{ t("chat.agentPicker.noResults") }}
+          </li>
         </ul>
       </div>
-    </template>
+    </div>
   </div>
 </template>
 
@@ -123,6 +148,14 @@ const selectedLabel = computed(() => {
   return match?.label ?? props.selectedAgent;
 });
 
+const triggerLabel = computed(() =>
+  props.selectedAgent ? selectedLabel.value : t("chat.agentPicker.auto")
+);
+
+const inputValue = computed(() =>
+  open.value ? query.value : triggerLabel.value
+);
+
 const filteredOptions = computed(() => {
   const q = query.value.trim().toLowerCase();
   if (!q) return safeOptions.value;
@@ -133,11 +166,18 @@ const filteredOptions = computed(() => {
   );
 });
 
+const optionId = (index: number) => `${listboxId}-agent-option-${index}`;
+
 const activeDescendant = computed(() => {
   if (!open.value || filteredOptions.value.length === 0) return undefined;
   const clamped = Math.min(activeIndex.value, filteredOptions.value.length - 1);
-  return `agent-option-${clamped}`;
+  return optionId(clamped);
 });
+
+const closeList = () => {
+  open.value = false;
+  query.value = "";
+};
 
 watch(
   () => props.options,
@@ -153,20 +193,36 @@ watch(filteredOptions, (options) => {
   }
 });
 
+watch(
+  () => [props.disabled, props.rolesLoading, safeOptions.value.length] as const,
+  ([disabled, loading, optionCount]) => {
+    if (disabled || loading || optionCount === 0) closeList();
+  }
+);
+
 const openList = () => {
   if (props.disabled || props.rolesLoading || safeOptions.value.length === 0) {
     return;
   }
+  if (!open.value) {
+    query.value = "";
+    const selectedIndex = safeOptions.value.findIndex(
+      (option) => option.tool === props.selectedAgent
+    );
+    activeIndex.value = selectedIndex >= 0 ? selectedIndex : 0;
+  }
   open.value = true;
 };
 
-const closeList = () => {
-  open.value = false;
+const focusPicker = () => {
+  if (props.disabled) return;
+  inputRef.value?.focus();
+  openList();
 };
 
 const onInput = (event: Event) => {
-  query.value = (event.target as HTMLInputElement).value;
   openList();
+  query.value = (event.target as HTMLInputElement).value;
   activeIndex.value = 0;
 };
 
@@ -174,6 +230,12 @@ const onBlur = () => {
   window.setTimeout(() => {
     closeList();
   }, 0);
+};
+
+const clearSelection = () => {
+  if (props.disabled) return;
+  emit("clear");
+  closeList();
 };
 
 const trySelect = (command: string) => {
@@ -198,7 +260,12 @@ const onKeydown = (event: KeyboardEvent) => {
   }
 
   if (!open.value && ["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+    event.preventDefault();
     openList();
+    if (event.key === "ArrowUp") {
+      activeIndex.value = Math.max(0, filteredOptions.value.length - 1);
+    }
+    return;
   }
 
   const options = filteredOptions.value;
@@ -247,94 +314,229 @@ defineExpose({ trySelect });
 
 <style scoped>
 .chat-agent-picker {
-  display: flex;
-  flex-wrap: wrap;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin-bottom: 6px;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .picker-status {
-  width: 100%;
-  color: var(--phy-color-text-muted, #909399);
-  font-size: 13px;
-  padding: 4px 0;
-}
-
-.picker-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--phy-color-accent-soft, #e8f4f8);
-  color: var(--phy-color-accent-text, #2b738f);
+  gap: var(--phy-space-8);
+  min-height: var(--phy-control-height-compact);
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: var(--phy-space-4) var(--phy-space-12);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-pill);
+  background: var(--phy-color-fill-subtle);
+  color: var(--phy-color-text-muted);
   font-size: 13px;
 }
 
-.picker-chip-remove {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 0 2px;
-}
-
-.picker-chip-remove:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+.picker-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: var(--phy-radius-pill);
+  background: var(--phy-color-primary);
+  opacity: 0.75;
 }
 
 .picker-combobox-wrap {
   position: relative;
-  flex: 1;
-  min-width: 160px;
+  display: inline-flex;
+  width: min(196px, calc(100vw - var(--phy-space-32)));
+  max-width: 100%;
+}
+
+.picker-control {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--phy-control-height-compact);
+  box-sizing: border-box;
+  padding: 0 var(--phy-space-8);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-pill);
+  background: var(--phy-color-fill-subtle);
+  transition: border-color var(--phy-motion-fast) ease,
+    background-color var(--phy-motion-fast) ease;
+}
+
+.picker-control:hover:not(.is-open) {
+  border-color: var(--phy-color-border-control);
+}
+
+.picker-control.is-open {
+  border-color: var(--phy-color-focus);
+  background: var(--phy-color-bg-elevated);
+}
+
+.picker-control:focus-within {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+.picker-agent-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: var(--phy-radius-pill);
+  background: var(--phy-color-accent-soft);
+  color: var(--phy-color-accent-text);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .picker-combobox {
   width: 100%;
-  box-sizing: border-box;
-  min-height: var(--phy-control-height-compact, 32px);
-  padding: 4px 10px;
-  border: 1px solid var(--phy-color-border, #d4d4d4);
-  border-radius: 8px;
+  min-width: 0;
+  height: calc(var(--phy-control-height-compact) - 2px);
+  padding: 0 var(--phy-space-8);
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--phy-color-text-secondary);
   font: inherit;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-control.has-selection .picker-combobox {
+  color: var(--phy-color-text);
+  font-weight: 500;
+}
+
+.picker-combobox::placeholder {
+  color: var(--phy-color-text-placeholder);
+}
+
+.picker-combobox[readonly] {
+  cursor: pointer;
 }
 
 .picker-combobox:disabled {
-  opacity: 0.6;
+  color: var(--phy-color-text-disabled);
   cursor: not-allowed;
 }
 
-.picker-listbox {
+.picker-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--phy-radius-pill);
+  background: transparent;
+  color: var(--phy-color-text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.picker-clear:hover {
+  background: var(--phy-color-primary-soft);
+  color: var(--phy-color-action-text);
+}
+
+.picker-clear:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: -2px;
+}
+
+.picker-clear:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.picker-chevron {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-inline: var(--phy-space-4);
+  border-right: 1.5px solid var(--phy-color-text-muted);
+  border-bottom: 1.5px solid var(--phy-color-text-muted);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--phy-motion-fast) ease;
+}
+
+.picker-control.is-open .picker-chevron {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.picker-popover {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  inset-block-end: calc(100% + var(--phy-space-8));
+  z-index: 30;
+  width: min(320px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
+  box-shadow: var(--phy-shadow-soft);
+}
+
+.picker-listbox {
   margin: 0;
-  padding: 4px 0;
+  padding: var(--phy-space-4);
   list-style: none;
-  max-height: 200px;
+  max-height: min(240px, 42vh);
   overflow-y: auto;
-  background: #fff;
-  border: 1px solid var(--phy-color-border, #d4d4d4);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  z-index: 20;
+  overscroll-behavior: contain;
 }
 
 .picker-option {
-  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  min-height: var(--phy-control-height-default);
+  box-sizing: border-box;
+  padding: var(--phy-space-8) var(--phy-space-12);
+  border-radius: var(--phy-radius-sm);
+  color: var(--phy-color-text-secondary);
   cursor: pointer;
   font-size: 13px;
 }
 
 .picker-option.is-active,
 .picker-option:hover {
-  background: var(--phy-color-fill-subtle, #f5f7fa);
+  background: var(--phy-color-primary-soft);
+  color: var(--phy-color-action-text);
+}
+
+.picker-no-results {
+  padding: var(--phy-space-16) var(--phy-space-12);
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .picker-combobox-wrap {
+    width: min(180px, calc(100vw - var(--phy-space-32)));
+  }
+
+  .picker-popover {
+    width: min(320px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picker-control,
+  .picker-chevron {
+    transition: none;
+  }
 }
 </style>

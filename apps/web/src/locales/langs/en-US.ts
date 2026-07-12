@@ -458,7 +458,10 @@ export default {
     agentPicker: {
       loading: "Loading agent permissions...",
       empty: "No agents available for your account",
+      auto: "Auto",
+      label: "Choose an agent",
       searchPlaceholder: "Search agents…",
+      noResults: "No matching agents",
       remove: "Remove {agent}",
     },
     log: {
