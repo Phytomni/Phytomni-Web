@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createI18n } from "vue-i18n";
 import SendProgress from "@/views/chat/components/SendProgress.vue";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+
+const PROGRESS_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/SendProgress.vue"),
+  "utf8"
+);
 
 function mountProgress(
   props: Record<string, unknown>,
@@ -126,6 +133,21 @@ describe("SendProgress.vue", () => {
     const pct = wrapper.find('[data-test="progress-percent"]');
     expect(pct.attributes("aria-live")).toBeUndefined();
     expect(pct.attributes("aria-hidden")).toBe("true");
+    expect(pct.element.tagName).toBe("SMALL");
+    expect(
+      live.element.compareDocumentPosition(pct.element) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("renders a thin semantic green-to-blue track with subdued fake percent", () => {
+    const styles = PROGRESS_SOURCE.slice(PROGRESS_SOURCE.indexOf("<style"));
+    expect(styles).toContain("height: 3px");
+    expect(styles).toContain("linear-gradient(");
+    expect(styles).toContain("var(--phy-color-accent)");
+    expect(styles).toContain("var(--phy-color-primary)");
+    expect(styles).toMatch(/\.send-progress__percent\s*\{[\s\S]*?opacity:/);
+    expect(styles).not.toMatch(/#[\da-f]{3,8}\b/i);
   });
 
   it("same-mount locale switch updates processing copy", async () => {

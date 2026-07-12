@@ -16,13 +16,13 @@
       >
         {{ displayLabel }}
       </span>
-      <span
+      <small
         class="send-progress__percent"
         data-test="progress-percent"
         aria-hidden="true"
       >
         {{ percentInt }}%
-      </span>
+      </small>
     </div>
     <div class="send-progress__track">
       <div
@@ -104,8 +104,8 @@ const valueText = computed(() =>
 .send-progress {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 5px;
+  margin-top: 9px;
 }
 .send-progress__meta {
   display: flex;
@@ -113,22 +113,47 @@ const valueText = computed(() =>
   justify-content: space-between;
   gap: 12px;
   font-size: 12px;
-  color: #909399;
+  line-height: 1.4;
+}
+.send-progress__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--phy-color-text-secondary);
+  font-weight: 600;
 }
 .send-progress__percent {
+  flex: none;
+  color: var(--phy-color-text-muted);
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  opacity: 0.72;
 }
 .send-progress__track {
   width: 100%;
-  height: 4px;
-  background: #ebeef5;
-  border-radius: 2px;
+  height: 3px;
+  background: color-mix(
+    in srgb,
+    var(--phy-color-border-subtle) 76%,
+    transparent
+  );
+  border-radius: var(--phy-radius-pill);
   overflow: hidden;
 }
 .send-progress__fill {
   height: 100%;
-  background: var(--phy-color-primary);
-  border-radius: 2px;
-  transition: width 0.3s ease-out;
+  background: linear-gradient(
+    90deg,
+    var(--phy-color-accent),
+    var(--phy-color-primary)
+  );
+  border-radius: var(--phy-radius-pill);
+  transition: width var(--phy-motion-normal) ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .send-progress__fill {
+    transition: none;
+  }
 }
 </style>
