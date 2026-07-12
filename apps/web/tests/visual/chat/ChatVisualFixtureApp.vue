@@ -21,11 +21,13 @@
         :sidebar-collapsed="fixture.sidebarCollapsed"
         :artifact-open="false"
         :artifact-fullscreen="false"
+        :main-inert="fixture.drawerOpen"
       >
         <template #sidebar>
           <PhyAdaptiveSidebar
             :collapsed="fixture.sidebarCollapsed"
             :drawer-open="fixture.drawerOpen"
+            :off-canvas="fixture.offCanvas"
             :close-label="$t('common.close')"
             @close="onFixtureAction('sidebar-close')"
             @toggle="onFixtureAction('sidebar-toggle')"
@@ -75,7 +77,7 @@
                     data-testid="chat-sidebar-trigger"
                     text
                     circle
-                    :aria-label="$t('chat.newChat')"
+                    :aria-label="$t('chat.openNavigation')"
                     @click="onFixtureAction('sidebar-trigger')"
                   >
                     <el-icon><Menu /></el-icon>
@@ -187,17 +189,23 @@
 
                   <!-- Frame fixtures: simple synthetic text rows -->
                   <template v-else>
-                    <div
+                    <ChatMessageRow
                       v-for="message in frameMessages"
                       :key="message.id"
-                      class="fixture-message-row"
-                      :class="`is-${message.role}`"
-                      data-testid="chat-message-row"
+                      :role="message.role === 'user' ? 'user' : 'assistant'"
+                      :message-id="message.id"
                     >
-                      <div class="fixture-message-content">
+                      <div
+                        :class="[
+                          'message-text',
+                          message.role === 'user'
+                            ? 'phy-bubble-user'
+                            : 'phy-bubble-assistant',
+                        ]"
+                      >
                         {{ message.content }}
                       </div>
-                    </div>
+                    </ChatMessageRow>
                   </template>
 
                   <!-- Phase 3C progress / transfer overlays (mutually exclusive) -->
@@ -538,17 +546,6 @@ onMounted(() => {
 .transcript-content {
   max-width: var(--phy-layout-transcript-max-width, 760px);
   margin: 0 auto;
-}
-
-.fixture-message-row {
-  margin-bottom: 12px;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--phy-color-fill-subtle, #f5f7fa);
-}
-
-.fixture-message-row.is-user {
-  background: var(--phy-color-brand-soft, #d6e6fe);
 }
 
 .empty-chat-mark {

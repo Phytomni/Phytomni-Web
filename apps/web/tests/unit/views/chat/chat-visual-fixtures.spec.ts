@@ -452,12 +452,17 @@ describe("Chat visual fixture source contracts", () => {
     expect(APP_SOURCE).not.toMatch(/@\/api\b/);
   });
 
-  it("keeps synthetic frame selectors isolated from production message roots", () => {
+  it("renders frame fixtures through production role rows and bubble tokens", () => {
     const scopedStyle = APP_SOURCE.split("<style scoped>")[1] ?? "";
     expect(scopedStyle).not.toMatch(/^\s*\.message(?:\.user)?\s*\{/m);
     expect(APP_SOURCE).not.toContain('class="message"');
-    expect(APP_SOURCE).toContain('class="fixture-message-row"');
-    expect(scopedStyle).toContain(".fixture-message-row.is-user");
+    expect(APP_SOURCE).toMatch(
+      /<ChatMessageRow[\s\S]*v-for="message in frameMessages"/
+    );
+    expect(APP_SOURCE).toContain("phy-bubble-user");
+    expect(APP_SOURCE).toContain("phy-bubble-assistant");
+    expect(APP_SOURCE).not.toContain('class="fixture-message-row"');
+    expect(scopedStyle).not.toContain(".fixture-message-row.is-user");
   });
 });
 

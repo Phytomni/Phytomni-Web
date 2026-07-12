@@ -222,7 +222,7 @@ describe("ChatFrameV2 — frame state matrix via 3A.8 registry", () => {
     expect(FIXTURE_APP_SOURCE).toContain('return "open"');
     expect(FIXTURE_APP_SOURCE).toContain('return "not-mobile"');
     expect(FIXTURE_APP_SOURCE).toContain('data-testid="chat-transcript"');
-    expect(FIXTURE_APP_SOURCE).toContain('data-testid="chat-message-row"');
+    expect(FIXTURE_APP_SOURCE).toContain("<ChatMessageRow");
     expect(FIXTURE_APP_SOURCE).toContain("<ChatComposer");
   });
 
