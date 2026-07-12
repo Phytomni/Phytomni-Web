@@ -220,6 +220,8 @@ export function useSendMessage(opts: {
           followUpQuestions: [],
           showFollowUpQuestions: false,
           showLog: false,
+          // Runtime-only Activity identity — reuse the captured request key.
+          streamPresentationKey: requestKey,
         };
         sendingMessages.push(placeholder);
         // Bind stream lookups to the captured state object so a post-rekey

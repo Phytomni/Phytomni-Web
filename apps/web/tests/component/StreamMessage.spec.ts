@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
+import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
 import {
   createMemoryA2uiTransport,
@@ -209,5 +210,113 @@ describe("StreamMessage", () => {
     expect(sink).toHaveLength(1);
     expect(sink[0].run_id).toBe("run-refs");
     expect(sink[0].surface_id).toBe("surf-refs");
+  });
+
+  it("groups consecutive activity blocks and keeps markdown/A2UI outside ChatActivity", () => {
+    const blocks: ContentBlock[] = [
+      { type: "markdown", authority: "web", text: "intro" },
+      { type: "tool", authority: "web", toolName: "knowledge_search" },
+      { type: "step", authority: "web", label: "retrieving" },
+      {
+        type: "agent-surface",
+        authority: "agent",
+        interactive: true,
+        surfaceId: "surf-vis",
+        widget: "confirm",
+        props: { title: "Go?", confirm_label: "Yes", cancel_label: "No" },
+      },
+      { type: "tool", authority: "web", toolName: "after" },
+      { type: "markdown", authority: "web", text: "outro" },
+    ];
+    const w = mount(StreamMessage, {
+      props: {
+        blocks,
+        streamPresentationKey: "req-act",
+        activityExpandedByMessage: {},
+        streaming: true,
+      },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+
+    const activities = w.findAllComponents(ChatActivity);
+    // Two activity groups split by agent-surface (indices 1 and 4).
+    expect(activities).toHaveLength(2);
+    expect(w.html()).toContain("intro");
+    expect(w.html()).toContain("outro");
+    // A2UI stays visible outside collapsed Activity.
+    expect(w.find(".a2ui-confirm, .agent-surface").exists()).toBe(true);
+    expect(w.text()).toContain("Go?");
+    // Default closed: tool labels not visible in collapsed groups.
+    expect(w.find(".tool-block").exists()).toBe(false);
+  });
+
+  it("missing presentation key expands activity content without a disclosure (hard stop)", () => {
+    const blocks: ContentBlock[] = [
+      { type: "tool", authority: "web", toolName: "knowledge_search" },
+      { type: "reasoning", authority: "web", text: "plan" },
+    ];
+    const w = mount(StreamMessage, {
+      props: { blocks },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+    expect(w.find("button[aria-expanded]").exists()).toBe(false);
+    expect(w.find(".tool-block").exists()).toBe(true);
+    // Reasoning inside missing-key activity still withinActivity (no nested toggle).
+    expect(w.find(".reasoning-toggle").exists()).toBe(false);
+    expect(w.find(".reasoning-body").exists()).toBe(true);
+  });
+
+  it("keeps A2UI transport/runId intact beside a collapsed Activity group", async () => {
+    const sink: A2uiActionEnvelope[] = [];
+    const transport = createMemoryA2uiTransport(sink);
+    const blocks: ContentBlock[] = [
+      { type: "tool", authority: "web", toolName: "knowledge_search" },
+      {
+        type: "agent-surface",
+        authority: "agent",
+        interactive: true,
+        surfaceId: "surf-beside",
+        widget: "confirm",
+        props: { title: "Confirm?", confirm_label: "Yes", cancel_label: "No" },
+      },
+    ];
+    const w = mount(StreamMessage, {
+      props: {
+        blocks,
+        streamPresentationKey: "req-a2ui",
+        activityExpandedByMessage: {},
+        runId: "run-beside",
+        transport,
+      },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+    expect(w.find(".tool-block").exists()).toBe(false);
+    expect(w.text()).toContain("Confirm?");
+    const buttons = w.findAll("button");
+    // Last button is the A2UI confirm (Activity toggle is first).
+    await buttons[buttons.length - 1].trigger("click");
+    await nextTick();
+    expect(sink).toHaveLength(1);
+    expect(sink[0].run_id).toBe("run-beside");
+    expect(sink[0].surface_id).toBe("surf-beside");
+  });
+
+  it("emits activity expand toggles keyed by stream:<messageKey>:activity-<startIndex>", async () => {
+    const blocks: ContentBlock[] = [
+      { type: "tool", authority: "web", toolName: "knowledge_search" },
+    ];
+    const w = mount(StreamMessage, {
+      props: {
+        blocks,
+        streamPresentationKey: "req-toggle",
+        activityExpandedByMessage: {},
+      },
+      global: { mocks: { $t: (k: string) => k } },
+    });
+    await w.find("button[aria-expanded]").trigger("click");
+    expect(w.emitted("update:activity-expanded")?.[0]).toEqual([
+      "stream:req-toggle:activity-0",
+      true,
+    ]);
   });
 });

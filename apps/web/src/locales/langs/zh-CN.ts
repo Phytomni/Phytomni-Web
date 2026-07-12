@@ -353,6 +353,14 @@ export default {
     },
     toolHits: "命中 {count} 条",
     streamInterrupted: "连接中断，请重试。",
+    activity: {
+      label: "活动",
+      count: "{count}",
+      status: {
+        running: "进行中",
+        done: "已完成",
+      },
+    },
     a2ui: {
       confirm: "确认",
       cancel: "取消",

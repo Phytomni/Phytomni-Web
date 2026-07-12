@@ -351,6 +351,14 @@ export default {
     },
     toolHits: "{count} hits",
     streamInterrupted: "Connection interrupted, please retry.",
+    activity: {
+      label: "Activity",
+      count: "{count}",
+      status: {
+        running: "In progress",
+        done: "Done",
+      },
+    },
     a2ui: {
       confirm: "Confirm",
       cancel: "Cancel",

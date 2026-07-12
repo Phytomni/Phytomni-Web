@@ -28,6 +28,7 @@ function createDefaultChatUIState(): ChatUIState {
     renderedChat: null,
     activeRequestId: "",
     generationStopped: false,
+    activityExpandedByMessage: {},
   };
 }
 

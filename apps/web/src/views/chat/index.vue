@@ -229,11 +229,20 @@
                 :is-last-message="currentChat.messages.length - 1 == index"
                 :stream-run-id="getChatState(currentChatId).a2uiRunId"
                 :stream-transport="getChatState(currentChatId).a2uiActionSender"
+                :activity-expanded-by-message="
+                  getChatState(currentChatId).activityExpandedByMessage
+                "
                 :gene-network-images="geneNetworkImages"
                 :gene-network-images-loading="geneNetworkImagesLoading"
                 :digital-design-images="digitalDesignImages"
                 :digital-design-images-loading="digitalDesignImagesLoading"
                 @finish="() => handleMarkdownFinish(index)"
+                @update:activity-expanded="
+                  (key, open) =>
+                    (getChatState(currentChatId).activityExpandedByMessage[
+                      key
+                    ] = open)
+                "
               />
 
               <!-- Shared message chrome: files, log toggle, follow-ups, actions -->

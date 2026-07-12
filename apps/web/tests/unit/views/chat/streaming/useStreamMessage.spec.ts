@@ -66,6 +66,40 @@ describe("useStreamMessage", () => {
     expect(chatState.isStreaming).toBe(false);
   });
 
+  it("preserves streamPresentationKey across stream finally cleanup", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r1"}\n\n',
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"hi"}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
+    ]);
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      streamPresentationKey: "chat-request-keep",
+    };
+    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "chat-request-keep",
+      placeholder,
+    });
+
+    expect(placeholder.streaming).toBe(false);
+    expect(chatState.streamingMessageId).toBeNull();
+    expect(placeholder.streamPresentationKey).toBe("chat-request-keep");
+    expect(placeholder.id).toBeUndefined();
+  });
+
   it("marks the placeholder errored on RunError", async () => {
     const body = sseStream([
       'event: RunError\ndata: {"type":"RunError","message":"boom"}\n\n',

@@ -48,6 +48,12 @@ export interface ChatMessage {
   server_file_path?: string; // server file path
   streaming?: boolean; // true while AG-UI stream is in flight (renderer shows cursor)
   blocks?: ContentBlock[]; // typed content blocks (streaming path); content stays for the axios path
+  /**
+   * Runtime-only UI identity for Activity disclosure while a stream placeholder
+   * has no server `id`. Stamped from the send request key; never written to
+   * FormData, reactions, Artifact eligibility, or A2UI run identity.
+   */
+  streamPresentationKey?: string;
 }
 
 // ContentBlock is one typed unit in a streaming assistant message. authority
@@ -130,6 +136,12 @@ export interface ChatUIState {
   activeRequestId: string;
   /** True after Stop aborted the dialogue's in-flight request. */
   generationStopped: boolean;
+  /**
+   * Per-message Activity disclosure map keyed by
+   * `stream:<messageKey>:activity-<startIndex>`. Owned by chatStates so A→B→A
+   * restores open/closed without leaking across dialogues.
+   */
+  activityExpandedByMessage: Record<string, boolean>;
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */

@@ -78,9 +78,30 @@ describe("useChatStates parallel chat state", () => {
       renderedChat: null,
       activeRequestId: "",
       generationStopped: false,
+      activityExpandedByMessage: {},
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
+  });
+
+  it("isolates activityExpandedByMessage per dialogue (A→B→A restoration)", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "A";
+    const stateA = s.getChatState("A");
+    stateA.activityExpandedByMessage["stream:req-a:activity-0"] = true;
+
+    s.currentChatId.value = "B";
+    const stateB = s.getChatState("B");
+    expect(stateB.activityExpandedByMessage).toEqual({});
+    stateB.activityExpandedByMessage["stream:req-b:activity-0"] = true;
+
+    s.currentChatId.value = "A";
+    expect(s.getChatState("A").activityExpandedByMessage).toEqual({
+      "stream:req-a:activity-0": true,
+    });
+    expect(s.getChatState("B").activityExpandedByMessage).toEqual({
+      "stream:req-b:activity-0": true,
+    });
   });
 
   it("isolates uploadTransfer per dialogue via proxy", () => {

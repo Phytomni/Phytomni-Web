@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { ContentBlock } from "@/views/chat/types";
 import {
+  activityDisclosureStateKey,
+  activityRegionDomId,
   buildPresentationItems,
+  resolveMessagePresentationKey,
   type PresentationItem,
 } from "@/views/chat/streaming/presentation";
 
@@ -205,3 +208,62 @@ describe("buildPresentationItems", () => {
     if (items[2].kind === "activity") expect(items[2].blocks).toHaveLength(2);
   });
 });
+
+describe("activity disclosure identity helpers", () => {
+  it("prefers non-empty server message.id over streamPresentationKey", () => {
+    expect(
+      resolveMessagePresentationKey({
+        id: "srv-42",
+        streamPresentationKey: "chat-request-1",
+      })
+    ).toBe("srv-42");
+  });
+
+  it("falls back to streamPresentationKey when id is missing or blank", () => {
+    expect(
+      resolveMessagePresentationKey({ streamPresentationKey: "chat-request-1" })
+    ).toBe("chat-request-1");
+    expect(
+      resolveMessagePresentationKey({
+        id: "  ",
+        streamPresentationKey: "chat-request-1",
+      })
+    ).toBe("chat-request-1");
+  });
+
+  it("returns null when neither key exists (missing-key contract)", () => {
+    expect(resolveMessagePresentationKey({})).toBeNull();
+    expect(resolveMessagePresentationKey({ id: "", streamPresentationKey: "" })).toBeNull();
+  });
+
+  it("composes state key as stream:<messageKey>:activity-<startIndex>", () => {
+    expect(activityDisclosureStateKey("req-1", 3)).toBe(
+      "stream:req-1:activity-3"
+    );
+  });
+
+  it("builds region id with encodeURIComponent of the state key", () => {
+    const stateKey = activityDisclosureStateKey("req/1", 0);
+    expect(activityRegionDomId(stateKey)).toBe(
+      `chat-activity-${encodeURIComponent(stateKey)}`
+    );
+  });
+
+  it("keeps the same Activity state key before and after server id arrives", () => {
+    const requestKey = "chat-request-abc";
+    const duringStream = activityDisclosureStateKey(
+      resolveMessagePresentationKey({ streamPresentationKey: requestKey })!,
+      0
+    );
+    // After completion the placeholder still carries streamPresentationKey; if a
+    // server id is later assigned, that becomes the key — until then the request
+    // key keeps disclosure state stable across stream cleanup.
+    const afterCleanup = activityDisclosureStateKey(
+      resolveMessagePresentationKey({ streamPresentationKey: requestKey })!,
+      0
+    );
+    expect(duringStream).toBe(afterCleanup);
+    expect(duringStream).toBe("stream:chat-request-abc:activity-0");
+  });
+});
+

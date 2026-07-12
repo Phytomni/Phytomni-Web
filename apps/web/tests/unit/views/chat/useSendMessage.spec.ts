@@ -727,6 +727,44 @@ describe("useSendMessage", () => {
     expect(state.isSending).toBe(false);
   });
 
+  it("stamps streaming placeholder streamPresentationKey with the request id (not message.id)", async () => {
+    vi.stubEnv("VITE_STREAM_ENABLED", "true");
+    states.get("A")!.messageInput = "stream stamp";
+    states.get("A")!.activeAgentName = "ChatAgent";
+    states.get("A")!.mode = "instant";
+
+    let capturedPlaceholder: any;
+    let capturedRequestId = "";
+    streamHarness.streamMessage.mockImplementationOnce(async (input: any) => {
+      capturedPlaceholder = input.placeholder;
+      capturedRequestId = input.requestId;
+      // Simulate stream finally clearing dialogue streaming fields.
+      const st = getChatState("A");
+      st.streamingMessageId = null;
+      st.isStreaming = false;
+      input.placeholder.streaming = false;
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(capturedRequestId).toMatch(/^chat-request-/);
+    expect(capturedPlaceholder.streamPresentationKey).toBe(capturedRequestId);
+    expect(capturedPlaceholder.id).toBeUndefined();
+    // Survives stream cleanup on the placeholder object.
+    expect(capturedPlaceholder.streamPresentationKey).toBe(capturedRequestId);
+    // Not written into FormData / reactions / artifact identity surfaces.
+    const call = streamHarness.streamMessage.mock.calls[0][0];
+    const fd = call.formData as FormData;
+    expect(fd.get("streamPresentationKey")).toBeNull();
+    expect(fd.has("stream_presentation_key")).toBe(false);
+    const assistant = getChatState("A").renderedChat!.messages.find(
+      (m: any) => m.role === "assistant"
+    );
+    expect(assistant.streamPresentationKey).toBe(capturedRequestId);
+    expect(assistant.id).toBeUndefined();
+  });
+
   it("Stop then late 200 does not append a second assistant row; peer dialogue stays sending", async () => {
     states.get("A")!.messageInput = "from-A";
     states.get("B")!.messageInput = "from-B";

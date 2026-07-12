@@ -25,6 +25,11 @@
       :ns="message.doc_list?.length ? 'm' + index : undefined"
       :run-id="streamRunId"
       :transport="streamTransport"
+      :message-id="message.id"
+      :stream-presentation-key="message.streamPresentationKey"
+      :activity-expanded-by-message="activityExpandedByMessage"
+      :streaming="!!message.streaming"
+      @update:activity-expanded="onActivityExpanded"
     />
     <!-- GeneNetworkAgent image display -->
     <div
@@ -179,6 +184,7 @@ defineProps<{
   isLastMessage: boolean;
   streamRunId?: string;
   streamTransport?: A2uiActionTransport | null;
+  activityExpandedByMessage?: Record<string, boolean>;
   geneNetworkImages: Record<string, string[]>;
   geneNetworkImagesLoading: Record<string, boolean>;
   digitalDesignImages: Record<string, string[]>;
@@ -187,7 +193,12 @@ defineProps<{
 
 const emit = defineEmits<{
   finish: [];
+  "update:activity-expanded": [stateKey: string, expanded: boolean];
 }>();
+
+const onActivityExpanded = (stateKey: string, expanded: boolean) => {
+  emit("update:activity-expanded", stateKey, expanded);
+};
 </script>
 
 <style scoped lang="scss">

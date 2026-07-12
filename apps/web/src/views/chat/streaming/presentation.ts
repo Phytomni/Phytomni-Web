@@ -68,3 +68,33 @@ export function buildPresentationItems(blocks: ContentBlock[]): PresentationItem
 
   return items;
 }
+
+/** Runtime UI identity for Activity disclosure — never a protocol/server id invent. */
+export function resolveMessagePresentationKey(message: {
+  id?: string;
+  streamPresentationKey?: string;
+}): string | null {
+  if (message.id != null && String(message.id).trim() !== "") {
+    return String(message.id);
+  }
+  if (
+    message.streamPresentationKey != null &&
+    message.streamPresentationKey.trim() !== ""
+  ) {
+    return message.streamPresentationKey;
+  }
+  return null;
+}
+
+/** Compose Activity map key: stream:<messageKey>:activity-<startIndex>. */
+export function activityDisclosureStateKey(
+  messageKey: string,
+  startIndex: number
+): string {
+  return `stream:${messageKey}:activity-${startIndex}`;
+}
+
+/** DOM id for the controlled Activity region (aria-controls target). */
+export function activityRegionDomId(stateKey: string): string {
+  return `chat-activity-${encodeURIComponent(stateKey)}`;
+}
