@@ -282,10 +282,13 @@ defineExpose<ChatComposerHandle>({
   display: none !important;
 }
 
-.chat-composer-body :deep(.el-textarea__inner) {
+.chat-composer .chat-composer-body :deep(.el-textarea__inner) {
   min-height: 40px;
   margin-bottom: 0 !important;
   padding: var(--phy-space-8) var(--phy-space-4);
+  background-color: transparent !important;
+  color: var(--phy-color-text);
+  box-shadow: none;
   line-height: 1.5;
 }
 

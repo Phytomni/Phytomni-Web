@@ -142,6 +142,9 @@ describe("ChatFrameV2 — compact Composer surface", () => {
     expect(CHAT_COMPOSER_SOURCE).toContain(
       "var(--phy-layout-transcript-max-width)"
     );
+    expect(CHAT_COMPOSER_SOURCE).toMatch(
+      /\.chat-composer\s+\.chat-composer-body\s+:deep\(\.el-textarea__inner\)\s*\{[\s\S]*?background-color:\s*transparent\s*!important;[\s\S]*?color:\s*var\(--phy-color-text\)/
+    );
   });
 
   it("keeps mode, picker, and actions in a stable order", () => {
