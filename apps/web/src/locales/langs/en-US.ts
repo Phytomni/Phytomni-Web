@@ -12,6 +12,7 @@ export default {
     noData: "No Data",
     save: "Save",
     reset: "Reset",
+    retry: "Retry",
     back: "Back",
     close: "Close",
     view: "View",
@@ -665,6 +666,8 @@ export default {
       downloadPDF: "Download PDF",
       downloadMD: "Download Markdown",
       imageViewerTitle: "Image Viewer",
+      references: "References",
+      noReferences: "No references available.",
     },
     geneNetwork: {
       title: "Gene Network Agent",

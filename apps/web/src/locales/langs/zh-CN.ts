@@ -18,6 +18,7 @@ export default {
     noData: "暂无数据",
     save: "保存",
     reset: "重置",
+    retry: "重试",
     back: "返回",
     close: "关闭",
     view: "查看",
@@ -646,6 +647,8 @@ export default {
       downloadPDF: "下载 PDF",
       downloadMD: "下载 Markdown",
       imageViewerTitle: "图片查看",
+      references: "参考文献",
+      noReferences: "暂无参考文献。",
     },
     geneNetwork: {
       title: "基因网络智能体",
