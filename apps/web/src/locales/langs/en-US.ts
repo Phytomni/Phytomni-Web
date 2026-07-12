@@ -424,6 +424,10 @@ export default {
       deleteWarning:
         "Are you sure you want to delete this conversation? This action cannot be undone.",
       enterNewTitle: "Please enter a new title",
+      like: "Like",
+      undoLike: "Undo like",
+      dislike: "Dislike",
+      undoDislike: "Undo dislike",
     },
     favorites: "Favorites",
     noFavorites: "No Favorites",

@@ -1,13 +1,17 @@
 <template>
   <div class="follow-up-questions">
     <h4>{{ $t("chat.followUpQuestions") }}</h4>
-    <div
-      v-for="(question, qIndex) in questions"
-      :key="qIndex"
-      class="question-item"
-      @click="handleQuestionClick(question)"
-    >
-      {{ qIndex + 1 }}. {{ question }}
+    <div class="follow-up-list">
+      <button
+        v-for="(question, qIndex) in questions"
+        :key="qIndex"
+        type="button"
+        class="question-item"
+        data-testid="follow-up-suggestion"
+        @click="handleQuestionClick(question)"
+      >
+        {{ qIndex + 1 }}. {{ question }}
+      </button>
     </div>
   </div>
 </template>
@@ -31,65 +35,47 @@ const handleQuestionClick = (question: string) => {
 
 <style lang="scss" scoped>
 .follow-up-questions {
-  margin-top: 12px;
-  padding: 12px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  border-left: 3px solid var(--el-color-primary);
+  margin-top: var(--phy-space-12, 12px);
 
   h4 {
-    margin: 0 0 8px 0;
+    margin: 0 0 var(--phy-space-8, 8px) 0;
     font-size: 14px;
     font-weight: 600;
-    color: #333;
+    color: var(--phy-color-text);
+  }
+}
+
+.follow-up-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--phy-space-8, 8px);
+}
+
+.question-item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  padding: var(--phy-space-8, 8px) var(--phy-space-12, 12px);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm, 6px);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--phy-color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    color: var(--phy-color-action-text);
+    border-color: var(--phy-color-action-text);
+    background: var(--phy-color-primary-soft);
   }
 
-  .question-item {
-    margin-bottom: 6px;
-    padding: 8px 12px;
-    background-color: #fff;
-    border-radius: 6px;
-    font-size: 13px;
-    color: #555;
-    border: 1px solid #e6e6e6;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    position: relative;
-    user-select: none;
-
-    &:hover {
-      background-color: #e6f7ff;
-      border-color: var(--el-color-primary);
-      color: var(--el-color-primary);
-      transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
-    }
-
-    &:active {
-      transform: translateY(0);
-      box-shadow: 0 1px 4px rgba(24, 144, 255, 0.2);
-    }
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-
-    // Add a click hint
-    &::after {
-      content: "";
-      position: absolute;
-      right: 8px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 11px;
-      color: #999;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-
-    &:hover::after {
-      opacity: 1;
-    }
+  &:focus-visible {
+    outline: 2px solid var(--phy-color-focus);
+    outline-offset: 2px;
   }
 }
 </style>

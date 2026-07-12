@@ -73,13 +73,17 @@ export function useReactions(opts: {
     });
   };
 
-  // get the reaction tooltip
+  // Locale-reactive labels; reaction values/API unchanged.
   const getReactionTooltip = (messageId: string, reactionType: number) => {
     const currentReaction = getReactionState(messageId);
     if (reactionType === 1) {
-      return currentReaction === 1 ? "Undo like" : "Like";
+      return currentReaction === 1
+        ? String(i18n.global.t("chat.actions.undoLike"))
+        : String(i18n.global.t("chat.actions.like"));
     } else if (reactionType === 2) {
-      return currentReaction === 2 ? "Undo dislike" : "Dislike";
+      return currentReaction === 2
+        ? String(i18n.global.t("chat.actions.undoDislike"))
+        : String(i18n.global.t("chat.actions.dislike"));
     }
     return "";
   };

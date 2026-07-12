@@ -143,6 +143,7 @@
                   <div class="log-view-left">
                     <h4>{{ $t("chat.log.replyContent") }}</h4>
                     <MarkdownViewer
+                      surface="chat"
                       :instantMessage="
                         (message?.instantMessage &&
                           currentChat.messages.length - 1 == index) ||
@@ -235,99 +236,55 @@
                 @finish="() => handleMarkdownFinish(index)"
               />
 
-              <!-- Bubble-branch chrome (visibility unchanged) -->
-              <template
+              <!-- Shared message chrome: files, log toggle, follow-ups, actions -->
+              <div
                 v-if="
-                  message.role === 'user' ||
-                  (!message.steps && !message.tableHeaders)
+                  message.role === 'user' &&
+                  message.attachedFiles &&
+                  message.attachedFiles.length > 0
                 "
+                class="message-files"
               >
-                <!-- File list display for user messages -->
-                <div
-                  v-if="
-                    message.role === 'user' &&
-                    message.attachedFiles &&
-                    message.attachedFiles.length > 0
-                  "
-                  class="message-files"
-                >
-                  <div class="files-list">
-                    <div
-                      v-for="(file, fileIndex) in message.attachedFiles"
-                      :key="fileIndex"
-                      class="file-item-display"
-                    >
-                      <FilesCard
-                        :uid="fileIndex"
-                        :name="file.name"
-                        :file-size="file.size"
-                        :show-del-icon="false"
-                      />
-                    </div>
+                <div class="files-list">
+                  <div
+                    v-for="(file, fileIndex) in message.attachedFiles"
+                    :key="fileIndex"
+                    class="file-item-display"
+                  >
+                    <FilesCard
+                      :uid="fileIndex"
+                      :name="file.name"
+                      :file-size="file.size"
+                      :show-del-icon="false"
+                    />
                   </div>
                 </div>
+              </div>
+
+              <!-- Log button - only shown for the AnalystAgent type -->
+              <div
+                v-if="
+                  message.role === 'assistant' &&
+                  message.tool_name === 'AnalystAgent'
+                "
+                class="log-button-container"
+              >
                 <el-button
-                  @click="() => downloadFile(message?.upload_path)"
-                  v-if="
-                    message?.status &&
-                    message?.status == 'SUCCEEDED' &&
-                    message?.upload_path &&
-                    message?.upload_path !== ''
-                  "
                   type="primary"
+                  size="small"
+                  @click="toggleLogView(message.id)"
+                  :class="{ active: message.showLog }"
                 >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
+                  <el-icon>
+                    <Document />
                   </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadURL")
-                  }}</span>
+                  {{
+                    message.showLog ? $t("chat.hideLog") : $t("chat.showLog")
+                  }}
                 </el-button>
+              </div>
 
-                <!-- Download button based on download_path -->
-                <el-button
-                  @click="() => downloadFile(message?.download_path)"
-                  v-if="
-                    message?.download_path &&
-                    message?.download_path !== '' &&
-                    message?.tool_name !== 'GeneNetworkAgent' &&
-                    message?.tool_name !== 'DigitalDesignAgent'
-                  "
-                  type="primary"
-                  style="margin-left: 8px"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadFile")
-                  }}</span>
-                </el-button>
-
-                <!-- Log button - only shown for the AnalystAgent type -->
-                <div
-                  v-if="
-                    message.role === 'assistant' &&
-                    message.tool_name === 'AnalystAgent'
-                  "
-                  class="log-button-container"
-                >
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click="toggleLogView(message.id)"
-                    :class="{ active: message.showLog }"
-                  >
-                    <el-icon>
-                      <Document />
-                    </el-icon>
-                    {{
-                      message.showLog ? $t("chat.hideLog") : $t("chat.showLog")
-                    }}
-                  </el-button>
-                </div>
-
-                <!-- Follow-up questions display -->
+              <template #follow-up>
                 <FollowUpQuestions
                   v-if="
                     message.role === 'assistant' &&
@@ -339,492 +296,46 @@
                   :questions="message.followUpQuestions"
                   @question-click="handleFollowUpQuestionClick"
                 />
+              </template>
 
-                <div v-if="message.role === 'user'" class="message-user">
-                  <div
-                    class="message-fotter"
-                    v-if="copyVisible == 0 || copyVisible !== index + 1"
-                  >
-                    <el-tooltip
-                      effect="dark"
-                      :content="$t('chat.copy')"
-                      placement="top-start"
-                    >
-                      <div class="message-fotter-item">
-                        <el-icon
-                          @click="
-                            () => {
-                              fallbackCopyText(message.content, index + 1);
-                            }
-                          "
-                        >
-                          <CopyDocument />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                  </div>
-                  <div
-                    class="message-fotter"
-                    v-else-if="copyVisible == index + 1"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon>
-                        <SuccessFilled />
-                      </el-icon>
-                    </div>
-                  </div>
-                </div>
-                <div v-else>
-                  <div class="message-fotter">
-                    <el-tooltip
-                      effect="dark"
-                      :content="$t('chat.copy')"
-                      placement="top-start"
-                      v-if="copyVisible == 0 || copyVisible !== index + 1"
-                    >
-                      <div class="message-fotter-item">
-                        <el-icon
-                          @click="() => copyMessageWithDocs(message, index)"
-                        >
-                          <CopyDocument />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                    <div
-                      class="message-fotter-item"
-                      v-else-if="copyVisible == index + 1"
-                    >
-                      <el-icon>
-                        <SuccessFilled />
-                      </el-icon>
-                    </div>
-                    <el-tooltip
-                      effect="dark"
-                      :content="$t('chat.refreshReply')"
-                      placement="top-start"
-                    >
-                      <div class="message-fotter-item">
-                        <el-icon
-                          @click="() => refreshMessage(index)"
-                          :class="{
-                            'is-loading':
-                              refreshingMessages[
-                                `${index}_${message.id || ''}`
-                              ] || isSending,
-                          }"
-                        >
-                          <Refresh />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-
-                    <!-- Upvote / downvote buttons -->
-                    <div
-                      v-if="message.role === 'assistant' && message.id"
-                      class="reaction-buttons"
-                    >
-                      <el-tooltip
-                        effect="dark"
-                        :content="getReactionTooltip(message.id, 1)"
-                        placement="top"
-                      >
-                        <div
-                          class="message-fotter-item reaction-btn"
-                          :class="{
-                            active: getReactionState(message.id) === 1,
-                          }"
-                          @click="handleReaction(message.id, 1)"
-                        >
-                          <el-icon>
-                            <SuccessFilled
-                              v-if="getReactionState(message.id) === 1"
-                            />
-                            <CircleCheck v-else />
-                          </el-icon>
-                        </div>
-                      </el-tooltip>
-                      <el-tooltip
-                        effect="dark"
-                        :content="getReactionTooltip(message.id, 2)"
-                        placement="top"
-                      >
-                        <div
-                          class="message-fotter-item reaction-btn"
-                          :class="{
-                            active: getReactionState(message.id) === 2,
-                          }"
-                          @click="handleReaction(message.id, 2)"
-                        >
-                          <el-icon>
-                            <CircleCloseFilled
-                              v-if="getReactionState(message.id) === 2"
-                            />
-                            <CircleClose v-else />
-                          </el-icon>
-                        </div>
-                      </el-tooltip>
-                    </div>
-
-                    <el-dropdown
-                      v-if="downloadWhiteList.includes(message.tool_name)"
-                      placement="top-start"
-                      trigger="click"
-                      @command="(v) => getFileDownUrl(message.id, v)"
-                    >
-                      <div class="message-fotter-item">
-                        <el-icon style="vertical-align: middle">
-                          <Download />
-                        </el-icon>
-                      </div>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item
-                            v-for="(item, index) in message?.tool_name ==
-                            'DataAgent'
-                              ? ['PDF', 'Markdown', 'Xlsx']
-                              : ['PDF', 'Markdown', 'Word']"
-                            :key="index"
-                            :command="item"
-                            >{{ item }}</el-dropdown-item
-                          >
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </div>
-                </div>
-                <div v-if="message.role === 'assistant'" class="tip-text">
+              <template #actions>
+                <ChatMessageActions
+                  :role="message.role === 'user' ? 'user' : 'assistant'"
+                  :copied="copyVisible === index + 1"
+                  :can-refresh="message.role !== 'user'"
+                  :refresh-busy="
+                    !!refreshingMessages[`${index}_${message.id || ''}`] ||
+                    (!message.steps && isSending)
+                  "
+                  :can-react="message.role === 'assistant' && !!message.id"
+                  :reaction-active="
+                    message.id ? getReactionState(message.id) : 0
+                  "
+                  :like-label="
+                    message.id ? getReactionTooltip(message.id, 1) : ''
+                  "
+                  :dislike-label="
+                    message.id ? getReactionTooltip(message.id, 2) : ''
+                  "
+                  :direct-downloads="getDirectDownloads(message)"
+                  :generated-formats="getGeneratedFormats(message.tool_name)"
+                  @copy="handleMessageCopy(message, index)"
+                  @refresh="() => refreshMessage(index)"
+                  @reaction="(type) => handleReaction(message.id, type)"
+                  @direct-download="(path) => downloadFile(path)"
+                  @download-format="(format) => getFileDownUrl(message.id, format)"
+                />
+                <div
+                  v-if="
+                    message.role === 'assistant' &&
+                    !message.steps &&
+                    !message.tableHeaders
+                  "
+                  class="tip-text"
+                >
                   {{ $t("common.Tip") }}
                 </div>
               </template>
-
-              <!-- Table-branch chrome (visibility unchanged) -->
-              <template v-else-if="message.tableHeaders">
-
-                <el-button
-                  @click="() => downloadFile(message?.upload_path)"
-                  v-if="
-                    message?.status &&
-                    message?.status == 'SUCCEEDED' &&
-                    message?.upload_path &&
-                    message?.upload_path !== ''
-                  "
-                  type="primary"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadURL")
-                  }}</span>
-                </el-button>
-
-                <!-- Download button based on download_path -->
-                <el-button
-                  @click="() => downloadFile(message?.download_path)"
-                  v-if="
-                    message?.download_path &&
-                    message?.download_path !== '' &&
-                    message?.tool_name !== 'GeneNetworkAgent' &&
-                    message?.tool_name !== 'DigitalDesignAgent'
-                  "
-                  type="primary"
-                  style="margin-left: 8px"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadFile")
-                  }}</span>
-                </el-button>
-
-                <!-- Follow-up questions display -->
-                <FollowUpQuestions
-                  v-if="
-                    message.followUpQuestions &&
-                    message.followUpQuestions.length > 0 &&
-                    message.showFollowUpQuestions &&
-                    index == currentChat.messages.length - 1
-                  "
-                  :questions="message.followUpQuestions"
-                  @question-click="handleFollowUpQuestionClick"
-                />
-                <div class="message-fotter">
-                  <el-tooltip
-                    effect="dark"
-                    :content="$t('chat.copy')"
-                    placement="top-start"
-                    v-if="copyVisible == 0 || copyVisible !== index + 1"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon
-                        @click="fallbackCopyText(message.original, index + 1)"
-                      >
-                        <CopyDocument />
-                      </el-icon>
-                    </div>
-                  </el-tooltip>
-                  <div
-                    class="message-fotter-item"
-                    v-else-if="copyVisible == index + 1"
-                  >
-                    <el-icon>
-                      <SuccessFilled />
-                    </el-icon>
-                  </div>
-                  <el-tooltip
-                    effect="dark"
-                    :content="$t('chat.refreshReply')"
-                    placement="top-start"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon
-                        @click="() => refreshMessage(index)"
-                        :class="{
-                          'is-loading':
-                            refreshingMessages[
-                              `${index}_${message.id || ''}`
-                            ] || isSending,
-                        }"
-                      >
-                        <Refresh />
-                      </el-icon>
-                    </div>
-                  </el-tooltip>
-
-                  <!-- Upvote / downvote buttons -->
-                  <div
-                    v-if="message.role === 'assistant' && message.id"
-                    class="reaction-buttons"
-                  >
-                    <el-tooltip
-                      effect="dark"
-                      :content="getReactionTooltip(message.id, 1)"
-                      placement="top"
-                    >
-                      <div
-                        class="message-fotter-item reaction-btn"
-                        :class="{ active: getReactionState(message.id) === 1 }"
-                        @click="handleReaction(message.id, 1)"
-                      >
-                        <el-icon>
-                          <SuccessFilled
-                            v-if="getReactionState(message.id) === 1"
-                          />
-                          <CircleCheck v-else />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                    <el-tooltip
-                      effect="dark"
-                      :content="getReactionTooltip(message.id, 2)"
-                      placement="top"
-                    >
-                      <div
-                        class="message-fotter-item reaction-btn"
-                        :class="{ active: getReactionState(message.id) === 2 }"
-                        @click="handleReaction(message.id, 2)"
-                      >
-                        <el-icon>
-                          <CircleCloseFilled
-                            v-if="getReactionState(message.id) === 2"
-                          />
-                          <CircleClose v-else />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                  </div>
-
-                  <el-dropdown
-                    v-if="downloadWhiteList.includes(message.tool_name)"
-                    placement="top-start"
-                    trigger="click"
-                    @command="(v) => getFileDownUrl(message.id, v)"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon style="vertical-align: middle">
-                        <Download />
-                      </el-icon>
-                    </div>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item
-                          v-for="(item, index) in message?.tool_name ==
-                          'DataAgent'
-                            ? ['PDF', 'Markdown', 'Xlsx']
-                            : ['PDF', 'Markdown', 'Word']"
-                          :key="index"
-                          :command="item"
-                          >{{ item }}</el-dropdown-item
-                        >
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                </div>
-                            </template>
-
-              <!-- Legacy-steps-branch chrome (visibility unchanged) -->
-              <template v-else>
-                <el-button
-                  @click="() => downloadFile(message?.upload_path)"
-                  v-if="
-                    message?.status &&
-                    message?.status == 'SUCCEEDED' &&
-                    message?.upload_path &&
-                    message?.upload_path !== ''
-                  "
-                  type="primary"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadURL")
-                  }}</span>
-                </el-button>
-
-                <!-- Download button based on download_path -->
-                <el-button
-                  @click="() => downloadFile(message?.download_path)"
-                  v-if="
-                    message?.download_path &&
-                    message?.download_path !== '' &&
-                    message?.tool_name !== 'GeneNetworkAgent' &&
-                    message?.tool_name !== 'DigitalDesignAgent'
-                  "
-                  type="primary"
-                  style="margin-left: 8px"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadFile")
-                  }}</span>
-                </el-button>
-
-                <!-- Follow-up questions display -->
-                <FollowUpQuestions
-                  v-if="
-                    message.followUpQuestions &&
-                    message.followUpQuestions.length > 0 &&
-                    message.showFollowUpQuestions &&
-                    index == currentChat.messages.length - 1
-                  "
-                  :questions="message.followUpQuestions"
-                  @question-click="handleFollowUpQuestionClick"
-                />
-                <div class="message-fotter">
-                  <el-tooltip
-                    effect="dark"
-                    :content="$t('chat.copy')"
-                    placement="top-start"
-                    v-if="copyVisible == 0 || copyVisible !== index + 1"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon
-                        @click="() => copyMessageWithDocs(message, index)"
-                      >
-                        <CopyDocument />
-                      </el-icon>
-                    </div>
-                  </el-tooltip>
-                  <div
-                    class="message-fotter-item"
-                    v-else-if="copyVisible == index + 1"
-                  >
-                    <el-icon>
-                      <SuccessFilled />
-                    </el-icon>
-                  </div>
-                  <el-tooltip
-                    effect="dark"
-                    :content="$t('chat.refreshReply')"
-                    placement="top-start"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon
-                        @click="() => refreshMessage(index)"
-                        :class="{
-                          'is-loading':
-                            refreshingMessages[`${index}_${message.id || ''}`],
-                        }"
-                      >
-                        <Refresh />
-                      </el-icon>
-                    </div>
-                  </el-tooltip>
-
-                  <!-- Upvote / downvote buttons -->
-                  <div
-                    v-if="message.role === 'assistant' && message.id"
-                    class="reaction-buttons"
-                  >
-                    <el-tooltip
-                      effect="dark"
-                      :content="getReactionTooltip(message.id, 1)"
-                      placement="top"
-                    >
-                      <div
-                        class="message-fotter-item reaction-btn"
-                        :class="{ active: getReactionState(message.id) === 1 }"
-                        @click="handleReaction(message.id, 1)"
-                      >
-                        <el-icon>
-                          <SuccessFilled
-                            v-if="getReactionState(message.id) === 1"
-                          />
-                          <CircleCheck v-else />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                    <el-tooltip
-                      effect="dark"
-                      :content="getReactionTooltip(message.id, 2)"
-                      placement="top"
-                    >
-                      <div
-                        class="message-fotter-item reaction-btn"
-                        :class="{ active: getReactionState(message.id) === 2 }"
-                        @click="handleReaction(message.id, 2)"
-                      >
-                        <el-icon>
-                          <CircleCloseFilled
-                            v-if="getReactionState(message.id) === 2"
-                          />
-                          <CircleClose v-else />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                  </div>
-
-                  <el-dropdown
-                    v-if="downloadWhiteList.includes(message.tool_name)"
-                    placement="top-start"
-                    trigger="click"
-                    @command="(v) => getFileDownUrl(message.id, v)"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon style="vertical-align: middle">
-                        <Download />
-                      </el-icon>
-                    </div>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item
-                          v-for="(item, index) in message?.tool_name ==
-                          'DataAgent'
-                            ? ['PDF', 'Markdown', 'Xlsx']
-                            : ['PDF', 'Markdown', 'Word']"
-                          :key="index"
-                          :command="item"
-                          >{{ item }}</el-dropdown-item
-                        >
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                </div>
-                            </template>
 
           </ChatMessageRow>
         </template>
@@ -944,21 +455,17 @@ import SendProgress from "./components/SendProgress.vue";
 import ChatComposer from "./components/ChatComposer.vue";
 import ChatMessageRow from "./components/ChatMessageRow.vue";
 import ChatMessageContent from "./components/ChatMessageContent.vue";
+import ChatMessageActions from "./components/ChatMessageActions.vue";
+import type { DirectDownloadItem } from "./components/ChatMessageActions.vue";
 import {
   PhyAdaptiveShell,
   PhyEmptyState,
 } from "@/components/shell";
 import {
   Document,
-  CopyDocument,
-  SuccessFilled,
-  Download,
   Menu,
   Loading,
   Refresh,
-  CircleCheck,
-  CircleClose,
-  CircleCloseFilled,
 } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
@@ -1705,7 +1212,7 @@ const setTourInputTarget = (el: HTMLElement | null) => {
 
 // Copy message content + cited document list (extracted from an inline @click to work around a
 // vue-tsc 0.39.5 bug where it mis-maps a local const declared inside a multi-statement template
-// arrow function onto the component instance — see the 2 @click usages in index.vue)
+// arrow function onto the component instance — see the @copy handler wiring below)
 const copyMessageWithDocs = (message: any, index: number) => {
   const docs =
     message.doc_list && message.doc_list.length > 0
@@ -1723,6 +1230,45 @@ const copyMessageWithDocs = (message: any, index: number) => {
   const text =
     message.content + (docs && docs !== "" ? "\nReferences:\n" : "") + docs;
   fallbackCopyText(text, index + 1);
+};
+
+const handleMessageCopy = (message: any, index: number) => {
+  if (message.role === "user") {
+    fallbackCopyText(message.content, index + 1);
+    return;
+  }
+  if (message.tableHeaders) {
+    fallbackCopyText(message.original, index + 1);
+    return;
+  }
+  copyMessageWithDocs(message, index);
+};
+
+const getDirectDownloads = (message: any): DirectDownloadItem[] => {
+  const items: DirectDownloadItem[] = [];
+  if (
+    message?.status === "SUCCEEDED" &&
+    message?.upload_path &&
+    message.upload_path !== ""
+  ) {
+    items.push({ kind: "upload", path: message.upload_path });
+  }
+  if (
+    message?.download_path &&
+    message.download_path !== "" &&
+    message?.tool_name !== "GeneNetworkAgent" &&
+    message?.tool_name !== "DigitalDesignAgent"
+  ) {
+    items.push({ kind: "file", path: message.download_path });
+  }
+  return items;
+};
+
+const getGeneratedFormats = (toolName?: string): string[] => {
+  if (!toolName || !downloadWhiteList.includes(toolName)) return [];
+  return toolName === "DataAgent"
+    ? ["PDF", "Markdown", "Xlsx"]
+    : ["PDF", "Markdown", "Word"];
 };
 </script>
 
@@ -1844,13 +1390,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
 .message {
   // Row owns bubble alignment/surface; Content owns overflow + gene image chrome.
   :deep(.message-content) {
-    // Content extraction keeps footers as siblings of ChatMessageContent's
-    // .message-text; hover the row content shell so user copy actions still appear.
-    .message-text:hover .message-user,
-    &:hover .message-user {
-      display: block !important;
-    }
-
     .ai-response {
       border-radius: 16px;
       padding: 16px;
@@ -1992,39 +1531,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
   background-color: var(--phy-color-bg-page);
 }
 
+/* Action hover chrome lives on ChatMessageActions + ChatMessageRow.
+   Keep this empty selector as the stable CSS section boundary that frame
+   layout contract tests use after `.input-container`. */
 .message-user {
-  position: absolute;
-  bottom: 0px;
-  right: 1px;
-  display: none;
-}
-
-.message-fotter {
-  width: 100%;
-  height: auto;
-  display: flex;
-  gap: 10px;
-  flex-direction: row;
-  justify-content: flex-end;
-  align-items: center;
-  margin-top: 5px;
-
-  &-item {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 22px;
-    height: 22px;
-    padding: 2px;
-    box-sizing: border-box;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  &-item:hover {
-    color: var(--el-color-primary);
-    background: #e8e6e6;
-  }
 }
 
 // Loading animation

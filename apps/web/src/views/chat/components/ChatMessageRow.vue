@@ -120,6 +120,13 @@ const ariaLabel = computed(() =>
   }
 }
 
+@media (hover: hover) {
+  .message-content:hover,
+  .message-content:focus-within {
+    --message-footer-opacity: 1;
+  }
+}
+
 @media (max-width: 768px) {
   .message.user :deep(.message-text.phy-bubble-user),
   .message.assistant :deep(.message-text.phy-bubble-assistant) {
