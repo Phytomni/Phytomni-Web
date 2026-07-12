@@ -428,6 +428,12 @@ describe("Chat visual fixture source contracts", () => {
     expect(APP_SOURCE).toContain("buildHarnessMessages");
   });
 
+  it("mirrors the production DeepGenome wide-row predicate in both content paths", () => {
+    const wideBinding =
+      /:wide="\s*message\.role === ['"]assistant['"]\s*&&\s*message\.tool_name === ['"]DeepGenomeAgent['"]\s*"/g;
+    expect(APP_SOURCE.match(wideBinding)).toHaveLength(2);
+  });
+
   it("Phase 3C harness mounts Activity/log/progress/transfer from shared fixtures", () => {
     expect(APP_SOURCE).toContain("isPhase3CFixtureKey");
     expect(APP_SOURCE).toContain("getPhase3COverlay");

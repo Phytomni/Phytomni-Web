@@ -1,20 +1,19 @@
 <template>
-  <el-container style="height: 100vh; background: #fff; overflow: hidden">
+  <el-container
+    class="deep-genome-viewer"
+    :class="{ 'deep-genome-viewer--embedded': embedded }"
+    data-testid="deep-genome-viewer"
+  >
     <!-- Sidebar navigation -->
-    <el-aside
-      width="400px"
-      style="
-        background-color: #f5f6f7 !important;
-        padding: 20px 10px;
-        overflow-y: auto;
-      "
-    >
-      <h3 style="color: #000">{{ $t("help.tableOfContents") }}</h3>
+    <el-aside class="deep-genome-toc" data-testid="deep-genome-toc">
+      <h3 class="deep-genome-toc-title">
+        {{ $t("help.tableOfContents") }}
+      </h3>
       <el-menu
         :default-active="activeHeadingId"
         @select="handleNavSelect"
         :unique-opened="true"
-        style="background-color: #fff !important; border-radius: 8px"
+        class="deep-genome-toc-menu"
       >
         <!-- Hierarchical TOC rendering -->
         <template v-for="item in nestedHeadings" :key="item.id">
@@ -94,19 +93,13 @@
     </el-aside>
 
     <!-- Main content area -->
-    <el-main style="padding: 20px; overflow-y: auto" ref="mainContentRef">
+    <el-main
+      ref="mainContentRef"
+      class="deep-genome-main"
+      data-testid="deep-genome-main"
+    >
       <!-- Download button group -->
-      <div
-        style="
-          position: sticky;
-          top: 0;
-          padding: 10px 0;
-          z-index: 1000;
-          display: flex;
-          justify-content: flex-end;
-          gap: 10px;
-        "
-      >
+      <div class="deep-genome-toolbar" data-testid="deep-genome-toolbar">
         <el-button type="primary" @click="downloadPDF">
           <i class="el-icon-document"></i>
           {{ $t("agents.deepGenome.downloadPDF") }}
@@ -258,6 +251,10 @@ const props = defineProps({
   ns: {
     type: String,
     default: "",
+  },
+  embedded: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -444,6 +441,107 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.deep-genome-viewer {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--phy-color-text);
+  background: var(--phy-color-bg-page);
+}
+
+.deep-genome-viewer--embedded {
+  height: min(70dvh, 720px);
+  max-height: 720px;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
+}
+
+.deep-genome-toc {
+  box-sizing: border-box;
+  width: 232px !important;
+  min-width: 0;
+  flex: 0 0 232px;
+  padding: var(--phy-space-16) var(--phy-space-8);
+  overflow-y: auto !important;
+  border-right: 1px solid var(--phy-color-border-subtle);
+  background: var(--phy-color-bg-sidebar);
+}
+
+.deep-genome-toc-title {
+  margin: 0 0 var(--phy-space-12);
+  color: var(--phy-color-text);
+  font-size: 16px;
+}
+
+.deep-genome-toc-menu {
+  max-width: 100%;
+  overflow: hidden;
+  border: none !important;
+  border-radius: var(--phy-radius-sm);
+  background: transparent !important;
+}
+
+.deep-genome-main {
+  position: relative;
+  box-sizing: border-box;
+  width: 0;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: var(--phy-space-16);
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  background: var(--phy-color-bg-elevated);
+}
+
+.deep-genome-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--phy-z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--phy-space-8);
+  padding: var(--phy-space-8) 0;
+  overflow: visible;
+  background: var(--phy-color-bg-elevated);
+}
+
+.deep-genome-toolbar :deep(.el-button) {
+  max-width: 100%;
+  margin-left: 0;
+}
+
+@media (max-width: 700px) {
+  .deep-genome-viewer {
+    flex-direction: column;
+  }
+
+  .deep-genome-toc {
+    width: 100% !important;
+    max-height: 168px;
+    flex: 0 0 auto;
+    padding: var(--phy-space-12) var(--phy-space-8);
+    border-right: 0;
+    border-bottom: 1px solid var(--phy-color-border-subtle);
+  }
+
+  .deep-genome-main {
+    width: 100%;
+    flex: 1 1 auto;
+    padding: var(--phy-space-12);
+  }
+
+  .deep-genome-toolbar {
+    justify-content: flex-start;
+  }
+}
+
 .mb-20 {
   margin-bottom: 20px;
 }
@@ -717,32 +815,6 @@ h3 {
   position: fixed !important;
   top: auto !important;
   left: auto !important;
-}
-
-/* ensure the main content area doesn't affect dropdown display */
-.el-main {
-  overflow: visible !important;
-  position: relative;
-}
-
-/* ensure the sticky button container doesn't affect the dropdown */
-[style*="position: sticky"] {
-  overflow: visible !important;
-  position: sticky;
-}
-
-/* keep the dropdown visible while preserving scrolling */
-.el-container {
-  overflow: hidden !important;
-}
-.el-aside {
-  overflow-y: auto !important;
-}
-.el-main {
-  overflow-y: auto !important;
-}
-[ref="mainContentRef"] {
-  overflow: visible !important;
 }
 
 /* add background and border to the dropdown for visibility */

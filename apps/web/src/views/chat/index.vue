@@ -131,6 +131,10 @@
             :role="message.role === 'user' ? 'user' : 'assistant'"
             :message-id="message.id || undefined"
             :streaming="!!message.streaming"
+            :wide="
+              message.role === 'assistant' &&
+              message.tool_name === 'DeepGenomeAgent'
+            "
           >
             <template #avatar>
               <el-avatar :size="36" :src="botAvatar" />

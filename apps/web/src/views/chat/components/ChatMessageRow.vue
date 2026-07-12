@@ -33,10 +33,12 @@ const props = withDefaults(
     messageId?: string;
     streaming?: boolean;
     loading?: boolean;
+    wide?: boolean;
   }>(),
   {
     streaming: false,
     loading: false,
+    wide: false,
   }
 );
 
@@ -49,6 +51,7 @@ const rootClasses = computed(() => [
   {
     streaming: props.streaming,
     loading: props.loading,
+    wide: props.wide && props.role === "assistant",
   },
 ]);
 
@@ -106,6 +109,16 @@ const ariaLabel = computed(() =>
       box-sizing: border-box;
       padding: 14px 16px;
       border-radius: var(--phy-radius-lg);
+    }
+  }
+
+  &.assistant.wide {
+    .message-content {
+      width: 100%;
+    }
+
+    :deep(.message-text.phy-bubble-assistant) {
+      width: 100%;
     }
   }
 

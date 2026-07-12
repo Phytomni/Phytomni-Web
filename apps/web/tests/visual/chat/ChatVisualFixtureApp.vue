@@ -118,6 +118,10 @@
                       :role="message.role === 'user' ? 'user' : 'assistant'"
                       :message-id="message.id"
                       :streaming="!!message.streaming"
+                      :wide="
+                        message.role === 'assistant' &&
+                        message.tool_name === 'DeepGenomeAgent'
+                      "
                     >
                       <ChatMessageContent
                         :message="message"
@@ -140,6 +144,10 @@
                       :role="message.role === 'user' ? 'user' : 'assistant'"
                       :message-id="message.id"
                       :streaming="!!message.streaming"
+                      :wide="
+                        message.role === 'assistant' &&
+                        message.tool_name === 'DeepGenomeAgent'
+                      "
                     >
                       <ChatMessageContent
                         :message="message"

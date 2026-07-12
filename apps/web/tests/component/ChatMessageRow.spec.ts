@@ -70,6 +70,19 @@ describe("ChatMessageRow", () => {
     expect(streaming.classes()).toContain("streaming");
   });
 
+  it("opts only explicitly wide assistant rows into the full-width layout", () => {
+    const regular = mountRow({ role: "assistant" });
+    expect(regular.props("wide")).toBe(false);
+    expect(regular.classes()).not.toContain("wide");
+
+    const wideAssistant = mountRow({ role: "assistant", wide: true });
+    expect(wideAssistant.props("wide")).toBe(true);
+    expect(wideAssistant.classes()).toContain("wide");
+
+    const wideUser = mountRow({ role: "user", wide: true });
+    expect(wideUser.classes()).not.toContain("wide");
+  });
+
   it("shows the avatar for assistant rows and hides it for user rows", () => {
     const assistant = mountRow({ role: "assistant" });
     expect(assistant.find(".message-avatar").exists()).toBe(true);
@@ -184,6 +197,18 @@ describe("ChatMessageRow", () => {
     expect(rowCss).toMatch(
       /&\.assistant\s*\{[\s\S]*?\.message-content\s*\{[\s\S]*?flex:\s*1\s+1\s+0/
     );
+  });
+
+  it("widens only the explicit assistant bubble without selector hacks", () => {
+    const rowCss = styleBlocks(ROW_SOURCE).join("\n");
+    expect(rowCss).toMatch(
+      /&\.assistant\.wide\s*\{[\s\S]*?:deep\(\.message-text\.phy-bubble-assistant\)\s*\{[\s\S]*?width:\s*100%/
+    );
+    expect(rowCss).not.toMatch(/:has\(/);
+
+    const wideBinding =
+      /:wide="\s*message\.role === ['"]assistant['"]\s*&&\s*message\.tool_name === ['"]DeepGenomeAgent['"]\s*"/g;
+    expect(CHAT_SOURCE.match(wideBinding)).toHaveLength(1);
   });
 
   it("keeps the 72 percent user cap inclusive of outer row spacing", () => {

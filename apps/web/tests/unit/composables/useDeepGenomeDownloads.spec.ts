@@ -125,6 +125,34 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
+  it("excludes the semantic download toolbar from the print clone", async () => {
+    const fakeEl = document.createElement("div");
+    const toolbar = document.createElement("div");
+    toolbar.className = "deep-genome-toolbar";
+    toolbar.appendChild(document.createElement("button"));
+    fakeEl.append(toolbar, document.createElement("p"));
+    const mainContentRef = ref({ $el: fakeEl });
+
+    let toolbarWasCloned = true;
+    const printSpy = vi.spyOn(window, "print").mockImplementation(async () => {
+      toolbarWasCloned = Boolean(
+        document
+          .querySelector("#print-container")
+          ?.querySelector(".deep-genome-toolbar")
+      );
+    });
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# PDF test", filename: "report.md" },
+      mainContentRef,
+      displayReferences: computed(() => []),
+    });
+
+    await downloadPDF();
+    expect(toolbarWasCloned).toBe(false);
+    printSpy.mockRestore();
+  });
+
   it("does not throw given a stub mainContentRef", async () => {
     // Build a minimal stub with $el, simulating an ElMain component instance
     const fakeEl = document.createElement("div");

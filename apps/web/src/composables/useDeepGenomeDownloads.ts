@@ -58,9 +58,9 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       contentInsideElMain.appendChild(childClone);
     }
 
-    // remove the download button group (via a more specific selector)
+    // remove the download button group via its semantic shell hook
     const downloadButtonGroup = contentInsideElMain.querySelector(
-      'div[style*="position: sticky"]'
+      ".deep-genome-toolbar"
     );
     if (downloadButtonGroup) {
       downloadButtonGroup.remove();

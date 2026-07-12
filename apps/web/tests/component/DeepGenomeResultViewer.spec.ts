@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 
 // Locks the reference-renderer text fields. doc_list comes from the Bot
@@ -9,6 +11,19 @@ import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 // parts are already scheme-checked; this pins the TEXT fields (title, citation
 // au/so, plain-string and JSON fallbacks) so a raw tag can't reach the DOM.
 const passthrough = { template: "<div><slot /></div>" };
+const VIEWER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/DeepGenomeResultViewer.vue"),
+  "utf8"
+);
+const VIEWER_TEMPLATE = VIEWER_SOURCE.slice(
+  0,
+  VIEWER_SOURCE.indexOf("<script setup")
+);
+const VIEWER_STYLES = [
+  ...VIEWER_SOURCE.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g),
+]
+  .map((match) => match[1])
+  .join("\n");
 
 const stubs = {
   ElContainer: passthrough,
@@ -25,9 +40,12 @@ const stubs = {
   ElDropdownItem: passthrough,
 };
 
-function render(references: unknown[]) {
+function render(
+  references: unknown[],
+  extraProps: Record<string, unknown> = {}
+) {
   return mount(DeepGenomeResultViewer, {
-    props: { markdown: "", references },
+    props: { markdown: "", references, ...extraProps },
     global: { stubs },
   });
 }
@@ -38,6 +56,73 @@ function renderMarkdown(markdown: string) {
     global: { stubs },
   });
 }
+
+describe("DeepGenomeResultViewer — adaptive shell", () => {
+  it("defaults to standalone and adds an explicit embedded shell state", () => {
+    const standalone = render([]);
+    expect(standalone.props("embedded")).toBe(false);
+    expect(standalone.find('[data-testid="deep-genome-viewer"]').classes()).not.toContain(
+      "deep-genome-viewer--embedded"
+    );
+
+    const embedded = render([], { embedded: true });
+    expect(embedded.props("embedded")).toBe(true);
+    expect(embedded.find('[data-testid="deep-genome-viewer"]').classes()).toContain(
+      "deep-genome-viewer--embedded"
+    );
+  });
+
+  it("uses semantic shell hooks instead of hard-coded layout attributes", () => {
+    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-viewer"');
+    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-toc"');
+    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-main"');
+    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-toolbar"');
+    expect(VIEWER_TEMPLATE).not.toMatch(/<el-container\s+style=/);
+    expect(VIEWER_TEMPLATE).not.toContain('width="400px"');
+    expect(VIEWER_TEMPLATE).not.toMatch(/<el-aside\b[^>]*\bstyle=/);
+    expect(VIEWER_TEMPLATE).not.toMatch(/<el-main\b[^>]*\bstyle=/);
+    expect(VIEWER_TEMPLATE).not.toMatch(
+      /<div\b(?=[^>]*class="deep-genome-toolbar")[^>]*\bstyle=/
+    );
+    expect(VIEWER_TEMPLATE).not.toMatch(/padding:\s*10px 0/);
+    expect(VIEWER_TEMPLATE).not.toMatch(/z-index:\s*1000/);
+    expect(VIEWER_TEMPLATE).not.toMatch(/gap:\s*10px/);
+  });
+
+  it("keeps the embedded desktop viewer bounded with a compact table of contents", () => {
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-viewer\s*\{[\s\S]*height:\s*100vh;[\s\S]*height:\s*100dvh;/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-viewer--embedded\s*\{[\s\S]*height:\s*min\(70dvh,\s*720px\)/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-toc\s*\{[\s\S]*width:\s*232px/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-main\s*\{[\s\S]*min-width:\s*0[\s\S]*overflow-x:\s*auto/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-toolbar\s*\{[\s\S]*flex-wrap:\s*wrap/
+    );
+    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-bg-elevated\)/);
+  });
+
+  it("switches to a contained single-column shell at 700px", () => {
+    expect(VIEWER_STYLES).toMatch(
+      /@media\s*\(max-width:\s*700px\)[\s\S]*\.deep-genome-viewer\s*\{[\s\S]*flex-direction:\s*column/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /@media\s*\(max-width:\s*700px\)[\s\S]*\.deep-genome-toc\s*\{[\s\S]*max-height:\s*168px/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /@media\s*\(max-width:\s*700px\)[\s\S]*\.deep-genome-main\s*\{[\s\S]*width:\s*100%/
+    );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-viewer\s*\{[\s\S]*max-width:\s*100%[\s\S]*overflow:\s*hidden/
+    );
+  });
+});
 
 describe("DeepGenomeResultViewer — reference text-field XSS hardening", () => {
   it("escapes a raw tag in the title-only reference branch", () => {

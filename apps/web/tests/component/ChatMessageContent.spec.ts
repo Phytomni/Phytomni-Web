@@ -137,9 +137,14 @@ const mountContent = (
         },
         DeepGenomeResultViewer: {
           name: "DeepGenomeResultViewer",
-          props: ["markdown", "references", "ns"],
+          props: {
+            markdown: String,
+            references: Array,
+            ns: String,
+            embedded: Boolean,
+          },
           template:
-            '<div data-testid="deep-genome" :data-ns="ns === undefined ? \'__absent__\' : ns" />',
+            '<div data-testid="deep-genome" :data-ns="ns === undefined ? \'__absent__\' : ns" :data-embedded="embedded ? \'true\' : \'false\'" />',
         },
         CitedAnswer: {
           name: "CitedAnswer",
@@ -472,11 +477,11 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
 
   it("passes page-unique ns=m${index} to DeepGenome and CitedAnswer only", () => {
     const deep = mountContent(MESSAGE_DEEP_GENOME, { index: 7 });
-    expect(deep.find('[data-testid="deep-genome"]').attributes("data-ns")).toBe(
-      "m7"
-    );
+    const deepViewer = deep.find('[data-testid="deep-genome"]');
+    expect(deepViewer.attributes("data-ns")).toBe("m7");
+    expect(deepViewer.attributes("data-embedded")).toBe("true");
     expect(
-      deep.find('[data-testid="deep-genome"]').attributes("data-ns")
+      deepViewer.attributes("data-ns")
     ).not.toBe("");
 
     const cited = mountContent(MESSAGE_CITED, { index: 3 });

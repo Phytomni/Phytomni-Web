@@ -104,6 +104,7 @@
       :markdown="message.content.replace(/\n/g, '\\n')"
       :references="message.doc_list || []"
       :ns="'m' + index"
+      embedded
     />
     <CitedAnswer
       v-else-if="
