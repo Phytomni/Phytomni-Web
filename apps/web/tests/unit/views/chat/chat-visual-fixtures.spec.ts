@@ -457,6 +457,7 @@ describe("Chat visual fixture boot contracts", () => {
     expect(MAIN_SOURCE).toContain('import "@fontsource/inter/600"');
     expect(MAIN_SOURCE).toContain('import "element-plus/dist/index.css"');
     expect(MAIN_SOURCE).toContain('import "@/styles/tokens.css"');
+    expect(MAIN_SOURCE).toContain('import "@/styles/markdown.css"');
     expect(MAIN_SOURCE).toContain('import "@/assets/main.css"');
     expect(MAIN_SOURCE).toContain('import "@/assets/theme.css"');
     expect(MAIN_SOURCE).not.toContain('from "@/main"');

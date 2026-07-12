@@ -16,6 +16,7 @@ import "@fontsource/inter/400";
 import "@fontsource/inter/600";
 import "element-plus/dist/index.css";
 import "@/styles/tokens.css";
+import "@/styles/markdown.css";
 import "@/assets/main.css";
 import "@/assets/theme.css";
 
