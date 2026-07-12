@@ -7,7 +7,7 @@
  * - `.phy-markdown--artifact` / `--document` — reserved; visuals land later.
  */
 
-/* Higher specificity than `.markdown-viewer { all: initial }` so Chat skin sticks. */
+/* Beat `.markdown-viewer.phy-markdown--legacy { all: initial }` when both classes compete. */
 .markdown-viewer.phy-markdown--chat,
 .md-block.phy-markdown--chat,
 .phy-markdown.phy-markdown--chat {

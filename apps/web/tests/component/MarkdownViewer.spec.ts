@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 
 // The real vue-element-plus-x barrel eagerly imports aggregated CSS that the
@@ -9,6 +11,18 @@ vi.mock("vue-element-plus-x", () => ({
 }));
 
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
+
+const MARKDOWN_CSS = readFileSync(
+  resolve(__dirname, "../../src/styles/markdown.css"),
+  "utf8"
+);
+const CHAT_MESSAGE_CONTENT_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/chat/components/ChatMessageContent.vue"
+  ),
+  "utf8"
+);
 
 // Locks the static-render (v-else) v-html path. When instantMessage is falsy
 // — history / already-finished agent messages — MarkdownViewer renders its own
@@ -70,7 +84,20 @@ describe("MarkdownViewer surface classes", () => {
     expect(root.classes()).not.toContain("phy-markdown--legacy");
   });
 
-  it("keeps long table/code/image overflow ownership on the chat surface", () => {
+  it("keeps Typewriter on the chat surface without phy-reading", () => {
+    const w = mount(MarkdownViewer, {
+      props: { content: "hello", instantMessage: true, surface: "chat" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown");
+    expect(root.classes()).toContain("phy-markdown");
+    expect(root.classes()).toContain("phy-markdown--chat");
+    expect(root.classes()).not.toContain("phy-reading");
+    expect(root.classes()).not.toContain("phy-markdown--legacy");
+    expect(w.findComponent({ name: "Typewriter" }).exists()).toBe(true);
+  });
+
+  it("renders long chat-surface fixtures with structure + XSS intact; CSS owns overflow", () => {
     const fixture = [
       "# Long heading that should wrap inside the transcript measure",
       "",
@@ -95,8 +122,26 @@ describe("MarkdownViewer surface classes", () => {
     expect(root.exists()).toBe(true);
     expect(w.find("pre").exists()).toBe(true);
     expect(w.find("img").exists()).toBe(true);
-    // Pipeline still emits the same structural tags; overflow is CSS-owned on the skin.
+    // Mount asserts structure + XSS intact; overflow ownership is a CSS contract.
     expect(w.find("img").attributes("onerror")).toBeUndefined();
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+pre\s*\{[^}]*overflow-x:\s*auto/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+table\s*\{[^}]*overflow-x:\s*auto/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+img\s*\{[^}]*max-width:\s*100%/
+    );
+  });
+
+  it("ChatMessageContent wires MarkdownViewer / CitedAnswer with surface chat", () => {
+    expect(CHAT_MESSAGE_CONTENT_SOURCE).toMatch(
+      /<CitedAnswer[\s\S]*?surface="chat"/
+    );
+    expect(CHAT_MESSAGE_CONTENT_SOURCE).toMatch(
+      /<MarkdownViewer[\s\S]*?surface="chat"/
+    );
   });
 });
 
