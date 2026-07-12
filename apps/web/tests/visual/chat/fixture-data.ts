@@ -1,13 +1,21 @@
 /** Deterministic synthetic data for the Chat visual fixture harness. */
 
 import type { ChatVisualFixtureDefinition } from "./fixture-registry";
-import type { UploadFile } from "@/views/chat/types";
+import type { UploadFile, ChatMessage } from "@/views/chat/types";
 import type { ChatAgentPickerOption } from "@/views/chat/components/ChatAgentPicker.vue";
 import {
   CANONICAL_AT_ABLE_TOOLS,
   CANONICAL_AGENT_DISPLAY_NAMES,
   CANONICAL_AGENT_I18N_KEYS,
 } from "@/constants/agents";
+import {
+  isPhase3BMessageKey,
+  buildPhase3BTranscript,
+  MESSAGE_FIXTURES,
+  MESSAGE_IMAGE,
+  FIXTURE_GENE_NETWORK_IMAGE_DATA_URL,
+  type Phase3BMessageKey,
+} from "../../fixtures/chat";
 
 /** Exact visible identity for harness and redaction scripts. */
 export const SYNTHETIC_IDENTITY = "Synthetic user";
@@ -47,6 +55,24 @@ export function buildSyntheticMessages(
   return rows.slice(0, fixture.messageCount);
 }
 
+/**
+ * Phase 3B keys reuse the shared fixture objects (same references as Vitest).
+ * Frame keys keep the simple synthetic rows.
+ */
+export function buildHarnessMessages(
+  fixture: ChatVisualFixtureDefinition
+): ChatMessage[] | SyntheticMessage[] {
+  if (isPhase3BMessageKey(fixture.key)) {
+    return buildPhase3BTranscript(fixture.key);
+  }
+  return buildSyntheticMessages(fixture);
+}
+
+/** Same object identity Vitest imports — fails if harness copied bodies. */
+export function getSharedMessageFixture(key: Phase3BMessageKey): ChatMessage {
+  return MESSAGE_FIXTURES[key];
+}
+
 export function buildSyntheticFileList(
   fixture: ChatVisualFixtureDefinition
 ): UploadFile[] {
@@ -79,6 +105,12 @@ export function buildSyntheticPickerOptions(): ChatAgentPickerOption[] {
 
 export const SYNTHETIC_ROLES_TOOL: string[] = [...CANONICAL_AT_ABLE_TOOLS];
 
+/** GeneNetwork image map for the `image` fixture — data URL, no network. */
+export function buildFixtureGeneNetworkImages(): Record<string, string[]> {
+  const id = MESSAGE_IMAGE.id ?? "fixture-msg-image";
+  return { [id]: [FIXTURE_GENE_NETWORK_IMAGE_DATA_URL] };
+}
+
 export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   Record<ChatVisualFixtureDefinition["key"], string>
 > = {
@@ -93,4 +125,13 @@ export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   "sidebar-compact": "",
   "sidebar-mobile-closed": "",
   "sidebar-mobile-open": "",
+  "short-generic": "",
+  "long-generic": "",
+  cited: "",
+  "deep-genome": "",
+  table: "",
+  steps: "",
+  image: "",
+  streaming: "",
+  "interleaved-streaming": "",
 };

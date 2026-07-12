@@ -100,15 +100,40 @@
                 </div>
 
                 <div class="transcript-content">
-                  <div
-                    v-for="message in messages"
-                    :key="message.id"
-                    class="message"
-                    :class="message.role"
-                    data-testid="chat-message-row"
-                  >
-                    <div class="message-content">{{ message.content }}</div>
-                  </div>
+                  <!-- Phase 3B: production row + content renderer, shared fixtures -->
+                  <template v-if="isMessageContentFixture">
+                    <ChatMessageRow
+                      v-for="(message, index) in contentMessages"
+                      :key="message.id || index"
+                      :role="message.role === 'user' ? 'user' : 'assistant'"
+                      :message-id="message.id"
+                      :streaming="!!message.streaming"
+                    >
+                      <ChatMessageContent
+                        :message="message"
+                        :index="index"
+                        :is-last-message="index === contentMessages.length - 1"
+                        stream-run-id=""
+                        :stream-transport="null"
+                        :gene-network-images="geneNetworkImages"
+                        :gene-network-images-loading="EMPTY_LOADING"
+                        :digital-design-images="EMPTY_IMAGES"
+                        :digital-design-images-loading="EMPTY_LOADING"
+                      />
+                    </ChatMessageRow>
+                  </template>
+                  <!-- Frame fixtures: simple synthetic text rows -->
+                  <template v-else>
+                    <div
+                      v-for="message in frameMessages"
+                      :key="message.id"
+                      class="message"
+                      :class="message.role"
+                      data-testid="chat-message-row"
+                    >
+                      <div class="message-content">{{ message.content }}</div>
+                    </div>
+                  </template>
                 </div>
               </div>
 
@@ -165,16 +190,26 @@ import ChatSidebarNav, {
   CHAT_SIDEBAR_DRAWER_OPEN_KEY,
 } from "@/views/chat/components/ChatSidebarNav.vue";
 import ChatComposer from "@/views/chat/components/ChatComposer.vue";
+import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
+import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import { useAppStore } from "@/stores";
+import type { ChatMessage } from "@/views/chat/types";
 import type { ChatVisualFixtureDefinition } from "./fixture-registry";
+import { isPhase3BMessageKey } from "../../fixtures/chat";
 import {
   SYNTHETIC_IDENTITY,
   SYNTHETIC_ROLES_TOOL,
   buildSyntheticFileList,
   buildSyntheticMessages,
+  buildHarnessMessages,
+  buildFixtureGeneNetworkImages,
   buildSyntheticPickerOptions,
   COMPOSER_MODEL_VALUE_BY_KEY,
+  type SyntheticMessage,
 } from "./fixture-data";
+
+const EMPTY_IMAGES = {} as Record<string, string[]>;
+const EMPTY_LOADING = {} as Record<string, boolean>;
 
 const props = defineProps<{
   fixture: ChatVisualFixtureDefinition | null;
@@ -207,9 +242,26 @@ const drawerStateAttr = computed(() => {
   return "not-mobile";
 });
 
-const messages = computed(() =>
-  props.fixture ? buildSyntheticMessages(props.fixture) : []
+const isMessageContentFixture = computed(
+  () => !!props.fixture && isPhase3BMessageKey(props.fixture.key)
 );
+
+const contentMessages = computed((): ChatMessage[] => {
+  if (!props.fixture || !isPhase3BMessageKey(props.fixture.key)) return [];
+  return buildHarnessMessages(props.fixture) as ChatMessage[];
+});
+
+const frameMessages = computed((): SyntheticMessage[] => {
+  if (!props.fixture || isPhase3BMessageKey(props.fixture.key)) return [];
+  return buildSyntheticMessages(props.fixture);
+});
+
+const geneNetworkImages = computed(() =>
+  props.fixture?.key === "image"
+    ? buildFixtureGeneNetworkImages()
+    : EMPTY_IMAGES
+);
+
 const fileList = computed(() =>
   props.fixture ? buildSyntheticFileList(props.fixture) : []
 );

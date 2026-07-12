@@ -13,7 +13,9 @@ beforeEach(() => _resetA2uiActionIdempotencyForTests());
 
 describe("StreamMessage", () => {
   it("renders a markdown block's text through v-html", () => {
-    const blocks: ContentBlock[] = [{ type: "markdown", authority: "web", text: "**hi**" }];
+    const blocks: ContentBlock[] = [
+      { type: "markdown", authority: "web", text: "**hi**" },
+    ];
     const w = mount(StreamMessage, { props: { blocks } });
     expect(w.html()).toContain("<strong>hi</strong>");
   });
@@ -49,5 +51,20 @@ describe("StreamMessage", () => {
     expect(sink[0].widget).toBe("confirm");
     expect(sink[0].payload).toEqual({ accepted: true });
     expect(w.text()).toContain("chat.a2ui.locked");
+  });
+
+  it("leaves [N] literal when ns is absent (reference-free streaming)", () => {
+    const blocks: ContentBlock[] = [
+      {
+        type: "markdown",
+        authority: "web",
+        text: "See [1] for the claim.",
+      },
+    ];
+    const w = mount(StreamMessage, { props: { blocks } });
+    // Scope gate: without ns, linkifyCitations is a no-op — markers stay literal.
+    expect(w.html()).toContain("[1]");
+    expect(w.html()).not.toContain('class="citation-ref"');
+    expect(w.html()).not.toContain("#ref-1");
   });
 });

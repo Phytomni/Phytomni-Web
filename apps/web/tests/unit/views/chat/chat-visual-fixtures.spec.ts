@@ -15,7 +15,14 @@ import {
   SYNTHETIC_IDENTITY,
   buildSyntheticMessages,
   buildSyntheticFileList,
+  buildHarnessMessages,
+  getSharedMessageFixture,
 } from "../../../visual/chat/fixture-data";
+import {
+  PHASE_3B_MESSAGE_KEYS,
+  MESSAGE_FIXTURES,
+  isPhase3BMessageKey,
+} from "../../../fixtures/chat";
 
 const WEB_ROOT = resolve(__dirname, "../../../..");
 const SRC_ROOT = resolve(WEB_ROOT, "src");
@@ -81,6 +88,8 @@ vi.mock("vue-element-plus-x", () => ({
     template: '<div class="files-card-stub" />',
     props: ["uid", "name", "fileSize", "showDelIcon"],
   },
+  Typewriter: { name: "Typewriter", template: "<div></div>" },
+  Prompts: { name: "Prompts", template: "<div></div>" },
 }));
 
 import ChatVisualFixtureApp from "../../../visual/chat/ChatVisualFixtureApp.vue";
@@ -99,7 +108,7 @@ function walkFiles(dir: string, acc: string[] = []): string[] {
 }
 
 describe("Chat visual fixture registry", () => {
-  it("contains every exact Phase 3A state key", () => {
+  it("contains every exact frame and Phase 3B message-state key", () => {
     expect([...CHAT_VISUAL_FIXTURE_KEYS]).toEqual([
       "empty",
       "populated",
@@ -112,6 +121,15 @@ describe("Chat visual fixture registry", () => {
       "sidebar-compact",
       "sidebar-mobile-closed",
       "sidebar-mobile-open",
+      "short-generic",
+      "long-generic",
+      "cited",
+      "deep-genome",
+      "table",
+      "steps",
+      "image",
+      "streaming",
+      "interleaved-streaming",
     ]);
   });
 
@@ -160,6 +178,20 @@ describe("Chat visual fixture registry", () => {
     expect(open.drawerOpen).toBe(true);
     expect(open.showSidebarTrigger).toBe(false);
   });
+
+  it("registers every Phase 3B message key with shared fixture objects", () => {
+    for (const key of PHASE_3B_MESSAGE_KEYS) {
+      expect(CHAT_VISUAL_FIXTURE_KEYS).toContain(key);
+      expect(isPhase3BMessageKey(key)).toBe(true);
+      expect(getSharedMessageFixture(key)).toBe(MESSAGE_FIXTURES[key]);
+      const fixture = getChatVisualFixture(key);
+      expect(fixture.chatState).toBe("populated");
+      expect(fixture.messageCount).toBe(2);
+      const rows = buildHarnessMessages(fixture);
+      expect(rows).toHaveLength(2);
+      expect(rows[1]).toBe(MESSAGE_FIXTURES[key]);
+    }
+  });
 });
 
 describe("Chat visual fixture source contracts", () => {
@@ -191,12 +223,27 @@ describe("Chat visual fixture source contracts", () => {
       resolve(VISUAL_CHAT, "fixture-data.ts"),
       resolve(VISUAL_CHAT, "main.ts"),
       resolve(VISUAL_CHAT, "ChatVisualFixtureApp.vue"),
+      resolve(WEB_ROOT, "tests/fixtures/chat/messages.ts"),
+      resolve(WEB_ROOT, "tests/fixtures/chat/index.ts"),
     ];
     for (const file of harnessTs) {
       const text = readFileSync(file, "utf8");
       expect(text).not.toMatch(/@\/api\b/);
       expect(text).not.toMatch(/from\s+['"]@\/utils\/request['"]/);
     }
+  });
+
+  it("Phase 3B harness path mounts production ChatMessageContent and ChatMessageRow", () => {
+    expect(APP_SOURCE).toContain("ChatMessageContent");
+    expect(APP_SOURCE).toContain("ChatMessageRow");
+    expect(APP_SOURCE).toMatch(
+      /import ChatMessageContent from ["']@\/views\/chat\/components\/ChatMessageContent\.vue["']/
+    );
+    expect(APP_SOURCE).toMatch(
+      /import ChatMessageRow from ["']@\/views\/chat\/components\/ChatMessageRow\.vue["']/
+    );
+    expect(APP_SOURCE).toContain("isPhase3BMessageKey");
+    expect(APP_SOURCE).toContain("buildHarnessMessages");
   });
 });
 
@@ -321,6 +368,33 @@ const mountFixtureApp = (
           name: "ElButton",
           template: "<button><slot /></button>",
         },
+        ElTable: true,
+        ElTableColumn: true,
+        // Heavy agent renderers — assert production mounts exist via stubs.
+        StreamMessage: {
+          name: "StreamMessage",
+          props: ["blocks", "ns"],
+          template:
+            '<div data-testid="stream-message" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+        },
+        DeepGenomeResultViewer: {
+          name: "DeepGenomeResultViewer",
+          props: ["ns"],
+          template:
+            '<div data-testid="deep-genome" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+        },
+        CitedAnswer: {
+          name: "CitedAnswer",
+          props: ["ns"],
+          template:
+            '<div data-testid="cited-answer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+        },
+        MarkdownViewer: {
+          name: "MarkdownViewer",
+          props: ["ns", "content"],
+          template:
+            '<div data-testid="markdown-viewer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+        },
         teleport: true,
       },
     },
@@ -415,5 +489,56 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(wrapper.find('[data-testid="chat-visual-root"]').exists()).toBe(
       false
     );
+  });
+
+  it("renders Phase 3B message fixtures via ChatMessageRow + ChatMessageContent without network", async () => {
+    const expectations: Record<string, { testId: string; ns?: string }> = {
+      "short-generic": { testId: "markdown-viewer", ns: "__absent__" },
+      "long-generic": { testId: "markdown-viewer", ns: "__absent__" },
+      cited: { testId: "cited-answer", ns: "m1" },
+      "deep-genome": { testId: "deep-genome", ns: "m1" },
+      streaming: { testId: "stream-message", ns: "__absent__" },
+      "interleaved-streaming": { testId: "stream-message", ns: "__absent__" },
+    };
+
+    for (const [key, expectBranch] of Object.entries(expectations)) {
+      const fixture = getChatVisualFixture(
+        key as typeof CHAT_VISUAL_FIXTURE_KEYS[number]
+      );
+      const wrapper = mountFixtureApp(fixture);
+      await flushPromises();
+      await nextTick();
+
+      expect(
+        wrapper.findComponent({ name: "ChatMessageContent" }).exists()
+      ).toBe(true);
+      expect(wrapper.findAll('[data-testid="chat-message-row"]')).toHaveLength(
+        fixture.messageCount
+      );
+      const branch = wrapper.find(`[data-testid="${expectBranch.testId}"]`);
+      expect(branch.exists()).toBe(true);
+      if (expectBranch.ns !== undefined) {
+        expect(branch.attributes("data-ns")).toBe(expectBranch.ns);
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
+      wrapper.unmount();
+    }
+  });
+
+  it("renders table/steps/image Phase 3B keys without network", async () => {
+    for (const key of ["table", "steps", "image"] as const) {
+      const fixture = getChatVisualFixture(key);
+      const wrapper = mountFixtureApp(fixture);
+      await flushPromises();
+      expect(
+        wrapper.findComponent({ name: "ChatMessageContent" }).exists()
+      ).toBe(true);
+      expect(wrapper.findAll('[data-testid="chat-message-row"]')).toHaveLength(
+        2
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+      wrapper.unmount();
+    }
   });
 });

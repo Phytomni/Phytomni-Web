@@ -12,6 +12,25 @@ vi.mock("vue-element-plus-x", () => ({
 
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import type { ChatMessage, ContentBlock } from "@/views/chat/types";
+import {
+  MESSAGE_SHORT_GENERIC,
+  MESSAGE_LONG_GENERIC,
+  MESSAGE_CITED,
+  MESSAGE_DEEP_GENOME,
+  MESSAGE_TABLE,
+  MESSAGE_STEPS,
+  MESSAGE_IMAGE,
+  MESSAGE_STREAMING,
+  MESSAGE_INTERLEAVED_STREAMING,
+  MESSAGE_STREAM_REFS_CAPTURED,
+  MESSAGE_FIXTURES,
+  PHASE_3B_MESSAGE_KEYS,
+  SHORT_GENERIC_MARKDOWN,
+  LONG_GENERIC_MARKDOWN,
+  CITED_MARKDOWN,
+  FIXTURE_REFERENCE_DOC,
+} from "../fixtures/chat";
+import { getSharedMessageFixture } from "../visual/chat/fixture-data";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
@@ -323,6 +342,87 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
   }
 });
 
+describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
+  const expectedByKey: Record<string, Branch> = {
+    "short-generic": "markdown",
+    "long-generic": "markdown",
+    cited: "cited",
+    "deep-genome": "deep-genome",
+    table: "table",
+    steps: "legacy",
+    image: "gene-network",
+    streaming: "stream",
+    "interleaved-streaming": "stream",
+  };
+
+  for (const key of PHASE_3B_MESSAGE_KEYS) {
+    it(`fixture ${key} selects ${expectedByKey[key]}`, () => {
+      const message = MESSAGE_FIXTURES[key];
+      expect(detectBranch(mountContent(message))).toBe(expectedByKey[key]);
+      expect(expectedBranch(message)).toBe(expectedByKey[key]);
+    });
+  }
+
+  it("DeepGenome stays ahead of generic cited when both would match doc_list", () => {
+    const wrapper = mountContent(MESSAGE_DEEP_GENOME);
+    expect(detectBranch(wrapper)).toBe("deep-genome");
+    expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+      false
+    );
+  });
+
+  it("specialized families are never captured by generic Markdown", () => {
+    for (const message of [
+      MESSAGE_CITED,
+      MESSAGE_DEEP_GENOME,
+      MESSAGE_IMAGE,
+      MESSAGE_TABLE,
+      MESSAGE_STEPS,
+      MESSAGE_STREAMING,
+      MESSAGE_INTERLEAVED_STREAMING,
+    ]) {
+      const wrapper = mountContent(message);
+      const branch = detectBranch(wrapper);
+      // Bubble-path generic Markdown must not win over specialized families.
+      expect(branch).not.toBe("markdown");
+      // Bubble specialized renderers (not legacy, which embeds MarkdownViewer).
+      if (
+        branch === "cited" ||
+        branch === "deep-genome" ||
+        branch === "stream" ||
+        branch === "gene-network" ||
+        branch === "digital-design" ||
+        branch === "table"
+      ) {
+        expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+          false
+        );
+      }
+    }
+  });
+
+  it("harness imports the identical fixture objects (no copied bodies)", () => {
+    expect(getSharedMessageFixture("short-generic")).toBe(
+      MESSAGE_SHORT_GENERIC
+    );
+    expect(getSharedMessageFixture("long-generic")).toBe(MESSAGE_LONG_GENERIC);
+    expect(getSharedMessageFixture("cited")).toBe(MESSAGE_CITED);
+    expect(getSharedMessageFixture("deep-genome")).toBe(MESSAGE_DEEP_GENOME);
+    expect(getSharedMessageFixture("table")).toBe(MESSAGE_TABLE);
+    expect(getSharedMessageFixture("steps")).toBe(MESSAGE_STEPS);
+    expect(getSharedMessageFixture("image")).toBe(MESSAGE_IMAGE);
+    expect(getSharedMessageFixture("streaming")).toBe(MESSAGE_STREAMING);
+    expect(getSharedMessageFixture("interleaved-streaming")).toBe(
+      MESSAGE_INTERLEAVED_STREAMING
+    );
+    expect(MESSAGE_SHORT_GENERIC.content).toBe(SHORT_GENERIC_MARKDOWN);
+    expect(MESSAGE_LONG_GENERIC.content).toBe(LONG_GENERIC_MARKDOWN);
+    expect(MESSAGE_CITED.content).toBe(CITED_MARKDOWN);
+    expect(MESSAGE_CITED.doc_list?.[0]).toEqual(FIXTURE_REFERENCE_DOC);
+  });
+});
+
 describe("ChatMessageContent namespace and stream props", () => {
   it("forwards runId/transport to StreamMessage with no namespace", () => {
     const transport = async () => ({ ok: true });
@@ -343,59 +443,70 @@ describe("ChatMessageContent namespace and stream props", () => {
     expect(stream.attributes("data-has-transport")).toBe("1");
   });
 
+  it("reference-free streaming fixtures invent no namespace", () => {
+    for (const message of [MESSAGE_STREAMING, MESSAGE_INTERLEAVED_STREAMING]) {
+      const wrapper = mountContent(message, { index: 5 });
+      expect(detectBranch(wrapper)).toBe("stream");
+      expect(
+        wrapper.find('[data-testid="stream-message"]').attributes("data-ns")
+      ).toBe("__absent__");
+    }
+  });
+
   it("passes page-unique ns=m${index} to DeepGenome and CitedAnswer only", () => {
-    const deep = mountContent(
-      {
-        role: "assistant",
-        content: "md",
-        tool_name: "DeepGenomeAgent",
-        doc_list: [{ title: "Doc" }],
-      },
-      { index: 7 }
-    );
+    const deep = mountContent(MESSAGE_DEEP_GENOME, { index: 7 });
     expect(deep.find('[data-testid="deep-genome"]').attributes("data-ns")).toBe(
       "m7"
     );
+    expect(
+      deep.find('[data-testid="deep-genome"]').attributes("data-ns")
+    ).not.toBe("");
 
-    const cited = mountContent(
-      {
-        role: "assistant",
-        content: "body",
-        tool_name: "KnowledgeAgent",
-        doc_list: [{ title: "Doc" }],
-      },
-      { index: 3 }
-    );
+    const cited = mountContent(MESSAGE_CITED, { index: 3 });
     expect(
       cited.find('[data-testid="cited-answer"]').attributes("data-ns")
     ).toBe("m3");
 
-    const plain = mountContent(
-      { role: "assistant", content: "plain", tool_name: "ChatAgent" },
-      { index: 9 }
-    );
+    const plain = mountContent(MESSAGE_SHORT_GENERIC, { index: 9 });
     expect(
       plain.find('[data-testid="markdown-viewer"]').attributes("data-ns")
     ).toBe("__absent__");
   });
 
   it("emits finish from CitedAnswer and MarkdownViewer paths", async () => {
-    const cited = mountContent({
-      role: "assistant",
-      content: "body",
-      tool_name: "KnowledgeAgent",
-      doc_list: [{ title: "Doc" }],
-    });
+    const cited = mountContent(MESSAGE_CITED);
     await cited.findComponent({ name: "CitedAnswer" }).vm.$emit("finish");
     expect(cited.emitted("finish")).toBeTruthy();
 
-    const md = mountContent({
-      role: "assistant",
-      content: "plain",
-      tool_name: "ChatAgent",
-    });
+    const md = mountContent(MESSAGE_SHORT_GENERIC);
     await md.findComponent({ name: "MarkdownViewer" }).vm.$emit("finish");
     expect(md.emitted("finish")).toBeTruthy();
+  });
+});
+
+describe("ChatMessageContent phyto.references streaming citation gap", () => {
+  /**
+   * useStreamMessage finalizes phyto.references into message.doc_list, but
+   * non-empty blocks keep the StreamMessage branch (no ns, no reference rows).
+   * Literal [N] is the characterized current composition — not the desired end
+   * state. Closing this gap is mandatory input for a follow-up streaming
+   * citation composition change (do not treat literal markers as the goal).
+   */
+  it("keeps StreamMessage (no ns) when blocks remain after doc_list capture", () => {
+    expect(MESSAGE_STREAM_REFS_CAPTURED.doc_list).toEqual([
+      FIXTURE_REFERENCE_DOC,
+    ]);
+    expect(MESSAGE_STREAM_REFS_CAPTURED.blocks?.length).toBeGreaterThan(0);
+    expect(MESSAGE_STREAM_REFS_CAPTURED.streaming).toBe(false);
+
+    const wrapper = mountContent(MESSAGE_STREAM_REFS_CAPTURED, { index: 2 });
+    expect(detectBranch(wrapper)).toBe("stream");
+    expect(
+      wrapper.find('[data-testid="stream-message"]').attributes("data-ns")
+    ).toBe("__absent__");
+    // Composition has no CitedAnswer / DeepGenome reference targets yet.
+    expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
   });
 });
 
