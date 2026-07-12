@@ -135,6 +135,51 @@ describe("MarkdownViewer surface classes", () => {
     );
   });
 
+  it("keeps the chat skin compact and bounded by the message bubble", () => {
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown\.phy-markdown--chat\s*\{[^}]*width:\s*100%[^}]*max-width:\s*100%/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s*>\s*:first-child[\s\S]*margin-top:\s*0/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s*>\s*:last-child[\s\S]*margin-bottom:\s*0/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+pre\s+code\s*\{[^}]*white-space:\s*pre/
+    );
+    expect(MARKDOWN_CSS).not.toMatch(/#[0-9a-f]{3,8}/i);
+  });
+
+  it("keeps horizontal overflow on code and table surfaces, not the prose wrapper", () => {
+    const nestedWrapper = MARKDOWN_CSS.match(
+      /\/\* Nested content wrappers[\s\S]*?\{([^}]*)\}/
+    )?.[1];
+    expect(nestedWrapper).toBeDefined();
+    expect(nestedWrapper).not.toMatch(/overflow-x:\s*auto/);
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+pre\s*\{[^}]*overscroll-behavior-inline:\s*contain/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+table\s*\{[^}]*overscroll-behavior-inline:\s*contain/
+    );
+  });
+
+  it("tightens static-render line breaks without changing rendered markup", () => {
+    const w = render("# Heading\nAlpha\nBeta\n## Next");
+    expect(w.findAll("br")).toHaveLength(3);
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+\.markdown-content\s+br\s*\{[^}]*display:\s*inline/
+    );
+    expect(MARKDOWN_CSS).toContain(
+      "br:has(+ :is(h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol))"
+    );
+    expect(MARKDOWN_CSS).toContain(".markdown-content li + br");
+    expect(MARKDOWN_CSS).not.toMatch(/\+\s*br\s*\+\s*br/);
+    expect(MARKDOWN_CSS).not.toMatch(/br:has\(\s*\+\s*br\s*\+/);
+    expect(MARKDOWN_CSS).not.toContain("display: contents");
+  });
+
   it("ChatMessageContent wires MarkdownViewer / CitedAnswer with surface chat", () => {
     expect(CHAT_MESSAGE_CONTENT_SOURCE).toMatch(
       /<CitedAnswer[\s\S]*?surface="chat"/
