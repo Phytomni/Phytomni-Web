@@ -327,6 +327,8 @@ export default {
     send: "发 送",
     newChat: "开启新对话",
     openNavigation: "打开导航",
+    expandNavigation: "展开导航",
+    collapseNavigation: "收起导航",
     exploreAgent: "智能体示例",
     agentsArchitectureTitle: "农科发现大模型智能体架构",
     agentsArchitectureAlt: "农科发现大模型智能体架构图",

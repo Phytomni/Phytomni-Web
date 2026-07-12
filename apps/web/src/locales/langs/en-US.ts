@@ -325,6 +325,8 @@ export default {
     send: "Send",
     newChat: "Start New",
     openNavigation: "Open navigation",
+    expandNavigation: "Expand navigation",
+    collapseNavigation: "Collapse navigation",
     exploreAgent: "Explore Agents",
     agentsArchitectureTitle: "Phytomni Agent Architecture",
     agentsArchitectureAlt: "Phytomni agent architecture diagram",

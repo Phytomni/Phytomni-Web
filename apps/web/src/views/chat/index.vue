@@ -9,6 +9,7 @@
     :sidebar-collapsed="leftSidebarCollapsed"
     :artifact-open="false"
     :artifact-fullscreen="false"
+    :main-inert="isMobileViewport && leftSidebarDrawerOpen"
   >
     <template #sidebar>
       <!-- Left sidebar -->
@@ -63,6 +64,7 @@
         <div class="chat-header-inner">
           <div class="header-leading">
             <el-button
+              ref="sidebarTriggerRef"
               class="mobile-sidebar-toggle"
               data-testid="chat-sidebar-trigger"
               :class="{ 'is-visible': leftSidebarCollapsed }"
@@ -469,6 +471,7 @@ const { t } = useI18n();
 // Left sidebar state
 const leftSidebarCollapsed = ref(false);
 const leftSidebarDrawerOpen = ref(false);
+const sidebarTriggerRef = ref<{ $el?: HTMLElement } | null>(null);
 provide(CHAT_SIDEBAR_DRAWER_OPEN_KEY, leftSidebarDrawerOpen);
 
 const isMobileViewport = ref(
@@ -486,6 +489,12 @@ const chatStateAttr = computed(() =>
 const sidebarDrawerStateAttr = computed(() => {
   if (!isMobileViewport.value) return "not-mobile";
   return leftSidebarDrawerOpen.value ? "open" : "closed";
+});
+
+watch(leftSidebarDrawerOpen, async (isOpen, wasOpen) => {
+  if (isOpen || !wasOpen || !isMobileViewport.value) return;
+  await nextTick();
+  sidebarTriggerRef.value?.$el?.focus();
 });
 
 // Agents architecture diagram dialog
@@ -547,11 +556,15 @@ const chatHeaderTitle = computed(() => {
   return listTitle?.trim() || t("chat.untitledConversation");
 });
 
-const toggleSidebarFromHeader = () => {
+const toggleSidebarFromHeader = async () => {
   if (leftSidebarCollapsed.value) {
     leftSidebarCollapsed.value = false;
   } else {
     leftSidebarDrawerOpen.value = true;
+    await nextTick();
+    document
+      .querySelector<HTMLElement>('[data-testid="sidebar-drawer-close"]')
+      ?.focus();
   }
 };
 

@@ -13,7 +13,11 @@
       <slot name="sidebar" />
     </aside>
 
-    <main class="phy-adaptive-shell__main">
+    <main
+      class="phy-adaptive-shell__main"
+      :inert="mainInert ? true : undefined"
+      :aria-hidden="mainInert ? 'true' : undefined"
+    >
       <slot name="main">
         <slot />
       </slot>
@@ -34,11 +38,13 @@ withDefaults(
     sidebarCollapsed?: boolean;
     artifactOpen?: boolean;
     artifactFullscreen?: boolean;
+    mainInert?: boolean;
   }>(),
   {
     sidebarCollapsed: false,
     artifactOpen: false,
     artifactFullscreen: false,
+    mainInert: false,
   }
 );
 </script>

@@ -82,7 +82,7 @@ const actionStubs = {
 };
 
 describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
-  it("activates New Chat via click and keeps a collapsed aria-label", async () => {
+  it("names and activates collapsed and expanded navigation controls", async () => {
     const wrapper = mount(ChatSidebarNav, {
       props: {
         collapsed: true,
@@ -125,6 +125,18 @@ describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
 
     await primary.trigger("click");
     expect(wrapper.emitted("new-chat")).toHaveLength(1);
+
+    const expand = wrapper.find('[data-test="sidebar-nav-expand"]');
+    expect(expand.element.tagName).toBe("BUTTON");
+    expect(expand.attributes("aria-label")).toBe(enUS.chat.expandNavigation);
+    await expand.trigger("click");
+    expect(wrapper.emitted("toggle-collapse")).toHaveLength(1);
+
+    await wrapper.setProps({ collapsed: false });
+    const collapse = wrapper.find('[data-test="sidebar-nav-collapse"]');
+    expect(collapse.attributes("aria-label")).toBe(
+      enUS.chat.collapseNavigation
+    );
   });
 
   it("exposes adaptive sidebar toggle/close with aria-expanded and focus-visible", async () => {
@@ -155,6 +167,30 @@ describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
     expect(SIDEBAR_SOURCE).toMatch(
       /\.phy-adaptive-sidebar__close button:focus-visible/
     );
+  });
+
+  it("removes a closed mobile drawer from focus order when it is off canvas", async () => {
+    const wrapper = mount(PhyAdaptiveSidebar, {
+      props: { collapsed: false, drawerOpen: false, offCanvas: true },
+      slots: {
+        close: "<span>Close</span>",
+        default: '<button type="button">Navigation item</button>',
+      },
+      attachTo: document.body,
+    });
+
+    expect(wrapper.element.hasAttribute("inert")).toBe(true);
+    expect(wrapper.attributes("aria-hidden")).toBe("true");
+
+    await wrapper.setProps({ drawerOpen: true, offCanvas: false });
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="sidebar-drawer-close"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.element.hasAttribute("inert")).toBe(false);
+    expect(wrapper.attributes("aria-hidden")).toBeUndefined();
+    wrapper.unmount();
   });
 });
 

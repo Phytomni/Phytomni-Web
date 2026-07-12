@@ -182,6 +182,24 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
     expect(drawer.classes()).toContain("is-drawer-open");
   });
 
+  it("makes the main surface inert while the mobile drawer owns focus", async () => {
+    const wrapper = mount(PhyAdaptiveShell, {
+      props: { sidebarCollapsed: false, mainInert: true },
+      slots: {
+        sidebar: "<nav />",
+        main: '<button type="button">Main</button>',
+      },
+    });
+    const main = wrapper.get(".phy-adaptive-shell__main");
+
+    expect(main.element.hasAttribute("inert")).toBe(true);
+    expect(main.attributes("aria-hidden")).toBe("true");
+
+    await wrapper.setProps({ mainInert: false });
+    expect(main.element.hasAttribute("inert")).toBe(false);
+    expect(main.attributes("aria-hidden")).toBeUndefined();
+  });
+
   it("wires ChatSidebarNav matchMedia to the mobile breakpoint minus one", () => {
     expect(NAV_SOURCE).toContain("SIDEBAR_MOBILE_BREAKPOINT");
     expect(NAV_SOURCE).toContain("window.matchMedia");
@@ -250,6 +268,10 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
     expect(CHAT_SOURCE).toContain(':drawer-open="leftSidebarDrawerOpen"');
     expect(SIDEBAR_SOURCE).toContain(':collapsed="sidebarCollapsed"');
     expect(SIDEBAR_SOURCE).toContain(':drawer-open="drawerOpen"');
+    expect(SIDEBAR_SOURCE).toContain(':off-canvas="isMobile && !drawerOpen"');
+    expect(CHAT_SOURCE).toContain(
+      ':main-inert="isMobileViewport && leftSidebarDrawerOpen"'
+    );
     expect(CHAT_SOURCE).toContain(
       ':data-sidebar-drawer-state="sidebarDrawerStateAttr"'
     );

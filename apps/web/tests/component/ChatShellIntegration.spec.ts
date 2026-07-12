@@ -171,6 +171,13 @@ describe("Chat adaptive shell integration", () => {
 
   it("routes help through the sidebar utility group and exposes shell capture hooks", () => {
     expect(CHAT_SOURCE).toContain('data-testid="chat-sidebar-trigger"');
+    expect(CHAT_SOURCE).toContain('ref="sidebarTriggerRef"');
+    expect(CHAT_SOURCE).toMatch(
+      /watch\(leftSidebarDrawerOpen,[\s\S]*sidebarTriggerRef\.value\?\.\$el\?\.focus\(\)/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /toggleSidebarFromHeader = async[\s\S]*sidebar-drawer-close[\s\S]*\.focus\(\)/
+    );
     expect(CHAT_NAV_SOURCE).toContain('data-testid="chat-primary-action"');
     expect(CHAT_NAV_SOURCE).toContain('data-testid="chat-account-identity"');
     expect(CHAT_NAV_SOURCE).toContain('class="sidebar-nav-utility"');

@@ -3,12 +3,25 @@
     <div class="sidebar-nav-top">
       <div class="sidebar-header">
         <div class="app-title">
+          <button
+            v-if="collapsed"
+            type="button"
+            class="logo-toggle"
+            data-test="sidebar-nav-expand"
+            :aria-label="$t('chat.expandNavigation')"
+            @click="emit('toggle-collapse')"
+          >
+            <img
+              src="../../../assets/images/chat/logo.png"
+              class="logo"
+              alt=""
+            />
+          </button>
           <img
+            v-else
             src="../../../assets/images/chat/logo.png"
             class="logo"
-            :class="{ clickable: collapsed }"
-            alt="Logo"
-            @click="collapsed && emit('toggle-collapse')"
+            alt=""
           />
           <span
             v-if="!collapsed"
@@ -23,6 +36,7 @@
           data-test="sidebar-nav-collapse"
           type="text"
           class="collapse-btn"
+          :aria-label="$t('chat.collapseNavigation')"
           @click="emit('toggle-collapse')"
         >
           <el-icon>
@@ -425,20 +439,28 @@ const handleHelpCommand = (command: string | number | object) => {
     font-weight: 600;
     color: var(--phy-color-text);
 
+    .logo-toggle {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid var(--phy-color-focus);
+        outline-offset: 2px;
+        border-radius: var(--phy-radius-sm);
+      }
+    }
+
     .logo {
       width: 24px;
       height: 24px;
       flex: 0 0 auto;
       margin-right: var(--phy-space-8);
-
-      &.clickable {
-        cursor: pointer;
-        transition: opacity var(--phy-motion-fast) ease;
-
-        &:hover {
-          opacity: 0.72;
-        }
-      }
     }
 
     .app-title-label {

@@ -2,6 +2,7 @@
   <PhyAdaptiveSidebar
     :collapsed="sidebarCollapsed"
     :drawer-open="drawerOpen"
+    :off-canvas="isMobile && !drawerOpen"
     :close-label="$t('common.close')"
     @close="closeDrawer"
     @toggle="toggle"
@@ -200,6 +201,7 @@ const emit = defineEmits([
 ]);
 
 const {
+  isMobile,
   sidebarCollapsed,
   drawerOpen,
   toggle,

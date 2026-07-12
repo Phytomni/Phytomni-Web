@@ -1,6 +1,8 @@
 <template>
   <aside
     class="phy-adaptive-sidebar"
+    :inert="offCanvas ? true : undefined"
+    :aria-hidden="offCanvas ? 'true' : undefined"
     :class="{
       'is-collapsed': collapsed,
       'is-drawer-open': drawerOpen,
@@ -56,11 +58,13 @@ withDefaults(
     collapsed?: boolean;
     drawerOpen?: boolean;
     closeLabel?: string;
+    offCanvas?: boolean;
   }>(),
   {
     collapsed: false,
     drawerOpen: false,
     closeLabel: "Close sidebar",
+    offCanvas: false,
   }
 );
 
