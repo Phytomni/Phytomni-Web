@@ -68,7 +68,7 @@
               :class="{ 'is-visible': leftSidebarCollapsed }"
               text
               circle
-              :aria-label="$t('chat.newChat')"
+              :aria-label="$t('chat.openNavigation')"
               @click="toggleSidebarFromHeader"
             >
               <el-icon><Menu /></el-icon>

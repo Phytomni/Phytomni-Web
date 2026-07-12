@@ -188,6 +188,9 @@ describe("Chat adaptive shell integration", () => {
 
   it("keeps the mobile drawer trigger visible while the primary action lives in the sidebar", () => {
     expect(CHAT_SOURCE).toContain('class="mobile-sidebar-toggle"');
+    expect(CHAT_SOURCE).toContain(":aria-label=\"$t('chat.openNavigation')\"");
+    expect(enUS.chat.openNavigation).toBe("Open navigation");
+    expect(zhCN.chat.openNavigation).toBe("打开导航");
     expect(CHAT_SOURCE).toContain("toggleSidebarFromHeader");
     expect(CHAT_SOURCE).toContain(':drawer-open="leftSidebarDrawerOpen"');
     expect(CHAT_NAV_SOURCE).toContain('data-testid="chat-primary-action"');
