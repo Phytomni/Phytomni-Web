@@ -62,11 +62,30 @@ describe("StreamMessage", () => {
       },
     ];
     const w = mount(StreamMessage, { props: { blocks } });
-    // Scope gate: without ns, linkifyCitations is a no-op — markers stay literal.
+    // Scope gate: without ns / references, renderStreamingMarkdown keeps [N] literal.
     expect(w.html()).toContain("[1]");
-    expect(w.html()).not.toContain('class="citation-ref"');
-    expect(w.html()).not.toContain("#ref-1");
+    expect(w.html()).not.toContain('href="#');
     expect(w.find(".doc-list").exists()).toBe(false);
+  });
+
+  it("keeps [N] literal when ns is set but references are empty or absent", () => {
+    const blocks: ContentBlock[] = [
+      {
+        type: "markdown",
+        authority: "web",
+        text: "See [1] for the claim.",
+      },
+    ];
+    for (const references of [undefined, [] as unknown[]]) {
+      const w = mount(StreamMessage, {
+        props: { blocks, ns: "m0", references },
+        global: { mocks: { $t: (k: string) => k } },
+      });
+      expect(w.html()).toContain("[1]");
+      expect(w.html()).not.toContain("#m0-ref-");
+      expect(w.html()).not.toContain('href="#');
+      expect(w.find(".doc-list").exists()).toBe(false);
+    }
   });
 
   it("linkifies [N] and renders CitationReferenceList only when references are nonempty", async () => {

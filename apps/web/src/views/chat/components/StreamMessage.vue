@@ -5,7 +5,7 @@
         :is="renderer(block.type)"
         v-if="renderer(block.type)"
         :block="block"
-        :ns="ns"
+        :ns="citationNs"
       />
     </template>
     <!--
@@ -18,7 +18,7 @@
     <CitationReferenceList
       v-if="references && references.length > 0"
       :references="references"
-      :ns="ns"
+      :ns="citationNs"
     />
   </div>
 </template>
@@ -39,6 +39,14 @@ const props = defineProps<{
   runId?: string;
   transport?: A2uiActionTransport | null;
 }>();
+
+// Defense in depth: never pass a non-empty ns to markdown/reasoning (or the
+// reference list) unless real reference rows exist — avoids dead #mN-ref-K
+// anchors when a caller supplies ns without references.
+const citationNs = computed(() =>
+  props.references && props.references.length ? props.ns ?? "" : ""
+);
+
 provide(
   "a2uiRunId",
   computed(() => props.runId ?? "")
