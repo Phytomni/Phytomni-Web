@@ -1,5 +1,5 @@
 <template>
-  <div data-testid="chat-composer">
+  <div data-testid="chat-composer" class="chat-composer">
     <ChatModeSelector
       v-if="showModeSelector"
       :model-value="chatMode"
@@ -9,7 +9,7 @@
     />
     <div
       :ref="bindTourInputTarget"
-      class="input-container-warpper"
+      class="chat-composer-surface"
     >
       <PhyComposerFrame>
         <ChatAgentPicker
@@ -21,7 +21,7 @@
           @select="emit('command', $event)"
           @clear="emit('clear-agent')"
         />
-        <div class="input-box">
+        <div class="chat-composer-body">
           <div v-if="isSending" class="abort-button-overlay">
             <el-tooltip :content="t('chat.abortTooltip')" placement="top">
               <el-button
@@ -43,7 +43,7 @@
             :loading="isSending"
             :disabled="isSending"
             variant="updown"
-            :auto-size="{ minRows: 2, maxRows: 5 }"
+            :auto-size="{ minRows: 1, maxRows: 5 }"
             clearable
             allow-speech
             :placeholder="t('chat.inputPlaceholder', { symbol: '@' })"
@@ -84,14 +84,7 @@
             </template>
 
             <template #prefix>
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 8px;
-                  flex-wrap: wrap;
-                "
-              >
+              <div class="composer-prefix">
                 <el-upload
                   ref="uploadRef"
                   class="upload-demo"
@@ -146,7 +139,7 @@
             </template>
 
             <template #action-list>
-              <div style="display: flex; align-items: center; gap: 8px">
+              <div class="composer-actions">
                 <div v-if="!modelValue.trim() || isSending" class="send-btn">
                   <el-tooltip
                     :content="t('chat.inputPlaceholderTip')"
@@ -255,99 +248,75 @@ defineExpose<ChatComposerHandle>({
 </script>
 
 <style scoped>
+.chat-composer {
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: var(--phy-space-8) var(--phy-space-16)
+    calc(var(--phy-space-8) + env(safe-area-inset-bottom, 0px));
+}
+
 .empty-chat-mode {
   display: flex;
   justify-content: center;
   margin: 0 auto var(--phy-space-8);
 }
 
-.input-container-warpper {
+.chat-composer-surface {
   position: relative;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 85%;
+  min-height: var(--phy-control-height-primary);
 }
 
-.input-box {
-  .header-self-wrap {
-    padding: 3px 2px 2px 3px;
-    box-sizing: border-box;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
+.chat-composer-body {
+  position: relative;
+  min-height: var(--phy-control-height-primary);
+}
 
-    .file-list-container {
-      .file-list-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 8px;
+.composer-prefix,
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
-        h4 {
-          margin: 0;
-          color: #606266;
-        }
-      }
+.header-self-wrap {
+  padding: 3px 2px 2px 3px;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
 
-      .file-list {
-        display: flex;
-        flex-direction: row;
-        gap: 3px;
-        flex-wrap: wrap;
-        padding: 4px;
-      }
+.file-list-container .file-list {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+  flex-wrap: wrap;
+  padding: 4px;
+}
 
-      .file-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0px 4px;
-        font-size: 12px;
+.file-list-container .file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 12px;
+}
 
-        .file-info {
-          display: flex;
-          align-items: center;
-          gap: 8px;
+.send-btn,
+.abort-btn {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
-          .el-icon {
-            color: #909399;
-          }
-
-          .file-name {
-            color: #303133;
-          }
-
-          .file-size {
-            color: #909399;
-            font-size: 12px;
-          }
-        }
-
-        .remove-btn {
-          padding: 2px;
-
-          &:hover {
-            color: #f56c6c;
-          }
-        }
-      }
-    }
-  }
-
-  .send-btn,
-  .abort-btn {
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .abort-button-overlay {
-    position: absolute;
-    top: -50px;
-    right: 20px;
-    z-index: 1000;
-    pointer-events: auto;
-  }
+.abort-button-overlay {
+  position: absolute;
+  top: -50px;
+  right: 20px;
+  z-index: 1000;
+  pointer-events: auto;
 }
 </style>

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import { ref, nextTick } from "vue";
+import { ref } from "vue";
 import type { UploadFile } from "@/views/chat/types";
 
 const mentionExpose = {
@@ -46,16 +46,21 @@ vi.mock("vue-element-plus-x", () => ({
 import ChatComposer from "@/views/chat/components/ChatComposer.vue";
 import type { ChatComposerHandle } from "@/views/chat/types";
 
-const PRE_EXTRACTION_DOM_ORDER = [
+const COMPACT_DOM_ORDER = [
   "chat-composer",
   "empty-chat-mode",
-  "input-container-warpper",
+  "chat-composer-surface",
   "phy-composer-frame",
-  "input-box",
+  "chat-agent-picker",
   "mention-sender-stub",
   "header-self-wrap",
   "upload-demo",
   "send-btn",
+];
+
+const pickerOptions = [
+  { tool: "RAG", label: "RAG", labelKey: "chat.agents.rAG" },
+  { tool: "BI", label: "BI", labelKey: "chat.agents.bI" },
 ];
 
 const baseProps = () => ({
@@ -68,8 +73,8 @@ const baseProps = () => ({
   rolesTool: ["RAG", "BI"],
   rolesLoading: false,
   hasMessages: false,
-  activeButton: "",
-  getAgentTooltip: (item: string) => item,
+  selectedAgent: "",
+  pickerOptions,
 });
 
 const mountComposer = (overrides: Record<string, unknown> = {}) =>
@@ -83,6 +88,13 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
           props: ["modelValue", "expertEnabled"],
           emits: ["update:modelValue"],
         },
+        ChatAgentPicker: {
+          name: "ChatAgentPicker",
+          template:
+            '<div class="chat-agent-picker" data-testid="chat-agent-picker" />',
+          props: ["options", "rolesLoading", "selectedAgent", "disabled"],
+          emits: ["select", "clear"],
+        },
         PhyComposerFrame: {
           name: "PhyComposerFrame",
           template: '<div class="phy-composer-frame"><slot /></div>',
@@ -90,7 +102,16 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
         ElUpload: {
           name: "ElUpload",
           template: '<div class="upload-demo"><slot name="trigger" /></div>',
-          props: ["disabled", "limit", "accept", "showFileList", "autoUpload", "multiple", "action", "onChange"],
+          props: [
+            "disabled",
+            "limit",
+            "accept",
+            "showFileList",
+            "autoUpload",
+            "multiple",
+            "action",
+            "onChange",
+          ],
           emits: ["change"],
         },
         ElButton: {
@@ -137,17 +158,28 @@ describe("ChatComposer", () => {
     expect(wrapper.find('[data-testid="chat-composer"]').exists()).toBe(true);
   });
 
-  it("keeps DOM-order parity with the pre-extraction fixture", () => {
-    const wrapper = mountComposer({ fileList: [{ name: "a.pdf", size: 1, type: "application/pdf", file: new File([], "a.pdf") }] });
+  it("keeps compact DOM order without legacy wrappers", () => {
+    const wrapper = mountComposer({
+      fileList: [
+        {
+          name: "a.pdf",
+          size: 1,
+          type: "application/pdf",
+          file: new File([], "a.pdf"),
+        },
+      ],
+    });
     const order: string[] = [];
     const walk = (el: Element) => {
       const cls = el.className?.toString() || "";
       const testId = el.getAttribute("data-testid");
       if (testId === "chat-composer") order.push("chat-composer");
       if (cls.includes("empty-chat-mode")) order.push("empty-chat-mode");
-      if (cls.includes("input-container-warpper")) order.push("input-container-warpper");
+      if (cls.includes("chat-composer-surface")) order.push("chat-composer-surface");
       if (cls.includes("phy-composer-frame")) order.push("phy-composer-frame");
-      if (cls.includes("input-box")) order.push("input-box");
+      if (testId === "chat-agent-picker" || cls.includes("chat-agent-picker")) {
+        order.push("chat-agent-picker");
+      }
       if (cls.includes("mention-sender-stub")) order.push("mention-sender-stub");
       if (cls.includes("header-self-wrap")) order.push("header-self-wrap");
       if (cls.includes("upload-demo")) order.push("upload-demo");
@@ -155,14 +187,27 @@ describe("ChatComposer", () => {
       Array.from(el.children).forEach(walk);
     };
     walk(wrapper.element);
-    for (const token of PRE_EXTRACTION_DOM_ORDER) {
+    for (const token of COMPACT_DOM_ORDER) {
       expect(order).toContain(token);
     }
-    expect(order.indexOf("chat-composer")).toBeLessThan(order.indexOf("empty-chat-mode"));
-    expect(order.indexOf("empty-chat-mode")).toBeLessThan(order.indexOf("input-container-warpper"));
-    expect(order.indexOf("input-container-warpper")).toBeLessThan(order.indexOf("phy-composer-frame"));
-    expect(order.indexOf("phy-composer-frame")).toBeLessThan(order.indexOf("input-box"));
-    expect(order.indexOf("input-box")).toBeLessThan(order.indexOf("mention-sender-stub"));
+    expect(wrapper.find(".input-container-warpper").exists()).toBe(false);
+    expect(wrapper.find(".input-box").exists()).toBe(false);
+    expect(wrapper.find(".input-container-bottom").exists()).toBe(false);
+    expect(order.indexOf("chat-composer")).toBeLessThan(
+      order.indexOf("empty-chat-mode")
+    );
+    expect(order.indexOf("empty-chat-mode")).toBeLessThan(
+      order.indexOf("chat-composer-surface")
+    );
+    expect(order.indexOf("chat-composer-surface")).toBeLessThan(
+      order.indexOf("phy-composer-frame")
+    );
+    expect(order.indexOf("phy-composer-frame")).toBeLessThan(
+      order.indexOf("chat-agent-picker")
+    );
+    expect(order.indexOf("chat-agent-picker")).toBeLessThan(
+      order.indexOf("mention-sender-stub")
+    );
   });
 
   it("supports v-model on the mention input", async () => {
@@ -192,10 +237,15 @@ describe("ChatComposer", () => {
     const wrapper = mountComposer({ showModeSelector: true });
     expect(wrapper.find(".empty-chat-mode").exists()).toBe(true);
 
-    const withMessages = mountComposer({ showModeSelector: false, hasMessages: true });
+    const withMessages = mountComposer({
+      showModeSelector: false,
+      hasMessages: true,
+    });
     expect(withMessages.find(".empty-chat-mode").exists()).toBe(false);
 
-    await wrapper.findComponent({ name: "ChatModeSelector" }).vm.$emit("update:modelValue", "expert");
+    await wrapper
+      .findComponent({ name: "ChatModeSelector" })
+      .vm.$emit("update:modelValue", "expert");
     expect(wrapper.emitted("update:chatMode")?.[0]).toEqual(["expert"]);
   });
 
@@ -215,7 +265,12 @@ describe("ChatComposer", () => {
   it("emits file-change from the upload control", async () => {
     const wrapper = mountComposer();
     const upload = wrapper.findComponent({ name: "ElUpload" });
-    const file = { name: "f.txt", size: 1, type: "text/plain", raw: new File([], "f.txt") };
+    const file = {
+      name: "f.txt",
+      size: 1,
+      type: "text/plain",
+      raw: new File([], "f.txt"),
+    };
     upload.props("onChange")?.(file);
     await wrapper.vm.$nextTick();
     expect(wrapper.emitted("file-change")).toHaveLength(1);
@@ -223,12 +278,16 @@ describe("ChatComposer", () => {
 
   it("disables upload and mention controls while sending", () => {
     const wrapper = mountComposer({ isSending: true });
-    expect(wrapper.findComponent({ name: "MentionSender" }).props("disabled")).toBe(true);
-    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(true);
+    expect(wrapper.findComponent({ name: "MentionSender" }).props("disabled")).toBe(
+      true
+    );
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
     expect(wrapper.find(".file-list-container").exists()).toBe(false);
   });
 
-  it("forwards mention select/search and agent footer actions", async () => {
+  it("forwards mention select/search and picker command/clear", async () => {
     const wrapper = mountComposer();
     const mention = wrapper.findComponent({ name: "MentionSender" });
     await mention.vm.$emit("select", { value: "RAG" });
@@ -236,10 +295,19 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("select")?.[0]).toEqual([{ value: "RAG" }]);
     expect(wrapper.emitted("search")?.[0]).toEqual(["R"]);
 
-    const agentBtn = wrapper.find(".agent-button");
-    expect(agentBtn.exists()).toBe(true);
-    await agentBtn.trigger("click");
-    expect(wrapper.emitted("agent-click")?.[0]).toEqual(["RAG"]);
+    const picker = wrapper.findComponent({ name: "ChatAgentPicker" });
+    expect(picker.exists()).toBe(true);
+    await picker.vm.$emit("select", "@RAG,");
+    await picker.vm.$emit("clear");
+    expect(wrapper.emitted("command")?.[0]).toEqual(["@RAG,"]);
+    expect(wrapper.emitted("clear-agent")).toHaveLength(1);
+  });
+
+  it("hides the agent picker in expert mode", () => {
+    const wrapper = mountComposer({ chatMode: "expert" });
+    expect(wrapper.findComponent({ name: "ChatAgentPicker" }).exists()).toBe(
+      false
+    );
   });
 
   it("exposes ChatComposerHandle methods consumed by composables", async () => {
@@ -252,7 +320,7 @@ describe("ChatComposer", () => {
     expect(handle.popoverVisible).toBe(false);
   });
 
-  it("binds tour input target to input-container-warpper without an extra focus wrapper", async () => {
+  it("binds tour input target to the compact surface without an extra focus wrapper", async () => {
     const tourInputTarget = ref<HTMLElement | null>(null);
     const setTourInputTarget = (el: HTMLElement | null) => {
       tourInputTarget.value = el;
@@ -260,8 +328,12 @@ describe("ChatComposer", () => {
     mountComposer({ setTourInputTarget, showModeSelector: false });
     await flushPromises();
     expect(tourInputTarget.value).toBeTruthy();
-    expect(tourInputTarget.value?.classList.contains("input-container-warpper")).toBe(true);
-    expect(tourInputTarget.value?.getAttribute("data-testid")).not.toBe("chat-composer");
+    expect(
+      tourInputTarget.value?.classList.contains("chat-composer-surface")
+    ).toBe(true);
+    expect(tourInputTarget.value?.getAttribute("data-testid")).not.toBe(
+      "chat-composer"
+    );
   });
 
   it("blocks Enter propagation while mention dropdown is open", async () => {
@@ -272,5 +344,13 @@ describe("ChatComposer", () => {
     Object.defineProperty(event, "stopPropagation", { value: stopPropagation });
     wrapper.find(".mention-sender-stub").element.dispatchEvent(event);
     expect(stopPropagation).toHaveBeenCalled();
+  });
+
+  it("applies a 48px-minimum elevated surface with safe-area padding", () => {
+    const wrapper = mountComposer();
+    const surface = wrapper.find(".chat-composer-surface");
+    expect(surface.exists()).toBe(true);
+    const rootStyle = wrapper.find('[data-testid="chat-composer"]').classes();
+    expect(rootStyle).toContain("chat-composer");
   });
 });

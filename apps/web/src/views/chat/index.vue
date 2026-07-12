@@ -1,4 +1,10 @@
 <template>
+  <div
+    class="chat-page-root"
+    data-testid="chat-root"
+    :data-chat-state="chatStateAttr"
+    :data-sidebar-drawer-state="sidebarDrawerStateAttr"
+  >
   <PhyAdaptiveShell
     :sidebar-collapsed="leftSidebarCollapsed"
     :artifact-open="false"
@@ -82,6 +88,7 @@
       <!-- Message area -->
       <div
         class="message-container"
+        data-testid="chat-transcript"
         data-test="chat-transcript-scroll-root"
         ref="messageContainer"
         :key="timestamp"
@@ -116,6 +123,7 @@
             :key="index"
             class="message"
             :class="message.role"
+            data-testid="chat-message-row"
           >
             <!-- Only assistant messages show an avatar -->
             <div v-if="message.role === 'assistant'" class="message-avatar">
@@ -979,6 +987,7 @@
         <div
           v-if="isSending && !getChatState(currentChatId).isStreaming"
           class="message assistant"
+          data-testid="chat-message-row"
         >
           <div class="message-avatar">
             <el-avatar :size="36" :src="botAvatar" />
@@ -1068,11 +1077,21 @@
     </el-dialog>
     </template>
   </PhyAdaptiveShell>
+  </div>
 </template>
 <script setup lang="ts">
-import { onMounted, provide, ref, nextTick, watch, computed } from "vue";
+import {
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  nextTick,
+  watch,
+  computed,
+} from "vue";
 import Sidebar from "./sidebar.vue";
 import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
+import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
 import { Prompts } from "vue-element-plus-x";
 import TransferProgress from "@/components/TransferProgress.vue";
 import SendProgress from "./components/SendProgress.vue";
@@ -1148,6 +1167,23 @@ const { t } = useI18n();
 const leftSidebarCollapsed = ref(false);
 const leftSidebarDrawerOpen = ref(false);
 provide(CHAT_SIDEBAR_DRAWER_OPEN_KEY, leftSidebarDrawerOpen);
+
+const isMobileViewport = ref(
+  typeof window !== "undefined"
+    ? window.innerWidth < SIDEBAR_MOBILE_BREAKPOINT
+    : false
+);
+const updateMobileViewport = () => {
+  isMobileViewport.value = window.innerWidth < SIDEBAR_MOBILE_BREAKPOINT;
+};
+
+const chatStateAttr = computed(() =>
+  currentChat.value?.messages?.length ? "populated" : "empty"
+);
+const sidebarDrawerStateAttr = computed(() => {
+  if (!isMobileViewport.value) return "not-mobile";
+  return leftSidebarDrawerOpen.value ? "open" : "closed";
+});
 
 // Agents architecture diagram dialog
 const agentsViewVisible = ref(false);
@@ -1239,6 +1275,9 @@ const loadUserTools = async () => {
 };
 
 onMounted(async () => {
+  updateMobileViewport();
+  window.addEventListener("resize", updateMobileViewport);
+
   // Load permission info first
   await loadUserTools();
 
@@ -1280,6 +1319,10 @@ onMounted(async () => {
   // Check whether the tutorial guide needs to be shown
   checkTutorialStatus();
 
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateMobileViewport);
 });
 
 // Load a specific incomplete session from localStorage (used by onMounted keyed on the url chatId)
@@ -1858,6 +1901,13 @@ const copyMessageWithDocs = (message: any, index: number) => {
   --el-button-border-color: var(--phy-color-primary-soft);
 }
 
+.chat-page-root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
 .chat-main-layout {
   display: flex;
   flex: 1;
@@ -1932,7 +1982,10 @@ const copyMessageWithDocs = (message: any, index: number) => {
   min-height: 0;
   overflow-y: auto;
   padding: var(--phy-space-16) var(--phy-space-16)
-    calc(var(--phy-control-height-primary) + var(--phy-space-32));
+    calc(
+      var(--phy-control-height-primary) + var(--phy-space-32) +
+        env(safe-area-inset-bottom, 0px)
+    );
   display: flex;
   flex-direction: column;
   background: var(--phy-color-bg-page);
@@ -2085,11 +2138,12 @@ const copyMessageWithDocs = (message: any, index: number) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: min(760px, 100%);
+  justify-content: flex-end;
+  width: min(100%, var(--phy-layout-transcript-max-width));
   margin: 0 auto;
-  padding: var(--phy-space-24) var(--phy-space-16) var(--phy-space-16);
+  padding: var(--phy-space-24) var(--phy-space-16) var(--phy-space-8);
   box-sizing: border-box;
+  gap: var(--phy-space-16);
 
   .empty-chat-starters-shell {
     width: 100%;
@@ -2167,8 +2221,9 @@ const copyMessageWithDocs = (message: any, index: number) => {
 
 .input-container {
   width: 100%;
+  flex-shrink: 0;
   position: relative;
-  background-color: #fff;
+  background-color: var(--phy-color-bg-page);
 }
 
 .message-user {

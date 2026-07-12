@@ -204,7 +204,7 @@ const drawerStateAttr = computed(() => {
   if (!props.fixture) return undefined;
   if (props.fixture.key === "sidebar-mobile-closed") return "closed";
   if (props.fixture.key === "sidebar-mobile-open") return "open";
-  return undefined;
+  return "not-mobile";
 });
 
 const messages = computed(() =>

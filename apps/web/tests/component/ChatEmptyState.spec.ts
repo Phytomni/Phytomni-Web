@@ -99,7 +99,10 @@ describe("Chat empty state", () => {
       ':set-tour-input-target="setTourInputTarget"'
     );
     expect(CHAT_COMPOSER_SOURCE).toContain(':ref="bindTourInputTarget"');
-    expect(CHAT_COMPOSER_SOURCE).toContain('class="input-container-warpper"');
+    expect(CHAT_COMPOSER_SOURCE).toContain('class="chat-composer-surface"');
+    expect(CHAT_COMPOSER_SOURCE).not.toContain(
+      'class="input-container-warpper"'
+    );
     const emptyStateStart = CHAT_SOURCE.indexOf(
       '<div v-if="!currentChat?.messages?.length" class="empty-chat">'
     );

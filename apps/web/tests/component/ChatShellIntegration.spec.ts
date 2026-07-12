@@ -133,7 +133,25 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("<el-dialog");
     expect(CHAT_SOURCE).toContain('class="message-container"');
     expect(CHAT_SOURCE).toContain("<ChatComposer");
-    expect(CHAT_COMPOSER_SOURCE).toContain('class="input-container-warpper"');
+    expect(CHAT_COMPOSER_SOURCE).toContain('class="chat-composer-surface"');
+    expect(CHAT_COMPOSER_SOURCE).not.toContain(
+      'class="input-container-warpper"'
+    );
+    expect(CHAT_COMPOSER_SOURCE).not.toContain('class="input-box"');
+  });
+
+  it("exposes production singleton frame hooks for capture", () => {
+    expect(countOccurrences(CHAT_SOURCE, 'data-testid="chat-root"')).toBe(1);
+    expect(countOccurrences(CHAT_SOURCE, 'data-testid="chat-transcript"')).toBe(
+      1
+    );
+    expect(CHAT_SOURCE).toContain(':data-chat-state="chatStateAttr"');
+    expect(CHAT_SOURCE).toContain(
+      ':data-sidebar-drawer-state="sidebarDrawerStateAttr"'
+    );
+    expect(
+      countOccurrences(CHAT_SOURCE, 'data-testid="chat-message-row"')
+    ).toBe(2);
   });
 
   it("keeps the Chat header focused on conversation context", () => {

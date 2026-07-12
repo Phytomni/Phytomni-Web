@@ -9,7 +9,7 @@
     </div>
 
     <div
-      v-else-if="options.length === 0"
+      v-else-if="safeOptions.length === 0"
       class="picker-status"
       data-testid="agent-picker-empty"
     >
@@ -87,12 +87,18 @@ export type ChatAgentPickerOption = {
   labelKey: string;
 };
 
-const props = defineProps<{
-  options: ChatAgentPickerOption[];
-  rolesLoading: boolean;
-  selectedAgent: string;
-  disabled?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    options?: ChatAgentPickerOption[];
+    rolesLoading: boolean;
+    selectedAgent: string;
+    disabled?: boolean;
+  }>(),
+  {
+    options: () => [],
+    disabled: false,
+  }
+);
 
 const emit = defineEmits<{
   select: [command: string];
@@ -107,17 +113,20 @@ const open = ref(false);
 const query = ref("");
 const activeIndex = ref(0);
 
-const permittedTools = computed(() => new Set(props.options.map((o) => o.tool)));
+const safeOptions = computed(() => props.options ?? []);
+const permittedTools = computed(
+  () => new Set(safeOptions.value.map((o) => o.tool))
+);
 
 const selectedLabel = computed(() => {
-  const match = props.options.find((o) => o.tool === props.selectedAgent);
+  const match = safeOptions.value.find((o) => o.tool === props.selectedAgent);
   return match?.label ?? props.selectedAgent;
 });
 
 const filteredOptions = computed(() => {
   const q = query.value.trim().toLowerCase();
-  if (!q) return props.options;
-  return props.options.filter(
+  if (!q) return safeOptions.value;
+  return safeOptions.value.filter(
     (option) =>
       option.label.toLowerCase().includes(q) ||
       option.tool.toLowerCase().includes(q)
@@ -145,7 +154,7 @@ watch(filteredOptions, (options) => {
 });
 
 const openList = () => {
-  if (props.disabled || props.rolesLoading || props.options.length === 0) {
+  if (props.disabled || props.rolesLoading || safeOptions.value.length === 0) {
     return;
   }
   open.value = true;
@@ -241,9 +250,9 @@ defineExpose({ trySelect });
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .picker-status {
@@ -288,7 +297,8 @@ defineExpose({ trySelect });
 .picker-combobox {
   width: 100%;
   box-sizing: border-box;
-  padding: 6px 10px;
+  min-height: var(--phy-control-height-compact, 32px);
+  padding: 4px 10px;
   border: 1px solid var(--phy-color-border, #d4d4d4);
   border-radius: 8px;
   font: inherit;
