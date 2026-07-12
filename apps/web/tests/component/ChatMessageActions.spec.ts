@@ -259,4 +259,29 @@ describe("ChatMessageActions", () => {
       /<MarkdownViewer[\s\S]*surface=["']chat["']/
     );
   });
+
+  it("local stopped/error rows without server id keep copy but not server-backed actions", () => {
+    // index gates react/refresh/download/log on !!message.id
+    expect(INDEX_SOURCE).toMatch(
+      /:can-react="message\.role === 'assistant' && !!message\.id"/
+    );
+    expect(INDEX_SOURCE).toMatch(/if \(message\.id\) handleReaction/);
+    expect(INDEX_SOURCE).toMatch(/if \(message\.id\) getFileDownUrl/);
+    expect(INDEX_SOURCE).toMatch(/message\.id && toggleLogView/);
+
+    const localRow = mountActions({
+      role: "assistant",
+      canRefresh: false,
+      canReact: false,
+      generatedFormats: [],
+      directDownloads: [],
+    });
+    expect(localRow.find('[data-testid="action-copy"]').exists()).toBe(true);
+    expect(localRow.find('[data-testid="action-refresh"]').exists()).toBe(false);
+    expect(localRow.find('[data-testid="action-like"]').exists()).toBe(false);
+    expect(localRow.find('[data-testid="action-dislike"]').exists()).toBe(false);
+    expect(
+      localRow.find('[data-testid="action-generated-download"]').exists()
+    ).toBe(false);
+  });
 });

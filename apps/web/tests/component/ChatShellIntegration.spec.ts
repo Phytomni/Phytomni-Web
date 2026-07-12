@@ -311,6 +311,27 @@ describe("Chat adaptive shell integration", () => {
     expect(sendMessageSource).toContain("chatState.uploadTransfer");
     expect(sendMessageSource).toContain("getStreamChatState");
     expect(sendMessageSource).toContain("id === sendingDialogueId ? chatState");
+    expect(sendMessageSource).toContain("createChatRequestKey");
+    expect(sendMessageSource).toContain("parentRowIdForDialogue");
+    expect(sendMessageSource).toContain("sendingMessages.push");
+    expect(sendMessageSource).toContain(
+      "chatState.activeRequestId === requestKey"
+    );
+    expect(sendMessageSource).not.toContain("Date.now().toString()");
+    expect(sendMessageSource).not.toContain("currentRequestId");
+    expect(sendMessageSource).not.toContain("isAborted");
+    expect(sendMessageSource).not.toContain("getDialogueIdFromChatId");
+
+    expect(CHAT_SOURCE).toContain("activeRequestId");
+    expect(CHAT_SOURCE).toContain("generationStopped");
+    expect(CHAT_SOURCE).toContain("abortDialogueRequest");
+    expect(CHAT_SOURCE).toContain("findStateByRequestId");
+    expect(CHAT_SOURCE).not.toContain("const currentRequestId = ref");
+    expect(CHAT_SOURCE).not.toContain("const isAborted = ref");
+    // Stopped local row must not invent a fake server message id
+    expect(CHAT_SOURCE).not.toMatch(
+      /generationStopped[\s\S]{0,200}id:\s*Date\.now\(\)\.toString\(\)/
+    );
   });
 
   it("owns live rendered messages on chatStates via renderedChat, not a second top-level cache", () => {

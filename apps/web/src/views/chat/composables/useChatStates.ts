@@ -26,6 +26,8 @@ function createDefaultChatUIState(): ChatUIState {
     uploadTransfer: null,
     selectedAgent: "",
     renderedChat: null,
+    activeRequestId: "",
+    generationStopped: false,
   };
 }
 

@@ -505,10 +505,12 @@ import {
 } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
 import { formatLogContentWithColors } from "./utils/agent-log";
+import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import type {
   Chat,
   ChatMessage,
   ChatComposerHandle,
+  ChatUIState,
   DialogueReconciliationResult,
 } from "./types";
 
@@ -701,6 +703,7 @@ const loadPendingChat = (dialogueId: string) => {
 
 // Parallel chat state (independent UI state per dialogueId) + current chat + 10 computed proxies
 const {
+  chatStates,
   getChatState,
   rekeyChatState,
   currentChatId,
@@ -910,10 +913,6 @@ const {
   digitalDesignImagesLoading,
 } = useAgentImages(currentChat);
 
-// Abort-request related
-const currentRequestId = ref<string>("");
-const isAborted = ref(false);
-
 // Start a new chat
 const startNewChat = () => {
   // Create the state for a new chat
@@ -1005,48 +1004,72 @@ const { getReactionState, handleReaction } = useReactions({
   scrollToBottom,
 });
 
-function abortTransfer(requestId: string) {
-  if (currentChatId.value) {
-    getChatState(currentChatId.value).uploadTransfer = null;
+function findStateByRequestId(
+  requestId: string
+): { dialogueId: string; state: ChatUIState } | null {
+  for (const [dialogueId, state] of Object.entries(chatStates.value)) {
+    if (
+      state.activeRequestId === requestId ||
+      state.uploadTransfer?.requestId === requestId
+    ) {
+      return { dialogueId, state };
+    }
   }
-  if (requestId === currentRequestId.value) {
-    void abortCurrentRequest();
+  return null;
+}
+
+function abortTransfer(requestId: string) {
+  const owned = findStateByRequestId(requestId);
+  if (owned) {
+    owned.state.uploadTransfer = null;
+  }
+  if (owned && owned.state.activeRequestId === requestId) {
+    void abortDialogueRequest(owned.dialogueId, owned.state);
     return;
   }
   abortRequest(requestId);
 }
 
-// Abort the current request
+// Abort the current (focused) dialogue's in-flight request
 const abortCurrentRequest = async () => {
-  if (!currentRequestId.value) return;
+  const dialogueId = currentChatId.value;
+  if (!dialogueId) return;
+  const chatState = getChatState(dialogueId);
+  await abortDialogueRequest(dialogueId, chatState);
+};
+
+const abortDialogueRequest = async (
+  dialogueId: string,
+  chatState: ChatUIState
+) => {
+  const requestId = chatState.activeRequestId;
+  if (!requestId) return;
 
   try {
-    // Import the abort-request helper
     const requestModule = (await import("@/utils/request")) as any;
-    const success = requestModule.abortRequest(currentRequestId.value);
+    const success = requestModule.abortRequest(requestId);
     if (success) {
-      isAborted.value = true;
+      chatState.generationStopped = true;
 
-      // Add an abort message
-      if (currentChat.value?.messages) {
+      // Local stopped row: no server message id — copy may remain; server-backed
+      // actions stay gated by !!message.id in the template.
+      const messages = chatState.renderedChat?.messages;
+      if (messages) {
         const abortMessage: ChatMessage = {
           role: "assistant",
           content: t("chat.generationStopped"),
           instantMessage: true,
-          id: Date.now().toString(),
         };
-        currentChat.value.messages.push(abortMessage);
+        messages.push(abortMessage);
       }
 
-      // Reset state
-      const chatState = getChatState(currentChatId.value);
-      if (chatState) {
-        chatState.isSending = false;
+      chatState.isSending = false;
+      chatState.uploadTransfer = null;
+      // Leave activeRequestId for send finally to clear only if it still matches.
+
+      if (currentChatId.value === dialogueId) {
+        await scrollToBottom();
       }
-
-      currentRequestId.value = "";
-
-      await scrollToBottom();
     }
   } catch (error) {
     console.error("Failed to abort request:", error);
@@ -1120,14 +1143,10 @@ const getChatIdFromUrl = () => {
   const urlParams = new URLSearchParams(window.location.search);
   return urlParams.get("dialogue_id");
 };
-// Read the dialogue ID based on the chat ID
+
+/** Parent row id for the focused dialogue — refresh only; send uses a pre-await capture. */
 const getDialogueIdFromChatId = () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const dialogueId = urlParams.get("dialogue_id");
-  const chatRealId = chatList.value.find(
-    (c: Chat) => c.dialogue_id === dialogueId
-  )?.id;
-  return chatRealId;
+  return parentRowIdForDialogue(currentChatId.value, chatList.value);
 };
 
 // Send message — send logic extracted into the useSendMessage composable
@@ -1136,17 +1155,12 @@ const { sendMessage } = useSendMessage({
   currentChatId,
   currentChat,
   composerRef,
-  currentRequestId,
-  isAborted,
   t,
   userStore,
   getHistoryQuestionData,
-  updateUrlWithChatId,
   chatList,
   timestamp,
   selectChat,
-  getDialogueIdFromChatId,
-  getChatIdFromUrl,
   scrollToBottom,
 });
 

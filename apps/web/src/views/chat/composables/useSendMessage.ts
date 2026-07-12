@@ -19,26 +19,23 @@ import { getQueryAbortable, getAnswerCheck } from "@/api/chat";
 import { createTransferTracker } from "@/utils/transfer-progress";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
+import { createChatRequestKey } from "../utils/chat-request-key";
+import { parentRowIdForDialogue } from "../utils/chat-parent-row";
 
 export function useSendMessage(opts: {
   getChatState: (dialogueId: string) => any;
   currentChatId: Ref<string>;
   currentChat: Ref<any>;
   composerRef: Ref<ChatComposerHandle | null>;
-  currentRequestId: Ref<string>;
-  isAborted: Ref<boolean>;
   t: (key: string) => string;
   userStore: () => any;
   getHistoryQuestionData: (
     sendingDialogueId?: string,
     options?: { blockingDialogueId?: string }
   ) => Promise<DialogueReconciliationResult | undefined> | DialogueReconciliationResult | undefined;
-  updateUrlWithChatId: (dialogueId: string) => void;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
   selectChat: (dialogueId: string) => Promise<void> | void;
-  getDialogueIdFromChatId: (chatId?: any) => any;
-  getChatIdFromUrl: () => any;
   scrollToBottom: () => void;
 }) {
   const {
@@ -46,24 +43,23 @@ export function useSendMessage(opts: {
     currentChatId,
     currentChat,
     composerRef,
-    currentRequestId,
-    isAborted,
     t,
     userStore,
     getHistoryQuestionData,
-    updateUrlWithChatId,
     chatList,
     timestamp,
     selectChat,
-    getDialogueIdFromChatId,
-    getChatIdFromUrl,
     scrollToBottom,
   } = opts;
+
+  const isForeground = (sendingDialogueId: string) =>
+    currentChatId.value === sendingDialogueId;
 
   const sendMessage = async () => {
     if (!currentChatId.value) return;
 
-    const chatState = getChatState(currentChatId.value);
+    const sendingDialogueId = currentChatId.value;
+    const chatState = getChatState(sendingDialogueId);
     if (!chatState || !chatState.messageInput.trim() || chatState.isSending)
       return;
 
@@ -71,33 +67,62 @@ export function useSendMessage(opts: {
     const currentMessage = newMessageValue.cleanedText;
     if (!currentMessage.trim()) return;
 
+    // Capture parent row, files, mode, history, and request key before any await
+    // so an A→B switch during scrollToBottom cannot retarget the payload.
+    const parentRowId = parentRowIdForDialogue(
+      sendingDialogueId,
+      chatList.value
+    );
+    const capturedFiles = [...chatState.fileList];
+    const capturedMode = chatState.mode;
+    const capturedHistory = chatState.historyQuestion;
+    const capturedMatches = [...newMessageValue.matches];
+    const requestKey = createChatRequestKey();
+
     chatState.isSending = true;
-    isAborted.value = false;
+    chatState.generationStopped = false;
+    chatState.activeRequestId = requestKey;
     chatState.sendStartedAt = Date.now();
     chatState.activeAgentName =
-      newMessageValue.matches.length > 0
-        ? newMessageValue.matches[0]
-        : "ChatAgent";
+      capturedMatches.length > 0 ? capturedMatches[0] : "ChatAgent";
     chatState.completing = false;
     chatState.messageInput = "";
 
-    const isNewChat =
-      !currentChat.value?.messages || currentChat.value.messages.length === 0;
-    if (isNewChat) currentChat.value = { messages: [] };
+    const isNewChat = (() => {
+      if (!chatState.renderedChat) {
+        if (
+          currentChatId.value === sendingDialogueId &&
+          currentChat.value?.messages
+        ) {
+          chatState.renderedChat = currentChat.value;
+        } else {
+          chatState.renderedChat = { messages: [] };
+        }
+      }
+      return chatState.renderedChat.messages.length === 0;
+    })();
+    // Keep the shell currentChat view in sync when this dialogue is focused
+    // (production computed setter writes the same object; test harnesses may
+    // still pass a separate ref).
+    if (currentChatId.value === sendingDialogueId) {
+      currentChat.value = chatState.renderedChat;
+    }
 
     // build the user message, including attached file info
     const userMessage = {
       role: "user",
       content: currentMessage,
-      attachedFiles:
-        chatState.fileList.length > 0 ? [...chatState.fileList] : undefined,
+      attachedFiles: capturedFiles.length > 0 ? [...capturedFiles] : undefined,
     };
 
     // append file info to the message content so it persists in history
     let messageContent = currentMessage;
-    if (chatState.fileList.length > 0) {
-      const fileInfo = chatState.fileList
-        .map((file: any) => `[Attachment: ${file.name} (${formatFileSize(file.size)})]`)
+    if (capturedFiles.length > 0) {
+      const fileInfo = capturedFiles
+        .map(
+          (file: any) =>
+            `[Attachment: ${file.name} (${formatFileSize(file.size)})]`
+        )
         .join("\n");
       messageContent = `${currentMessage}\n\n${fileInfo}`;
     }
@@ -105,52 +130,78 @@ export function useSendMessage(opts: {
     // update the user message content to include file info
     userMessage.content = messageContent;
 
-    currentChat.value.messages.push(userMessage);
+    const sendingMessages = chatState.renderedChat.messages;
+    sendingMessages.push(userMessage);
 
-    // Capture sending IDs and messages here so the write+clear below run against
-    // a stable snapshot, immune to currentChatId / currentChat rotation during
-    // the awaits below (scrollToBottom, getQueryAbortable, and finally
-    // getHistoryQuestionData).
-    const sendingDialogueId = currentChatId.value;
-    const sendingMessages = currentChat.value.messages;
     const sendingTitle = messageContent;
     let blockingDialogueId: string | undefined;
+
+    if (parentRowId === null) {
+      // Hard no-send: missing/ambiguous existing parent mapping.
+      sendingMessages.push({
+        role: "assistant",
+        content: t("chat.sendFailed"),
+        steps: [],
+        status: "",
+        upload_path: "",
+        download_path: "",
+        instantMessage: true,
+        tool_name: "",
+        followUpQuestions: [],
+        showFollowUpQuestions: false,
+        showLog: false,
+      });
+      if (chatState.activeRequestId === requestKey) {
+        chatState.activeRequestId = "";
+        chatState.isSending = false;
+        chatState.sendStartedAt = null;
+        chatState.completing = false;
+        chatState.activeAgentName = "";
+        chatState.generationStopped = false;
+      }
+      if (isForeground(sendingDialogueId)) {
+        await scrollToBottom();
+      }
+      return;
+    }
 
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
       writePendingChat(sendingDialogueId, sendingMessages, {
         title: sendingTitle,
-        mode: chatState.mode,
-        onError: () => ElMessage.warning(t("chat.pendingWriteFailed")),
+        mode: capturedMode,
+        onError: () => {
+          if (isForeground(sendingDialogueId)) {
+            ElMessage.warning(t("chat.pendingWriteFailed"));
+          }
+        },
       });
     }
 
-    await scrollToBottom();
+    if (isForeground(sendingDialogueId)) {
+      await scrollToBottom();
+    }
 
     try {
-      const urlChatId = getDialogueIdFromChatId();
       const queryData = new FormData();
       queryData.append("query", messageContent); // use the message content that includes file info
-      queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
+      queryData.append("id", parentRowId.toString());
       queryData.append(
         "tool",
-        chatState.mode === "expert"
+        capturedMode === "expert"
           ? ""
-          : newMessageValue.matches.length > 0
-            ? newMessageValue.matches.join(",")
+          : capturedMatches.length > 0
+            ? capturedMatches.join(",")
             : ""
       );
-      queryData.append("mode", chatState.mode);
-      if (chatState.historyQuestion) {
-        queryData.append("history", JSON.stringify(chatState.historyQuestion));
+      queryData.append("mode", capturedMode);
+      if (capturedHistory) {
+        queryData.append("history", JSON.stringify(capturedHistory));
       }
-      if (chatState.fileList.length > 0) {
-        chatState.fileList.forEach((fileItem: any) => {
+      if (capturedFiles.length > 0) {
+        capturedFiles.forEach((fileItem: any) => {
           queryData.append("files", fileItem.file);
         });
       }
-
-      // generate a request ID
-      currentRequestId.value = Date.now().toString();
 
       // Stream branch: chat-family + instant mode + dark-launch flag. The
       // insertion point is inside the existing try, so returning here still
@@ -158,7 +209,7 @@ export function useSendMessage(opts: {
       // coordinator, title update, fileList clear) exactly once — no duplicate
       // cleanup needed, and none is done here.
       const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
-      if (shouldStream(chatState.activeAgentName, chatState.mode, streamFlag)) {
+      if (shouldStream(chatState.activeAgentName, capturedMode, streamFlag)) {
         const placeholder: ChatMessage = {
           role: "assistant",
           content: "",
@@ -170,7 +221,7 @@ export function useSendMessage(opts: {
           showFollowUpQuestions: false,
           showLog: false,
         };
-        currentChat.value.messages.push(placeholder);
+        sendingMessages.push(placeholder);
         // Bind stream lookups to the captured state object so a post-rekey
         // getChatState(oldTempId) cannot resurrect an empty temp record.
         const getStreamChatState = (id: string) =>
@@ -182,23 +233,23 @@ export function useSendMessage(opts: {
         await streamMessage({
           dialogueId: sendingDialogueId,
           formData: queryData,
-          requestId: currentRequestId.value,
+          requestId: requestKey,
           placeholder,
         });
         return;
       }
 
-      const hasFiles = chatState.fileList.length > 0;
+      const hasFiles = capturedFiles.length > 0;
       const tracker = hasFiles
         ? createTransferTracker({
             phase: "upload",
-            requestId: currentRequestId.value,
+            requestId: requestKey,
           })
         : null;
 
       const response = await getQueryAbortable(
         queryData as any,
-        currentRequestId.value,
+        requestKey,
         tracker
           ? {
               onUploadProgress: (e) => {
@@ -220,7 +271,7 @@ export function useSendMessage(opts: {
       );
 
       // On response: first fast-animate the progress bar to 100% (CSS 300ms), then swap in the answer.
-      if (!isAborted.value) {
+      if (!chatState.generationStopped) {
         chatState.completing = true;
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
@@ -323,7 +374,9 @@ export function useSendMessage(opts: {
                     // force a view update
                     nextTick(() => {
                       timestamp.value = Date.now();
-                      scrollToBottom();
+                      if (isForeground(sendingDialogueId)) {
+                        scrollToBottom();
+                      }
                     });
                   })
                   .catch((error) => {
@@ -334,7 +387,9 @@ export function useSendMessage(opts: {
                     // force a view update
                     nextTick(() => {
                       timestamp.value = Date.now();
-                      scrollToBottom();
+                      if (isForeground(sendingDialogueId)) {
+                        scrollToBottom();
+                      }
                     });
                   });
               }
@@ -486,11 +541,11 @@ export function useSendMessage(opts: {
 
         // ensure assistantMessage was created to avoid pushing undefined
         if (assistantMessage) {
-          currentChat.value.messages.push(assistantMessage);
+          sendingMessages.push(assistantMessage);
         } else {
           // if assistantMessage was not created, create a default message
           console.warn("assistantMessage was not created; using a default message");
-          currentChat.value.messages.push({
+          sendingMessages.push({
             role: "assistant",
             content: response.data?.answer || "Sorry, I cannot answer this question.",
             status: response.data?.status || "",
@@ -505,7 +560,7 @@ export function useSendMessage(opts: {
           });
         }
       } else {
-        currentChat.value.messages.push({
+        sendingMessages.push({
           role: "assistant",
           content: "Sorry, I cannot answer this question.",
           steps: [],
@@ -526,7 +581,7 @@ export function useSendMessage(opts: {
       if (
         error.name === "AbortError" ||
         error.code === "ERR_CANCELED" ||
-        isAborted.value
+        chatState.generationStopped
       ) {
         return; // don't show an error message when the request is aborted
       }
@@ -566,7 +621,7 @@ export function useSendMessage(opts: {
       }
 
       // check for a network/timeout error; if so, first verify whether the message was sent successfully
-      if (isNetworkError(error) && !isAborted.value) {
+      if (isNetworkError(error) && !chatState.generationStopped) {
         try {
           // wait a short while to give the server time to process the request
           await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -589,23 +644,22 @@ export function useSendMessage(opts: {
               }
             }
           } else {
-            // for an existing chat, check the current conversation directly
-            const urlDialogueId = getChatIdFromUrl();
-            if (urlDialogueId) {
-              const checkRes = await getAnswerCheck({
-                dialogue_id: urlDialogueId,
-              });
-              if (
-                checkRes.code === 200 &&
-                checkRes.data &&
-                checkRes.data.length > 0
-              ) {
-                // check whether the last message contains the one we just sent
-                const lastItem = checkRes.data[checkRes.data.length - 1];
-                if (lastItem && lastItem.query === messageContent) {
-                  await selectChat(urlDialogueId);
-                  return;
+            // for an existing chat, check the captured sending dialogue directly
+            const checkRes = await getAnswerCheck({
+              dialogue_id: sendingDialogueId,
+            });
+            if (
+              checkRes.code === 200 &&
+              checkRes.data &&
+              checkRes.data.length > 0
+            ) {
+              // check whether the last message contains the one we just sent
+              const lastItem = checkRes.data[checkRes.data.length - 1];
+              if (lastItem && lastItem.query === messageContent) {
+                if (isForeground(sendingDialogueId)) {
+                  await selectChat(sendingDialogueId);
                 }
+                return;
               }
             }
           }
@@ -616,9 +670,9 @@ export function useSendMessage(opts: {
       }
 
       // only add an error message if not aborted
-      if (!isAborted.value) {
+      if (!chatState.generationStopped) {
         const isTimeout = error.response?.status === 504;
-        currentChat.value.messages.push({
+        sendingMessages.push({
           role: "assistant",
           content: isTimeout ? t("chat.timeoutFailed") : t("chat.sendFailed"),
           steps: [],
@@ -633,10 +687,6 @@ export function useSendMessage(opts: {
         });
       }
     } finally {
-      // clean up the request ID
-      currentRequestId.value = "";
-      chatState.uploadTransfer = null;
-
       const historyOpts =
         blockingDialogueId !== undefined
           ? { blockingDialogueId }
@@ -644,17 +694,14 @@ export function useSendMessage(opts: {
       await getHistoryQuestionData(sendingDialogueId, historyOpts);
 
       if (!isNewChat) {
-        // for an existing chat, update the current conversation's title (if it changed)
-        if (
-          currentChat.value?.messages &&
-          currentChat.value.messages.length > 0
-        ) {
+        // for an existing chat, update the sending conversation's title (if it changed)
+        if (sendingMessages.length > 0) {
           const userMessage =
-            currentChat.value.messages[currentChat.value.messages.length - 2]; // the second-to-last is the user message
+            sendingMessages[sendingMessages.length - 2]; // the second-to-last is the user message
           if (userMessage && userMessage.role === "user") {
-            // find the current conversation in the list and update its title
+            // find the sending conversation in the list and update its title
             const currentChatIndex = chatList.value.findIndex(
-              (chat) => chat.dialogue_id === currentChatId.value
+              (chat) => chat.dialogue_id === sendingDialogueId
             );
             if (currentChatIndex !== -1) {
               // take the user message content as the title (length-limited)
@@ -668,23 +715,35 @@ export function useSendMessage(opts: {
         }
       }
 
-      // clear the file list
-      if (chatState.fileList.length > 0) {
-        chatState.fileList = [];
-        // close the header after clearing the file list
-        nextTick(() => {
-          if (composerRef.value) {
-            composerRef.value.closeHeader();
+      // Clear lifecycle fields only for this request — never a newer same-dialogue key
+      // and never recreate a rekeyed temp state via getChatState(oldTempId).
+      if (chatState.activeRequestId === requestKey) {
+        chatState.activeRequestId = "";
+        chatState.uploadTransfer = null;
+        chatState.generationStopped = false;
+
+        // clear the file list
+        if (chatState.fileList.length > 0) {
+          chatState.fileList = [];
+          // close the header after clearing the file list (foreground only)
+          if (isForeground(sendingDialogueId)) {
+            nextTick(() => {
+              if (composerRef.value) {
+                composerRef.value.closeHeader();
+              }
+            });
           }
-        });
+        }
+
+        chatState.isSending = false;
+        chatState.sendStartedAt = null;
+        chatState.completing = false;
+        chatState.activeAgentName = "";
       }
 
-      chatState.isSending = false;
-      chatState.sendStartedAt = null;
-      chatState.completing = false;
-      chatState.activeAgentName = "";
-
-      await scrollToBottom();
+      if (isForeground(sendingDialogueId)) {
+        await scrollToBottom();
+      }
     }
   };
 

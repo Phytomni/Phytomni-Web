@@ -76,6 +76,8 @@ describe("useChatStates parallel chat state", () => {
       uploadTransfer: null,
       selectedAgent: "",
       renderedChat: null,
+      activeRequestId: "",
+      generationStopped: false,
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);

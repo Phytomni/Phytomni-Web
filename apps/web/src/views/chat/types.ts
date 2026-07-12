@@ -126,6 +126,10 @@ export interface ChatUIState {
   selectedAgent: string;
   /** Live message tree for this dialogue; default null until hydrated. */
   renderedChat: ChatView | null;
+  /** Runtime-only active send/stream request key; empty when idle. */
+  activeRequestId: string;
+  /** True after Stop aborted the dialogue's in-flight request. */
+  generationStopped: boolean;
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */
