@@ -241,6 +241,96 @@ describe("useStreamMessage", () => {
     expect(unregisterAbortController).toHaveBeenCalledWith("req-9");
   });
 
+  it("stale stream finally does not clear a newer request's streaming fields", async () => {
+    let releaseStale!: () => void;
+    let releaseFresh!: () => void;
+    const staleGate = new Promise<void>((r) => {
+      releaseStale = r;
+    });
+    const freshGate = new Promise<void>((r) => {
+      releaseFresh = r;
+    });
+    const enc = new TextEncoder();
+    const gatedBody = (runId: string, gate: Promise<void>) =>
+      new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(
+            enc.encode(
+              `event: RunStarted\ndata: {"type":"RunStarted","run_id":"${runId}"}\n\n`,
+            ),
+          );
+          await gate;
+          controller.enqueue(
+            enc.encode(
+              `event: RunFinished\ndata: {"type":"RunFinished","run_id":"${runId}"}\n\n`,
+            ),
+          );
+          controller.close();
+        },
+      });
+
+    (fetch as any)
+      .mockResolvedValueOnce(new Response(gatedBody("old", staleGate), { status: 200 }))
+      .mockResolvedValueOnce(new Response(gatedBody("new", freshGate), { status: 200 }));
+
+    const chatState: any = {
+      isStreaming: false,
+      streamingMessageId: null,
+      a2uiActionSender: null,
+      a2uiRunId: "",
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+
+    const stalePlaceholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const freshPlaceholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+
+    const stalePromise = streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "req-old",
+      placeholder: stalePlaceholder,
+    });
+    await vi.waitFor(() => {
+      expect(chatState.streamingMessageId).toBe("req-old");
+    });
+
+    const freshPromise = streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "req-new",
+      placeholder: freshPlaceholder,
+    });
+    await vi.waitFor(() => {
+      expect(chatState.streamingMessageId).toBe("req-new");
+    });
+
+    releaseStale();
+    await stalePromise;
+
+    // Stale finally must not wipe the newer stream's ownership markers.
+    expect(chatState.streamingMessageId).toBe("req-new");
+    expect(chatState.isStreaming).toBe(true);
+    expect(stalePlaceholder.streaming).toBe(false);
+
+    releaseFresh();
+    await freshPromise;
+    expect(chatState.streamingMessageId).toBeNull();
+    expect(chatState.isStreaming).toBe(false);
+  });
+
   /**
    * Live-session limitation: phyto.references land on placeholder.doc_list only
    * for the current stream. History reload does not invent persisted reference

@@ -371,10 +371,11 @@ export function useSendMessage(opts: {
                     } else if (assistantMessage) {
                       assistantMessage.content = "File content is empty or failed to load";
                     }
-                    // force a view update
+                    // force a view update (foreground only — do not bump shared
+                    // timestamp / scroll while the user is on another dialogue)
                     nextTick(() => {
-                      timestamp.value = Date.now();
                       if (isForeground(sendingDialogueId)) {
+                        timestamp.value = Date.now();
                         scrollToBottom();
                       }
                     });
@@ -384,10 +385,9 @@ export function useSendMessage(opts: {
                     if (assistantMessage) {
                       assistantMessage.content = "Failed to load file, please try again later";
                     }
-                    // force a view update
                     nextTick(() => {
-                      timestamp.value = Date.now();
                       if (isForeground(sendingDialogueId)) {
+                        timestamp.value = Date.now();
                         scrollToBottom();
                       }
                     });
@@ -539,8 +539,16 @@ export function useSendMessage(opts: {
           }
         }
 
-        // ensure assistantMessage was created to avoid pushing undefined
-        if (assistantMessage) {
+        // ensure assistantMessage was created to avoid pushing undefined.
+        // Ownership: Stop without resend leaves generationStopped while
+        // activeRequestId may still equal requestKey until finally; Stop then
+        // resend replaces activeRequestId. Skip append in both cases.
+        const ownsResponse =
+          chatState.activeRequestId === requestKey &&
+          !chatState.generationStopped;
+        if (!ownsResponse) {
+          // stale / stopped — finally still clears when this key owns
+        } else if (assistantMessage) {
           sendingMessages.push(assistantMessage);
         } else {
           // if assistantMessage was not created, create a default message
@@ -559,7 +567,10 @@ export function useSendMessage(opts: {
             showLog: false,
           });
         }
-      } else {
+      } else if (
+        chatState.activeRequestId === requestKey &&
+        !chatState.generationStopped
+      ) {
         sendingMessages.push({
           role: "assistant",
           content: "Sorry, I cannot answer this question.",
@@ -586,6 +597,12 @@ export function useSendMessage(opts: {
         return; // don't show an error message when the request is aborted
       }
 
+      // A newer same-dialogue send owns the key — do not mutate this dialogue's
+      // messages or steal focus for a stale failure.
+      if (chatState.activeRequestId !== requestKey) {
+        return;
+      }
+
       // check whether it's a token-expired error
       if (
         error.response &&
@@ -593,30 +610,33 @@ export function useSendMessage(opts: {
         error.response.data.detail &&
         error.response.data.detail.code === 403
       ) {
-        ElMessageBox.alert(
-          i18n.global.t("common.sessionExpired"),
-          i18n.global.t("common.notice"),
-          {
-            confirmButtonText: i18n.global.t("request.confirmButtonText"),
-            type: "warning",
-          callback: () => {
-            const UserStore = userStore();
-            UserStore.FedLogOut().finally(() => {
-              // clear all caches and cookies
-              localStorage.clear();
-              sessionStorage.clear();
-              document.cookie.split(";").forEach(function (c) {
-                document.cookie = c
-                  .replace(/^ +/, "")
-                  .replace(
-                    /=.*/,
-                    "=;expires=" + new Date().toUTCString() + ";path=/"
-                  );
+        // Modal only when foreground — background must not steal focus on B.
+        if (isForeground(sendingDialogueId)) {
+          ElMessageBox.alert(
+            i18n.global.t("common.sessionExpired"),
+            i18n.global.t("common.notice"),
+            {
+              confirmButtonText: i18n.global.t("request.confirmButtonText"),
+              type: "warning",
+            callback: () => {
+              const UserStore = userStore();
+              UserStore.FedLogOut().finally(() => {
+                // clear all caches and cookies
+                localStorage.clear();
+                sessionStorage.clear();
+                document.cookie.split(";").forEach(function (c) {
+                  document.cookie = c
+                    .replace(/^ +/, "")
+                    .replace(
+                      /=.*/,
+                      "=;expires=" + new Date().toUTCString() + ";path=/"
+                    );
+                });
+                location.href = "/login";
               });
-              location.href = "/login";
-            });
-          },
-        });
+            },
+          });
+        }
         return;
       }
 
@@ -626,21 +646,24 @@ export function useSendMessage(opts: {
           // wait a short while to give the server time to process the request
           await new Promise((resolve) => setTimeout(resolve, 1000));
 
-          // for a new chat, check by refreshing the history
+          // for a new chat, check by refreshing the history — foreground only so
+          // background recovery cannot refresh chatList while the user is on B.
           if (isNewChat) {
-            await getHistoryQuestionData();
-            // if the history has a new chat, the message was sent successfully
-            if (chatList.value.length > 0) {
-              const newChat = chatList.value[0];
-              const checkRes = await getAnswerCheck({
-                dialogue_id: newChat.dialogue_id,
-              });
-              if (
-                checkRes.code === 200 &&
-                checkRes.data &&
-                checkRes.data.length > 0
-              ) {
-                return;
+            if (isForeground(sendingDialogueId)) {
+              await getHistoryQuestionData(sendingDialogueId);
+              // if the history has a new chat, the message was sent successfully
+              if (chatList.value.length > 0) {
+                const newChat = chatList.value[0];
+                const checkRes = await getAnswerCheck({
+                  dialogue_id: newChat.dialogue_id,
+                });
+                if (
+                  checkRes.code === 200 &&
+                  checkRes.data &&
+                  checkRes.data.length > 0
+                ) {
+                  return;
+                }
               }
             }
           } else {
@@ -669,8 +692,11 @@ export function useSendMessage(opts: {
         }
       }
 
-      // only add an error message if not aborted
-      if (!chatState.generationStopped) {
+      // only add an error message if this request still owns the dialogue
+      if (
+        chatState.activeRequestId === requestKey &&
+        !chatState.generationStopped
+      ) {
         const isTimeout = error.response?.status === 504;
         sendingMessages.push({
           role: "assistant",

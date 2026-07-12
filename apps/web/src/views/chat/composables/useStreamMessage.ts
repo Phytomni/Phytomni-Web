@@ -99,12 +99,17 @@ export function useStreamMessage(opts: {
         placeholder.content = t("chat.streamInterrupted");
       }
     } finally {
+      // Always finalize this request's placeholder and unregister its controller.
+      // Clear dialogue streaming fields only while this request still owns them —
+      // a stale finally must not wipe a newer same-dialogue stream.
       placeholder.streaming = false;
       placeholder.instantMessage = true;
-      chatState.isStreaming = false;
-      chatState.streamingMessageId = null;
-      chatState.a2uiActionSender = null;
-      chatState.a2uiRunId = "";
+      if (chatState.streamingMessageId === requestId) {
+        chatState.isStreaming = false;
+        chatState.streamingMessageId = null;
+        chatState.a2uiActionSender = null;
+        chatState.a2uiRunId = "";
+      }
       unregisterAbortController(requestId); // mirror the axios .finally cleanup
     }
   };

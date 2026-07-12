@@ -726,4 +726,227 @@ describe("useSendMessage", () => {
     expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
     expect(state.isSending).toBe(false);
   });
+
+  it("Stop then late 200 does not append a second assistant row; peer dialogue stays sending", async () => {
+    states.get("A")!.messageInput = "from-A";
+    states.get("B")!.messageInput = "from-B";
+
+    let resolveA!: (v: any) => void;
+    let resolveB!: (v: any) => void;
+    mockGetQueryAbortable
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveA = resolve;
+        }) as any
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveB = resolve;
+        }) as any
+      );
+
+    const { sendMessage } = makeComposable();
+    const sendA = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    const keyA = getChatState("A").activeRequestId;
+
+    currentChatId.value = "B";
+    currentChat.value = { messages: [] };
+    const sendB = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    const keyB = getChatState("B").activeRequestId;
+    expect(keyA).not.toBe(keyB);
+    expect(getChatState("B").isSending).toBe(true);
+
+    // Mirror abortDialogueRequest on A only: ID-less local stopped row, leave
+    // activeRequestId for send finally, clear isSending.
+    const stateA = getChatState("A");
+    stateA.generationStopped = true;
+    stateA.isSending = false;
+    stateA.renderedChat!.messages.push({
+      role: "assistant",
+      content: "chat.generationStopped",
+      instantMessage: true,
+    });
+    const stopped = stateA.renderedChat!.messages.at(-1);
+    expect(stopped).not.toHaveProperty("id");
+
+    expect(getChatState("B").isSending).toBe(true);
+    expect(getChatState("B").activeRequestId).toBe(keyB);
+
+    resolveA({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "late-answer-must-not-land",
+        id: "late-a",
+        follow_up_questions: [],
+      },
+    });
+    await sendA;
+
+    const msgsA = getChatState("A").renderedChat!.messages;
+    expect(msgsA.filter((m) => m.role === "assistant")).toHaveLength(1);
+    expect(msgsA.at(-1).content).toBe("chat.generationStopped");
+    expect(msgsA.some((m) => m.content === "late-answer-must-not-land")).toBe(
+      false
+    );
+
+    expect(getChatState("B").isSending).toBe(true);
+    expect(getChatState("B").activeRequestId).toBe(keyB);
+
+    resolveB({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "answer-B",
+        id: "mb",
+        follow_up_questions: [],
+      },
+    });
+    await sendB;
+    expect(getChatState("B").isSending).toBe(false);
+    expect(getChatState("B").renderedChat!.messages.at(-1).content).toBe(
+      "answer-B"
+    );
+  });
+
+  it("Stop then immediate resend: late request-1 does not append over request-2", async () => {
+    states.get("A")!.messageInput = "first";
+    let resolveFirst!: (v: any) => void;
+    let resolveSecond!: (v: any) => void;
+    mockGetQueryAbortable.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      }) as any
+    );
+
+    const { sendMessage } = makeComposable();
+    const first = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    const firstKey = getChatState("A").activeRequestId;
+
+    // Stop leaves activeRequestId, then a newer send claims the dialogue.
+    getChatState("A").generationStopped = true;
+    getChatState("A").isSending = false;
+    getChatState("A").renderedChat!.messages.push({
+      role: "assistant",
+      content: "chat.generationStopped",
+      instantMessage: true,
+    });
+    getChatState("A").messageInput = "second";
+    mockGetQueryAbortable.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSecond = resolve;
+      }) as any
+    );
+    const second = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    const secondKey = getChatState("A").activeRequestId;
+    expect(secondKey).not.toBe(firstKey);
+    expect(getChatState("A").isSending).toBe(true);
+
+    resolveFirst({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "stale-answer-1",
+        id: "m1",
+        follow_up_questions: [],
+      },
+    });
+    await first;
+
+    expect(getChatState("A").activeRequestId).toBe(secondKey);
+    expect(getChatState("A").isSending).toBe(true);
+    expect(
+      getChatState("A").renderedChat!.messages.some(
+        (m) => m.content === "stale-answer-1"
+      )
+    ).toBe(false);
+
+    resolveSecond({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "answer-2",
+        id: "m2",
+        follow_up_questions: [],
+      },
+    });
+    await second;
+    expect(getChatState("A").renderedChat!.messages.at(-1).content).toBe(
+      "answer-2"
+    );
+  });
+
+  it("background session-expired does not open ElMessageBox", async () => {
+    const { ElMessageBox } = await import("element-plus");
+    states.get("A")!.messageInput = "auth-fail";
+    let rejectQuery!: (err: unknown) => void;
+    mockGetQueryAbortable.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectQuery = reject;
+      }) as any
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    const { sendMessage } = makeComposable();
+    const sendPromise = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    currentChatId.value = "B";
+    currentChat.value = { messages: [] };
+    rejectQuery({
+      response: { data: { detail: { code: 403 } } },
+    });
+    try {
+      await sendPromise;
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    expect(ElMessageBox.alert).not.toHaveBeenCalled();
+  });
+
+  it("background network-error recovery does not refresh history for a new chat", async () => {
+    const { isNetworkError } = await import("@/utils/network-error");
+    vi.mocked(isNetworkError).mockReturnValue(true);
+    vi.useFakeTimers();
+
+    const tempId = "new_bg_net";
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+    states.set(tempId, makeState({ messageInput: "offline" }));
+
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("Network Error"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    const { sendMessage } = makeComposable();
+    const sendPromise = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    currentChatId.value = "B";
+    currentChat.value = { messages: [] };
+    getHistoryQuestionData.mockClear();
+
+    try {
+      const settled = sendPromise;
+      await vi.advanceTimersByTimeAsync(1000);
+      await settled;
+    } finally {
+      consoleError.mockRestore();
+      vi.mocked(isNetworkError).mockReturnValue(false);
+      vi.useRealTimers();
+    }
+
+    // Recovery used a single-arg refresh; finally always uses (id, opts).
+    const recoveryCalls = getHistoryQuestionData.mock.calls.filter(
+      (c) => c.length === 1 && c[0] === tempId
+    );
+    expect(recoveryCalls).toHaveLength(0);
+    expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, undefined);
+  });
 });

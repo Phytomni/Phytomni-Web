@@ -332,6 +332,23 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).not.toMatch(
       /generationStopped[\s\S]{0,200}id:\s*Date\.now\(\)\.toString\(\)/
     );
+    // Abort targets only the owning dialogue's activeRequestId — never abortAll
+    const abortStart = CHAT_SOURCE.indexOf("const abortDialogueRequest");
+    const abortEnd = CHAT_SOURCE.indexOf("// Use a preset question", abortStart);
+    const abortBlock = CHAT_SOURCE.slice(abortStart, abortEnd);
+    expect(abortBlock).toContain("chatState.activeRequestId");
+    expect(abortBlock).toContain("abortRequest(requestId)");
+    expect(abortBlock).not.toContain("abortAllRequests");
+    expect(abortBlock).toContain("generationStopped = true");
+    expect(abortBlock).not.toMatch(/\bid:\s/);
+
+    const streamSource = readFileSync(
+      resolve(__dirname, "../../src/views/chat/composables/useStreamMessage.ts"),
+      "utf8"
+    );
+    expect(streamSource).toContain(
+      "chatState.streamingMessageId === requestId"
+    );
   });
 
   it("owns live rendered messages on chatStates via renderedChat, not a second top-level cache", () => {
