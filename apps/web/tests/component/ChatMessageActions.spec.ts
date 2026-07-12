@@ -28,8 +28,6 @@ const mountActions = (props: Record<string, unknown> = {}) =>
       refreshBusy: false,
       canReact: true,
       reactionActive: 0,
-      likeLabel: "Like",
-      dislikeLabel: "Dislike",
       generatedFormats: [],
       directDownloads: [],
       ...props,
@@ -94,34 +92,68 @@ describe("ChatMessageActions", () => {
     expect(wrapper.find('[data-testid="action-dislike"]').exists()).toBe(true);
   });
 
-  it("shows copied state instead of the copy button", () => {
-    const wrapper = mountActions({ copied: true });
-    expect(wrapper.find('[data-testid="action-copy"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="action-copied"]').exists()).toBe(true);
+  it("keeps a single copy button mounted through the copied state", async () => {
+    const wrapper = mountActions({ copied: false });
+    const copy = wrapper.find('[data-testid="action-copy"]');
+    expect(copy.exists()).toBe(true);
+    expect(wrapper.find('[data-testid="action-copied"]').exists()).toBe(false);
+
+    await wrapper.setProps({ copied: true });
+    expect(wrapper.findAll('[data-testid="action-copy"]')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="action-copy"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="action-copied"]').exists()).toBe(false);
+    expect(
+      wrapper.find('[data-testid="action-copy"]').attributes("aria-live")
+    ).toBe("polite");
   });
 
-  it("marks refresh as busy", () => {
+  it("disables refresh while busy and keeps aria-busy", () => {
     const wrapper = mountActions({ refreshBusy: true });
     const refresh = wrapper.find('[data-testid="action-refresh"]');
     expect(refresh.classes()).toContain("is-loading");
+    expect(refresh.attributes("aria-busy")).toBe("true");
+    expect(refresh.attributes("disabled")).toBeDefined();
   });
 
-  it("marks active reaction state", () => {
-    const liked = mountActions({ reactionActive: 1, likeLabel: "Undo like" });
+  it("derives like/dislike labels from reactionActive without label props", () => {
+    expect(ACTIONS_SOURCE).not.toMatch(/likeLabel\?:/);
+    expect(ACTIONS_SOURCE).not.toMatch(/dislikeLabel\?:/);
+    expect(INDEX_SOURCE).not.toMatch(/:like-label=/);
+    expect(INDEX_SOURCE).not.toMatch(/:dislike-label=/);
+    expect(INDEX_SOURCE).not.toMatch(/getReactionTooltip/);
+
+    const idle = mountActions({ reactionActive: 0 });
+    expect(idle.find('[data-testid="action-like"]').attributes("aria-label")).toBe(
+      "chat.actions.like"
+    );
+    expect(
+      idle.find('[data-testid="action-dislike"]').attributes("aria-label")
+    ).toBe("chat.actions.dislike");
+    expect(
+      idle.find('[data-testid="action-like"]').attributes("aria-pressed")
+    ).toBe("false");
+
+    const liked = mountActions({ reactionActive: 1 });
     expect(liked.find('[data-testid="action-like"]').classes()).toContain(
       "active"
     );
     expect(liked.find('[data-testid="action-like"]').attributes("aria-label")).toBe(
-      "Undo like"
+      "chat.actions.undoLike"
     );
+    expect(
+      liked.find('[data-testid="action-like"]').attributes("aria-pressed")
+    ).toBe("true");
 
-    const disliked = mountActions({
-      reactionActive: 2,
-      dislikeLabel: "Undo dislike",
-    });
+    const disliked = mountActions({ reactionActive: 2 });
     expect(disliked.find('[data-testid="action-dislike"]').classes()).toContain(
       "active"
     );
+    expect(
+      disliked.find('[data-testid="action-dislike"]').attributes("aria-label")
+    ).toBe("chat.actions.undoDislike");
+    expect(
+      disliked.find('[data-testid="action-dislike"]').attributes("aria-pressed")
+    ).toBe("true");
   });
 
   it("renders direct downloads as one downloads control", async () => {
@@ -146,6 +178,28 @@ describe("ChatMessageActions", () => {
       "obs://upload"
     );
     expect(wrapper.emitted("direct-download")?.[0]).toEqual(["obs://upload"]);
+  });
+
+  it("disambiguates twin download aria-labels when both menus are present", () => {
+    const wrapper = mountActions({
+      directDownloads: [{ kind: "file", path: "obs://file" }],
+      generatedFormats: ["PDF", "Markdown"],
+    });
+    const direct = wrapper.find('[data-testid="action-direct-downloads"]');
+    const generated = wrapper.find('[data-testid="action-generated-download"]');
+    expect(direct.attributes("aria-label")).toBe(
+      "chat.actions.downloadAttachments"
+    );
+    expect(generated.attributes("aria-label")).toBe(
+      "chat.actions.downloadFormats"
+    );
+    expect(direct.attributes("aria-label")).not.toBe(
+      generated.attributes("aria-label")
+    );
+    expect(direct.attributes("title")).toBe(direct.attributes("aria-label"));
+    expect(generated.attributes("title")).toBe(
+      generated.attributes("aria-label")
+    );
   });
 
   it("renders generated format choices and emits download-format", async () => {

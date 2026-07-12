@@ -9,29 +9,24 @@
     role="toolbar"
   >
     <el-tooltip
-      v-if="!copied"
       effect="dark"
-      :content="t('chat.copy')"
+      :content="copyLabel"
       placement="top-start"
     >
       <button
         type="button"
         class="message-footer-item"
         data-testid="action-copy"
-        :aria-label="t('chat.copy')"
+        :aria-label="copyLabel"
+        :aria-live="copied ? 'polite' : undefined"
         @click="emit('copy')"
       >
-        <el-icon><CopyDocument /></el-icon>
+        <el-icon>
+          <SuccessFilled v-if="copied" />
+          <CopyDocument v-else />
+        </el-icon>
       </button>
     </el-tooltip>
-    <div
-      v-else
-      class="message-footer-item"
-      data-testid="action-copied"
-      aria-hidden="true"
-    >
-      <el-icon><SuccessFilled /></el-icon>
-    </div>
 
     <el-tooltip
       v-if="canRefresh"
@@ -46,6 +41,7 @@
         :class="{ 'is-loading': refreshBusy }"
         :aria-label="t('chat.refreshReply')"
         :aria-busy="refreshBusy ? 'true' : undefined"
+        :disabled="refreshBusy"
         @click="emit('refresh')"
       >
         <el-icon><Refresh /></el-icon>
@@ -98,6 +94,7 @@
         class="message-footer-item"
         data-testid="action-direct-downloads"
         :aria-label="directDownloadsLabel"
+        :title="directDownloadsLabel"
       >
         <el-icon><Download /></el-icon>
       </button>
@@ -129,7 +126,8 @@
         type="button"
         class="message-footer-item"
         data-testid="action-generated-download"
-        :aria-label="t('chat.downloadFile')"
+        :aria-label="generatedDownloadsLabel"
+        :title="generatedDownloadsLabel"
       >
         <el-icon><Download /></el-icon>
       </button>
@@ -176,8 +174,6 @@ const props = withDefaults(
     refreshBusy?: boolean;
     canReact?: boolean;
     reactionActive?: number;
-    likeLabel?: string;
-    dislikeLabel?: string;
     generatedFormats?: string[];
     directDownloads?: DirectDownloadItem[];
   }>(),
@@ -187,8 +183,6 @@ const props = withDefaults(
     refreshBusy: false,
     canReact: false,
     reactionActive: 0,
-    likeLabel: "",
-    dislikeLabel: "",
     generatedFormats: () => [],
     directDownloads: () => [],
   }
@@ -204,7 +198,31 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
+const copyLabel = computed(() =>
+  props.copied ? t("chat.copySuccess") : t("chat.copy")
+);
+
+const likeLabel = computed(() =>
+  props.reactionActive === 1
+    ? t("chat.actions.undoLike")
+    : t("chat.actions.like")
+);
+
+const dislikeLabel = computed(() =>
+  props.reactionActive === 2
+    ? t("chat.actions.undoDislike")
+    : t("chat.actions.dislike")
+);
+
+const hasTwinDownloads = computed(
+  () =>
+    props.directDownloads.length > 0 && props.generatedFormats.length > 0
+);
+
 const directDownloadsLabel = computed(() => {
+  if (hasTwinDownloads.value) {
+    return t("chat.actions.downloadAttachments");
+  }
   if (props.directDownloads.length === 1) {
     return props.directDownloads[0].kind === "upload"
       ? t("chat.downloadURL")
@@ -212,6 +230,12 @@ const directDownloadsLabel = computed(() => {
   }
   return t("chat.downloadFile");
 });
+
+const generatedDownloadsLabel = computed(() =>
+  hasTwinDownloads.value
+    ? t("chat.actions.downloadFormats")
+    : t("chat.downloadFile")
+);
 
 const onDirectDownload = (path: string | number) => {
   emit("direct-download", String(path));

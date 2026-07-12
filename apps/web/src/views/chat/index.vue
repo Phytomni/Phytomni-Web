@@ -311,12 +311,6 @@
                   :reaction-active="
                     message.id ? getReactionState(message.id) : 0
                   "
-                  :like-label="
-                    message.id ? getReactionTooltip(message.id, 1) : ''
-                  "
-                  :dislike-label="
-                    message.id ? getReactionTooltip(message.id, 2) : ''
-                  "
                   :direct-downloads="getDirectDownloads(message)"
                   :generated-formats="getGeneratedFormats(message.tool_name)"
                   @copy="handleMessageCopy(message, index)"
@@ -995,7 +989,7 @@ const { handleFileChange, removeFile } = useFileUpload({
 });
 
 // Message upvote/downvote feature — state and logic extracted into the useReactions composable
-const { getReactionState, handleReaction, getReactionTooltip } = useReactions({
+const { getReactionState, handleReaction } = useReactions({
   currentChatId,
   getChatState,
   scrollToBottom,
