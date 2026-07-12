@@ -29,6 +29,10 @@ export default {
     Tip: "（AI 生成）",
     aiDisclaimer: "由AI生成，请仔细审查",
     followSystem: "跟随系统",
+    lightTheme: "浅色",
+    darkTheme: "深色",
+    themeSelector: "选择主题",
+    languageSelector: "选择语言",
     opFailedRetry: "操作失败，请重试",
     renamedSuccess: "重命名成功",
     renameFailedRetry: "重命名失败，请重试",
@@ -300,6 +304,7 @@ export default {
 
   // 基因展示
   gene: {
+    detailTitle: "基因科研结果",
     notFound: "未找到基因详情",
     searchPlaceholder: "请输入物种或者基因进行搜索",
     getFailed: "获取基因详情失败",
@@ -321,6 +326,7 @@ export default {
     inputPlaceholder: "请输入您的问题……",
     send: "发 送",
     newChat: "开启新对话",
+    openNavigation: "打开导航",
     exploreAgent: "智能体示例",
     agentsArchitectureTitle: "农科发现大模型智能体架构",
     agentsArchitectureAlt: "农科发现大模型智能体架构图",
