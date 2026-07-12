@@ -222,6 +222,86 @@ run:
 agent-browser --session phy-v2-auth close
 ```
 
+## Boundary geometry matrix (closure)
+
+Run `geometry-check.js` (measure + hard assert; throws on FAIL) at every row
+below. Save JSON stdout beside the evidence ledger. jsdom/Vitest responsive
+contracts deliberately make **no** geometry claim — only this live script proves
+overflow, primary-action visibility, viewport escape, and last-message clearance.
+
+Required viewport pairs (plus the four canonical viewports above):
+
+| Viewport | Route / fixture | Expectation |
+|---|---|---|
+| `599x900` | auth `/chat` + harness when transient | mobile: closed trigger visible; open drawer primary visible |
+| `600x900` | auth `/chat` + harness when transient | same as 599 (still `< 900`) |
+| `899x900` | auth `/chat` + harness when transient | mobile boundary below 900 |
+| `900x900` | auth `/chat` + harness when transient | compact desktop; primary action visible |
+| `1279x900` | auth `/chat` + harness when transient | compact desktop; primary action visible |
+| `1280x900` | auth `/chat` + harness when transient | expanded desktop; primary action visible |
+| `1440x900` | canonical | desktop |
+| `1024x768` | canonical | compact |
+| `768x1024` | canonical | mobile pair (closed + open) |
+| `390x844` | canonical | mobile pair (closed + open) |
+
+Every PASS row must prove:
+
+- document and transcript `scrollWidth <= clientWidth`
+- Composer rect inside the viewport
+- `lastMessage.bottom <= composer.top` when a last message exists
+- desktop/compact: primary action visible
+- closed-mobile: sidebar trigger visible; paired open-drawer: primary visible
+
+### Boundary capture sketch
+
+```bash
+cd apps/web
+set -e
+set -o pipefail
+mkdir -p ../../.codex/evidence/frontend-v2/3C.8
+test -d ../../.codex/evidence/frontend-v2/3C.8
+# Example boundary row (harness). Authenticated rows use phy-v2-auth + redact.
+agent-browser --session phy-v2-fixture set viewport 899 900
+agent-browser --session phy-v2-fixture set media light
+agent-browser --session phy-v2-fixture open 'http://127.0.0.1:5174/tests/visual/chat/?state=empty&locale=en-US&theme=light'
+agent-browser --session phy-v2-fixture wait --fn "document.querySelector('[data-testid=chat-visual-root]')?.dataset.fixtureReady === 'true'"
+agent-browser --session phy-v2-fixture eval --stdin < tests/visual/chat/geometry-check.js | tee ../../.codex/evidence/frontend-v2/3C.8/chat__empty__899x900__en-US__light.geometry.json
+test -s ../../.codex/evidence/frontend-v2/3C.8/chat__empty__899x900__en-US__light.geometry.json
+```
+
+### Result-recording table
+
+Record one row per capture. Geometry PASS requires `geometry-check.js` exit 0;
+Blocked/Not Captured leave the wave FAIL (never a waiver).
+
+| viewport | locale | theme | state | fixture_source | geometry | identity_redaction | screenshot | notes |
+|---|---|---|---|---|---|---|---|---|
+| 599x900 | en-US | light | empty | authenticated-route / tests/visual/chat | PASS / FAIL / Blocked / Not Captured | dom-only / not-needed-synthetic | path or — | |
+| 600x900 | … | … | … | … | … | … | … | |
+| 899x900 | … | … | … | … | … | … | … | |
+| 900x900 | … | … | … | … | … | … | … | |
+| 1279x900 | … | … | … | … | … | … | … | |
+| 1280x900 | … | … | … | … | … | … | … | |
+| 1440x900 | … | … | … | … | … | … | … | |
+| 1024x768 | … | … | … | … | … | … | … | |
+| 768x1024 | … | … | sidebar-mobile-closed / open | … | … | … | … | pair required |
+| 390x844 | … | … | sidebar-mobile-closed / open | … | … | … | … | pair required |
+
+Manual assistive / zoom / touch rows (human):
+
+| check | result | notes |
+|---|---|---|
+| 200% zoom | PASS / FAIL / Not Captured | |
+| prefers-reduced-motion | PASS / FAIL / Not Captured | |
+| forced colors | PASS / FAIL / Not Captured | |
+| keyboard-only operation | PASS / FAIL / Not Captured | |
+| screen-reader announcements | PASS / FAIL / Not Captured | |
+| touch actions | PASS / FAIL / Not Captured | |
+| mobile soft-keyboard safe area | PASS / FAIL / Not Captured | |
+
+When Vite/Go/Bot are unavailable, mark live geometry and authenticated rows
+`Blocked: services unavailable` / `Not Captured`. Do not invent PASS.
+
 ## Dedicated typecheck
 
 Root `npm run type-check` excludes `tests/**`. Always also run:
