@@ -581,3 +581,99 @@ describe("ChatMessageContent integration in chat index", () => {
     );
   });
 });
+
+describe("ChatMessageContent overflow and agent image presentation", () => {
+  const CONTENT_SOURCE = readFileSync(
+    resolve(
+      __dirname,
+      "../../src/views/chat/components/ChatMessageContent.vue"
+    ),
+    "utf8"
+  );
+  const contentStyles = [
+    ...CONTENT_SOURCE.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g),
+  ]
+    .map((m) => m[1])
+    .join("\n");
+
+  it("owns internal overflow so wide table/code/image children stay in transcript", () => {
+    expect(contentStyles).toMatch(/min-width:\s*0/);
+    expect(contentStyles).toMatch(/overflow-x:\s*auto/);
+    // Table branch and bubble body both need an overflow owner.
+    expect(contentStyles).toMatch(/\.table-response|\.message-text/);
+  });
+
+  it("uses locale-reactive result image alt with one-based index", () => {
+    expect(CONTENT_SOURCE).toMatch(
+      /\$t\(\s*["']chat\.resultImageAlt["']\s*,\s*\{\s*index:\s*imgIndex\s*\+\s*1\s*\}\s*\)/
+    );
+    expect(CONTENT_SOURCE).not.toMatch(/['"]Result ['"]\s*\+\s*\(imgIndex/);
+  });
+
+  it("renders GeneNetwork/DigitalDesign alt from the locale key at mount", () => {
+    const gn = mountContent(
+      {
+        role: "assistant",
+        content: "",
+        tool_name: "GeneNetworkAgent",
+        id: "gn-alt",
+      },
+      {
+        geneNetworkImages: {
+          "gn-alt": ["data:image/svg+xml,%3Csvg/%3E"],
+        },
+      }
+    );
+    const img = gn.find("img.result-image");
+    expect(img.exists()).toBe(true);
+    // Mock $t returns the key; production interpolates {index}.
+    expect(img.attributes("alt")).toBe("chat.resultImageAlt");
+
+    const dd = mountContent(
+      {
+        role: "assistant",
+        content: "",
+        tool_name: "DigitalDesignAgent",
+        id: "dd-alt",
+      },
+      {
+        digitalDesignImages: {
+          "dd-alt": ["data:image/svg+xml,%3Csvg/%3E"],
+        },
+      }
+    );
+    expect(dd.find("img.result-image").attributes("alt")).toBe(
+      "chat.resultImageAlt"
+    );
+  });
+
+  it("styles image/loading/no-image with semantic tokens and contained overflow", () => {
+    expect(contentStyles).toMatch(/var\(--phy-color-text-muted\)/);
+    expect(contentStyles).toMatch(
+      /var\(--phy-shadow-soft\)|var\(--phy-radius-sm\)/
+    );
+    expect(contentStyles).not.toMatch(/#909399/);
+    expect(contentStyles).not.toMatch(
+      /box-shadow:\s*0\s+2px\s+8px\s+rgba\(0,\s*0,\s*0,\s*0\.1\)/
+    );
+    // Gene image chrome left index.vue — styles live on Content now.
+    expect(CHAT_SOURCE).not.toMatch(
+      /\.gene-network-images\s*\{[\s\S]*#909399/
+    );
+  });
+
+  it("does not change GeneNetwork image map keys or loading gates", () => {
+    expect(CONTENT_SOURCE).toMatch(
+      /geneNetworkImagesLoading\[message\.id \|\| ['"]['"]\]/
+    );
+    expect(CONTENT_SOURCE).toMatch(
+      /geneNetworkImages\[message\.id \|\| ['"]['"]\]/
+    );
+    expect(CONTENT_SOURCE).toMatch(
+      /digitalDesignImagesLoading\[message\.id \|\| ['"]['"]\]/
+    );
+    expect(CONTENT_SOURCE).toMatch(
+      /digitalDesignImages\[message\.id \|\| ['"]['"]\]/
+    );
+  });
+});

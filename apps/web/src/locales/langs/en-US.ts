@@ -324,6 +324,7 @@ export default {
     deepGenome: "Deep Genome Database",
     useTool: "Use Tool",
     stepResult: "Step Result",
+    resultImageAlt: "Result image {index}",
     sendFailed: "Failed to send message, please try again later.",
     timeoutFailed: "The request timed out. Try narrowing your query or retry later.",
     sendAriaLabel: "Send",

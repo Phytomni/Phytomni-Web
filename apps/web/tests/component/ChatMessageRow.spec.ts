@@ -8,9 +8,21 @@ const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
   "utf8"
 );
+const ROW_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageRow.vue"),
+  "utf8"
+);
+const CONTENT_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageContent.vue"),
+  "utf8"
+);
 
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
+
+/** Strip Vue SFC <style> blocks for CSS-contract assertions. */
+const styleBlocks = (source: string) =>
+  [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
 
 const mountRow = (
   props: Record<string, unknown> = {},
@@ -134,5 +146,42 @@ describe("ChatMessageRow", () => {
       /<ChatMessageRow[\s\S]*v-if="isSending && !getChatState\(currentChatId\)\.isStreaming"/
     );
     expect(CHAT_SOURCE).not.toContain('data-testid="chat-message-row"');
+  });
+
+  it("applies pale role bubble classes via Content and token-backed surfaces", () => {
+    expect(CONTENT_SOURCE).toMatch(/phy-bubble-user/);
+    expect(CONTENT_SOURCE).toMatch(/phy-bubble-assistant/);
+    expect(CONTENT_SOURCE).toMatch(
+      /message\.role === ['"]user['"]\s*\?\s*['"]phy-bubble-user/
+    );
+
+    const rowCss = styleBlocks(ROW_SOURCE).join("\n");
+    expect(rowCss).toMatch(/\.phy-bubble-user/);
+    expect(rowCss).toMatch(/\.phy-bubble-assistant/);
+    expect(rowCss).toMatch(/max-width:\s*72%/);
+    expect(rowCss).toMatch(/padding:\s*14px\s+16px/);
+    expect(rowCss).toMatch(/padding:\s*12px\s+14px/);
+    expect(rowCss).toMatch(/border-radius:\s*(16px|var\(--phy-radius-lg\))/);
+    // Role alignment stays structural for forced-colors when fills are ignored.
+    expect(rowCss).toMatch(/forced-colors:\s*active/);
+    expect(rowCss).toMatch(/data-message-role|justify-content:\s*flex-end/);
+  });
+
+  it("rejects glass, gradient, and raw alternate bubble fills on the row surface", () => {
+    const rowCss = styleBlocks(ROW_SOURCE).join("\n");
+    expect(rowCss).not.toMatch(/backdrop-filter/);
+    expect(rowCss).not.toMatch(/linear-gradient|radial-gradient/);
+    expect(rowCss).not.toMatch(/#409eff|#66b1ff|#1890ff/i);
+    // No competing solid fills — utilities + tokens own pale greens/blues.
+    expect(rowCss).not.toMatch(
+      /background(-color)?:\s*#(?!eaf6f1|eaf2fe)[0-9a-f]{3,8}/i
+    );
+    // Index must not strip the utility shadow or re-own bubble padding/width.
+    expect(CHAT_SOURCE).not.toMatch(
+      /\.message-text[^{]*\{[^}]*box-shadow:\s*none/
+    );
+    expect(CHAT_SOURCE).not.toMatch(
+      /\.message-text[^{]*\{[^}]*padding:\s*12px/
+    );
   });
 });

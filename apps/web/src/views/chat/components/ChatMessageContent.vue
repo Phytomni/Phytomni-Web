@@ -48,7 +48,7 @@
           v-for="(imgUrl, imgIndex) in geneNetworkImages[message.id || '']"
           :key="imgIndex"
           :src="imgUrl"
-          :alt="'Result ' + (imgIndex + 1)"
+          :alt="$t('chat.resultImageAlt', { index: imgIndex + 1 })"
           class="result-image"
         />
       </div>
@@ -79,7 +79,7 @@
           v-for="(imgUrl, imgIndex) in digitalDesignImages[message.id || '']"
           :key="imgIndex"
           :src="imgUrl"
-          :alt="'Result ' + (imgIndex + 1)"
+          :alt="$t('chat.resultImageAlt', { index: imgIndex + 1 })"
           class="result-image"
         />
       </div>
@@ -186,3 +186,66 @@ const emit = defineEmits<{
   finish: [];
 }>();
 </script>
+
+<style scoped lang="scss">
+/* Content owns internal overflow so wide children cannot stretch the transcript. */
+.message-text {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+  box-sizing: border-box;
+
+  :deep(pre),
+  :deep(table),
+  :deep(.el-table) {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+.table-response {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.gene-network-images {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+
+  .images-loading {
+    display: flex;
+    align-items: center;
+    gap: var(--phy-space-8);
+    color: var(--phy-color-text-muted);
+    font-size: 14px;
+    padding: var(--phy-space-12) 0;
+  }
+
+  .images-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--phy-space-12);
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+
+    .result-image {
+      max-width: 100%;
+      border-radius: var(--phy-radius-sm);
+      box-shadow: var(--phy-shadow-soft);
+    }
+  }
+
+  .no-images {
+    color: var(--phy-color-text-muted);
+    font-size: 14px;
+    padding: var(--phy-space-12) 0;
+  }
+}
+</style>

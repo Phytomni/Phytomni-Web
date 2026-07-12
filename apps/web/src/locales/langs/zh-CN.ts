@@ -326,6 +326,7 @@ export default {
     deepGenome: "深度基因收录",
     useTool: "使用工具",
     stepResult: "步骤结果",
+    resultImageAlt: "结果图 {index}",
     sendFailed: "发送消息失败，请稍后重试。",
     timeoutFailed: "请求处理超时，请缩小查询范围或稍后重试。",
     sendAriaLabel: "发送",

@@ -198,6 +198,40 @@ describe("PHY_TOKENS", () => {
     expect(TOKENS_CSS).not.toContain("prefers-reduced-transparency");
   });
 
+  it("chat bubble components reject alternate fills, blur, and strong glass", () => {
+    const rowCss = readFileSync(
+      resolve(
+        __dirname,
+        "../../../src/views/chat/components/ChatMessageRow.vue"
+      ),
+      "utf8"
+    );
+    const contentCss = readFileSync(
+      resolve(
+        __dirname,
+        "../../../src/views/chat/components/ChatMessageContent.vue"
+      ),
+      "utf8"
+    );
+    const chatIndex = readFileSync(
+      resolve(__dirname, "../../../src/views/chat/index.vue"),
+      "utf8"
+    );
+    const surfaces = [rowCss, contentCss, chatIndex].join("\n");
+
+    expect(surfaces).not.toMatch(/backdrop-filter\s*:/);
+    expect(surfaces).not.toMatch(
+      /linear-gradient\s*\(|radial-gradient\s*\(/
+    );
+    // Banned competing brand blues must not reappear as bubble fills.
+    for (const hex of ["#409eff", "#66b1ff", "#1890ff", "#626aef"]) {
+      expect(surfaces.toLowerCase()).not.toContain(hex);
+    }
+    // Approved pale fills stay on the token sheet, not hardcoded in chat CSS.
+    expect(rowCss).not.toMatch(/#eaf6f1|#eaf2fe|#cfe8dc|#d5e5fc/i);
+    expect(contentCss).not.toMatch(/#eaf6f1|#eaf2fe|#cfe8dc|#d5e5fc/i);
+  });
+
   it("lists legacy competing brand hexes as banned", () => {
     const banned = new Set(BANNED_BRAND_HEX.map((h) => h.toLowerCase()));
     for (const hex of [

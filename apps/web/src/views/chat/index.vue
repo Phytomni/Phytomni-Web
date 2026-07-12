@@ -1842,65 +1842,8 @@ const copyMessageWithDocs = (message: any, index: number) => {
 }
 
 .message {
-  // Row shell layout lives on ChatMessageRow; pierce for slotted content styles.
-  &.user {
-    :deep(.message-content) {
-      .message-text,
-      .has-user {
-        box-shadow: none;
-      }
-    }
-  }
-
-  &.assistant {
-    :deep(.message-content) {
-      .message-text {
-        box-shadow: none;
-      }
-    }
-  }
-
+  // Row owns bubble alignment/surface; Content owns overflow + gene image chrome.
   :deep(.message-content) {
-    .message-text {
-      position: relative;
-      word-break: break-word;
-      white-space: pre-wrap;
-      box-shadow: none;
-      width: 100%;
-      padding: 12px;
-      border-radius: var(--phy-radius-lg);
-
-      // GeneNetworkAgent image styles
-      .gene-network-images {
-        .images-loading {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          color: #909399;
-          font-size: 14px;
-          padding: 12px 0;
-        }
-
-        .images-container {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-
-          .result-image {
-            max-width: 100%;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          }
-        }
-
-        .no-images {
-          color: #909399;
-          font-size: 14px;
-          padding: 12px 0;
-        }
-      }
-    }
-
     // Content extraction keeps footers as siblings of ChatMessageContent's
     // .message-text; hover the row content shell so user copy actions still appear.
     .message-text:hover .message-user,

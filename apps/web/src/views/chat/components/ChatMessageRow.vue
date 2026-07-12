@@ -71,21 +71,40 @@ const ariaLabel = computed(() =>
 
     .message-content {
       display: flex;
-      justify-content: flex-end;
-      width: calc(100% - 48px);
-      border-radius: 15px;
+      flex-direction: column;
+      align-items: flex-end;
+      max-width: 72%;
+      width: fit-content;
       background-color: transparent;
+    }
+
+    :deep(.message-text.phy-bubble-user) {
+      width: fit-content;
+      max-width: 100%;
+      box-sizing: border-box;
+      padding: 14px 16px;
+      border-radius: var(--phy-radius-lg);
     }
   }
 
   &.assistant {
     flex-direction: row;
+    justify-content: flex-start;
 
     .message-content {
-      border-radius: 15px;
       margin-left: 12px;
-      background-color: transparent;
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      background-color: transparent;
+    }
+
+    :deep(.message-text.phy-bubble-assistant) {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      padding: 14px 16px;
+      border-radius: var(--phy-radius-lg);
     }
   }
 
@@ -97,6 +116,25 @@ const ariaLabel = computed(() =>
   .message-content {
     padding: 0 12px 12px;
     max-width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .message.user :deep(.message-text.phy-bubble-user),
+  .message.assistant :deep(.message-text.phy-bubble-assistant) {
+    padding: 12px 14px;
+  }
+}
+
+/* Role identity survives via data-message-role / aria-label / alignment when fills are ignored. */
+@media (forced-colors: active) {
+  .message.user {
+    justify-content: flex-end;
+  }
+
+  .message.assistant {
+    justify-content: flex-start;
   }
 }
 </style>
