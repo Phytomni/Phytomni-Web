@@ -40,14 +40,14 @@ describe("LangSwitch.vue", () => {
     const store = useAppStore();
     store.language = "zh-CN";
     const wrapper = mountSwitch();
-    expect(wrapper.text()).toContain("中文");
+    expect(wrapper.text()).toContain(enUS.common.languageChinese);
   });
 
   it("renders the English label when store language is en-US", () => {
     const store = useAppStore();
     store.language = "en-US";
     const wrapper = mountSwitch();
-    expect(wrapper.text()).toContain("English");
+    expect(wrapper.text()).toContain(enUS.common.languageEnglish);
   });
 
   it("delegates to setLanguage on dropdown command without mutating the store directly", async () => {
@@ -82,7 +82,11 @@ describe("LangSwitch.vue", () => {
 
     expect(trigger.attributes("type")).toBe("button");
     expect(trigger.attributes("aria-label")).toBe(enUS.common.languageSelector);
-    expect(wrapper.get(".lang-label-full").text()).toBe("English");
-    expect(wrapper.get(".lang-label-compact").text()).toBe("EN");
+    expect(wrapper.get(".lang-label-full").text()).toBe(
+      enUS.common.languageEnglish
+    );
+    expect(wrapper.get(".lang-label-compact").text()).toBe(
+      enUS.common.languageEnglishCompact
+    );
   });
 });

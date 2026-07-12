@@ -17,10 +17,10 @@
       <template #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item command="zh-CN" :disabled="currentLang === 'zh-CN'">
-            中文
+            {{ $t("common.languageChinese") }}
           </el-dropdown-item>
           <el-dropdown-item command="en-US" :disabled="currentLang === 'en-US'">
-            English
+            {{ $t("common.languageEnglish") }}
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>
@@ -30,11 +30,13 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { ArrowDown } from "@element-plus/icons-vue";
 import { setLanguage } from "@/locales";
 import { useAppStore } from "@/stores";
 
 const appStore = useAppStore();
+const { t } = useI18n();
 
 // current language
 const currentLang = computed(() => {
@@ -43,11 +45,15 @@ const currentLang = computed(() => {
 
 // displayed language label
 const currentLangLabel = computed(() => {
-  return currentLang.value === "zh-CN" ? "中文" : "English";
+  return currentLang.value === "zh-CN"
+    ? t("common.languageChinese")
+    : t("common.languageEnglish");
 });
 
 const currentLangCompactLabel = computed(() => {
-  return currentLang.value === "zh-CN" ? "中" : "EN";
+  return currentLang.value === "zh-CN"
+    ? t("common.languageChineseCompact")
+    : t("common.languageEnglishCompact");
 });
 
 // switch language (setLanguage also syncs document.title via chat.appTitle)
