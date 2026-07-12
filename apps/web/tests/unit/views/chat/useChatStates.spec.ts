@@ -78,6 +78,10 @@ describe("useChatStates parallel chat state", () => {
       activeRequestId: "",
       generationStopped: false,
       activityExpandedByMessage: {},
+      artifactOpen: false,
+      activeArtifactMessageId: null,
+      artifactTab: "content",
+      autoOpenedArtifactMessageIds: [],
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);

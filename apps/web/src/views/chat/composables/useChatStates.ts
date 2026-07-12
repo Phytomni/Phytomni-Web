@@ -28,6 +28,10 @@ function createDefaultChatUIState(): ChatUIState {
     activeRequestId: "",
     generationStopped: false,
     activityExpandedByMessage: {},
+    artifactOpen: false,
+    activeArtifactMessageId: null,
+    artifactTab: "content",
+    autoOpenedArtifactMessageIds: [],
   };
 }
 

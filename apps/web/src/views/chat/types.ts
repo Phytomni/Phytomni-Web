@@ -37,6 +37,8 @@ export interface A2uiRuntimeContext {
 
 export type ArtifactKind = "deep-genome" | "research" | "cited-report" | null;
 
+export type ArtifactTab = "content" | "evidence" | "activity" | "downloads";
+
 export interface ChatMessage {
   role: string;
   content: any;
@@ -158,6 +160,11 @@ export interface ChatUIState {
    * restores open/closed without leaking across dialogues.
    */
   activityExpandedByMessage: Record<string, boolean>;
+  artifactOpen: boolean;
+  activeArtifactMessageId: string | null;
+  artifactTab: ArtifactTab;
+  /** Runtime-only server IDs already considered for automatic artifact opening. */
+  autoOpenedArtifactMessageIds: string[];
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */
