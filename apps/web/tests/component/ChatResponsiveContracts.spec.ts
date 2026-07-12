@@ -199,6 +199,10 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
 });
 
 describe("ChatResponsiveContracts — single scroll owner and stable hooks", () => {
+  it("keeps the architecture dialog within the mobile viewport", () => {
+    expect(CHAT_SOURCE).toContain('width="min(800px, calc(100vw - 32px))"');
+  });
+
   it("keeps one transcript scroll-owner hook and one messageContainer ref", () => {
     expect(
       countOccurrences(CHAT_SOURCE, 'data-test="chat-transcript-scroll-root"')

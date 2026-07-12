@@ -358,7 +358,7 @@
       :title="t('chat.agentsArchitectureTitle')"
       :close-on-click-modal="true"
       :close-on-press-escape="true"
-      width="800px"
+      width="min(800px, calc(100vw - 32px))"
       center
     >
       <div
