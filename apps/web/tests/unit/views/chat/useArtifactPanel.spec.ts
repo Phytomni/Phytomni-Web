@@ -96,6 +96,20 @@ describe("useArtifactPanel", () => {
     ]);
   });
 
+  it("can mark a background dialogue id without changing the foreground selection", () => {
+    const { states, panel } = makePanel();
+    states.currentChatId.value = "A";
+
+    panel.markAutoOpened("background-42", "B");
+
+    expect(panel.hasAutoOpened("background-42", "B")).toBe(true);
+    expect(panel.hasAutoOpened("background-42")).toBe(false);
+    expect(states.getChatState("A").autoOpenedArtifactMessageIds).toEqual([]);
+    expect(states.getChatState("B").autoOpenedArtifactMessageIds).toEqual([
+      "background-42",
+    ]);
+  });
+
   it("selects a tab and close resets selection without clearing seen ids", () => {
     const { states, panel } = makePanel();
     states.currentChatId.value = "A";

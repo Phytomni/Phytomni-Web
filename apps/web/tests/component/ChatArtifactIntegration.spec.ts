@@ -74,6 +74,10 @@ const CONTENT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageContent.vue"),
   "utf8"
 );
+const DEEP_GENOME_ARTIFACT_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/research/DeepGenomeArtifact.vue"),
+  "utf8"
+);
 const citedMessage: ChatMessage = {
   role: "assistant",
   id: "cited-1",
@@ -98,6 +102,13 @@ const deepGenomeMessage: ChatMessage = {
   status: "SUCCEEDED",
   content: "# Full DeepGenome report",
   doc_list: [{ title: "DeepGenome source" }],
+};
+
+const deepGenomePreview = {
+  title: "Finished",
+  kind: "Deep Genome Agent",
+  summary: "Deep genome analysis for a gene.",
+  openLabel: "View",
 };
 
 const preview = {
@@ -165,7 +176,14 @@ function setViewportWidth(width: number) {
   });
 }
 
-async function mountProductionChat(width = 1440) {
+async function mountProductionChat(
+  width = 1440,
+  options: {
+    markDeepSeen?: boolean;
+    messagesA?: ChatMessage[];
+    messagesB?: ChatMessage[];
+  } = {}
+) {
   setViewportWidth(width);
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -239,13 +257,18 @@ async function mountProductionChat(width = 1440) {
   state.getChatState("A").renderedChat = {
     dialogue_id: "A",
     title: "Cited synthesis",
-    messages: [citedMessage, deepGenomeMessage],
+    messages: options.messagesA || [citedMessage, deepGenomeMessage],
   };
+  // This fixture represents a history refresh whose DeepGenome id was already
+  // observed; dedicated auto-open tests cover a genuinely new foreground row.
+  if (options.markDeepSeen !== false) {
+    state.getChatState("A").autoOpenedArtifactMessageIds.push("deep-1");
+  }
   state.getChatState("A").messageInput = "draft A";
   state.getChatState("B").renderedChat = {
     dialogue_id: "B",
     title: "Research simulation",
-    messages: [researchMessage],
+    messages: options.messagesB || [researchMessage],
   };
   state.getChatState("B").messageInput = "draft B";
   state.currentChatId.value = "A";
@@ -298,12 +321,15 @@ describe("Chat artifact message ownership", () => {
     expect(wrapper.emitted("open-artifact")).toHaveLength(1);
   });
 
-  it("keeps DeepGenome on its existing inline viewer", () => {
-    const wrapper = mountContent(deepGenomeMessage, preview);
+  it("renders DeepGenome as one neutral preview instead of an inline full report", async () => {
+    const wrapper = mountContent(deepGenomeMessage, deepGenomePreview);
 
-    expect(wrapper.find("[data-test=deep-genome-inline]").exists()).toBe(true);
-    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
-    expect(wrapper.text()).toContain("Full DeepGenome report");
+    expect(wrapper.find("[data-test=deep-genome-inline]").exists()).toBe(false);
+    expect(wrapper.findAll("[data-test=artifact-open]")).toHaveLength(1);
+    expect(wrapper.text()).toContain("Deep Genome Agent");
+    expect(wrapper.text()).not.toContain("Full DeepGenome report");
+    await wrapper.get("[data-test=artifact-open]").trigger("click");
+    expect(wrapper.emitted("open-artifact")).toHaveLength(1);
   });
 
   it("keeps the existing copy action wired to complete message source", () => {
@@ -317,6 +343,91 @@ describe("Chat artifact message ownership", () => {
 });
 
 describe("Chat artifact shell integration", () => {
+  it("auto-opens a new completed foreground DeepGenome id once", async () => {
+    const { wrapper, state } = await mountProductionChat(1440, {
+      markDeepSeen: false,
+    });
+    await nextTick();
+    await nextTick();
+
+    expect(state.getChatState("A").activeArtifactMessageId).toBe("deep-1");
+    expect(state.getChatState("A").artifactOpen).toBe(true);
+    expect(state.getChatState("A").autoOpenedArtifactMessageIds).toContain(
+      "deep-1"
+    );
+
+    await wrapper.get("[data-test=artifact-close]").trigger("click");
+    expect(state.getChatState("A").artifactOpen).toBe(false);
+
+    state.getChatState("A").renderedChat = {
+      dialogue_id: "A",
+      messages: [citedMessage, { ...deepGenomeMessage }],
+    };
+    await nextTick();
+    await nextTick();
+
+    expect(state.getChatState("A").artifactOpen).toBe(false);
+    expect(state.getChatState("A").activeArtifactMessageId).toBeNull();
+  });
+
+  it.each([
+    {
+      name: "streaming placeholder",
+      message: {
+        ...deepGenomeMessage,
+        id: "streaming-deep",
+        content: "partial",
+        streaming: true,
+      },
+    },
+    {
+      name: "missing server id",
+      message: { ...deepGenomeMessage, id: undefined },
+    },
+    {
+      name: "failed result",
+      message: { ...deepGenomeMessage, id: "failed-deep", status: "FAILED" },
+    },
+    {
+      name: "running server task",
+      message: {
+        ...deepGenomeMessage,
+        id: "running-deep",
+        status: "RUNNING",
+        content: "Server task created: task-123",
+      },
+    },
+  ])("does not auto-open a $name", async ({ message }) => {
+    const { state } = await mountProductionChat(1440, {
+      markDeepSeen: false,
+      messagesA: [message],
+    });
+    await nextTick();
+    await nextTick();
+
+    expect(state.getChatState("A").artifactOpen).toBe(false);
+    expect(state.getChatState("A").autoOpenedArtifactMessageIds).toEqual([]);
+  });
+
+  it("does not steal focus when a completed result appeared in a background dialogue", async () => {
+    const { state } = await mountProductionChat(1440, {
+      markDeepSeen: false,
+      messagesA: [{ role: "user", content: "foreground" }],
+      messagesB: [{ ...deepGenomeMessage, id: "background-deep" }],
+    });
+    await nextTick();
+    await nextTick();
+
+    expect(state.getChatState("A").artifactOpen).toBe(false);
+    state.currentChatId.value = "B";
+    await nextTick();
+    await nextTick();
+    expect(state.getChatState("B").artifactOpen).toBe(false);
+    expect(state.getChatState("B").autoOpenedArtifactMessageIds).toEqual([
+      "background-deep",
+    ]);
+  });
+
   it("temporarily collapses the rendered sidebar without changing its stored preference", async () => {
     const { wrapper } = await mountProductionChat();
     const renderedSidebar = () => wrapper.get(".phy-adaptive-sidebar");
@@ -347,18 +458,16 @@ describe("Chat artifact shell integration", () => {
     const composer = wrapper.get("[data-testid=chat-composer]").element;
     transcript.scrollTop = 417;
 
-    expect(wrapper.findAll("[data-test=artifact-open]")).toHaveLength(1);
+    expect(wrapper.findAll("[data-test=artifact-open]")).toHaveLength(2);
     expect(wrapper.find("[data-test=cited-body]").exists()).toBe(false);
     expect(wrapper.text()).toContain(preview.summary);
     expect(wrapper.text()).not.toContain(citedMessage.content);
     expect(wrapper.text()).not.toContain("Evidence-backed finding");
     const deepGenomeRow = wrapper.get('[data-message-id="deep-1"]');
     expect(deepGenomeRow.find("[data-test=deep-genome-inline]").exists()).toBe(
-      true
-    );
-    expect(deepGenomeRow.find("[data-test=artifact-open]").exists()).toBe(
       false
     );
+    expect(deepGenomeRow.find("[data-test=artifact-open]").exists()).toBe(true);
     expect(transcript.scrollTop).toBe(417);
     expect(composer).toHaveProperty(
       "value",
@@ -515,6 +624,11 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain(':artifact-open="artifactOpen"');
     expect(CHAT_SOURCE).toContain("effectiveSidebarCollapsed");
     expect(CHAT_SOURCE).toContain("<template #artifact>");
+    expect(CHAT_SOURCE).toContain("<DeepGenomeArtifact");
+    expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-actions="false"');
+    expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(
+      ':show-references="false"'
+    );
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");
     expect(CHAT_SOURCE).toContain('surface="artifact"');
     expect(CHAT_SOURCE).toContain("<CitedAnswer");

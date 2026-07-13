@@ -74,25 +74,29 @@ export function useArtifactPanel(opts: {
     getChatState(currentChatId.value).artifactTab = tab;
   };
 
-  const hasAutoOpened = (messageId: string): boolean => {
-    if (!currentChatId.value) return false;
+  const hasAutoOpened = (
+    messageId: string,
+    dialogueId = currentChatId.value
+  ): boolean => {
+    if (!dialogueId) return false;
     const normalizedId = normalizeServerMessageId(messageId);
     return (
       normalizedId !== null &&
-      getChatState(currentChatId.value).autoOpenedArtifactMessageIds.includes(
+      getChatState(dialogueId).autoOpenedArtifactMessageIds.includes(
         normalizedId
       )
     );
   };
 
-  const markAutoOpened = (messageId: string) => {
-    if (!currentChatId.value) return;
+  const markAutoOpened = (
+    messageId: string,
+    dialogueId = currentChatId.value
+  ) => {
+    if (!dialogueId) return;
     const normalizedId = normalizeServerMessageId(messageId);
     if (normalizedId === null) return;
 
-    const seenIds = getChatState(
-      currentChatId.value
-    ).autoOpenedArtifactMessageIds;
+    const seenIds = getChatState(dialogueId).autoOpenedArtifactMessageIds;
     if (!seenIds.includes(normalizedId)) {
       seenIds.push(normalizedId);
     }

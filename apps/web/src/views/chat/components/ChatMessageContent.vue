@@ -92,20 +92,6 @@
         {{ $t("common.noData") }}
       </div>
     </div>
-    <!-- DeepGenomeAgent responses use a dedicated viewer component with a references list;
-         other tool_name values fall back to the generic MarkdownViewer -->
-    <DeepGenomeResultViewer
-      v-else-if="
-        message.doc_list &&
-        message.doc_list.length > 0 &&
-        message.role === 'assistant' &&
-        message.tool_name === 'DeepGenomeAgent'
-      "
-      :markdown="message.content.replace(/\n/g, '\\n')"
-      :references="message.doc_list || []"
-      :ns="'m' + index"
-      embedded
-    />
     <ResearchArtifactPreview
       v-else-if="artifactPreview"
       :title="artifactPreview.title"
@@ -113,6 +99,17 @@
       :summary="artifactPreview.summary"
       :open-label="artifactPreview.openLabel"
       @open="emit('open-artifact')"
+    />
+    <!-- Ineligible DeepGenome results (streaming, missing id, failed, or
+         transient file loading) retain the embedded compatibility viewer. -->
+    <DeepGenomeResultViewer
+      v-else-if="
+        message.role === 'assistant' && message.tool_name === 'DeepGenomeAgent'
+      "
+      :markdown="String(message.content).replace(/\n/g, '\\n')"
+      :references="message.doc_list || []"
+      :ns="'m' + index"
+      embedded
     />
     <CitedAnswer
       v-else-if="

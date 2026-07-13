@@ -389,8 +389,30 @@
     </template>
 
     <template #artifact>
+      <DeepGenomeArtifact
+        v-if="
+          currentArtifactMessage &&
+          currentArtifactMessage.tool_name === 'DeepGenomeAgent'
+        "
+        :title="chatHeaderTitle"
+        :metadata="artifactAgentLabel(currentArtifactMessage)"
+        :status="t('common.finished')"
+        :markdown="String(currentArtifactMessage.content).replace(/\n/g, '\\n')"
+        :references="currentArtifactMessage.doc_list"
+        :ns="artifactNamespace"
+        :tab="artifactTab"
+        :tab-labels="artifactTabLabels"
+        :tablist-label="t('common.operation')"
+        :artifact-id="artifactId"
+        :back-label="t('common.back')"
+        :close-label="t('common.close')"
+        :action-label="t('common.operation')"
+        @back="closeArtifact"
+        @close="closeArtifact"
+        @tab="selectArtifactTab"
+      />
       <ResearchArtifactShell
-        v-if="currentArtifactMessage"
+        v-else-if="currentArtifactMessage"
         :title="chatHeaderTitle"
         :metadata="artifactAgentLabel(currentArtifactMessage)"
         :status="t('common.finished')"
@@ -456,6 +478,7 @@ import {
   PhyEmptyState,
 } from "@/components/shell";
 import {
+  DeepGenomeArtifact,
   ResearchArtifactShell,
   ResearchEvidencePanel,
 } from "@/components/research";
@@ -733,6 +756,8 @@ const {
   openArtifact: setArtifactOpen,
   closeArtifact: resetArtifactPanel,
   selectArtifactTab,
+  hasAutoOpened,
+  markAutoOpened,
 } = useArtifactPanel({ currentChatId, currentChat, getChatState });
 
 const effectiveSidebarCollapsed = computed(
@@ -752,9 +777,31 @@ function artifactAgentLabel(message: ChatMessage): string {
     : CANONICAL_AGENT_DISPLAY_NAMES[tool];
 }
 
+const DEEP_GENOME_SUCCESS_STATUSES = new Set(["SUCCEEDED"]);
+
+function isCompletedDeepGenomeMessage(message: ChatMessage): boolean {
+  if (artifactKindForMessage(message) !== "deep-genome") return false;
+
+  const status = String(message.status || "")
+    .trim()
+    .toUpperCase();
+  if (!DEEP_GENOME_SUCCESS_STATUSES.has(status)) return false;
+
+  const content = typeof message.content === "string" ? message.content.trim() : "";
+  return (
+    content !== "" &&
+    !/^Loading file content\.\.\.?$/i.test(content) &&
+    !/^File content is empty or failed to load$/i.test(content) &&
+    !/^Failed to load file/i.test(content)
+  );
+}
+
 function artifactPreviewForMessage(message: ChatMessage) {
   const artifactKind = artifactKindForMessage(message);
-  if (artifactKind === null || artifactKind === "deep-genome") return null;
+  if (artifactKind === null) return null;
+  if (artifactKind === "deep-genome" && !isCompletedDeepGenomeMessage(message)) {
+    return null;
+  }
 
   const tool = canonicalAgentTool(message.tool_name);
   if (!tool) return null;
@@ -1048,6 +1095,44 @@ const openArtifact = (messageId: string) => {
 const closeArtifact = () => {
   resetArtifactPanel();
 };
+
+const observeDeepGenomeArtifacts = () => {
+  const foregroundDialogueId = currentChatId.value;
+  let foregroundCandidate: string | null = null;
+
+  Object.entries(chatStates.value).forEach(([dialogueId, state]) => {
+    (state.renderedChat?.messages ?? []).forEach((message) => {
+      if (!isCompletedDeepGenomeMessage(message)) return;
+      if (typeof message.id !== "string" && typeof message.id !== "number") {
+        return;
+      }
+      const normalizedId = String(message.id).trim();
+      if (!normalizedId) return;
+
+      if (hasAutoOpened(normalizedId, dialogueId)) return;
+
+      // Mark every eligible server id as considered in its own dialogue. A
+      // background result is therefore never auto-opened when the user later
+      // switches into that conversation.
+      markAutoOpened(normalizedId, dialogueId);
+      if (dialogueId === foregroundDialogueId) {
+        foregroundCandidate = normalizedId;
+      }
+    });
+  });
+
+  if (foregroundCandidate !== null) {
+    // Mark before opening so the same reactive update, close/reopen cycle, or
+    // history refresh cannot take focus from the user a second time.
+    markAutoOpened(foregroundCandidate);
+    openArtifact(foregroundCandidate);
+  }
+};
+
+watch([chatStates, currentChatId], observeDeepGenomeArtifacts, {
+  deep: true,
+  flush: "post",
+});
 
 watch(
   artifactOpen,

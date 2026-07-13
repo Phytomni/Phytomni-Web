@@ -45,6 +45,7 @@ type Branch =
   | "gene-network"
   | "digital-design"
   | "deep-genome"
+  | "artifact-preview"
   | "cited"
   | "markdown"
   | "table"
@@ -74,8 +75,15 @@ function expectedBranch(message: ChatMessage): Branch {
       return "digital-design";
     }
     if (
-      message.doc_list &&
-      message.doc_list.length > 0 &&
+      message.role === "assistant" &&
+      message.tool_name === "DeepGenomeAgent" &&
+      message.id &&
+      typeof message.content === "string" &&
+      message.content.trim()
+    ) {
+      return "artifact-preview";
+    }
+    if (
       message.role === "assistant" &&
       message.tool_name === "DeepGenomeAgent"
     ) {
@@ -98,6 +106,8 @@ function expectedBranch(message: ChatMessage): Branch {
 
 function detectBranch(wrapper: VueWrapper): Branch {
   if (wrapper.find('[data-testid="stream-message"]').exists()) return "stream";
+  if (wrapper.find(".research-artifact-preview").exists())
+    return "artifact-preview";
   if (wrapper.find('[data-testid="deep-genome"]').exists())
     return "deep-genome";
   if (wrapper.find('[data-testid="cited-answer"]').exists()) return "cited";
@@ -121,6 +131,18 @@ const mountContent = (
       message,
       index: 0,
       isLastMessage: true,
+      artifactPreview:
+        message.tool_name === "DeepGenomeAgent" &&
+        message.id &&
+        typeof message.content === "string" &&
+        message.content.trim()
+          ? {
+              title: "Finished",
+              kind: "Deep Genome Agent",
+              summary: "Deep genome analysis",
+              openLabel: "View",
+            }
+          : null,
       geneNetworkImages: EMPTY_IMAGES,
       geneNetworkImagesLoading: EMPTY_LOADING,
       digitalDesignImages: EMPTY_IMAGES,
@@ -226,7 +248,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       },
     },
     {
-      name: "DeepGenomeAgent with docs → deep-genome",
+      name: "DeepGenomeAgent with docs → artifact preview",
       message: {
         role: "assistant",
         content: "md",
@@ -350,7 +372,7 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
     "short-generic": "markdown",
     "long-generic": "markdown",
     cited: "cited",
-    "deep-genome": "deep-genome",
+    "deep-genome": "artifact-preview",
     table: "table",
     steps: "legacy",
     image: "gene-network",
@@ -366,9 +388,16 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
     });
   }
 
-  it("DeepGenome stays ahead of generic cited when both would match doc_list", () => {
-    const wrapper = mountContent(MESSAGE_DEEP_GENOME);
-    expect(detectBranch(wrapper)).toBe("deep-genome");
+  it("DeepGenome uses the artifact preview before generic cited rendering", () => {
+    const wrapper = mountContent(MESSAGE_DEEP_GENOME, {
+      artifactPreview: {
+        title: "Finished",
+        kind: "Deep Genome Agent",
+        summary: "Deep genome analysis",
+        openLabel: "View",
+      },
+    });
+    expect(detectBranch(wrapper)).toBe("artifact-preview");
     expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
       false
@@ -393,6 +422,7 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
       if (
         branch === "cited" ||
         branch === "deep-genome" ||
+        branch === "artifact-preview" ||
         branch === "stream" ||
         branch === "gene-network" ||
         branch === "digital-design" ||
@@ -475,14 +505,18 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
     }
   });
 
-  it("passes page-unique ns=m${index} to DeepGenome and CitedAnswer only", () => {
-    const deep = mountContent(MESSAGE_DEEP_GENOME, { index: 7 });
-    const deepViewer = deep.find('[data-testid="deep-genome"]');
-    expect(deepViewer.attributes("data-ns")).toBe("m7");
-    expect(deepViewer.attributes("data-embedded")).toBe("true");
-    expect(
-      deepViewer.attributes("data-ns")
-    ).not.toBe("");
+  it("keeps the DeepGenome full source out of the Chat preview", () => {
+    const deep = mountContent(MESSAGE_DEEP_GENOME, {
+      index: 7,
+      artifactPreview: {
+        title: "Finished",
+        kind: "Deep Genome Agent",
+        summary: "Deep genome analysis",
+        openLabel: "View",
+      },
+    });
+    expect(deep.find(".research-artifact-preview").exists()).toBe(true);
+    expect(deep.text()).not.toContain(String(MESSAGE_DEEP_GENOME.content));
 
     const cited = mountContent(MESSAGE_CITED, { index: 3 });
     expect(
