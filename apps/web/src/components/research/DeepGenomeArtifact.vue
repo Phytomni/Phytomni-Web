@@ -11,6 +11,7 @@
       :status="status"
       :tab="selectedTab"
       :tab-labels="tabLabels"
+      content-layout="wide"
       :tablist-label="tablistLabel"
       :artifact-id="artifactId"
       :back-label="backLabel"

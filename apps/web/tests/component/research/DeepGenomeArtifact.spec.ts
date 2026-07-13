@@ -74,6 +74,11 @@ describe("DeepGenomeArtifact", () => {
     expect(wrapper.find(".research-evidence-panel__item").attributes("id")).toBe(
       "artifactunder-ref-1"
     );
+    expect(
+      wrapper
+        .find(".research-artifact-shell__narrative-content")
+        .classes()
+    ).toContain("research-artifact-shell__narrative-content--wide");
   });
 
   it("delegates header download actions to the typed embedded viewer handle", async () => {

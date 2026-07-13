@@ -64,6 +64,8 @@
             :class="{
               'research-artifact-shell__narrative-content phy-reading':
                 item.id === 'content',
+              'research-artifact-shell__narrative-content--wide':
+                item.id === 'content' && contentLayout === 'wide',
               'research-artifact-shell__supporting-content':
                 item.id !== 'content',
             }"
@@ -82,6 +84,7 @@ import ResearchArtifactHeader from "./ResearchArtifactHeader.vue";
 
 type ResearchArtifactTab = "content" | "evidence" | "activity" | "downloads";
 type ResearchArtifactTabLabels = Partial<Record<ResearchArtifactTab, string>>;
+type ResearchArtifactContentLayout = "reading" | "wide";
 
 const DEFAULT_TAB_LABELS: Record<ResearchArtifactTab, string> = {
   content: "Report",
@@ -103,6 +106,7 @@ const props = withDefaults(
     status?: string;
     tab?: ResearchArtifactTab;
     tabLabels?: ResearchArtifactTabLabels;
+    contentLayout?: ResearchArtifactContentLayout;
     tablistLabel?: string;
     artifactId?: string;
     backLabel: string;
@@ -112,6 +116,7 @@ const props = withDefaults(
   {
     tab: "content",
     tabLabels: () => ({}),
+    contentLayout: "reading",
     tablistLabel: "Report sections",
   }
 );
@@ -315,6 +320,10 @@ function handleTabKeydown(
   max-width: calc(var(--phy-layout-reading-max-width) - var(--phy-space-20));
   font-family: var(--phy-font-reading);
   line-height: 1.7;
+}
+
+.research-artifact-shell__narrative-content--wide {
+  max-width: var(--phy-layout-artifact-wide-max-width);
 }
 
 .research-artifact-shell__supporting-content {

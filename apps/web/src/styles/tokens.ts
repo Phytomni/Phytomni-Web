@@ -38,6 +38,7 @@ export const PHY_TOKENS = {
   sidebarCompactWidth: "56px",
   transcriptMaxWidth: "860px",
   readingMaxWidth: "760px",
+  artifactWideMaxWidth: "1120px",
   artifactChatMinWidth: "360px",
   artifactContentMinWidth: "560px",
   breakpointSmall: "600px",

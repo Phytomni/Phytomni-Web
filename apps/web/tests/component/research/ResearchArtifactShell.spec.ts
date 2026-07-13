@@ -9,7 +9,10 @@ const tabs = {
   downloads: "Downloads",
 };
 
-function mountShell(tab: keyof typeof tabs = "content") {
+function mountShell(
+  tab: keyof typeof tabs = "content",
+  contentLayout: "reading" | "wide" = "reading"
+) {
   return mount(ResearchArtifactShell, {
     attachTo: document.body,
     props: {
@@ -17,6 +20,7 @@ function mountShell(tab: keyof typeof tabs = "content") {
       metadata: ["Deep Genome Agent", "Oryza sativa"],
       status: "Complete",
       tab,
+      contentLayout,
       tabLabels: tabs,
       backLabel: "Back to conversation",
       closeLabel: "Close artifact",
@@ -155,5 +159,15 @@ describe("ResearchArtifactShell", () => {
     expect(wrapper.get("[data-test=artifact-back]").classes()).toContain(
       "research-artifact-header__back--mobile-only"
     );
+  });
+
+  it("supports a wide narrative layout for documents with an embedded TOC", () => {
+    const wrapper = mountShell("content", "wide");
+
+    expect(
+      wrapper
+        .find(".research-artifact-shell__narrative-content")
+        .classes()
+    ).toContain("research-artifact-shell__narrative-content--wide");
   });
 });
