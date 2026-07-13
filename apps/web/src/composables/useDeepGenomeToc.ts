@@ -3,7 +3,9 @@ import type { Ref } from "vue";
 
 export interface DeepGenomeTocOpts {
   headings: Ref<Array<{ id: string; [key: string]: unknown }>>;
-  nestedHeadings: Ref<Array<{ id: string; children?: unknown[]; [key: string]: unknown }>>;
+  nestedHeadings: Ref<
+    Array<{ id: string; children?: unknown[]; [key: string]: unknown }>
+  >;
   mainContentRef: Ref<any>;
 }
 
@@ -17,9 +19,48 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
   const observerRef = ref<IntersectionObserver | null>(null);
   const observedElements = ref<Set<Element>>(new Set());
 
+  const resolveMainElement = (): HTMLElement | null => {
+    const value = mainContentRef.value;
+    const element = value?.$el ?? value;
+    return element instanceof HTMLElement ? element : null;
+  };
+
+  const resolveViewerRoot = (): HTMLElement | null =>
+    resolveMainElement()?.closest<HTMLElement>(".deep-genome-viewer") ?? null;
+
+  const findOwnedHeading = (id: string): HTMLElement | null => {
+    const viewerRoot = resolveViewerRoot();
+    if (!viewerRoot) return document.getElementById(id);
+
+    return (
+      Array.from(viewerRoot.querySelectorAll<HTMLElement>("[id]")).find(
+        (element) => element.id === id
+      ) ?? null
+    );
+  };
+
+  const findScrollOwner = (): HTMLElement | null => {
+    let element: HTMLElement | null = resolveMainElement();
+
+    while (
+      element &&
+      element !== document.body &&
+      element !== document.documentElement
+    ) {
+      const overflowY = window.getComputedStyle(element).overflowY;
+      const ownsVerticalScroll = element.scrollHeight > element.clientHeight;
+      if (/^(auto|scroll|overlay)$/.test(overflowY) && ownsVerticalScroll) {
+        return element;
+      }
+      element = element.parentElement;
+    }
+
+    return null;
+  };
+
   // scroll to the heading with the given id (internal, not exposed)
   const jumpTo = (id: string) => {
-    const element = document.getElementById(id);
+    const element = findOwnedHeading(id);
     if (element) {
       // use nextTick to scroll after the DOM updates
       nextTick(() => {
@@ -37,7 +78,11 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
   const expandParentMenus = (id: string) => {
     // first find the active item's path in the nested structure
     const findPath = (
-      items: Array<{ id: string; children?: unknown[]; [key: string]: unknown }>,
+      items: Array<{
+        id: string;
+        children?: unknown[];
+        [key: string]: unknown;
+      }>,
       targetId: string,
       path: string[] = []
     ): string[] | null => {
@@ -48,7 +93,11 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
         }
         if (item.children && item.children.length > 0) {
           const childPath = findPath(
-            item.children as Array<{ id: string; children?: unknown[]; [key: string]: unknown }>,
+            item.children as Array<{
+              id: string;
+              children?: unknown[];
+              [key: string]: unknown;
+            }>,
             targetId,
             [...path, item.id]
           );
@@ -66,9 +115,11 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
     // expand all parent menus along the path (except the last, which is the active item itself)
     for (let i = 0; i < path.length - 1; i++) {
       const menuId = path[i];
-      const subMenuItem = document.querySelector(
-        `.el-sub-menu[index="${menuId}"]`
-      );
+      const queryRoot =
+        resolveViewerRoot()?.querySelector(".deep-genome-toc") ?? document;
+      const subMenuItem = Array.from(
+        queryRoot.querySelectorAll<HTMLElement>(".el-sub-menu[index]")
+      ).find((element) => element.getAttribute("index") === menuId);
 
       if (subMenuItem && !subMenuItem.classList.contains("is-opened")) {
         // expand the menu via Element Plus's mechanism
@@ -114,7 +165,7 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
       },
       {
         // set the root to the scroll container
-        root: mainContentRef.value?.$el || mainContentRef.value,
+        root: findScrollOwner(),
         // trigger when 20% of the element is in the viewport
         threshold: 0.2,
         // margin to trigger earlier or later
@@ -126,7 +177,7 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
 
     // observe all heading elements
     headings.value.forEach((heading) => {
-      const element = document.getElementById(heading.id);
+      const element = findOwnedHeading(heading.id);
       if (element && !observedElements.value.has(element)) {
         observer.observe(element);
         observedElements.value.add(element);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import enUS from "@/locales/langs/en-US";
@@ -26,6 +26,28 @@ const VIEWER_STYLES = [
 ]
   .map((match) => match[1])
   .join("\n");
+const TOC_PATH = resolve(
+  __dirname,
+  "../../src/components/research/DeepGenomeToc.vue"
+);
+const TYPES_PATH = resolve(
+  __dirname,
+  "../../src/components/research/deep-genome-types.ts"
+);
+const TOC_SOURCE = existsSync(TOC_PATH) ? readFileSync(TOC_PATH, "utf8") : "";
+const TOC_TEMPLATE = TOC_SOURCE.slice(0, TOC_SOURCE.indexOf("<script setup"));
+const TOC_STYLES = [
+  ...TOC_SOURCE.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g),
+]
+  .map((match) => match[1])
+  .join("\n");
+const TYPES_SOURCE = existsSync(TYPES_PATH)
+  ? readFileSync(TYPES_PATH, "utf8")
+  : "";
+
+function cssRule(styles: string, selector: string): string {
+  return styles.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+}
 
 const stubs = {
   ElContainer: passthrough,
@@ -48,80 +70,110 @@ function render(
 ) {
   return mount(DeepGenomeResultViewer, {
     props: { markdown: "", references, ...extraProps },
-    global: { stubs },
+    global: { stubs, mocks: { $t: (key: string) => key } },
   });
 }
 
 function renderMarkdown(markdown: string) {
   return mount(DeepGenomeResultViewer, {
     props: { markdown, references: [] },
-    global: { stubs },
+    global: { stubs, mocks: { $t: (key: string) => key } },
   });
 }
 
-describe("DeepGenomeResultViewer — adaptive shell", () => {
-  it("defaults to standalone and adds an explicit embedded shell state", () => {
-    const standalone = render([]);
-    expect(standalone.props("embedded")).toBe(false);
-    expect(
-      standalone.find('[data-testid="deep-genome-viewer"]').classes()
-    ).not.toContain("deep-genome-viewer--embedded");
+describe("DeepGenomeResultViewer — embedded renderer boundary", () => {
+  it("always renders an embedded root without owning the viewport or page surface", () => {
+    const wrapper = render([]);
+    const root = wrapper.find('[data-testid="deep-genome-viewer"]');
 
-    const embedded = render([], { embedded: true });
-    expect(embedded.props("embedded")).toBe(true);
-    expect(
-      embedded.find('[data-testid="deep-genome-viewer"]').classes()
-    ).toContain("deep-genome-viewer--embedded");
+    expect(root.element.tagName).toBe("DIV");
+    expect(VIEWER_TEMPLATE).not.toContain("<el-container");
+    expect(VIEWER_STYLES).not.toMatch(/100(?:d|s|l)?vh/);
+    expect(VIEWER_STYLES).not.toContain("var(--phy-color-bg-page)");
+    expect(cssRule(VIEWER_STYLES, "\\.deep-genome-viewer")).not.toMatch(
+      /\boverflow\b/
+    );
   });
 
-  it("uses semantic shell hooks instead of hard-coded layout attributes", () => {
+  it("keeps the legacy embedded prop inert while compatibility actions and references default on", () => {
+    const compatible = render([]);
+    expect(compatible.props("embedded")).toBe(false);
+    expect(compatible.props("showActions")).toBe(true);
+    expect(compatible.props("showReferences")).toBe(true);
+    expect(
+      compatible.find('[data-testid="deep-genome-toolbar"]').exists()
+    ).toBe(true);
+    expect(compatible.find(".deep-genome-references").exists()).toBe(true);
+
+    const composed = render([], {
+      embedded: true,
+      showActions: false,
+      showReferences: false,
+    });
+    expect(composed.find('[data-testid="deep-genome-toolbar"]').exists()).toBe(
+      false
+    );
+    expect(composed.find(".deep-genome-references").exists()).toBe(false);
+    expect(
+      composed.find('[data-testid="deep-genome-viewer"]').classes()
+    ).not.toContain("deep-genome-viewer--embedded");
+  });
+
+  it("uses semantic hooks instead of hard-coded or dynamic inline layout styles", () => {
     expect(VIEWER_TEMPLATE).toContain('class="deep-genome-viewer"');
-    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-toc"');
+    expect(VIEWER_TEMPLATE).toContain("<DeepGenomeToc");
     expect(VIEWER_TEMPLATE).toContain('class="deep-genome-main"');
     expect(VIEWER_TEMPLATE).toContain('class="deep-genome-toolbar"');
-    expect(VIEWER_TEMPLATE).not.toMatch(/<el-container\s+style=/);
+    expect(VIEWER_TEMPLATE).not.toMatch(/\b:?style\s*=/);
+    expect(TOC_TEMPLATE).not.toMatch(/\b:?style\s*=/);
     expect(VIEWER_TEMPLATE).not.toContain('width="400px"');
-    expect(VIEWER_TEMPLATE).not.toMatch(/<el-aside\b[^>]*\bstyle=/);
-    expect(VIEWER_TEMPLATE).not.toMatch(/<el-main\b[^>]*\bstyle=/);
-    expect(VIEWER_TEMPLATE).not.toMatch(
-      /<div\b(?=[^>]*class="deep-genome-toolbar")[^>]*\bstyle=/
-    );
-    expect(VIEWER_TEMPLATE).not.toMatch(/padding:\s*10px 0/);
-    expect(VIEWER_TEMPLATE).not.toMatch(/z-index:\s*1000/);
-    expect(VIEWER_TEMPLATE).not.toMatch(/gap:\s*10px/);
   });
 
-  it("keeps the embedded desktop viewer bounded with a compact table of contents", () => {
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-viewer\s*\{[\s\S]*height:\s*100vh;[\s\S]*height:\s*100dvh;/
+  it("extracts an exact 232px desktop TOC that becomes a collapsed disclosure at 899px", () => {
+    expect(TOC_SOURCE).not.toBe("");
+    expect(TOC_TEMPLATE).toContain("<details");
+    expect(TOC_TEMPLATE).toContain("<summary");
+    expect(TOC_TEMPLATE).toContain(':open="disclosureOpen"');
+    expect(TOC_SOURCE).toContain("const disclosureOpen = ref(false)");
+    expect(TOC_SOURCE).toContain('window.matchMedia("(min-width: 900px)")');
+    expect(TOC_STYLES).toMatch(
+      /\.deep-genome-toc\s*\{[\s\S]*width:\s*232px[\s\S]*flex:\s*0 0 232px/
+    );
+    expect(TOC_STYLES).toMatch(
+      /@media\s*\(max-width:\s*899px\)[\s\S]*\.deep-genome-toc\s*\{[\s\S]*width:\s*100%/
     );
     expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-viewer--embedded\s*\{[\s\S]*height:\s*min\(70dvh,\s*720px\)/
+      /@media\s*\(max-width:\s*899px\)[\s\S]*\.deep-genome-viewer\s*\{[\s\S]*flex-direction:\s*column/
     );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-toc\s*\{[\s\S]*width:\s*232px/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-main\s*\{[\s\S]*min-width:\s*0[\s\S]*overflow-x:\s*auto/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-toolbar\s*\{[\s\S]*flex-wrap:\s*wrap/
-    );
-    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-bg-elevated\)/);
   });
 
-  it("switches to a contained single-column shell at 700px", () => {
-    expect(VIEWER_STYLES).toMatch(
-      /@media\s*\(max-width:\s*700px\)[\s\S]*\.deep-genome-viewer\s*\{[\s\S]*flex-direction:\s*column/
+  it("exports and exposes one typed download facade that delegates to the existing methods", () => {
+    const wrapper = render([]);
+
+    expect(TYPES_SOURCE).toMatch(
+      /export type DeepGenomeDownloadFormat\s*=\s*"pdf"\s*\|\s*"markdown"/
     );
-    expect(VIEWER_STYLES).toMatch(
-      /@media\s*\(max-width:\s*700px\)[\s\S]*\.deep-genome-toc\s*\{[\s\S]*max-height:\s*168px/
+    expect(TYPES_SOURCE).toMatch(
+      /export interface DeepGenomeViewerHandle\s*\{[\s\S]*download\(format:\s*DeepGenomeDownloadFormat\):\s*Promise<void>/
     );
-    expect(VIEWER_STYLES).toMatch(
-      /@media\s*\(max-width:\s*700px\)[\s\S]*\.deep-genome-main\s*\{[\s\S]*width:\s*100%/
+    expect(wrapper.vm).toHaveProperty("download");
+    expect(VIEWER_SOURCE).toMatch(
+      /defineExpose(?:<DeepGenomeViewerHandle>)?\(\{\s*download\s*\}\)/
     );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-viewer\s*\{[\s\S]*max-width:\s*100%[\s\S]*overflow:\s*hidden/
+    expect(VIEWER_SOURCE).toMatch(
+      /const download[\s\S]*format === "pdf"[\s\S]*downloadPDF\(\)[\s\S]*downloadMarkdown\(\)/
+    );
+  });
+
+  it("preserves exactly the thirteen trusted HTML sinks across document, TOC, and references", () => {
+    const sinkCount =
+      (VIEWER_TEMPLATE.match(/\bv-html\s*=/g) ?? []).length +
+      (TOC_TEMPLATE.match(/\bv-html\s*=/g) ?? []).length;
+
+    expect(sinkCount).toBe(13);
+    expect(VIEWER_TEMPLATE).toContain('v-html="ref.html"');
+    expect(VIEWER_SOURCE).toContain(
+      "buildDisplayReferences(props.references, props.ns)"
     );
   });
 });
@@ -195,8 +247,11 @@ describe("DeepGenomeResultViewer — scientific document skin", () => {
   });
 
   it("keeps tables as the only local horizontal scroll surface", () => {
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-main\s*\{[\s\S]*overflow-x:\s*hidden/
+    expect(cssRule(VIEWER_STYLES, "\\.deep-genome-viewer")).not.toMatch(
+      /overflow-x:\s*auto/
+    );
+    expect(cssRule(VIEWER_STYLES, "\\.deep-genome-main")).not.toMatch(
+      /overflow-x:\s*auto/
     );
     expect(VIEWER_STYLES).toMatch(
       /\.deep-genome-document\s+:deep\(\.markdown-table\)\s*\{[\s\S]*display:\s*block[\s\S]*max-width:\s*100%[\s\S]*overflow-x:\s*auto/
@@ -205,10 +260,10 @@ describe("DeepGenomeResultViewer — scientific document skin", () => {
   });
 
   it("uses quiet tokenized TOC and toolbar states", () => {
-    expect(VIEWER_STYLES).toMatch(
+    expect(TOC_STYLES).toMatch(
       /\.deep-genome-toc\s+:deep\(\.el-menu-item\.is-active\)[\s\S]*background(?:-color)?:\s*var\(--phy-color-brand-blue-soft\)/
     );
-    expect(VIEWER_STYLES).toMatch(
+    expect(TOC_STYLES).toMatch(
       /\.deep-genome-toc\s+:deep\(\.el-menu-item:hover\)[\s\S]*background(?:-color)?:\s*var\(--phy-color-fill-subtle\)/
     );
     expect(VIEWER_TEMPLATE).toMatch(
@@ -219,15 +274,18 @@ describe("DeepGenomeResultViewer — scientific document skin", () => {
     );
   });
 
-  it("renders references and generated images as single-layer panels", () => {
+  it("renders references and generated media as divider-led document sections", () => {
     expect(VIEWER_TEMPLATE).toContain('class="deep-genome-references"');
     expect(VIEWER_TEMPLATE).toContain('class="deep-genome-reference"');
     expect(VIEWER_TEMPLATE).toContain('class="deep-genome-empty-references"');
     expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-references\s*\{[\s\S]*border:\s*1px solid var\(--phy-color-border-subtle\)[\s\S]*background:\s*var\(--phy-color-fill-subtle\)/
+      /\.deep-genome-references\s*\{[\s\S]*border-top:\s*1px solid var\(--phy-color-border-subtle\)/
     );
     expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-document\s+:deep\(\.image-card\)\s*\{[\s\S]*border:\s*1px solid var\(--phy-color-border-subtle\)[\s\S]*background:\s*var\(--phy-color-bg-elevated\)/
+      /\.deep-genome-document\s+:deep\(\.image-card\)\s*\{[\s\S]*border:\s*0/
+    );
+    expect(cssRule(VIEWER_STYLES, "\\.deep-genome-references")).not.toMatch(
+      /background\s*:/
     );
   });
 });
@@ -264,6 +322,15 @@ describe("DeepGenomeResultViewer — scoped responsive media viewers", () => {
     expect(VIEWER_SOURCE).toContain("controller.abort()");
     expect(VIEWER_SOURCE).toContain("viewer.stopAnimate?.()");
     expect(VIEWER_SOURCE).toContain("viewer.clear?.()");
+  });
+
+  it("cancels delayed scroll-spy setup before unmount cleanup finishes", () => {
+    expect(VIEWER_SOURCE).toMatch(
+      /observerSetupTimer\s*=\s*window\.setTimeout\([\s\S]*setupIntersectionObserver/
+    );
+    expect(VIEWER_SOURCE).toMatch(
+      /onBeforeUnmount\(\(\)\s*=>\s*\{[\s\S]*window\.clearTimeout\(observerSetupTimer\)/
+    );
   });
 
   it("uses a semantic responsive class instead of fixed CIF inline dimensions", () => {

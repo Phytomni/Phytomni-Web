@@ -174,4 +174,22 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
 
     printSpy.mockRestore();
   });
+
+  it("prints from a native embedded main element without requiring an Element Plus $el", async () => {
+    const nativeMain = document.createElement("main");
+    nativeMain.appendChild(document.createElement("p"));
+    const mainContentRef = ref<HTMLElement | null>(nativeMain);
+    const printSpy = vi.spyOn(window, "print").mockResolvedValue(undefined);
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# Embedded PDF", filename: "embedded.md" },
+      mainContentRef,
+      displayReferences: computed(() => []),
+    });
+
+    await expect(downloadPDF()).resolves.toBeUndefined();
+    expect(printSpy).toHaveBeenCalledOnce();
+
+    printSpy.mockRestore();
+  });
 });
