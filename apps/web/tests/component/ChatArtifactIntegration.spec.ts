@@ -203,18 +203,6 @@ async function mountProductionChat(width = 1440) {
           template:
             '<article data-test="markdown-body" :data-surface="surface" :class="[\'phy-markdown\', `phy-markdown--${surface}`]">{{ content }}</article>',
         },
-        CitedAnswer: {
-          name: "CitedAnswer",
-          props: ["content", "surface"],
-          template:
-            '<article data-test="cited-body" :data-surface="surface">{{ content }}</article>',
-        },
-        CitationReferenceList: {
-          name: "CitationReferenceList",
-          props: ["references"],
-          template:
-            '<div data-test="artifact-evidence">{{ references?.map((item) => item.title).join(", ") }}</div>',
-        },
         DeepGenomeResultViewer: {
           name: "DeepGenomeResultViewer",
           props: ["markdown"],
@@ -398,9 +386,16 @@ describe("Chat artifact shell integration", () => {
       "Full cited report"
     );
     expect(wrapper.findAll("[data-test=markdown-body]")).toHaveLength(1);
-    expect(wrapper.get("[data-test=artifact-evidence]").text()).toContain(
+    const evidencePanel = wrapper.get(".research-evidence-panel");
+    const evidenceTabPanel = evidencePanel.element.closest(
+      '[data-panel-id="evidence"]'
+    );
+    expect(evidenceTabPanel?.hasAttribute("hidden")).toBe(true);
+    expect(evidencePanel.text()).toContain(
       "Complete source document"
     );
+    expect(wrapper.findAll(".research-evidence-panel__item")).toHaveLength(1);
+    expect(wrapper.find(".doc-list").exists()).toBe(false);
     expect(wrapper.get("[data-testid=chat-transcript]").element).toBe(
       transcript
     );
@@ -522,7 +517,13 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain("<template #artifact>");
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");
     expect(CHAT_SOURCE).toContain('surface="artifact"');
-    expect(CHAT_SOURCE).toContain("<CitationReferenceList");
+    expect(CHAT_SOURCE).toContain("<CitedAnswer");
+    expect(CHAT_SOURCE).toContain('reference-presentation="external"');
+    expect(CHAT_SOURCE).toContain("<ResearchEvidencePanel");
+    expect(CHAT_SOURCE).toContain(
+      '@activate="selectArtifactTab(\'evidence\')"'
+    );
+    expect(CHAT_SOURCE).not.toContain("<CitationReferenceList");
     expect(CHAT_SOURCE).toContain("artifactPreviewForMessage(message)");
     expect(CONTENT_SOURCE).toContain("<ResearchArtifactPreview");
     expect(CONTENT_SOURCE).toContain("@open=\"emit('open-artifact')\"");

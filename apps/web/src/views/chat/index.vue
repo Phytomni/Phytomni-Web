@@ -406,19 +406,20 @@
         @tab="selectArtifactTab"
       >
         <template #content>
-          <MarkdownViewer
+          <CitedAnswer
             :content="String(currentArtifactMessage.content)"
+            :references="currentArtifactMessage.doc_list"
             :ns="artifactNamespace"
             surface="artifact"
+            reference-presentation="external"
           />
         </template>
         <template #evidence>
-          <CitationReferenceList
-            v-if="currentArtifactMessage.doc_list?.length"
+          <ResearchEvidencePanel
             :references="currentArtifactMessage.doc_list"
             :ns="artifactNamespace"
+            @activate="selectArtifactTab('evidence')"
           />
-          <span v-else>{{ t("common.noData") }}</span>
         </template>
         <template #activity>{{ t("common.noData") }}</template>
         <template #downloads>{{ t("common.noData") }}</template>
@@ -454,9 +455,11 @@ import {
   PhyAdaptiveShell,
   PhyEmptyState,
 } from "@/components/shell";
-import { ResearchArtifactShell } from "@/components/research";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
-import CitationReferenceList from "@/components/CitationReferenceList.vue";
+import {
+  ResearchArtifactShell,
+  ResearchEvidencePanel,
+} from "@/components/research";
+import CitedAnswer from "@/components/CitedAnswer.vue";
 import { Menu } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";

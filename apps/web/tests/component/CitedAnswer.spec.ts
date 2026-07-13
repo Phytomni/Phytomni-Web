@@ -51,6 +51,21 @@ describe("CitedAnswer", () => {
     expect(mountCited({ content: "body" }).find(".doc-list").exists()).toBe(false);
   });
 
+  it("keeps the cited body and namespace while references are presented externally", () => {
+    const wrapper = mountCited({
+      content: "Evidence-backed body [1]",
+      references: [{ title: "External source" }],
+      ns: "artifact-a",
+      surface: "artifact",
+      referencePresentation: "external",
+    });
+
+    expect(wrapper.find(".mv-stub").text()).toContain("Evidence-backed body [1]");
+    expect(wrapper.find(".mv-stub").text()).toContain("artifact-a");
+    expect(wrapper.find(".mv-stub").text()).toContain("artifact");
+    expect(wrapper.find(".doc-list").exists()).toBe(false);
+  });
+
   it("passes content and instantMessage through to MarkdownViewer", () => {
     const wrapper = mountCited({ content: "hello", references: [], instantMessage: true });
     expect(wrapper.find(".mv-stub").text()).toContain("hello");

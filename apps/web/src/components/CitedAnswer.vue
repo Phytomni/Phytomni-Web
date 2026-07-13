@@ -7,7 +7,11 @@
       :surface="surface"
       @finish="$emit('finish')"
     />
-    <CitationReferenceList :references="references" :ns="ns" />
+    <CitationReferenceList
+      v-if="referencePresentation === 'inline'"
+      :references="references"
+      :ns="ns"
+    />
   </div>
 </template>
 
@@ -20,13 +24,17 @@ import CitationReferenceList from "@/components/CitationReferenceList.vue";
 // Body -> MarkdownViewer (which linkifies [N] markers); reference list ->
 // CitationReferenceList (buildDisplayReferences only). This component never reads
 // chatStates / the store — the chat view passes instantMessage + @finish in (parallel-chat invariant).
-defineProps<{
-  content: string;
-  references?: any[];
-  instantMessage?: boolean;
-  ns?: string;
-  surface?: MarkdownSurface;
-}>();
+withDefaults(
+  defineProps<{
+    content: string;
+    references?: unknown[];
+    instantMessage?: boolean;
+    ns?: string;
+    surface?: MarkdownSurface;
+    referencePresentation?: "inline" | "external";
+  }>(),
+  { referencePresentation: "inline" }
+);
 
 defineEmits<{ finish: [] }>();
 </script>
