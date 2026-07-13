@@ -201,7 +201,7 @@ async function mountProductionChat(width = 1440) {
           name: "MarkdownViewer",
           props: ["content", "surface", "ns"],
           template:
-            '<article data-test="markdown-body" :data-surface="surface">{{ content }}</article>',
+            '<article data-test="markdown-body" :data-surface="surface" :class="[\'phy-markdown\', `phy-markdown--${surface}`]">{{ content }}</article>',
         },
         CitedAnswer: {
           name: "CitedAnswer",
@@ -391,6 +391,9 @@ describe("Chat artifact shell integration", () => {
       '.phy-adaptive-shell__artifact [data-test="markdown-body"]'
     );
     expect(artifactBody.attributes("data-surface")).toBe("artifact");
+    expect(artifactBody.classes()).toEqual(
+      expect.arrayContaining(["phy-markdown", "phy-markdown--artifact"])
+    );
     expect(artifactBody.text()).toContain(
       "Full cited report"
     );

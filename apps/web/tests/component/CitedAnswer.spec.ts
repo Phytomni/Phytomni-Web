@@ -80,13 +80,15 @@ describe("CitedAnswer", () => {
     expect(wrapper.find(".mv-stub").text()).toContain("m3");
   });
 
-  it("forwards optional surface to MarkdownViewer", () => {
-    const withSurface = mountCited({
-      content: "hi",
-      references: [],
-      surface: "chat",
-    });
-    expect(withSurface.find(".mv-stub").text()).toContain("chat");
+  it("forwards each explicit surface to MarkdownViewer", () => {
+    for (const surface of ["chat", "artifact", "document"]) {
+      const withSurface = mountCited({
+        content: "hi",
+        references: [],
+        surface,
+      });
+      expect(withSurface.find(".mv-stub").text()).toContain(surface);
+    }
 
     const legacyDefault = mountCited({ content: "hi", references: [] });
     // Absent surface is not forwarded as chat — stub interpolates empty/undefined.

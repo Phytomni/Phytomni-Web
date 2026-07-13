@@ -16,6 +16,10 @@ const MARKDOWN_CSS = readFileSync(
   resolve(__dirname, "../../src/styles/markdown.css"),
   "utf8"
 );
+const TOKENS_CSS = readFileSync(
+  resolve(__dirname, "../../src/styles/tokens.css"),
+  "utf8"
+);
 const CHAT_MESSAGE_CONTENT_SOURCE = readFileSync(
   resolve(
     __dirname,
@@ -23,6 +27,15 @@ const CHAT_MESSAGE_CONTENT_SOURCE = readFileSync(
   ),
   "utf8"
 );
+
+function cssRuleBody(selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = MARKDOWN_CSS.match(
+    new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, "s")
+  );
+  expect(match, `Missing Markdown CSS rule: ${selector}`).not.toBeNull();
+  return match?.[1] ?? "";
+}
 
 // Locks the static-render (v-else) v-html path. When instantMessage is falsy
 // — history / already-finished agent messages — MarkdownViewer renders its own
@@ -82,6 +95,128 @@ describe("MarkdownViewer surface classes", () => {
     const root = w.find(".phy-markdown");
     expect(root.classes()).toContain("phy-markdown--chat");
     expect(root.classes()).not.toContain("phy-markdown--legacy");
+  });
+
+  it("applies the artifact skin to a 740px serif narrative while exclusions stay sans or mono", () => {
+    const w = mount(MarkdownViewer, {
+      props: { content: "Research narrative", surface: "artifact" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown");
+    expect(root.classes()).toContain("phy-markdown--artifact");
+    expect(root.classes()).not.toContain("phy-markdown--legacy");
+    expect(root.classes()).not.toContain("phy-reading");
+
+    const narrativeRule = cssRuleBody(
+      ".phy-markdown--artifact :is(.markdown-content, .markdown-body)"
+    );
+    expect(narrativeRule).toMatch(/max-width:\s*740px/);
+    expect(narrativeRule).toMatch(
+      /font-family:\s*var\(--phy-font-reading\)/
+    );
+    expect(
+      cssRuleBody(
+        ".phy-markdown--artifact :is(h1, h2, h3, h4, h5, h6)"
+      )
+    ).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
+    expect(
+      cssRuleBody(
+        ".phy-markdown--artifact :is(code, pre, kbd, samp)"
+      )
+    ).toMatch(/font-family:\s*var\(--phy-font-mono\)/);
+    expect(
+      cssRuleBody(
+        '.phy-markdown--artifact :is(caption, figcaption, button, input, select, textarea, [role="button"], .doc-list, .doc-list-title, .doc-list-item)'
+      )
+    ).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
+  });
+
+  it("keeps serif on artifact narrative paragraphs without leaking it into structural containers", () => {
+    const style = document.createElement("style");
+    style.textContent = `${TOKENS_CSS}\n${MARKDOWN_CSS}`;
+    document.head.append(style);
+
+    const fixture = mount(
+      {
+        template: `
+          <div class="phy-markdown phy-markdown--artifact">
+            <div class="markdown-content">
+              <p data-test="narrative">Narrative</p>
+              <blockquote><p data-test="blockquote">Quote</p></blockquote>
+              <ul><li><p data-test="list">List detail</p></li></ul>
+              <figure><figcaption><p data-test="caption">Caption</p></figcaption></figure>
+              <div class="doc-list"><p data-test="reference">Reference</p></div>
+              <div role="button"><p data-test="control">Control copy</p></div>
+            </div>
+          </div>
+        `,
+      },
+      { attachTo: document.body }
+    );
+
+    try {
+      const fontFamily = (selector: string) =>
+        getComputedStyle(fixture.get(selector).element).fontFamily;
+      const readingFamily = fontFamily(".markdown-content");
+      const shellFamily = fontFamily(".phy-markdown");
+
+      expect(readingFamily).not.toBe(shellFamily);
+      expect(fontFamily('[data-test="narrative"]')).toBe(readingFamily);
+      for (const structuralParagraph of [
+        "blockquote",
+        "list",
+        "caption",
+        "reference",
+        "control",
+      ]) {
+        expect(fontFamily(`[data-test="${structuralParagraph}"]`)).toBe(
+          shellFamily
+        );
+      }
+    } finally {
+      fixture.unmount();
+      style.remove();
+    }
+  });
+
+  it("applies the document fixture class while keeping its body sans", () => {
+    const w = mount(MarkdownViewer, {
+      props: { content: "Document narrative", surface: "document" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown");
+    expect(root.classes()).toContain("phy-markdown--document");
+    expect(root.classes()).not.toContain("phy-markdown--legacy");
+    expect(root.classes()).not.toContain("phy-reading");
+
+    const documentRule = cssRuleBody(".phy-markdown--document");
+    const documentBodyRule = cssRuleBody(
+      ".phy-markdown--document :is(.markdown-content, .markdown-body)"
+    );
+    expect(documentRule).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
+    expect(documentBodyRule).toMatch(
+      /font-family:\s*var\(--phy-font-shell\)/
+    );
+    expect(`${documentRule}${documentBodyRule}`).not.toContain(
+      "--phy-font-reading"
+    );
+  });
+
+  it("contains artifact and document overflow, caption, link, and focus affordances", () => {
+    const sharedSurface = ":is(.phy-markdown--artifact, .phy-markdown--document)";
+    expect(cssRuleBody(`${sharedSurface} pre`)).toMatch(
+      /overflow-x:\s*auto[\s\S]*overscroll-behavior-inline:\s*contain/
+    );
+    expect(cssRuleBody(`${sharedSurface} table`)).toMatch(
+      /max-width:\s*100%[\s\S]*overflow-x:\s*auto/
+    );
+    expect(cssRuleBody(`${sharedSurface} img`)).toMatch(/max-width:\s*100%/);
+    expect(cssRuleBody(`${sharedSurface} :is(caption, figcaption)`)).toMatch(
+      /font-family:\s*var\(--phy-font-shell\)/
+    );
+    expect(cssRuleBody(`${sharedSurface} a:focus-visible`)).toMatch(
+      /outline:\s*2px solid var\(--phy-color-focus\)/
+    );
   });
 
   it("keeps Typewriter on the chat surface without phy-reading", () => {
