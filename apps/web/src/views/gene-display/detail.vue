@@ -1,10 +1,6 @@
 <template>
-  <PhyWorkspaceShell class="gene-detail-workspace">
-    <template #header>
-      <PhyPageHeader :title="pageTitle" />
-    </template>
-
-    <PhyAsyncState :state="asyncState">
+  <main class="gene-detail-route" data-scroll-root="gene-detail">
+    <PhyAsyncState class="gene-detail-state" :state="asyncState">
       <template #loading>
         <div class="gene-detail-state-surface">
           <PhySkeleton shape="line" :count="8" />
@@ -29,32 +25,36 @@
       </template>
 
       <template #ready>
-        <div class="gene-detail-result">
-          <DeepGenomeResultViewer
-            :markdown="processedContent"
-            :references="references"
-            ns="gene-detail"
-            embedded
-          />
-        </div>
+        <DeepGenomeArtifact
+          class="gene-detail-artifact"
+          :markdown="processedContent"
+          :references="references"
+          ns="gene-detail"
+          :title="pageTitle"
+          :metadata="artifactMetadata"
+          :tab-labels="artifactTabLabels"
+          :tablist-label="t('common.operation')"
+          artifact-id="gene-detail-artifact"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t('common.operation')"
+          @back="handleArtifactNavigation"
+          @close="handleArtifactNavigation"
+        />
       </template>
     </PhyAsyncState>
-  </PhyWorkspaceShell>
+  </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { getGeneDetails } from "@/api/gene-display";
-import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
+import { DeepGenomeArtifact } from "@/components/research";
 import { useI18n } from "vue-i18n";
 import { buildDisplayContent } from "./gene-markdown";
-import {
-  PhyEmptyState,
-  PhyPageHeader,
-  PhyWorkspaceShell,
-} from "@/components/shell";
+import { PhyEmptyState } from "@/components/shell";
 import { PhyAsyncState, PhyErrorState, PhySkeleton } from "@/components/state";
 
 type AsyncState = "loading" | "empty" | "error" | "ready";
@@ -67,6 +67,7 @@ interface GeneReference {
 const { t } = useI18n();
 
 const route = useRoute();
+const router = useRouter();
 const loading = ref(false);
 const requestFailed = ref(false);
 const MDContent = ref("");
@@ -79,6 +80,13 @@ const fileName = computed(() => {
 });
 
 const pageTitle = computed(() => fileName.value || t("gene.detailTitle"));
+const artifactMetadata = computed(() => t("agents.deepGenome.title"));
+const artifactTabLabels = computed(() => ({
+  content: t("common.view"),
+  evidence: t("agents.deepGenome.references"),
+  activity: t("chat.log.activityLabel"),
+  downloads: t("chat.actions.downloadAttachments"),
+}));
 
 const asyncState = computed<AsyncState>(() => {
   if (loading.value) return "loading";
@@ -168,6 +176,16 @@ const retryFetch = () => {
   }
 };
 
+const handleArtifactNavigation = () => {
+  if (window.history.length > 1) {
+    window.history.back();
+  } else if (window.opener && !window.opener.closed) {
+    window.close();
+  } else {
+    router.push({ name: "geneDisplay" });
+  }
+};
+
 watch(
   fileName,
   (nextFileName) => {
@@ -191,10 +209,34 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-.gene-detail-workspace {
+.gene-detail-route {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
   height: 100%;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
   padding-bottom: calc(var(--phy-space-40) + var(--phy-space-24));
+  background: var(--phy-color-bg-page);
+  color: var(--phy-color-text);
+}
+
+.gene-detail-state {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.gene-detail-state :deep(.phy-async-state__ready),
+.gene-detail-state :deep(.phy-async-state__content) {
+  height: 100%;
+  min-height: 0;
+}
+
+.gene-detail-artifact {
+  height: 100%;
+  min-height: 0;
 }
 
 .gene-detail-state-surface {
@@ -203,13 +245,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--phy-color-border-subtle);
   border-radius: var(--phy-radius-md);
   background: var(--phy-color-bg-elevated);
-}
-
-.gene-detail-result {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
 }
 
 @media (max-width: 599px) {

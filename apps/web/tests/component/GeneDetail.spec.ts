@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   buildDisplayContent: vi.fn((content: string) => content),
   messageError: vi.fn(),
   messageWarning: vi.fn(),
+  routerPush: vi.fn(),
 }));
 
 const mockRoute = reactive({
@@ -23,6 +24,7 @@ const mockRoute = reactive({
 
 vi.mock("vue-router", () => ({
   useRoute: () => mockRoute,
+  useRouter: () => ({ push: mocks.routerPush }),
 }));
 
 vi.mock("@/api/gene-display", () => ({
@@ -44,22 +46,50 @@ vi.mock("element-plus", () => ({
 
 import GeneDetail from "@/views/gene-display/detail.vue";
 
-const DeepGenomeResultViewerStub = defineComponent({
-  name: "DeepGenomeResultViewer",
+const DeepGenomeArtifactStub = defineComponent({
+  name: "DeepGenomeArtifact",
   props: {
     markdown: { type: String, default: "" },
     references: { type: Array, default: () => [] },
     ns: { type: String, default: "" },
-    embedded: { type: Boolean, default: false },
+    title: { type: String, default: "" },
+    metadata: { type: [String, Array], default: undefined },
+    tabLabels: { type: Object, default: () => ({}) },
+    tablistLabel: { type: String, default: "" },
+    artifactId: { type: String, default: "" },
+    backLabel: { type: String, default: "" },
+    closeLabel: { type: String, default: "" },
+    actionLabel: { type: String, default: "" },
   },
-  setup(props) {
+  setup(props, { emit }) {
     return () =>
-      h("article", {
-        "data-testid": "deep-genome-viewer-stub",
-        "data-markdown": props.markdown,
-        "data-ns": props.ns,
-        "data-embedded": String(props.embedded),
-      });
+      h("article", [
+        h("div", {
+          "data-testid": "deep-genome-artifact-stub",
+          "data-markdown": props.markdown,
+          "data-ns": props.ns,
+          "data-title": props.title,
+          "data-metadata": Array.isArray(props.metadata)
+            ? props.metadata.join("|")
+            : props.metadata || "",
+          "data-tab-labels": JSON.stringify(props.tabLabels),
+          "data-tablist-label": props.tablistLabel,
+          "data-artifact-id": props.artifactId,
+          "data-back-label": props.backLabel,
+          "data-close-label": props.closeLabel,
+          "data-action-label": props.actionLabel,
+        }),
+        h(
+          "button",
+          { "data-testid": "artifact-back", onClick: () => emit("back") },
+          "Back"
+        ),
+        h(
+          "button",
+          { "data-testid": "artifact-close", onClick: () => emit("close") },
+          "Close"
+        ),
+      ]);
   },
 });
 
@@ -87,17 +117,47 @@ const mountView = () =>
   mount(GeneDetail, {
     global: {
       stubs: {
-        DeepGenomeResultViewer: DeepGenomeResultViewerStub,
+        DeepGenomeArtifact: DeepGenomeArtifactStub,
       },
     },
   });
 
-describe("Gene Detail research workspace", () => {
+describe("Gene Detail research artifact", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.keys(mockRoute.query).forEach((key) => delete mockRoute.query[key]);
     mocks.getGeneDetails.mockResolvedValue(successResponse());
     mocks.buildDisplayContent.mockImplementation((content: string) => content);
+    mocks.routerPush.mockReset();
+  });
+
+  it("mounts the completed report in the shared DeepGenome artifact shell", async () => {
+    mockRoute.query.file_name = "Os01g0107900_result.md";
+    const wrapper = mountView();
+    await flushPromises();
+
+    const artifact = wrapper.get('[data-testid="deep-genome-artifact-stub"]');
+    expect(artifact.attributes("data-title")).toBe("Os01g0107900_result.md");
+    expect(artifact.attributes("data-metadata")).toBe("Deep Genome Agent");
+    expect(artifact.attributes("data-markdown")).toContain("# Os01g0107900");
+    expect(artifact.attributes("data-ns")).toBe("gene-detail");
+    expect(artifact.attributes("data-back-label")).toBe("Back");
+    expect(artifact.attributes("data-close-label")).toBe("Close");
+    expect(artifact.attributes("data-action-label")).toBe("Operation");
+    expect(artifact.attributes("data-tablist-label")).toBe("Operation");
+    expect(artifact.attributes("data-artifact-id")).toBe(
+      "gene-detail-artifact"
+    );
+    expect(JSON.parse(artifact.attributes("data-tab-labels"))).toEqual({
+      content: "View",
+      evidence: "References",
+      activity: "Execution log",
+      downloads: "Download attachments",
+    });
+    expect(wrapper.find('[data-scroll-root="gene-detail"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-scroll-root="workspace"]').exists()).toBe(false);
   });
 
   it("renders an explicit shared empty state and skips the API when file_name is missing", async () => {
@@ -105,10 +165,8 @@ describe("Gene Detail research workspace", () => {
     await flushPromises();
 
     expect(mocks.getGeneDetails).not.toHaveBeenCalled();
-    expect(wrapper.find(".phy-workspace-shell").exists()).toBe(true);
-    expect(wrapper.find(".phy-page-header h1").text()).toBe(
-      "Gene research result"
-    );
+    expect(wrapper.find(".gene-detail-route").exists()).toBe(true);
+    expect(wrapper.find(".phy-workspace-shell").exists()).toBe(false);
     expect(wrapper.find(".phy-async-state--empty").exists()).toBe(true);
     expect(wrapper.text()).toContain("Gene details not found");
   });
@@ -134,6 +192,7 @@ describe("Gene Detail research workspace", () => {
       "true"
     );
     expect(wrapper.find(".phy-skeleton").exists()).toBe(true);
+    expect(wrapper.findComponent(DeepGenomeArtifactStub).exists()).toBe(false);
 
     resolveRequest(successResponse());
     await flushPromises();
@@ -155,21 +214,22 @@ describe("Gene Detail research workspace", () => {
     expect(mocks.getGeneDetails).toHaveBeenCalledWith({
       file_name: "Os01g0107900.md",
     });
-    expect(wrapper.find(".phy-page-header h1").text()).toBe("Os01g0107900.md");
+    expect(wrapper.findComponent(DeepGenomeArtifactStub).props("title")).toBe(
+      "Os01g0107900.md"
+    );
     expect(mocks.buildDisplayContent).toHaveBeenLastCalledWith(
       "# Os01g0107900\n\nEvidence [1]"
     );
 
-    const viewer = wrapper.findComponent(DeepGenomeResultViewerStub);
-    expect(viewer.props("markdown")).toBe("# Os01g0107900\n\nEvidence [1]");
-    expect(viewer.props("references")).toEqual([
+    const artifact = wrapper.findComponent(DeepGenomeArtifactStub);
+    expect(artifact.props("markdown")).toBe("# Os01g0107900\n\nEvidence [1]");
+    expect(artifact.props("references")).toEqual([
       { title: "Fallback paper" },
       { title: "Second paper" },
     ]);
-    expect(viewer.props("ns")).toBe("gene-detail");
-    expect(viewer.props("embedded")).toBe(true);
-    expect(viewer.props("markdown")).not.toContain("DOC TITLES");
-    expect(viewer.props("markdown")).not.toContain("Fallback paper");
+    expect(artifact.props("ns")).toBe("gene-detail");
+    expect(artifact.props("markdown")).not.toContain("DOC TITLES");
+    expect(artifact.props("markdown")).not.toContain("Fallback paper");
   });
 
   it("prefers API references over the DOC TITLES fallback", async () => {
@@ -189,9 +249,9 @@ describe("Gene Detail research workspace", () => {
     const wrapper = mountView();
     await flushPromises();
 
-    const viewer = wrapper.findComponent(DeepGenomeResultViewerStub);
-    expect(viewer.props("references")).toEqual(apiReferences);
-    expect(viewer.props("markdown")).toBe("# Os01g0107900\n\nEvidence [1]");
+    const artifact = wrapper.findComponent(DeepGenomeArtifactStub);
+    expect(artifact.props("references")).toEqual(apiReferences);
+    expect(artifact.props("markdown")).toBe("# Os01g0107900\n\nEvidence [1]");
   });
 
   it("uses the shared not-found state for a successful response without content", async () => {
@@ -203,9 +263,7 @@ describe("Gene Detail research workspace", () => {
 
     expect(wrapper.find(".phy-async-state--empty").exists()).toBe(true);
     expect(wrapper.text()).toContain("Gene details not found");
-    expect(wrapper.findComponent(DeepGenomeResultViewerStub).exists()).toBe(
-      false
-    );
+    expect(wrapper.findComponent(DeepGenomeArtifactStub).exists()).toBe(false);
   });
 
   it("shows an actionable error for a failed response and retries the same file", async () => {
@@ -228,6 +286,7 @@ describe("Gene Detail research workspace", () => {
       file_name: "Os01g0107900.md",
     });
     expect(wrapper.find(".phy-async-state--ready").exists()).toBe(true);
+    expect(wrapper.findComponent(DeepGenomeArtifactStub).exists()).toBe(true);
   });
 
   it("shows the same retry state when the request rejects", async () => {
@@ -250,9 +309,9 @@ describe("Gene Detail research workspace", () => {
     const wrapper = mountView();
     await flushPromises();
 
-    expect(wrapper.findAll('[data-scroll-root="workspace"]')).toHaveLength(1);
-    expect(wrapper.find(".gene-detail-result").exists()).toBe(true);
-    expect(wrapper.find(".gene-detail-container").exists()).toBe(false);
+    expect(wrapper.findAll('[data-scroll-root="gene-detail"]')).toHaveLength(1);
+    expect(wrapper.find(".gene-detail-artifact").exists()).toBe(true);
+    expect(wrapper.find('[data-scroll-root="workspace"]').exists()).toBe(false);
   });
 
   it("loads the new document when file_name changes on the reused route", async () => {
@@ -289,16 +348,18 @@ describe("Gene Detail research workspace", () => {
     expect(mocks.getGeneDetails).toHaveBeenLastCalledWith({
       file_name: "second.md",
     });
-    expect(wrapper.find(".phy-page-header h1").text()).toBe("second.md");
+    expect(wrapper.findComponent(DeepGenomeArtifactStub).props("title")).toBe(
+      "second.md"
+    );
     expect(
-      wrapper.findComponent(DeepGenomeResultViewerStub).props("markdown")
+      wrapper.findComponent(DeepGenomeArtifactStub).props("markdown")
     ).toBe("# Second gene");
 
     resolveFirst(successResponse({ content: "# Stale first gene" }));
     await flushPromises();
 
     expect(
-      wrapper.findComponent(DeepGenomeResultViewerStub).props("markdown")
+      wrapper.findComponent(DeepGenomeArtifactStub).props("markdown")
     ).toBe("# Second gene");
   });
 
@@ -320,5 +381,97 @@ describe("Gene Detail research workspace", () => {
 
     expect(mocks.messageError).not.toHaveBeenCalled();
     expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it("uses browser history when the detail tab has navigable history", async () => {
+    mockRoute.query.file_name = "Os01g0107900.md";
+    const wrapper = mountView();
+    await flushPromises();
+
+    const originalHistoryLength = window.history.length;
+    Object.defineProperty(window.history, "length", {
+      configurable: true,
+      value: 2,
+    });
+    const historyBack = vi
+      .spyOn(window.history, "back")
+      .mockImplementation(() => undefined);
+
+    try {
+      await wrapper.get('[data-testid="artifact-back"]').trigger("click");
+      expect(historyBack).toHaveBeenCalledOnce();
+      expect(mocks.routerPush).not.toHaveBeenCalled();
+    } finally {
+      historyBack.mockRestore();
+      Object.defineProperty(window.history, "length", {
+        configurable: true,
+        value: originalHistoryLength,
+      });
+    }
+  });
+
+  it("closes a detail tab opened by Gene Display when no history exists", async () => {
+    mockRoute.query.file_name = "Os01g0107900.md";
+    const wrapper = mountView();
+    await flushPromises();
+
+    const originalHistoryLength = window.history.length;
+    const originalOpener = window.opener;
+    Object.defineProperty(window.history, "length", {
+      configurable: true,
+      value: 1,
+    });
+    Object.defineProperty(window, "opener", {
+      configurable: true,
+      value: { closed: false },
+    });
+    const close = vi.spyOn(window, "close").mockImplementation(() => undefined);
+
+    try {
+      await wrapper.get('[data-testid="artifact-close"]').trigger("click");
+      expect(close).toHaveBeenCalledOnce();
+      expect(mocks.routerPush).not.toHaveBeenCalled();
+    } finally {
+      close.mockRestore();
+      Object.defineProperty(window.history, "length", {
+        configurable: true,
+        value: originalHistoryLength,
+      });
+      Object.defineProperty(window, "opener", {
+        configurable: true,
+        value: originalOpener,
+      });
+    }
+  });
+
+  it("routes back to Gene Display when a standalone detail tab cannot close", async () => {
+    mockRoute.query.file_name = "Os01g0107900.md";
+    const wrapper = mountView();
+    await flushPromises();
+
+    const originalHistoryLength = window.history.length;
+    const originalOpener = window.opener;
+    Object.defineProperty(window.history, "length", {
+      configurable: true,
+      value: 1,
+    });
+    Object.defineProperty(window, "opener", {
+      configurable: true,
+      value: null,
+    });
+
+    try {
+      await wrapper.get('[data-testid="artifact-back"]').trigger("click");
+      expect(mocks.routerPush).toHaveBeenCalledWith({ name: "geneDisplay" });
+    } finally {
+      Object.defineProperty(window.history, "length", {
+        configurable: true,
+        value: originalHistoryLength,
+      });
+      Object.defineProperty(window, "opener", {
+        configurable: true,
+        value: originalOpener,
+      });
+    }
   });
 });
