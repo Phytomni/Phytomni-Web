@@ -155,15 +155,17 @@ const metadataItems = computed(() => {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--phy-space-8);
-  max-width: 45%;
   min-width: 0;
-  overflow-x: auto;
+  max-width: 100%;
+  overflow-x: visible;
   overflow-y: hidden;
   scrollbar-width: thin;
 }
 
-.research-artifact-header__control {
+.research-artifact-header__control,
+:slotted(.research-artifact-header__control) {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -180,12 +182,14 @@ const metadataItems = computed(() => {
   cursor: pointer;
 }
 
-.research-artifact-header__control:hover {
+.research-artifact-header__control:hover,
+:slotted(.research-artifact-header__control:hover) {
   background: var(--phy-color-fill-subtle);
   color: var(--phy-color-action-text-hover);
 }
 
-.research-artifact-header__control:focus-visible {
+.research-artifact-header__control:focus-visible,
+:slotted(.research-artifact-header__control:focus-visible) {
   outline: 2px solid var(--phy-color-focus);
   outline-offset: 2px;
 }
@@ -197,8 +201,13 @@ const metadataItems = computed(() => {
 
 @media (max-width: 899px) {
   .research-artifact-header {
+    flex-wrap: wrap;
     gap: var(--phy-space-8);
     padding: var(--phy-space-12) var(--phy-space-16);
+  }
+
+  .research-artifact-header__identity {
+    flex: 1 1 0;
   }
 
   .research-artifact-header__back--mobile-only {
@@ -219,10 +228,14 @@ const metadataItems = computed(() => {
   }
 
   .research-artifact-header__actions {
-    max-width: 35%;
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    max-width: none;
+    overflow-x: visible;
   }
 
-  .research-artifact-header__control {
+  .research-artifact-header__control,
+  :slotted(.research-artifact-header__control) {
     min-width: calc(var(--phy-control-height-default) + var(--phy-space-4));
     min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
     padding-inline: var(--phy-space-8);

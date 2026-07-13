@@ -108,4 +108,35 @@ describe("ResearchArtifactHeader", () => {
       /\.research-artifact-header__actions\s*{[^}]*flex:\s*0 0 auto;/s
     );
   });
+
+  it("wraps artifact actions below the compact desktop breakpoint", () => {
+    const source = readFileSync(
+      resolve(
+        __dirname,
+        "../../../src/components/research/ResearchArtifactHeader.vue"
+      ),
+      "utf8"
+    );
+
+    expect(source).toMatch(
+      /\.research-artifact-header__actions\s*{[^}]*flex-wrap:\s*wrap;/s
+    );
+    expect(source).toMatch(
+      /@media\s*\(max-width:\s*899px\)[\s\S]*?\.research-artifact-header__actions\s*{[^}]*max-width:\s*none;/s
+    );
+  });
+
+  it("styles controls supplied through the actions slot", () => {
+    const source = readFileSync(
+      resolve(
+        __dirname,
+        "../../../src/components/research/ResearchArtifactHeader.vue"
+      ),
+      "utf8"
+    );
+
+    expect(source).toMatch(
+      /:slotted\(\.research-artifact-header__control\)\s*{/s
+    );
+  });
 });
