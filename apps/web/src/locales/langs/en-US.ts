@@ -313,6 +313,7 @@ export default {
     geneName: "File Name",
     biocode: "species",
     geneId: "Gene ID",
+    resultsCount: "{count} results",
     logs: {
       fetchDataFailed: "Failed to fetch data:",
       fetchDetailFailed: "Failed to fetch gene details:",

@@ -220,6 +220,15 @@ describe("Gene Display workspace", () => {
     );
   });
 
+  it("shows the fetched result count in the data toolbar", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    const results = wrapper.get(".gene-results-count");
+    expect(results.attributes("aria-live")).toBe("polite");
+    expect(results.text()).toBe("2 results");
+  });
+
   it("searches on Enter and resets the current page to one", async () => {
     const wrapper = mountView();
     await flushPromises();

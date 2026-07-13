@@ -100,6 +100,16 @@ const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
   "utf8"
 );
+const artifactSlotStart = CHAT_SOURCE.indexOf("<template #artifact>");
+const artifactSlotEnd = CHAT_SOURCE.indexOf(
+  "</PhyAdaptiveShell>",
+  artifactSlotStart
+);
+const CHAT_TRANSCRIPT_SOURCE = CHAT_SOURCE.slice(0, artifactSlotStart);
+const ARTIFACT_SLOT_SOURCE = CHAT_SOURCE.slice(
+  artifactSlotStart,
+  artifactSlotEnd
+);
 const CONTENT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageContent.vue"),
   "utf8"
@@ -558,9 +568,14 @@ describe("ChatInteractionV2 — progress exclusivity and legacy absences", () =>
     expect(countOccurrences(COMPOSER_SOURCE, "<ChatAgentPicker")).toBe(1);
     // Single content owner — ChatMessageContent, not duplicate inline branches.
     expect(countOccurrences(CHAT_SOURCE, "<ChatMessageContent")).toBe(1);
-    expect(CHAT_SOURCE).not.toContain("<CitedAnswer");
-    expect(CHAT_SOURCE).not.toContain("<DeepGenomeResultViewer");
-    expect(CHAT_SOURCE).not.toContain("<StreamMessage");
+    expect(artifactSlotStart).toBeGreaterThan(0);
+    expect(artifactSlotEnd).toBeGreaterThan(artifactSlotStart);
+    expect(ARTIFACT_SLOT_SOURCE).toContain("<ResearchArtifactShell");
+    expect(CHAT_TRANSCRIPT_SOURCE).not.toContain("<CitedAnswer");
+    expect(CHAT_TRANSCRIPT_SOURCE).not.toContain("<DeepGenomeResultViewer");
+    expect(CHAT_TRANSCRIPT_SOURCE).not.toContain("<StreamMessage");
+    // Artifact presentation owns the single citation surface outside the transcript.
+    expect(countOccurrences(ARTIFACT_SLOT_SOURCE, "<CitedAnswer")).toBe(1);
   });
 });
 

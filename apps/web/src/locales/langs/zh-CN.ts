@@ -315,6 +315,7 @@ export default {
     geneName: "文件名称",
     biocode: "物种名",
     geneId: "基因ID",
+    resultsCount: "共 {count} 条结果",
     logs: {
       fetchDataFailed: "获取数据失败：",
       fetchDetailFailed: "获取基因详情失败：",

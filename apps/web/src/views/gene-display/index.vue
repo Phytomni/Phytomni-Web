@@ -30,6 +30,13 @@
               </template>
             </el-input>
           </div>
+          <span
+            class="gene-results-count"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {{ $t("gene.resultsCount", { count: total }) }}
+          </span>
         </template>
       </PhyDataToolbar>
     </template>
@@ -242,6 +249,15 @@ onMounted(() => {
 .gene-search-control {
   width: 100%;
   max-width: 100%;
+}
+
+.gene-results-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--phy-control-height-default);
+  color: var(--phy-color-text-secondary);
+  font-size: 0.8125rem;
+  white-space: nowrap;
 }
 
 :deep(.gene-search-control .el-input__wrapper) {
