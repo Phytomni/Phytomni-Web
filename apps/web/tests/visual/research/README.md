@@ -39,3 +39,7 @@ physical image dimensions are validated separately with `file`.
 
 Boundary smoke widths (en-US/light) are: 320, 389, 390, 479, 480, 767, 768,
 1024, 1199, 1366, 1367, 1920, and 1921px.
+
+At desktop widths above the reading baseline, the Deep Genome canvas scales
+fluidly from 1120px toward 1600px and its report column from 760px toward
+1040px; ordinary research artifacts keep the shared reading width.

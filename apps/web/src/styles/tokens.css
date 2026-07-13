@@ -286,7 +286,8 @@
   --phy-layout-sidebar-compact-width: 56px;
   --phy-layout-transcript-max-width: 860px;
   --phy-layout-reading-max-width: 760px;
-  --phy-layout-artifact-wide-max-width: 1120px;
+  --phy-layout-artifact-wide-max-width: clamp(1120px, 72vw, 1600px);
+  --phy-layout-artifact-document-max-width: clamp(760px, 46vw, 1040px);
   --phy-layout-artifact-chat-min-width: 360px;
   --phy-layout-artifact-content-min-width: 560px;
 

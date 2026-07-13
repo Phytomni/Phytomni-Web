@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { defineComponent, nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import DeepGenomeArtifact from "@/components/research/DeepGenomeArtifact.vue";
@@ -93,6 +95,20 @@ describe("DeepGenomeArtifact", () => {
 
     expect(download).toHaveBeenNthCalledWith(1, "pdf");
     expect(download).toHaveBeenNthCalledWith(2, "markdown");
+  });
+
+  it("expands the embedded report column on ultra-wide layouts", () => {
+    const source = readFileSync(
+      resolve(
+        __dirname,
+        "../../../src/components/research/DeepGenomeArtifact.vue"
+      ),
+      "utf8"
+    );
+
+    expect(source).toMatch(
+      /:deep\(\.deep-genome-document\)[\s\S]*?max-width:\s*var\(--phy-layout-artifact-document-max-width\)/
+    );
   });
 
   it("activates the evidence tab and focuses the exact namespaced citation row", async () => {

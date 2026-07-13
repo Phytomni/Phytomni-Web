@@ -208,4 +208,8 @@ async function handleArtifactClick(event: MouseEvent): Promise<void> {
 .deep-genome-artifact :deep(.research-artifact-shell__panel) {
   min-width: 0;
 }
+
+.deep-genome-artifact :deep(.deep-genome-document) {
+  max-width: var(--phy-layout-artifact-document-max-width);
+}
 </style>
