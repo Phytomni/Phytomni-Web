@@ -23,17 +23,20 @@ const epLocale = computed(() =>
   appStore.language === "zh-CN" ? zhCn : en,
 );
 
+const AUTH_PATHS = new Set([
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/change-password",
+]);
+
 const showFooter = computed(() => {
   if (route.meta?.layout !== "nolayout") return false;
-  return !new Set([
-    "/chat",
-    "/login",
-    "/register",
-    "/forgot-password",
-    "/help",
-    "/terms",
-    "/privacy",
-  ]).has(route.path);
+  if (route.meta?.productLayout === "auth") return false;
+  return (
+    !new Set(["/chat", "/help", "/terms", "/privacy"]).has(route.path) &&
+    !AUTH_PATHS.has(route.path)
+  );
 });
 </script>
 
