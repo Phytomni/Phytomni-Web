@@ -416,6 +416,12 @@ onMounted(() => {
   min-height: var(--phy-control-height-primary);
 }
 
+@media (max-width: 599px) {
+  .change-password-field {
+    display: block;
+  }
+}
+
 .change-password-actions-item {
   margin: var(--phy-space-8) 0 0;
 }

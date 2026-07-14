@@ -336,6 +336,10 @@ describe("Change Password surface", () => {
     expect(source).not.toContain("SET_LOGIN_STATUS");
     expect(source).toContain("PhyAuthLayout");
     expect(source).toContain("--phy-control-height-primary");
+    expect(source).toContain("@media (max-width: 599px)");
+    expect(source).toMatch(
+      /@media \(max-width: 599px\)[\s\S]*?\.change-password-field\s*\{[\s\S]*?display:\s*block;/,
+    );
     expect(source).not.toContain("height: 100vh");
   });
 });
