@@ -277,7 +277,7 @@ const staticNoticeId = `agent-demo-static-example-${
     display: -webkit-box;
     overflow: hidden;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 4;
   }
 
   .agent-demo-shell__body {
