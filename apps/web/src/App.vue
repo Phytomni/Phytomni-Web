@@ -7,6 +7,12 @@
     </div>
   </el-config-provider>
 </template>
+<script lang="ts">
+export function normalizeCompatibilityPath(path: string): string {
+  if (path === "/") return "/";
+  return path.replace(/\/+$/, "") || "/";
+}
+</script>
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterView, useRoute } from "vue-router";
@@ -29,14 +35,15 @@ const AUTH_PATHS = new Set([
 ]);
 
 const showFooter = computed(() => {
+  const normalizedPath = normalizeCompatibilityPath(route.path);
   if (route.meta?.layout !== "nolayout") return false;
   if (route.meta?.productLayout === "standalone") return false;
   if (route.meta?.productLayout === "auth") return false;
   if (route.meta?.productLayout === "document") return false;
   if (route.name === "Unauthorized" || route.name === "NotFound") return false;
   return (
-    !new Set(["/chat", "/help", "/terms", "/privacy"]).has(route.path) &&
-    !AUTH_PATHS.has(route.path)
+    !new Set(["/chat", "/help", "/terms", "/privacy"]).has(normalizedPath) &&
+    !AUTH_PATHS.has(normalizedPath)
   );
 });
 </script>

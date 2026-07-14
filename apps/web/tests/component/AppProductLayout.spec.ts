@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { normalizeCompatibilityPath } from "../../src/App.vue";
 
 const SOURCE = readFileSync(resolve(__dirname, "../../src/App.vue"), "utf8");
 
 describe("App product-layout hand-off", () => {
+  it.each([
+    ["/", "/"],
+    ["/login/", "/login"],
+    ["/change-password///", "/change-password"],
+    ["/help/", "/help"],
+    ["/terms////", "/terms"],
+    ["/privacy/", "/privacy"],
+  ])("normalizes compatibility path %s to %s", (path, expected) => {
+    expect(normalizeCompatibilityPath(path)).toBe(expected);
+  });
+
   it("does not stage the compatibility Footer for auth routes", () => {
     expect(SOURCE).toContain('route.meta?.productLayout === "auth"');
     expect(SOURCE).toContain('"/change-password"');
