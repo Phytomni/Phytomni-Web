@@ -199,6 +199,7 @@ export default {
     confirmPassword: "Confirm Password",
     confirmPasswordPlaceholder: "Please confirm your password",
     registerButton: "Register",
+    registrationFailed: "Registration failed",
     haveAccount: "Already have an account?",
     login: "Login",
     agreement: {

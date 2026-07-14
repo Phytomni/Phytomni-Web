@@ -204,6 +204,7 @@ export default {
     confirmPassword: "确认密码",
     confirmPasswordPlaceholder: "请再次输入密码",
     registerButton: "注 册",
+    registrationFailed: "注册失败",
     haveAccount: "已有账户？",
     login: "登录",
     agreement: {

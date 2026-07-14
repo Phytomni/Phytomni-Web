@@ -4,12 +4,25 @@
       <LangSwitch />
     </template>
     <template #brand>
-      <PhyAuthBrand :title="$t('chat.appTitle')" />
+      <div class="register-brand">
+        <PhyBrandMark :size="40" />
+        <span class="register-brand-title">{{ $t("chat.appTitle") }}</span>
+      </div>
     </template>
 
-    <h2 class="register-title">{{ $t("register.title") }}</h2>
-    <h5 class="register-subtitle">{{ $t("register.subtitle") }}</h5>
-    <el-form ref="formRef" :model="formData" :rules="formRules" status-icon>
+    <template #title>
+      <h1 class="register-title">{{ $t("register.title") }}</h1>
+    </template>
+    <template #description>
+      <p class="register-subtitle">{{ $t("register.subtitle") }}</p>
+    </template>
+    <el-form
+      ref="formRef"
+      class="register-form"
+      :model="formData"
+      :rules="formRules"
+      status-icon
+    >
       <div class="form-item-label">{{ $t("register.email") }}</div>
       <el-form-item prop="email">
         <el-input
@@ -52,13 +65,23 @@
         </el-checkbox>
         <div class="register-agreement-links">
           {{ $t("register.agreement.prefix") }}
-          <a href="/terms" target="_blank" rel="noopener noreferrer">{{
-            $t("register.agreement.terms")
-          }}</a>
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            @click.stop
+          >
+            {{ $t("register.agreement.terms") }}
+          </a>
           {{ $t("register.agreement.and") }}
-          <a href="/privacy" target="_blank" rel="noopener noreferrer">{{
-            $t("register.agreement.privacy")
-          }}</a>
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            @click.stop
+          >
+            {{ $t("register.agreement.privacy") }}
+          </a>
         </div>
       </div>
 
@@ -74,7 +97,7 @@
 
       <div class="login-container">
         <span>{{ $t("register.haveAccount") }}</span>
-        <a href="javascript:;" class="login-link" @click="goToLogin">
+        <a href="/login" class="login-link" @click.prevent="goToLogin">
           {{ $t("register.login") }}
         </a>
       </div>
@@ -92,7 +115,8 @@ import type { ElForm } from "element-plus";
 import { ElMessage } from "element-plus";
 import { register } from "@/api/auth";
 import LangSwitch from "@/components/LangSwitch.vue";
-import { PhyAuthBrand, PhyAuthLayout } from "@/components/shell";
+import { PhyAuthLayout } from "@/components/shell";
+import { PhyBrandMark } from "@/components/brand";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -112,7 +136,13 @@ const formData = reactive({
 });
 
 // Custom validation rule: confirm password
-const validateConfirmPassword = (rule: any, value: string, callback: any) => {
+type ValidationCallback = (error?: Error) => void;
+
+const validateConfirmPassword = (
+  _rule: unknown,
+  value: string,
+  callback: ValidationCallback
+) => {
   if (value === "") {
     callback(new Error(t("register.validation.confirmPasswordRequired")));
   } else if (value !== formData.password) {
@@ -123,7 +153,11 @@ const validateConfirmPassword = (rule: any, value: string, callback: any) => {
 };
 
 // Password strength validation function - checks whether the password meets complexity requirements
-const validatePasswordStrength = (rule: any, value: string, callback: any) => {
+const validatePasswordStrength = (
+  _rule: unknown,
+  value: string,
+  callback: ValidationCallback
+) => {
   if (!value) {
     callback();
     return;
@@ -223,27 +257,28 @@ const handleSubmit = () => {
 };
 
 const handleRegister = () => {
-  console.log("Starting registration...");
   const data = new FormData();
   data.append("email", formData.email);
   data.append("password", formData.password);
   register(data)
-    .then((res: any) => {
-      console.log("Registration response:", res);
+    .then((res: { code: number; message?: string }) => {
       if (res.code === 200) {
-        console.log("Registration successful");
         ElMessage.success(t("common.registrationSuccess"));
         router.replace("/login");
       } else {
-        console.log("Registration failed, status code:", res.code);
-        ElMessage.error(
-          t("login.registerFailed") + ": " + (res.message || "Unknown error")
-        );
+        ElMessage.error(res.message || t("register.registrationFailed"));
       }
     })
-    .catch((err: any) => {
-      console.log("Registration error:", err);
-      ElMessage.error(err.message || t("login.registerFailed"));
+    .catch((err: unknown) => {
+      const response =
+        typeof err === "object" && err !== null && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response
+          : undefined;
+      const message =
+        response?.data?.message ||
+        (err instanceof Error ? err.message : undefined) ||
+        t("register.registrationFailed");
+      ElMessage.error(message);
     })
     .finally(() => {
       loading.value = false;
@@ -256,14 +291,31 @@ const goToLogin = () => {
 </script>
 
 <style lang="scss" scoped>
+.register-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--phy-space-8);
+  min-width: 0;
+}
+
+.register-brand-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--phy-color-text);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .register-title {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 1.35rem;
   font-weight: 600;
 }
 
 .register-subtitle {
-  margin: 0 0 20px;
+  margin: var(--phy-space-8) 0 0;
   font-weight: 400;
   color: var(--phy-color-text-secondary);
 }
