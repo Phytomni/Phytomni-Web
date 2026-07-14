@@ -299,6 +299,12 @@ describe("Registration auth surface", () => {
     assertConsent("我已阅读并同意以下法律文件", "服务条款", "隐私政策");
   });
 
+  it("wraps consent text inside the narrow auth card", () => {
+    expect(SOURCE).toMatch(
+      /\.register-agreement :deep\(\.el-checkbox__label\)[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?white-space:\s*normal;/,
+    );
+  });
+
   it("rejects every password rule and confirmation mismatch before a request", async () => {
     const wrapper = mountView();
     await wrapper.get('input[type="checkbox"]').setValue(true);

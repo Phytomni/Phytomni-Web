@@ -342,6 +342,27 @@ const goToLogin = () => {
   line-height: 1.5;
 }
 
+.register-agreement :deep(.el-checkbox) {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 100%;
+  margin-right: 0;
+}
+
+.register-agreement :deep(.el-checkbox__input) {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.register-agreement :deep(.el-checkbox__label) {
+  min-width: 0;
+  max-width: 100%;
+  padding-left: var(--phy-space-8);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .register-agreement-links {
   padding-left: var(--phy-space-24);
 }
