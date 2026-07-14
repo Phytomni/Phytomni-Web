@@ -268,7 +268,6 @@ const resetForm = () => {
 
 const finishPasswordChange = async () => {
   await Promise.resolve(UserStore.FedLogOut())
-    .catch(() => undefined)
     .finally(() => {
       try {
         sessionStorage.setItem("tutorial_pending", "1");
@@ -276,7 +275,8 @@ const finishPasswordChange = async () => {
         // Storage is best-effort; the login redirect must still happen.
       }
       router.replace("/login");
-    });
+    })
+    .catch(() => undefined);
 };
 
 const submitForm = async () => {
@@ -369,7 +369,7 @@ onMounted(() => {
   justify-content: flex-start;
   width: auto !important;
   height: auto;
-  margin-bottom: var(--phy-space-6);
+  margin-bottom: var(--phy-space-8);
   padding: 0;
   color: var(--phy-color-text-secondary);
   font-size: 0.875rem;
@@ -400,7 +400,7 @@ onMounted(() => {
 .change-password-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--phy-space-10);
+  gap: var(--phy-space-12);
 }
 
 .change-password-actions :deep(.el-button) {
