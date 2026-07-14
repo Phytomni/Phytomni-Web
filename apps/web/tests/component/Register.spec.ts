@@ -275,19 +275,28 @@ describe("Registration auth surface", () => {
 
   it("renders one explicit consent copy and one link set in both locales", async () => {
     const wrapper = mountView();
-    const assertConsent = (terms: string, privacy: string) => {
+    const assertConsent = (
+      consent: string,
+      terms: string,
+      privacy: string,
+    ) => {
       const agreement = wrapper.get(".register-agreement").text();
       expect(wrapper.get(".register-agreement").findAll('input[type="checkbox"]')).toHaveLength(1);
       expect(wrapper.get(".register-agreement").findAll('a[href="/terms"]')).toHaveLength(1);
       expect(wrapper.get(".register-agreement").findAll('a[href="/privacy"]')).toHaveLength(1);
+      expect(agreement).toContain(consent);
       expect(agreement.split(terms).length - 1).toBe(1);
       expect(agreement.split(privacy).length - 1).toBe(1);
     };
 
-    assertConsent("Terms of Service", "Privacy Policy");
+    assertConsent(
+      "I have read and agree to the legal documents below",
+      "Terms of Service",
+      "Privacy Policy",
+    );
     i18n.global.locale.value = "zh-CN";
     await nextTick();
-    assertConsent("服务条款", "隐私政策");
+    assertConsent("我已阅读并同意以下法律文件", "服务条款", "隐私政策");
   });
 
   it("rejects every password rule and confirmation mismatch before a request", async () => {

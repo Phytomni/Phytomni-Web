@@ -208,7 +208,7 @@ export default {
       terms: "Terms of Service",
       and: "and",
       privacy: "Privacy Policy",
-      checkboxLabel: "I agree to review the legal documents below",
+      checkboxLabel: "I have read and agree to the legal documents below",
       checkboxRequired:
         "Please agree to the Terms of Service and Privacy Policy",
     },
