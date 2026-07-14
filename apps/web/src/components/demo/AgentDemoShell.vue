@@ -207,6 +207,7 @@ const staticNoticeId = `agent-demo-static-example-${
   color: var(--phy-color-text);
   font-size: 0.98rem;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .agent-demo-shell__result {
