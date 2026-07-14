@@ -60,6 +60,9 @@ describe("PhyAuthLayout", () => {
     expect(SOURCE).toMatch(/height:\s*100vh;[\s\S]*height:\s*100dvh;/);
     expect(SOURCE).toMatch(/overflow-y:\s*auto/);
     expect(SOURCE).toMatch(/max-width:\s*432px/);
+    expect(SOURCE).toMatch(
+      /@media\s*\(min-width:\s*600px\)[\s\S]*?clamp\(432px,\s*calc\(25vw \+ 72px\),\s*560px\)[\s\S]*?max-width:\s*560px/,
+    );
     expect(SOURCE).toMatch(/--phy-control-height-primary/);
     expect(SOURCE).toContain("phy-auth-content");
     expect(SOURCE).toContain("phy-auth-layout--horizon");

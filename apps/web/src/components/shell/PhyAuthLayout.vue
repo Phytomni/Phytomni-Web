@@ -107,6 +107,18 @@ withDefaults(
   box-shadow: var(--phy-shadow-soft);
 }
 
+/* Give wide desktop auth surfaces a little more visual weight without
+ * changing the compact/mobile contract or the approved 432px baseline. */
+@media (min-width: 600px) {
+  .phy-auth-card {
+    width: min(
+      clamp(432px, calc(25vw + 72px), 560px),
+      calc(100vw - (var(--phy-space-16) * 2))
+    );
+    max-width: 560px;
+  }
+}
+
 .phy-auth-brand {
   margin-bottom: var(--phy-space-20);
 }
