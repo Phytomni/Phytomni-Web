@@ -655,6 +655,11 @@ export default {
     data: {
       title: "数据智能体",
       subtitle: "数据智能体 - 提供多组学数据分析和处理服务",
+      tableCaptions: {
+        transcript: "静态示例输出 — 转录本 ID",
+        cdsLength: "静态示例输出 — CDS 长度",
+        homologs: "静态示例输出 — 同源基因",
+      },
     },
     briefGene: {
       title: "基因综述智能体",

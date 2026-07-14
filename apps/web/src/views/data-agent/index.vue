@@ -1,289 +1,163 @@
 <template>
-  <div class="data-agent-container">
-    <div class="chat-header">
-      <div class="header-content">
-        <el-button
-          type="primary"
-          :icon="ArrowLeft"
-          @click="goBack"
-          class="back-button"
+  <AgentDemoShell
+    :title="$t('agents.data.title')"
+    :subtitle="$t('agents.data.subtitle')"
+    @back="goBack"
+  >
+    <template #default>
+      <div class="data-agent-conversation" data-test="data-agent-conversation">
+        <article
+          v-for="(round, index) in rounds"
+          :key="round.captionKey"
+          class="data-agent-round"
+          data-test="data-agent-round"
         >
-          {{ $t("common.back") }}
-        </el-button>
-        <div class="header-text">
-          <h1>{{ $t("agents.data.title") }}</h1>
-          <p>{{ $t("agents.data.subtitle") }}</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="chat-messages">
-      <!-- First conversation round -->
-      <div class="message user-message">
-        <div class="message-content">
-          <div class="message-text">
-            Please list the transcript ID of Os01g0177400 in rice.
+          <div class="data-agent-question" data-test="data-agent-question">
+            {{ round.question }}
           </div>
-        </div>
-      </div>
 
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
-        </div>
-        <div class="message-content">
-          <div class="message-text">
-            <MarkdownViewer :content="round1Response" :instantMessage="true" />
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
+          <figure
+            class="data-agent-result"
+            data-test="data-agent-result"
+            :aria-labelledby="`data-agent-caption-${index}`"
+          >
+            <figcaption :id="`data-agent-caption-${index}`">
+              {{ $t(round.captionKey) }}
+            </figcaption>
+            <div
+              class="data-agent-table-scroll"
+              data-test="data-agent-table-scroll"
+              role="region"
+              :aria-labelledby="`data-agent-caption-${index}`"
+            >
+              <MarkdownViewer
+                :content="round.response"
+                :instant-message="true"
+                surface="chat"
+              />
+            </div>
+          </figure>
+        </article>
       </div>
+    </template>
 
-      <!-- Second conversation round -->
-      <div class="message user-message">
-        <div class="message-content">
-          <div class="message-text">
-            How many bases does the CDS sequence of rice transcript
-            Os01t0177400-01 contain?
-          </div>
-        </div>
-      </div>
-
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
-        </div>
-        <div class="message-content">
-          <div class="message-text">
-            <MarkdownViewer :content="round2Response" :instantMessage="true" />
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Third conversation round -->
-      <div class="message user-message">
-        <div class="message-content">
-          <div class="message-text">
-            List the homologous genes of rice Os01g0177400 in maize.
-          </div>
-        </div>
-      </div>
-
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
-        </div>
-        <div class="message-content">
-          <div class="message-text">
-            <MarkdownViewer :content="round3Response" :instantMessage="true" />
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <template #footer>{{ $t("common.Tip") }}</template>
+  </AgentDemoShell>
 </template>
 
 <script setup lang="ts">
 import { useRouter } from "vue-router";
-import { ArrowLeft } from "@element-plus/icons-vue";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import { AgentDemoShell } from "@/components/demo";
 
 const router = useRouter();
 const goBack = () => {
   router.back();
 };
 
-const botAvatar =
-  "/avatars/bot.svg";
-
-// First-round conversation response
-const round1Response = `|  Transcript ID  |
+const rounds = [
+  {
+    question: "Please list the transcript ID of Os01g0177400 in rice.",
+    response: `|  Transcript ID  |
 | :-------------: |
 | Os01t0177400-01 |
-`;
-
-// Second-round conversation response
-const round2Response = `| LENGTH([sequence_2]) |
+`,
+    captionKey: "agents.data.tableCaptions.transcript",
+  },
+  {
+    question:
+      "How many bases does the CDS sequence of rice transcript Os01t0177400-01 contain?",
+    response: `| LENGTH([sequence_2]) |
 | :------------------: |
-|         1113         |`;
-
-// Third-round conversation response
-const round3Response = `| Query Gene ID | Query Species | Homology Gene ID | Homology Species |
+|         1113         |`,
+    captionKey: "agents.data.tableCaptions.cdsLength",
+  },
+  {
+    question: "List the homologous genes of rice Os01g0177400 in maize.",
+    response: `| Query Gene ID | Query Species | Homology Gene ID | Homology Species |
 | ------------- | :-----------: | :--------------: | :--------------: |
-| Os01g0177400  |      osa      | Zm00001eb122500  |       zma        |`;
+| Os01g0177400  |      osa      | Zm00001eb122500  |       zma        |`,
+    captionKey: "agents.data.tableCaptions.homologs",
+  },
+] as const;
 </script>
 
-<style lang="scss" scoped>
-.data-agent-container {
-  height: 100vh;
+<style scoped>
+.data-agent-conversation {
   display: flex;
   flex-direction: column;
-  background-color: #f5f5f5;
+  gap: var(--phy-space-24);
+  min-width: 0;
 }
 
-.chat-header {
-  background: #fff;
-  padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .back-button {
-    flex-shrink: 0;
-  }
-
-  .header-text {
-    flex: 1;
-    text-align: center;
-
-    h1 {
-      margin: 0 0 8px 0;
-      color: #333;
-      font-size: 24px;
-    }
-
-    p {
-      margin: 0;
-      color: #666;
-      font-size: 14px;
-    }
-  }
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin: 20px 0px;
-  padding: 20px;
+.data-agent-round {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  background: var(--el-bg-color);
-  box-shadow: 0 0 10px 0 rgb(218, 217, 217);
-  border-radius: 10px;
+  gap: var(--phy-space-12);
+  min-width: 0;
 }
 
-.message {
-  display: flex;
-  margin-bottom: 16px;
-
-  &.user-message {
-    justify-content: flex-end;
-
-    .message-content {
-      background: #eff6ff;
-      color: #333;
-      border-radius: 18px 18px 4px 18px;
-      max-width: 100%;
-    }
-  }
-
-  &.ai-message {
-    justify-content: flex-start;
-
-    .message-avatar {
-      flex-shrink: 0;
-      align-self: flex-start;
-      margin-right: 8px;
-    }
-
-    .message-content {
-      background: white;
-      color: #333;
-      border-radius: 18px 18px 18px 4px;
-      max-width: 85%;
-      border: 1px solid #e0e0e0;
-    }
-  }
+.data-agent-question,
+.data-agent-result {
+  box-sizing: border-box;
+  min-width: 0;
+  border-radius: var(--phy-radius-lg);
 }
 
-.message-content {
-  padding: 12px 16px;
-  word-wrap: break-word;
-
-  .message-text {
-    line-height: 1.5;
-
-    :deep(h1),
-    :deep(h2),
-    :deep(h3),
-    :deep(h4),
-    :deep(h5),
-    :deep(h6) {
-      margin-top: 0;
-      margin-bottom: 12px;
-      color: inherit;
-    }
-
-    :deep(p) {
-      margin-bottom: 12px;
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
-
-    :deep(ul),
-    :deep(ol) {
-      margin-bottom: 12px;
-      padding-left: 20px;
-    }
-
-    :deep(li) {
-      margin-bottom: 4px;
-    }
-
-    :deep(strong) {
-      font-weight: 600;
-    }
-
-    :deep(code) {
-      background: rgba(0, 0, 0, 0.1);
-      padding: 2px 4px;
-      border-radius: 3px;
-      font-family: "Courier New", monospace;
-    }
-
-    :deep(pre) {
-      background: rgba(0, 0, 0, 0.05);
-      padding: 12px;
-      border-radius: 6px;
-      overflow-x: auto;
-      margin-bottom: 12px;
-    }
-
-    :deep(table) {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 12px;
-
-      th,
-      td {
-        border: 1px solid #ddd;
-        padding: 8px 12px;
-        text-align: left;
-      }
-
-      th {
-        background-color: #f5f5f5;
-        font-weight: 600;
-      }
-    }
-  }
+.data-agent-question {
+  align-self: flex-end;
+  width: min(100%, 820px);
+  padding: var(--phy-space-16) var(--phy-space-20);
+  border: 1px solid var(--phy-color-bubble-user-border);
+  background: var(--phy-color-bubble-user);
+  color: var(--phy-color-text);
+  line-height: 1.6;
 }
 
-.tip-text {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 10px;
+.data-agent-result {
+  align-self: flex-start;
+  width: min(100%, 960px);
+  margin: 0;
+  padding: var(--phy-space-16) var(--phy-space-20) var(--phy-space-20);
+  border: 1px solid var(--phy-color-bubble-assistant-border);
+  background: var(--phy-color-bubble-assistant);
+}
+
+.data-agent-result figcaption {
+  margin-bottom: var(--phy-space-8);
+  color: var(--phy-color-action-text);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.data-agent-table-scroll {
+  box-sizing: border-box;
   width: 100%;
-  text-align: right;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.data-agent-table-scroll :deep(.phy-markdown--chat) {
+  min-width: 0;
+}
+
+.data-agent-table-scroll :deep(.phy-markdown--chat table) {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+
+@media (max-width: 700px) {
+  .data-agent-question,
+  .data-agent-result {
+    width: 100%;
+  }
+
+  .data-agent-result {
+    padding-inline: var(--phy-space-16);
+  }
 }
 </style>

@@ -670,6 +670,11 @@ export default {
       title: "Data Agent",
       subtitle:
         "Data Agent - Provides multi-omics data analysis and processing services",
+      tableCaptions: {
+        transcript: "Sample output — transcript ID",
+        cdsLength: "Sample output — CDS length",
+        homologs: "Sample output — homologous genes",
+      },
     },
     briefGene: {
       title: "Brief Gene Agent",
