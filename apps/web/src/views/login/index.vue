@@ -1,19 +1,32 @@
 <template>
-  <PhyAuthLayout>
+  <PhyAuthLayout horizon>
     <template #lang>
       <LangSwitch />
     </template>
     <template #brand>
-      <PhyAuthBrand :title="$t('chat.appTitle')" />
+      <div class="login-brand">
+        <PhyBrandMark :size="40" />
+        <span class="login-brand-title">{{ $t("chat.appTitle") }}</span>
+      </div>
     </template>
 
-    <h2 class="login-title">
-      {{ $t("login.title") }}
-    </h2>
-    <h5 class="login-subtitle">
-      {{ $t("login.subtitle") }}
-    </h5>
-    <el-form ref="formRef" :model="formData" :rules="formRules" status-icon>
+    <template #title>
+      <h1 class="login-title">
+        {{ $t("login.title") }}
+      </h1>
+    </template>
+    <template #description>
+      <p class="login-subtitle">
+        {{ $t("login.subtitle") }}
+      </p>
+    </template>
+    <el-form
+      ref="formRef"
+      class="login-form"
+      :model="formData"
+      :rules="formRules"
+      status-icon
+    >
       <div class="form-item-label">{{ $t("login.email") }}</div>
       <el-form-item prop="email">
         <el-input
@@ -46,7 +59,7 @@
         }}</a>
       </div>
       <div class="forgot-password">
-        <a href="#" @click="goToForgotPassword">{{
+        <a href="/forgot-password" @click.prevent="goToForgotPassword">{{
           $t("login.forgotPassword")
         }}</a>
       </div>
@@ -62,7 +75,7 @@
 
       <div class="register-container">
         <span>{{ $t("login.noAccount") }}</span>
-        <a href="javascript:;" class="register-link" @click="goToRegister">
+        <a href="/register" class="register-link" @click.prevent="goToRegister">
           {{ $t("login.register") }}
         </a>
       </div>
@@ -82,7 +95,8 @@ import { login } from "@/api/login";
 import { register } from "@/api/auth";
 import { setToken } from "@/utils/auth";
 import LangSwitch from "@/components/LangSwitch.vue";
-import { PhyAuthBrand, PhyAuthLayout } from "@/components/shell";
+import { PhyAuthLayout } from "@/components/shell";
+import { PhyBrandMark } from "@/components/brand";
 import { useI18n } from "vue-i18n";
 import { userStore } from "@/stores";
 
@@ -129,11 +143,6 @@ const formRules = reactive({
     },
   ],
 });
-
-const toggleLoginRegister = () => {
-  isLogin.value = !isLogin.value;
-  formRef.value?.resetFields();
-};
 
 const handleSubmit = () => {
   if (!formRef.value) return;
@@ -275,14 +284,31 @@ const goToRegister = () => {
 </script>
 
 <style lang="scss" scoped>
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--phy-space-8);
+  min-width: 0;
+}
+
+.login-brand-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--phy-color-text);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .login-title {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 1.35rem;
   font-weight: 600;
 }
 
 .login-subtitle {
-  margin: 0 0 20px;
+  margin: var(--phy-space-8) 0 0;
   font-weight: 400;
   color: var(--phy-color-text-secondary);
 }
