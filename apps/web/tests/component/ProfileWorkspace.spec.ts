@@ -63,6 +63,7 @@ type Rule = {
 
 const formErrorsKey: InjectionKey<Ref<Record<string, string>>> =
   Symbol("form-errors");
+let validationPause: Promise<void> | null = null;
 
 const ElButtonStub = defineComponent({
   name: "ElButton",
@@ -109,6 +110,7 @@ const ElFormStub = defineComponent({
     provide(formErrorsKey, errors);
 
     const validate = async (callback?: (valid: boolean) => void) => {
+      if (validationPause) await validationPause;
       const nextErrors: Record<string, string> = {};
       for (const [field, fieldRules] of Object.entries(props.rules)) {
         for (const rule of fieldRules as Rule[]) {
@@ -270,7 +272,10 @@ describe("Profile workspace", () => {
     mocks.FedLogOut.mockResolvedValue(undefined);
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    validationPause = null;
+    vi.restoreAllMocks();
+  });
 
   it("shows shared loading, ready, and retryable error states while preserving the current-user request", async () => {
     let resolveProfile: (value: { code: number; data: typeof profile }) => void;
@@ -443,6 +448,33 @@ describe("Profile workspace", () => {
     resolveLogout();
     await flushPromises();
     expect(mocks.replace).toHaveBeenCalledWith("/login");
+  });
+
+  it("blocks duplicate password submissions while validation is pending", async () => {
+    let releaseValidation: (() => void) | undefined;
+    validationPause = new Promise<void>((resolve) => {
+      releaseValidation = resolve;
+    });
+    const { wrapper } = mountView();
+    await flushPromises();
+    await openPasswordDialog(wrapper);
+    await setPassword(wrapper, "Current1!", "Secure1!");
+
+    const firstSubmit = wrapper
+      .get(".profile-password-submit")
+      .trigger("click");
+    const secondSubmit = wrapper
+      .get(".profile-password-submit")
+      .trigger("click");
+    await wrapper.vm.$nextTick();
+
+    expect(mocks.changePassword).not.toHaveBeenCalled();
+    if (!releaseValidation)
+      throw new Error("validation resolver was not created");
+    releaseValidation();
+    await Promise.all([firstSubmit, secondSubmit, flushPromises()]);
+
+    expect(mocks.changePassword).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the password dialog open and avoids logout/navigation after failed responses or requests", async () => {

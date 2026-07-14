@@ -340,27 +340,37 @@ const changePassword = () => {
 
 const handlePasswordChange = async () => {
   if (!passwordFormRef.value || submitting.value) return;
-  await passwordFormRef.value.validate(async (valid) => {
-    if (!valid) return;
-    submitting.value = true;
-    try {
-      const formData = new FormData();
-      formData.append("password", passwordForm.oldPassword);
-      formData.append("new_password", passwordForm.newPassword);
-      const response = await apiChangePassword(formData);
-      if (response.code === 200) {
-        passwordDialogVisible.value = false;
-        ElMessage.success(t("profile.passwordChangeSuccess"));
-        await UserStore.FedLogOut().finally(() => router.replace("/login"));
-      } else {
-        ElMessage.error(t("profile.passwordChangeFailed"));
+  submitting.value = true;
+
+  try {
+    await passwordFormRef.value.validate(async (valid) => {
+      if (!valid) {
+        submitting.value = false;
+        return;
       }
-    } catch {
-      ElMessage.warning(t("profile.passwordChangeFailed"));
-    } finally {
-      submitting.value = false;
-    }
-  });
+
+      try {
+        const formData = new FormData();
+        formData.append("password", passwordForm.oldPassword);
+        formData.append("new_password", passwordForm.newPassword);
+        const response = await apiChangePassword(formData);
+        if (response.code === 200) {
+          passwordDialogVisible.value = false;
+          ElMessage.success(t("profile.passwordChangeSuccess"));
+          await UserStore.FedLogOut().finally(() => router.replace("/login"));
+        } else {
+          ElMessage.error(t("profile.passwordChangeFailed"));
+        }
+      } catch {
+        ElMessage.warning(t("profile.passwordChangeFailed"));
+      } finally {
+        submitting.value = false;
+      }
+    });
+  } catch {
+    submitting.value = false;
+    ElMessage.warning(t("profile.passwordChangeFailed"));
+  }
 };
 
 const fetchUserInfo = async () => {
