@@ -239,6 +239,12 @@ const staticNoticeId = `agent-demo-static-example-${
   margin: 0 auto;
 }
 
+/* The app shell mounts a fixed footer for legacy nolayout pages. Static demos
+ * own their footer inside the scroll root so long artifacts remain readable. */
+:global(.app-container:has(.agent-demo-shell) > .app-footer) {
+  display: none;
+}
+
 @media (max-width: 700px) {
   .agent-demo-shell__header-inner {
     grid-template-columns: auto minmax(0, 1fr);
@@ -280,10 +286,13 @@ const staticNoticeId = `agent-demo-static-example-${
   .agent-demo-shell__header-inner {
     align-items: start;
     gap: var(--phy-space-8);
+    grid-template-columns: minmax(68px, auto) minmax(0, 1fr);
     padding-block: var(--phy-space-10);
   }
 
   .agent-demo-shell__back {
+    width: max-content;
+    min-width: 68px;
     padding-inline: var(--phy-space-4);
   }
 
