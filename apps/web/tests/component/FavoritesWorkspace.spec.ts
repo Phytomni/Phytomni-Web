@@ -335,6 +335,52 @@ describe("Favorites workspace", () => {
     expect(mocks.getCollectHistory).toHaveBeenCalledTimes(4);
   });
 
+  it("retains loaded rows when a refresh request rejects", async () => {
+    const { wrapper } = mountView();
+    await flushPromises();
+    expect(wrapper.findAll(".favorite-row")).toHaveLength(2);
+
+    mocks.getCollectHistory.mockRejectedValueOnce(new Error("offline"));
+    await wrapper.get(".favorites-refresh").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.findAll(".favorite-row")).toHaveLength(2);
+    expect(mocks.error).toHaveBeenCalledWith("Failed to load favorites");
+    expect(mocks.success).not.toHaveBeenCalled();
+    expect(wrapper.get(".favorites-refresh").attributes("aria-busy")).toBe(
+      "false"
+    );
+  });
+
+  it("keeps the loaded rows visible while refresh owns its independent busy state", async () => {
+    let resolveRefresh:
+      | ((value: { code: number; data: typeof favoriteRows }) => void)
+      | undefined;
+    const { wrapper } = mountView();
+    await flushPromises();
+    mocks.getCollectHistory.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        })
+    );
+
+    await wrapper.get(".favorites-refresh").trigger("click");
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findAll(".favorite-row")).toHaveLength(2);
+    expect(wrapper.get(".favorites-refresh").attributes("aria-busy")).toBe(
+      "true"
+    );
+
+    if (!resolveRefresh) throw new Error("refresh resolver was not created");
+    resolveRefresh({ code: 200, data: makeFavoriteRows() });
+    await flushPromises();
+    expect(wrapper.get(".favorites-refresh").attributes("aria-busy")).toBe(
+      "false"
+    );
+  });
+
   it("formats raw dates reactively and reports refresh success only for successful requests", async () => {
     const { i18n, wrapper } = mountView();
     await flushPromises();
@@ -356,7 +402,7 @@ describe("Favorites workspace", () => {
     await wrapper.get(".favorites-refresh").trigger("click");
     await flushPromises();
     expect(mocks.success).not.toHaveBeenCalled();
-    expect(wrapper.find(".phy-async-state--error").exists()).toBe(true);
+    expect(wrapper.findAll(".favorite-row")).toHaveLength(2);
 
     const refreshed = mountView().wrapper;
     await flushPromises();

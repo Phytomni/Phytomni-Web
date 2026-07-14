@@ -198,8 +198,8 @@ const asyncState = computed<AsyncState>(() => {
   return "ready";
 });
 
-const fetchFavorites = async (): Promise<boolean> => {
-  loading.value = true;
+const fetchFavorites = async (showLoading = true): Promise<boolean> => {
+  if (showLoading) loading.value = true;
   requestFailed.value = false;
 
   try {
@@ -215,24 +215,22 @@ const fetchFavorites = async (): Promise<boolean> => {
       return true;
     }
 
-    favoritesList.value = [];
-    requestFailed.value = true;
+    requestFailed.value = favoritesList.value.length === 0;
     ElMessage.error(response.message || t("favorites.loadFailed"));
     return false;
   } catch {
-    favoritesList.value = [];
-    requestFailed.value = true;
+    requestFailed.value = favoritesList.value.length === 0;
     ElMessage.error(t("favorites.loadFailed"));
     return false;
   } finally {
-    loading.value = false;
+    if (showLoading) loading.value = false;
   }
 };
 
 const refreshFavorites = async () => {
   refreshing.value = true;
   try {
-    if (await fetchFavorites()) {
+    if (await fetchFavorites(false)) {
       ElMessage.success(t("common.refreshedSuccess"));
     }
   } finally {
