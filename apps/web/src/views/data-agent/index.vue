@@ -106,7 +106,7 @@ const rounds = [
 
 .data-agent-question {
   align-self: flex-end;
-  width: min(100%, 820px);
+  width: min(100%, clamp(820px, 56vw, 1280px));
   padding: var(--phy-space-16) var(--phy-space-20);
   border: 1px solid var(--phy-color-bubble-user-border);
   background: var(--phy-color-bubble-user);
@@ -116,7 +116,7 @@ const rounds = [
 
 .data-agent-result {
   align-self: flex-start;
-  width: min(100%, 960px);
+  width: min(100%, clamp(960px, 66vw, 1440px));
   margin: 0;
   padding: var(--phy-space-16) var(--phy-space-20) var(--phy-space-20);
   border: 1px solid var(--phy-color-bubble-assistant-border);
