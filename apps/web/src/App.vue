@@ -19,9 +19,7 @@ import { useAppStore } from "@/stores";
 const route = useRoute();
 const appStore = useAppStore();
 
-const epLocale = computed(() =>
-  appStore.language === "zh-CN" ? zhCn : en,
-);
+const epLocale = computed(() => (appStore.language === "zh-CN" ? zhCn : en));
 
 const AUTH_PATHS = new Set([
   "/login",
@@ -32,8 +30,10 @@ const AUTH_PATHS = new Set([
 
 const showFooter = computed(() => {
   if (route.meta?.layout !== "nolayout") return false;
+  if (route.meta?.productLayout === "standalone") return false;
   if (route.meta?.productLayout === "auth") return false;
   if (route.meta?.productLayout === "document") return false;
+  if (route.name === "Unauthorized" || route.name === "NotFound") return false;
   return (
     !new Set(["/chat", "/help", "/terms", "/privacy"]).has(route.path) &&
     !AUTH_PATHS.has(route.path)

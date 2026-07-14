@@ -50,6 +50,7 @@ export default {
   errorPage: {
     back: "Back",
     goHome: "Back to Home",
+    goChat: "Open Chat",
     e401Title: "401 Error!",
     e401NoAccess: "You do not have access permission!",
     e401Detail:

@@ -1,246 +1,238 @@
 <template>
-  <div class="wscn-http404-container">
-    <div class="wscn-http404">
-      <div class="pic-404">
-        <img
-          class="pic-404__parent"
-          src="@/assets/404_images/404.png"
-          alt="404"
-        />
-        <img
-          class="pic-404__child left"
-          src="@/assets/404_images/404_cloud.png"
-          alt="404"
-        />
-        <img
-          class="pic-404__child mid"
-          src="@/assets/404_images/404_cloud.png"
-          alt="404"
-        />
-        <img
-          class="pic-404__child right"
-          src="@/assets/404_images/404_cloud.png"
-          alt="404"
-        />
+  <main
+    class="phy-recovery-page"
+    data-recovery-page="404"
+    aria-labelledby="recovery-404-title"
+  >
+    <section class="phy-recovery-card">
+      <div class="phy-recovery-visual" aria-hidden="true">
+        <svg
+          class="phy-recovery-illustration"
+          viewBox="0 0 220 180"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          focusable="false"
+        >
+          <path
+            class="phy-recovery-illustration__leaf"
+            d="M164 29C119 30 77 50 65 87c-8 25 3 48 26 54 23 6 47-12 57-37 11-27 9-49 16-75Z"
+            fill="currentColor"
+            fill-opacity="0.14"
+            stroke="currentColor"
+            stroke-width="2"
+          />
+          <path
+            d="M45 153c27-49 61-80 119-113"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-width="2"
+          />
+          <path
+            class="phy-recovery-illustration__data-line"
+            d="m85 106 18-20 17 11 20-28 19 8"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+          />
+          <circle cx="85" cy="106" r="4" fill="currentColor" />
+          <circle cx="103" cy="86" r="4" fill="currentColor" />
+          <circle cx="120" cy="97" r="4" fill="currentColor" />
+          <circle cx="140" cy="69" r="4" fill="currentColor" />
+          <circle cx="159" cy="77" r="4" fill="currentColor" />
+          <path
+            d="M18 154h184"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-opacity="0.28"
+          />
+        </svg>
       </div>
-      <div class="bullshit">
-        <div class="bullshit__oops">{{ $t("errorPage.e404Title") }}</div>
-        <div class="bullshit__headline">
-          {{ message }}
-        </div>
-        <div class="bullshit__info">
+
+      <div class="phy-recovery-copy">
+        <p class="phy-recovery-code">404</p>
+        <h1 id="recovery-404-title" class="phy-recovery-title">
+          {{ $t("errorPage.e404Title") }}
+        </h1>
+        <p class="phy-recovery-summary">
+          {{ $t("errorPage.e404NotFound") }}
+        </p>
+        <p class="phy-recovery-detail">
           {{ $t("errorPage.e404Detail") }}
+        </p>
+        <div class="phy-recovery-actions">
+          <router-link
+            to="/chat"
+            class="phy-recovery-action phy-recovery-action--primary"
+            data-action="primary"
+          >
+            {{ $t("errorPage.goChat") }}
+          </router-link>
         </div>
-        <router-link to="/index" class="bullshit__return-home">
-          {{ $t("errorPage.goHome") }}
-        </router-link>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 </template>
 
-<script setup>
-import { computed } from "vue";
-import { useI18n } from "vue-i18n";
-
-const { t } = useI18n();
-
-const message = computed(() => {
-  return t("errorPage.e404NotFound");
-});
-</script>
-
-<style lang="scss" scoped>
-.wscn-http404-container {
-  transform: translate(-50%, -50%);
-  position: absolute;
-  top: 40%;
-  left: 50%;
+<style scoped>
+.phy-recovery-page {
+  box-sizing: border-box;
+  display: grid;
+  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  place-items: center;
+  padding: clamp(var(--phy-space-24), 7vh, var(--phy-space-64))
+    var(--phy-space-16);
+  overflow: auto;
+  background: var(--phy-color-bg-page);
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
 }
-.wscn-http404 {
-  position: relative;
-  width: 1200px;
-  padding: 0 50px;
-  overflow: hidden;
-  .pic-404 {
-    position: relative;
-    float: left;
-    width: 600px;
-    overflow: hidden;
-    &__parent {
-      width: 100%;
-    }
-    &__child {
-      position: absolute;
-      &.left {
-        width: 80px;
-        top: 17px;
-        left: 220px;
-        opacity: 0;
-        animation-name: cloudLeft;
-        animation-duration: 2s;
-        animation-timing-function: linear;
-        animation-fill-mode: forwards;
-        animation-delay: 1s;
-      }
-      &.mid {
-        width: 46px;
-        top: 10px;
-        left: 420px;
-        opacity: 0;
-        animation-name: cloudMid;
-        animation-duration: 2s;
-        animation-timing-function: linear;
-        animation-fill-mode: forwards;
-        animation-delay: 1.2s;
-      }
-      &.right {
-        width: 62px;
-        top: 100px;
-        left: 500px;
-        opacity: 0;
-        animation-name: cloudRight;
-        animation-duration: 2s;
-        animation-timing-function: linear;
-        animation-fill-mode: forwards;
-        animation-delay: 1s;
-      }
-      @keyframes cloudLeft {
-        0% {
-          top: 17px;
-          left: 220px;
-          opacity: 0;
-        }
-        20% {
-          top: 33px;
-          left: 188px;
-          opacity: 1;
-        }
-        80% {
-          top: 81px;
-          left: 92px;
-          opacity: 1;
-        }
-        100% {
-          top: 97px;
-          left: 60px;
-          opacity: 0;
-        }
-      }
-      @keyframes cloudMid {
-        0% {
-          top: 10px;
-          left: 420px;
-          opacity: 0;
-        }
-        20% {
-          top: 40px;
-          left: 360px;
-          opacity: 1;
-        }
-        70% {
-          top: 130px;
-          left: 180px;
-          opacity: 1;
-        }
-        100% {
-          top: 160px;
-          left: 120px;
-          opacity: 0;
-        }
-      }
-      @keyframes cloudRight {
-        0% {
-          top: 100px;
-          left: 500px;
-          opacity: 0;
-        }
-        20% {
-          top: 120px;
-          left: 460px;
-          opacity: 1;
-        }
-        80% {
-          top: 180px;
-          left: 340px;
-          opacity: 1;
-        }
-        100% {
-          top: 200px;
-          left: 300px;
-          opacity: 0;
-        }
-      }
-    }
+
+.phy-recovery-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.85fr) minmax(0, 1fr);
+  width: min(100%, 760px);
+  align-items: center;
+  gap: clamp(var(--phy-space-24), 6vw, var(--phy-space-64));
+  box-sizing: border-box;
+  padding: clamp(var(--phy-space-24), 5vw, var(--phy-space-48));
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-lg);
+  background: var(--phy-color-bg-elevated);
+  box-shadow: var(--phy-shadow-soft);
+}
+
+.phy-recovery-visual {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  color: var(--phy-color-accent);
+}
+
+.phy-recovery-illustration {
+  display: block;
+  width: min(100%, 220px);
+  height: auto;
+}
+
+.phy-recovery-illustration__leaf {
+  color: var(--phy-color-accent);
+}
+
+.phy-recovery-illustration__data-line {
+  color: var(--phy-color-brand-blue);
+}
+
+.phy-recovery-copy {
+  min-width: 0;
+}
+
+.phy-recovery-code {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-action-text);
+  font-family: var(--phy-font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.phy-recovery-title {
+  margin: 0;
+  color: var(--phy-color-text);
+  font-size: clamp(1.55rem, 4vw, 2.25rem);
+  line-height: 1.15;
+}
+
+.phy-recovery-summary {
+  margin: var(--phy-space-12) 0 0;
+  color: var(--phy-color-text);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.phy-recovery-detail {
+  margin: var(--phy-space-12) 0 0;
+  color: var(--phy-color-text-secondary);
+  line-height: 1.65;
+}
+
+.phy-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--phy-space-12);
+  margin-top: var(--phy-space-24);
+}
+
+.phy-recovery-action {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 var(--phy-space-16);
+  border: 1px solid transparent;
+  border-radius: var(--phy-radius-sm);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    color var(--phy-motion-fast) var(--phy-motion-ease-out);
+}
+
+.phy-recovery-action--primary {
+  border-color: var(--phy-color-action-fill);
+  background: var(--phy-color-action-fill);
+  color: var(--phy-color-on-action);
+}
+
+.phy-recovery-action--primary:hover {
+  border-color: var(--phy-color-action-fill-hover);
+  background: var(--phy-color-action-fill-hover);
+}
+
+.phy-recovery-action:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 599px) {
+  .phy-recovery-page {
+    align-items: start;
+    padding-top: var(--phy-space-24);
   }
-  .bullshit {
-    position: relative;
-    float: left;
-    width: 300px;
-    padding: 30px 0;
-    overflow: hidden;
-    &__oops {
-      font-size: 32px;
-      font-weight: bold;
-      line-height: 40px;
-      color: #1482f0;
-      opacity: 0;
-      margin-bottom: 20px;
-      animation-name: slideUp;
-      animation-duration: 0.5s;
-      animation-fill-mode: forwards;
-    }
-    &__headline {
-      font-size: 20px;
-      line-height: 24px;
-      color: #222;
-      font-weight: bold;
-      opacity: 0;
-      margin-bottom: 10px;
-      animation-name: slideUp;
-      animation-duration: 0.5s;
-      animation-delay: 0.1s;
-      animation-fill-mode: forwards;
-    }
-    &__info {
-      font-size: 13px;
-      line-height: 21px;
-      color: grey;
-      opacity: 0;
-      margin-bottom: 30px;
-      animation-name: slideUp;
-      animation-duration: 0.5s;
-      animation-delay: 0.2s;
-      animation-fill-mode: forwards;
-    }
-    &__return-home {
-      display: block;
-      float: left;
-      width: 110px;
-      height: 36px;
-      background: #1482f0;
-      border-radius: 100px;
-      text-align: center;
-      color: #ffffff;
-      opacity: 0;
-      font-size: 14px;
-      line-height: 36px;
-      cursor: pointer;
-      animation-name: slideUp;
-      animation-duration: 0.5s;
-      animation-delay: 0.3s;
-      animation-fill-mode: forwards;
-    }
-    @keyframes slideUp {
-      0% {
-        transform: translateY(60px);
-        opacity: 0;
-      }
-      100% {
-        transform: translateY(0);
-        opacity: 1;
-      }
-    }
+
+  .phy-recovery-card {
+    grid-template-columns: 1fr;
+    gap: var(--phy-space-20);
+  }
+
+  .phy-recovery-visual {
+    justify-content: start;
+  }
+
+  .phy-recovery-illustration {
+    width: min(100%, 180px);
+  }
+}
+
+@media (max-width: 389px) {
+  .phy-recovery-page {
+    padding-inline: var(--phy-space-12);
+  }
+
+  .phy-recovery-card {
+    padding: var(--phy-space-20) var(--phy-space-16);
+  }
+
+  .phy-recovery-action {
+    width: 100%;
   }
 }
 </style>

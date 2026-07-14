@@ -56,6 +56,7 @@ export default {
   errorPage: {
     back: "返回",
     goHome: "回首页",
+    goChat: "打开对话",
     e401Title: "401错误！",
     e401NoAccess: "您没有访问权限！",
     e401Detail:
