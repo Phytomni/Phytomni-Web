@@ -642,6 +642,10 @@ export default {
 
   // 智能体页面
   agents: {
+    demo: {
+      staticExample: "静态示例",
+      questionLabel: "示例问题",
+    },
     analyst: {
       title: "分析智能体",
       subtitle: "分析智能体 - 提供生物信息学数据分析和解读服务",

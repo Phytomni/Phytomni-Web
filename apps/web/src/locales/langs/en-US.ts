@@ -655,6 +655,10 @@ export default {
 
   // Agent Pages
   agents: {
+    demo: {
+      staticExample: "Static example",
+      questionLabel: "Example question",
+    },
     analyst: {
       title: "Analyst Agent",
       subtitle:

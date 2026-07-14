@@ -1,66 +1,36 @@
 <template>
-  <div class="knowledge-agent-container">
-    <div class="chat-header">
-      <div class="header-content">
-        <el-button
-          type="primary"
-          :icon="ArrowLeft"
-          @click="goBack"
-          class="back-button"
-        >
-          {{ $t("common.back") }}
-        </el-button>
-        <div class="header-text">
-          <h1>{{ $t("agents.knowledge.title") }}</h1>
-          <p>{{ $t("agents.knowledge.subtitle") }}</p>
-        </div>
-      </div>
-    </div>
+  <AgentDemoShell
+    :title="$t('agents.knowledge.title')"
+    :subtitle="$t('agents.knowledge.subtitle')"
+    @back="goBack"
+  >
+    <template #question>
+      How do epigenetic modifications, such as DNA methylation and histone
+      modifications, regulate adaptive responses to drought stress in crops?
+    </template>
 
-    <div class="chat-messages">
-      <!-- User question -->
-      <div class="message user-message">
-        <div class="message-content">
-          <div class="message-text">
-            How do epigenetic modifications, such as DNA methylation and histone
-            modifications, regulate adaptive responses to drought stress in
-            crops?
-          </div>
-        </div>
-      </div>
+    <template #result>
+      <CitedAnswer
+        :content="knowledgeAnswer.content"
+        :references="knowledgeAnswer.references"
+        ns="kb"
+        surface="artifact"
+      />
+    </template>
 
-      <!-- AI answer -->
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
-        </div>
-        <div class="message-content">
-          <div class="message-text">
-            <CitedAnswer
-              :content="knowledgeAnswer.content"
-              :references="knowledgeAnswer.references"
-              :ns="'kb'"
-            />
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <template #footer>{{ $t("common.Tip") }}</template>
+  </AgentDemoShell>
 </template>
 
 <script setup lang="ts">
 import { useRouter } from "vue-router";
-import { ArrowLeft } from "@element-plus/icons-vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
+import AgentDemoShell from "@/components/demo/AgentDemoShell.vue";
 
 const router = useRouter();
 const goBack = () => {
   router.back();
 };
-
-const botAvatar =
-  "/avatars/bot.svg";
 
 const knowledgeAnswer = {
   content: `Epigenetic modifications, including DNA methylation and histone modifications, play crucial roles in regulating adaptive responses to drought stress in crops by altering gene expression and chromatin structure, thereby enabling plants to better cope with water deficit conditions. Here's a detailed look at how these modifications contribute to drought stress responses:
@@ -215,158 +185,3 @@ In summary, epigenetic modifications like DNA methylation and histone modificati
   ],
 };
 </script>
-
-<style lang="scss" scoped>
-.knowledge-agent-container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background-color: #f5f5f5;
-}
-
-.chat-header {
-  background: #fff;
-  padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .back-button {
-    flex-shrink: 0;
-  }
-
-  .header-text {
-    flex: 1;
-    text-align: center;
-
-    h1 {
-      margin: 0 0 8px 0;
-      color: #333;
-      font-size: 24px;
-    }
-
-    p {
-      margin: 0;
-      color: #666;
-      font-size: 14px;
-    }
-  }
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin: 20px 0px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  background: var(--el-bg-color);
-  box-shadow: 0 0 10px 0 rgb(218, 217, 217);
-  border-radius: 10px;
-}
-
-.message {
-  display: flex;
-  margin-bottom: 16px;
-
-  &.user-message {
-    justify-content: flex-end;
-
-    .message-content {
-      background: #eff6ff;
-      color: #333;
-      border-radius: 18px 18px 4px 18px;
-      max-width: 100%;
-    }
-  }
-
-  &.ai-message {
-    justify-content: flex-start;
-
-    .message-avatar {
-      flex-shrink: 0;
-      align-self: flex-start;
-      margin-right: 8px;
-    }
-
-    .message-content {
-      background: white;
-      color: #333;
-      border-radius: 18px 18px 18px 4px;
-      max-width: 85%;
-      border: 1px solid #e0e0e0;
-    }
-  }
-}
-
-.message-content {
-  padding: 12px 16px;
-  word-wrap: break-word;
-
-  .message-text {
-    line-height: 1.5;
-
-    :deep(h1),
-    :deep(h2),
-    :deep(h3),
-    :deep(h4),
-    :deep(h5),
-    :deep(h6) {
-      margin-top: 0;
-      margin-bottom: 12px;
-      color: inherit;
-    }
-
-    :deep(p) {
-      margin-bottom: 12px;
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
-
-    :deep(ul),
-    :deep(ol) {
-      margin-bottom: 12px;
-      padding-left: 20px;
-    }
-
-    :deep(li) {
-      margin-bottom: 4px;
-    }
-
-    :deep(strong) {
-      font-weight: 600;
-    }
-
-    :deep(code) {
-      background: rgba(0, 0, 0, 0.1);
-      padding: 2px 4px;
-      border-radius: 3px;
-      font-family: "Courier New", monospace;
-    }
-
-    :deep(pre) {
-      background: rgba(0, 0, 0, 0.05);
-      padding: 12px;
-      border-radius: 6px;
-      overflow-x: auto;
-      margin-bottom: 12px;
-    }
-  }
-}
-
-.tip-text {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 10px;
-  width: 100%;
-  text-align: right;
-}
-</style>
