@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import PhyBrandMark from "@/components/brand/PhyBrandMark.vue";
+import PhyAuthBrand from "@/components/shell/PhyAuthBrand.vue";
+
+describe("PhyAuthBrand", () => {
+  it("preserves the production bitmap fallback and accessible title", () => {
+    const wrapper = mount(PhyAuthBrand, {
+      props: { title: "Phytomni" },
+    });
+
+    expect(wrapper.find("img").attributes("src")).toBe("/logo.png");
+    expect(wrapper.find("img").attributes("alt")).toBe("");
+    expect(wrapper.find("img").attributes("aria-hidden")).toBe("true");
+    expect(wrapper.text()).toContain("Phytomni");
+  });
+});
 
 describe("PhyBrandMark", () => {
   it("renders a code-native accessible mark when labelled", () => {
