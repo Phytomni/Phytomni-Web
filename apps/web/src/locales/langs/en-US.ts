@@ -663,8 +663,10 @@ export default {
       title: "Analyst Agent",
       subtitle:
         "Analysis Agent - Provides bioinformatics data analysis and interpretation services",
+      sampleTask: "Static sample task ID",
+      sampleResult: "Static sample result",
       taskCreated: "Task created successfully",
-      downloadResults: "Download Analysis Results",
+      downloadResults: "Download sample results",
     },
     data: {
       title: "Data Agent",

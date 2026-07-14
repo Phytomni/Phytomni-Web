@@ -649,8 +649,10 @@ export default {
     analyst: {
       title: "分析智能体",
       subtitle: "分析智能体 - 提供生物信息学数据分析和解读服务",
+      sampleTask: "静态示例任务 ID",
+      sampleResult: "静态示例结果",
       taskCreated: "任务创建成功",
-      downloadResults: "下载分析结果",
+      downloadResults: "下载示例结果",
     },
     data: {
       title: "数据智能体",
