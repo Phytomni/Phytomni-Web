@@ -4,6 +4,17 @@
     <template v-else>
       <el-container class="main-container">
         <el-header height="60px">
+          <el-button
+            v-if="isMobileViewport && !hideSidebar"
+            class="mobile-sidebar-toggle"
+            text
+            circle
+            :aria-label="$t('chat.openNavigation')"
+            :aria-expanded="mobileSidebarOpen"
+            @click="mobileSidebarOpen = true"
+          >
+            <el-icon><Menu /></el-icon>
+          </el-button>
           <div class="logo">
             <el-button @click="handleBack" type="primary" size="small">{{
               $t("common.back")
@@ -36,17 +47,18 @@
         </el-header>
         <el-container class="content-container">
           <el-aside
-            v-if="!hideSidebar"
-            :width="isCollapse ? '64px' : '200px'"
-            class="sidebar"
+            v-if="!hideSidebar && (!isMobileViewport || mobileSidebarOpen)"
+            :width="isMobileViewport ? '272px' : isCollapse ? '64px' : '200px'"
+            :class="['sidebar', { 'is-mobile-drawer': isMobileViewport }]"
           >
             <el-menu
               :default-active="activeMenu"
               :router="true"
               :collapse="isCollapse"
               class="el-menu-vertical"
+              @select="handleMenuSelect"
             >
-              <el-menu-item index="/gene-display">
+              <el-menu-item v-if="!isManagementRoute" index="/gene-display">
                 <el-icon><Document /></el-icon>
                 <span>{{ $t("menu.deepGenome") }}</span>
               </el-menu-item>
@@ -129,6 +141,13 @@
               <el-icon v-else><Fold /></el-icon>
             </div>
           </el-aside>
+          <button
+            v-if="isMobileViewport && mobileSidebarOpen"
+            type="button"
+            class="mobile-sidebar-backdrop"
+            :aria-label="$t('common.close')"
+            @click="mobileSidebarOpen = false"
+          />
           <el-main class="main-content">
             <RouterView />
           </el-main>
@@ -142,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import {
   UserFilled,
@@ -157,6 +176,7 @@ import {
   Folder,
   Clock,
   Setting,
+  Menu,
 } from "@element-plus/icons-vue";
 import { userStore } from "@/stores";
 import LangSwitch from "@/components/LangSwitch.vue";
@@ -180,12 +200,45 @@ const hideSidebar = computed(() => {
   return route.meta.hideSidebar === true;
 });
 
+const isManagementRoute = computed(() =>
+  new Set([
+    "/user-list",
+    "/log-list",
+    "/permi-manage",
+    "/global-config",
+    "/admin-management",
+  ]).has(route.path),
+);
+
 // sidebar collapse state
 const isCollapse = ref(false);
+const isMobileViewport = ref(
+  typeof window !== "undefined" && window.innerWidth < 900
+);
+const mobileSidebarOpen = ref(false);
+
+const updateViewport = () => {
+  const mobile = window.innerWidth < 900;
+  isMobileViewport.value = mobile;
+  if (!mobile) mobileSidebarOpen.value = false;
+};
+
+onMounted(() => {
+  updateViewport();
+  window.addEventListener("resize", updateViewport);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateViewport);
+});
 
 // toggle the sidebar collapse state
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value;
+};
+
+const handleMenuSelect = () => {
+  if (isMobileViewport.value) mobileSidebarOpen.value = false;
 };
 // logout
 const handleLogout = () => {
@@ -222,6 +275,7 @@ const hasPermission = (permission: string) => {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  position: relative;
   overflow: hidden;
 }
 
@@ -341,6 +395,16 @@ const hasPermission = (permission: string) => {
   border-top: 1px solid var(--phy-color-border-subtle);
 }
 
+.mobile-sidebar-toggle {
+  display: none;
+  flex-shrink: 0;
+  color: var(--phy-color-action-text);
+}
+
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 599px) {
   .el-header {
     gap: var(--phy-space-4);
@@ -351,7 +415,7 @@ const hasPermission = (permission: string) => {
       gap: var(--phy-space-8);
 
       .logo-text {
-        max-width: 96px;
+        max-width: min(180px, calc(100vw - 188px));
         font-size: 17px;
       }
     }
@@ -361,6 +425,68 @@ const hasPermission = (permission: string) => {
 
       .username {
         display: none;
+      }
+    }
+  }
+}
+
+@media (max-width: 899px) {
+  .mobile-sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar.is-mobile-drawer {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: var(--phy-z-drawer);
+    width: 272px !important;
+    max-width: min(272px, 82vw);
+    box-shadow: 8px 0 24px rgba(16, 34, 25, 0.16);
+  }
+
+  .mobile-sidebar-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: calc(var(--phy-z-drawer) - 1);
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: var(--phy-color-overlay);
+    cursor: pointer;
+  }
+
+  .main-content {
+    width: 100%;
+  }
+}
+
+@media (max-width: 374px) {
+  .el-header {
+    .theme-switch-component {
+      display: none;
+    }
+
+    .logo {
+      gap: var(--phy-space-4);
+
+      > .el-button {
+        width: 36px;
+        padding-inline: 0;
+        overflow: hidden;
+        font-size: 0;
+
+        &::before {
+          content: "‹";
+          font-size: 22px;
+          line-height: 1;
+        }
+      }
+
+      .logo-text {
+        max-width: 136px;
+        font-size: 16px;
       }
     }
   }

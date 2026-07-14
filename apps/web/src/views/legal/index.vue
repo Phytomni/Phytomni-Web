@@ -13,6 +13,7 @@
     </header>
     <article v-if="bodyHtml" class="legal-body" v-html="bodyHtml" />
     <p v-else class="legal-error">{{ t("legal.loadError") }}</p>
+    <Footer class="legal-footer" />
   </div>
 </template>
 
@@ -21,6 +22,7 @@ import { computed, watchEffect, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import LangSwitch from "@/components/LangSwitch.vue";
+import Footer from "@/components/Footer.vue";
 import { loadLegalDoc, type LegalDocKind } from "@/legal/loadLegalDoc";
 import { renderLegalMarkdown } from "@/legal/renderLegalMarkdown";
 
@@ -55,8 +57,7 @@ const draftBanner = computed(() => t("legal.draftBanner"));
   height: 100vh;
   overflow-y: auto;
   box-sizing: border-box;
-  /* Extra bottom padding so fixed Footer does not cover the last lines. */
-  padding: 24px 20px 72px;
+  padding: 24px 20px 0;
   background: var(--el-bg-color-page, #f5f7fa);
   color: var(--el-text-color-primary, #303133);
 }
@@ -132,5 +133,10 @@ const draftBanner = computed(() => t("legal.draftBanner"));
   margin: 0 auto;
   color: var(--el-color-danger, #f56c6c);
   font-size: 15px;
+}
+
+.legal-footer {
+  max-width: 760px;
+  margin: 24px auto 0;
 }
 </style>

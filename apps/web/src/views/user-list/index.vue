@@ -1,21 +1,24 @@
 <template>
   <PiiWatermark>
-  <div class="user-list-container">
-    <!-- Top operation bar -->
-    <div class="operation-bar">
-      <el-button type="primary" @click="handleAdd">
-        <el-icon><Plus /></el-icon>{{ $t("user.add") }}
-      </el-button>
-    </div>
+    <PhyWorkspaceShell class="user-list-workspace">
+      <template #header>
+        <PhyPageHeader :title="$t('menu.userList')">
+          <template #actions>
+            <el-button type="primary" @click="handleAdd">
+              <el-icon><Plus /></el-icon>{{ $t("user.add") }}
+            </el-button>
+          </template>
+        </PhyPageHeader>
+      </template>
 
-    <!-- User table -->
-    <div class="table-container">
+      <PhyTableFrame>
       <el-table
         :data="tableData"
         border
         stripe
         v-loading="loading"
-        style="width: 100%"
+        class="user-table"
+        table-layout="auto"
         header-row-class-name="table-header-row"
         header-cell-class-name="table-header-cell"
       >
@@ -28,14 +31,21 @@
         <el-table-column
           prop="email"
           :label="$t('user.username')"
+          min-width="220"
           align="center"
         />
         <el-table-column
           prop="description"
           :label="$t('user.role')"
+          min-width="130"
           align="center"
         />
-        <el-table-column prop="phone" :label="$t('user.phone')" align="center">
+        <el-table-column
+          prop="phone"
+          :label="$t('user.phone')"
+          min-width="140"
+          align="center"
+        >
           <template #default="scope">
             {{ scope.row.phone || "-" }}
           </template>
@@ -43,6 +53,7 @@
         <el-table-column
           prop="organization"
           :label="$t('user.organization')"
+          min-width="180"
           align="center"
         >
           <template #default="scope">
@@ -52,6 +63,7 @@
         <el-table-column
           prop="position"
           :label="$t('user.position')"
+          min-width="160"
           align="center"
         >
           <template #default="scope">
@@ -121,19 +133,19 @@
         </el-table-column>
       </el-table>
 
-      <!-- Pagination -->
-      <div class="pagination-container">
+      <template #pagination>
         <el-pagination
+          class="user-pagination"
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           :page-sizes="[10, 20, 30, 50]"
-          layout="total, sizes, prev, pager, next, jumper"
+          layout="total, sizes, prev, pager, next"
           :total="total"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
         />
-      </div>
-    </div>
+      </template>
+      </PhyTableFrame>
 
     <!-- User edit dialog -->
     <el-dialog
@@ -272,7 +284,7 @@
         </span>
       </template>
     </el-dialog>
-  </div>
+    </PhyWorkspaceShell>
   </PiiWatermark>
 </template>
 
@@ -283,6 +295,11 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { getUserList, addUser, changePermission, unlockUser } from "@/api/auth";
 import { useI18n } from "vue-i18n";
 import PiiWatermark from "@/components/PiiWatermark.vue";
+import {
+  PhyPageHeader,
+  PhyTableFrame,
+  PhyWorkspaceShell,
+} from "@/components/shell";
 
 const { t } = useI18n();
 
@@ -621,50 +638,44 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.user-list-container {
-  height: auto;
-  min-height: 100%;
-  padding: 20px;
-
-  .operation-bar {
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: flex-end;
+.user-list-workspace {
+  :deep(.el-watermark) {
+    height: 100%;
   }
 
-  .table-container {
-    margin-bottom: 20px;
-    padding: 20px;
-    border-radius: 4px;
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  :deep(.user-table) {
+    min-width: 1420px;
+  }
 
-    .el-table {
-      width: 100%;
+  :deep(.user-pagination) {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  :deep(.el-pagination__jump) {
+    display: none;
+  }
+}
+
+.view-info {
+  .info-item {
+    display: flex;
+    margin-bottom: 15px;
+
+    .label {
+      width: 100px;
+      flex: 0 0 auto;
+      padding-right: 12px;
+      color: var(--phy-color-text-secondary);
+      text-align: right;
     }
-  }
 
-  .pagination-container {
-    margin-top: 20px;
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .view-info {
-    .info-item {
-      margin-bottom: 15px;
-      display: flex;
-
-      .label {
-        width: 100px;
-        color: #606266;
-        text-align: right;
-        padding-right: 12px;
-      }
-
-      .value {
-        flex: 1;
-        color: #303133;
-      }
+    .value {
+      min-width: 0;
+      flex: 1;
+      color: var(--phy-color-text);
+      overflow-wrap: anywhere;
     }
   }
 }

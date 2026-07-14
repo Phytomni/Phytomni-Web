@@ -119,7 +119,11 @@
   }
 
   const transcriptEl = transcripts[0];
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  const mobileSafeInset = innerWidth < 600 ? 24 : 0;
+  transcriptEl.scrollTop = Math.max(
+    0,
+    transcriptEl.scrollHeight - transcriptEl.clientHeight - mobileSafeInset
+  );
   await frame();
   await frame();
 
@@ -129,7 +133,7 @@
   const clientWidth = transcriptEl.clientWidth;
   const scrollWidth = transcriptEl.scrollWidth;
   const atBottom =
-    scrollHeight - clientHeight - scrollTop <= 1 ||
+    scrollHeight - clientHeight - scrollTop <= Math.max(1, mobileSafeInset) ||
     scrollHeight <= clientHeight;
 
   const primaryNodes = document.querySelectorAll(
@@ -168,6 +172,15 @@
   const closedMobile = drawerState === "closed";
   const openMobile = drawerState === "open";
   const desktopState = drawerState === "not-mobile" || drawerState == null;
+  const mainSurface = root.querySelector?.(
+    ".phy-adaptive-shell__main"
+  );
+  const drawerSurface = root.querySelector?.(
+    ".phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__surface"
+  );
+  const drawerScrim = root.querySelector?.(
+    ".phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__scrim"
+  );
   const docScrollWidth = document.documentElement.scrollWidth;
   const docClientWidth = document.documentElement.clientWidth;
   const reasons = [];
@@ -183,9 +196,9 @@
     );
   }
 
-  if (composerNodes.length !== 1 || !composer.visible) {
+  if (composerNodes.length !== 1 || (!openMobile && !composer.visible)) {
     reasons.push("composer missing or not visible");
-  } else if (!isInsideViewport(composer)) {
+  } else if (!openMobile && !isInsideViewport(composer)) {
     reasons.push("composer escapes viewport");
   }
 
@@ -244,6 +257,18 @@
     }
   }
 
+  if (openMobile) {
+    if (mainSurface?.getAttribute("aria-hidden") !== "true") {
+      reasons.push("open mobile requires hidden main surface");
+    }
+    if (!drawerSurface || !isVisibleInViewport(measureRect(drawerSurface))) {
+      reasons.push("open mobile requires visible drawer surface");
+    }
+    if (!drawerScrim || !isVisibleInViewport(measureRect(drawerScrim))) {
+      reasons.push("open mobile requires visible drawer scrim");
+    }
+  }
+
   if (primaryNodes.length > 1) {
     reasons.push(`primary-action count ${primaryNodes.length}`);
   }
@@ -272,6 +297,9 @@
     primaryAction,
     navigationTrigger,
     composer,
+    mainSurfaceHidden: mainSurface?.getAttribute("aria-hidden") === "true",
+    drawerSurface: measureRect(drawerSurface),
+    drawerScrim: measureRect(drawerScrim),
     lastMessage,
     state,
     drawerState,

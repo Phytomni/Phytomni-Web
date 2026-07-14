@@ -522,6 +522,7 @@ import {
   getStarterPromptItems,
 } from "@/views/chat/utils/starterPrompts";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
+import chatLogo from "@/assets/images/chat/logo.png";
 import {
   clearPendingChat,
   isLocalStorageChat,
@@ -579,8 +580,7 @@ watch(leftSidebarDrawerOpen, async (isOpen, wasOpen) => {
 const agentsViewVisible = ref(false);
 const { scale, isDragging, imageOffset, containerRef, imageRef, imageStyle, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp } = useImageZoomPan(agentsViewVisible);
 
-const botAvatar =
-  "/avatars/bot.svg";
+const botAvatar = chatLogo;
 
 // Show the Agents architecture diagram dialog
 const showAgentsView = () => {
@@ -1151,7 +1151,14 @@ watch(
 const scrollToBottom = async () => {
   await nextTick();
   if (messageContainer.value) {
-    messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
+    const mobileSafeInset =
+      typeof window !== "undefined" && window.innerWidth < 600 ? 24 : 0;
+    messageContainer.value.scrollTop = Math.max(
+      0,
+      messageContainer.value.scrollHeight -
+        messageContainer.value.clientHeight -
+        mobileSafeInset,
+    );
   }
 };
 

@@ -100,6 +100,12 @@ withDefaults(
   flex-direction: column;
 }
 
+@media (max-width: 899px) {
+  .phy-adaptive-shell__main[aria-hidden="true"] {
+    visibility: hidden;
+  }
+}
+
 .phy-adaptive-shell--artifact-fullscreen .phy-adaptive-shell__sidebar,
 .phy-adaptive-shell--artifact-fullscreen .phy-adaptive-shell__main {
   display: none;

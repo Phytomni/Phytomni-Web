@@ -24,10 +24,16 @@ const epLocale = computed(() =>
 );
 
 const showFooter = computed(() => {
-  if (route.meta?.layout === "nolayout" && route.path !== "/chat") {
-    return true;
-  }
-  return false;
+  if (route.meta?.layout !== "nolayout") return false;
+  return !new Set([
+    "/chat",
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/help",
+    "/terms",
+    "/privacy",
+  ]).has(route.path);
 });
 </script>
 

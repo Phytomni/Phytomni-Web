@@ -275,7 +275,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, provide, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  watch,
+} from "vue";
 import en from "element-plus/es/locale/lang/en";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { Close, Menu } from "@element-plus/icons-vue";
@@ -330,17 +338,34 @@ const props = defineProps<{
 const appStore = useAppStore();
 const epLocale = computed(() => (appStore.language === "zh-CN" ? zhCn : en));
 
+const viewportWidth = ref(
+  typeof window === "undefined" ? 1440 : window.innerWidth
+);
+const isMobileViewport = computed(() => viewportWidth.value < 900);
+
 const fixture = computed(() => {
   if (!props.fixture) {
     throw new Error("ChatVisualFixtureApp: fixture missing in success branch");
   }
-  return props.fixture;
+  if (
+    !isMobileViewport.value ||
+    props.fixture.key === "sidebar-mobile-closed" ||
+    props.fixture.key === "sidebar-mobile-open"
+  ) {
+    return props.fixture;
+  }
+  return {
+    ...props.fixture,
+    drawerOpen: false,
+    showSidebarTrigger: true,
+    offCanvas: true,
+  };
 });
 const drawerOpenRef = ref(props.fixture?.drawerOpen ?? false);
 provide(CHAT_SIDEBAR_DRAWER_OPEN_KEY, drawerOpenRef);
 
 watch(
-  () => props.fixture?.drawerOpen,
+  () => (props.fixture ? fixture.value.drawerOpen : false),
   (value) => {
     drawerOpenRef.value = value ?? false;
   }
@@ -350,6 +375,7 @@ const drawerStateAttr = computed(() => {
   if (!props.fixture) return undefined;
   if (props.fixture.key === "sidebar-mobile-closed") return "closed";
   if (props.fixture.key === "sidebar-mobile-open") return "open";
+  if (isMobileViewport.value) return "closed";
   return "not-mobile";
 });
 
@@ -483,8 +509,18 @@ async function applyPickerFixtureState() {
   }
 }
 
+const updateViewportWidth = () => {
+  viewportWidth.value = window.innerWidth;
+};
+
 onMounted(() => {
+  updateViewportWidth();
+  window.addEventListener("resize", updateViewportWidth);
   void applyPickerFixtureState();
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateViewportWidth);
 });
 </script>
 
@@ -540,7 +576,22 @@ onMounted(() => {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
   padding: 16px;
+}
+
+.empty-chat {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, var(--phy-layout-transcript-max-width, 760px));
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: clamp(24px, 5vh, 48px) 16px 24px;
+  text-align: center;
 }
 
 .transcript-content {

@@ -761,6 +761,32 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("adapts message fixtures to the closed mobile drawer below the medium breakpoint", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+
+    const wrapper = mountFixtureApp(getChatVisualFixture("cited"));
+    await nextTick();
+
+    const root = wrapper.find('[data-testid="chat-visual-root"]');
+    expect(root.attributes("data-sidebar-drawer-state")).toBe("closed");
+    expect(
+      wrapper.findAll('[data-testid="chat-sidebar-trigger"]')
+    ).toHaveLength(1);
+    expect(wrapper.findAll('[data-testid="chat-primary-action"]')).toHaveLength(
+      1
+    );
+
+    wrapper.unmount();
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: previousWidth,
+    });
+  });
+
   it("shows sidebar trigger only for closed-mobile and primary for open-mobile", async () => {
     const closed = mountFixtureApp(
       getChatVisualFixture("sidebar-mobile-closed")

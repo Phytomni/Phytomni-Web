@@ -4,10 +4,7 @@
       <LangSwitch />
     </template>
     <template #brand>
-      <div class="auth-brand">
-        <div class="logo" aria-hidden="true" />
-        <div class="auth-brand-title">{{ $t("chat.appTitle") }}</div>
-      </div>
+      <PhyAuthBrand :title="$t('chat.appTitle')" />
     </template>
 
     <h2 class="login-title">
@@ -85,7 +82,7 @@ import { login } from "@/api/login";
 import { register } from "@/api/auth";
 import { setToken } from "@/utils/auth";
 import LangSwitch from "@/components/LangSwitch.vue";
-import PhyAuthLayout from "@/components/shell/PhyAuthLayout.vue";
+import { PhyAuthBrand, PhyAuthLayout } from "@/components/shell";
 import { useI18n } from "vue-i18n";
 import { userStore } from "@/stores";
 
@@ -278,26 +275,6 @@ const goToRegister = () => {
 </script>
 
 <style lang="scss" scoped>
-.auth-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 4px;
-}
-
-.logo {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: var(--phy-color-primary-soft);
-}
-
-.auth-brand-title {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--phy-color-text);
-}
-
 .login-title {
   margin: 0 0 4px;
   font-size: 1.35rem;

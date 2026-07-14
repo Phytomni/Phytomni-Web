@@ -151,7 +151,7 @@ export default {
 
   // Login module
   login: {
-    title: "Phytomni",
+    title: "Sign in",
     subtitle: "A multi-agent system for scientific discovery and plant design",
     email: "Email",
     emailPlaceholder: "Please enter your email address",

@@ -177,7 +177,7 @@ describe("ChatMessageRow", () => {
     expect(rowCss).toMatch(/\.phy-bubble-assistant/);
     expect(rowCss).toMatch(/max-width:\s*72%/);
     expect(rowCss).toMatch(/padding:\s*14px\s+16px/);
-    expect(rowCss).toMatch(/padding:\s*12px\s+14px/);
+    expect(rowCss).toMatch(/padding:\s*10px\s+12px/);
     expect(rowCss).toMatch(/border-radius:\s*(16px|var\(--phy-radius-lg\))/);
     // Role alignment stays structural for forced-colors when fills are ignored.
     expect(rowCss).toMatch(/forced-colors:\s*active/);

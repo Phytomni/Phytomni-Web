@@ -14,5 +14,6 @@ describe("PhyAuthLayout", () => {
     expect(wrapper.find("[data-test=brand]").exists()).toBe(true);
     expect(wrapper.find("[data-test=form]").exists()).toBe(true);
     expect(wrapper.find(".phy-auth-card").exists()).toBe(true);
+    expect(wrapper.find(".phy-auth-footer").exists()).toBe(true);
   });
 });

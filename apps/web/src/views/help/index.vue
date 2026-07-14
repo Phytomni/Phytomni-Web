@@ -28,8 +28,20 @@
     </template>
 
     <div ref="mainContentRef" class="help-article">
-      <MarkdownViewer :content="helpContent" />
+      <section
+        v-for="section in helpSections"
+        :id="section.id"
+        :key="section.id"
+        class="help-section"
+      >
+        <h1>{{ section.heading }}</h1>
+        <MarkdownViewer :content="section.body" surface="document" />
+      </section>
     </div>
+
+    <template #footer>
+      <Footer />
+    </template>
   </PhyDocLayout>
 </template>
 
@@ -37,7 +49,8 @@
 import { useRouter } from "vue-router";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
 import { PhyDocLayout, PhyPageHeader } from "@/components/shell";
-import { ref, onMounted, onUnmounted } from "vue";
+import Footer from "@/components/Footer.vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { getToken } from "@/utils/auth";
 import { ElMessage } from "element-plus";
@@ -76,7 +89,7 @@ const SECTIONS = [
   "limitations",
 ] as const;
 
-const SECTION_IDS: Record<(typeof SECTIONS)[number], string> = {
+const SECTION_IDS: Record<typeof SECTIONS[number], string> = {
   whatIs: "what-is-phytomni",
   gettingStarted: "getting-started",
   howItWorks: "how-it-works",
@@ -85,12 +98,20 @@ const SECTION_IDS: Record<(typeof SECTIONS)[number], string> = {
 };
 
 // Table of contents data structure
-const tableOfContents = ref(
+const tableOfContents = computed(() =>
   SECTIONS.map((key) => ({
     id: SECTION_IDS[key],
     title: t(`help.toc.${key}`),
     level: 1,
-  })),
+  }))
+);
+
+const helpSections = computed(() =>
+  SECTIONS.map((key) => ({
+    id: SECTION_IDS[key],
+    heading: t(`help.doc.${key}.heading`),
+    body: t(`help.doc.${key}.body`),
+  }))
 );
 
 // Currently active table-of-contents item
@@ -104,7 +125,7 @@ const scrollContainerRef = ref<HTMLElement | null>(null);
 
 function sectionTopInContainer(
   element: HTMLElement,
-  container: HTMLElement,
+  container: HTMLElement
 ): number {
   return (
     element.getBoundingClientRect().top -
@@ -156,33 +177,14 @@ onMounted(() => {
   }
   handleScroll();
 });
-
 onUnmounted(() => {
   if (scrollContainerRef.value) {
     scrollContainerRef.value.removeEventListener("scroll", handleScroll);
   }
 });
-
-// Markdown content — assembled from i18n so copy is localized/reviewable, while
-// the section-anchor <div id> wrappers stay in code (DOM contract for the TOC
-// scroll-spy). Each section closes its <h1> block before the markdown body so
-// CommonMark resumes parsing (block HTML would otherwise suspend markdown).
-const helpContent = SECTIONS.map((key) => {
-  const id = SECTION_IDS[key];
-  const heading = t(`help.doc.${key}.heading`);
-  const body = t(`help.doc.${key}.body`);
-  return `<div id="${id}"><h1>${heading}</h1></div>\n\n${body}`;
-}).join("\n\n");
 </script>
 
 <style scoped>
-:deep(.phy-doc-layout) {
-  height: 100vh;
-  overflow-y: auto;
-  box-sizing: border-box;
-  padding-bottom: 72px;
-}
-
 .back-btn {
   border: 1px solid var(--phy-color-border);
   background: var(--phy-color-bg-elevated);
@@ -221,5 +223,15 @@ const helpContent = SECTIONS.map((key) => {
 }
 .help-article {
   /* Reading measure comes from .phy-reading on PhyDocLayout body */
+}
+.help-section + .help-section {
+  margin-top: 48px;
+}
+.help-section > h1 {
+  margin: 0 0 20px;
+  font-family: var(--phy-font-shell);
+  font-size: 1.6rem;
+  line-height: 1.25;
+  color: var(--phy-color-text);
 }
 </style>

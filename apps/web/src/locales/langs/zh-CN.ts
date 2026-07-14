@@ -156,8 +156,8 @@ export default {
 
   // 登录模块
   login: {
-    title: "农科发现大模型",
-    subtitle: "A multi-agent system for scientific discovery and plant design",
+    title: "登录",
+    subtitle: "面向科学发现与植物设计的多智能体科研系统",
     email: "邮箱",
     emailPlaceholder: "请输入邮箱地址",
     password: "密码",

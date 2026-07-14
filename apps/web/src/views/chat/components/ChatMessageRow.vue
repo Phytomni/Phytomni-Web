@@ -24,6 +24,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import defaultBotAvatar from "@/assets/images/chat/logo.png";
 
 export type ChatMessageRowRole = "user" | "assistant";
 
@@ -41,8 +42,6 @@ const props = withDefaults(
     wide: false,
   }
 );
-
-const defaultBotAvatar = "/avatars/bot.svg";
 
 const showAvatar = computed(() => props.role === "assistant");
 
@@ -67,7 +66,7 @@ const ariaLabel = computed(() =>
 <style scoped lang="scss">
 .message {
   display: flex;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 
   &.user {
     justify-content: flex-end;
@@ -143,9 +142,49 @@ const ariaLabel = computed(() =>
 }
 
 @media (max-width: 768px) {
+  .message {
+    margin-bottom: 6px;
+
+    .message-content {
+      padding-bottom: 4px;
+    }
+  }
+
   .message.user :deep(.message-text.phy-bubble-user),
   .message.assistant :deep(.message-text.phy-bubble-assistant) {
-    padding: 12px 14px;
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .message {
+    margin-bottom: 4px;
+
+    .message-content {
+      padding-bottom: 2px;
+    }
+  }
+
+  .message.user :deep(.message-text.phy-bubble-user),
+  .message.assistant :deep(.message-text.phy-bubble-assistant) {
+    padding: 8px 10px;
+  }
+
+  .message-content :deep(.phy-markdown--chat) {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .message-content :deep(.phy-markdown--chat p) {
+    margin-block: 0.35em;
+    line-height: 1.45;
+  }
+
+  .message-content :deep(.phy-markdown--chat h1),
+  .message-content :deep(.phy-markdown--chat h2),
+  .message-content :deep(.phy-markdown--chat h3),
+  .message-content :deep(.phy-markdown--chat h4) {
+    margin-block: 0.45em 0.2em;
   }
 }
 
