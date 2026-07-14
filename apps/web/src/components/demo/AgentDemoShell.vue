@@ -115,7 +115,7 @@ const staticNoticeId = `agent-demo-static-example-${
   grid-template-columns: minmax(96px, 1fr) minmax(0, 760px) minmax(96px, 1fr);
   align-items: center;
   gap: var(--phy-space-16);
-  width: min(100%, clamp(1160px, 78vw, 1760px));
+  width: min(100%, clamp(1160px, 78vw, 2000px));
   min-height: 76px;
   margin: 0 auto;
   padding: var(--phy-space-12) var(--phy-space-20);
@@ -153,7 +153,7 @@ const staticNoticeId = `agent-demo-static-example-${
   flex: 1 0 auto;
   flex-direction: column;
   gap: var(--phy-space-16);
-  width: min(100%, clamp(1160px, 78vw, 1760px));
+  width: min(100%, clamp(1160px, 78vw, 2000px));
   min-width: 0;
   margin: 0 auto;
   padding: var(--phy-space-24) var(--phy-space-20) var(--phy-space-40);
@@ -184,7 +184,7 @@ const staticNoticeId = `agent-demo-static-example-${
 }
 
 .agent-demo-shell__question {
-  width: min(100%, clamp(920px, 66vw, 1440px));
+  width: min(100%, clamp(920px, 66vw, 1600px));
   margin-left: auto;
   padding: var(--phy-space-16) var(--phy-space-20);
   border: 1px solid var(--phy-color-bubble-user-border);
@@ -210,7 +210,7 @@ const staticNoticeId = `agent-demo-static-example-${
 }
 
 .agent-demo-shell__result {
-  width: min(100%, clamp(1040px, 74vw, 1600px));
+  width: min(100%, clamp(1040px, 74vw, 1800px));
   min-width: 0;
   margin-right: auto;
   padding: var(--phy-space-24) var(--phy-space-24) var(--phy-space-20);
@@ -228,12 +228,17 @@ const staticNoticeId = `agent-demo-static-example-${
 @media (min-width: 1440px) {
   .agent-demo-shell__result :deep(.phy-markdown--artifact .markdown-content),
   .agent-demo-shell__result :deep(.phy-markdown--artifact .markdown-body) {
-    max-width: clamp(740px, 42vw, 1040px);
+    max-width: clamp(740px, 42vw, 1120px);
+  }
+
+  .agent-demo-shell__result :deep(.cited-answer > .doc-list) {
+    width: min(100%, clamp(740px, 42vw, 1120px));
+    margin-inline: auto;
   }
 }
 
 .agent-demo-shell__note {
-  width: min(100%, clamp(1040px, 74vw, 1600px));
+  width: min(100%, clamp(1040px, 74vw, 1800px));
   margin-right: auto;
   color: var(--phy-color-text-muted);
   font-size: 0.75rem;
