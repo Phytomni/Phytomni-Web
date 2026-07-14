@@ -703,17 +703,19 @@ export default {
       title: "Gene Network Agent",
       subtitle:
         "Gene Network Agent - Provides gene network analysis and phenotype trait association services",
-      taskCreated: "Task created successfully",
-      downloadResults: "Download Analysis Results",
-      downloading: "Downloading...",
-      volumeProgress: "Downloading volume {current}/{total}",
+      sampleTask: "Static sample task ID",
+      sampleResult: "Static sample result",
+      downloadResults: "Start download requests",
+      startingDownload: "Starting download {current} of {total}",
+      allDownloadsStarted: "All five download requests started",
     },
     digitalDesign: {
       title: "Digital Design Agent",
       subtitle:
         "Digital Design Agent - Provides protein structure prediction and design services based on gene IDs",
-      taskCreated: "Task created successfully",
-      downloadResults: "Download Analysis Results",
+      sampleTask: "Static sample task ID",
+      sampleResult: "Static sample result",
+      downloadResults: "Start download request",
     },
   },
 

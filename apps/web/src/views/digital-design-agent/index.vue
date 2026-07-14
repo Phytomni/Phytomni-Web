@@ -1,196 +1,98 @@
 <template>
-  <div class="digital-design-agent-container">
-    <div class="chat-header">
-      <div class="header-content">
+  <AgentDemoShell
+    :title="$t('agents.digitalDesign.title')"
+    :subtitle="$t('agents.digitalDesign.subtitle')"
+    @back="goBack"
+  >
+    <template #question>
+      <p data-test="digital-design-question">{{ sampleQuestion }}</p>
+    </template>
+
+    <template #result>
+      <div data-test="digital-design-result">
+        <p
+          class="digital-design-result-label"
+          data-test="digital-design-result-label"
+        >
+          {{ $t("agents.digitalDesign.sampleResult") }}
+        </p>
+        <p class="digital-design-task-label" data-test="digital-design-task">
+          {{ $t("agents.digitalDesign.sampleTask") }}
+          <code>3b5564b-772a-44f0-abc5-fb163e7d13c4</code>
+        </p>
+
         <el-button
           type="primary"
-          :icon="ArrowLeft"
-          @click="goBack"
-          class="back-button"
+          size="small"
+          :icon="Download"
+          class="digital-design-download"
+          data-test="digital-design-download"
+          @click="downloadResults"
+          @keydown.enter.prevent="downloadResults"
         >
-          {{ $t("common.back") }}
+          {{ $t("agents.digitalDesign.downloadResults") }}
         </el-button>
-        <div class="header-text">
-          <h1>{{ $t("agents.digitalDesign.title") }}</h1>
-          <p>{{ $t("agents.digitalDesign.subtitle") }}</p>
-        </div>
       </div>
-    </div>
+    </template>
 
-    <div class="chat-messages">
-      <!-- User question -->
-      <div class="message user-message">
-        <div class="message-content">
-          <div class="message-text">
-            Please help me design the protein structure based on evolution
-            information for gene Os01g0177400.
-          </div>
-        </div>
-      </div>
-
-      <!-- AI answer -->
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
-        </div>
-        <div class="message-content">
-          <div class="message-text">
-            {{ $t("agents.digitalDesign.taskCreated")
-            }}3b5564b-772a-44f0-abc5-fb163e7d13c4
-            <div class="download-section">
-              <el-button
-                type="primary"
-                :icon="Download"
-                @click="downloadResults"
-                class="download-button"
-              >
-                {{ $t("agents.digitalDesign.downloadResults") }}
-              </el-button>
-            </div>
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <template #footer>{{ $t("common.Tip") }}</template>
+  </AgentDemoShell>
 </template>
 
 <script setup lang="ts">
 import { useRouter } from "vue-router";
-import { ArrowLeft, Download } from "@element-plus/icons-vue";
+import { Download } from "@element-plus/icons-vue";
+import { AgentDemoShell } from "@/components/demo";
 
 const router = useRouter();
+
+const sampleQuestion =
+  "Please help me design the protein structure based on evolution information for gene Os01g0177400.";
+
 const goBack = () => {
   router.back();
 };
 
-const botAvatar =
-  "/avatars/bot.svg";
-
-// Download analysis results
 const downloadResults = () => {
   const link = document.createElement("a");
   link.href =
     "/static/downloads/7.Digital Design Agent/2.DigitalAgent/results/design_results.zip";
   link.download = "design_results.zip";
+  link.style.display = "none";
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+  }
 };
 </script>
 
-<style lang="scss" scoped>
-.digital-design-agent-container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background-color: #f5f5f5;
+<style scoped>
+.digital-design-result-label,
+.digital-design-task-label {
+  margin: 0;
 }
 
-.chat-header {
-  background: #fff;
-  padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .back-button {
-    flex-shrink: 0;
-  }
-
-  .header-text {
-    flex: 1;
-    text-align: center;
-
-    h1 {
-      margin: 0 0 8px 0;
-      color: #333;
-      font-size: 24px;
-    }
-
-    p {
-      margin: 0;
-      color: #666;
-      font-size: 14px;
-    }
-  }
+.digital-design-result-label {
+  color: var(--phy-color-action-text);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
 }
 
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin: 20px 0px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  background: var(--el-bg-color);
-  box-shadow: 0 0 10px 0 rgb(218, 217, 217);
-  border-radius: 10px;
+.digital-design-task-label {
+  margin-top: var(--phy-space-8);
 }
 
-.message {
-  display: flex;
-  margin-bottom: 16px;
-
-  &.user-message {
-    justify-content: flex-end;
-
-    .message-content {
-      background: #eff6ff;
-      color: #333;
-      border-radius: 18px 18px 4px 18px;
-      max-width: 100%;
-    }
-  }
-
-  &.ai-message {
-    justify-content: flex-start;
-
-    .message-avatar {
-      flex-shrink: 0;
-      align-self: flex-start;
-      margin-right: 8px;
-    }
-
-    .message-content {
-      background: white;
-      color: #333;
-      border-radius: 18px 18px 18px 4px;
-      max-width: 85%;
-      border: 1px solid #e0e0e0;
-    }
-  }
+.digital-design-task-label code {
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-mono);
+  font-size: 0.9em;
 }
 
-.message-content {
-  padding: 12px 16px;
-  word-wrap: break-word;
-
-  .message-text {
-    line-height: 1.5;
-  }
-}
-
-.download-section {
-  margin-top: 12px;
-
-  .download-button {
-    margin-top: 8px;
-  }
-}
-
-.tip-text {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 10px;
-  width: 100%;
-  text-align: right;
+.digital-design-download {
+  margin-top: var(--phy-space-12);
 }
 </style>

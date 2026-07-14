@@ -1,282 +1,181 @@
 <template>
-  <div class="gene-network-agent-container">
-    <div class="chat-header">
-      <div class="header-content">
+  <AgentDemoShell
+    :title="$t('agents.geneNetwork.title')"
+    :subtitle="$t('agents.geneNetwork.subtitle')"
+    @back="goBack"
+  >
+    <template #question>
+      <p data-test="gene-network-question">{{ sampleQuestion }}</p>
+    </template>
+
+    <template #result>
+      <div data-test="gene-network-result">
+        <p
+          class="gene-network-result-label"
+          data-test="gene-network-result-label"
+        >
+          {{ $t("agents.geneNetwork.sampleResult") }}
+        </p>
+        <p class="gene-network-task-label" data-test="gene-network-task">
+          {{ $t("agents.geneNetwork.sampleTask") }}
+          <code>8ab4434b-772a-44f0-aaa5-fa163e7f84a3</code>
+        </p>
+
         <el-button
           type="primary"
-          :icon="ArrowLeft"
-          @click="goBack"
-          class="back-button"
+          size="small"
+          :icon="Download"
+          class="gene-network-download"
+          data-test="gene-network-download"
+          :disabled="downloadState === 'starting'"
+          @click="downloadResults"
+          @keydown.enter.prevent="downloadResults"
         >
-          {{ $t("common.back") }}
+          {{ $t("agents.geneNetwork.downloadResults") }}
         </el-button>
-        <div class="header-text">
-          <h1>{{ $t("agents.geneNetwork.title") }}</h1>
-          <p>{{ $t("agents.geneNetwork.subtitle") }}</p>
-        </div>
-      </div>
-    </div>
 
-    <div class="chat-messages">
-      <!-- User question -->
-      <div class="message user-message">
-        <div class="message-content">
-          <div class="message-text">
-            Please help me to analysis the hormone regulatory network in the
-            traits of TO:0000011
-          </div>
+        <div
+          v-if="downloadState !== 'idle'"
+          class="gene-network-download-status"
+          data-test="gene-network-download-status-group"
+        >
+          <p data-test="gene-network-download-status" role="status">
+            {{ downloadStatus }}
+          </p>
+          <p
+            v-if="currentDownloadFile"
+            class="gene-network-current-file"
+            data-test="gene-network-current-file"
+          >
+            {{ currentDownloadFile }}
+          </p>
         </div>
       </div>
+    </template>
 
-      <!-- AI answer -->
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
-        </div>
-        <div class="message-content">
-          <div class="message-text">
-            {{ $t("agents.geneNetwork.taskCreated")
-            }}8ab4434b-772a-44f0-aaa5-fa163e7f84a3
-            <div class="download-section">
-              <el-button
-                type="primary"
-                :icon="Download"
-                @click="downloadResults"
-                :loading="isDownloading"
-                class="download-button"
-              >
-                {{ isDownloading ? $t("agents.geneNetwork.downloading") : $t("agents.geneNetwork.downloadResults") }}
-              </el-button>
-              <div v-if="isDownloading" class="download-progress">
-                <p>{{ $t("agents.geneNetwork.volumeProgress", { current: currentDownloadIndex + 1, total: 5 }) }}</p>
-                <p class="file-name">{{ currentDownloadFile }}</p>
-              </div>
-            </div>
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <template #footer>{{ $t("common.Tip") }}</template>
+  </AgentDemoShell>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { ArrowLeft, Download } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
-
-import { ref } from "vue";
+import { Download } from "@element-plus/icons-vue";
+import { AgentDemoShell } from "@/components/demo";
 
 const router = useRouter();
+const { t } = useI18n();
+
+const sampleQuestion =
+  "Please help me to analysis the hormone regulatory network in the traits of TO:0000011";
+
+const fileParts = [
+  "network_results.zip.001",
+  "network_results.zip.002",
+  "network_results.zip.003",
+  "network_results.zip.004",
+  "network_results.zip.005",
+] as const;
+const basePath =
+  "/static/downloads/5.Gene Netwrok Agent/3.NetwrokAgent/results/";
+
+type DownloadState = "idle" | "starting" | "started";
+
+const downloadState = ref<DownloadState>("idle");
+const currentDownloadFile = ref("");
+const currentDownloadIndex = ref(0);
+
+const downloadStatus = computed(() => {
+  if (downloadState.value === "started") {
+    return t("agents.geneNetwork.allDownloadsStarted");
+  }
+  return t("agents.geneNetwork.startingDownload", {
+    current: currentDownloadIndex.value + 1,
+    total: fileParts.length,
+  });
+});
+
 const goBack = () => {
   router.back();
 };
 
-const botAvatar =
-  "/avatars/bot.svg";
+const startDownloadRequest = (fileName: string) => {
+  const link = document.createElement("a");
+  link.href = basePath + fileName;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+  }
+};
 
-// Download state management
-const isDownloading = ref(false);
-const currentDownloadIndex = ref(0);
-const currentDownloadFile = ref("");
-
-// Download analysis results - supports multi-volume download
 const downloadResults = () => {
-  const fileParts = [
-    "network_results.zip.001",
-    "network_results.zip.002",
-    "network_results.zip.003",
-    "network_results.zip.004",
-    "network_results.zip.005",
-  ];
+  if (downloadState.value === "starting") return;
 
-  const basePath =
-    "/static/downloads/5.Gene Netwrok Agent/3.NetwrokAgent/results/";
-
-  // Start downloading
-  isDownloading.value = true;
+  downloadState.value = "starting";
   currentDownloadIndex.value = 0;
   currentDownloadFile.value = fileParts[0];
 
-  // Show download-start notice
-  ElMessage({
-    message: `Downloading ${fileParts.length} split file(s), please wait until all downloads finish`,
-    type: "info",
-    duration: 4000,
-  });
-
-  // Download each volume file in sequence
   fileParts.forEach((fileName, index) => {
-    setTimeout(() => {
-      try {
-        // Update current download state
-        currentDownloadIndex.value = index;
-        currentDownloadFile.value = fileName;
+    window.setTimeout(() => {
+      currentDownloadIndex.value = index;
+      currentDownloadFile.value = fileName;
+      startDownloadRequest(fileName);
 
-        const link = document.createElement("a");
-        link.href = basePath + fileName;
-        link.download = fileName;
-        link.style.display = "none";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        // Last file finished downloading
-        if (index === fileParts.length - 1) {
-          setTimeout(() => {
-            isDownloading.value = false;
-            ElMessage({
-              message: "All split files downloaded! Put them in the same directory and extract",
-              type: "success",
-              duration: 5000,
-            });
-          }, 1000);
-        }
-      } catch (error) {
-        console.error(`Failed to download file ${fileName}:`, error);
-        isDownloading.value = false;
-        ElMessage({
-          message: `Failed to download ${fileName}, please try again`,
-          type: "error",
-          duration: 3000,
-        });
+      if (index === fileParts.length - 1) {
+        downloadState.value = "started";
       }
-    }, index * 1000); // Download files 1 second apart to avoid browser limits
+    }, index * 1000);
   });
 };
 </script>
 
-<style lang="scss" scoped>
-.gene-network-agent-container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background-color: #f5f5f5;
+<style scoped>
+.gene-network-result-label,
+.gene-network-task-label {
+  margin: 0;
 }
 
-.chat-header {
-  background: #fff;
-  padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .back-button {
-    flex-shrink: 0;
-  }
-
-  .header-text {
-    flex: 1;
-    text-align: center;
-
-    h1 {
-      margin: 0 0 8px 0;
-      color: #333;
-      font-size: 24px;
-    }
-
-    p {
-      margin: 0;
-      color: #666;
-      font-size: 14px;
-    }
-  }
+.gene-network-result-label {
+  color: var(--phy-color-action-text);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
 }
 
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin: 20px 0px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  background: var(--el-bg-color);
-  box-shadow: 0 0 10px 0 rgb(218, 217, 217);
-  border-radius: 10px;
+.gene-network-task-label {
+  margin-top: var(--phy-space-8);
 }
 
-.message {
-  display: flex;
-  margin-bottom: 16px;
-
-  &.user-message {
-    justify-content: flex-end;
-
-    .message-content {
-      background: #eff6ff;
-      color: #333;
-      border-radius: 18px 18px 4px 18px;
-      max-width: 100%;
-    }
-  }
-
-  &.ai-message {
-    justify-content: flex-start;
-
-    .message-avatar {
-      flex-shrink: 0;
-      align-self: flex-start;
-      margin-right: 8px;
-    }
-
-    .message-content {
-      background: white;
-      color: #333;
-      border-radius: 18px 18px 18px 4px;
-      max-width: 85%;
-      border: 1px solid #e0e0e0;
-    }
-  }
+.gene-network-task-label code {
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-mono);
+  font-size: 0.9em;
 }
 
-.message-content {
-  padding: 12px 16px;
-  word-wrap: break-word;
-
-  .message-text {
-    line-height: 1.5;
-  }
+.gene-network-download {
+  margin-top: var(--phy-space-12);
 }
 
-.download-section {
-  margin-top: 12px;
-
-  .download-button {
-    margin-top: 8px;
-  }
-
-  .download-progress {
-    margin-top: 12px;
-    padding: 12px;
-    background-color: #f0f9ff;
-    border: 1px solid #bae6fd;
-    border-radius: 8px;
-
-    p {
-      margin: 4px 0;
-      color: #0369a1;
-      font-size: 14px;
-
-      &.file-name {
-        font-weight: 500;
-        color: #0c4a6e;
-      }
-    }
-  }
+.gene-network-download-status {
+  margin-top: var(--phy-space-12);
+  color: var(--phy-color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
-.tip-text {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 10px;
-  width: 100%;
-  text-align: right;
+.gene-network-download-status p {
+  margin: 0;
+}
+
+.gene-network-current-file {
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-mono);
+  overflow-wrap: anywhere;
 }
 </style>
