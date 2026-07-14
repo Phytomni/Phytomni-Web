@@ -5,26 +5,11 @@
     @back="goBack"
   >
     <template #question>
-      <div
-        class="analyst-message analyst-message--question"
-        data-test="analyst-question"
-      >
-        Your data is {
-        "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_1.fq.gz":
-        "pair-end 1 chip-seq data for rice",
-        "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_2.fq.gz":
-        "pair-end 2 chip-seq data for rice",
-        "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/NIP_genome_final.fa":
-        "rice genome fasta file"}, please help me to perform the callpeak
-        analysis.
-      </div>
+      <p data-test="analyst-question">{{ sampleQuestion }}</p>
     </template>
 
     <template #result>
-      <div
-        class="analyst-message analyst-message--result"
-        data-test="analyst-result"
-      >
+      <div data-test="analyst-result">
         <p class="analyst-result-label" data-test="analyst-result-label">
           {{ $t("agents.analyst.sampleResult") }}
         </p>
@@ -57,6 +42,9 @@ import { AgentDemoShell } from "@/components/demo";
 
 const router = useRouter();
 
+const sampleQuestion =
+  'Your data is {"/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_1.fq.gz": "pair-end 1 chip-seq data for rice", "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_2.fq.gz": "pair-end 2 chip-seq data for rice", "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/NIP_genome_final.fa": "rice genome fasta file"}, please help me to perform the callpeak analysis.';
+
 const goBack = () => {
   router.back();
 };
@@ -73,26 +61,6 @@ const downloadResults = () => {
 </script>
 
 <style scoped>
-.analyst-message {
-  box-sizing: border-box;
-  min-width: 0;
-  padding: var(--phy-space-16) var(--phy-space-20);
-  border: 1px solid;
-  border-radius: var(--phy-radius-lg);
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.analyst-message--question {
-  border-color: var(--phy-color-bubble-user-border);
-  background: var(--phy-color-bubble-user);
-}
-
-.analyst-message--result {
-  border-color: var(--phy-color-bubble-assistant-border);
-  background: var(--phy-color-bubble-assistant);
-}
-
 .analyst-result-label,
 .analyst-task-label {
   margin: 0;

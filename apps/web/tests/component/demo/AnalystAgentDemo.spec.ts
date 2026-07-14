@@ -7,6 +7,9 @@ import zhCN from "@/locales/langs/zh-CN";
 
 const routerBack = vi.hoisted(() => vi.fn());
 
+const SAMPLE_QUESTION =
+  'Your data is {"/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_1.fq.gz": "pair-end 1 chip-seq data for rice", "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_2.fq.gz": "pair-end 2 chip-seq data for rice", "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/NIP_genome_final.fa": "rice genome fasta file"}, please help me to perform the callpeak analysis.';
+
 vi.mock("vue-router", () => ({
   useRouter: () => ({ back: routerBack }),
 }));
@@ -54,8 +57,11 @@ describe("Analyst Agent static demonstration", () => {
     expect(wrapper.get("[data-test=agent-demo-static-badge]").text()).toContain(
       "Static example"
     );
-    expect(wrapper.get("[data-test=analyst-question]").text()).toContain(
-      "callpeak analysis"
+    expect(wrapper.get("[data-test=analyst-question]").text()).toBe(
+      SAMPLE_QUESTION
+    );
+    expect(SAMPLE_QUESTION).toContain(
+      '{"/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_1.fq.gz":'
     );
     expect(wrapper.get("[data-test=analyst-task-label]").text()).toContain(
       "4a7715a-996a-22e0-acd5-fb278e7d45b3"
@@ -103,12 +109,9 @@ describe("Analyst Agent static demonstration", () => {
     expect(wrapper.findAll(".chat-header, .chat-messages, .message-avatar")).toHaveLength(
       0
     );
-    expect(wrapper.find("[data-test=analyst-question]").classes()).toContain(
-      "analyst-message--question"
-    );
-    expect(wrapper.find("[data-test=analyst-result]").classes()).toContain(
-      "analyst-message--result"
-    );
+    expect(wrapper.find("[data-test=analyst-question]").classes()).toEqual([]);
+    expect(wrapper.find("[data-test=analyst-result]").classes()).toEqual([]);
+    expect(wrapper.findAll(".analyst-message")).toHaveLength(0);
 
     await wrapper.get("[data-test=shell-back]").trigger("click");
     expect(routerBack).toHaveBeenCalledTimes(1);

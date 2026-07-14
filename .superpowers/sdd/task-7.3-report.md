@@ -54,3 +54,23 @@ the route behavior.
 - `apps/web/tests/component/demo/AnalystAgentDemo.spec.ts`
 - `apps/web/src/locales/langs/en-US.ts`
 - `apps/web/src/locales/langs/zh-CN.ts`
+
+## Reviewer Fix
+
+- Removed the Analyst route's nested question/result card wrappers and surface
+  styles; `AgentDemoShell` now owns the only pale question/result surfaces while
+  the semantic `data-test` hooks remain on the slot content.
+- Defined the sample question as one exact string and rendered it by interpolation,
+  preserving the original opening-brace/quote adjacency and all three OBS paths.
+- Strengthened the Analyst spec to assert the complete sample question, the static
+  disclosure/task/result contracts, the bundled download path and filename, anchor
+  cleanup, keyboard activation, Back navigation, and absence of route card classes.
+
+### Reviewer-Fix Commands and Results
+
+| Check | Command | Result |
+|---|---|---|
+| Focused reviewer suite | `cd apps/web && npx vitest run tests/component/demo/AnalystAgentDemo.spec.ts tests/component/demo/AgentDemoShell.spec.ts tests/unit/constants/agent-locales.spec.ts` | **PASS** — 3 files, 11 tests |
+| TypeScript | `cd apps/web && npm run type-check` | **PASS** — `vue-tsc --noEmit` |
+| Scoped lint | `cd apps/web && npx eslint src/views/analyst-agent/index.vue --no-fix` | **PASS** — exit 0 |
+| Diff hygiene | `git diff --check` | **PASS** |
