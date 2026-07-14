@@ -226,6 +226,21 @@ describe("Feedback workspace", () => {
     }
   );
 
+  it.each([10, 1000])(
+    "accepts feedback content at the %s-character boundary",
+    async (length) => {
+      vi.useFakeTimers();
+      const wrapper = mountView();
+
+      await setContent(wrapper, "a".repeat(length));
+      await submit(wrapper);
+
+      expect(mocks.feedback).toHaveBeenCalledTimes(1);
+      expect(wrapper.find(".el-form-item__error").exists()).toBe(false);
+      await vi.advanceTimersByTimeAsync(1500);
+    }
+  );
+
   it("resets the content and validation state", async () => {
     const wrapper = mountView();
     await setContent(wrapper, "too short");

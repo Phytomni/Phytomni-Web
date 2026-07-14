@@ -591,6 +591,11 @@ export default {
     submit: "提交反馈",
     submitSuccess: "反馈提交成功，感谢您的宝贵意见！",
     submitFailed: "提交失败，请重试",
+    validation: {
+      required: "请输入反馈内容",
+      min: "反馈内容至少需要10个字符",
+      max: "反馈内容不能超过1000个字符",
+    },
   },
 
   // 全局策略配置

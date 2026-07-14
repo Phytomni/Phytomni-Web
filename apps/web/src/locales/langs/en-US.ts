@@ -604,6 +604,11 @@ export default {
     submitSuccess:
       "Feedback submitted successfully. Thank you for your valuable input!",
     submitFailed: "Submission failed, please try again",
+    validation: {
+      required: "Please enter feedback content",
+      min: "Feedback must be at least 10 characters",
+      max: "Feedback cannot exceed 1000 characters",
+    },
   },
 
   // Global Policy Configuration
