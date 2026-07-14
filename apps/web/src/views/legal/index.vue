@@ -1,5 +1,9 @@
 <template>
-  <div class="legal-page">
+  <div
+    class="legal-page"
+    data-scroll-root="legal"
+    :data-render-state="renderError ? 'error' : 'rendered'"
+  >
     <div class="legal-toolbar">
       <LangSwitch />
     </div>
@@ -11,8 +15,15 @@
         {{ t("legal.effectiveLabel") }}: {{ doc.effectiveDate }}
       </p>
     </header>
-    <article v-if="bodyHtml" class="legal-body" v-html="bodyHtml" />
-    <p v-else class="legal-error">{{ t("legal.loadError") }}</p>
+    <article
+      v-if="bodyHtml"
+      class="legal-body"
+      data-render-state="rendered"
+      v-html="bodyHtml"
+    />
+    <p v-else class="legal-error" data-render-state="error">
+      {{ t("legal.loadError") }}
+    </p>
     <Footer class="legal-footer" />
   </div>
 </template>
@@ -35,12 +46,15 @@ const kind = computed<LegalDocKind>(() =>
 
 const doc = ref(loadLegalDoc(kind.value, locale.value));
 const bodyHtml = ref("");
+const renderError = ref(false);
 
 watchEffect(() => {
   doc.value = loadLegalDoc(kind.value, locale.value);
+  renderError.value = false;
   try {
     bodyHtml.value = renderLegalMarkdown(doc.value.markdown);
   } catch {
+    renderError.value = true;
     bodyHtml.value = "";
   }
 });
@@ -55,11 +69,16 @@ const draftBanner = computed(() => t("legal.draftBanner"));
 .legal-page {
   /* App.vue locks html/body/#app to overflow:hidden; this page is the scroll root. */
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-  padding: 24px 20px 0;
+  padding: 24px 20px 24px;
   background: var(--el-bg-color-page, #f5f7fa);
   color: var(--el-text-color-primary, #303133);
+  font-family: var(--phy-font-shell);
 }
 
 .legal-toolbar {
@@ -100,6 +119,7 @@ const draftBanner = computed(() => t("legal.draftBanner"));
 }
 
 .legal-body {
+  flex: 0 0 auto;
   max-width: 760px;
   margin: 0 auto;
   padding: 24px;
@@ -129,6 +149,7 @@ const draftBanner = computed(() => t("legal.draftBanner"));
 }
 
 .legal-error {
+  flex: 0 0 auto;
   max-width: 760px;
   margin: 0 auto;
   color: var(--el-color-danger, #f56c6c);
@@ -136,7 +157,8 @@ const draftBanner = computed(() => t("legal.draftBanner"));
 }
 
 .legal-footer {
-  max-width: 760px;
-  margin: 24px auto 0;
+  flex: 0 0 auto;
+  width: min(100%, 760px);
+  margin-inline: auto;
 }
 </style>

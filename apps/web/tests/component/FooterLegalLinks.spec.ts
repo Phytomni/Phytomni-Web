@@ -39,5 +39,6 @@ describe("Footer legal links", () => {
     expect(SOURCE).toMatch(/:focus-visible/);
     expect(SOURCE).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
     expect(SOURCE).not.toMatch(/\.theme-dark/);
+    expect(SOURCE).not.toMatch(/position\s*:\s*(?:fixed|sticky)/);
   });
 });

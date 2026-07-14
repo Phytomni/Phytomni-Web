@@ -17,4 +17,11 @@ describe("App product-layout hand-off", () => {
     expect(SOURCE).toMatch(/<Footer\s+v-if="showFooter"\s+class="app-footer"\s*\/>/);
     expect(SOURCE).toContain("productLayout");
   });
+
+  it("hands document routes to their route-owned Footer", () => {
+    expect(SOURCE).toContain('route.meta?.productLayout === "document"');
+    expect(SOURCE).toMatch(
+      /if\s*\(route\.meta\?\.productLayout\s*===\s*"document"\)\s*return\s*false/,
+    );
+  });
 });
