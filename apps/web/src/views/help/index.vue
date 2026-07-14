@@ -1,48 +1,62 @@
 <template>
-  <PhyDocLayout>
-    <template #header>
-      <PhyPageHeader :title="$t('help.title')">
-        <template #actions>
-          <button class="back-btn" type="button" @click="goBack">
-            {{ $t("common.back") }}
-          </button>
-        </template>
-      </PhyPageHeader>
-    </template>
+  <div ref="scrollContainerRef" class="help-page" data-scroll-root="help">
+    <PhyDocLayout>
+      <template #header>
+        <PhyPageHeader :title="$t('help.title')">
+          <template #actions>
+            <button class="back-btn" type="button" @click="goBack">
+              {{ $t("common.back") }}
+            </button>
+          </template>
+        </PhyPageHeader>
+      </template>
 
-    <template #toc>
-      <div class="toc-title">{{ $t("help.tableOfContents") }}</div>
-      <nav class="toc-nav">
-        <ul class="toc-list">
-          <li
-            v-for="item in tableOfContents"
-            :key="item.id"
-            class="toc-item"
-            :class="{ active: activeSection === item.id }"
-            @click="scrollToSection(item.id)"
-          >
-            <span class="toc-link">{{ item.title }}</span>
-          </li>
-        </ul>
-      </nav>
-    </template>
+      <template #toc>
+        <div class="toc-title">{{ $t("help.tableOfContents") }}</div>
+        <nav class="toc-nav" :aria-label="$t('help.tableOfContents')">
+          <ul class="toc-list">
+            <li
+              v-for="item in tableOfContents"
+              :key="item.id"
+              class="toc-item"
+              :class="{ active: activeSection === item.id }"
+            >
+              <button
+                class="toc-link"
+                :class="{ active: activeSection === item.id }"
+                :data-section-id="item.id"
+                type="button"
+                :aria-current="
+                  activeSection === item.id ? 'location' : undefined
+                "
+                @click="scrollToSection(item.id)"
+                @keydown.enter.prevent="scrollToSection(item.id)"
+                @keydown.space.prevent="scrollToSection(item.id)"
+              >
+                {{ item.title }}
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </template>
 
-    <div ref="mainContentRef" class="help-article">
-      <section
-        v-for="section in helpSections"
-        :id="section.id"
-        :key="section.id"
-        class="help-section"
-      >
-        <h1>{{ section.heading }}</h1>
-        <MarkdownViewer :content="section.body" surface="document" />
-      </section>
-    </div>
+      <article ref="mainContentRef" class="help-article">
+        <section
+          v-for="section in helpContent"
+          :id="section.id"
+          :key="section.id"
+          class="help-section"
+        >
+          <h1 tabindex="-1">{{ section.heading }}</h1>
+          <MarkdownViewer :content="section.body" surface="document" />
+        </section>
+      </article>
 
-    <template #footer>
-      <Footer />
-    </template>
-  </PhyDocLayout>
+      <template #footer>
+        <Footer class="help-footer" />
+      </template>
+    </PhyDocLayout>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -97,7 +111,8 @@ const SECTION_IDS: Record<typeof SECTIONS[number], string> = {
   limitations: "limitations",
 };
 
-// Table of contents data structure
+// Table of contents data structure. Both the labels and document bodies are
+// computed so an in-place locale change updates the mounted document.
 const tableOfContents = computed(() =>
   SECTIONS.map((key) => ({
     id: SECTION_IDS[key],
@@ -106,7 +121,7 @@ const tableOfContents = computed(() =>
   }))
 );
 
-const helpSections = computed(() =>
+const helpContent = computed(() =>
   SECTIONS.map((key) => ({
     id: SECTION_IDS[key],
     heading: t(`help.doc.${key}.heading`),
@@ -120,7 +135,7 @@ const activeSection = ref(SECTION_IDS.whatIs);
 // Reference to the main content area element
 const mainContentRef = ref<HTMLElement | null>(null);
 
-// Scroll root — PhyDocLayout body scrolls via the layout shell (App.vue locks document overflow).
+// Help owns the only scroll root. App.vue locks document overflow for the SPA.
 const scrollContainerRef = ref<HTMLElement | null>(null);
 
 function sectionTopInContainer(
@@ -140,11 +155,27 @@ const scrollToSection = (sectionId: string) => {
   const element = document.getElementById(sectionId);
   if (element && container) {
     const elementTop = sectionTopInContainer(element, container) - 20;
-    container.scrollTo({
-      top: elementTop,
-      behavior: "smooth",
-    });
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({
+        top: elementTop,
+        behavior: "smooth",
+      });
+    } else {
+      container.scrollTop = elementTop;
+    }
     activeSection.value = sectionId;
+
+    // Keep keyboard users oriented after the smooth-scroll request. The
+    // heading is deliberately removed from the normal tab order in the
+    // template, so this focus does not add another tab stop.
+    const heading = element.querySelector("h1") as HTMLElement | null;
+    if (heading) {
+      try {
+        heading.focus({ preventScroll: true });
+      } catch {
+        heading.focus();
+      }
+    }
   }
 };
 
@@ -169,9 +200,6 @@ const handleScroll = () => {
 };
 
 onMounted(() => {
-  scrollContainerRef.value =
-    (mainContentRef.value?.closest(".phy-doc-layout") as HTMLElement | null) ??
-    mainContentRef.value;
   if (scrollContainerRef.value) {
     scrollContainerRef.value.addEventListener("scroll", handleScroll);
   }
@@ -185,6 +213,17 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.help-page {
+  box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--phy-color-bg-page);
+  color: var(--phy-color-text);
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
 .back-btn {
   border: 1px solid var(--phy-color-border);
   background: var(--phy-color-bg-elevated);
@@ -208,21 +247,40 @@ onUnmounted(() => {
   padding: 0;
 }
 .toc-item {
-  padding: 6px 8px;
+  margin: 0;
+  padding: 0;
   border-radius: var(--phy-radius-sm);
-  color: var(--phy-color-text-secondary);
-  cursor: pointer;
 }
 .toc-item.active,
 .toc-item:hover {
   background: var(--phy-color-primary-soft);
-  color: var(--phy-color-primary);
 }
 .toc-link {
   display: block;
+  width: 100%;
+  border: 0;
+  border-radius: var(--phy-radius-sm);
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--phy-color-text-secondary);
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.toc-link.active,
+.toc-link:hover {
+  background: var(--phy-color-primary-soft);
+  color: var(--phy-color-primary);
+}
+.toc-link:focus-visible,
+.back-btn:focus-visible,
+.help-section > h1:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
 }
 .help-article {
-  /* Reading measure comes from .phy-reading on PhyDocLayout body */
+  min-width: 0;
 }
 .help-section + .help-section {
   margin-top: 48px;
@@ -233,5 +291,15 @@ onUnmounted(() => {
   font-size: 1.6rem;
   line-height: 1.25;
   color: var(--phy-color-text);
+}
+
+.help-footer {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .help-page :deep(.phy-doc-layout__content) {
+    padding-top: 20px;
+  }
 }
 </style>

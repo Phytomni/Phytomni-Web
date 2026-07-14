@@ -3,6 +3,9 @@
     <header v-if="$slots.header" class="phy-doc-layout__header">
       <slot name="header" />
     </header>
+    <div v-if="$slots.metadata" class="phy-doc-layout__metadata">
+      <slot name="metadata" />
+    </div>
     <div class="phy-doc-layout__content">
       <aside v-if="$slots.toc" class="phy-doc-layout__toc">
         <slot name="toc" />
@@ -21,30 +24,36 @@
 
 <style scoped>
 .phy-doc-layout {
-  height: 100vh;
-  height: 100dvh;
-  overflow-y: auto;
   box-sizing: border-box;
-  min-height: 100vh;
   background: var(--phy-color-bg-page);
   color: var(--phy-color-text);
   font-family: var(--phy-font-shell);
 }
 .phy-doc-layout__header {
+  box-sizing: border-box;
+  width: min(100%, 1060px);
+  margin: 0 auto;
   border-bottom: 1px solid var(--phy-color-border);
   background: var(--phy-color-bg-elevated);
   padding: 16px 20px;
 }
+.phy-doc-layout__metadata {
+  box-sizing: border-box;
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 20px 20px 0;
+}
 .phy-doc-layout__content {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 760px);
   gap: 24px;
-  max-width: var(--phy-layout-document-max-width);
+  width: min(100%, 1060px);
   margin: 0 auto;
   padding: 24px 20px 48px;
   box-sizing: border-box;
 }
 .phy-doc-layout__toc {
-  flex: 0 0 220px;
+  box-sizing: border-box;
   position: sticky;
   top: 16px;
   align-self: flex-start;
@@ -54,24 +63,37 @@
   padding: 12px;
 }
 .phy-doc-body {
-  flex: 1;
+  width: min(100%, 760px);
+  max-width: 760px;
   min-width: 0;
-  max-width: var(--phy-layout-reading-max-width);
 }
 .phy-doc-layout__footer {
-  width: min(100%, var(--phy-layout-document-max-width));
-  margin: 0 auto;
   box-sizing: border-box;
+  width: min(100%, 760px);
+  margin: 0 auto;
   padding: 0 20px 24px;
 }
 @media (max-width: 900px) {
   .phy-doc-layout__content {
+    display: flex;
     flex-direction: column;
+    gap: 20px;
   }
   .phy-doc-layout__toc {
     position: static;
-    flex-basis: auto;
     width: 100%;
+  }
+}
+
+@media (max-width: 599px) {
+  .phy-doc-layout__header {
+    padding-inline: 16px;
+  }
+
+  .phy-doc-layout__metadata,
+  .phy-doc-layout__content,
+  .phy-doc-layout__footer {
+    padding-inline: 16px;
   }
 }
 </style>
