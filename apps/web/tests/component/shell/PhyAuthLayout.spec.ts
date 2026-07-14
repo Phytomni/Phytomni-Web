@@ -61,7 +61,7 @@ describe("PhyAuthLayout", () => {
     expect(SOURCE).toMatch(/overflow-y:\s*auto/);
     expect(SOURCE).toMatch(/max-width:\s*432px/);
     expect(SOURCE).toMatch(
-      /@media\s*\(min-width:\s*600px\)[\s\S]*?clamp\(432px,\s*calc\(25vw \+ 72px\),\s*560px\)[\s\S]*?max-width:\s*560px/,
+      /@media\s*\(min-width:\s*600px\)[\s\S]*?clamp\(432px,\s*calc\(35vw - 72px\),\s*672px\)[\s\S]*?max-width:\s*672px/,
     );
     expect(SOURCE).toMatch(/--phy-control-height-primary/);
     expect(SOURCE).toContain("phy-auth-content");
