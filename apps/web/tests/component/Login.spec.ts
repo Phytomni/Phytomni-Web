@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { config, flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, nextTick } from "vue";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
 import { readFileSync } from "node:fs";
@@ -187,6 +187,7 @@ const fillCredentials = async (
 describe("Login auth surface", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    i18n.global.locale.value = "en-US";
     mocks.route.query = {};
     mocks.safeRedirect.mockReturnValue("/chat");
     mocks.login.mockResolvedValue({
@@ -230,6 +231,11 @@ describe("Login auth surface", () => {
     expect(terms.attributes("rel")).toBe("noopener noreferrer");
     expect(privacy.attributes("target")).toBe("_blank");
     expect(privacy.attributes("rel")).toBe("noopener noreferrer");
+    expect(terms.text()).toBe("Terms of Service");
+
+    i18n.global.locale.value = "zh-CN";
+    await nextTick();
+    expect(wrapper.get('a[href="/terms"]').text()).toBe("服务条款");
 
     await wrapper.get('a[href="/forgot-password"]').trigger("click");
     await wrapper.get('a[href="/register"]').trigger("click");

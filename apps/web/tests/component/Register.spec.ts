@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { config, flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, nextTick } from "vue";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
 import { readFileSync } from "node:fs";
@@ -217,6 +217,7 @@ const fillRegistration = async (
 describe("Registration auth surface", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    i18n.global.locale.value = "en-US";
     mocks.route.query = {};
     mocks.register.mockResolvedValue({ code: 200 });
   });
@@ -270,6 +271,23 @@ describe("Registration auth surface", () => {
       target: "_blank",
       rel: "noopener noreferrer",
     });
+  });
+
+  it("renders one explicit consent copy and one link set in both locales", async () => {
+    const wrapper = mountView();
+    const assertConsent = (terms: string, privacy: string) => {
+      const agreement = wrapper.get(".register-agreement").text();
+      expect(wrapper.get(".register-agreement").findAll('input[type="checkbox"]')).toHaveLength(1);
+      expect(wrapper.get(".register-agreement").findAll('a[href="/terms"]')).toHaveLength(1);
+      expect(wrapper.get(".register-agreement").findAll('a[href="/privacy"]')).toHaveLength(1);
+      expect(agreement.split(terms).length - 1).toBe(1);
+      expect(agreement.split(privacy).length - 1).toBe(1);
+    };
+
+    assertConsent("Terms of Service", "Privacy Policy");
+    i18n.global.locale.value = "zh-CN";
+    await nextTick();
+    assertConsent("服务条款", "隐私政策");
   });
 
   it("rejects every password rule and confirmation mismatch before a request", async () => {

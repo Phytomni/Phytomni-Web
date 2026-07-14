@@ -183,7 +183,7 @@ export default {
     agreement: {
       prefix:
         "Registering and logging in means you have read and agreed to our",
-      terms: "User Agreement",
+      terms: "Terms of Service",
       and: "and",
       privacy: "Privacy Policy",
     },
@@ -208,8 +208,7 @@ export default {
       terms: "Terms of Service",
       and: "and",
       privacy: "Privacy Policy",
-      checkboxLabel:
-        "I have read and agree to the Terms of Service and Privacy Policy",
+      checkboxLabel: "I agree to review the legal documents below",
       checkboxRequired:
         "Please agree to the Terms of Service and Privacy Policy",
     },

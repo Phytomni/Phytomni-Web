@@ -47,12 +47,13 @@ describe("PhyAuthLayout", () => {
     );
   });
 
-  it("provides a labelled brand fallback when no brand slot is supplied", () => {
+  it("keeps the fallback mark decorative when adjacent text supplies the name", () => {
     const wrapper = mount(PhyAuthLayout);
     expect(wrapper.find(".phy-auth-brand-fallback").exists()).toBe(true);
-    expect(wrapper.find(".phy-auth-brand-fallback svg").attributes("aria-label")).toBe(
-      "Phytomni",
-    );
+    const mark = wrapper.find(".phy-auth-brand-fallback svg");
+    expect(mark.attributes("aria-hidden")).toBe("true");
+    expect(mark.attributes("aria-label")).toBeUndefined();
+    expect(wrapper.find(".phy-auth-brand-fallback span").text()).toBe("Phytomni");
   });
 
   it("keeps the auth scroll, measure, and control contracts in the shell", () => {

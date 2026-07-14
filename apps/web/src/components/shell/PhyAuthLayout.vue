@@ -9,7 +9,7 @@
         <div class="phy-auth-brand">
           <slot name="brand">
             <div class="phy-auth-brand-fallback">
-              <PhyBrandMark label="Phytomni" />
+              <PhyBrandMark />
               <span>Phytomni</span>
             </div>
           </slot>

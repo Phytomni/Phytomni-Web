@@ -4,9 +4,12 @@
       <template #header>
         <PhyPageHeader :title="$t('help.title')">
           <template #actions>
-            <button class="back-btn" type="button" @click="goBack">
-              {{ $t("common.back") }}
-            </button>
+            <div class="help-header-actions">
+              <LangSwitch />
+              <button class="back-btn" type="button" @click="goBack">
+                {{ $t("common.back") }}
+              </button>
+            </div>
           </template>
         </PhyPageHeader>
       </template>
@@ -64,6 +67,7 @@ import { useRouter } from "vue-router";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
 import { PhyDocLayout, PhyPageHeader } from "@/components/shell";
 import Footer from "@/components/Footer.vue";
+import LangSwitch from "@/components/LangSwitch.vue";
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { getToken } from "@/utils/auth";
@@ -231,6 +235,11 @@ onUnmounted(() => {
   border-radius: var(--phy-radius-sm);
   padding: 6px 12px;
   cursor: pointer;
+}
+.help-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--phy-space-8);
 }
 .back-btn:hover {
   border-color: var(--phy-color-primary);

@@ -64,7 +64,6 @@
           {{ $t("register.agreement.checkboxLabel") }}
         </el-checkbox>
         <div class="register-agreement-links">
-          {{ $t("register.agreement.prefix") }}
           <a
             href="/terms"
             target="_blank"
@@ -334,6 +333,17 @@ const goToLogin = () => {
     color: var(--phy-color-primary);
     text-decoration: none;
   }
+}
+
+.register-agreement {
+  display: flex;
+  flex-direction: column;
+  gap: var(--phy-space-4);
+  line-height: 1.5;
+}
+
+.register-agreement-links {
+  padding-left: var(--phy-space-24);
 }
 
 .register-button {

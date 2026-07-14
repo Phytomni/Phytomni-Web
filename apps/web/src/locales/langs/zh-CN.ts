@@ -213,7 +213,7 @@ export default {
       terms: "服务条款",
       and: "和",
       privacy: "隐私政策",
-      checkboxLabel: "我已阅读并同意服务条款和隐私政策",
+      checkboxLabel: "我同意阅读以下法律文件",
       checkboxRequired: "请先同意服务条款和隐私政策",
     },
     validation: {

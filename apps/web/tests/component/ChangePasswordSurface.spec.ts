@@ -236,6 +236,9 @@ describe("Change Password surface", () => {
   it("uses the auth shell with one bounded form and hides Back for first login", () => {
     const wrapper = mountView("0");
     expect(wrapper.findComponent({ name: "PhyAuthLayout" }).exists()).toBe(true);
+    expect(wrapper.find(".phy-brand-mark").exists()).toBe(true);
+    expect(wrapper.find(".phy-auth-brand").text()).toContain("Phytomni");
+    expect(wrapper.find('img[src="/logo.png"]').exists()).toBe(false);
     expect(wrapper.find(".change-password-page").exists()).toBe(false);
     expect(wrapper.find(".change-password-back").exists()).toBe(false);
     expect(wrapper.find(".change-password-form").exists()).toBe(true);
@@ -277,7 +280,8 @@ describe("Change Password surface", () => {
     const wrapper = mountView("0");
     (mocks.store as typeof store).FedLogOut = logout;
     await fillForm(wrapper);
-    await wrapper.get(".change-password-submit").trigger("click");
+    wrapper.get(".change-password-submit").trigger("click");
+    wrapper.get(".change-password-submit").trigger("click");
     await flushPromises();
     expect([...mocks.changePassword.mock.calls[0][0].entries()]).toEqual([
       ["password", "Current1!"],

@@ -52,6 +52,7 @@ const mountHelp = () =>
     attachTo: document.body,
     global: {
       stubs: {
+        LangSwitch: { template: '<div data-test="lang-switch" />' },
         MarkdownViewer: MarkdownStub,
         PhyPageHeader: {
           template:
@@ -127,6 +128,8 @@ describe("Help product document", () => {
 
   it("keeps token-aware back branches and one flowing footer in the help scroll root", async () => {
     const wrapper = mountHelp();
+    expect(wrapper.find(".help-header-actions [data-test=lang-switch]").exists()).toBe(true);
+    expect(wrapper.find(".help-header-actions .back-btn").exists()).toBe(true);
     expect(wrapper.find(".help-page").findAll(".footer-container")).toHaveLength(1);
     expect(
       wrapper.find(".help-page").element.contains(
