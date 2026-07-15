@@ -2,19 +2,25 @@
   <form class="a2ui-form" @submit.prevent="onSubmit">
     <div class="a2ui-title">{{ title }}</div>
     <div v-for="f in fields" :key="f.name" class="a2ui-field">
-      <label>{{ f.label }}</label>
+      <label :for="fieldId(f.name)">{{ f.label }}</label>
       <el-input
         v-if="f.type === 'text' || !f.type"
+        :id="fieldId(f.name)"
+        :aria-label="f.label"
         v-model="model[f.name]"
         :disabled="disabled"
       />
       <el-input-number
         v-else-if="f.type === 'number'"
+        :id="fieldId(f.name)"
+        :aria-label="f.label"
         v-model="model[f.name]"
         :disabled="disabled"
       />
       <el-select
         v-else-if="f.type === 'select'"
+        :id="fieldId(f.name)"
+        :aria-label="f.label"
         v-model="model[f.name]"
         :disabled="disabled"
       >
@@ -26,7 +32,12 @@
         />
       </el-select>
     </div>
-    <el-button type="primary" native-type="submit" :disabled="disabled">
+    <el-button
+      type="primary"
+      native-type="submit"
+      :disabled="disabled"
+      :aria-label="t('chat.a2ui.submit')"
+    >
       {{ t("chat.a2ui.submit") }}
     </el-button>
     <el-button
@@ -34,6 +45,7 @@
       type="default"
       native-type="button"
       :disabled="disabled"
+      :aria-label="t('chat.a2ui.cancel')"
       @click="onCancel"
     >
       {{ t("chat.a2ui.cancel") }}
@@ -81,5 +93,9 @@ function onSubmit() {
 function onCancel() {
   if (props.disabled) return;
   emit("action", { widget: "form", payload: { cancelled: true } });
+}
+
+function fieldId(name: string) {
+  return `a2ui-field-${name}`;
 }
 </script>

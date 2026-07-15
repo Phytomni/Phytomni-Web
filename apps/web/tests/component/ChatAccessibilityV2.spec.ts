@@ -11,6 +11,7 @@ import { nextTick } from "vue";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
 import enUS from "@/locales/langs/en-US";
+import zhCN from "@/locales/langs/zh-CN";
 import {
   FIXTURE_ACTIVITY_BLOCKS,
   FIXTURE_ACTIVITY_STATE_KEY,
@@ -18,15 +19,17 @@ import {
   FIXTURE_PROGRESS_STARTED_AT,
 } from "../fixtures/chat";
 import { activityRegionDomId } from "@/views/chat/streaming/presentation";
-import { createMemoryA2uiTransport } from "@/views/chat/streaming/a2uiAction";
 import ChatSidebarNav from "@/views/chat/components/ChatSidebarNav.vue";
 import ChatAgentPicker from "@/views/chat/components/ChatAgentPicker.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
 import SendProgress from "@/views/chat/components/SendProgress.vue";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
+import FormWidget from "@/views/chat/components/blocks/a2ui/FormWidget.vue";
+import ChoiceWidget from "@/views/chat/components/blocks/a2ui/ChoiceWidget.vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
 import { CANONICAL_AT_ABLE_TOOLS } from "@/constants/agents";
+import type { A2uiOpenSurface } from "@/views/chat/streaming/a2uiContract";
 
 const ACTIONS_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageActions.vue"),
@@ -48,11 +51,180 @@ const GLOBAL_CSS = readFileSync(
   resolve(__dirname, "../../src/assets/main.css"),
   "utf8"
 );
+const A2UI_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/chat/components/blocks/AgentSurfaceBlock.vue"
+  ),
+  "utf8"
+);
+
+const A2UI_LIFECYCLE_KEYS = [
+  "submitting",
+  "submitted",
+  "cancelled",
+  "rejected",
+  "advanced",
+  "temporarilyRejected",
+  "retry",
+  "expired",
+  "unknown",
+  "protocolError",
+  "notSent",
+  "refreshRequired",
+] as const;
 
 const i18n = createI18n({
   legacy: false,
   locale: "en-US",
   messages: { "en-US": enUS },
+});
+
+describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
+  it("keeps lifecycle copy bilingual and free of upstream error details", () => {
+    const english = enUS.chat.a2ui as Record<string, string>;
+    const chinese = zhCN.chat.a2ui as Record<string, string>;
+    for (const key of A2UI_LIFECYCLE_KEYS) {
+      expect(english[key]).toBeTruthy();
+      expect(chinese[key]).toBeTruthy();
+    }
+
+    const block = {
+      ...FIXTURE_A2UI_REQUIRED_BLOCK,
+      a2ui: {
+        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        state: {
+          status: "unknown" as const,
+          round: 1 as const,
+          actionId: "action-unknown",
+          code: "secret-upstream-detail",
+        },
+      },
+    };
+    const wrapper = mount(AgentSurfaceBlock, {
+      props: { block },
+      global: { plugins: [i18n, ElementPlus] },
+    });
+
+    expect(wrapper.find(".a2ui-status").text()).toBe(english.unknown);
+    expect(wrapper.text()).not.toContain("secret-upstream-detail");
+    expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(false);
+  });
+
+  it("announces submitting state and focuses a fresh round two once", async () => {
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
+    const roundTwo = {
+      ...FIXTURE_A2UI_REQUIRED_BLOCK,
+      a2ui: {
+        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        state: { status: "ready" as const, round: 2 as const },
+      },
+    };
+    const wrapper = mount(AgentSurfaceBlock, {
+      props: { block: roundTwo },
+      global: { plugins: [i18n, ElementPlus] },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    await nextTick();
+
+    const root = wrapper.find(".agent-surface-block");
+    const rootFocusCount = () =>
+      focusSpy.mock.instances.filter((instance) => instance === root.element)
+        .length;
+    expect(root.attributes("tabindex")).toBe("-1");
+    expect(root.attributes("aria-busy")).toBeUndefined();
+    expect(document.activeElement).toBe(root.element);
+    expect(rootFocusCount()).toBe(1);
+
+    await wrapper.setProps({
+      block: {
+        ...roundTwo,
+        a2ui: {
+          ...roundTwo.a2ui!,
+          state: {
+            status: "submitting" as const,
+            round: 2 as const,
+            envelope: {
+              surface_id: roundTwo.a2ui!.surface.surface_id,
+              widget: "form",
+              action_id: "round-two-action",
+              run_id: "round-two-run",
+              payload: { fields: { species: "Oryza sativa" } },
+            },
+          },
+        },
+      },
+    });
+    await nextTick();
+    expect(root.attributes("aria-busy")).toBe("true");
+    expect(root.find(".a2ui-status").attributes("role")).toBe("status");
+    expect(root.find(".a2ui-status").attributes("aria-live")).toBe("polite");
+    expect(root.find(".a2ui-status").text()).toBe(enUS.chat.a2ui.submitting);
+    expect(rootFocusCount()).toBe(1);
+
+    wrapper.unmount();
+    focusSpy.mockRestore();
+  });
+
+  it("does not steal focus on the initial round and keeps widget controls named", () => {
+    const roundOne = structuredClone(FIXTURE_A2UI_REQUIRED_BLOCK);
+    const wrapper = mount(AgentSurfaceBlock, {
+      props: { block: roundOne },
+      global: { plugins: [i18n, ElementPlus] },
+    });
+    expect(document.activeElement).not.toBe(
+      wrapper.find(".agent-surface-block").element
+    );
+    expect(A2UI_SOURCE).toContain(":focus-visible");
+    expect(A2UI_SOURCE).toContain("--phy-color-focus");
+    expect(A2UI_SOURCE).toContain("pointer: coarse");
+    expect(A2UI_SOURCE).toContain("--phy-control-height-default");
+    expect(A2UI_SOURCE).not.toContain("@keydown");
+    wrapper.unmount();
+
+    const formSurface: Extract<
+      A2uiOpenSurface,
+      { widget: "form" }
+    >["props"] = {
+      title: "Enter species",
+      fields: [
+        { name: "species", label: "Species", type: "text" as const, required: true },
+      ],
+    };
+    const form = mount(FormWidget, {
+      props: { surface: formSurface, disabled: false },
+      global: { plugins: [i18n, ElementPlus] },
+    });
+    expect(form.find("label[for='a2ui-field-species']").text()).toBe("Species");
+    expect(form.find("input").attributes("aria-label")).toBe("Species");
+    expect(form.find("button[type='submit']").attributes("aria-label")).toBe(
+      enUS.chat.a2ui.submit
+    );
+    expect(
+      form.find('[data-test="a2ui-form-cancel"]').attributes("aria-label")
+    ).toBe(enUS.chat.a2ui.cancel);
+    form.unmount();
+
+    const choice = mount(ChoiceWidget, {
+      props: {
+        surface: {
+          title: "Pick",
+          options: [{ id: "rice", label: "Rice" }],
+          multiple: false,
+        },
+        disabled: false,
+      },
+      global: { plugins: [i18n, ElementPlus] },
+    });
+    expect(
+      choice.find('[data-test="a2ui-choice-submit"]').attributes("aria-label")
+    ).toBe(enUS.chat.a2ui.submit);
+    expect(
+      choice.find('[data-test="a2ui-choice-cancel"]').attributes("aria-label")
+    ).toBe(enUS.chat.a2ui.cancel);
+    choice.unmount();
+  });
 });
 
 const makeOptions = (tools: string[]) =>
@@ -380,13 +552,9 @@ describe("ChatAccessibilityV2 — message actions and downloads", () => {
 
 describe("ChatAccessibilityV2 — A2UI required input", () => {
   it("keeps the required field focusable and rejects empty submit", async () => {
-    const sink: Array<Record<string, unknown>> = [];
-    const transport = createMemoryA2uiTransport(sink as never);
     const wrapper = mount(AgentSurfaceBlock, {
       props: {
         block: FIXTURE_A2UI_REQUIRED_BLOCK,
-        runId: "fixture-run",
-        transport,
       },
       global: { plugins: [i18n, ElementPlus] },
       attachTo: document.body,
@@ -400,26 +568,40 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
     expect(document.activeElement).toBe(input.element);
 
     await wrapper.find("form").trigger("submit.prevent");
-    expect(sink).toHaveLength(0);
+    expect(wrapper.emitted("action")).toBeUndefined();
 
     await input.setValue("Oryza sativa");
     await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-    expect(sink.length).toBeGreaterThanOrEqual(1);
+    expect(wrapper.emitted("action")).toEqual([
+      [{ widget: "form", payload: { fields: { species: "Oryza sativa" } } }],
+    ]);
 
     wrapper.unmount();
   });
 
   it("hides interaction when the surface cannot send", () => {
+    const block = {
+      ...FIXTURE_A2UI_REQUIRED_BLOCK,
+      a2ui: {
+        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        state: {
+          status: "expired" as const,
+          round: 1 as const,
+          code: "a2ui_not_found",
+        },
+      },
+    };
     const wrapper = mount(AgentSurfaceBlock, {
       props: {
-        block: FIXTURE_A2UI_REQUIRED_BLOCK,
-        runId: "",
-        transport: null,
+        block,
       },
       global: { plugins: [i18n, ElementPlus] },
     });
     expect(wrapper.text()).toContain(enUS.chat.a2ui.expired);
+    expect(wrapper.find(".a2ui-status").attributes("role")).toBe("status");
+    expect(wrapper.find(".a2ui-status").attributes("aria-live")).toBe(
+      "polite"
+    );
   });
 });
 

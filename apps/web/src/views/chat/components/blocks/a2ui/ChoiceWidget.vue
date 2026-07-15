@@ -6,12 +6,22 @@
       v-model="selectedMulti"
       :disabled="disabled"
     >
-      <el-checkbox v-for="o in options" :key="o.id" :value="o.id">
+      <el-checkbox
+        v-for="o in options"
+        :key="o.id"
+        :value="o.id"
+        :aria-label="o.label"
+      >
         {{ o.label }}
       </el-checkbox>
     </el-checkbox-group>
     <el-radio-group v-else v-model="selectedOne" :disabled="disabled">
-      <el-radio v-for="o in options" :key="o.id" :value="o.id">
+      <el-radio
+        v-for="o in options"
+        :key="o.id"
+        :value="o.id"
+        :aria-label="o.label"
+      >
         {{ o.label }}
       </el-radio>
     </el-radio-group>
@@ -19,6 +29,7 @@
       data-test="a2ui-choice-submit"
       type="primary"
       :disabled="disabled || !hasSelection"
+      :aria-label="t('chat.a2ui.submit')"
       @click="onSubmit"
     >
       {{ t("chat.a2ui.submit") }}
@@ -27,6 +38,7 @@
       data-test="a2ui-choice-cancel"
       type="default"
       :disabled="disabled"
+      :aria-label="t('chat.a2ui.cancel')"
       @click="onCancel"
     >
       {{ t("chat.a2ui.cancel") }}

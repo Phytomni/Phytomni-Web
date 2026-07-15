@@ -20,6 +20,7 @@ const lifecycleCopy = {
   expired: "This action is no longer active.",
   unknown: "This action has an unknown result.",
   protocolError: "This action could not be displayed.",
+  notSent: "This action was not sent.",
 };
 
 function createLifecycleI18n() {
@@ -90,6 +91,7 @@ const lifecycleCases: Array<{
   {
     name: "ready",
     state: { status: "ready", round: 1, lastError: "not_sent" },
+    copyKey: "notSent",
     retry: false,
   },
   {
