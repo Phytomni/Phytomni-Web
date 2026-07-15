@@ -98,7 +98,11 @@ describe("reduceAGUIEvent", () => {
           catalog_version: "v1.0",
           surface_id: "surf-1",
           widget: "confirm",
-          props: { title: "OK?" },
+          props: {
+            title: "OK?",
+            confirm_label: "Confirm",
+            cancel_label: "Cancel",
+          },
         },
       },
     });
@@ -107,7 +111,11 @@ describe("reduceAGUIEvent", () => {
     expect(b?.interactive).toBe(true);
     expect(b?.surfaceId).toBe("surf-1");
     expect(b?.widget).toBe("confirm");
-    expect(b?.props).toEqual({ title: "OK?" });
+    expect(b?.props).toEqual({
+      title: "OK?",
+      confirm_label: "Confirm",
+      cancel_label: "Cancel",
+    });
   });
 
   it("skips phyto.a2ui with unknown widget without adding a block", () => {
@@ -154,7 +162,11 @@ describe("reduceAGUIEvent", () => {
           catalog_version: "v1.0",
           surface_id: "s",
           widget: "choice",
-          props: { title: "Pick", options: [{ id: "a", label: "A" }] },
+          props: {
+            title: "Pick",
+            options: [{ id: "a", label: "A" }],
+            multiple: false,
+          },
         },
       },
     });

@@ -243,20 +243,20 @@ function decodeOpenProps(
     if (!title.ok) return title;
     const body = readOptionalText(props, "body");
     if (!body.ok) return body;
-    const confirmLabel = readOptionalLabel(props, "confirm_label");
+    const confirmLabel = readLabel(
+      hasOwn(props, "confirm_label") ? props.confirm_label : undefined
+    );
     if (!confirmLabel.ok) return confirmLabel;
-    const cancelLabel = readOptionalLabel(props, "cancel_label");
+    const cancelLabel = readLabel(
+      hasOwn(props, "cancel_label") ? props.cancel_label : undefined
+    );
     if (!cancelLabel.ok) return cancelLabel;
     return ok({
       title: title.value,
       ...(body.value !== undefined ? { body: body.value } : {}),
-      ...(confirmLabel.value !== undefined
-        ? { confirm_label: confirmLabel.value }
-        : {}),
-      ...(cancelLabel.value !== undefined
-        ? { cancel_label: cancelLabel.value }
-        : {}),
-    } as A2uiOpenSurface["props"]);
+      confirm_label: confirmLabel.value,
+      cancel_label: cancelLabel.value,
+    });
   }
 
   const title = readLabel(hasOwn(props, "title") ? props.title : undefined);
@@ -271,8 +271,10 @@ function decodeOpenProps(
     hasOwn(props, "options") ? props.options : undefined
   );
   if (!options.ok) return options;
-  const multiple = hasOwn(props, "multiple") ? props.multiple : false;
-  if (typeof multiple !== "boolean") return fail("props_invalid");
+  if (!hasOwn(props, "multiple") || typeof props.multiple !== "boolean") {
+    return fail("props_invalid");
+  }
+  const multiple = props.multiple;
   return ok({ title: title.value, options: options.value, multiple });
 }
 

@@ -84,6 +84,30 @@ describe("decodeA2uiOpenSurface", () => {
     if (result.ok) expect(result.value.widget).toBe(_widget);
   });
 
+  it.each(["confirm_label", "cancel_label"] as const)(
+    "rejects a Confirm surface missing required %s",
+    (missingLabel) => {
+      const props = { ...confirmProps };
+      delete props[missingLabel];
+      expectReason(
+        decodeA2uiOpenSurface(openSurface("confirm", props)),
+        "props_invalid"
+      );
+    }
+  );
+
+  it("rejects a Choice surface missing required multiple", () => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("choice", {
+          title: "Choice",
+          options: [{ id: "a", label: "Option A" }],
+        })
+      ),
+      "props_invalid"
+    );
+  });
+
   it("accepts an ordinary object and a null-prototype object", () => {
     const value = Object.create(null) as Record<string, unknown>;
     value.catalog_version = "v1.0";
