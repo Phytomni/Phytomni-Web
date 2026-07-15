@@ -11,6 +11,33 @@
       "source_path": "docs/contracts/a2ui/chat_confirm/downlink.json",
       "sha256": "a495fb8c9af8ab0bdedac6f23178863e8a8720d2a8d0b0af3d3861373addae67",
       "file": "upstream/chat_confirm/downlink.json"
+    },
+    {
+      "id": "chat-form-downlink",
+      "class": "upstream-projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_form/downlink.json",
+      "sha256": "9068a2bd6885b8b87631bea819e543ea77fefb154acb7eff8d7291a464b2fd0e",
+      "file": "upstream/chat_form/downlink.json"
+    },
+    {
+      "id": "chat-choice-downlink",
+      "class": "upstream-projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_choice/downlink.json",
+      "sha256": "76b80db916ace2b384771535376ea2fefe45d245c514dfe3194ab4df0b301f16",
+      "file": "upstream/chat_choice/downlink.json"
+    },
+    {
+      "id": "multi-turn-round2-downlink",
+      "class": "upstream-projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/multi_turn/round2_downlink.json",
+      "sha256": "4f9d57799e06deeae324bddadc6b4ac1cbc683abec67d80838d60a34cb739cc4",
+      "file": "upstream/multi_turn/round2_downlink.json"
     }
   ]
 }
