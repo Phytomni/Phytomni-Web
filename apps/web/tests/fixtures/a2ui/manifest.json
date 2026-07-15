@@ -83,6 +83,33 @@
       "source_path": "docs/contracts/a2ui/chat_choice/success_cancel.json",
       "sha256": "e801e85c0782ab47e3545b4fbb1e70b325c52f94cee10f8d82687f65bb6f090b",
       "file": "upstream/chat_choice/success_cancel.json"
+    },
+    {
+      "id": "web-http-terminal-succeeded",
+      "class": "web-http-synthetic",
+      "partial": false,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_confirm/success_accept.json",
+      "sha256": "5a37c3fd0ab6d825e5d2f151eaa4f3ef32698b018d6ff2c3aacb8f11de0e97d7",
+      "file": "http/terminal_succeeded.json"
+    },
+    {
+      "id": "web-http-input-required-round2",
+      "class": "web-http-synthetic",
+      "partial": false,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/multi_turn/round2_downlink.json",
+      "sha256": "6cfb9b8e5311185177d4046855b06a0ffcc718735f1cc728f30feb796e305b76",
+      "file": "http/input_required_round2.json"
+    },
+    {
+      "id": "web-http-conflict-not-open",
+      "class": "web-http-synthetic",
+      "partial": false,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_confirm/errors/not_input_required_409.json",
+      "sha256": "5103ecff1dd4d6b67e12495e6187a1cb2328ddc2ec3e91a4eca36ffd07b2354d",
+      "file": "http/conflict_not_open.json"
     }
   ]
 }

@@ -1,0 +1,25 @@
+{
+  "id": "run-contract-1",
+  "run_id": "run-contract-1",
+  "object": "agent.run",
+  "agent": "review",
+  "status": "input_required",
+  "task_ids": [],
+  "interrupt": {
+    "draft": {
+      "a2ui": {
+        "catalog_version": "v1.0",
+        "surface_id": "sfc-contract-2",
+        "widget": "choice",
+        "props": {
+          "title": "Choice",
+          "options": [
+            {"id": "a", "label": "Option A"},
+            {"id": "b", "label": "Option B"}
+          ],
+          "multiple": false
+        }
+      }
+    }
+  }
+}

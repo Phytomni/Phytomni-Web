@@ -93,6 +93,23 @@ const expectedTerminalProjections = [
     file: "upstream/chat_choice/success_cancel.json",
   },
 ] as const;
+const expectedWebHttpFixtures = [
+  {
+    id: "web-http-terminal-succeeded",
+    source_path: "docs/contracts/a2ui/chat_confirm/success_accept.json",
+    file: "http/terminal_succeeded.json",
+  },
+  {
+    id: "web-http-input-required-round2",
+    source_path: "docs/contracts/a2ui/multi_turn/round2_downlink.json",
+    file: "http/input_required_round2.json",
+  },
+  {
+    id: "web-http-conflict-not-open",
+    source_path: "docs/contracts/a2ui/chat_confirm/errors/not_input_required_409.json",
+    file: "http/conflict_not_open.json",
+  },
+] as const;
 const sourceCommit = "27448d121139699d99f24820afed3948658fe89f";
 
 describe("A2UI contract fixtures", () => {
@@ -197,6 +214,67 @@ describe("A2UI contract fixtures", () => {
       for (const envelopeField of ["id", "run_id", "object", "task_ids"]) {
         expect(body).not.toHaveProperty(envelopeField);
       }
+    }
+  );
+
+  it.each(expectedWebHttpFixtures)(
+    "registers $id as a complete Web-owned HTTP envelope",
+    (expected) => {
+      const manifest = JSON.parse(
+        readFileSync(manifestPath, "utf8")
+      ) as FixtureManifest;
+      const entries = manifest.fixtures.filter(
+        (entry) => entry.id === expected.id
+      );
+      expect(entries).toHaveLength(1);
+
+      const entry = entries[0];
+      expect(entry).toMatchObject({
+        id: expected.id,
+        class: "web-http-synthetic",
+        partial: false,
+        source_commit: sourceCommit,
+        source_path: expected.source_path,
+        file: expected.file,
+      });
+      expect(entry.source_path).not.toMatch(/golden/i);
+      expect(entry.file).not.toMatch(/^upstream\//);
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
+
+      const fixturePath = resolve(
+        process.cwd(),
+        "tests/fixtures/a2ui",
+        entry.file
+      );
+      const fixtureSha256 = createHash("sha256")
+        .update(readFileSync(fixturePath))
+        .digest("hex");
+      expect(fixtureSha256).toBe(entry.sha256);
+
+      const body = JSON.parse(readFileSync(fixturePath, "utf8")) as Record<
+        string,
+        unknown
+      >;
+      if (expected.id === "web-http-conflict-not-open") {
+        expect(body).toMatchObject({
+          error: {
+            type: "conflict",
+            code: 409,
+            message: "Run is not waiting for input.",
+            request_id: expect.any(String),
+          },
+        });
+        return;
+      }
+
+      expect(body).toMatchObject({
+        id: expect.any(String),
+        run_id: expect.any(String),
+        object: "agent.run",
+        agent: expect.any(String),
+        status: expect.any(String),
+        task_ids: expect.any(Array),
+      });
     }
   );
 });
