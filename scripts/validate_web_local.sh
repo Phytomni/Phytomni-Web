@@ -17,8 +17,8 @@
 #   G12  apps/web vitest run + coverage threshold
 #   G13  i18n hardcoded-copy scanner (CJK / ElMessage / gin.H ratchet against
 #        scripts/i18n_allowlist.md)
-#   G14  frontend visual design contract (brand colors, agent-influenced glass,
-#        and global wildcard CSS side effects)
+#   G14  frontend visual design contract (brand colors, glass bubbles, legacy
+#        markers, unsafe focus/motion/layout rules, and global CSS side effects)
 #
 # Exit 0 means safe to commit. Any failure aborts via `set -e`.
 
