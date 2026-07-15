@@ -6,12 +6,14 @@ import type {
   A2uiActionResponse,
   A2uiActionIntent,
   A2uiOpenSurface,
+  A2uiSurfaceState,
   A2uiTerminalSurface,
 } from "@/views/chat/streaming/a2uiContract";
 import { A2UI_LIMITS } from "@/views/chat/streaming/a2uiContract";
 import {
   beginA2uiAction,
   beginA2uiRetry,
+  lockUnverifiedHistoryA2ui,
   markA2uiNotSent,
   reduceA2uiFailure,
   reduceA2uiInputRequired,
@@ -20,7 +22,7 @@ import {
 import { decodeA2uiActionResponse } from "@/views/chat/streaming/a2uiParse";
 import { A2uiTransportError } from "@/views/chat/streaming/a2uiAction";
 import * as a2uiAction from "@/views/chat/streaming/a2uiAction";
-import type { ContentBlock } from "@/views/chat/types";
+import type { ChatMessage, ContentBlock } from "@/views/chat/types";
 
 const surface: A2uiOpenSurface = {
   catalog_version: "v1.0",
@@ -1007,5 +1009,128 @@ describe("A2UI transport failure and retry reducers", () => {
       reason: "retry_not_allowed",
       blocks: ready,
     });
+  });
+});
+
+describe("lockUnverifiedHistoryA2ui", () => {
+  const historyMessage = (
+    state: A2uiSurfaceState,
+    runtime = true,
+  ): ChatMessage => ({
+    role: "assistant",
+    content: "history",
+    ...(runtime
+      ? {
+          a2uiRuntime: {
+            dialogueId: "dialogue-history",
+            messageId: "message-history",
+            runId: "run-history",
+            transport: vi.fn(),
+          },
+        }
+      : {}),
+    blocks: [
+      {
+        type: "agent-surface",
+        authority: "agent",
+        interactive: true,
+        a2ui: { surface, state },
+      },
+    ],
+  });
+
+  it.each([
+    ["ready", { status: "ready", round: 1 }],
+    [
+      "submitting",
+      {
+        status: "submitting",
+        round: 2,
+        envelope: {
+          surface_id: surface.surface_id,
+          widget: surface.widget,
+          action_id: "history-action",
+          run_id: "history-run",
+          payload: { accepted: true },
+        },
+      },
+    ],
+    [
+      "temporarily_rejected",
+      {
+        status: "temporarily_rejected",
+        round: 1,
+        envelope: {
+          surface_id: surface.surface_id,
+          widget: surface.widget,
+          action_id: "retry-action",
+          run_id: "history-run",
+          payload: { accepted: true },
+        },
+        code: "gateway_disabled",
+      },
+    ],
+  ] as const)("expires unverified %s state and strips runtime", (_label, state) => {
+    const message = historyMessage(state);
+    const messages = [message];
+
+    const next = lockUnverifiedHistoryA2ui(messages);
+
+    expect(next).not.toBe(messages);
+    expect(next[0]).not.toBe(message);
+    expect(next[0]).not.toHaveProperty("a2uiRuntime");
+    expect(next[0].blocks).not.toBe(message.blocks);
+    expect(next[0].blocks?.[0]).not.toBe(message.blocks?.[0]);
+    expect(next[0].blocks?.[0].a2ui?.state).toEqual({
+      status: "expired",
+      round: state.round,
+      ...(state.status === "submitting" || state.status === "temporarily_rejected"
+        ? { actionId: state.envelope.action_id }
+        : {}),
+      code: "reload_unverified",
+    });
+    expect(message.blocks?.[0].a2ui?.state).toEqual(state);
+  });
+
+  it.each([
+    "resolved",
+    "expired",
+    "protocol_error",
+    "rejected",
+    "unknown",
+  ] as const)("keeps closed %s state closed", (status) => {
+    const state =
+      status === "resolved"
+        ? {
+            status,
+            round: 1 as const,
+            actionId: "action",
+            resolution: "submitted" as const,
+          }
+        : status === "expired"
+        ? { status, round: 1 as const, actionId: "action", code: "old" }
+        : status === "protocol_error"
+        ? { status, round: 1 as const, actionId: "action", code: "old" }
+        : { status, round: 1 as const, actionId: "action", code: "old" };
+    const message = historyMessage(state, false);
+    const messages = [message];
+
+    const next = lockUnverifiedHistoryA2ui(messages);
+
+    expect(next).toBe(messages);
+    expect(next[0]).toBe(message);
+    expect(next[0].blocks).toBe(message.blocks);
+    expect(next[0].blocks?.[0]).toBe(message.blocks?.[0]);
+    expect(next[0].blocks?.[0].a2ui?.state).toEqual(state);
+  });
+
+  it("returns the original array and objects when no lock or stale runtime is present", () => {
+    const plain: ChatMessage = { role: "assistant", content: "plain" };
+    const messages = [plain];
+
+    const next = lockUnverifiedHistoryA2ui(messages);
+
+    expect(next).toBe(messages);
+    expect(next[0]).toBe(plain);
   });
 });

@@ -1,4 +1,4 @@
-import type { ContentBlock } from "../types";
+import type { ChatMessage, ContentBlock } from "../types";
 import { A2UI_LIMITS } from "./a2uiContract";
 import { decodeA2uiOpenSurface } from "./a2uiParse";
 import type {
@@ -30,6 +30,76 @@ export type RetryA2uiResult =
       blocks: ContentBlock[];
       reason: "retry_not_allowed" | "surface_missing";
     };
+
+/**
+ * Close interactive A2UI surfaces restored from persisted history.
+ *
+ * A history row can contain the last open surface snapshot, but it cannot
+ * prove that the Bot still owns the corresponding action/run after reload.
+ * Keep terminal states as-is, and only clone the message/block objects whose
+ * open state must be changed. Runtime transports are never reconstructed from
+ * persisted data; any stale serialized runtime field is removed instead.
+ */
+export function lockUnverifiedHistoryA2ui(
+  messages: ChatMessage[],
+): ChatMessage[] {
+  let changed = false;
+  const nextMessages = messages.map((message) => {
+    const blocks = message.blocks;
+    let nextBlocks = blocks;
+    let blocksChanged = false;
+
+    if (Array.isArray(blocks)) {
+      for (let index = 0; index < blocks.length; index += 1) {
+        const block = blocks[index];
+        const runtime = block.a2ui;
+        if (!runtime || !isOpenA2uiSurfaceState(runtime.state.status)) {
+          continue;
+        }
+
+        const state = runtime.state;
+        const actionId =
+          state.status === "submitting" ||
+          state.status === "temporarily_rejected"
+            ? state.envelope.action_id
+            : undefined;
+        const closedState: A2uiSurfaceRuntime["state"] = {
+          status: "expired",
+          round: state.round,
+          ...(actionId ? { actionId } : {}),
+          code: "reload_unverified",
+        };
+
+        if (!blocksChanged) {
+          nextBlocks = blocks.slice();
+          blocksChanged = true;
+        }
+        if (!nextBlocks) continue;
+        nextBlocks[index] = {
+          ...block,
+          a2ui: {
+            surface: runtime.surface,
+            state: closedState,
+          },
+        };
+      }
+    }
+
+    const hasSerializedRuntime = Object.prototype.hasOwnProperty.call(
+      message,
+      "a2uiRuntime",
+    );
+    if (!blocksChanged && !hasSerializedRuntime) return message;
+
+    changed = true;
+    const nextMessage: ChatMessage = { ...message };
+    if (blocksChanged && nextBlocks) nextMessage.blocks = nextBlocks;
+    if (hasSerializedRuntime) delete nextMessage.a2uiRuntime;
+    return nextMessage;
+  });
+
+  return changed ? nextMessages : messages;
+}
 
 export function beginA2uiAction(
   blocks: ContentBlock[],

@@ -5,6 +5,7 @@ import { parseMessageWithFiles } from "../utils/message-parse";
 import { isValidJSON, convertToTableData } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 import { getAnswerCheck } from "@/api/chat";
+import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
 
 export function useSelectChat(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
@@ -32,6 +33,16 @@ export function useSelectChat(opts: {
     const chat = chatList.value.find(
       (c: Chat) => c.dialogue_id === capturedDialogueId
     );
+
+    // A live rendered owner already contains message-scoped stream/runtime
+    // state. Re-selecting it must not rehydrate stale history over that tree.
+    if (chatState.renderedChat) {
+      if (chatState.renderedChat.messages.length > 0) {
+        await scrollToBottom();
+      }
+      updateUrlWithChatId(capturedDialogueId);
+      return;
+    }
 
     // call getAnswerCheck to get the conversation records
     const res = await getAnswerCheck({ dialogue_id: capturedDialogueId });
@@ -335,7 +346,7 @@ export function useSelectChat(opts: {
       // Populate only this dialogue's rendered owner — never the live current ref
       chatState.renderedChat = {
         ...chat,
-        messages: messages,
+        messages: lockUnverifiedHistoryA2ui(messages),
       };
 
       // Foreground shell effects only while this dialogue is still selected

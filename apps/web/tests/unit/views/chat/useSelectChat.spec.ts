@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref } from "vue";
 import { useSelectChat } from "@/views/chat/composables/useSelectChat";
-import type { ChatUIState } from "@/views/chat/types";
+import type { ChatMessage, ChatUIState } from "@/views/chat/types";
 
 // Mock getAnswerCheck API (the only API selectChat calls)
 vi.mock("@/api/chat", () => ({
@@ -165,6 +165,35 @@ describe("useSelectChat", () => {
     expect(reactions["old-msg"]).toBeUndefined();
     // The new entry is hydrated
     expect(reactions["msg-1"]).toBe(1);
+  });
+
+  it("reselects a live rendered owner without overwriting its message runtime from history", async () => {
+    const transport = vi.fn();
+    const runtime = {
+      dialogueId: "d1",
+      messageId: "live-message",
+      runId: "live-run",
+      transport,
+    };
+    const liveMessage: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      a2uiRuntime: runtime,
+      blocks: [],
+    };
+    const state = getChatState("d1");
+    state.renderedChat = { dialogue_id: "d1", messages: [liveMessage] };
+    const renderedOwner = state.renderedChat;
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    expect(mockGetAnswerCheck).not.toHaveBeenCalled();
+    expect(state.renderedChat).toBe(renderedOwner);
+    expect(state.renderedChat?.messages[0].a2uiRuntime).toBe(runtime);
+    expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
+    expect(scrollToBottom).toHaveBeenCalledTimes(1);
   });
 
   it("non-200 response: does not rebuild messages or reset historyQuestion, but still updates URL when still active", async () => {
