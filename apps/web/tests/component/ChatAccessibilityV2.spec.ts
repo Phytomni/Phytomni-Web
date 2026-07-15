@@ -27,9 +27,15 @@ import SendProgress from "@/views/chat/components/SendProgress.vue";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
 import FormWidget from "@/views/chat/components/blocks/a2ui/FormWidget.vue";
 import ChoiceWidget from "@/views/chat/components/blocks/a2ui/ChoiceWidget.vue";
+import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
 import { CANONICAL_AT_ABLE_TOOLS } from "@/constants/agents";
 import type { A2uiOpenSurface } from "@/views/chat/streaming/a2uiContract";
+import {
+  A2UI_LIFECYCLE_LONG_BODY,
+  A2UI_LIFECYCLE_LONG_LABEL,
+  buildA2uiLifecycleMessages,
+} from "../visual/chat/fixture-data";
 
 const ACTIONS_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageActions.vue"),
@@ -224,6 +230,49 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
       choice.find('[data-test="a2ui-choice-cancel"]').attributes("aria-label")
     ).toBe(enUS.chat.a2ui.cancel);
     choice.unmount();
+  });
+
+  it("renders the bounded lifecycle fixture in both supported locales", () => {
+    const blocks = buildA2uiLifecycleMessages()[0].blocks ?? [];
+    expect(A2UI_LIFECYCLE_LONG_BODY).toHaveLength(4096);
+    expect(A2UI_LIFECYCLE_LONG_LABEL).toHaveLength(256);
+
+    for (const locale of ["en-US", "zh-CN"] as const) {
+      const localeI18n = createI18n({
+        legacy: false,
+        locale,
+        fallbackLocale: "en-US",
+        messages: { "en-US": enUS, "zh-CN": zhCN },
+      });
+      const wrapper = mount(StreamMessage, {
+        props: { blocks: structuredClone(blocks) },
+        global: { plugins: [localeI18n, ElementPlus] },
+      });
+
+      expect(wrapper.findAll(".agent-surface-block")).toHaveLength(7);
+      expect(
+        wrapper.findAll('[role="status"][aria-live="polite"]')
+      ).toHaveLength(5);
+      expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(true);
+      expect(wrapper.find(".a2ui-body").text()).toHaveLength(
+        A2UI_LIFECYCLE_LONG_BODY.length
+      );
+      expect(wrapper.find(".a2ui-form label").text()).toHaveLength(
+        A2UI_LIFECYCLE_LONG_LABEL.length
+      );
+
+      const statusText = wrapper
+        .findAll(".a2ui-status")
+        .map((node) => node.text())
+        .join(" ");
+      if (locale === "zh-CN") {
+        expect(statusText).toContain("操作");
+      } else {
+        expect(statusText).toContain("action");
+      }
+      expect(statusText).not.toContain("fixture_gateway_disabled");
+      wrapper.unmount();
+    }
   });
 });
 

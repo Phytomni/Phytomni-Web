@@ -5,6 +5,8 @@ import { runInNewContext } from "node:vm";
 import { mount, flushPromises } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
+import { createI18n } from "vue-i18n";
+import ElementPlus from "element-plus";
 import {
   CHAT_VISUAL_FIXTURE_KEYS,
   CHAT_VISUAL_LOCALES,
@@ -19,6 +21,7 @@ import {
   buildHarnessMessages,
   getSharedMessageFixture,
   getSharedPhase3COverlay,
+  buildA2uiLifecycleMessages,
 } from "../../../visual/chat/fixture-data";
 import {
   PHASE_3B_MESSAGE_KEYS,
@@ -28,6 +31,8 @@ import {
   isPhase3CFixtureKey,
   getPhase3COverlay,
 } from "../../../fixtures/chat";
+import enUS from "@/locales/langs/en-US";
+import zhCN from "@/locales/langs/zh-CN";
 
 const WEB_ROOT = resolve(__dirname, "../../../..");
 const SRC_ROOT = resolve(WEB_ROOT, "src");
@@ -35,6 +40,10 @@ const VISUAL_CHAT = resolve(WEB_ROOT, "tests/visual/chat");
 const MAIN_SOURCE = readFileSync(resolve(VISUAL_CHAT, "main.ts"), "utf8");
 const APP_SOURCE = readFileSync(
   resolve(VISUAL_CHAT, "ChatVisualFixtureApp.vue"),
+  "utf8"
+);
+const CONTENT_SOURCE = readFileSync(
+  resolve(SRC_ROOT, "views/chat/components/ChatMessageContent.vue"),
   "utf8"
 );
 const MEASURE_SOURCE = readFileSync(
@@ -72,6 +81,7 @@ type GeometryHarnessOptions = {
   width?: number;
   height?: number;
   documentScrollWidth?: number;
+  transcriptClientWidth?: number;
   transcriptScrollWidth?: number;
   transcriptRect?: Rect;
   composerRect?: Rect;
@@ -112,7 +122,8 @@ async function runGeometryHarness(
     {
       scrollHeight: 1200,
       clientHeight: 672,
-      clientWidth: Math.max(1, width - 280),
+      clientWidth:
+        options.transcriptClientWidth ?? Math.max(1, width - 280),
       scrollWidth: options.transcriptScrollWidth ?? Math.max(1, width - 280),
     }
   );
@@ -290,6 +301,7 @@ describe("Chat visual fixture registry", () => {
       "progress-completing",
       "transfer-real",
       "a2ui-required",
+      "a2ui-lifecycle",
       "send-stop",
       "parallel-a",
       "parallel-b",
@@ -376,6 +388,16 @@ describe("Chat visual fixture registry", () => {
         expect(overlay.transfer).toBeTruthy();
       }
     }
+  });
+
+  it("registers the sanitized A2UI lifecycle content fixture", () => {
+    expect(CHAT_VISUAL_FIXTURE_KEYS).toContain("a2ui-lifecycle");
+    const fixture = getChatVisualFixture("a2ui-lifecycle");
+    expect(fixture.messageCount).toBe(1);
+
+    const messages = buildA2uiLifecycleMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0].blocks).toHaveLength(7);
   });
 });
 
@@ -629,71 +651,94 @@ describe("Chat visual fixture geometry negative controls", () => {
   });
 });
 
+type VisualMountOptions = {
+  renderA2ui?: boolean;
+  locale?: "en-US" | "zh-CN";
+};
+
 const mountFixtureApp = (
   fixture: ReturnType<typeof getChatVisualFixture> | null,
-  errorMessage: string | null = null
-) =>
-  mount(ChatVisualFixtureApp, {
+  errorMessage: string | null = null,
+  options: VisualMountOptions = {}
+) => {
+  const stubs = {
+    ChatModeSelector: true,
+    ChatAgentPicker: true,
+    LangSwitch: true,
+    ThemeSwitch: true,
+    ElUpload: true,
+    ElDropdown: {
+      name: "ElDropdown",
+      template:
+        '<div class="dropdown-stub"><slot /><slot name="dropdown" /></div>',
+    },
+    ElDropdownMenu: {
+      template: '<div class="dropdown-menu-stub"><slot /></div>',
+    },
+    ElDropdownItem: {
+      template: "<button><slot /></button>",
+    },
+    ElTooltip: true,
+    ElAvatar: true,
+    ElIcon: true,
+    ElButton: {
+      name: "ElButton",
+      template: "<button><slot /></button>",
+    },
+    ElTable: true,
+    ElTableColumn: true,
+    // Heavy agent renderers — assert production mounts exist via stubs.
+    StreamMessage: {
+      name: "StreamMessage",
+      props: ["blocks", "ns"],
+      template:
+        '<div data-testid="stream-message" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+    },
+    DeepGenomeResultViewer: {
+      name: "DeepGenomeResultViewer",
+      props: ["ns"],
+      template:
+        '<div data-testid="deep-genome" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+    },
+    CitedAnswer: {
+      name: "CitedAnswer",
+      props: ["ns"],
+      template:
+        '<div data-testid="cited-answer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+    },
+    MarkdownViewer: {
+      name: "MarkdownViewer",
+      props: ["ns", "content"],
+      template:
+        '<div data-testid="markdown-viewer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+    },
+    teleport: true,
+  } as Record<string, unknown>;
+  if (options.renderA2ui) delete stubs.StreamMessage;
+
+  const plugins = options.renderA2ui
+    ? [
+        createI18n({
+          legacy: false,
+          locale: options.locale ?? "en-US",
+          fallbackLocale: "en-US",
+          messages: { "en-US": enUS, "zh-CN": zhCN },
+        }),
+        ElementPlus,
+      ]
+    : [];
+
+  return mount(ChatVisualFixtureApp, {
     props: { fixture, errorMessage },
     global: {
+      plugins,
       mocks: {
         $t: (key: string) => key,
       },
-      stubs: {
-        ChatModeSelector: true,
-        ChatAgentPicker: true,
-        LangSwitch: true,
-        ThemeSwitch: true,
-        ElUpload: true,
-        ElDropdown: {
-          name: "ElDropdown",
-          template:
-            '<div class="dropdown-stub"><slot /><slot name="dropdown" /></div>',
-        },
-        ElDropdownMenu: {
-          template: '<div class="dropdown-menu-stub"><slot /></div>',
-        },
-        ElDropdownItem: {
-          template: "<button><slot /></button>",
-        },
-        ElTooltip: true,
-        ElAvatar: true,
-        ElIcon: true,
-        ElButton: {
-          name: "ElButton",
-          template: "<button><slot /></button>",
-        },
-        ElTable: true,
-        ElTableColumn: true,
-        // Heavy agent renderers — assert production mounts exist via stubs.
-        StreamMessage: {
-          name: "StreamMessage",
-          props: ["blocks", "ns"],
-          template:
-            '<div data-testid="stream-message" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
-        },
-        DeepGenomeResultViewer: {
-          name: "DeepGenomeResultViewer",
-          props: ["ns"],
-          template:
-            '<div data-testid="deep-genome" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
-        },
-        CitedAnswer: {
-          name: "CitedAnswer",
-          props: ["ns"],
-          template:
-            '<div data-testid="cited-answer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
-        },
-        MarkdownViewer: {
-          name: "MarkdownViewer",
-          props: ["ns", "content"],
-          template:
-            '<div data-testid="markdown-viewer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
-        },
-        teleport: true,
-      },
+      stubs,
     },
   });
+};
 
 describe("Chat visual fixture rendering (no network)", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
@@ -861,5 +906,83 @@ describe("Chat visual fixture rendering (no network)", () => {
       expect(fetchSpy).not.toHaveBeenCalled();
       wrapper.unmount();
     }
+  });
+
+  it("renders the sanitized A2UI lifecycle through production content blocks", async () => {
+    const fixture = getChatVisualFixture("a2ui-lifecycle");
+    const wrapper = mountFixtureApp(fixture, null, { renderA2ui: true });
+    await flushPromises();
+    await nextTick();
+
+    expect(
+      wrapper.findComponent({ name: "ChatMessageContent" }).exists()
+    ).toBe(true);
+    expect(wrapper.findComponent({ name: "StreamMessage" }).exists()).toBe(
+      true
+    );
+    expect(wrapper.findAll(".agent-surface-block")).toHaveLength(7);
+    expect(wrapper.findAll(".a2ui-status")).toHaveLength(5);
+    expect(wrapper.find(".a2ui-body").text()).toHaveLength(4096);
+    expect(wrapper.find(".a2ui-form label").text()).toHaveLength(256);
+    expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(true);
+    expect(
+      wrapper.find('.agent-surface-block[data-widget="form"]').attributes(
+        "aria-busy"
+      )
+    ).toBe("true");
+    expect(wrapper.findAll(".a2ui-actions")).toHaveLength(3);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("renders the lifecycle fixture in both locales without network", async () => {
+    for (const locale of ["en-US", "zh-CN"] as const) {
+      const wrapper = mountFixtureApp(
+        getChatVisualFixture("a2ui-lifecycle"),
+        null,
+        { renderA2ui: true, locale }
+      );
+      await flushPromises();
+      await nextTick();
+
+      expect(wrapper.findAll(".agent-surface-block")).toHaveLength(7);
+      expect(wrapper.findAll('[role="status"][aria-live="polite"]')).toHaveLength(
+        5
+      );
+      expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(true);
+      wrapper.unmount();
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
+  });
+
+  it("keeps lifecycle geometry bounded for desktop and 375px viewports", async () => {
+    const desktop = await runGeometryHarness({
+      width: 1440,
+      documentScrollWidth: 1440,
+      transcriptScrollWidth: 1160,
+    });
+    expect(desktop.pass).toBe(true);
+
+    const mobile = await runGeometryHarness({
+      width: 375,
+      height: 900,
+      documentScrollWidth: 375,
+      transcriptClientWidth: 375,
+      transcriptScrollWidth: 375,
+      drawerState: "closed",
+      includeTrigger: true,
+      transcriptRect: rect(0, 48, 375, 720),
+      composerRect: rect(8, 740, 367, 880),
+      lastMessageRect: rect(16, 620, 359, 700),
+    });
+    expect(mobile.pass).toBe(true);
+    expect((mobile.reasons ?? []).some((reason) => /overflow/.test(reason))).toBe(
+      false
+    );
+    expect(CONTENT_SOURCE).toContain("overflow-x: auto");
+    expect(CONTENT_SOURCE).toContain("word-break: break-word");
+    expect(CONTENT_SOURCE).toContain("max-width: 100%");
   });
 });

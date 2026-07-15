@@ -1,7 +1,11 @@
 /** Deterministic synthetic data for the Chat visual fixture harness. */
 
 import type { ChatVisualFixtureDefinition } from "./fixture-registry";
-import type { UploadFile, ChatMessage } from "@/views/chat/types";
+import type { ContentBlock, UploadFile, ChatMessage } from "@/views/chat/types";
+import type {
+  A2uiOpenSurface,
+  A2uiSurfaceState,
+} from "@/views/chat/streaming/a2uiContract";
 import type { ChatAgentPickerOption } from "@/views/chat/components/ChatAgentPicker.vue";
 import {
   CANONICAL_AT_ABLE_TOOLS,
@@ -77,6 +81,9 @@ export function buildHarnessMessages(
     // Progress / transfer / send-stop: frame rows + overlay widgets.
     return buildSyntheticMessages(fixture);
   }
+  if (isA2uiLifecycleFixtureKey(fixture.key)) {
+    return buildA2uiLifecycleMessages();
+  }
   return buildSyntheticMessages(fixture);
 }
 
@@ -121,6 +128,170 @@ export function buildSyntheticPickerOptions(): ChatAgentPickerOption[] {
 
 export const SYNTHETIC_ROLES_TOOL: string[] = [...CANONICAL_AT_ABLE_TOOLS];
 
+export const A2UI_LIFECYCLE_LONG_LABEL = "L".repeat(256);
+export const A2UI_LIFECYCLE_LONG_BODY = "B".repeat(4096);
+
+const A2UI_LIFECYCLE_KEY = "a2ui-lifecycle" as const;
+
+function buildA2uiSurfaceBlock(
+  surface: A2uiOpenSurface,
+  state: A2uiSurfaceState
+): ContentBlock {
+  return {
+    type: "agent-surface",
+    authority: "agent",
+    interactive: true,
+    a2ui: { surface, state },
+  };
+}
+
+export function buildA2uiLifecycleMessages(): ChatMessage[] {
+  const confirmSurface: A2uiOpenSurface = {
+    catalog_version: "v1.0",
+    surface_id: "fixture-a2ui-confirm-ready",
+    widget: "confirm",
+    props: {
+      title: "Continue with this fixture?",
+      body: A2UI_LIFECYCLE_LONG_BODY,
+      confirm_label: "Continue",
+      cancel_label: "Dismiss",
+    },
+  };
+  const formSurface: A2uiOpenSurface = {
+    catalog_version: "v1.0",
+    surface_id: "fixture-a2ui-form-submitting",
+    widget: "form",
+    props: {
+      title: "Structured input",
+      fields: [
+        {
+          name: "fixture_value",
+          label: A2UI_LIFECYCLE_LONG_LABEL,
+          type: "text",
+          required: true,
+        },
+      ],
+    },
+  };
+  const choiceSurface: A2uiOpenSurface = {
+    catalog_version: "v1.0",
+    surface_id: "fixture-a2ui-choice-resolved",
+    widget: "choice",
+    props: {
+      title: "Select a fixture option",
+      options: [
+        { id: "option-a", label: "Option A" },
+        { id: "option-b", label: "Option B" },
+      ],
+      multiple: false,
+    },
+  };
+  const retrySurface: A2uiOpenSurface = {
+    catalog_version: "v1.0",
+    surface_id: "fixture-a2ui-retry",
+    widget: "confirm",
+    props: {
+      title: "Retryable fixture action",
+      confirm_label: "Continue",
+      cancel_label: "Dismiss",
+    },
+  };
+  const unknownSurface: A2uiOpenSurface = {
+    catalog_version: "v1.0",
+    surface_id: "fixture-a2ui-unknown",
+    widget: "confirm",
+    props: {
+      title: "Unknown fixture outcome",
+      confirm_label: "Continue",
+      cancel_label: "Dismiss",
+    },
+  };
+  const roundOneSurface: A2uiOpenSurface = {
+    catalog_version: "v1.0",
+    surface_id: "fixture-a2ui-round-one",
+    widget: "choice",
+    props: {
+      title: "First fixture round",
+      options: [{ id: "next", label: "Continue" }],
+      multiple: false,
+    },
+  };
+  const roundTwoSurface: A2uiOpenSurface = {
+    catalog_version: "v1.0",
+    surface_id: "fixture-a2ui-round-two",
+    widget: "choice",
+    props: {
+      title: "Second fixture round",
+      options: [{ id: "finish", label: "Finish" }],
+      multiple: false,
+    },
+  };
+  const submittingEnvelope = {
+    surface_id: formSurface.surface_id,
+    widget: formSurface.widget,
+    action_id: "fixture-a2ui-form-action",
+    run_id: "fixture-a2ui-runtime",
+    payload: { fields: { fixture_value: "synthetic" } },
+  } as const;
+  const retryEnvelope = {
+    surface_id: retrySurface.surface_id,
+    widget: retrySurface.widget,
+    action_id: "fixture-a2ui-retry-action",
+    run_id: "fixture-a2ui-runtime",
+    payload: { accepted: true },
+  } as const;
+
+  const blocks: ContentBlock[] = [
+    buildA2uiSurfaceBlock(confirmSurface, { status: "ready", round: 1 }),
+    buildA2uiSurfaceBlock(formSurface, {
+      status: "submitting",
+      round: 1,
+      envelope: submittingEnvelope,
+    }),
+    buildA2uiSurfaceBlock(choiceSurface, {
+      status: "resolved",
+      round: 1,
+      actionId: "fixture-a2ui-choice-action",
+      resolution: "submitted",
+    }),
+    buildA2uiSurfaceBlock(retrySurface, {
+      status: "temporarily_rejected",
+      round: 1,
+      envelope: retryEnvelope,
+      code: "fixture_gateway_disabled",
+    }),
+    buildA2uiSurfaceBlock(unknownSurface, {
+      status: "unknown",
+      round: 1,
+      actionId: "fixture-a2ui-unknown-action",
+      code: "fixture_unknown_outcome",
+    }),
+    buildA2uiSurfaceBlock(roundOneSurface, {
+      status: "resolved",
+      round: 1,
+      actionId: "fixture-a2ui-round-one-action",
+      resolution: "advanced",
+    }),
+    buildA2uiSurfaceBlock(roundTwoSurface, { status: "ready", round: 2 }),
+  ];
+
+  return [
+    {
+      id: "fixture-msg-a2ui-lifecycle",
+      role: "assistant",
+      content: "",
+      streaming: false,
+      blocks,
+    },
+  ];
+}
+
+export function isA2uiLifecycleFixtureKey(
+  key: string
+): key is typeof A2UI_LIFECYCLE_KEY {
+  return key === A2UI_LIFECYCLE_KEY;
+}
+
 /** GeneNetwork image map for the `image` fixture — data URL, no network. */
 export function buildFixtureGeneNetworkImages(): Record<string, string[]> {
   const id = MESSAGE_IMAGE.id ?? "fixture-msg-image";
@@ -161,6 +332,7 @@ export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   "progress-completing": "Synthetic progress draft",
   "transfer-real": "Synthetic transfer draft",
   "a2ui-required": "",
+  "a2ui-lifecycle": "",
   "send-stop": "Synthetic stop draft",
   "parallel-a": "Synthetic dialogue A draft",
   "parallel-b": "Synthetic dialogue B draft",

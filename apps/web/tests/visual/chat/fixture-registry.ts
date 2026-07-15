@@ -34,6 +34,7 @@ export const CHAT_VISUAL_FIXTURE_KEYS = [
   "progress-completing",
   "transfer-real",
   "a2ui-required",
+  "a2ui-lifecycle",
   "send-stop",
   "parallel-a",
   "parallel-b",
@@ -503,6 +504,20 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
     pickerSearchQuery: "",
     messageCount: 2,
   },
+  "a2ui-lifecycle": {
+    key: "a2ui-lifecycle",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 1,
+  },
   "send-stop": {
     key: "send-stop",
     chatState: "populated",
@@ -571,6 +586,12 @@ export function isChatVisualFixtureKey(
     typeof value === "string" &&
     (CHAT_VISUAL_FIXTURE_KEYS as readonly string[]).includes(value)
   );
+}
+
+export function isA2uiLifecycleFixtureKey(
+  value: string | null | undefined
+): value is "a2ui-lifecycle" {
+  return value === "a2ui-lifecycle";
 }
 
 export function isChatVisualLocale(

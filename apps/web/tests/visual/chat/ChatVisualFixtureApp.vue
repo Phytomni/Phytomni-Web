@@ -139,7 +139,7 @@
                   </template>
 
                   <!-- Phase 3C content + overlay widgets (Activity / log / A2UI / parallel) -->
-                  <template v-else-if="isPhase3CContentFixture">
+                  <template v-else-if="isStructuredContentFixture">
                     <ChatMessageRow
                       v-for="(message, index) in contentMessages"
                       :key="message.id || index"
@@ -326,6 +326,7 @@ import {
   COMPOSER_MODEL_VALUE_BY_KEY,
   type SyntheticMessage,
 } from "./fixture-data";
+import { isA2uiLifecycleFixtureKey } from "./fixture-registry";
 
 const EMPTY_IMAGES = {} as Record<string, string[]>;
 const EMPTY_LOADING = {} as Record<string, boolean>;
@@ -411,9 +412,21 @@ const isPhase3CContentFixture = computed(() => {
   );
 });
 
+const isA2uiLifecycleContentFixture = computed(
+  () => !!props.fixture && isA2uiLifecycleFixtureKey(props.fixture.key)
+);
+
+const isStructuredContentFixture = computed(
+  () =>
+    isPhase3CContentFixture.value || isA2uiLifecycleContentFixture.value
+);
+
 const contentMessages = computed((): ChatMessage[] => {
   if (!props.fixture) return [];
-  if (isPhase3BMessageKey(props.fixture.key) || isPhase3CContentFixture.value) {
+  if (
+    isPhase3BMessageKey(props.fixture.key) ||
+    isStructuredContentFixture.value
+  ) {
     return buildHarnessMessages(props.fixture) as ChatMessage[];
   }
   return [];
