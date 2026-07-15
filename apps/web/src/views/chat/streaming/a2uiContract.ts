@@ -14,6 +14,14 @@ export type A2uiWidgetKind = "confirm" | "form" | "choice";
 export type A2uiRound = 1 | 2;
 export type A2uiScalar = string | number;
 
+export interface A2uiActionEnvelope {
+  surface_id: string;
+  widget: string;
+  action_id: string;
+  run_id: string;
+  payload: Record<string, unknown>;
+}
+
 export interface A2uiFormField {
   name: string;
   label: string;
@@ -133,3 +141,51 @@ export type A2uiActionIntent =
       widget: "choice";
       payload: { selected: string | string[] } | { cancelled: true };
     };
+
+export type A2uiResolution = "submitted" | "cancelled" | "rejected" | "advanced";
+
+export type A2uiSurfaceState =
+  | { status: "ready"; round: A2uiRound; lastError?: "not_sent" }
+  | { status: "submitting"; round: A2uiRound; envelope: A2uiActionEnvelope }
+  | {
+      status: "resolved";
+      round: A2uiRound;
+      actionId: string;
+      resolution: A2uiResolution;
+      snapshot?: A2uiTerminalSurface;
+    }
+  | {
+      status: "rejected";
+      round: A2uiRound;
+      actionId: string;
+      code: string;
+    }
+  | {
+      status: "temporarily_rejected";
+      round: A2uiRound;
+      envelope: A2uiActionEnvelope;
+      code: string;
+    }
+  | {
+      status: "expired";
+      round: A2uiRound;
+      actionId?: string;
+      code: string;
+    }
+  | {
+      status: "unknown";
+      round: A2uiRound;
+      actionId: string;
+      code: string;
+    }
+  | {
+      status: "protocol_error";
+      round: A2uiRound;
+      actionId?: string;
+      code: string;
+    };
+
+export interface A2uiSurfaceRuntime {
+  surface: A2uiOpenSurface;
+  state: A2uiSurfaceState;
+}

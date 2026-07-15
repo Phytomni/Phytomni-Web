@@ -2,16 +2,14 @@
 // Server action-frame format is still open; this module owns a stable
 // envelope + swappable transport so UI work is not blocked.
 
-import { A2UI_LIMITS, type A2uiActionResponse } from "./a2uiContract";
+import {
+  A2UI_LIMITS,
+  type A2uiActionEnvelope,
+  type A2uiActionResponse,
+} from "./a2uiContract";
 import { decodeA2uiActionResponse } from "./a2uiParse";
 
-export interface A2uiActionEnvelope {
-  surface_id: string;
-  widget: string;
-  action_id: string;
-  run_id: string;
-  payload: Record<string, unknown>;
-}
+export type { A2uiActionEnvelope } from "./a2uiContract";
 
 export type A2uiActionTransport = (
   envelope: A2uiActionEnvelope,

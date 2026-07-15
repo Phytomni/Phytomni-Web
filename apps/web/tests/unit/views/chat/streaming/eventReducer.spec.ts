@@ -109,6 +109,19 @@ describe("reduceAGUIEvent", () => {
     const b = s.blocks.find((x) => x.type === "agent-surface");
     expect(b?.authority).toBe("agent");
     expect(b?.interactive).toBe(true);
+    expect(b?.a2ui).toEqual({
+      surface: {
+        catalog_version: "v1.0",
+        surface_id: "surf-1",
+        widget: "confirm",
+        props: {
+          title: "OK?",
+          confirm_label: "Confirm",
+          cancel_label: "Cancel",
+        },
+      },
+      state: { status: "ready", round: 1 },
+    });
     expect(b?.surfaceId).toBe("surf-1");
     expect(b?.widget).toBe("confirm");
     expect(b?.props).toEqual({
@@ -116,6 +129,50 @@ describe("reduceAGUIEvent", () => {
       confirm_label: "Confirm",
       cancel_label: "Cancel",
     });
+  });
+
+  it("keeps the decoded A2UI surface typed beside temporary aliases", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "form-1",
+          widget: "form",
+          props: {
+            title: "Details",
+            fields: [
+              {
+                name: "gene",
+                label: "Gene",
+                type: "text",
+                required: true,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const block = s.blocks.find((x) => x.type === "agent-surface");
+    expect(block?.a2ui?.surface.widget).toBe("form");
+    expect(block?.a2ui?.surface.props).toEqual({
+      title: "Details",
+      fields: [
+        {
+          name: "gene",
+          label: "Gene",
+          type: "text",
+          required: true,
+        },
+      ],
+    });
+    expect(block?.a2ui?.state).toEqual({ status: "ready", round: 1 });
+    expect(block?.surfaceId).toBe(block?.a2ui?.surface.surface_id);
+    expect(block?.widget).toBe(block?.a2ui?.surface.widget);
+    expect(block?.props).toBe(block?.a2ui?.surface.props);
   });
 
   it("skips phyto.a2ui with unknown widget without adding a block", () => {

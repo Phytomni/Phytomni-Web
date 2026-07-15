@@ -71,13 +71,19 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
       } else if (ev.data.name === "phyto.a2ui") {
         const parsed = parseA2uiCustomValue(ev.data.value);
         if (parsed.ok) {
+          const surface = parsed.value;
           blocks.push({
             type: "agent-surface",
             authority: "agent",
             interactive: true,
-            surfaceId: parsed.value.surface_id,
-            widget: parsed.value.widget,
-            props: parsed.value.props,
+            a2ui: {
+              surface,
+              state: { status: "ready", round: 1 },
+            },
+            // Temporary aliases retained until the later renderer migration.
+            surfaceId: surface.surface_id,
+            widget: surface.widget,
+            props: surface.props,
           });
         } else {
           // Skip bad frames; keep the stream alive. Prefer warn over throw.
