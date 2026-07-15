@@ -2,10 +2,12 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -13,7 +15,7 @@ import (
 	rxBot "phytomni-server/external/bot"
 )
 
-const validA2uiActionBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"approved":true}}`
+const validA2uiActionBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"accepted":true}}`
 
 func TestA2uiAction_EnvelopeStrictDecode(t *testing.T) {
 	validID := strings.Repeat("界", a2uiIdentifierMaxChars)
@@ -88,7 +90,7 @@ func TestA2uiAction_OwnershipMiss404(t *testing.T) {
 		{
 			name:     "wrong run",
 			username: "alice@x.com",
-			body:     `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-2","payload":{}}`,
+			body:     `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-2","payload":{"accepted":true}}`,
 		},
 	}
 
@@ -129,7 +131,7 @@ func TestA2uiAction_RunMismatchDoesNotCallBot(t *testing.T) {
 
 	outcome, err := (&Service{}).A2uiAction(
 		context.Background(), "alice@x.com", "dlg-1",
-		[]byte(`{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-mismatch","payload":{}}`),
+		[]byte(`{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-mismatch","payload":{"accepted":true}}`),
 	)
 
 	if outcome != nil {
@@ -268,4 +270,121 @@ func TestA2uiAction_BadEnvelope(t *testing.T) {
 	if !errors.Is(err, ErrA2uiActionBadRequest) {
 		t.Fatalf("error = %v, want ErrA2uiActionBadRequest", err)
 	}
+}
+
+func a2uiActionBody(widget, payload string) []byte {
+	return []byte(`{"surface_id":"surface-1","widget":"` + widget + `","action_id":"submit","run_id":"run-1","payload":` + payload + `}`)
+}
+
+func TestValidateA2uiPayload_Matrix(t *testing.T) {
+	valid := []struct {
+		name    string
+		widget  string
+		payload string
+	}{
+		{name: "confirm true", widget: "confirm", payload: `{"accepted":true}`},
+		{name: "confirm false", widget: "confirm", payload: `{"accepted":false}`},
+		{name: "empty form", widget: "form", payload: `{"fields":{}}`},
+		{name: "form cancellation", widget: "form", payload: `{"cancelled":true}`},
+		{name: "form values", widget: "form", payload: `{"fields":{"name":"","count":1.25}}`},
+		{name: "form field and value upper bounds", widget: "form", payload: `{"fields":{"` + strings.Repeat("界", a2uiIdentifierMaxChars) + `":"` + strings.Repeat("v", a2uiFormValueMaxChars) + `"}}`},
+		{name: "form twenty fields", widget: "form", payload: `{"fields":{` + strings.Join(makeA2uiFields(a2uiFormFieldMaxCount), ",") + `}}`},
+		{name: "choice single", widget: "choice", payload: `{"selected":"option-a"}`},
+		{name: "choice upper bounds", widget: "choice", payload: `{"selected":"` + strings.Repeat("界", a2uiIdentifierMaxChars) + `"}`},
+		{name: "choice multiple", widget: "choice", payload: `{"selected":["option-a","option-b"]}`},
+		{name: "choice one hundred", widget: "choice", payload: `{"selected":[` + strings.Join(makeA2uiStrings(a2uiChoiceMaxCount), ",") + `]}`},
+		{name: "choice cancellation", widget: "choice", payload: `{"cancelled":true}`},
+	}
+	for _, tt := range valid {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateA2uiPayload(tt.widget, json.RawMessage(tt.payload)); err != nil {
+				t.Fatalf("validateA2uiPayload: %v", err)
+			}
+		})
+	}
+
+	invalid := []struct {
+		name    string
+		widget  string
+		payload string
+		secret  string
+	}{
+		{name: "confirm missing accepted", widget: "confirm", payload: `{}`},
+		{name: "confirm unknown key", widget: "confirm", payload: `{"accepted":true,"extra":"secret-confirm"}`, secret: "secret-confirm"},
+		{name: "confirm duplicate accepted", widget: "confirm", payload: `{"accepted":true,"accepted":false}`},
+		{name: "confirm non boolean", widget: "confirm", payload: `{"accepted":1}`},
+		{name: "form unknown key", widget: "form", payload: `{"fields":{},"extra":"secret-form"}`, secret: "secret-form"},
+		{name: "form cancelled false", widget: "form", payload: `{"cancelled":false}`},
+		{name: "form cancelled with fields", widget: "form", payload: `{"cancelled":true,"fields":{}}`},
+		{name: "form duplicate field", widget: "form", payload: `{"fields":{"name":"first","name":"second"}}`, secret: "second"},
+		{name: "form nested value", widget: "form", payload: `{"fields":{"nested":{"secret":"nested"}}}`, secret: "nested"},
+		{name: "form array value", widget: "form", payload: `{"fields":{"items":[1]}}`},
+		{name: "form boolean value", widget: "form", payload: `{"fields":{"enabled":true}}`},
+		{name: "form null value", widget: "form", payload: `{"fields":{"empty":null}}`},
+		{name: "form unsafe field", widget: "form", payload: `{"fields":{"__proto__":"secret"}}`, secret: "secret"},
+		{name: "form prototype field", widget: "form", payload: `{"fields":{"prototype":"secret"}}`, secret: "secret"},
+		{name: "form constructor field", widget: "form", payload: `{"fields":{"constructor":"secret"}}`, secret: "secret"},
+		{name: "form empty field name", widget: "form", payload: `{"fields":{"":"value"}}`},
+		{name: "form overlong field name", widget: "form", payload: `{"fields":{"` + strings.Repeat("界", a2uiIdentifierMaxChars+1) + `":"value"}}`},
+		{name: "form overlong value", widget: "form", payload: `{"fields":{"name":"` + strings.Repeat("v", 4097) + `"}}`},
+		{name: "form too many fields", widget: "form", payload: `{"fields":{` + strings.Join(makeA2uiFields(21), ",") + `}}`},
+		{name: "choice missing selected", widget: "choice", payload: `{}`},
+		{name: "choice unknown key", widget: "choice", payload: `{"selected":"one","extra":"secret-choice"}`, secret: "secret-choice"},
+		{name: "choice selected empty", widget: "choice", payload: `{"selected":""}`},
+		{name: "choice selected overlong", widget: "choice", payload: `{"selected":"` + strings.Repeat("界", a2uiIdentifierMaxChars+1) + `"}`},
+		{name: "choice selected empty array", widget: "choice", payload: `{"selected":[]}`},
+		{name: "choice selected duplicate", widget: "choice", payload: `{"selected":["one","one"]}`},
+		{name: "choice selected mixed types", widget: "choice", payload: `{"selected":["one",2]}`},
+		{name: "choice selected too many", widget: "choice", payload: `{"selected":[` + strings.Join(makeA2uiStrings(101), ",") + `]}`},
+		{name: "choice cancelled false", widget: "choice", payload: `{"cancelled":false}`},
+		{name: "choice cancelled with selected", widget: "choice", payload: `{"cancelled":true,"selected":"one"}`},
+	}
+
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			setupA2uiActionTest(t)
+			var hits atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hits.Add(1)
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{
+				ProxyEnabled: true, A2uiActionsEnabled: true, BaseURL: srv.URL,
+				UserAPIKey: "test-user-key", TimeoutSeconds: 5,
+			}
+
+			outcome, err := (&Service{}).A2uiAction(
+				context.Background(), "alice@x.com", "dlg-1", a2uiActionBody(tt.widget, tt.payload),
+			)
+			if outcome != nil {
+				t.Fatalf("outcome = %#v, want nil", outcome)
+			}
+			if !errors.Is(err, ErrA2uiActionBadRequest) {
+				t.Fatalf("error = %v, want ErrA2uiActionBadRequest", err)
+			}
+			if tt.secret != "" && strings.Contains(err.Error(), tt.secret) {
+				t.Fatalf("error leaked submitted value %q: %v", tt.secret, err)
+			}
+			if got := hits.Load(); got != 0 {
+				t.Fatalf("Bot hits = %d, want 0", got)
+			}
+		})
+	}
+}
+
+func makeA2uiFields(count int) []string {
+	fields := make([]string, count)
+	for i := range fields {
+		fields[i] = `"field-` + strconv.Itoa(i) + `":"value"`
+	}
+	return fields
+}
+
+func makeA2uiStrings(count int) []string {
+	values := make([]string, count)
+	for i := range values {
+		values[i] = `"option-` + strconv.Itoa(i) + `"`
+	}
+	return values
 }

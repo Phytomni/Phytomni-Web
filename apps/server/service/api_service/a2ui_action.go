@@ -36,6 +36,9 @@ func (ps *Service) A2uiAction(
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid envelope", ErrA2uiActionBadRequest)
 	}
+	if err := validateA2uiPayload(env.Widget, env.Payload); err != nil {
+		return nil, err
+	}
 
 	var count int64
 	err = model.DB(ctx).Model(&model.QuestionAgentLog{}).
