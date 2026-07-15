@@ -59,7 +59,8 @@ const event = {
 
 const terminal = (
   envelope: A2uiActionEnvelope,
-  accepted = true
+  accepted = true,
+  answer?: string
 ): A2uiActionResponse => ({
   status: "succeeded",
   run_id: envelope.run_id,
@@ -70,6 +71,7 @@ const terminal = (
       widget: "confirm",
       props: { status: "submitted", accepted },
     },
+    ...(answer === undefined ? {} : { formatted: { answer } }),
   },
 });
 
@@ -94,6 +96,14 @@ const messageWith = (
   },
   ...overrides,
 });
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+};
 
 describe("useA2uiInteraction", () => {
   it("reads run and transport from the owning message and enters submitting before await", async () => {
@@ -288,5 +298,174 @@ describe("useA2uiInteraction", () => {
     expect(inputMessage.blocks?.at(-1)?.a2ui?.surface.surface_id).toBe(
       round2Surface.surface_id
     );
+  });
+
+  it("applies a deferred terminal response once and appends its formatted answer once", async () => {
+    const reply = deferred<A2uiActionResponse>();
+    const transport = vi.fn(() => reply.promise);
+    const message = messageWith(transport);
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-deferred",
+    });
+
+    const pending = submitAction(message, event);
+    const submitting = message.blocks?.[1].a2ui?.state;
+    if (!submitting || submitting.status !== "submitting") {
+      throw new Error("expected a submitting A2UI surface");
+    }
+
+    reply.resolve(terminal(submitting.envelope, true, "answer once"));
+    await pending;
+    // Observing an already-settled coordinator promise again must not append
+    // another answer block or re-apply the terminal response.
+    await pending;
+
+    expect(message.blocks?.[1].a2ui?.state).toMatchObject({
+      status: "resolved",
+      actionId: "action-deferred",
+    });
+    expect(
+      message.blocks?.filter(
+        (block) => block.sourceActionId === "action-deferred"
+      )
+    ).toEqual([
+      expect.objectContaining({
+        type: "markdown",
+        text: "answer once",
+      }),
+    ]);
+  });
+
+  it.each([
+    [
+      "runtime replacement",
+      (message: ChatMessage) => {
+        const runtime = message.a2uiRuntime;
+        if (!runtime) throw new Error("expected an A2UI runtime");
+        message.a2uiRuntime = { ...runtime };
+      },
+    ],
+    [
+      "runtime clearing",
+      (message: ChatMessage) => {
+        message.a2uiRuntime = undefined;
+      },
+    ],
+    [
+      "run replacement",
+      (message: ChatMessage) => {
+        const runtime = message.a2uiRuntime;
+        if (!runtime) throw new Error("expected an A2UI runtime");
+        runtime.runId = "run-2";
+      },
+    ],
+  ] as const)(
+    "locks a stale %s response as unknown without an answer or retry",
+    async (_label, invalidateRuntime) => {
+      const reply = deferred<A2uiActionResponse>();
+      const transport = vi.fn(() => reply.promise);
+      const message = messageWith(transport);
+      const { submitAction, retryAction } = useA2uiInteraction({
+        buildActionId: () => "action-stale",
+      });
+
+      const pending = submitAction(message, event);
+      const submitting = message.blocks?.[1].a2ui?.state;
+      if (!submitting || submitting.status !== "submitting") {
+        throw new Error("expected a submitting A2UI surface");
+      }
+
+      invalidateRuntime(message);
+      reply.resolve(terminal(submitting.envelope, true, "stale answer"));
+      await pending;
+      await retryAction(message, confirmSurface.surface_id);
+
+      expect(message.blocks?.[1].a2ui?.state).toEqual({
+        status: "unknown",
+        round: 1,
+        actionId: "action-stale",
+        code: "runtime_changed",
+      });
+      expect(
+        message.blocks?.some((block) => block.sourceActionId === "action-stale")
+      ).toBe(false);
+      expect(transport).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("locks a stale transport rejection instead of exposing a retry", async () => {
+    let rejectTransport!: (error: unknown) => void;
+    const transport = vi.fn(
+      () =>
+        new Promise<A2uiActionResponse>((_resolve, reject) => {
+          rejectTransport = reject;
+        })
+    );
+    const message = messageWith(transport);
+    const { submitAction, retryAction } = useA2uiInteraction({
+      buildActionId: () => "action-stale-rejection",
+    });
+
+    const pending = submitAction(message, event);
+    const runtime = message.a2uiRuntime;
+    if (!runtime) throw new Error("expected an A2UI runtime");
+    message.a2uiRuntime = { ...runtime };
+    rejectTransport(
+      new A2uiTransportError(
+        "temporarily_rejected",
+        "a2ui_gateway_disabled",
+        503,
+        false,
+        true
+      )
+    );
+    await pending;
+    await retryAction(message, confirmSurface.surface_id);
+
+    expect(message.blocks?.[1].a2ui?.state).toEqual({
+      status: "unknown",
+      round: 1,
+      actionId: "action-stale-rejection",
+      code: "runtime_changed",
+    });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows a dialogue rekey when the message and runtime objects stay identical", async () => {
+    const reply = deferred<A2uiActionResponse>();
+    const transport = vi.fn(() => reply.promise);
+    const message = messageWith(transport);
+    const runtime = message.a2uiRuntime;
+    const byDialogue: Record<string, ChatMessage[]> = {
+      temporary: [message],
+    };
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-rekey",
+    });
+
+    const pending = submitAction(byDialogue.temporary[0], event);
+    byDialogue.server = byDialogue.temporary;
+    delete byDialogue.temporary;
+
+    expect(byDialogue.server[0]).toBe(message);
+    expect(byDialogue.server[0].a2uiRuntime).toBe(runtime);
+    const submitting = message.blocks?.[1].a2ui?.state;
+    if (!submitting || submitting.status !== "submitting") {
+      throw new Error("expected a submitting A2UI surface");
+    }
+    reply.resolve(terminal(submitting.envelope, true, "rekeyed answer"));
+    await pending;
+
+    expect(message.blocks?.[1].a2ui?.state).toMatchObject({
+      status: "resolved",
+      actionId: "action-rekey",
+    });
+    expect(
+      message.blocks?.some(
+        (block) =>
+          block.sourceActionId === "action-rekey" &&
+          block.text === "rekeyed answer"
+      )
+    ).toBe(true);
   });
 });

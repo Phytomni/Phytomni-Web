@@ -55,9 +55,13 @@ function ownsSubmittingAction(
 
 async function dispatchTransport(
   message: ChatMessage,
+  capturedRuntime: NonNullable<ChatMessage["a2uiRuntime"]>,
   transport: A2uiActionTransport,
   envelope: A2uiActionEnvelope
 ): Promise<void> {
+  const runtimeChanged = (): boolean =>
+    message.a2uiRuntime !== capturedRuntime ||
+    capturedRuntime.runId !== envelope.run_id;
   let response: A2uiActionResponse;
   try {
     response = await transport(envelope);
@@ -65,7 +69,30 @@ async function dispatchTransport(
     message.blocks = reduceA2uiFailure(
       message.blocks ?? [],
       envelope,
-      normalizeUnexpectedError(error)
+      runtimeChanged()
+        ? new A2uiTransportError(
+            "unknown",
+            "runtime_changed",
+            undefined,
+            true,
+            false
+          )
+        : normalizeUnexpectedError(error)
+    );
+    return;
+  }
+
+  if (runtimeChanged()) {
+    message.blocks = reduceA2uiFailure(
+      message.blocks ?? [],
+      envelope,
+      new A2uiTransportError(
+        "unknown",
+        "runtime_changed",
+        undefined,
+        true,
+        false
+      )
     );
     return;
   }
@@ -127,7 +154,7 @@ export function useA2uiInteraction(options: A2uiInteractionOptions = {}): {
     message.blocks = begun.blocks;
     if (!begun.ok) return;
 
-    await dispatchTransport(message, transport, begun.envelope);
+    await dispatchTransport(message, runtime, transport, begun.envelope);
   };
 
   const retryAction = async (
@@ -145,7 +172,7 @@ export function useA2uiInteraction(options: A2uiInteractionOptions = {}): {
     message.blocks = begun.blocks;
     if (!begun.ok) return;
 
-    await dispatchTransport(message, transport, begun.envelope);
+    await dispatchTransport(message, runtime, transport, begun.envelope);
   };
 
   return { submitAction, retryAction };
