@@ -39,6 +39,15 @@ a:focus-visible {
     text-decoration: underline;
   }
 
+  .el-input__wrapper {
+    border: 1px solid ButtonText;
+  }
+
+  .el-input__wrapper:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
   button,
   [role="button"],
   input,

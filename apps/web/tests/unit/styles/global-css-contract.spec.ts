@@ -82,4 +82,13 @@ describe("global CSS contract", () => {
     expect(GLOBAL_CSS).not.toMatch(/transition:\s*all\b/);
     expect(GLOBAL_CSS).not.toMatch(/outline:\s*(?:none|0|unset)\b/);
   });
+
+  it("keeps Element Plus inputs visible in forced-colors mode", () => {
+    expect(CSS["main.css"]).toMatch(
+      /\.el-input__wrapper\s*\{\s*border:\s*1px solid ButtonText;\s*\}/
+    );
+    expect(CSS["main.css"]).toMatch(
+      /\.el-input__wrapper:focus-within\s*\{[\s\S]*outline:\s*2px solid Highlight;[\s\S]*outline-offset:\s*2px;/
+    );
+  });
 });
