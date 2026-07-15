@@ -23,13 +23,13 @@
       :blocks="message.blocks || []"
       :references="message.doc_list"
       :ns="message.doc_list?.length ? 'm' + index : undefined"
-      :run-id="message.a2uiRuntime?.runId"
-      :transport="message.a2uiRuntime?.transport ?? null"
       :message-id="message.id"
       :stream-presentation-key="message.streamPresentationKey"
       :activity-expanded-by-message="activityExpandedByMessage"
       :streaming="!!message.streaming"
       @update:activity-expanded="onActivityExpanded"
+      @a2ui-action="(event) => emit('a2ui-action', event)"
+      @a2ui-retry="(surfaceId) => emit('a2ui-retry', surfaceId)"
     />
     <!-- GeneNetworkAgent image display -->
     <div
@@ -183,6 +183,7 @@ import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
 import StreamMessage from "./StreamMessage.vue";
 import type { ChatMessage } from "../types";
+import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
 
 defineProps<{
   message: ChatMessage;
@@ -205,6 +206,8 @@ const emit = defineEmits<{
   finish: [];
   "open-artifact": [];
   "update:activity-expanded": [stateKey: string, expanded: boolean];
+  "a2ui-action": [event: A2uiSurfaceActionEvent];
+  "a2ui-retry": [surfaceId: string];
 }>();
 
 const onActivityExpanded = (stateKey: string, expanded: boolean) => {

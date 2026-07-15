@@ -4,10 +4,6 @@ import { nextTick } from "vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
-import {
-  createMemoryA2uiTransport,
-  type A2uiActionEnvelope,
-} from "@/views/chat/streaming/a2uiAction";
 
 describe("StreamMessage", () => {
   it("renders a markdown block's text through v-html", () => {
@@ -36,9 +32,7 @@ describe("StreamMessage", () => {
     expect(w.html()).not.toContain("mol3d");
   });
 
-  it("provides runId and transport so agent-surface confirm can send", async () => {
-    const sink: A2uiActionEnvelope[] = [];
-    const transport = createMemoryA2uiTransport(sink);
+  it("emits a message-scoped surface action without injecting transport", async () => {
     const blocks: ContentBlock[] = [
       {
         type: "agent-surface",
@@ -56,17 +50,23 @@ describe("StreamMessage", () => {
       },
     ];
     const w = mount(StreamMessage, {
-      props: { blocks, runId: "run-inject", transport },
+      props: { blocks },
     });
-    const buttons = w.findAll("button");
-    await buttons[buttons.length - 1].trigger("click");
+    await w.find(".a2ui-confirm button[type='button']:last-child").trigger("click");
     await nextTick();
-    expect(sink).toHaveLength(1);
-    expect(sink[0].surface_id).toBe("surf-inject");
-    expect(sink[0].run_id).toBe("run-inject");
-    expect(sink[0].widget).toBe("confirm");
-    expect(sink[0].payload).toEqual({ accepted: true });
-    expect(w.text()).toContain("chat.a2ui.locked");
+    expect(w.emitted("a2ui-action")).toEqual([
+      [
+        {
+          surfaceId: "surf-inject",
+          intent: { widget: "confirm", payload: { accepted: true } },
+        },
+      ],
+    ]);
+    expect(w.emitted("a2ui-retry")).toBeUndefined();
+    await w.findComponent({ name: "AgentSurfaceBlock" }).vm.$emit("retry");
+    expect(w.emitted("a2ui-retry")).toEqual([["surf-inject"]]);
+    expect(w.vm.$.provides).not.toHaveProperty("a2uiRunId");
+    expect(w.vm.$.provides).not.toHaveProperty("a2uiTransport");
   });
 
   it("leaves [N] literal when ns is absent (reference-free streaming)", () => {
@@ -174,9 +174,7 @@ describe("StreamMessage", () => {
     expect(none.find(".doc-list").exists()).toBe(false);
   });
 
-  it("preserves A2UI transport while references appear after blocks", async () => {
-    const sink: A2uiActionEnvelope[] = [];
-    const transport = createMemoryA2uiTransport(sink);
+  it("preserves A2UI surface events while references appear after blocks", async () => {
     const blocks: ContentBlock[] = [
       {
         type: "agent-surface",
@@ -197,8 +195,6 @@ describe("StreamMessage", () => {
     const w = mount(StreamMessage, {
       props: {
         blocks,
-        runId: "run-refs",
-        transport,
         ns: "",
         references: undefined,
       },
@@ -216,9 +212,14 @@ describe("StreamMessage", () => {
     const buttons = w.findAll("button");
     await buttons[buttons.length - 1].trigger("click");
     await nextTick();
-    expect(sink).toHaveLength(1);
-    expect(sink[0].run_id).toBe("run-refs");
-    expect(sink[0].surface_id).toBe("surf-refs");
+    expect(w.emitted("a2ui-action")).toEqual([
+      [
+        {
+          surfaceId: "surf-refs",
+          intent: { widget: "confirm", payload: { accepted: true } },
+        },
+      ],
+    ]);
   });
 
   it("groups consecutive activity blocks and keeps markdown/A2UI outside ChatActivity", () => {
@@ -281,9 +282,7 @@ describe("StreamMessage", () => {
     expect(w.find(".reasoning-body").exists()).toBe(true);
   });
 
-  it("keeps A2UI transport/runId intact beside a collapsed Activity group", async () => {
-    const sink: A2uiActionEnvelope[] = [];
-    const transport = createMemoryA2uiTransport(sink);
+  it("keeps A2UI surface events beside a collapsed Activity group", async () => {
     const blocks: ContentBlock[] = [
       { type: "tool", authority: "web", toolName: "knowledge_search" },
       {
@@ -306,8 +305,6 @@ describe("StreamMessage", () => {
         blocks,
         streamPresentationKey: "req-a2ui",
         activityExpandedByMessage: {},
-        runId: "run-beside",
-        transport,
       },
       global: { mocks: { $t: (k: string) => k } },
     });
@@ -317,9 +314,14 @@ describe("StreamMessage", () => {
     // Last button is the A2UI confirm (Activity toggle is first).
     await buttons[buttons.length - 1].trigger("click");
     await nextTick();
-    expect(sink).toHaveLength(1);
-    expect(sink[0].run_id).toBe("run-beside");
-    expect(sink[0].surface_id).toBe("surf-beside");
+    expect(w.emitted("a2ui-action")).toEqual([
+      [
+        {
+          surfaceId: "surf-beside",
+          intent: { widget: "confirm", payload: { accepted: true } },
+        },
+      ],
+    ]);
   });
 
   it("emits activity expand toggles keyed by stream:<messageKey>:activity-<startIndex>", async () => {

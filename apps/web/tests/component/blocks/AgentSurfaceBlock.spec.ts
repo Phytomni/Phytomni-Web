@@ -29,6 +29,8 @@ describe("AgentSurfaceBlock", () => {
     expect(w.emitted("action")).toEqual([
       [{ widget: "confirm", payload: { accepted: true } }],
     ]);
+    expect(w.emitted("action")?.[0]?.[0]).not.toHaveProperty("surfaceId");
+    expect(w.emitted("retry")).toBeUndefined();
   });
 
   it("forwards typed Choice intents from the decoded surface only", async () => {

@@ -12,6 +12,7 @@ vi.mock("vue-element-plus-x", () => ({
 
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import type { ChatMessage, ContentBlock } from "@/views/chat/types";
+import type { A2uiSurfaceActionEvent } from "@/views/chat/composables/useA2uiInteraction";
 import {
   MESSAGE_SHORT_GENERIC,
   MESSAGE_LONG_GENERIC,
@@ -153,9 +154,10 @@ const mountContent = (
       stubs: {
         StreamMessage: {
           name: "StreamMessage",
-          props: ["blocks", "runId", "transport", "ns", "references"],
+          props: ["blocks", "ns", "references"],
+          emits: ["a2ui-action", "a2ui-retry"],
           template:
-            '<div data-testid="stream-message" :data-ns="ns === undefined || ns === \'\' ? \'__absent__\' : ns" :data-run-id="runId" :data-has-transport="transport ? \'1\' : \'0\'" :data-ref-count="Array.isArray(references) && references.length ? String(references.length) : \'0\'" />',
+            '<div data-testid="stream-message" :data-ns="ns === undefined || ns === \'\' ? \'__absent__\' : ns" :data-ref-count="Array.isArray(references) && references.length ? String(references.length) : \'0\'" />',
         },
         DeepGenomeResultViewer: {
           name: "DeepGenomeResultViewer",
@@ -457,7 +459,7 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
 });
 
 describe("ChatMessageContent namespace and message-owned stream context", () => {
-  it("forwards the message's own runId/transport with no namespace", () => {
+  it("does not forward runtime transport props to StreamMessage", () => {
     const transport = async () => undefined;
     const wrapper = mountContent(
       {
@@ -475,14 +477,15 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
       },
       { index: 4 }
     );
-    const stream = wrapper.find('[data-testid="stream-message"]');
+    const stream = wrapper.findComponent({ name: "StreamMessage" });
     expect(stream.exists()).toBe(true);
     expect(stream.attributes("data-ns")).toBe("__absent__");
-    expect(stream.attributes("data-run-id")).toBe("run-42");
-    expect(stream.attributes("data-has-transport")).toBe("1");
+    expect(stream.props("runId")).toBeUndefined();
+    expect(stream.props("transport")).toBeUndefined();
+    expect(transport).toBeTypeOf("function");
   });
 
-  it("does not leak another message's A2UI context into a context-free row", () => {
+  it("keeps a context-free row free of transport props", () => {
     const wrapper = mountContent({
       role: "assistant",
       content: "",
@@ -490,9 +493,28 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
       blocks: [block()],
       tool_name: "ChatAgent",
     });
-    const stream = wrapper.find('[data-testid="stream-message"]');
-    expect(stream.attributes("data-run-id")).toBeUndefined();
-    expect(stream.attributes("data-has-transport")).toBe("0");
+    const stream = wrapper.findComponent({ name: "StreamMessage" });
+    expect(stream.props("runId")).toBeUndefined();
+    expect(stream.props("transport")).toBeUndefined();
+  });
+
+  it("preserves typed A2UI action and retry events from StreamMessage", async () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [block()],
+      tool_name: "ChatAgent",
+    });
+    const stream = wrapper.findComponent({ name: "StreamMessage" });
+    const event: A2uiSurfaceActionEvent = {
+      surfaceId: "surface-1",
+      intent: { widget: "confirm", payload: { accepted: true } },
+    };
+    await stream.vm.$emit("a2ui-action", event);
+    await stream.vm.$emit("a2ui-retry", "surface-1");
+    expect(wrapper.emitted("a2ui-action")).toEqual([[event]]);
+    expect(wrapper.emitted("a2ui-retry")).toEqual([["surface-1"]]);
   });
 
   it("reference-free streaming fixtures invent no namespace", () => {

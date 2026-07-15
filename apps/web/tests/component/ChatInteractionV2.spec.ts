@@ -6,14 +6,16 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mount, flushPromises } from "@vue/test-utils";
-import { nextTick, ref } from "vue";
+import { defineComponent, h, nextTick, reactive, ref } from "vue";
 import { createI18n } from "vue-i18n";
 import { createPinia, setActivePinia } from "pinia";
 import ElementPlus from "element-plus";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
-import type { ChatUIState, UploadFile } from "@/views/chat/types";
+import { useA2uiInteraction } from "@/views/chat/composables/useA2uiInteraction";
+import type { ChatMessage, ChatUIState, UploadFile } from "@/views/chat/types";
 import type { A2uiActionTransport } from "@/views/chat/streaming/a2uiAction";
 import { createMemoryA2uiTransport } from "@/views/chat/streaming/a2uiAction";
+import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
 import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
@@ -198,6 +200,137 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     expect(MESSAGE_DEEP_GENOME.tool_name).toBe("DeepGenomeAgent");
   });
 
+  it("routes a surface intent through the owning message and resolves it in place", async () => {
+    expect(CHAT_SOURCE).toContain(
+      'const { submitAction, retryAction } = useA2uiInteraction();'
+    );
+    expect(CHAT_SOURCE).toContain(
+      '@a2ui-action="(event) => submitAction(message, event)"'
+    );
+    expect(CHAT_SOURCE).toContain(
+      '@a2ui-retry="(surfaceId) => retryAction(message, surfaceId)"'
+    );
+    expect(CONTENT_SOURCE).toContain(
+      '@a2ui-action="(event) => emit(\'a2ui-action\', event)"'
+    );
+
+    const makeMessage = (surfaceId: string, messageId: string): ChatMessage => ({
+      role: "assistant",
+      content: "",
+      id: messageId,
+      streaming: true,
+      blocks: [
+        {
+          type: "agent-surface",
+          authority: "agent",
+          interactive: true,
+          a2ui: {
+            surface: {
+              catalog_version: "v1.0",
+              surface_id: surfaceId,
+              widget: "confirm",
+              props: {
+                title: "Continue?",
+                confirm_label: "Confirm",
+                cancel_label: "Cancel",
+              },
+            },
+            state: { status: "ready", round: 1 },
+          },
+        },
+      ],
+      a2uiRuntime: {
+        dialogueId: "dialogue-owner",
+        messageId,
+        runId: "run-owner",
+        transport: async () => {
+          throw new Error("transport not wired");
+        },
+      },
+    });
+    const owner = reactive(
+      makeMessage("surface-owner", "message-owner")
+    ) as ChatMessage;
+    const other = makeMessage("surface-other", "message-other");
+    let resolveTransport!: (response: A2uiActionResponse) => void;
+    const transport: A2uiActionTransport = vi.fn(
+      () =>
+        new Promise<A2uiActionResponse>((resolve) => {
+          resolveTransport = resolve;
+        })
+    );
+    owner.a2uiRuntime!.transport = transport;
+
+    const Harness = defineComponent({
+      setup() {
+        const { submitAction, retryAction } = useA2uiInteraction({
+          buildActionId: () => "action-owner",
+        });
+        return () =>
+          h(ChatMessageContent, {
+            message: owner,
+            index: 0,
+            isLastMessage: true,
+            geneNetworkImages: EMPTY_IMAGES,
+            geneNetworkImagesLoading: EMPTY_LOADING,
+            digitalDesignImages: EMPTY_IMAGES,
+            digitalDesignImagesLoading: EMPTY_LOADING,
+            onA2uiAction: (event) => submitAction(owner, event),
+            onA2uiRetry: (surfaceId) => retryAction(owner, surfaceId),
+          });
+      },
+    });
+    const i18n = createI18n({
+      legacy: false,
+      locale: "en-US",
+      messages: { "en-US": enUS, "zh-CN": zhCN },
+    });
+    const wrapper = mount(Harness, {
+      global: {
+        plugins: [i18n, ElementPlus],
+        stubs: {
+          MarkdownViewer: true,
+          CitedAnswer: true,
+          DeepGenomeResultViewer: true,
+          ResearchArtifactPreview: true,
+          ElIcon: true,
+        },
+      },
+    });
+
+    const buttons = wrapper.findAll(".a2ui-confirm button");
+    expect(buttons).toHaveLength(2);
+    await buttons[1].trigger("click");
+    await nextTick();
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(owner.blocks?.[0].a2ui?.state.status).toBe("submitting");
+    expect(wrapper.find(".a2ui-status").text()).toBe(enUS.chat.a2ui.locked);
+    expect(other.blocks?.[0].a2ui?.state.status).toBe("ready");
+
+    resolveTransport({
+      status: "succeeded",
+      run_id: "run-owner",
+      result: {
+        a2ui: {
+          catalog_version: "v1.0",
+          surface_id: "surface-owner",
+          widget: "confirm",
+          props: { status: "submitted", accepted: true },
+        },
+        formatted: { answer: "Completed" },
+      },
+    });
+    await flushPromises();
+    await nextTick();
+    expect(owner.blocks?.[0].a2ui?.state.status).toBe("resolved");
+    expect(owner.blocks?.some((block) => block.sourceActionId === "action-owner")).toBe(
+      true
+    );
+    expect(owner.blocks?.some((block) => block.text === "Completed")).toBe(true);
+    expect(other.blocks?.[0].a2ui?.state.status).toBe("ready");
+    wrapper.unmount();
+  });
+
   it("mounts user/assistant rows, follow-ups, and actions chrome", () => {
     const user = mount(ChatMessageRow, {
       props: { role: "user" },
@@ -331,12 +464,9 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       true
     );
 
-    const transport = createMemoryA2uiTransport([]);
     const a2ui = mount(AgentSurfaceBlock, {
       props: {
         block: FIXTURE_A2UI_REQUIRED_BLOCK,
-        runId: "fixture-run",
-        transport,
       },
       global: { plugins: [i18n, ElementPlus] },
     });

@@ -15,6 +15,8 @@
         v-else-if="renderer(item.block.type)"
         :block="item.block"
         :ns="citationNs"
+        @action="onA2uiAction(item.block, $event)"
+        @retry="onA2uiRetry(item.block)"
       />
     </template>
     <!--
@@ -33,11 +35,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, provide } from "vue";
+import { computed } from "vue";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
 import ChatActivity from "./ChatActivity.vue";
 import type { ContentBlock } from "../types";
-import type { A2uiActionTransport } from "../streaming/a2uiAction";
+import type { A2uiActionIntent } from "../streaming/a2uiContract";
+import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
 import { resolveBlockRenderer } from "../streaming/blockRegistry";
 import {
   activityDisclosureStateKey,
@@ -52,8 +55,6 @@ const props = withDefaults(
     ns?: string;
     /** Live phyto.references rows (message.doc_list); render only when nonempty. */
     references?: unknown[];
-    runId?: string;
-    transport?: A2uiActionTransport | null;
     /** Server message id when present (preferred Activity identity). */
     messageId?: string;
     /** Runtime-only request-key stamp on the streaming placeholder. */
@@ -71,6 +72,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   "update:activity-expanded": [stateKey: string, expanded: boolean];
+  "a2ui-action": [event: A2uiSurfaceActionEvent];
+  "a2ui-retry": [surfaceId: string];
 }>();
 
 // Defense in depth: never pass a non-empty ns to markdown/reasoning (or the
@@ -89,16 +92,19 @@ const messageKey = computed(() =>
 
 const presentationItems = computed(() => buildPresentationItems(props.blocks));
 
-provide(
-  "a2uiRunId",
-  computed(() => props.runId ?? "")
-);
-provide(
-  "a2uiTransport",
-  computed(() => props.transport ?? null)
-);
-
 const renderer = (type: string) => resolveBlockRenderer(type);
+
+function onA2uiAction(block: ContentBlock, intent: A2uiActionIntent) {
+  const surfaceId = block.a2ui?.surface.surface_id;
+  if (!surfaceId) return;
+  emit("a2ui-action", { surfaceId, intent });
+}
+
+function onA2uiRetry(block: ContentBlock) {
+  const surfaceId = block.a2ui?.surface.surface_id;
+  if (!surfaceId) return;
+  emit("a2ui-retry", surfaceId);
+}
 
 function activityStateKeyFor(startIndex: number): string | null {
   if (!messageKey.value) return null;

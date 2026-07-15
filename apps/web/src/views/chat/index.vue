@@ -167,6 +167,8 @@
                             currentChatId
                           ).activityExpandedByMessage[key] = open)
                       "
+                      @a2ui-action="(event) => submitAction(message, event)"
+                      @a2ui-retry="(surfaceId) => retryAction(message, surfaceId)"
                     />
 
                     <template #activity>
@@ -514,6 +516,7 @@ import {
 import type { CanonicalAgentTool } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useSendMessage } from "./composables/useSendMessage";
+import { useA2uiInteraction } from "./composables/useA2uiInteraction";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
 import {
   useLogView,
@@ -1402,6 +1405,8 @@ const { sendMessage } = useSendMessage({
   selectChat,
   scrollToBottom,
 });
+
+const { submitAction, retryAction } = useA2uiInteraction();
 
 // Handle the Markdown typing-effect completion event
 const handleMarkdownFinish = (messageIndex: number) => {

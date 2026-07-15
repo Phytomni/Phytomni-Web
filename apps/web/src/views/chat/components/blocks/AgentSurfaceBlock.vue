@@ -43,6 +43,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   action: [intent: A2uiActionIntent];
+  retry: [];
 }>();
 
 const { t } = useI18n();
