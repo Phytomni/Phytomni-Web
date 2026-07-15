@@ -6,6 +6,19 @@ export function isActivityBlock(block: ContentBlock): boolean {
   return ACTIVITY_BLOCK_TYPES.has(block.type);
 }
 
+export function presentationBlockKey(
+  block: ContentBlock,
+  index: number,
+): string {
+  if (block.type === "agent-surface" && block.a2ui?.surface.surface_id) {
+    return "surface:" + block.a2ui.surface.surface_id;
+  }
+  if (block.type === "markdown" && block.sourceActionId) {
+    return "action:" + block.sourceActionId;
+  }
+  return "block:" + index;
+}
+
 export interface BlockPresentationItem {
   kind: "block";
   key: string;
@@ -56,7 +69,7 @@ export function buildPresentationItems(blocks: ContentBlock[]): PresentationItem
     flushActivity(index - 1);
     items.push({
       kind: "block",
-      key: `block-${index}`,
+      key: presentationBlockKey(block, index),
       index,
       block,
     });

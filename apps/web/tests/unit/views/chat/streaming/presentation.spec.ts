@@ -1,9 +1,17 @@
 import { describe, it, expect } from "vitest";
 import type { ContentBlock } from "@/views/chat/types";
+import type {
+  A2uiActionEnvelope,
+  A2uiActionResponse,
+  A2uiOpenSurface,
+  A2uiTerminalSurface,
+} from "@/views/chat/streaming/a2uiContract";
+import { reduceA2uiSucceeded } from "@/views/chat/streaming/a2uiReducer";
 import {
   activityDisclosureStateKey,
   activityRegionDomId,
   buildPresentationItems,
+  presentationBlockKey,
   resolveMessagePresentationKey,
   type PresentationItem,
 } from "@/views/chat/streaming/presentation";
@@ -31,13 +39,35 @@ function agentSurface(surfaceId: string): ContentBlock {
     interactive: true,
     surfaceId,
     widget: "confirm",
+    a2ui: {
+      surface: {
+        catalog_version: "v1.0",
+        surface_id: surfaceId,
+        widget: "confirm",
+        props: {
+          title: "Continue?",
+          confirm_label: "Continue",
+          cancel_label: "Cancel",
+        },
+      },
+      state: { status: "ready", round: 1 },
+    },
   };
 }
 
 function blockItem(index: number, block: ContentBlock): PresentationItem {
   return {
     kind: "block",
-    key: `block-${index}`,
+    key: `block:${index}`,
+    index,
+    block,
+  };
+}
+
+function surfaceItem(index: number, block: ContentBlock): PresentationItem {
+  return {
+    kind: "block",
+    key: `surface:${block.a2ui?.surface.surface_id}`,
     index,
     block,
   };
@@ -115,7 +145,7 @@ describe("buildPresentationItems", () => {
       blocks: [tool("before"), agentSurface("surf-1"), tool("after")],
       expected: (blocks) => [
         activityItem(0, 0, [blocks[0]]),
-        blockItem(1, blocks[1]),
+        surfaceItem(1, blocks[1]),
         activityItem(2, 2, [blocks[2]]),
       ],
     },
@@ -201,11 +231,109 @@ describe("buildPresentationItems", () => {
     ]);
     expect(items.map((item) => item.key)).toEqual([
       "activity-0",
-      "block-2",
+      "surface:x",
       "activity-3",
     ]);
     if (items[0].kind === "activity") expect(items[0].blocks).toHaveLength(2);
     if (items[2].kind === "activity") expect(items[2].blocks).toHaveLength(2);
+  });
+
+  it("keys an agent surface by surface identity across unrelated appends", () => {
+    const surface = agentSurface("surface-stable");
+    const beforeAppend = buildPresentationItems([surface]);
+    const afterAppend = buildPresentationItems([surface, md("later")]);
+
+    expect(beforeAppend[0].key).toBe("surface:surface-stable");
+    expect(afterAppend[0].key).toBe("surface:surface-stable");
+  });
+
+  it("keys an action-answer Markdown block by its source action", () => {
+    const answer: ContentBlock = {
+      ...md("completed"),
+      sourceActionId: "action-42",
+    };
+
+    expect(buildPresentationItems([answer])[0].key).toBe("action:action-42");
+  });
+
+  it("uses an index fallback for generic Markdown blocks", () => {
+    expect(buildPresentationItems([md("generic")])[0].key).toBe("block:0");
+  });
+
+  it("does not use a shared surface key when the surface ID is missing", () => {
+    const missingSurfaceId: ContentBlock = {
+      ...agentSurface("surface-missing"),
+      surfaceId: undefined,
+      a2ui: {
+        ...agentSurface("surface-missing").a2ui!,
+        surface: {
+          ...agentSurface("surface-missing").a2ui!.surface,
+          surface_id: "",
+        },
+      },
+    };
+
+    expect(presentationBlockKey(missingSurfaceId, 0)).not.toBe("surface:");
+    expect(buildPresentationItems([missingSurfaceId])[0].key).toBe("block:0");
+  });
+
+  it("keeps action-answer keys unique after duplicate reduction", () => {
+    const surface: A2uiOpenSurface = {
+      catalog_version: "v1.0",
+      surface_id: "surface-once",
+      widget: "confirm",
+      props: {
+        title: "Continue?",
+        confirm_label: "Continue",
+        cancel_label: "Cancel",
+      },
+    };
+    const envelope: A2uiActionEnvelope = {
+      surface_id: surface.surface_id,
+      widget: surface.widget,
+      action_id: "action-once",
+      run_id: "run-once",
+      payload: { accepted: true },
+    };
+    const terminal: A2uiTerminalSurface = {
+      catalog_version: "v1.0",
+      surface_id: surface.surface_id,
+      widget: "confirm",
+      props: { status: "submitted", accepted: true },
+    };
+    const response: Extract<
+      A2uiActionResponse,
+      { status: "succeeded" }
+    > = {
+      status: "succeeded",
+      run_id: envelope.run_id,
+      result: {
+        a2ui: terminal,
+        formatted: { answer: "completed" },
+      },
+    };
+
+    const blocks: ContentBlock[] = [
+      {
+        type: "agent-surface",
+        authority: "agent",
+        interactive: true,
+        a2ui: {
+          surface,
+          state: { status: "submitting", round: 1, envelope },
+        },
+      },
+    ];
+    const first = reduceA2uiSucceeded(blocks, envelope, response);
+    const reduced = reduceA2uiSucceeded(first, envelope, response);
+    const items = buildPresentationItems(reduced);
+
+    expect(reduced).toBe(first);
+    expect(new Set(items.map((item) => item.key)).size).toBe(items.length);
+    expect(items.map((item) => item.key)).toEqual([
+      "surface:surface-once",
+      "action:action-once",
+    ]);
   });
 });
 
@@ -266,4 +394,3 @@ describe("activity disclosure identity helpers", () => {
     expect(duringStream).toBe("stream:chat-request-abc:activity-0");
   });
 });
-
