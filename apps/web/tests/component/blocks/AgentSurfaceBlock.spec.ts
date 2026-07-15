@@ -1,15 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
 import {
   createMemoryA2uiTransport,
-  _resetA2uiActionIdempotencyForTests,
   type A2uiActionEnvelope,
 } from "@/views/chat/streaming/a2uiAction";
 import type { ContentBlock } from "@/views/chat/types";
-
-beforeEach(() => _resetA2uiActionIdempotencyForTests());
 
 describe("AgentSurfaceBlock", () => {
   it("sends confirm action and shows locked status", async () => {

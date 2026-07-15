@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
@@ -6,11 +6,8 @@ import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
 import {
   createMemoryA2uiTransport,
-  _resetA2uiActionIdempotencyForTests,
   type A2uiActionEnvelope,
 } from "@/views/chat/streaming/a2uiAction";
-
-beforeEach(() => _resetA2uiActionIdempotencyForTests());
 
 describe("StreamMessage", () => {
   it("renders a markdown block's text through v-html", () => {

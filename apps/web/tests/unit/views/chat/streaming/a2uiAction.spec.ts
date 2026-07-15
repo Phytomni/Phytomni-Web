@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   decodeA2uiActionResponse,
 } from "@/views/chat/streaming/a2uiParse";
@@ -9,7 +9,7 @@ import {
   createMemoryA2uiTransport,
   createFetchA2uiTransport,
   sendA2uiAction,
-  _resetA2uiActionIdempotencyForTests,
+  A2uiTransportError,
   type A2uiActionEnvelope,
 } from "@/views/chat/streaming/a2uiAction";
 import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
@@ -32,7 +32,37 @@ const terminalResponseFor = (
   return { ...response, run_id: envelope.run_id };
 };
 
-beforeEach(() => _resetA2uiActionIdempotencyForTests());
+const envelope: A2uiActionEnvelope = {
+  surface_id: "s1",
+  widget: "confirm",
+  action_id: "a1",
+  run_id: "r1",
+  payload: { accepted: true },
+};
+
+const gatewayError = (code: string, overrides: Record<string, unknown> = {}) => ({
+  error: {
+    type: "gateway_error",
+    code,
+    message: "A2UI actions are unavailable.",
+    request_id: "req-1",
+  },
+  forwarded: false,
+  retryable: true,
+  ...overrides,
+});
+
+const jsonResponse = (status: number, body: unknown): Response =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+
+const textResponse = (status: number, body: string): Response =>
+  new Response(body, {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 
 describe("a2uiAction", () => {
   it("buildA2uiActionId returns a non-empty unique-ish id", () => {
@@ -45,30 +75,17 @@ describe("a2uiAction", () => {
   it("memory transport records envelopes", async () => {
     const sink: A2uiActionEnvelope[] = [];
     const t = createMemoryA2uiTransport(sink, terminalResponseFor);
-    const env: A2uiActionEnvelope = {
-      surface_id: "s1",
-      widget: "confirm",
-      action_id: "a1",
-      run_id: "r1",
-      payload: { accepted: true },
-    };
-    await sendA2uiAction(env, t);
-    expect(sink).toEqual([env]);
+    const response = await sendA2uiAction(envelope, t);
+    expect(response.status).toBe("succeeded");
+    expect(sink).toEqual([envelope]);
   });
 
-  it("sendA2uiAction is idempotent on action_id", async () => {
+  it("makes two explicit transport calls for the same action_id", async () => {
     const sink: A2uiActionEnvelope[] = [];
     const t = createMemoryA2uiTransport(sink, terminalResponseFor);
-    const env: A2uiActionEnvelope = {
-      surface_id: "s1",
-      widget: "confirm",
-      action_id: "same",
-      run_id: "r1",
-      payload: { accepted: false },
-    };
-    await sendA2uiAction(env, t);
-    await sendA2uiAction(env, t);
-    expect(sink).toHaveLength(1);
+    await sendA2uiAction({ ...envelope, action_id: "same" }, t);
+    await sendA2uiAction({ ...envelope, action_id: "same" }, t);
+    expect(sink).toHaveLength(2);
   });
 
   it("fetch transport POSTs the envelope to the provisional path", async () => {
@@ -126,46 +143,191 @@ describe("a2uiAction", () => {
     expect(response.run_id).toBe("run-contract-1");
   });
 
-  it("fetch transport throws when response is not ok", async () => {
-    const fetchImpl = vi.fn(async () => new Response(null, { status: 500 }));
+  it("does not automatically retry after fetch rejects", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
     const t = createFetchA2uiTransport({
       conversationId: "42",
       getToken: () => "tok",
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     await expect(
-      sendA2uiAction(
-        {
-          surface_id: "s",
-          widget: "form",
-          action_id: "fail-http",
-          run_id: "r1",
-          payload: {},
-        },
-        t,
-      ),
-    ).rejects.toThrow("a2ui action HTTP 500");
+      sendA2uiAction({ ...envelope, action_id: "network-failure" }, t),
+    ).rejects.toMatchObject({ kind: "unknown" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("allows retry with same action_id after transport failure", async () => {
-    const sink: A2uiActionEnvelope[] = [];
-    let attempts = 0;
-    const t = async (envelope: A2uiActionEnvelope) => {
-      attempts++;
-      if (attempts === 1) throw new Error("transport failed");
-      sink.push(envelope);
-      return terminalResponseFor(envelope);
-    };
-    const env: A2uiActionEnvelope = {
-      surface_id: "s1",
-      widget: "confirm",
-      action_id: "retry-me",
-      run_id: "r1",
-      payload: { accepted: true },
-    };
-    await expect(sendA2uiAction(env, t)).rejects.toThrow("transport failed");
-    await sendA2uiAction(env, t);
-    expect(sink).toEqual([env]);
-    expect(attempts).toBe(2);
+  it("classifies malformed 2xx JSON as an ambiguous outcome", async () => {
+    const fetchImpl = vi.fn(async () => textResponse(200, "not-json"));
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(t(envelope)).rejects.toMatchObject({
+      kind: "unknown",
+      code: "a2ui_invalid_response",
+      httpStatus: 200,
+      forwarded: true,
+      retryable: false,
+      message: "A2UI action request failed",
+    });
+  });
+
+  it("classifies oversized 2xx JSON as an ambiguous outcome", async () => {
+    const oversized = `{"padding":"${"x".repeat(1024 * 1024)}"}`;
+    const fetchImpl = vi.fn(async () => textResponse(200, oversized));
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(t(envelope)).rejects.toMatchObject({
+      kind: "unknown",
+      code: "a2ui_response_too_large",
+      httpStatus: 200,
+      forwarded: true,
+      retryable: false,
+    });
+  });
+
+  it.each([404, 409])("maps HTTP %s to expired", async (status) => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(status, gatewayError("a2ui_not_found")),
+    );
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(t(envelope)).rejects.toMatchObject({
+      kind: "expired",
+      code: "a2ui_not_found",
+      httpStatus: status,
+      forwarded: false,
+      retryable: true,
+    });
+  });
+
+  it.each([400, 401, 403, 413, 415, 422])(
+    "maps HTTP %s to rejected",
+    async (status) => {
+      const fetchImpl = vi.fn(async () =>
+        jsonResponse(status, gatewayError("a2ui_invalid_action", { retryable: false })),
+      );
+      const t = createFetchA2uiTransport({
+        conversationId: "42",
+        getToken: () => "tok",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      });
+      await expect(t(envelope)).rejects.toMatchObject({
+        kind: "rejected",
+        code: "a2ui_invalid_action",
+        httpStatus: status,
+        forwarded: false,
+        retryable: false,
+      });
+    },
+  );
+
+  it("maps a proven pre-dispatch local rejection to temporarily_rejected", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(503, gatewayError("a2ui_gateway_disabled")),
+    );
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(t(envelope)).rejects.toMatchObject({
+      kind: "temporarily_rejected",
+      code: "a2ui_gateway_disabled",
+      httpStatus: 503,
+      forwarded: false,
+      retryable: true,
+    });
+  });
+
+  it("does not trust non-boolean forwarding metadata", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(503, gatewayError("a2ui_gateway_disabled", {
+        forwarded: "false",
+        retryable: true,
+      })),
+    );
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(t(envelope)).rejects.toMatchObject({
+      kind: "unknown",
+      forwarded: true,
+      retryable: true,
+    });
+  });
+
+  it.each([500, 502, 504])("maps HTTP %s to unknown", async (status) => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(status, gatewayError("a2ui_internal", { forwarded: true, retryable: false })),
+    );
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(t(envelope)).rejects.toMatchObject({
+      kind: "unknown",
+      code: "a2ui_internal",
+      httpStatus: status,
+      forwarded: true,
+      retryable: false,
+    });
+  });
+
+  it.each([
+    ["timeout", new Error("timeout")],
+    ["abort-after-send", new DOMException("The operation was aborted", "AbortError")],
+    ["network", new TypeError("Failed to fetch")],
+  ])("maps %s failures to unknown", async (_label, failure) => {
+    const fetchImpl = vi.fn(async () => {
+      throw failure;
+    });
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(t(envelope)).rejects.toMatchObject({
+      kind: "unknown",
+      code: "a2ui_transport_error",
+      httpStatus: undefined,
+      forwarded: true,
+      retryable: false,
+      message: "A2UI action request failed",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("never includes the upstream error message in the local error", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(400, {
+        ...gatewayError("a2ui_invalid_action", { retryable: false }),
+        error: {
+          ...gatewayError("a2ui_invalid_action").error,
+          message: "upstream secret should not be exposed",
+        },
+      }),
+    );
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const error = await t(envelope).catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(A2uiTransportError);
+    expect((error as Error).message).toBe("A2UI action request failed");
+    expect((error as Error).message).not.toContain("upstream secret");
   });
 });
