@@ -28,6 +28,7 @@ root [`README.md`](../README.md) for build/run instructions.
 | Look up a Go API endpoint | [`../apps/server/API_DOC.md`](../apps/server/API_DOC.md) |
 | Understand the parallel-chat frontend state model | [`../apps/web/docs/parallel-chat-state.md`](../apps/web/docs/parallel-chat-state.md) |
 | Run / write frontend tests | [`../apps/web/tests/README.md`](../apps/web/tests/README.md) |
+| Maintain the frontend visual system / run visual QA | [`frontend-design-system.md`](frontend-design-system.md) |
 | Read a design proposal / ADR | [`design/`](design/) — forward-looking, not-yet-implemented work |
 
 ## Where docs live
