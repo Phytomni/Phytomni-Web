@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G7.5, G11–G14)
+# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G7.5, G11–G15)
 #
 # Runs every check listed in .claude/plans/production-backport.md:
 #   G-1  staged/unstaged secret scan
@@ -19,6 +19,8 @@
 #        scripts/i18n_allowlist.md)
 #   G14  frontend visual design contract (brand colors, glass bubbles, legacy
 #        markers, unsafe focus/motion/layout rules, and global CSS side effects)
+#   G15  A2UI activation contract (fixture provenance, lifecycle ownership,
+#        middleware order, audit masking, body limits, and dark-launch defaults)
 #
 # Exit 0 means safe to commit. Any failure aborts via `set -e`.
 
@@ -131,5 +133,8 @@ python3 scripts/check_i18n.py --check
 
 step "G14 frontend visual design contract"
 python3 scripts/check_brand_colors.py
+
+step "G15 A2UI activation contract"
+python3 scripts/check_a2ui_activation_contract.py
 
 step "validate_web_local.sh: ALL GATES PASS"
