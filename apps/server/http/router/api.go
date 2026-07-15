@@ -42,7 +42,6 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/conversations", apiHandler.Conversations)                                             // conversation list (?favorite=true for favourites)
 		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)                                  // all child messages for a conversation
 		apiV1Router.POST("/conversations/:id/messages", middleware.PerUserRateLimit("query"), apiHandler.Query) // send message (id=0 for new conversation, relayed to Bot, per-user rate limited)
-		apiV1Router.POST("/conversations/:id/a2ui-actions", apiHandler.A2uiAction)                              // interactive agent-surface action uplink
 		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)                                    // soft-delete conversation
 		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)                                     // rename conversation
 		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType)                            // like/dislike
@@ -62,6 +61,21 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/downloads/analyst-agent/obs-images", apiHandler.DownloadAnalystAgentObsImages) // AnalystAgent OBS image download links
 		apiV1Router.POST("/downloads/rendering-file", apiHandler.DownloadObsRenderingFile)               // file-format-conversion download
 	}
+
+	// A2UI action bodies must be bounded and validated before OperationLog reads
+	// them. Keep the same localization, auth, first-login, and CORS gates as the
+	// generic authenticated v1 group while inserting the body guard immediately
+	// before audit logging.
+	a2uiRouter := r.Group("api/v1").Use(
+		i18n.Localize(),
+		middleware.GlobalMiddleware(),
+		middleware.AuthMiddleware(),
+		middleware.LoginStatusMiddleware(),
+		middleware.CORS(),
+		middleware.A2uiJSONGuard(),
+		middleware.OperationLog(),
+	)
+	a2uiRouter.POST("/conversations/:id/a2ui-actions", apiHandler.A2uiAction) // interactive agent-surface action uplink
 
 	// /api/v1/auth lifecycle group: logout / logout-all. Carries AuthMiddleware (handler needs
 	// ctx username/token) but NOT LoginStatusMiddleware — first-login users must still be able

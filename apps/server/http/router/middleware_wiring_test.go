@@ -105,3 +105,23 @@ func TestLoginRouteSkipsJWTAuth(t *testing.T) {
 		t.Fatalf("auth/sessions rejected the no-JWT request with %d; login must NOT sit behind AuthMiddleware (got body=%s)", w.Code, w.Body.String())
 	}
 }
+
+// TestA2uiActionRouteRegisteredExactlyOnce keeps the interactive uplink on a
+// single route. The middleware wiring is intentionally asserted separately by
+// the integration tests in chat_gate_integration_test.go.
+func TestA2uiActionRouteRegisteredExactlyOnce(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+
+	const wantPath = "/api/v1/conversations/:id/a2ui-actions"
+	var matches []gin.RouteInfo
+	for _, route := range engine.Routes() {
+		if route.Method == http.MethodPost && route.Path == wantPath {
+			matches = append(matches, route)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("POST %s registered %d times, want exactly once", wantPath, len(matches))
+	}
+}
