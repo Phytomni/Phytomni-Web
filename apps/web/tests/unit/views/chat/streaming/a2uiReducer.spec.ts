@@ -9,6 +9,7 @@ import type {
 import { A2UI_LIMITS } from "@/views/chat/streaming/a2uiContract";
 import {
   beginA2uiAction,
+  reduceA2uiInputRequired,
   reduceA2uiSucceeded,
 } from "@/views/chat/streaming/a2uiReducer";
 import type { ContentBlock } from "@/views/chat/types";
@@ -85,6 +86,11 @@ type SucceededResponse = Extract<
   { status: "succeeded" }
 >;
 
+type InputRequiredResponse = Extract<
+  A2uiActionResponse,
+  { status: "input_required" }
+>;
+
 const terminalConfirm = (
   surfaceId: string,
   accepted: boolean,
@@ -153,6 +159,16 @@ const succeeded = (
     a2ui,
     ...(answer === undefined ? {} : { formatted: { answer } }),
   },
+});
+
+const inputRequired = (
+  envelope: A2uiActionEnvelope,
+  a2ui: A2uiOpenSurface,
+  runId = envelope.run_id,
+): InputRequiredResponse => ({
+  status: "input_required",
+  run_id: runId,
+  interrupt: { draft: { a2ui } },
 });
 
 describe("beginA2uiAction", () => {
@@ -473,4 +489,184 @@ describe("reduceA2uiSucceeded", () => {
       );
     },
   );
+});
+
+describe("reduceA2uiInputRequired", () => {
+  const round2Surface: A2uiOpenSurface = {
+    ...choiceSurface,
+    surface_id: "surface-2",
+  };
+
+  it("advances round 1 and appends a fresh ready round-2 surface", () => {
+    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+    const original = structuredClone(blocks);
+
+    const next = reduceA2uiInputRequired(
+      blocks,
+      envelope,
+      inputRequired(envelope, round2Surface),
+    );
+
+    expect(next).not.toBe(blocks);
+    expect(next[0]).toBe(blocks[0]);
+    expect(next[2]).toBe(blocks[2]);
+    expect(next[1]).not.toBe(blocks[1]);
+    expect(next[1].a2ui).toEqual({
+      surface,
+      state: {
+        status: "resolved",
+        round: 1,
+        actionId: envelope.action_id,
+        resolution: "advanced",
+      },
+    });
+    expect(next.at(-1)).toEqual({
+      type: "agent-surface",
+      authority: "agent",
+      interactive: true,
+      surfaceId: round2Surface.surface_id,
+      widget: round2Surface.widget,
+      props: round2Surface.props,
+      a2ui: {
+        surface: round2Surface,
+        state: { status: "ready", round: 2 },
+      },
+    });
+    expect(blocks).toEqual(original);
+  });
+
+  it.each([
+    ["reused surface", surface, "surface_reused"],
+    ["mismatched run", round2Surface, "run_id_mismatch"],
+    [
+      "malformed surface",
+      { ...round2Surface, widget: "slider" },
+      "surface_invalid",
+    ],
+  ] as const)("marks the submitting target protocol_error for %s", (
+    _label,
+    nextSurface,
+    code,
+  ) => {
+    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+    const response = inputRequired(
+      envelope,
+      nextSurface as A2uiOpenSurface,
+      code === "run_id_mismatch" ? "other-run" : envelope.run_id,
+    );
+
+    const next = reduceA2uiInputRequired(blocks, envelope, response);
+
+    expect(next[1].a2ui?.state).toEqual({
+      status: "protocol_error",
+      round: 1,
+      actionId: envelope.action_id,
+      code,
+    });
+    expect(next).toHaveLength(blocks.length);
+  });
+
+  it("rejects a fresh surface whose identity is already present elsewhere", () => {
+    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+    const duplicate = readyBlock({}, round2Surface);
+    const withDuplicate = [...blocks, duplicate];
+
+    const next = reduceA2uiInputRequired(
+      withDuplicate,
+      envelope,
+      inputRequired(envelope, round2Surface),
+    );
+
+    expect(next[1].a2ui?.state).toMatchObject({
+      status: "protocol_error",
+      code: "surface_duplicate",
+    });
+    expect(next).toHaveLength(withDuplicate.length);
+    expect(next.at(-1)).toBe(duplicate);
+  });
+
+  it("marks a ready target protocol_error when its submitting action is missing", () => {
+    const blocks = blocksWithTarget();
+    const envelope: A2uiActionEnvelope = {
+      surface_id: surface.surface_id,
+      widget: surface.widget,
+      action_id: "missing-action",
+      run_id: "run-9",
+      payload: { accepted: true },
+    };
+
+    const next = reduceA2uiInputRequired(
+      blocks,
+      envelope,
+      inputRequired(envelope, round2Surface),
+    );
+
+    expect(next[1].a2ui?.state).toEqual({
+      status: "protocol_error",
+      round: 1,
+      actionId: envelope.action_id,
+      code: "target_missing",
+    });
+    expect(next).toHaveLength(blocks.length);
+  });
+
+  it("rejects input_required from round 2 without creating round 3", () => {
+    const first = beginSubmitting(surface, confirmIntent);
+    const second = reduceA2uiInputRequired(
+      first.blocks,
+      first.envelope,
+      inputRequired(first.envelope, round2Surface),
+    );
+    const round2 = second.at(-1);
+    if (!round2?.a2ui || round2.a2ui.state.status !== "ready") {
+      throw new Error("expected a ready round-2 surface");
+    }
+    const round2Begin = beginA2uiAction(
+      second,
+      round2Surface.surface_id,
+      first.envelope.run_id,
+      { widget: "choice", payload: { selected: "a" } },
+      "action-2",
+    );
+    if (!round2Begin.ok) throw new Error("expected round 2 begin to succeed");
+
+    const next = reduceA2uiInputRequired(
+      round2Begin.blocks,
+      round2Begin.envelope,
+      inputRequired(round2Begin.envelope, {
+        ...round2Surface,
+        surface_id: "surface-3",
+        widget: "form",
+        props: {
+          title: "Gene ID",
+          fields: [
+            { name: "gene_id", label: "Gene ID", type: "text", required: true },
+          ],
+        },
+      } as A2uiOpenSurface),
+    );
+
+    expect(next[3].a2ui?.state).toEqual({
+      status: "protocol_error",
+      round: 2,
+      actionId: round2Begin.envelope.action_id,
+      code: "round_exhausted",
+    });
+    expect(next).toHaveLength(round2Begin.blocks.length);
+  });
+
+  it("applies the same response once and leaves the advanced surface unchanged on replay", () => {
+    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+    const response = inputRequired(envelope, round2Surface);
+
+    const first = reduceA2uiInputRequired(blocks, envelope, response);
+    const replay = reduceA2uiInputRequired(first, envelope, response);
+
+    expect(replay).toBe(first);
+    expect(
+      replay.filter(
+        (block) => block.a2ui?.surface.surface_id === round2Surface.surface_id,
+      ),
+    ).toHaveLength(1);
+  });
 });

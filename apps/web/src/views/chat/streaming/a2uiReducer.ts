@@ -1,9 +1,11 @@
 import type { ContentBlock } from "../types";
 import { A2UI_LIMITS } from "./a2uiContract";
+import { decodeA2uiOpenSurface } from "./a2uiParse";
 import type {
   A2uiActionEnvelope,
   A2uiActionResponse,
   A2uiActionIntent,
+  A2uiOpenSurface,
 } from "./a2uiContract";
 
 export type BeginA2uiResult =
@@ -161,6 +163,213 @@ export function reduceA2uiSucceeded(
     });
   }
 
+  return nextBlocks;
+}
+
+/**
+ * Fold one decoded intermediate response into its submitting surface.
+ *
+ * An input-required response contains no terminal projection for the old
+ * widget.  Its only authoritative result is the fresh draft surface, so the
+ * old surface is resolved generically as `advanced` and the new surface is
+ * opened as round two.  A second pause is a protocol violation: the contract
+ * permits at most two interaction rounds per message.
+ */
+export function reduceA2uiInputRequired(
+  blocks: ContentBlock[],
+  envelope: A2uiActionEnvelope,
+  response: Extract<A2uiActionResponse, { status: "input_required" }>,
+): ContentBlock[] {
+  const targetIndex = findInputRequiredTarget(blocks, envelope);
+  if (targetIndex < 0) return blocks;
+
+  const target = blocks[targetIndex];
+  const runtime = target.a2ui;
+  if (!runtime) return blocks;
+
+  const state = runtime.state;
+  if (state.status !== "submitting") {
+    // A replay after a valid transition sees the old surface resolved and the
+    // new one ready.  Neither state still owns the action, so it is idempotent.
+    if (state.status === "resolved" || state.status === "protocol_error") {
+      return blocks;
+    }
+    return markInputRequiredProtocolError(
+      blocks,
+      targetIndex,
+      runtime,
+      envelope.action_id,
+      "target_missing",
+    );
+  }
+
+  const protocolCode = getA2uiInputRequiredProtocolCode(
+    runtime.surface,
+    state.envelope,
+    envelope,
+    response.run_id,
+  );
+  if (protocolCode) {
+    return markInputRequiredProtocolError(
+      blocks,
+      targetIndex,
+      runtime,
+      envelope.action_id,
+      protocolCode,
+    );
+  }
+
+  if (state.round !== 1) {
+    return markInputRequiredProtocolError(
+      blocks,
+      targetIndex,
+      runtime,
+      envelope.action_id,
+      "round_exhausted",
+    );
+  }
+
+  const decoded = decodeA2uiOpenSurface(response.interrupt?.draft?.a2ui);
+  if (!decoded.ok) {
+    return markInputRequiredProtocolError(
+      blocks,
+      targetIndex,
+      runtime,
+      envelope.action_id,
+      "surface_invalid",
+    );
+  }
+
+  const nextSurface = decoded.value;
+  if (nextSurface.surface_id === runtime.surface.surface_id) {
+    return markInputRequiredProtocolError(
+      blocks,
+      targetIndex,
+      runtime,
+      envelope.action_id,
+      "surface_reused",
+    );
+  }
+
+  if (hasSurfaceIdentity(blocks, nextSurface.surface_id)) {
+    return markInputRequiredProtocolError(
+      blocks,
+      targetIndex,
+      runtime,
+      envelope.action_id,
+      "surface_duplicate",
+    );
+  }
+
+  const nextBlocks = blocks.slice();
+  nextBlocks[targetIndex] = {
+    ...target,
+    a2ui: {
+      surface: runtime.surface,
+      state: {
+        status: "resolved",
+        round: state.round,
+        actionId: envelope.action_id,
+        resolution: "advanced",
+      },
+    },
+  };
+  nextBlocks.push({
+    type: "agent-surface",
+    authority: "agent",
+    interactive: true,
+    surfaceId: nextSurface.surface_id,
+    widget: nextSurface.widget,
+    props: nextSurface.props,
+    a2ui: {
+      surface: nextSurface,
+      state: { status: "ready", round: 2 },
+    },
+  });
+  return nextBlocks;
+}
+
+function findInputRequiredTarget(
+  blocks: ContentBlock[],
+  envelope: A2uiActionEnvelope,
+): number {
+  const actionIndex = blocks.findIndex((block) => {
+    const state = block.a2ui?.state;
+    return (
+      state?.status === "submitting" &&
+      state.envelope.action_id === envelope.action_id
+    );
+  });
+  if (actionIndex >= 0) return actionIndex;
+
+  // If the caller still points at the original surface but its submitting
+  // action cannot be found, retain a visible protocol error on that surface.
+  // Do not use resolved/protocol-error surfaces as fallbacks: this keeps a
+  // duplicate response a strict no-op.
+  return blocks.findIndex((block) => {
+    const runtime = block.a2ui;
+    return (
+      runtime?.surface.surface_id === envelope.surface_id &&
+      (runtime.state.status === "submitting" || runtime.state.status === "ready")
+    );
+  });
+}
+
+function getA2uiInputRequiredProtocolCode(
+  openSurface: { surface_id: string; widget: string },
+  submitting: A2uiActionEnvelope,
+  envelope: A2uiActionEnvelope,
+  responseRunId: string,
+): string | undefined {
+  if (submitting.action_id !== envelope.action_id) return "action_mismatch";
+  if (submitting.run_id !== envelope.run_id) return "run_id_mismatch";
+  if (responseRunId !== envelope.run_id) return "run_id_mismatch";
+  if (
+    openSurface.surface_id !== envelope.surface_id ||
+    submitting.surface_id !== envelope.surface_id
+  ) {
+    return "surface_mismatch";
+  }
+  if (
+    openSurface.widget !== envelope.widget ||
+    submitting.widget !== envelope.widget
+  ) {
+    return "widget_mismatch";
+  }
+  return undefined;
+}
+
+function hasSurfaceIdentity(blocks: ContentBlock[], surfaceId: string): boolean {
+  return blocks.some(
+    (block) =>
+      block.a2ui?.surface.surface_id === surfaceId || block.surfaceId === surfaceId,
+  );
+}
+
+function markInputRequiredProtocolError(
+  blocks: ContentBlock[],
+  targetIndex: number,
+  runtime: {
+    surface: A2uiOpenSurface;
+    state: { round: 1 | 2 };
+  },
+  actionId: string,
+  code: string,
+): ContentBlock[] {
+  const target = blocks[targetIndex];
+  const nextBlocks = blocks.slice();
+  nextBlocks[targetIndex] = {
+    ...target,
+    a2ui: {
+      surface: runtime.surface,
+      state: {
+        status: "protocol_error",
+        round: runtime.state.round,
+        actionId,
+        code,
+      },
+    },
+  };
   return nextBlocks;
 }
 
