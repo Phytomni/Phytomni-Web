@@ -290,6 +290,7 @@ describe("useA2uiInteraction", () => {
       buildActionId: () => "action-input",
     }).submitAction(inputMessage, event);
 
+    expect(inputTransport).toHaveBeenCalledTimes(1);
     expect(inputMessage.blocks?.[1].a2ui?.state).toMatchObject({
       status: "resolved",
       resolution: "advanced",
@@ -298,6 +299,55 @@ describe("useA2uiInteraction", () => {
     expect(inputMessage.blocks?.at(-1)?.a2ui?.surface.surface_id).toBe(
       round2Surface.surface_id
     );
+    expect(
+      inputMessage.blocks?.filter((block) =>
+        ["ready", "submitting", "temporarily_rejected"].includes(
+          block.a2ui?.state.status ?? "",
+        ),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("does not advance when another open surface remains in the same message", async () => {
+    const secondOpenSurface: A2uiOpenSurface = {
+      ...round2Surface,
+      surface_id: "surface-open",
+    };
+    const transport = vi.fn(async (envelope: A2uiActionEnvelope) =>
+      inputRequired(envelope),
+    );
+    const message = messageWith(transport, {
+      blocks: [
+        ...readyBlocks(),
+        {
+          type: "agent-surface",
+          authority: "agent",
+          interactive: true,
+          a2ui: {
+            surface: secondOpenSurface,
+            state: { status: "ready", round: 1 },
+          },
+        },
+      ],
+    });
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-multiple-open",
+    });
+
+    await submitAction(message, event);
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(message.blocks).toHaveLength(4);
+    expect(message.blocks?.[1].a2ui?.state).toEqual({
+      status: "protocol_error",
+      round: 1,
+      actionId: "action-multiple-open",
+      code: "multiple_open_surfaces",
+    });
+    expect(message.blocks?.[3].a2ui?.state).toEqual({
+      status: "ready",
+      round: 1,
+    });
   });
 
   it("applies a deferred terminal response once and appends its formatted answer once", async () => {

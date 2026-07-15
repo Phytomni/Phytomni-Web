@@ -380,6 +380,25 @@ export function reduceA2uiInputRequired(
     );
   }
 
+  // A run may have exactly one open surface while an input-required response
+  // is in flight.  If a second ready, submitting, or manually retryable
+  // surface remains in the message, the response is ambiguous: do not close
+  // or advance either surface whose ownership is not proven.
+  const openSurfaceCount = blocks.reduce(
+    (count, block) =>
+      count + (isOpenA2uiSurfaceState(block.a2ui?.state.status) ? 1 : 0),
+    0,
+  );
+  if (openSurfaceCount > 1) {
+    return markInputRequiredProtocolError(
+      blocks,
+      targetIndex,
+      runtime,
+      envelope.action_id,
+      "multiple_open_surfaces",
+    );
+  }
+
   const decoded = decodeA2uiOpenSurface(response.interrupt?.draft?.a2ui);
   if (!decoded.ok) {
     return markInputRequiredProtocolError(
@@ -490,6 +509,14 @@ function getA2uiInputRequiredProtocolCode(
 function hasSurfaceIdentity(blocks: ContentBlock[], surfaceKey: string): boolean {
   return blocks.some(
     (block) => block.a2ui?.surface.surface_id === surfaceKey,
+  );
+}
+
+function isOpenA2uiSurfaceState(status: string | undefined): boolean {
+  return (
+    status === "ready" ||
+    status === "submitting" ||
+    status === "temporarily_rejected"
   );
 }
 
