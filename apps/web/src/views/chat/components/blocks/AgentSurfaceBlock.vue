@@ -1,95 +1,94 @@
 <template>
-  <div class="agent-surface-block" :data-widget="block.widget">
+  <div
+    class="agent-surface-block"
+    :data-widget="surface?.widget ?? block.widget"
+  >
     <p v-if="block.failed" class="a2ui-status">{{ t("chat.a2ui.failed") }}</p>
     <p v-else-if="locked" class="a2ui-status">{{ t("chat.a2ui.locked") }}</p>
-    <p v-else-if="!canSend" class="a2ui-status">{{ t("chat.a2ui.expired") }}</p>
+    <p v-else-if="!surface" class="a2ui-status">{{ t("chat.a2ui.expired") }}</p>
     <ConfirmWidget
-      v-if="block.widget === 'confirm'"
-      :props="block.props ?? {}"
+      v-if="confirmSurface"
+      :surface="confirmSurface.props"
       :disabled="!canInteract"
-      @submit="onSubmit"
+      @action="onAction"
     />
     <FormWidget
-      v-else-if="block.widget === 'form'"
-      :props="block.props ?? {}"
+      v-else-if="formSurface"
+      :surface="formSurface.props"
       :disabled="!canInteract"
-      @submit="onSubmit"
+      @action="onAction"
     />
     <ChoiceWidget
-      v-else-if="block.widget === 'choice'"
-      :props="block.props ?? {}"
+      v-else-if="choiceSurface"
+      :props="choiceSurface.props"
       :disabled="!canInteract"
-      @submit="onSubmit"
+      @submit="onChoiceSubmit"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, type ComputedRef } from "vue";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ContentBlock } from "../../types";
-import type { A2uiActionTransport } from "../../streaming/a2uiAction";
-import {
-  buildA2uiActionId,
-  sendA2uiAction,
-} from "../../streaming/a2uiAction";
+import type {
+  A2uiActionIntent,
+  A2uiOpenSurface,
+} from "../../streaming/a2uiContract";
 import ConfirmWidget from "./a2ui/ConfirmWidget.vue";
 import FormWidget from "./a2ui/FormWidget.vue";
 import ChoiceWidget from "./a2ui/ChoiceWidget.vue";
 
 const props = defineProps<{
   block: ContentBlock;
-  runId?: string;
-  transport?: A2uiActionTransport | null;
+}>();
+const emit = defineEmits<{
+  action: [intent: A2uiActionIntent];
 }>();
 
-const injectedRunId = inject<ComputedRef<string> | string>("a2uiRunId", "");
-const injectedTransport = inject<
-  ComputedRef<A2uiActionTransport | null> | A2uiActionTransport | null
->("a2uiTransport", null);
-
-const runId = computed(() =>
-  props.runId ??
-  (typeof injectedRunId === "object" && injectedRunId && "value" in injectedRunId
-    ? injectedRunId.value
-    : String(injectedRunId ?? "")),
-);
-const transport = computed(() => {
-  if (props.transport !== undefined) return props.transport;
-  if (
-    injectedTransport &&
-    typeof injectedTransport === "object" &&
-    "value" in injectedTransport
-  ) {
-    return injectedTransport.value;
-  }
-  return (injectedTransport as A2uiActionTransport | null) ?? null;
-});
-
 const { t } = useI18n();
-const locked = ref(false);
+const surface = computed(() => props.block.a2ui?.surface);
+const confirmSurface = computed<
+  Extract<A2uiOpenSurface, { widget: "confirm" }> | undefined
+>(() => (surface.value?.widget === "confirm" ? surface.value : undefined));
+const formSurface = computed<
+  Extract<A2uiOpenSurface, { widget: "form" }> | undefined
+>(() => (surface.value?.widget === "form" ? surface.value : undefined));
+const choiceSurface = computed<
+  Extract<A2uiOpenSurface, { widget: "choice" }> | undefined
+>(() => (surface.value?.widget === "choice" ? surface.value : undefined));
 
-const canSend = computed(
-  () => !!transport.value && !!runId.value && !!props.block.surfaceId,
+const locked = computed(() =>
+  Boolean(surface.value && props.block.a2ui?.state.status !== "ready")
 );
-const canInteract = computed(
-  () => canSend.value && !locked.value && !props.block.failed,
+const canInteract = computed(() =>
+  Boolean(
+    surface.value &&
+      props.block.a2ui?.state.status === "ready" &&
+      !props.block.failed
+  )
 );
 
-async function onSubmit(value: { payload: Record<string, unknown> }) {
-  if (!canInteract.value || !transport.value) return;
-  locked.value = true;
-  const envelope = {
-    surface_id: props.block.surfaceId as string,
-    widget: String(props.block.widget ?? ""),
-    action_id: buildA2uiActionId(),
-    run_id: runId.value,
-    payload: value.payload,
-  };
-  try {
-    await sendA2uiAction(envelope, transport.value);
-  } catch {
-    // Keep locked — failed-not-unlocked. Parent may also stamp block.failed.
+function onAction(intent: A2uiActionIntent) {
+  if (!canInteract.value) return;
+  emit("action", intent);
+}
+
+function onChoiceSubmit(value: { payload: Record<string, unknown> }) {
+  const selected = value.payload.selected;
+  if (
+    !canInteract.value ||
+    (typeof selected !== "string" &&
+      !(
+        Array.isArray(selected) &&
+        selected.every((item) => typeof item === "string")
+      ))
+  ) {
+    return;
   }
+  emit("action", {
+    widget: "choice",
+    payload: { selected },
+  });
 }
 </script>

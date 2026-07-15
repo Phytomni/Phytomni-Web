@@ -15,30 +15,28 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { useI18n } from "vue-i18n";
+import type {
+  A2uiActionIntent,
+  A2uiOpenSurface,
+} from "../../../streaming/a2uiContract";
+
+type ConfirmProps = Extract<A2uiOpenSurface, { widget: "confirm" }>["props"];
 
 const props = defineProps<{
-  props: Record<string, unknown>;
+  surface: ConfirmProps;
   disabled: boolean;
 }>();
 const emit = defineEmits<{
-  submit: [value: { payload: Record<string, unknown> }];
+  action: [intent: Extract<A2uiActionIntent, { widget: "confirm" }>];
 }>();
-const { t } = useI18n();
 
-const title = computed(() => String(props.props.title ?? ""));
-const body = computed(() =>
-  props.props.body != null ? String(props.props.body) : "",
-);
-const confirmLabel = computed(() =>
-  String(props.props.confirm_label ?? t("chat.a2ui.confirm")),
-);
-const cancelLabel = computed(() =>
-  String(props.props.cancel_label ?? t("chat.a2ui.cancel")),
-);
+const title = computed(() => props.surface.title);
+const body = computed(() => props.surface.body ?? "");
+const confirmLabel = computed(() => props.surface.confirm_label);
+const cancelLabel = computed(() => props.surface.cancel_label);
 
 function emitSubmit(accepted: boolean) {
   if (props.disabled) return;
-  emit("submit", { payload: { accepted } });
+  emit("action", { widget: "confirm", payload: { accepted } });
 }
 </script>

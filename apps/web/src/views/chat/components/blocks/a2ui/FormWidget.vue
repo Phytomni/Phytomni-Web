@@ -29,35 +29,40 @@
     <el-button type="primary" native-type="submit" :disabled="disabled">
       {{ t("chat.a2ui.submit") }}
     </el-button>
+    <el-button
+      data-test="a2ui-form-cancel"
+      type="default"
+      native-type="button"
+      :disabled="disabled"
+      @click="onCancel"
+    >
+      {{ t("chat.a2ui.cancel") }}
+    </el-button>
   </form>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive } from "vue";
 import { useI18n } from "vue-i18n";
+import type {
+  A2uiActionIntent,
+  A2uiOpenSurface,
+  A2uiScalar,
+} from "../../../streaming/a2uiContract";
 
-type Field = {
-  name: string;
-  label: string;
-  type?: string;
-  required?: boolean;
-  options?: Array<string | number>;
-};
+type FormProps = Extract<A2uiOpenSurface, { widget: "form" }>["props"];
 
 const props = defineProps<{
-  props: Record<string, unknown>;
+  surface: FormProps;
   disabled: boolean;
 }>();
 const emit = defineEmits<{
-  submit: [value: { payload: Record<string, unknown> }];
+  action: [intent: Extract<A2uiActionIntent, { widget: "form" }>];
 }>();
 const { t } = useI18n();
-const title = computed(() => String(props.props.title ?? ""));
-const fields = computed<Field[]>(() => {
-  const raw = props.props.fields;
-  return Array.isArray(raw) ? (raw as Field[]) : [];
-});
-const model = reactive<Record<string, string | number>>({});
+const title = computed(() => props.surface.title);
+const fields = computed(() => props.surface.fields);
+const model = reactive<Record<string, A2uiScalar>>({});
 
 function onSubmit() {
   if (props.disabled) return;
@@ -66,10 +71,15 @@ function onSubmit() {
       return;
     }
   }
-  const out: Record<string, string | number> = {};
+  const out: Record<string, A2uiScalar> = {};
   for (const f of fields.value) {
     if (model[f.name] !== undefined) out[f.name] = model[f.name];
   }
-  emit("submit", { payload: { fields: out } });
+  emit("action", { widget: "form", payload: { fields: out } });
+}
+
+function onCancel() {
+  if (props.disabled) return;
+  emit("action", { widget: "form", payload: { cancelled: true } });
 }
 </script>
