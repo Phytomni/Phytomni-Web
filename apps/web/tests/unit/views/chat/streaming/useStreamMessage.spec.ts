@@ -232,15 +232,36 @@ describe("useStreamMessage", () => {
         controller.close();
       },
     });
-    (fetch as any).mockResolvedValue(
-      new Response(body, {
-        status: 200,
-        headers: {
-          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
-          "X-Phyto-Message-Id": "142",
-        },
-      })
-    );
+    (fetch as any)
+      .mockResolvedValueOnce(
+        new Response(body, {
+          status: 200,
+          headers: {
+            "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+            "X-Phyto-Message-Id": "142",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: "succeeded",
+            run_id: "run-42",
+            result: {
+              a2ui: {
+                catalog_version: "v1.0",
+                surface_id: "surf-1",
+                widget: "confirm",
+                props: { status: "submitted", accepted: true },
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      );
 
     const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
     const chatState: any = {
@@ -279,7 +300,7 @@ describe("useStreamMessage", () => {
       widget: "confirm",
       action_id: "action-canonical-1",
       run_id: "run-42",
-      payload: { confirmed: true },
+      payload: { accepted: true },
     });
     expect(fetch).toHaveBeenNthCalledWith(
       2,
