@@ -15,6 +15,55 @@ import (
 
 const validA2uiActionBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"approved":true}}`
 
+func TestA2uiAction_EnvelopeStrictDecode(t *testing.T) {
+	validID := strings.Repeat("界", a2uiIdentifierMaxChars)
+	validBoundaryBody := `{"surface_id":"` + validID + `","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{}}`
+
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{name: "confirm", body: validA2uiActionBody, want: true},
+		{name: "form", body: `{"surface_id":"s1","widget":"form","action_id":"submit","run_id":"run-1","payload":{"fields":{}}}`, want: true},
+		{name: "choice", body: `{"surface_id":"s1","widget":"choice","action_id":"submit","run_id":"run-1","payload":{"selected":"a"}}`, want: true},
+		{name: "identifier upper boundary", body: validBoundaryBody, want: true},
+		{name: "missing surface id", body: `{"widget":"confirm","action_id":"submit","run_id":"run-1","payload":{}}`, want: false},
+		{name: "missing payload", body: `{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run-1"}`, want: false},
+		{name: "unknown top level field", body: `{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{},"extra":1}`, want: false},
+		{name: "duplicate top level field", body: `{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run-1","run_id":"run-1","payload":{}}`, want: false},
+		{name: "concatenated values", body: validA2uiActionBody + `{}`, want: false},
+		{name: "trailing non-whitespace", body: validA2uiActionBody + ` trailing`, want: false},
+		{name: "trimmed surface id required", body: `{"surface_id":" s1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{}}`, want: false},
+		{name: "trimmed action id required", body: `{"surface_id":"s1","widget":"confirm","action_id":"submit ","run_id":"run-1","payload":{}}`, want: false},
+		{name: "trimmed run id required", body: `{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"\trun-1","payload":{}}`, want: false},
+		{name: "empty identifier", body: `{"surface_id":"","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{}}`, want: false},
+		{name: "overlong identifier", body: `{"surface_id":"` + strings.Repeat("界", a2uiIdentifierMaxChars+1) + `","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{}}`, want: false},
+		{name: "unknown widget", body: `{"surface_id":"s1","widget":"button","action_id":"submit","run_id":"run-1","payload":{}}`, want: false},
+		{name: "null payload", body: `{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":null}`, want: false},
+		{name: "array payload", body: `{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":[]}`, want: false},
+		{name: "scalar payload", body: `{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":true}`, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := decodeA2uiActionEnvelope([]byte(tt.body))
+			if tt.want {
+				if err != nil {
+					t.Fatalf("decodeA2uiActionEnvelope: %v", err)
+				}
+				if got.SurfaceID == "" || got.Widget == "" || got.ActionID == "" || got.RunID == "" || len(got.Payload) == 0 {
+					t.Fatalf("decoded envelope is incomplete: %+v", got)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("decodeA2uiActionEnvelope(%q) succeeded: %+v", tt.body, got)
+			}
+		})
+	}
+}
+
 func setupA2uiActionTest(t *testing.T) {
 	t.Helper()
 	gdb := setupTestDB(t)
@@ -59,6 +108,38 @@ func TestA2uiAction_OwnershipMiss404(t *testing.T) {
 				t.Fatalf("error = %v, want ErrA2uiActionNotFound", err)
 			}
 		})
+	}
+}
+
+func TestA2uiAction_RunMismatchDoesNotCallBot(t *testing.T) {
+	setupA2uiActionTest(t)
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		ProxyEnabled:       true,
+		A2uiActionsEnabled: true,
+		BaseURL:            srv.URL,
+		UserAPIKey:         "test-user-key",
+		TimeoutSeconds:     5,
+	}
+
+	outcome, err := (&Service{}).A2uiAction(
+		context.Background(), "alice@x.com", "dlg-1",
+		[]byte(`{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-mismatch","payload":{}}`),
+	)
+
+	if outcome != nil {
+		t.Fatalf("outcome = %#v, want nil", outcome)
+	}
+	if !errors.Is(err, ErrA2uiActionNotFound) {
+		t.Fatalf("error = %v, want ErrA2uiActionNotFound", err)
+	}
+	if got := hits.Load(); got != 0 {
+		t.Fatalf("Bot hits = %d, want 0", got)
 	}
 }
 

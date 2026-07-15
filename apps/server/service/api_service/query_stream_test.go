@@ -235,7 +235,7 @@ func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
 				context.Background(),
 				"action@example.com",
 				identity.DialogueID,
-				[]byte(`{"surface_id":"s1","widget":"button","action_id":"submit","run_id":"run_action","payload":{}}`),
+				[]byte(`{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run_action","payload":{}}`),
 			)
 			if actionErr != nil {
 				t.Fatalf("A2UI action was not authorized when frame became visible: %v", actionErr)

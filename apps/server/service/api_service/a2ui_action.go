@@ -2,7 +2,6 @@ package api_service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -21,14 +20,6 @@ func a2uiFlagOffStubBody() []byte {
 	return []byte(`{"status":403,"error":{"type":"forbidden","code":403,"message":"` + a2uiDisabledMsg + `"}}`)
 }
 
-type A2uiActionEnvelope struct {
-	SurfaceID string          `json:"surface_id"`
-	Widget    string          `json:"widget"`
-	ActionID  string          `json:"action_id"`
-	RunID     string          `json:"run_id"`
-	Payload   json.RawMessage `json:"payload"`
-}
-
 type A2uiActionOutcome struct {
 	Status      int
 	Body        []byte
@@ -41,16 +32,13 @@ func (ps *Service) A2uiAction(
 	dialogueID string,
 	rawBody []byte,
 ) (*A2uiActionOutcome, error) {
-	var env A2uiActionEnvelope
-	if err := json.Unmarshal(rawBody, &env); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrA2uiActionBadRequest, err)
-	}
-	if env.SurfaceID == "" || env.Widget == "" || env.ActionID == "" || env.RunID == "" {
-		return nil, fmt.Errorf("%w: missing required fields", ErrA2uiActionBadRequest)
+	env, err := decodeA2uiActionEnvelope(rawBody)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid envelope", ErrA2uiActionBadRequest)
 	}
 
 	var count int64
-	err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+	err = model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where(
 			"dialogue_id = ? AND user_name = ? AND bot_run_id = ? AND delete_at IS NULL",
 			dialogueID,
