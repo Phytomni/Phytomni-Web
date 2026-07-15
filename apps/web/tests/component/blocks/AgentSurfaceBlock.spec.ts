@@ -14,7 +14,18 @@ beforeEach(() => _resetA2uiActionIdempotencyForTests());
 describe("AgentSurfaceBlock", () => {
   it("sends confirm action and shows locked status", async () => {
     const sink: A2uiActionEnvelope[] = [];
-    const transport = createMemoryA2uiTransport(sink);
+    const transport = createMemoryA2uiTransport(sink, (envelope) => ({
+      status: "succeeded",
+      run_id: envelope.run_id,
+      result: {
+        a2ui: {
+          catalog_version: "v1.0",
+          surface_id: envelope.surface_id,
+          widget: "confirm",
+          props: { status: "submitted", accepted: true },
+        },
+      },
+    }));
     const block: ContentBlock = {
       type: "agent-surface",
       authority: "agent",
