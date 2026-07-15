@@ -253,6 +253,107 @@ func TestA2uiAction_FlagOnPassthrough(t *testing.T) {
 	}
 }
 
+func TestA2uiAction_UpstreamValidation(t *testing.T) {
+	const succeeded = `{"status":"succeeded","result":{"a2ui":{}}}`
+	const inputRequired = `{"status":"input_required","interrupt":{"draft":{"a2ui":{}}}}`
+
+	tests := []struct {
+		name        string
+		status      int
+		contentType string
+		body        string
+		wantErr     error
+		wantBody    string
+		wantType    string
+	}{
+		{name: "application json succeeded", status: http.StatusOK, contentType: "application/json", body: succeeded, wantBody: succeeded, wantType: "application/json"},
+		{name: "vendor json input required", status: http.StatusAccepted, contentType: "application/vnd.phytomni+json", body: inputRequired, wantBody: inputRequired, wantType: "application/vnd.phytomni+json"},
+		{name: "missing content type", status: http.StatusOK, body: succeeded, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "invalid content type", status: http.StatusOK, contentType: "application/json; charset=\"", body: succeeded, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "text html content type", status: http.StatusOK, contentType: "text/html", body: succeeded, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "empty body", status: http.StatusOK, contentType: "application/json", wantErr: ErrA2uiUpstreamProtocol},
+		{name: "malformed body", status: http.StatusOK, contentType: "application/json", body: `{"status":"succeeded"`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "array body", status: http.StatusOK, contentType: "application/json", body: `[]`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "scalar body", status: http.StatusOK, contentType: "application/json", body: `true`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "trailing value", status: http.StatusOK, contentType: "application/json", body: succeeded + ` {}`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "succeeded missing result", status: http.StatusOK, contentType: "application/json", body: `{"status":"succeeded"}`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "succeeded missing a2ui", status: http.StatusOK, contentType: "application/json", body: `{"status":"succeeded","result":{}}`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "succeeded non object a2ui", status: http.StatusOK, contentType: "application/json", body: `{"status":"succeeded","result":{"a2ui":null}}`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "input required missing interrupt", status: http.StatusOK, contentType: "application/json", body: `{"status":"input_required"}`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "input required missing draft a2ui", status: http.StatusOK, contentType: "application/json", body: `{"status":"input_required","interrupt":{"draft":{}}}`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "input required non object a2ui", status: http.StatusOK, contentType: "application/json", body: `{"status":"input_required","interrupt":{"draft":{"a2ui":[]}}}`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "unknown success status", status: http.StatusOK, contentType: "application/json", body: `{"status":"queued"}`, wantErr: ErrA2uiUpstreamProtocol},
+		{name: "non 2xx object pass through", status: http.StatusConflict, contentType: "application/problem+json", body: `{"error":"surface expired"}`, wantBody: `{"error":"surface expired"}`, wantType: "application/problem+json"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupA2uiActionTest(t)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.contentType != "" {
+					w.Header().Set("Content-Type", tt.contentType)
+				}
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{
+				ProxyEnabled: true, A2uiActionsEnabled: true, BaseURL: srv.URL,
+				UserAPIKey: "test-user-key", TimeoutSeconds: 5,
+			}
+
+			outcome, err := (&Service{}).A2uiAction(
+				context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
+			)
+			if tt.wantErr != nil {
+				if outcome != nil {
+					t.Fatalf("outcome = %#v, want nil", outcome)
+				}
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("A2uiAction: %v", err)
+			}
+			if outcome.Status != tt.status {
+				t.Fatalf("status = %d, want %d", outcome.Status, tt.status)
+			}
+			if outcome.ContentType != tt.wantType {
+				t.Fatalf("content type = %q, want %q", outcome.ContentType, tt.wantType)
+			}
+			if string(outcome.Body) != tt.wantBody {
+				t.Fatalf("body = %q, want %q", outcome.Body, tt.wantBody)
+			}
+		})
+	}
+}
+
+func TestA2uiAction_UpstreamOversizeReturnsSentinel(t *testing.T) {
+	setupA2uiActionTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"succeeded","result":{"a2ui":{}}}`))
+		_, _ = w.Write(make([]byte, int(rxBot.A2uiActionMaxResponseBytes)))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		ProxyEnabled: true, A2uiActionsEnabled: true, BaseURL: srv.URL,
+		UserAPIKey: "test-user-key", TimeoutSeconds: 5,
+	}
+
+	outcome, err := (&Service{}).A2uiAction(
+		context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
+	)
+	if outcome != nil {
+		t.Fatalf("outcome = %#v, want nil", outcome)
+	}
+	if !errors.Is(err, rxBot.ErrA2uiResponseTooLarge) {
+		t.Fatalf("error = %v, want ErrA2uiResponseTooLarge", err)
+	}
+}
+
 func TestA2uiAction_BadEnvelope(t *testing.T) {
 	setupA2uiActionTest(t)
 	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, A2uiActionsEnabled: true}

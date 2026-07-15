@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"strings"
 	"unicode/utf8"
 )
@@ -153,6 +154,81 @@ func isA2uiJSONObject(raw json.RawMessage) bool {
 	}
 	var object map[string]json.RawMessage
 	return json.Unmarshal(trimmed, &object) == nil && object != nil
+}
+
+func validateA2uiUpstreamResponse(status int, contentType string, raw []byte) error {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil || !isA2uiJSONMediaType(mediaType) {
+		return ErrA2uiUpstreamProtocol
+	}
+
+	entries, ok := decodeA2uiObjectEntries(raw)
+	if !ok {
+		return ErrA2uiUpstreamProtocol
+	}
+	if status < 200 || status >= 300 {
+		return nil
+	}
+
+	fields := make(map[string]json.RawMessage, len(entries))
+	for _, entry := range entries {
+		fields[entry.key] = entry.value
+	}
+	statusValue, ok := decodeA2uiStringValue(fields["status"])
+	if !ok {
+		return ErrA2uiUpstreamProtocol
+	}
+
+	switch statusValue {
+	case "succeeded":
+		if _, hasInterrupt := fields["interrupt"]; hasInterrupt || !hasA2uiObjectField(fields["result"], "a2ui") {
+			return ErrA2uiUpstreamProtocol
+		}
+	case "input_required":
+		if _, hasResult := fields["result"]; hasResult || !hasA2uiNestedObjectField(fields["interrupt"], "draft", "a2ui") {
+			return ErrA2uiUpstreamProtocol
+		}
+	default:
+		return ErrA2uiUpstreamProtocol
+	}
+	return nil
+}
+
+func isA2uiJSONMediaType(mediaType string) bool {
+	return mediaType == "application/json" ||
+		strings.HasSuffix(mediaType, "+json")
+}
+
+func hasA2uiObjectField(raw json.RawMessage, field string) bool {
+	if !isA2uiJSONObject(raw) {
+		return false
+	}
+	entries, ok := decodeA2uiObjectEntries(raw)
+	if !ok {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.key == field && isA2uiJSONObject(entry.value) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasA2uiNestedObjectField(raw json.RawMessage, outerField, innerField string) bool {
+	if !isA2uiJSONObject(raw) {
+		return false
+	}
+	entries, ok := decodeA2uiObjectEntries(raw)
+	if !ok {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.key == outerField {
+			return hasA2uiObjectField(entry.value, innerField)
+		}
+	}
+	return false
 }
 
 type a2uiObjectEntry struct {

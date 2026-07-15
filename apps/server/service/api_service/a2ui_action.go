@@ -12,6 +12,7 @@ import (
 var (
 	ErrA2uiActionNotFound   = errors.New("a2ui action target not found")
 	ErrA2uiActionBadRequest = errors.New("invalid a2ui action envelope")
+	ErrA2uiUpstreamProtocol = errors.New("invalid a2ui upstream response")
 )
 
 const a2uiDisabledMsg = "a2ui " + "disabled"
@@ -70,13 +71,12 @@ func (ps *Service) A2uiAction(
 	if err != nil {
 		return nil, err
 	}
-	contentType := result.ContentType
-	if contentType == "" {
-		contentType = "application/json"
+	if result == nil || validateA2uiUpstreamResponse(result.Status, result.ContentType, result.Body) != nil {
+		return nil, ErrA2uiUpstreamProtocol
 	}
 	return &A2uiActionOutcome{
 		Status:      result.Status,
 		Body:        result.Body,
-		ContentType: contentType,
+		ContentType: result.ContentType,
 	}, nil
 }

@@ -27,6 +27,10 @@ func (ph *Handler) A2uiAction(ctx *gin.Context) {
 	}
 	out, err := ph.service.A2uiAction(ctx.Request.Context(), email, dialogueID, raw)
 	if err != nil {
+		if status, ok := a2uiActionUpstreamStatus(err); ok {
+			ctx.JSON(status, gin.H{"message": i18n.T(ctx, "a2ui.request_failed")})
+			return
+		}
 		switch {
 		case errors.Is(err, api_service.ErrA2uiActionBadRequest):
 			ctx.JSON(http.StatusBadRequest, gin.H{"message": i18n.T(ctx, "a2ui.invalid_action")})
@@ -46,4 +50,11 @@ func (ph *Handler) A2uiAction(ctx *gin.Context) {
 		ct = "application/json"
 	}
 	ctx.Data(out.Status, ct, out.Body)
+}
+
+func a2uiActionUpstreamStatus(err error) (int, bool) {
+	if errors.Is(err, rxBot.ErrA2uiResponseTooLarge) || errors.Is(err, api_service.ErrA2uiUpstreamProtocol) {
+		return http.StatusBadGateway, true
+	}
+	return 0, false
 }
