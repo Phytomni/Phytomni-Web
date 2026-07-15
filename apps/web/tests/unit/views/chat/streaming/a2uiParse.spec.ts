@@ -3,6 +3,86 @@ import {
   parseA2uiCustomValue,
   isA2uiCatalogSupported,
 } from "@/views/chat/streaming/a2uiParse";
+import {
+  A2UI_CATALOG_VERSION,
+  A2UI_LIMITS,
+} from "@/views/chat/streaming/a2uiContract";
+import type {
+  A2uiOpenSurface,
+  A2uiTerminalSurface,
+} from "@/views/chat/streaming/a2uiContract";
+
+const confirmOpenSurface = {
+  catalog_version: A2UI_CATALOG_VERSION,
+  surface_id: "sfc-confirm",
+  widget: "confirm",
+  props: {
+    title: "Continue?",
+    body: "Run the analysis as planned.",
+    confirm_label: "Confirm",
+    cancel_label: "Cancel",
+  },
+} satisfies A2uiOpenSurface;
+
+const formOpenSurface = {
+  catalog_version: A2UI_CATALOG_VERSION,
+  surface_id: "sfc-form",
+  widget: "form",
+  props: {
+    title: "Gene ID",
+    fields: [
+      {
+        name: "gene_id",
+        label: "Gene ID",
+        type: "text",
+        required: true,
+      },
+    ],
+  },
+} satisfies A2uiOpenSurface;
+
+const choiceOpenSurface = {
+  catalog_version: A2UI_CATALOG_VERSION,
+  surface_id: "sfc-choice",
+  widget: "choice",
+  props: {
+    title: "Choice",
+    options: [
+      { id: "a", label: "Option A" },
+      { id: "b", label: "Option B" },
+    ],
+    multiple: false,
+  },
+} satisfies A2uiOpenSurface;
+
+const terminalSurface = {
+  catalog_version: A2UI_CATALOG_VERSION,
+  surface_id: "sfc-form",
+  widget: "form",
+  props: {
+    status: "submitted",
+    fields: { gene_id: "AT1G01010" },
+  },
+} satisfies A2uiTerminalSurface;
+
+void confirmOpenSurface;
+void formOpenSurface;
+void choiceOpenSurface;
+void terminalSurface;
+
+describe("A2UI resource limits", () => {
+  it("keeps reviewed request, response, and content budgets", () => {
+    expect(A2UI_LIMITS).toEqual({
+      requestBytes: 64 * 1024,
+      responseBytes: 1024 * 1024,
+      identifierChars: 256,
+      formFields: 20,
+      choiceItems: 100,
+      labelChars: 256,
+      textChars: 4096,
+    });
+  });
+});
 
 describe("isA2uiCatalogSupported", () => {
   it("accepts v1.0 and forward v1.x strings", () => {
