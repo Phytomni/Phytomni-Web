@@ -3,6 +3,7 @@ package bot
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,14 @@ type A2uiActionResult struct {
 	Body        []byte
 	ContentType string
 }
+
+// A2uiActionMaxResponseBytes bounds the completed response body returned by
+// the Bot action endpoint.
+const A2uiActionMaxResponseBytes int64 = 1 << 20
+
+// ErrA2uiResponseTooLarge marks a Bot action response that exceeds the
+// gateway's response body budget.
+var ErrA2uiResponseTooLarge = errors.New("a2ui response too large")
 
 // PostA2uiAction POSTs raw JSON bytes to Bot
 // POST /v1/runs/{run_id}/a2ui-actions. Transport/timeout errors wrap
@@ -38,9 +47,12 @@ func (c *Client) PostA2uiAction(ctx context.Context, runID string, body []byte) 
 		return nil, err
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, A2uiActionMaxResponseBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(raw)) > A2uiActionMaxResponseBytes {
+		return nil, ErrA2uiResponseTooLarge
 	}
 	return &A2uiActionResult{
 		Status:      resp.StatusCode,

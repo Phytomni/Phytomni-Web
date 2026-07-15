@@ -1,15 +1,32 @@
 package bot
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func a2uiResponseServer(t *testing.T, body []byte, setContentLength bool) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if setContentLength {
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		} else if flusher, ok := w.(http.Flusher); ok {
+			// Flush headers before writing the body so the client receives an
+			// unknown Content-Length and must enforce the streaming read bound.
+			flusher.Flush()
+		}
+		_, _ = w.Write(body)
+	}))
+}
 
 func TestPostA2uiAction_ForwardsRawBodyAndAuth(t *testing.T) {
 	var gotPath, gotAuth, gotCT string
@@ -62,6 +79,51 @@ func TestPostA2uiAction_ReturnsBot4xxAsResult(t *testing.T) {
 	}
 	if res.Status != 409 || string(res.Body) != string(body) {
 		t.Fatalf("got status=%d body=%s", res.Status, res.Body)
+	}
+}
+
+func TestPostA2uiAction_AcceptsExactResponseLimit(t *testing.T) {
+	body := bytes.Repeat([]byte("a"), int(A2uiActionMaxResponseBytes))
+	srv := a2uiResponseServer(t, body, true)
+	defer srv.Close()
+
+	res, err := newTestClient(srv.URL).PostA2uiAction(context.Background(), "run-1", []byte(`{}`))
+	if err != nil {
+		t.Fatalf("exact response limit must succeed: %v", err)
+	}
+	if res == nil {
+		t.Fatal("exact response limit returned nil result")
+	}
+	if len(res.Body) != len(body) {
+		t.Fatalf("result body length = %d, want %d", len(res.Body), len(body))
+	}
+}
+
+func TestPostA2uiAction_RejectsOversizeResponseWithoutPartialResult(t *testing.T) {
+	body := bytes.Repeat([]byte("a"), int(A2uiActionMaxResponseBytes)+1)
+	srv := a2uiResponseServer(t, body, true)
+	defer srv.Close()
+
+	res, err := newTestClient(srv.URL).PostA2uiAction(context.Background(), "run-1", []byte(`{}`))
+	if !errors.Is(err, ErrA2uiResponseTooLarge) {
+		t.Fatalf("oversize response error = %v, want ErrA2uiResponseTooLarge", err)
+	}
+	if res != nil {
+		t.Fatalf("oversize response returned partial result: %+v", res)
+	}
+}
+
+func TestPostA2uiAction_RejectsOversizeUnknownContentLength(t *testing.T) {
+	body := bytes.Repeat([]byte("a"), int(A2uiActionMaxResponseBytes)+1)
+	srv := a2uiResponseServer(t, body, false)
+	defer srv.Close()
+
+	res, err := newTestClient(srv.URL).PostA2uiAction(context.Background(), "run-1", []byte(`{}`))
+	if !errors.Is(err, ErrA2uiResponseTooLarge) {
+		t.Fatalf("unknown Content-Length error = %v, want ErrA2uiResponseTooLarge", err)
+	}
+	if res != nil {
+		t.Fatalf("unknown Content-Length returned partial result: %+v", res)
 	}
 }
 
