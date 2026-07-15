@@ -78,10 +78,16 @@ invalid_collect_type = "无效的collect_type值"
 
 [a2ui]
 invalid_body = "请求体无效"
+invalid_json = "JSON 请求体无效"
 invalid_action = "无效的 A2UI 操作"
+unsupported_media_type = "不支持的媒体类型"
+request_too_large = "请求体过大"
 not_found = "未找到"
 gateway_disabled = "服务暂时不可用"
 request_timed_out = "请求超时，请稍后再试"
+upstream_too_large = "上游响应过大"
+upstream_invalid = "上游响应无效"
+internal = "请求失败"
 request_failed = "请求失败"
 disabled_stub = "a2ui 已禁用"
 

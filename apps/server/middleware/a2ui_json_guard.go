@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"phytomni-server/common"
 	"phytomni-server/common/i18n"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +22,6 @@ const (
 	a2uiInvalidJSONCode      = "a2ui_invalid_json"
 	a2uiRequestTooLargeCode  = "a2ui_request_too_large"
 	a2uiUnsupportedMediaCode = "a2ui_unsupported_media_type"
-	a2uiGatewayErrorType     = "gateway_error"
 )
 
 // A2uiJSONGuard validates and bounds the A2UI action body before downstream
@@ -31,12 +31,12 @@ func A2uiJSONGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mediaType, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
 		if err != nil || !isA2uiJSONMediaType(mediaType) {
-			abortA2uiJSONGuard(c, http.StatusUnsupportedMediaType, a2uiUnsupportedMediaCode)
+			abortA2uiJSONGuard(c, http.StatusUnsupportedMediaType, a2uiUnsupportedMediaCode, "a2ui.unsupported_media_type")
 			return
 		}
 
 		if c.Request == nil {
-			abortA2uiJSONGuard(c, http.StatusBadRequest, a2uiInvalidJSONCode)
+			abortA2uiJSONGuard(c, http.StatusBadRequest, a2uiInvalidJSONCode, "a2ui.invalid_json")
 			return
 		}
 
@@ -50,11 +50,11 @@ func A2uiJSONGuard() gin.HandlerFunc {
 		bounded := io.LimitReader(body, A2uiActionMaxRequestBytes+1)
 		rawBody, readErr := io.ReadAll(bounded)
 		if int64(len(rawBody)) > A2uiActionMaxRequestBytes {
-			abortA2uiJSONGuard(c, http.StatusRequestEntityTooLarge, a2uiRequestTooLargeCode)
+			abortA2uiJSONGuard(c, http.StatusRequestEntityTooLarge, a2uiRequestTooLargeCode, "a2ui.request_too_large")
 			return
 		}
 		if readErr != nil || !json.Valid(rawBody) {
-			abortA2uiJSONGuard(c, http.StatusBadRequest, a2uiInvalidJSONCode)
+			abortA2uiJSONGuard(c, http.StatusBadRequest, a2uiInvalidJSONCode, "a2ui.invalid_json")
 			return
 		}
 
@@ -69,14 +69,7 @@ func isA2uiJSONMediaType(mediaType string) bool {
 	return strings.EqualFold(mediaType, "application/json") || strings.HasSuffix(mediaType, "+json")
 }
 
-func abortA2uiJSONGuard(c *gin.Context, status int, code string) {
-	c.AbortWithStatusJSON(status, gin.H{
-		"error": gin.H{
-			"type":    a2uiGatewayErrorType,
-			"code":    code,
-			"message": i18n.T(c, "a2ui.invalid_body"),
-		},
-		"forwarded": false,
-		"retryable": false,
-	})
+func abortA2uiJSONGuard(c *gin.Context, status int, code, messageKey string) {
+	common.WriteA2uiHTTPError(c, status, code, i18n.T(c, messageKey), false, false)
+	c.Abort()
 }

@@ -237,13 +237,14 @@ func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
 				identity.DialogueID,
 				[]byte(`{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run_action","payload":{"accepted":true}}`),
 			)
-			if actionErr != nil {
-				t.Fatalf("A2UI action was not authorized when frame became visible: %v", actionErr)
+			if !errors.Is(actionErr, ErrGatewayDisabled) {
+				t.Fatalf("A2UI action gateway result = %v, want ErrGatewayDisabled", actionErr)
 			}
-			// Flag-off is intentionally still a 403 stub. Reaching the outcome
-			// proves the unchanged ownership tuple was already present.
-			if outcome == nil || outcome.Status != http.StatusForbidden {
-				t.Fatalf("flag-off outcome = %+v, want 403 stub after authorization", outcome)
+			// Flag-off now fails before dispatch with the same typed disabled error
+			// as proxy-disabled mode; reaching this branch still proves the
+			// ownership tuple was present before the flag gate.
+			if outcome != nil {
+				t.Fatalf("flag-off outcome = %+v, want nil", outcome)
 			}
 			authorizedAtFrame = true
 			return nil

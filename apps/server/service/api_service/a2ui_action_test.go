@@ -145,7 +145,7 @@ func TestA2uiAction_RunMismatchDoesNotCallBot(t *testing.T) {
 	}
 }
 
-func TestA2uiAction_FlagOffStub403(t *testing.T) {
+func TestA2uiAction_FlagOffReturnsGatewayDisabled(t *testing.T) {
 	setupA2uiActionTest(t)
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -165,18 +165,11 @@ func TestA2uiAction_FlagOffStub403(t *testing.T) {
 		context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
 	)
 
-	if err != nil {
-		t.Fatalf("A2uiAction: %v", err)
+	if outcome != nil {
+		t.Fatalf("outcome = %#v, want nil", outcome)
 	}
-	if outcome.Status != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", outcome.Status)
-	}
-	const wantBody = `{"status":403,"error":{"type":"forbidden","code":403,"message":"a2ui disabled"}}`
-	if string(outcome.Body) != wantBody {
-		t.Fatalf("body = %q, want %q", outcome.Body, wantBody)
-	}
-	if outcome.ContentType != "application/json" {
-		t.Fatalf("content type = %q, want application/json", outcome.ContentType)
+	if !errors.Is(err, ErrGatewayDisabled) {
+		t.Fatalf("error = %v, want ErrGatewayDisabled", err)
 	}
 	if got := hits.Load(); got != 0 {
 		t.Fatalf("Bot hits = %d, want 0", got)

@@ -111,6 +111,10 @@ func buildChatGateEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 	db.Set("phytomni-server", gdb)
 
 	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		c.Set("x-request-id", "router-test-request")
+		c.Next()
+	})
 	Api(engine.Group("/"))
 	return engine, gdb
 }
@@ -230,9 +234,10 @@ func TestA2uiActionRouteAcceptsExactLimitAndReachesService(t *testing.T) {
 
 	body := a2uiActionBodyOfSize(t, middleware.A2uiActionMaxRequestBytes)
 	response := sendA2uiActionRequest(engine, tok, body, "application/json")
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("exact-limit A2UI action: got %d, want flag-off service response 403", response.Code)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("exact-limit A2UI action: got %d, want invalid-action service response 422", response.Code)
 	}
+	assertA2uiGatewayError(t, response, "a2ui_invalid_action", false, false)
 	waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
 }
 
@@ -240,12 +245,13 @@ func TestA2uiActionRouteAuditRedactsPayload(t *testing.T) {
 	engine, gdb := buildChatGateEnv(t)
 	configureA2uiFlagOff(t)
 	tok := seedA2uiActionOwner(t, gdb, "a2ui-audit@x.com", "1")
-	body := []byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":{"email":"researcher@example.com","biological_input":"BRCA1","nested":{"token":"secret-token"}},"extra":"drop-me"}`)
+	body := []byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":{"fields":{"email":"researcher@example.com","biological_input":"BRCA1","token":"secret-token"}}}`)
 
 	response := sendA2uiActionRequest(engine, tok, body, "application/json")
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("A2UI audit request: got %d, want flag-off service response 403", response.Code)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("A2UI audit request: got %d, want gateway-disabled response 503", response.Code)
 	}
+	assertA2uiGatewayError(t, response, "a2ui_gateway_disabled", false, true)
 	waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
 
 	var bodyParams string
@@ -260,6 +266,40 @@ func TestA2uiActionRouteAuditRedactsPayload(t *testing.T) {
 	}
 }
 
+type a2uiGatewayErrorResponse struct {
+	Error struct {
+		Type      string `json:"type"`
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
+	} `json:"error"`
+	Forwarded bool `json:"forwarded"`
+	Retryable bool `json:"retryable"`
+}
+
+func assertA2uiGatewayError(t *testing.T, response *httptest.ResponseRecorder, code string, forwarded, retryable bool) {
+	t.Helper()
+	var envelope a2uiGatewayErrorResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode gateway error: %v; body=%q", err, response.Body.String())
+	}
+	if envelope.Error.Type != "gateway_error" {
+		t.Errorf("error.type = %q, want gateway_error", envelope.Error.Type)
+	}
+	if envelope.Error.Code != code {
+		t.Errorf("error.code = %q, want %q", envelope.Error.Code, code)
+	}
+	if envelope.Error.RequestID != "router-test-request" {
+		t.Errorf("error.request_id = %q, want router-test-request", envelope.Error.RequestID)
+	}
+	if envelope.Forwarded != forwarded {
+		t.Errorf("forwarded = %v, want %v", envelope.Forwarded, forwarded)
+	}
+	if envelope.Retryable != retryable {
+		t.Errorf("retryable = %v, want %v", envelope.Retryable, retryable)
+	}
+}
+
 func TestA2uiActionRouteRejectsOverflowBeforeOperationLog(t *testing.T) {
 	engine, gdb := buildChatGateEnv(t)
 	configureA2uiFlagOff(t)
@@ -270,7 +310,34 @@ func TestA2uiActionRouteRejectsOverflowBeforeOperationLog(t *testing.T) {
 	if response.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("overflow A2UI action: got %d, want 413", response.Code)
 	}
+	assertA2uiGatewayError(t, response, "a2ui_request_too_large", false, false)
 	assertNoOperationLog(t, gdb, a2uiActionRoutePath)
+}
+
+func TestA2uiActionRouteMapsGuardFailuresToStableCodes(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        []byte
+		contentType string
+		status      int
+		code        string
+	}{
+		{name: "malformed json", body: []byte(`{"unterminated"`), contentType: "application/json", status: http.StatusBadRequest, code: "a2ui_invalid_json"},
+		{name: "unsupported media", body: []byte(`{}`), contentType: "text/plain", status: http.StatusUnsupportedMediaType, code: "a2ui_unsupported_media_type"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, gdb := buildChatGateEnv(t)
+			configureA2uiFlagOff(t)
+			tok := seedA2uiActionOwner(t, gdb, "a2ui-guard@x.com", "1")
+			response := sendA2uiActionRequest(engine, tok, tt.body, tt.contentType)
+			if response.Code != tt.status {
+				t.Fatalf("status = %d, want %d; body=%q", response.Code, tt.status, response.Body.String())
+			}
+			assertA2uiGatewayError(t, response, tt.code, false, false)
+			assertNoOperationLog(t, gdb, a2uiActionRoutePath)
+		})
+	}
 }
 
 func TestA2uiJSONGuardDoesNotApplyToGenericApiV1Routes(t *testing.T) {

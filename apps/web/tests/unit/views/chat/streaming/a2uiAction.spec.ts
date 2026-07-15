@@ -58,12 +58,6 @@ const jsonResponse = (status: number, body: unknown): Response =>
     headers: { "Content-Type": "application/json" },
   });
 
-const textResponse = (status: number, body: string): Response =>
-  new Response(body, {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-
 describe("a2uiAction", () => {
   it("buildA2uiActionId returns a non-empty unique-ish id", () => {
     const a = buildA2uiActionId();
@@ -158,8 +152,13 @@ describe("a2uiAction", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("classifies malformed 2xx JSON as an ambiguous outcome", async () => {
-    const fetchImpl = vi.fn(async () => textResponse(200, "not-json"));
+  it("maps an invalid upstream gateway envelope to an ambiguous outcome", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(502, gatewayError("a2ui_upstream_invalid", {
+        forwarded: true,
+        retryable: false,
+      })),
+    );
     const t = createFetchA2uiTransport({
       conversationId: "42",
       getToken: () => "tok",
@@ -167,17 +166,21 @@ describe("a2uiAction", () => {
     });
     await expect(t(envelope)).rejects.toMatchObject({
       kind: "unknown",
-      code: "a2ui_invalid_response",
-      httpStatus: 200,
+      code: "a2ui_upstream_invalid",
+      httpStatus: 502,
       forwarded: true,
       retryable: false,
       message: "A2UI action request failed",
     });
   });
 
-  it("classifies oversized 2xx JSON as an ambiguous outcome", async () => {
-    const oversized = `{"padding":"${"x".repeat(1024 * 1024)}"}`;
-    const fetchImpl = vi.fn(async () => textResponse(200, oversized));
+  it("maps an oversized upstream gateway envelope to an ambiguous outcome", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(502, gatewayError("a2ui_upstream_too_large", {
+        forwarded: true,
+        retryable: false,
+      })),
+    );
     const t = createFetchA2uiTransport({
       conversationId: "42",
       getToken: () => "tok",
@@ -185,8 +188,8 @@ describe("a2uiAction", () => {
     });
     await expect(t(envelope)).rejects.toMatchObject({
       kind: "unknown",
-      code: "a2ui_response_too_large",
-      httpStatus: 200,
+      code: "a2ui_upstream_too_large",
+      httpStatus: 502,
       forwarded: true,
       retryable: false,
     });
@@ -194,7 +197,7 @@ describe("a2uiAction", () => {
 
   it.each([404, 409])("maps HTTP %s to expired", async (status) => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(status, gatewayError("a2ui_not_found")),
+      jsonResponse(status, gatewayError("a2ui_not_found", { retryable: false })),
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -206,7 +209,7 @@ describe("a2uiAction", () => {
       code: "a2ui_not_found",
       httpStatus: status,
       forwarded: false,
-      retryable: true,
+      retryable: false,
     });
   });
 

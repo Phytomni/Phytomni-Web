@@ -15,12 +15,6 @@ var (
 	ErrA2uiUpstreamProtocol = errors.New("invalid a2ui upstream response")
 )
 
-const a2uiDisabledMsg = "a2ui " + "disabled"
-
-func a2uiFlagOffStubBody() []byte {
-	return []byte(`{"status":403,"error":{"type":"forbidden","code":403,"message":"` + a2uiDisabledMsg + `"}}`)
-}
-
 type A2uiActionOutcome struct {
 	Status      int
 	Body        []byte
@@ -60,11 +54,7 @@ func (ps *Service) A2uiAction(
 		return nil, ErrGatewayDisabled
 	}
 	if !rxBot.BotConfig.A2uiActionsEnabled {
-		return &A2uiActionOutcome{
-			Status:      403,
-			Body:        a2uiFlagOffStubBody(),
-			ContentType: "application/json",
-		}, nil
+		return nil, ErrGatewayDisabled
 	}
 
 	result, err := rxBot.NewClient().PostA2uiAction(ctx, env.RunID, rawBody)

@@ -29,6 +29,10 @@ func newA2uiJSONGuardTestServer(t *testing.T) *a2uiJSONGuardTestServer {
 func newA2uiJSONGuardEngine(state *a2uiJSONGuardTestServer) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		c.Set("x-request-id", "guard-test-request")
+		c.Next()
+	})
 	engine.Use(i18n.Localize())
 	engine.POST(
 		"/a2ui",
@@ -49,9 +53,10 @@ func newA2uiJSONGuardEngine(state *a2uiJSONGuardTestServer) *gin.Engine {
 
 type a2uiJSONGuardResponse struct {
 	Error struct {
-		Type    string `json:"type"`
-		Code    string `json:"code"`
-		Message string `json:"message"`
+		Type      string `json:"type"`
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
 	} `json:"error"`
 	Forwarded bool `json:"forwarded"`
 	Retryable bool `json:"retryable"`
@@ -66,7 +71,7 @@ func decodeA2uiJSONGuardResponse(t *testing.T, response *httptest.ResponseRecord
 	return envelope
 }
 
-func assertA2uiJSONGuardError(t *testing.T, response *httptest.ResponseRecorder, status int, code string) {
+func assertA2uiJSONGuardError(t *testing.T, response *httptest.ResponseRecorder, status int, code, message string) {
 	t.Helper()
 	if response.Code != status {
 		t.Fatalf("status = %d, want %d; body=%q", response.Code, status, response.Body.String())
@@ -78,8 +83,11 @@ func assertA2uiJSONGuardError(t *testing.T, response *httptest.ResponseRecorder,
 	if envelope.Error.Code != code {
 		t.Errorf("error.code = %q, want %q", envelope.Error.Code, code)
 	}
-	if envelope.Error.Message != "invalid body" {
-		t.Errorf("error.message = %q, want localized invalid body copy", envelope.Error.Message)
+	if envelope.Error.Message != message {
+		t.Errorf("error.message = %q, want localized copy %q", envelope.Error.Message, message)
+	}
+	if envelope.Error.RequestID == "" {
+		t.Error("error.request_id is empty")
 	}
 	if envelope.Forwarded {
 		t.Error("forwarded = true, want false")
@@ -149,7 +157,7 @@ func TestA2uiJSONGuard_RejectsUnsupportedMediaTypes(t *testing.T) {
 			engine := newA2uiJSONGuardEngine(server)
 			engine.ServeHTTP(response, request)
 
-			assertA2uiJSONGuardError(t, response, http.StatusUnsupportedMediaType, "a2ui_unsupported_media_type")
+			assertA2uiJSONGuardError(t, response, http.StatusUnsupportedMediaType, "a2ui_unsupported_media_type", "unsupported media type")
 			if server.downstreamCalls != 0 || server.finalCalls != 0 {
 				t.Fatalf("downstream/final calls = %d/%d, want 0/0", server.downstreamCalls, server.finalCalls)
 			}
@@ -196,7 +204,7 @@ func TestA2uiJSONGuard_ChunkedBodyOverLimitIsRejected(t *testing.T) {
 	engine := newA2uiJSONGuardEngine(server)
 	engine.ServeHTTP(response, request)
 
-	assertA2uiJSONGuardError(t, response, http.StatusRequestEntityTooLarge, "a2ui_request_too_large")
+	assertA2uiJSONGuardError(t, response, http.StatusRequestEntityTooLarge, "a2ui_request_too_large", "request body too large")
 	if server.downstreamCalls != 0 || server.finalCalls != 0 {
 		t.Fatalf("downstream/final calls = %d/%d, want 0/0", server.downstreamCalls, server.finalCalls)
 	}
@@ -224,7 +232,7 @@ func TestA2uiJSONGuard_RejectsMalformedEmptyAndReadErrorBodies(t *testing.T) {
 			engine := newA2uiJSONGuardEngine(server)
 			engine.ServeHTTP(response, request)
 
-			assertA2uiJSONGuardError(t, response, http.StatusBadRequest, "a2ui_invalid_json")
+			assertA2uiJSONGuardError(t, response, http.StatusBadRequest, "a2ui_invalid_json", "invalid JSON body")
 			if server.downstreamCalls != 0 || server.finalCalls != 0 {
 				t.Fatalf("downstream/final calls = %d/%d, want 0/0", server.downstreamCalls, server.finalCalls)
 			}

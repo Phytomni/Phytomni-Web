@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"phytomni-server/common"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/service/api_service"
@@ -22,27 +23,14 @@ func (ph *Handler) A2uiAction(ctx *gin.Context) {
 	dialogueID := ctx.Param("id")
 	raw, err := io.ReadAll(ctx.Request.Body)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"message": i18n.T(ctx, "a2ui.invalid_body")})
+		writeA2uiActionError(ctx, a2uiActionError{
+			status: http.StatusBadRequest, code: "a2ui_invalid_json", messageKey: "a2ui.invalid_json",
+		})
 		return
 	}
 	out, err := ph.service.A2uiAction(ctx.Request.Context(), email, dialogueID, raw)
 	if err != nil {
-		if status, ok := a2uiActionUpstreamStatus(err); ok {
-			ctx.JSON(status, gin.H{"message": i18n.T(ctx, "a2ui.request_failed")})
-			return
-		}
-		switch {
-		case errors.Is(err, api_service.ErrA2uiActionBadRequest):
-			ctx.JSON(http.StatusBadRequest, gin.H{"message": i18n.T(ctx, "a2ui.invalid_action")})
-		case errors.Is(err, api_service.ErrA2uiActionNotFound):
-			ctx.JSON(http.StatusNotFound, gin.H{"message": i18n.T(ctx, "a2ui.not_found")})
-		case errors.Is(err, api_service.ErrGatewayDisabled):
-			ctx.JSON(http.StatusServiceUnavailable, gin.H{"message": i18n.T(ctx, "a2ui.gateway_disabled")})
-		case errors.Is(err, rxBot.ErrBotTimeout):
-			ctx.JSON(http.StatusGatewayTimeout, gin.H{"message": i18n.T(ctx, "a2ui.request_timed_out")})
-		default:
-			ctx.JSON(http.StatusInternalServerError, gin.H{"message": i18n.T(ctx, "a2ui.request_failed")})
-		}
+		writeA2uiActionError(ctx, classifyA2uiActionError(err))
 		return
 	}
 	ct := out.ContentType
@@ -50,6 +38,44 @@ func (ph *Handler) A2uiAction(ctx *gin.Context) {
 		ct = "application/json"
 	}
 	ctx.Data(out.Status, ct, out.Body)
+}
+
+type a2uiActionError struct {
+	status     int
+	code       string
+	messageKey string
+	forwarded  bool
+	retryable  bool
+}
+
+func classifyA2uiActionError(err error) a2uiActionError {
+	switch {
+	case errors.Is(err, api_service.ErrA2uiActionBadRequest):
+		return a2uiActionError{status: http.StatusUnprocessableEntity, code: "a2ui_invalid_action", messageKey: "a2ui.invalid_action"}
+	case errors.Is(err, api_service.ErrA2uiActionNotFound):
+		return a2uiActionError{status: http.StatusNotFound, code: "a2ui_not_found", messageKey: "a2ui.not_found"}
+	case errors.Is(err, api_service.ErrGatewayDisabled):
+		return a2uiActionError{status: http.StatusServiceUnavailable, code: "a2ui_gateway_disabled", messageKey: "a2ui.gateway_disabled", retryable: true}
+	case errors.Is(err, rxBot.ErrBotTimeout):
+		return a2uiActionError{status: http.StatusGatewayTimeout, code: "a2ui_upstream_timeout", messageKey: "a2ui.request_timed_out", forwarded: true}
+	case errors.Is(err, rxBot.ErrA2uiResponseTooLarge):
+		return a2uiActionError{status: http.StatusBadGateway, code: "a2ui_upstream_too_large", messageKey: "a2ui.upstream_too_large", forwarded: true}
+	case errors.Is(err, api_service.ErrA2uiUpstreamProtocol):
+		return a2uiActionError{status: http.StatusBadGateway, code: "a2ui_upstream_invalid", messageKey: "a2ui.upstream_invalid", forwarded: true}
+	default:
+		return a2uiActionError{status: http.StatusInternalServerError, code: "a2ui_internal", messageKey: "a2ui.internal", retryable: true}
+	}
+}
+
+func writeA2uiActionError(ctx *gin.Context, failure a2uiActionError) {
+	common.WriteA2uiHTTPError(
+		ctx,
+		failure.status,
+		failure.code,
+		i18n.T(ctx, failure.messageKey),
+		failure.forwarded,
+		failure.retryable,
+	)
 }
 
 func a2uiActionUpstreamStatus(err error) (int, bool) {
