@@ -30,7 +30,10 @@ vi.mock("vue-element-plus-x", () => ({
       "submitType",
     ],
     emits: ["update:modelValue", "submit", "select", "search"],
-    setup(_props: unknown, { expose }: { expose: (exposed: Record<string, unknown>) => void }) {
+    setup(
+      _props: unknown,
+      { expose }: { expose: (exposed: Record<string, unknown>) => void }
+    ) {
       expose(mentionExpose);
       return {};
     },
@@ -96,11 +99,6 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
           props: ["options", "rolesLoading", "selectedAgent", "disabled"],
           emits: ["select", "clear"],
         },
-        PhyComposerFrame: {
-          name: "PhyComposerFrame",
-          template:
-            '<div class="phy-composer-frame"><slot name="attachments" /><slot /><slot name="actions" /></div>',
-        },
         ElUpload: {
           name: "ElUpload",
           template: '<div class="upload-demo"><slot name="trigger" /></div>',
@@ -129,7 +127,8 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
         ElIcon: { name: "ElIcon", template: "<span><slot /></span>" },
         ElDropdown: {
           name: "ElDropdown",
-          template: '<div class="el-dropdown"><slot /><slot name="dropdown" /></div>',
+          template:
+            '<div class="el-dropdown"><slot /><slot name="dropdown" /></div>',
           props: ["placement", "trigger", "disabled"],
           emits: ["command"],
         },
@@ -176,9 +175,11 @@ describe("ChatComposer", () => {
       const cls = el.className?.toString() || "";
       const testId = el.getAttribute("data-testid");
       if (testId === "chat-composer") order.push("chat-composer");
-      if (cls.includes("chat-composer-surface")) order.push("chat-composer-surface");
+      if (cls.includes("chat-composer-surface"))
+        order.push("chat-composer-surface");
       if (cls.includes("phy-composer-frame")) order.push("phy-composer-frame");
-      if (cls.includes("composer-attachments")) order.push("composer-attachments");
+      if (cls.includes("composer-attachments"))
+        order.push("composer-attachments");
       if (cls.includes("composer-toolbar")) order.push("composer-toolbar");
       if (cls.includes("composer-mode-selector")) {
         order.push("composer-mode-selector");
@@ -186,7 +187,8 @@ describe("ChatComposer", () => {
       if (testId === "chat-agent-picker" || cls.includes("chat-agent-picker")) {
         order.push("chat-agent-picker");
       }
-      if (cls.includes("mention-sender-stub")) order.push("mention-sender-stub");
+      if (cls.includes("mention-sender-stub"))
+        order.push("mention-sender-stub");
       if (cls.includes("upload-demo")) order.push("upload-demo");
       if (cls.includes("send-btn")) order.push("send-btn");
       Array.from(el.children).forEach(walk);
@@ -298,9 +300,9 @@ describe("ChatComposer", () => {
 
   it("disables upload and mention controls while sending", () => {
     const wrapper = mountComposer({ isSending: true });
-    expect(wrapper.findComponent({ name: "MentionSender" }).props("disabled")).toBe(
-      true
-    );
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(true);
     expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
       true
     );

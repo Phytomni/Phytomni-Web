@@ -43,7 +43,7 @@
             <div
               v-for="agent in presetAgents"
               :key="agent.id"
-              class="input-container-bottom-item"
+              class="agent-option"
               @click="handleAgentClick(agent)"
             >
               <span>{{ agent.name }}</span>
@@ -63,64 +63,64 @@
         </template>
       </ChatSidebarNav>
 
-    <!-- Rename dialog -->
-    <el-dialog
-      v-model="renameDialogVisible"
-      :title="$t('chat.actions.rename')"
-      width="400px"
-      :close-on-click-modal="false"
-      :close-on-press-escape="false"
-      @close="handleRenameDialogClose"
-    >
-      <el-form :model="renameForm" ref="renameFormRef" :rules="renameRules">
-        <el-form-item prop="title" :label="$t('chat.conversationTitle')">
-          <el-input
-            v-model="renameForm.title"
-            :placeholder="$t('chat.actions.enterNewTitle')"
-            maxlength="100"
-            show-word-limit
-            @keyup.enter="handleRenameConfirm"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="renameDialogVisible = false">
-            {{ $t("common.cancel") }}
-          </el-button>
-          <el-button type="primary" @click="handleRenameConfirm">
-            {{ $t("common.confirm") }}
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
+      <!-- Rename dialog -->
+      <el-dialog
+        v-model="renameDialogVisible"
+        :title="$t('chat.actions.rename')"
+        width="400px"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        @close="handleRenameDialogClose"
+      >
+        <el-form :model="renameForm" ref="renameFormRef" :rules="renameRules">
+          <el-form-item prop="title" :label="$t('chat.conversationTitle')">
+            <el-input
+              v-model="renameForm.title"
+              :placeholder="$t('chat.actions.enterNewTitle')"
+              maxlength="100"
+              show-word-limit
+              @keyup.enter="handleRenameConfirm"
+            />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="renameDialogVisible = false">
+              {{ $t("common.cancel") }}
+            </el-button>
+            <el-button type="primary" @click="handleRenameConfirm">
+              {{ $t("common.confirm") }}
+            </el-button>
+          </span>
+        </template>
+      </el-dialog>
 
-    <!-- Delete confirmation dialog -->
-    <el-dialog
-      v-model="deleteDialogVisible"
-      :title="$t('chat.actions.deleteConfirm')"
-      width="400px"
-      :close-on-click-modal="false"
-      :close-on-press-escape="false"
-    >
-      <div class="delete-confirm-content">
-        <el-icon class="warning-icon">
-          <Warning />
-        </el-icon>
-        <p>{{ $t("chat.actions.deleteWarning") }}</p>
-        <p class="chat-title-to-delete">{{ chatToDelete?.title }}</p>
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="deleteDialogVisible = false">
-            {{ $t("common.cancel") }}
-          </el-button>
-          <el-button type="danger" @click="handleDeleteConfirm">
-            {{ $t("common.confirm") }}
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
+      <!-- Delete confirmation dialog -->
+      <el-dialog
+        v-model="deleteDialogVisible"
+        :title="$t('chat.actions.deleteConfirm')"
+        width="400px"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+      >
+        <div class="delete-confirm-content">
+          <el-icon class="warning-icon">
+            <Warning />
+          </el-icon>
+          <p>{{ $t("chat.actions.deleteWarning") }}</p>
+          <p class="chat-title-to-delete">{{ chatToDelete?.title }}</p>
+        </div>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="deleteDialogVisible = false">
+              {{ $t("common.cancel") }}
+            </el-button>
+            <el-button type="danger" @click="handleDeleteConfirm">
+              {{ $t("common.confirm") }}
+            </el-button>
+          </span>
+        </template>
+      </el-dialog>
     </div>
   </PhyAdaptiveSidebar>
 </template>
@@ -167,7 +167,8 @@ const props = defineProps({
 });
 const router = useRouter();
 const UserStore = userStore();
-const { todayChats, yesterdayChats, weekChats, olderChats } = useChatHistoryGroups(toRef(props, "chatList"));
+const { todayChats, yesterdayChats, weekChats, olderChats } =
+  useChatHistoryGroups(toRef(props, "chatList"));
 const chatHistoryGroups = computed<ChatHistoryGroup[]>(() => [
   {
     key: "today",
@@ -204,18 +205,13 @@ const emit = defineEmits([
   "showArchitecture",
 ]);
 
-const {
-  isMobile,
-  sidebarCollapsed,
-  drawerOpen,
-  toggle,
-  closeDrawer,
-} = useSidebarResponsive({
-  collapsed: () => props.collapsed,
-  drawerOpen: () => props.drawerOpen,
-  onCollapseChange: (value) => emit("handleSidebarCollapse", value),
-  onDrawerOpenChange: (value) => emit("drawerOpenChange", value),
-});
+const { isMobile, sidebarCollapsed, drawerOpen, toggle, closeDrawer } =
+  useSidebarResponsive({
+    collapsed: () => props.collapsed,
+    drawerOpen: () => props.drawerOpen,
+    onCollapseChange: (value) => emit("handleSidebarCollapse", value),
+    onDrawerOpenChange: (value) => emit("drawerOpenChange", value),
+  });
 
 const renderedSidebarCollapsed = computed(
   () => props.effectiveCollapsed ?? sidebarCollapsed.value
@@ -253,7 +249,15 @@ const handleAgentClick = (agent: { route: string }) => {
   showAgentsList.value = false;
 };
 
-const { handleCommand, hasPermission, startNewChat, openKnowledgeBase, openFavorites, startTutorial, selectChat } = useSidebarNavigation({
+const {
+  handleCommand,
+  hasPermission,
+  startNewChat,
+  openKnowledgeBase,
+  openFavorites,
+  startTutorial,
+  selectChat,
+} = useSidebarNavigation({
   router,
   userStore: UserStore,
   onStartNewChat: () => emit("startNewChat"),
@@ -287,7 +291,6 @@ const expandedGroups = ref({
 const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   expandedGroups.value[group] = !expandedGroups.value[group];
 };
-
 </script>
 
 <style lang="scss" scoped>
@@ -309,23 +312,6 @@ const toggleExpand = (group: keyof typeof expandedGroups.value) => {
   white-space: normal !important;
   word-break: break-word;
   line-height: 1.5;
-}
-
-/* Remove the dropdown focus styles */
-.el-dropdown:focus-visible {
-  outline: none !important;
-}
-
-.el-dropdown {
-  outline: none !important;
-}
-
-.el-tooltip__trigger:focus-visible {
-  outline: unset !important;
-}
-
-.el-tooltip__trigger:first-child:focus-visible {
-  outline: unset !important;
 }
 
 .el-button + .el-button {

@@ -12,7 +12,9 @@ const SOURCE = readFileSync(
 const styleBlocks = (source: string) =>
   [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
 
-const mountFollowUps = (questions = ["What is GA3ox?", "How is it regulated?"]) =>
+const mountFollowUps = (
+  questions = ["What is GA3ox?", "How is it regulated?"]
+) =>
   mount(FollowUpQuestions, {
     props: { questions },
   });
@@ -39,6 +41,8 @@ describe("FollowUpQuestions", () => {
     // Native button click handles Enter/Space; ensure focusable target size contract.
     expect(button.attributes("type")).toBe("button");
     expect(wrapper.emitted("question-click")).toBeUndefined();
+    expect(SOURCE).toMatch(/<button[\s\S]*data-testid="follow-up-suggestion"/);
+    expect(SOURCE).not.toMatch(/<div[^>]*data-testid="follow-up-suggestion"/);
   });
 
   it("uses token-only quiet inline styles without elevation or translate", () => {

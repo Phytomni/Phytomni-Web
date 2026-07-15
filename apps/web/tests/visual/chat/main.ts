@@ -18,7 +18,6 @@ import "element-plus/dist/index.css";
 import "@/styles/tokens.css";
 import "@/styles/markdown.css";
 import "@/assets/main.css";
-import "@/assets/theme.css";
 
 const params = new URLSearchParams(window.location.search);
 const resolved = resolveChatVisualFixture(

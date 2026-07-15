@@ -22,6 +22,7 @@ describe("ResearchArtifactHeader", () => {
     const title = wrapper.get(".research-artifact-header__title");
 
     expect(title.text()).toBe(longTitle);
+    expect(title.attributes("id")).toBe("research-artifact-title");
     expect(title.attributes("title")).toBe(longTitle);
     expect(title.attributes("data-truncate")).toBe("title");
     expect(

@@ -229,8 +229,8 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
       1
     );
     expect(countOccurrences(CHAT_SOURCE, 'ref="messageContainer"')).toBe(1);
-    expect(CHAT_SOURCE).toContain(
-      'class="message-container"\n        data-testid="chat-transcript"'
+    expect(CHAT_SOURCE).toMatch(
+      /class="message-container"[\s\S]*data-testid="chat-transcript"/
     );
     expect(SHELL_SOURCE).toContain('data-scroll-root="adaptive"');
   });

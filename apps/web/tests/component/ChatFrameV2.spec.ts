@@ -45,11 +45,9 @@ describe("ChatFrameV2 — production capture hooks", () => {
     expect(CHAT_SOURCE).toContain(
       ':data-sidebar-drawer-state="sidebarDrawerStateAttr"'
     );
-    expect(CHAT_SOURCE).toContain('chatStateAttr = computed(() =>');
-    expect(CHAT_SOURCE).toMatch(
-      /chatStateAttr[\s\S]*\? "populated" : "empty"/
-    );
-    expect(CHAT_SOURCE).toContain('SIDEBAR_MOBILE_BREAKPOINT');
+    expect(CHAT_SOURCE).toContain("chatStateAttr = computed(() =>");
+    expect(CHAT_SOURCE).toMatch(/chatStateAttr[\s\S]*\? "populated" : "empty"/);
+    expect(CHAT_SOURCE).toContain("SIDEBAR_MOBILE_BREAKPOINT");
     expect(CHAT_SOURCE).toMatch(
       /sidebarDrawerStateAttr[\s\S]*"not-mobile"[\s\S]*"open"[\s\S]*"closed"/
     );
@@ -59,8 +57,8 @@ describe("ChatFrameV2 — production capture hooks", () => {
     expect(countOccurrences(CHAT_SOURCE, 'data-testid="chat-transcript"')).toBe(
       1
     );
-    expect(CHAT_SOURCE).toContain(
-      'class="message-container"\n        data-testid="chat-transcript"'
+    expect(CHAT_SOURCE).toMatch(
+      /class="message-container"\s+data-testid="chat-transcript"/
     );
     expect(
       countOccurrences(CHAT_SOURCE, 'data-test="chat-transcript-scroll-root"')
@@ -69,15 +67,16 @@ describe("ChatFrameV2 — production capture hooks", () => {
     expect(TRANSCRIPT_SOURCE).toContain(
       'v-if="!currentChat?.messages?.length"'
     );
-    expect(TRANSCRIPT_SOURCE).toContain(
-      'v-if="currentChat?.messages?.length"'
-    );
+    expect(TRANSCRIPT_SOURCE).toContain('v-if="currentChat?.messages?.length"');
   });
 
   it("marks persisted and loading message rows with the repeatable hook", () => {
     // Hook lives once on ChatMessageRow; index mounts the shell for transcript + loading.
     expect(
-      countOccurrences(CHAT_MESSAGE_ROW_SOURCE, 'data-testid="chat-message-row"')
+      countOccurrences(
+        CHAT_MESSAGE_ROW_SOURCE,
+        'data-testid="chat-message-row"'
+      )
     ).toBe(1);
     expect(countOccurrences(CHAT_SOURCE, "<ChatMessageRow")).toBe(2);
     expect(TRANSCRIPT_SOURCE).toContain(
@@ -130,14 +129,21 @@ describe("ChatFrameV2 — compact Composer surface", () => {
       'class="input-container-warpper"'
     );
     expect(CHAT_COMPOSER_SOURCE).not.toContain('class="input-box"');
-    expect(CHAT_COMPOSER_SOURCE).not.toContain('class="input-container-bottom"');
-    expect(CHAT_COMPOSER_SOURCE).toContain("<PhyComposerFrame");
-    expect(CHAT_COMPOSER_SOURCE).toContain("<template #attachments>");
+    expect(CHAT_COMPOSER_SOURCE).not.toContain(
+      'class="input-container-bottom"'
+    );
+    expect(CHAT_COMPOSER_SOURCE).not.toContain("PhyComposerFrame");
+    expect(CHAT_COMPOSER_SOURCE).toContain('class="phy-composer-frame"');
+    expect(CHAT_COMPOSER_SOURCE).toContain(
+      'class="phy-composer-frame__attachments'
+    );
     expect(CHAT_COMPOSER_SOURCE).toMatch(
       /:deep\(\.el-sender\) \{[\s\S]*?box-shadow: none;/
     );
     expect(CHAT_COMPOSER_SOURCE).not.toContain("<template #header>");
-    expect(CHAT_COMPOSER_SOURCE).toContain("min-height: var(--phy-control-height-primary)");
+    expect(CHAT_COMPOSER_SOURCE).toContain(
+      "min-height: var(--phy-control-height-primary)"
+    );
     expect(CHAT_COMPOSER_SOURCE).toContain("safe-area-inset-bottom");
     expect(CHAT_COMPOSER_SOURCE).toContain(
       "var(--phy-layout-transcript-max-width)"
@@ -160,7 +166,9 @@ describe("ChatFrameV2 — compact Composer surface", () => {
     expect(modeIdx).toBeGreaterThan(mentionIdx);
     expect(pickerIdx).toBeGreaterThan(modeIdx);
     expect(sendIdx).toBeGreaterThan(pickerIdx);
-    expect(CHAT_COMPOSER_SOURCE).toContain("<template #actions>");
+    expect(CHAT_COMPOSER_SOURCE).toContain(
+      'class="phy-composer-frame__actions'
+    );
     expect(CHAT_COMPOSER_SOURCE).toContain("<template #action-list />");
     expect(CHAT_COMPOSER_SOURCE).toMatch(
       /:deep\(\.el-sender-updown-wrap\) \{[\s\S]*?display: none !important;/
@@ -174,7 +182,9 @@ describe("ChatFrameV2 — compact Composer surface", () => {
     expect(CHAT_COMPOSER_SOURCE).toMatch(
       /:ref="bindTourInputTarget"[\s\S]*class="chat-composer-surface"/
     );
-    expect(CHAT_SOURCE).toContain(':set-tour-input-target="setTourInputTarget"');
+    expect(CHAT_SOURCE).toContain(
+      ':set-tour-input-target="setTourInputTarget"'
+    );
   });
 });
 
@@ -210,14 +220,16 @@ describe("ChatFrameV2 — frame state matrix via 3A.8 registry", () => {
       false
     );
     expect(getChatVisualFixture("sidebar-compact").sidebarCollapsed).toBe(true);
-    expect(getChatVisualFixture("sidebar-mobile-closed").showSidebarTrigger).toBe(
-      true
-    );
+    expect(
+      getChatVisualFixture("sidebar-mobile-closed").showSidebarTrigger
+    ).toBe(true);
     expect(getChatVisualFixture("sidebar-mobile-open").drawerOpen).toBe(true);
   });
 
   it("keeps the harness drawer-state attribute exact for mobile and not-mobile", () => {
-    expect(FIXTURE_APP_SOURCE).toContain(':data-sidebar-drawer-state="drawerStateAttr"');
+    expect(FIXTURE_APP_SOURCE).toContain(
+      ':data-sidebar-drawer-state="drawerStateAttr"'
+    );
     expect(FIXTURE_APP_SOURCE).toContain('return "closed"');
     expect(FIXTURE_APP_SOURCE).toContain('return "open"');
     expect(FIXTURE_APP_SOURCE).toContain('return "not-mobile"');

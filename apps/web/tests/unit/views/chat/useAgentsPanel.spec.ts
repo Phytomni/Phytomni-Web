@@ -1,58 +1,36 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { useAgentsPanel } from "@/views/chat/composables/useAgentsPanel";
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  CANONICAL_AGENT_I18N_KEYS,
+  derivePickerOptions,
+} from "@/constants/agents";
 
-// Mock element-plus ElMessageBox — alert returning an empty object is enough to cover the showMoreInfo main path
-vi.mock("element-plus", () => ({
-  ElMessageBox: {
-    alert: vi.fn(() => ({})),
-  },
-}));
+const SIDEBAR_SOURCE = readFileSync(
+  resolve(__dirname, "../../../../src/views/chat/sidebar.vue"),
+  "utf8"
+);
 
-import { ElMessageBox } from "element-plus";
+describe("canonical agent option ownership", () => {
+  it("uses the canonical localized key for picker labels", () => {
+    const [chatAgent] = derivePickerOptions(["ChatAgent"]);
 
-const mockAlert = vi.mocked(ElMessageBox.alert);
-
-describe("useAgentsPanel", () => {
-  const t = (k: string) => k;
-
-  function makeComposable() {
-    const panel = useAgentsPanel({ t });
-    return { panel };
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks();
+    expect(chatAgent.labelKey).toBe(CANONICAL_AGENT_I18N_KEYS.ChatAgent);
+    expect(derivePickerOptions(["UnknownAgent"])).toEqual([]);
   });
 
-  describe("removed stage-only exports", () => {
-    it("does not export permanent stage state or handlers", () => {
-      const { panel } = makeComposable();
-
-      expect(panel).not.toHaveProperty("presetAgents");
-      expect(panel).not.toHaveProperty("containerStyle");
-      expect(panel).not.toHaveProperty("handleScroll");
-      expect(panel).not.toHaveProperty("handleAgentClick");
-    });
+  it("keeps the active sidebar as the owner of the agent list interaction", () => {
+    expect(SIDEBAR_SOURCE).toContain("deriveSidebarRouteOptions");
+    expect(SIDEBAR_SOURCE).toContain("const showAgentsList = ref(false)");
+    expect(SIDEBAR_SOURCE).toContain(
+      "showAgentsList.value = !showAgentsList.value"
+    );
+    expect(SIDEBAR_SOURCE).toContain("router.push(agent.route)");
+    expect(SIDEBAR_SOURCE).toContain("showAgentsList.value = false");
   });
 
-  describe("getAgentTooltip", () => {
-    it("lowercases the first letter into a key → t('chat.agents.chatAgent')", () => {
-      const { panel } = makeComposable();
-      expect(panel.getAgentTooltip("ChatAgent")).toBe("chat.agents.chatAgent");
-    });
-
-    it("falls back to the raw agentName when t returns empty (|| fallback branch)", () => {
-      const emptyT = (_k: string) => "";
-      const panel = useAgentsPanel({ t: emptyT });
-      expect(panel.getAgentTooltip("ChatAgent")).toBe("ChatAgent");
-    });
-  });
-
-  describe("showMoreInfo", () => {
-    it("calls ElMessageBox.alert", () => {
-      const { panel } = makeComposable();
-      panel.showMoreInfo("ChatAgent");
-      expect(mockAlert).toHaveBeenCalledTimes(1);
-    });
+  it("does not reintroduce the removed agent-panel HTML dialog path", () => {
+    expect(SIDEBAR_SOURCE).not.toContain("dangerouslyUseHTMLString");
+    expect(SIDEBAR_SOURCE).not.toContain("showMoreInfo");
   });
 });

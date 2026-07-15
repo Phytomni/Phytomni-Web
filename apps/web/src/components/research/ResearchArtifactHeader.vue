@@ -13,6 +13,7 @@
 
     <div class="research-artifact-header__identity">
       <h1
+        id="research-artifact-title"
         class="research-artifact-header__title"
         :title="title"
         data-truncate="title"

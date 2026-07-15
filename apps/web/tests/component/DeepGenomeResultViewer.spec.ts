@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import { existsSync, readFileSync } from "node:fs";
@@ -64,21 +64,31 @@ const stubs = {
   ElDropdownItem: passthrough,
 };
 
+const mountedViewers: Array<{ unmount: () => void }> = [];
+
+afterEach(() => {
+  mountedViewers.splice(0).forEach((wrapper) => wrapper.unmount());
+});
+
 function render(
   references: unknown[],
   extraProps: Record<string, unknown> = {}
 ) {
-  return mount(DeepGenomeResultViewer, {
+  const wrapper = mount(DeepGenomeResultViewer, {
     props: { markdown: "", references, ...extraProps },
     global: { stubs, mocks: { $t: (key: string) => key } },
   });
+  mountedViewers.push(wrapper);
+  return wrapper;
 }
 
 function renderMarkdown(markdown: string) {
-  return mount(DeepGenomeResultViewer, {
+  const wrapper = mount(DeepGenomeResultViewer, {
     props: { markdown, references: [] },
     global: { stubs, mocks: { $t: (key: string) => key } },
   });
+  mountedViewers.push(wrapper);
+  return wrapper;
 }
 
 describe("DeepGenomeResultViewer — embedded renderer boundary", () => {

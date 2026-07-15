@@ -3,6 +3,8 @@
     v-if="downloadTransferList.length"
     class="transfer-progress-list"
     data-test="transfer-progress-list"
+    role="region"
+    :aria-label="t('chat.transferProgress')"
   >
     <TransferProgress
       v-for="snap in downloadTransferList"
@@ -17,6 +19,9 @@
 import TransferProgress from "@/components/TransferProgress.vue";
 import { downloadTransferList } from "@/utils/download-transfers";
 import { abortRequest } from "@/utils/request";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 function onCancel(requestId: string) {
   abortRequest(requestId);

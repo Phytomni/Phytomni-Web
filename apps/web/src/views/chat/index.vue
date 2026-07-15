@@ -5,449 +5,462 @@
     :data-chat-state="chatStateAttr"
     :data-sidebar-drawer-state="sidebarDrawerStateAttr"
   >
-  <PhyAdaptiveShell
-    :sidebar-collapsed="effectiveSidebarCollapsed"
-    :artifact-open="artifactOpen"
-    :artifact-fullscreen="artifactOpen && isMobileViewport"
-    :main-inert="isMobileViewport && leftSidebarDrawerOpen"
-  >
-    <template #sidebar>
-      <!-- Left sidebar -->
-      <div ref="tourSidebarTarget" class="tour-sidebar-wrap">
-        <Sidebar
-          :chatList="chatList"
-          :currentChatId="currentChatId"
-          :collapsed="leftSidebarCollapsed"
-          :effective-collapsed="effectiveSidebarCollapsed"
-          :drawer-open="leftSidebarDrawerOpen"
-          @selectChat="selectChat"
-          @startNewChat="startNewChat"
-          @handleSidebarCollapse="handleSidebarCollapse"
-          @drawerOpenChange="leftSidebarDrawerOpen = $event"
-          @startTutorial="startTutorial"
-          @showArchitecture="showAgentsView"
-          @chatRenamed="handleChatRenamed"
-          @chatDeleted="handleChatDeleted"
-          @chatFavorited="handleChatFavorited"
-        />
-      </div>
-    </template>
-
-    <template #main>
-      <el-tour
-        v-model="showTutorial"
-        :mask="true"
-        :close-on-press-escape="true"
-        @finish="completeTutorial"
-        @close="completeTutorial"
-      >
-        <el-tour-step
-          :target="tourSidebarTarget"
-          :title="t('tutorial.step1.title')"
-          :description="t('tutorial.step1.content')"
-        />
-        <el-tour-step
-          :target="tourCasesTarget"
-          :title="t('tutorial.step2.title')"
-          :description="t('tutorial.step2.content')"
-        />
-        <el-tour-step
-          :target="tourInputTarget"
-          :title="t('tutorial.step3.title')"
-          :description="t('tutorial.step3.content')"
-        />
-      </el-tour>
-
-      <div class="chat-main-layout">
-        <!-- Center chat area -->
-        <div class="chat-main">
-      <header class="chat-header">
-        <div class="chat-header-inner">
-          <div class="header-leading">
-            <el-button
-              ref="sidebarTriggerRef"
-              class="mobile-sidebar-toggle"
-              data-testid="chat-sidebar-trigger"
-              :class="{ 'is-visible': leftSidebarCollapsed }"
-              text
-              circle
-              :aria-label="$t('chat.openNavigation')"
-              @click="toggleSidebarFromHeader"
-            >
-              <el-icon><Menu /></el-icon>
-            </el-button>
-            <h2 class="chat-header-title" :title="chatHeaderTitle">
-              {{ chatHeaderTitle }}
-            </h2>
-            <span
-              v-if="chatMode === 'expert'"
-              class="chat-expert-indicator"
-              data-test="chat-expert-indicator"
-            >
-              {{ $t("chat.mode.expert") }}
-            </span>
-          </div>
+    <PhyAdaptiveShell
+      :sidebar-collapsed="effectiveSidebarCollapsed"
+      :artifact-open="artifactOpen"
+      :artifact-fullscreen="artifactOpen && isMobileViewport"
+      :main-inert="isMobileViewport && leftSidebarDrawerOpen"
+    >
+      <template #sidebar>
+        <!-- Left sidebar -->
+        <div ref="tourSidebarTarget" class="tour-sidebar-wrap">
+          <Sidebar
+            :chatList="chatList"
+            :currentChatId="currentChatId"
+            :collapsed="leftSidebarCollapsed"
+            :effective-collapsed="effectiveSidebarCollapsed"
+            :drawer-open="leftSidebarDrawerOpen"
+            @selectChat="selectChat"
+            @startNewChat="startNewChat"
+            @handleSidebarCollapse="handleSidebarCollapse"
+            @drawerOpenChange="leftSidebarDrawerOpen = $event"
+            @startTutorial="startTutorial"
+            @showArchitecture="showAgentsView"
+            @chatRenamed="handleChatRenamed"
+            @chatDeleted="handleChatDeleted"
+            @chatFavorited="handleChatFavorited"
+          />
         </div>
-      </header>
+      </template>
 
-      <!-- Message area -->
-      <div
-        class="message-container"
-        data-testid="chat-transcript"
-        data-test="chat-transcript-scroll-root"
-        ref="messageContainer"
-        :key="timestamp"
-      >
-        <div v-if="!currentChat?.messages?.length" class="empty-chat">
-          <PhyEmptyState
-            :title="$t('chat.welcomeTitle')"
-            :subtitle="$t('chat.welcomeSubtitle')"
-            class="empty-chat-starters-shell"
-          >
-            <template #mark>
-              <img
-                src="../../assets/images/chat/logo.png"
-                class="empty-chat-mark"
-                alt=""
-              />
-            </template>
+      <template #main>
+        <el-tour
+          v-model="showTutorial"
+          :mask="true"
+          :close-on-press-escape="true"
+          @finish="completeTutorial"
+          @close="completeTutorial"
+        >
+          <el-tour-step
+            :target="tourSidebarTarget"
+            :title="t('tutorial.step1.title')"
+            :description="t('tutorial.step1.content')"
+          />
+          <el-tour-step
+            :target="tourCasesTarget"
+            :title="t('tutorial.step2.title')"
+            :description="t('tutorial.step2.content')"
+          />
+          <el-tour-step
+            :target="tourInputTarget"
+            :title="t('tutorial.step3.title')"
+            :description="t('tutorial.step3.content')"
+          />
+        </el-tour>
+
+        <div class="chat-main-layout">
+          <!-- Center chat area -->
+          <div class="chat-main">
+            <header class="chat-header">
+              <div class="chat-header-inner">
+                <div class="header-leading">
+                  <el-button
+                    ref="sidebarTriggerRef"
+                    class="mobile-sidebar-toggle"
+                    data-testid="chat-sidebar-trigger"
+                    :class="{ 'is-visible': leftSidebarCollapsed }"
+                    text
+                    circle
+                    :aria-label="$t('chat.openNavigation')"
+                    @click="toggleSidebarFromHeader"
+                  >
+                    <el-icon><Menu /></el-icon>
+                  </el-button>
+                  <h2 class="chat-header-title" :title="chatHeaderTitle">
+                    {{ chatHeaderTitle }}
+                  </h2>
+                  <span
+                    v-if="chatMode === 'expert'"
+                    class="chat-expert-indicator"
+                    data-test="chat-expert-indicator"
+                  >
+                    {{ $t("chat.mode.expert") }}
+                  </span>
+                </div>
+              </div>
+            </header>
+
+            <!-- Message area -->
             <div
-              ref="tourCasesTarget"
-              class="empty-chat-starters-region"
-              role="group"
-              :aria-label="$t('chat.starter.title')"
+              class="message-container"
+              data-testid="chat-transcript"
+              data-test="chat-transcript-scroll-root"
+              ref="messageContainer"
+              :key="timestamp"
             >
-              <Prompts
-                class="empty-chat-starters"
-                :items="starterItems"
-                wrap
-                @item-click="onStarterClick"
-              />
-            </div>
-          </PhyEmptyState>
-        </div>
-        <div class="transcript-content">
-        <template v-if="currentChat?.messages?.length">
-          <ChatMessageRow
-            v-for="(message, index) in currentChat.messages"
-            :key="index"
-            :role="message.role === 'user' ? 'user' : 'assistant'"
-            :message-id="message.id || undefined"
-            :streaming="!!message.streaming"
-            :wide="
-              message.role === 'assistant' &&
-              (message.tool_name === 'DeepGenomeAgent' ||
-                !!artifactPreviewForMessage(message))
-            "
-          >
-            <template #avatar>
-              <el-avatar :size="36" :src="botAvatar" />
-            </template>
-              <ChatMessageContent
-                :message="message"
-                :index="index"
-                :is-last-message="currentChat.messages.length - 1 == index"
-                :artifact-preview="artifactPreviewForMessage(message)"
-                :activity-expanded-by-message="
-                  getChatState(currentChatId).activityExpandedByMessage
-                "
-                :gene-network-images="geneNetworkImages"
-                :gene-network-images-loading="geneNetworkImagesLoading"
-                :digital-design-images="digitalDesignImages"
-                :digital-design-images-loading="digitalDesignImagesLoading"
-                @finish="() => handleMarkdownFinish(index)"
-                @open-artifact="openArtifact(String(message.id))"
-                @update:activity-expanded="
-                  (key, open) =>
-                    (getChatState(currentChatId).activityExpandedByMessage[
-                      key
-                    ] = open)
-                "
-              />
-
-              <template #activity>
-                <!-- Only mount when rowId is a valid positive-decimal id;
-                     missing/invalid ids never GET/PATCH and hide the log disclosure. -->
-                <ChatActivity
-                  v-if="
-                    message.role === 'assistant' &&
-                    message.tool_name === 'AnalystAgent' &&
-                    !!deriveAnalystLogRowId(message)
-                  "
-                  :state-key="analystLogStateKey(message)"
-                  :expanded="isAnalystLogExpanded(message)"
-                  :label="$t('chat.log.activityLabel')"
-                  :hide-count="true"
-                  @update:expanded="(open) => setLogExpanded(message, open)"
+              <div v-if="!currentChat?.messages?.length" class="empty-chat">
+                <PhyEmptyState
+                  :title="$t('chat.welcomeTitle')"
+                  :subtitle="$t('chat.welcomeSubtitle')"
+                  class="empty-chat-starters-shell"
                 >
-                  <ChatAnalystLog
-                    :row-id="deriveAnalystLogRowId(message)"
-                    :task-id="deriveAnalystLogTaskId(message)"
-                    :log-data="
+                  <template #mark>
+                    <img
+                      src="../../assets/images/chat/logo.png"
+                      class="empty-chat-mark"
+                      alt=""
+                    />
+                  </template>
+                  <div
+                    ref="tourCasesTarget"
+                    class="empty-chat-starters-region"
+                    role="group"
+                    :aria-label="$t('chat.starter.title')"
+                  >
+                    <Prompts
+                      class="empty-chat-starters"
+                      :items="starterItems"
+                      wrap
+                      @item-click="onStarterClick"
+                    />
+                  </div>
+                </PhyEmptyState>
+              </div>
+              <div class="transcript-content">
+                <template v-if="currentChat?.messages?.length">
+                  <ChatMessageRow
+                    v-for="(message, index) in currentChat.messages"
+                    :key="index"
+                    :role="message.role === 'user' ? 'user' : 'assistant'"
+                    :message-id="message.id || undefined"
+                    :streaming="!!message.streaming"
+                    :wide="
+                      message.role === 'assistant' &&
+                      (message.tool_name === 'DeepGenomeAgent' ||
+                        !!artifactPreviewForMessage(message))
+                    "
+                  >
+                    <template #avatar>
+                      <el-avatar :size="36" :src="botAvatar" />
+                    </template>
+                    <ChatMessageContent
+                      :message="message"
+                      :index="index"
+                      :is-last-message="
+                        currentChat.messages.length - 1 == index
+                      "
+                      :artifact-preview="artifactPreviewForMessage(message)"
+                      :activity-expanded-by-message="
+                        getChatState(currentChatId).activityExpandedByMessage
+                      "
+                      :gene-network-images="geneNetworkImages"
+                      :gene-network-images-loading="geneNetworkImagesLoading"
+                      :digital-design-images="digitalDesignImages"
+                      :digital-design-images-loading="
+                        digitalDesignImagesLoading
+                      "
+                      @finish="() => handleMarkdownFinish(index)"
+                      @open-artifact="openArtifact(String(message.id))"
+                      @update:activity-expanded="
+                        (key, open) =>
+                          (getChatState(
+                            currentChatId
+                          ).activityExpandedByMessage[key] = open)
+                      "
+                    />
+
+                    <template #activity>
+                      <!-- Only mount when rowId is a valid positive-decimal id;
+                     missing/invalid ids never GET/PATCH and hide the log disclosure. -->
+                      <ChatActivity
+                        v-if="
+                          message.role === 'assistant' &&
+                          message.tool_name === 'AnalystAgent' &&
+                          !!deriveAnalystLogRowId(message)
+                        "
+                        :state-key="analystLogStateKey(message)"
+                        :expanded="isAnalystLogExpanded(message)"
+                        :label="$t('chat.log.activityLabel')"
+                        :hide-count="true"
+                        @update:expanded="
+                          (open) => setLogExpanded(message, open)
+                        "
+                      >
+                        <ChatAnalystLog
+                          :row-id="deriveAnalystLogRowId(message)"
+                          :task-id="deriveAnalystLogTaskId(message)"
+                          :log-data="
                       getChatState(currentChatId).logData[
                         deriveAnalystLogRowId(message)!
                       ]
                     "
-                    :loading="
+                          :loading="
                       !!getChatState(currentChatId).loadingLog[
                         deriveAnalystLogRowId(message)!
                       ]
                     "
-                    :updating="
+                          :updating="
                       !!getChatState(currentChatId).updatingLog[
                         deriveAnalystLogRowId(message)!
                       ]
                     "
-                    :error-kind="
+                          :error-kind="
                       getChatState(currentChatId).logErrorKinds[
                         deriveAnalystLogRowId(message)!
                       ]
                     "
-                    @update="updateLog(message)"
-                    @retry="retryLog(message)"
-                  />
-                </ChatActivity>
-              </template>
+                          @update="updateLog(message)"
+                          @retry="retryLog(message)"
+                        />
+                      </ChatActivity>
+                    </template>
 
-              <!-- Shared message chrome: files, follow-ups, actions -->
-              <div
-                v-if="
-                  message.role === 'user' &&
-                  message.attachedFiles &&
-                  message.attachedFiles.length > 0
-                "
-                class="message-files"
-              >
-                <div class="files-list">
-                  <div
-                    v-for="(file, fileIndex) in message.attachedFiles"
-                    :key="fileIndex"
-                    class="file-item-display"
-                  >
-                    <FilesCard
-                      :uid="fileIndex"
-                      :name="file.name"
-                      :file-size="file.size"
-                      :show-del-icon="false"
-                    />
-                  </div>
-                </div>
-              </div>
+                    <!-- Shared message chrome: files, follow-ups, actions -->
+                    <div
+                      v-if="
+                        message.role === 'user' &&
+                        message.attachedFiles &&
+                        message.attachedFiles.length > 0
+                      "
+                      class="message-files"
+                    >
+                      <div class="files-list">
+                        <div
+                          v-for="(file, fileIndex) in message.attachedFiles"
+                          :key="fileIndex"
+                          class="file-item-display"
+                        >
+                          <FilesCard
+                            :uid="fileIndex"
+                            :name="file.name"
+                            :file-size="file.size"
+                            :show-del-icon="false"
+                          />
+                        </div>
+                      </div>
+                    </div>
 
-              <template #follow-up>
-                <FollowUpQuestions
-                  v-if="
-                    message.role === 'assistant' &&
-                    message.followUpQuestions &&
-                    message.followUpQuestions.length > 0 &&
-                    message.showFollowUpQuestions &&
-                    index == currentChat.messages.length - 1
-                  "
-                  :questions="message.followUpQuestions"
-                  @question-click="handleFollowUpQuestionClick"
-                />
-              </template>
+                    <template #follow-up>
+                      <FollowUpQuestions
+                        v-if="
+                          message.role === 'assistant' &&
+                          message.followUpQuestions &&
+                          message.followUpQuestions.length > 0 &&
+                          message.showFollowUpQuestions &&
+                          index == currentChat.messages.length - 1
+                        "
+                        :questions="message.followUpQuestions"
+                        @question-click="handleFollowUpQuestionClick"
+                      />
+                    </template>
 
-              <template #actions>
-                <ChatMessageActions
-                  :role="message.role === 'user' ? 'user' : 'assistant'"
-                  :copied="copyVisible === index + 1"
-                  :can-refresh="messageActionCapabilities(message).canRefresh"
-                  :refresh-busy="
-                    !!refreshingMessages[`${index}_${message.id || ''}`] ||
-                    (!message.steps && isSending)
-                  "
-                  :can-react="messageActionCapabilities(message).canReact"
-                  :reaction-active="
-                    message.id ? getReactionState(message.id) : 0
-                  "
-                  :direct-downloads="getDirectDownloads(message)"
-                  :generated-formats="
-                    messageActionCapabilities(message).generatedFormats
-                  "
-                  @copy="handleMessageCopy(message, index)"
-                  @refresh="() => refreshMessage(index)"
-                  @reaction="
-                    (type) => {
-                      if (message.id) handleReaction(message.id, type);
-                    }
-                  "
-                  @direct-download="(path) => downloadFile(path)"
-                  @download-format="
-                    (format) => {
-                      if (message.id) getFileDownUrl(message.id, format);
-                    }
-                  "
-                />
-                <div
-                  v-if="
-                    message.role === 'assistant' &&
-                    !message.steps &&
-                    !message.tableHeaders
-                  "
-                  class="tip-text"
-                >
-                  {{ $t("common.Tip") }}
-                </div>
-              </template>
+                    <template #actions>
+                      <ChatMessageActions
+                        :role="message.role === 'user' ? 'user' : 'assistant'"
+                        :copied="copyVisible === index + 1"
+                        :can-refresh="
+                          messageActionCapabilities(message).canRefresh
+                        "
+                        :refresh-busy="
+                          !!refreshingMessages[
+                            `${index}_${message.id || ''}`
+                          ] ||
+                          (!message.steps && isSending)
+                        "
+                        :can-react="messageActionCapabilities(message).canReact"
+                        :reaction-active="
+                          message.id ? getReactionState(message.id) : 0
+                        "
+                        :direct-downloads="getDirectDownloads(message)"
+                        :generated-formats="
+                          messageActionCapabilities(message).generatedFormats
+                        "
+                        @copy="handleMessageCopy(message, index)"
+                        @refresh="() => refreshMessage(index)"
+                        @reaction="
+                          (type) => {
+                            if (message.id) handleReaction(message.id, type);
+                          }
+                        "
+                        @direct-download="(path) => downloadFile(path)"
+                        @download-format="
+                          (format) => {
+                            if (message.id) getFileDownUrl(message.id, format);
+                          }
+                        "
+                      />
+                      <div
+                        v-if="
+                          message.role === 'assistant' &&
+                          !message.steps &&
+                          !message.tableHeaders
+                        "
+                        class="tip-text"
+                      >
+                        {{ $t("common.Tip") }}
+                      </div>
+                    </template>
+                  </ChatMessageRow>
+                </template>
 
-          </ChatMessageRow>
-        </template>
-
-        <!-- Loading message: real TransferProgress XOR simulated SendProgress,
+                <!-- Loading message: real TransferProgress XOR simulated SendProgress,
              suppressed while an AG-UI stream is in flight — the placeholder already
              shows streaming content, so both would double the "is responding" cue. -->
-        <ChatMessageRow
-          v-if="isSending && !getChatState(currentChatId).isStreaming"
-          role="assistant"
-          loading
-        >
-          <template #avatar>
-            <el-avatar :size="36" :src="botAvatar" />
-          </template>
-            <div class="message-text loading-message phy-bubble-assistant">
-              {{ $t("chat.ladingInner") }}
-              <div class="loading-dots">
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
+                <ChatMessageRow
+                  v-if="isSending && !getChatState(currentChatId).isStreaming"
+                  role="assistant"
+                  loading
+                >
+                  <template #avatar>
+                    <el-avatar :size="36" :src="botAvatar" />
+                  </template>
+                  <div
+                    class="message-text loading-message phy-bubble-assistant"
+                  >
+                    {{ $t("chat.ladingInner") }}
+                    <div class="loading-dots">
+                      <span class="dot"></span>
+                      <span class="dot"></span>
+                      <span class="dot"></span>
+                    </div>
+                    <TransferProgress
+                      v-if="getChatState(currentChatId).uploadTransfer"
+                      :snapshot="getChatState(currentChatId).uploadTransfer!"
+                      @cancel="(id) => abortTransfer(id)"
+                    />
+                    <SendProgress
+                      v-else
+                      :started-at="getChatState(currentChatId).sendStartedAt"
+                      :agent-name="getChatState(currentChatId).activeAgentName"
+                      :completing="getChatState(currentChatId).completing"
+                    />
+                  </div>
+                </ChatMessageRow>
               </div>
-              <TransferProgress
-                v-if="getChatState(currentChatId).uploadTransfer"
-                :snapshot="getChatState(currentChatId).uploadTransfer!"
-                @cancel="(id) => abortTransfer(id)"
-              />
-              <SendProgress
-                v-else
-                :started-at="getChatState(currentChatId).sendStartedAt"
-                :agent-name="getChatState(currentChatId).activeAgentName"
-                :completing="getChatState(currentChatId).completing"
+            </div>
+            <el-backtop target=".message-container" :right="40" :bottom="80" />
+
+            <!-- Input area -->
+            <div class="input-container">
+              <ChatComposer
+                ref="composerRef"
+                v-model="displayMessageInput"
+                :is-sending="isSending"
+                v-model:chat-mode="chatMode"
+                :expert-mode-enabled="expertModeEnabled"
+                :show-mode-selector="!currentChat?.messages?.length"
+                :file-list="fileList"
+                :roles-tool="rolesTool"
+                :roles-loading="rolesLoading"
+                :has-messages="!!currentChat?.messages?.length"
+                :selected-agent="selectedAgent"
+                :picker-options="pickerOptions"
+                :set-tour-input-target="setTourInputTarget"
+                @submit="sendMessage"
+                @stop="abortCurrentRequest"
+                @select="handleSelect"
+                @search="handleSearch"
+                @command="handleCommand"
+                @file-change="handleFileChange"
+                @remove-file="removeFile"
+                @clear-agent="clearSelectedAgent"
               />
             </div>
-        </ChatMessageRow>
+          </div>
         </div>
-      </div>
-      <el-backtop target=".message-container" :right="40" :bottom="80" />
 
-      <!-- Input area -->
-      <div class="input-container">
-        <ChatComposer
-          ref="composerRef"
-          v-model="displayMessageInput"
-          :is-sending="isSending"
-          v-model:chat-mode="chatMode"
-          :expert-mode-enabled="expertModeEnabled"
-          :show-mode-selector="!currentChat?.messages?.length"
-          :file-list="fileList"
-          :roles-tool="rolesTool"
-          :roles-loading="rolesLoading"
-          :has-messages="!!currentChat?.messages?.length"
-          :selected-agent="selectedAgent"
-          :picker-options="pickerOptions"
-          :set-tour-input-target="setTourInputTarget"
-          @submit="sendMessage"
-          @stop="abortCurrentRequest"
-          @select="handleSelect"
-          @search="handleSearch"
-          @command="handleCommand"
-          @file-change="handleFileChange"
-          @remove-file="removeFile"
-          @clear-agent="clearSelectedAgent"
+        <!-- Agents architecture diagram dialog -->
+        <el-dialog
+          v-model="agentsViewVisible"
+          :title="t('chat.agentsArchitectureTitle')"
+          :close-on-click-modal="true"
+          :close-on-press-escape="true"
+          width="min(800px, calc(100vw - 32px))"
+          center
+        >
+          <div
+            class="agents-view-container"
+            @wheel="handleWheel"
+            @mousedown="handleMouseDown"
+            @mousemove="handleMouseMove"
+            @mouseup="handleMouseUp"
+            @mouseleave="handleMouseUp"
+            ref="containerRef"
+            style="overflow: hidden; cursor: grab"
+          >
+            <img
+              ref="imageRef"
+              :src="AgentsViewImg"
+              :alt="t('chat.agentsArchitectureAlt')"
+              class="agents-view-image"
+              :style="imageStyle"
+            />
+          </div>
+        </el-dialog>
+      </template>
+
+      <template #artifact>
+        <DeepGenomeArtifact
+          v-if="
+            currentArtifactMessage &&
+            currentArtifactMessage.tool_name === 'DeepGenomeAgent'
+          "
+          :title="chatHeaderTitle"
+          :metadata="artifactAgentLabel(currentArtifactMessage)"
+          :status="t('common.finished')"
+          :markdown="
+            String(currentArtifactMessage.content).replace(/\n/g, '\\n')
+          "
+          :references="currentArtifactMessage.doc_list"
+          :ns="artifactNamespace"
+          :tab="artifactTab"
+          :tab-labels="artifactTabLabels"
+          :tablist-label="t('common.operation')"
+          :artifact-id="artifactId"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t('common.operation')"
+          @back="closeArtifact"
+          @close="closeArtifact"
+          @tab="selectArtifactTab"
         />
-      </div>
-        </div>
-      </div>
-
-    <!-- Agents architecture diagram dialog -->
-    <el-dialog
-      v-model="agentsViewVisible"
-      :title="t('chat.agentsArchitectureTitle')"
-      :close-on-click-modal="true"
-      :close-on-press-escape="true"
-      width="min(800px, calc(100vw - 32px))"
-      center
-    >
-      <div
-        class="agents-view-container"
-        @wheel="handleWheel"
-        @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseup="handleMouseUp"
-        @mouseleave="handleMouseUp"
-        ref="containerRef"
-        style="overflow: hidden; cursor: grab"
-      >
-        <img
-          ref="imageRef"
-          :src="AgentsViewImg"
-          :alt="t('chat.agentsArchitectureAlt')"
-          class="agents-view-image"
-          :style="imageStyle"
-        />
-      </div>
-    </el-dialog>
-    </template>
-
-    <template #artifact>
-      <DeepGenomeArtifact
-        v-if="
-          currentArtifactMessage &&
-          currentArtifactMessage.tool_name === 'DeepGenomeAgent'
-        "
-        :title="chatHeaderTitle"
-        :metadata="artifactAgentLabel(currentArtifactMessage)"
-        :status="t('common.finished')"
-        :markdown="String(currentArtifactMessage.content).replace(/\n/g, '\\n')"
-        :references="currentArtifactMessage.doc_list"
-        :ns="artifactNamespace"
-        :tab="artifactTab"
-        :tab-labels="artifactTabLabels"
-        :tablist-label="t('common.operation')"
-        :artifact-id="artifactId"
-        :back-label="t('common.back')"
-        :close-label="t('common.close')"
-        :action-label="t('common.operation')"
-        @back="closeArtifact"
-        @close="closeArtifact"
-        @tab="selectArtifactTab"
-      />
-      <ResearchArtifactShell
-        v-else-if="currentArtifactMessage"
-        :title="chatHeaderTitle"
-        :metadata="artifactAgentLabel(currentArtifactMessage)"
-        :status="t('common.finished')"
-        :tab="artifactTab"
-        :tab-labels="artifactTabLabels"
-        :tablist-label="t('common.operation')"
-        :artifact-id="artifactId"
-        :back-label="t('common.back')"
-        :close-label="t('common.close')"
-        :action-label="t('common.operation')"
-        @back="closeArtifact"
-        @close="closeArtifact"
-        @tab="selectArtifactTab"
-      >
-        <template #content>
-          <CitedAnswer
-            :content="String(currentArtifactMessage.content)"
-            :references="currentArtifactMessage.doc_list"
-            :ns="artifactNamespace"
-            surface="artifact"
-            reference-presentation="external"
-          />
-        </template>
-        <template #evidence>
-          <ResearchEvidencePanel
-            :references="currentArtifactMessage.doc_list"
-            :ns="artifactNamespace"
-            @activate="selectArtifactTab('evidence')"
-          />
-        </template>
-        <template #activity>{{ t("common.noData") }}</template>
-        <template #downloads>{{ t("common.noData") }}</template>
-      </ResearchArtifactShell>
-    </template>
-  </PhyAdaptiveShell>
+        <ResearchArtifactShell
+          v-else-if="currentArtifactMessage"
+          :title="chatHeaderTitle"
+          :metadata="artifactAgentLabel(currentArtifactMessage)"
+          :status="t('common.finished')"
+          :tab="artifactTab"
+          :tab-labels="artifactTabLabels"
+          :tablist-label="t('common.operation')"
+          :artifact-id="artifactId"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t('common.operation')"
+          @back="closeArtifact"
+          @close="closeArtifact"
+          @tab="selectArtifactTab"
+        >
+          <template #content>
+            <CitedAnswer
+              :content="String(currentArtifactMessage.content)"
+              :references="currentArtifactMessage.doc_list"
+              :ns="artifactNamespace"
+              surface="artifact"
+              reference-presentation="external"
+            />
+          </template>
+          <template #evidence>
+            <ResearchEvidencePanel
+              :references="currentArtifactMessage.doc_list"
+              :ns="artifactNamespace"
+              @activate="selectArtifactTab('evidence')"
+            />
+          </template>
+          <template #activity>{{ t("common.noData") }}</template>
+          <template #downloads>{{ t("common.noData") }}</template>
+        </ResearchArtifactShell>
+      </template>
+    </PhyAdaptiveShell>
   </div>
 </template>
 <script setup lang="ts">
@@ -473,10 +486,7 @@ import ChatMessageActions from "./components/ChatMessageActions.vue";
 import ChatActivity from "./components/ChatActivity.vue";
 import ChatAnalystLog from "./components/ChatAnalystLog.vue";
 import type { DirectDownloadItem } from "./components/ChatMessageActions.vue";
-import {
-  PhyAdaptiveShell,
-  PhyEmptyState,
-} from "@/components/shell";
+import { PhyAdaptiveShell, PhyEmptyState } from "@/components/shell";
 import {
   DeepGenomeArtifact,
   ResearchArtifactShell,
@@ -578,7 +588,18 @@ watch(leftSidebarDrawerOpen, async (isOpen, wasOpen) => {
 
 // Agents architecture diagram dialog
 const agentsViewVisible = ref(false);
-const { scale, isDragging, imageOffset, containerRef, imageRef, imageStyle, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp } = useImageZoomPan(agentsViewVisible);
+const {
+  scale,
+  isDragging,
+  imageOffset,
+  containerRef,
+  imageRef,
+  imageStyle,
+  handleWheel,
+  handleMouseDown,
+  handleMouseMove,
+  handleMouseUp,
+} = useImageZoomPan(agentsViewVisible);
 
 const botAvatar = chatLogo;
 
@@ -629,7 +650,7 @@ const chatHeaderTitle = computed(() => {
   if (currentTitle) return currentTitle;
 
   const listTitle = chatList.value.find(
-    (chat) => chat.dialogue_id === currentChatId.value,
+    (chat) => chat.dialogue_id === currentChatId.value
   )?.title;
   return listTitle?.trim() || t("chat.untitledConversation");
 });
@@ -703,7 +724,6 @@ onMounted(async () => {
 
   // Check whether the tutorial guide needs to be shown
   checkTutorialStatus();
-
 });
 
 onUnmounted(() => {
@@ -787,7 +807,8 @@ function isCompletedDeepGenomeMessage(message: ChatMessage): boolean {
     .toUpperCase();
   if (!DEEP_GENOME_SUCCESS_STATUSES.has(status)) return false;
 
-  const content = typeof message.content === "string" ? message.content.trim() : "";
+  const content =
+    typeof message.content === "string" ? message.content.trim() : "";
   return (
     content !== "" &&
     !/^Loading file content\.\.\.?$/i.test(content) &&
@@ -799,7 +820,10 @@ function isCompletedDeepGenomeMessage(message: ChatMessage): boolean {
 function artifactPreviewForMessage(message: ChatMessage) {
   const artifactKind = artifactKindForMessage(message);
   if (artifactKind === null) return null;
-  if (artifactKind === "deep-genome" && !isCompletedDeepGenomeMessage(message)) {
+  if (
+    artifactKind === "deep-genome" &&
+    !isCompletedDeepGenomeMessage(message)
+  ) {
     return null;
   }
 
@@ -1002,12 +1026,11 @@ const onStarterClick = (item: { key: string | number }) => {
 };
 
 // Copy conversation + file download
-const { fallbackCopyText, downloadFile, getFileDownUrl } =
-  useCopyDownload({
-    copyVisible,
-    copyTimeRef,
-    t,
-  });
+const { fallbackCopyText, downloadFile, getFileDownUrl } = useCopyDownload({
+  copyVisible,
+  copyTimeRef,
+  t,
+});
 
 // Agent image fetch state (GeneNetworkAgent / DigitalDesignAgent)
 const {
@@ -1157,7 +1180,7 @@ const scrollToBottom = async () => {
       0,
       messageContainer.value.scrollHeight -
         messageContainer.value.clientHeight -
-        mobileSafeInset,
+        mobileSafeInset
     );
   }
 };
@@ -1429,12 +1452,8 @@ const { refreshMessage } = useRefreshMessage({
 });
 
 // Tutorial guide feature — state and logic extracted into the useTutorial composable
-const {
-  showTutorial,
-  startTutorial,
-  completeTutorial,
-  checkTutorialStatus,
-} = useTutorial();
+const { showTutorial, startTutorial, completeTutorial, checkTutorialStatus } =
+  useTutorial();
 
 const tourSidebarTarget = ref<HTMLElement | null>(null);
 const tourCasesTarget = ref<HTMLElement | null>(null);
@@ -1968,7 +1987,9 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
   margin-left: 8px;
 
   .reaction-btn {
-    transition: all 0.2s ease;
+    transition: color var(--phy-motion-fast) var(--phy-motion-ease-out),
+      background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+      transform var(--phy-motion-fast) var(--phy-motion-ease-out);
 
     &:hover {
       color: var(--el-color-primary);

@@ -406,7 +406,7 @@ describe("ChatMessageActions", () => {
   it("wires refresh, reactions, and generated formats through one capability helper", () => {
     expect(INDEX_SOURCE).toMatch(/messageActionCapabilities/);
     expect(INDEX_SOURCE).toMatch(
-      /:can-refresh="messageActionCapabilities\(message\)\.canRefresh"/
+      /:can-refresh="\s*messageActionCapabilities\(message\)\.canRefresh\s*"/
     );
     expect(INDEX_SOURCE).toMatch(
       /:can-react="messageActionCapabilities\(message\)\.canReact"/

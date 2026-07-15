@@ -377,9 +377,9 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         },
       },
     });
-    expect(cited.find('[data-testid="cited-answer"]').attributes("data-ns")).toBe(
-      "m1"
-    );
+    expect(
+      cited.find('[data-testid="cited-answer"]').attributes("data-ns")
+    ).toBe("m1");
   });
 });
 
@@ -616,9 +616,9 @@ describe("ChatInteractionV2 — Phase 3C harness registry", () => {
   it("fails when a Phase 3C key is absent from the closed registry", () => {
     expect(isPhase3CFixtureKey("activity-closed")).toBe(true);
     expect(isPhase3CFixtureKey("progress-invented")).toBe(false);
-    expect(resolveChatVisualFixture("progress-invented", "en-US", "light").ok).toBe(
-      false
-    );
+    expect(
+      resolveChatVisualFixture("progress-invented", "en-US", "light").ok
+    ).toBe(false);
   });
 
   it("renders Phase 3C overlays without network and without inventing backend success", async () => {
@@ -648,10 +648,6 @@ describe("ChatInteractionV2 — Phase 3C harness registry", () => {
           mocks: { $t: (k: string) => k },
           stubs: {
             ChatModeSelector: true,
-            PhyComposerFrame: {
-              name: "PhyComposerFrame",
-              template: "<div><slot /></div>",
-            },
             ChatAgentPicker: true,
             LangSwitch: true,
             ThemeSwitch: true,
@@ -687,8 +683,7 @@ describe("ChatInteractionV2 — Phase 3C harness registry", () => {
             StreamMessage: {
               name: "StreamMessage",
               props: ["blocks", "activityExpandedByMessage"],
-              template:
-                '<div data-testid="stream-message" data-stream="1" />',
+              template: '<div data-testid="stream-message" data-stream="1" />',
             },
             DeepGenomeResultViewer: true,
             CitedAnswer: true,

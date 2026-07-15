@@ -341,7 +341,8 @@ export default {
     stepResult: "Step Result",
     resultImageAlt: "Result image {index}",
     sendFailed: "Failed to send message, please try again later.",
-    timeoutFailed: "The request timed out. Try narrowing your query or retry later.",
+    timeoutFailed:
+      "The request timed out. Try narrowing your query or retry later.",
     sendAriaLabel: "Send",
     abortAriaLabel: "Stop answering",
     progress: {
@@ -388,10 +389,12 @@ export default {
       title: "Try one of these",
       geneLabel: "Query a gene",
       geneDesc: "Function and homologs of a gene",
-      genePrompt: "Tell me about the function and homologs of gene Os01g0177400",
+      genePrompt:
+        "Tell me about the function and homologs of gene Os01g0177400",
       speciesLabel: "Explore a species",
       speciesDesc: "Key genes and pathways of a species",
-      speciesPrompt: "Which key genes are involved in drought resistance in rice?",
+      speciesPrompt:
+        "Which key genes are involved in drought resistance in rice?",
       deepGenomeLabel: "Deep genome analysis",
       deepGenomeDesc: "Run a deep genome report on a gene",
       deepGenomePrompt: "Run a deep genome analysis for gene Os01g0177400",
@@ -413,8 +416,7 @@ export default {
       analystAgent: "Transforms raw data into meaningful plant insights.",
       reviewAgent:
         "Generates AI-powered literature reviews for agricultural research.",
-      briefGeneAgent:
-        "Creates rapid gene-function briefs and research leads.",
+      briefGeneAgent: "Creates rapid gene-function briefs and research leads.",
       deepGenomeAgent: "Decodes plant genomes for smarter breeding strategies.",
       inSilicoResearchAgent:
         "Simulates plant experiments digitally to accelerate discovery.",
@@ -503,6 +505,13 @@ export default {
     transferCancel: "Cancel",
     transferEta: "About {seconds}s left",
     transferSize: "{loaded} / {total}",
+    transferProgress: "Active transfers",
+    transferPhase: {
+      upload: "Uploading",
+      download: "Downloading",
+    },
+    transferProgressText: "{phase}: {loaded} / {total} ({percent}%)",
+    transferProgressIndeterminate: "{phase}: {loaded} transferred",
     downloadCancelled: "Download cancelled",
     downloadError:
       "An error occurred while downloading, please contact the administrator!",
@@ -644,7 +653,8 @@ export default {
     operator: "Operator",
     changes: "Changes",
     historyDetail: "History Detail",
-    historyDetailContent: "Time: {time}\nOperator: {operator}\nChanges: {changes}",
+    historyDetailContent:
+      "Time: {time}\nOperator: {operator}\nChanges: {changes}",
     saveSuccess: "Configuration saved successfully",
     saveFailed: "Failed to save configuration",
     resetConfirm:
@@ -716,6 +726,14 @@ export default {
       sampleTask: "Static sample task ID",
       sampleResult: "Static sample result",
       downloadResults: "Start download request",
+    },
+    design: {
+      title: "Design Agent",
+      subtitle:
+        "Design Agent - This routed demonstration is not yet connected to a live design workflow",
+      unavailableTitle: "Design Agent is not yet available",
+      unavailableMessage:
+        "This route is reserved for a future design workflow. No live design form, result, or progress state is available yet.",
     },
   },
 

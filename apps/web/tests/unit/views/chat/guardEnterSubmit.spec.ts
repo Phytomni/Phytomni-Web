@@ -15,7 +15,10 @@ vi.mock("vue-element-plus-x", () => ({
     inheritAttrs: false,
     template: '<div class="mention-sender-stub" v-bind="$attrs"><slot /></div>',
     props: ["modelValue", "loading", "disabled"],
-    setup(_props: unknown, { expose }: { expose: (exposed: Record<string, unknown>) => void }) {
+    setup(
+      _props: unknown,
+      { expose }: { expose: (exposed: Record<string, unknown>) => void }
+    ) {
       expose(mentionExpose);
       return {};
     },
@@ -47,7 +50,6 @@ describe("guardEnterSubmit at ChatComposer boundary", () => {
       global: {
         stubs: {
           ChatModeSelector: true,
-          PhyComposerFrame: { template: "<div><slot /></div>" },
         },
       },
     });

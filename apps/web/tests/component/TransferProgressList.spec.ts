@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createI18n } from "vue-i18n";
 import TransferProgressList from "@/components/TransferProgressList.vue";
+import enUS from "@/locales/langs/en-US";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import {
   upsertDownloadTransfer,
@@ -23,6 +25,12 @@ const snap: TransferSnapshot = {
   requestId: "dl-req-1",
 };
 
+const i18n = createI18n({
+  legacy: false,
+  locale: "en-US",
+  messages: { "en-US": enUS },
+});
+
 describe("TransferProgressList.vue", () => {
   afterEach(() => {
     clearDownloadTransfers();
@@ -34,6 +42,7 @@ describe("TransferProgressList.vue", () => {
 
     const wrapper = mount(TransferProgressList, {
       global: {
+        plugins: [i18n],
         stubs: {
           "el-progress": true,
         },
@@ -41,8 +50,16 @@ describe("TransferProgressList.vue", () => {
     });
 
     expect(wrapper.find('[data-test="transfer-progress-list"]').exists()).toBe(
-      true,
+      true
     );
+    expect(
+      wrapper.find('[data-test="transfer-progress-list"]').attributes("role")
+    ).toBe("region");
+    expect(
+      wrapper
+        .find('[data-test="transfer-progress-list"]')
+        .attributes("aria-label")
+    ).toBe("Active transfers");
     expect(wrapper.findAll('[data-test="transfer-progress"]')).toHaveLength(1);
 
     await wrapper.find('[data-test="transfer-cancel"]').trigger("click");

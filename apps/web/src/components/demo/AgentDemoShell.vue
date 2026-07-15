@@ -92,6 +92,7 @@ const staticNoticeId = `agent-demo-static-example-${
   flex-direction: column;
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   min-width: 0;
   min-height: 0;
   overflow-x: hidden;
@@ -107,7 +108,7 @@ const staticNoticeId = `agent-demo-static-example-${
   z-index: var(--phy-z-sticky);
   flex: 0 0 auto;
   border-bottom: 1px solid var(--phy-color-border-subtle);
-  background: color-mix(in srgb, var(--phy-color-bg-elevated) 96%, transparent);
+  background: var(--phy-color-bg-elevated);
 }
 
 .agent-demo-shell__header-inner {
@@ -252,13 +253,7 @@ const staticNoticeId = `agent-demo-static-example-${
   margin: 0 auto;
 }
 
-/* The app shell mounts a fixed footer for legacy nolayout pages. Static demos
- * own their footer inside the scroll root so long artifacts remain readable. */
-:global(.app-container:has(.agent-demo-shell) > .app-footer) {
-  display: none;
-}
-
-@media (max-width: 700px) {
+@media (max-width: 899px) {
   .agent-demo-shell__header-inner {
     grid-template-columns: auto minmax(0, 1fr);
     min-height: 68px;
@@ -295,7 +290,7 @@ const staticNoticeId = `agent-demo-static-example-${
   }
 }
 
-@media (max-width: 389px) {
+@media (max-width: 599px) {
   .agent-demo-shell__header-inner {
     align-items: start;
     gap: var(--phy-space-8);
@@ -305,8 +300,12 @@ const staticNoticeId = `agent-demo-static-example-${
 
   .agent-demo-shell__back {
     width: max-content;
-    min-width: 68px;
+    max-width: 100%;
+    min-width: var(--phy-control-height-default);
     padding-inline: var(--phy-space-4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .agent-demo-shell__heading h1 {

@@ -59,8 +59,7 @@ export default {
     goChat: "打开对话",
     e401Title: "401错误！",
     e401NoAccess: "您没有访问权限！",
-    e401Detail:
-      "对不起，您没有访问权限，请不要进行非法操作！您可以返回主页面",
+    e401Detail: "对不起，您没有访问权限，请不要进行非法操作！您可以返回主页面",
     e404Title: "404错误！",
     e404NotFound: "页面不存在！",
     e404Detail:
@@ -81,8 +80,7 @@ export default {
     },
     step2: {
       title: "试试示例问题",
-      content:
-        "输入框上方的这些卡片是示例问题。点击即可将示例填入输入框。",
+      content: "输入框上方的这些卡片是示例问题。点击即可将示例填入输入框。",
     },
     step3: {
       title: "对话窗口",
@@ -238,8 +236,7 @@ export default {
     icpFiling: "京ICP备07026971号-9",
     versionLabel: "版本",
     effectiveLabel: "生效日期",
-    draftBanner:
-      "本稿待中国农业科学院生物技术研究所审定，不构成最终法律文本。",
+    draftBanner: "本稿待中国农业科学院生物技术研究所审定，不构成最终法律文本。",
     loadError: "文档加载失败，请稍后重试。",
   },
 
@@ -497,6 +494,13 @@ export default {
     transferCancel: "取消",
     transferEta: "约剩余 {seconds} 秒",
     transferSize: "{loaded} / {total}",
+    transferProgress: "进行中的传输",
+    transferPhase: {
+      upload: "正在上传",
+      download: "正在下载",
+    },
+    transferProgressText: "{phase}：{loaded} / {total}（{percent}%）",
+    transferProgressIndeterminate: "{phase}：已传输 {loaded}",
     downloadCancelled: "已取消下载",
     downloadError: "下载过程中出错，请联系管理员！",
   },
@@ -696,6 +700,13 @@ export default {
       sampleTask: "静态示例任务 ID",
       sampleResult: "静态示例结果",
       downloadResults: "开始下载请求",
+    },
+    design: {
+      title: "设计智能体",
+      subtitle: "设计智能体 - 此演示路由尚未接入真实设计流程",
+      unavailableTitle: "设计智能体暂未开放",
+      unavailableMessage:
+        "此路由为未来的设计流程预留。目前没有可用的实时设计表单、结果或进度状态。",
     },
   },
 

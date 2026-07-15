@@ -474,7 +474,7 @@ describe("Chat visual fixture boot contracts", () => {
     expect(MAIN_SOURCE).toContain('import "@/styles/tokens.css"');
     expect(MAIN_SOURCE).toContain('import "@/styles/markdown.css"');
     expect(MAIN_SOURCE).toContain('import "@/assets/main.css"');
-    expect(MAIN_SOURCE).toContain('import "@/assets/theme.css"');
+    expect(MAIN_SOURCE).not.toContain('import "@/assets/theme.css"');
     expect(MAIN_SOURCE).not.toContain('from "@/main"');
     expect(MAIN_SOURCE).not.toMatch(/\binitTheme\s*\(/);
 
@@ -641,10 +641,6 @@ const mountFixtureApp = (
       },
       stubs: {
         ChatModeSelector: true,
-        PhyComposerFrame: {
-          name: "PhyComposerFrame",
-          template: "<div><slot /></div>",
-        },
         ChatAgentPicker: true,
         LangSwitch: true,
         ThemeSwitch: true,

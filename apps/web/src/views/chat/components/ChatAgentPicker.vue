@@ -400,13 +400,18 @@ defineExpose({ trySelect });
   padding: 0 var(--phy-space-8);
   overflow: hidden;
   border: 0;
-  outline: 0;
   background: transparent;
   color: var(--phy-color-text-secondary);
   font: inherit;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.picker-combobox:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: -2px;
+  border-radius: var(--phy-radius-sm);
 }
 
 .picker-control.has-selection .picker-combobox {

@@ -164,7 +164,7 @@
                 href="https://beian.miit.gov.cn/"
                 target="_blank"
                 rel="noopener noreferrer"
-              >{{ $t("legal.icpFiling") }}</a
+                >{{ $t("legal.icpFiling") }}</a
               >
             </div>
             <div class="help-preferences" role="group">
@@ -285,14 +285,7 @@ export const CHAT_SIDEBAR_DRAWER_OPEN_KEY = Symbol("chatSidebarDrawerOpen");
 </script>
 
 <script setup lang="ts">
-import {
-  computed,
-  inject,
-  onMounted,
-  onUnmounted,
-  ref,
-  type Ref,
-} from "vue";
+import { computed, inject, onMounted, onUnmounted, ref, type Ref } from "vue";
 import {
   ArrowDown,
   ChatDotRound,
@@ -650,7 +643,7 @@ const handleHelpCommand = (command: string | number | object) => {
   gap: var(--phy-space-8);
 }
 
-:deep(.input-container-bottom-item) {
+:deep(.agent-option) {
   display: flex;
   align-items: center;
   gap: var(--phy-space-8);
@@ -763,7 +756,6 @@ const handleHelpCommand = (command: string | number | object) => {
 
   :deep(.el-dropdown) {
     width: 100%;
-    outline: none !important;
   }
 
   .username {
