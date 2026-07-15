@@ -38,6 +38,51 @@
       "source_path": "docs/contracts/a2ui/multi_turn/round2_downlink.json",
       "sha256": "4f9d57799e06deeae324bddadc6b4ac1cbc683abec67d80838d60a34cb739cc4",
       "file": "upstream/multi_turn/round2_downlink.json"
+    },
+    {
+      "id": "chat-confirm-success-accept",
+      "class": "upstream-projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_confirm/success_accept.json",
+      "sha256": "ff2707277e12c142c07f89027d3a84b99caa2756b3d67f8f4d465090cb4b172e",
+      "file": "upstream/chat_confirm/success_accept.json"
+    },
+    {
+      "id": "chat-form-success-submit",
+      "class": "upstream-projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_form/success_submit.json",
+      "sha256": "6907007f2824c83c6aa8fa92d826e065819355d8e4a17670b3ce995065652b28",
+      "file": "upstream/chat_form/success_submit.json"
+    },
+    {
+      "id": "chat-form-success-cancel",
+      "class": "upstream-projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_form/success_cancel.json",
+      "sha256": "155f80b6a1c51f6ee8dfa7f4f3b074e846343b266d88e2823bbf08e3f57a0d53",
+      "file": "upstream/chat_form/success_cancel.json"
+    },
+    {
+      "id": "chat-choice-success-submit",
+      "class": "upstream-projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_choice/success_submit.json",
+      "sha256": "61d1f9b9614d6c76ad14b88b8453835987ae132ea309c998ea39c9c625964f56",
+      "file": "upstream/chat_choice/success_submit.json"
+    },
+    {
+      "id": "chat-choice-success-cancel",
+      "class": "upstream-projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_choice/success_cancel.json",
+      "sha256": "e801e85c0782ab47e3545b4fbb1e70b325c52f94cee10f8d82687f65bb6f090b",
+      "file": "upstream/chat_choice/success_cancel.json"
     }
   ]
 }
