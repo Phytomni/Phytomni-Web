@@ -33,13 +33,13 @@ export type RetryA2uiResult =
 
 export function beginA2uiAction(
   blocks: ContentBlock[],
-  surfaceId: string,
+  surfaceKey: string,
   runId: string,
   intent: A2uiActionIntent,
   actionId: string,
 ): BeginA2uiResult {
   const targetIndex = blocks.findIndex(
-    (block) => block.a2ui?.surface.surface_id === surfaceId,
+    (block) => block.a2ui?.surface.surface_id === surfaceKey,
   );
   if (targetIndex < 0) {
     return { ok: false, reason: "surface_missing", blocks };
@@ -159,10 +159,10 @@ export function reduceA2uiFailure(
  */
 export function markA2uiNotSent(
   blocks: ContentBlock[],
-  surfaceId: string
+  surfaceKey: string
 ): ContentBlock[] {
   const targetIndex = blocks.findIndex(
-    (block) => block.a2ui?.surface.surface_id === surfaceId
+    (block) => block.a2ui?.surface.surface_id === surfaceKey
   );
   if (targetIndex < 0) return blocks;
 
@@ -192,10 +192,10 @@ export function markA2uiNotSent(
  */
 export function beginA2uiRetry(
   blocks: ContentBlock[],
-  surfaceId: string
+  surfaceKey: string
 ): RetryA2uiResult {
   const targetIndex = blocks.findIndex(
-    (block) => block.a2ui?.surface.surface_id === surfaceId
+    (block) => block.a2ui?.surface.surface_id === surfaceKey
   );
   if (targetIndex < 0) {
     return { ok: false, reason: "surface_missing", blocks };
@@ -429,9 +429,6 @@ export function reduceA2uiInputRequired(
     type: "agent-surface",
     authority: "agent",
     interactive: true,
-    surfaceId: nextSurface.surface_id,
-    widget: nextSurface.widget,
-    props: nextSurface.props,
     a2ui: {
       surface: nextSurface,
       state: { status: "ready", round: 2 },
@@ -490,10 +487,9 @@ function getA2uiInputRequiredProtocolCode(
   return undefined;
 }
 
-function hasSurfaceIdentity(blocks: ContentBlock[], surfaceId: string): boolean {
+function hasSurfaceIdentity(blocks: ContentBlock[], surfaceKey: string): boolean {
   return blocks.some(
-    (block) =>
-      block.a2ui?.surface.surface_id === surfaceId || block.surfaceId === surfaceId,
+    (block) => block.a2ui?.surface.surface_id === surfaceKey,
   );
 }
 

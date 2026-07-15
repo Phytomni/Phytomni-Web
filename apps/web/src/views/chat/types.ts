@@ -88,12 +88,8 @@ export interface ContentBlock {
   label?: string; // step block: structured step identifier
   count?: number; // tool_result hit count
   // agent-surface (phyto.a2ui):
-  surfaceId?: string;
-  widget?: "confirm" | "form" | "choice" | string;
-  props?: Record<string, unknown>;
   a2ui?: A2uiSurfaceRuntime;
   sourceActionId?: string;
-  failed?: boolean; // set on RunError — UI must not unlock after submit
 }
 
 export interface ChatResponse {

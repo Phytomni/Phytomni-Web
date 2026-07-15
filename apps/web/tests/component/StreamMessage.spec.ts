@@ -44,9 +44,15 @@ describe("StreamMessage", () => {
         type: "agent-surface",
         authority: "agent",
         interactive: true,
-        surfaceId: "surf-inject",
-        widget: "confirm",
-        props: { title: "Go?", confirm_label: "Yes", cancel_label: "No" },
+        a2ui: {
+          surface: {
+            catalog_version: "v1.0",
+            surface_id: "surf-inject",
+            widget: "confirm",
+            props: { title: "Go?", confirm_label: "Yes", cancel_label: "No" },
+          },
+          state: { status: "ready", round: 1 },
+        },
       },
     ];
     const w = mount(StreamMessage, {
@@ -176,9 +182,15 @@ describe("StreamMessage", () => {
         type: "agent-surface",
         authority: "agent",
         interactive: true,
-        surfaceId: "surf-refs",
-        widget: "confirm",
-        props: { title: "Go?", confirm_label: "Yes", cancel_label: "No" },
+        a2ui: {
+          surface: {
+            catalog_version: "v1.0",
+            surface_id: "surf-refs",
+            widget: "confirm",
+            props: { title: "Go?", confirm_label: "Yes", cancel_label: "No" },
+          },
+          state: { status: "ready", round: 1 },
+        },
       },
       { type: "markdown", authority: "web", text: "See [1]." },
     ];
@@ -218,9 +230,15 @@ describe("StreamMessage", () => {
         type: "agent-surface",
         authority: "agent",
         interactive: true,
-        surfaceId: "surf-vis",
-        widget: "confirm",
-        props: { title: "Go?", confirm_label: "Yes", cancel_label: "No" },
+        a2ui: {
+          surface: {
+            catalog_version: "v1.0",
+            surface_id: "surf-vis",
+            widget: "confirm",
+            props: { title: "Go?", confirm_label: "Yes", cancel_label: "No" },
+          },
+          state: { status: "ready", round: 1 },
+        },
       },
       { type: "tool", authority: "web", toolName: "after" },
       { type: "markdown", authority: "web", text: "outro" },
@@ -272,9 +290,15 @@ describe("StreamMessage", () => {
         type: "agent-surface",
         authority: "agent",
         interactive: true,
-        surfaceId: "surf-beside",
-        widget: "confirm",
-        props: { title: "Confirm?", confirm_label: "Yes", cancel_label: "No" },
+        a2ui: {
+          surface: {
+            catalog_version: "v1.0",
+            surface_id: "surf-beside",
+            widget: "confirm",
+            props: { title: "Confirm?", confirm_label: "Yes", cancel_label: "No" },
+          },
+          state: { status: "ready", round: 1 },
+        },
       },
     ];
     const w = mount(StreamMessage, {

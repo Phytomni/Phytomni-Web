@@ -245,8 +245,19 @@ describe("useChatStates renderedChat ownership", () => {
       type: "agent-surface",
       authority: "agent" as const,
       interactive: true,
-      surfaceId: "surf-a",
-      widget: "confirm" as const,
+      a2ui: {
+        surface: {
+          catalog_version: "v1.0",
+          surface_id: "surf-a",
+          widget: "confirm" as const,
+          props: {
+            title: "Continue?",
+            confirm_label: "Yes",
+            cancel_label: "No",
+          },
+        },
+        state: { status: "ready" as const, round: 1 as const },
+      },
     };
     const streamingPlaceholder = {
       role: "assistant",

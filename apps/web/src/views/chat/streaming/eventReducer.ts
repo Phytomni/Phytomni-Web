@@ -72,6 +72,14 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
         const parsed = parseA2uiCustomValue(ev.data.value);
         if (parsed.ok) {
           const surface = parsed.value;
+          if (
+            blocks.some(
+              (block) => block.a2ui?.surface.surface_id === surface.surface_id,
+            )
+          ) {
+            console.warn("[phyto.a2ui] skipped frame: duplicate_surface_id");
+            break;
+          }
           blocks.push({
             type: "agent-surface",
             authority: "agent",
@@ -80,10 +88,6 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
               surface,
               state: { status: "ready", round: 1 },
             },
-            // Temporary aliases retained until the later renderer migration.
-            surfaceId: surface.surface_id,
-            widget: surface.widget,
-            props: surface.props,
           });
         } else {
           // Skip bad frames; keep the stream alive. Prefer warn over throw.
@@ -97,10 +101,32 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
     case "RunError":
       next.error = { message: String(ev.data.message ?? "stream error") };
       next.done = true;
-      // Interactive surfaces must not unlock after a failed run — stamp failed.
+      // A failed run expires only surfaces that are still open or submitting.
+      // Terminal/protocol states are preserved so a late stream error cannot
+      // overwrite an already-decided interaction.
       for (const b of blocks) {
-        if (b.type === "agent-surface" && b.interactive) {
-          b.failed = true;
+        const runtime = b.a2ui;
+        if (!runtime) continue;
+        const { state: surfaceState } = runtime;
+        if (surfaceState.status === "ready") {
+          b.a2ui = {
+            surface: runtime.surface,
+            state: {
+              status: "expired",
+              round: surfaceState.round,
+              code: "run_failed",
+            },
+          };
+        } else if (surfaceState.status === "submitting") {
+          b.a2ui = {
+            surface: runtime.surface,
+            state: {
+              status: "expired",
+              round: surfaceState.round,
+              actionId: surfaceState.envelope.action_id,
+              code: "run_failed",
+            },
+          };
         }
       }
       break;

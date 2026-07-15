@@ -37,9 +37,6 @@ const readyBlock = (
   type: "agent-surface",
   authority: "agent",
   interactive: true,
-  surfaceId: openSurface.surface_id,
-  widget: openSurface.widget,
-  props: openSurface.props,
   a2ui: { surface: openSurface, state: { status: "ready", round: 1 } },
   ...overrides,
 });
@@ -97,22 +94,22 @@ type InputRequiredResponse = Extract<
 >;
 
 const terminalConfirm = (
-  surfaceId: string,
+  surfaceKey: string,
   accepted: boolean,
 ): A2uiTerminalSurface => ({
   catalog_version: "v1.0",
-  surface_id: surfaceId,
+  surface_id: surfaceKey,
   widget: "confirm",
   props: { status: "submitted", accepted },
 });
 
 const terminalForm = (
-  surfaceId: string,
+  surfaceKey: string,
   fields: Record<string, string>,
   cancelled = false,
 ): A2uiTerminalSurface => ({
   catalog_version: "v1.0",
-  surface_id: surfaceId,
+  surface_id: surfaceKey,
   widget: "form",
   props: {
     status: "submitted",
@@ -122,12 +119,12 @@ const terminalForm = (
 });
 
 const terminalChoice = (
-  surfaceId: string,
+  surfaceKey: string,
   selected: string | string[] | undefined,
   cancelled = false,
 ): A2uiTerminalSurface => ({
   catalog_version: "v1.0",
-  surface_id: surfaceId,
+  surface_id: surfaceKey,
   widget: "choice",
   props: {
     status: "submitted",
@@ -274,7 +271,7 @@ describe("beginA2uiAction", () => {
     ["missing run ID", "run_missing", "", confirmIntent, "action-1", "surface-1"],
     ["blank action ID", "action_id_invalid", "run-9", confirmIntent, "  ", "surface-1"],
     ["missing surface", "surface_missing", "run-9", confirmIntent, "action-1", "missing"],
-  ] as const)("returns a fixed reason for %s without mutation", (_label, reason, runId, intent, actionId, surfaceId) => {
+  ] as const)("returns a fixed reason for %s without mutation", (_label, reason, runId, intent, actionId, surfaceKey) => {
     const blocks = blocksWithTarget();
     const original = structuredClone(blocks);
     const mismatchedIntent: A2uiActionIntent = {
@@ -284,7 +281,7 @@ describe("beginA2uiAction", () => {
 
     const result = beginA2uiAction(
       blocks,
-      surfaceId,
+      surfaceKey,
       runId,
       reason === "intent_mismatch" ? mismatchedIntent : intent,
       actionId,
@@ -383,7 +380,9 @@ describe("reduceA2uiSucceeded", () => {
     expect(next[0]).toBe(blocks[0]);
     expect(next[2]).toBe(blocks[2]);
     expect(next[1]).not.toBe(blocks[1]);
-    expect(next[1].props).toBe(openSurface.props);
+    expect(next[1]).not.toHaveProperty("surfaceId");
+    expect(next[1]).not.toHaveProperty("widget");
+    expect(next[1]).not.toHaveProperty("props");
     expect(next[1].a2ui).toEqual({
       surface: openSurface,
       state: {
@@ -529,9 +528,6 @@ describe("reduceA2uiInputRequired", () => {
       type: "agent-surface",
       authority: "agent",
       interactive: true,
-      surfaceId: round2Surface.surface_id,
-      widget: round2Surface.widget,
-      props: round2Surface.props,
       a2ui: {
         surface: round2Surface,
         state: { status: "ready", round: 2 },

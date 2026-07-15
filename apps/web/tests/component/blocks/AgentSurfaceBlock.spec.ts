@@ -9,9 +9,6 @@ describe("AgentSurfaceBlock", () => {
       type: "agent-surface",
       authority: "agent",
       interactive: true,
-      surfaceId: "s1",
-      widget: "confirm",
-      props: { title: "stale legacy props" },
       a2ui: {
         surface: {
           catalog_version: "v1.0",
@@ -39,13 +36,6 @@ describe("AgentSurfaceBlock", () => {
       type: "agent-surface",
       authority: "agent",
       interactive: true,
-      surfaceId: "choice-surface",
-      widget: "choice",
-      props: {
-        title: "Legacy title",
-        options: [{ id: "legacy", label: "Legacy option" }],
-        multiple: false,
-      },
       a2ui: {
         surface: {
           catalog_version: "v1.0",

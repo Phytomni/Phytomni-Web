@@ -77,18 +77,24 @@ export const FIXTURE_A2UI_REQUIRED_BLOCK: ContentBlock = {
   type: "agent-surface",
   authority: "agent",
   interactive: true,
-  surfaceId: "fixture-surface-required",
-  widget: "form",
-  props: {
-    title: "Synthetic required input",
-    fields: [
-      {
-        name: "species",
-        label: "Species",
-        type: "text",
-        required: true,
+  a2ui: {
+    surface: {
+      catalog_version: "v1.0",
+      surface_id: "fixture-surface-required",
+      widget: "form",
+      props: {
+        title: "Synthetic required input",
+        fields: [
+          {
+            name: "species",
+            label: "Species",
+            type: "text",
+            required: true,
+          },
+        ],
       },
-    ],
+    },
+    state: { status: "ready", round: 1 },
   },
 };
 

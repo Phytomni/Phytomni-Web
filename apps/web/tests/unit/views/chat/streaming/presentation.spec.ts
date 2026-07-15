@@ -32,17 +32,15 @@ function reasoning(text: string): ContentBlock {
   return { type: "reasoning", authority: "web", text };
 }
 
-function agentSurface(surfaceId: string): ContentBlock {
+function agentSurface(surfaceKey: string): ContentBlock {
   return {
     type: "agent-surface",
     authority: "agent",
     interactive: true,
-    surfaceId,
-    widget: "confirm",
     a2ui: {
       surface: {
         catalog_version: "v1.0",
-        surface_id: surfaceId,
+        surface_id: surfaceKey,
         widget: "confirm",
         props: {
           title: "Continue?",
@@ -261,9 +259,8 @@ describe("buildPresentationItems", () => {
   });
 
   it("does not use a shared surface key when the surface ID is missing", () => {
-    const missingSurfaceId: ContentBlock = {
+    const missingSurface: ContentBlock = {
       ...agentSurface("surface-missing"),
-      surfaceId: undefined,
       a2ui: {
         ...agentSurface("surface-missing").a2ui!,
         surface: {
@@ -273,8 +270,8 @@ describe("buildPresentationItems", () => {
       },
     };
 
-    expect(presentationBlockKey(missingSurfaceId, 0)).not.toBe("surface:");
-    expect(buildPresentationItems([missingSurfaceId])[0].key).toBe("block:0");
+    expect(presentationBlockKey(missingSurface, 0)).not.toBe("surface:");
+    expect(buildPresentationItems([missingSurface])[0].key).toBe("block:0");
   });
 
   it("keeps action-answer keys unique after duplicate reduction", () => {

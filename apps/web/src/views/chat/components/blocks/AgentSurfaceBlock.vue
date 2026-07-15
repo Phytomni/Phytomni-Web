@@ -1,10 +1,9 @@
 <template>
   <div
     class="agent-surface-block"
-    :data-widget="surface?.widget ?? block.widget"
+    :data-widget="surface?.widget"
   >
-    <p v-if="block.failed" class="a2ui-status">{{ t("chat.a2ui.failed") }}</p>
-    <p v-else-if="locked" class="a2ui-status">{{ t("chat.a2ui.locked") }}</p>
+    <p v-if="locked" class="a2ui-status">{{ t("chat.a2ui.locked") }}</p>
     <p v-else-if="!surface" class="a2ui-status">{{ t("chat.a2ui.expired") }}</p>
     <ConfirmWidget
       v-if="confirmSurface"
@@ -63,9 +62,8 @@ const locked = computed(() =>
 );
 const canInteract = computed(() =>
   Boolean(
-    surface.value &&
-      props.block.a2ui?.state.status === "ready" &&
-      !props.block.failed
+      surface.value &&
+      props.block.a2ui?.state.status === "ready"
   )
 );
 

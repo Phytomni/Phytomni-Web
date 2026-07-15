@@ -124,13 +124,15 @@ function readIdentity(
 }> {
   const catalog = readCatalog(hasOwn(value, "catalog_version") ? value.catalog_version : undefined);
   if (!catalog.ok) return catalog;
-  const surfaceId = readIdentifier(hasOwn(value, "surface_id") ? value.surface_id : undefined);
-  if (!surfaceId.ok) return surfaceId;
+  const surfaceKey = readIdentifier(
+    hasOwn(value, "surface_id") ? value.surface_id : undefined,
+  );
+  if (!surfaceKey.ok) return surfaceKey;
   const widget = readWidget(hasOwn(value, "widget") ? value.widget : undefined);
   if (!widget.ok) return widget;
   return ok({
     catalog_version: catalog.value,
-    surface_id: surfaceId.value,
+    surface_id: surfaceKey.value,
     widget: widget.value,
   });
 }
