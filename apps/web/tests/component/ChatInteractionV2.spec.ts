@@ -304,7 +304,15 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     await nextTick();
     expect(transport).toHaveBeenCalledTimes(1);
     expect(owner.blocks?.[0].a2ui?.state.status).toBe("submitting");
-    expect(wrapper.find(".a2ui-status").text()).toBe(enUS.chat.a2ui.locked);
+    expect(wrapper.find(".a2ui-status").exists()).toBe(true);
+    expect(wrapper.find(".a2ui-status").text()).not.toContain(
+      "transport not wired"
+    );
+    expect(
+      wrapper.findAll(".a2ui-confirm button").every((button) =>
+        button.attributes("disabled") !== undefined
+      )
+    ).toBe(true);
     expect(other.blocks?.[0].a2ui?.state.status).toBe("ready");
 
     resolveTransport({

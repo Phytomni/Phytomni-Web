@@ -3,8 +3,19 @@
     class="agent-surface-block"
     :data-widget="surface?.widget"
   >
-    <p v-if="locked" class="a2ui-status">{{ t("chat.a2ui.locked") }}</p>
+    <p v-if="statusMessageKey" class="a2ui-status">
+      {{ t(statusMessageKey) }}
+    </p>
     <p v-else-if="!surface" class="a2ui-status">{{ t("chat.a2ui.expired") }}</p>
+    <button
+      v-if="canRetry"
+      data-test="a2ui-retry"
+      class="a2ui-retry"
+      type="button"
+      @click="onRetry"
+    >
+      {{ t("chat.a2ui.retry") }}
+    </button>
     <ConfirmWidget
       v-if="confirmSurface"
       :surface="confirmSurface.props"
@@ -58,18 +69,44 @@ const choiceSurface = computed<
   Extract<A2uiOpenSurface, { widget: "choice" }> | undefined
 >(() => (surface.value?.widget === "choice" ? surface.value : undefined));
 
-const locked = computed(() =>
-  Boolean(surface.value && props.block.a2ui?.state.status !== "ready")
+const canInteract = computed(
+  () => props.block.a2ui?.state.status === "ready"
 );
-const canInteract = computed(() =>
-  Boolean(
-      surface.value &&
-      props.block.a2ui?.state.status === "ready"
-  )
+const canRetry = computed(
+  () => props.block.a2ui?.state.status === "temporarily_rejected"
 );
+const statusMessageKey = computed(() => {
+  const state = props.block.a2ui?.state;
+  if (!state) return undefined;
+
+  switch (state.status) {
+    case "submitting":
+      return "chat.a2ui.submitting";
+    case "resolved":
+      return `chat.a2ui.${state.resolution}`;
+    case "rejected":
+      return "chat.a2ui.rejected";
+    case "temporarily_rejected":
+      return "chat.a2ui.temporarilyRejected";
+    case "expired":
+      return "chat.a2ui.expired";
+    case "unknown":
+      return "chat.a2ui.unknown";
+    case "protocol_error":
+      return "chat.a2ui.protocolError";
+    default:
+      return undefined;
+  }
+});
 
 function onAction(intent: A2uiActionIntent) {
   if (!canInteract.value) return;
   emit("action", intent);
 }
+
+function onRetry() {
+  if (!canRetry.value) return;
+  emit("retry");
+}
+
 </script>
