@@ -8,13 +8,14 @@
   --phy-color-overlay: rgba(10, 24, 18, 0.48);
   --phy-color-text: #14201b;
   --phy-color-text-secondary: #5b6b63;
-  --phy-color-text-muted: #68776f;
+  --phy-color-text-muted: #65736b;
   --phy-color-text-placeholder: #65736b;
   --phy-color-text-disabled: #7c8981;
   --phy-color-border-subtle: #e6ebe7;
   --phy-color-border-control: #6f7d75;
   --phy-color-action-fill: #2f6fd4;
   --phy-color-action-fill-hover: #255eb8;
+  --phy-color-action-rgb: 47, 111, 212;
   --phy-color-on-action: #ffffff;
   --phy-color-action-text: #2f6fd4;
   --phy-color-action-text-hover: #255eb8;
@@ -25,6 +26,7 @@
   --phy-color-accent-hover: #0f4d39;
   --phy-color-accent-soft: #d7ede5;
   --phy-color-accent-text: #14644a;
+  --phy-color-accent-rgb: 20, 100, 74;
   --phy-color-bubble-user: #eaf6f1;
   --phy-color-bubble-user-border: #cfe8dc;
   --phy-color-bubble-assistant: #eaf2fe;
@@ -73,16 +75,22 @@
   --el-color-primary-light-8: #d5e2f6;
   --el-color-primary-light-9: #eaf1fb;
   --el-color-primary-hover: var(--phy-color-action-fill-hover);
-  --el-color-primary-rgb: 47, 111, 212;
+  --el-color-primary-rgb: var(--phy-color-action-rgb);
+  --el-color-primary-text: var(--phy-color-action-text);
+  --el-link-color: var(--phy-color-action-text);
+  --el-link-hover-color: var(--phy-color-action-text-hover);
+  --el-focus-color: var(--phy-color-focus);
 
   /* Element Plus success bridge. */
-  --el-color-success: #14644a;
-  --el-color-success-dark-2: #0f4d39;
+  --el-color-success: var(--phy-color-accent);
+  --el-color-success-dark-2: var(--phy-color-accent-hover);
   --el-color-success-light-3: #3d8f72;
   --el-color-success-light-5: #7eb59a;
   --el-color-success-light-7: #b6d7c8;
-  --el-color-success-light-8: #d7ede5;
-  --el-color-success-light-9: #eaf6f1;
+  --el-color-success-light-8: var(--phy-color-accent-soft);
+  --el-color-success-light-9: var(--phy-color-bubble-user);
+  --el-color-success-rgb: var(--phy-color-accent-rgb);
+  --el-color-success-text: var(--phy-color-accent-text);
 
   /* Element Plus surface bridge. */
   --el-bg-color: var(--phy-color-bg-elevated);
@@ -97,10 +105,21 @@
   --el-border-color: var(--phy-color-border-subtle);
   --el-border-color-light: var(--phy-color-border-subtle);
   --el-border-color-lighter: var(--phy-color-border-subtle);
+  --el-border-color-extra-light: var(--phy-color-fill-subtle);
+  --el-border-color-dark: var(--phy-color-border-control);
+  --el-border-color-darker: var(--phy-color-border-control);
+  --el-border-color-hover: var(--phy-color-border-control);
   --el-fill-color: var(--phy-color-fill-subtle);
   --el-fill-color-light: var(--phy-color-fill-subtle);
   --el-fill-color-lighter: var(--phy-color-bg-elevated);
+  --el-fill-color-extra-light: var(--phy-color-bg-elevated);
+  --el-fill-color-dark: var(--phy-color-border-subtle);
   --el-fill-color-darker: var(--phy-color-border-subtle);
+  --el-fill-color-blank: var(--phy-color-bg-elevated);
+  --el-disabled-bg-color: var(--phy-color-fill-subtle);
+  --el-disabled-text-color: var(--phy-color-text-disabled);
+  --el-disabled-border-color: var(--phy-color-border-subtle);
+  --el-overlay-color: var(--phy-color-overlay);
   --el-button-bg-color: var(--phy-color-action-fill);
   --el-button-border-color: var(--phy-color-action-fill);
   --el-button-text-color: var(--phy-color-on-action);
@@ -147,6 +166,7 @@
   --phy-color-border-control: #71857a;
   --phy-color-action-fill: #2f6fd4;
   --phy-color-action-fill-hover: #255eb8;
+  --phy-color-action-rgb: 47, 111, 212;
   --phy-color-on-action: #ffffff;
   --phy-color-action-text: #8cb8ff;
   --phy-color-action-text-hover: #b7d4ff;
@@ -157,6 +177,7 @@
   --phy-color-accent-hover: #347f61;
   --phy-color-accent-soft: #193a2e;
   --phy-color-accent-text: #7fd0ae;
+  --phy-color-accent-rgb: 43, 122, 89;
   --phy-color-bubble-user: #17352a;
   --phy-color-bubble-user-border: #2b5b48;
   --phy-color-bubble-assistant: #182d49;
@@ -205,16 +226,22 @@
   --el-color-primary-light-8: #1b3458;
   --el-color-primary-light-9: #172a46;
   --el-color-primary-hover: var(--phy-color-action-fill-hover);
-  --el-color-primary-rgb: 47, 111, 212;
+  --el-color-primary-rgb: var(--phy-color-action-rgb);
+  --el-color-primary-text: var(--phy-color-action-text);
+  --el-link-color: var(--phy-color-action-text);
+  --el-link-hover-color: var(--phy-color-action-text-hover);
+  --el-focus-color: var(--phy-color-focus);
 
   /* Element Plus success bridge. */
-  --el-color-success: #2b7a59;
-  --el-color-success-dark-2: #347f61;
+  --el-color-success: var(--phy-color-accent);
+  --el-color-success-dark-2: var(--phy-color-accent-hover);
   --el-color-success-light-3: #245f46;
   --el-color-success-light-5: #204d3a;
   --el-color-success-light-7: #1c3b2e;
   --el-color-success-light-8: #193229;
   --el-color-success-light-9: #172922;
+  --el-color-success-rgb: var(--phy-color-accent-rgb);
+  --el-color-success-text: var(--phy-color-accent-text);
 
   /* Element Plus surface bridge. */
   --el-bg-color: var(--phy-color-bg-elevated);
@@ -229,10 +256,21 @@
   --el-border-color: var(--phy-color-border-subtle);
   --el-border-color-light: var(--phy-color-border-subtle);
   --el-border-color-lighter: var(--phy-color-border-subtle);
+  --el-border-color-extra-light: var(--phy-color-fill-subtle);
+  --el-border-color-dark: var(--phy-color-border-control);
+  --el-border-color-darker: var(--phy-color-border-control);
+  --el-border-color-hover: var(--phy-color-border-control);
   --el-fill-color: var(--phy-color-fill-subtle);
   --el-fill-color-light: var(--phy-color-fill-subtle);
   --el-fill-color-lighter: var(--phy-color-bg-elevated);
+  --el-fill-color-extra-light: var(--phy-color-bg-elevated);
+  --el-fill-color-dark: var(--phy-color-border-subtle);
   --el-fill-color-darker: var(--phy-color-border-subtle);
+  --el-fill-color-blank: var(--phy-color-bg-elevated);
+  --el-disabled-bg-color: var(--phy-color-fill-subtle);
+  --el-disabled-text-color: var(--phy-color-text-disabled);
+  --el-disabled-border-color: var(--phy-color-border-subtle);
+  --el-overlay-color: var(--phy-color-overlay);
   --el-button-bg-color: var(--phy-color-action-fill);
   --el-button-border-color: var(--phy-color-action-fill);
   --el-button-text-color: var(--phy-color-on-action);
@@ -260,6 +298,14 @@
     var(--phy-color-bg-page) 48%,
     color-mix(in srgb, var(--phy-color-accent-soft) 60%, #101815) 100%
   );
+}
+
+/* Element Plus success text surfaces use the accessible text role, not the fill. */
+.el-link.el-link--success,
+.el-button.el-button--success.is-text,
+.el-button.el-button--success.is-link,
+.el-tag.el-tag--success {
+  color: var(--phy-color-accent-text);
 }
 
 /* Shared dimensions are theme-independent and intentionally defined once. */

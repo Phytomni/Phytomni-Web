@@ -25,6 +25,7 @@
 <style scoped>
 .phy-workspace-shell {
   --phy-workspace-gutter: var(--phy-space-40);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: var(--phy-space-24);

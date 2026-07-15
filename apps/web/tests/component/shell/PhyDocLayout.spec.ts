@@ -6,7 +6,7 @@ import PhyDocLayout from "@/components/shell/PhyDocLayout.vue";
 
 const SOURCE = readFileSync(
   resolve(__dirname, "../../../src/components/shell/PhyDocLayout.vue"),
-  "utf8",
+  "utf8"
 );
 
 describe("PhyDocLayout", () => {
@@ -29,7 +29,7 @@ describe("PhyDocLayout", () => {
   it("owns a fixed narrative measure without becoming a scroll container", () => {
     expect(SOURCE).toMatch(/\.phy-doc-body\s*\{[\s\S]*max-width:\s*760px/);
     expect(SOURCE).not.toMatch(/\b(?:min-)?height\s*:/);
-    expect(SOURCE).not.toMatch(/\boverflow(?:-[a-z]+)?\s*:/);
+    expect(SOURCE).not.toMatch(/\boverflow(?:-x|-y)?\s*:/);
   });
 
   it("keeps an optional footer in the document scroll flow", () => {
@@ -41,5 +41,9 @@ describe("PhyDocLayout", () => {
 
     expect(wrapper.find(".phy-doc-layout__footer").exists()).toBe(true);
     expect(wrapper.find("[data-test=footer]").exists()).toBe(true);
+    expect(SOURCE).toMatch(
+      /\.phy-doc-layout__footer\s*\{[\s\S]*padding:[^;]*24px/
+    );
+    expect(SOURCE).toContain("@media (max-width: 899px)");
   });
 });

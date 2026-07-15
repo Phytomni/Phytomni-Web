@@ -1,39 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { normalizeCompatibilityPath } from "../../src/App.vue";
 
 const SOURCE = readFileSync(resolve(__dirname, "../../src/App.vue"), "utf8");
 
-describe("App product-layout hand-off", () => {
-  it.each([
-    ["/", "/"],
-    ["/login/", "/login"],
-    ["/change-password///", "/change-password"],
-    ["/help/", "/help"],
-    ["/terms////", "/terms"],
-    ["/privacy/", "/privacy"],
-  ])("normalizes compatibility path %s to %s", (path, expected) => {
-    expect(normalizeCompatibilityPath(path)).toBe(expected);
+describe("App product-layout ownership", () => {
+  it("keeps the root responsible only for Element Plus locale and transfer overlays", () => {
+    expect(SOURCE).toContain("el-config-provider");
+    expect(SOURCE).toContain("TransferProgressList");
+    expect(SOURCE).not.toContain("useRoute");
+    expect(SOURCE).not.toContain("normalizeCompatibilityPath");
   });
 
-  it("does not stage the compatibility Footer for auth routes", () => {
-    expect(SOURCE).toContain('route.meta?.productLayout === "auth"');
-    expect(SOURCE).toContain('"/change-password"');
-    expect(SOURCE).toMatch(
-      /if\s*\(route\.meta\?\.productLayout\s*===\s*"auth"\)\s*return\s*false/,
-    );
+  it("does not mount a compatibility Footer or fixed footer selector", () => {
+    expect(SOURCE).not.toContain("<Footer");
+    expect(SOURCE).not.toContain("showFooter");
+    expect(SOURCE).not.toContain("app-footer");
+    expect(SOURCE).not.toMatch(/position:\s*fixed/);
   });
 
-  it("keeps the global Footer mount available for non-auth compatibility routes", () => {
-    expect(SOURCE).toMatch(/<Footer\s+v-if="showFooter"\s+class="app-footer"\s*\/>/);
-    expect(SOURCE).toContain("productLayout");
-  });
-
-  it("hands document routes to their route-owned Footer", () => {
-    expect(SOURCE).toContain('route.meta?.productLayout === "document"');
-    expect(SOURCE).toMatch(
-      /if\s*\(route\.meta\?\.productLayout\s*===\s*"document"\)\s*return\s*false/,
-    );
+  it("leaves Footer ownership to route shells", () => {
+    expect(SOURCE).not.toContain("@/components/Footer.vue");
+    expect(SOURCE).toContain("<RouterView />");
   });
 });

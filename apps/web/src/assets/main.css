@@ -1,4 +1,4 @@
-@import './base.css';
+@import "./base.css";
 
 #app {
   margin: 0;
@@ -23,4 +23,39 @@ a:hover {
 a:focus-visible {
   outline: 2px solid var(--phy-color-focus);
   outline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+
+  a {
+    text-decoration: underline;
+  }
+
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  summary {
+    border-color: ButtonText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

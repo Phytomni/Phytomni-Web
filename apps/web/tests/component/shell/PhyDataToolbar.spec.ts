@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import PhyDataToolbar from "@/components/shell/PhyDataToolbar.vue";
+
+const SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/shell/PhyDataToolbar.vue"),
+  "utf8"
+);
 
 describe("PhyDataToolbar", () => {
   it("keeps filters and actions in separate groups", () => {
@@ -35,5 +42,15 @@ describe("PhyDataToolbar", () => {
 
     expect(wrapper.classes()).toContain("is-wrappable");
     expect(wrapper.classes()).toContain("phy-data-toolbar--wrap");
+  });
+
+  it("stacks filter and action groups without a hard minimum width", () => {
+    expect(SOURCE).toMatch(/flex-wrap:\s*wrap/);
+    expect(SOURCE).toMatch(
+      /@media\s*\(max-width:\s*599px\)[\s\S]*?width:\s*100%/
+    );
+    expect(SOURCE).toMatch(/@media\s*\(max-width:\s*899px\)/);
+    expect(SOURCE).toMatch(/min-width:\s*0/);
+    expect(SOURCE).not.toMatch(/min-width:\s*(?:2|3|4)\d{2}px/);
   });
 });

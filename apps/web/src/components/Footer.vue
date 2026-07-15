@@ -47,6 +47,9 @@
 
 .legal-link,
 .icp-link {
+  display: inline-flex;
+  min-height: var(--phy-control-height-default);
+  align-items: center;
   border-radius: var(--phy-radius-sm);
   color: var(--phy-color-text-muted);
   text-decoration: none;
@@ -65,6 +68,13 @@
   &:focus-visible {
     outline: 2px solid var(--phy-color-focus);
     outline-offset: 2px;
+  }
+}
+
+@media (max-width: 899px) {
+  .legal-link,
+  .icp-link {
+    min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
   }
 }
 

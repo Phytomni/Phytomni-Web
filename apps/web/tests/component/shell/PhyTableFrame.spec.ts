@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import PhyTableFrame from "@/components/shell/PhyTableFrame.vue";
+
+const SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/shell/PhyTableFrame.vue"),
+  "utf8"
+);
 
 describe("PhyTableFrame", () => {
   it("renders the table slot inside its horizontal overflow container", () => {
@@ -34,5 +41,13 @@ describe("PhyTableFrame", () => {
 
     expect("data" in props).toBe(false);
     expect("columns" in props).toBe(false);
+  });
+
+  it("keeps horizontal overflow scoped to the table frame", () => {
+    expect(SOURCE).toMatch(
+      /\.phy-table-frame__overflow\s*\{[\s\S]*overflow-x:\s*auto;[\s\S]*overflow-y:\s*hidden/
+    );
+    expect(SOURCE).not.toMatch(/position:\s*fixed/);
+    expect(SOURCE).toMatch(/min-width:\s*0/);
   });
 });

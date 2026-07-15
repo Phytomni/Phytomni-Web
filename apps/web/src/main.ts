@@ -19,7 +19,6 @@ import "element-plus/dist/index.css";
 import "./styles/tokens.css";
 import "./styles/markdown.css";
 import "./assets/main.css"; // global styles
-import "./assets/theme.css"; // theme styles
 import "./permission"; // permission control
 
 const app = createApp(App);

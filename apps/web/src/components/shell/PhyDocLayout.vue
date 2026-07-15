@@ -73,7 +73,7 @@
   margin: 0 auto;
   padding: 0 20px 24px;
 }
-@media (max-width: 900px) {
+@media (max-width: 899px) {
   .phy-doc-layout__content {
     display: flex;
     flex-direction: column;

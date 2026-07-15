@@ -1,6 +1,10 @@
 <template>
   <aside
+    ref="sidebarRef"
     class="phy-adaptive-sidebar"
+    :role="drawerOpen ? 'dialog' : undefined"
+    :aria-modal="drawerOpen ? 'true' : undefined"
+    :aria-labelledby="drawerOpen ? 'phy-adaptive-sidebar-title' : undefined"
     :inert="offCanvas ? true : undefined"
     :aria-hidden="offCanvas ? 'true' : undefined"
     :class="{
@@ -17,7 +21,14 @@
       @click="emit('close')"
     />
 
-    <div class="phy-adaptive-sidebar__surface">
+    <div class="phy-adaptive-sidebar__surface" @keydown="handleKeydown">
+      <h2
+        v-if="drawerOpen"
+        id="phy-adaptive-sidebar-title"
+        class="phy-adaptive-sidebar__dialog-title"
+      >
+        {{ dialogLabel }}
+      </h2>
       <div v-if="$slots.toggle" class="phy-adaptive-sidebar__toggle">
         <button
           type="button"
@@ -53,18 +64,22 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(
+import { nextTick, onBeforeUnmount, ref, watch } from "vue";
+
+const props = withDefaults(
   defineProps<{
     collapsed?: boolean;
     drawerOpen?: boolean;
     closeLabel?: string;
     offCanvas?: boolean;
+    dialogLabel?: string;
   }>(),
   {
     collapsed: false,
     drawerOpen: false,
     closeLabel: "Close sidebar",
     offCanvas: false,
+    dialogLabel: "Sidebar",
   }
 );
 
@@ -72,6 +87,91 @@ const emit = defineEmits<{
   (event: "close"): void;
   (event: "toggle"): void;
 }>();
+
+const sidebarRef = ref<HTMLElement | null>(null);
+let previousDrawerFocus: HTMLElement | null = null;
+
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
+function getSurfaceFocusables(): HTMLElement[] {
+  return sidebarRef.value
+    ? Array.from(
+        sidebarRef.value.querySelectorAll<HTMLElement>(
+          `.phy-adaptive-sidebar__surface ${FOCUSABLE_SELECTOR}`
+        )
+      )
+    : [];
+}
+
+function focusDrawer(): void {
+  void nextTick(() => {
+    const closeControl = sidebarRef.value?.querySelector<HTMLElement>(
+      '[data-testid="sidebar-drawer-close"]'
+    );
+    const focusTarget = closeControl || getSurfaceFocusables()[0];
+    focusTarget?.focus();
+  });
+}
+
+function restoreDrawerFocus(): void {
+  if (previousDrawerFocus?.isConnected) {
+    previousDrawerFocus.focus();
+  }
+  previousDrawerFocus = null;
+}
+
+function handleKeydown(event: KeyboardEvent): void {
+  if (!props.drawerOpen) return;
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    emit("close");
+    return;
+  }
+
+  if (event.key !== "Tab") return;
+  const focusables = getSurfaceFocusables();
+  if (focusables.length === 0) return;
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+watch(
+  () => props.drawerOpen,
+  (isOpen, wasOpen) => {
+    if (isOpen && !wasOpen) {
+      previousDrawerFocus =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      focusDrawer();
+      return;
+    }
+    if (!isOpen && wasOpen) {
+      restoreDrawerFocus();
+    }
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  restoreDrawerFocus();
+});
 </script>
 
 <style scoped>
@@ -150,6 +250,18 @@ const emit = defineEmits<{
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+
+.phy-adaptive-sidebar__dialog-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .phy-adaptive-sidebar__scrim {

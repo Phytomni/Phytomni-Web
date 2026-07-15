@@ -1,16 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const TOKENS_CSS = readFileSync(
   resolve(__dirname, "../../../src/styles/tokens.css"),
   "utf8"
 );
-const THEME_CSS = readFileSync(
-  resolve(__dirname, "../../../src/assets/theme.css"),
-  "utf8"
-);
-
 function modeBlock(selector: string): string {
   const block = TOKENS_CSS.match(
     new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\n\\}`)
@@ -27,7 +22,7 @@ const lightTokens: Record<string, string> = {
   "--phy-color-overlay": "rgba(10, 24, 18, 0.48)",
   "--phy-color-text": "#14201b",
   "--phy-color-text-secondary": "#5b6b63",
-  "--phy-color-text-muted": "#68776f",
+  "--phy-color-text-muted": "#65736b",
   "--phy-color-text-placeholder": "#65736b",
   "--phy-color-text-disabled": "#7c8981",
   "--phy-color-border-subtle": "#e6ebe7",
@@ -55,13 +50,15 @@ const lightTokens: Record<string, string> = {
   "--el-color-primary-light-7": "#c1d4f2",
   "--el-color-primary-light-8": "#d5e2f6",
   "--el-color-primary-light-9": "#eaf1fb",
-  "--el-color-success": "#14644a",
-  "--el-color-success-dark-2": "#0f4d39",
+  "--el-color-success": "var(--phy-color-accent)",
+  "--el-color-success-dark-2": "var(--phy-color-accent-hover)",
   "--el-color-success-light-3": "#3d8f72",
   "--el-color-success-light-5": "#7eb59a",
   "--el-color-success-light-7": "#b6d7c8",
-  "--el-color-success-light-8": "#d7ede5",
-  "--el-color-success-light-9": "#eaf6f1",
+  "--el-color-success-light-8": "var(--phy-color-accent-soft)",
+  "--el-color-success-light-9": "var(--phy-color-bubble-user)",
+  "--el-color-success-rgb": "var(--phy-color-accent-rgb)",
+  "--el-color-success-text": "var(--phy-color-accent-text)",
 };
 
 const darkTokens: Record<string, string> = {
@@ -100,13 +97,15 @@ const darkTokens: Record<string, string> = {
   "--el-color-primary-light-7": "#1e3e69",
   "--el-color-primary-light-8": "#1b3458",
   "--el-color-primary-light-9": "#172a46",
-  "--el-color-success": "#2b7a59",
-  "--el-color-success-dark-2": "#347f61",
+  "--el-color-success": "var(--phy-color-accent)",
+  "--el-color-success-dark-2": "var(--phy-color-accent-hover)",
   "--el-color-success-light-3": "#245f46",
   "--el-color-success-light-5": "#204d3a",
   "--el-color-success-light-7": "#1c3b2e",
   "--el-color-success-light-8": "#193229",
   "--el-color-success-light-9": "#172922",
+  "--el-color-success-rgb": "var(--phy-color-accent-rgb)",
+  "--el-color-success-text": "var(--phy-color-accent-text)",
 };
 
 describe("semantic theme contract", () => {
@@ -136,8 +135,9 @@ describe("semantic theme contract", () => {
     );
   });
 
-  it("leaves semantic root declarations out of the compatibility stylesheet", () => {
-    expect(THEME_CSS).not.toMatch(/^\s+--(?:color|el)-[a-z-]+\s*:/m);
-    expect(THEME_CSS).not.toContain("Global theme transition");
+  it("removes the superseded compatibility stylesheet", () => {
+    expect(
+      existsSync(resolve(__dirname, "../../../src/assets/theme.css"))
+    ).toBe(false);
   });
 });

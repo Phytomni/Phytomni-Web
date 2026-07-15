@@ -104,7 +104,6 @@ function back() {
   box-sizing: border-box;
   display: grid;
   min-height: 100%;
-  min-height: 100vh;
   min-height: 100dvh;
   place-items: center;
   padding: clamp(var(--phy-space-24), 7vh, var(--phy-space-64))

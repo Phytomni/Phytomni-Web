@@ -32,6 +32,14 @@ const AUTH_LAYOUT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/shell/PhyAuthLayout.vue"),
   "utf8"
 );
+const HELP_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/help/index.vue"),
+  "utf8"
+);
+const LEGAL_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/legal/index.vue"),
+  "utf8"
+);
 const CHAT_ROW_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageRow.vue"),
   "utf8"
@@ -94,10 +102,15 @@ describe("Global application chrome", () => {
   });
 
   it("moves auth and document footers into their own scroll roots", () => {
-    expect(APP_SOURCE).toContain("/help");
-    expect(APP_SOURCE).toContain("/terms");
-    expect(APP_SOURCE).toContain("/privacy");
+    expect(APP_SOURCE).not.toContain("Footer");
+    expect(APP_SOURCE).not.toContain("/help");
+    expect(APP_SOURCE).not.toContain("/terms");
+    expect(APP_SOURCE).not.toContain("/privacy");
     expect(AUTH_LAYOUT_SOURCE).toContain("phy-auth-footer");
+    expect(HELP_SOURCE).toContain('data-scroll-root="help"');
+    expect(HELP_SOURCE).toContain("help-footer");
+    expect(LEGAL_SOURCE).toContain('data-scroll-root="legal"');
+    expect(LEGAL_SOURCE).toContain("legal-footer");
   });
 
   it("uses the product mark for assistant message identity", () => {

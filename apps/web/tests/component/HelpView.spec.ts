@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { config, mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
+import { createPinia, setActivePinia } from "pinia";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
@@ -31,6 +32,10 @@ const i18n = createI18n({
 config.global.plugins = [i18n, ElementPlus];
 
 describe("HelpView", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
   it("renders real section anchors instead of leaking HTML wrappers into markdown", () => {
     const wrapper = mount(HelpView, {
       global: { stubs: { Typewriter: true } },

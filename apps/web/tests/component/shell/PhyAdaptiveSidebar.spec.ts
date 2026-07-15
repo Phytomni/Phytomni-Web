@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
+import { nextTick } from "vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
 
 const CHAT_SIDEBAR_SOURCE = readFileSync(
@@ -48,6 +49,52 @@ describe("PhyAdaptiveSidebar", () => {
 
     expect(wrapper.emitted("close")).toHaveLength(1);
     expect(wrapper.emitted("toggle")).toBeUndefined();
+  });
+
+  it("exposes a labelled modal drawer and traps focus until it closes", async () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const wrapper = mount(PhyAdaptiveSidebar, {
+      attachTo: document.body,
+      props: { drawerOpen: true, dialogLabel: "Conversation navigation" },
+      slots: {
+        close: "Close",
+        default: '<a href="#history">History</a>',
+      },
+    });
+    await nextTick();
+
+    const sidebar = wrapper.get(".phy-adaptive-sidebar");
+    const close = wrapper.get('[data-testid="sidebar-drawer-close"]');
+    const history = wrapper.get('a[href="#history"]');
+
+    expect(sidebar.attributes("role")).toBe("dialog");
+    expect(sidebar.attributes("aria-modal")).toBe("true");
+    expect(sidebar.attributes("aria-labelledby")).toBe(
+      "phy-adaptive-sidebar-title"
+    );
+    expect(wrapper.get("#phy-adaptive-sidebar-title").text()).toBe(
+      "Conversation navigation"
+    );
+    expect(document.activeElement).toBe(close.element);
+
+    await history.trigger("keydown", { key: "Tab" });
+    expect(document.activeElement).toBe(close.element);
+
+    await close.trigger("keydown", { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(history.element);
+
+    await history.trigger("keydown", { key: "Escape" });
+    expect(wrapper.emitted("close")).toHaveLength(1);
+
+    await wrapper.setProps({ drawerOpen: false });
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+
+    wrapper.unmount();
+    opener.remove();
   });
 
   it("accepts only presentational state props and emits", () => {

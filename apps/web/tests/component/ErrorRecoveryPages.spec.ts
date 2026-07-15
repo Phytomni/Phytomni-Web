@@ -122,11 +122,9 @@ describe("standalone recovery pages", () => {
     );
   });
 
-  it("uses standalone Footer ownership and code-native recovery artwork", () => {
-    expect(APP_SOURCE).toContain('route.meta?.productLayout === "standalone"');
-    expect(APP_SOURCE).toMatch(
-      /if\s*\(route\.meta\?\.productLayout\s*===\s*"standalone"\)\s*return\s*false/
-    );
+  it("keeps recovery surfaces free of global fixed-footer ownership", () => {
+    expect(APP_SOURCE).not.toContain("app-footer");
+    expect(APP_SOURCE).not.toContain("showFooter");
     expect(
       readFileSync(resolve(__dirname, "../../src/views/error/401.vue"), "utf8")
     ).not.toMatch(/<img\b|401_images/);

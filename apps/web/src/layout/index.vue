@@ -48,13 +48,19 @@
         <el-container class="content-container">
           <el-aside
             v-if="!hideSidebar && (!isMobileViewport || mobileSidebarOpen)"
-            :width="isMobileViewport ? '272px' : isCollapse ? '64px' : '200px'"
+            :width="
+              isMobileViewport
+                ? '272px'
+                : isCollapse || isCompactViewport
+                ? '64px'
+                : '200px'
+            "
             :class="['sidebar', { 'is-mobile-drawer': isMobileViewport }]"
           >
             <el-menu
               :default-active="activeMenu"
               :router="true"
-              :collapse="isCollapse"
+              :collapse="isCollapse || isCompactViewport"
               class="el-menu-vertical"
               @select="handleMenuSelect"
             >
@@ -136,10 +142,23 @@
                 <span>{{ $t("menu.adminManagement") }}</span>
               </el-menu-item>
             </el-menu>
-            <div class="collapse-btn" @click="toggleCollapse">
+            <button
+              v-if="!isCompactViewport"
+              type="button"
+              class="collapse-btn"
+              :aria-label="
+                $t(
+                  isCollapse
+                    ? 'chat.expandNavigation'
+                    : 'chat.collapseNavigation'
+                )
+              "
+              :aria-expanded="!isCollapse"
+              @click="toggleCollapse"
+            >
               <el-icon v-if="isCollapse"><Expand /></el-icon>
               <el-icon v-else><Fold /></el-icon>
-            </div>
+            </button>
           </el-aside>
           <button
             v-if="isMobileViewport && mobileSidebarOpen"
@@ -207,7 +226,7 @@ const isManagementRoute = computed(() =>
     "/permi-manage",
     "/global-config",
     "/admin-management",
-  ]).has(route.path),
+  ]).has(route.path)
 );
 
 // sidebar collapse state
@@ -215,11 +234,17 @@ const isCollapse = ref(false);
 const isMobileViewport = ref(
   typeof window !== "undefined" && window.innerWidth < 900
 );
+const isCompactViewport = ref(
+  typeof window !== "undefined" &&
+    window.innerWidth >= 900 &&
+    window.innerWidth < 1280
+);
 const mobileSidebarOpen = ref(false);
 
 const updateViewport = () => {
   const mobile = window.innerWidth < 900;
   isMobileViewport.value = mobile;
+  isCompactViewport.value = !mobile && window.innerWidth < 1280;
   if (!mobile) mobileSidebarOpen.value = false;
 };
 
@@ -257,12 +282,11 @@ const hasPermission = (permission: string) => {
 
 <style scoped lang="scss">
 .layout-container {
-  height: 100vh;
+  box-sizing: border-box;
   height: 100dvh;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .main-container {
@@ -335,9 +359,9 @@ const hasPermission = (permission: string) => {
 .sidebar {
   display: flex;
   flex-direction: column;
-  background-color: #f9fbff;
-  transition: width 0.3s;
-  box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
+  background-color: var(--phy-color-bg-sidebar);
+  transition: width var(--phy-motion-normal) var(--phy-motion-ease-out);
+  box-shadow: var(--phy-shadow-soft);
   overflow: hidden;
 
   .el-menu-vertical {
@@ -372,12 +396,20 @@ const hasPermission = (permission: string) => {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: #606266;
-    background-color: #f9fbff;
-    transition: all 0.3s;
+    padding: 0;
+    border: 0;
+    color: var(--phy-color-text-secondary);
+    background-color: var(--phy-color-bg-sidebar);
+    transition: background-color var(--phy-motion-fast)
+      var(--phy-motion-ease-out);
 
     &:hover {
-      background-color: #e6e8eb;
+      background-color: var(--phy-color-fill-subtle);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--phy-color-focus);
+      outline-offset: -2px;
     }
   }
 }
@@ -385,7 +417,7 @@ const hasPermission = (permission: string) => {
 .main-content {
   padding: 0;
   overflow-y: auto !important;
-  background-color: #fff;
+  background-color: var(--phy-color-bg-page);
   height: 100%;
 }
 

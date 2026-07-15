@@ -27,7 +27,7 @@ const handleTryDemo = () => {
 .cloud-storage-container {
   padding: 24px;
   background-color: var(--el-bg-color-page, #f5f7fa);
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .cloud-storage-content {
@@ -48,17 +48,5 @@ const handleTryDemo = () => {
     font-size: 16px;
     line-height: 1.6;
   }
-}
-
-.theme-dark .cloud-storage-container {
-  background-color: var(--el-bg-color-page, #1a1a1a);
-}
-
-.theme-dark .cloud-storage-content h1 {
-  color: var(--el-text-color-primary, #ffffff);
-}
-
-.theme-dark .cloud-storage-content p {
-  color: var(--el-text-color-regular, rgba(235, 235, 235, 0.64));
 }
 </style>
