@@ -97,17 +97,24 @@ describe("FormWidget", () => {
 });
 
 describe("ChoiceWidget", () => {
+  const surface: Extract<A2uiOpenSurface, { widget: "choice" }> = {
+    catalog_version: "v1.0",
+    surface_id: "choice-surface",
+    widget: "choice",
+    props: {
+      title: "Pick",
+      multiple: false,
+      options: [
+        { id: "a", label: "Alpha" },
+        { id: "b", label: "Beta" },
+      ],
+    },
+  };
+
   it("emits selected id for single choice", async () => {
     const w = mount(ChoiceWidget, {
       props: {
-        props: {
-          title: "Pick",
-          multiple: false,
-          options: [
-            { id: "a", label: "Alpha" },
-            { id: "b", label: "Beta" },
-          ],
-        },
+        surface: surface.props,
         disabled: false,
       },
     });
@@ -115,9 +122,86 @@ describe("ChoiceWidget", () => {
     await radioGroup.vm.$emit("update:modelValue", "a");
     const submit = w.find("[data-test=a2ui-choice-submit]");
     await submit.trigger("click");
-    const emitted = w.emitted("submit")?.[0]?.[0] as {
-      payload: { selected: string };
+    expect(w.emitted("action")).toEqual([
+      [{ widget: "choice", payload: { selected: "a" } }],
+    ]);
+  });
+
+  it("emits a copied string array for multiple choice", async () => {
+    const multipleSurface: Extract<A2uiOpenSurface, { widget: "choice" }> = {
+      ...surface,
+      props: { ...surface.props, multiple: true },
     };
-    expect(emitted.payload.selected).toBe("a");
+    const w = mount(ChoiceWidget, {
+      props: { surface: multipleSurface.props, disabled: false },
+    });
+    const selected = ["a", "b"];
+    const checkboxGroup = w.findComponent({ name: "ElCheckboxGroup" });
+    await checkboxGroup.vm.$emit("update:modelValue", selected);
+    await w.find("[data-test=a2ui-choice-submit]").trigger("click");
+
+    const emitted = w.emitted("action")?.[0]?.[0] as {
+      payload: { selected: string[] };
+    };
+    expect(emitted.payload.selected).toEqual(["a", "b"]);
+    expect(emitted.payload.selected).not.toBe(selected);
+  });
+
+  it("emits cancellation without requiring a selection", async () => {
+    const w = mount(ChoiceWidget, {
+      props: { surface: surface.props, disabled: false },
+    });
+    await w.find('[data-test="a2ui-choice-cancel"]').trigger("click");
+    expect(w.emitted("action")).toEqual([
+      [{ widget: "choice", payload: { cancelled: true } }],
+    ]);
+  });
+
+  it("does not submit or cancel when disabled", async () => {
+    const w = mount(ChoiceWidget, {
+      props: { surface: surface.props, disabled: true },
+    });
+    const radioGroup = w.findComponent({ name: "ElRadioGroup" });
+    await radioGroup.vm.$emit("update:modelValue", "a");
+    await w.find("[data-test=a2ui-choice-submit]").trigger("click");
+    await w.find('[data-test="a2ui-choice-cancel"]').trigger("click");
+    expect(w.emitted("action")).toBeUndefined();
+  });
+
+  it("disables submit for zero selection but leaves cancel enabled", () => {
+    const w = mount(ChoiceWidget, {
+      props: { surface: surface.props, disabled: false },
+    });
+    const submit = w.find("[data-test=a2ui-choice-submit]");
+    const cancel = w.find('[data-test="a2ui-choice-cancel"]');
+    expect(submit.attributes("disabled")).toBeDefined();
+    expect(cancel.attributes("disabled")).toBeUndefined();
+  });
+
+  it("passes option ids as control values instead of labels", () => {
+    const single = mount(ChoiceWidget, {
+      props: { surface: surface.props, disabled: false },
+    });
+    const radios = single.findAllComponents({ name: "ElRadio" });
+    expect(radios.map((radio) => radio.props("value"))).toEqual(["a", "b"]);
+    expect(radios.every((radio) => radio.props("label") === undefined)).toBe(
+      true
+    );
+
+    const multipleSurface: Extract<A2uiOpenSurface, { widget: "choice" }> = {
+      ...surface,
+      props: { ...surface.props, multiple: true },
+    };
+    const multiple = mount(ChoiceWidget, {
+      props: { surface: multipleSurface.props, disabled: false },
+    });
+    const checkboxes = multiple.findAllComponents({ name: "ElCheckbox" });
+    expect(checkboxes.map((checkbox) => checkbox.props("value"))).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(
+      checkboxes.every((checkbox) => checkbox.props("label") === undefined)
+    ).toBe(true);
   });
 });

@@ -20,9 +20,9 @@
     />
     <ChoiceWidget
       v-else-if="choiceSurface"
-      :props="choiceSurface.props"
+      :surface="choiceSurface.props"
       :disabled="!canInteract"
-      @submit="onChoiceSubmit"
+      @action="onAction"
     />
   </div>
 </template>
@@ -72,23 +72,5 @@ const canInteract = computed(() =>
 function onAction(intent: A2uiActionIntent) {
   if (!canInteract.value) return;
   emit("action", intent);
-}
-
-function onChoiceSubmit(value: { payload: Record<string, unknown> }) {
-  const selected = value.payload.selected;
-  if (
-    !canInteract.value ||
-    (typeof selected !== "string" &&
-      !(
-        Array.isArray(selected) &&
-        selected.every((item) => typeof item === "string")
-      ))
-  ) {
-    return;
-  }
-  emit("action", {
-    widget: "choice",
-    payload: { selected },
-  });
 }
 </script>
