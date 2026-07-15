@@ -25,8 +25,16 @@ SCOPED_FILES = {
     "operation_log": Path("apps/server/middleware/operation_log.go"),
     "bot_action_client": Path("apps/server/external/bot/a2ui_action.go"),
     "bot_example_config": Path("apps/server/config/app.yml.example"),
+    "bot_config": Path("apps/server/external/bot/config.go"),
+    "design_system_doc": Path("docs/frontend-design-system.md"),
 }
 ALLOWED_FIXTURE_CLASSES = {"upstream-projection", "web-http-synthetic"}
+ALLOWED_CONTRACT_KINDS = {
+    "open_surface",
+    "terminal_projection",
+    "action_response",
+    "error_response",
+}
 FORBIDDEN_PATH_PARTS = {"evidence", "handoff", "bot", "ops", "operations"}
 PASS_LINE = "A2UI activation contract: PASS"
 
@@ -35,6 +43,37 @@ ACTION_ROUTE_RE = re.compile(
     r"\(\s*[\"'](?P<path>[^\"']*/a2ui-actions)[\"']"
 )
 FLAG_RE_TEMPLATE = r"(?m)^\s*{key}\s*:\s*(?P<value>true|false)\b"
+REQUIRED_DESIGN_MARKERS = (
+    "A2UI interaction lifecycle",
+    "three supported widgets",
+    "message-owned state",
+    "messageKey + run_id + surface_id",
+    "terminal",
+    "input_required",
+    "N=2",
+    "no automatic retry",
+    "no-blind-replay",
+    "unknown lock",
+    "Form/Choice cancellation",
+    "history/reload read-only degradation",
+    "reload fail-safe",
+    "lifecycle status",
+    "visible focus",
+    "touch controls",
+    ".codex/evidence/a2ui-activation/",
+    "A1 activation-ready is not production activation",
+)
+STALE_CONFIG_MARKERS = (
+    "until Bot P0 ships",
+    "until Bot accept ships",
+    "Bot-shaped 403 stub",
+)
+UNBACKED_ENVIRONMENT_CLAIM_RE = re.compile(
+    r"\b(?:staging|ci|production)\b[^\.\n]{0,80}"
+    r"\b(?:proof|evidence|validation|verification|verified|validated|"
+    r"passed|pass|sign[- ]?off|complete)\b",
+    re.IGNORECASE,
+)
 
 
 def _within(path: Path, parent: Path) -> bool:
@@ -162,6 +201,8 @@ def _check_manifest(
             violations.append(f"staging-capture fixture is not allowed: {fixture_id}")
         elif fixture_class not in ALLOWED_FIXTURE_CLASSES:
             violations.append(f"unclassified fixture: {fixture_id}")
+        if entry.get("contract_kind") not in ALLOWED_CONTRACT_KINDS:
+            violations.append(f"unclassified fixture: {fixture_id}")
 
         resolved = _resolve_fixture_path(fixture_root, entry.get("file"), violations)
         if resolved is None:
@@ -257,6 +298,37 @@ def _check_flags(text: str, violations: list[str]) -> None:
             violations.append(f"{key} default must be false")
 
 
+def _check_config_governance(text: str, violations: list[str]) -> None:
+    lowered = text.casefold()
+    for marker in STALE_CONFIG_MARKERS:
+        if marker.casefold() in lowered:
+            violations.append(f"stale config launch promise: {marker}")
+    endpoint_claim_re = re.compile(
+        r"(?i)\bendpoint\b[^\n]{0,120}\b(?:alone|by itself|enough|"
+        r"authori[sz]e|suffice)"
+    )
+    for line in text.splitlines():
+        if endpoint_claim_re.search(line):
+            violations.append(
+                "config comments cannot treat Bot endpoint existence alone as "
+                f"activation evidence: {line.strip()}"
+            )
+
+
+def _check_design_system(text: str, violations: list[str]) -> None:
+    lowered = re.sub(r"\s+", " ", text.casefold())
+    for marker in REQUIRED_DESIGN_MARKERS:
+        normalized_marker = re.sub(r"\s+", " ", marker.casefold())
+        if normalized_marker not in lowered:
+            violations.append(f"frontend-design-system.md missing lifecycle marker: {marker}")
+
+    normalized = re.sub(r"\s+", " ", text)
+    for match in UNBACKED_ENVIRONMENT_CLAIM_RE.finditer(normalized):
+        context = match.group(0).strip()
+        if "external evidence" not in context.casefold():
+            violations.append(f"unbacked environment proof claim: {context}")
+
+
 def check(root: Path) -> list[str]:
     """Return deterministic violations for the activation contract."""
     root = root.resolve()
@@ -281,6 +353,11 @@ def check(root: Path) -> list[str]:
         _check_bot_client(source_text["bot_action_client"], violations)
     if "bot_example_config" in source_text:
         _check_flags(source_text["bot_example_config"], violations)
+        _check_config_governance(source_text["bot_example_config"], violations)
+    if "bot_config" in source_text:
+        _check_config_governance(source_text["bot_config"], violations)
+    if "design_system_doc" in source_text:
+        _check_design_system(source_text["design_system_doc"], violations)
     return violations
 
 

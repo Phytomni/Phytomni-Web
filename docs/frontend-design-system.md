@@ -231,6 +231,41 @@ Store local evidence below `.codex/evidence/frontend-v2/`; this path is ignored
 and must never be staged. The index schema is documented in
 `.codex/evidence/frontend-v2/README.md`.
 
+## A2UI interaction lifecycle
+
+The Web activation slice supports three widgets only. The three supported
+widgets are `Confirm`, `Form`, and `Choice`. Message-owned state is the rule: a
+surface is stored on the
+assistant message that introduced it, never in a global or dialogue-wide
+singleton. The stable identity tuple is `messageKey + run_id + surface_id`;
+reducer updates and action responses must retain all three members.
+
+- A `terminal` response closes the current surface. An `input_required`
+  response updates the same message and may open the next review round.
+- The pause-round ceiling is `N=2`: after the second input-required round the
+  Web surface pauses and waits for a new assistant turn rather than opening a
+  third round.
+- There is no automatic retry. An `unknown lock` is terminal for the current
+  surface; only a deliberate, bounded user action can retry a proven
+  pre-dispatch rejection.
+- Form/Choice cancellation is an explicit user action and emits a bounded
+  cancellation payload; it is not inferred from navigation or a component
+  unmount.
+- History/reload read-only degradation is intentional. Persisted messages may
+  show the last safe surface snapshot, but they must not invent a live action
+  transport or replay a stale envelope. The no-blind-replay rule rejects any
+  client-side attempt to resend an old envelope, and the reload fail-safe keeps
+  the surface read-only when its runtime identity is unavailable.
+- Accessibility keeps lifecycle status in a polite live region, focuses a
+  freshly opened round without stealing initial focus, preserves visible
+  focus, and keeps touch controls at the shared minimum target size.
+- Sanitized local evidence belongs under
+  `.codex/evidence/a2ui-activation/`; it must contain synthetic identifiers and
+  no cookies, tokens, production URLs, or biological/user data.
+- A1 activation-ready is not production activation. Full external acceptance,
+  operator authorization, and cross-system evidence remain prerequisites for
+  changing a dark-launch flag.
+
 ## Prohibited patterns
 
 The G14 scanner and contract tests reject the high-signal regressions below:

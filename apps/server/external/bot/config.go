@@ -30,9 +30,9 @@ type Config struct {
 	StreamEnabled bool `json:"stream_enabled" yaml:"stream_enabled" mapstructure:"stream_enabled"`
 	// A2uiActionsEnabled is the dark-launch switch for POST
 	// /api/v1/conversations/:id/a2ui-actions → Bot
-	// /v1/runs/{run_id}/a2ui-actions. While false the gateway returns a
-	// Bot-shaped 403 stub after ownership checks (no Bot call). Zero value
-	// false = safe dormant default, like StreamEnabled.
+	// /v1/runs/{run_id}/a2ui-actions. While false the gateway returns a local
+	// 503 after ownership checks (no Bot call). Zero value false = safe dormant
+	// default, like StreamEnabled.
 	A2uiActionsEnabled bool `json:"a2ui_actions_enabled" yaml:"a2ui_actions_enabled" mapstructure:"a2ui_actions_enabled"`
 	// KeyAuditRedact, when true, requires loggers to emit only the key prefix.
 	KeyAuditRedact bool `json:"key_audit_redact" yaml:"key_audit_redact" mapstructure:"key_audit_redact"`

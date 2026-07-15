@@ -14,6 +14,26 @@ from scripts import check_a2ui_activation_contract as checker
 
 
 FIXTURE_BYTES = b'{"surface_id":"synthetic-surface","widget":"confirm"}\n'
+DOC_REQUIRED_MARKERS = (
+    "A2UI interaction lifecycle",
+    "three supported widgets",
+    "message-owned state",
+    "messageKey + run_id + surface_id",
+    "terminal",
+    "input_required",
+    "N=2",
+    "no automatic retry",
+    "no-blind-replay",
+    "unknown lock",
+    "Form/Choice cancellation",
+    "history/reload read-only degradation",
+    "reload fail-safe",
+    "lifecycle status",
+    "visible focus",
+    "touch controls",
+    ".codex/evidence/a2ui-activation/",
+    "A1 activation-ready is not production activation",
+)
 
 
 class A2uiActivationContractTests(unittest.TestCase):
@@ -102,6 +122,12 @@ bot:
   a2ui_actions_enabled: false
 """,
         )
+        self.write(
+            root,
+            "apps/server/external/bot/config.go",
+            "// A2uiActionsEnabled returns a local 503 while the flag is false.\n",
+        )
+        self.write(root, "docs/frontend-design-system.md", "\n".join(DOC_REQUIRED_MARKERS))
         return temporary, root
 
     @staticmethod
@@ -169,6 +195,7 @@ bot:
         for field, value, marker in (
             ("class", "staging-capture", "staging-capture"),
             ("class", "unknown", "unclassified"),
+            ("contract_kind", "unknown", "unclassified"),
         ):
             with self.subTest(field=field, value=value):
                 temporary, root = self.make_tree()
@@ -251,6 +278,50 @@ bot:
                     encoding="utf-8",
                 )
                 self.assert_fails(root, f"{key} default must be false")
+
+    def test_config_governance_rejects_stale_launch_promises(self) -> None:
+        stale_markers = (
+            "until Bot P0 ships",
+            "until Bot accept ships",
+            "Bot-shaped 403 stub",
+            "Bot endpoint existence alone authorizes activation",
+        )
+        for marker in stale_markers:
+            for relative in (
+                "apps/server/config/app.yml.example",
+                "apps/server/external/bot/config.go",
+            ):
+                with self.subTest(marker=marker, relative=relative):
+                    temporary, root = self.make_tree()
+                    self.addCleanup(temporary.cleanup)
+                    config = root / relative
+                    config.write_text(
+                        config.read_text(encoding="utf-8") + f"\n# {marker}\n",
+                        encoding="utf-8",
+                    )
+                    self.assert_fails(root, marker)
+
+    def test_design_system_requires_the_activation_lifecycle_contract(self) -> None:
+        for marker in DOC_REQUIRED_MARKERS:
+            with self.subTest(marker=marker):
+                temporary, root = self.make_tree()
+                self.addCleanup(temporary.cleanup)
+                doc = root / "docs/frontend-design-system.md"
+                doc.write_text(
+                    doc.read_text(encoding="utf-8").replace(marker, ""),
+                    encoding="utf-8",
+                )
+                self.assert_fails(root, marker)
+
+    def test_design_system_rejects_unbacked_environment_proof_claims(self) -> None:
+        temporary, root = self.make_tree()
+        self.addCleanup(temporary.cleanup)
+        doc = root / "docs/frontend-design-system.md"
+        doc.write_text(
+            doc.read_text(encoding="utf-8") + "\nProduction\nproof is complete.\n",
+            encoding="utf-8",
+        )
+        self.assert_fails(root, "unbacked environment proof claim")
 
 
 if __name__ == "__main__":
