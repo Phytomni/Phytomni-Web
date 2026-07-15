@@ -6,7 +6,9 @@ import type {
   A2uiActionResponse,
   A2uiActionIntent,
   A2uiOpenSurface,
+  A2uiSurfaceRuntime,
 } from "./a2uiContract";
+import type { A2uiTransportError } from "./a2uiAction";
 
 export type BeginA2uiResult =
   | { ok: true; blocks: ContentBlock[]; envelope: A2uiActionEnvelope }
@@ -19,6 +21,14 @@ export type BeginA2uiResult =
         | "intent_mismatch"
         | "action_id_invalid";
       blocks: ContentBlock[];
+    };
+
+export type RetryA2uiResult =
+  | { ok: true; blocks: ContentBlock[]; envelope: A2uiActionEnvelope }
+  | {
+      ok: false;
+      blocks: ContentBlock[];
+      reason: "retry_not_allowed" | "surface_missing";
     };
 
 export function beginA2uiAction(
@@ -57,6 +67,147 @@ export function beginA2uiAction(
     run_id: runId,
     payload: intent.payload,
   };
+  const nextBlocks = blocks.slice();
+  nextBlocks[targetIndex] = {
+    ...target,
+    a2ui: {
+      surface: runtime.surface,
+      state: {
+        status: "submitting",
+        round: runtime.state.round,
+        envelope,
+      },
+    },
+  };
+  return { ok: true, blocks: nextBlocks, envelope };
+}
+
+/**
+ * Fold a transport failure into the submitting surface that owns its action.
+ * Only a literal `forwarded=false` and `retryable=true` prove that dispatch did
+ * not reach the Bot, so only that combination exposes the original envelope
+ * for a manual retry. Every other ambiguous outcome is terminal and unknown.
+ */
+export function reduceA2uiFailure(
+  blocks: ContentBlock[],
+  envelope: A2uiActionEnvelope,
+  error: A2uiTransportError
+): ContentBlock[] {
+  const targetIndex = blocks.findIndex((block) => {
+    const state = block.a2ui?.state;
+    return (
+      state?.status === "submitting" &&
+      state.envelope.action_id === envelope.action_id
+    );
+  });
+
+  // A late failure cannot safely change a resolved, expired, or otherwise
+  // non-submitting surface. Keeping the same array also preserves idempotency.
+  if (targetIndex < 0) return blocks;
+
+  const target = blocks[targetIndex];
+  const runtime = target.a2ui;
+  if (!runtime || runtime.state.status !== "submitting") return blocks;
+
+  const submitting = runtime.state;
+  const actionId = submitting.envelope.action_id;
+  const nextState: A2uiSurfaceRuntime["state"] =
+    error.kind === "rejected"
+      ? {
+          status: "rejected",
+          round: submitting.round,
+          actionId,
+          code: error.code,
+        }
+      : error.kind === "temporarily_rejected" &&
+        error.forwarded === false &&
+        error.retryable === true
+      ? {
+          status: "temporarily_rejected",
+          round: submitting.round,
+          envelope: submitting.envelope,
+          code: error.code,
+        }
+      : error.kind === "expired"
+      ? {
+          status: "expired",
+          round: submitting.round,
+          actionId,
+          code: error.code,
+        }
+      : {
+          status: "unknown",
+          round: submitting.round,
+          actionId,
+          code: error.code,
+        };
+
+  const nextBlocks = blocks.slice();
+  nextBlocks[targetIndex] = {
+    ...target,
+    a2ui: {
+      surface: runtime.surface,
+      state: nextState,
+    },
+  };
+  return nextBlocks;
+}
+
+/**
+ * Record a local precondition failure that prevented transport dispatch.
+ * The surface remains ready and can be submitted again by the caller.
+ */
+export function markA2uiNotSent(
+  blocks: ContentBlock[],
+  surfaceId: string
+): ContentBlock[] {
+  const targetIndex = blocks.findIndex(
+    (block) => block.a2ui?.surface.surface_id === surfaceId
+  );
+  if (targetIndex < 0) return blocks;
+
+  const target = blocks[targetIndex];
+  const runtime = target.a2ui;
+  if (!runtime || runtime.state.status !== "ready") return blocks;
+
+  const nextBlocks = blocks.slice();
+  nextBlocks[targetIndex] = {
+    ...target,
+    a2ui: {
+      surface: runtime.surface,
+      state: {
+        status: "ready",
+        round: runtime.state.round,
+        lastError: "not_sent",
+      },
+    },
+  };
+  return nextBlocks;
+}
+
+/**
+ * Re-enter submitting only for a proven pre-dispatch rejection. The stored
+ * envelope is returned unchanged so retries retain the original action ID and
+ * payload; no new ID, delay, or retry counter is introduced here.
+ */
+export function beginA2uiRetry(
+  blocks: ContentBlock[],
+  surfaceId: string
+): RetryA2uiResult {
+  const targetIndex = blocks.findIndex(
+    (block) => block.a2ui?.surface.surface_id === surfaceId
+  );
+  if (targetIndex < 0) {
+    return { ok: false, reason: "surface_missing", blocks };
+  }
+
+  const target = blocks[targetIndex];
+  const runtime = target.a2ui;
+  if (!runtime || runtime.state.status !== "temporarily_rejected") {
+    return { ok: false, reason: "retry_not_allowed", blocks };
+  }
+
+  const envelope = runtime.state.envelope;
   const nextBlocks = blocks.slice();
   nextBlocks[targetIndex] = {
     ...target,

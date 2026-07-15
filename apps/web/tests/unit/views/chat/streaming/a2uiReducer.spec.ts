@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   A2uiActionEnvelope,
   A2uiActionResponse,
@@ -9,9 +9,14 @@ import type {
 import { A2UI_LIMITS } from "@/views/chat/streaming/a2uiContract";
 import {
   beginA2uiAction,
+  beginA2uiRetry,
+  markA2uiNotSent,
+  reduceA2uiFailure,
   reduceA2uiInputRequired,
   reduceA2uiSucceeded,
 } from "@/views/chat/streaming/a2uiReducer";
+import { A2uiTransportError } from "@/views/chat/streaming/a2uiAction";
+import * as a2uiAction from "@/views/chat/streaming/a2uiAction";
 import type { ContentBlock } from "@/views/chat/types";
 
 const surface: A2uiOpenSurface = {
@@ -668,5 +673,196 @@ describe("reduceA2uiInputRequired", () => {
         (block) => block.a2ui?.surface.surface_id === round2Surface.surface_id,
       ),
     ).toHaveLength(1);
+  });
+});
+
+describe("A2UI transport failure and retry reducers", () => {
+  const transportError = (
+    kind: "rejected" | "temporarily_rejected" | "expired" | "unknown",
+    code: string,
+    forwarded: boolean,
+    retryable: boolean
+  ) => new A2uiTransportError(kind, code, undefined, forwarded, retryable);
+
+  it.each([
+    [
+      "rejected",
+      transportError("rejected", "a2ui_invalid_action", false, false),
+      {
+        status: "rejected",
+        round: 1,
+        actionId: "action-1",
+        code: "a2ui_invalid_action",
+      },
+      false,
+    ],
+    [
+      "proven temporary rejection",
+      transportError(
+        "temporarily_rejected",
+        "a2ui_gateway_disabled",
+        false,
+        true
+      ),
+      {
+        status: "temporarily_rejected",
+        round: 1,
+        envelope: {
+          surface_id: "surface-1",
+          widget: "confirm",
+          action_id: "action-1",
+          run_id: "run-9",
+          payload: { accepted: true },
+        },
+        code: "a2ui_gateway_disabled",
+      },
+      true,
+    ],
+    [
+      "expired",
+      transportError("expired", "a2ui_not_found", false, true),
+      {
+        status: "expired",
+        round: 1,
+        actionId: "action-1",
+        code: "a2ui_not_found",
+      },
+      false,
+    ],
+    [
+      "ambiguous unknown",
+      transportError("unknown", "a2ui_transport_error", true, false),
+      {
+        status: "unknown",
+        round: 1,
+        actionId: "action-1",
+        code: "a2ui_transport_error",
+      },
+      false,
+    ],
+  ] as const)(
+    "maps %s to one terminal state and fixed retry eligibility",
+    (_label, error, expectedState, retryAllowed) => {
+      const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+      const next = reduceA2uiFailure(blocks, envelope, error);
+
+      expect(next).not.toBe(blocks);
+      expect(next[1].a2ui?.state).toEqual(expectedState);
+      expect(blocks[1].a2ui?.state).toMatchObject({ status: "submitting" });
+
+      const retry = beginA2uiRetry(next, surface.surface_id);
+      expect(retry.ok).toBe(retryAllowed);
+      if (retryAllowed) {
+        expect(retry).toMatchObject({ ok: true });
+      } else {
+        expect(retry).toMatchObject({ ok: false, reason: "retry_not_allowed" });
+      }
+    }
+  );
+
+  it("keeps a ready surface and records not_sent when no transport call was made", () => {
+    const blocks = blocksWithTarget();
+    const next = markA2uiNotSent(blocks, surface.surface_id);
+
+    expect(next).not.toBe(blocks);
+    expect(next[1].a2ui?.state).toEqual({
+      status: "ready",
+      round: 1,
+      lastError: "not_sent",
+    });
+    expect(blocks[1].a2ui?.state).toEqual({ status: "ready", round: 1 });
+  });
+
+  it("retries only a proven pre-dispatch rejection with the stored envelope", () => {
+    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+    const temporary = reduceA2uiFailure(
+      blocks,
+      envelope,
+      transportError(
+        "temporarily_rejected",
+        "a2ui_gateway_disabled",
+        false,
+        true
+      )
+    );
+    const stored = temporary[1].a2ui?.state;
+    if (!stored || stored.status !== "temporarily_rejected") {
+      throw new Error("expected temporarily_rejected state");
+    }
+    const buildId = vi.spyOn(a2uiAction, "buildA2uiActionId");
+
+    const result = beginA2uiRetry(temporary, surface.surface_id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected retry to be allowed");
+    expect(result.envelope).toBe(stored.envelope);
+    expect(result.envelope).toEqual(envelope);
+    expect(result.envelope.action_id).toBe("action-1");
+    expect(result.blocks[1].a2ui?.state).toEqual({
+      status: "submitting",
+      round: 1,
+      envelope: stored.envelope,
+    });
+    expect(buildId).not.toHaveBeenCalled();
+    buildId.mockRestore();
+  });
+
+  it.each([
+    ["forwarded=true", true, true],
+    ["retryable=false", false, false],
+  ] as const)(
+    "does not create temporarily_rejected for %s",
+    (_label, forwarded, retryable) => {
+      const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+      const next = reduceA2uiFailure(
+        blocks,
+        envelope,
+        transportError(
+          "temporarily_rejected",
+          "ambiguous_gateway_result",
+          forwarded,
+          retryable
+        )
+      );
+
+      expect(next[1].a2ui?.state).toMatchObject({
+        status: "unknown",
+        actionId: envelope.action_id,
+        code: "ambiguous_gateway_result",
+      });
+      expect(next[1].a2ui?.state.status).not.toBe("temporarily_rejected");
+      expect(next[1].a2ui?.state.status).not.toBe("protocol_error");
+    }
+  );
+
+  it("ignores a stale failure after the action is no longer submitting", () => {
+    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+    const resolved = reduceA2uiSucceeded(
+      blocks,
+      envelope,
+      succeeded(envelope, terminalConfirm(surface.surface_id, true))
+    );
+
+    const stale = reduceA2uiFailure(
+      resolved,
+      envelope,
+      transportError("unknown", "late_transport_error", true, false)
+    );
+
+    expect(stale).toBe(resolved);
+  });
+
+  it("does not allow retry when the surface is missing or not temporarily rejected", () => {
+    const ready = blocksWithTarget();
+    expect(beginA2uiRetry(ready, "missing")).toEqual({
+      ok: false,
+      reason: "surface_missing",
+      blocks: ready,
+    });
+    expect(beginA2uiRetry(ready, surface.surface_id)).toEqual({
+      ok: false,
+      reason: "retry_not_allowed",
+      blocks: ready,
+    });
   });
 });
