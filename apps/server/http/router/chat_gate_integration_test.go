@@ -236,6 +236,30 @@ func TestA2uiActionRouteAcceptsExactLimitAndReachesService(t *testing.T) {
 	waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
 }
 
+func TestA2uiActionRouteAuditRedactsPayload(t *testing.T) {
+	engine, gdb := buildChatGateEnv(t)
+	configureA2uiFlagOff(t)
+	tok := seedA2uiActionOwner(t, gdb, "a2ui-audit@x.com", "1")
+	body := []byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":{"email":"researcher@example.com","biological_input":"BRCA1","nested":{"token":"secret-token"}},"extra":"drop-me"}`)
+
+	response := sendA2uiActionRequest(engine, tok, body, "application/json")
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("A2UI audit request: got %d, want flag-off service response 403", response.Code)
+	}
+	waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
+
+	var bodyParams string
+	if err := gdb.Table("user_operation_logs").Where("path = ?", a2uiActionRoutePath).Pluck("body_params", &bodyParams).Error; err != nil {
+		t.Fatalf("read A2UI operation log: %v", err)
+	}
+	if bodyParams != `{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":"[REDACTED]"}` {
+		t.Fatalf("A2UI operation-log body = %q, want IDs plus redacted payload", bodyParams)
+	}
+	if strings.Contains(bodyParams, "researcher@example.com") || strings.Contains(bodyParams, "BRCA1") || strings.Contains(bodyParams, "secret-token") {
+		t.Fatalf("A2UI operation-log body leaked payload data: %s", bodyParams)
+	}
+}
+
 func TestA2uiActionRouteRejectsOverflowBeforeOperationLog(t *testing.T) {
 	engine, gdb := buildChatGateEnv(t)
 	configureA2uiFlagOff(t)

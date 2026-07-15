@@ -1,10 +1,72 @@
 package middleware
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
 )
+
+const wantA2uiAuditBody = `{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":"[REDACTED]"}`
+
+func TestA2uiRedactMasksCompletePayload(t *testing.T) {
+	body := []byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":{"email":"researcher@example.com","biological_input":"BRCA1 c.68_69del","nested":{"token":"secret-token"},"items":[{"secret":"secret-value"}],"ordinary":"retain only inside payload"},"unknown":"drop-me"}`)
+
+	if got := redactA2uiActionBody(body); got != wantA2uiAuditBody {
+		t.Fatalf("A2UI audit body = %q, want %q", got, wantA2uiAuditBody)
+	}
+}
+
+func TestA2uiRedactMasksAllWidgetPayloads(t *testing.T) {
+	for _, widget := range []string{"confirm", "form", "choice"} {
+		t.Run(widget, func(t *testing.T) {
+			body := []byte(fmt.Sprintf(`{"surface_id":"sfc-1","widget":%q,"action_id":"act-1","run_id":"run-1","payload":{"selected":["gene-a","gene-b"]}}`, widget))
+			got := redactA2uiActionBody(body)
+			if !strings.Contains(got, `"payload":"[REDACTED]"`) {
+				t.Fatalf("%s payload not masked: %s", widget, got)
+			}
+			if strings.Contains(got, "gene-a") || strings.Contains(got, "gene-b") {
+				t.Fatalf("%s payload leaked: %s", widget, got)
+			}
+		})
+	}
+}
+
+func TestA2uiRedactRejectsMalformedEnvelope(t *testing.T) {
+	for _, body := range [][]byte{
+		[]byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":`),
+		[]byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1"}`),
+	} {
+		if got := redactA2uiActionBody(body); got != "[redacted: invalid a2ui action]" {
+			t.Fatalf("malformed A2UI body = %q, want fixed placeholder", got)
+		}
+	}
+}
+
+func TestA2uiRedactRejectsInvalidIdentifiers(t *testing.T) {
+	for _, body := range [][]byte{
+		[]byte(`{"surface_id":7,"widget":"form","action_id":"act-1","run_id":"run-1","payload":{}}`),
+		[]byte(fmt.Sprintf(`{"surface_id":"sfc-1","widget":"form","action_id":%q,"run_id":"run-1","payload":{}}`, strings.Repeat("界", 257))),
+	} {
+		if got := redactA2uiActionBody(body); got != "[redacted: invalid a2ui action]" {
+			t.Fatalf("invalid A2UI identifier = %q, want fixed placeholder", got)
+		}
+	}
+}
+
+func TestGenericJSONRedactionKeepsRecursiveCredentialMasking(t *testing.T) {
+	body := []byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":{"nested_token":"secret-token"},"email":"researcher@example.com"}`)
+	out := redactBodyByContentType("application/json", body)
+	if !strings.Contains(out, `"surface_id":"sfc-1"`) {
+		t.Fatalf("generic JSON redaction removed ordinary A2UI field: %s", out)
+	}
+	if strings.Contains(out, "secret-token") || !strings.Contains(out, `"nested_token":"`+redactedMask+`"`) {
+		t.Fatalf("generic JSON credential masking changed: %s", out)
+	}
+	if !strings.Contains(out, `"email":"researcher@example.com"`) {
+		t.Fatalf("generic JSON redaction changed ordinary email: %s", out)
+	}
+}
 
 // TestRedactJSONBodyNested verifies recursive redaction: sensitive keys inside nested objects are masked too.
 func TestRedactJSONBodyNested(t *testing.T) {
