@@ -48,8 +48,8 @@ func readGalleryCols(t *testing.T, gdb *gorm.DB, id int64) (downloadPath, imageP
 // carries several `type:enum` GORM tags (MySQL-only) that SQLite AutoMigrate does
 // not recognise. The DDL includes only the columns read/written by the answer-check
 // / update-log / bot-sync paths (id/user_name/dialogue_id/f_id/bot_run_id/status/
-// answer + task_id/server_id/compute_resource/log_status/delete_at); all other
-// fields scan as zero values.
+// answer + task_id/server_id/compute_resource/log_status/mode/delete_at); all
+// other fields scan as zero values.
 //
 // Connection pool pinned to 1: each :memory: connection is its own database; if a
 // write and its verification read land on different connections the read returns
@@ -85,6 +85,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		compute_resource TEXT,
 		server_file_path TEXT,
 		log_status TEXT,
+		mode TEXT,
 		status TEXT,
 		download_path TEXT,
 		image_paths TEXT,
@@ -508,6 +509,125 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	var paths []string
 	if err := json.Unmarshal([]byte(ip), &paths); err != nil || len(paths) != 1 || paths[0] != "/obs/p/r1/a.png" {
 		t.Errorf("image_paths = %q (%v)", ip, err)
+	}
+}
+
+// TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope closes the remote
+// DeepGenome compatibility path in one fixture: the Web submits one umbrella
+// run, reconciles two intermediate revisions and a final report, then reads
+// history through AnswerCheck. A foreign row carrying the same run id must not
+// appear in the owner's history response.
+func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
+	gdb := setupTestDB(t)
+	const runID = "run-deep-genome-e2e"
+	var submittedDialogue string
+	var poll atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents/deep_genome/runs":
+			var req rxBot.AgentRunRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("decode submit request: %v", err)
+			}
+			if req.DialogueID == "" {
+				t.Error("submit dialogue_id must be non-empty")
+			}
+			submittedDialogue = req.DialogueID
+			_, _ = w.Write([]byte(`{"id":"completion-deep-genome-e2e","run_id":"run-deep-genome-e2e","object":"agent.run","agent":"deep_genome","status":"running","task_ids":["child-deep-genome-e2e"],"result":{}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/"+runID:
+			var body string
+			switch poll.Add(1) {
+			case 1:
+				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"running","result":{"report_stage":"intermediate","report_completeness":"partial","report_revision":1,"intermediate_report":"# Revision 1"}}`
+			case 2:
+				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"running","result":{"report_stage":"intermediate","report_completeness":"partial","report_revision":2,"intermediate_report":"# Revision 2"}}`
+			default:
+				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"succeeded","result":{"report_stage":"final","report_completeness":"complete","report_revision":3,"intermediate_report":"# Revision 2","final_report":"# Final DeepGenome report"}}`
+			}
+			_, _ = w.Write([]byte(body))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs":
+			if got := r.URL.Query().Get("dialogue_id"); got != submittedDialogue {
+				t.Errorf("history dialogue_id=%q, want %q", got, submittedDialogue)
+			}
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"succeeded","result":{"report_stage":"final","report_revision":3,"final_report":"# Final DeepGenome report"}}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "inspect the gene", Tool: "DeepGenomeAgent", Id: 0,
+	})
+	if err != nil {
+		t.Fatalf("submit DeepGenome query: %v", err)
+	}
+	if out.Status != "RUNNING" || out.BotRunID != runID || out.BotRunID == "child-deep-genome-e2e" {
+		t.Fatalf("submission identity/status=%#v", out)
+	}
+	if out.DialogueId == "" || out.DialogueId != submittedDialogue {
+		t.Fatalf("generated dialogue id=%q, submitted=%q", out.DialogueId, submittedDialogue)
+	}
+	dialogueID := out.DialogueId
+
+	row := model.QuestionAgentLog{
+		Id: out.Id, UserName: "alice", BotRunId: out.BotRunID,
+		Status: out.Status, ToolName: out.ToolName,
+	}
+	SyncBotRuns([]model.QuestionAgentLog{row})
+	projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
+	if err != nil || projection.ReportRevision != 1 || projection.VisibleReport() != "# Revision 1" {
+		t.Fatalf("revision 1 projection=%#v err=%v", projection, err)
+	}
+	SyncBotRuns([]model.QuestionAgentLog{row})
+	projection, err = LoadBotRunProjection(context.Background(), "alice", out.Id)
+	if err != nil || projection.ReportRevision != 2 || projection.VisibleReport() != "# Revision 2" {
+		t.Fatalf("revision 2 projection=%#v err=%v", projection, err)
+	}
+	SyncBotRuns([]model.QuestionAgentLog{row})
+	if got := poll.Load(); got != 3 {
+		t.Fatalf("poll count=%d, want revision 1, revision 2, and final report", got)
+	}
+
+	projection, err = LoadBotRunProjection(context.Background(), "alice", out.Id)
+	if err != nil {
+		t.Fatalf("load final projection: %v", err)
+	}
+	if projection.RunID != runID || projection.ReportRevision != 3 || projection.VisibleReport() != "# Final DeepGenome report" {
+		t.Fatalf("final projection=%#v", projection)
+	}
+
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(900, ?, ?, 'bob', 'foreign', 'foreign', 'DeepGenomeAgent', ?, 'SUCCEEDED', '2026-01-01 00:01:00')`, dialogueID, out.Id, runID).Error; err != nil {
+		t.Fatalf("seed foreign row: %v", err)
+	}
+	got, err := NewService().AnswerCheck(context.Background(), "alice", dialogueID)
+	if err != nil {
+		t.Fatalf("AnswerCheck: %v", err)
+	}
+	if len(got) != 1 || got[0].Id != out.Id || got[0].UserName != "alice" || got[0].Status != "SUCCEEDED" {
+		t.Fatalf("owner-scoped history=%+v", got)
+	}
+	var answer struct {
+		Content string        `json:"content"`
+		DocList []interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got[0].Answer), &answer); err != nil {
+		t.Fatalf("final history answer is not shaped JSON: %q (%v)", got[0].Answer, err)
+	}
+	if answer.Content != "# Final DeepGenome report" || answer.DocList == nil || len(answer.DocList) != 0 {
+		t.Fatalf("history final report=%+v", answer)
+	}
+	var distinctRunIDs int64
+	if err := gdb.Raw(`SELECT COUNT(DISTINCT bot_run_id) FROM question_agent_logs WHERE dialogue_id = ?`, dialogueID).Scan(&distinctRunIDs).Error; err != nil {
+		t.Fatalf("count umbrella run ids: %v", err)
+	}
+	if distinctRunIDs != 1 {
+		t.Fatalf("distinct bot_run_id=%d, want one umbrella run id", distinctRunIDs)
 	}
 }
 
