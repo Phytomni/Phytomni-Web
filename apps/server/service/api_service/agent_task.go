@@ -40,7 +40,7 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 	scoped := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("user_name = ?", username).
 		Where("status = ? or status = ? or status = ?", "RUNNING", "SUCCEEDED", "FAILED").
-		Where("server_id IS NOT NULL or task_id IS NOT NULL").
+		Where("NULLIF(TRIM(server_id), '') IS NOT NULL OR NULLIF(TRIM(task_id), '') IS NOT NULL OR NULLIF(TRIM(bot_run_id), '') IS NOT NULL").
 		Session(&gorm.Session{})
 
 	var total int64
@@ -57,7 +57,14 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 	for _, v := range QuestionAgentLogList {
 		if v.FId != 0 {
 			var result *model.QuestionAgentLog
-			if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("id = ?", v.FId).First(&result).Error; err != nil {
+			if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+				Where("id = ? and user_name = ?", v.FId, username).
+				First(&result).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					// A corrupt/mismatched parent must not leak another user's
+					// dialogue id or make the owner's list unusable.
+					continue
+				}
 				return nil, 0, 0, err
 			}
 			v.FDialogueId = result.DialogueId
@@ -75,7 +82,9 @@ func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (
 		Where("id = ? and user_name = ?", id, username).First(&QuestionAgentLogList).Error; err != nil {
 		return nil, errors.New("task not found")
 	}
-	if QuestionAgentLogList.TaskId == "" {
+	if strings.TrimSpace(QuestionAgentLogList.TaskId) == "" &&
+		strings.TrimSpace(QuestionAgentLogList.BotRunId) == "" &&
+		strings.TrimSpace(QuestionAgentLogList.ServerId) == "" {
 		return nil, errors.New("task not found")
 	}
 
@@ -168,6 +177,11 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 	newList = append(newList, QuestionAgentLogList...)
 	QuestionAgentLogList = newList
 
+	// A persisted bounded projection is the first history source during the
+	// reversible cutover. It remains available even when Bot is dark or
+	// temporarily unreachable; Web-owned fields stay on the row.
+	ps.overlayPersistedBotProjections(ctx, QuestionAgentLogList)
+
 	// Bot is the content source of truth when the gateway is active: overlay MySQL
 	// transition fields with Bot content, leaving Web-only fields (id,
 	// reaction_type, upload_path) intact. proxy_enabled=false or Bot unreachable
@@ -207,8 +221,20 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 		if row.BotRunId == "" {
 			continue
 		}
+		// A valid persisted projection has already crossed the modern boundary
+		// above. Do not let a legacy flat/list response replace it with an older
+		// or less complete shape during history replay. If the JSON is malformed,
+		// retain the Bot response as the safe fallback.
+		if projection, projectionErr := LoadBotRunProjection(ctx, row.UserName, row.Id); projectionErr == nil && projection.RunID == strings.TrimSpace(row.BotRunId) {
+			continue
+		}
 		rec, ok := byRun[row.BotRunId]
 		if !ok {
+			continue
+		}
+		if projection, projectionErr := DecodeRunProjection(&rec); projectionErr == nil && projection.RunID == strings.TrimSpace(row.BotRunId) {
+			formatted, _, _ := rxBot.ParseRunFormatted(rec.Result)
+			applyBotProjectionToHistoryRowWithFormatted(row, projection, formatted)
 			continue
 		}
 		if rec.Query != "" {
@@ -237,6 +263,39 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 			row.Status = strings.ToUpper(rec.Status)
 		}
 	}
+}
+
+func (ps *Service) overlayPersistedBotProjections(ctx context.Context, list []*model.QuestionAgentLog) {
+	for _, row := range list {
+		if row == nil || strings.TrimSpace(row.BotRunId) == "" || strings.TrimSpace(row.UserName) == "" {
+			continue
+		}
+		projection, err := LoadBotRunProjection(ctx, row.UserName, row.Id)
+		if err != nil || strings.TrimSpace(projection.RunID) == "" || projection.RunID != strings.TrimSpace(row.BotRunId) {
+			continue
+		}
+		applyBotProjectionToHistoryRow(row, projection)
+	}
+}
+
+func applyBotProjectionToHistoryRow(row *model.QuestionAgentLog, projection BotRunProjection) bool {
+	return applyBotProjectionToHistoryRowWithFormatted(row, projection, nil)
+}
+
+func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, projection BotRunProjection, formatted *rxBot.Formatted) bool {
+	if row == nil || strings.TrimSpace(projection.RunID) == "" {
+		return false
+	}
+	if report := strings.TrimSpace(projection.VisibleReport()); report != "" {
+		row.Answer = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted)
+	}
+	if strings.TrimSpace(projection.Status) != "" {
+		row.Status = projection.Status
+	}
+	if toolName := slugToToolName[projection.Agent]; toolName != "" {
+		row.ToolName = toolName
+	}
+	return true
 }
 
 func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (int, error) {

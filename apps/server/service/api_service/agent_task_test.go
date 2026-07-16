@@ -251,6 +251,54 @@ func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
 	}
 }
 
+// TestAnswerCheckPrefersProjectionAndFallsBackToLegacy verifies that history
+// can render a persisted bounded projection without polling Bot, while rows
+// without one retain their Web-owned legacy answer and reaction fields.
+func TestAnswerCheckPrefersProjectionAndFallsBackToLegacy(t *testing.T) {
+	gdb := setupTestDB(t)
+	projection := BotRunProjection{
+		RunID:              "run-projected",
+		Agent:              "deep_genome",
+		Status:             "SUCCEEDED",
+		ReportRevision:     4,
+		ReportCompleteness: "complete",
+		FinalReport:        "# Projected report",
+	}
+	encoded, err := marshalPersistedProjection(projection)
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, reaction_type, upload_path, created_at) VALUES
+		(100, 'dlg-projection', 0, 'alice', 'projected-q', 'legacy-projected', 'DeepGenomeAgent', 'run-projected', ?, 4, 'RUNNING', '2', '/upload/projected', '2026-01-01 00:00:00'),
+		(101, 'dlg-projection', 100, 'alice', 'legacy-q', 'legacy-a', 'ChatAgent', '', '', -1, 'SUCCEEDED', '1', '/upload/legacy', '2026-01-01 00:01:00'),
+		(102, 'dlg-projection', 100, 'bob', 'foreign-q', 'foreign-a', 'ChatAgent', 'run-projected', ?, 4, 'SUCCEEDED', '0', '/upload/foreign', '2026-01-01 00:02:00')`, encoded, encoded).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	got, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-projection")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected owned parent + child, got %d: %+v", len(got), got)
+	}
+	if got[0].Id != 100 || !strings.Contains(got[0].Answer, "Projected report") || got[0].Status != "SUCCEEDED" {
+		t.Fatalf("projection was not preferred: %+v", got[0])
+	}
+	if got[0].ReactionType != "2" || got[0].UploadPath != "/upload/projected" {
+		t.Fatalf("Web-owned fields changed: reaction=%q upload=%q", got[0].ReactionType, got[0].UploadPath)
+	}
+	if got[1].Answer != "legacy-a" || got[1].ReactionType != "1" || got[1].UploadPath != "/upload/legacy" {
+		t.Fatalf("legacy fallback changed: %+v", got[1])
+	}
+	for _, row := range got {
+		if row.UserName != "alice" || row.Id == 102 {
+			t.Fatalf("foreign projection row leaked: %+v", row)
+		}
+	}
+}
+
 // TestApiAnswerCheck_OverlayReshapesFinalReport pins the deep_genome read path
 // on the history overlay: a row carrying a bot_run_id whose run finished with
 // result.final_report (no formatted envelope) gets its answer reshaped through
