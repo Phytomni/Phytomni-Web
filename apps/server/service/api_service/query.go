@@ -221,12 +221,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// status="running", answer polled later via /query/analyst/update_log).
 		// Branch on the returned status;
 		// never assume remote, or a sync agent's answer is silently dropped.
-		args := map[string]interface{}{"user_query": in.Query}
-		if slug == "deep_genome" {
-			// deep_genome needs a structured gene id; resolve_gene_id=true tells
-			// Bot's resolver to derive it from the free-text user_query (Bot
-			// rejects this flag for any other agent, so scope it to deep_genome).
-			args["resolve_gene_id"] = true
+		args, err := rxBot.BuildAgentArguments(slug, rxBot.AgentArgumentInput{
+			UserQuery:   in.Query,
+			OBSFileList: obsPaths,
+		})
+		if err != nil {
+			return nil, err
 		}
 		resp, err := client.InvokeAgent(ctx, slug, rxBot.AgentRunRequest{
 			Arguments:  args,
