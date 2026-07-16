@@ -14,8 +14,15 @@
       "completed": 1,
       "total": 2
     },
-    "degraded": false,
-    "failures": [],
+    "degraded": true,
+    "degraded_reason": "1 of 2 optional analyses unavailable",
+    "failures": [
+      {
+        "work_item_key": "protein_design",
+        "status": "failed",
+        "message": "analysis task failed"
+      }
+    ],
     "artifacts": []
   },
   "error": "",

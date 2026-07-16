@@ -1,13 +1,41 @@
 package bot
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
 
 // AgentRunInterrupt contains the bounded pause metadata returned when an
 // agent needs user input before it can continue.
 type AgentRunInterrupt struct {
-	RunID      string          `json:"run_id"`
+	ThreadID   string          `json:"thread_id,omitempty"`
+	RunID      string          `json:"-"`
 	Generation string          `json:"generation,omitempty"`
 	Draft      json.RawMessage `json:"draft,omitempty"`
+}
+
+// UnmarshalJSON accepts Bot's thread_id interrupt identity and the legacy
+// run_id spelling, while keeping one normalized RunID for Web callers.
+func (i *AgentRunInterrupt) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ThreadID   string          `json:"thread_id"`
+		RunID      string          `json:"run_id"`
+		Generation string          `json:"generation"`
+		Draft      json.RawMessage `json:"draft"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	i.ThreadID = raw.ThreadID
+	i.RunID = raw.ThreadID
+	if i.RunID == "" {
+		i.RunID = raw.RunID
+	}
+	i.Generation = raw.Generation
+	i.Draft = raw.Draft
+	return nil
 }
 
 // RunProjectionEnvelope is the public projection envelope returned in a run
@@ -26,4 +54,122 @@ type RunProjectionEnvelope struct {
 	Failures           []string        `json:"failures,omitempty"`
 	Artifacts          json.RawMessage `json:"artifacts,omitempty"`
 	Formatted          *Formatted      `json:"formatted,omitempty"`
+}
+
+const (
+	maxProjectionFailures       = 32
+	maxProjectionFailureMessage = 256
+	maxProjectionFailureField   = 128
+)
+
+// UnmarshalJSON accepts both the legacy string failure list and Bot HEAD's
+// bounded failure objects, retaining only safe user-facing messages.
+func (p *RunProjectionEnvelope) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ReportStage        string          `json:"report_stage"`
+		ReportCompleteness string          `json:"report_completeness"`
+		ReportRevision     *int64          `json:"report_revision"`
+		ReportUpdatedAt    string          `json:"report_updated_at"`
+		IntermediateReport string          `json:"intermediate_report"`
+		FinalReport        string          `json:"final_report"`
+		Progress           json.RawMessage `json:"progress"`
+		Degraded           bool            `json:"degraded"`
+		DegradedReason     string          `json:"degraded_reason"`
+		Failures           json.RawMessage `json:"failures"`
+		Artifacts          json.RawMessage `json:"artifacts"`
+		Formatted          *Formatted      `json:"formatted"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	failures, err := decodeProjectionFailures(raw.Failures)
+	if err != nil {
+		return err
+	}
+	*p = RunProjectionEnvelope{
+		ReportStage:        raw.ReportStage,
+		ReportCompleteness: raw.ReportCompleteness,
+		ReportRevision:     raw.ReportRevision,
+		ReportUpdatedAt:    raw.ReportUpdatedAt,
+		IntermediateReport: raw.IntermediateReport,
+		FinalReport:        raw.FinalReport,
+		Progress:           raw.Progress,
+		Degraded:           raw.Degraded,
+		DegradedReason:     raw.DegradedReason,
+		Failures:           failures,
+		Artifacts:          raw.Artifacts,
+		Formatted:          raw.Formatted,
+	}
+	return nil
+}
+
+func decodeProjectionFailures(raw json.RawMessage) ([]string, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+
+	var entries []json.RawMessage
+	if err := json.Unmarshal(trimmed, &entries); err != nil {
+		return nil, err
+	}
+
+	failures := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if len(failures) == maxProjectionFailures {
+			break
+		}
+
+		var message string
+		if err := json.Unmarshal(entry, &message); err == nil {
+			if message, ok := boundedProjectionFailureMessage(message); ok {
+				failures = append(failures, message)
+			}
+			continue
+		}
+
+		var object struct {
+			WorkItemKey string `json:"work_item_key"`
+			Status      string `json:"status"`
+			Message     string `json:"message"`
+		}
+		if err := json.Unmarshal(entry, &object); err != nil {
+			continue
+		}
+		if !validProjectionFailureField(object.WorkItemKey) || !validProjectionFailureField(object.Status) {
+			continue
+		}
+		if message, ok := boundedProjectionFailureMessage(object.Message); ok {
+			failures = append(failures, message)
+			continue
+		}
+		if message, ok := normalizedProjectionFailureMessage(object.Status); ok {
+			failures = append(failures, message)
+		}
+	}
+	return failures, nil
+}
+
+func validProjectionFailureField(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && len([]rune(value)) <= maxProjectionFailureField
+}
+
+func boundedProjectionFailureMessage(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	return value, value != "" && len([]rune(value)) <= maxProjectionFailureMessage
+}
+
+func normalizedProjectionFailureMessage(status string) (string, bool) {
+	switch strings.TrimSpace(status) {
+	case "failed":
+		return "analysis task failed", true
+	case "timed_out":
+		return "analysis task timed out", true
+	case "cancelled":
+		return "analysis task cancelled", true
+	default:
+		return "", false
+	}
 }

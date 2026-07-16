@@ -36,8 +36,18 @@ func TestHeadFixturesPreserveNullRunAndInputRequired(t *testing.T) {
 
 	var paused AgentRunResponse
 	decodeFixture(t, "review_input_required.json", &paused)
-	if paused.Status != "input_required" || paused.Interrupt == nil || paused.Interrupt.RunID != "run-review-1" {
+	if paused.Status != "input_required" || paused.Interrupt == nil || paused.Interrupt.ThreadID != "run-review-1" || paused.Interrupt.RunID != "run-review-1" {
 		t.Fatalf("paused=%#v", paused)
+	}
+}
+
+func TestHeadFixturesNormalizeLegacyInterruptRunID(t *testing.T) {
+	var paused AgentRunResponse
+	if err := json.Unmarshal([]byte(`{"status":"input_required","interrupt":{"run_id":"run-legacy-1","draft":{}}}`), &paused); err != nil {
+		t.Fatalf("decode legacy interrupt: %v", err)
+	}
+	if paused.Interrupt == nil || paused.Interrupt.ThreadID != "" || paused.Interrupt.RunID != "run-legacy-1" {
+		t.Fatalf("legacy interrupt = %#v", paused.Interrupt)
 	}
 }
 
@@ -55,6 +65,9 @@ func TestHeadFixturesDecodeProjectionEnvelopes(t *testing.T) {
 	if projection.ReportRevision == nil || *projection.ReportRevision != 2 || projection.IntermediateReport != "# Intermediate" {
 		t.Fatalf("intermediate projection = %#v", projection)
 	}
+	if len(projection.Failures) != 1 || projection.Failures[0] != "analysis task failed" {
+		t.Fatalf("intermediate failures = %#v", projection.Failures)
+	}
 
 	var final RunRecord
 	decodeFixture(t, "deep_genome_final.json", &final)
@@ -66,6 +79,17 @@ func TestHeadFixturesDecodeProjectionEnvelopes(t *testing.T) {
 	}
 	if projection.ReportRevision == nil || *projection.ReportRevision != 3 || projection.FinalReport != "# Final" {
 		t.Fatalf("final projection = %#v", projection)
+	}
+}
+
+func TestRunProjectionRetainsBoundedFailureMessage(t *testing.T) {
+	var projection RunProjectionEnvelope
+	raw := []byte(`{"failures":[{"work_item_key":"protein_design","status":"failed","message":"optional analysis unavailable","traceback":"private"}]}`)
+	if err := json.Unmarshal(raw, &projection); err != nil {
+		t.Fatalf("decode bounded failure: %v", err)
+	}
+	if len(projection.Failures) != 1 || projection.Failures[0] != "optional analysis unavailable" {
+		t.Fatalf("normalized failures = %#v", projection.Failures)
 	}
 }
 
