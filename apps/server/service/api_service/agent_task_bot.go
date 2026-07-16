@@ -2,7 +2,6 @@ package api_service
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	rxBot "phytomni-server/external/bot"
@@ -25,49 +24,37 @@ func SyncBotRuns(rows []model.QuestionAgentLog) {
 		return
 	}
 	ctx := context.Background()
+	ps := NewService()
 	client := rxBot.NewClient()
 	for _, row := range rows {
 		if row.BotRunId == "" {
 			rxLog.Sugar().Warnf("RUNNING row %d has no bot_run_id; skipping bot sync", row.Id)
 			continue
 		}
-		rec, err := client.GetRun(ctx, row.BotRunId)
+		// The cron query normally hydrates the owner, while older callers and
+		// focused tests may pass only the lifecycle columns. Re-read the row so
+		// the owner-scoped projection CAS never falls back to an unscoped write.
+		if row.UserName == "" {
+			var stored model.QuestionAgentLog
+			if err := model.Default().Where("id = ?", row.Id).First(&stored).Error; err != nil {
+				rxLog.Sugar().Error(err)
+				continue
+			}
+			row = stored
+		}
+		rec, meta, err := client.GetRunWithMeta(ctx, row.BotRunId)
 		if err != nil {
 			rxLog.Sugar().Error(err)
 			continue
 		}
-		newStatus := strings.ToUpper(rec.Status)
-		// An empty status would be written verbatim by GORM's map Updates (maps
-		// do not skip zero values the way struct Updates does), flipping the row
-		// out of the WHERE status='RUNNING' poll set permanently — so skip it.
-		if newStatus == "" || row.Status == newStatus {
-			continue // still running, unchanged, or malformed — nothing to write
+		// A blank upstream status is malformed for polling. Keep the legacy
+		// guard: do not even persist a report from this snapshot, otherwise the
+		// row would be partially reconciled while the next poll still sees it as
+		// RUNNING.
+		if strings.TrimSpace(rec.Status) == "" {
+			continue
 		}
-		updates := map[string]interface{}{"status": newStatus}
-		// analyst class: presence of formatted means it is not deep_genome.
-		// Only write a non-empty answer (avoid wiping an already-rendered answer);
-		// the same branch backfills gallery paths, leaving deep_genome's
-		// final_report path untouched and producing no download_path.
-		if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
-			if shaped := rxBot.ShapeAnswer(rec.Agent, answerText, f); shaped != "" {
-				updates["answer"] = shaped
-			}
-			if dirs, paths, ok2 := rxBot.ParseRunArtifacts(rec.Result); ok2 {
-				if len(dirs) > 0 && dirs[0] != "" {
-					updates["download_path"] = dirs[0]
-				}
-				if len(paths) > 0 {
-					if b, err := json.Marshal(paths); err == nil {
-						updates["image_paths"] = string(b)
-					}
-				}
-			}
-		} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
-			// final_report is deep_genome-exclusive; reshape with the known slug.
-			updates["answer"] = rxBot.ShapeAnswer("deep_genome", fr, nil)
-		}
-		if err := model.Default().Model(&model.QuestionAgentLog{}).
-			Where("id = ?", row.Id).Updates(updates).Error; err != nil {
+		if err := ps.applyBotRunProjection(ctx, &row, rec, meta); err != nil {
 			rxLog.Sugar().Error(err)
 		}
 	}

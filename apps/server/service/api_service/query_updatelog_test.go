@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -200,5 +202,53 @@ func TestApiQueryAnalystUpdateLog_NoArtifactsNoClobber(t *testing.T) {
 	dp, ip := readGalleryCols(t, gdb, 65)
 	if dp != "/obs/old" || ip != `["/obs/old/x.png"]` {
 		t.Errorf("no-artifacts run must not clobber gallery, got dp=%q ip=%q", dp, ip)
+	}
+}
+
+func TestApiQueryAnalystUpdateLogWalksRunTaskLogs(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, query, answer, tool_name, task_id, bot_run_id, status, created_at) VALUES
+		(67, 'alice', 'q', 'Task created: task-log', 'AnalystAgent', 'task-log', 'run-logs', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/runs/run-logs":
+			_, _ = w.Write([]byte(`{"run_id":"run-logs","agent":"analyst","status":"succeeded","result":{"formatted":{"answer":"report"}}}`))
+		case "/v1/runs/run-logs/logs":
+			_, _ = w.Write([]byte(`{"run_id":"run-logs","task_ids":["task-log"],"task_logs":[{"status":"succeeded","formatted":{"answer":"task log"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	if _, err := NewService().QueryAnalystUpdateLog(context.Background(), "alice", "task-log", "cr-1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	var taskLog string
+	if err := gdb.Raw(`SELECT COALESCE(task_log,'') FROM question_agent_logs WHERE id = 67`).Row().Scan(&taskLog); err != nil {
+		t.Fatalf("read task_log: %v", err)
+	}
+	var stored map[string]interface{}
+	if err := json.Unmarshal([]byte(taskLog), &stored); err != nil {
+		t.Fatalf("task_log is not JSON: %q (%v)", taskLog, err)
+	}
+	if stored["status"] != "succeeded" {
+		t.Fatalf("task_log=%v, want matched task_logs entry", stored)
+	}
+}
+
+func TestEncodeMatchingTaskLogRejectsMismatchedExplicitID(t *testing.T) {
+	logs := &rxBot.RunLogsResponse{
+		TaskIDs:  []string{"task-target"},
+		TaskLogs: []map[string]interface{}{{"task_id": "task-other", "status": "succeeded"}},
+	}
+	if got, ok := encodeMatchingTaskLog(logs, "task-target"); ok || got != "" {
+		t.Fatalf("mismatched explicit task id was associated: %q, %v", got, ok)
 	}
 }

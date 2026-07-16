@@ -413,6 +413,187 @@ func parseHistory(s string) []rxBot.ChatMessage {
 	return msgs
 }
 
+const botProjectionApplyAttempts = 3
+
+// applyBotRunProjection is the single Bot-run reconciliation path used by the
+// cron poller and the legacy update-log endpoint. It decodes the bounded run
+// projection once, merges it through the owner-scoped revision CAS, and only
+// writes non-blank compatibility columns so partial/older snapshots cannot
+// erase a report or invent an artifact URL.
+func (ps *Service) applyBotRunProjection(ctx context.Context, row *model.QuestionAgentLog, rec *rxBot.RunRecord, meta rxBot.ResponseMeta) error {
+	if row == nil || rec == nil {
+		return errors.New("bot projection requires a row and run record")
+	}
+	if strings.TrimSpace(row.UserName) == "" {
+		return errors.New("bot projection row has no owner")
+	}
+
+	statusPresent := strings.TrimSpace(rec.Status) != ""
+	decodeRecord := *rec
+	if !statusPresent {
+		// Update-log is a best-effort compatibility endpoint. Preserve its
+		// historical behavior for a response with no status by decoding against
+		// the already-persisted state, while deliberately omitting a status write.
+		decodeRecord.Status = row.Status
+		if strings.TrimSpace(decodeRecord.Status) == "" {
+			decodeRecord.Status = "running"
+		}
+	}
+	projection, err := DecodeRunProjection(&decodeRecord)
+	if err != nil {
+		return err
+	}
+	if projection.RunID != strings.TrimSpace(row.BotRunId) {
+		return fmt.Errorf("bot projection run id %q does not match row", projection.RunID)
+	}
+	projection.RequestID = strings.TrimSpace(meta.BotRequestID)
+	logBotResponseMeta(ctx, meta)
+
+	for attempt := 0; attempt < botProjectionApplyAttempts; attempt++ {
+		if err := SaveBotRunProjection(ctx, row.UserName, row.Id, projection); err != nil {
+			return err
+		}
+		// SaveBotRunProjection may have merged an equal/older snapshot into a
+		// newer concurrent projection. Read the CAS winner back before touching
+		// legacy answer/artifact columns; otherwise a stale poll could overwrite
+		// the durable projection's visible report even though the JSON CAS was
+		// correctly rejected.
+		storedProjection, err := LoadBotRunProjection(ctx, row.UserName, row.Id)
+		if err != nil {
+			return err
+		}
+		updates := botProjectionLegacyUpdates(projection, storedProjection, rec, statusPresent)
+		if len(updates) == 0 {
+			return nil
+		}
+		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ? AND bot_report_revision = ?", row.Id, row.UserName, storedProjection.ReportRevision).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 1 {
+			return nil
+		}
+	}
+	return ErrBotProjectionConflict
+}
+
+func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.RunRecord, statusPresent bool) map[string]interface{} {
+	updates := make(map[string]interface{})
+	if statusPresent && stored.Status != "" {
+		updates["status"] = stored.Status
+	}
+
+	visible := strings.TrimSpace(stored.VisibleReport())
+	if visible != "" {
+		formatted, _, hasFormatted := rxBot.ParseRunFormatted(rec.Result)
+		if strings.TrimSpace(incoming.VisibleReport()) != visible {
+			hasFormatted = false
+		}
+		if hasFormatted {
+			if shaped := rxBot.ShapeAnswer(stored.Agent, stored.VisibleReport(), formatted); shaped != "" {
+				updates["answer"] = shaped
+			}
+		} else if shaped := rxBot.ShapeAnswer(stored.Agent, stored.VisibleReport(), nil); shaped != "" {
+			updates["answer"] = shaped
+		}
+		if hasFormatted && len(formatted.FollowUpQuestions) > 0 && strings.TrimSpace(string(formatted.FollowUpQuestions)) != "" && strings.TrimSpace(string(formatted.FollowUpQuestions)) != "null" {
+			updates["follow_up_questions"] = string(formatted.FollowUpQuestions)
+		}
+	}
+
+	if len(stored.Artifacts.Directories) > 0 && strings.TrimSpace(stored.Artifacts.Directories[0]) != "" {
+		updates["download_path"] = stored.Artifacts.Directories[0]
+	}
+	if len(stored.Artifacts.Paths) > 0 {
+		if encoded, err := json.Marshal(stored.Artifacts.Paths); err == nil {
+			updates["image_paths"] = string(encoded)
+		}
+	}
+	return updates
+}
+
+func taskLogMatchesID(log map[string]interface{}, taskID string) bool {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return false
+	}
+	for _, key := range []string{"task_id", "id"} {
+		value, ok := log[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case string:
+			if strings.TrimSpace(typed) == taskID {
+				return true
+			}
+		case json.Number:
+			if typed.String() == taskID {
+				return true
+			}
+		case float64:
+			if fmt.Sprintf("%g", typed) == taskID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func taskLogHasExplicitID(log map[string]interface{}) bool {
+	for _, key := range []string{"task_id", "id"} {
+		if _, ok := log[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func encodeMatchingTaskLog(logs *rxBot.RunLogsResponse, taskID string) (string, bool) {
+	if logs == nil {
+		return "", false
+	}
+	for index, log := range logs.TaskLogs {
+		if taskLogMatchesID(log, taskID) {
+			encoded, err := json.Marshal(log)
+			if err != nil || len(encoded) == 0 {
+				return "", false
+			}
+			return string(encoded), true
+		}
+		// Prefer an explicit child id over positional inference. If Bot gives a
+		// different explicit id, the entry cannot belong to this update-log task
+		// even when its array index happens to line up.
+		if _, hasTaskID := log["task_id"]; hasTaskID {
+			continue
+		}
+		if _, hasID := log["id"]; hasID {
+			continue
+		}
+		if index >= len(logs.TaskIDs) || strings.TrimSpace(logs.TaskIDs[index]) != strings.TrimSpace(taskID) {
+			continue
+		}
+		encoded, err := json.Marshal(log)
+		if err != nil || len(encoded) == 0 {
+			return "", false
+		}
+		return string(encoded), true
+	}
+	// Bot's reconciled payload is allowed to omit the child id because the
+	// sibling `task_ids` array carries the identity. A single returned log is
+	// therefore safe to associate with the update-log task; with multiple
+	// sparse logs, only the index-aligned branch above is deterministic.
+	if len(logs.TaskLogs) == 1 && len(logs.TaskIDs) == 1 && strings.TrimSpace(logs.TaskIDs[0]) == strings.TrimSpace(taskID) && !taskLogHasExplicitID(logs.TaskLogs[0]) {
+		encoded, err := json.Marshal(logs.TaskLogs[0])
+		if err == nil && len(encoded) > 0 {
+			return string(encoded), true
+		}
+	}
+	return "", false
+}
+
 // QueryAnalystUpdateLog syncs a finished remote task's result back into the
 // Web row. The Web app posts both task_id and compute_resource.
 func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, computeResource string) (string, error) {
@@ -427,54 +608,47 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 	if row.BotRunId == "" {
 		return "", ErrMissingBotRunID
 	}
-	rec, err := rxBot.NewClient().GetRun(ctx, row.BotRunId)
+	client := rxBot.NewClient()
+	rec, meta, err := client.GetRunWithMeta(ctx, row.BotRunId)
 	if err != nil {
 		return "", err
 	}
-	// Reshape the finished task's content into the JSON the Web app parses, the
-	// same as the live dispatch and the answer-check overlay. deep_genome's
-	// assembled report arrives as result.final_report (no formatted envelope),
-	// so fall back to it when there is no formatted block.
+	if err := ps.applyBotRunProjection(ctx, &row, rec, meta); err != nil {
+		return "", err
+	}
+
 	updates := map[string]interface{}{
 		"compute_resource": computeResource,
 		"log_status":       "sync_succeeded",
 	}
-	answer := rec.Answer
-	if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
-		answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
-		// analyst class: backfill the gallery representative prefix + full image paths (both written only when non-empty, no-clobber)
-		if dirs, paths, ok2 := rxBot.ParseRunArtifacts(rec.Result); ok2 {
-			if len(dirs) > 0 && dirs[0] != "" {
-				updates["download_path"] = dirs[0]
-			}
-			if len(paths) > 0 {
-				if b, err := json.Marshal(paths); err == nil {
-					updates["image_paths"] = string(b)
-				}
-			}
+	if logs, logsErr := client.GetRunLogs(ctx, row.BotRunId); logsErr == nil {
+		if taskLog, ok := encodeMatchingTaskLog(logs, taskID); ok {
+			updates["task_log"] = taskLog
 		}
-	} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
-		// final_report is deep_genome-exclusive; reshape with the known slug.
-		answer = rxBot.ShapeAnswer("deep_genome", fr, nil)
-	}
-	// The Web app gates download on "SUCCEEDED"; Bot is lowercase. Skip an empty
-	// status rather than writing '' into the NOT NULL column (GORM's map Updates
-	// does not skip zero values), which would strand the row out of the cron's
-	// WHERE status='RUNNING' poll set.
-	if s := strings.ToUpper(rec.Status); s != "" {
-		updates["status"] = s
-	}
-	// Never clobber an existing answer with a blank reshape: a completed run
-	// that still has no rendered answer (e.g. analyst, whose formatted answer
-	// is not yet produced by Bot) must leave the prior column untouched.
-	if answer != "" {
-		updates["answer"] = answer
+	} else {
+		// Run logs are a compatibility enrichment. Bot documents a sparse,
+		// best-effort logs response; a log-service outage must not discard the
+		// already-reconciled run projection.
+		rxLog.SugarContext(ctx).Warnw("Bot run logs unavailable", "run_id", row.BotRunId, "err", logsErr)
 	}
 	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-		Where("id = ?", row.Id).Updates(updates).Error; err != nil {
+		Where("id = ? AND user_name = ?", row.Id, row.UserName).
+		Updates(updates).Error; err != nil {
 		return "", err
 	}
-	return answer, nil
+
+	projection, projectionErr := LoadBotRunProjection(ctx, username, row.Id)
+	if projectionErr != nil {
+		return "", projectionErr
+	}
+	if strings.TrimSpace(projection.VisibleReport()) == "" {
+		return "", nil
+	}
+	formatted, _, hasFormatted := rxBot.ParseRunFormatted(rec.Result)
+	if hasFormatted {
+		return rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted), nil
+	}
+	return rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), nil), nil
 }
 
 // persistQuestionLog writes one QuestionAgentLog row, shared by the blocking
