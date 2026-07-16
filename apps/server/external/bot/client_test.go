@@ -164,3 +164,20 @@ func TestDoJSON_WrapsTimeoutAsErrBotTimeout(t *testing.T) {
 		t.Fatalf("err = %v, want wrapped ErrBotTimeout", err)
 	}
 }
+
+func TestChatCompletionWrapperPreservesTimeoutContract(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	c.http = &http.Client{Timeout: 20 * time.Millisecond}
+	response, err := c.ChatCompletion(context.Background(), ChatCompletionRequest{})
+	if response != nil {
+		t.Fatalf("response=%#v, want nil on timeout", response)
+	}
+	if err == nil || !errors.Is(err, ErrBotTimeout) {
+		t.Fatalf("err=%v, want wrapped ErrBotTimeout", err)
+	}
+}

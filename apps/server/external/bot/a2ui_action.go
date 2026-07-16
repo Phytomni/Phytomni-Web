@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,9 +13,10 @@ import (
 // Non-2xx Bot responses are returned here (not as error) so the gateway can
 // passthrough status + body unchanged.
 type A2uiActionResult struct {
-	Status      int
-	Body        []byte
-	ContentType string
+	Status       int
+	Body         []byte
+	ContentType  string
+	BotRequestID string
 }
 
 // A2uiActionMaxResponseBytes bounds the completed response body returned by
@@ -41,22 +41,21 @@ func (c *Client) PostA2uiAction(ctx context.Context, runID string, body []byte) 
 	req.Header.Set("Authorization", "Bearer "+c.userKey)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		if isTimeoutErr(err) {
-			return nil, fmt.Errorf("%w: %v", ErrBotTimeout, err)
-		}
-		return nil, err
+		return nil, wrapTransportError(err)
 	}
 	defer resp.Body.Close()
+	meta := responseMeta(resp)
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, A2uiActionMaxResponseBytes+1))
 	if err != nil {
-		return nil, err
+		return nil, wrapTransportError(err)
 	}
 	if int64(len(raw)) > A2uiActionMaxResponseBytes {
 		return nil, ErrA2uiResponseTooLarge
 	}
 	return &A2uiActionResult{
-		Status:      resp.StatusCode,
-		Body:        raw,
-		ContentType: resp.Header.Get("Content-Type"),
+		Status:       resp.StatusCode,
+		Body:         raw,
+		ContentType:  resp.Header.Get("Content-Type"),
+		BotRequestID: meta.BotRequestID,
 	}, nil
 }
