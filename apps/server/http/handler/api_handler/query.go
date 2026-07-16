@@ -32,6 +32,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusServiceUnavailable, "expert mode not available"
 	case errors.Is(err, api_service.ErrMissingBotRunID):
 		return http.StatusConflict, "task is not syncable through bot run state"
+	case errors.Is(err, api_service.ErrInvalidA2uiSurface):
+		return http.StatusBadRequest, "invalid input-required surface"
 	case errors.Is(err, rxBot.ErrBotTimeout):
 		return http.StatusGatewayTimeout, "request timed out, please narrow your query or try again later"
 	case errors.Is(err, api_service.ErrStreamUnsupported):

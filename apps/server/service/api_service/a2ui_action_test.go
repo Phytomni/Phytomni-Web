@@ -17,6 +17,111 @@ import (
 
 const validA2uiActionBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"accepted":true}}`
 
+func TestQueryReviewReturnsInputRequiredSurface(t *testing.T) {
+	setupExpertTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-review-1","run_id":"run-review-1","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"draft":"summary","a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}}},"task_ids":[],"result":{}}`))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	out, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{Query: "review", Tool: "ReviewAgent"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out.Status != "INPUT_REQUIRED" || out.BotRunID != "run-review-1" || out.A2UI == nil {
+		t.Fatalf("out = %#v", out)
+	}
+	if out.A2UI.SurfaceID != "surface-1" || out.A2UI.Widget != "confirm" {
+		t.Fatalf("surface = %#v", out.A2UI)
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal QueryData: %v", err)
+	}
+	if strings.Contains(string(encoded), "interrupt") || strings.Contains(string(encoded), "draft") {
+		t.Fatalf("raw pause leaked into QueryData: %s", encoded)
+	}
+	if !strings.Contains(string(encoded), `"a2ui"`) {
+		t.Fatalf("bounded surface missing from QueryData: %s", encoded)
+	}
+}
+
+func TestDecodeA2uiSurfaceStrictBounds(t *testing.T) {
+	base := `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}`
+	tests := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{name: "valid", raw: base, want: true},
+		{name: "duplicate surface key", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","surface_id":"surface-2","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}`},
+		{name: "unsupported widget", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"button","props":{"title":"Approve"}}`},
+		{name: "overlong title", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"` + strings.Repeat("x", a2uiLabelMaxChars+1) + `","confirm_label":"Yes","cancel_label":"No"}}`},
+		{name: "duplicate choice id", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"choice","props":{"title":"Choose","options":[{"id":"a","label":"A"},{"id":"a","label":"Again"}],"multiple":false}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := DecodeA2uiSurface(json.RawMessage(tt.raw))
+			if tt.want {
+				if err != nil || got == nil {
+					t.Fatalf("DecodeA2uiSurface: got=%#v err=%v", got, err)
+				}
+				return
+			}
+			if err == nil || got != nil {
+				t.Fatalf("DecodeA2uiSurface accepted malformed surface: got=%#v err=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestQueryReviewRejectsInvalidPauseWithoutPersisting(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "missing run",
+			body: `{"id":"completion-review","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}}},"task_ids":[],"result":{}}`,
+		},
+		{
+			name: "invalid surface",
+			body: `{"id":"run-review-2","run_id":"run-review-2","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"button","props":{}}}},"task_ids":[],"result":{}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+			t.Cleanup(func() { rxBot.BotConfig = nil })
+
+			_, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{Query: "review", Tool: "ReviewAgent"})
+			if !errors.Is(err, ErrInvalidA2uiSurface) && !errors.Is(err, ErrMissingBotRunID) {
+				t.Fatalf("Query error = %v", err)
+			}
+			var rows int64
+			if err := gdb.Table("question_agent_logs").Count(&rows).Error; err != nil {
+				t.Fatalf("count rows: %v", err)
+			}
+			if rows != 0 {
+				t.Fatalf("invalid pause persisted %d row(s)", rows)
+			}
+		})
+	}
+}
+
 func TestA2uiAction_EnvelopeStrictDecode(t *testing.T) {
 	validID := strings.Repeat("界", a2uiIdentifierMaxChars)
 	validBoundaryBody := `{"surface_id":"` + validID + `","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{}}`

@@ -36,6 +36,11 @@ var ErrExpertDisabled = errors.New("expert mode not available")
 // through Bot run state because it has no bot_run_id.
 var ErrMissingBotRunID = errors.New("row has no bot_run_id to sync")
 
+// ErrInvalidA2uiSurface marks a malformed native input-required pause. The
+// blocking path returns it before persistence so no row can be stranded with
+// a run that the browser cannot safely resume.
+var ErrInvalidA2uiSurface = errors.New("invalid a2ui input-required surface")
+
 // ErrStreamUnsupported marks a /query streaming request the SSE branch cannot
 // serve (non-chat slug, or mode=expert which routes via /v1/query/route). The
 // handler maps it to 400; expert traffic normally never reaches it because the
@@ -62,22 +67,23 @@ type QueryInput struct {
 // QueryData is the response payload the Web app reads off response.data. The
 // content fields are relayed from Bot; id/reaction are Web-owned.
 type QueryData struct {
-	Id                int64  `json:"id"`
-	ToolName          string `json:"tool_name"`
-	Answer            string `json:"answer"`
-	FollowUpQuestions string `json:"follow_up_questions"`
-	Status            string `json:"status"`
-	UploadPath        string `json:"upload_path"`
-	DownloadPath      string `json:"download_path"`
-	ServerFilePath    string `json:"server_file_path"`
-	ComputeResource   string `json:"compute_resource"`
-	ReactionType      string `json:"reaction_type"`
-	DialogueId        string `json:"dialogue_id"`
-	BotRunID          string `json:"bot_run_id,omitempty"`
-	TaskId            string `json:"task_id,omitempty"`
-	TrackingDegraded  bool   `json:"tracking_degraded,omitempty"`
-	ReportRevision    int64  `json:"report_revision,omitempty"`
-	RequestID         string `json:"request_id,omitempty"`
+	Id                int64           `json:"id"`
+	ToolName          string          `json:"tool_name"`
+	Answer            string          `json:"answer"`
+	FollowUpQuestions string          `json:"follow_up_questions"`
+	Status            string          `json:"status"`
+	UploadPath        string          `json:"upload_path"`
+	DownloadPath      string          `json:"download_path"`
+	ServerFilePath    string          `json:"server_file_path"`
+	ComputeResource   string          `json:"compute_resource"`
+	ReactionType      string          `json:"reaction_type"`
+	DialogueId        string          `json:"dialogue_id"`
+	BotRunID          string          `json:"bot_run_id,omitempty"`
+	TaskId            string          `json:"task_id,omitempty"`
+	TrackingDegraded  bool            `json:"tracking_degraded,omitempty"`
+	ReportRevision    int64           `json:"report_revision,omitempty"`
+	RequestID         string          `json:"request_id,omitempty"`
+	A2UI              *A2uiSurfaceDTO `json:"a2ui,omitempty"`
 }
 
 // StreamIdentity is the Web-owned identity of a streamed assistant message.
@@ -153,6 +159,31 @@ func formattedMetadata(formatted *rxBot.Formatted) json.RawMessage {
 		return nil
 	}
 	return formatted.Metadata
+}
+
+func decodeInputRequiredSurface(interrupt *rxBot.AgentRunInterrupt) (*A2uiSurfaceDTO, error) {
+	if interrupt == nil || len(bytes.TrimSpace(interrupt.Draft)) == 0 {
+		return nil, ErrInvalidA2uiSurface
+	}
+	entries, ok := decodeA2uiObjectEntries(interrupt.Draft)
+	if !ok {
+		return nil, ErrInvalidA2uiSurface
+	}
+	var rawSurface json.RawMessage
+	for _, entry := range entries {
+		if entry.key == "a2ui" {
+			rawSurface = entry.value
+			break
+		}
+	}
+	if len(bytes.TrimSpace(rawSurface)) == 0 {
+		return nil, ErrInvalidA2uiSurface
+	}
+	surface, err := DecodeA2uiSurface(rawSurface)
+	if err != nil {
+		return nil, ErrInvalidA2uiSurface
+	}
+	return surface, nil
 }
 
 func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
@@ -271,15 +302,35 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if err != nil {
 			return nil, err
 		}
-		// Default-mode chat/completions strips formatted.answer into
-		// choices[0].message.content; source it there, then reshape per slug
-		// (knowledge/review become {content, doc_list}; chat stays plain).
-		out.Answer = rxBot.ShapeAnswer(slug, rxBot.ChatAnswerText(resp), &resp.Formatted)
-		out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
 		botRunID = canonicalBotRunID(resp.RunID)
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
-		out.ReportRevision = responseReportRevision(resp.ReportRevision, metadataReportRevision(resp.Formatted.Metadata))
+		out.ReportRevision = responseReportRevision(resp.ReportRevision, metadataReportRevision(resp.Formatted.Metadata), metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
+		if strings.EqualFold(strings.TrimSpace(resp.Status), "input_required") {
+			// Review's native pause is returned from the chat endpoint as an
+			// agent.run envelope. Decode only interrupt.draft.a2ui and never
+			// assume choices[0] exists for this shape.
+			surface, surfaceErr := decodeInputRequiredSurface(resp.Interrupt)
+			if surfaceErr != nil {
+				return nil, surfaceErr
+			}
+			if botRunID == "" {
+				return nil, ErrMissingBotRunID
+			}
+			out.Status = "INPUT_REQUIRED"
+			out.A2UI = surface
+		} else {
+			// Default-mode chat/completions strips formatted.answer into
+			// choices[0].message.content; source it there, then reshape per slug
+			// (knowledge/review become {content, doc_list}; chat stays plain).
+			if strings.EqualFold(strings.TrimSpace(resp.Status), "succeeded") && len(resp.Choices) == 0 && resp.Result.Formatted != nil {
+				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
+			} else {
+				out.Answer = rxBot.ShapeAnswer(slug, rxBot.ChatAnswerText(resp), &resp.Formatted)
+				out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
+			}
+		}
 	} else {
 		// /v1/agents/{slug}/runs serves BOTH synchronous agents (data → 200,
 		// status="succeeded", answer already in result.formatted) AND remote
@@ -332,7 +383,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	}
 
-	if out.Status == "RUNNING" && botRunID == "" {
+	if (out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED") && botRunID == "" {
 		// A child task id cannot be used as the Bot run join key. Refuse to
 		// persist an unpollable row even when a legacy response has task_ids.
 		return nil, ErrMissingBotRunID

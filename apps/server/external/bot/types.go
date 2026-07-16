@@ -40,14 +40,22 @@ type Choice struct {
 
 // ChatCompletionResponse is the non-streaming response for a sync chat model.
 type ChatCompletionResponse struct {
-	ID               string    `json:"id"`
-	RunID            *string   `json:"run_id"`
-	DegradedTracking bool      `json:"degraded_tracking,omitempty"`
-	ReportRevision   *int64    `json:"report_revision,omitempty"`
-	Object           string    `json:"object"`
-	Model            string    `json:"model"`
-	Choices          []Choice  `json:"choices"`
-	Formatted        Formatted `json:"formatted"`
+	ID               string  `json:"id"`
+	RunID            *string `json:"run_id"`
+	DegradedTracking bool    `json:"degraded_tracking,omitempty"`
+	ReportRevision   *int64  `json:"report_revision,omitempty"`
+	// Review pauses intentionally return the native agent.run envelope from
+	// the chat-completions route. These fields stay optional so ordinary
+	// OpenAI-shaped responses remain unchanged and callers never index choices
+	// merely to discover a pause.
+	Agent     string             `json:"agent,omitempty"`
+	Status    string             `json:"status,omitempty"`
+	Interrupt *AgentRunInterrupt `json:"interrupt,omitempty"`
+	Result    AgentRunResult     `json:"result,omitempty"`
+	Object    string             `json:"object"`
+	Model     string             `json:"model"`
+	Choices   []Choice           `json:"choices"`
+	Formatted Formatted          `json:"formatted"`
 }
 
 // AgentRunRequest is the body for POST /v1/agents/{slug}/runs.
