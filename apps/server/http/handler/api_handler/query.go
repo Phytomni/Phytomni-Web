@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"phytomni-server/common"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -43,6 +44,14 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, msg
 	}
 	return http.StatusInternalServerError, "request failed"
+}
+
+func writeQueryError(ctx *gin.Context, status int, message string) {
+	body := gin.H{"code": status, "message": message}
+	if requestID := common.A2uiRequestID(ctx); requestID != "" {
+		body["request_id"] = requestID
+	}
+	ctx.JSON(status, body)
 }
 
 // wantsStream reports whether the caller opted into SSE via the Accept header.
@@ -191,7 +200,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 				} else {
 					// Pre-first-byte failure: no SSE headers were written, so a
 					// normal JSON error with the right Content-Type still ships.
-					ctx.JSON(status, gin.H{"code": status, "message": msg})
+					writeQueryError(ctx, status, msg)
 				}
 			}
 			return
@@ -208,7 +217,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		} else {
 			rxLog.Sugar().Warnw("ApiQuery client error", "user", name, "status", status, "err", err)
 		}
-		ctx.JSON(status, gin.H{"code": status, "message": msg})
+		writeQueryError(ctx, status, msg)
 		return
 	}
 	// QueryData carries the Web request id for client correlation. The service
@@ -243,7 +252,7 @@ func (ph *Handler) QueryAnalystUpdateLog(ctx *gin.Context) {
 		} else {
 			rxLog.Sugar().Warnw("ApiQueryAnalystUpdateLog client error", "user", name, "status", status, "err", err)
 		}
-		ctx.JSON(status, gin.H{"code": status, "message": msg})
+		writeQueryError(ctx, status, msg)
 		return
 	}
 	ctx.JSON(errs.SucResp(result))

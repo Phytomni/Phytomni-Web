@@ -2,9 +2,11 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	rxBot "phytomni-server/external/bot"
@@ -56,6 +58,13 @@ func TestQueryReturnsDegradedTrackingWithoutSyntheticRunID(t *testing.T) {
 	}
 	if out.BotRunID != "" || !out.TrackingDegraded {
 		t.Fatalf("out=%#v", out)
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal degraded response: %v", err)
+	}
+	if strings.Contains(string(encoded), "bot_run_id") || !strings.Contains(string(encoded), `"tracking_degraded":true`) {
+		t.Fatalf("degraded response identity fields are wrong: %s", encoded)
 	}
 }
 
