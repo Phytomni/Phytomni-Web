@@ -1,0 +1,25 @@
+{
+  "id": "run-review-1",
+  "run_id": "run-review-1",
+  "object": "agent.run",
+  "agent": "review",
+  "status": "input_required",
+  "interrupt": {
+    "run_id": "run-review-1",
+    "generation": "review-1",
+    "draft": {
+      "a2ui": {
+        "catalog_version": "v1.0",
+        "surface_id": "surface-synthetic-1",
+        "widget": "confirm",
+        "props": {
+          "title": "Synthetic review",
+          "confirm_label": "Approve",
+          "cancel_label": "Reject"
+        }
+      }
+    }
+  },
+  "task_ids": [],
+  "result": {}
+}
