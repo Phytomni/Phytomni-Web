@@ -152,6 +152,9 @@ describe("useSendMessage", () => {
         tool_name: "ChatAgents",
         answer: "I'm the assistant",
         id: "msg-1",
+        bot_run_id: "run-msg-1",
+        report_revision: 1,
+        request_id: "web-request-msg-1",
         reaction_type: "1",
         follow_up_questions: [],
       },
@@ -167,6 +170,11 @@ describe("useSendMessage", () => {
     expect(msgs[0].content).toContain("Hello world");
     expect(msgs[1].role).toBe("assistant");
     expect(msgs[1].content).toBe("I'm the assistant");
+    expect(msgs[1].botProjection).toMatchObject({
+      runId: "run-msg-1",
+      reportRevision: 1,
+      requestId: "web-request-msg-1",
+    });
 
     // Cleanup is done via the captured chatState
     const stateA = getChatState("A");

@@ -15,12 +15,104 @@ import {
   isLocalStorageChat,
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
-import { getQueryAbortable, getAnswerCheck } from "@/api/chat";
+import {
+  getQueryAbortable,
+  getAnswerCheck,
+  type QueryData,
+} from "@/api/chat";
 import { createTransferTracker } from "@/utils/transfer-progress";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
 import { createChatRequestKey } from "../utils/chat-request-key";
 import { parentRowIdForDialogue } from "../utils/chat-parent-row";
+import { parseBotProjection } from "../botProjection";
+import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
+import { createFetchA2uiTransport } from "../streaming/a2uiAction";
+import { getToken } from "@/utils/auth";
+
+function parseBlockingProjection(data: QueryData) {
+  const payload =
+    data.answer === undefined && data.final_answer !== undefined
+      ? { ...data, answer: data.final_answer }
+      : data;
+  try {
+    return parseBotProjection(payload);
+  } catch {
+    // Legacy responses may contain fields outside the projection contract. Do
+    // not copy an unvalidated envelope into the reactive message state.
+    return undefined;
+  }
+}
+
+const SAFE_DIALOGUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
+
+function attachBlockingLegacyFields(
+  message: ChatMessage,
+  data: QueryData
+): void {
+  if (typeof data.task_id === "string" && data.task_id.trim() !== "") {
+    message.task_id = data.task_id;
+  }
+  if (
+    typeof data.download_path === "string" &&
+    data.download_path.trim() !== ""
+  ) {
+    message.download_path = data.download_path;
+  }
+}
+
+function attachBlockingA2ui(
+  message: ChatMessage,
+  data: QueryData,
+  projection: ReturnType<typeof parseBotProjection> | undefined,
+): void {
+  if (
+    !projection ||
+    projection.status !== "INPUT_REQUIRED" ||
+    data.a2ui === undefined ||
+    data.a2ui === null
+  ) {
+    return;
+  }
+
+  const decoded = decodeA2uiOpenSurface(data.a2ui);
+  if (!decoded.ok) return;
+
+  message.blocks = [
+    {
+      type: "agent-surface",
+      authority: "agent",
+      interactive: true,
+      a2ui: {
+        surface: decoded.value,
+        state: { status: "ready", round: 1 },
+      },
+    },
+  ];
+
+  const runId = projection.runId;
+  const dialogueId = data.dialogue_id?.trim() ?? "";
+  const messageId =
+    data.id === undefined || data.id === null ? "" : String(data.id);
+  if (
+    !runId ||
+    !SAFE_DIALOGUE_ID_PATTERN.test(dialogueId) ||
+    !/^[1-9]\d*$/u.test(messageId)
+  ) {
+    return;
+  }
+
+  message.a2uiRuntime = {
+    dialogueId,
+    messageId,
+    runId,
+    transport: createFetchA2uiTransport({
+      conversationId: dialogueId,
+      getToken,
+      acceptLanguage: i18n.global.locale.value,
+    }),
+  };
+}
 
 export function useSendMessage(opts: {
   getChatState: (dialogueId: string) => any;
@@ -290,12 +382,14 @@ export function useSendMessage(opts: {
       }
 
       if (response.data) {
+        const responseData = response.data as QueryData;
+        const botProjection = parseBlockingProjection(responseData);
         if (
           chatState.activeRequestId === requestKey &&
-          typeof response.data.dialogue_id === "string" &&
-          response.data.dialogue_id !== ""
+          typeof responseData.dialogue_id === "string" &&
+          responseData.dialogue_id !== ""
         ) {
-          blockingDialogueId = response.data.dialogue_id;
+          blockingDialogueId = responseData.dialogue_id;
         }
         let assistantMessage: ChatMessage | undefined;
         if (response.data.final_answer) {
@@ -553,6 +647,16 @@ export function useSendMessage(opts: {
           }
         }
 
+        if (assistantMessage) {
+          attachBlockingLegacyFields(assistantMessage, responseData);
+          // Keep the Web row id and Bot umbrella identity in distinct fields;
+          // only the parser output crosses into reactive message state.
+          if (botProjection) {
+            assistantMessage.botProjection = botProjection;
+            attachBlockingA2ui(assistantMessage, responseData, botProjection);
+          }
+        }
+
         // ensure assistantMessage was created to avoid pushing undefined.
         // Ownership: Stop without resend leaves generationStopped while
         // activeRequestId may still equal requestKey until finally; Stop then
@@ -567,7 +671,7 @@ export function useSendMessage(opts: {
         } else {
           // if assistantMessage was not created, create a default message
           console.warn("assistantMessage was not created; using a default message");
-          sendingMessages.push({
+          assistantMessage = {
             role: "assistant",
             content: response.data?.answer || "Sorry, I cannot answer this question.",
             status: response.data?.status || "",
@@ -579,7 +683,13 @@ export function useSendMessage(opts: {
             followUpQuestions: [],
             showFollowUpQuestions: false,
             showLog: false,
-          });
+          };
+          attachBlockingLegacyFields(assistantMessage, responseData);
+          if (botProjection) {
+            assistantMessage.botProjection = botProjection;
+            attachBlockingA2ui(assistantMessage, responseData, botProjection);
+          }
+          sendingMessages.push(assistantMessage);
         }
       } else if (
         chatState.activeRequestId === requestKey &&

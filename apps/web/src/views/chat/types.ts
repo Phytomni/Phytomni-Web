@@ -112,6 +112,14 @@ export interface ChatResponse {
   compute_resource?: string; // compute resource info
   follow_up_questions?: string | string[]; // follow-up questions list
   server_file_path?: string; // server file path
+  /** Bot umbrella identity; never substitute the Web row id or a task id. */
+  bot_run_id?: string | null;
+  /** True when a successful response cannot be polled by Bot run id. */
+  tracking_degraded?: boolean;
+  report_revision?: number;
+  request_id?: string | null;
+  /** Bounded input-required surface from the Web Go gateway. */
+  a2ui?: unknown;
 }
 
 export interface UploadFile {

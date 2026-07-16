@@ -5,6 +5,29 @@ type QueryProgressOpts = {
   onUploadProgress?: (e: AxiosProgressEvent) => void;
 };
 
+/** Stable blocking chat envelope returned by the Web Go gateway. */
+export interface QueryData {
+  id?: string | number;
+  final_answer?: string;
+  answer?: string;
+  follow_up_questions?: string | string[];
+  status?: string;
+  tool_name?: string;
+  upload_path?: string;
+  download_path?: string;
+  server_file_path?: string;
+  compute_resource?: string;
+  reaction_type?: string;
+  dialogue_id?: string;
+  task_id?: string;
+  bot_run_id?: string | null;
+  tracking_degraded?: boolean;
+  report_revision?: number;
+  request_id?: string | null;
+  /** Bounded by the Go A2UI decoder; the client validates it again before use. */
+  a2ui?: unknown;
+}
+
 type DownloadProgressOpts = {
   requestId?: string;
   onDownloadProgress?: (e: AxiosProgressEvent) => void;
