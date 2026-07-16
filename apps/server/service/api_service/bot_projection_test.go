@@ -243,6 +243,11 @@ func TestDecodeRunProjectionSubmissionDegradedTrackingIsExplicit(t *testing.T) {
 
 	if _, err := DecodeRunProjection(response); err == nil {
 		t.Fatal("poll decoder accepted AgentRunResponse submission")
+	} else {
+		var projectionErr *ProjectionDecodeError
+		if !errors.As(err, &projectionErr) {
+			t.Fatalf("poll decoder error=%T %v, want *ProjectionDecodeError", err, err)
+		}
 	}
 	got, err := DecodeAgentRunSubmission(response)
 	if err != nil {
