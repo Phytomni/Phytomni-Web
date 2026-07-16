@@ -10,8 +10,8 @@ export const CANONICAL_AGENT_TOOLS = [
   "AnalystAgent",
   "DeepGenomeAgent",
   "InSilicoResearchAgent",
-  "GeneNetworkAgent",
   "DigitalDesignAgent",
+  "GeneNetworkAgent",
 ] as const;
 
 export type CanonicalAgentTool = (typeof CANONICAL_AGENT_TOOLS)[number];
@@ -33,8 +33,8 @@ export const CANONICAL_AGENT_DISPLAY_NAMES: Record<CanonicalAgentTool, string> =
   AnalystAgent: "Analyst Agent",
   DeepGenomeAgent: "Deep Genome Agent",
   InSilicoResearchAgent: "In Silico Research Agent",
-  GeneNetworkAgent: "Gene Network Agent",
   DigitalDesignAgent: "Digital Design Agent",
+  GeneNetworkAgent: "Gene Network Agent",
 } as const;
 
 export const CANONICAL_AGENT_ZH_NAMES: Record<CanonicalAgentTool, string> = {
@@ -46,8 +46,8 @@ export const CANONICAL_AGENT_ZH_NAMES: Record<CanonicalAgentTool, string> = {
   AnalystAgent: "分析智能体",
   DeepGenomeAgent: "基因深度分析智能体",
   InSilicoResearchAgent: "虚拟研究智能体",
-  GeneNetworkAgent: "基因网络智能体",
   DigitalDesignAgent: "智能设计智能体",
+  GeneNetworkAgent: "基因网络智能体",
 } as const;
 
 export const CANONICAL_AGENT_I18N_KEYS: Record<CanonicalAgentTool, string> = {
@@ -59,8 +59,8 @@ export const CANONICAL_AGENT_I18N_KEYS: Record<CanonicalAgentTool, string> = {
   AnalystAgent: "chat.agents.analystAgent",
   DeepGenomeAgent: "chat.agents.deepGenomeAgent",
   InSilicoResearchAgent: "chat.agents.inSilicoResearchAgent",
-  GeneNetworkAgent: "chat.agents.geneNetworkAgent",
   DigitalDesignAgent: "chat.agents.digitalDesignAgent",
+  GeneNetworkAgent: "chat.agents.geneNetworkAgent",
 } as const;
 
 export const CANONICAL_AGENT_PAGE_TITLE_KEYS: Partial<

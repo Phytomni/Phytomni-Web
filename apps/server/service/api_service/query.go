@@ -92,6 +92,9 @@ var slugToToolName = map[string]string{
 	"review":      "ReviewAgent",
 	"deep_genome": "DeepGenomeAgent",
 	"brief_gene":  "BriefGeneAgent",
+	"research":    "InSilicoResearchAgent",
+	"design":      "DigitalDesignAgent",
+	"network":     "GeneNetworkAgent",
 }
 
 // ExpertModeEnabled reports whether Expert routing is live. It is the single
@@ -214,8 +217,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	} else {
 		// /v1/agents/{slug}/runs serves BOTH synchronous agents (data → 200,
 		// status="succeeded", answer already in result.formatted) AND remote
-		// agents (analyst, deep_genome → 202, status="running", answer polled
-		// later via /query/analyst/update_log). Branch on the returned status;
+		// agents (analyst, deep_genome, research, design, network → 202,
+		// status="running", answer polled later via /query/analyst/update_log).
+		// Branch on the returned status;
 		// never assume remote, or a sync agent's answer is silently dropped.
 		args := map[string]interface{}{"user_query": in.Query}
 		if slug == "deep_genome" {

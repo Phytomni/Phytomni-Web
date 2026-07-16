@@ -1,6 +1,36 @@
 package bot
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+func sortedKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func TestCanonicalAgentSlugsAreExactlyTheReleaseSet(t *testing.T) {
+	want := []string{
+		"analyst",
+		"brief_gene",
+		"chat",
+		"data",
+		"deep_genome",
+		"design",
+		"knowledge",
+		"network",
+		"research",
+		"review",
+	}
+	if got := sortedKeys(CanonicalAgentTool); !slices.Equal(got, want) {
+		t.Fatalf("slugs=%v want=%v", got, want)
+	}
+}
 
 func TestAliasToSlugIsCanonical(t *testing.T) {
 	canonicalNames := map[string]bool{}

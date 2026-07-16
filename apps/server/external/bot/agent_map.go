@@ -9,19 +9,22 @@ import (
 // slugs. This table is Web-owned and deliberately decoupled from Bot's advisory
 // legacy_aliases metadata.
 var aliasToSlug = map[string]string{
-	"ChatAgent":       "chat",
-	"KnowledgeAgent":  "knowledge",
-	"DataAgent":       "data",
-	"ReviewAgent":     "review",
-	"BriefGeneAgent":  "brief_gene",
-	"AnalystAgent":    "analyst",
-	"DeepGenomeAgent": "deep_genome",
+	"ChatAgent":             "chat",
+	"KnowledgeAgent":        "knowledge",
+	"DataAgent":             "data",
+	"ReviewAgent":           "review",
+	"BriefGeneAgent":        "brief_gene",
+	"AnalystAgent":          "analyst",
+	"DeepGenomeAgent":       "deep_genome",
+	"InSilicoResearchAgent": "research",
+	"DigitalDesignAgent":    "design",
+	"GeneNetworkAgent":      "network",
 }
 
 // slugToChatModel maps the sync chat-family slugs to their /v1/chat/completions
-// model id. Remote agents (analyst, deep_genome) are absent here and run via
-// /v1/agents/{slug}/runs instead. Whether data is a chat model or an agent run
-// is confirmed against the live Bot at wiring time.
+// model id. Remote agents (analyst, deep_genome, research, design, network) are
+// absent here and run via /v1/agents/{slug}/runs instead. Whether data is a
+// chat model or an agent run is confirmed against the live Bot at wiring time.
 var slugToChatModel = map[string]string{
 	"chat":      "phyto-chat",
 	"knowledge": "phyto-knowledge",

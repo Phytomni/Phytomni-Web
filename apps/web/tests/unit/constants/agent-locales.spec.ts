@@ -20,6 +20,41 @@ const getMessage = (messages: unknown, path: string) =>
   }, messages);
 
 describe("canonical agent locale names", () => {
+  it("contains each release agent exactly once with complete metadata", () => {
+    const releaseTools = [
+      "ChatAgent",
+      "KnowledgeAgent",
+      "DataAgent",
+      "ReviewAgent",
+      "BriefGeneAgent",
+      "AnalystAgent",
+      "DeepGenomeAgent",
+      "InSilicoResearchAgent",
+      "DigitalDesignAgent",
+      "GeneNetworkAgent",
+    ];
+
+    expect(CANONICAL_AGENT_TOOLS).toEqual(releaseTools);
+    expect(new Set(CANONICAL_AGENT_TOOLS).size).toBe(releaseTools.length);
+    for (const toolName of releaseTools) {
+      expect(CANONICAL_AGENT_DISPLAY_NAMES[toolName]).toEqual(
+        expect.any(String)
+      );
+      expect(CANONICAL_AGENT_ZH_NAMES[toolName]).toEqual(expect.any(String));
+      expect(CANONICAL_AGENT_I18N_KEYS[toolName]).toEqual(expect.any(String));
+    }
+  });
+
+  it("keeps remote tools out of the role-backed picker subset", () => {
+    expect(CANONICAL_AT_ABLE_TOOLS).toEqual([
+      "ChatAgent",
+      "KnowledgeAgent",
+      "DataAgent",
+      "ReviewAgent",
+      "BriefGeneAgent",
+    ]);
+  });
+
   it("keeps every canonical tool mapped to one stable chat-agent i18n key", () => {
     expect(Object.keys(CANONICAL_AGENT_I18N_KEYS).sort()).toEqual(
       [...CANONICAL_AGENT_TOOLS].sort()
