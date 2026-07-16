@@ -73,6 +73,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		answer TEXT,
 		tool_name TEXT,
 		bot_run_id TEXT,
+		bot_projection_json TEXT,
+		bot_report_revision INTEGER NOT NULL DEFAULT -1,
 		server_id TEXT,
 		task_id TEXT,
 		task_log TEXT,

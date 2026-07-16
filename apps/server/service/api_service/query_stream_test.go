@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"gorm.io/gorm"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
 )
@@ -36,8 +37,23 @@ func sseChatServer(t *testing.T) {
 // (agent_task_test.go) predates the column — using it would fail the INSERT
 // with "no such column: mode" once QueryStream persists Mode.
 
-func TestQueryStream_PersistsAndForwards(t *testing.T) {
+// setupStreamTestDB extends the expert fixture with the additive Bot
+// projection columns. Keeping the DDL hand-written avoids AutoMigrate on the
+// enum-tagged model while making every column selected by QueryStream present.
+func setupStreamTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
 	gdb := setupExpertTestDB(t)
+	if err := gdb.Exec(`ALTER TABLE question_agent_logs ADD COLUMN bot_projection_json TEXT`).Error; err != nil {
+		t.Fatalf("add bot projection column: %v", err)
+	}
+	if err := gdb.Exec(`ALTER TABLE question_agent_logs ADD COLUMN bot_report_revision INTEGER NOT NULL DEFAULT -1`).Error; err != nil {
+		t.Fatalf("add bot revision column: %v", err)
+	}
+	return gdb
+}
+
+func TestQueryStream_PersistsAndForwards(t *testing.T) {
+	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
 	svc := &Service{}
 
@@ -83,7 +99,7 @@ func TestQueryStream_PersistsAndForwards(t *testing.T) {
 }
 
 func TestQueryStream_ReadyRowAndRunIDPrecedeFrames(t *testing.T) {
-	gdb := setupExpertTestDB(t)
+	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
 	svc := &Service{}
 
@@ -142,7 +158,7 @@ func TestQueryStream_ReadyRowAndRunIDPrecedeFrames(t *testing.T) {
 }
 
 func TestQueryStream_InitialPersistenceFailureForwardsNothing(t *testing.T) {
-	gdb := setupExpertTestDB(t)
+	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
 	if err := gdb.Exec(`DROP TABLE question_agent_logs`).Error; err != nil {
 		t.Fatalf("drop stream table: %v", err)
@@ -164,7 +180,7 @@ func TestQueryStream_InitialPersistenceFailureForwardsNothing(t *testing.T) {
 }
 
 func TestQueryStream_CancelFinalizesReadyRow(t *testing.T) {
-	gdb := setupExpertTestDB(t)
+	gdb := setupStreamTestDB(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_cancel\"}\n\n"))
@@ -204,7 +220,7 @@ func TestQueryStream_CancelFinalizesReadyRow(t *testing.T) {
 }
 
 func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
-	setupExpertTestDB(t)
+	setupStreamTestDB(t)
 	body := strings.Join([]string{
 		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_action\"}\n",
 		"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.a2ui\",\"value\":{\"surface_id\":\"s1\"}}\n",
@@ -259,7 +275,7 @@ func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
 }
 
 func TestQueryStream_ForwardErrorStillPersists(t *testing.T) {
-	gdb := setupExpertTestDB(t)
+	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
 	svc := &Service{}
 	forward := func(frame []byte) error { return http.ErrBodyNotAllowed } // simulate browser disconnect
@@ -275,7 +291,7 @@ func TestQueryStream_ForwardErrorStillPersists(t *testing.T) {
 }
 
 func TestQueryStream_ExpertRefused(t *testing.T) {
-	setupExpertTestDB(t)
+	setupStreamTestDB(t)
 	botHits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		botHits++
@@ -295,7 +311,7 @@ func TestQueryStream_ExpertRefused(t *testing.T) {
 }
 
 func TestQueryStream_NonChatSlugRefused(t *testing.T) {
-	setupExpertTestDB(t)
+	setupStreamTestDB(t)
 	botHits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		botHits++
@@ -317,7 +333,7 @@ func TestQueryStream_NonChatSlugRefused(t *testing.T) {
 }
 
 func TestQueryStream_PersistsBotRunID(t *testing.T) {
-	gdb := setupExpertTestDB(t)
+	gdb := setupStreamTestDB(t)
 	sseChatServer(t) // fixture RunStarted carries run_id "run_77"
 	svc := &Service{}
 	out, err := svc.QueryStream(context.Background(), "carol@example.com",
@@ -335,7 +351,7 @@ func TestQueryStream_PersistsBotRunID(t *testing.T) {
 }
 
 func TestQueryStream_RefreshClearsTaskColumns(t *testing.T) {
-	gdb := setupExpertTestDB(t)
+	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
 	svc := &Service{}
 	seed := model.QuestionAgentLog{
@@ -387,7 +403,7 @@ func TestQueryStream_RefreshClearsTaskColumns(t *testing.T) {
 }
 
 func TestQueryStream_RunErrorPersistsFailed(t *testing.T) {
-	gdb := setupExpertTestDB(t)
+	gdb := setupStreamTestDB(t)
 	// Bot stream that starts then emits a RunError instead of RunFinished.
 	body := strings.Join([]string{
 		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_err\"}\n",
