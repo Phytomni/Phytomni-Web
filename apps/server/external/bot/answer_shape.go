@@ -1,6 +1,12 @@
 package bot
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"strings"
+)
 
 // ShapeAnswer rewrites a Bot reply into the JSON-string-in-answer contract
 // the Web app's JSON.parse(answer) expects, keyed by agent slug. cited families
@@ -210,6 +216,189 @@ func ParseRunArtifacts(raw json.RawMessage) (dirs []string, paths []string, ok b
 		paths = append(paths, a.Paths...)
 	}
 	return dirs, paths, true
+}
+
+// BoundedRunProgress is the public counter subset accepted from a Bot run.
+// Unknown/provider-specific progress fields are intentionally ignored.
+type BoundedRunProgress struct {
+	Completed       int64
+	Total           int64
+	Failed          int64
+	Pending         int64
+	BriefGeneStatus string
+}
+
+const (
+	// These limits keep progress and report projections small enough for a Web
+	// row while leaving ample room for the release's normal analysis fan-out.
+	MaxProjectionProgressCounter = int64(1_000_000_000)
+	MaxProjectionReportLength    = 1 << 20
+	MaxProjectionArtifactCount   = 64
+	MaxProjectionArtifactPaths   = 256
+	MaxProjectionArtifactPathLen = 512
+)
+
+// ParseRunProgress strictly decodes the bounded progress counters used by the
+// Web projection. A missing/null progress object is a valid zero projection;
+// negative, over-cap, or structurally malformed counters are rejected.
+func ParseRunProgress(raw json.RawMessage) (BoundedRunProgress, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return BoundedRunProgress{}, nil
+	}
+	var payload struct {
+		Completed       *int64 `json:"completed"`
+		CompletedCount  *int64 `json:"completed_count"`
+		Total           *int64 `json:"total"`
+		TotalCount      *int64 `json:"total_count"`
+		Failed          *int64 `json:"failed"`
+		FailedCount     *int64 `json:"failed_count"`
+		Pending         *int64 `json:"pending"`
+		PendingCount    *int64 `json:"pending_count"`
+		BriefGeneStatus string `json:"brief_gene_status"`
+	}
+	if err := json.Unmarshal(trimmed, &payload); err != nil {
+		return BoundedRunProgress{}, fmt.Errorf("progress must be an object with integer counters: %w", err)
+	}
+	progress := BoundedRunProgress{
+		Completed:       chooseProgressCounter(payload.Completed, payload.CompletedCount),
+		Total:           chooseProgressCounter(payload.Total, payload.TotalCount),
+		Failed:          chooseProgressCounter(payload.Failed, payload.FailedCount),
+		Pending:         chooseProgressCounter(payload.Pending, payload.PendingCount),
+		BriefGeneStatus: strings.TrimSpace(payload.BriefGeneStatus),
+	}
+	for name, value := range map[string]int64{
+		"completed": progress.Completed,
+		"total":     progress.Total,
+		"failed":    progress.Failed,
+		"pending":   progress.Pending,
+	} {
+		if value < 0 {
+			return BoundedRunProgress{}, fmt.Errorf("progress %s is negative", name)
+		}
+		if value > MaxProjectionProgressCounter {
+			return BoundedRunProgress{}, fmt.Errorf("progress %s exceeds %d", name, MaxProjectionProgressCounter)
+		}
+	}
+	if progress.Total > 0 && progress.Completed > progress.Total {
+		return BoundedRunProgress{}, fmt.Errorf("progress completed exceeds total")
+	}
+	if len([]rune(progress.BriefGeneStatus)) > MaxProjectionFailureField {
+		return BoundedRunProgress{}, fmt.Errorf("brief_gene_status exceeds %d characters", MaxProjectionFailureField)
+	}
+	return progress, nil
+}
+
+// DecodeProjectionProgress is the explicit decoder-named alias used by
+// service callers that treat progress as a projection boundary.
+func DecodeProjectionProgress(raw json.RawMessage) (BoundedRunProgress, error) {
+	return ParseRunProgress(raw)
+}
+
+func chooseProgressCounter(primary, fallback *int64) int64 {
+	if primary != nil {
+		return *primary
+	}
+	if fallback != nil {
+		return *fallback
+	}
+	return 0
+}
+
+// BoundedRunArtifact is one output directory and its validated OBS paths.
+// Task ids and provider metadata are deliberately not represented.
+type BoundedRunArtifact struct {
+	OutputDir string
+	Paths     []string
+}
+
+// ParseRunProjectionArtifacts strictly decodes terminal artifact outputs. It
+// accepts OBS URI references and the legacy /obs/ mount form, rejects remote
+// URLs/traversal/control characters, and permits an empty path list when the
+// provider's best-effort glob found no files.
+func ParseRunProjectionArtifacts(raw json.RawMessage) ([]BoundedRunArtifact, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+	type artifactEntry struct {
+		OutputDir string   `json:"output_dir"`
+		Paths     []string `json:"paths"`
+	}
+	var entries []artifactEntry
+	if err := json.Unmarshal(trimmed, &entries); err != nil {
+		var payload struct {
+			Artifacts []artifactEntry `json:"artifacts"`
+		}
+		if objectErr := json.Unmarshal(trimmed, &payload); objectErr != nil {
+			return nil, fmt.Errorf("artifacts must be an array or object: %w", err)
+		}
+		entries = payload.Artifacts
+	}
+	if len(entries) > MaxProjectionArtifactCount {
+		return nil, fmt.Errorf("artifact count exceeds %d", MaxProjectionArtifactCount)
+	}
+	artifacts := make([]BoundedRunArtifact, 0, len(entries))
+	totalPaths := 0
+	for index, item := range entries {
+		dir := strings.TrimSpace(item.OutputDir)
+		if dir != "" {
+			if err := validateProjectionOBSPath(dir); err != nil {
+				return nil, fmt.Errorf("artifact %d output_dir: %w", index, err)
+			}
+		}
+		paths := make([]string, 0, len(item.Paths))
+		for pathIndex, path := range item.Paths {
+			path = strings.TrimSpace(path)
+			if err := validateProjectionOBSPath(path); err != nil {
+				return nil, fmt.Errorf("artifact %d path %d: %w", index, pathIndex, err)
+			}
+			paths = append(paths, path)
+		}
+		totalPaths += len(paths)
+		if totalPaths > MaxProjectionArtifactPaths {
+			return nil, fmt.Errorf("artifact path count exceeds %d", MaxProjectionArtifactPaths)
+		}
+		if dir == "" && len(paths) > 0 {
+			return nil, fmt.Errorf("artifact %d has paths without output_dir", index)
+		}
+		artifacts = append(artifacts, BoundedRunArtifact{OutputDir: dir, Paths: paths})
+	}
+	return artifacts, nil
+}
+
+// DecodeProjectionArtifacts is the explicit decoder-named alias for the strict
+// terminal artifact helper.
+func DecodeProjectionArtifacts(raw json.RawMessage) ([]BoundedRunArtifact, error) {
+	return ParseRunProjectionArtifacts(raw)
+}
+
+func validateProjectionOBSPath(value string) error {
+	if value == "" {
+		return fmt.Errorf("path is empty")
+	}
+	if len([]rune(value)) > MaxProjectionArtifactPathLen {
+		return fmt.Errorf("path exceeds %d characters", MaxProjectionArtifactPathLen)
+	}
+	for _, r := range value {
+		if r == 0 || r == '\n' || r == '\r' || r == '\t' || r == ' ' {
+			return fmt.Errorf("path contains whitespace or control characters")
+		}
+	}
+	if strings.HasPrefix(value, "/obs/") {
+		if strings.Contains(value, "../") || strings.HasSuffix(value, "/..") {
+			return fmt.Errorf("path traversal is not allowed")
+		}
+		return nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "obs" || u.Host == "" || u.Path == "" || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("path is not an OBS reference")
+	}
+	if strings.Contains(u.Path, "../") || strings.HasSuffix(u.Path, "/..") {
+		return fmt.Errorf("path traversal is not allowed")
+	}
+	return nil
 }
 
 // unquote strips surrounding quotes from a JSON-encoded scalar so a string
