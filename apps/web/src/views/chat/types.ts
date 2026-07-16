@@ -1,5 +1,6 @@
 import type { A2uiActionTransport } from "./streaming/a2uiAction";
 import type { A2uiSurfaceRuntime } from "./streaming/a2uiContract";
+import type { BotRunProjection } from "./botProjection";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 
 export interface Chat {
@@ -73,6 +74,8 @@ export interface ChatMessage {
   streamPresentationKey?: string;
   /** Runtime-only A2UI context sourced exclusively from stream response headers. */
   a2uiRuntime?: A2uiRuntimeContext;
+  /** Sanitized Bot lifecycle snapshot; raw API envelopes never enter message state. */
+  botProjection?: BotRunProjection;
 }
 
 // ContentBlock is one typed unit in a streaming assistant message. authority

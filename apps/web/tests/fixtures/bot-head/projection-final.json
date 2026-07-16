@@ -1,0 +1,29 @@
+{
+  "id": 101,
+  "tool_name": "DeepGenomeAgent",
+  "status": "SUCCEEDED",
+  "dialogue_id": "dialogue-synthetic-1",
+  "bot_run_id": "run-dg-1",
+  "report_revision": 3,
+  "report_stage": "final",
+  "report_completeness": "complete",
+  "intermediate_report": "# Intermediate",
+  "final_report": "# Final",
+  "progress": {
+    "completed": 2,
+    "total": 2,
+    "failed": 0,
+    "pending": 0
+  },
+  "degraded": false,
+  "tracking_degraded": false,
+  "failures": [],
+  "artifacts": {
+    "directories": ["/obs/synthetic-bucket/run-dg-1"],
+    "output_dirs": ["/obs/synthetic-bucket/run-dg-1"],
+    "paths": [
+      "/obs/synthetic-bucket/run-dg-1/report.md",
+      "/obs/synthetic-bucket/run-dg-1/data.tsv"
+    ]
+  }
+}
