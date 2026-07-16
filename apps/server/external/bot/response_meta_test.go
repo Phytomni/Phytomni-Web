@@ -118,6 +118,33 @@ func TestChatCompletionStreamWithMetaReadsSetupHeader(t *testing.T) {
 	}
 }
 
+func TestChatCompletionStreamWithMetaBodyDeadlineOnErrorReturnsTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Request-Id", "bot-stream-timeout-10")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		time.Sleep(200 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"error":{"message":"late"}}`)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	c.http = &http.Client{Timeout: 20 * time.Millisecond}
+	stream, meta, err := c.ChatCompletionStreamWithMeta(context.Background(), ChatCompletionRequest{})
+	if stream != nil {
+		stream.Close()
+	}
+	if meta.StatusCode != http.StatusBadRequest || meta.BotRequestID != "bot-stream-timeout-10" {
+		t.Fatalf("meta=%#v, want status=%d and request id", meta, http.StatusBadRequest)
+	}
+	if err == nil || !errors.Is(err, ErrBotTimeout) {
+		t.Fatalf("err=%v, want wrapped ErrBotTimeout", err)
+	}
+}
+
 func TestChatCompletionWithMetaDeadlineReturnsTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)

@@ -240,8 +240,11 @@ func (c *Client) ChatCompletionStreamWithMeta(ctx context.Context, req ChatCompl
 	}
 	meta := responseMeta(resp)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if readErr != nil {
+			return nil, meta, wrapTransportError(readErr)
+		}
 		return nil, meta, preferBotRequestID(botError(http.MethodPost, "/v1/chat/completions", resp.StatusCode, raw), meta.BotRequestID)
 	}
 	return resp.Body, meta, nil
