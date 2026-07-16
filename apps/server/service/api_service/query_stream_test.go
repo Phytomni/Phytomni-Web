@@ -43,12 +43,6 @@ func sseChatServer(t *testing.T) {
 func setupStreamTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb := setupExpertTestDB(t)
-	if err := gdb.Exec(`ALTER TABLE question_agent_logs ADD COLUMN bot_projection_json TEXT`).Error; err != nil {
-		t.Fatalf("add bot projection column: %v", err)
-	}
-	if err := gdb.Exec(`ALTER TABLE question_agent_logs ADD COLUMN bot_report_revision INTEGER NOT NULL DEFAULT -1`).Error; err != nil {
-		t.Fatalf("add bot revision column: %v", err)
-	}
 	return gdb
 }
 

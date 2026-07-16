@@ -28,7 +28,7 @@ func setupStreamHandlerTestDB(t *testing.T) *gorm.DB {
 	}
 	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		dialogue_id TEXT, f_id INTEGER DEFAULT 0, server_id TEXT, bot_run_id TEXT,
+		dialogue_id TEXT, f_id INTEGER DEFAULT 0, server_id TEXT, bot_run_id TEXT, bot_projection_json TEXT, bot_report_revision INTEGER NOT NULL DEFAULT -1,
 		user_name TEXT, query TEXT, title_query TEXT, answer TEXT,
 		follow_up_questions TEXT, task_id TEXT, task_log TEXT, file_name TEXT,
 		upload_path TEXT, download_path TEXT, image_paths TEXT, compute_resource TEXT,

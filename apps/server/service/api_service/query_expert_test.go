@@ -29,7 +29,7 @@ func setupExpertTestDB(t *testing.T) *gorm.DB {
 	}
 	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		dialogue_id TEXT, f_id INTEGER DEFAULT 0, server_id TEXT, bot_run_id TEXT,
+		dialogue_id TEXT, f_id INTEGER DEFAULT 0, server_id TEXT, bot_run_id TEXT, bot_projection_json TEXT, bot_report_revision INTEGER NOT NULL DEFAULT -1,
 		user_name TEXT, query TEXT, title_query TEXT, answer TEXT,
 		follow_up_questions TEXT, task_id TEXT, task_log TEXT, file_name TEXT,
 		upload_path TEXT, download_path TEXT, image_paths TEXT, compute_resource TEXT,
@@ -184,7 +184,7 @@ func expertRouteServer(t *testing.T, routeBody string) {
 // task id from task_ids, and surface the task id in the answer.
 func TestQuery_ExpertRunningArm(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"run-async","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-async-1"],"result":{}}`)
+	expertRouteServer(t, `{"id":"completion-async","run_id":"run-async","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-async-1"],"result":{}}`)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 	if err != nil {
@@ -213,7 +213,7 @@ func TestQuery_ExpertRunningArm(t *testing.T) {
 // persisted task_id is "" and the row strands RUNNING forever.
 func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"run-dedup","object":"agent.run","agent":"analyst","status":"running","task_ids":[],"result":{"dedup_hit":true,"task_id":"dedup-77"}}`)
+	expertRouteServer(t, `{"id":"completion-dedup","run_id":"run-dedup","object":"agent.run","agent":"analyst","status":"running","task_ids":[],"result":{"dedup_hit":true,"task_id":"dedup-77"}}`)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 	if err != nil {

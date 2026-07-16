@@ -209,6 +209,16 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		ctx.JSON(status, gin.H{"code": status, "message": msg})
 		return
 	}
+	// QueryData carries the Web request id for client correlation. The service
+	// normally derives it from Gin's context; keep the handler as the final
+	// boundary so custom service contexts cannot drop the id from the envelope.
+	if data.RequestID == "" {
+		if requestID, ok := ctx.Get("x-request-id"); ok {
+			if id, ok := requestID.(string); ok {
+				data.RequestID = strings.TrimSpace(id)
+			}
+		}
+	}
 	ctx.JSON(errs.SucResp(data))
 }
 

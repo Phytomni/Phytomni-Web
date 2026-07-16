@@ -11,6 +11,7 @@ import (
 	"time"
 
 	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
 	"phytomni-server/model"
 
 	"github.com/google/uuid"
@@ -72,6 +73,11 @@ type QueryData struct {
 	ComputeResource   string `json:"compute_resource"`
 	ReactionType      string `json:"reaction_type"`
 	DialogueId        string `json:"dialogue_id"`
+	BotRunID          string `json:"bot_run_id,omitempty"`
+	TaskId            string `json:"task_id,omitempty"`
+	TrackingDegraded  bool   `json:"tracking_degraded,omitempty"`
+	ReportRevision    int64  `json:"report_revision,omitempty"`
+	RequestID         string `json:"request_id,omitempty"`
 }
 
 // StreamIdentity is the Web-owned identity of a streamed assistant message.
@@ -101,6 +107,59 @@ var slugToToolName = map[string]string{
 // source of truth shared by the /query gateway gate and the UI pill flag.
 func (ps *Service) ExpertModeEnabled() bool {
 	return rxBot.BotConfig != nil && rxBot.BotConfig.ExpertEnabled
+}
+
+func requestIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if id, ok := ctx.Value("x-request-id").(string); ok {
+		return strings.TrimSpace(id)
+	}
+	return ""
+}
+
+func canonicalBotRunID(runID *string) string {
+	if runID == nil {
+		return ""
+	}
+	return strings.TrimSpace(*runID)
+}
+
+func responseReportRevision(values ...*int64) int64 {
+	for _, value := range values {
+		if value != nil && *value >= 0 {
+			return *value
+		}
+	}
+	return 0
+}
+
+func metadataReportRevision(raw json.RawMessage) *int64 {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil
+	}
+	var metadata struct {
+		ReportRevision *int64 `json:"report_revision"`
+	}
+	if err := json.Unmarshal(raw, &metadata); err != nil || metadata.ReportRevision == nil || *metadata.ReportRevision < 0 {
+		return nil
+	}
+	return metadata.ReportRevision
+}
+
+func formattedMetadata(formatted *rxBot.Formatted) json.RawMessage {
+	if formatted == nil {
+		return nil
+	}
+	return formatted.Metadata
+}
+
+func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
+	if strings.TrimSpace(meta.BotRequestID) == "" {
+		return
+	}
+	rxLog.SugarContext(ctx).Debugw("Bot response received", "bot_request_id", meta.BotRequestID)
 }
 
 // Query is the gateway orchestration: upload files to Bot, dispatch to the
@@ -158,22 +217,25 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		ReactionType: "0",
 		DialogueId:   dialogueID,
 		Status:       "SUCCEEDED",
+		RequestID:    requestIDFromContext(ctx),
 	}
 	var botRunID, serverID, taskID, logStatus string
 	if in.Mode == "expert" {
-		resp, err := client.RouteQuery(ctx, rxBot.RouteQueryRequest{
+		resp, meta, err := client.RouteQueryWithMeta(ctx, rxBot.RouteQueryRequest{
 			UserQuery:   in.Query,
 			History:     parseHistory(in.History),
 			OBSFileList: obsPaths,
 			DialogueID:  dialogueID,
 			ForcedTool:  nil,
 		})
+		logBotResponseMeta(ctx, meta)
 		if err != nil {
 			return nil, err
 		}
-		if resp.ID != nil {
-			botRunID = *resp.ID
-		}
+		botRunID = canonicalBotRunID(resp.RunID)
+		out.BotRunID = botRunID
+		out.TrackingDegraded = resp.DegradedTracking
+		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
 		// Reshape by the slug Bot's router CHOSE (never "expert"), so cited/table
 		// formatting survives and SyncBotRuns reconciles async runs by agent slug.
 		resolvedSlug := resp.Agent
@@ -204,7 +266,8 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if len(obsPaths) > 0 {
 			req.OBSFileList = obsPaths
 		}
-		resp, err := client.ChatCompletion(ctx, req)
+		resp, meta, err := client.ChatCompletionWithMeta(ctx, req)
+		logBotResponseMeta(ctx, meta)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +276,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// (knowledge/review become {content, doc_list}; chat stays plain).
 		out.Answer = rxBot.ShapeAnswer(slug, rxBot.ChatAnswerText(resp), &resp.Formatted)
 		out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
-		botRunID = resp.ID
+		botRunID = canonicalBotRunID(resp.RunID)
+		out.BotRunID = botRunID
+		out.TrackingDegraded = resp.DegradedTracking
+		out.ReportRevision = responseReportRevision(resp.ReportRevision, metadataReportRevision(resp.Formatted.Metadata))
 	} else {
 		// /v1/agents/{slug}/runs serves BOTH synchronous agents (data → 200,
 		// status="succeeded", answer already in result.formatted) AND remote
@@ -228,16 +294,18 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if err != nil {
 			return nil, err
 		}
-		resp, err := client.InvokeAgent(ctx, slug, rxBot.AgentRunRequest{
+		resp, meta, err := client.InvokeAgentWithMeta(ctx, slug, rxBot.AgentRunRequest{
 			Arguments:  args,
 			DialogueID: dialogueID,
 		})
+		logBotResponseMeta(ctx, meta)
 		if err != nil {
 			return nil, err
 		}
-		if resp.ID != nil {
-			botRunID = *resp.ID
-		}
+		botRunID = canonicalBotRunID(resp.RunID)
+		out.BotRunID = botRunID
+		out.TrackingDegraded = resp.DegradedTracking
+		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
 		if resp.Status == "succeeded" {
 			// Synchronous agent (e.g. data): the answer is already here.
 			if resp.Result.Formatted != nil {
@@ -263,6 +331,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			}
 		}
 	}
+
+	if out.Status == "RUNNING" && botRunID == "" {
+		// A child task id cannot be used as the Bot run join key. Refuse to
+		// persist an unpollable row even when a legacy response has task_ids.
+		return nil, ErrMissingBotRunID
+	}
+	out.TaskId = taskID
 
 	// 5. Persist the Web row (INSERT new, or UPDATE on refresh).
 	titleQuery := ""

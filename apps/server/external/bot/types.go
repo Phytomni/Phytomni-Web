@@ -43,6 +43,7 @@ type ChatCompletionResponse struct {
 	ID               string    `json:"id"`
 	RunID            *string   `json:"run_id"`
 	DegradedTracking bool      `json:"degraded_tracking,omitempty"`
+	ReportRevision   *int64    `json:"report_revision,omitempty"`
 	Object           string    `json:"object"`
 	Model            string    `json:"model"`
 	Choices          []Choice  `json:"choices"`
@@ -59,9 +60,10 @@ type AgentRunRequest struct {
 // AgentRunResult carries either a finished formatted payload (sync agents) or
 // a dedup-hit marker (analyst re-submit of an identical input fingerprint).
 type AgentRunResult struct {
-	Formatted *Formatted `json:"formatted,omitempty"`
-	DedupHit  bool       `json:"dedup_hit,omitempty"`
-	TaskID    string     `json:"task_id,omitempty"`
+	Formatted      *Formatted `json:"formatted,omitempty"`
+	DedupHit       bool       `json:"dedup_hit,omitempty"`
+	TaskID         string     `json:"task_id,omitempty"`
+	ReportRevision *int64     `json:"report_revision,omitempty"`
 }
 
 // AgentRunResponse covers both the 200 sync shape (status=succeeded) and the
@@ -71,6 +73,7 @@ type AgentRunResponse struct {
 	ID               *string            `json:"id"`
 	RunID            *string            `json:"run_id"`
 	DegradedTracking bool               `json:"degraded_tracking,omitempty"`
+	ReportRevision   *int64             `json:"report_revision,omitempty"`
 	Interrupt        *AgentRunInterrupt `json:"interrupt,omitempty"`
 	Object           string             `json:"object"`
 	Agent            string             `json:"agent"`
