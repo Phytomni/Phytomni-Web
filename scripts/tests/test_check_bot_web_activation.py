@@ -196,6 +196,75 @@ def test_checker_rejects_out_of_scope_matrix_symlink(tmp_path: Path) -> None:
         outside.unlink(missing_ok=True)
 
 
+def test_cli_rejects_reversed_matrix_markers_without_traceback(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        checker.MATRIX_REL.as_posix(),
+        f"{checker.MATRIX_JSON_END}\n{checker.MATRIX_JSON_START}\n{{}}",
+    )
+    for relative, content in checker.DEFAULT_CHECK_FILES.items():
+        write(tmp_path, relative.as_posix(), content)
+
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        assert checker.main(["--root", str(tmp_path)]) != 0
+    text = output.getvalue()
+    assert text.startswith(f"{checker.FAIL_LINE}\n")
+    assert "Traceback" not in text
+    assert all(len(line) <= checker.MAX_FAILURE_LENGTH for line in text.splitlines())
+
+
+def test_checker_rejects_root_symlink_into_forbidden_checkout(tmp_path: Path) -> None:
+    target = tmp_path / "Phytomni-Bot"
+    minimal_tree(target)
+    alias = tmp_path / "web-alias"
+    alias.symlink_to(target, target_is_directory=True)
+
+    errors = checker.check(alias)
+    assert errors == ["refusing to read out-of-scope activation root"]
+
+
+def test_history_default_check_ignores_comments_and_dead_markers() -> None:
+    source = dict(checker.DEFAULT_CHECK_FILES)
+    source[Path("apps/server/service/api_service/bot_capabilities.go")] = """
+func HistoryReadModeFromConfig() HistoryReadMode {
+    // if viper.GetBool("bot.history_dual_read") {
+    //     return HistoryReadModeDual
+    // }
+    if false {
+        return HistoryReadModeLegacy
+    }
+    return HistoryReadModeDual
+}
+"""
+
+    violations: list[str] = []
+    checker._check_defaults(source, violations)
+    assert "history_dual_read default must remain legacy/off" in violations
+
+
+def test_default_check_rejects_duplicate_yaml_and_web_defaults() -> None:
+    source = dict(checker.DEFAULT_CHECK_FILES)
+    source[Path("apps/server/config/app.yml.example")] = """
+bot:
+  expert_enabled: false
+  expert_enabled: true
+  stream_enabled: false
+  a2ui_actions_enabled: false
+"""
+    source[Path("apps/web/src/stores/user.ts")] = """
+const state = {
+  expertEnabled: false,
+  expertEnabled: true,
+}
+"""
+
+    violations: list[str] = []
+    checker._check_defaults(source, violations)
+    assert "expert_enabled default must be false" in violations
+    assert "Web expertEnabled default must be false" in violations
+
+
 def test_requested_unknown_flag_is_rejected_without_echoing_value() -> None:
     errors = checker.activation_errors({}, requested_flags={"private_payload": True})
     assert errors == ["unknown feature flag"]

@@ -176,6 +176,6 @@ reviewed:
 | RC-LIVE-001 | Authorized live end-to-end run | External Pending |
 
 No row above is marked passed by this document. Feature gates remain dark by
-default (`expert_enabled`, `stream_enabled`, and `a2ui_actions_enabled` are
-false), and no Bot, operations, deployment, or live configuration change is
-part of this Web reference.
+default (`expert_enabled`, `stream_enabled`, `a2ui_actions_enabled`, and
+`history_dual_read` are false/off), and no Bot, operations, deployment, or
+live configuration change is part of this Web reference.

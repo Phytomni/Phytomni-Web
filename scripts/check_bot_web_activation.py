@@ -97,10 +97,16 @@ _MATRIX_FIELDS = {"schema_version", "feature_flags", "rows", "rollback"}
 _ROW_FIELDS = {"id", "status", "fixture_id", "fixture_sha256"}
 _SAFE_FIXTURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-_EXPERT_DEFAULT_RE = re.compile(r"(?m)^\s*expertEnabled\s*:\s*false\b")
+_EXPERT_DEFAULT_RE = re.compile(
+    r"(?m)^[ \t]*expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
+)
 _CONFIG_FLAG_RE = re.compile(
-    r"(?m)^\s*(?P<key>expert_enabled|stream_enabled|a2ui_actions_enabled)"
-    r"\s*:\s*(?P<value>true|false)\b"
+    r"(?m)^[ \t]*(?P<key>expert_enabled|stream_enabled|a2ui_actions_enabled)"
+    r"[ \t]*:[ \t]*(?P<value>true|false)\b"
+)
+_HISTORY_FUNCTION_RE = re.compile(
+    r"(?m)^\s*func\s+HistoryReadModeFromConfig\s*\([^)]*\)"
+    r"\s*HistoryReadMode\s*\{"
 )
 
 _FORBIDDEN_PARTS = frozenset(
@@ -114,23 +120,28 @@ _FORBIDDEN_PARTS = frozenset(
 )
 
 
-def _within(path: Path, root: Path) -> bool:
+def _has_forbidden_part(path: Path) -> bool:
+    return any(part.casefold() in _FORBIDDEN_PARTS for part in path.parts)
+
+
+def _resolve(path: Path) -> Path | None:
     try:
-        path.resolve().relative_to(root.resolve())
-    except ValueError:
-        return False
-    return True
+        return path.resolve()
+    except (OSError, RuntimeError):
+        return None
 
 
 def _safe_relative_path(root: Path, relative: Path) -> Path | None:
     candidate = root / relative
-    if not _within(candidate, root):
+    resolved_root = _resolve(root)
+    resolved_candidate = _resolve(candidate)
+    if resolved_root is None or resolved_candidate is None:
         return None
     try:
-        parts = candidate.resolve().relative_to(root.resolve()).parts
+        resolved_candidate.relative_to(resolved_root)
     except ValueError:
         return None
-    if any(part.casefold() in _FORBIDDEN_PARTS for part in parts):
+    if _has_forbidden_part(resolved_candidate):
         return None
     return candidate
 
@@ -160,10 +171,12 @@ def _extract_json_block(text: str) -> str | None:
 
     if text.count(MATRIX_JSON_START) != 1 or text.count(MATRIX_JSON_END) != 1:
         return None
-    start = text.index(MATRIX_JSON_START) + len(MATRIX_JSON_START)
-    end = text.index(MATRIX_JSON_END, start)
-    if end < start:
+    marker_start = text.find(MATRIX_JSON_START)
+    marker_end = text.find(MATRIX_JSON_END)
+    if marker_start < 0 or marker_end < 0 or marker_end <= marker_start:
         return None
+    start = marker_start + len(MATRIX_JSON_START)
+    end = marker_end
     block = text[start:end].strip()
     if block.startswith("```json") and block.endswith("```"):
         block = block[len("```json") : -len("```")].strip()
@@ -178,7 +191,7 @@ def parse_matrix(text: str) -> Any | None:
         return None
     try:
         return json.loads(block)
-    except json.JSONDecodeError:
+    except (TypeError, ValueError):
         return None
 
 
@@ -302,18 +315,100 @@ def validate_rows(rows: Any) -> list[str]:
     return errors
 
 
+def _strip_go_comments(text: str) -> str:
+    """Remove Go comments while preserving strings and line structure."""
+
+    output: list[str] = []
+    state = "code"
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if state == "code":
+            if text.startswith("//", index):
+                output.append(" ")
+                index += 2
+                while index < len(text) and text[index] != "\n":
+                    index += 1
+                continue
+            if text.startswith("/*", index):
+                output.append(" ")
+                index += 2
+                while index < len(text):
+                    if text.startswith("*/", index):
+                        index += 2
+                        break
+                    if text[index] == "\n":
+                        output.append("\n")
+                    index += 1
+                continue
+            output.append(char)
+            if char in {'"', "'", "`"}:
+                state = char
+            index += 1
+            continue
+
+        output.append(char)
+        if char == "\\" and state in {'"', "'"} and index + 1 < len(text):
+            output.append(text[index + 1])
+            index += 2
+            continue
+        if char == state:
+            state = "code"
+        index += 1
+    return "".join(output)
+
+
+def _history_function_body(source: str) -> str | None:
+    source = _strip_go_comments(source)
+    matches = list(_HISTORY_FUNCTION_RE.finditer(source))
+    if len(matches) != 1:
+        return None
+    opening = matches[0].end() - 1
+    depth = 0
+    state = "code"
+    index = opening
+    while index < len(source):
+        char = source[index]
+        if state == "code":
+            if char in {'"', "'", "`"}:
+                state = char
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return source[opening + 1 : index]
+        else:
+            if char == "\\" and state in {'"', "'"}:
+                index += 1
+            elif char == state:
+                state = "code"
+        index += 1
+    return None
+
+
+def _history_default_is_legacy(source: str) -> bool:
+    body = _history_function_body(source)
+    if body is None:
+        return False
+    normalized = re.sub(r"\s+", " ", body).strip()
+    return normalized == (
+        'if viper.GetBool("bot.history_dual_read") { '
+        "return HistoryReadModeDual } return HistoryReadModeLegacy"
+    )
+
+
 def _check_defaults(source: Mapping[Path, str], violations: list[str]) -> None:
     config = source.get(Path("apps/server/config/app.yml.example"), "")
-    matches = {
-        match.group("key"): match.group("value")
-        for match in _CONFIG_FLAG_RE.finditer(config)
-    }
+    matches = list(_CONFIG_FLAG_RE.finditer(config))
     for key in ("expert_enabled", "stream_enabled", "a2ui_actions_enabled"):
-        if matches.get(key) != "false":
+        key_matches = [match for match in matches if match.group("key") == key]
+        if len(key_matches) != 1 or key_matches[0].group("value") != "false":
             violations.append(f"{key} default must be false")
 
     user_store = source.get(Path("apps/web/src/stores/user.ts"), "")
-    if _EXPERT_DEFAULT_RE.search(user_store) is None:
+    expert_matches = list(_EXPERT_DEFAULT_RE.finditer(user_store))
+    if len(expert_matches) != 1 or expert_matches[0].group("value") != "false":
         violations.append("Web expertEnabled default must be false")
 
     stream_source = source.get(
@@ -332,11 +427,7 @@ def _check_defaults(source: Mapping[Path, str], violations: list[str]) -> None:
     history_source = source.get(
         Path("apps/server/service/api_service/bot_capabilities.go"), ""
     )
-    if (
-        "HistoryReadModeFromConfig" not in history_source
-        or 'viper.GetBool("bot.history_dual_read")' not in history_source
-        or "return HistoryReadModeLegacy" not in history_source
-    ):
+    if not _history_default_is_legacy(history_source):
         violations.append("history_dual_read default must remain legacy/off")
 
 
@@ -395,9 +486,11 @@ def check(root: Path) -> list[str]:
     """Return deterministic, bounded activation violations for ``root``."""
 
     requested_root = Path(root)
-    if any(part.casefold() in _FORBIDDEN_PARTS for part in requested_root.parts):
+    if _has_forbidden_part(requested_root):
         return ["refusing to read out-of-scope activation root"]
-    root = requested_root.resolve()
+    root = _resolve(requested_root)
+    if root is None or _has_forbidden_part(root):
+        return ["refusing to read out-of-scope activation root"]
     violations: list[str] = []
     matrix_text = _read_text(root, MATRIX_REL, violations)
     if matrix_text is None:
