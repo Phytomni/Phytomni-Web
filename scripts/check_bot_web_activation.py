@@ -2,9 +2,9 @@
 """Check the local, fail-closed Bot/Web activation evidence matrix.
 
 The checker is intentionally offline.  It reads one sanitized JSON block from
-the versioned Web matrix and a fixed set of Web-owned default sources.  It does
-not inspect a sibling checkout, handoff/evidence trees, fixture payloads, or
-live endpoints.
+the versioned Web matrix, a fixed set of Web-owned default sources, and the
+small RC-WEB-004 terminal fixture metadata needed for local readiness.  It does
+not inspect a sibling checkout, handoff/evidence trees, or live endpoints.
 """
 
 from __future__ import annotations
@@ -88,6 +88,32 @@ DEFAULT_CHECK_FILES: dict[Path, str] = {
     ),
 }
 
+PRODUCT_FIXTURE_IDS = (
+    "rc-web-004-research-terminal",
+    "rc-web-004-design-terminal",
+    "rc-web-004-network-terminal",
+)
+PRODUCT_FIXTURE_PATHS: dict[str, Path] = {
+    "rc-web-004-research-terminal": Path(
+        "apps/server/external/bot/testdata/head/research_terminal.json"
+    ),
+    "rc-web-004-design-terminal": Path(
+        "apps/server/external/bot/testdata/head/design_terminal.json"
+    ),
+    "rc-web-004-network-terminal": Path(
+        "apps/server/external/bot/testdata/head/network_terminal.json"
+    ),
+}
+PRODUCT_FIXTURE_AGENTS = {
+    "rc-web-004-research-terminal": "research",
+    "rc-web-004-design-terminal": "design",
+    "rc-web-004-network-terminal": "network",
+}
+SHARED_REPORT_SURFACE_TEST = Path(
+    "apps/web/tests/component/BotRemoteAgentSurfaces.spec.ts"
+)
+SHARED_REPORT_SURFACE_MARKER = '"renders one shared report contract for %s"'
+
 PASS_LINE = "Bot/Web activation evidence: PASS"
 FAIL_LINE = "Bot/Web activation evidence: FAIL"
 MAX_FAILURE_LINES = 32
@@ -95,8 +121,16 @@ MAX_FAILURE_LENGTH = 240
 MAX_MATRIX_JSON_BYTES = 256 * 1024
 MAX_MATRIX_JSON_DEPTH = 256
 
-_MATRIX_FIELDS = {"schema_version", "feature_flags", "rows", "rollback"}
+_MATRIX_FIELDS = {
+    "schema_version",
+    "feature_flags",
+    "rows",
+    "rollback",
+    "local_readiness",
+}
 _ROW_FIELDS = {"id", "status", "fixture_id", "fixture_sha256"}
+_LOCAL_READINESS_FIELDS = {"rc_web_004"}
+_RC_WEB_004_READINESS_FIELDS = {"fixture_ids", "shared_report_surface_test"}
 _SAFE_FIXTURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _EXPERT_DEFAULT_RE = re.compile(
@@ -123,6 +157,30 @@ _FORBIDDEN_PARTS = frozenset(
         "ops",
         "operations",
         "phytomni-bot",
+    }
+)
+
+_FORBIDDEN_FIXTURE_FIELDS = frozenset(
+    {
+        "created_at",
+        "dialogue_id",
+        "error",
+        "expires_at",
+        "model",
+        "origin",
+        "payload",
+        "private",
+        "private_payload",
+        "query",
+        "raw",
+        "raw_payload",
+        "request_id",
+        "stack_trace",
+        "task_id",
+        "task_ids",
+        "traceback",
+        "updated_at",
+        "user_id",
     }
 )
 
@@ -347,6 +405,142 @@ def validate_rows(rows: Any) -> list[str]:
     if set(ROW_IDS) - seen:
         errors.append("matrix rows are missing required acceptance rows")
     return errors
+
+
+def validate_local_readiness(value: Any) -> list[str]:
+    """Validate the local-only RC-WEB-004 evidence references."""
+
+    if not isinstance(value, dict):
+        return ["local readiness must be an object"]
+    errors: list[str] = []
+    if set(value) != _LOCAL_READINESS_FIELDS:
+        errors.append("local readiness must contain only RC-WEB-004")
+    entry = value.get("rc_web_004")
+    if not isinstance(entry, dict):
+        return [*errors, "RC-WEB-004 local readiness must be an object"]
+    if set(entry) != _RC_WEB_004_READINESS_FIELDS:
+        errors.append("RC-WEB-004 local readiness fields are unsupported")
+
+    fixture_ids = entry.get("fixture_ids")
+    if not isinstance(fixture_ids, list) or any(
+        not isinstance(item, str) or not _SAFE_FIXTURE_ID_RE.fullmatch(item)
+        for item in fixture_ids
+    ):
+        errors.append("RC-WEB-004 local fixture ids must be bounded metadata")
+    elif len(fixture_ids) != len(PRODUCT_FIXTURE_IDS) or len(set(fixture_ids)) != len(fixture_ids):
+        errors.append("RC-WEB-004 requires three distinct product fixture ids")
+    elif set(fixture_ids) != set(PRODUCT_FIXTURE_IDS):
+        errors.append("RC-WEB-004 product fixture ids are incomplete")
+
+    shared_test = entry.get("shared_report_surface_test")
+    if shared_test != SHARED_REPORT_SURFACE_TEST.as_posix():
+        errors.append("RC-WEB-004 shared report-surface test is not the Web contract test")
+    return errors
+
+
+def _fixture_field_names(value: Any, depth: int = 0) -> set[str]:
+    """Collect bounded JSON object keys without retaining fixture values."""
+
+    if depth > 32:
+        return {"__depth_limit__"}
+    if isinstance(value, dict):
+        names: set[str] = set()
+        for key, child in value.items():
+            if isinstance(key, str):
+                names.add(key)
+            names.update(_fixture_field_names(child, depth + 1))
+        return names
+    if isinstance(value, list):
+        names: set[str] = set()
+        for child in value:
+            names.update(_fixture_field_names(child, depth + 1))
+        return names
+    return set()
+
+
+def _load_fixture_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
+    text = _read_text(root, relative, violations)
+    if text is None:
+        return None
+    try:
+        return json.loads(text)
+    except (RecursionError, TypeError, ValueError):
+        violations.append("RC-WEB-004 product fixture JSON is malformed")
+        return None
+
+
+def _check_product_fixture(root: Path, fixture_id: str, violations: list[str]) -> None:
+    payload = _load_fixture_json(root, PRODUCT_FIXTURE_PATHS[fixture_id], violations)
+    if not isinstance(payload, dict):
+        if payload is not None:
+            violations.append("RC-WEB-004 product fixture must be an object")
+        return
+
+    if payload.get("fixture_id") != fixture_id:
+        violations.append("RC-WEB-004 product fixture id does not match its allowlist")
+    if payload.get("agent") != PRODUCT_FIXTURE_AGENTS[fixture_id]:
+        violations.append("RC-WEB-004 product fixture agent slug is not canonical")
+    if _fixture_field_names(payload) & _FORBIDDEN_FIXTURE_FIELDS:
+        violations.append("RC-WEB-004 product fixture contains raw or private fields")
+
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        violations.append("RC-WEB-004 product fixture result must be an object")
+        return
+    final_report = result.get("final_report")
+    formatted = result.get("formatted")
+    formatted_answer = formatted.get("answer") if isinstance(formatted, dict) else ""
+    if not (
+        isinstance(final_report, str)
+        and final_report.strip()
+        or isinstance(formatted_answer, str)
+        and formatted_answer.strip()
+    ):
+        violations.append("RC-WEB-004 product fixture needs a final report or formatted answer")
+
+    artifacts = result.get("artifacts")
+    if not isinstance(artifacts, list):
+        violations.append("RC-WEB-004 product fixture artifacts must be an explicit list")
+        return
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            violations.append("RC-WEB-004 product fixture artifact must be an object")
+            continue
+        if not isinstance(artifact.get("output_dir"), str):
+            violations.append("RC-WEB-004 product fixture artifact directory is missing")
+        paths = artifact.get("paths")
+        if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
+            violations.append("RC-WEB-004 product fixture artifact paths must be a list")
+
+
+def _check_rc_web_004_local_readiness(
+    root: Path, readiness: Any, rows: Any, violations: list[str]
+) -> None:
+    if not isinstance(readiness, dict):
+        return
+    entry = readiness.get("rc_web_004")
+    if not isinstance(entry, dict):
+        return
+    fixture_ids = entry.get("fixture_ids")
+    if isinstance(fixture_ids, list) and set(fixture_ids) == set(PRODUCT_FIXTURE_IDS):
+        for fixture_id in PRODUCT_FIXTURE_IDS:
+            _check_product_fixture(root, fixture_id, violations)
+
+    if entry.get("shared_report_surface_test") == SHARED_REPORT_SURFACE_TEST.as_posix():
+        source = _read_text(root, SHARED_REPORT_SURFACE_TEST, violations)
+        if source is not None:
+            if SHARED_REPORT_SURFACE_MARKER not in source:
+                violations.append("RC-WEB-004 shared report-surface test is missing")
+            for fixture_id in PRODUCT_FIXTURE_IDS:
+                if fixture_id not in source:
+                    violations.append("RC-WEB-004 shared report-surface test lacks product fixture coverage")
+
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict) and row.get("id") == "RC-WEB-004":
+                if row.get("status") != "External Pending":
+                    violations.append("RC-WEB-004 external status must remain External Pending")
+                break
 
 
 def _mask_javascript_non_code(text: str) -> str:
@@ -654,6 +848,9 @@ def validate_matrix(value: Any) -> list[str]:
     rows = value.get("rows")
     errors.extend(validate_rows(rows))
 
+    local_readiness = value.get("local_readiness")
+    errors.extend(validate_local_readiness(local_readiness))
+
     rollback = value.get("rollback")
     if not isinstance(rollback, list) or any(not isinstance(item, str) for item in rollback):
         errors.append("activation matrix rollback markers must be a list")
@@ -696,6 +893,13 @@ def check(root: Path) -> list[str]:
         violations.append("activation matrix JSON block is missing or malformed")
     else:
         violations.extend(validate_matrix(matrix_value))
+
+    _check_rc_web_004_local_readiness(
+        root,
+        matrix_value.get("local_readiness") if isinstance(matrix_value, dict) else None,
+        matrix_value.get("rows") if isinstance(matrix_value, dict) else None,
+        violations,
+    )
 
     source: dict[Path, str] = {}
     for relative in DEFAULT_CHECK_FILES:

@@ -1,0 +1,22 @@
+{
+  "fixture_id": "rc-web-004-research-terminal",
+  "run_id": "run-rc-web-004-research-1",
+  "agent": "research",
+  "status": "succeeded",
+  "result": {
+    "report_stage": "final",
+    "report_completeness": "complete",
+    "report_revision": 1,
+    "report_updated_at": "2026-07-18T00:00:00Z",
+    "final_report": "# Research terminal report",
+    "artifacts": [
+      {
+        "output_dir": "obs://synthetic-bucket/rc-web-004/research",
+        "paths": [
+          "obs://synthetic-bucket/rc-web-004/research/report.md",
+          "obs://synthetic-bucket/rc-web-004/research/evidence.tsv"
+        ]
+      }
+    ]
+  }
+}

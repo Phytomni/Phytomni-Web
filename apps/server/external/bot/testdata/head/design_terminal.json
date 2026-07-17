@@ -1,0 +1,16 @@
+{
+  "fixture_id": "rc-web-004-design-terminal",
+  "run_id": "run-rc-web-004-design-1",
+  "agent": "design",
+  "status": "succeeded",
+  "result": {
+    "report_stage": "final",
+    "report_completeness": "complete",
+    "report_revision": 1,
+    "report_updated_at": "2026-07-18T00:01:00Z",
+    "formatted": {
+      "answer": "# Design terminal answer"
+    },
+    "artifacts": []
+  }
+}

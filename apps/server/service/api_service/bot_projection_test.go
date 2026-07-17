@@ -261,6 +261,140 @@ func TestDecodeRunProjectionSubmissionDegradedTrackingIsExplicit(t *testing.T) {
 	}
 }
 
+func TestDecodeResearchDesignNetworkTerminalArtifacts(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name          string
+		fixture       string
+		wantFixtureID string
+		wantAgent     string
+		wantReport    string
+		wantArtifacts int
+		wantPaths     int
+	}{
+		{
+			name:          "research report and artifacts",
+			fixture:       "research_terminal.json",
+			wantFixtureID: "rc-web-004-research-terminal",
+			wantAgent:     "research",
+			wantReport:    "# Research terminal report",
+			wantArtifacts: 1,
+			wantPaths:     2,
+		},
+		{
+			name:          "design formatted answer and empty artifacts",
+			fixture:       "design_terminal.json",
+			wantFixtureID: "rc-web-004-design-terminal",
+			wantAgent:     "design",
+			wantReport:    "# Design terminal answer",
+			wantArtifacts: 0,
+			wantPaths:     0,
+		},
+		{
+			name:          "network report and empty artifact paths",
+			fixture:       "network_terminal.json",
+			wantFixtureID: "rc-web-004-network-terminal",
+			wantAgent:     "network",
+			wantReport:    "# Network terminal report",
+			wantArtifacts: 1,
+			wantPaths:     0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var raw map[string]interface{}
+			decodeFixtureForProjectionTest(t, tc.fixture, &raw)
+			assertSanitizedTerminalFixture(t, raw, tc.wantFixtureID, tc.wantAgent)
+
+			record := loadRunRecordFixture(t, tc.fixture)
+			if record.Agent != tc.wantAgent {
+				t.Fatalf("agent=%q want %q", record.Agent, tc.wantAgent)
+			}
+			if _, ok := rxBot.CanonicalAgentTool[record.Agent]; !ok {
+				t.Fatalf("agent=%q is not a canonical Bot slug", record.Agent)
+			}
+
+			var envelope struct {
+				FinalReport string `json:"final_report"`
+				Formatted   *struct {
+					Answer string `json:"answer"`
+				} `json:"formatted"`
+				Artifacts []struct {
+					OutputDir string   `json:"output_dir"`
+					Paths     []string `json:"paths"`
+				} `json:"artifacts"`
+			}
+			if err := json.Unmarshal(record.Result, &envelope); err != nil {
+				t.Fatalf("decode result envelope: %v", err)
+			}
+			if strings.TrimSpace(envelope.FinalReport) == "" &&
+				(envelope.Formatted == nil || strings.TrimSpace(envelope.Formatted.Answer) == "") {
+				t.Fatal("terminal fixture has neither a final report nor formatted answer")
+			}
+			if len(envelope.Artifacts) != tc.wantArtifacts {
+				t.Fatalf("artifact entries=%d want %d", len(envelope.Artifacts), tc.wantArtifacts)
+			}
+			pathCount := 0
+			for _, artifact := range envelope.Artifacts {
+				if artifact.OutputDir == "" && len(artifact.Paths) > 0 {
+					t.Fatal("artifact paths must not exist without an output directory")
+				}
+				pathCount += len(artifact.Paths)
+			}
+			if pathCount != tc.wantPaths {
+				t.Fatalf("artifact paths=%d want %d", pathCount, tc.wantPaths)
+			}
+
+			projection, err := DecodeRunProjection(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if projection.Agent != tc.wantAgent || projection.VisibleReport() != tc.wantReport {
+				t.Fatalf("projection agent/report=%q/%q", projection.Agent, projection.VisibleReport())
+			}
+			if len(projection.Artifacts.Paths) != tc.wantPaths {
+				t.Fatalf("projection paths=%d want %d", len(projection.Artifacts.Paths), tc.wantPaths)
+			}
+		})
+	}
+}
+
+func assertSanitizedTerminalFixture(t *testing.T, payload map[string]interface{}, fixtureID, agent string) {
+	t.Helper()
+	if payload["fixture_id"] != fixtureID {
+		t.Fatalf("fixture_id=%v want %q", payload["fixture_id"], fixtureID)
+	}
+	if payload["agent"] != agent {
+		t.Fatalf("agent=%v want %q", payload["agent"], agent)
+	}
+	forbidden := map[string]struct{}{
+		"created_at": {}, "dialogue_id": {}, "error": {}, "expires_at": {},
+		"model": {}, "origin": {}, "payload": {}, "private": {},
+		"private_payload": {}, "query": {}, "raw": {}, "raw_payload": {},
+		"request_id": {}, "stack_trace": {}, "task_id": {}, "task_ids": {},
+		"traceback": {}, "updated_at": {}, "user_id": {},
+	}
+	var visit func(interface{})
+	visit = func(value interface{}) {
+		switch current := value.(type) {
+		case map[string]interface{}:
+			for key, child := range current {
+				if _, blocked := forbidden[key]; blocked {
+					t.Fatalf("fixture contains raw/private field %q", key)
+				}
+				visit(child)
+			}
+		case []interface{}:
+			for _, child := range current {
+				visit(child)
+			}
+		}
+	}
+	visit(payload)
+}
+
 func decodeFixtureForProjectionTest(t *testing.T, name string, out interface{}) {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)
