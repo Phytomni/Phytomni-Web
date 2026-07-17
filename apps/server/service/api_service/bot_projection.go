@@ -1,6 +1,7 @@
 package api_service
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -23,6 +24,8 @@ const (
 	maxInteropTargetID          = 64
 	maxInteropKind              = 8
 	maxInteropCode              = 32
+	maxInteropMetadataBytes     = 64 << 10
+	maxInteropMetadataEntries   = 16
 )
 
 var interopProjectionTargetPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
@@ -173,7 +176,7 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	if err != nil {
 		return BotRunProjection{}, err
 	}
-	projection, err := buildProjectionFromEnvelope(runID, agent, status, record.Answer, envelope)
+	projection, err := buildProjectionFromEnvelope(runID, agent, status, record.Answer, envelope, len(record.TaskIDs) == 0)
 	if err != nil {
 		return BotRunProjection{}, err
 	}
@@ -189,6 +192,17 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 	if err != nil {
 		return BotRunProjection{}, err
 	}
+	interopMetadata, err := decodeFormattedInteropMetadata(formattedMetadata(response.Result.Formatted))
+	if err != nil {
+		return BotRunProjection{}, err
+	}
+	if interopMetadata.failed(len(response.TaskIDs) == 0) {
+		// Bot can return a transport-level running envelope while a required
+		// interop plan has already failed. Treat the bounded metadata outcome as
+		// terminal so the Web layer never persists an unpollable pseudo-running
+		// row.
+		status = "FAILED"
+	}
 
 	runID := ""
 	if response.RunID != nil {
@@ -197,7 +211,7 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 			return BotRunProjection{}, err
 		}
 	}
-	if runID == "" && !response.DegradedTracking {
+	if runID == "" && !response.DegradedTracking && status != "FAILED" {
 		return BotRunProjection{}, projectionDecodeError("run_id", "missing umbrella run id")
 	}
 
@@ -207,6 +221,8 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		Status:           status,
 		ReportRevision:   -1,
 		TrackingDegraded: response.DegradedTracking,
+		DegradedInterop:  interopMetadata.DegradedInterop,
+		InterOp:          interopMetadata.projection(),
 	}
 	if response.Result.Formatted != nil {
 		answer, err := boundProjectionText(response.Result.Formatted.Answer, rxBot.MaxProjectionReportLength, "formatted.answer")
@@ -235,6 +251,208 @@ type projectionEnvelope struct {
 	DegradedInterop    bool            `json:"degraded_interop"`
 }
 
+// botInteropMetadata is the small, safe subset of Bot's formatted metadata
+// that Web may retain. Capability labels, latency, task/context ids, peer
+// payloads, endpoints, and credentials are intentionally not represented.
+type botInteropMetadata struct {
+	Status          string
+	DegradedInterop bool
+	Entries         []botInteropEntry
+}
+
+type botInteropEntry struct {
+	TargetID string
+	Kind     string
+	Status   string
+	Code     string
+}
+
+type botInteropMetadataEnvelope struct {
+	Status          string          `json:"status"`
+	Interop         json.RawMessage `json:"interop"`
+	DegradedInterop bool            `json:"degraded_interop"`
+}
+
+type botInteropMetadataEntry struct {
+	TargetID string `json:"target_id"`
+	Kind     string `json:"kind"`
+	Status   string `json:"status"`
+	Code     string `json:"code"`
+}
+
+// decodeFormattedInteropMetadata decodes Bot's nested
+// result.formatted.metadata object. The raw field is capped before decoding,
+// and only the bounded target/kind/status/code labels are copied into the
+// Web-owned projection.
+func decodeFormattedInteropMetadata(raw json.RawMessage) (botInteropMetadata, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return botInteropMetadata{}, nil
+	}
+	if len([]byte(trimmed)) > maxInteropMetadataBytes {
+		return botInteropMetadata{}, projectionDecodeError("formatted.metadata", "value is overlong")
+	}
+	// Callers may provide either formatted itself or its metadata member. Pull
+	// the nested member when present, while retaining support for a direct
+	// metadata object in response paths.
+	var formatted struct {
+		Metadata json.RawMessage `json:"metadata"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &formatted); err != nil {
+		return botInteropMetadata{}, projectionDecodeError("formatted.metadata", "malformed metadata")
+	}
+	if len(bytes.TrimSpace(formatted.Metadata)) > 0 && !bytes.Equal(bytes.TrimSpace(formatted.Metadata), []byte("null")) {
+		trimmed = string(bytes.TrimSpace(formatted.Metadata))
+		if len([]byte(trimmed)) > maxInteropMetadataBytes {
+			return botInteropMetadata{}, projectionDecodeError("formatted.metadata", "value is overlong")
+		}
+	}
+	var envelope botInteropMetadataEnvelope
+	if err := json.Unmarshal([]byte(trimmed), &envelope); err != nil {
+		return botInteropMetadata{}, projectionDecodeError("formatted.metadata", "malformed metadata")
+	}
+	metadata := botInteropMetadata{
+		Status:          strings.ToUpper(strings.TrimSpace(envelope.Status)),
+		DegradedInterop: envelope.DegradedInterop,
+	}
+	if metadata.Status != "" {
+		switch metadata.Status {
+		case "SUCCESS", "SUCCEEDED", "PARTIAL", "FAILED", "PENDING", "RUNNING", "INPUT_REQUIRED":
+		default:
+			// Universal metadata is advisory for non-interop agents. Ignore
+			// an unknown provider status rather than rejecting an otherwise
+			// valid projection; only the explicit FAILED value is terminal.
+			metadata.Status = ""
+		}
+	}
+	if len(bytes.TrimSpace(envelope.Interop)) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Interop), []byte("null")) {
+		return metadata, nil
+	}
+	var entries []botInteropMetadataEntry
+	if err := json.Unmarshal(envelope.Interop, &entries); err != nil {
+		return botInteropMetadata{}, projectionDecodeError("formatted.metadata.interop", "must be an array")
+	}
+	if len(entries) > maxInteropMetadataEntries {
+		return botInteropMetadata{}, projectionDecodeError("formatted.metadata.interop", "too many entries")
+	}
+	metadata.Entries = make([]botInteropEntry, 0, len(entries))
+	for index, entry := range entries {
+		targetID := strings.TrimSpace(entry.TargetID)
+		kind := strings.TrimSpace(entry.Kind)
+		status := strings.ToLower(strings.TrimSpace(entry.Status))
+		code := strings.TrimSpace(entry.Code)
+		if targetID == "" || len([]rune(targetID)) > maxInteropTargetID || !interopProjectionTargetPattern.MatchString(targetID) {
+			return botInteropMetadata{}, projectionDecodeError(fmt.Sprintf("formatted.metadata.interop[%d].target_id", index), "malformed target id")
+		}
+		if kind != "mcp" && kind != "a2a" {
+			return botInteropMetadata{}, projectionDecodeError(fmt.Sprintf("formatted.metadata.interop[%d].kind", index), "unsupported kind")
+		}
+		switch status {
+		case "completed", "input_required", "degraded", "failed":
+		default:
+			return botInteropMetadata{}, projectionDecodeError(fmt.Sprintf("formatted.metadata.interop[%d].status", index), "unsupported status")
+		}
+		if len([]rune(code)) > maxInteropCode {
+			return botInteropMetadata{}, projectionDecodeError(fmt.Sprintf("formatted.metadata.interop[%d].code", index), "malformed code")
+		}
+		if code != "" && !validInteropProjectionCode(code) {
+			return botInteropMetadata{}, projectionDecodeError(fmt.Sprintf("formatted.metadata.interop[%d].code", index), "unsupported code")
+		}
+		metadata.Entries = append(metadata.Entries, botInteropEntry{
+			TargetID: targetID,
+			Kind:     kind,
+			Status:   status,
+			Code:     code,
+		})
+	}
+	return metadata, nil
+}
+
+func (metadata botInteropMetadata) failed(noTaskIDs bool) bool {
+	if metadata.Status == "FAILED" {
+		return true
+	}
+	if !noTaskIDs {
+		return false
+	}
+	for _, entry := range metadata.Entries {
+		if entry.Status == "failed" {
+			return true
+		}
+	}
+	return false
+}
+
+func (metadata botInteropMetadata) projection() *InteropProvenance {
+	// Prefer an explicit failure over a degraded or completed entry when Bot
+	// reports more than one target. This prevents a successful sibling from
+	// masking a required failure in the single Web-facing projection slot.
+	selected := botInteropEntry{}
+	selectedRank := -1
+	for _, entry := range metadata.Entries {
+		rank := 0
+		switch entry.Status {
+		case "completed":
+			rank = 4
+		case "degraded":
+			rank = 3
+		case "input_required":
+			rank = 2
+		case "failed":
+			rank = 1
+		}
+		if rank > selectedRank {
+			selected = entry
+			selectedRank = rank
+		}
+	}
+	if metadata.Status == "FAILED" && (selectedRank < 0 || selected.Status != "failed") {
+		return interopProvenancePtr(InteropProvenance{Status: "failed", Code: "interop_failed"})
+	}
+	if selectedRank >= 0 {
+		status := "delegated"
+		switch selected.Status {
+		case "degraded":
+			status = "degraded"
+		case "failed":
+			status = "failed"
+		case "input_required":
+			status = "degraded"
+		}
+		if metadata.DegradedInterop && selected.Status == "completed" {
+			status = "degraded"
+		}
+		code := selected.Code
+		if code == "" || (metadata.DegradedInterop && selected.Status == "completed") {
+			switch selected.Status {
+			case "completed":
+				if metadata.DegradedInterop {
+					code = "degraded"
+				}
+			case "degraded":
+				code = "degraded"
+			case "input_required":
+				code = "input_required"
+			case "failed":
+				code = "interop_failed"
+			}
+		}
+		return interopProvenancePtr(InteropProvenance{
+			Status:   status,
+			TargetID: selected.TargetID,
+			Kind:     selected.Kind,
+			Code:     code,
+		})
+	}
+	if metadata.DegradedInterop {
+		return interopProvenancePtr(InteropProvenance{Status: "degraded", Code: "degraded"})
+	}
+	if metadata.Status == "FAILED" {
+		return interopProvenancePtr(InteropProvenance{Status: "failed", Code: "interop_failed"})
+	}
+	return nil
+}
+
 func decodeProjectionEnvelope(raw json.RawMessage) (projectionEnvelope, error) {
 	if len(strings.TrimSpace(string(raw))) == 0 || strings.TrimSpace(string(raw)) == "null" {
 		return projectionEnvelope{}, nil
@@ -246,7 +464,7 @@ func decodeProjectionEnvelope(raw json.RawMessage) (projectionEnvelope, error) {
 	return envelope, nil
 }
 
-func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, envelope projectionEnvelope) (BotRunProjection, error) {
+func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, envelope projectionEnvelope, noTaskIDs bool) (BotRunProjection, error) {
 	revision := int64(-1)
 	if envelope.ReportRevision != nil {
 		if *envelope.ReportRevision < 0 {
@@ -323,6 +541,16 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	if err != nil {
 		return BotRunProjection{}, err
 	}
+	formattedInterop, err := decodeFormattedInteropMetadata(envelope.Formatted)
+	if err != nil {
+		return BotRunProjection{}, err
+	}
+	if formattedInterop.failed(noTaskIDs) {
+		status = "FAILED"
+	}
+	if formattedProjection := formattedInterop.projection(); formattedProjection != nil {
+		interop = formattedProjection
+	}
 
 	directories := make([]string, 0, len(runArtifacts))
 	paths := make([]string, 0)
@@ -360,7 +588,7 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 		Artifacts:      artifacts,
 		// RequestID intentionally remains empty. A Bot request id is response
 		// metadata, not public run state, and is never copied from provider data.
-		DegradedInterop: envelope.DegradedInterop,
+		DegradedInterop: envelope.DegradedInterop || formattedInterop.DegradedInterop,
 		InterOp:         interop,
 	}, nil
 }
@@ -424,13 +652,20 @@ func normalizeInteropProvenance(value *InteropProvenance) (*InteropProvenance, e
 		return nil, projectionDecodeError("interop.code", "malformed code")
 	}
 	if copyValue.Code != "" {
-		switch copyValue.Code {
-		case "disabled", "forbidden", "unavailable", "discovery_failed", "no_evidence", "target_unavailable", "invalid_request":
-		default:
+		if !validInteropProjectionCode(copyValue.Code) {
 			return nil, projectionDecodeError("interop.code", "unsupported code")
 		}
 	}
 	return &copyValue, nil
+}
+
+func validInteropProjectionCode(value string) bool {
+	switch value {
+	case "disabled", "forbidden", "unavailable", "discovery_failed", "no_evidence", "target_unavailable", "invalid_request", "degraded", "input_required", "interop_failed":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeProjectionRunID(value string) (string, error) {

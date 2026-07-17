@@ -23,7 +23,10 @@ type AgentArgumentInput struct {
 
 var interopTargetIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
-const MaxInteropTargets = 16
+const (
+	MaxInteropTargets    = 16
+	MaxInteropModeLength = 16
+)
 
 func validOBSPath(path string) bool {
 	if !strings.HasPrefix(path, "/obs/") || len(path) <= len("/obs/") {
@@ -49,6 +52,9 @@ func validateOBSPaths(paths []string, field string) ([]string, error) {
 func validateInterop(mode string, targets []string) (string, []string, error) {
 	if mode == "" {
 		mode = "off"
+	}
+	if len([]rune(mode)) > MaxInteropModeLength {
+		return "", nil, fmt.Errorf("interop mode exceeds %d characters", MaxInteropModeLength)
 	}
 	switch mode {
 	case "off", "auto", "required":

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 )
 
 type interopDelegationServer struct {
@@ -20,11 +21,15 @@ type interopDelegationServer struct {
 	submissionHits atomic.Int64
 	mu             sync.Mutex
 	args           map[string]interface{}
+	submissionBody string
 }
 
-func newInteropDelegationServer(t *testing.T, discoveryStatus int, discoveryBody string) *interopDelegationServer {
+func newInteropDelegationServer(t *testing.T, discoveryStatus int, discoveryBody string, submissionBodies ...string) *interopDelegationServer {
 	t.Helper()
 	h := &interopDelegationServer{}
+	if len(submissionBodies) > 0 {
+		h.submissionBody = submissionBodies[0]
+	}
 	h.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -50,6 +55,10 @@ func newInteropDelegationServer(t *testing.T, discoveryStatus int, discoveryBody
 			slug := "research"
 			if len(parts) >= 4 && parts[2] != "" {
 				slug = parts[2]
+			}
+			if h.submissionBody != "" {
+				_, _ = w.Write([]byte(h.submissionBody))
+				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": "completion-" + slug, "run_id": "run-" + slug,
@@ -219,6 +228,45 @@ func TestRequiredInteropFailsBeforeAgentSubmission(t *testing.T) {
 	}
 	if h.discoveryHits.Load() != 1 || h.submissionHits.Load() != 0 {
 		t.Fatalf("discovery=%d submission=%d, want 1/0", h.discoveryHits.Load(), h.submissionHits.Load())
+	}
+}
+
+func TestRequiredInteropRuntimeFailureDoesNotPersistRunning(t *testing.T) {
+	setupExpertTestDB(t)
+	h := newInteropDelegationServer(t, http.StatusOK, `{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"}],"errors":[]}`, `{"id":"completion-failed","run_id":"run-failed","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{"formatted":{"answer":"required peer failed","metadata":{"status":"FAILED","interop":[{"target_id":"mcp-peer","kind":"mcp","capability":"private-capability","status":"failed","latency_ms":11,"endpoint":"https://private.invalid","credential":"secret"}]}}}}`)
+	h.configure(t)
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "research", Tool: "InSilicoResearchAgent", InteropMode: "required", InteropTargets: []string{"mcp-peer"},
+	})
+	if err != nil {
+		t.Fatalf("runtime failed Query: %v", err)
+	}
+	if out == nil || out.Status != "FAILED" || out.InterOp == nil || out.InterOp.Status != "failed" || out.InterOp.TargetID != "mcp-peer" {
+		t.Fatalf("runtime failed response=%#v", out)
+	}
+	var status string
+	if err := model.Default().Raw(`SELECT status FROM question_agent_logs WHERE id = ?`, out.Id).Scan(&status).Error; err != nil {
+		t.Fatalf("read persisted status: %v", err)
+	}
+	if status == "RUNNING" || status != "FAILED" {
+		t.Fatalf("persisted status=%q, want terminal FAILED", status)
+	}
+	projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
+	if err != nil {
+		t.Fatalf("load failed projection: %v", err)
+	}
+	if projection.Status != "FAILED" || projection.InterOp == nil || projection.InterOp.Status != "failed" {
+		t.Fatalf("persisted failed projection=%#v", projection)
+	}
+	encoded, err := json.Marshal(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"private-capability", "latency_ms", "private.invalid", "credential", "secret"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("private runtime field %q crossed projection boundary: %s", forbidden, encoded)
+		}
 	}
 }
 

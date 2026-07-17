@@ -79,7 +79,19 @@ func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection
 		current.InterOp = normalized
 	}
 	if incoming.InterOp != nil {
-		normalized, err := normalizeInteropProvenance(incoming.InterOp)
+		incomingInterop := *incoming.InterOp
+		// Bot's nested formatted metadata does not repeat the caller's
+		// interop_mode. Preserve the mode recorded at submission when a poll
+		// snapshot supplies only target/kind/status/code; legacy snapshots use
+		// the safe local default.
+		if strings.TrimSpace(incomingInterop.Mode) == "" {
+			if current.InterOp != nil && strings.TrimSpace(current.InterOp.Mode) != "" {
+				incomingInterop.Mode = current.InterOp.Mode
+			} else {
+				incomingInterop.Mode = "off"
+			}
+		}
+		normalized, err := normalizeInteropProvenance(&incomingInterop)
 		if err != nil {
 			return BotRunProjection{}, false, err
 		}

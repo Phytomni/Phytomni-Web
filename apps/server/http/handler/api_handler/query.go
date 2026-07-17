@@ -140,6 +140,14 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		Mode:    ctx.DefaultPostForm("mode", "instant"),
 	}
 	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
+	// Bound this caller-controlled label before it can reach service errors or
+	// request logs. The only accepted values remain off|auto|required; an
+	// overlong value fails closed at the HTTP boundary instead of being echoed
+	// by a downstream validation error.
+	if len([]rune(in.InteropMode)) > rxBot.MaxInteropModeLength {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid interop controls"})
+		return
+	}
 	interopTargets, ok := parseInteropTargets(ctx.PostForm("interop_targets"))
 	if !ok {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid interop controls"})

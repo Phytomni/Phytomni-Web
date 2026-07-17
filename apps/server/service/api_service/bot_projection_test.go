@@ -261,6 +261,112 @@ func TestDecodeRunProjectionSubmissionDegradedTrackingIsExplicit(t *testing.T) {
 	}
 }
 
+func TestDecodeAgentRunSubmissionRequiredInteropFailureIsTerminal(t *testing.T) {
+	response := rxBot.AgentRunResponse{
+		Agent:  "research",
+		Status: "running",
+		Result: rxBot.AgentRunResult{Formatted: &rxBot.Formatted{
+			Answer:   "required peer failed",
+			Metadata: json.RawMessage(`{"status":"FAILED","interop":[{"target_id":"mcp-peer","kind":"mcp","capability":"secret-capability","status":"failed","latency_ms":42,"endpoint":"https://private.invalid","credential":"token"}]}`),
+		}},
+	}
+
+	got, err := DecodeAgentRunSubmission(response)
+	if err != nil {
+		t.Fatalf("DecodeAgentRunSubmission: %v", err)
+	}
+	if got.Status != "FAILED" || got.RunID != "" {
+		t.Fatalf("terminal failure projection=%#v", got)
+	}
+	if got.InterOp == nil || got.InterOp.Status != "failed" || got.InterOp.TargetID != "mcp-peer" || got.InterOp.Kind != "mcp" {
+		t.Fatalf("failed interop projection=%#v", got.InterOp)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"secret-capability", "latency_ms", "private.invalid", "credential", "token"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("private interop field %q crossed projection boundary: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestDecodeRunProjectionNestedInteropMetadataIsBounded(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:   "run-nested-interop",
+		Agent:   "research",
+		Status:  "running",
+		TaskIDs: []string{"task-nested-interop"},
+		Result:  json.RawMessage(`{"formatted":{"answer":"degraded local answer","metadata":{"interop":[{"target_id":"mcp-peer","kind":"mcp","capability":"hidden","status":"degraded","latency_ms":12,"peer_payload":{"secret":"no"}}],"degraded_interop":true}}}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatalf("DecodeRunProjection: %v", err)
+	}
+	if got.Status != "RUNNING" || !got.DegradedInterop || got.InterOp == nil || got.InterOp.Status != "degraded" || got.InterOp.TargetID != "mcp-peer" || got.InterOp.Kind != "mcp" {
+		t.Fatalf("nested degraded projection=%#v", got)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"hidden", "latency_ms", "peer_payload", "secret"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("private nested field %q crossed projection boundary: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestDecodeRunProjectionPollingNestedInteropCompletedPreservesSafeFields(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:   "run-poll-interop",
+		Agent:   "design",
+		Status:  "succeeded",
+		Result:  json.RawMessage(`{"formatted":{"answer":"delegated answer","metadata":{"status":"SUCCESS","interop":[{"target_id":"a2a-peer","kind":"a2a","capability":"design","status":"completed","latency_ms":9}]}}}`),
+		TaskIDs: []string{},
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatalf("DecodeRunProjection: %v", err)
+	}
+	if got.Status != "SUCCEEDED" || got.InterOp == nil || got.InterOp.Status != "delegated" || got.InterOp.TargetID != "a2a-peer" || got.InterOp.Kind != "a2a" {
+		t.Fatalf("nested completed projection=%#v", got)
+	}
+}
+
+func TestDecodeRunProjectionAcceptsNonInteropFormattedMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		agent      string
+		topStatus  string
+		metaStatus string
+		wantStatus string
+	}{
+		{name: "success", agent: "deep_genome", topStatus: "succeeded", metaStatus: "SUCCESS", wantStatus: "SUCCEEDED"},
+		{name: "running", agent: "analyst", topStatus: "running", metaStatus: "RUNNING", wantStatus: "RUNNING"},
+		{name: "input required", agent: "review", topStatus: "input_required", metaStatus: "INPUT_REQUIRED", wantStatus: "INPUT_REQUIRED"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			record := rxBot.RunRecord{
+				RunID:  "run-non-interop-" + tc.name,
+				Agent:  tc.agent,
+				Status: tc.topStatus,
+				Result: json.RawMessage(`{"formatted":{"answer":"ordinary answer","metadata":{"status":"` + tc.metaStatus + `","report_revision":3,"other_provider_field":{"private":"ignored"}}}}`),
+			}
+			got, err := DecodeRunProjection(record)
+			if err != nil {
+				t.Fatalf("DecodeRunProjection: %v", err)
+			}
+			if got.Status != tc.wantStatus || got.VisibleReport() != "ordinary answer" || got.InterOp != nil || got.DegradedInterop {
+				t.Fatalf("ordinary metadata projection=%#v", got)
+			}
+		})
+	}
+}
+
 func TestDecodeResearchDesignNetworkTerminalArtifacts(t *testing.T) {
 	t.Parallel()
 

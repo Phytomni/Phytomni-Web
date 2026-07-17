@@ -519,10 +519,27 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		botRunID = submission.RunID
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
+		if submission.InterOp != nil {
+			if strings.TrimSpace(submission.InterOp.Mode) == "" {
+				submission.InterOp.Mode = "off"
+			}
+			out.InterOp = interopProvenancePtr(*submission.InterOp)
+		}
+		out.DegradedInterop = out.DegradedInterop || submission.DegradedInterop
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
 		// Reshape by the slug Bot's router CHOSE (never "expert"), so cited/table
 		// formatting survives and SyncBotRuns reconciles async runs by agent slug.
 		if submission.Status == "SUCCEEDED" {
+			if resp.Result.Formatted != nil {
+				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
+			}
+		} else if submission.Status == "FAILED" {
+			// A required interop failure may arrive as status=running with
+			// formatted.metadata.status=FAILED and no task ids. The projection
+			// decoder has already normalized that nested outcome; keep the row
+			// terminal and never invent a pollable task.
+			out.Status = "FAILED"
 			if resp.Result.Formatted != nil {
 				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
@@ -608,7 +625,22 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
-		if resp.Status == "succeeded" {
+		interopMetadata, metadataErr := decodeFormattedInteropMetadata(formattedMetadata(resp.Result.Formatted))
+		if metadataErr != nil {
+			return nil, metadataErr
+		}
+		if interopAgent(slug) {
+			out.DegradedInterop = out.DegradedInterop || interopMetadata.DegradedInterop
+			if interopProjection := interopMetadata.projection(); interopProjection != nil {
+				interopProjection.Mode = interop.Provenance.Mode
+				out.InterOp = interopProjection
+			}
+		}
+		responseStatus := strings.ToUpper(strings.TrimSpace(resp.Status))
+		if interopAgent(slug) && interopMetadata.failed(len(resp.TaskIDs) == 0 && strings.TrimSpace(resp.Result.TaskID) == "") {
+			responseStatus = "FAILED"
+		}
+		if responseStatus == "SUCCEEDED" {
 			// Synchronous agent (e.g. data): the answer is already here.
 			if resp.Result.Formatted != nil {
 				// Reshape the sync agent payload (data -> {headers, rows}).
@@ -616,6 +648,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 			// out.Status stays "SUCCEEDED".
+		} else if responseStatus == "FAILED" {
+			// Bot's bounded interop metadata is authoritative for a terminal
+			// required failure even when the umbrella response still says running.
+			out.Status = "FAILED"
+			if resp.Result.Formatted != nil {
+				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
+			}
 		} else {
 			// Remote agent: only a task id is back; the answer arrives later.
 			out.Status = "RUNNING"
@@ -684,14 +724,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, err
 		}
 	}
-	if interopAgent(slug) && botRunID != "" {
+	if expertProjection == nil && interopAgent(slug) {
 		projection := BotRunProjection{
 			RunID:           botRunID,
 			Agent:           slug,
 			Status:          out.Status,
 			ReportRevision:  -1,
 			DegradedInterop: out.DegradedInterop,
-			InterOp:         queryInteropProvenancePtr(slug, interop),
+			InterOp:         out.InterOp,
 		}
 		if err := SaveBotRunProjection(ctx, username, id, projection); err != nil {
 			return nil, err
