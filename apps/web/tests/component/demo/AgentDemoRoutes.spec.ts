@@ -43,7 +43,16 @@ const DEMO_CONTRACTS: DemoContract[] = [
   {
     path: "/gene-network-agent",
     source: "views/gene-network-agent/index.vue",
-    required: ["AgentDemoShell", "gene-network-download", "router.back"],
+    required: [
+      "useBotRemoteAgentRun",
+      'tool: "GeneNetworkAgent"',
+      "network-submit",
+      "network-unavailable",
+      "ResearchArtifactShell",
+      "BotReportState",
+      "BotArtifactList",
+      "router.back",
+    ],
   },
   {
     path: "/digital-design-agent",

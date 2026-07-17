@@ -1,152 +1,19 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-const routerBack = vi.hoisted(() => vi.fn());
+describe("retired media agent demonstrations", () => {
+  it("does not retain the old Gene Network static download demonstration", () => {
+    const source = readFileSync(
+      resolve(__dirname, "../../../src/views/gene-network-agent/index.vue"),
+      "utf8"
+    );
 
-const GENE_NETWORK_QUESTION =
-  "Please help me to analysis the hormone regulatory network in the traits of TO:0000011";
-const GENE_NETWORK_TASK_ID = "8ab4434b-772a-44f0-aaa5-fa163e7f84a3";
-const GENE_NETWORK_BASE_PATH =
-  "/static/downloads/5.Gene Netwrok Agent/3.NetwrokAgent/results/";
-const GENE_NETWORK_FILES = [
-  "network_results.zip.001",
-  "network_results.zip.002",
-  "network_results.zip.003",
-  "network_results.zip.004",
-  "network_results.zip.005",
-] as const;
-
-vi.mock("vue-router", () => ({
-  useRouter: () => ({ back: routerBack }),
-}));
-
-const AgentDemoShellStub = {
-  emits: ["back"],
-  template: `
-    <div data-test="demo-shell">
-      <span data-test="agent-demo-static-badge">Static example</span>
-      <button data-test="shell-back" @click="$emit('back')">Back</button>
-      <slot name="question" />
-      <slot name="result" />
-      <slot name="footer" />
-    </div>
-  `,
-};
-
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-import GeneNetworkAgent from "@/views/gene-network-agent/index.vue";
-
-function mountDemo(component: typeof GeneNetworkAgent) {
-  return mount(component, {
-    global: {
-      plugins: [i18n, ElementPlus],
-      stubs: { AgentDemoShell: AgentDemoShellStub },
-    },
+    expect(source).not.toContain("AgentDemoShell");
+    expect(source).not.toContain("/static/downloads/");
+    expect(source).not.toContain("sampleTask");
+    expect(source).not.toContain("downloadResults");
+    expect(source).toContain('useBotRemoteAgentRun');
+    expect(source).toContain('tool: "GeneNetworkAgent"');
   });
-}
-
-afterEach(() => {
-  vi.useRealTimers();
-  routerBack.mockReset();
-});
-
-describe("media agent static demonstrations", () => {
-  it("keeps exact questions, task IDs, static labels, and shared shell ownership", () => {
-    const geneWrapper = mountDemo(GeneNetworkAgent);
-
-    expect(geneWrapper.get("[data-test=agent-demo-static-badge]").text()).toBe(
-      "Static example"
-    );
-    expect(geneWrapper.get("[data-test=gene-network-question]").text()).toBe(
-      GENE_NETWORK_QUESTION
-    );
-    expect(geneWrapper.get("[data-test=gene-network-task]").text()).toContain(
-      GENE_NETWORK_TASK_ID
-    );
-    expect(geneWrapper.get("[data-test=gene-network-result-label]").text()).toBe(
-      "Static sample result"
-    );
-    expect(
-      geneWrapper.findAll(
-        ".chat-header, .chat-messages, .message-avatar, .message-content"
-      )
-    ).toHaveLength(0);
-    expect(geneWrapper.findAll("[role=progressbar]")).toHaveLength(0);
-    expect(geneWrapper.text()).not.toMatch(
-      /created successfully|completed|downloading|progress|percent|eta/i
-    );
-  });
-
-  it("starts each Gene Network part one second apart and reports request starts only", async () => {
-    vi.useFakeTimers();
-    const appendSpy = vi.spyOn(document.body, "appendChild");
-    const removeSpy = vi.spyOn(document.body, "removeChild");
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const wrapper = mountDemo(GeneNetworkAgent);
-
-    await wrapper.get("[data-test=gene-network-download]").trigger("click");
-    expect(wrapper.get("[data-test=gene-network-download-status]").text()).toBe(
-      "Starting download 1 of 5"
-    );
-    expect(wrapper.get("[data-test=gene-network-current-file]").text()).toBe(
-      GENE_NETWORK_FILES[0]
-    );
-    expect(clickSpy).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(0);
-    expect(clickSpy).toHaveBeenCalledTimes(1);
-    expect(wrapper.get("[data-test=gene-network-current-file]").text()).toBe(
-      GENE_NETWORK_FILES[0]
-    );
-
-    await vi.advanceTimersByTimeAsync(999);
-    expect(clickSpy).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(clickSpy).toHaveBeenCalledTimes(2);
-    expect(wrapper.get("[data-test=gene-network-download-status]").text()).toBe(
-      "Starting download 2 of 5"
-    );
-    expect(wrapper.get("[data-test=gene-network-current-file]").text()).toBe(
-      GENE_NETWORK_FILES[1]
-    );
-
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(clickSpy).toHaveBeenCalledTimes(5);
-    expect(wrapper.get("[data-test=gene-network-download-status]").text()).toBe(
-      "All five download requests started"
-    );
-    expect(wrapper.get("[data-test=gene-network-current-file]").text()).toBe(
-      GENE_NETWORK_FILES[4]
-    );
-    expect(wrapper.findAll("[role=progressbar]")).toHaveLength(0);
-    expect(wrapper.text()).not.toMatch(/finished|downloaded|percent|eta|progress/i);
-
-    const anchors = appendSpy.mock.calls
-      .map(([node]) => node)
-      .filter((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
-    expect(anchors.map((anchor) => anchor.getAttribute("href"))).toEqual(
-      GENE_NETWORK_FILES.map((file) => GENE_NETWORK_BASE_PATH + file)
-    );
-    expect(anchors.map((anchor) => anchor.download)).toEqual([...GENE_NETWORK_FILES]);
-    expect(removeSpy.mock.calls.map(([node]) => node)).toEqual(anchors);
-    expect(fetchSpy).not.toHaveBeenCalled();
-
-    fetchSpy.mockRestore();
-    appendSpy.mockRestore();
-    removeSpy.mockRestore();
-    clickSpy.mockRestore();
-  });
-
 });

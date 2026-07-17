@@ -127,10 +127,14 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   {
     path: "/gene-network-agent",
     component: "views/gene-network-agent/index.vue",
-    productLayout: "demo",
-    migrationTask: "agent demo shell",
-    behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell"],
+    productLayout: "standalone",
+    migrationTask: "capability-gated remote agent surface",
+    behaviorTest: "tests/component/GeneNetworkAgentView.spec.ts",
+    sourceMarkers: [
+      "useBotRemoteAgentRun",
+      'tool: "GeneNetworkAgent"',
+      "ResearchArtifactShell",
+    ],
   },
   {
     path: "/deep-genome-agent",
