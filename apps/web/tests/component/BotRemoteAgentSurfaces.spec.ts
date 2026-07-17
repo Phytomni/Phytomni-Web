@@ -5,9 +5,11 @@ import DigitalDesignAgentView from "@/views/digital-design-agent/index.vue";
 import GeneNetworkAgentView from "@/views/gene-network-agent/index.vue";
 import ResearchAgentView from "@/views/research-agent/index.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
+import { datetimeFormats } from "@/locales/datetime-formats";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
-import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import type { BotRunProjection } from "@/views/chat/botProjection";
+import type { BotRemoteAgentRunState } from "@/views/chat/composables/useBotRemoteAgentRun";
 
 const mocks = vi.hoisted(() => {
   const state = {
@@ -123,6 +125,7 @@ const i18n = createI18n({
   legacy: false,
   locale: "en-US",
   fallbackLocale: "en-US",
+  datetimeFormats,
   messages: { "en-US": enUS, "zh-CN": zhCN },
 });
 
@@ -138,17 +141,57 @@ const products = {
   network: REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent,
 } as const;
 
-function syntheticDegradedState(): BotLifecycleState {
+function syntheticDegradedState(): BotRemoteAgentRunState {
+  const projection: BotRunProjection = {
+    runId: "run-synthetic",
+    agent: "SyntheticAgent",
+    status: "RUNNING",
+    reportStage: "intermediate",
+    reportCompleteness: "partial",
+    reportRevision: 1,
+    reportUpdatedAt: "2026-07-16T08:30:00.000Z",
+    intermediateReport: "Synthetic report",
+    finalReport: "",
+    progress: {
+      completed: 2,
+      total: 4,
+      failed: 0,
+      pending: 2,
+      briefGeneStatus: "running",
+    },
+    degraded: true,
+    degradedReason: "Optional analysis unavailable",
+    failures: ["Optional analysis unavailable"],
+    artifacts: [
+      {
+        outputDir: "/obs/synthetic-bucket/root",
+        paths: [
+          "/obs/synthetic-bucket/root/report.txt",
+          "/obs/synthetic-bucket/root/../secret.txt",
+        ],
+      },
+    ],
+    requestId: "request-synthetic",
+    trackingDegraded: false,
+  };
+
   return {
     runId: "run-synthetic",
     status: "RUNNING",
     reportRevision: 1,
-    visibleReport: "",
-    intermediateReport: "",
+    visibleReport: "Synthetic report",
+    intermediateReport: "Synthetic report",
     finalReport: "",
     degraded: true,
     failures: ["Optional analysis unavailable"],
-    artifacts: [],
+    artifacts: projection.artifacts,
+    phase: "running",
+    requestId: "request-synthetic",
+    uploadTransfer: null,
+    projection,
+    dialogueId: "surface-matrix",
+    messageId: "message-synthetic",
+    error: null,
   };
 }
 
@@ -203,6 +246,20 @@ describe("Bot remote-agent surface matrix", () => {
       );
       expect(wrapper.find(".bot-report-state").exists()).toBe(true);
       expect(wrapper.find(".bot-artifact-list").exists()).toBe(true);
+      expect(
+        wrapper
+          .find('.bot-report-state [data-test="bot-report-content"]')
+          .text()
+      ).toContain("Synthetic report");
+      expect(
+        wrapper.find('[data-test="bot-report-progress"]').text()
+      ).toContain("2/4");
+      expect(wrapper.find('[data-test="bot-report-updated-at"]').exists()).toBe(
+        true
+      );
+      expect(
+        wrapper.findAll('button[data-test="bot-artifact-download"]')
+      ).toHaveLength(1);
       const scrollRoot =
         surface === "design"
           ? "digital-design"
@@ -212,9 +269,10 @@ describe("Bot remote-agent surface matrix", () => {
       expect(wrapper.attributes("data-scroll-root")).toBe(
         `${scrollRoot}-agent`
       );
-      expect(wrapper.find('a[href*="task"]').exists()).toBe(false);
+      expect(wrapper.find("a[href]").exists()).toBe(false);
       expect(wrapper.text()).toContain("partial");
       expect(wrapper.text()).toContain("No safe downloads");
+      expect(wrapper.text()).not.toContain("secret.txt");
 
       wrapper.unmount();
     }
