@@ -105,7 +105,7 @@ const INTEROP_AGENT_NAMES = new Set([
 ]);
 
 /** Copy only the allowlisted interop labels into lifecycle-owned state. */
-function cloneInterop(
+export function cloneBotInterop(
   value: BotInteropProvenance | null | undefined
 ): BotInteropProvenance | null {
   if (!value || typeof value !== "object") return null;
@@ -142,8 +142,8 @@ function mergeInterop(
   incoming: BotInteropProvenance | null | undefined,
   stale: boolean
 ): BotInteropProvenance | null {
-  const currentCopy = cloneInterop(current);
-  const incomingCopy = cloneInterop(incoming);
+  const currentCopy = cloneBotInterop(current);
+  const incomingCopy = cloneBotInterop(incoming);
   if (stale && currentCopy) return currentCopy;
   return incomingCopy ?? currentCopy;
 }
@@ -389,7 +389,7 @@ export function reduceBotFailure(
       : state.intermediateReport,
     degraded: state.status === "SUCCEEDED" ? state.degraded : true,
     degradedInterop: state.degradedInterop === true,
-    interop: cloneInterop(state.interop),
+    interop: cloneBotInterop(state.interop),
     failures: mergeFailures(state.failures, [safeMessage]),
     artifacts: cloneArtifacts(state.artifacts),
   };

@@ -39,6 +39,7 @@ import {
   type RemoteAgentChatState,
   type RemoteAgentCapabilitySource,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
+import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import router, {
   REMOTE_AGENT_ROUTE_CONTRACTS,
   REMOTE_AGENT_LAZY_ROUTES,
@@ -241,6 +242,45 @@ describe("useBotRemoteAgentRun", () => {
     expect(state.botLifecycle?.interop).toEqual(run.state.value.interop);
     expect(state.botLifecycle?.degradedInterop).toBe(true);
     expect(JSON.stringify(state)).not.toContain("private.invalid");
+  });
+
+  it("sanitizes pre-existing lifecycle interop before entering reactive state", () => {
+    const rawInterop = {
+      mode: "auto",
+      status: "delegated",
+      targetId: "mcp-peer",
+      kind: "mcp",
+      code: "no_evidence",
+      endpoint: "https://private.invalid",
+      credentials: "secret-token",
+    };
+    const state: RemoteAgentChatState = {
+      ...makeState(),
+      botLifecycle: {
+        ...initBotLifecycleState(),
+        degradedInterop: "yes" as never,
+        interop: rawInterop as never,
+      },
+    };
+
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-existing-lifecycle",
+      getChatState: () => state,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    expect(run.state.value.degradedInterop).toBe(false);
+    expect(run.state.value.interop).toEqual({
+      mode: "auto",
+      status: "delegated",
+      targetId: "mcp-peer",
+      kind: "mcp",
+      code: "no_evidence",
+    });
+    expect(run.state.value.interop).not.toBe(rawInterop);
+    expect(run.state.value.interop).not.toHaveProperty("endpoint");
+    expect(run.state.value.interop).not.toHaveProperty("credentials");
   });
 
   it("hydrates a validated terminal projection and clears its identity on reset", async () => {

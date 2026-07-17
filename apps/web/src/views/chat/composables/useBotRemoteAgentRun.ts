@@ -13,6 +13,7 @@ import type { BotCapability } from "./useBotCapabilities";
 import { useBotCapabilities } from "./useBotCapabilities";
 import { parseBotProjection, type BotRunProjection } from "../botProjection";
 import {
+  cloneBotInterop,
   initBotLifecycleState,
   reduceBotFailure,
   reduceBotProjection,
@@ -175,7 +176,13 @@ function capabilityFor(
 }
 
 function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
-  const lifecycle = owned.botLifecycle ?? initBotLifecycleState();
+  const lifecycle = owned.botLifecycle
+    ? {
+        ...owned.botLifecycle,
+        degradedInterop: owned.botLifecycle.degradedInterop === true,
+        interop: cloneBotInterop(owned.botLifecycle.interop),
+      }
+    : initBotLifecycleState();
   const projection = safeProjectionCopy(owned.botProjection);
   return {
     ...lifecycle,

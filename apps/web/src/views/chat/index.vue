@@ -576,7 +576,10 @@ import type {
   DialogueReconciliationResult,
 } from "./types";
 import type { BotRunProjection } from "./botProjection";
-import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
+import {
+  cloneBotInterop,
+  type BotLifecycleState,
+} from "./streaming/botLifecycleReducer";
 
 const composerRef = ref<ChatComposerHandle | null>(null);
 
@@ -890,9 +893,17 @@ function lifecycleFromMessage(
 ): ChatArtifactLifecycleState | null {
   const projection = message.botProjection;
   if (message.botLifecycle) {
-    if (!projection) return message.botLifecycle;
+    if (!projection) {
+      return {
+        ...message.botLifecycle,
+        degradedInterop: message.botLifecycle.degradedInterop === true,
+        interop: cloneBotInterop(message.botLifecycle.interop),
+      };
+    }
     return {
       ...message.botLifecycle,
+      degradedInterop: projection.degradedInterop === true,
+      interop: cloneBotInterop(projection.interop),
       reportStage: projection.reportStage,
       reportUpdatedAt: projection.reportUpdatedAt,
       progress: projection.progress,
@@ -925,6 +936,8 @@ function lifecycleFromMessage(
     intermediateReport,
     finalReport,
     degraded: projection.degraded || projection.trackingDegraded,
+    degradedInterop: projection.degradedInterop === true,
+    interop: cloneBotInterop(projection.interop),
     failures: projection.failures,
     artifacts: projection.artifacts,
     reportStage: projection.reportStage,

@@ -62,6 +62,7 @@ vi.mock("vue-router", async (importOriginal) => {
 
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatIndex from "@/views/chat/index.vue";
+import BotReportState from "@/components/research/BotReportState.vue";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import { SIDEBAR_COLLAPSED_PREFERENCE_KEY } from "@/views/chat/composables/useSidebarResponsive";
@@ -147,6 +148,21 @@ const partialResearchProjection: BotRunProjection = {
 const projectionBackedResearchMessage: ChatMessage = {
   ...researchMessage,
   botProjection: partialResearchProjection,
+};
+
+const interopProjectionOnlyResearchMessage: ChatMessage = {
+  ...researchMessage,
+  botProjection: {
+    ...partialResearchProjection,
+    interop: {
+      mode: "auto",
+      status: "degraded",
+      targetId: "mcp-peer",
+      kind: "mcp",
+      code: "degraded",
+    },
+    degradedInterop: true,
+  },
 };
 
 const deepGenomeMessage: ChatMessage = {
@@ -697,6 +713,26 @@ describe("Chat artifact shell integration", () => {
       "/obs/bucket/run-research-1"
     );
     expect(wrapper.html()).not.toContain("/private.txt");
+  });
+
+  it("preserves interop provenance when the artifact has only a projection", async () => {
+    const { wrapper } = await mountProductionChat(1440, {
+      messagesA: [interopProjectionOnlyResearchMessage],
+    });
+
+    await wrapper.get("[data-test=artifact-open]").trigger("click");
+    const report = wrapper.findComponent(BotReportState);
+    expect(report.exists()).toBe(true);
+    expect(report.props("state")).toMatchObject({
+      degradedInterop: true,
+      interop: {
+        mode: "auto",
+        status: "degraded",
+        targetId: "mcp-peer",
+        kind: "mcp",
+        code: "degraded",
+      },
+    });
   });
 
   it("wires production Chat to the artifact state, renderers, and adaptive slot", () => {
