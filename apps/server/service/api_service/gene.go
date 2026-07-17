@@ -189,6 +189,9 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 // listing that matches the given suffix.
 func findObsKeyBySuffix(keys []string, suffix string) string {
 	for _, k := range keys {
+		if rxBot.ValidateProjectionOBSPath(k) != nil {
+			continue
+		}
 		if strings.HasSuffix(strings.ToLower(k), suffix) {
 			return k
 		}
@@ -206,6 +209,77 @@ func friendlyRelayErr(err error) error {
 	return err
 }
 
+func validateDownloadArtifactPath(obsPath string) error {
+	if rxBot.ValidateProjectionOBSPath(obsPath) != nil {
+		return errors.New("invalid obs artifact path")
+	}
+	return nil
+}
+
+// artifactPathWithinPrefix checks containment only after both values have
+// crossed the shared OBS-path validator. It supports the legacy /obs mount and
+// Bot's obs:// URI form without exposing either value to logs.
+func artifactPathWithinPrefix(prefix, candidate string) bool {
+	if !isSafeObsPrefix(prefix) || rxBot.ValidateProjectionOBSPath(candidate) != nil {
+		return false
+	}
+	if strings.HasPrefix(prefix, "/obs/") && strings.HasPrefix(candidate, "/obs/") {
+		return candidate == prefix || strings.HasPrefix(candidate, prefix+"/")
+	}
+	prefixURL, err := url.Parse(prefix)
+	if err != nil || prefixURL.Scheme != "obs" {
+		return false
+	}
+	candidateURL, err := url.Parse(candidate)
+	if err != nil || candidateURL.Scheme != "obs" || candidateURL.Host != prefixURL.Host {
+		return false
+	}
+	return candidateURL.Path == prefixURL.Path || strings.HasPrefix(candidateURL.Path, strings.TrimSuffix(prefixURL.Path, "/")+"/")
+}
+
+// isSafeObsPrefix accepts a validated object path's parent directory. A run
+// may live directly below the bucket, so the parent can be /obs/<bucket> (or
+// obs://<bucket>) even though that bucket root is not itself an object path.
+func isSafeObsPrefix(value string) bool {
+	if strings.HasPrefix(value, "/obs/") {
+		segments := strings.Split(value, "/")
+		if len(segments) < 3 || segments[2] == "" {
+			return false
+		}
+		for _, segment := range segments[2:] {
+			if segment == "" || segment == "." || segment == ".." || strings.ContainsAny(segment, "?#:") {
+				return false
+			}
+		}
+		return true
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "obs" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || strings.ContainsAny(parsed.Host, "?#:") {
+		return false
+	}
+	for _, segment := range strings.Split(strings.TrimPrefix(parsed.Path, "/"), "/") {
+		if segment == "." || segment == ".." || strings.ContainsAny(segment, "?#:\\ \t\r\n\x00") {
+			return false
+		}
+	}
+	return true
+}
+
+func artifactRunRoot(obsPath string) string {
+	if strings.HasPrefix(obsPath, "/obs/") {
+		return path.Dir(obsPath)
+	}
+	parsed, err := url.Parse(obsPath)
+	if err != nil || parsed.Scheme != "obs" || parsed.Host == "" {
+		return ""
+	}
+	root := path.Dir(parsed.Path)
+	if root == "." || root == "/" {
+		return "obs://" + parsed.Host + strings.TrimSuffix(root, "/")
+	}
+	return "obs://" + parsed.Host + root
+}
+
 // relayDownloadURL issues a short-lived token URL pointing at this service's
 // streaming download endpoint for the given OBS key. The browser side
 // (window.open / <img src>) cannot carry an Authorization header, so auth
@@ -220,6 +294,9 @@ func relayDownloadURL(obsKey string) (string, error) {
 }
 
 func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {
+	if err := validateDownloadArtifactPath(obsPath); err != nil {
+		return "", err
+	}
 	var questionAgentLog model.QuestionAgentLog
 	if result := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? and download_path = ? and delete_at IS NULL", username, obsPath).
 		First(&questionAgentLog).RowsAffected; result == 0 {
@@ -231,7 +308,14 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 	if err != nil {
 		return "", friendlyRelayErr(err)
 	}
-	zipKey := findObsKeyBySuffix(keys, ".zip")
+	zipKey := ""
+	for _, candidate := range keys {
+		if !strings.HasSuffix(strings.ToLower(candidate), ".zip") || !artifactPathWithinPrefix(obsPath, candidate) {
+			continue
+		}
+		zipKey = candidate
+		break
+	}
 	if zipKey == "" {
 		return "", errors.New("no zip file found in the specified directory")
 	}
@@ -239,6 +323,9 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 }
 
 func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
+	if err := validateDownloadArtifactPath(obsPath); err != nil {
+		return nil, err
+	}
 	// Ownership check + read the image paths written by the reconciler
 	// (populated by the completed-state reconcile pass after cutover).
 	var row model.QuestionAgentLog
@@ -254,7 +341,7 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 			// Non-empty but invalid JSON: DB corruption or Bot contract drift.
 			// Warn and fall back to enumeration (keep the endpoint usable);
 			// do not silently treat the corrupt state as a legacy empty row.
-			rxLog.Sugar().Warnw("image_paths invalid JSON, falling back to OBS prefix enumeration", "download_path", obsPath, "err", err)
+			rxLog.Sugar().Warnw("image_paths invalid JSON, falling back to OBS prefix enumeration", "artifact_kind", "images", "reason", "invalid_json")
 			keys = nil
 		}
 	}
@@ -274,21 +361,21 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	// itself (that would incorrectly reject sibling images); use its parent dir.
 	// The download token signs any key without a prefix binding, so this loop is
 	// the sole authorization gate for each object; out-of-bounds paths are dropped.
-	anchor := path.Dir(obsPath)
+	anchor := artifactRunRoot(obsPath)
 	var imageUrls []string
-	for _, k := range keys {
+	for index, k := range keys {
 		if !strings.HasSuffix(strings.ToLower(k), ".png") {
 			continue
 		}
-		if anchor != "" && anchor != "." && !strings.HasPrefix(k, anchor+"/") {
+		if !artifactPathWithinPrefix(anchor, k) {
 			// Out-of-bounds path: skip + warn (fail-safe: drop suspicious, serve the rest, keep observable).
-			rxLog.Sugar().Warnw("image path escapes run root, skipping signing", "key", k, "anchor", anchor)
+			rxLog.Sugar().Warnw("image path escapes run root, skipping signing", "artifact_index", index, "reason", "outside_owner_run")
 			continue
 		}
 		u, err := relayDownloadURL(k)
 		if err != nil {
 			// Skip individual signing failures (preserves prior "skip bad file" behaviour); warn for observability.
-			rxLog.Sugar().Warnw("image signing failed, skipping", "key", k, "err", err)
+			rxLog.Sugar().Warnw("image signing failed, skipping", "artifact_index", index, "reason", "signing_failed")
 			continue
 		}
 		imageUrls = append(imageUrls, u)

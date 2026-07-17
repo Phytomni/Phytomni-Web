@@ -110,6 +110,14 @@ export const getChatdownloadURL = (data: { obs_path: string }) => {
   });
 };
 
+/**
+ * Approved server-issued artifact action. Keep the internal OBS reference in
+ * the authenticated request; the browser only receives the short-lived URL
+ * returned by Web Go and never synthesizes one from a Bot path.
+ */
+export const downloadArtifact = (obsPath: string) =>
+  getChatdownloadURL({ obs_path: obsPath });
+
 // Get rendering-file download URL
 export const getFileDownUrlApi = (
   data: { id: string; document_format: string } | FormData,

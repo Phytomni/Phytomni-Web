@@ -210,10 +210,22 @@ func ParseRunArtifacts(raw json.RawMessage) (dirs []string, paths []string, ok b
 		return nil, nil, false
 	}
 	for _, a := range env.Artifacts {
-		if a.OutputDir != "" {
-			dirs = append(dirs, a.OutputDir)
+		dir := a.OutputDir
+		if dir != "" {
+			if err := ValidateProjectionOBSPath(dir); err != nil {
+				continue
+			}
+			dirs = append(dirs, dir)
 		}
-		paths = append(paths, a.Paths...)
+		for _, artifactPath := range a.Paths {
+			if err := ValidateProjectionOBSPath(artifactPath); err != nil {
+				continue
+			}
+			if dir == "" || !artifactPathWithinDirectory(dir, artifactPath) {
+				continue
+			}
+			paths = append(paths, artifactPath)
+		}
 	}
 	return dirs, paths, true
 }
@@ -236,6 +248,7 @@ const (
 	MaxProjectionArtifactCount   = 64
 	MaxProjectionArtifactPaths   = 256
 	MaxProjectionArtifactPathLen = 512
+	MaxProjectionArtifactNameLen = 128
 )
 
 // ParseRunProgress strictly decodes the bounded progress counters used by the
@@ -341,7 +354,10 @@ func ParseRunProjectionArtifacts(raw json.RawMessage) ([]BoundedRunArtifact, err
 	artifacts := make([]BoundedRunArtifact, 0, len(entries))
 	totalPaths := 0
 	for index, item := range entries {
-		dir := strings.TrimSpace(item.OutputDir)
+		if item.OutputDir != strings.TrimSpace(item.OutputDir) {
+			return nil, fmt.Errorf("artifact %d output_dir: path contains surrounding whitespace", index)
+		}
+		dir := item.OutputDir
 		if dir != "" {
 			if err := validateProjectionOBSPath(dir); err != nil {
 				return nil, fmt.Errorf("artifact %d output_dir: %w", index, err)
@@ -349,7 +365,9 @@ func ParseRunProjectionArtifacts(raw json.RawMessage) ([]BoundedRunArtifact, err
 		}
 		paths := make([]string, 0, len(item.Paths))
 		for pathIndex, path := range item.Paths {
-			path = strings.TrimSpace(path)
+			if path != strings.TrimSpace(path) {
+				return nil, fmt.Errorf("artifact %d path %d: path contains surrounding whitespace", index, pathIndex)
+			}
 			if err := validateProjectionOBSPath(path); err != nil {
 				return nil, fmt.Errorf("artifact %d path %d: %w", index, pathIndex, err)
 			}
@@ -373,6 +391,13 @@ func DecodeProjectionArtifacts(raw json.RawMessage) ([]BoundedRunArtifact, error
 	return ParseRunProjectionArtifacts(raw)
 }
 
+// ValidateProjectionOBSPath is the shared Bot/Web artifact path boundary.
+// It accepts only the documented internal /obs mount form or an obs:// URI;
+// browser URLs, traversal, query strings, and control characters are rejected.
+func ValidateProjectionOBSPath(value string) error {
+	return validateProjectionOBSPath(value)
+}
+
 func validateProjectionOBSPath(value string) error {
 	if value == "" {
 		return fmt.Errorf("path is empty")
@@ -381,24 +406,51 @@ func validateProjectionOBSPath(value string) error {
 		return fmt.Errorf("path exceeds %d characters", MaxProjectionArtifactPathLen)
 	}
 	for _, r := range value {
-		if r == 0 || r == '\n' || r == '\r' || r == '\t' || r == ' ' {
+		if r == 0 || r == '\n' || r == '\r' || r == '\t' || r == ' ' || r == '\\' {
 			return fmt.Errorf("path contains whitespace or control characters")
 		}
 	}
 	if strings.HasPrefix(value, "/obs/") {
-		if strings.Contains(value, "../") || strings.HasSuffix(value, "/..") {
-			return fmt.Errorf("path traversal is not allowed")
+		segments := strings.Split(value, "/")
+		if len(segments) < 4 || segments[2] == "" {
+			return fmt.Errorf("path must include a bucket and key")
+		}
+		for _, segment := range segments[2:] {
+			if segment == "" || segment == "." || segment == ".." || strings.ContainsAny(segment, "?#:") {
+				return fmt.Errorf("path traversal or delimiters are not allowed")
+			}
 		}
 		return nil
 	}
 	u, err := url.Parse(value)
-	if err != nil || u.Scheme != "obs" || u.Host == "" || u.Path == "" || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Scheme != "obs" || u.Host == "" || u.Path == "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil || strings.ContainsAny(u.Host, "?#:") {
 		return fmt.Errorf("path is not an OBS reference")
 	}
-	if strings.Contains(u.Path, "../") || strings.HasSuffix(u.Path, "/..") {
-		return fmt.Errorf("path traversal is not allowed")
+	segments := strings.Split(u.Path, "/")
+	if len(segments) < 2 {
+		return fmt.Errorf("path must include a key")
+	}
+	for _, segment := range segments[1:] {
+		if segment == "" || segment == "." || segment == ".." || strings.ContainsAny(segment, "?#:") {
+			return fmt.Errorf("path traversal or delimiters are not allowed")
+		}
 	}
 	return nil
+}
+
+func artifactPathWithinDirectory(directory, artifactPath string) bool {
+	if directory == artifactPath || strings.HasPrefix(artifactPath, directory+"/") {
+		return true
+	}
+	base, err := url.Parse(directory)
+	if err != nil || base.Scheme != "obs" {
+		return false
+	}
+	item, err := url.Parse(artifactPath)
+	if err != nil || item.Scheme != "obs" || item.Host != base.Host {
+		return false
+	}
+	return item.Path == base.Path || strings.HasPrefix(item.Path, strings.TrimSuffix(base.Path, "/")+"/")
 }
 
 // unquote strips surrounding quotes from a JSON-encoded scalar so a string

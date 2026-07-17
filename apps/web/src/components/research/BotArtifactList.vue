@@ -10,7 +10,7 @@
         :key="artifact.id"
         class="bot-artifact-list__item"
       >
-        <span class="bot-artifact-list__name" :title="artifact.path">
+        <span class="bot-artifact-list__name">
           {{ artifact.name }}
         </span>
         <button
@@ -47,6 +47,9 @@ const props = withDefaults(
     artifacts?: readonly BotArtifact[];
     download?: (path: string) => void | Promise<void>;
     downloadAction?: (path: string) => void | Promise<void>;
+    /** Preferred provenance callback: the server resolves the run/name pair. */
+    downloadArtifact?: (runId: string, name: string) => void | Promise<void>;
+    runId?: string;
     titleLabel?: string;
     downloadText?: string;
     emptyLabel?: string;
@@ -58,7 +61,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (event: "download", path: string): void;
+  (event: "download", runId: string, name: string): void;
 }>();
 
 const { t } = useI18n();
@@ -75,6 +78,28 @@ interface ArtifactRow {
   name: string;
   path: string;
   outputDir: string;
+  runId: string;
+}
+
+type ArtifactInput = BotArtifact & {
+  runId?: unknown;
+  run_id?: unknown;
+  path?: unknown;
+  name?: unknown;
+  displayName?: unknown;
+};
+
+function safeRunId(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value !== value.trim() ||
+    value.length > 128 ||
+    /[\\/\r\n\t]/u.test(value)
+  ) {
+    return "";
+  }
+  return value;
 }
 
 function isSafeObsPath(value: unknown): value is string {
@@ -115,12 +140,16 @@ const rows = computed(() => {
   let warning = props.artifacts.length === 0;
 
   props.artifacts.forEach((artifact, artifactIndex) => {
+    const input = artifact as ArtifactInput;
     const outputDir =
-      artifact && typeof artifact.outputDir === "string"
-        ? artifact.outputDir
-        : "";
+      input && typeof input.outputDir === "string" ? input.outputDir : "";
     const paths =
-      artifact && Array.isArray(artifact.paths) ? artifact.paths : [];
+      input && Array.isArray(input.paths)
+        ? input.paths
+        : typeof input?.path === "string"
+        ? [input.path]
+        : [];
+    const runId = safeRunId(props.runId ?? input?.runId ?? input?.run_id);
     const directoryIsSafe = isSafeObsPath(outputDir);
 
     if (paths.length === 0) {
@@ -143,6 +172,7 @@ const rows = computed(() => {
         name: displayName(path),
         path,
         outputDir,
+        runId,
       });
     });
   });
@@ -161,8 +191,18 @@ function requestDownload(artifact: ArtifactRow): void {
   if (!isSafeObsPath(artifact.path) || !isSafeObsPath(artifact.outputDir)) {
     return;
   }
+
+  if (props.downloadArtifact) {
+    if (!artifact.runId) {
+      return;
+    }
+    void props.downloadArtifact(artifact.runId, artifact.name);
+    emit("download", artifact.runId, artifact.name);
+    return;
+  }
+
   (props.download ?? props.downloadAction)?.(artifact.outputDir);
-  emit("download", artifact.outputDir);
+  emit("download", artifact.runId, artifact.name);
 }
 </script>
 
