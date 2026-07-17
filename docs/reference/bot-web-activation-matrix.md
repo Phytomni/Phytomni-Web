@@ -122,9 +122,7 @@ above passed from local evidence alone.
 
 ## Local synthetic verification record (2026-07-17)
 
-- Commit under test: `3965b26` base snapshot plus the Task 27 working-tree
-  checks; the closure commit records these tests without changing the matrix
-  JSON or any external status.
+- Commit under test: `51be5a3` (Task 27 synthetic compatibility closure).
 - Sanitized fixture ids: `web-task27-stream`, `web-task27-run-error`,
   `web-task27-expert-research`, and `web-task27-history`. Fixtures contain only
   bounded synthetic identities; no query, answer, report, error payload, URL,
