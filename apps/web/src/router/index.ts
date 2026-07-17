@@ -11,10 +11,10 @@ import {
 } from "@/constants/agents";
 
 /**
- * Capability-gated route contracts for the remote product views.  They are
- * metadata only until the corresponding view is implemented; adding them to
- * `constantRoutes` early would advertise a demo or create an unresolved lazy
- * import.
+ * Capability-gated route contracts for remote product views. The Research
+ * surface has a real lazy component but remains dark until its `live` contract
+ * is enabled; the other registry entries remain metadata-only demos. Keeping
+ * them outside `constantRoutes` avoids advertising inactive products.
  */
 export const REMOTE_AGENT_ROUTE_CONTRACTS = REMOTE_AGENT_PRODUCT_REGISTRY;
 

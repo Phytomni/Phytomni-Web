@@ -24,6 +24,12 @@ vi.mock("@/utils/transfer-progress", () => ({
   })),
 }));
 
+// Keep the route contract test focused on the lazy boundary. Loading the real
+// Research SFC would pull Element Plus CSS into the Node runner.
+vi.mock("@/views/research-agent/index.vue", () => ({
+  default: { __file: "/src/views/research-agent/index.vue" },
+}));
+
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
   useBotCapabilities: mockUseBotCapabilities,
 }));
@@ -146,6 +152,8 @@ describe("useBotRemoteAgentRun", () => {
         bot_run_id: "run-research-1",
         tool_name: "InSilicoResearchAgent",
         status: "RUNNING",
+        dialogue_id: "42",
+        id: 17,
       },
     });
 
@@ -173,6 +181,8 @@ describe("useBotRemoteAgentRun", () => {
 
     expect(getChatState("d1").botProjection?.runId).toBe("run-research-1");
     expect(getChatState("d1").botLifecycle?.runId).toBe("run-research-1");
+    expect(run.state.value.dialogueId).toBe("42");
+    expect(run.state.value.messageId).toBe("17");
 
     const formData = mockQuery.mock.calls[0][0] as FormData;
     expect(formData.get("query")).toBe("paper");
@@ -189,6 +199,61 @@ describe("useBotRemoteAgentRun", () => {
     expect(formData.get("interop_targets")).toBe(JSON.stringify(["mcp-peer"]));
     expect(formData.get("query")).not.toContain("AT1G01010");
     expect(getChatState("d1").activeRequestId).toBe("");
+  });
+
+  it("hydrates a validated terminal projection and clears its identity on reset", async () => {
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        bot_run_id: "run-research-2",
+        tool_name: "InSilicoResearchAgent",
+        status: "RUNNING",
+        dialogue_id: "43",
+        id: 18,
+      },
+    });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-hydrate",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await run.submit({ query: "paper" });
+    run.hydrate(
+      {
+        runId: "run-research-2",
+        agent: "InSilicoResearchAgent",
+        status: "SUCCEEDED",
+        reportStage: "final",
+        reportCompleteness: "complete",
+        reportRevision: 1,
+        reportUpdatedAt: null,
+        intermediateReport: "",
+        finalReport: "Terminal report",
+        progress: {
+          completed: 1,
+          total: 1,
+          failed: 0,
+          pending: 0,
+          briefGeneStatus: "",
+        },
+        degraded: false,
+        degradedReason: null,
+        failures: [],
+        artifacts: [{ outputDir: "/obs/bucket/report", paths: [] }],
+        requestId: null,
+        trackingDegraded: false,
+      },
+      { dialogueId: "43", messageId: "18" }
+    );
+
+    expect(run.state.value.phase).toBe("succeeded");
+    expect(run.state.value.finalReport).toBe("Terminal report");
+    expect(run.state.value.dialogueId).toBe("43");
+    expect(run.state.value.messageId).toBe("18");
+
+    run.reset();
+    expect(run.state.value.dialogueId).toBeNull();
+    expect(run.state.value.messageId).toBeNull();
   });
 
   it("loads the default capability source before submitting", async () => {
@@ -368,7 +433,7 @@ describe("useBotRemoteAgentRun", () => {
     expect(state.botProjection?.runId).toBe("run-new");
   });
 
-  it("keeps the research route dark and uses the lazy 404 fallback", async () => {
+  it("keeps the research route dark and points its lazy boundary at Research", async () => {
     const contract = REMOTE_AGENT_ROUTE_CONTRACTS.InSilicoResearchAgent;
     const originalLive = contract.live;
     const route = router
@@ -439,6 +504,6 @@ describe("useBotRemoteAgentRun", () => {
       default?: { __file?: string };
     }>;
     const loaded = await component();
-    expect(loaded.default?.__file).toContain("views/error/404.vue");
+    expect(loaded.default?.__file).toContain("views/research-agent/index.vue");
   });
 });

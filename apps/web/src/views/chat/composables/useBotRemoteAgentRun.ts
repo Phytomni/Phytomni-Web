@@ -56,6 +56,8 @@ export interface RemoteAgentChatState {
   activeAgentName?: string;
   botProjection?: BotRunProjection;
   botLifecycle?: BotLifecycleState;
+  dialogueId?: string;
+  messageId?: string;
 }
 
 type RefLike<T> = { readonly value: T };
@@ -94,6 +96,8 @@ export interface BotRemoteAgentRunState extends BotLifecycleState {
   requestId: string | null;
   uploadTransfer: TransferSnapshot | null;
   projection: BotRunProjection | null;
+  dialogueId: string | null;
+  messageId: string | null;
   error:
     | BotRemoteAgentRunErrorCode
     | "request_failed"
@@ -106,6 +110,11 @@ export type UseBotRemoteAgentRunOptions = {
   dialogueId: string;
   getChatState?: (dialogueId: string) => RemoteAgentChatState;
   capabilities?: RemoteAgentCapabilitySource;
+};
+
+export type RemoteAgentRunIdentity = {
+  dialogueId: string | null;
+  messageId: string | null;
 };
 
 let requestSequence = 0;
@@ -173,6 +182,8 @@ function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
     requestId: owned.activeRequestId?.trim() || null,
     uploadTransfer: owned.uploadTransfer ?? null,
     projection,
+    dialogueId: owned.dialogueId ?? null,
+    messageId: owned.messageId ?? null,
     error: null,
   };
 }
@@ -280,6 +291,28 @@ function responsePayload(response: unknown): unknown {
   return response;
 }
 
+function safeIdentity(value: unknown, pattern: RegExp): string | null {
+  const normalized =
+    typeof value === "number" && Number.isSafeInteger(value)
+      ? String(value)
+      : typeof value === "string"
+      ? value.trim()
+      : "";
+  return normalized && pattern.test(normalized) ? normalized : null;
+}
+
+function responseIdentity(response: unknown): RemoteAgentRunIdentity {
+  const payload = responsePayload(response);
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { dialogueId: null, messageId: null };
+  }
+  const record = payload as Record<string, unknown>;
+  return {
+    dialogueId: safeIdentity(record.dialogue_id, SAFE_DIALOGUE_ID_PATTERN),
+    messageId: safeIdentity(record.id, /^[1-9]\d{0,18}$/u),
+  };
+}
+
 function isCanceledRequest(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; name?: unknown };
@@ -307,6 +340,10 @@ function capabilityLoader(
 export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   state: Ref<BotRemoteAgentRunState>;
   submit: (input: RemoteAgentSubmitInput) => Promise<BotRunProjection | null>;
+  hydrate: (
+    projection: BotRunProjection,
+    identity?: Partial<RemoteAgentRunIdentity>
+  ) => void;
   cancel: () => boolean;
   reset: () => void;
 } {
@@ -336,6 +373,35 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
         paths: [...artifact.paths],
       })),
     };
+  };
+
+  const hydrate = (
+    projection: BotRunProjection,
+    identity: Partial<RemoteAgentRunIdentity> = {}
+  ): void => {
+    const lifecycle = reduceBotProjection(state.value, projection);
+    const dialogueId =
+      identity.dialogueId === undefined
+        ? state.value.dialogueId
+        : safeIdentity(identity.dialogueId, SAFE_DIALOGUE_ID_PATTERN);
+    const messageId =
+      identity.messageId === undefined
+        ? state.value.messageId
+        : safeIdentity(identity.messageId, /^[1-9]\d{0,18}$/u);
+    state.value = {
+      ...state.value,
+      ...lifecycle,
+      phase: phaseFor(projection.status),
+      requestId: null,
+      uploadTransfer: null,
+      projection,
+      dialogueId,
+      messageId,
+      error: null,
+    };
+    owned.dialogueId = dialogueId ?? undefined;
+    owned.messageId = messageId ?? undefined;
+    syncOwnedState();
   };
 
   const syncCancelledOwner = () => {
@@ -466,6 +532,8 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       requestId,
       uploadTransfer: null,
       projection: null,
+      dialogueId: null,
+      messageId: null,
       error: null,
     };
     syncOwnedState();
@@ -502,14 +570,19 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
 
       const projection = parseBotProjection(responsePayload(response));
       const lifecycle = reduceBotProjection(state.value, projection);
+      const identity = responseIdentity(response);
       state.value = {
         ...state.value,
         ...lifecycle,
         phase: phaseFor(projection.status),
         requestId,
         projection,
+        dialogueId: identity.dialogueId,
+        messageId: identity.messageId,
         error: null,
       };
+      owned.dialogueId = identity.dialogueId ?? undefined;
+      owned.messageId = identity.messageId ?? undefined;
       syncOwnedState();
       return projection;
     } catch (error) {
@@ -572,6 +645,8 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     owned.uploadTransfer = null;
     owned.generationStopped = false;
     owned.activeAgentName = "";
+    owned.dialogueId = undefined;
+    owned.messageId = undefined;
     delete owned.botProjection;
     delete owned.botLifecycle;
     state.value = {
@@ -580,9 +655,11 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       requestId: null,
       uploadTransfer: null,
       projection: null,
+      dialogueId: null,
+      messageId: null,
       error: null,
     };
   };
 
-  return { state, submit, cancel, reset };
+  return { state, submit, hydrate, cancel, reset };
 }
