@@ -2,6 +2,11 @@
 
 Status: local Web contract reference; live acceptance is not claimed.
 
+The companion [Bot/Web activation evidence matrix](bot-web-activation-matrix.md)
+is the local checker input for reviewed acceptance rows and dark-launch flags.
+`scripts/check_bot_web_activation.py` is a deterministic, offline Web evidence
+gate; it does not turn local tests into external acceptance.
+
 This document records the boundary consumed by `release/0.1.3` Web Go. The
 browser talks only to Web Go. Web Go owns user identity, row ownership, legacy
 history compatibility, response shaping, and the sanitized projection stored
