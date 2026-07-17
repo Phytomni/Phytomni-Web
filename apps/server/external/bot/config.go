@@ -34,6 +34,12 @@ type Config struct {
 	// 503 after ownership checks (no Bot call). Zero value false = safe dormant
 	// default, like StreamEnabled.
 	A2uiActionsEnabled bool `json:"a2ui_actions_enabled" yaml:"a2ui_actions_enabled" mapstructure:"a2ui_actions_enabled"`
+	// ResearchEnabled, DesignEnabled, and NetworkEnabled are independent
+	// product gates for the remote agent surfaces. They intentionally default
+	// false so a missing config key cannot activate a Bot-backed product.
+	ResearchEnabled bool `json:"research_enabled" yaml:"research_enabled" mapstructure:"research_enabled"`
+	DesignEnabled   bool `json:"design_enabled" yaml:"design_enabled" mapstructure:"design_enabled"`
+	NetworkEnabled  bool `json:"network_enabled" yaml:"network_enabled" mapstructure:"network_enabled"`
 	// KeyAuditRedact, when true, requires loggers to emit only the key prefix.
 	KeyAuditRedact bool `json:"key_audit_redact" yaml:"key_audit_redact" mapstructure:"key_audit_redact"`
 	// MaxUploadFileBytes / MaxUploadFileCount / MaxUploadTotalBytes bound the

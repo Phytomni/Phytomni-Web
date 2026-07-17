@@ -79,3 +79,35 @@ func TestA2uiActionsEnabledTrueWhenSet(t *testing.T) {
 		t.Fatal("A2uiActionsEnabled must be true when set")
 	}
 }
+
+func TestRemoteProductFlagsDefaultOff(t *testing.T) {
+	cfg := Config{}
+	if cfg.ResearchEnabled || cfg.DesignEnabled || cfg.NetworkEnabled {
+		t.Fatal("remote product flags must default off")
+	}
+}
+
+func TestInitFromViper_RemoteProductFlags(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(func() {
+		viper.Reset()
+		BotConfig = nil
+	})
+
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper defaults: %v", err)
+	}
+	if BotConfig.ResearchEnabled || BotConfig.DesignEnabled || BotConfig.NetworkEnabled {
+		t.Fatal("remote product flags must remain disabled when keys are absent")
+	}
+
+	viper.Set("bot.research_enabled", true)
+	viper.Set("bot.design_enabled", true)
+	viper.Set("bot.network_enabled", true)
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper explicit flags: %v", err)
+	}
+	if !BotConfig.ResearchEnabled || !BotConfig.DesignEnabled || !BotConfig.NetworkEnabled {
+		t.Fatalf("explicit remote product flags were not decoded: %#v", BotConfig)
+	}
+}

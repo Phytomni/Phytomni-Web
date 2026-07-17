@@ -8,7 +8,10 @@ import {
   removeExpiresIn,
 } from "@/utils/auth";
 import { getUserTool } from "@/api/chat";
-import { CANONICAL_AT_ABLE_TOOLS } from "@/constants/agents";
+import {
+  CANONICAL_AT_ABLE_TOOLS,
+  type RemoteAgentTool,
+} from "@/constants/agents";
 import Cookies from "js-cookie";
 interface UserToolResponse {
   code: number;
@@ -58,6 +61,9 @@ export default defineStore({
   }),
   getters: {
     isFirstLogin: (state): boolean => state.login_status === "0",
+    hasRemoteAgentPermission:
+      (state) => (tool: RemoteAgentTool | string): boolean =>
+        state.roles.includes(tool),
   },
   actions: {
     getUserTools() {

@@ -195,9 +195,39 @@ function syntheticDegradedState(): BotRemoteAgentRunState {
   };
 }
 
-function mountSurface(surface: keyof typeof surfaces) {
+function syntheticFailureState(): BotRemoteAgentRunState {
+  const projection: BotRunProjection = {
+    ...syntheticDegradedState().projection!,
+    status: "TIMED_OUT",
+    reportStage: "final",
+    reportCompleteness: "none",
+    intermediateReport: "",
+    finalReport: "",
+    degraded: true,
+    degradedReason: "Run timed out",
+    failures: ["analysis task timed out"],
+    artifacts: [],
+  };
+  return {
+    ...syntheticDegradedState(),
+    status: "FAILED",
+    phase: "failed",
+    visibleReport: "",
+    intermediateReport: "",
+    finalReport: "",
+    degraded: true,
+    failures: ["analysis task timed out"],
+    artifacts: [],
+    projection,
+  };
+}
+
+function mountSurface(
+  surface: keyof typeof surfaces,
+  state: BotRemoteAgentRunState = syntheticDegradedState()
+) {
   return mount(surfaces[surface], {
-    props: { state: syntheticDegradedState() },
+    props: { state },
     global: {
       plugins: [i18n],
       stubs: {
@@ -277,4 +307,52 @@ describe("Bot remote-agent surface matrix", () => {
       wrapper.unmount();
     }
   );
+
+  it.each(Object.keys(surfaces) as Array<keyof typeof surfaces>)(
+    "keeps timeout failure and empty-artifact recovery bounded for %s",
+    (surface) => {
+      const wrapper = mountSurface(surface, syntheticFailureState());
+
+      expect(wrapper.find('[data-test="bot-report-failure"]').exists()).toBe(
+        true
+      );
+      expect(wrapper.find('[data-test="bot-artifact-warning"]').exists()).toBe(
+        true
+      );
+      expect(wrapper.text()).toContain("Failed");
+      expect(wrapper.find("a[href]").exists()).toBe(false);
+      expect(wrapper.text()).not.toContain("run-synthetic");
+
+      wrapper.unmount();
+    }
+  );
+
+  it("retains research input after a retryable submit failure", async () => {
+    const wrapper = mount(ResearchAgentView, {
+      global: {
+        plugins: [i18n],
+        stubs: {
+          MarkdownViewer: {
+            props: ["content"],
+            template:
+              '<article data-test="report-markdown">{{ content }}</article>',
+          },
+        },
+      },
+    });
+    const question = "Keep this question for retry";
+    await wrapper.find('[data-test="research-question"]').setValue(question);
+    mocks.submit.mockRejectedValueOnce(new Error("timeout"));
+    await wrapper.find("form").trigger("submit");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(
+      (wrapper.find('[data-test="research-question"]').element as HTMLTextAreaElement)
+        .value
+    ).toBe(question);
+    expect(wrapper.find('[data-test="research-form-error"]').exists()).toBe(
+      true
+    );
+    wrapper.unmount();
+  });
 });

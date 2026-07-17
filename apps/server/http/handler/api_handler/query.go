@@ -31,6 +31,10 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, "unknown tool type"
 	case errors.Is(err, api_service.ErrExpertDisabled):
 		return http.StatusServiceUnavailable, "expert mode not available"
+	case errors.Is(err, api_service.ErrRemoteProductDisabled):
+		return http.StatusServiceUnavailable, "remote product temporarily unavailable"
+	case errors.Is(err, api_service.ErrRemoteProductForbidden):
+		return http.StatusNotFound, "remote product not found"
 	case errors.Is(err, api_service.ErrMissingBotRunID):
 		return http.StatusConflict, "task is not syncable through bot run state"
 	case errors.Is(err, api_service.ErrInvalidA2uiSurface):
@@ -116,6 +120,18 @@ func (ph *Handler) Query(ctx *gin.Context) {
 	// refresh_id still travels in the multipart body.
 	in.Id, _ = strconv.ParseInt(ctx.Param("id"), 10, 64)
 	in.RefreshId, _ = strconv.ParseInt(ctx.DefaultPostForm("refresh_id", "0"), 10, 64)
+
+	// Product permissions are checked after parsing the explicit tool/mode but
+	// before opening uploads or dispatching to QueryStream/Query. This keeps the
+	// browser convenience guard and the Go authorization boundary aligned while
+	// preserving the existing body-size and quota checks above.
+	if api_service.IsRemoteProductTool(in.Tool) {
+		if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), in.Tool); err != nil {
+			status, message := queryErrorStatus(err)
+			writeQueryError(ctx, status, message)
+			return
+		}
+	}
 
 	if form != nil {
 		files := form.File["files"]

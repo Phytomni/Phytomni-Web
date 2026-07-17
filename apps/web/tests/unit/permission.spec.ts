@@ -9,8 +9,19 @@ vi.mock("@/router", () => ({
 vi.mock("@/utils", () => ({ getToken: vi.fn() }));
 // Hand-stub the Pinia store factory (no real Pinia needed). Named with the
 // "mock" prefix so vitest's vi.mock hoisting allows the reference.
-const mockStore = { getUserTools: vi.fn(), FedLogOut: vi.fn() };
+const mockStore = {
+  getUserTools: vi.fn(),
+  FedLogOut: vi.fn(),
+  roles: [] as string[],
+};
 vi.mock("@/stores", () => ({ userStore: () => mockStore }));
+const mockCapabilities = {
+  byTool: { value: {} as Record<string, unknown> },
+  load: vi.fn().mockResolvedValue([]),
+};
+vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
+  useBotCapabilities: () => mockCapabilities,
+}));
 // Keep i18n light — the first-login branch calls i18n.global.t.
 vi.mock("@/locales", () => ({ i18n: { global: { t: (k: string) => k } } }));
 // Avoid real ElNotification DOM side effects. mockNotifClose is a STABLE close
@@ -44,8 +55,11 @@ describe("beforeEachGuard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    mockStore.roles = [];
+    mockCapabilities.byTool.value = {};
     mockStore.getUserTools.mockResolvedValue(true);
     mockStore.FedLogOut.mockResolvedValue(true);
+    mockCapabilities.load.mockResolvedValue([]);
   });
 
   it("1: no token + whitelist path → next() with no arg", () => {
@@ -203,5 +217,20 @@ describe("beforeEachGuard", () => {
       next as any
     );
     expect(mockNotifClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("11: token + remote route without its role → safe NotFound redirect", async () => {
+    mockGetToken.mockReturnValue("tok");
+    localStorage.setItem("loginStatus", "1");
+    mockStore.roles = [];
+    const next = vi.fn();
+    beforeEachGuard(
+      route("/gene-network-agent", { name: "geneNetworkAgent" }) as any,
+      route("/chat") as any,
+      next as any
+    );
+    await flush();
+    expect(next).toHaveBeenCalledWith({ name: "NotFound" });
+    expect(mockCapabilities.load).not.toHaveBeenCalled();
   });
 });

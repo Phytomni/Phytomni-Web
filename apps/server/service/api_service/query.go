@@ -242,6 +242,15 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
 		return nil, ErrExpertDisabled
 	}
+	// Product runs submitted through the HTTP route always carry an explicit
+	// mode (the handler defaults it to "instant"). Keep zero-value direct
+	// service callers compatible with their legacy fixtures while ensuring every
+	// real remote dispatch is authorized before upload or Bot I/O.
+	if in.Mode != "" && isRemoteProductTool(in.Tool) {
+		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+			return nil, err
+		}
+	}
 	client := rxBot.NewClient()
 
 	// 1. Upload attachments to Bot OBS; keep names/paths for the Web row and
@@ -823,6 +832,11 @@ func (ps *Service) QueryStream(
 		// an Expert turn into a streamed ChatAgent run (slug-gate invariant,
 		// query_expert_test.go).
 		return nil, fmt.Errorf("%w: expert mode", ErrStreamUnsupported)
+	}
+	if isRemoteProductTool(in.Tool) {
+		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+			return nil, err
+		}
 	}
 	slug, ok := rxBot.SlugFor(in.Tool)
 	if !ok {
