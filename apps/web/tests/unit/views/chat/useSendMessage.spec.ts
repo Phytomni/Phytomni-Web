@@ -289,6 +289,7 @@ describe("useSendMessage", () => {
         tool_name: "ChatAgent",
         answer: "ok",
         id: "m1",
+        bot_run_id: "run-captured-mode",
         follow_up_questions: [],
       },
     } as any);
@@ -1087,6 +1088,33 @@ describe("useSendMessage", () => {
         requestId: "web-request-1",
       },
     });
+  });
+
+  it("Expert rejects a non-terminal response without bot run identity", async () => {
+    states.get("A")!.messageInput = "research without identity";
+    states.get("A")!.mode = "expert";
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        tool_name: "InSilicoResearchAgent",
+        answer: "Task created",
+        status: "RUNNING",
+        task_id: "child-missing-run",
+        follow_up_questions: [],
+      },
+    } as any);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+    try {
+      const { sendMessage } = makeComposable();
+      await sendMessage();
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    const assistants = getChatState("A").renderedChat!.messages.filter(
+      (message) => message.role === "assistant"
+    );
+    expect(assistants.at(-1)?.content).toBe("chat.sendFailed");
+    expect(assistants.at(-1)?.tool_name).toBe("");
   });
 
   it("Expert rejects unknown or malformed response tools through the safe send-failure path", async () => {

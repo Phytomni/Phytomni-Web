@@ -150,6 +150,15 @@ func SurfaceableMessage(err error) (string, bool) {
 // doJSONWithMeta sends an optional JSON body, captures response metadata, and
 // decodes a JSON response into out.
 func (c *Client) doJSONWithMeta(ctx context.Context, method, path string, body, out interface{}) (ResponseMeta, error) {
+	return c.doJSONWithMetaOptions(ctx, method, path, body, out, false)
+}
+
+// doJSONWithMetaOptions is the shared JSON transport with an opt-in strict
+// decoder for response envelopes whose identity controls a cross-service
+// write. Ordinary Bot responses keep encoding/json's existing behavior; the
+// Expert router response opts in so duplicate object keys cannot become a
+// last-value-wins agent/run identity.
+func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool) (ResponseMeta, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -179,10 +188,93 @@ func (c *Client) doJSONWithMeta(ctx context.Context, method, path string, body, 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return meta, preferBotRequestID(botError(method, path, resp.StatusCode, raw), meta.BotRequestID)
 	}
+	if rejectDuplicateKeys {
+		if err := rejectDuplicateJSONKeys(raw); err != nil {
+			return meta, err
+		}
+	}
 	if out != nil {
 		return meta, json.Unmarshal(raw, out)
 	}
 	return meta, nil
+}
+
+var errDuplicateJSONKey = errors.New("duplicate JSON object key")
+
+// rejectDuplicateJSONKeys walks one complete JSON value and rejects duplicate
+// keys at every object depth. encoding/json intentionally keeps the last value
+// for duplicate keys; that is unsafe for the Expert envelope because a
+// duplicate agent/run_id could change the identity after validation.
+func rejectDuplicateJSONKeys(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := walkJSONValue(decoder); err != nil {
+		return err
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return errors.New("multiple JSON values")
+		}
+		return err
+	}
+	return nil
+}
+
+func walkJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+
+	switch delim {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return errors.New("JSON object key is not a string")
+			}
+			if _, duplicate := seen[key]; duplicate {
+				return fmt.Errorf("%w: %q", errDuplicateJSONKey, key)
+			}
+			seen[key] = struct{}{}
+			if err := walkJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if closing != json.Delim('}') {
+			return errors.New("JSON object did not close")
+		}
+	case '[':
+		for decoder.More() {
+			if err := walkJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if closing != json.Delim(']') {
+			return errors.New("JSON array did not close")
+		}
+	default:
+		return errors.New("unexpected JSON delimiter")
+	}
+	return nil
 }
 
 // doJSON sends an optional JSON body and decodes a JSON response into out.
@@ -280,7 +372,7 @@ func (c *Client) RouteQuery(ctx context.Context, req RouteQueryRequest) (*RouteQ
 // metadata alongside the agent.run-shaped response.
 func (c *Client) RouteQueryWithMeta(ctx context.Context, req RouteQueryRequest) (*RouteQueryResponse, ResponseMeta, error) {
 	var out RouteQueryResponse
-	meta, err := c.doJSONWithMeta(ctx, http.MethodPost, "/v1/query/route", req, &out)
+	meta, err := c.doJSONWithMetaOptions(ctx, http.MethodPost, "/v1/query/route", req, &out, true)
 	return &out, meta, err
 }
 

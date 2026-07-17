@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -316,7 +317,11 @@ func TestQuery_ExpertUnknownOrMalformedResolvedSlugFailsClosed(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			gdb := setupExpertTestDB(t)
-			expertRouteServer(t, `{"id":"completion-bad","run_id":"run-bad","object":"agent.run","agent":"`+tc.agent+`","status":"running","task_ids":["child-bad"],"result":{}}`)
+			agentJSON, err := json.Marshal(tc.agent)
+			if err != nil {
+				t.Fatalf("marshal test agent: %v", err)
+			}
+			expertRouteServer(t, `{"id":"completion-bad","run_id":"run-bad","object":"agent.run","agent":`+string(agentJSON)+`,"status":"running","task_ids":["child-bad"],"result":{}}`)
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 			if !errors.Is(err, ErrUnknownTool) {
@@ -331,6 +336,40 @@ func TestQuery_ExpertUnknownOrMalformedResolvedSlugFailsClosed(t *testing.T) {
 			}
 			if count != 0 {
 				t.Fatalf("unknown resolved slug wrote %d row(s)", count)
+			}
+		})
+	}
+}
+
+func TestQuery_ExpertDuplicateRouteKeysFailsBeforePersistence(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "duplicate top-level agent",
+			body: `{"id":"completion-duplicate","run_id":"run-duplicate","agent":"knowledge","agent":"research","status":"running","result":{}}`,
+		},
+		{
+			name: "duplicate nested answer",
+			body: `{"id":"completion-duplicate","run_id":"run-duplicate","agent":"knowledge","status":"succeeded","result":{"formatted":{"answer":"first","answer":"last"}}}`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			expertRouteServer(t, tc.body)
+
+			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
+			if err == nil {
+				t.Fatalf("duplicate route response returned output=%+v", out)
+			}
+			var count int64
+			if err := gdb.Raw(`SELECT COUNT(*) FROM question_agent_logs`).Row().Scan(&count); err != nil {
+				t.Fatalf("count rows: %v", err)
+			}
+			if count != 0 {
+				t.Fatalf("duplicate route response persisted %d row(s)", count)
 			}
 		})
 	}

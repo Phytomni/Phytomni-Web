@@ -51,6 +51,51 @@ function parseBlockingProjection(data: QueryData) {
   }
 }
 
+const EXPERT_RUN_ID_KEYS = ["bot_run_id", "run_id", "runId"] as const;
+const EXPERT_PROJECTION_KEYS = ["projection", "result", "data"] as const;
+
+function isProjectionRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.prototype.toString.call(value) === "[object Object]"
+  );
+}
+
+function hasMalformedExpertRunIdentity(value: unknown): boolean {
+  if (!isProjectionRecord(value)) return false;
+  const sources: Record<string, unknown>[] = [value];
+  const seen = new Set<Record<string, unknown>>(sources);
+  for (const key of EXPERT_PROJECTION_KEYS) {
+    const nested = value[key];
+    if (isProjectionRecord(nested) && !seen.has(nested)) {
+      sources.push(nested);
+      seen.add(nested);
+    }
+  }
+
+  for (const source of sources) {
+    for (const key of EXPERT_RUN_ID_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+      const raw = source[key];
+      if (raw === undefined || raw === null || raw === "") continue;
+      if (typeof raw !== "string") return true;
+      const trimmed = raw.trim();
+      if (
+        Array.from(raw).length > 128 ||
+        raw.includes("\u0000") ||
+        /[\r\n\t]/u.test(raw) ||
+        /[\\/]/u.test(trimmed) ||
+        trimmed === ""
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 const SAFE_DIALOGUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
 
 function attachBlockingLegacyFields(
@@ -391,11 +436,17 @@ export function useSendMessage(opts: {
       if (response.data) {
         const responseData = response.data as QueryData;
         const botProjection = parseBlockingProjection(responseData);
+        const expertSucceeded =
+          botProjection?.status === "SUCCEEDED" ||
+          (botProjection === undefined &&
+            typeof responseData.status === "string" &&
+            responseData.status.trim().toUpperCase() === "SUCCEEDED");
         if (
           capturedMode === "expert" &&
           (!isCanonicalToolName(responseData.tool_name) ||
-            !botProjection ||
-            botProjection.agent !== responseData.tool_name)
+            (botProjection && botProjection.agent !== responseData.tool_name) ||
+            hasMalformedExpertRunIdentity(responseData) ||
+            (!expertSucceeded && (!botProjection || !botProjection.runId)))
         ) {
           // Expert responses must have crossed the Go canonical projection
           // boundary. Unknown or malformed envelopes use the existing send
