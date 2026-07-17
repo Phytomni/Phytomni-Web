@@ -90,13 +90,13 @@ export function remoteAgentRouteGuard(tool: RemoteAgentTool) {
 /**
  * The Research route is mounted separately from the static product-route
  * inventory. This keeps the existing visual-contract route list stable while
- * still giving the dark surface a real, guarded, lazy 404 fallback.
+ * still giving the dark surface a real, guarded, lazy view.
  */
 export const REMOTE_AGENT_LAZY_ROUTES = [
   {
     path: "/research-agent",
     name: "researchAgent",
-    component: () => import("@/views/error/404.vue"),
+    component: () => import("@/views/research-agent/index.vue"),
     beforeEnter: remoteAgentRouteGuard("InSilicoResearchAgent"),
     meta: {
       title: "Research Agent",

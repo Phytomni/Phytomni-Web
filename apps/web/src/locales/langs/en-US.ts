@@ -755,6 +755,50 @@ export default {
       unavailableMessage:
         "This route is reserved for a future design workflow. No live design form, result, or progress state is available yet.",
     },
+    research: {
+      title: "In Silico Research Agent",
+      agentLabel: "Research workflow",
+      subtitle:
+        "Submit a study question and supporting context for a reproducible research report.",
+      questionLabel: "Research question",
+      questionPlaceholder:
+        "Describe the study you want to reproduce or explore",
+      contextFilesLabel: "Paper and context files",
+      contextFilesHint:
+        "Upload up to 10 files (.pdf, .doc, .xlsx, .ppt, .txt, or .png), up to 10 MB each.",
+      datasetDescriptionLabel: "Dataset description (optional)",
+      datasetDescriptionPlaceholder:
+        "Describe the dataset, species, parameters, or substitutions to consider",
+      submit: "Start research run",
+      submitting: "Submitting…",
+      reset: "Start another run",
+      progress: "Research run in progress",
+      complete: "Report ready",
+      degraded: "The report is partial because some analysis was unavailable.",
+      reportTitle: "Research report",
+      report: "Report",
+      evidence: "Evidence",
+      activity: "Activity",
+      downloads: "Downloads",
+      download: "Request download",
+      noEvidence: "No structured evidence is available for this run.",
+      noDownloads: "No safe downloads are available for this run.",
+      emptyReport: "The research report is not available yet.",
+      capabilityLoading: "Checking research capability…",
+      unavailableTitle: "Research Agent is not available",
+      unavailableMessage:
+        "This route is reserved for a capability-gated research workflow. No result was created.",
+      fileValidation:
+        "Some files were rejected. Check the supported types and 10 MB size limit.",
+      fileCountValidation: "You can upload at most 10 files.",
+      questionRequired: "Enter a research question before submitting.",
+      questionTooLong: "The research question is too long.",
+      datasetTooLong: "The dataset description is too long.",
+      submitFailed:
+        "The research run could not be submitted. Please try again.",
+      downloadFailed: "The download request could not be completed.",
+      sectionsLabel: "Research report sections",
+    },
   },
 
   // Help Center
