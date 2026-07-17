@@ -98,15 +98,20 @@ _ROW_FIELDS = {"id", "status", "fixture_id", "fixture_sha256"}
 _SAFE_FIXTURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _EXPERT_DEFAULT_RE = re.compile(
-    r"(?m)^[ \t]*expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
+    r"(?<![A-Za-z0-9_$])expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _CONFIG_FLAG_RE = re.compile(
     r"(?m)^[ \t]*(?P<key>expert_enabled|stream_enabled|a2ui_actions_enabled)"
     r"[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _HISTORY_FUNCTION_RE = re.compile(
-    r"(?m)^\s*func\s+HistoryReadModeFromConfig\s*\([^)]*\)"
-    r"\s*HistoryReadMode\s*\{"
+    r"(?m)^[ \t]*func[ \t]+HistoryReadModeFromConfig[ \t]*\([^)]*\)"
+    r"[ \t]*HistoryReadMode[ \t]*\{"
+)
+
+_YAML_BLOCK_SCALAR_RE = re.compile(
+    r"^[ \t]*(?!#)[^#\n]*:[ \t]*(?P<indicator>[|>])"
+    r"(?P<modifiers>[+-]?[1-9]?[+-]?)[ \t]*(?:#.*)?$"
 )
 
 _FORBIDDEN_PARTS = frozenset(
@@ -315,6 +320,177 @@ def validate_rows(rows: Any) -> list[str]:
     return errors
 
 
+def _mask_javascript_non_code(text: str) -> str:
+    """Mask JavaScript comments and literals while preserving line structure."""
+
+    output = list(text)
+    state = "code"
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if state == "code":
+            if text.startswith("//", index):
+                output[index] = output[index + 1] = " "
+                state = "line_comment"
+                index += 2
+                continue
+            if text.startswith("/*", index):
+                output[index] = output[index + 1] = " "
+                state = "block_comment"
+                index += 2
+                continue
+            if char in {'"', "'", "`"}:
+                output[index] = " "
+                state = char
+            index += 1
+            continue
+
+        if state == "line_comment":
+            if char in "\r\n":
+                state = "code"
+            else:
+                output[index] = " "
+            index += 1
+            continue
+
+        if state == "block_comment":
+            if text.startswith("*/", index):
+                output[index] = output[index + 1] = " "
+                state = "code"
+                index += 2
+                continue
+            if char not in "\r\n":
+                output[index] = " "
+            index += 1
+            continue
+
+        # A quoted or template literal.  The contents of a template
+        # interpolation are deliberately masked too: the activation marker
+        # must be an executable property in the source, not arbitrary template
+        # text that happens to contain the same spelling.
+        if char == "\\":
+            output[index] = " "
+            if index + 1 < len(text):
+                if text[index + 1] not in "\r\n":
+                    output[index + 1] = " "
+                index += 2
+                continue
+        elif char == state:
+            output[index] = " "
+            state = "code"
+        else:
+            if char not in "\r\n":
+                output[index] = " "
+        index += 1
+    return "".join(output)
+
+
+def _mask_yaml_block_scalars(text: str) -> str:
+    """Mask YAML literal/folded block scalar contents.
+
+    The activation defaults are ordinary scalar keys.  A line that merely
+    resembles one inside ``notes: |`` or ``notes: >`` is payload text and must
+    not satisfy the exact-single-key check.
+    """
+
+    output: list[str] = []
+    block_parent_indent: int | None = None
+    block_content_indent: int | None = None
+    for line in text.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        if block_parent_indent is not None:
+            if not body.strip():
+                output.append("".join(char if char in "\r\n" else " " for char in line))
+                continue
+            indent = len(body) - len(body.lstrip(" \t"))
+            required = block_content_indent
+            if (required is None and indent > block_parent_indent) or (
+                required is not None and indent >= required
+            ):
+                if required is None:
+                    block_content_indent = indent
+                output.append(
+                    "".join(char if char in "\r\n" else " " for char in line)
+                )
+                continue
+            block_parent_indent = None
+            block_content_indent = None
+
+        output.append(line)
+        if body.lstrip(" \t").startswith("#"):
+            continue
+        match = _YAML_BLOCK_SCALAR_RE.fullmatch(body)
+        if match is None:
+            continue
+        modifiers = match.group("modifiers")
+        explicit = next((int(char) for char in modifiers if char.isdigit()), None)
+        block_parent_indent = len(body) - len(body.lstrip(" \t"))
+        block_content_indent = (
+            block_parent_indent + explicit if explicit is not None else None
+        )
+    return "".join(output)
+
+
+def _mask_go_non_code(text: str) -> str:
+    """Mask Go comments and literals while preserving byte offsets and lines."""
+
+    output = list(text)
+    state = "code"
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if state == "code":
+            if text.startswith("//", index):
+                output[index] = output[index + 1] = " "
+                state = "line_comment"
+                index += 2
+                continue
+            if text.startswith("/*", index):
+                output[index] = output[index + 1] = " "
+                state = "block_comment"
+                index += 2
+                continue
+            if char in {'"', "'", "`"}:
+                output[index] = " "
+                state = char
+            index += 1
+            continue
+
+        if state == "line_comment":
+            if char in "\r\n":
+                state = "code"
+            else:
+                output[index] = " "
+            index += 1
+            continue
+
+        if state == "block_comment":
+            if text.startswith("*/", index):
+                output[index] = output[index + 1] = " "
+                state = "code"
+                index += 2
+                continue
+            if char not in "\r\n":
+                output[index] = " "
+            index += 1
+            continue
+
+        if state in {'"', "'"} and char == "\\":
+            output[index] = " "
+            if index + 1 < len(text):
+                if text[index + 1] not in "\r\n":
+                    output[index + 1] = " "
+                index += 2
+                continue
+        elif char == state:
+            output[index] = " "
+            state = "code"
+        elif char not in "\r\n":
+            output[index] = " "
+        index += 1
+    return "".join(output)
+
+
 def _strip_go_comments(text: str) -> str:
     """Remove Go comments while preserving strings and line structure."""
 
@@ -359,31 +535,20 @@ def _strip_go_comments(text: str) -> str:
 
 
 def _history_function_body(source: str) -> str | None:
-    source = _strip_go_comments(source)
-    matches = list(_HISTORY_FUNCTION_RE.finditer(source))
+    masked = _mask_go_non_code(source)
+    matches = list(_HISTORY_FUNCTION_RE.finditer(masked))
     if len(matches) != 1:
         return None
     opening = matches[0].end() - 1
     depth = 0
-    state = "code"
-    index = opening
-    while index < len(source):
-        char = source[index]
-        if state == "code":
-            if char in {'"', "'", "`"}:
-                state = char
-            elif char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    return source[opening + 1 : index]
-        else:
-            if char == "\\" and state in {'"', "'"}:
-                index += 1
-            elif char == state:
-                state = "code"
-        index += 1
+    for index in range(opening, len(masked)):
+        char = masked[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return _strip_go_comments(source[opening + 1 : index])
     return None
 
 
@@ -400,6 +565,7 @@ def _history_default_is_legacy(source: str) -> bool:
 
 def _check_defaults(source: Mapping[Path, str], violations: list[str]) -> None:
     config = source.get(Path("apps/server/config/app.yml.example"), "")
+    config = _mask_yaml_block_scalars(config)
     matches = list(_CONFIG_FLAG_RE.finditer(config))
     for key in ("expert_enabled", "stream_enabled", "a2ui_actions_enabled"):
         key_matches = [match for match in matches if match.group("key") == key]
@@ -407,6 +573,7 @@ def _check_defaults(source: Mapping[Path, str], violations: list[str]) -> None:
             violations.append(f"{key} default must be false")
 
     user_store = source.get(Path("apps/web/src/stores/user.ts"), "")
+    user_store = _mask_javascript_non_code(user_store)
     expert_matches = list(_EXPERT_DEFAULT_RE.finditer(user_store))
     if len(expert_matches) != 1 or expert_matches[0].group("value") != "false":
         violations.append("Web expertEnabled default must be false")

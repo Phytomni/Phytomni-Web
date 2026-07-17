@@ -265,6 +265,74 @@ const state = {
     assert "Web expertEnabled default must be false" in violations
 
 
+def test_web_expert_default_ignores_comments_and_string_literals() -> None:
+    source = dict(checker.DEFAULT_CHECK_FILES)
+    source[Path("apps/web/src/stores/user.ts")] = """
+/*
+expertEnabled: false
+*/
+const quoted = "expertEnabled: false"
+const template = `
+expertEnabled: false
+`
+"""
+
+    violations: list[str] = []
+    checker._check_defaults(source, violations)
+    assert "Web expertEnabled default must be false" in violations
+
+
+def test_history_default_ignores_fake_function_inside_go_raw_string() -> None:
+    source = dict(checker.DEFAULT_CHECK_FILES)
+    source[Path("apps/server/service/api_service/bot_capabilities.go")] = r'''
+var fake = `
+func HistoryReadModeFromConfig() HistoryReadMode {
+    if viper.GetBool("bot.history_dual_read") {
+        return HistoryReadModeDual
+    }
+    return HistoryReadModeLegacy
+}
+`
+'''
+
+    violations: list[str] = []
+    checker._check_defaults(source, violations)
+    assert "history_dual_read default must remain legacy/off" in violations
+
+
+def test_history_default_accepts_real_safe_function_with_comments() -> None:
+    source = dict(checker.DEFAULT_CHECK_FILES)
+    source[Path("apps/server/service/api_service/bot_capabilities.go")] = r'''
+// This comment must not affect the executable declaration.
+func HistoryReadModeFromConfig() HistoryReadMode {
+    // Preserve the explicit Web-owned Viper switch.
+    if viper.GetBool("bot.history_dual_read") {
+        return HistoryReadModeDual
+    }
+    return HistoryReadModeLegacy
+}
+'''
+
+    violations: list[str] = []
+    checker._check_defaults(source, violations)
+    assert "history_dual_read default must remain legacy/off" not in violations
+
+
+def test_yaml_block_scalar_does_not_count_as_executable_default() -> None:
+    source = dict(checker.DEFAULT_CHECK_FILES)
+    source[Path("apps/server/config/app.yml.example")] = """
+bot:
+  notes: |
+    expert_enabled: false
+  stream_enabled: false
+  a2ui_actions_enabled: false
+"""
+
+    violations: list[str] = []
+    checker._check_defaults(source, violations)
+    assert "expert_enabled default must be false" in violations
+
+
 def test_requested_unknown_flag_is_rejected_without_echoing_value() -> None:
     errors = checker.activation_errors({}, requested_flags={"private_payload": True})
     assert errors == ["unknown feature flag"]
