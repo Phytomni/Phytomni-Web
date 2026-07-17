@@ -443,6 +443,30 @@ describe("reduceA2uiSucceeded", () => {
     ).toHaveLength(1);
   });
 
+  it("does not fold a transport failure for a mismatched envelope", () => {
+    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+    const mismatched: A2uiActionEnvelope = {
+      ...envelope,
+      run_id: "other-run",
+    };
+    const before = structuredClone(blocks);
+
+    const next = reduceA2uiFailure(
+      blocks,
+      mismatched,
+      new A2uiTransportError(
+        "unknown",
+        "a2ui_transport_error",
+        undefined,
+        true,
+        false,
+      ),
+    );
+
+    expect(next).toBe(blocks);
+    expect(blocks).toEqual(before);
+  });
+
   it.each([
     [
       "surface mismatch",
@@ -525,6 +549,37 @@ describe("reduceA2uiInputRequired", () => {
     ...choiceSurface,
     surface_id: "surface-2",
   };
+
+  it("accepts only the typed input-required response branch", () => {
+    const response = fixture("http/input_required_round2.json") as Record<
+      string,
+      unknown
+    >;
+    const interrupt = response.interrupt as Record<string, unknown>;
+    const draft = interrupt.draft as Record<string, unknown>;
+    const cases: unknown[] = [
+      { ...response, run_id: undefined },
+      { ...response, status: "running" },
+      { ...response, result: {} },
+      {
+        ...response,
+        interrupt: {
+          draft: {
+            ...draft,
+            a2ui: {
+              ...(draft.a2ui as Record<string, unknown>),
+              widget: "slider",
+            },
+          },
+        },
+      },
+    ];
+
+    for (const value of cases) {
+      expect(decodeA2uiActionResponse(value).ok).toBe(false);
+    }
+    expect(decodeA2uiActionResponse(response).ok).toBe(true);
+  });
 
   it("advances round 1 and appends a fresh ready round-2 surface", () => {
     const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
@@ -641,6 +696,31 @@ describe("reduceA2uiInputRequired", () => {
     });
     expect(next).toHaveLength(blocks.length);
   });
+
+  it.each([
+    ["action", { action_id: "other-action" }, "action_mismatch"],
+    ["surface", { surface_id: "other-surface" }, "surface_mismatch"],
+    ["widget", { widget: "form" }, "widget_mismatch"],
+  ] as const)(
+    "rejects a response envelope with a mismatched %s identity",
+    (_label, override, code) => {
+      const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+      const mismatched = { ...envelope, ...override } as A2uiActionEnvelope;
+      const next = reduceA2uiInputRequired(
+        blocks,
+        mismatched,
+        inputRequired(mismatched, round2Surface),
+      );
+
+      expect(next[1].a2ui?.state).toEqual({
+        status: "protocol_error",
+        round: 1,
+        actionId: mismatched.action_id,
+        code,
+      });
+      expect(next).toHaveLength(blocks.length);
+    },
+  );
 
   it("rejects a fresh surface whose identity is already present elsewhere", () => {
     const { blocks, envelope } = beginSubmitting(surface, confirmIntent);

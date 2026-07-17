@@ -6,7 +6,13 @@
     tabindex="-1"
     :aria-busy="isSubmitting ? 'true' : undefined"
   >
-    <p v-if="statusMessageKey" class="a2ui-status" role="status" aria-live="polite">
+    <p
+      v-if="statusMessageKey"
+      class="a2ui-status"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
       {{ t(statusMessageKey) }}
     </p>
     <p
@@ -14,6 +20,7 @@
       class="a2ui-status"
       role="status"
       aria-live="polite"
+      aria-atomic="true"
     >
       {{ t("chat.a2ui.expired") }}
     </p>
@@ -83,7 +90,9 @@ const choiceSurface = computed<
 >(() => (surface.value?.widget === "choice" ? surface.value : undefined));
 
 const canInteract = computed(
-  () => props.block.a2ui?.state.status === "ready"
+  () =>
+    props.block.interactive !== false &&
+    props.block.a2ui?.state.status === "ready"
 );
 const isSubmitting = computed(
   () => props.block.a2ui?.state.status === "submitting"

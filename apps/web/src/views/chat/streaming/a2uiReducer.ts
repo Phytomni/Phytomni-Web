@@ -32,6 +32,53 @@ export type RetryA2uiResult =
     };
 
 /**
+ * A runtime identity mismatch is terminal for the local surface.  It is
+ * distinct from `not_sent`: the latter means no network request was attempted
+ * and the user may still correct a missing runtime, while this branch means a
+ * message/runtime tuple was crossed and must never be replayed.
+ */
+export function markA2uiRuntimeMismatch(
+  blocks: ContentBlock[],
+  surfaceKey: string,
+  code = "runtime_identity_mismatch",
+): ContentBlock[] {
+  const targetIndex = blocks.findIndex(
+    (block) => block.a2ui?.surface.surface_id === surfaceKey,
+  );
+  if (targetIndex < 0) return blocks;
+
+  const target = blocks[targetIndex];
+  const runtime = target.a2ui;
+  if (
+    !runtime ||
+    (runtime.state.status !== "ready" &&
+      runtime.state.status !== "temporarily_rejected")
+  ) {
+    return blocks;
+  }
+
+  const actionId =
+    runtime.state.status === "temporarily_rejected"
+      ? runtime.state.envelope.action_id
+      : undefined;
+
+  const nextBlocks = blocks.slice();
+  nextBlocks[targetIndex] = {
+    ...target,
+    a2ui: {
+      surface: runtime.surface,
+      state: {
+        status: "protocol_error",
+        round: runtime.state.round,
+        ...(actionId ? { actionId } : {}),
+        code,
+      },
+    },
+  };
+  return nextBlocks;
+}
+
+/**
  * Close interactive A2UI surfaces restored from persisted history.
  *
  * A history row can contain the last open surface snapshot, but it cannot
@@ -129,7 +176,6 @@ export function beginA2uiAction(
   if (typeof actionId !== "string" || actionId.trim() === "") {
     return { ok: false, reason: "action_id_invalid", blocks };
   }
-
   const envelope: A2uiActionEnvelope = {
     surface_id: runtime.surface.surface_id,
     widget: runtime.surface.widget,
@@ -167,7 +213,10 @@ export function reduceA2uiFailure(
     const state = block.a2ui?.state;
     return (
       state?.status === "submitting" &&
-      state.envelope.action_id === envelope.action_id
+      state.envelope.action_id === envelope.action_id &&
+      state.envelope.surface_id === envelope.surface_id &&
+      state.envelope.widget === envelope.widget &&
+      state.envelope.run_id === envelope.run_id
     );
   });
 

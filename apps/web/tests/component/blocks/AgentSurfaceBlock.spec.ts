@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
@@ -260,6 +261,83 @@ describe("AgentSurfaceBlock", () => {
     expect(remounted.findAll(".a2ui-confirm button").every((button) =>
       button.attributes("disabled") !== undefined
     )).toBe(true);
+  });
+
+  it("keeps a ready surface disabled when the block is marked non-interactive", () => {
+    const block = lifecycleBlock({ status: "ready", round: 1 });
+    block.interactive = false;
+    const w = mount(AgentSurfaceBlock, {
+      props: { block },
+      global: { plugins: [createLifecycleI18n(), ElementPlus] },
+    });
+
+    expect(w.findAll(".a2ui-confirm button").every((button) =>
+      button.attributes("disabled") !== undefined
+    )).toBe(true);
+    expect(w.find(".a2ui-status").exists()).toBe(false);
+  });
+
+  it("marks lifecycle announcements as atomic polite live regions", () => {
+    const w = mount(AgentSurfaceBlock, {
+      props: {
+        block: lifecycleBlock({
+          status: "submitting",
+          round: 1,
+          envelope: submittingEnvelope,
+        }),
+      },
+      global: { plugins: [createLifecycleI18n(), ElementPlus] },
+    });
+
+    expect(w.find('[role="status"]').attributes("aria-live")).toBe("polite");
+    expect(w.find('[role="status"]').attributes("aria-atomic")).toBe("true");
+  });
+
+  it("focuses a fresh round-2 root once without scrolling", async () => {
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
+    const block = lifecycleBlock({ status: "ready", round: 2 });
+    const w = mount(AgentSurfaceBlock, {
+      props: { block },
+      global: { plugins: [createLifecycleI18n(), ElementPlus] },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+
+    const root = w.find(".agent-surface-block");
+    expect(document.activeElement).toBe(root.element);
+    expect(
+      focusSpy.mock.calls.filter(
+        ([options]) =>
+          options &&
+          typeof options === "object" &&
+          "preventScroll" in options &&
+          options.preventScroll === true,
+      ),
+    ).toHaveLength(1);
+
+    await w.setProps({
+      block: {
+        ...block,
+        a2ui: {
+          ...block.a2ui!,
+          state: { status: "submitting", round: 2, envelope: submittingEnvelope },
+        },
+      },
+    });
+    await nextTick();
+    expect(
+      focusSpy.mock.calls.filter(
+        ([options]) =>
+          options &&
+          typeof options === "object" &&
+          "preventScroll" in options &&
+          options.preventScroll === true,
+      ),
+    ).toHaveLength(1);
+
+    w.unmount();
+    focusSpy.mockRestore();
   });
 
   it("forwards a confirm intent without creating a transport envelope", async () => {

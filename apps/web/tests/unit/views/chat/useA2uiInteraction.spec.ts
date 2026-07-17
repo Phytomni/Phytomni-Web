@@ -189,6 +189,35 @@ describe("useA2uiInteraction", () => {
     }
   );
 
+  it("refuses a runtime copied to a different message or dialogue", async () => {
+    const transport = vi.fn(async (envelope: A2uiActionEnvelope) =>
+      terminal(envelope),
+    );
+    const message = messageWith(transport) as ChatMessage & {
+      dialogue_id: string;
+    };
+    message.id = "message-local";
+    message.dialogue_id = "dialogue-local";
+    message.a2uiRuntime = {
+      dialogueId: "dialogue-foreign",
+      messageId: "message-foreign",
+      runId: "run-foreign",
+      transport,
+    };
+
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-foreign",
+    });
+    await submitAction(message, event);
+
+    expect(transport).not.toHaveBeenCalled();
+    expect(message.blocks?.[1].a2ui?.state).toEqual({
+      status: "protocol_error",
+      round: 1,
+      code: "runtime_identity_mismatch",
+    });
+  });
+
   it("routes transport failures through reduceA2uiFailure and normalizes unexpected throws", async () => {
     const transportError = new A2uiTransportError(
       "rejected",
@@ -442,6 +471,35 @@ describe("useA2uiInteraction", () => {
       expect(transport).toHaveBeenCalledTimes(1);
     }
   );
+
+  it("locks a response when the message-owned dialogue identity changes in place", async () => {
+    const reply = deferred<A2uiActionResponse>();
+    const transport = vi.fn(() => reply.promise);
+    const message = messageWith(transport);
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-dialogue-stale",
+    });
+
+    const pending = submitAction(message, event);
+    const submitting = message.blocks?.[1].a2ui?.state;
+    if (!submitting || submitting.status !== "submitting") {
+      throw new Error("expected a submitting A2UI surface");
+    }
+    const runtime = message.a2uiRuntime;
+    if (!runtime) throw new Error("expected an A2UI runtime");
+    runtime.dialogueId = "dialogue-other";
+
+    reply.resolve(terminal(submitting.envelope, true, "stale dialogue"));
+    await pending;
+
+    expect(message.blocks?.[1].a2ui?.state).toEqual({
+      status: "unknown",
+      round: 1,
+      actionId: "action-dialogue-stale",
+      code: "runtime_changed",
+    });
+    expect(message.blocks?.some((block) => block.sourceActionId)).toBe(false);
+  });
 
   it("locks a stale transport rejection instead of exposing a retry", async () => {
     let rejectTransport!: (error: unknown) => void;

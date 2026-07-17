@@ -8,6 +8,7 @@ import {
   beginA2uiAction,
   beginA2uiRetry,
   markA2uiNotSent,
+  markA2uiRuntimeMismatch,
   reduceA2uiFailure,
   reduceA2uiInputRequired,
   reduceA2uiSucceeded,
@@ -19,6 +20,7 @@ import type {
 } from "../streaming/a2uiContract";
 
 const UNEXPECTED_TRANSPORT_ERROR_CODE = "a2ui_transport_error";
+const SAFE_RUNTIME_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
 
 export interface A2uiSurfaceActionEvent {
   surfaceId: string;
@@ -53,15 +55,65 @@ function ownsSubmittingAction(
   );
 }
 
+function optionalMessageIdentity(
+  message: ChatMessage,
+  keys: readonly string[],
+): string | undefined {
+  const record = message as unknown as Record<string, unknown>;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) continue;
+    const value = record[key];
+    return typeof value === "string" ? value.trim() : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Runtime context is message-owned.  A context copied from another message or
+ * dialogue must not be allowed to dispatch an action, even when its transport
+ * function happens to still be callable.
+ */
+function runtimeOwnsMessage(
+  message: ChatMessage,
+  runtime: NonNullable<ChatMessage["a2uiRuntime"]>,
+): boolean {
+  if (
+    !SAFE_RUNTIME_ID_PATTERN.test(runtime.dialogueId) ||
+    !SAFE_RUNTIME_ID_PATTERN.test(runtime.messageId) ||
+    !SAFE_RUNTIME_ID_PATTERN.test(runtime.runId)
+  ) {
+    return false;
+  }
+
+  if (typeof message.id === "string" && message.id.trim() !== "") {
+    if (message.id.trim() !== runtime.messageId) return false;
+  }
+
+  const declaredDialogue = optionalMessageIdentity(message, [
+    "dialogue_id",
+    "dialogueId",
+  ]);
+  return declaredDialogue === undefined || declaredDialogue === runtime.dialogueId;
+}
+
 async function dispatchTransport(
   message: ChatMessage,
   capturedRuntime: NonNullable<ChatMessage["a2uiRuntime"]>,
   transport: A2uiActionTransport,
   envelope: A2uiActionEnvelope
 ): Promise<void> {
+  const capturedIdentity = {
+    dialogueId: capturedRuntime.dialogueId,
+    messageId: capturedRuntime.messageId,
+    runId: capturedRuntime.runId,
+  };
   const runtimeChanged = (): boolean =>
     message.a2uiRuntime !== capturedRuntime ||
-    capturedRuntime.runId !== envelope.run_id;
+    capturedRuntime.dialogueId !== capturedIdentity.dialogueId ||
+    capturedRuntime.messageId !== capturedIdentity.messageId ||
+    capturedRuntime.runId !== capturedIdentity.runId ||
+    capturedRuntime.runId !== envelope.run_id ||
+    !runtimeOwnsMessage(message, capturedRuntime);
   let response: A2uiActionResponse;
   try {
     response = await transport(envelope);
@@ -134,6 +186,11 @@ export function useA2uiInteraction(options: A2uiInteractionOptions = {}): {
     const runId = runtime?.runId;
     const transport = runtime?.transport;
 
+    if (runtime && !runtimeOwnsMessage(message, runtime)) {
+      message.blocks = markA2uiRuntimeMismatch(message.blocks ?? [], event.surfaceId);
+      return;
+    }
+
     if (
       !runtime ||
       typeof runId !== "string" ||
@@ -163,6 +220,10 @@ export function useA2uiInteraction(options: A2uiInteractionOptions = {}): {
   ): Promise<void> => {
     const runtime = message.a2uiRuntime;
     const transport = runtime?.transport;
+    if (runtime && !runtimeOwnsMessage(message, runtime)) {
+      message.blocks = markA2uiRuntimeMismatch(message.blocks ?? [], surfaceId);
+      return;
+    }
     if (!runtime || typeof transport !== "function") {
       message.blocks = markA2uiNotSent(message.blocks ?? [], surfaceId);
       return;

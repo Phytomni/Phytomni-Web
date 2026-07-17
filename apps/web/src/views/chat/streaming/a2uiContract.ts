@@ -116,6 +116,15 @@ export interface A2uiFormattedResult {
   answer?: string;
 }
 
+/**
+ * The only intermediate action response shape accepted by the Web action
+ * transport.  Bot intentionally returns just a fresh draft surface here;
+ * terminal result/formatted fields are not carried across the pause boundary.
+ */
+export interface A2uiInputRequiredInterrupt {
+  draft: { a2ui: A2uiOpenSurface };
+}
+
 export type A2uiActionResponse =
   | {
       status: "succeeded";
@@ -128,7 +137,7 @@ export type A2uiActionResponse =
   | {
       status: "input_required";
       run_id: string;
-      interrupt: { draft: { a2ui: A2uiOpenSurface } };
+      interrupt: A2uiInputRequiredInterrupt;
     };
 
 export type A2uiActionIntent =
