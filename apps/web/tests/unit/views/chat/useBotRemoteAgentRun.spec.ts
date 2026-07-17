@@ -203,6 +203,46 @@ describe("useBotRemoteAgentRun", () => {
     expect(getChatState("d1").activeRequestId).toBe("");
   });
 
+  it("retains only safe interop provenance in owner lifecycle state", async () => {
+    const state = makeState();
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        bot_run_id: "run-research-interop",
+        tool_name: "InSilicoResearchAgent",
+        status: "RUNNING",
+        degraded_interop: true,
+        interop: {
+          mode: "auto",
+          status: "degraded",
+          target_id: "mcp-peer",
+          kind: "mcp",
+          code: "degraded",
+          endpoint: "https://private.invalid",
+        },
+      },
+    });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-interop",
+      getChatState: () => state,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await run.submit({ query: "paper" });
+
+    expect(run.state.value.interop).toEqual({
+      mode: "auto",
+      status: "degraded",
+      targetId: "mcp-peer",
+      kind: "mcp",
+      code: "degraded",
+    });
+    expect(run.state.value.degradedInterop).toBe(true);
+    expect(state.botLifecycle?.interop).toEqual(run.state.value.interop);
+    expect(state.botLifecycle?.degradedInterop).toBe(true);
+    expect(JSON.stringify(state)).not.toContain("private.invalid");
+  });
+
   it("hydrates a validated terminal projection and clears its identity on reset", async () => {
     mockQuery.mockResolvedValueOnce({
       data: {
@@ -244,6 +284,14 @@ describe("useBotRemoteAgentRun", () => {
         artifacts: [{ outputDir: "/obs/bucket/report", paths: [] }],
         requestId: null,
         trackingDegraded: false,
+        interop: {
+          mode: "required",
+          status: "delegated",
+          targetId: "a2a-peer",
+          kind: "a2a",
+          code: "no_evidence",
+        },
+        degradedInterop: false,
       },
       { dialogueId: "43", messageId: "18" }
     );
@@ -252,10 +300,19 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.finalReport).toBe("Terminal report");
     expect(run.state.value.dialogueId).toBe("43");
     expect(run.state.value.messageId).toBe("18");
+    expect(run.state.value.interop).toEqual({
+      mode: "required",
+      status: "delegated",
+      targetId: "a2a-peer",
+      kind: "a2a",
+      code: "no_evidence",
+    });
 
     run.reset();
     expect(run.state.value.dialogueId).toBeNull();
     expect(run.state.value.messageId).toBeNull();
+    expect(run.state.value.interop).toBeNull();
+    expect(run.state.value.degradedInterop).toBe(false);
   });
 
   it("loads the default capability source before submitting", async () => {

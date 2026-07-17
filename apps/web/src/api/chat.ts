@@ -1,5 +1,6 @@
 import request, { createAbortableRequest } from "@/utils/request";
 import type { AxiosProgressEvent } from "axios";
+import type { BotInteropPayload } from "@/views/chat/botProjection";
 
 type QueryProgressOpts = {
   onUploadProgress?: (e: AxiosProgressEvent) => void;
@@ -24,6 +25,8 @@ export interface QueryData {
   tracking_degraded?: boolean;
   report_revision?: number;
   request_id?: string | null;
+  degraded_interop?: boolean;
+  interop?: BotInteropPayload | null;
   /** Bounded by the Go A2UI decoder; the client validates it again before use. */
   a2ui?: unknown;
 }

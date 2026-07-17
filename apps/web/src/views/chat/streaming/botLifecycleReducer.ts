@@ -5,6 +5,7 @@ import {
 } from "../botProjection";
 import type {
   BotArtifact,
+  BotInteropProvenance,
   BotRunProjection,
   BotRunStatus,
 } from "../botProjection";
@@ -23,6 +24,8 @@ export interface BotLifecycleState {
   intermediateReport: string;
   finalReport: string;
   degraded: boolean;
+  degradedInterop?: boolean;
+  interop?: BotInteropProvenance | null;
   failures: string[];
   artifacts: BotArtifact[];
 }
@@ -76,6 +79,73 @@ function cloneArtifacts(artifacts: readonly BotArtifact[]): BotArtifact[] {
   }
 
   return cloned;
+}
+
+const INTEROP_MODES = new Set(["off", "auto", "required"]);
+const INTEROP_STATUSES = new Set(["local", "delegated", "degraded", "failed"]);
+const INTEROP_KINDS = new Set(["mcp", "a2a"]);
+const INTEROP_CODES = new Set([
+  "disabled",
+  "forbidden",
+  "unavailable",
+  "discovery_failed",
+  "no_evidence",
+  "target_unavailable",
+  "invalid_request",
+  "degraded",
+  "input_required",
+  "interop_failed",
+]);
+const INTEROP_TARGET_ID_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/u;
+const INTEROP_AGENT_NAMES = new Set([
+  "research",
+  "design",
+  "InSilicoResearchAgent",
+  "DigitalDesignAgent",
+]);
+
+/** Copy only the allowlisted interop labels into lifecycle-owned state. */
+function cloneInterop(
+  value: BotInteropProvenance | null | undefined
+): BotInteropProvenance | null {
+  if (!value || typeof value !== "object") return null;
+  if (
+    typeof value.mode !== "string" ||
+    !INTEROP_MODES.has(value.mode) ||
+    typeof value.status !== "string" ||
+    !INTEROP_STATUSES.has(value.status)
+  ) {
+    return null;
+  }
+
+  const copy: BotInteropProvenance = {
+    mode: value.mode as BotInteropProvenance["mode"],
+    status: value.status as BotInteropProvenance["status"],
+  };
+  if (
+    typeof value.targetId === "string" &&
+    INTEROP_TARGET_ID_PATTERN.test(value.targetId)
+  ) {
+    copy.targetId = value.targetId;
+  }
+  if (typeof value.kind === "string" && INTEROP_KINDS.has(value.kind)) {
+    copy.kind = value.kind as BotInteropProvenance["kind"];
+  }
+  if (typeof value.code === "string" && INTEROP_CODES.has(value.code)) {
+    copy.code = value.code as BotInteropProvenance["code"];
+  }
+  return copy;
+}
+
+function mergeInterop(
+  current: BotInteropProvenance | null | undefined,
+  incoming: BotInteropProvenance | null | undefined,
+  stale: boolean
+): BotInteropProvenance | null {
+  const currentCopy = cloneInterop(current);
+  const incomingCopy = cloneInterop(incoming);
+  if (stale && currentCopy) return currentCopy;
+  return incomingCopy ?? currentCopy;
 }
 
 function hasText(value: string): boolean {
@@ -233,6 +303,8 @@ export function initBotLifecycleState(): BotLifecycleState {
     intermediateReport: "",
     finalReport: "",
     degraded: false,
+    degradedInterop: false,
+    interop: null,
     failures: [],
     artifacts: [],
   };
@@ -272,6 +344,12 @@ export function reduceBotProjection(
   const nextStatus = mergeStatus(state.status, incomingStatus, stale);
   const nextRunId = state.runId ?? incoming.runId ?? null;
   const nextRevision = Math.max(currentRevision, incomingRevision);
+  const interopEnabled = INTEROP_AGENT_NAMES.has(incoming.agent);
+  const nextInterop = mergeInterop(
+    state.interop,
+    interopEnabled ? incoming.interop : null,
+    stale
+  );
 
   return {
     runId: nextRunId,
@@ -284,6 +362,10 @@ export function reduceBotProjection(
       state.degraded === true ||
       incoming.degraded === true ||
       incoming.trackingDegraded === true,
+    degradedInterop:
+      state.degradedInterop === true ||
+      (interopEnabled && incoming.degradedInterop === true),
+    interop: nextInterop,
     failures: mergeFailures(state.failures, incoming.failures),
     artifacts: mergeArtifacts(state.artifacts, incoming.artifacts),
   };
@@ -306,6 +388,8 @@ export function reduceBotFailure(
       ? state.finalReport
       : state.intermediateReport,
     degraded: state.status === "SUCCEEDED" ? state.degraded : true,
+    degradedInterop: state.degradedInterop === true,
+    interop: cloneInterop(state.interop),
     failures: mergeFailures(state.failures, [safeMessage]),
     artifacts: cloneArtifacts(state.artifacts),
   };

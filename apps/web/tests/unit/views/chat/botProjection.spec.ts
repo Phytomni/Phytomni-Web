@@ -270,4 +270,151 @@ describe("parseBotProjection", () => {
         .reportUpdatedAt
     ).toBe("2026-07-16T00:00:00Z");
   });
+
+  it("parses safe interop provenance from snake and camel case sources", () => {
+    const delegated = parseBotProjection({
+      agent: "InSilicoResearchAgent",
+      interop: {
+        mode: "auto",
+        status: "delegated",
+        target_id: "mcp-peer",
+        kind: "mcp",
+        code: "no_evidence",
+        endpoint: "https://private.invalid",
+        credential: "secret",
+      },
+      degraded_interop: true,
+    });
+    expect(delegated.interop).toEqual({
+      mode: "auto",
+      status: "delegated",
+      targetId: "mcp-peer",
+      kind: "mcp",
+      code: "no_evidence",
+    });
+    expect(delegated.degradedInterop).toBe(true);
+    expect(JSON.stringify(delegated)).not.toContain("private.invalid");
+    expect(JSON.stringify(delegated)).not.toContain("credential");
+
+    const failed = parseBotProjection({
+      tool_name: "DigitalDesignAgent",
+      result: {
+        interop: {
+          mode: "required",
+          status: "failed",
+          targetId: "a2a-peer",
+          kind: "a2a",
+          code: "interop_failed",
+        },
+        degradedInterop: false,
+      },
+    });
+    expect(failed.interop).toEqual({
+      mode: "required",
+      status: "failed",
+      targetId: "a2a-peer",
+      kind: "a2a",
+      code: "interop_failed",
+    });
+    expect(failed.degradedInterop).toBe(false);
+  });
+
+  it.each([
+    ["off", "local"],
+    ["auto", "delegated"],
+    ["auto", "degraded"],
+    ["required", "failed"],
+  ] as const)("accepts %s/%s provenance", (mode, status) => {
+    expect(
+      parseBotProjection({
+        agent: "research",
+        interop: { mode, status },
+      }).interop
+    ).toEqual({ mode, status });
+  });
+
+  it("uses projection source precedence for persisted interop fields", () => {
+    const projection = parseBotProjection({
+      tool_name: "InSilicoResearchAgent",
+      projection: {
+        interop: {
+          mode: "off",
+          status: "local",
+        },
+      },
+      data: {
+        interop: {
+          mode: "auto",
+          status: "delegated",
+          targetId: "mcp-peer",
+          kind: "mcp",
+        },
+      },
+    });
+    expect(projection.interop).toEqual({ mode: "off", status: "local" });
+  });
+
+  it("defaults legacy projections without interop metadata", () => {
+    const projection = parseBotProjection({ status: "SUCCEEDED" });
+    expect(projection.interop).toBeNull();
+    expect(projection.degradedInterop).toBe(false);
+  });
+
+  it("rejects malformed interop fields and wrong public shapes", () => {
+    const base = { mode: "auto", status: "delegated" };
+    for (const [field, value] of [
+      ["mode", "unsupported"],
+      ["status", "RUNNING"],
+      ["kind", "http"],
+      ["target_id", "https://private.invalid"],
+      ["code", "provider_secret"],
+      ["target_id", "x".repeat(65)],
+    ] as const) {
+      expect(() =>
+        parseBotProjection({
+          agent: "InSilicoResearchAgent",
+          interop: { ...base, [field]: value },
+        })
+      ).toThrow(/interop/);
+    }
+    expect(() =>
+      parseBotProjection({
+        agent: "InSilicoResearchAgent",
+        interop: [],
+      })
+    ).toThrow(/interop/);
+    expect(() =>
+      parseBotProjection({
+        agent: "InSilicoResearchAgent",
+        interop: { mode: "auto", status: "delegated", kind: 1 },
+      })
+    ).toThrow(/interop/);
+    expect(() =>
+      parseBotProjection({
+        agent: "InSilicoResearchAgent",
+        interop: { mode: "auto" },
+      })
+    ).toThrow(/interop.status/);
+    expect(() =>
+      parseBotProjection({
+        agent: "InSilicoResearchAgent",
+        degraded_interop: "true",
+      })
+    ).toThrow(/degraded_interop/);
+  });
+
+  it("does not attach interop metadata to ordinary agent projections", () => {
+    const projection = parseBotProjection({
+      tool_name: "AnalystAgent",
+      interop: {
+        mode: "auto",
+        status: "delegated",
+        targetId: "mcp-peer",
+        kind: "mcp",
+      },
+      degradedInterop: true,
+    });
+    expect(projection.interop).toBeNull();
+    expect(projection.degradedInterop).toBe(false);
+  });
 });

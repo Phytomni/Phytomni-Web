@@ -1,6 +1,6 @@
 import type { A2uiActionTransport } from "./streaming/a2uiAction";
 import type { A2uiSurfaceRuntime } from "./streaming/a2uiContract";
-import type { BotRunProjection } from "./botProjection";
+import type { BotInteropPayload, BotRunProjection } from "./botProjection";
 import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 
@@ -116,6 +116,9 @@ export interface ChatResponse {
   bot_run_id?: string | null;
   /** True when a successful response cannot be polled by Bot run id. */
   tracking_degraded?: boolean;
+  /** Safe Web-owned interop outcome; raw Bot metadata is never retained. */
+  degraded_interop?: boolean;
+  interop?: BotInteropPayload | null;
   report_revision?: number;
   request_id?: string | null;
   /** Bounded input-required surface from the Web Go gateway. */

@@ -176,7 +176,7 @@ function capabilityFor(
 
 function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
   const lifecycle = owned.botLifecycle ?? initBotLifecycleState();
-  const projection = owned.botProjection ?? null;
+  const projection = safeProjectionCopy(owned.botProjection);
   return {
     ...lifecycle,
     phase: projection ? phaseFor(projection.status) : "idle",
@@ -292,6 +292,20 @@ function responsePayload(response: unknown): unknown {
   return response;
 }
 
+function safeProjectionCopy(
+  projection: BotRunProjection | null | undefined
+): BotRunProjection | null {
+  if (!projection) return null;
+  try {
+    // Re-run the boundary parser before a projection enters message-owned
+    // state. This strips unknown/private fields even when hydrate is called by
+    // a history consumer rather than by the axios response path.
+    return parseBotProjection(projection);
+  } catch {
+    return null;
+  }
+}
+
 function safeIdentity(value: unknown, pattern: RegExp): string | null {
   const normalized =
     typeof value === "number" && Number.isSafeInteger(value)
@@ -359,7 +373,8 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   let capabilityLoadPromise: Promise<void> | null = null;
 
   const syncOwnedState = () => {
-    owned.botProjection = state.value.projection ?? undefined;
+    owned.botProjection =
+      safeProjectionCopy(state.value.projection) ?? undefined;
     owned.botLifecycle = {
       runId: state.value.runId,
       status: state.value.status,
@@ -368,6 +383,8 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       intermediateReport: state.value.intermediateReport,
       finalReport: state.value.finalReport,
       degraded: state.value.degraded,
+      degradedInterop: state.value.degradedInterop === true,
+      interop: state.value.interop ? { ...state.value.interop } : null,
       failures: [...state.value.failures],
       artifacts: state.value.artifacts.map((artifact) => ({
         outputDir: artifact.outputDir,
@@ -380,7 +397,8 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     projection: BotRunProjection,
     identity: Partial<RemoteAgentRunIdentity> = {}
   ): void => {
-    const lifecycle = reduceBotProjection(state.value, projection);
+    const safeProjection = parseBotProjection(projection);
+    const lifecycle = reduceBotProjection(state.value, safeProjection);
     const dialogueId =
       identity.dialogueId === undefined
         ? state.value.dialogueId
@@ -392,10 +410,10 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     state.value = {
       ...state.value,
       ...lifecycle,
-      phase: phaseFor(projection.status),
+      phase: phaseFor(safeProjection.status),
       requestId: null,
       uploadTransfer: null,
-      projection,
+      projection: safeProjection,
       dialogueId,
       messageId,
       error: null,

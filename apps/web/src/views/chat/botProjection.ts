@@ -20,6 +20,11 @@ export const MAX_BOT_ARTIFACT_PATHS = 256;
 export const MAX_BOT_ARTIFACT_PATH_LENGTH = 512;
 export const MAX_BOT_REQUEST_ID_LENGTH = 256;
 export const MAX_BOT_PROGRESS_COUNTER = 1_000_000_000;
+export const MAX_BOT_INTEROP_MODE_LENGTH = 16;
+export const MAX_BOT_INTEROP_STATUS_LENGTH = 16;
+export const MAX_BOT_INTEROP_TARGET_ID_LENGTH = 64;
+export const MAX_BOT_INTEROP_KIND_LENGTH = 8;
+export const MAX_BOT_INTEROP_CODE_LENGTH = 32;
 
 export type BotRunStatus =
   | "RUNNING"
@@ -30,6 +35,39 @@ export type BotRunStatus =
   | "QUEUED"
   | "CANCELLED"
   | "TIMED_OUT";
+
+export type BotInteropMode = "off" | "auto" | "required";
+export type BotInteropStatus = "local" | "delegated" | "degraded" | "failed";
+export type BotInteropKind = "mcp" | "a2a";
+export type BotInteropCode =
+  | "disabled"
+  | "forbidden"
+  | "unavailable"
+  | "discovery_failed"
+  | "no_evidence"
+  | "target_unavailable"
+  | "invalid_request"
+  | "degraded"
+  | "input_required"
+  | "interop_failed";
+
+/** A bounded, Web-owned explanation of an interop decision. */
+export interface BotInteropProvenance {
+  mode: BotInteropMode;
+  status: BotInteropStatus;
+  targetId?: string;
+  kind?: BotInteropKind;
+  code?: BotInteropCode;
+}
+
+/** The snake_case shape emitted by the Go gateway before parser normalization. */
+export interface BotInteropPayload {
+  mode: BotInteropMode;
+  status: BotInteropStatus;
+  target_id?: string;
+  kind?: BotInteropKind;
+  code?: BotInteropCode;
+}
 
 export type BotReportStage =
   | "waiting_for_brief_gene"
@@ -70,6 +108,10 @@ export interface BotRunProjection {
   artifacts: BotArtifact[];
   requestId: string | null;
   trackingDegraded: boolean;
+  /** True when the interop path degraded; never contains provider metadata. */
+  degradedInterop?: boolean;
+  /** Safe interop provenance, or null for legacy/local responses. */
+  interop?: BotInteropProvenance | null;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -101,6 +143,34 @@ const REPORT_COMPLETENESS = new Set<Exclude<BotReportCompleteness, null>>([
 
 const RFC3339_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+
+const INTEROP_MODES = new Set<BotInteropMode>(["off", "auto", "required"]);
+const INTEROP_STATUSES = new Set<BotInteropStatus>([
+  "local",
+  "delegated",
+  "degraded",
+  "failed",
+]);
+const INTEROP_KINDS = new Set<BotInteropKind>(["mcp", "a2a"]);
+const INTEROP_CODES = new Set<BotInteropCode>([
+  "disabled",
+  "forbidden",
+  "unavailable",
+  "discovery_failed",
+  "no_evidence",
+  "target_unavailable",
+  "invalid_request",
+  "degraded",
+  "input_required",
+  "interop_failed",
+]);
+const INTEROP_TARGET_ID_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/u;
+const INTEROP_AGENT_NAMES = new Set([
+  "research",
+  "design",
+  "InSilicoResearchAgent",
+  "DigitalDesignAgent",
+]);
 
 const own = (value: JsonRecord, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
@@ -205,6 +275,77 @@ function parseStatus(value: unknown): BotRunStatus {
   const mapped = STATUS_ALIASES[normalized];
   if (!mapped) error("status", "unsupported value");
   return mapped;
+}
+
+function requiredInteropEnum<T extends string>(
+  value: unknown,
+  field: string,
+  maxLength: number,
+  values: ReadonlySet<T>
+): T {
+  const normalized = boundedString(value, field, maxLength);
+  if (!normalized || !values.has(normalized as T)) {
+    error(field, "unsupported value");
+  }
+  return normalized as T;
+}
+
+function optionalInteropString(
+  value: unknown,
+  field: string,
+  maxLength: number
+): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  const normalized = boundedString(value, field, maxLength);
+  return normalized || null;
+}
+
+function parseInterop(value: unknown): BotInteropProvenance | null {
+  if (value === undefined || value === null) return null;
+  if (!isJsonRecord(value)) error("interop", "must be an object");
+
+  const mode = requiredInteropEnum(
+    readField([value], ["mode"]),
+    "interop.mode",
+    MAX_BOT_INTEROP_MODE_LENGTH,
+    INTEROP_MODES
+  );
+  const status = requiredInteropEnum(
+    readField([value], ["status"]),
+    "interop.status",
+    MAX_BOT_INTEROP_STATUS_LENGTH,
+    INTEROP_STATUSES
+  );
+  const targetId = optionalInteropString(
+    readField([value], ["target_id", "targetId"]),
+    "interop.target_id",
+    MAX_BOT_INTEROP_TARGET_ID_LENGTH
+  );
+  if (targetId && !INTEROP_TARGET_ID_PATTERN.test(targetId)) {
+    error("interop.target_id", "is malformed");
+  }
+  const kind = optionalInteropString(
+    readField([value], ["kind"]),
+    "interop.kind",
+    MAX_BOT_INTEROP_KIND_LENGTH
+  );
+  if (kind && !INTEROP_KINDS.has(kind as BotInteropKind)) {
+    error("interop.kind", "unsupported value");
+  }
+  const code = optionalInteropString(
+    readField([value], ["code"]),
+    "interop.code",
+    MAX_BOT_INTEROP_CODE_LENGTH
+  );
+  if (code && !INTEROP_CODES.has(code as BotInteropCode)) {
+    error("interop.code", "unsupported value");
+  }
+
+  const provenance: BotInteropProvenance = { mode, status };
+  if (targetId) provenance.targetId = targetId;
+  if (kind) provenance.kind = kind as BotInteropKind;
+  if (code) provenance.code = code as BotInteropCode;
+  return provenance;
 }
 
 function parseEnum<T extends string>(
@@ -563,6 +704,7 @@ export function parseBotProjection(input: unknown): BotRunProjection {
     : status === "SUCCEEDED"
     ? answer
     : finalValue;
+  const interopEnabled = INTEROP_AGENT_NAMES.has(agentValue ?? "");
 
   return {
     runId,
@@ -606,6 +748,15 @@ export function parseBotProjection(input: unknown): BotRunProjection {
       readField(sources, ["tracking_degraded", "trackingDegraded"]),
       "tracking_degraded"
     ),
+    degradedInterop: interopEnabled
+      ? optionalBoolean(
+          readField(sources, ["degraded_interop", "degradedInterop"]),
+          "degraded_interop"
+        )
+      : false,
+    interop: interopEnabled
+      ? parseInterop(readField(sources, ["interop"]))
+      : null,
   };
 }
 

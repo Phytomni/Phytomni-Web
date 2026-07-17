@@ -320,4 +320,71 @@ describe("bot lifecycle reducer", () => {
     expect(next.artifacts[0].paths).not.toBe(first.artifacts[0].paths);
     expect(first.failures).toEqual(["one"]);
   });
+
+  it("retains safe interop provenance with defensive copies and sticky degradation", () => {
+    const provenance = {
+      mode: "auto" as const,
+      status: "delegated" as const,
+      targetId: "mcp-peer",
+      kind: "mcp" as const,
+      code: "no_evidence" as const,
+    };
+    const incoming = {
+      ...projection({ agent: "InSilicoResearchAgent", reportRevision: 2 }),
+      interop: provenance,
+      degradedInterop: true,
+    } as BotRunProjection;
+    const state = reduceBotProjection(initBotLifecycleState(), incoming);
+    expect(state.interop).toEqual(provenance);
+    expect(state.degradedInterop).toBe(true);
+
+    provenance.status = "failed" as never;
+    expect(state.interop).toEqual({
+      mode: "auto",
+      status: "delegated",
+      targetId: "mcp-peer",
+      kind: "mcp",
+      code: "no_evidence",
+    });
+
+    const stale = reduceBotProjection(
+      state,
+      {
+        ...projection({ agent: "InSilicoResearchAgent", reportRevision: 1 }),
+        interop: { mode: "off", status: "local" },
+        degradedInterop: false,
+      } as BotRunProjection
+    );
+    expect(stale.interop).toEqual(state.interop);
+    expect(stale.degradedInterop).toBe(true);
+  });
+
+  it("preserves provenance through local failures and keeps legacy defaults", () => {
+    const state = reduceBotProjection(initBotLifecycleState(), {
+      ...projection({ agent: "InSilicoResearchAgent", reportRevision: 1 }),
+      interop: { mode: "required", status: "degraded", code: "degraded" },
+      degradedInterop: true,
+    } as BotRunProjection);
+    const failed = reduceBotFailure(state, "provider secret");
+    expect(failed.interop).toEqual({
+      mode: "required",
+      status: "degraded",
+      code: "degraded",
+    });
+    expect(failed.degradedInterop).toBe(true);
+
+    const legacy = reduceBotProjection(initBotLifecycleState(), projection());
+    expect(legacy.interop).toBeNull();
+    expect(legacy.degradedInterop).toBe(false);
+  });
+
+  it("does not leak interop fields from ordinary agent projections", () => {
+    const next = reduceBotProjection(initBotLifecycleState(), {
+      ...projection({ agent: "DeepGenomeAgent" }),
+      interop: { mode: "auto", status: "delegated", targetId: "mcp-peer" },
+      degradedInterop: true,
+    } as BotRunProjection);
+    expect(next.interop).toBeNull();
+    expect(next.degradedInterop).toBe(false);
+  });
 });
