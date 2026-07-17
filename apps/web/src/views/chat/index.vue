@@ -449,6 +449,8 @@
               :state="currentArtifactLifecycle"
               :progress="currentArtifactProjection?.progress"
               :updated-at="currentArtifactProjection?.reportUpdatedAt"
+              :labels="currentArtifactBotReportLabels"
+              :empty-report-label="currentArtifactEmptyReportLabel"
               :ns="artifactNamespace"
             />
             <CitedAnswer
@@ -467,12 +469,12 @@
               @activate="selectArtifactTab('evidence')"
             />
           </template>
-          <template #activity>{{ t("common.noData") }}</template>
+          <template #activity>{{ t("chat.log.noData") }}</template>
           <template #downloads>
             <BotArtifactList
               v-if="currentArtifactLifecycle"
               :artifacts="currentArtifactLifecycle.artifacts"
-              :empty-label="t('common.warning')"
+              :empty-label="t('chat.botReport.emptyArtifacts')"
               :download="downloadFile"
             />
             <span v-else>{{ t("common.noData") }}</span>
@@ -875,7 +877,9 @@ const artifactTabLabels = computed(() => ({
 
 type ChatArtifactReportStatus = "loading" | "degraded" | "complete" | "failed";
 type ChatArtifactLifecycleState = BotLifecycleState &
-  Partial<Pick<BotRunProjection, "reportStage" | "reportUpdatedAt" | "progress">>;
+  Partial<
+    Pick<BotRunProjection, "reportStage" | "reportUpdatedAt" | "progress">
+  >;
 
 const currentArtifactProjection = computed(
   () => currentArtifactMessage.value?.botProjection ?? null
@@ -937,9 +941,11 @@ const currentArtifactLifecycle = computed(() => {
 function reportStatusForArtifact(
   state: BotLifecycleState
 ): ChatArtifactReportStatus {
-  const stage = (state as BotLifecycleState & {
-    reportStage?: "waiting_for_brief_gene" | "intermediate" | "final" | null;
-  }).reportStage;
+  const stage = (
+    state as BotLifecycleState & {
+      reportStage?: "waiting_for_brief_gene" | "intermediate" | "final" | null;
+    }
+  ).reportStage;
   if (state.status === "FAILED") return "failed";
   if (state.status === "INPUT_REQUIRED" || stage === "waiting_for_brief_gene") {
     return "loading";
@@ -962,18 +968,49 @@ const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
       : null
 );
 
-const currentArtifactStatusLabel = computed(() => {
-  switch (currentArtifactReportStatus.value) {
-    case "loading":
-      return t("common.loading");
-    case "degraded":
-      return t("common.warning");
-    case "failed":
-      return t("common.failed");
-    case "complete":
-    default:
-      return t("common.finished");
+function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
+  const stage = state.reportStage;
+  if (state.status === "FAILED") return t("chat.botReport.failed");
+  if (state.status === "INPUT_REQUIRED") {
+    return t("chat.botReport.inputRequired");
   }
+  if (stage === "waiting_for_brief_gene") {
+    return t("chat.botReport.waiting");
+  }
+  if (state.degraded) return t("chat.botReport.degraded");
+  if (stage === "intermediate") return t("chat.botReport.partial");
+  if (state.status === "RUNNING") return t("chat.botReport.waiting");
+  return t("chat.botReport.complete");
+}
+
+const currentArtifactBotReportLabels = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  if (!state) return {};
+  const status = reportStatusForArtifact(state);
+  return {
+    loading:
+      status === "loading"
+        ? botReportLabelForLifecycle(state)
+        : t("chat.botReport.waiting"),
+    degraded:
+      status === "degraded"
+        ? botReportLabelForLifecycle(state)
+        : t("chat.botReport.degraded"),
+    failed: t("chat.botReport.failed"),
+    complete: t("chat.botReport.complete"),
+  };
+});
+
+const currentArtifactEmptyReportLabel = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  return state
+    ? botReportLabelForLifecycle(state)
+    : t("chat.botReport.waiting");
+});
+
+const currentArtifactStatusLabel = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  return state ? botReportLabelForLifecycle(state) : t("common.finished");
 });
 
 const reconcileMatchedDialogue = (
