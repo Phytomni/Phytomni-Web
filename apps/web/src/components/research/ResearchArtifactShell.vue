@@ -66,6 +66,7 @@
           :aria-labelledby="tabId(item.id)"
           :hidden="selectedTab !== item.id"
           :data-panel-id="item.id"
+          :data-test="panelTestId(item.id)"
         >
           <div
             :class="{
@@ -167,6 +168,10 @@ function tabId(tab: ResearchArtifactTab): string {
 
 function panelId(tab: ResearchArtifactTab): string {
   return `${idBase.value}-panel-${tab}`;
+}
+
+function panelTestId(tab: ResearchArtifactTab): string {
+  return `bot-report-${tab}`;
 }
 
 function activateTab(tab: ResearchArtifactTab, moveFocus = false): void {

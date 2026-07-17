@@ -13,6 +13,14 @@
     >
       <h1 id="research-agent-title">{{ t("agents.research.title") }}</h1>
       <p>{{ t("agents.research.capabilityLoading") }}</p>
+      <button
+        type="button"
+        class="research-agent-back"
+        data-test="research-back"
+        @click="goBack"
+      >
+        {{ t("common.back") }}
+      </button>
     </section>
 
     <section
@@ -26,6 +34,14 @@
         {{ t("agents.research.unavailableTitle") }}
       </h1>
       <p>{{ t("agents.research.unavailableMessage") }}</p>
+      <button
+        type="button"
+        class="research-agent-back"
+        data-test="research-back"
+        @click="goBack"
+      >
+        {{ t("common.back") }}
+      </button>
     </section>
 
     <template v-else>
@@ -49,7 +65,11 @@
         </button>
       </header>
 
-      <form class="research-agent-form" @submit.prevent="submitResearch">
+      <form
+        class="research-agent-form"
+        novalidate
+        @submit.prevent="submitResearch"
+      >
         <div class="research-agent-field">
           <label for="research-question">{{
             t("agents.research.questionLabel")
@@ -59,9 +79,8 @@
             v-model="question"
             data-test="research-question"
             :placeholder="t('agents.research.questionPlaceholder')"
-            :maxlength="MAX_QUERY_LENGTH"
             rows="5"
-            required
+            aria-required="true"
           />
         </div>
 
@@ -112,7 +131,6 @@
             v-model="datasetDescription"
             data-test="research-dataset"
             :placeholder="t('agents.research.datasetDescriptionPlaceholder')"
-            :maxlength="MAX_DATASET_DESCRIPTION_LENGTH"
             rows="3"
           />
         </div>
@@ -139,7 +157,7 @@
             type="submit"
             class="research-agent-submit"
             data-test="research-submit"
-            :disabled="isSubmitting || !question.trim()"
+            :disabled="isSubmitting"
             @click="submitResearch"
           >
             {{
@@ -256,6 +274,7 @@ import { getAnswerCheck, getChatdownloadURL } from "@/api/chat";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
 import {
   useBotRemoteAgentRun,
@@ -326,10 +345,12 @@ const capabilityLoaded = computed(() => capabilities.loaded.value === true);
 const researchCapability = computed(
   () => capabilities.byTool.value.InSilicoResearchAgent
 );
+const researchProduct = REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent;
 const capabilityAllowed = computed(() => {
   const capability = researchCapability.value;
   return (
     capabilityLoaded.value &&
+    researchProduct.live === true &&
     capability?.enabled === true &&
     capability.execution === "agent_run" &&
     capability.attachments === true &&

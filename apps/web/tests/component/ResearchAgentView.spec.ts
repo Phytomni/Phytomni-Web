@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import ResearchAgentView from "@/views/research-agent/index.vue";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
@@ -60,6 +61,8 @@ const mocks = vi.hoisted(() => {
     load: vi.fn().mockResolvedValue([]),
     getChatState: vi.fn(() => ({})),
     getAnswerCheck: vi.fn().mockResolvedValue({ code: 200, data: [] }),
+    capabilityLoaded: { value: true },
+    routerBack: vi.fn(),
   };
 });
 
@@ -80,7 +83,7 @@ vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
   useBotCapabilities: () => ({
-    loaded: { value: true },
+    loaded: mocks.capabilityLoaded,
     loading: { value: false },
     byTool: {
       value: {
@@ -106,7 +109,7 @@ vi.mock("@/views/chat/composables/useChatStates", () => ({
 }));
 
 vi.mock("vue-router", () => ({
-  useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ back: mocks.routerBack, push: vi.fn() }),
   useRoute: () => ({ query: {} }),
 }));
 
@@ -167,6 +170,7 @@ function degradedState(): BotLifecycleState {
 describe("ResearchAgentView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
     mocks.state.value = {
       runId: null,
       status: "RUNNING",
@@ -187,6 +191,50 @@ describe("ResearchAgentView", () => {
     };
     mocks.submit.mockResolvedValue(null);
     mocks.getAnswerCheck.mockResolvedValue({ code: 200, data: [] });
+    mocks.capabilityLoaded.value = true;
+  });
+
+  afterEach(() => {
+    REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = false;
+  });
+
+  it("keeps loading and dark-product Back actions reachable", async () => {
+    mocks.capabilityLoaded.value = false;
+    const loading = mountView();
+    expect(loading.get('[data-test="research-back"]').exists()).toBe(true);
+    await loading.get('[data-test="research-back"]').trigger("click");
+    expect(mocks.routerBack).toHaveBeenCalledTimes(1);
+    loading.unmount();
+
+    mocks.capabilityLoaded.value = true;
+    REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = false;
+    const unavailable = mountView();
+    expect(unavailable.get('[data-test="research-unavailable"]').exists()).toBe(
+      true
+    );
+    await unavailable.get('[data-test="research-back"]').trigger("click");
+    expect(mocks.routerBack).toHaveBeenCalledTimes(2);
+    unavailable.unmount();
+  });
+
+  it("uses localized custom validation for empty and oversized questions", async () => {
+    const wrapper = mountView();
+
+    await wrapper.get("form.research-agent-form").trigger("submit");
+    expect(wrapper.get('[data-test="research-form-error"]').exists()).toBe(
+      true
+    );
+    expect(mocks.submit).not.toHaveBeenCalled();
+
+    await wrapper
+      .get('[data-test="research-question"]')
+      .setValue("x".repeat(4001));
+    await wrapper.get("form.research-agent-form").trigger("submit");
+    expect(wrapper.get('[data-test="research-form-error"]').exists()).toBe(
+      true
+    );
+    expect(mocks.submit).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it("submits a research question and preserves uploaded paper names", async () => {

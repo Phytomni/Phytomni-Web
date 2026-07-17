@@ -45,6 +45,18 @@ describe("ResearchArtifactShell", () => {
     expect(wrapper.find("[data-test=evidence]").exists()).toBe(true);
     expect(wrapper.find("[data-test=activity]").exists()).toBe(true);
     expect(wrapper.find("[data-test=downloads]").exists()).toBe(true);
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="bot-report-evidence"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="bot-report-activity"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="bot-report-downloads"]').exists()).toBe(
+      true
+    );
     expect(
       wrapper
         .find(".research-artifact-shell__narrative-content.phy-reading")

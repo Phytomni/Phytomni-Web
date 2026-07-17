@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createI18n } from "vue-i18n";
 import type { BotArtifact } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import BotReportState from "@/components/research/BotReportState.vue";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
+import { datetimeFormats } from "@/locales/datetime-formats";
+import { formatDisplayDate } from "@/locales/format-display-date";
 
 vi.mock("@/components/MarkdownViewer.vue", () => ({
   default: {
@@ -81,6 +84,40 @@ describe("BotReportState", () => {
     );
     expect(wrapper.find('[data-test="bot-report-updated-at"]').exists()).toBe(
       false
+    );
+  });
+
+  it("formats report timestamps through the locale-aware datetime preset", () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: "en-US",
+      datetimeFormats,
+      messages: { "en-US": {}, "zh-CN": {} },
+    });
+    const updatedAt = "2026-07-16T08:30:00.000Z";
+    const wrapper = mount(BotReportState, {
+      props: {
+        state: lifecycle({
+          status: "SUCCEEDED",
+          visibleReport: "# Final report",
+          finalReport: "# Final report",
+        }),
+        updatedAt,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          MarkdownViewer: {
+            props: ["content"],
+            template:
+              '<article data-test="report-markdown">{{ content }}</article>',
+          },
+        },
+      },
+    });
+
+    expect(wrapper.get('[data-test="bot-report-updated-at"]').text()).toBe(
+      formatDisplayDate(i18n.global.d, updatedAt, "datetime")
     );
   });
 
