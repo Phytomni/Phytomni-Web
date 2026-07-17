@@ -73,6 +73,9 @@ DEFAULT_CHECK_FILES: dict[Path, str] = {
         "  expert_enabled: false\n"
         "  stream_enabled: false\n"
         "  a2ui_actions_enabled: false\n"
+        "  research_enabled: false\n"
+        "  design_enabled: false\n"
+        "  network_enabled: false\n"
     ),
     Path("apps/web/src/stores/user.ts"): "expertEnabled: false\n",
     Path("apps/web/src/views/chat/composables/useSendMessage.ts"): (
@@ -137,7 +140,8 @@ _EXPERT_DEFAULT_RE = re.compile(
     r"(?m)^[ \t]*expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _CONFIG_FLAG_RE = re.compile(
-    r"(?m)^[ \t]*(?P<key>expert_enabled|stream_enabled|a2ui_actions_enabled)"
+    r"(?m)^[ \t]*(?P<key>expert_enabled|stream_enabled|a2ui_actions_enabled|"
+    r"research_enabled|design_enabled|network_enabled)"
     r"[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _HISTORY_FUNCTION_RE = re.compile(
@@ -183,6 +187,7 @@ _FORBIDDEN_FIXTURE_FIELDS = frozenset(
         "user_id",
     }
 )
+_FIXTURE_DEPTH_LIMIT_MARKER = "__fixture_depth_limit__"
 
 
 def _has_forbidden_part(path: Path) -> bool:
@@ -442,7 +447,7 @@ def _fixture_field_names(value: Any, depth: int = 0) -> set[str]:
     """Collect bounded JSON object keys without retaining fixture values."""
 
     if depth > 32:
-        return {"__depth_limit__"}
+        return {_FIXTURE_DEPTH_LIMIT_MARKER}
     if isinstance(value, dict):
         names: set[str] = set()
         for key, child in value.items():
@@ -480,7 +485,10 @@ def _check_product_fixture(root: Path, fixture_id: str, violations: list[str]) -
         violations.append("RC-WEB-004 product fixture id does not match its allowlist")
     if payload.get("agent") != PRODUCT_FIXTURE_AGENTS[fixture_id]:
         violations.append("RC-WEB-004 product fixture agent slug is not canonical")
-    if _fixture_field_names(payload) & _FORBIDDEN_FIXTURE_FIELDS:
+    field_names = _fixture_field_names(payload)
+    if _FIXTURE_DEPTH_LIMIT_MARKER in field_names:
+        violations.append("RC-WEB-004 product fixture nesting exceeds scanner bound")
+    if field_names & _FORBIDDEN_FIXTURE_FIELDS:
         violations.append("RC-WEB-004 product fixture contains raw or private fields")
 
     result = payload.get("result")
@@ -790,7 +798,14 @@ def _check_defaults(source: Mapping[Path, str], violations: list[str]) -> None:
     config = source.get(Path("apps/server/config/app.yml.example"), "")
     config = _mask_yaml_block_scalars(config)
     matches = list(_CONFIG_FLAG_RE.finditer(config))
-    for key in ("expert_enabled", "stream_enabled", "a2ui_actions_enabled"):
+    for key in (
+        "expert_enabled",
+        "stream_enabled",
+        "a2ui_actions_enabled",
+        "research_enabled",
+        "design_enabled",
+        "network_enabled",
+    ):
         key_matches = [match for match in matches if match.group("key") == key]
         if len(key_matches) != 1 or key_matches[0].group("value") != "false":
             violations.append(f"{key} default must be false")

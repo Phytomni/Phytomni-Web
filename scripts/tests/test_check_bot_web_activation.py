@@ -91,6 +91,51 @@ def minimal_tree(tmp_path: Path, value: dict[str, object] | None = None) -> Path
     return root
 
 
+def local_readiness_matrix_value() -> dict[str, object]:
+    value = matrix_value()
+    value["local_readiness"] = {
+        "rc_web_004": {
+            "fixture_ids": list(checker.PRODUCT_FIXTURE_IDS),
+            "shared_report_surface_test": checker.SHARED_REPORT_SURFACE_TEST.as_posix(),
+        }
+    }
+    return value
+
+
+def product_fixture_payload(fixture_id: str) -> dict[str, object]:
+    return {
+        "fixture_id": fixture_id,
+        "agent": checker.PRODUCT_FIXTURE_AGENTS[fixture_id],
+        "result": {
+            "final_report": "synthetic terminal report",
+            "artifacts": [],
+        },
+    }
+
+
+def local_readiness_tree(tmp_path: Path) -> Path:
+    write(
+        tmp_path,
+        checker.MATRIX_REL.as_posix(),
+        matrix_text(local_readiness_matrix_value()),
+    )
+    for relative, content in checker.DEFAULT_CHECK_FILES.items():
+        write(tmp_path, relative.as_posix(), content)
+    for fixture_id, relative in checker.PRODUCT_FIXTURE_PATHS.items():
+        write(tmp_path, relative.as_posix(), product_fixture_payload(fixture_id))
+    write(
+        tmp_path,
+        checker.SHARED_REPORT_SURFACE_TEST.as_posix(),
+        "\n".join(
+            [
+                checker.SHARED_REPORT_SURFACE_MARKER,
+                *checker.PRODUCT_FIXTURE_IDS,
+            ]
+        ),
+    )
+    return tmp_path
+
+
 def test_activation_requires_external_rows_to_be_reviewed() -> None:
     rows = {"RC-WEB-001": "External Pending", "RC-WEB-002": "Reviewed"}
     assert checker.activation_errors(rows, requested_flags={"stream": True}) == [
@@ -279,6 +324,9 @@ bot:
   expert_enabled: true
   stream_enabled: false
   a2ui_actions_enabled: false
+  research_enabled: false
+  design_enabled: false
+  network_enabled: false
 """
     source[Path("apps/web/src/stores/user.ts")] = """
 const state = {
@@ -291,6 +339,56 @@ const state = {
     checker._check_defaults(source, violations)
     assert "expert_enabled default must be false" in violations
     assert "Web expertEnabled default must be false" in violations
+
+
+def test_default_check_rejects_true_or_duplicate_product_flags() -> None:
+    source = dict(checker.DEFAULT_CHECK_FILES)
+    source[Path("apps/server/config/app.yml.example")] = """
+bot:
+  expert_enabled: false
+  stream_enabled: false
+  a2ui_actions_enabled: false
+  research_enabled: true
+  design_enabled: false
+  network_enabled: false
+  network_enabled: false
+"""
+
+    violations: list[str] = []
+    checker._check_defaults(source, violations)
+    assert "research_enabled default must be false" in violations
+    assert "network_enabled default must be false" in violations
+
+
+def test_checker_rejects_true_or_duplicate_product_flags_in_temp_root(tmp_path: Path) -> None:
+    root = local_readiness_tree(tmp_path)
+    config_path = root / "apps/server/config/app.yml.example"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + "  design_enabled: true\n"
+        + "  design_enabled: false\n",
+        encoding="utf-8",
+    )
+
+    errors = checker.check(root)
+    assert "design_enabled default must be false" in errors
+
+
+def test_checker_rejects_deep_forbidden_fixture_field_in_temp_root(tmp_path: Path) -> None:
+    root = local_readiness_tree(tmp_path)
+    fixture_id = checker.PRODUCT_FIXTURE_IDS[0]
+    payload = product_fixture_payload(fixture_id)
+    cursor: dict[str, object] = payload
+    for _ in range(40):
+        nested: dict[str, object] = {}
+        cursor["nested"] = nested
+        cursor = nested
+    cursor["raw"] = "must not be echoed"
+    write(root, checker.PRODUCT_FIXTURE_PATHS[fixture_id].as_posix(), payload)
+
+    errors = checker.check(root)
+    assert "RC-WEB-004 product fixture nesting exceeds scanner bound" in errors
+    assert all("must not be echoed" not in error for error in errors)
 
 
 def test_web_expert_default_ignores_comments_and_string_literals() -> None:
@@ -369,6 +467,9 @@ bot:
     expert_enabled: false
   stream_enabled: false
   a2ui_actions_enabled: false
+  research_enabled: false
+  design_enabled: false
+  network_enabled: false
 """
 
     violations: list[str] = []
