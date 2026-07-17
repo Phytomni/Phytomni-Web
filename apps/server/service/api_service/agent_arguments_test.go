@@ -28,7 +28,10 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"completion-research","run_id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`))
 	}))
 	defer srv.Close()
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
@@ -97,7 +100,10 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 				_, _ = w.Write([]byte(`{"id":"completion-remote","run_id":"run-remote","object":"agent.run","agent":"` + tt.name + `","status":"running","task_ids":["child-remote"],"result":{}}`))
 			}))
 			defer srv.Close()
-			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
+				ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+			}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
 			if _, err := NewService().Query(context.Background(), "alice", QueryInput{Query: tt.name, Tool: tt.tool}); err != nil {

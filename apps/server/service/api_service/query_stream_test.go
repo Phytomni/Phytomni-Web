@@ -548,7 +548,10 @@ func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"submission-task27","run_id":"run-research-task27","object":"agent.run","agent":"research","status":"running","task_ids":["child-task27"],"result":{}}`))
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	ctx := context.WithValue(context.Background(), "x-request-id", "web-request-task27")
@@ -708,6 +711,30 @@ func TestQueryStream_StreamGateOffRefusesWithoutBotCall(t *testing.T) {
 	}
 	if botHits != 0 {
 		t.Fatalf("stream gate off must not touch Bot (hits=%d)", botHits)
+	}
+}
+
+func TestQueryStream_RemoteProductGatePrecedesStreamGate(t *testing.T) {
+	setupStreamTestDB(t)
+	botHits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		botHits++
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
+		NetworkEnabled: false,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	_, err := (&Service{}).QueryStream(context.Background(), "network@example.com",
+		QueryInput{Query: "network", Tool: "GeneNetworkAgent", Mode: "instant"}, nil, nil)
+	if !errors.Is(err, ErrRemoteProductDisabled) {
+		t.Fatalf("remote stream gate error = %v, want ErrRemoteProductDisabled", err)
+	}
+	if botHits != 0 {
+		t.Fatalf("remote stream gate must reject before any Bot request (hits=%d)", botHits)
 	}
 }
 

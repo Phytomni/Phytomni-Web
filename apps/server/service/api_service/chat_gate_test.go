@@ -266,6 +266,42 @@ func TestCheckRemoteProductAllowed_UnknownToolFailsClosed(t *testing.T) {
 	}
 }
 
+func TestCheckExpertRemoteProductsAllowedRequiresEveryProductFlag(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "expert@example.com", "admin", 5)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ResearchEnabled: true,
+		DesignEnabled:   true,
+		NetworkEnabled:  false,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckExpertRemoteProductsAllowed(context.Background(), "expert@example.com")
+	if !errors.Is(err, ErrRemoteProductDisabled) {
+		t.Fatalf("Expert with one product flag off = %v, want ErrRemoteProductDisabled", err)
+	}
+}
+
+func TestCheckExpertRemoteProductsAllowedRequiresEveryGrant(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "expert@example.com", "expert-role", 5)
+	seedRemoteProductPermission(t, gdb, "expert-role", "InSilicoResearchAgent", 1)
+	seedRemoteProductPermission(t, gdb, "expert-role", "DigitalDesignAgent", 2)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ResearchEnabled: true,
+		DesignEnabled:   true,
+		NetworkEnabled:  true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckExpertRemoteProductsAllowed(context.Background(), "expert@example.com")
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("Expert with one product grant missing = %v, want ErrRemoteProductForbidden", err)
+	}
+}
+
 func TestQueryRemoteProductFlagOffStopsBeforeBot(t *testing.T) {
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, BaseURL: "http://127.0.0.1:1"}
@@ -295,5 +331,27 @@ func TestQueryRemoteProductRoleDeniedStopsBeforeBot(t *testing.T) {
 	})
 	if !errors.Is(err, ErrRemoteProductForbidden) {
 		t.Fatalf("role-denied Query error = %v, want ErrRemoteProductForbidden", err)
+	}
+}
+
+func TestQueryRemoteProductEmptyModeStillChecksPermission(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ProxyEnabled:   true,
+		NetworkEnabled: true,
+		BaseURL:        "http://127.0.0.1:1",
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	_, err := NewService().Query(context.Background(), "network@example.com", QueryInput{
+		Query: "network",
+		Tool:  "GeneNetworkAgent",
+		// Mode intentionally omitted: direct service calls must still enforce
+		// the explicit remote tool boundary.
+	})
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("empty-mode role-denied Query error = %v, want ErrRemoteProductForbidden", err)
 	}
 }

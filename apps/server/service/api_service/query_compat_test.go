@@ -25,7 +25,10 @@ func compatChatServer(t *testing.T, chatBody string) {
 		_, _ = w.Write([]byte(chatBody))
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
 
@@ -79,7 +82,10 @@ func TestQueryRemoteMissingRunIDDoesNotPersistPollableRow(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	_, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})

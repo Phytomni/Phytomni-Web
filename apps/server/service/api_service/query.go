@@ -242,11 +242,18 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
 		return nil, ErrExpertDisabled
 	}
-	// Product runs submitted through the HTTP route always carry an explicit
-	// mode (the handler defaults it to "instant"). Keep zero-value direct
-	// service callers compatible with their legacy fixtures while ensuring every
-	// real remote dispatch is authorized before upload or Bot I/O.
-	if in.Mode != "" && isRemoteProductTool(in.Tool) {
+	// Expert routes through Bot's semantic router before Web learns which agent
+	// was selected. Require the complete remote product capability set before
+	// any upload, dialogue resolution, or RouteQueryWithMeta call.
+	if in.Mode == "expert" {
+		if err := ps.CheckExpertRemoteProductsAllowed(ctx, username); err != nil {
+			return nil, err
+		}
+	}
+	// Every explicit remote product tool is gated, including zero-value direct
+	// service calls whose Mode is empty. Only the legacy zero-value tool remains
+	// unscoped and continues to default to ChatAgent below.
+	if isRemoteProductTool(in.Tool) {
 		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
 			return nil, err
 		}
@@ -822,6 +829,11 @@ func (ps *Service) QueryStream(
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
+	if isRemoteProductTool(in.Tool) {
+		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+			return nil, err
+		}
+	}
 	if !rxBot.BotConfig.StreamEnabled {
 		return nil, fmt.Errorf("%w: stream gate is off", ErrStreamUnsupported)
 	}
@@ -832,11 +844,6 @@ func (ps *Service) QueryStream(
 		// an Expert turn into a streamed ChatAgent run (slug-gate invariant,
 		// query_expert_test.go).
 		return nil, fmt.Errorf("%w: expert mode", ErrStreamUnsupported)
-	}
-	if isRemoteProductTool(in.Tool) {
-		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
-			return nil, err
-		}
 	}
 	slug, ok := rxBot.SlugFor(in.Tool)
 	if !ok {

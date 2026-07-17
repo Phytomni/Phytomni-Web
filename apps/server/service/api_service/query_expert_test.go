@@ -39,6 +39,27 @@ func setupExpertTestDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
+	if err := gdb.Exec(`CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT,
+		code TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create users table: %v", err)
+	}
+	// Expert policy is deliberately authenticated and fail-closed. These
+	// synthetic callers represent the administrator fixture used by the
+	// existing allowed-path tests; production authorization still resolves the
+	// real JWT operator from the Web users table.
+	for _, email := range []string{
+		"alice",
+		"dan",
+		"alice@x.com",
+		"task27-expert@example.com",
+	} {
+		if err := gdb.Exec(`INSERT INTO users (email, code) VALUES (?, 'admin')`, email).Error; err != nil {
+			t.Fatalf("seed expert user %s: %v", email, err)
+		}
+	}
 	db.Set("phytomni-server", gdb)
 	return gdb
 }
@@ -60,7 +81,10 @@ func botRouter(t *testing.T, hit *string) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
 
@@ -106,6 +130,33 @@ func TestQuery_ExpertDisabledReturns503Sentinel(t *testing.T) {
 	}
 	if hit != "" {
 		t.Errorf("disabled Expert must not call Bot, hit %q", hit)
+	}
+}
+
+func TestQuery_ExpertRemotePolicyRejectsBeforeRoute(t *testing.T) {
+	setupExpertTestDB(t)
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"agent":"knowledge","status":"succeeded","result":{}}`))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: false,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	_, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "q", Tool: "StaleAgent", Mode: "expert",
+	})
+	if !errors.Is(err, ErrRemoteProductDisabled) {
+		t.Fatalf("Expert remote policy error = %v, want ErrRemoteProductDisabled", err)
+	}
+	if hits != 0 {
+		t.Fatalf("Expert policy must reject before RouteQueryWithMeta (hits=%d)", hits)
 	}
 }
 
@@ -176,7 +227,10 @@ func expertRouteServer(t *testing.T, routeBody string) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
 

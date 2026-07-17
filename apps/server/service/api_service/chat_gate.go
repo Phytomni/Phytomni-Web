@@ -64,6 +64,17 @@ var remoteProductRequirements = map[string]remoteProductRequirement{
 	},
 }
 
+// expertRemoteProductTools is the complete product capability set that must
+// be accepted before Expert can dispatch to Bot's semantic router. Expert
+// does not know which product the router will select until after that request,
+// so the pre-dispatch policy deliberately requires every canonical remote
+// product flag and grant up front.
+var expertRemoteProductTools = [...]string{
+	"InSilicoResearchAgent",
+	"DigitalDesignAgent",
+	"GeneNetworkAgent",
+}
+
 func isRemoteProductTool(tool string) bool {
 	_, ok := remoteProductRequirements[strings.TrimSpace(tool)]
 	return ok
@@ -147,6 +158,21 @@ func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool st
 	}
 	if grants == 0 {
 		return ErrRemoteProductForbidden
+	}
+	return nil
+}
+
+// CheckExpertRemoteProductsAllowed is the fail-closed Expert pre-dispatch
+// policy. The router may select any canonical remote product, and its choice
+// is not known until after RouteQueryWithMeta has already reached Bot. Require
+// all three product flags and all three authenticated grants before that
+// request; administrators satisfy each grant through the same server-side
+// role check used by explicit product routes.
+func (ps *Service) CheckExpertRemoteProductsAllowed(ctx context.Context, email string) error {
+	for _, tool := range expertRemoteProductTools {
+		if err := ps.CheckRemoteProductAllowed(ctx, email, tool); err != nil {
+			return err
+		}
 	}
 	return nil
 }
