@@ -99,7 +99,11 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
       next.done = true;
       break;
     case "RunError":
-      next.error = { message: String(ev.data.message ?? "stream error") };
+      // RunError is terminal. Preserve the first upstream message if a
+      // transport layer later tries to append a synthetic error event.
+      if (!next.error) {
+        next.error = { message: String(ev.data.message ?? "stream error") };
+      }
       next.done = true;
       // A failed run expires only surfaces that are still open or submitting.
       // Terminal/protocol states are preserved so a late stream error cannot

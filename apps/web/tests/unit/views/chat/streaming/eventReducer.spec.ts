@@ -91,6 +91,22 @@ describe("reduceAGUIEvent", () => {
     expect(s.error?.message).toBe("boom");
   });
 
+  it("keeps the first terminal RunError instead of duplicating a synthetic error", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "RunError",
+      data: { message: "upstream boom" },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "RunError",
+      data: { message: "chat.streamInterrupted" },
+    });
+    s = reduceAGUIEvent(s, { type: "RunFinished", data: {} });
+
+    expect(s.done).toBe(true);
+    expect(s.error?.message).toBe("upstream boom");
+  });
+
   it("pushes an agent-surface block from phyto.a2ui confirm", () => {
     let s = initReducerState();
     s = reduceAGUIEvent(s, { type: "RunStarted", data: { run_id: "r1" } });

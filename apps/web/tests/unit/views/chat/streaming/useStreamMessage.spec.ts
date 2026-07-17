@@ -309,6 +309,94 @@ describe("useStreamMessage", () => {
     );
   });
 
+  it("captures safe Web and Bot request ids without using temporary A2UI identity", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-safe-ids"}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-safe-ids"}\n\n',
+      "data: [DONE]\n\n",
+    ]);
+    (fetch as any).mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "314",
+          "X-Request-Id": "web-req-314",
+          "X-Bot-Request-Id": "bot-req-2718",
+        },
+      }),
+    );
+    const formData = new FormData();
+    formData.append("id", "0");
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    const result = await streamMessage({
+      dialogueId: "new_local",
+      formData,
+      requestId: "req-safe-ids",
+      placeholder,
+    });
+
+    expect(result).toEqual({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "314",
+      requestId: "web-req-314",
+      botRequestId: "bot-req-2718",
+    });
+    expect(placeholder.a2uiRuntime?.dialogueId).toBe(CANONICAL_DIALOGUE_ID);
+    expect(placeholder.a2uiRuntime?.messageId).toBe("314");
+    expect(placeholder.a2uiRuntime?.dialogueId).not.toBe("new_local");
+    expect(placeholder.a2uiRuntime?.messageId).not.toBe("0");
+  });
+
+  it("drops unsafe request ids while retaining canonical message identity", async () => {
+    const body = sseStream([
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-safe"}\n\n',
+    ]);
+    (fetch as any).mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "315",
+          "X-Request-Id": "web request with spaces",
+          "X-Bot-Request-Id": "bot/request",
+        },
+      }),
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    const result = await streamMessage({
+      dialogueId: "local-safe",
+      formData: new FormData(),
+      requestId: "req-unsafe-ids",
+      placeholder,
+    });
+
+    expect(result).toEqual({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "315",
+    });
+  });
+
   it("never derives A2UI identity from the FormData parent id", async () => {
     const body = sseStream([
       'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-no-headers"}\n\n',
@@ -454,6 +542,74 @@ describe("useStreamMessage", () => {
     expect(errored.content).toBe("boom");
     expect(interrupted.a2uiRuntime).toBeUndefined();
     expect(interrupted.content).toBe("chat.streamInterrupted");
+  });
+
+  it("does not replace a terminal RunError with a synthetic interruption", async () => {
+    const enc = new TextEncoder();
+    let sent = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (!sent) {
+          sent = true;
+          controller.enqueue(
+            enc.encode(
+              'event: RunError\ndata: {"type":"RunError","message":"upstream boom"}\n\n',
+            ),
+          );
+          return;
+        }
+        controller.error(new Error("late transport close"));
+      },
+    });
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "local-terminal-error",
+      formData: new FormData(),
+      requestId: "req-terminal-error",
+      placeholder,
+    });
+
+    expect(placeholder.content).toBe("upstream boom");
+    expect(placeholder.content).not.toBe("chat.streamInterrupted");
+  });
+
+  it("treats the legacy [DONE] frame as a terminal success", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-done"}\n\n',
+      "data: [DONE]\n\n",
+    ]);
+    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "local-done",
+      formData: new FormData(),
+      requestId: "req-done",
+      placeholder,
+    });
+
+    expect(placeholder.content).toBe("");
+    expect(placeholder.streaming).toBe(false);
   });
 
   it("invalidates a header-established A2UI context when stream reading aborts", async () => {

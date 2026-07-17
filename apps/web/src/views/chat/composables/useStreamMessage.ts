@@ -21,6 +21,10 @@ export interface StreamResult {
   dialogueId?: string;
   /** Persisted assistant row id associated with this stream. */
   messageId?: string;
+  /** Safe Web gateway request id, when the response exposes one. */
+  requestId?: string;
+  /** Safe upstream Bot request id, when the gateway exposes one. */
+  botRequestId?: string;
 }
 
 const UUID_PATTERN =
@@ -34,8 +38,26 @@ function canonicalDialogueHeader(resp: Response): string | undefined {
 
 function canonicalMessageHeader(resp: Response): string | undefined {
   const value = resp.headers.get("X-Phyto-Message-Id")?.trim();
-  if (!value || !/^[1-9]\d*$/.test(value)) return undefined;
+  if (!value || !/^[1-9]\d{0,18}$/.test(value)) return undefined;
   return value;
+}
+
+const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+function safeRequestHeader(
+  resp: Response,
+  name: "X-Request-Id" | "X-Bot-Request-Id"
+): string | undefined {
+  const value = resp.headers.get(name)?.trim();
+  if (!value || !SAFE_REQUEST_ID_PATTERN.test(value)) return undefined;
+  return value;
+}
+
+function isDoneFrame(frame: string): boolean {
+  return frame.split("\n").some((raw) => {
+    const line = raw.replace(/\r$/, "");
+    return line.startsWith("data:") && line.slice(5).trim() === "[DONE]";
+  });
 }
 
 // useStreamMessage consumes the AG-UI SSE stream with fetch + ReadableStream
@@ -89,6 +111,10 @@ export function useStreamMessage(opts: {
         dialogueId: canonicalDialogueId,
         messageId: canonicalMessageId,
       };
+      const requestIdHeader = safeRequestHeader(resp, "X-Request-Id");
+      const botRequestIdHeader = safeRequestHeader(resp, "X-Bot-Request-Id");
+      if (requestIdHeader) result.requestId = requestIdHeader;
+      if (botRequestIdHeader) result.botRequestId = botRequestIdHeader;
 
       // Both headers are required before the message can own an interactive
       // uplink. A partial/malformed identity remains visibly non-interactive;
@@ -110,6 +136,25 @@ export function useStreamMessage(opts: {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      const consumeFrame = (frame: string) => {
+        // Some Bot-compatible providers close with the legacy [DONE] sentinel
+        // instead of a RunFinished event. Treat that sentinel as terminal while
+        // leaving all other AG-UI bytes untouched for the existing parser.
+        if (isDoneFrame(frame)) {
+          state = reduceAGUIEvent(state, { type: "RunFinished", data: {} });
+          return;
+        }
+        const ev = parseAGUIFrame(frame);
+        if (!ev) return;
+        state = reduceAGUIEvent(state, ev);
+        if (state.runId && placeholder.a2uiRuntime) {
+          placeholder.a2uiRuntime = {
+            ...placeholder.a2uiRuntime,
+            runId: state.runId,
+          };
+        }
+        placeholder.blocks = state.blocks; // reactive: re-renders StreamMessage
+      };
       // Read loop: decode bytes, split complete frames, reduce, mutate blocks.
       for (;;) {
         const { value, done } = await reader.read();
@@ -117,19 +162,10 @@ export function useStreamMessage(opts: {
         buffer += decoder.decode(value, { stream: true });
         const { frames, rest } = splitSSEFrames(buffer);
         buffer = rest;
-        for (const frame of frames) {
-          const ev = parseAGUIFrame(frame);
-          if (!ev) continue;
-          state = reduceAGUIEvent(state, ev);
-          if (state.runId && placeholder.a2uiRuntime) {
-            placeholder.a2uiRuntime = {
-              ...placeholder.a2uiRuntime,
-              runId: state.runId,
-            };
-          }
-          placeholder.blocks = state.blocks; // reactive: re-renders StreamMessage
-        }
+        for (const frame of frames) consumeFrame(frame);
       }
+      buffer += decoder.decode();
+      if (buffer) consumeFrame(buffer);
 
       if (!state.done) {
         placeholder.content = t("chat.streamInterrupted");
@@ -159,11 +195,16 @@ export function useStreamMessage(opts: {
       // Once RunFinished has been reduced, a later transport close/error does
       // not revoke a successfully completed message. Before that terminal
       // event, Abort and broken streams invalidate the message-owned uplink.
-      if (!state.done || state.error) {
+      if (!state.done) {
         placeholder.a2uiRuntime = undefined;
         if (e?.name !== "AbortError") {
           placeholder.content = t("chat.streamInterrupted");
         }
+      } else if (state.error) {
+        // RunError is already terminal. A later reader/transport failure must
+        // not replace its upstream message with a duplicate synthetic copy.
+        placeholder.a2uiRuntime = undefined;
+        placeholder.content = state.error.message;
       }
     } finally {
       // Always finalize this request's placeholder and unregister its controller.
