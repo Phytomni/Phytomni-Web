@@ -15,7 +15,7 @@ func TestRouteQuery_PostsToRouteEndpoint(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotMethod = r.URL.Path, r.Method
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"run-1","object":"agent.run","agent":"knowledge","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"hi","references":[]}}}`))
+		_, _ = w.Write([]byte(`{"id":"run-1","run_id":"run-1","object":"agent.run","agent":"knowledge","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"hi","references":[]}}}`))
 	}))
 	defer srv.Close()
 	BotConfig = &Config{BaseURL: srv.URL, TimeoutSeconds: 5}

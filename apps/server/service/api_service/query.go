@@ -132,6 +132,26 @@ func canonicalBotRunID(runID *string) string {
 	return strings.TrimSpace(*runID)
 }
 
+// resolveExpertAgent validates the Bot router's selected slug against both
+// Web-owned canonical maps before any tool name, answer shape, or projection
+// lifecycle is derived from the response. Expert is a cross-service boundary:
+// a missing/unknown/malformed slug must never fall back to ChatAgent.
+func resolveExpertAgent(resp *rxBot.RouteQueryResponse) (string, string, error) {
+	if resp == nil {
+		return "", "", fmt.Errorf("%w: expert response is missing", ErrUnknownTool)
+	}
+	rawSlug := resp.Agent
+	slug := strings.TrimSpace(rawSlug)
+	if slug == "" || rawSlug != slug || strings.ContainsAny(rawSlug, "\r\n\t") {
+		return "", "", fmt.Errorf("%w: expert response has an invalid agent", ErrUnknownTool)
+	}
+	canonicalTool, ok := rxBot.CanonicalAgentTool[slug]
+	if !ok || slugToToolName[slug] != canonicalTool {
+		return "", "", fmt.Errorf("%w: expert response has an unsupported agent", ErrUnknownTool)
+	}
+	return slug, canonicalTool, nil
+}
+
 func responseReportRevision(values ...*int64) int64 {
 	for _, value := range values {
 		if value != nil && *value >= 0 {
@@ -139,6 +159,15 @@ func responseReportRevision(values ...*int64) int64 {
 		}
 	}
 	return 0
+}
+
+func responseReportRevisionOrDefault(defaultValue int64, values ...*int64) int64 {
+	for _, value := range values {
+		if value != nil && *value >= 0 {
+			return *value
+		}
+	}
+	return defaultValue
 }
 
 func metadataReportRevision(raw json.RawMessage) *int64 {
@@ -228,9 +257,15 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	}
 
 	// 2. Web-owned alias -> Bot slug. Empty tool defaults to the chat agent.
-	slug, ok := rxBot.SlugFor(in.Tool)
-	if !ok {
-		return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
+	// Expert deliberately ignores the picker value: the Bot router resolves the
+	// canonical slug, and a stale/unknown client-side tool must not steer it.
+	var slug string
+	if in.Mode != "expert" {
+		var ok bool
+		slug, ok = rxBot.SlugFor(in.Tool)
+		if !ok {
+			return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
+		}
 	}
 
 	// 3. Resolve dialogue_id + f_id from the threading model above. Ownership
@@ -244,13 +279,17 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// 4. Dispatch. Web Go never runs an LLM; it forwards free-form query text
 	//    (and structured obs_file_list to capable chat models).
 	out := &QueryData{
-		ToolName:     slugToToolName[slug],
+		ToolName:     "",
 		ReactionType: "0",
 		DialogueId:   dialogueID,
 		Status:       "SUCCEEDED",
 		RequestID:    requestIDFromContext(ctx),
 	}
+	if slug != "" {
+		out.ToolName = slugToToolName[slug]
+	}
 	var botRunID, serverID, taskID, logStatus string
+	var expertProjection *BotRunProjection
 	if in.Mode == "expert" {
 		resp, meta, err := client.RouteQueryWithMeta(ctx, rxBot.RouteQueryRequest{
 			UserQuery:   in.Query,
@@ -263,23 +302,38 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if err != nil {
 			return nil, err
 		}
-		botRunID = canonicalBotRunID(resp.RunID)
+		resolvedSlug, resolvedTool, err := resolveExpertAgent(resp)
+		if err != nil {
+			return nil, err
+		}
+		submission, err := DecodeAgentRunSubmission(resp)
+		if err != nil {
+			// Keep malformed upstream envelopes on the bounded client-error path;
+			// never expose decoder details or fabricate a successful tool.
+			return nil, fmt.Errorf("%w: invalid expert response", ErrUnknownTool)
+		}
+		if submission.Agent != resolvedSlug {
+			return nil, fmt.Errorf("%w: expert response agent mismatch", ErrUnknownTool)
+		}
+		routeRevision := metadataReportRevision(formattedMetadata(resp.Result.Formatted))
+		submission.ReportRevision = responseReportRevisionOrDefault(-1, resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
+		submission.TrackingDegraded = resp.DegradedTracking
+		expertProjection = &submission
+		slug = resolvedSlug
+		out.ToolName = resolvedTool
+		botRunID = submission.RunID
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
-		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
+		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
 		// Reshape by the slug Bot's router CHOSE (never "expert"), so cited/table
 		// formatting survives and SyncBotRuns reconciles async runs by agent slug.
-		resolvedSlug := resp.Agent
-		if name, ok := slugToToolName[resolvedSlug]; ok {
-			out.ToolName = name
-		}
-		if resp.Status == "succeeded" {
+		if submission.Status == "SUCCEEDED" {
 			if resp.Result.Formatted != nil {
 				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 		} else {
-			out.Status = "RUNNING"
+			out.Status = submission.Status
 			logStatus = "sync_running"
 			if resp.Result.DedupHit {
 				taskID = resp.Result.TaskID
@@ -426,6 +480,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	}
 	out.Id = id
 	out.UploadPath = strings.Join(obsPaths, ",")
+	if expertProjection != nil {
+		// The row now exists, so the accepted Expert submission can enter the
+		// same owner-scoped projection store used by polling/reconciliation.
+		if err := SaveBotRunProjection(ctx, username, id, *expertProjection); err != nil {
+			return nil, err
+		}
+	}
 	return out, nil
 }
 

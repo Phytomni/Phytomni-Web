@@ -310,6 +310,7 @@ describe("useSendMessage", () => {
     const formData = mockGetQueryAbortable.mock.calls[0][0] as FormData;
     expect(formData.get("id")).toBe("1");
     expect(formData.get("mode")).toBe("expert");
+    expect(formData.get("tool")).toBe("");
     expect(formData.get("query")).toContain("payload-A");
     expect(formData.get("history")).toBe(JSON.stringify({ h: 1 }));
     expect(formData.getAll("files")).toHaveLength(1);
@@ -1049,6 +1050,70 @@ describe("useSendMessage", () => {
     );
     expect(recoveryCalls).toHaveLength(0);
     expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, undefined);
+  });
+
+  it("Expert renders the canonical resolved tool and projection while preserving the captured mode", async () => {
+    states.get("A")!.messageInput = "research please";
+    states.get("A")!.mode = "expert";
+    states.get("A")!.activeAgentName = "ChatAgent";
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        tool_name: "InSilicoResearchAgent",
+        answer: "Task created: child-1",
+        status: "RUNNING",
+        task_id: "child-1",
+        bot_run_id: "run-expert-1",
+        report_revision: 3,
+        request_id: "web-request-1",
+        follow_up_questions: [],
+      },
+    } as any);
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const formData = mockGetQueryAbortable.mock.calls[0][0] as FormData;
+    expect(formData.get("mode")).toBe("expert");
+    expect(formData.get("tool")).toBe("");
+    const assistant = getChatState("A").renderedChat!.messages.at(-1);
+    expect(assistant).toMatchObject({
+      tool_name: "InSilicoResearchAgent",
+      task_id: "child-1",
+      botProjection: {
+        runId: "run-expert-1",
+        agent: "InSilicoResearchAgent",
+        status: "RUNNING",
+        reportRevision: 3,
+        requestId: "web-request-1",
+      },
+    });
+  });
+
+  it("Expert rejects unknown or malformed response tools through the safe send-failure path", async () => {
+    for (const data of [
+      { tool_name: "UnknownAgent", status: "RUNNING", answer: "bad" },
+      { tool_name: "InSilicoResearchAgent", status: "not-a-status", answer: "bad" },
+    ]) {
+      vi.clearAllMocks();
+      states.get("A")!.messageInput = "bad expert response";
+      states.get("A")!.mode = "expert";
+      states.get("A")!.renderedChat = null;
+      currentChat.value = { messages: [] };
+      mockGetQueryAbortable.mockResolvedValueOnce({ data } as any);
+      const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+      try {
+        const { sendMessage } = makeComposable();
+        await sendMessage();
+      } finally {
+        consoleError.mockRestore();
+      }
+      const assistants = getChatState("A").renderedChat!.messages.filter(
+        (message) => message.role === "assistant"
+      );
+      expect(assistants.at(-1)?.content).toBe("chat.sendFailed");
+      expect(assistants.at(-1)?.tool_name).toBe("");
+      states.get("A")!.messageInput = "";
+    }
   });
 
   it("blocking AnalystAgent response does not invent task_id (Update stays unavailable)", async () => {

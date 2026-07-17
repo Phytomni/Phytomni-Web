@@ -51,7 +51,7 @@ func botRouter(t *testing.T, hit *string) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/query/route":
-			_, _ = w.Write([]byte(`{"id":"run-x","object":"agent.run","agent":"knowledge","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"body","references":[{"file_id":"f1","title":"Doc A"}]}}}`))
+			_, _ = w.Write([]byte(`{"id":"run-x","run_id":"run-x","object":"agent.run","agent":"knowledge","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"body","references":[{"file_id":"f1","title":"Doc A"}]}}}`))
 		case "/v1/chat/completions":
 			_, _ = w.Write([]byte(`{"id":"c1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"hi"}}],"formatted":{"answer":"hi"}}`))
 		default:
@@ -223,6 +223,116 @@ func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
 	gdb.Raw(`SELECT COALESCE(task_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&taskID)
 	if taskID != "dedup-77" {
 		t.Errorf("expected persisted task_id=dedup-77 (DedupHit fallback), got %q", taskID)
+	}
+}
+
+func TestQuery_ExpertResolvedRemoteUsesCanonicalProjection(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	expertRouteServer(t, `{"id":"completion-expert","run_id":"run-expert-1","object":"agent.run","agent":"research","status":"running","task_ids":["child-1"],"result":{}}`)
+
+	ctx := context.WithValue(context.Background(), "x-request-id", "web-request-1")
+	out, err := NewService().Query(ctx, "alice", QueryInput{
+		Query: "find a candidate gene", Tool: "StaleAgent", Mode: "expert",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out.ToolName != "InSilicoResearchAgent" {
+		t.Fatalf("tool_name=%q, want InSilicoResearchAgent", out.ToolName)
+	}
+	if out.BotRunID != "run-expert-1" || out.TaskId != "child-1" {
+		t.Fatalf("identity mismatch: bot_run_id=%q task_id=%q", out.BotRunID, out.TaskId)
+	}
+	if out.Status != "RUNNING" || out.RequestID != "web-request-1" {
+		t.Fatalf("lifecycle/correlation mismatch: status=%q request_id=%q", out.Status, out.RequestID)
+	}
+
+	projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
+	if err != nil {
+		t.Fatalf("LoadBotRunProjection: %v", err)
+	}
+	if projection.RunID != "run-expert-1" || projection.Agent != "research" || projection.Status != "RUNNING" {
+		t.Fatalf("projection identity mismatch: %+v", projection)
+	}
+	var storedTool, storedTask string
+	if err := gdb.Raw(`SELECT tool_name, task_id FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&storedTool, &storedTask); err != nil {
+		t.Fatalf("read legacy compatibility fields: %v", err)
+	}
+	if storedTool != "InSilicoResearchAgent" || storedTask != "child-1" {
+		t.Fatalf("legacy fields mismatch: tool=%q task=%q", storedTool, storedTask)
+	}
+}
+
+func TestQuery_ExpertResolvedCanonicalRemoteSlugsKeepWebMappings(t *testing.T) {
+	tests := []struct {
+		name string
+		slug string
+		tool string
+	}{
+		{name: "deep genome", slug: "deep_genome", tool: "DeepGenomeAgent"},
+		{name: "brief gene", slug: "brief_gene", tool: "BriefGeneAgent"},
+		{name: "network", slug: "network", tool: "GeneNetworkAgent"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			expertRouteServer(t, `{"id":"completion-`+tc.slug+`","run_id":"run-`+tc.slug+`","object":"agent.run","agent":"`+tc.slug+`","status":"running","task_ids":["child-`+tc.slug+`"],"result":{}}`)
+
+			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
+			if err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if out.ToolName != tc.tool || out.Status != "RUNNING" {
+				t.Fatalf("output=%+v, want tool=%q status=RUNNING", out, tc.tool)
+			}
+			projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
+			if err != nil {
+				t.Fatalf("LoadBotRunProjection: %v", err)
+			}
+			if projection.Agent != tc.slug || projection.RunID != "run-"+tc.slug {
+				t.Fatalf("projection=%+v, want slug=%q run=%q", projection, tc.slug, "run-"+tc.slug)
+			}
+			var taskID string
+			if err := gdb.Raw(`SELECT task_id FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&taskID); err != nil {
+				t.Fatalf("read task id: %v", err)
+			}
+			if taskID != "child-"+tc.slug {
+				t.Fatalf("task_id=%q, want child-%s", taskID, tc.slug)
+			}
+		})
+	}
+}
+
+func TestQuery_ExpertUnknownOrMalformedResolvedSlugFailsClosed(t *testing.T) {
+	tests := []struct {
+		name  string
+		agent string
+	}{
+		{name: "unknown", agent: "made_up"},
+		{name: "blank", agent: ""},
+		{name: "surrounding whitespace", agent: " research "},
+		{name: "malformed", agent: "research\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			expertRouteServer(t, `{"id":"completion-bad","run_id":"run-bad","object":"agent.run","agent":"`+tc.agent+`","status":"running","task_ids":["child-bad"],"result":{}}`)
+
+			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
+			if !errors.Is(err, ErrUnknownTool) {
+				t.Fatalf("err=%v, want ErrUnknownTool", err)
+			}
+			if out != nil {
+				t.Fatalf("unknown resolved slug returned output: %+v", out)
+			}
+			var count int64
+			if err := gdb.Raw(`SELECT COUNT(*) FROM question_agent_logs`).Row().Scan(&count); err != nil {
+				t.Fatalf("count rows: %v", err)
+			}
+			if count != 0 {
+				t.Fatalf("unknown resolved slug wrote %d row(s)", count)
+			}
+		})
 	}
 }
 

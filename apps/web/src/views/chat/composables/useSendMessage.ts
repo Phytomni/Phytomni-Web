@@ -29,6 +29,13 @@ import { parseBotProjection } from "../botProjection";
 import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { getToken } from "@/utils/auth";
+import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
+
+const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
+
+function isCanonicalToolName(value: unknown): value is string {
+  return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
+}
 
 function parseBlockingProjection(data: QueryData) {
   const payload =
@@ -384,6 +391,17 @@ export function useSendMessage(opts: {
       if (response.data) {
         const responseData = response.data as QueryData;
         const botProjection = parseBlockingProjection(responseData);
+        if (
+          capturedMode === "expert" &&
+          (!isCanonicalToolName(responseData.tool_name) ||
+            !botProjection ||
+            botProjection.agent !== responseData.tool_name)
+        ) {
+          // Expert responses must have crossed the Go canonical projection
+          // boundary. Unknown or malformed envelopes use the existing send
+          // failure path instead of entering reactive message state.
+          throw new Error("invalid expert response projection");
+        }
         if (
           chatState.activeRequestId === requestKey &&
           typeof responseData.dialogue_id === "string" &&
