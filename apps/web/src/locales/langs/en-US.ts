@@ -743,17 +743,58 @@ export default {
       title: "Digital Design Agent",
       subtitle:
         "Digital Design Agent - Provides protein structure prediction and design services based on gene IDs",
-      sampleTask: "Static sample task ID",
-      sampleResult: "Static sample result",
-      downloadResults: "Start download request",
+      agentLabel: "Digital design workflow",
+      questionLabel: "Design question",
+      questionPlaceholder:
+        "Describe the protein or promoter design you want to explore",
+      geneIdLabel: "Gene ID",
+      geneIdPlaceholder: "For example, AT1G01010",
+      speciesCodeLabel: "Species code",
+      speciesCodePlaceholder: "For example, ath",
+      contextFilesLabel: "Context files (optional)",
+      contextFilesHint:
+        "Upload up to 10 files (.pdf, .doc, .xlsx, .ppt, .txt, or .png), up to 10 MB each.",
+      submit: "Start design run",
+      submitting: "Submitting…",
+      reset: "Start another run",
+      progress: "Design run in progress",
+      complete: "Design report ready",
+      degraded: "The design report is partial because some analysis was unavailable.",
+      trackingDegraded:
+        "Run tracking is degraded. The displayed state may not include the latest Bot update.",
+      reportTitle: "Digital design report",
+      report: "Report",
+      evidence: "Evidence",
+      activity: "Activity",
+      downloads: "Downloads",
+      download: "Request download",
+      noEvidence: "No structured evidence is available for this run.",
+      noDownloads: "No safe downloads are available for this run.",
+      emptyReport: "The design report is not available yet.",
+      capabilityLoading: "Checking digital design capability…",
+      unavailableTitle: "Digital Design Agent is not available",
+      unavailableMessage:
+        "This route is reserved for a capability-gated design workflow. No result was created.",
+      fileValidation:
+        "Some files were rejected. Check the supported types and 10 MB size limit.",
+      fileCountValidation: "You can upload at most 10 files.",
+      questionRequired: "Enter a design question before submitting.",
+      questionTooLong: "The design question is too long.",
+      geneIdValidation:
+        "Enter a valid gene ID using letters, numbers, dots, underscores, or hyphens (up to 128 characters).",
+      speciesCodeValidation:
+        "Enter a valid species code using lowercase letters, numbers, underscores, or hyphens (up to 32 characters).",
+      submitFailed: "The design run could not be submitted. Please try again.",
+      downloadFailed: "The download request could not be completed.",
+      sectionsLabel: "Digital design report sections",
     },
     design: {
       title: "Design Agent",
       subtitle:
-        "Design Agent - This routed demonstration is not yet connected to a live design workflow",
+        "Design Agent - Legacy compatibility route for the capability-gated Digital Design workflow",
       unavailableTitle: "Design Agent is not yet available",
       unavailableMessage:
-        "This route is reserved for a future design workflow. No live design form, result, or progress state is available yet.",
+        "This legacy route remains unavailable. Use the Digital Design Agent route when its capability is enabled.",
     },
     research: {
       title: "In Silico Research Agent",

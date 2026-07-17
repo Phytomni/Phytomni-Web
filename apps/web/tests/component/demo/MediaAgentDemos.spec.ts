@@ -20,12 +20,6 @@ const GENE_NETWORK_FILES = [
   "network_results.zip.005",
 ] as const;
 
-const DIGITAL_DESIGN_QUESTION =
-  "Please help me design the protein structure based on evolution information for gene Os01g0177400.";
-const DIGITAL_DESIGN_TASK_ID = "3b5564b-772a-44f0-abc5-fb163e7d13c4";
-const DIGITAL_DESIGN_HREF =
-  "/static/downloads/7.Digital Design Agent/2.DigitalAgent/results/design_results.zip";
-
 vi.mock("vue-router", () => ({
   useRouter: () => ({ back: routerBack }),
 }));
@@ -50,9 +44,8 @@ const i18n = createI18n({
 });
 
 import GeneNetworkAgent from "@/views/gene-network-agent/index.vue";
-import DigitalDesignAgent from "@/views/digital-design-agent/index.vue";
 
-function mountDemo(component: typeof GeneNetworkAgent | typeof DigitalDesignAgent) {
+function mountDemo(component: typeof GeneNetworkAgent) {
   return mount(component, {
     global: {
       plugins: [i18n, ElementPlus],
@@ -69,7 +62,6 @@ afterEach(() => {
 describe("media agent static demonstrations", () => {
   it("keeps exact questions, task IDs, static labels, and shared shell ownership", () => {
     const geneWrapper = mountDemo(GeneNetworkAgent);
-    const digitalWrapper = mountDemo(DigitalDesignAgent);
 
     expect(geneWrapper.get("[data-test=agent-demo-static-badge]").text()).toBe(
       "Static example"
@@ -83,27 +75,15 @@ describe("media agent static demonstrations", () => {
     expect(geneWrapper.get("[data-test=gene-network-result-label]").text()).toBe(
       "Static sample result"
     );
-
-    expect(digitalWrapper.get("[data-test=agent-demo-static-badge]").text()).toBe(
-      "Static example"
-    );
-    expect(digitalWrapper.get("[data-test=digital-design-question]").text()).toBe(
-      DIGITAL_DESIGN_QUESTION
-    );
-    expect(digitalWrapper.get("[data-test=digital-design-task]").text()).toContain(
-      DIGITAL_DESIGN_TASK_ID
-    );
     expect(
-      digitalWrapper.get("[data-test=digital-design-result-label]").text()
-    ).toBe("Static sample result");
-
-    for (const wrapper of [geneWrapper, digitalWrapper]) {
-      expect(
-        wrapper.findAll(".chat-header, .chat-messages, .message-avatar, .message-content")
-      ).toHaveLength(0);
-      expect(wrapper.findAll("[role=progressbar]")).toHaveLength(0);
-      expect(wrapper.text()).not.toMatch(/created successfully|completed|downloading|progress|percent|eta/i);
-    }
+      geneWrapper.findAll(
+        ".chat-header, .chat-messages, .message-avatar, .message-content"
+      )
+    ).toHaveLength(0);
+    expect(geneWrapper.findAll("[role=progressbar]")).toHaveLength(0);
+    expect(geneWrapper.text()).not.toMatch(
+      /created successfully|completed|downloading|progress|percent|eta/i
+    );
   });
 
   it("starts each Gene Network part one second apart and reports request starts only", async () => {
@@ -169,37 +149,4 @@ describe("media agent static demonstrations", () => {
     clickSpy.mockRestore();
   });
 
-  it("preserves the Digital Design static target, DOM cleanup, keyboard activation, and Back", async () => {
-    const appendSpy = vi.spyOn(document.body, "appendChild");
-    const removeSpy = vi.spyOn(document.body, "removeChild");
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const wrapper = mountDemo(DigitalDesignAgent);
-
-    const download = wrapper.get("[data-test=digital-design-download]");
-    await download.trigger("click");
-    await download.trigger("keydown.enter");
-
-    const anchors = appendSpy.mock.calls
-      .map(([node]) => node)
-      .filter((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
-    expect(anchors).toHaveLength(2);
-    expect(anchors.every((anchor) => anchor.getAttribute("href") === DIGITAL_DESIGN_HREF)).toBe(
-      true
-    );
-    expect(anchors.every((anchor) => anchor.download === "design_results.zip")).toBe(true);
-    expect(clickSpy).toHaveBeenCalledTimes(2);
-    expect(removeSpy.mock.calls.map(([node]) => node)).toEqual(anchors);
-    expect(fetchSpy).not.toHaveBeenCalled();
-
-    await wrapper.get("[data-test=shell-back]").trigger("click");
-    expect(routerBack).toHaveBeenCalledTimes(1);
-
-    fetchSpy.mockRestore();
-    appendSpy.mockRestore();
-    removeSpy.mockRestore();
-    clickSpy.mockRestore();
-  });
 });

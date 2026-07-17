@@ -48,7 +48,16 @@ const DEMO_CONTRACTS: DemoContract[] = [
   {
     path: "/digital-design-agent",
     source: "views/digital-design-agent/index.vue",
-    required: ["AgentDemoShell", "digital-design-download", "router.back"],
+    required: [
+      "useBotRemoteAgentRun",
+      'tool: "DigitalDesignAgent"',
+      "design-submit",
+      "design-unavailable",
+      "ResearchArtifactShell",
+      "BotReportState",
+      "BotArtifactList",
+      "router.back",
+    ],
   },
   {
     path: "/deep-genome-agent",

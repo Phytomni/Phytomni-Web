@@ -143,10 +143,14 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   {
     path: "/digital-design-agent",
     component: "views/digital-design-agent/index.vue",
-    productLayout: "demo",
-    migrationTask: "agent demo shell",
-    behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell"],
+    productLayout: "standalone",
+    migrationTask: "capability-gated remote agent surface",
+    behaviorTest: "tests/component/DigitalDesignAgentView.spec.ts",
+    sourceMarkers: [
+      "useBotRemoteAgentRun",
+      'tool: "DigitalDesignAgent"',
+      "ResearchArtifactShell",
+    ],
   },
   {
     path: "/design",

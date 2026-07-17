@@ -10,11 +10,14 @@
         data-test="design-unavailable"
         role="status"
         aria-live="polite"
+        aria-describedby="design-legacy-unavailable-message"
       >
         <h2 data-test="design-unavailable-title">
           {{ t("agents.design.unavailableTitle") }}
         </h2>
-        <p>{{ t("agents.design.unavailableMessage") }}</p>
+        <p id="design-legacy-unavailable-message">
+          {{ t("agents.design.unavailableMessage") }}
+        </p>
       </section>
     </template>
   </AgentDemoShell>
