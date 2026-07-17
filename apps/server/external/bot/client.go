@@ -211,7 +211,7 @@ func (c *Client) ChatCompletionWithMeta(ctx context.Context, req ChatCompletionR
 }
 
 // ChatCompletionStream opens a streaming chat completion and returns the raw
-// SSE body for the caller to io.Copy through to the Web app. Precondition
+// SSE body for the caller to forward to the Web app unchanged. Precondition
 // failures (auth, unsupported model) surface as a decoded error here, before
 // any frame is forwarded, because Bot validates them up front. The caller
 // owns closing the returned ReadCloser.

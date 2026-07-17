@@ -13,11 +13,15 @@ const LEGACY_CHAT_CAPABILITY: StreamCapability = {
   enabled: true,
   agents: ["ChatAgent"],
 };
-const STREAM_CAPABLE = new Set([
+// These are the only canonical tools the Web stream reducer currently knows
+// how to render. A capability manifest must still opt in each one explicitly;
+// the legacy boolean overload below intentionally exposes ChatAgent only.
+export const STREAM_CAPABLE_AGENTS = [
   "ChatAgent",
   "KnowledgeAgent",
   "BriefGeneAgent",
-]);
+] as const;
+const STREAM_CAPABLE = new Set<string>(STREAM_CAPABLE_AGENTS);
 
 export function shouldStream(
   agent: string,
@@ -32,7 +36,7 @@ export function shouldStream(
 export function shouldStream(
   agent: string,
   mode: "instant" | "expert",
-  capabilityOrFlag: StreamCapability | boolean,
+  capabilityOrFlag: StreamCapability | boolean
 ): boolean {
   const capability =
     typeof capabilityOrFlag === "boolean"

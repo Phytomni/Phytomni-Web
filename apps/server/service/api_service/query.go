@@ -752,6 +752,9 @@ func (ps *Service) QueryStream(
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
+	if !rxBot.BotConfig.StreamEnabled {
+		return nil, fmt.Errorf("%w: stream gate is off", ErrStreamUnsupported)
+	}
 	if in.Mode == "expert" {
 		// Expert routes via RouteQuery (POST /v1/query/route, no streaming
 		// primitive). The handler gate keeps expert out of this branch; this
@@ -764,9 +767,9 @@ func (ps *Service) QueryStream(
 	if !ok {
 		return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
 	}
-	chatModel, isChat := rxBot.ChatModelFor(slug)
-	if !isChat {
-		// Non-chat slugs have no Bot streaming primitive today (handoff P1).
+	chatModel, streamCapable := rxBot.StreamModelFor(slug)
+	if !streamCapable {
+		// Slugs without an approved stream model stay on their blocking path.
 		return nil, fmt.Errorf("%w: tool %q has no Bot streaming primitive (handoff P1)", ErrStreamUnsupported, in.Tool)
 	}
 
@@ -837,7 +840,9 @@ func (ps *Service) QueryStream(
 		onReady(identity)
 	}
 
-	// Forward + tee, splitting the SSE body on blank-line frame separators.
+	// Forward + tee, splitting the SSE body on blank-line frame separators. The
+	// split token includes its original separator so the bytes reaching Web are
+	// exactly the bytes Bot sent; only the accumulator parses a copy.
 	acc := &rxBot.AGUIAccumulator{}
 	scanner := bufio.NewScanner(rc)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -863,8 +868,9 @@ func (ps *Service) QueryStream(
 				persistedRunID = acc.RunID()
 			}
 		}
-		// Forward the raw frame (with trailing blank line) to the browser.
-		out := append(append([]byte{}, frame...), '\n', '\n')
+		// Forward the raw frame, including Bot's original separator, to the
+		// browser. Never re-encode or normalize an AG-UI frame in the gateway.
+		out := append([]byte(nil), frame...)
 		if forwarding && forward != nil {
 			if err := forward(out); err != nil {
 				forwarding = false
@@ -886,6 +892,12 @@ func (ps *Service) QueryStream(
 		streamErr = err
 	} else if acc.Err() != nil {
 		status = "FAILED"
+	}
+	// A Bot RunError is already terminal on the wire. Suppress any synthetic
+	// handler error even if the transport reports a late read error after that
+	// frame; the browser must see exactly one terminal error event.
+	if acc.Err() != nil {
+		streamErr = nil
 	}
 
 	// Finalize the row opened above. WithoutCancel preserves request-scoped DB
@@ -999,11 +1011,14 @@ func (ps *Service) finalizeQuestionStream(
 }
 
 // splitSSEFrames is a bufio.SplitFunc that yields one SSE frame per call,
-// splitting on the blank-line ("\n\n") separator. The trailing separator is
-// consumed but not included in the token.
+// splitting on the blank-line (LF or CRLF) separator. The trailing separator is
+// included in the token so forwarding can preserve Bot's bytes exactly.
 func splitSSEFrames(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if i := bytes.Index(data, []byte("\r\n\r\n")); i >= 0 {
+		return i + 4, data[:i+4], nil
+	}
 	if i := bytes.Index(data, []byte("\n\n")); i >= 0 {
-		return i + 2, data[:i], nil
+		return i + 2, data[:i+2], nil
 	}
 	if atEOF && len(data) > 0 {
 		return len(data), data, nil

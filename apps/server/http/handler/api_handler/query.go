@@ -145,8 +145,8 @@ func (ph *Handler) Query(ctx *gin.Context) {
 
 	// SSE branch (dark-launch). Taken when the caller accepts
 	// text/event-stream, the flag is on, and the turn is Instant. The
-	// chat-family restriction is enforced downstream in QueryStream (via
-	// ChatModelFor); a non-chat slug reaching here is refused with
+	// stream-capability restriction is enforced downstream in QueryStream (via
+	// StreamModelFor); a non-capable slug reaching here is refused with
 	// ErrStreamUnsupported before any frame. Expert must fall through to the
 	// blocking path, which owns RouteQuery dispatch and the expert_enabled dark
 	// gate — the frontend forces tool="" in Expert, so slug alone cannot tell

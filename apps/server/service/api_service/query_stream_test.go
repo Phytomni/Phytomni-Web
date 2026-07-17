@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -341,6 +342,87 @@ func TestQueryStream_PersistsBotRunID(t *testing.T) {
 	}
 	if botRunID != "run_77" {
 		t.Fatalf("persisted bot_run_id = %q, want run_77", botRunID)
+	}
+}
+
+func TestQueryStream_CompatibilityModelsPreserveAGUIBytes(t *testing.T) {
+	const fixture = "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run-k\"}\n\n" +
+		"event: StepStarted\ndata: {\"type\":\"StepStarted\",\"step_name\":\"retrieve\"}\n\n" +
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"answer\"}\n\n" +
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-k\"}\n\n" +
+		"data: [DONE]\n\n"
+
+	for _, tc := range []struct {
+		name  string
+		tool  string
+		model string
+	}{
+		{name: "knowledge", tool: "KnowledgeAgent", model: "phyto-knowledge"},
+		{name: "brief gene", tool: "BriefGeneAgent", model: "phyto-brief-gene"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			var gotModel string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req rxBot.ChatCompletionRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Fatalf("decode stream request: %v", err)
+				}
+				gotModel = req.Model
+				if !req.Stream {
+					t.Error("stream request must set stream=true")
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte(fixture))
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+			t.Cleanup(func() { rxBot.BotConfig = nil })
+
+			var forwarded strings.Builder
+			out, err := (&Service{}).QueryStream(context.Background(), "compat@example.com",
+				QueryInput{Query: "compat", Tool: tc.tool, Mode: "instant"}, nil,
+				func(frame []byte) error {
+					_, _ = forwarded.Write(frame)
+					return nil
+				})
+			if err != nil {
+				t.Fatalf("QueryStream error: %v", err)
+			}
+			if gotModel != tc.model {
+				t.Fatalf("stream model = %q, want %q", gotModel, tc.model)
+			}
+			if forwarded.String() != fixture {
+				t.Fatalf("forwarded AG-UI bytes changed:\n got %q\nwant %q", forwarded.String(), fixture)
+			}
+			var runID string
+			if err := gdb.Raw(`SELECT COALESCE(bot_run_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Scan(&runID).Error; err != nil {
+				t.Fatalf("read persisted run id: %v", err)
+			}
+			if runID != "run-k" {
+				t.Fatalf("persisted run id = %q, want run-k", runID)
+			}
+		})
+	}
+}
+
+func TestQueryStream_StreamGateOffRefusesWithoutBotCall(t *testing.T) {
+	setupStreamTestDB(t)
+	botHits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		botHits++
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: false, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	_, err := (&Service{}).QueryStream(context.Background(), "gate@example.com",
+		QueryInput{Query: "hi", Tool: "KnowledgeAgent", Mode: "instant"}, nil, nil)
+	if !errors.Is(err, ErrStreamUnsupported) {
+		t.Fatalf("err = %v, want ErrStreamUnsupported while stream gate is off", err)
+	}
+	if botHits != 0 {
+		t.Fatalf("stream gate off must not touch Bot (hits=%d)", botHits)
 	}
 }
 

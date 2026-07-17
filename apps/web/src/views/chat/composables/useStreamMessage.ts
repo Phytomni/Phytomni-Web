@@ -60,6 +60,24 @@ function isDoneFrame(frame: string): boolean {
   });
 }
 
+// Keep transport acceptance bounded even when Bot adds a new AG-UI event. The
+// reducer owns the detailed payload handling; this gate prevents an unknown
+// event type from becoming an accidental UI surface while retaining the
+// existing tool/reasoning events used by the chat stream.
+const BOUNDED_AGUI_EVENTS = new Set([
+  "RunStarted",
+  "StepStarted",
+  "TextMessageStart",
+  "TextMessageContent",
+  "TextMessageEnd",
+  "ReasoningMessageContent",
+  "ToolCallStart",
+  "ToolCallResult",
+  "Custom",
+  "RunFinished",
+  "RunError",
+]);
+
 // useStreamMessage consumes the AG-UI SSE stream with fetch + ReadableStream
 // (axios cannot read a stream incrementally). It mutates the already-pushed
 // placeholder message per event so Vue reactivity renders blocks live, then
@@ -146,6 +164,7 @@ export function useStreamMessage(opts: {
         }
         const ev = parseAGUIFrame(frame);
         if (!ev) return;
+        if (!BOUNDED_AGUI_EVENTS.has(ev.type)) return;
         state = reduceAGUIEvent(state, ev);
         if (state.runId && placeholder.a2uiRuntime) {
           placeholder.a2uiRuntime = {

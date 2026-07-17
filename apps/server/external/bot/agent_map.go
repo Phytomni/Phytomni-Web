@@ -78,14 +78,24 @@ var aliasToSlug = map[string]string{
 	"GeneNetworkAgent":      "network",
 }
 
-// slugToChatModel maps the sync chat-family slugs to their /v1/chat/completions
-// model id. Remote agents (analyst, deep_genome, research, design, network) are
-// absent here and run via /v1/agents/{slug}/runs instead. Whether data is a
-// chat model or an agent run is confirmed against the live Bot at wiring time.
+// slugToChatModel maps the sync chat-family slugs to their
+// /v1/chat/completions model id. BriefGene remains an agent_run for the
+// blocking path, so its stream model lives in slugToStreamModel below instead
+// of changing Query's established dispatch contract.
 var slugToChatModel = map[string]string{
 	"chat":      "phyto-chat",
 	"knowledge": "phyto-knowledge",
 	"review":    "phyto-review",
+}
+
+// slugToStreamModel is the Web-owned allowlist for the AG-UI chat-completion
+// models that may be opened by QueryStream. Keep the stream-only BriefGene
+// mapping separate from slugToChatModel: the blocking Query path still routes
+// BriefGene through /v1/agents/{slug}/runs until its blocking contract changes.
+var slugToStreamModel = map[string]string{
+	"chat":       "phyto-chat",
+	"knowledge":  "phyto-knowledge",
+	"brief_gene": "phyto-brief-gene",
 }
 
 // ValidateAgents fetches Bot /v1/agents and asserts every slug the Web-owned
@@ -126,5 +136,14 @@ func SlugFor(tool string) (string, bool) {
 // and whether the slug is a chat-family (vs remote agent) slug.
 func ChatModelFor(slug string) (string, bool) {
 	model, ok := slugToChatModel[slug]
+	return model, ok
+}
+
+// StreamModelFor returns the Web-owned AG-UI model for a stream-capable slug.
+// The caller still has to pass the process-wide StreamEnabled gate; this
+// lookup only enforces the canonical model/slug pair and fails closed for all
+// other agents.
+func StreamModelFor(slug string) (string, bool) {
+	model, ok := slugToStreamModel[slug]
 	return model, ok
 }
