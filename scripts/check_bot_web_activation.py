@@ -92,13 +92,15 @@ PASS_LINE = "Bot/Web activation evidence: PASS"
 FAIL_LINE = "Bot/Web activation evidence: FAIL"
 MAX_FAILURE_LINES = 32
 MAX_FAILURE_LENGTH = 240
+MAX_MATRIX_JSON_BYTES = 256 * 1024
+MAX_MATRIX_JSON_DEPTH = 256
 
 _MATRIX_FIELDS = {"schema_version", "feature_flags", "rows", "rollback"}
 _ROW_FIELDS = {"id", "status", "fixture_id", "fixture_sha256"}
 _SAFE_FIXTURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _EXPERT_DEFAULT_RE = re.compile(
-    r"(?<![A-Za-z0-9_$])expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
+    r"(?m)^[ \t]*expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _CONFIG_FLAG_RE = re.compile(
     r"(?m)^[ \t]*(?P<key>expert_enabled|stream_enabled|a2ui_actions_enabled)"
@@ -194,9 +196,36 @@ def parse_matrix(text: str) -> Any | None:
     block = _extract_json_block(text)
     if block is None:
         return None
+    if len(block.encode("utf-8")) > MAX_MATRIX_JSON_BYTES:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for char in block:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > MAX_MATRIX_JSON_DEPTH:
+                return None
+        elif char in "]}":
+            depth -= 1
+            if depth < 0:
+                return None
+    if in_string or depth != 0:
+        return None
     try:
         return json.loads(block)
-    except (TypeError, ValueError):
+    except (RecursionError, TypeError, ValueError):
         return None
 
 

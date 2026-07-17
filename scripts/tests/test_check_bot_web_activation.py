@@ -214,6 +214,34 @@ def test_cli_rejects_reversed_matrix_markers_without_traceback(tmp_path: Path) -
     assert all(len(line) <= checker.MAX_FAILURE_LENGTH for line in text.splitlines())
 
 
+def test_cli_rejects_deeply_nested_matrix_without_traceback(tmp_path: Path) -> None:
+    nested_json = "[" * 10_000 + "0" + "]" * 10_000
+    write(
+        tmp_path,
+        checker.MATRIX_REL.as_posix(),
+        "\n".join(
+            (
+                checker.MATRIX_JSON_START,
+                "```json",
+                nested_json,
+                "```",
+                checker.MATRIX_JSON_END,
+            )
+        ),
+    )
+    for relative, content in checker.DEFAULT_CHECK_FILES.items():
+        write(tmp_path, relative.as_posix(), content)
+
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        assert checker.main(["--root", str(tmp_path)]) != 0
+    text = output.getvalue()
+    assert text.startswith(f"{checker.FAIL_LINE}\n")
+    assert "Traceback" not in text
+    assert len(text.splitlines()) <= checker.MAX_FAILURE_LINES + 1
+    assert all(len(line) <= checker.MAX_FAILURE_LENGTH for line in text.splitlines())
+
+
 def test_checker_rejects_root_symlink_into_forbidden_checkout(tmp_path: Path) -> None:
     target = tmp_path / "Phytomni-Bot"
     minimal_tree(target)
@@ -280,6 +308,21 @@ expertEnabled: false
     violations: list[str] = []
     checker._check_defaults(source, violations)
     assert "Web expertEnabled default must be false" in violations
+
+
+def test_web_expert_default_ignores_regex_literal_marker() -> None:
+    source = dict(checker.DEFAULT_CHECK_FILES)
+    source[Path("apps/web/src/stores/user.ts")] = (
+        "const marker = /expertEnabled: false/;\n"
+    )
+
+    violations: list[str] = []
+    checker._check_defaults(source, violations)
+    assert "Web expertEnabled default must be false" in violations
+
+    violations = []
+    checker._check_defaults(dict(checker.DEFAULT_CHECK_FILES), violations)
+    assert "Web expertEnabled default must be false" not in violations
 
 
 def test_history_default_ignores_fake_function_inside_go_raw_string() -> None:
