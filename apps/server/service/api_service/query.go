@@ -47,6 +47,16 @@ var ErrInvalidA2uiSurface = errors.New("invalid a2ui input-required surface")
 // handler's stream gate already excludes mode=expert (defense in depth).
 var ErrStreamUnsupported = errors.New("streaming not supported for this request")
 
+// ErrInteropRequired means an explicit required delegation could not be
+// proven from the authenticated, sanitized discovery snapshot. It is returned
+// before any local or Bot agent submission so missing external evidence cannot
+// look like a successful local run.
+var ErrInteropRequired = errors.New("required interop evidence unavailable")
+
+// ErrInteropTargetForbidden means the requested target id was not present as an
+// available, allowlisted target in the Web-owned discovery snapshot.
+var ErrInteropTargetForbidden = errors.New("interop target is not allowlisted")
+
 // QueryFile is one uploaded attachment, read into memory by the handler.
 type QueryFile struct {
 	Filename string
@@ -55,35 +65,39 @@ type QueryFile struct {
 
 // QueryInput is the parsed /query multipart form.
 type QueryInput struct {
-	Query     string
-	Id        int64 // the Web app's threading id: 0 = new conversation, else parent row id
-	Tool      string
-	RefreshId int64 // !=0 = re-answer an existing turn (UPDATE that row)
-	History   string
-	Mode      string // "instant" (default) | "expert"
-	Files     []QueryFile
+	Query          string
+	Id             int64 // the Web app's threading id: 0 = new conversation, else parent row id
+	Tool           string
+	RefreshId      int64 // !=0 = re-answer an existing turn (UPDATE that row)
+	History        string
+	Mode           string // "instant" (default) | "expert"
+	Files          []QueryFile
+	InteropMode    string
+	InteropTargets []string
 }
 
 // QueryData is the response payload the Web app reads off response.data. The
 // content fields are relayed from Bot; id/reaction are Web-owned.
 type QueryData struct {
-	Id                int64           `json:"id"`
-	ToolName          string          `json:"tool_name"`
-	Answer            string          `json:"answer"`
-	FollowUpQuestions string          `json:"follow_up_questions"`
-	Status            string          `json:"status"`
-	UploadPath        string          `json:"upload_path"`
-	DownloadPath      string          `json:"download_path"`
-	ServerFilePath    string          `json:"server_file_path"`
-	ComputeResource   string          `json:"compute_resource"`
-	ReactionType      string          `json:"reaction_type"`
-	DialogueId        string          `json:"dialogue_id"`
-	BotRunID          string          `json:"bot_run_id,omitempty"`
-	TaskId            string          `json:"task_id,omitempty"`
-	TrackingDegraded  bool            `json:"tracking_degraded,omitempty"`
-	ReportRevision    int64           `json:"report_revision,omitempty"`
-	RequestID         string          `json:"request_id,omitempty"`
-	A2UI              *A2uiSurfaceDTO `json:"a2ui,omitempty"`
+	Id                int64              `json:"id"`
+	ToolName          string             `json:"tool_name"`
+	Answer            string             `json:"answer"`
+	FollowUpQuestions string             `json:"follow_up_questions"`
+	Status            string             `json:"status"`
+	UploadPath        string             `json:"upload_path"`
+	DownloadPath      string             `json:"download_path"`
+	ServerFilePath    string             `json:"server_file_path"`
+	ComputeResource   string             `json:"compute_resource"`
+	ReactionType      string             `json:"reaction_type"`
+	DialogueId        string             `json:"dialogue_id"`
+	BotRunID          string             `json:"bot_run_id,omitempty"`
+	TaskId            string             `json:"task_id,omitempty"`
+	TrackingDegraded  bool               `json:"tracking_degraded,omitempty"`
+	ReportRevision    int64              `json:"report_revision,omitempty"`
+	RequestID         string             `json:"request_id,omitempty"`
+	A2UI              *A2uiSurfaceDTO    `json:"a2ui,omitempty"`
+	DegradedInterop   bool               `json:"degraded_interop,omitempty"`
+	InterOp           *InteropProvenance `json:"interop,omitempty"`
 }
 
 // StreamIdentity is the Web-owned identity of a streamed assistant message.
@@ -123,6 +137,149 @@ func requestIDFromContext(ctx context.Context) string {
 		return strings.TrimSpace(id)
 	}
 	return ""
+}
+
+type interopDecision struct {
+	Mode       string
+	Targets    []string
+	Provenance InteropProvenance
+	Degraded   bool
+}
+
+func interopAgent(slug string) bool {
+	return slug == "research" || slug == "design"
+}
+
+func interopErrorCode(err error) string {
+	switch {
+	case errors.Is(err, ErrInteropDisabled):
+		return "disabled"
+	case errors.Is(err, ErrInteropForbidden):
+		return "forbidden"
+	case errors.Is(err, ErrInteropUnavailable):
+		return "unavailable"
+	default:
+		return "discovery_failed"
+	}
+}
+
+func localInteropDecision(mode string) interopDecision {
+	return interopDecision{
+		Mode: mode,
+		Provenance: InteropProvenance{
+			Mode:   mode,
+			Status: "local",
+		},
+	}
+}
+
+func degradedInteropDecision(mode, targetID, code string) interopDecision {
+	return interopDecision{
+		Mode:     "off",
+		Degraded: true,
+		Provenance: InteropProvenance{
+			Mode:     mode,
+			Status:   "degraded",
+			TargetID: targetID,
+			Code:     code,
+		},
+	}
+}
+
+func failedInteropDecision(mode, targetID, code string) interopDecision {
+	return interopDecision{
+		Mode: "off",
+		Provenance: InteropProvenance{
+			Mode:     mode,
+			Status:   "failed",
+			TargetID: targetID,
+			Code:     code,
+		},
+	}
+}
+
+func queryInteropProvenancePtr(slug string, decision interopDecision) *InteropProvenance {
+	if !interopAgent(slug) {
+		return nil
+	}
+	return interopProvenancePtr(decision.Provenance)
+}
+
+// prepareInterop applies the Web-owned delegation policy before any upload,
+// dialogue write, or Bot agent submission. Discovery is advisory evidence only;
+// endpoint/credential/peer payloads never enter this decision.
+func (ps *Service) prepareInterop(ctx context.Context, username, slug, mode string, targets []string) (interopDecision, error) {
+	if !interopAgent(slug) {
+		return localInteropDecision("off"), nil
+	}
+	normalizedMode, normalizedTargets, err := rxBot.ValidateInteropControls(mode, targets)
+	if err != nil {
+		decision := failedInteropDecision(mode, "", "invalid_request")
+		return decision, fmt.Errorf("%w: invalid interop controls", ErrInteropTargetForbidden)
+	}
+	if normalizedMode == "off" {
+		return localInteropDecision("off"), nil
+	}
+	if len(normalizedTargets) == 0 {
+		if normalizedMode == "required" {
+			return failedInteropDecision(normalizedMode, "", "no_evidence"), ErrInteropRequired
+		}
+		return degradedInteropDecision(normalizedMode, "", "no_evidence"), nil
+	}
+
+	caps, discoveryErr := ps.InteropCapabilities(ctx, username)
+	if discoveryErr != nil {
+		if normalizedMode == "required" {
+			return failedInteropDecision(normalizedMode, normalizedTargets[0], interopErrorCode(discoveryErr)), ErrInteropRequired
+		}
+		return degradedInteropDecision(normalizedMode, normalizedTargets[0], interopErrorCode(discoveryErr)), nil
+	}
+
+	available := make(map[string]InteropTarget)
+	failed := make(map[string]InteropTarget)
+	for _, target := range caps.Targets {
+		switch target.Status {
+		case "available":
+			available[target.TargetID] = target
+		case "failed":
+			failed[target.TargetID] = target
+		}
+	}
+	var firstAvailable InteropTarget
+	for index, targetID := range normalizedTargets {
+		if target, ok := available[targetID]; ok {
+			if index == 0 {
+				firstAvailable = target
+			}
+			continue
+		}
+		if target, ok := failed[targetID]; ok {
+			code := target.Code
+			if code == "" {
+				code = "target_unavailable"
+			}
+			if normalizedMode == "required" {
+				return failedInteropDecision(normalizedMode, targetID, code), ErrInteropRequired
+			}
+			return degradedInteropDecision(normalizedMode, targetID, code), nil
+		}
+		// A syntactically valid but undiscovered id is outside the runtime
+		// allowlist. Do not silently drop it or submit a local pseudo-success.
+		return failedInteropDecision(normalizedMode, targetID, "target_unavailable"), ErrInteropTargetForbidden
+	}
+	if firstAvailable.TargetID == "" {
+		return failedInteropDecision(normalizedMode, "", "no_evidence"), ErrInteropRequired
+	}
+	return interopDecision{
+		Mode:    normalizedMode,
+		Targets: append([]string(nil), normalizedTargets...),
+		Provenance: InteropProvenance{
+			Mode:     normalizedMode,
+			Status:   "delegated",
+			TargetID: firstAvailable.TargetID,
+			Kind:     firstAvailable.Kind,
+		},
+	}, nil
 }
 
 func canonicalBotRunID(runID *string) string {
@@ -258,21 +415,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, err
 		}
 	}
-	client := rxBot.NewClient()
-
-	// 1. Upload attachments to Bot OBS; keep names/paths for the Web row and
-	//    the structured obs_file_list passed to capable chat models.
-	var obsPaths, fileNames []string
-	for _, f := range in.Files {
-		up, err := client.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
-		if err != nil {
-			return nil, err
-		}
-		obsPaths = append(obsPaths, up.Path)
-		fileNames = append(fileNames, f.Filename)
-	}
-
-	// 2. Web-owned alias -> Bot slug. Empty tool defaults to the chat agent.
+	// 1. Web-owned alias -> Bot slug. Empty tool defaults to the chat agent.
 	// Expert deliberately ignores the picker value: the Bot router resolves the
 	// canonical slug, and a stale/unknown client-side tool must not steer it.
 	var slug string
@@ -282,6 +425,36 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if !ok {
 			return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
 		}
+	}
+	interop := localInteropDecision("off")
+	var err error
+	if in.Mode != "expert" {
+		interop, err = ps.prepareInterop(ctx, username, slug, in.InteropMode, in.InteropTargets)
+		if err != nil {
+			failed := &QueryData{
+				Status:          "FAILED",
+				DegradedInterop: interop.Degraded,
+				InterOp:         queryInteropProvenancePtr(slug, interop),
+			}
+			return failed, err
+		}
+		in.InteropMode = interop.Mode
+		in.InteropTargets = append([]string(nil), interop.Targets...)
+	}
+
+	client := rxBot.NewClient()
+
+	// 2. Upload attachments to Bot OBS; keep names/paths for the Web row and
+	//    the structured obs_file_list passed to capable chat models. This runs
+	//    only after required interop evidence and target authorization succeed.
+	var obsPaths, fileNames []string
+	for _, f := range in.Files {
+		up, err := client.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
+		if err != nil {
+			return nil, err
+		}
+		obsPaths = append(obsPaths, up.Path)
+		fileNames = append(fileNames, f.Filename)
 	}
 
 	// 3. Resolve dialogue_id + f_id from the threading model above. Ownership
@@ -295,11 +468,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// 4. Dispatch. Web Go never runs an LLM; it forwards free-form query text
 	//    (and structured obs_file_list to capable chat models).
 	out := &QueryData{
-		ToolName:     "",
-		ReactionType: "0",
-		DialogueId:   dialogueID,
-		Status:       "SUCCEEDED",
-		RequestID:    requestIDFromContext(ctx),
+		ToolName:        "",
+		ReactionType:    "0",
+		DialogueId:      dialogueID,
+		Status:          "SUCCEEDED",
+		RequestID:       requestIDFromContext(ctx),
+		DegradedInterop: interop.Degraded,
+		InterOp:         queryInteropProvenancePtr(slug, interop),
 	}
 	if slug != "" {
 		out.ToolName = slugToToolName[slug]
@@ -324,6 +499,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 		submission, err := DecodeAgentRunSubmission(resp)
 		if err != nil {
+			var projectionErr *ProjectionDecodeError
+			if errors.As(err, &projectionErr) && projectionErr.Field == "run_id" {
+				return nil, ErrMissingBotRunID
+			}
 			// Keep malformed upstream envelopes on the bounded client-error path;
 			// never expose decoder details or fabricate a successful tool.
 			return nil, fmt.Errorf("%w: invalid expert response", ErrUnknownTool)
@@ -409,8 +588,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// Branch on the returned status;
 		// never assume remote, or a sync agent's answer is silently dropped.
 		args, err := rxBot.BuildAgentArguments(slug, rxBot.AgentArgumentInput{
-			UserQuery:   in.Query,
-			OBSFileList: obsPaths,
+			UserQuery:      in.Query,
+			OBSFileList:    obsPaths,
+			InteropMode:    in.InteropMode,
+			InteropTargets: in.InteropTargets,
 		})
 		if err != nil {
 			return nil, err
@@ -500,6 +681,19 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// The row now exists, so the accepted Expert submission can enter the
 		// same owner-scoped projection store used by polling/reconciliation.
 		if err := SaveBotRunProjection(ctx, username, id, *expertProjection); err != nil {
+			return nil, err
+		}
+	}
+	if interopAgent(slug) && botRunID != "" {
+		projection := BotRunProjection{
+			RunID:           botRunID,
+			Agent:           slug,
+			Status:          out.Status,
+			ReportRevision:  -1,
+			DegradedInterop: out.DegradedInterop,
+			InterOp:         queryInteropProvenancePtr(slug, interop),
+		}
+		if err := SaveBotRunProjection(ctx, username, id, projection); err != nil {
 			return nil, err
 		}
 	}

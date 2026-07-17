@@ -71,6 +71,23 @@ func TestQueryReturnsDegradedTrackingWithoutSyntheticRunID(t *testing.T) {
 	}
 }
 
+func TestQueryChatDoesNotEmitInteropProvenance(t *testing.T) {
+	setupExpertTestDB(t)
+	compatChatServer(t, `{"id":"chatcmpl-chat","run_id":"run-chat","choices":[{"message":{"content":"answer"}}]}`)
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if strings.Contains(string(encoded), `"interop"`) || strings.Contains(string(encoded), `"degraded_interop"`) {
+		t.Fatalf("chat response unexpectedly contains interop fields: %s", encoded)
+	}
+}
+
 func TestQueryRemoteMissingRunIDDoesNotPersistPollableRow(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

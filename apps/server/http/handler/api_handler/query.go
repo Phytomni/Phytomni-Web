@@ -37,6 +37,10 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusNotFound, "remote product not found"
 	case errors.Is(err, api_service.ErrMissingBotRunID):
 		return http.StatusConflict, "task is not syncable through bot run state"
+	case errors.Is(err, api_service.ErrInteropRequired):
+		return http.StatusFailedDependency, "required interop evidence unavailable"
+	case errors.Is(err, api_service.ErrInteropTargetForbidden):
+		return http.StatusBadRequest, "interop target is not allowlisted"
 	case errors.Is(err, api_service.ErrInvalidA2uiSurface):
 		return http.StatusBadRequest, "invalid input-required surface"
 	case errors.Is(err, rxBot.ErrBotTimeout):
@@ -61,6 +65,30 @@ func writeQueryError(ctx *gin.Context, status int, message string) {
 // wantsStream reports whether the caller opted into SSE via the Accept header.
 func wantsStream(ctx *gin.Context) bool {
 	return strings.Contains(ctx.GetHeader("Accept"), "text/event-stream")
+}
+
+func parseInteropTargets(raw string) ([]string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, true
+	}
+	// A valid target id is at most 64 bytes and the service accepts at most
+	// MaxInteropTargets. Reject oversized JSON before unmarshalling so a caller
+	// cannot use the multipart budget to create a large temporary slice.
+	if len(raw) > 4096 {
+		return nil, false
+	}
+	if raw[0] != '[' || raw[len(raw)-1] != ']' {
+		return nil, false
+	}
+	var targets []string
+	if err := json.Unmarshal([]byte(raw), &targets); err != nil || targets == nil {
+		return nil, false
+	}
+	if len(targets) > rxBot.MaxInteropTargets {
+		return nil, false
+	}
+	return targets, true
 }
 
 // streamEnabled reports whether the AG-UI streaming dark-launch flag is on.
@@ -111,6 +139,13 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		History: ctx.DefaultPostForm("history", "[]"),
 		Mode:    ctx.DefaultPostForm("mode", "instant"),
 	}
+	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
+	interopTargets, ok := parseInteropTargets(ctx.PostForm("interop_targets"))
+	if !ok {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid interop controls"})
+		return
+	}
+	in.InteropTargets = interopTargets
 	if strings.TrimSpace(in.Query) == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.query_empty")})
 		return

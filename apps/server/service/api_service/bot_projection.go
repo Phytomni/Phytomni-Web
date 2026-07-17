@@ -3,6 +3,7 @@ package api_service
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,7 +18,26 @@ const (
 	maxProjectionCompleteness   = 32
 	maxProjectionDegraded       = rxBot.MaxProjectionFailureMessage
 	maxProjectionFailureMessage = rxBot.MaxProjectionFailureMessage
+	maxInteropMode              = 16
+	maxInteropStatus            = 16
+	maxInteropTargetID          = 64
+	maxInteropKind              = 8
+	maxInteropCode              = 32
 )
+
+var interopProjectionTargetPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+
+// InteropProvenance is the Web-owned explanation of how a research/design
+// request was executed. It intentionally contains only bounded, allowlisted
+// labels; endpoints, credentials, schemas, and provider diagnostics never
+// cross the Bot/Web boundary or enter the projection store.
+type InteropProvenance struct {
+	Mode     string `json:"mode"`
+	Status   string `json:"status"`
+	TargetID string `json:"target_id,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+	Code     string `json:"code,omitempty"`
+}
 
 // ProjectionProgress contains only the bounded counters and public BriefGene
 // status that Web surfaces need. Provider-specific progress payloads are not
@@ -61,6 +81,8 @@ type BotRunProjection struct {
 	Artifacts          ProjectionArtifacts
 	RequestID          string
 	TrackingDegraded   bool
+	DegradedInterop    bool
+	InterOp            *InteropProvenance
 	RawPayload         []byte
 }
 
@@ -209,6 +231,8 @@ type projectionEnvelope struct {
 	Failures           json.RawMessage `json:"failures"`
 	Artifacts          json.RawMessage `json:"artifacts"`
 	Formatted          json.RawMessage `json:"formatted"`
+	Interop            json.RawMessage `json:"interop"`
+	DegradedInterop    bool            `json:"degraded_interop"`
 }
 
 func decodeProjectionEnvelope(raw json.RawMessage) (projectionEnvelope, error) {
@@ -295,6 +319,10 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	if err != nil {
 		return BotRunProjection{}, projectionDecodeError("artifacts", err.Error())
 	}
+	interop, err := decodeInteropProvenance(envelope.Interop)
+	if err != nil {
+		return BotRunProjection{}, err
+	}
 
 	directories := make([]string, 0, len(runArtifacts))
 	paths := make([]string, 0)
@@ -332,7 +360,77 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 		Artifacts:      artifacts,
 		// RequestID intentionally remains empty. A Bot request id is response
 		// metadata, not public run state, and is never copied from provider data.
+		DegradedInterop: envelope.DegradedInterop,
+		InterOp:         interop,
 	}, nil
+}
+
+// interopProvenancePtr returns a private copy so response/projection callers
+// cannot mutate the decision that was validated at the service boundary.
+func interopProvenancePtr(value InteropProvenance) *InteropProvenance {
+	copyValue := value
+	return &copyValue
+}
+
+func decodeInteropProvenance(raw json.RawMessage) (*InteropProvenance, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return nil, nil
+	}
+	var value InteropProvenance
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, projectionDecodeError("interop", "malformed provenance")
+	}
+	normalized, err := normalizeInteropProvenance(&value)
+	if err != nil {
+		return nil, err
+	}
+	return normalized, nil
+}
+
+func normalizeInteropProvenance(value *InteropProvenance) (*InteropProvenance, error) {
+	if value == nil {
+		return nil, nil
+	}
+	copyValue := *value
+	copyValue.Mode = strings.TrimSpace(copyValue.Mode)
+	copyValue.Status = strings.TrimSpace(copyValue.Status)
+	copyValue.TargetID = strings.TrimSpace(copyValue.TargetID)
+	copyValue.Kind = strings.TrimSpace(copyValue.Kind)
+	copyValue.Code = strings.TrimSpace(copyValue.Code)
+	if copyValue.Mode == "" || len([]rune(copyValue.Mode)) > maxInteropMode {
+		return nil, projectionDecodeError("interop.mode", "malformed mode")
+	}
+	switch copyValue.Mode {
+	case "off", "auto", "required":
+	default:
+		return nil, projectionDecodeError("interop.mode", "unsupported mode")
+	}
+	if copyValue.Status == "" || len([]rune(copyValue.Status)) > maxInteropStatus {
+		return nil, projectionDecodeError("interop.status", "malformed status")
+	}
+	switch copyValue.Status {
+	case "local", "delegated", "degraded", "failed":
+	default:
+		return nil, projectionDecodeError("interop.status", "unsupported status")
+	}
+	if copyValue.TargetID != "" && (len([]rune(copyValue.TargetID)) > maxInteropTargetID || !interopProjectionTargetPattern.MatchString(copyValue.TargetID)) {
+		return nil, projectionDecodeError("interop.target_id", "malformed target id")
+	}
+	if copyValue.Kind != "" && copyValue.Kind != "mcp" && copyValue.Kind != "a2a" {
+		return nil, projectionDecodeError("interop.kind", "unsupported kind")
+	}
+	if len([]rune(copyValue.Code)) > maxInteropCode {
+		return nil, projectionDecodeError("interop.code", "malformed code")
+	}
+	if copyValue.Code != "" {
+		switch copyValue.Code {
+		case "disabled", "forbidden", "unavailable", "discovery_failed", "no_evidence", "target_unavailable", "invalid_request":
+		default:
+			return nil, projectionDecodeError("interop.code", "unsupported code")
+		}
+	}
+	return &copyValue, nil
 }
 
 func normalizeProjectionRunID(value string) (string, error) {

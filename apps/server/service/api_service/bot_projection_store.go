@@ -40,6 +40,8 @@ type persistedProjection struct {
 	Failures           []string                     `json:"failures,omitempty"`
 	Artifacts          persistedProjectionArtifacts `json:"artifacts,omitempty"`
 	TrackingDegraded   bool                         `json:"tracking_degraded,omitempty"`
+	DegradedInterop    bool                         `json:"degraded_interop,omitempty"`
+	InterOp            *InteropProvenance           `json:"interop,omitempty"`
 }
 
 type persistedProjectionProgress struct {
@@ -68,6 +70,20 @@ type botProjectionRow struct {
 func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection, bool, error) {
 	if current.RunID != "" && incoming.RunID != "" && current.RunID != incoming.RunID {
 		return BotRunProjection{}, false, errors.New("bot projection run id mismatch")
+	}
+	if current.InterOp != nil {
+		normalized, err := normalizeInteropProvenance(current.InterOp)
+		if err != nil {
+			return BotRunProjection{}, false, err
+		}
+		current.InterOp = normalized
+	}
+	if incoming.InterOp != nil {
+		normalized, err := normalizeInteropProvenance(incoming.InterOp)
+		if err != nil {
+			return BotRunProjection{}, false, err
+		}
+		incoming.InterOp = normalized
 	}
 
 	merged := cloneBotRunProjection(current)
@@ -188,6 +204,10 @@ func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
 	// snapshot is a zero-value omission, not permission to erase the marker.
 	dst.Degraded = dst.Degraded || incoming.Degraded
 	dst.TrackingDegraded = dst.TrackingDegraded || incoming.TrackingDegraded
+	dst.DegradedInterop = dst.DegradedInterop || incoming.DegradedInterop
+	if incoming.InterOp != nil {
+		dst.InterOp = interopProvenancePtr(*incoming.InterOp)
+	}
 	if strings.TrimSpace(incoming.DegradedReason) != "" {
 		dst.DegradedReason = incoming.DegradedReason
 	}
@@ -234,10 +254,17 @@ func cloneBotRunProjection(in BotRunProjection) BotRunProjection {
 	out.Artifacts.OutputDirs = append([]string(nil), in.Artifacts.OutputDirs...)
 	out.Artifacts.Paths = append([]string(nil), in.Artifacts.Paths...)
 	out.RawPayload = append([]byte(nil), in.RawPayload...)
+	if in.InterOp != nil {
+		out.InterOp = interopProvenancePtr(*in.InterOp)
+	}
 	return out
 }
 
 func marshalPersistedProjection(projection BotRunProjection) (string, error) {
+	interop, err := normalizeInteropProvenance(projection.InterOp)
+	if err != nil {
+		return "", err
+	}
 	encoded, err := json.Marshal(persistedProjection{
 		RunID:              projection.RunID,
 		Agent:              projection.Agent,
@@ -264,6 +291,8 @@ func marshalPersistedProjection(projection BotRunProjection) (string, error) {
 			Paths:       append([]string(nil), projection.Artifacts.Paths...),
 		},
 		TrackingDegraded: projection.TrackingDegraded,
+		DegradedInterop:  projection.DegradedInterop,
+		InterOp:          interop,
 	})
 	if err != nil {
 		return "", err
@@ -278,6 +307,10 @@ func unmarshalPersistedProjection(raw string) (BotRunProjection, error) {
 	var stored persistedProjection
 	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
 		return BotRunProjection{}, fmt.Errorf("decode bot projection: %w", err)
+	}
+	interop, err := normalizeInteropProvenance(stored.InterOp)
+	if err != nil {
+		return BotRunProjection{}, err
 	}
 	return BotRunProjection{
 		RunID:              stored.RunID,
@@ -305,6 +338,8 @@ func unmarshalPersistedProjection(raw string) (BotRunProjection, error) {
 			Paths:       append([]string(nil), stored.Artifacts.Paths...),
 		},
 		TrackingDegraded: stored.TrackingDegraded,
+		DegradedInterop:  stored.DegradedInterop,
+		InterOp:          interop,
 	}, nil
 }
 

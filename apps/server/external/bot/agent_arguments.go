@@ -23,6 +23,8 @@ type AgentArgumentInput struct {
 
 var interopTargetIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
+const MaxInteropTargets = 16
+
 func validOBSPath(path string) bool {
 	if !strings.HasPrefix(path, "/obs/") || len(path) <= len("/obs/") {
 		return false
@@ -55,6 +57,9 @@ func validateInterop(mode string, targets []string) (string, []string, error) {
 	}
 
 	copyTargets := make([]string, len(targets))
+	if len(targets) > MaxInteropTargets {
+		return "", nil, fmt.Errorf("too many interop targets")
+	}
 	copy(copyTargets, targets)
 	seen := make(map[string]struct{}, len(copyTargets))
 	for _, target := range copyTargets {
@@ -66,7 +71,21 @@ func validateInterop(mode string, targets []string) (string, []string, error) {
 		}
 		seen[target] = struct{}{}
 	}
+	if mode == "off" {
+		// The local mode is an explicit no-peer contract. Validate any supplied
+		// ids so malformed input cannot be smuggled through, then never forward
+		// them to Bot where a future implementation might misinterpret them.
+		return mode, []string{}, nil
+	}
 	return mode, copyTargets, nil
+}
+
+// ValidateInteropControls exposes the same bounded mode/id validation used by
+// BuildAgentArguments to the service orchestration layer. It does not consult
+// Bot or a registry; the service applies the authenticated target allowlist
+// separately before enabling auto/required delegation.
+func ValidateInteropControls(mode string, targets []string) (string, []string, error) {
+	return validateInterop(mode, targets)
 }
 
 func validateDataList(dataList map[string]interface{}) (map[string]interface{}, error) {
