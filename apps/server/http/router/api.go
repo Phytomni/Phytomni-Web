@@ -30,6 +30,7 @@ func Api(r *gin.RouterGroup) {
 	// Middleware chain is identical to the old v1 group.
 	apiV1Router := r.Group("api/v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	{
+		apiV1Router.GET("/bot/capabilities", apiHandler.BotCapabilities)             // Web-owned, authenticated Bot capability manifest
 		apiV1Router.POST("/users", apiHandler.Register)                              // admin registers a user or vip user
 		apiV1Router.GET("/users", apiHandler.PermissionUserList)                     // admin user list
 		apiV1Router.GET("/users/me", apiHandler.GetUserProfile)                      // get own profile (email from JWT, IDOR closed)

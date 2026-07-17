@@ -3,7 +3,64 @@ package bot
 import (
 	"context"
 	"fmt"
+	"strings"
 )
+
+// WebAgentDefinition is the Web-owned identity and execution primitive for a
+// Bot agent. The manifest endpoint deliberately starts from this table rather
+// than copying Bot's descriptor (which may contain private or advisory fields).
+type WebAgentDefinition struct {
+	Tool      string
+	Slug      string
+	Execution string
+}
+
+// WebAgentDefinitions is the stable ten-agent release set. Keep the order
+// deterministic because the capability manifest is a public, cacheable DTO.
+var WebAgentDefinitions = []WebAgentDefinition{
+	{Tool: "ChatAgent", Slug: "chat", Execution: "chat"},
+	{Tool: "KnowledgeAgent", Slug: "knowledge", Execution: "chat"},
+	{Tool: "DataAgent", Slug: "data", Execution: "blocking"},
+	{Tool: "ReviewAgent", Slug: "review", Execution: "chat"},
+	{Tool: "BriefGeneAgent", Slug: "brief_gene", Execution: "agent_run"},
+	{Tool: "AnalystAgent", Slug: "analyst", Execution: "agent_run"},
+	{Tool: "DeepGenomeAgent", Slug: "deep_genome", Execution: "agent_run"},
+	{Tool: "InSilicoResearchAgent", Slug: "research", Execution: "agent_run"},
+	{Tool: "DigitalDesignAgent", Slug: "design", Execution: "agent_run"},
+	{Tool: "GeneNetworkAgent", Slug: "network", Execution: "agent_run"},
+}
+
+const maxBotAgentDescriptors = 32
+
+// ValidateWebAgentDescriptors validates only the public shape needed by the
+// Web capability manifest. It returns presence by canonical slug and never
+// returns the original descriptor, legacy aliases, or any other Bot metadata.
+// A missing canonical slug is valid (the caller marks that capability off),
+// but an unknown, duplicate, or malformed descriptor fails the complete
+// manifest closed.
+func ValidateWebAgentDescriptors(resp *AgentsListResponse) (map[string]struct{}, error) {
+	if resp == nil || len(resp.Data) > maxBotAgentDescriptors {
+		return nil, fmt.Errorf("invalid bot agent listing")
+	}
+
+	present := make(map[string]struct{}, len(resp.Data))
+	for _, descriptor := range resp.Data {
+		slug := strings.TrimSpace(descriptor.Slug)
+		tool := strings.TrimSpace(descriptor.Tool)
+		if slug == "" || tool == "" {
+			return nil, fmt.Errorf("malformed bot agent descriptor")
+		}
+		canonicalTool, ok := CanonicalAgentTool[slug]
+		if !ok || canonicalTool != tool {
+			return nil, fmt.Errorf("unknown bot agent descriptor")
+		}
+		if _, duplicate := present[slug]; duplicate {
+			return nil, fmt.Errorf("duplicate bot agent descriptor")
+		}
+		present[slug] = struct{}{}
+	}
+	return present, nil
+}
 
 // aliasToSlug maps the canonical tool names the Web app sends to Bot agent
 // slugs. This table is Web-owned and deliberately decoupled from Bot's advisory
