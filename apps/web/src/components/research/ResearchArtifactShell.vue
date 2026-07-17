@@ -2,6 +2,13 @@
   <section
     ref="shellRef"
     class="research-artifact-shell research-artifact-shell--desktop-column research-artifact-shell--mobile-fullscreen"
+    :class="
+      reportStatus
+        ? `research-artifact-shell--report-${reportStatus}`
+        : undefined
+    "
+    :data-report-status="reportStatus || undefined"
+    :aria-busy="reportStatus === 'loading' ? 'true' : undefined"
     data-scroll-owner="artifact-body"
   >
     <div class="research-artifact-shell__chrome">
@@ -85,6 +92,11 @@ import ResearchArtifactHeader from "./ResearchArtifactHeader.vue";
 type ResearchArtifactTab = "content" | "evidence" | "activity" | "downloads";
 type ResearchArtifactTabLabels = Partial<Record<ResearchArtifactTab, string>>;
 type ResearchArtifactContentLayout = "reading" | "wide";
+type ResearchArtifactReportStatus =
+  | "loading"
+  | "degraded"
+  | "complete"
+  | "failed";
 
 const DEFAULT_TAB_LABELS: Record<ResearchArtifactTab, string> = {
   content: "Report",
@@ -107,6 +119,7 @@ const props = withDefaults(
     tab?: ResearchArtifactTab;
     tabLabels?: ResearchArtifactTabLabels;
     contentLayout?: ResearchArtifactContentLayout;
+    reportStatus?: ResearchArtifactReportStatus;
     tablistLabel?: string;
     artifactId?: string;
     backLabel: string;

@@ -10,6 +10,7 @@ const testState = vi.hoisted(() => ({
     typeof import("@/views/chat/composables/useChatStates").useChatStates
   > | null,
   copiedText: vi.fn(),
+  downloadFile: vi.fn(),
 }));
 
 vi.mock("vue-element-plus-x", () => ({
@@ -38,7 +39,7 @@ vi.mock(
 vi.mock("@/views/chat/composables/useCopyDownload", () => ({
   useCopyDownload: () => ({
     fallbackCopyText: (text: string) => testState.copiedText(text),
-    downloadFile: vi.fn(),
+    downloadFile: testState.downloadFile,
     getFileDownUrl: vi.fn(),
   }),
 }));
@@ -65,6 +66,8 @@ import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import { SIDEBAR_COLLAPSED_PREFERENCE_KEY } from "@/views/chat/composables/useSidebarResponsive";
 import type { ChatMessage } from "@/views/chat/types";
+import type { BotRunProjection } from "@/views/chat/botProjection";
+import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
@@ -93,6 +96,57 @@ const researchMessage: ChatMessage = {
   tool_name: "InSilicoResearchAgent",
   status: "SUCCEEDED",
   content: "# Full research report\n\nComplete simulated experiment results.",
+};
+
+const partialResearchLifecycle: BotLifecycleState = {
+  runId: "run-research-1",
+  status: "RUNNING",
+  reportRevision: 2,
+  visibleReport: "# Partial report",
+  intermediateReport: "# Partial report",
+  finalReport: "",
+  degraded: true,
+  failures: ["Optional BriefGene analysis unavailable"],
+  artifacts: [
+    {
+      outputDir: "/obs/bucket/run-research-1",
+      paths: [
+        "/obs/bucket/run-research-1/results.pdf",
+        "/obs/bucket/run-research-1/../private.txt",
+      ],
+    },
+    { outputDir: "/obs/bucket/run-research-1", paths: [] },
+  ],
+};
+
+const partialResearchProjection: BotRunProjection = {
+  runId: "run-research-projection-1",
+  agent: "InSilicoResearchAgent",
+  status: "RUNNING",
+  reportStage: "intermediate",
+  reportCompleteness: "partial",
+  reportRevision: 2,
+  reportUpdatedAt: "2026-07-17T10:00:00Z",
+  intermediateReport: "# Projection partial report",
+  finalReport: "",
+  progress: {
+    completed: 1,
+    total: 2,
+    failed: 0,
+    pending: 1,
+    briefGeneStatus: "",
+  },
+  degraded: false,
+  degradedReason: null,
+  failures: [],
+  artifacts: partialResearchLifecycle.artifacts,
+  requestId: null,
+  trackingDegraded: false,
+};
+
+const projectionBackedResearchMessage: ChatMessage = {
+  ...researchMessage,
+  botProjection: partialResearchProjection,
 };
 
 const deepGenomeMessage: ChatMessage = {
@@ -292,6 +346,7 @@ beforeEach(() => {
   globalI18n.global.locale.value = "en-US";
   testState.chatStates = null;
   testState.copiedText.mockReset();
+  testState.downloadFile.mockReset();
   localStorage.clear();
   localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "false");
   window.history.replaceState({}, "", "/chat");
@@ -617,6 +672,31 @@ describe("Chat artifact shell integration", () => {
       "phy-adaptive-shell--normal"
     );
     expect(transcript.scrollTop).toBe(417);
+  });
+
+  it("renders lifecycle reports and validated artifact actions in the shared shell", async () => {
+    const { wrapper } = await mountProductionChat(1440, {
+      messagesA: [projectionBackedResearchMessage],
+    });
+
+    await wrapper.get("[data-test=artifact-open]").trigger("click");
+    expect(wrapper.get("[data-report-status=degraded]").exists()).toBe(true);
+    expect(wrapper.get("[data-test=bot-report-content]").text()).toContain(
+      "Projection partial report"
+    );
+    expect(wrapper.text()).not.toContain("raw.phytomni_state");
+
+    await wrapper.get('[data-tab-id="downloads"]').trigger("click");
+    expect(
+      wrapper.findAll('[data-test="bot-artifact-download"]')
+    ).toHaveLength(1);
+    await wrapper
+      .get('[data-test="bot-artifact-download"]')
+      .trigger("click");
+    expect(testState.downloadFile).toHaveBeenCalledWith(
+      "/obs/bucket/run-research-1"
+    );
+    expect(wrapper.html()).not.toContain("/private.txt");
   });
 
   it("wires production Chat to the artifact state, renderers, and adaptive slot", () => {

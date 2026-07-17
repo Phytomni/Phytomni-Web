@@ -409,7 +409,7 @@
           "
           :title="chatHeaderTitle"
           :metadata="artifactAgentLabel(currentArtifactMessage)"
-          :status="t('common.finished')"
+          :status="currentArtifactStatusLabel"
           :markdown="
             String(currentArtifactMessage.content).replace(/\n/g, '\\n')
           "
@@ -430,7 +430,8 @@
           v-else-if="currentArtifactMessage"
           :title="chatHeaderTitle"
           :metadata="artifactAgentLabel(currentArtifactMessage)"
-          :status="t('common.finished')"
+          :status="currentArtifactStatusLabel"
+          :report-status="currentArtifactReportStatus || undefined"
           :tab="artifactTab"
           :tab-labels="artifactTabLabels"
           :tablist-label="t('common.operation')"
@@ -443,7 +444,15 @@
           @tab="selectArtifactTab"
         >
           <template #content>
+            <BotReportState
+              v-if="currentArtifactLifecycle"
+              :state="currentArtifactLifecycle"
+              :progress="currentArtifactProjection?.progress"
+              :updated-at="currentArtifactProjection?.reportUpdatedAt"
+              :ns="artifactNamespace"
+            />
             <CitedAnswer
+              v-else
               :content="String(currentArtifactMessage.content)"
               :references="currentArtifactMessage.doc_list"
               :ns="artifactNamespace"
@@ -459,7 +468,15 @@
             />
           </template>
           <template #activity>{{ t("common.noData") }}</template>
-          <template #downloads>{{ t("common.noData") }}</template>
+          <template #downloads>
+            <BotArtifactList
+              v-if="currentArtifactLifecycle"
+              :artifacts="currentArtifactLifecycle.artifacts"
+              :empty-label="t('common.warning')"
+              :download="downloadFile"
+            />
+            <span v-else>{{ t("common.noData") }}</span>
+          </template>
         </ResearchArtifactShell>
       </template>
     </PhyAdaptiveShell>
@@ -494,6 +511,8 @@ import {
   ResearchArtifactShell,
   ResearchEvidencePanel,
 } from "@/components/research";
+import BotArtifactList from "@/components/research/BotArtifactList.vue";
+import BotReportState from "@/components/research/BotReportState.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import { Menu } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
@@ -554,6 +573,8 @@ import type {
   ChatUIState,
   DialogueReconciliationResult,
 } from "./types";
+import type { BotRunProjection } from "./botProjection";
+import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
 
 const composerRef = ref<ChatComposerHandle | null>(null);
 
@@ -851,6 +872,109 @@ const artifactTabLabels = computed(() => ({
   activity: t("chat.log.activityLabel"),
   downloads: t("chat.actions.downloadAttachments"),
 }));
+
+type ChatArtifactReportStatus = "loading" | "degraded" | "complete" | "failed";
+type ChatArtifactLifecycleState = BotLifecycleState &
+  Partial<Pick<BotRunProjection, "reportStage" | "reportUpdatedAt" | "progress">>;
+
+const currentArtifactProjection = computed(
+  () => currentArtifactMessage.value?.botProjection ?? null
+);
+
+function lifecycleFromMessage(
+  message: ChatMessage
+): ChatArtifactLifecycleState | null {
+  const projection = message.botProjection;
+  if (message.botLifecycle) {
+    if (!projection) return message.botLifecycle;
+    return {
+      ...message.botLifecycle,
+      reportStage: projection.reportStage,
+      reportUpdatedAt: projection.reportUpdatedAt,
+      progress: projection.progress,
+    };
+  }
+  if (!projection) return null;
+
+  let status: BotLifecycleState["status"] = "RUNNING";
+  switch (projection.status) {
+    case "INPUT_REQUIRED":
+      status = "INPUT_REQUIRED";
+      break;
+    case "SUCCEEDED":
+      status = "SUCCEEDED";
+      break;
+    case "FAILED":
+    case "CANCELLED":
+    case "TIMED_OUT":
+      status = "FAILED";
+      break;
+  }
+
+  const intermediateReport = projection.intermediateReport || "";
+  const finalReport = projection.finalReport || "";
+  return {
+    runId: projection.runId,
+    status,
+    reportRevision: projection.reportRevision,
+    visibleReport: finalReport.trim() ? finalReport : intermediateReport,
+    intermediateReport,
+    finalReport,
+    degraded: projection.degraded || projection.trackingDegraded,
+    failures: projection.failures,
+    artifacts: projection.artifacts,
+    reportStage: projection.reportStage,
+    reportUpdatedAt: projection.reportUpdatedAt,
+    progress: projection.progress,
+  };
+}
+
+const currentArtifactLifecycle = computed(() => {
+  const message = currentArtifactMessage.value;
+  return message ? lifecycleFromMessage(message) : null;
+});
+
+function reportStatusForArtifact(
+  state: BotLifecycleState
+): ChatArtifactReportStatus {
+  const stage = (state as BotLifecycleState & {
+    reportStage?: "waiting_for_brief_gene" | "intermediate" | "final" | null;
+  }).reportStage;
+  if (state.status === "FAILED") return "failed";
+  if (state.status === "INPUT_REQUIRED" || stage === "waiting_for_brief_gene") {
+    return "loading";
+  }
+  if (state.degraded || stage === "intermediate") return "degraded";
+  if (
+    state.status === "SUCCEEDED" ||
+    stage === "final" ||
+    state.finalReport.trim() !== ""
+  ) {
+    return "complete";
+  }
+  return "loading";
+}
+
+const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
+  () =>
+    currentArtifactLifecycle.value
+      ? reportStatusForArtifact(currentArtifactLifecycle.value)
+      : null
+);
+
+const currentArtifactStatusLabel = computed(() => {
+  switch (currentArtifactReportStatus.value) {
+    case "loading":
+      return t("common.loading");
+    case "degraded":
+      return t("common.warning");
+    case "failed":
+      return t("common.failed");
+    case "complete":
+    default:
+      return t("common.finished");
+  }
+});
 
 const reconcileMatchedDialogue = (
   tempId: string,
