@@ -68,6 +68,91 @@ describe("useStreamMessage", () => {
     expect(chatState.isStreaming).toBe(false);
   });
 
+  it("keeps one bounded stream identity for Chat, Knowledge, and BriefGene", async () => {
+    const cases = [
+      {
+        tool: "ChatAgent",
+        runId: "run-task27-chat",
+        messageId: "401",
+        webRequestId: "web-task27-chat",
+        botRequestId: "bot-task27-chat",
+      },
+      {
+        tool: "KnowledgeAgent",
+        runId: "run-task27-knowledge",
+        messageId: "402",
+        webRequestId: "web-task27-knowledge",
+        botRequestId: "bot-task27-knowledge",
+      },
+      {
+        tool: "BriefGeneAgent",
+        runId: "run-task27-brief-gene",
+        messageId: "403",
+        webRequestId: "web-task27-brief-gene",
+        botRequestId: "bot-task27-brief-gene",
+      },
+    ];
+
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    for (const [index, fixture] of cases.entries()) {
+      const body = sseStream([
+        `event: RunStarted\r\ndata: {"type":"RunStarted","run_id":"${fixture.runId}"}\r\n\r\n`,
+        'event: FutureEvent\ndata: {"type":"FutureEvent","value":"ignored"}\n\n',
+        `event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"${fixture.tool}"}\r\n\r\n`,
+        `event: RunFinished\ndata: {"type":"RunFinished","run_id":"${fixture.runId}"}\n\n`,
+        "data: [DONE]\r\n\r\n",
+      ]);
+      (fetch as any).mockResolvedValueOnce(
+        new Response(body, {
+          status: 200,
+          headers: {
+            "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+            "X-Phyto-Message-Id": fixture.messageId,
+            "X-Request-Id": fixture.webRequestId,
+            "X-Bot-Request-Id": fixture.botRequestId,
+          },
+        }),
+      );
+      const formData = new FormData();
+      formData.append("tool", fixture.tool);
+      formData.append("mode", "instant");
+      const placeholder: ChatMessage = {
+        role: "assistant",
+        content: "",
+        streaming: true,
+        blocks: [],
+      };
+
+      const result = await streamMessage({
+        dialogueId: `local-task27-${index}`,
+        formData,
+        requestId: `request-task27-${index}`,
+        placeholder,
+      });
+
+      expect(result).toEqual({
+        dialogueId: CANONICAL_DIALOGUE_ID,
+        messageId: fixture.messageId,
+        requestId: fixture.webRequestId,
+        botRequestId: fixture.botRequestId,
+      });
+      expect(placeholder.a2uiRuntime?.runId).toBe(fixture.runId);
+      expect(placeholder.a2uiRuntime?.messageId).toBe(fixture.messageId);
+      expect(placeholder.a2uiRuntime?.messageId).not.toBe(fixture.runId);
+      expect(placeholder.blocks?.find((block) => block.type === "markdown")?.text).toBe(
+        fixture.tool,
+      );
+      const request = (fetch as any).mock.calls[index][1] as RequestInit;
+      expect((request.body as FormData).get("tool")).toBe(fixture.tool);
+      expect((request.body as FormData).get("mode")).toBe("instant");
+    }
+    expect((fetch as any).mock.calls).toHaveLength(cases.length);
+  });
+
   it("preserves streamPresentationKey across stream finally cleanup", async () => {
     const body = sseStream([
       'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r1"}\n\n',

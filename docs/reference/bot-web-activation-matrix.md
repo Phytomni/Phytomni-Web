@@ -119,3 +119,34 @@ test pass, a commit, or a fixture checksum is not by itself external evidence.
 The checker is local and non-mutating. It never reads a sibling Bot checkout,
 handoff/operations evidence, or live endpoint, and it never declares any row
 above passed from local evidence alone.
+
+## Local synthetic verification record (2026-07-17)
+
+- Commit under test: `3965b26` base snapshot plus the Task 27 working-tree
+  checks; the closure commit records these tests without changing the matrix
+  JSON or any external status.
+- Sanitized fixture ids: `web-task27-stream`, `web-task27-run-error`,
+  `web-task27-expert-research`, and `web-task27-history`. Fixtures contain only
+  bounded synthetic identities; no query, answer, report, error payload, URL,
+  credential, or user data is recorded here.
+- Focused Go command: `GOCACHE=/tmp/phytomni-go-cache
+  GOTMPDIR=/tmp/phytomni-go-tmp go test ./external/bot ./service/api_service
+  -run 'Test(AGUICompatibilityFixture|QueryStream_Combined|CompatibilityFixture_)'
+  -count=1` — PASS (`external/bot`, `service/api_service`).
+- Focused Web command: `npx --no-install vitest run
+  tests/unit/views/chat/streaming/aguiEvents.spec.ts
+  tests/unit/views/chat/streaming/useStreamMessage.spec.ts` — PASS (2 files,
+  33 tests).
+- Repository gate: `./scripts/validate_web_local.sh` — G1/G2/G3/G4/G5/G6 PASS;
+  G7.5 is blocked by the pre-existing
+  `TestQueryRemoteMissingRunIDDoesNotPersistPollableRow` assertion in
+  `apps/server/service/api_service/query_compat_test.go:87` (got the existing
+  `unknown tool: invalid expert response`, expected `ErrMissingBotRunID`).
+  This unrelated failure is recorded verbatim and is not reclassified as a
+  Task 27 failure.
+- Observed Web-owned defaults: `expert=false`, `stream=false`, `a2ui=false`,
+  `history_dual_read=false`.
+- These are synthetic Web-owned unit checks only. Bot, operations,
+  deployment, production, browser-live, and external rollout acceptance were
+  not performed. `RC-WEB-001` through `RC-WEB-007` and `RC-LIVE-001` remain
+  `External Pending`.
