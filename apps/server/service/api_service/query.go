@@ -625,9 +625,15 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
-		interopMetadata, metadataErr := decodeFormattedInteropMetadata(formattedMetadata(resp.Result.Formatted))
-		if metadataErr != nil {
-			return nil, metadataErr
+		var (
+			interopMetadata botInteropMetadata
+			metadataErr     error
+		)
+		if interopAgent(slug) {
+			interopMetadata, metadataErr = decodeFormattedInteropMetadata(formattedMetadata(resp.Result.Formatted))
+			if metadataErr != nil {
+				return nil, metadataErr
+			}
 		}
 		if interopAgent(slug) {
 			out.DegradedInterop = out.DegradedInterop || interopMetadata.DegradedInterop

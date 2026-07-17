@@ -192,11 +192,14 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 	if err != nil {
 		return BotRunProjection{}, err
 	}
-	interopMetadata, err := decodeFormattedInteropMetadata(formattedMetadata(response.Result.Formatted))
-	if err != nil {
-		return BotRunProjection{}, err
+	var interopMetadata botInteropMetadata
+	if interopAgent(agent) {
+		interopMetadata, err = decodeFormattedInteropMetadata(formattedMetadata(response.Result.Formatted))
+		if err != nil {
+			return BotRunProjection{}, err
+		}
 	}
-	if interopMetadata.failed(len(response.TaskIDs) == 0) {
+	if interopAgent(agent) && interopMetadata.failed(len(response.TaskIDs) == 0) {
 		// Bot can return a transport-level running envelope while a required
 		// interop plan has already failed. Treat the bounded metadata outcome as
 		// terminal so the Web layer never persists an unpollable pseudo-running
@@ -399,7 +402,10 @@ func (metadata botInteropMetadata) projection() *InteropProvenance {
 		case "input_required":
 			rank = 2
 		case "failed":
-			rank = 1
+			// A failed target is terminal evidence. It must outrank every
+			// completed/degraded sibling rather than being masked by the
+			// highest-success entry in this single-slot projection.
+			rank = 5
 		}
 		if rank > selectedRank {
 			selected = entry
@@ -537,19 +543,25 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	if err != nil {
 		return BotRunProjection{}, projectionDecodeError("artifacts", err.Error())
 	}
-	interop, err := decodeInteropProvenance(envelope.Interop)
-	if err != nil {
-		return BotRunProjection{}, err
+	var interop *InteropProvenance
+	if interopAgent(agent) {
+		interop, err = decodeInteropProvenance(envelope.Interop)
+		if err != nil {
+			return BotRunProjection{}, err
+		}
 	}
-	formattedInterop, err := decodeFormattedInteropMetadata(envelope.Formatted)
-	if err != nil {
-		return BotRunProjection{}, err
-	}
-	if formattedInterop.failed(noTaskIDs) {
-		status = "FAILED"
-	}
-	if formattedProjection := formattedInterop.projection(); formattedProjection != nil {
-		interop = formattedProjection
+	var formattedInterop botInteropMetadata
+	if interopAgent(agent) {
+		formattedInterop, err = decodeFormattedInteropMetadata(envelope.Formatted)
+		if err != nil {
+			return BotRunProjection{}, err
+		}
+		if formattedInterop.failed(noTaskIDs) {
+			status = "FAILED"
+		}
+		if formattedProjection := formattedInterop.projection(); formattedProjection != nil {
+			interop = formattedProjection
+		}
 	}
 
 	directories := make([]string, 0, len(runArtifacts))
@@ -588,7 +600,7 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 		Artifacts:      artifacts,
 		// RequestID intentionally remains empty. A Bot request id is response
 		// metadata, not public run state, and is never copied from provider data.
-		DegradedInterop: envelope.DegradedInterop || formattedInterop.DegradedInterop,
+		DegradedInterop: interopAgent(agent) && (envelope.DegradedInterop || formattedInterop.DegradedInterop),
 		InterOp:         interop,
 	}, nil
 }

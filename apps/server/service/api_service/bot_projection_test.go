@@ -292,6 +292,27 @@ func TestDecodeAgentRunSubmissionRequiredInteropFailureIsTerminal(t *testing.T) 
 	}
 }
 
+func TestDecodeAgentRunSubmissionNonInteropMetadataCannotTerminalize(t *testing.T) {
+	runID := "run-ordinary-submit"
+	response := rxBot.AgentRunResponse{
+		RunID:  &runID,
+		Agent:  "analyst",
+		Status: "running",
+		Result: rxBot.AgentRunResult{Formatted: &rxBot.Formatted{
+			Answer:   "ordinary answer",
+			Metadata: json.RawMessage(`{"status":"FAILED","degraded_interop":true,"interop":[{"target_id":"mcp-peer","kind":"mcp","status":"failed","code":"interop_failed"}]}`),
+		}},
+	}
+
+	got, err := DecodeAgentRunSubmission(response)
+	if err != nil {
+		t.Fatalf("DecodeAgentRunSubmission: %v", err)
+	}
+	if got.Status != "RUNNING" || got.InterOp != nil || got.DegradedInterop {
+		t.Fatalf("ordinary submission projection=%#v", got)
+	}
+}
+
 func TestDecodeRunProjectionNestedInteropMetadataIsBounded(t *testing.T) {
 	record := rxBot.RunRecord{
 		RunID:   "run-nested-interop",
@@ -334,6 +355,42 @@ func TestDecodeRunProjectionPollingNestedInteropCompletedPreservesSafeFields(t *
 	}
 	if got.Status != "SUCCEEDED" || got.InterOp == nil || got.InterOp.Status != "delegated" || got.InterOp.TargetID != "a2a-peer" || got.InterOp.Kind != "a2a" {
 		t.Fatalf("nested completed projection=%#v", got)
+	}
+}
+
+func TestDecodeRunProjectionMixedInteropFailureWins(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:   "run-mixed-interop",
+		Agent:   "research",
+		Status:  "succeeded",
+		TaskIDs: []string{"task-mixed-interop"},
+		Result:  json.RawMessage(`{"formatted":{"answer":"mixed answer","metadata":{"status":"SUCCESS","interop":[{"target_id":"mcp-completed","kind":"mcp","status":"completed"},{"target_id":"a2a-failed","kind":"a2a","status":"failed","code":"interop_failed"}]}}}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatalf("DecodeRunProjection: %v", err)
+	}
+	if got.Status != "SUCCEEDED" || got.InterOp == nil || got.InterOp.Status != "failed" || got.InterOp.TargetID != "a2a-failed" || got.InterOp.Kind != "a2a" || got.InterOp.Code != "interop_failed" {
+		t.Fatalf("mixed interop projection=%#v", got)
+	}
+}
+
+func TestDecodeRunProjectionNonInteropNestedInteropMetadataIgnored(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:   "run-ordinary-poll",
+		Agent:   "analyst",
+		Status:  "running",
+		TaskIDs: []string{"task-ordinary-poll"},
+		Result:  json.RawMessage(`{"interop":{"mode":"auto","status":"degraded","target_id":"mcp-peer","kind":"mcp","code":"degraded"},"degraded_interop":true,"formatted":{"answer":"ordinary poll answer","metadata":{"status":"FAILED","degraded_interop":true,"interop":[{"target_id":"mcp-peer","kind":"mcp","status":"failed","code":"interop_failed"}]}}}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatalf("DecodeRunProjection: %v", err)
+	}
+	if got.Status != "RUNNING" || got.InterOp != nil || got.DegradedInterop {
+		t.Fatalf("ordinary polling projection=%#v", got)
 	}
 }
 
