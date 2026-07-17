@@ -53,10 +53,16 @@ func TestGetInteropCapabilitiesRejectsUnboundedOrMalformedEnvelope(t *testing.T)
 		name string
 		body string
 	}{
-		{name: "bad target", body: `{"data":[{"target_id":"../secret","kind":"mcp"}]}`},
-		{name: "bad kind", body: `{"data":[{"target_id":"mcp-peer","kind":"stdio"}]}`},
-		{name: "bad code", body: `{"errors":[{"target_id":"mcp-peer","kind":"mcp","code":"private exception"}]}`},
-		{name: "too many", body: `{"data":[` + strings.TrimSuffix(strings.Repeat(`{"target_id":"mcp-peer","kind":"mcp"},`, maxInteropCapabilities+1), ",") + `]}`},
+		{name: "missing object", body: `{"data":[],"errors":[]}`},
+		{name: "missing data", body: `{"object":"list","errors":[]}`},
+		{name: "missing errors", body: `{"object":"list","data":[]}`},
+		{name: "null data", body: `{"object":"list","data":null,"errors":[]}`},
+		{name: "null errors", body: `{"object":"list","data":[],"errors":null}`},
+		{name: "wrong object", body: `{"object":"object","data":[],"errors":[]}`},
+		{name: "bad target", body: `{"object":"list","data":[{"target_id":"../secret","kind":"mcp"}],"errors":[]}`},
+		{name: "bad kind", body: `{"object":"list","data":[{"target_id":"mcp-peer","kind":"stdio"}],"errors":[]}`},
+		{name: "bad code", body: `{"object":"list","data":[],"errors":[{"target_id":"mcp-peer","kind":"mcp","code":"private exception"}]}`},
+		{name: "too many", body: `{"object":"list","data":[` + strings.TrimSuffix(strings.Repeat(`{"target_id":"mcp-peer","kind":"mcp"},`, maxInteropCapabilities+1), ",") + `],"errors":[]}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -69,6 +75,37 @@ func TestGetInteropCapabilitiesRejectsUnboundedOrMalformedEnvelope(t *testing.T)
 				t.Fatal("malformed/unbounded envelope unexpectedly accepted")
 			}
 		})
+	}
+}
+
+func TestGetInteropCapabilitiesRejectsUnknownDiscoveryCode(t *testing.T) {
+	const unsafeCode = "credential_ref=operator-token"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[],"errors":[{"target_id":"mcp-peer","kind":"mcp","code":"` + unsafeCode + `"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := newTestClient(srv.URL).GetInteropCapabilities(context.Background())
+	if err == nil {
+		t.Fatal("unknown discovery code unexpectedly accepted")
+	}
+	if strings.Contains(err.Error(), unsafeCode) || strings.Contains(err.Error(), "operator-token") {
+		t.Fatalf("unsafe discovery code leaked through client error: %v", err)
+	}
+}
+
+func TestGetInteropCapabilitiesRejectsOversizedUnknownField(t *testing.T) {
+	body := `{"object":"list","data":[],"errors":[],"unknown":"` + strings.Repeat("x", int(InteropMaxResponseBytes)) + `"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := newTestClient(srv.URL).GetInteropCapabilities(context.Background())
+	if !errors.Is(err, ErrInteropResponseTooLarge) {
+		t.Fatalf("oversized unknown field error = %v, want ErrInteropResponseTooLarge", err)
 	}
 }
 

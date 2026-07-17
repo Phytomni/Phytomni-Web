@@ -134,11 +134,15 @@ func sanitizeInteropCapabilities(response *rxBot.InteropCapabilitiesResponse) In
 		if current, ok := byTarget[key]; ok && current.Status == "available" {
 			continue
 		}
+		code := ""
+		if item.Code == "discovery_failed" {
+			code = item.Code
+		}
 		byTarget[key] = InteropTarget{
 			TargetID: item.TargetID,
 			Kind:     item.Kind,
 			Status:   "failed",
-			Code:     item.Code,
+			Code:     code,
 		}
 	}
 

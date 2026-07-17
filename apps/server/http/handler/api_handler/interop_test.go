@@ -131,6 +131,28 @@ func TestInteropHandlerBotUnavailableReturns503(t *testing.T) {
 	}
 }
 
+func TestInteropHandlerMalformedEnvelopeReturns503(t *testing.T) {
+	gdb := setupInteropHandlerDB(t)
+	if err := gdb.Exec(`INSERT INTO users (email, code) VALUES ('admin@example.com', 'admin')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":null,"errors":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	configureInteropHandlerBot(t, srv.URL, true)
+
+	c, w := interopHandlerContext(t, "admin@example.com")
+	NewHandler().InteropCapabilities(c)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("malformed envelope status = %d, body=%s; want 503", w.Code, w.Body.String())
+	}
+	if containsInteropHandler(w.Body.String(), "object") || containsInteropHandler(w.Body.String(), "data") {
+		t.Fatalf("malformed envelope details leaked: %s", w.Body.String())
+	}
+}
+
 func TestInteropHandlerRequiresAuthenticatedIdentity(t *testing.T) {
 	configureInteropHandlerBot(t, "http://127.0.0.1:1", true)
 	c, w := interopHandlerContext(t, "")

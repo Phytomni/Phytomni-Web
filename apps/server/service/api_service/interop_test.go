@@ -145,7 +145,7 @@ func TestInteropCapabilitiesFlagOffReturnsBeforeBot(t *testing.T) {
 	gdb := setupInteropServiceDB(t)
 	seedInteropUser(t, gdb, "admin@example.com", "admin")
 	hits := int64(0)
-	srv := interopResponseServer(t, http.StatusOK, `{"data":[]}`, &hits)
+	srv := interopResponseServer(t, http.StatusOK, `{"object":"list","data":[],"errors":[]}`, &hits)
 	t.Cleanup(srv.Close)
 	configureInteropServiceBot(t, srv.URL, false)
 
@@ -162,7 +162,7 @@ func TestInteropCapabilitiesUnauthorizedReturnsBeforeBot(t *testing.T) {
 	gdb := setupInteropServiceDB(t)
 	seedInteropUser(t, gdb, "user@example.com", "user")
 	hits := int64(0)
-	srv := interopResponseServer(t, http.StatusOK, `{"data":[]}`, &hits)
+	srv := interopResponseServer(t, http.StatusOK, `{"object":"list","data":[],"errors":[]}`, &hits)
 	t.Cleanup(srv.Close)
 	configureInteropServiceBot(t, srv.URL, true)
 
@@ -180,7 +180,7 @@ func TestInteropCapabilitiesGrantedAgentRoleCanDiscover(t *testing.T) {
 	seedInteropUser(t, gdb, "researcher@example.com", "researcher")
 	grantInteropCapability(t, gdb, "researcher", "InSilicoResearchAgent", 1)
 	hits := int64(0)
-	srv := interopResponseServer(t, http.StatusOK, `{"data":[{"target_id":"mcp-peer","kind":"mcp"}]}`, &hits)
+	srv := interopResponseServer(t, http.StatusOK, `{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"}],"errors":[]}`, &hits)
 	t.Cleanup(srv.Close)
 	configureInteropServiceBot(t, srv.URL, true)
 
@@ -239,5 +239,19 @@ func TestInteropCapabilitiesPartialFailureRetainsSuccessfulTargets(t *testing.T)
 	}
 	if !foundSuccess || !foundFailure {
 		t.Fatalf("partial target statuses = %#v", result.Targets)
+	}
+}
+
+func TestSanitizeInteropCapabilitiesDropsUnknownErrorCode(t *testing.T) {
+	result := sanitizeInteropCapabilities(&rxBot.InteropCapabilitiesResponse{
+		Object: "list",
+		Data:   []rxBot.InteropCapabilityRecord{},
+		Errors: []rxBot.InteropDiscoveryError{{TargetID: "mcp-peer", Kind: "mcp", Code: "credential_ref=operator-token"}},
+	})
+	if len(result.Targets) != 1 {
+		t.Fatalf("sanitized targets = %#v, want one failure target", result.Targets)
+	}
+	if result.Targets[0].Code != "" {
+		t.Fatalf("unsafe error code projected: %#v", result.Targets[0])
 	}
 }
