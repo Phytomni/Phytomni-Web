@@ -3,6 +3,42 @@ import {
   createWebHistory,
   createWebHashHistory,
 } from "vue-router";
+import {
+  REMOTE_AGENT_PRODUCT_REGISTRY,
+  type RemoteAgentTool,
+} from "@/constants/agents";
+
+/**
+ * Capability-gated route contracts for the remote product views.  They are
+ * metadata only until the corresponding view is implemented; adding them to
+ * `constantRoutes` early would advertise a demo or create an unresolved lazy
+ * import.
+ */
+export const REMOTE_AGENT_ROUTE_CONTRACTS = REMOTE_AGENT_PRODUCT_REGISTRY;
+
+export type RemoteAgentRouteAccess = {
+  roles?: readonly string[];
+  capabilities?: Readonly<
+    Record<string, { enabled?: boolean; execution?: string } | undefined>
+  >;
+};
+
+export function canActivateRemoteAgentRoute(
+  tool: RemoteAgentTool,
+  access: RemoteAgentRouteAccess
+): boolean {
+  const contract = REMOTE_AGENT_ROUTE_CONTRACTS[tool];
+  if (!contract) return false;
+  const roles = access.roles ?? [];
+  const capability = access.capabilities?.[tool];
+  return (
+    roles.includes(contract.requiredRole) &&
+    capability?.enabled === true &&
+    capability.execution === contract.capability
+  );
+}
+
+export const isRemoteAgentRouteAllowed = canActivateRemoteAgentRoute;
 
 export const dynamicRoutes = [
   {

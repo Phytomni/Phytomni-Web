@@ -1,4 +1,15 @@
 import type { ArtifactKind, ChatMessage } from "../types";
+import type { RemoteAgentTool } from "@/constants/agents";
+
+/** Remote product artifacts stay explicit until each surface has a renderer. */
+export const REMOTE_AGENT_ARTIFACT_POLICIES: Record<
+  RemoteAgentTool,
+  { kind: ArtifactKind; autoOpen: boolean }
+> = {
+  InSilicoResearchAgent: { kind: "research", autoOpen: true },
+  DigitalDesignAgent: { kind: null, autoOpen: false },
+  GeneNetworkAgent: { kind: null, autoOpen: false },
+};
 
 const ARTIFACT_KIND_BY_TOOL: ReadonlyMap<
   string,

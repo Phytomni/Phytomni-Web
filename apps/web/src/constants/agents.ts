@@ -85,6 +85,76 @@ export const CANONICAL_AGENT_ROUTES = {
   DigitalDesignAgent: "/digital-design-agent",
 } as const;
 
+/**
+ * Remote product surfaces are intentionally separate from the seven sidebar
+ * routes above.  The three records describe a future capability-gated route
+ * contract; they do not make a demo route look like a live product surface.
+ */
+export type RemoteAgentTool = Extract<
+  CanonicalAgentTool,
+  "InSilicoResearchAgent" | "DigitalDesignAgent" | "GeneNetworkAgent"
+>;
+
+export interface RemoteAgentProductMetadata {
+  tool: RemoteAgentTool;
+  slug: "research" | "design" | "network";
+  route: string;
+  routeName: string;
+  capability: "agent_run";
+  requiredRole: RemoteAgentTool;
+  attachments: boolean;
+  artifacts: boolean;
+  live: boolean;
+}
+
+export const REMOTE_AGENT_PRODUCT_REGISTRY: Record<
+  RemoteAgentTool,
+  RemoteAgentProductMetadata
+> = {
+  InSilicoResearchAgent: {
+    tool: "InSilicoResearchAgent",
+    slug: "research",
+    route: "/research-agent",
+    routeName: "researchAgent",
+    capability: "agent_run",
+    requiredRole: "InSilicoResearchAgent",
+    attachments: true,
+    artifacts: true,
+    live: false,
+  },
+  DigitalDesignAgent: {
+    tool: "DigitalDesignAgent",
+    slug: "design",
+    route: "/digital-design-agent",
+    routeName: "digitalDesignAgent",
+    capability: "agent_run",
+    requiredRole: "DigitalDesignAgent",
+    attachments: true,
+    artifacts: true,
+    live: false,
+  },
+  GeneNetworkAgent: {
+    tool: "GeneNetworkAgent",
+    slug: "network",
+    route: "/gene-network-agent",
+    routeName: "geneNetworkAgent",
+    capability: "agent_run",
+    requiredRole: "GeneNetworkAgent",
+    attachments: true,
+    artifacts: true,
+    live: false,
+  },
+};
+
+/** Route values consumed by future guarded product views, never by the @ picker. */
+export const REMOTE_AGENT_ROUTES: Record<RemoteAgentTool, string> = {
+  InSilicoResearchAgent: "/research-agent",
+  DigitalDesignAgent: "/digital-design-agent",
+  GeneNetworkAgent: "/gene-network-agent",
+};
+
+export const REMOTE_AGENT_ROUTE_CONTRACTS = REMOTE_AGENT_PRODUCT_REGISTRY;
+
 export type RoutedAgentTool = keyof typeof CANONICAL_AGENT_ROUTES;
 
 export type CanonicalAtAbleTool = (typeof CANONICAL_AT_ABLE_TOOLS)[number];
