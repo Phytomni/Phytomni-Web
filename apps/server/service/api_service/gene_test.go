@@ -24,11 +24,11 @@ func TestApiDownloadAnalystAgentObsImages_StoredPaths(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, download_path, image_paths, created_at) VALUES
-		(70, 'alice', '/obs/p/r1', '["/obs/p/r1/a.png","/obs/p/r2/b.png","/obs/p/r1/t.csv"]', '2026-01-01 00:00:00')`).Error; err != nil {
+		(70, 'alice', '/obs/bucket/user/runs/run-1', '["/obs/bucket/user/runs/run-1/a.png","/obs/bucket/user/runs/run-2/b.png","/obs/bucket/user/runs/run-1/t.csv"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
-	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
+	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/bucket/user/runs/run-1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -68,15 +68,15 @@ func TestApiDownloadAnalystAgentObsImages_ContainmentBypass(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, download_path, image_paths, created_at) VALUES
-		(72, 'alice', '/obs/p/r1', '["/obs/p/r1/a.png","/obs/p/r2/b.png","/obs/OTHER/evil.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
+		(72, 'alice', '/obs/bucket/user/runs/run-1', '["/obs/bucket/user/runs/run-1/a.png","/obs/bucket/user/runs/run-2/b.png","/obs/OTHER/evil.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	ps := NewService()
-	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
+	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/bucket/user/runs/run-1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	// /obs/p/r1 + /obs/p/r2 are under run root /obs/p → served (2);
+	// run-1 + run-2 are under run root /obs/bucket/user/runs → served (2);
 	// /obs/OTHER/evil.png escapes the run root → dropped.
 	if len(urls) != 2 {
 		t.Fatalf("expected 2 in-scope png urls (cross-root dropped), got %d: %v", len(urls), urls)
@@ -102,25 +102,25 @@ func TestApiDownloadAnalystAgentObsImages_FallbackListingContainment(t *testing.
 	// image_paths left empty → handler must fall back to ListObsKeys.
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, download_path, image_paths, created_at) VALUES
-		(74, 'alice', '/obs/p/r1', '', '2026-01-01 00:00:00')`).Error; err != nil {
+		(74, 'alice', '/obs/bucket/user/runs/run-1', '', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	// Reachable fake Bot relay: listing returns in-root pngs (run root /obs/p),
+	// Reachable fake Bot relay: listing returns in-root pngs (run root /obs/bucket/user/runs),
 	// a cross-root png, and a non-image. Only the two in-root pngs may be signed.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"keys":["/obs/p/r1/a.png","/obs/p/r2/b.png","/obs/OTHER/evil.png","/obs/p/r1/t.csv"]}`))
+		_, _ = w.Write([]byte(`{"keys":["/obs/bucket/user/runs/run-1/a.png","/obs/bucket/user/runs/run-2/b.png","/obs/OTHER/evil.png","/obs/bucket/user/runs/run-1/t.csv"]}`))
 	}))
 	defer srv.Close()
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	ps := NewService()
-	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/p/r1")
+	urls, err := ps.DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/bucket/user/runs/run-1")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	// /obs/p/r1 + /obs/p/r2 under run root /obs/p → signed (2);
+	// run-1 + run-2 under run root /obs/bucket/user/runs → signed (2);
 	// /obs/OTHER/evil.png escapes → dropped; t.csv → not a png.
 	if len(urls) != 2 {
 		t.Fatalf("expected 2 in-scope png urls from fallback listing (cross-root + csv excluded), got %d: %v", len(urls), urls)

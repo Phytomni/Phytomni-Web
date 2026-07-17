@@ -8,14 +8,14 @@ vi.mock("@/utils/request", () => ({
 }));
 
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
-import { downloadArtifact } from "@/api/chat";
+import { getChatdownloadURL } from "@/api/chat";
 import type { BotArtifact } from "@/views/chat/botProjection";
 
 describe("BotArtifactList provenance boundary", () => {
   it("uses the approved server-issued OBS download action", async () => {
     requestMock.mockResolvedValueOnce({ code: 200, data: "signed" });
 
-    await downloadArtifact("/obs/bucket/run-1");
+    await getChatdownloadURL({ obs_path: "/obs/bucket/run-1" });
 
     expect(requestMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -31,28 +31,28 @@ describe("BotArtifactList provenance boundary", () => {
     requestMock.mockClear();
   });
 
-  it("calls the approved download API instead of constructing an href", async () => {
-    const downloadArtifact = vi.fn();
+  it("keeps the legacy path callback and download event for both OBS forms", async () => {
+    const download = vi.fn();
     const artifacts: BotArtifact[] = [
       {
-        outputDir: "/obs/bucket/run-1",
-        paths: ["/obs/bucket/run-1/output.zip"],
+        outputDir: "obs://bucket/run-1",
+        paths: ["obs://bucket/run-1/output.zip"],
       },
     ];
     const wrapper = mount(BotArtifactList, {
       props: {
         artifacts,
-        runId: "run-1",
-        downloadArtifact,
+        download,
         emptyLabel: "No artifacts",
       },
     });
 
     await wrapper.get('[data-test="bot-artifact-download"]').trigger("click");
 
-    expect(downloadArtifact).toHaveBeenCalledWith("run-1", "output.zip");
+    expect(download).toHaveBeenCalledWith("obs://bucket/run-1");
+    expect(wrapper.emitted("download")).toEqual([["obs://bucket/run-1"]]);
     expect(wrapper.element.querySelector('a[href*="obs"]')).toBeNull();
-    expect(wrapper.html()).not.toContain("/obs/");
+    expect(wrapper.html()).not.toContain("obs://");
   });
 
   it("keeps malformed paths warning-only and never exposes private diagnostics", () => {
@@ -64,11 +64,12 @@ describe("BotArtifactList provenance boundary", () => {
             paths: [
               "/obs/bucket/run-1/../private.txt",
               "http://private/secret",
+              "obs://user:secret@bucket/run/private.txt",
+              "obs://bucket/run/../private.txt",
             ],
           },
         ],
-        runId: "run-1",
-        downloadArtifact: vi.fn(),
+        download: vi.fn(),
         emptyLabel: "No artifacts",
       },
     });

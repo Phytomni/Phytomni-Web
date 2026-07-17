@@ -322,7 +322,7 @@ import {
   type BotRemoteAgentRunState,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
-import type { BotProgress } from "@/views/chat/botProjection";
+import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
 const MAX_QUERY_LENGTH = 4000;
@@ -584,6 +584,10 @@ function isSafeDownloadUrl(value: unknown): value is string {
 
 async function downloadArtifact(outputDir: string): Promise<void> {
   downloadError.value = "";
+  if (!isSafeBotObsPath(outputDir)) {
+    downloadError.value = t("agents.digitalDesign.downloadFailed");
+    return;
+  }
   try {
     const response = await getChatdownloadURL({ obs_path: outputDir });
     const data = response as { code?: unknown; data?: unknown };

@@ -55,7 +55,7 @@ describe("parseBotProjection", () => {
     ).toBe("# Heading\n\n- one\n- two");
   });
 
-  it("accepts only bounded OBS artifact paths and never creates a download URL", () => {
+  it("accepts bounded OBS paths in both documented forms and never creates a download URL", () => {
     const projection = parseBotProjection(finalFixture);
 
     expect(projection.artifacts).toEqual([
@@ -65,6 +65,21 @@ describe("parseBotProjection", () => {
           "/obs/synthetic-bucket/run-dg-1/report.md",
           "/obs/synthetic-bucket/run-dg-1/data.tsv",
         ],
+      },
+    ]);
+    expect(
+      parseBotProjection({
+        artifacts: [
+          {
+            output_dir: "obs://bucket/run",
+            paths: ["obs://bucket/run/report.md"],
+          },
+        ],
+      }).artifacts
+    ).toEqual([
+      {
+        outputDir: "obs://bucket/run",
+        paths: ["obs://bucket/run/report.md"],
       },
     ]);
     expect(projection.artifacts[0]).not.toHaveProperty("downloadUrl");
@@ -148,6 +163,28 @@ describe("parseBotProjection", () => {
       parseBotProjection({
         artifacts: [
           { output_dir: "/obs/bucket/x", paths: ["/obs/bucket/../secret"] },
+        ],
+      })
+    ).toThrow(/artifact/);
+    for (const path of [
+      "obs://user:secret@bucket/run/report.md",
+      "obs://bucket/run?token=secret",
+      "obs://bucket/run/../private.txt",
+      "obs://bucket//private.txt",
+    ]) {
+      expect(() =>
+        parseBotProjection({
+          artifacts: [{ output_dir: "obs://bucket/run", paths: [path] }],
+        })
+      ).toThrow(/artifact/);
+    }
+    expect(() =>
+      parseBotProjection({
+        artifacts: [
+          {
+            output_dir: "obs://bucket/run",
+            paths: ["obs://bucket/other/report.md"],
+          },
         ],
       })
     ).toThrow(/artifact/);

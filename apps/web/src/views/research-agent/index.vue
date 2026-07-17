@@ -282,6 +282,7 @@ import {
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import {
+  isSafeBotObsPath,
   parseBotProjection,
   type BotArtifact,
   type BotProgress,
@@ -540,29 +541,6 @@ function safeHistoryIdentity(value: unknown, pattern: RegExp): string | null {
   return normalized && pattern.test(normalized) ? normalized : null;
 }
 
-function isSafeObsPath(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const path = value.trim();
-  if (
-    !path.startsWith("/obs/") ||
-    path.length <= "/obs/".length ||
-    path.length > 512 ||
-    path.includes("\\") ||
-    path.includes("?") ||
-    path.includes("#") ||
-    path.includes(":") ||
-    /[\r\n\t ]/u.test(path)
-  ) {
-    return false;
-  }
-  const parts = path.split("/");
-  return (
-    parts.length >= 4 &&
-    parts[2] !== "" &&
-    parts.slice(3).every((part) => part !== "" && part !== "." && part !== "..")
-  );
-}
-
 function historyArtifactPaths(value: unknown): string[] {
   const values: unknown[] = [];
   if (Array.isArray(value)) {
@@ -577,7 +555,7 @@ function historyArtifactPaths(value: unknown): string[] {
       values.push(value);
     }
   }
-  return values.filter(isSafeObsPath).slice(0, MAX_HISTORY_ARTIFACTS);
+  return values.filter(isSafeBotObsPath).slice(0, MAX_HISTORY_ARTIFACTS);
 }
 
 function artifactsFromHistoryRow(row: HistoryRecord): BotArtifact[] {
@@ -759,6 +737,10 @@ function isSafeDownloadUrl(value: unknown): value is string {
 
 async function downloadArtifact(outputDir: string): Promise<void> {
   downloadError.value = "";
+  if (!isSafeBotObsPath(outputDir)) {
+    downloadError.value = t("agents.research.downloadFailed");
+    return;
+  }
   try {
     const response = await getChatdownloadURL({ obs_path: outputDir });
     const data = response as { code?: unknown; data?: unknown };

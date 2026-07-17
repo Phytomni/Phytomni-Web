@@ -40,16 +40,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import type { BotArtifact } from "@/views/chat/botProjection";
+import { isSafeBotObsPath, type BotArtifact } from "@/views/chat/botProjection";
 
 const props = withDefaults(
   defineProps<{
     artifacts?: readonly BotArtifact[];
     download?: (path: string) => void | Promise<void>;
     downloadAction?: (path: string) => void | Promise<void>;
-    /** Preferred provenance callback: the server resolves the run/name pair. */
-    downloadArtifact?: (runId: string, name: string) => void | Promise<void>;
-    runId?: string;
     titleLabel?: string;
     downloadText?: string;
     emptyLabel?: string;
@@ -61,7 +58,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (event: "download", runId: string, name: string): void;
+  (event: "download", path: string): void;
 }>();
 
 const { t } = useI18n();
@@ -78,57 +75,6 @@ interface ArtifactRow {
   name: string;
   path: string;
   outputDir: string;
-  runId: string;
-}
-
-type ArtifactInput = BotArtifact & {
-  runId?: unknown;
-  run_id?: unknown;
-  path?: unknown;
-  name?: unknown;
-  displayName?: unknown;
-};
-
-function safeRunId(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value !== value.trim() ||
-    value.length > 128 ||
-    /[\\/\r\n\t]/u.test(value)
-  ) {
-    return "";
-  }
-  return value;
-}
-
-function isSafeObsPath(value: unknown): value is string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value !== value.trim()
-  ) {
-    return false;
-  }
-  if (
-    !value.startsWith("/obs/") ||
-    value.length <= "/obs/".length ||
-    value.includes("\\") ||
-    value.includes("?") ||
-    value.includes("#") ||
-    value.includes(":") ||
-    /[\r\n\t ]/u.test(value)
-  ) {
-    return false;
-  }
-  const segments = value.split("/");
-  return (
-    segments.length >= 4 &&
-    segments[2] !== "" &&
-    segments
-      .slice(3)
-      .every((segment) => segment !== "" && segment !== "." && segment !== "..")
-  );
 }
 
 function displayName(path: string): string {
@@ -140,17 +86,13 @@ const rows = computed(() => {
   let warning = props.artifacts.length === 0;
 
   props.artifacts.forEach((artifact, artifactIndex) => {
-    const input = artifact as ArtifactInput;
     const outputDir =
-      input && typeof input.outputDir === "string" ? input.outputDir : "";
+      artifact && typeof artifact.outputDir === "string"
+        ? artifact.outputDir
+        : "";
     const paths =
-      input && Array.isArray(input.paths)
-        ? input.paths
-        : typeof input?.path === "string"
-        ? [input.path]
-        : [];
-    const runId = safeRunId(props.runId ?? input?.runId ?? input?.run_id);
-    const directoryIsSafe = isSafeObsPath(outputDir);
+      artifact && Array.isArray(artifact.paths) ? artifact.paths : [];
+    const directoryIsSafe = isSafeBotObsPath(outputDir);
 
     if (paths.length === 0) {
       warning = true;
@@ -162,7 +104,7 @@ const rows = computed(() => {
         directoryIsSafe &&
         typeof path === "string" &&
         (path === outputDir || path.startsWith(`${outputDir}/`));
-      if (!isSafeObsPath(path) || !belongsToDirectory) {
+      if (!isSafeBotObsPath(path) || !belongsToDirectory) {
         warning = true;
         return;
       }
@@ -172,7 +114,6 @@ const rows = computed(() => {
         name: displayName(path),
         path,
         outputDir,
-        runId,
       });
     });
   });
@@ -188,21 +129,15 @@ function downloadLabel(name: string): string {
 }
 
 function requestDownload(artifact: ArtifactRow): void {
-  if (!isSafeObsPath(artifact.path) || !isSafeObsPath(artifact.outputDir)) {
-    return;
-  }
-
-  if (props.downloadArtifact) {
-    if (!artifact.runId) {
-      return;
-    }
-    void props.downloadArtifact(artifact.runId, artifact.name);
-    emit("download", artifact.runId, artifact.name);
+  if (
+    !isSafeBotObsPath(artifact.path) ||
+    !isSafeBotObsPath(artifact.outputDir)
+  ) {
     return;
   }
 
   (props.download ?? props.downloadAction)?.(artifact.outputDir);
-  emit("download", artifact.runId, artifact.name);
+  emit("download", artifact.outputDir);
 }
 </script>
 

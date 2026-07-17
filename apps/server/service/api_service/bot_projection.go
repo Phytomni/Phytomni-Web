@@ -3,7 +3,6 @@ package api_service
 import (
 	"encoding/json"
 	"fmt"
-	pathpkg "path"
 	"strings"
 	"time"
 
@@ -38,88 +37,6 @@ type ProjectionArtifacts struct {
 	Directories []string
 	OutputDirs  []string
 	Paths       []string
-}
-
-// ProjectedArtifact is the narrow provenance DTO used when a Bot output needs
-// to cross a Web-owned boundary. Path and UserName remain server-side
-// authorization inputs; their JSON fields are deliberately omitted so a
-// browser response cannot echo either internal path or account identifier.
-// The browser receives a display name and an action descriptor, never a URL
-// made from an OBS path.
-type ProjectedArtifact struct {
-	Path           string `json:"-"`
-	Origin         string `json:"origin"`
-	Kind           string `json:"kind"`
-	DisplayName    string `json:"display_name"`
-	Name           string `json:"name"`
-	DownloadAction string `json:"download_action"`
-	RunID          string `json:"run_id,omitempty"`
-	UserName       string `json:"-"`
-}
-
-const artifactDownloadAction = "analyst-agent/obs-file"
-
-// ProjectArtifacts keeps only validated OBS object references and gives each
-// one bounded, user-visible metadata. Invalid/private paths are dropped rather
-// than echoed into a response or a log.
-func ProjectArtifacts(paths []string) []ProjectedArtifact {
-	return projectArtifacts("", "", paths)
-}
-
-// ProjectOwnedArtifacts is the owner/run-aware form used by callers that have
-// durable Web identity available. The one-argument ProjectArtifacts helper is
-// retained for compatibility with projection-only callers.
-func ProjectOwnedArtifacts(runID, username string, paths []string) []ProjectedArtifact {
-	runID = safeProvenanceValue(runID, 128)
-	username = safeProvenanceValue(username, 255)
-	if runID == "" || username == "" {
-		return nil
-	}
-	return projectArtifacts(runID, username, paths)
-}
-
-func projectArtifacts(runID, username string, paths []string) []ProjectedArtifact {
-	artifacts := make([]ProjectedArtifact, 0, len(paths))
-	seen := make(map[string]struct{}, len(paths))
-	for _, artifactPath := range paths {
-		if len(artifacts) >= rxBot.MaxProjectionArtifactPaths {
-			break
-		}
-		if rxBot.ValidateProjectionOBSPath(artifactPath) != nil {
-			continue
-		}
-		if _, duplicate := seen[artifactPath]; duplicate {
-			continue
-		}
-		name := pathpkg.Base(artifactPath)
-		if name == "." || name == "/" || len([]rune(name)) > rxBot.MaxProjectionArtifactNameLen {
-			continue
-		}
-		kind := strings.TrimPrefix(strings.ToLower(pathpkg.Ext(name)), ".")
-		if kind == "" {
-			kind = "file"
-		}
-		seen[artifactPath] = struct{}{}
-		artifacts = append(artifacts, ProjectedArtifact{
-			Path:           artifactPath,
-			Origin:         "bot",
-			Kind:           kind,
-			DisplayName:    name,
-			Name:           name,
-			DownloadAction: artifactDownloadAction,
-			RunID:          runID,
-			UserName:       username,
-		})
-	}
-	return artifacts
-}
-
-func safeProvenanceValue(value string, max int) string {
-	value = strings.TrimSpace(value)
-	if value == "" || len([]rune(value)) > max || strings.ContainsAny(value, "\x00/\\\r\n\t") {
-		return ""
-	}
-	return value
 }
 
 // BotRunProjection is the Web-owned, sanitized lifecycle snapshot. It never

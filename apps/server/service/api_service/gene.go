@@ -189,7 +189,7 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 // listing that matches the given suffix.
 func findObsKeyBySuffix(keys []string, suffix string) string {
 	for _, k := range keys {
-		if rxBot.ValidateProjectionOBSPath(k) != nil {
+		if rxBot.ValidateProjectionOBSPath(k) != nil && !isSafeRelayObjectKey(k) {
 			continue
 		}
 		if strings.HasSuffix(strings.ToLower(k), suffix) {
@@ -216,13 +216,27 @@ func validateDownloadArtifactPath(obsPath string) error {
 	return nil
 }
 
-// artifactPathWithinPrefix checks containment only after both values have
-// crossed the shared OBS-path validator. It supports the legacy /obs mount and
-// Bot's obs:// URI form without exposing either value to logs.
+// artifactPathWithinPrefix checks containment after validating absolute OBS
+// references or a relative key returned by Bot's relay. Relative keys are
+// canonicalized only for the in-memory ownership check; the original key is
+// retained by callers for signing and relay/object requests.
 func artifactPathWithinPrefix(prefix, candidate string) bool {
-	if !isSafeObsPrefix(prefix) || rxBot.ValidateProjectionOBSPath(candidate) != nil {
+	if !isSafeObsPrefix(prefix) {
 		return false
 	}
+	if rxBot.ValidateProjectionOBSPath(candidate) != nil {
+		if !isSafeRelayObjectKey(candidate) {
+			return false
+		}
+		candidate = canonicalRelayObjectPath(prefix, candidate)
+		if candidate == "" {
+			return false
+		}
+	}
+	return artifactAbsolutePathWithinPrefix(prefix, candidate)
+}
+
+func artifactAbsolutePathWithinPrefix(prefix, candidate string) bool {
 	if strings.HasPrefix(prefix, "/obs/") && strings.HasPrefix(candidate, "/obs/") {
 		return candidate == prefix || strings.HasPrefix(candidate, prefix+"/")
 	}
@@ -237,17 +251,57 @@ func artifactPathWithinPrefix(prefix, candidate string) bool {
 	return candidateURL.Path == prefixURL.Path || strings.HasPrefix(candidateURL.Path, strings.TrimSuffix(prefixURL.Path, "/")+"/")
 }
 
+// isSafeRelayObjectKey validates the relative keys returned by Bot's OBS
+// listing relay. These keys deliberately remain relative when signed and sent
+// back to /v1/relay/obs/object; this helper only proves they are safe to bind
+// to the owner-scoped bucket/run prefix.
+func isSafeRelayObjectKey(value string) bool {
+	if value == "" || value != strings.TrimSpace(value) || len([]rune(value)) > rxBot.MaxProjectionArtifactPathLen {
+		return false
+	}
+	if strings.HasPrefix(value, "/") || strings.ContainsAny(value, "\\?#:%") || strings.ContainsAny(value, "\x00\r\n\t ") {
+		return false
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+func canonicalRelayObjectPath(prefix, relativeKey string) string {
+	if !isSafeRelayObjectKey(relativeKey) {
+		return ""
+	}
+	if strings.HasPrefix(prefix, "/obs/") {
+		segments := strings.Split(prefix, "/")
+		if len(segments) < 3 || segments[2] == "" {
+			return ""
+		}
+		return "/obs/" + segments[2] + "/" + relativeKey
+	}
+	parsed, err := url.Parse(prefix)
+	if err != nil || parsed.Scheme != "obs" || parsed.Host == "" {
+		return ""
+	}
+	return "obs://" + parsed.Host + "/" + relativeKey
+}
+
 // isSafeObsPrefix accepts a validated object path's parent directory. A run
 // may live directly below the bucket, so the parent can be /obs/<bucket> (or
 // obs://<bucket>) even though that bucket root is not itself an object path.
 func isSafeObsPrefix(value string) bool {
+	if value == "" || value != strings.TrimSpace(value) {
+		return false
+	}
 	if strings.HasPrefix(value, "/obs/") {
 		segments := strings.Split(value, "/")
 		if len(segments) < 3 || segments[2] == "" {
 			return false
 		}
 		for _, segment := range segments[2:] {
-			if segment == "" || segment == "." || segment == ".." || strings.ContainsAny(segment, "?#:") {
+			if segment == "" || segment == "." || segment == ".." || strings.ContainsAny(segment, "?#:%") {
 				return false
 			}
 		}
@@ -257,9 +311,11 @@ func isSafeObsPrefix(value string) bool {
 	if err != nil || parsed.Scheme != "obs" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || strings.ContainsAny(parsed.Host, "?#:") {
 		return false
 	}
-	for _, segment := range strings.Split(strings.TrimPrefix(parsed.Path, "/"), "/") {
-		if segment == "." || segment == ".." || strings.ContainsAny(segment, "?#:\\ \t\r\n\x00") {
-			return false
+	if parsed.Path != "" && parsed.Path != "/" {
+		for _, segment := range strings.Split(strings.TrimPrefix(parsed.Path, "/"), "/") {
+			if segment == "" || segment == "." || segment == ".." || strings.ContainsAny(segment, "?#:%\\ \t\r\n\x00") {
+				return false
+			}
 		}
 	}
 	return true
@@ -267,11 +323,17 @@ func isSafeObsPrefix(value string) bool {
 
 func artifactRunRoot(obsPath string) string {
 	if strings.HasPrefix(obsPath, "/obs/") {
+		if len(strings.Split(strings.TrimPrefix(obsPath, "/obs/"), "/")) == 2 {
+			return obsPath
+		}
 		return path.Dir(obsPath)
 	}
 	parsed, err := url.Parse(obsPath)
 	if err != nil || parsed.Scheme != "obs" || parsed.Host == "" {
 		return ""
+	}
+	if len(strings.Split(strings.TrimPrefix(parsed.Path, "/"), "/")) == 1 {
+		return obsPath
 	}
 	root := path.Dir(parsed.Path)
 	if root == "." || root == "/" {

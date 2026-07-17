@@ -308,7 +308,7 @@ import {
   type BotRemoteAgentRunState,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
-import type { BotProgress } from "@/views/chat/botProjection";
+import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
 const MAX_QUERY_LENGTH = 4000;
@@ -512,30 +512,6 @@ function goBack(): void {
   router.back();
 }
 
-function isSafeObsPath(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const path = value.trim();
-  if (
-    path !== value ||
-    !path.startsWith("/obs/") ||
-    path.length <= "/obs/".length ||
-    path.length > 512 ||
-    path.includes("\\") ||
-    path.includes("?") ||
-    path.includes("#") ||
-    path.includes(":") ||
-    /[\r\n\t ]/u.test(path)
-  ) {
-    return false;
-  }
-  const parts = path.split("/");
-  return (
-    parts.length >= 4 &&
-    parts[2] !== "" &&
-    parts.slice(3).every((part) => part !== "" && part !== "." && part !== "..")
-  );
-}
-
 function isSafeDownloadUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.trim() === "") return false;
   try {
@@ -548,7 +524,7 @@ function isSafeDownloadUrl(value: unknown): value is string {
 
 async function downloadArtifact(outputDir: string): Promise<void> {
   downloadError.value = "";
-  if (!isSafeObsPath(outputDir)) {
+  if (!isSafeBotObsPath(outputDir)) {
     downloadError.value = t("agents.geneNetwork.downloadFailed");
     return;
   }

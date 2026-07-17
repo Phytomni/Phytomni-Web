@@ -339,29 +339,79 @@ function parseFailures(value: unknown): string[] {
 }
 
 function validateOBSPath(value: unknown, field: string): string {
-  const path = boundedString(value, field, MAX_BOT_ARTIFACT_PATH_LENGTH);
+  const path = boundedString(value, field, MAX_BOT_ARTIFACT_PATH_LENGTH, {
+    trim: false,
+  });
   if (!path) error(field, "must not be empty");
+  if (path !== path.trim()) error(field, "contains surrounding whitespace");
   if (
-    !path.startsWith("/obs/") ||
-    path.length <= "/obs/".length ||
     path.includes("\\") ||
     path.includes("?") ||
     path.includes("#") ||
-    path.includes(":") ||
-    path
-      .split("/")
-      .slice(1)
-      .some((part) => part === "" || part === "." || part === "..") ||
-    path.includes("../") ||
     /[\r\n\t ]/u.test(path)
   ) {
-    error(field, "must be a validated /obs/<bucket>/<key> path");
+    error(field, "contains whitespace or delimiters");
   }
-  const segments = path.split("/");
-  if (segments.length < 4 || !segments[2] || !segments.slice(3).join("/")) {
+
+  if (path.startsWith("/obs/")) {
+    const segments = path.split("/");
+    if (segments.length < 4 || !segments[2]) {
+      error(field, "must include a bucket and key");
+    }
+    if (
+      segments
+        .slice(2)
+        .some(
+          (part) =>
+            part === "" ||
+            part === "." ||
+            part === ".." ||
+            part.includes(":") ||
+            part.includes("%")
+        )
+    ) {
+      error(field, "contains traversal or invalid path segments");
+    }
+    return path;
+  }
+
+  if (!path.startsWith("obs://")) {
+    error(field, "must be a validated /obs/<bucket>/<key> or obs:// URI");
+  }
+  const rest = path.slice("obs://".length);
+  const slash = rest.indexOf("/");
+  if (slash <= 0 || slash === rest.length - 1) {
     error(field, "must include a bucket and key");
   }
+  const authority = rest.slice(0, slash);
+  if (/[?#:%@]/u.test(authority)) {
+    error(field, "contains userinfo or invalid bucket delimiters");
+  }
+  if (
+    rest
+      .slice(slash + 1)
+      .split("/")
+      .some(
+        (part) =>
+          part === "" ||
+          part === "." ||
+          part === ".." ||
+          part.includes(":") ||
+          part.includes("%")
+      )
+  ) {
+    error(field, "contains traversal or invalid path segments");
+  }
   return path;
+}
+
+/** Return true only for a fully validated internal OBS reference. */
+export function isSafeBotObsPath(value: unknown): value is string {
+  try {
+    return validateOBSPath(value, "path") === value;
+  } catch {
+    return false;
+  }
 }
 
 function parseRawArtifactArray(value: readonly unknown[]): BotArtifact[] {
@@ -391,6 +441,17 @@ function parseRawArtifactArray(value: readonly unknown[]): BotArtifact[] {
       error(
         `artifacts[${index}].output_dir`,
         "is required when paths are present"
+      );
+    }
+    if (
+      outputDir &&
+      paths.some(
+        (path) => path !== outputDir && !path.startsWith(`${outputDir}/`)
+      )
+    ) {
+      error(
+        `artifacts[${index}].paths`,
+        "must remain within output_dir"
       );
     }
     pathCount += paths.length;
