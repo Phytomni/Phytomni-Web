@@ -80,6 +80,35 @@ func TestA2uiActionsEnabledTrueWhenSet(t *testing.T) {
 	}
 }
 
+func TestInteropEnabledDefaultsFalse(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(func() {
+		viper.Reset()
+		BotConfig = nil
+	})
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper defaults: %v", err)
+	}
+	if BotConfig.InteropEnabled {
+		t.Fatal("InteropEnabled must default false")
+	}
+}
+
+func TestInteropEnabledTrueWhenSet(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(func() {
+		viper.Reset()
+		BotConfig = nil
+	})
+	viper.Set("bot.interop_enabled", true)
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper explicit flag: %v", err)
+	}
+	if !BotConfig.InteropEnabled {
+		t.Fatal("InteropEnabled must be true when bot.interop_enabled=true")
+	}
+}
+
 func TestRemoteProductFlagsDefaultOff(t *testing.T) {
 	cfg := Config{}
 	if cfg.ResearchEnabled || cfg.DesignEnabled || cfg.NetworkEnabled {

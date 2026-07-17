@@ -34,6 +34,10 @@ type Config struct {
 	// 503 after ownership checks (no Bot call). Zero value false = safe dormant
 	// default, like StreamEnabled.
 	A2uiActionsEnabled bool `json:"a2ui_actions_enabled" yaml:"a2ui_actions_enabled" mapstructure:"a2ui_actions_enabled"`
+	// InteropEnabled is the Web-owned dark-launch switch for the optional
+	// /v1/interop/capabilities discovery call. It deliberately defaults false:
+	// a missing key must never expose Bot registry metadata to the browser.
+	InteropEnabled bool `json:"interop_enabled" yaml:"interop_enabled" mapstructure:"interop_enabled"`
 	// ResearchEnabled, DesignEnabled, and NetworkEnabled are independent
 	// product gates for the remote agent surfaces. They intentionally default
 	// false so a missing config key cannot activate a Bot-backed product.
