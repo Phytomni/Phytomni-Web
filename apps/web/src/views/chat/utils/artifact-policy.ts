@@ -11,21 +11,20 @@ export const REMOTE_AGENT_ARTIFACT_POLICIES: Record<
   GeneNetworkAgent: { kind: null, autoOpen: false },
 };
 
-const ARTIFACT_KIND_BY_TOOL: ReadonlyMap<
-  string,
-  NonNullable<ArtifactKind>
-> = new Map([
-  ["DeepGenomeAgent", "deep-genome"],
-  ["InSilicoResearchAgent", "research"],
-  ["KnowledgeAgent", "cited-report"],
-  ["ReviewAgent", "cited-report"],
-  ["BriefGeneAgent", "cited-report"],
-]);
-
-const AUTO_OPEN_TOOLS: ReadonlySet<string> = new Set([
-  "DeepGenomeAgent",
-  "InSilicoResearchAgent",
-]);
+/**
+ * Chat artifact behavior is intentionally independent from product-route
+ * liveness: existing InSilicoResearch chat rows retain their tested
+ * research-artifact behavior while dark product routes remain unavailable.
+ */
+const ARTIFACT_POLICY_BY_TOOL: Readonly<
+  Record<string, { kind: ArtifactKind; autoOpen: boolean }>
+> = {
+  DeepGenomeAgent: { kind: "deep-genome", autoOpen: true },
+  KnowledgeAgent: { kind: "cited-report", autoOpen: false },
+  ReviewAgent: { kind: "cited-report", autoOpen: false },
+  BriefGeneAgent: { kind: "cited-report", autoOpen: false },
+  ...REMOTE_AGENT_ARTIFACT_POLICIES,
+};
 
 type ArtifactPolicyMessage = Pick<
   ChatMessage,
@@ -47,7 +46,7 @@ export function artifactKindForMessage(
   }
 
   return message.tool_name
-    ? ARTIFACT_KIND_BY_TOOL.get(message.tool_name) ?? null
+    ? ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.kind ?? null
     : null;
 }
 
@@ -57,6 +56,6 @@ export function shouldAutoOpenArtifact(
   return (
     artifactKindForMessage(message) !== null &&
     !!message.tool_name &&
-    AUTO_OPEN_TOOLS.has(message.tool_name)
+    ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.autoOpen === true
   );
 }

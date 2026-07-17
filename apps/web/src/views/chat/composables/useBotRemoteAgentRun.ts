@@ -74,6 +74,8 @@ export type BotRemoteAgentRunErrorCode =
   | "unknown_agent"
   | "capability_disabled"
   | "attachments_disabled"
+  | "resolver_disabled"
+  | "invalid_dialogue"
   | "invalid_query"
   | "run_in_progress";
 
@@ -108,6 +110,12 @@ export type UseBotRemoteAgentRunOptions = {
 
 let requestSequence = 0;
 const localChatStates = new Map<string, RemoteAgentChatState>();
+const SAFE_DIALOGUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
+
+type RemoteRequestToken = {
+  id: string;
+  cancelled: boolean;
+};
 
 function localStateFor(dialogueId: string): RemoteAgentChatState {
   const existing = localChatStates.get(dialogueId);
@@ -176,9 +184,10 @@ function phaseFor(status: BotRunProjection["status"]): RemoteAgentRunPhase {
     case "SUCCEEDED":
       return "succeeded";
     case "FAILED":
-    case "CANCELLED":
     case "TIMED_OUT":
       return "failed";
+    case "CANCELLED":
+      return "cancelled";
     case "PENDING":
     case "QUEUED":
     case "RUNNING":
@@ -195,6 +204,17 @@ function requestIdFor(dialogueId: string): string {
   return `remote-agent-${
     safeDialogueId || "dialogue"
   }-${Date.now()}-${requestSequence}`;
+}
+
+function normalizeDialogueId(dialogueId: string): string {
+  const normalized = dialogueId.trim();
+  if (!SAFE_DIALOGUE_ID_PATTERN.test(normalized)) {
+    throw new BotRemoteAgentRunError(
+      "invalid_dialogue",
+      "Remote agent dialogue identity is invalid"
+    );
+  }
+  return normalized;
 }
 
 function fileValue(file: RemoteAgentFile): File | null {
@@ -219,9 +239,11 @@ function appendOptional(formData: FormData, key: string, value: unknown): void {
 
 function buildFormData(
   input: RemoteAgentSubmitInput,
-  tool: RemoteAgentTool
+  tool: RemoteAgentTool,
+  dialogueId: string
 ): FormData {
   const formData = new FormData();
+  formData.append("id", dialogueId);
   formData.append("query", input.query);
   formData.append("tool", tool);
   formData.append("mode", "instant");
@@ -266,6 +288,22 @@ function isCanceledRequest(error: unknown): boolean {
   );
 }
 
+function capabilityLoader(
+  source: RemoteAgentCapabilitySource
+): ((force?: boolean) => Promise<unknown>) | undefined {
+  const unwrappedSource = isRefLike(source) ? source.value : source;
+  if (
+    unwrappedSource &&
+    typeof unwrappedSource === "object" &&
+    "load" in unwrappedSource &&
+    typeof (unwrappedSource as { load?: unknown }).load === "function"
+  ) {
+    return (unwrappedSource as { load: (force?: boolean) => Promise<unknown> })
+      .load;
+  }
+  return undefined;
+}
+
 export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   state: Ref<BotRemoteAgentRunState>;
   submit: (input: RemoteAgentSubmitInput) => Promise<BotRunProjection | null>;
@@ -279,7 +317,8 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     (useBotCapabilities(dialogueId) as RemoteAgentCapabilitySource);
   const owned = getChatState(dialogueId);
   const state = ref<BotRemoteAgentRunState>(initialState(owned));
-  let cancelledRequestId: string | null = null;
+  let activeToken: RemoteRequestToken | null = null;
+  let capabilityLoadPromise: Promise<void> | null = null;
 
   const syncOwnedState = () => {
     owned.botProjection = state.value.projection ?? undefined;
@@ -299,8 +338,40 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     };
   };
 
-  const setPhase = (phase: RemoteAgentRunPhase) => {
-    state.value = { ...state.value, phase };
+  const syncCancelledOwner = () => {
+    const cancelledProjection = state.value.projection
+      ? {
+          ...state.value.projection,
+          status: "CANCELLED" as const,
+        }
+      : null;
+    const failedLifecycle = reduceBotFailure(state.value, {
+      code: "cancelled",
+    });
+    state.value = {
+      ...state.value,
+      ...failedLifecycle,
+      phase: "cancelled",
+      requestId: null,
+      uploadTransfer: null,
+      projection: cancelledProjection,
+      error: null,
+    };
+    owned.activeRequestId = "";
+    owned.isSending = false;
+    owned.uploadTransfer = null;
+    syncOwnedState();
+  };
+
+  const ensureCapabilitiesLoaded = async (): Promise<void> => {
+    const load = capabilityLoader(capabilities);
+    if (!load) return;
+    if (!capabilityLoadPromise) {
+      capabilityLoadPromise = Promise.resolve(load(false)).then(
+        () => undefined
+      );
+    }
+    await capabilityLoadPromise;
   };
 
   const submit = async (
@@ -312,8 +383,22 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       throw new BotRemoteAgentRunError("unknown_agent", "Unknown remote agent");
     }
 
+    const normalizedDialogueId = normalizeDialogueId(dialogueId);
+    try {
+      await ensureCapabilitiesLoaded();
+    } catch {
+      throw new BotRemoteAgentRunError(
+        "capability_disabled",
+        "Remote agent capability is unavailable"
+      );
+    }
+
     const capability = capabilityFor(capabilities, tool);
-    if (!capability || capability.enabled !== true) {
+    if (
+      !capability ||
+      capability.enabled !== true ||
+      capability.execution !== "agent_run"
+    ) {
       throw new BotRemoteAgentRunError(
         "capability_disabled",
         "Remote agent capability is disabled"
@@ -327,10 +412,25 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     if (validFiles.length !== files.length) {
       throw new BotRemoteAgentRunError("invalid_query", "Invalid attachment");
     }
-    if (validFiles.length > 0 && capability.attachments === false) {
+    if (validFiles.length > 0 && capability.attachments !== true) {
       throw new BotRemoteAgentRunError(
         "attachments_disabled",
         "Remote agent attachments are disabled"
+      );
+    }
+
+    const resolver = input.resolver;
+    const hasResolverValues =
+      !!resolver &&
+      [
+        resolver.geneId ?? resolver.gene_id,
+        resolver.toId ?? resolver.to_id,
+        resolver.speciesCode ?? resolver.species_code,
+      ].some((value) => typeof value === "string" && value.trim() !== "");
+    if (hasResolverValues && capability.resolver !== true) {
+      throw new BotRemoteAgentRunError(
+        "resolver_disabled",
+        "Remote agent resolver is disabled"
       );
     }
 
@@ -344,12 +444,17 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       );
     }
 
-    const formData = buildFormData({ ...input, files: validFiles }, tool);
-    const requestId = requestIdFor(dialogueId);
+    const formData = buildFormData(
+      { ...input, files: validFiles },
+      tool,
+      normalizedDialogueId
+    );
+    const requestId = requestIdFor(normalizedDialogueId);
+    const token: RemoteRequestToken = { id: requestId, cancelled: false };
+    activeToken = token;
     const tracker = validFiles.length
       ? createTransferTracker({ phase: "upload", requestId })
       : null;
-    cancelledRequestId = null;
     const freshLifecycle = initBotLifecycleState();
     owned.activeRequestId = requestId;
     owned.isSending = true;
@@ -372,6 +477,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
         tracker
           ? {
               onUploadProgress: (event) => {
+                if (activeToken !== token || token.cancelled) return;
                 const snapshot = tracker.update({
                   loaded: event.loaded,
                   total: event.total ?? 0,
@@ -392,7 +498,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
           : undefined
       );
 
-      if (cancelledRequestId === requestId) return null;
+      if (activeToken !== token || token.cancelled) return null;
 
       const projection = parseBotProjection(responsePayload(response));
       const lifecycle = reduceBotProjection(state.value, projection);
@@ -407,8 +513,11 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       syncOwnedState();
       return projection;
     } catch (error) {
-      if (cancelledRequestId === requestId || isCanceledRequest(error)) {
-        if (cancelledRequestId === requestId) setPhase("cancelled");
+      if (
+        activeToken !== token ||
+        token.cancelled ||
+        isCanceledRequest(error)
+      ) {
         return null;
       }
 
@@ -425,36 +534,44 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       syncOwnedState();
       throw error;
     } finally {
-      if (owned.activeRequestId === requestId) {
+      const ownsRequest = activeToken === token;
+      if (ownsRequest && owned.activeRequestId === requestId) {
         owned.activeRequestId = "";
         owned.isSending = false;
         owned.uploadTransfer = null;
+        owned.activeAgentName = "";
       }
-      if (state.value.requestId === requestId) {
+      if (ownsRequest && state.value.requestId === requestId) {
         state.value = { ...state.value, requestId: null, uploadTransfer: null };
       }
+      if (ownsRequest) activeToken = null;
     }
   };
 
   const cancel = (): boolean => {
-    const requestId = owned.activeRequestId;
-    if (!requestId) return false;
-    cancelledRequestId = requestId;
+    const token = activeToken;
+    if (!token || token.cancelled || owned.activeRequestId !== token.id) {
+      return false;
+    }
+    token.cancelled = true;
     owned.generationStopped = true;
-    setPhase("cancelled");
-    return abortRequest(requestId);
+    owned.activeAgentName = "";
+    syncCancelledOwner();
+    return abortRequest(token.id);
   };
 
   const reset = (): void => {
-    const requestId = owned.activeRequestId;
-    if (requestId) {
-      cancelledRequestId = requestId;
-      abortRequest(requestId);
-      owned.activeRequestId = "";
+    const token = activeToken;
+    if (token) {
+      token.cancelled = true;
+      abortRequest(token.id);
+      activeToken = null;
     }
+    owned.activeRequestId = "";
     owned.isSending = false;
     owned.uploadTransfer = null;
     owned.generationStopped = false;
+    owned.activeAgentName = "";
     delete owned.botProjection;
     delete owned.botLifecycle;
     state.value = {
