@@ -31,6 +31,32 @@ describe("splitSSEFrames", () => {
     expect(frames).toEqual(['data: {"a":1}', 'data: {"b":2}']);
     expect(rest).toBe('data: {"c":');
   });
+
+  it("splits CRLF frames without normalizing bytes, including DONE and rest", () => {
+    const firstChunk =
+      'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"hi"}\r\n\r';
+    const first = splitSSEFrames(firstChunk);
+    expect(first.frames).toEqual([]);
+    expect(first.rest).toBe(firstChunk);
+
+    const second = splitSSEFrames(
+      first.rest + '\ndata: [DONE]\r\n\r\n\r\n\r\npartial'
+    );
+    expect(second.frames).toEqual([
+      'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"hi"}',
+      "data: [DONE]",
+    ]);
+    expect(second.rest).toBe("partial");
+    expect(parseAGUIFrame(second.frames[0])?.data.delta).toBe("hi");
+    expect(parseAGUIFrame(second.frames[1])).toBeNull();
+  });
+
+  it("ignores empty LF and CRLF frames while consuming their separators", () => {
+    expect(splitSSEFrames("\n\n\r\n\r\ndata: {\"ok\":true}\n\n")).toEqual({
+      frames: ['data: {"ok":true}'],
+      rest: "",
+    });
+  });
 });
 
 describe("parseAGUIFrame multi-line data", () => {

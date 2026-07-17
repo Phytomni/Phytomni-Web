@@ -35,11 +35,30 @@ export function parseAGUIFrame(frame: string): AGUIEvent | null {
   return { type, data };
 }
 
-// splitSSEFrames splits a streaming buffer on the blank-line ("\n\n") frame
-// separator, returning the complete frames plus the trailing partial (rest)
-// to be prepended to the next chunk.
+// splitSSEFrames splits a streaming buffer on LF or CRLF blank-line frame
+// separators, returning complete frames plus the trailing partial (rest) to
+// be prepended to the next chunk. The frame slices are intentionally not
+// normalized so parseAGUIFrame receives the provider's original line endings.
 export function splitSSEFrames(buffer: string): { frames: string[]; rest: string } {
-  const parts = buffer.split("\n\n");
-  const rest = parts.pop() ?? "";
-  return { frames: parts.filter((f) => f.length > 0), rest };
+  const frames: string[] = [];
+  let frameStart = 0;
+  let searchFrom = 0;
+
+  for (;;) {
+    const lfIndex = buffer.indexOf("\n\n", searchFrom);
+    const crlfIndex = buffer.indexOf("\r\n\r\n", searchFrom);
+    if (lfIndex < 0 && crlfIndex < 0) break;
+
+    const useCRLF =
+      crlfIndex >= 0 && (lfIndex < 0 || crlfIndex < lfIndex);
+    const separatorIndex = useCRLF ? crlfIndex : lfIndex;
+    const separatorLength = useCRLF ? 4 : 2;
+    const frame = buffer.slice(frameStart, separatorIndex);
+    if (frame.length > 0) frames.push(frame);
+
+    frameStart = separatorIndex + separatorLength;
+    searchFrom = frameStart;
+  }
+
+  return { frames, rest: buffer.slice(frameStart) };
 }
