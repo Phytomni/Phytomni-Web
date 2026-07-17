@@ -13,6 +13,14 @@
     >
       <h1 id="digital-design-title">{{ t("agents.digitalDesign.title") }}</h1>
       <p>{{ t("agents.digitalDesign.capabilityLoading") }}</p>
+      <button
+        type="button"
+        class="digital-design-back"
+        data-test="design-back"
+        @click="goBack"
+      >
+        {{ t("common.back") }}
+      </button>
     </section>
 
     <section
@@ -26,6 +34,14 @@
         {{ t("agents.digitalDesign.unavailableTitle") }}
       </h1>
       <p>{{ t("agents.digitalDesign.unavailableMessage") }}</p>
+      <button
+        type="button"
+        class="digital-design-back"
+        data-test="design-back"
+        @click="goBack"
+      >
+        {{ t("common.back") }}
+      </button>
     </section>
 
     <template v-else>
@@ -51,7 +67,11 @@
         </button>
       </header>
 
-      <form class="digital-design-form" @submit.prevent="submitDesign">
+      <form
+        class="digital-design-form"
+        novalidate
+        @submit.prevent="submitDesign"
+      >
         <div class="digital-design-field">
           <label for="design-question">
             {{ t("agents.digitalDesign.questionLabel") }}
@@ -61,9 +81,7 @@
             v-model="question"
             data-test="design-question"
             :placeholder="t('agents.digitalDesign.questionPlaceholder')"
-            :maxlength="MAX_QUERY_LENGTH"
             rows="5"
-            required
           />
         </div>
 
@@ -77,10 +95,8 @@
               v-model="geneId"
               data-test="design-gene-id"
               type="text"
-              :maxlength="MAX_GENE_ID_LENGTH"
               :placeholder="t('agents.digitalDesign.geneIdPlaceholder')"
               autocomplete="off"
-              required
             />
           </div>
 
@@ -93,10 +109,8 @@
               v-model="speciesCode"
               data-test="design-species-code"
               type="text"
-              :maxlength="MAX_SPECIES_CODE_LENGTH"
               :placeholder="t('agents.digitalDesign.speciesCodePlaceholder')"
               autocomplete="off"
-              required
             />
           </div>
         </div>
@@ -301,6 +315,7 @@ import { getChatdownloadURL } from "@/api/chat";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
 import {
   useBotRemoteAgentRun,
@@ -362,10 +377,12 @@ const capabilityLoaded = computed(() => capabilities.loaded.value === true);
 const digitalDesignCapability = computed(
   () => capabilities.byTool.value.DigitalDesignAgent
 );
+const digitalDesignProduct = REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent;
 const capabilityAllowed = computed(() => {
   const capability = digitalDesignCapability.value;
   return (
     capabilityLoaded.value &&
+    digitalDesignProduct.live === true &&
     capability?.enabled === true &&
     capability.execution === "agent_run" &&
     capability.resolver === true &&
@@ -386,10 +403,12 @@ const reportUpdatedAt = computed(
 const trackingDegraded = computed(
   () => displayedState.value.projection?.trackingDegraded === true
 );
-const isRunActive = computed(() =>
-  ["submitting", "running", "input_required"].includes(
-    displayedState.value.phase
-  )
+const isRunActive = computed(
+  () =>
+    Boolean(displayedState.value.requestId) &&
+    ["submitting", "running", "input_required"].includes(
+      displayedState.value.phase
+    )
 );
 const hasRun = computed(
   () =>
@@ -447,7 +466,7 @@ function isAllowedFile(file: File): boolean {
     file.size > 0 &&
     file.size <= MAX_DESIGN_FILE_BYTES &&
     DESIGN_FILE_EXTENSIONS.includes(
-      extensionFor(file.name) as (typeof DESIGN_FILE_EXTENSIONS)[number]
+      extensionFor(file.name) as typeof DESIGN_FILE_EXTENSIONS[number]
     )
   );
 }
@@ -455,14 +474,13 @@ function isAllowedFile(file: File): boolean {
 function handleFiles(event: Event): void {
   const input = event.target as HTMLInputElement;
   const incoming = Array.from(input.files ?? []);
-  const validFiles = incoming.filter(isAllowedFile);
-  const accepted = validFiles.slice(0, MAX_DESIGN_FILES);
+  const accepted = incoming.filter(isAllowedFile).slice(0, MAX_DESIGN_FILES);
   selectedFiles.value = accepted;
   fileError.value =
-    validFiles.length > MAX_DESIGN_FILES
-      ? t("agents.digitalDesign.fileCountValidation")
-      : accepted.length !== incoming.length
+    accepted.length !== incoming.length
       ? t("agents.digitalDesign.fileValidation")
+      : incoming.length > MAX_DESIGN_FILES
+      ? t("agents.digitalDesign.fileCountValidation")
       : "";
   input.value = "";
 }

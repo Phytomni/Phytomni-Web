@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
+import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import DigitalDesignAgentView from "@/views/digital-design-agent/index.vue";
@@ -63,6 +64,7 @@ const mocks = vi.hoisted(() => {
     load: vi.fn().mockResolvedValue([]),
     getChatState: vi.fn(() => ({})),
     getChatdownloadURL: vi.fn(),
+    routerBack: vi.fn(),
   };
 });
 
@@ -101,7 +103,7 @@ vi.mock("@/components/research/BotArtifactList.vue", () => ({
 }));
 
 vi.mock("vue-router", () => ({
-  useRouter: () => ({ back: vi.fn() }),
+  useRouter: () => ({ back: mocks.routerBack }),
   useRoute: () => ({ query: {} }),
 }));
 
@@ -148,6 +150,7 @@ function resetState(): void {
     messageId: null,
   };
   mocks.capabilities.loaded.value = true;
+  REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = true;
   mocks.capabilities.byTool.value.DigitalDesignAgent = {
     tool: "DigitalDesignAgent",
     slug: "design",
@@ -160,6 +163,10 @@ function resetState(): void {
     enabled: true,
   };
 }
+
+afterEach(() => {
+  REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = false;
+});
 
 function degradedState(): BotLifecycleState {
   return {
@@ -180,6 +187,26 @@ describe("DigitalDesignAgentView", () => {
     vi.clearAllMocks();
     resetState();
     mocks.submit.mockResolvedValue(null);
+  });
+
+  it("keeps loading and unavailable Back actions labeled and reachable", async () => {
+    mocks.capabilities.loaded.value = false;
+    const loading = mountView();
+    expect(loading.get('[data-test="design-back"]').text()).toBe("Back");
+    await loading.get('[data-test="design-back"]').trigger("click");
+    expect(mocks.routerBack).toHaveBeenCalledTimes(1);
+    loading.unmount();
+
+    mocks.capabilities.loaded.value = true;
+    REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = false;
+    const unavailable = mountView();
+    expect(unavailable.get('[data-test="design-unavailable"]').exists()).toBe(
+      true
+    );
+    expect(unavailable.get('[data-test="design-back"]').text()).toBe("Back");
+    await unavailable.get('[data-test="design-back"]').trigger("click");
+    expect(mocks.routerBack).toHaveBeenCalledTimes(2);
+    unavailable.unmount();
   });
 
   it("submits structured gene/species resolver values without leaking them into query", async () => {
@@ -218,6 +245,57 @@ describe("DigitalDesignAgentView", () => {
 
     expect(wrapper.get('[data-test="design-validation"]').text()).toContain("gene");
     expect(wrapper.get('[data-test="design-validation"]').text()).toContain("species");
+    expect(mocks.submit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("renders localized validation for empty and oversized values", async () => {
+    const wrapper = mountView();
+    await wrapper.get("form.digital-design-form").trigger("submit");
+
+    expect(wrapper.get('[data-test="design-form-error"]').text()).toContain(
+      "Enter a design question"
+    );
+    expect(wrapper.get('[data-test="design-validation"]').text()).toContain(
+      "gene ID"
+    );
+    expect(wrapper.get('[data-test="design-validation"]').text()).toContain(
+      "species code"
+    );
+    expect(mocks.submit).not.toHaveBeenCalled();
+
+    await wrapper
+      .get('[data-test="design-question"]')
+      .setValue("x".repeat(4001));
+    await wrapper
+      .get('[data-test="design-gene-id"]')
+      .setValue("A".repeat(129));
+    await wrapper
+      .get('[data-test="design-species-code"]')
+      .setValue("a".repeat(33));
+    await wrapper.get("form.digital-design-form").trigger("submit");
+
+    expect(wrapper.get('[data-test="design-form-error"]').text()).toContain(
+      "too long"
+    );
+    expect(wrapper.get('[data-test="design-validation"]').text()).toContain(
+      "gene ID"
+    );
+    expect(wrapper.get('[data-test="design-validation"]').text()).toContain(
+      "species code"
+    );
+    expect(mocks.submit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("does not submit an otherwise-complete capability while the product is dark", async () => {
+    REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = false;
+    const wrapper = mountView();
+
+    expect(wrapper.get('[data-test="design-unavailable"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="design-submit"]').exists()).toBe(false);
     expect(mocks.submit).not.toHaveBeenCalled();
     wrapper.unmount();
   });

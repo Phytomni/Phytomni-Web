@@ -76,6 +76,7 @@ export type BotRemoteAgentRunErrorCode =
   | "unknown_agent"
   | "capability_disabled"
   | "attachments_disabled"
+  | "artifacts_disabled"
   | "resolver_disabled"
   | "invalid_dialogue"
   | "invalid_query"
@@ -468,6 +469,13 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       throw new BotRemoteAgentRunError(
         "capability_disabled",
         "Remote agent capability is disabled"
+      );
+    }
+
+    if (capability.artifacts !== true) {
+      throw new BotRemoteAgentRunError(
+        "artifacts_disabled",
+        "Remote agent artifacts are disabled"
       );
     }
 

@@ -61,7 +61,8 @@ function makeCapabilities(
   attachments: boolean | undefined = true,
   execution = "agent_run",
   resolver = false,
-  load?: () => Promise<unknown>
+  load?: () => Promise<unknown>,
+  artifacts: boolean | undefined = true
 ): RemoteAgentCapabilitySource {
   return {
     byTool: ref({
@@ -70,6 +71,7 @@ function makeCapabilities(
         attachments,
         execution,
         resolver,
+        artifacts,
       },
     }),
     load,
@@ -312,6 +314,19 @@ describe("useBotRemoteAgentRun", () => {
         makeCapabilities("DigitalDesignAgent", true, true, "agent_run", false),
         { resolver: { geneId: "AT1G01010", speciesCode: "ath" } },
       ],
+      [
+        "missing artifact authorization",
+        makeCapabilities(
+          "DigitalDesignAgent",
+          true,
+          true,
+          "agent_run",
+          false,
+          undefined,
+          false
+        ),
+        {},
+      ],
     ];
 
     for (const [name, source, input] of cases) {
@@ -329,6 +344,8 @@ describe("useBotRemoteAgentRun", () => {
             ? "resolver_disabled"
             : name === "missing attachment authorization"
             ? "attachments_disabled"
+            : name === "missing artifact authorization"
+            ? "artifacts_disabled"
             : "capability_disabled",
       });
     }
