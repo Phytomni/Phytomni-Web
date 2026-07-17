@@ -7,6 +7,17 @@ import { readServerFile } from "../utils/agent-log";
 import { getAnswerCheck } from "@/api/chat";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
 
+// History rows may carry bounded source metadata during the reversible Web
+// cutover. Keep that metadata opaque to rendering and discard malformed rows
+// before the existing per-agent branches inspect content fields.
+function normalizedHistoryRows(data: unknown): ChatResponse[] {
+  if (!Array.isArray(data)) return [];
+  return data.filter(
+    (item): item is ChatResponse =>
+      typeof item === "object" && item !== null && !Array.isArray(item)
+  );
+}
+
 export function useSelectChat(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
   currentChatId: Ref<string>;
@@ -62,8 +73,9 @@ export function useSelectChat(opts: {
       chatState.reactions = {};
 
       // iterate the returned array and convert to message format
-      if (res.data && Array.isArray(res.data)) {
-        res.data.forEach((item: ChatResponse) => {
+      const historyRows = normalizedHistoryRows(res.data);
+      if (historyRows.length > 0) {
+        historyRows.forEach((item: ChatResponse) => {
           // sync the reaction state returned by the server
           if (item.id && item.reaction_type) {
             chatState.reactions[item.id.toString()] = parseInt(

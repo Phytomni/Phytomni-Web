@@ -167,6 +167,31 @@ describe("useSelectChat", () => {
     expect(reactions["msg-1"]).toBe(1);
   });
 
+  it("ignores optional history source metadata and preserves legacy rendering", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce({
+      code: 200,
+      data: [
+        {
+          id: "msg-source",
+          query: "Question",
+          answer: "Answer",
+          tool_name: "ChatAgent",
+          source: "unexpected-diagnostic",
+          fallback_reason: "private upstream error",
+        },
+      ],
+    } as any);
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    const messages = getChatState("d1").renderedChat!.messages;
+    expect(messages[0]).toMatchObject({ role: "user", content: "Question" });
+    expect(messages[1]).toMatchObject({ role: "assistant", content: "Answer" });
+    expect((messages[1] as any).source).toBeUndefined();
+    expect((messages[1] as any).fallback_reason).toBeUndefined();
+  });
+
   it("reselects a live rendered owner without overwriting its message runtime from history", async () => {
     const transport = vi.fn();
     const runtime = {
