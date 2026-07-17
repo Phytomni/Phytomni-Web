@@ -31,7 +31,7 @@ func (ph *Handler) BotCapabilities(ctx *gin.Context) {
 		// or any Bot payload to the browser.
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{
 			"code":    http.StatusServiceUnavailable,
-			"message": "bot capabilities unavailable",
+			"message": i18n.T(ctx, "bot.capabilities_unavailable"),
 		})
 		return
 	}

@@ -556,7 +556,7 @@ onBeforeUnmount(() => {
   display: grid;
   gap: var(--phy-space-24);
   width: 100%;
-  height: 100vh;
+  height: 100%;
   min-height: 0;
   padding: var(--phy-space-32) var(--phy-space-40) var(--phy-space-48);
   overflow-y: auto;

@@ -34,14 +34,14 @@ func (ph *Handler) InteropCapabilities(ctx *gin.Context) {
 			// missing route; neither state should disclose Bot configuration.
 			ctx.JSON(http.StatusNotFound, gin.H{
 				"code":    http.StatusNotFound,
-				"message": "interop capabilities not found",
+				"message": i18n.T(ctx, "interop.capabilities_not_found"),
 			})
 		default:
 			// Registry, transport, and decode details are intentionally not
 			// serialized. The local status tells clients this is retryable.
 			ctx.JSON(http.StatusServiceUnavailable, gin.H{
 				"code":    http.StatusServiceUnavailable,
-				"message": "interop capabilities unavailable",
+				"message": i18n.T(ctx, "interop.capabilities_unavailable"),
 			})
 		}
 		return

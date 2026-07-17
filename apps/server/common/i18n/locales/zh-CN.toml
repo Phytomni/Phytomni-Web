@@ -43,6 +43,13 @@ empty_body = "反馈类型或反馈内容不能为空"
 [chat]
 quota_exhausted = "账户额度不足，请联系管理员开通"
 
+[bot]
+capabilities_unavailable = "Bot 能力不可用"
+
+[interop]
+capabilities_not_found = "互操作能力不存在"
+capabilities_unavailable = "互操作能力不可用"
+
 [gene]
 file_name_required = "参数file_name不能为空"
 fetch_failed = "获取文件失败"
@@ -59,6 +66,7 @@ upload_too_large = "上传内容过大"
 query_empty = "查询内容不能为空"
 file_unreadable = "无法读取上传的文件"
 task_id_required = "task_id必填"
+invalid_interop_controls = "互操作控制参数无效"
 
 [permission]
 user_id_required = "用户ID不能为空"

@@ -43,6 +43,13 @@ empty_body = "Feedback type and content cannot be empty"
 [chat]
 quota_exhausted = "Account has no chat quota; contact an administrator"
 
+[bot]
+capabilities_unavailable = "bot capabilities unavailable"
+
+[interop]
+capabilities_not_found = "interop capabilities not found"
+capabilities_unavailable = "interop capabilities unavailable"
+
 [gene]
 file_name_required = "parameter file_name cannot be empty"
 fetch_failed = "failed to fetch file"
@@ -59,6 +66,7 @@ upload_too_large = "upload content too large"
 query_empty = "query content cannot be empty"
 file_unreadable = "cannot read uploaded file"
 task_id_required = "task_id is required"
+invalid_interop_controls = "invalid interop controls"
 
 [permission]
 user_id_required = "user ID cannot be empty"
