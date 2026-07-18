@@ -160,7 +160,11 @@ contains the same [projection schema and precedence rules](../reference/bot-web-
 
 ### 4.3 Mode-column preflight
 
-The target `main` line includes an idempotent `add-mode` migration command for
+The production comparison base contains an idempotent `add-mode` migration
+command, while the release branch adds `add-bot-projection` in the same CLI
+subcommand area. During the branch merge, resolve any `migrate.go` conflict by
+retaining **both** subcommands, then verify the merged binary exposes them. The
+target `main` line includes an idempotent `add-mode` migration command for
 the 0.1.2 Expert selector. If the inspection in §4.1 shows that `mode` is
 missing, run the command exposed by the merged target binary:
 

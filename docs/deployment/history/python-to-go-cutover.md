@@ -8,7 +8,7 @@
 > understand the baseline, to rebuild from scratch, or to roll the baseline back.
 > It is **not** pending work.
 >
-> - **Upgrading a `0.1.1` production to `0.1.2`?** → [`upgrading.md`](../upgrading.md).
+> - **Upgrading a `0.1.1` production to `0.1.2`?** → [`upgrade-0.1.1-to-0.1.2.md`](upgrade-0.1.1-to-0.1.2.md).
 > - **Getting to `0.1.1` from the pre-`apps/` layout?** → [`repo-reorg-cutover.md`](repo-reorg-cutover.md).
 > - Lost? → [`README.md`](../README.md) routes by production version.
 
@@ -30,7 +30,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 > - **`0.1.1`** (repo re-layout, `/api/v1`, Redis, auth hardening) →
 >   [`repo-reorg-cutover.md`](repo-reorg-cutover.md) §1–§11.
 > - **`0.1.2`** (i18n, Instant/Expert dark, streaming dark, gene obsfs, backend
->   hardening) → [`upgrading.md`](../upgrading.md), plus [`CHANGELOG.md`](../../../CHANGELOG.md).
+>   hardening) → [`upgrade-0.1.1-to-0.1.2.md`](upgrade-0.1.1-to-0.1.2.md), plus [`CHANGELOG.md`](../../../CHANGELOG.md).
 >
 > Read this document only to confirm the baseline is in place (or to rebuild it
 > from scratch); for a production already on the baseline, go straight to the
