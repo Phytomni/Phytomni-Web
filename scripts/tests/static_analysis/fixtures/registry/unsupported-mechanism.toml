@@ -1,0 +1,14 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "unsupported-mechanism"
+tool = "eslint"
+rule = "rule"
+classification = "structural"
+mechanism = "ignore-file"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"
+target = "name"

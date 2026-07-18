@@ -1,0 +1,22 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "empty-tests"
+tool = "eslint"
+rule = "rule"
+classification = "structural"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"
+target = "name"
+fingerprint = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-07-19
+rationale = "A narrow reason."
+counterfactual = "Removing it would worsen the boundary."
+risk = "A bounded test risk."
+tests = []

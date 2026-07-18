@@ -1,0 +1,22 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "web-eslint-structural-001"
+tool = "eslint"
+rule = "@typescript-eslint/no-explicit-any"
+classification = "structural"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps\\web\\src\\views\\chat\\index.vue"
+target = "sendMessage"
+fingerprint = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-08-19
+rationale = "The native browser API has no narrower type in this boundary."
+counterfactual = "Removing this exact directive would make the integration less readable without improving safety."
+risk = "The boundary remains covered by the chat integration tests."
+tests = ["scripts/tests/static_analysis/test_model.py"]

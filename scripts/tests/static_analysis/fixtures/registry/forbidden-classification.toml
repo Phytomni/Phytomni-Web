@@ -1,0 +1,14 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "forbidden-classification"
+tool = "eslint"
+rule = "rule"
+classification = "forbidden"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"
+target = "name"

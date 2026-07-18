@@ -1,0 +1,14 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "wildcard-authority"
+tool = "eslint"
+rule = "*"
+classification = "structural"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"
+target = "name"
