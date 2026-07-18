@@ -130,7 +130,7 @@ The checker is local and non-mutating. It never reads a sibling Bot checkout,
 handoff/operations evidence, or live endpoint, and it never declares any row
 above passed from local evidence alone.
 
-## Local synthetic verification record (2026-07-17)
+## Historical synthetic verification record (2026-07-17; superseded)
 
 - Commit under test: `51be5a3` (Task 27 synthetic compatibility closure).
 - Sanitized fixture ids: `web-task27-stream`, `web-task27-run-error`,
@@ -172,3 +172,19 @@ above passed from local evidence alone.
 - This is Web-owned synthetic evidence only. The RC-WEB-004 acceptance row
   remains `External Pending` until an authorized Bot/operations acceptance
   packet is reviewed.
+
+## Current Web closure record (2026-07-18)
+
+- Commit under test: `b6975f9` (`release/0.1.3`), including the final
+  compatibility gate repairs.
+- Full repository gate:
+  `GOCACHE=/tmp/phytomni-web-task38-gocache
+  GOTMPDIR=/tmp/phytomni-web-task38-gotmp ./scripts/validate_web_local.sh` —
+  PASS; 184 frontend test files / 2329 tests; G13, G14, G15, G16, and G17
+  PASS.
+- Fresh uncached Go verification:
+  `GOCACHE=/tmp/phytomni-web-task38-gocache
+  GOTMPDIR=/tmp/phytomni-web-task38-gotmp go test ./... -count=1` — PASS.
+- The local closure supersedes the historical Task 27 gate snapshot above;
+  it does not change the matrix JSON, external acceptance rows, or
+  dark-launch defaults.
