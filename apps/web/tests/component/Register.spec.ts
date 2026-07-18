@@ -222,11 +222,11 @@ describe("Registration auth surface", () => {
     mocks.register.mockResolvedValue({ code: 200 });
   });
 
-  it("uses the auth shell title, description, and code-native brand", () => {
+  it("uses the auth shell title, description, and production logo", () => {
     const wrapper = mountView();
 
     expect(wrapper.find(".phy-auth-layout").exists()).toBe(true);
-    expect(wrapper.find(".phy-brand-mark").exists()).toBe(true);
+    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(true);
     expect(wrapper.find(".register-title").element.tagName).toBe("H1");
     expect(wrapper.find(".register-subtitle").element.tagName).toBe("P");
     expect(wrapper.findAll(".el-form")).toHaveLength(1);

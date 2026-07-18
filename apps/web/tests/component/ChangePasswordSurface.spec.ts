@@ -236,9 +236,8 @@ describe("Change Password surface", () => {
   it("uses the auth shell with one bounded form and hides Back for first login", () => {
     const wrapper = mountView("0");
     expect(wrapper.findComponent({ name: "PhyAuthLayout" }).exists()).toBe(true);
-    expect(wrapper.find(".phy-brand-mark").exists()).toBe(true);
+    expect(wrapper.find('img[src="/logo.png"]').exists()).toBe(true);
     expect(wrapper.find(".phy-auth-brand").text()).toContain("Phytomni");
-    expect(wrapper.find('img[src="/logo.png"]').exists()).toBe(false);
     expect(wrapper.find(".change-password-page").exists()).toBe(false);
     expect(wrapper.find(".change-password-back").exists()).toBe(false);
     expect(wrapper.find(".change-password-form").exists()).toBe(true);

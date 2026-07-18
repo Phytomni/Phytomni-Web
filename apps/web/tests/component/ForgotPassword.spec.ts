@@ -74,10 +74,10 @@ describe("ForgotPassword view", () => {
     expect(wrapper.text()).toContain("密码重置功能暂未开放");
   });
 
-  it("uses the shared brand mark and semantic warning token", () => {
+  it("uses the production logo and semantic warning token", () => {
     const wrapper = mountView();
-    expect(wrapper.find(".forgot-password-brand svg").exists()).toBe(true);
-    expect(SOURCE).toContain("PhyBrandMark");
+    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(true);
+    expect(SOURCE).toContain("PhyAuthBrand");
     expect(SOURCE).toContain("var(--el-color-warning)");
     expect(SOURCE).not.toContain("#e6a23c");
   });

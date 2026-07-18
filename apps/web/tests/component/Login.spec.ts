@@ -201,13 +201,13 @@ describe("Login auth surface", () => {
     });
   });
 
-  it("mounts one login form on the horizon auth shell with the code-native brand", () => {
+  it("mounts one login form on the horizon auth shell with the production logo", () => {
     const wrapper = mountView();
 
     expect(wrapper.find(".phy-auth-layout").classes()).toContain(
       "phy-auth-layout--horizon",
     );
-    expect(wrapper.find(".phy-brand-mark").exists()).toBe(true);
+    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(true);
     expect(wrapper.findAll(".el-form")).toHaveLength(1);
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
     expect(wrapper.find(".login-button").attributes("type")).toBe("button");

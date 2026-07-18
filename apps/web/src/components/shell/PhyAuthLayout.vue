@@ -8,10 +8,7 @@
       <section class="phy-auth-card">
         <div class="phy-auth-brand">
           <slot name="brand">
-            <div class="phy-auth-brand-fallback">
-              <PhyBrandMark />
-              <span>Phytomni</span>
-            </div>
+            <PhyAuthBrand title="Phytomni" />
           </slot>
         </div>
 
@@ -45,7 +42,7 @@
 <script setup lang="ts">
 // Presentational only — no auth logic, routing, or store dependencies.
 import Footer from "@/components/Footer.vue";
-import { PhyBrandMark } from "@/components/brand";
+import PhyAuthBrand from "./PhyAuthBrand.vue";
 
 withDefaults(
   defineProps<{
@@ -121,22 +118,6 @@ withDefaults(
 
 .phy-auth-brand {
   margin-bottom: var(--phy-space-20);
-}
-
-.phy-auth-brand-fallback {
-  display: flex;
-  align-items: center;
-  gap: var(--phy-space-10, 10px);
-  min-width: 0;
-  color: var(--phy-color-text);
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
-.phy-auth-brand-fallback span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .phy-auth-title :deep(:first-child),

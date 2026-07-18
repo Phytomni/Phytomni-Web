@@ -4,12 +4,7 @@
       <LangSwitch />
     </template>
     <template #brand>
-      <div class="change-password-brand">
-        <PhyBrandMark :size="40" />
-        <span class="change-password-brand-title">
-          {{ $t("chat.appTitle") }}
-        </span>
-      </div>
+      <PhyAuthBrand :title="$t('chat.appTitle')" />
     </template>
 
     <template #title>
@@ -131,8 +126,7 @@ import { userStore } from "@/stores";
 import { useI18n } from "vue-i18n";
 import { changePassword } from "@/api/auth";
 import LangSwitch from "@/components/LangSwitch.vue";
-import { PhyAuthLayout } from "@/components/shell";
-import { PhyBrandMark } from "@/components/brand";
+import { PhyAuthBrand, PhyAuthLayout } from "@/components/shell";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -341,23 +335,6 @@ onMounted(() => {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--phy-space-8);
-}
-
-.change-password-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--phy-space-8);
-  min-width: 0;
-}
-
-.change-password-brand-title {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--phy-color-text);
-  font-size: 1.05rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .change-password-back {

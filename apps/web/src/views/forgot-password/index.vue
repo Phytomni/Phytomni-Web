@@ -4,12 +4,7 @@
       <LangSwitch />
     </template>
     <template #brand>
-      <div class="forgot-password-brand">
-        <PhyBrandMark :size="40" />
-        <span class="forgot-password-brand-title">
-          {{ $t("chat.appTitle") }}
-        </span>
-      </div>
+      <PhyAuthBrand :title="$t('chat.appTitle')" />
     </template>
 
     <template #title>
@@ -40,8 +35,7 @@ import { onMounted } from "vue";
 import { redirectIfAuthed } from "@/utils/auth-redirect";
 import { WarningFilled } from "@element-plus/icons-vue";
 import LangSwitch from "@/components/LangSwitch.vue";
-import { PhyAuthLayout } from "@/components/shell";
-import { PhyBrandMark } from "@/components/brand";
+import { PhyAuthBrand, PhyAuthLayout } from "@/components/shell";
 
 const router = useRouter();
 const route = useRoute();
@@ -55,23 +49,6 @@ const goToLogin = () => {
 </script>
 
 <style lang="scss" scoped>
-.forgot-password-brand {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: var(--phy-space-10, 10px);
-}
-
-.forgot-password-brand-title {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--phy-color-text);
-  font-size: 1.05rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .forgot-password-title {
   margin: 0;
   font-size: 1.35rem;

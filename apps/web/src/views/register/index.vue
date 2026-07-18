@@ -4,10 +4,7 @@
       <LangSwitch />
     </template>
     <template #brand>
-      <div class="register-brand">
-        <PhyBrandMark :size="40" />
-        <span class="register-brand-title">{{ $t("chat.appTitle") }}</span>
-      </div>
+      <PhyAuthBrand :title="$t('chat.appTitle')" />
     </template>
 
     <template #title>
@@ -114,8 +111,7 @@ import type { ElForm } from "element-plus";
 import { ElMessage } from "element-plus";
 import { register } from "@/api/auth";
 import LangSwitch from "@/components/LangSwitch.vue";
-import { PhyAuthLayout } from "@/components/shell";
-import { PhyBrandMark } from "@/components/brand";
+import { PhyAuthBrand, PhyAuthLayout } from "@/components/shell";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -290,23 +286,6 @@ const goToLogin = () => {
 </script>
 
 <style lang="scss" scoped>
-.register-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--phy-space-8);
-  min-width: 0;
-}
-
-.register-brand-title {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--phy-color-text);
-  font-size: 1.05rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .register-title {
   margin: 0;
   font-size: 1.35rem;
