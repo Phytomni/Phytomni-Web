@@ -13,6 +13,70 @@ Newest first.
 
 ---
 
+## [0.1.3] — 2026-07-18
+
+Release candidate for the production-facing Web merge on top of the `0.1.2`
+stack. The release keeps existing blocking chat, ownership checks, and legacy
+history behavior available while adding compatibility infrastructure and a
+converged frontend experience. **All new Bot-facing capabilities remain
+default-off; local evidence is not external acceptance.** **Ops upgrade
+runbook:** [`docs/deployment/upgrading.md`](docs/deployment/upgrading.md).
+
+### 🎨 Frontend experience and accessibility
+
+- Workspace, chat, agent, research, artifact, authentication, legal, and
+  responsive surfaces converge on the current shell and visual tokens, with
+  keyboard/forced-colors behavior and localized display copy covered by the
+  frontend contracts.
+- Chat lifecycle, upload/download progress, history, artifacts, citations,
+  and remote-agent surfaces preserve per-dialogue ownership and safe markdown
+  rendering while G14 visual evidence remains a local gate.
+
+### ✨ A2UI lifecycle and action safety (dark-launched OFF)
+
+- Typed A2UI surfaces and action relay support bounded forms, choices, expiry,
+  owner/run matching, retry limits, and lifecycle cleanup without exposing raw
+  agent HTML or payloads.
+- `bot.a2ui_actions_enabled` remains `false`; G15 proves Web activation
+  readiness only and does not authorize a Bot or production flag change.
+
+### 🔗 Bot HEAD compatibility and report projections
+
+- Bot umbrella `run_id` is separated from OpenAI completion ids and child task
+  ids; Web persists the canonical run identity for polling, history joins, and
+  A2UI ownership.
+- Sanitized, bounded, revisioned Bot projections use compare-and-swap
+  persistence. Newer non-empty reports win while legacy answer/status/artifact
+  columns remain readable for fallback and rollback.
+- History fallback/dual-read, canonical agent parity, remote Research/Design/
+  Network request shaping, Expert/AG-UI compatibility, and artifact ownership
+  boundaries are covered by the Web contract. `history_dual_read` remains
+  disabled until the matching acceptance record exists.
+
+### 🧭 Interop, provenance, and security boundaries (dark-launched OFF)
+
+- Capability and provenance discovery is Web-owned, allowlisted, owner-scoped,
+  bounded, and redacted; raw Bot envelopes, private paths, provider traces,
+  credentials, and cross-user rows remain unavailable to the browser.
+- `bot.interop_enabled`, `research_enabled`, `design_enabled`, and
+  `network_enabled` remain `false` pending security review and Bot/operations
+  acceptance. G16 records local compatibility evidence; it is not live proof.
+
+### 🧪 Release gates and deployment prerequisite
+
+- The local release gate now records G14 frontend visual, G15 A2UI readiness,
+  G16 Bot/Web compatibility, and G17 activation-evidence checks in addition to
+  the existing G13 i18n gate.
+- Before 0.1.3 traffic, operators must run the additive
+  `add-bot-projection` migration for `bot_projection_json`,
+  `bot_report_revision`, and `idx_question_agent_logs_bot_report_revision`.
+  The migration preserves legacy columns and is documented in the active
+  upgrade runbook.
+- Bot-owner review, Bot CI, staging/live smoke evidence, and operations sign-off
+  remain **External Pending**. `expert_enabled`, `stream_enabled`,
+  `a2ui_actions_enabled`, `interop_enabled`, the remote-agent flags, and
+  `history_dual_read` stay off for the initial deploy.
+
 ## [0.1.2] — 2026-07-06
 
 Feature + hardening release on top of the `0.1.1` layout. Adds Instant/Expert
@@ -22,8 +86,8 @@ sweep, the gene-example obsfs migration, and backend infrastructure hardening.
 **Two operator actions are required at deploy** (both operator-only, invisible to
 the local gate): the `tool_names` permission-key data migration and — only when
 activating Expert — the additive `mode` column. Everything else is additive or
-dark-launched. **Ops upgrade runbook:**
-[`docs/deployment/upgrading.md`](docs/deployment/upgrading.md).
+dark-launched. **Historical ops upgrade runbook:**
+[`docs/deployment/history/upgrade-0.1.1-to-0.1.2.md`](docs/deployment/history/upgrade-0.1.1-to-0.1.2.md).
 
 ### 🌐 i18n unification (single-language policy, enforced)
 

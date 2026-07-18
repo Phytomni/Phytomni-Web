@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "bot_commit": "e0c296e6773f6638bac57a181bc727fd97c8a9fb",
+  "required_agents": [
+    "chat",
+    "knowledge",
+    "data",
+    "review",
+    "brief_gene",
+    "analyst",
+    "deep_genome",
+    "research",
+    "design",
+    "network"
+  ],
+  "fixtures": [
+    "chat_completion_run_id",
+    "degraded_tracking",
+    "deep_genome_revision",
+    "review_input_required"
+  ]
+}

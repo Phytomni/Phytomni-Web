@@ -1,4 +1,40 @@
 import request, { createAbortableRequest } from "@/utils/request";
+import type { AxiosProgressEvent } from "axios";
+import type { BotInteropPayload } from "@/views/chat/botProjection";
+
+type QueryProgressOpts = {
+  onUploadProgress?: (e: AxiosProgressEvent) => void;
+};
+
+/** Stable blocking chat envelope returned by the Web Go gateway. */
+export interface QueryData {
+  id?: string | number;
+  final_answer?: string;
+  answer?: string;
+  follow_up_questions?: string | string[];
+  status?: string;
+  tool_name?: string;
+  upload_path?: string;
+  download_path?: string;
+  server_file_path?: string;
+  compute_resource?: string;
+  reaction_type?: string;
+  dialogue_id?: string;
+  task_id?: string;
+  bot_run_id?: string | null;
+  tracking_degraded?: boolean;
+  report_revision?: number;
+  request_id?: string | null;
+  degraded_interop?: boolean;
+  interop?: BotInteropPayload | null;
+  /** Bounded by the Go A2UI decoder; the client validates it again before use. */
+  a2ui?: unknown;
+}
+
+type DownloadProgressOpts = {
+  requestId?: string;
+  onDownloadProgress?: (e: AxiosProgressEvent) => void;
+};
 
 // History question list
 export const getHistoryQuestionList = () => {
@@ -17,13 +53,15 @@ export const getQuery = (
         tool?: string;
         files?: File[];
       }
-    | FormData
+    | FormData,
+  opts?: QueryProgressOpts
 ) => {
   const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
   return request({
     url: `/api/v1/conversations/${id}/messages`,
     method: "post",
     data: data,
+    onUploadProgress: opts?.onUploadProgress,
   });
 };
 
@@ -37,7 +75,8 @@ export const getQueryAbortable = (
         files?: File[];
       }
     | FormData,
-  requestId?: string
+  requestId?: string,
+  opts?: QueryProgressOpts
 ) => {
   const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
   return createAbortableRequest({
@@ -45,6 +84,7 @@ export const getQueryAbortable = (
     method: "post",
     data: data,
     requestId: requestId,
+    onUploadProgress: opts?.onUploadProgress,
   });
 };
 
@@ -75,13 +115,16 @@ export const getChatdownloadURL = (data: { obs_path: string }) => {
 
 // Get rendering-file download URL
 export const getFileDownUrlApi = (
-  data: { id: string; document_format: string } | FormData
+  data: { id: string; document_format: string } | FormData,
+  opts?: DownloadProgressOpts
 ) => {
-  return request({
+  return createAbortableRequest({
     url: "/api/v1/downloads/rendering-file",
     method: "post",
     data: data,
     responseType: "blob",
+    requestId: opts?.requestId,
+    onDownloadProgress: opts?.onDownloadProgress,
   });
 };
 

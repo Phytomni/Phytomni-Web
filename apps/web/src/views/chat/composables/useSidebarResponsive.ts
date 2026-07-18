@@ -1,106 +1,239 @@
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
-export function useSidebarResponsive(opts: {
-  collapsed: () => boolean; // () => props.collapsed
-  onCollapseChange: (value: boolean) => void; // (v) => emit("handleSidebarCollapse", v)
-}) {
-  // sidebar collapse state
-  const sidebarCollapsed = ref(opts.collapsed());
+/** The persisted desktop preference for the Chat control-plane sidebar. */
+export const SIDEBAR_COLLAPSED_PREFERENCE_KEY = "sidebarCollapsedPreference";
+/** The pre-v2 key, retained only for one-time migration. */
+export const SIDEBAR_LEGACY_AUTO_EXPAND_KEY = "sidebarAutoExpand";
+export const SIDEBAR_MOBILE_BREAKPOINT = 900;
+export const SIDEBAR_COMPACT_BREAKPOINT = 1280;
 
-  // responsive breakpoint (auto-collapse the sidebar below this width)
-  const RESPONSIVE_BREAKPOINT = 1200;
+type SidebarResponsiveOptions = {
+  collapsed: () => boolean;
+  drawerOpen?: () => boolean;
+  onCollapseChange: (value: boolean) => void;
+  onDrawerOpenChange?: (value: boolean) => void;
+};
 
-  // debounce timer
+function readBoolean(value: string | null): boolean | null {
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "boolean" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredPreference(fallback: boolean): boolean {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(
+      SIDEBAR_COLLAPSED_PREFERENCE_KEY
+    );
+    if (stored !== null) {
+      const parsed = readBoolean(stored);
+      if (parsed !== null) {
+        return parsed;
+      }
+      window.localStorage.removeItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY);
+    }
+
+    const legacy = window.localStorage.getItem(SIDEBAR_LEGACY_AUTO_EXPAND_KEY);
+    if (legacy !== null) {
+      const parsed = readBoolean(legacy);
+      window.localStorage.removeItem(SIDEBAR_LEGACY_AUTO_EXPAND_KEY);
+      if (parsed !== null) {
+        const migrated = !parsed;
+        window.localStorage.setItem(
+          SIDEBAR_COLLAPSED_PREFERENCE_KEY,
+          JSON.stringify(migrated)
+        );
+        return migrated;
+      }
+    }
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+  }
+
+  return fallback;
+}
+
+function persistPreference(value: boolean): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      SIDEBAR_COLLAPSED_PREFERENCE_KEY,
+      JSON.stringify(value)
+    );
+  } catch {
+    // A blocked storage area must not prevent the sidebar from working.
+  }
+}
+
+function getWindowWidth(): number {
+  return typeof window === "undefined" ? SIDEBAR_COMPACT_BREAKPOINT : window.innerWidth;
+}
+
+/**
+ * Owns sidebar breakpoint derivation and the desktop/mobile interaction state.
+ * Rendering remains the responsibility of PhyAdaptiveSidebar.
+ */
+export function useSidebarResponsive(opts: SidebarResponsiveOptions) {
+  const viewportWidth = ref(getWindowWidth());
+  const collapsedPreference = ref(readStoredPreference(opts.collapsed()));
+  const drawerOpen = ref(opts.drawerOpen?.() ?? false);
+
+  const isMobile = computed(
+    () => viewportWidth.value < SIDEBAR_MOBILE_BREAKPOINT
+  );
+  const sidebarCollapsed = computed(
+    () =>
+      !isMobile.value &&
+      (viewportWidth.value < SIDEBAR_COMPACT_BREAKPOINT ||
+        collapsedPreference.value)
+  );
+
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // user preference - whether auto-expand is enabled
-  const autoExpandEnabled = ref(true);
+  const emitDrawerState = (value: boolean) => {
+    opts.onDrawerOpenChange?.(value);
+  };
 
-  // check the window size and auto-adjust the sidebar state
-  const checkWindowSize = () => {
-    const windowWidth = window.innerWidth;
-    if (windowWidth < RESPONSIVE_BREAKPOINT && !sidebarCollapsed.value) {
-      sidebarCollapsed.value = true;
-    } else if (
-      windowWidth >= RESPONSIVE_BREAKPOINT &&
-      sidebarCollapsed.value &&
-      autoExpandEnabled.value
-    ) {
-      sidebarCollapsed.value = false;
+  const updateViewport = () => {
+    viewportWidth.value = getWindowWidth();
+    if (!isMobile.value && drawerOpen.value) {
+      drawerOpen.value = false;
     }
   };
 
-  // watch window size changes (debounced)
   const handleResize = () => {
-    if (resizeTimer) {
+    if (resizeTimer !== null) {
       clearTimeout(resizeTimer);
     }
     resizeTimer = setTimeout(() => {
-      checkWindowSize();
-    }, 100); // 100ms debounce delay
+      resizeTimer = null;
+      updateViewport();
+    }, 100);
   };
 
-  // watch externally provided state changes
+  const setCollapsedPreference = (value: boolean) => {
+    if (collapsedPreference.value === value) {
+      return;
+    }
+    collapsedPreference.value = value;
+    if (!isMobile.value) {
+      persistPreference(value);
+    }
+  };
+
+  const openDrawer = () => {
+    if (!isMobile.value || drawerOpen.value) {
+      return;
+    }
+    drawerOpen.value = true;
+  };
+
+  const closeDrawer = () => {
+    if (!drawerOpen.value) {
+      return;
+    }
+    drawerOpen.value = false;
+  };
+
+  const toggle = () => {
+    if (isMobile.value) {
+      if (drawerOpen.value) {
+        closeDrawer();
+      } else {
+        openDrawer();
+      }
+      return;
+    }
+    setCollapsedPreference(!collapsedPreference.value);
+  };
+
+  // Compatibility names used by the current Sidebar until the root shell is remounted.
+  const expandSidebar = () => {
+    if (isMobile.value) {
+      openDrawer();
+      return;
+    }
+    setCollapsedPreference(false);
+  };
+
+  const collapseSidebar = () => {
+    if (isMobile.value) {
+      closeDrawer();
+      return;
+    }
+    setCollapsedPreference(true);
+  };
+
   watch(
-    () => opts.collapsed(),
-    (newVal) => {
-      sidebarCollapsed.value = newVal;
+    sidebarCollapsed,
+    (value, previousValue) => {
+      if (value !== previousValue) {
+        opts.onCollapseChange(value);
+      }
     }
   );
 
-  // watch internal state changes and notify the parent
-  watch(sidebarCollapsed, (newVal) => {
-    opts.onCollapseChange(newVal);
-  });
+  watch(drawerOpen, emitDrawerState);
 
-  // watch the auto-expand setting and persist to localStorage
-  watch(autoExpandEnabled, (newVal) => {
-    localStorage.setItem("sidebarAutoExpand", JSON.stringify(newVal));
-  });
-
-  // expand the sidebar - only when it is collapsed
-  const expandSidebar = () => {
-    if (sidebarCollapsed.value) {
-      sidebarCollapsed.value = false;
-      // temporarily disable auto-expand when the user expands manually
-      autoExpandEnabled.value = false;
-      // re-enable auto-expand after 3 seconds
-      setTimeout(() => {
-        autoExpandEnabled.value = true;
-      }, 3000);
+  watch(
+    () => opts.collapsed(),
+    (value) => {
+      // A compact derived state must not turn a resize into a stored preference.
+      if (isMobile.value || viewportWidth.value < SIDEBAR_COMPACT_BREAKPOINT) {
+        return;
+      }
+      setCollapsedPreference(value);
     }
-  };
+  );
 
-  // collapse the sidebar
-  const collapseSidebar = () => {
-    sidebarCollapsed.value = true;
-    // temporarily disable auto-expand when the user collapses manually
-    autoExpandEnabled.value = false;
-    // re-enable auto-expand after 3 seconds
-    setTimeout(() => {
-      autoExpandEnabled.value = true;
-    }, 3000);
-  };
+  if (opts.drawerOpen) {
+    watch(opts.drawerOpen, (value) => {
+      if (value !== drawerOpen.value) {
+        drawerOpen.value = value;
+      }
+    });
+  }
 
-  // on mount, check the window size and add listeners
   onMounted(() => {
-    checkWindowSize();
+    updateViewport();
     window.addEventListener("resize", handleResize);
-
-    // read the user preference from localStorage
-    const savedAutoExpand = localStorage.getItem("sidebarAutoExpand");
-    if (savedAutoExpand !== null) {
-      autoExpandEnabled.value = JSON.parse(savedAutoExpand);
+    if (opts.collapsed() !== sidebarCollapsed.value) {
+      opts.onCollapseChange(sidebarCollapsed.value);
     }
   });
 
-  // on unmount, remove listeners and clear the timer
   onUnmounted(() => {
     window.removeEventListener("resize", handleResize);
-    if (resizeTimer) {
+    if (resizeTimer !== null) {
       clearTimeout(resizeTimer);
+      resizeTimer = null;
     }
   });
 
-  return { sidebarCollapsed, expandSidebar, collapseSidebar };
+  return {
+    isMobile,
+    collapsedPreference,
+    drawerOpen,
+    sidebarCollapsed,
+    effectiveCollapsed: sidebarCollapsed,
+    toggle,
+    openDrawer,
+    closeDrawer,
+    expandSidebar,
+    collapseSidebar,
+  };
 }

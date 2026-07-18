@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 
 // The real vue-element-plus-x barrel eagerly imports aggregated CSS that the
@@ -9,6 +11,31 @@ vi.mock("vue-element-plus-x", () => ({
 }));
 
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
+
+const MARKDOWN_CSS = readFileSync(
+  resolve(__dirname, "../../src/styles/markdown.css"),
+  "utf8"
+);
+const TOKENS_CSS = readFileSync(
+  resolve(__dirname, "../../src/styles/tokens.css"),
+  "utf8"
+);
+const CHAT_MESSAGE_CONTENT_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/chat/components/ChatMessageContent.vue"
+  ),
+  "utf8"
+);
+
+function cssRuleBody(selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = MARKDOWN_CSS.match(
+    new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, "s")
+  );
+  expect(match, `Missing Markdown CSS rule: ${selector}`).not.toBeNull();
+  return match?.[1] ?? "";
+}
 
 // Locks the static-render (v-else) v-html path. When instantMessage is falsy
 // — history / already-finished agent messages — MarkdownViewer renders its own
@@ -48,6 +75,253 @@ describe("MarkdownViewer — XSS hardening of the v-html render path", () => {
     );
     expect(w.find("a").attributes("href")).toBe("https://example.org/a");
     expect(w.find("img").attributes("src")).toBe("/attachments/p.png");
+  });
+});
+
+describe("MarkdownViewer surface classes", () => {
+  it("defaults to legacy surface wrapper classes", () => {
+    const w = render("hello");
+    const root = w.find(".phy-markdown");
+    expect(root.exists()).toBe(true);
+    expect(root.classes()).toContain("phy-markdown--legacy");
+    expect(root.classes()).not.toContain("phy-markdown--chat");
+  });
+
+  it("applies explicit chat surface classes without a renderer handoff", () => {
+    const w = mount(MarkdownViewer, {
+      props: { content: "hello", instantMessage: false, surface: "chat" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown");
+    expect(root.classes()).toContain("phy-markdown--chat");
+    expect(root.classes()).not.toContain("phy-markdown--legacy");
+  });
+
+  it("applies the artifact skin to a 740px serif narrative while exclusions stay sans or mono", () => {
+    const w = mount(MarkdownViewer, {
+      props: { content: "Research narrative", surface: "artifact" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown");
+    expect(root.classes()).toContain("phy-markdown--artifact");
+    expect(root.classes()).not.toContain("phy-markdown--legacy");
+    expect(root.classes()).not.toContain("phy-reading");
+
+    const narrativeRule = cssRuleBody(
+      ".phy-markdown--artifact :is(.markdown-content, .markdown-body)"
+    );
+    expect(narrativeRule).toMatch(/max-width:\s*740px/);
+    expect(narrativeRule).toMatch(
+      /font-family:\s*var\(--phy-font-reading\)/
+    );
+    expect(
+      cssRuleBody(
+        ".phy-markdown--artifact :is(h1, h2, h3, h4, h5, h6)"
+      )
+    ).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
+    expect(
+      cssRuleBody(
+        ".phy-markdown--artifact :is(code, pre, kbd, samp)"
+      )
+    ).toMatch(/font-family:\s*var\(--phy-font-mono\)/);
+    expect(
+      cssRuleBody(
+        '.phy-markdown--artifact :is(caption, figcaption, button, input, select, textarea, [role="button"], .doc-list, .doc-list-title, .doc-list-item)'
+      )
+    ).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
+  });
+
+  it("keeps serif on artifact narrative paragraphs without leaking it into structural containers", () => {
+    const style = document.createElement("style");
+    style.textContent = `${TOKENS_CSS}\n${MARKDOWN_CSS}`;
+    document.head.append(style);
+
+    const fixture = mount(
+      {
+        template: `
+          <div class="phy-markdown phy-markdown--artifact">
+            <div class="markdown-content">
+              <p data-test="narrative">Narrative</p>
+              <blockquote><p data-test="blockquote">Quote</p></blockquote>
+              <ul><li><p data-test="list">List detail</p></li></ul>
+              <figure><figcaption><p data-test="caption">Caption</p></figcaption></figure>
+              <div class="doc-list"><p data-test="reference">Reference</p></div>
+              <div role="button"><p data-test="control">Control copy</p></div>
+            </div>
+          </div>
+        `,
+      },
+      { attachTo: document.body }
+    );
+
+    try {
+      const fontFamily = (selector: string) =>
+        getComputedStyle(fixture.get(selector).element).fontFamily;
+      const readingFamily = fontFamily(".markdown-content");
+      const shellFamily = fontFamily(".phy-markdown");
+
+      expect(readingFamily).not.toBe(shellFamily);
+      expect(fontFamily('[data-test="narrative"]')).toBe(readingFamily);
+      for (const structuralParagraph of [
+        "blockquote",
+        "list",
+        "caption",
+        "reference",
+        "control",
+      ]) {
+        expect(fontFamily(`[data-test="${structuralParagraph}"]`)).toBe(
+          shellFamily
+        );
+      }
+    } finally {
+      fixture.unmount();
+      style.remove();
+    }
+  });
+
+  it("applies the document fixture class while keeping its body sans", () => {
+    const w = mount(MarkdownViewer, {
+      props: { content: "Document narrative", surface: "document" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown");
+    expect(root.classes()).toContain("phy-markdown--document");
+    expect(root.classes()).not.toContain("phy-markdown--legacy");
+    expect(root.classes()).not.toContain("phy-reading");
+
+    const documentRule = cssRuleBody(".phy-markdown--document");
+    const documentBodyRule = cssRuleBody(
+      ".phy-markdown--document :is(.markdown-content, .markdown-body)"
+    );
+    expect(documentRule).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
+    expect(documentBodyRule).toMatch(
+      /font-family:\s*var\(--phy-font-shell\)/
+    );
+    expect(`${documentRule}${documentBodyRule}`).not.toContain(
+      "--phy-font-reading"
+    );
+  });
+
+  it("contains artifact and document overflow, caption, link, and focus affordances", () => {
+    const sharedSurface = ":is(.phy-markdown--artifact, .phy-markdown--document)";
+    expect(cssRuleBody(`${sharedSurface} pre`)).toMatch(
+      /overflow-x:\s*auto[\s\S]*overscroll-behavior-inline:\s*contain/
+    );
+    expect(cssRuleBody(`${sharedSurface} table`)).toMatch(
+      /max-width:\s*100%[\s\S]*overflow-x:\s*auto/
+    );
+    expect(cssRuleBody(`${sharedSurface} img`)).toMatch(/max-width:\s*100%/);
+    expect(cssRuleBody(`${sharedSurface} :is(caption, figcaption)`)).toMatch(
+      /font-family:\s*var\(--phy-font-shell\)/
+    );
+    expect(cssRuleBody(`${sharedSurface} a:focus-visible`)).toMatch(
+      /outline:\s*2px solid var\(--phy-color-focus\)/
+    );
+  });
+
+  it("keeps Typewriter on the chat surface without phy-reading", () => {
+    const w = mount(MarkdownViewer, {
+      props: { content: "hello", instantMessage: true, surface: "chat" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown");
+    expect(root.classes()).toContain("phy-markdown");
+    expect(root.classes()).toContain("phy-markdown--chat");
+    expect(root.classes()).not.toContain("phy-reading");
+    expect(root.classes()).not.toContain("phy-markdown--legacy");
+    expect(w.findComponent({ name: "Typewriter" }).exists()).toBe(true);
+  });
+
+  it("renders long chat-surface fixtures with structure + XSS intact; CSS owns overflow", () => {
+    const fixture = [
+      "# Long heading that should wrap inside the transcript measure",
+      "",
+      "- list item one",
+      "- list item two",
+      "",
+      "```",
+      "const wide = '" + "x".repeat(120) + "';",
+      "```",
+      "",
+      "| a | b | c | d | e | f | g | h |",
+      "| - | - | - | - | - | - | - | - |",
+      "| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |",
+      "",
+      "![wide](https://example.org/p.png)",
+    ].join("\n");
+    const w = mount(MarkdownViewer, {
+      props: { content: fixture, instantMessage: false, surface: "chat", ns: "m0" },
+      global: { stubs: { Typewriter: true } },
+    });
+    const root = w.find(".phy-markdown.phy-markdown--chat");
+    expect(root.exists()).toBe(true);
+    expect(w.find("pre").exists()).toBe(true);
+    expect(w.find("img").exists()).toBe(true);
+    // Mount asserts structure + XSS intact; overflow ownership is a CSS contract.
+    expect(w.find("img").attributes("onerror")).toBeUndefined();
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+pre\s*\{[^}]*overflow-x:\s*auto/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+table\s*\{[^}]*overflow-x:\s*auto/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+img\s*\{[^}]*max-width:\s*100%/
+    );
+  });
+
+  it("keeps the chat skin compact and bounded by the message bubble", () => {
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown\.phy-markdown--chat\s*\{[^}]*width:\s*100%[^}]*max-width:\s*100%/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s*>\s*:first-child[\s\S]*margin-top:\s*0/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s*>\s*:last-child[\s\S]*margin-bottom:\s*0/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+pre\s+code\s*\{[^}]*white-space:\s*pre/
+    );
+    expect(MARKDOWN_CSS).not.toMatch(/#[0-9a-f]{3,8}/i);
+  });
+
+  it("keeps horizontal overflow on code and table surfaces, not the prose wrapper", () => {
+    const nestedWrapper = MARKDOWN_CSS.match(
+      /\/\* Nested content wrappers[\s\S]*?\{([^}]*)\}/
+    )?.[1];
+    expect(nestedWrapper).toBeDefined();
+    expect(nestedWrapper).not.toMatch(/overflow-x:\s*auto/);
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+pre\s*\{[^}]*overscroll-behavior-inline:\s*contain/
+    );
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+table\s*\{[^}]*overscroll-behavior-inline:\s*contain/
+    );
+  });
+
+  it("tightens static-render line breaks without changing rendered markup", () => {
+    const w = render("# Heading\nAlpha\nBeta\n## Next");
+    expect(w.findAll("br")).toHaveLength(3);
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat\s+\.markdown-content\s+br\s*\{[^}]*display:\s*inline/
+    );
+    expect(MARKDOWN_CSS).toContain(
+      "br:has(+ :is(h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol))"
+    );
+    expect(MARKDOWN_CSS).toContain(".markdown-content li + br");
+    expect(MARKDOWN_CSS).not.toMatch(/\+\s*br\s*\+\s*br/);
+    expect(MARKDOWN_CSS).not.toMatch(/br:has\(\s*\+\s*br\s*\+/);
+    expect(MARKDOWN_CSS).not.toContain("display: contents");
+  });
+
+  it("ChatMessageContent wires MarkdownViewer / CitedAnswer with surface chat", () => {
+    expect(CHAT_MESSAGE_CONTENT_SOURCE).toMatch(
+      /<CitedAnswer[\s\S]*?surface="chat"/
+    );
+    expect(CHAT_MESSAGE_CONTENT_SOURCE).toMatch(
+      /<MarkdownViewer[\s\S]*?surface="chat"/
+    );
   });
 });
 

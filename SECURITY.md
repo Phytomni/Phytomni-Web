@@ -7,8 +7,8 @@ there is no separate maintenance branch.
 
 | Release           | Supported |
 | ----------------- | --------- |
-| `0.1.2` (current) | yes       |
-| `< 0.1.2`         | no        |
+| `0.1.3` (current) | yes       |
+| `< 0.1.3`         | no        |
 
 See the [CHANGELOG](CHANGELOG.md) for what each release contains.
 

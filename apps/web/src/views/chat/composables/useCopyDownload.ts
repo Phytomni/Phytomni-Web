@@ -1,6 +1,18 @@
 import { ElMessage } from "element-plus";
 import type { WritableComputedRef } from "vue";
 import { getChatdownloadURL, getFileDownUrlApi } from "@/api/chat";
+import { createTransferTracker } from "@/utils/transfer-progress";
+import {
+  removeDownloadTransfer,
+  upsertDownloadTransfer,
+} from "@/utils/download-transfers";
+
+let renderingFileDownloadSeq = 0;
+
+function isCanceledRequest(error: unknown): boolean {
+  const err = error as { code?: unknown; name?: unknown };
+  return err?.code === "ERR_CANCELED" || err?.name === "CanceledError";
+}
 
 export function useCopyDownload(opts: {
   copyVisible: WritableComputedRef<number>;
@@ -66,8 +78,15 @@ export function useCopyDownload(opts: {
     const queryData = new FormData();
     queryData.append("document_format", type);
     queryData.append("id", (id ? Number(id) : 0).toString());
+    const requestId = `rendering-file-${Date.now()}-${++renderingFileDownloadSeq}`;
+    const tracker = createTransferTracker({ phase: "download", requestId });
     try {
-      const response = await getFileDownUrlApi(queryData);
+      const response = await getFileDownUrlApi(queryData, {
+        requestId,
+        onDownloadProgress: (event) => {
+          upsertDownloadTransfer(tracker.update(event));
+        },
+      });
       // extract the filename from the response headers
       const contentDisposition = response.headers["content-disposition"];
       let fileName = "default_filename"; // default filename
@@ -95,7 +114,14 @@ export function useCopyDownload(opts: {
       window.URL.revokeObjectURL(downloadUrl);
       document.body.removeChild(link);
     } catch (error) {
+      if (isCanceledRequest(error)) {
+        ElMessage.info(t("chat.downloadCancelled"));
+        return;
+      }
       console.error("File download failed:", error);
+      ElMessage.error(t("chat.downloadError"));
+    } finally {
+      removeDownloadTransfer(requestId);
     }
   };
 

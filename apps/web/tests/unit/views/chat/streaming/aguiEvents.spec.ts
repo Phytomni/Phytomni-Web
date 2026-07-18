@@ -31,6 +31,32 @@ describe("splitSSEFrames", () => {
     expect(frames).toEqual(['data: {"a":1}', 'data: {"b":2}']);
     expect(rest).toBe('data: {"c":');
   });
+
+  it("splits CRLF frames without normalizing bytes, including DONE and rest", () => {
+    const firstChunk =
+      'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"hi"}\r\n\r';
+    const first = splitSSEFrames(firstChunk);
+    expect(first.frames).toEqual([]);
+    expect(first.rest).toBe(firstChunk);
+
+    const second = splitSSEFrames(
+      first.rest + '\ndata: [DONE]\r\n\r\n\r\n\r\npartial'
+    );
+    expect(second.frames).toEqual([
+      'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"hi"}',
+      "data: [DONE]",
+    ]);
+    expect(second.rest).toBe("partial");
+    expect(parseAGUIFrame(second.frames[0])?.data.delta).toBe("hi");
+    expect(parseAGUIFrame(second.frames[1])).toBeNull();
+  });
+
+  it("ignores empty LF and CRLF frames while consuming their separators", () => {
+    expect(splitSSEFrames("\n\n\r\n\r\ndata: {\"ok\":true}\n\n")).toEqual({
+      frames: ['data: {"ok":true}'],
+      rest: "",
+    });
+  });
 });
 
 describe("parseAGUIFrame multi-line data", () => {
@@ -49,5 +75,57 @@ describe("parseAGUIFrame multi-line data", () => {
   it("falls back to the event: line when data has no type", () => {
     const ev = parseAGUIFrame('event: RunFinished\ndata: {"run_id":"r1"}');
     expect(ev?.type).toBe("RunFinished");
+  });
+});
+
+describe("combined gated compatibility fixture", () => {
+  it("keeps mixed raw separators, terminal RunError, DONE, and bounded events", () => {
+    // The first chunk ends inside a CRLF separator to mirror arbitrary reader
+    // boundaries. The following chunks deliberately alternate LF/CRLF and end
+    // with a trailing partial frame; no frame text is normalized.
+    const chunks = [
+      'event: RunStarted\r\ndata: {"type":"RunStarted","run_id":"run-task27"}\r\n\r',
+      '\nevent: FutureEvent\ndata: {"type":"FutureEvent","value":"ignored"}\n\n',
+      'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"synthetic"}\r\n\r\n',
+      'event: RunError\ndata: {"type":"RunError","code":"fixture_failure","message":"synthetic failure"}\n\n',
+      'data: [DONE]\r\n\r\npartial',
+    ];
+    let buffer = "";
+    const frames: string[] = [];
+    for (const chunk of chunks) {
+      buffer += chunk;
+      const split = splitSSEFrames(buffer);
+      frames.push(...split.frames);
+      buffer = split.rest;
+    }
+
+    expect(frames).toHaveLength(5);
+    expect(frames[0]).toContain("\r\n");
+    expect(frames[2]).toContain("\r\n");
+    expect(frames[3]).toContain("\n");
+    expect(buffer).toBe("partial");
+
+    const allowed = new Set([
+      "RunStarted",
+      "TextMessageContent",
+      "RunError",
+    ]);
+    const observed = frames
+      .map((frame) => parseAGUIFrame(frame))
+      .filter((event): event is NonNullable<typeof event> => event !== null);
+    expect(observed.map((event) => event.type)).toEqual([
+      "RunStarted",
+      "FutureEvent",
+      "TextMessageContent",
+      "RunError",
+    ]);
+    expect(observed.filter((event) => allowed.has(event.type)).map((event) => event.type)).toEqual([
+      "RunStarted",
+      "TextMessageContent",
+      "RunError",
+    ]);
+    expect(observed[0].data.run_id).toBe("run-task27");
+    expect(observed[3].data.message).toBe("synthetic failure");
+    expect(parseAGUIFrame(frames[4])).toBeNull();
   });
 });

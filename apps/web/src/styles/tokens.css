@@ -1,0 +1,393 @@
+:root,
+.theme-light {
+  /* Semantic light mode */
+  --phy-color-bg-page: #f7f9fc;
+  --phy-color-bg-elevated: #ffffff;
+  --phy-color-bg-sidebar: #f5f7fa;
+  --phy-color-fill-subtle: #eef3f0;
+  --phy-color-overlay: rgba(10, 24, 18, 0.48);
+  --phy-color-text: #14201b;
+  --phy-color-text-secondary: #5b6b63;
+  --phy-color-text-muted: #65736b;
+  --phy-color-text-placeholder: #65736b;
+  --phy-color-text-disabled: #7c8981;
+  --phy-color-border-subtle: #e6ebe7;
+  --phy-color-border-control: #6f7d75;
+  --phy-color-action-fill: #2f6fd4;
+  --phy-color-action-fill-hover: #255eb8;
+  --phy-color-action-rgb: 47, 111, 212;
+  --phy-color-on-action: #ffffff;
+  --phy-color-action-text: #2f6fd4;
+  --phy-color-action-text-hover: #255eb8;
+  --phy-color-focus: #2f6fd4;
+  --phy-color-brand-blue: #3a83f7;
+  --phy-color-brand-blue-soft: #d6e6fe;
+  --phy-color-accent: #14644a;
+  --phy-color-accent-hover: #0f4d39;
+  --phy-color-accent-soft: #d7ede5;
+  --phy-color-accent-text: #14644a;
+  --phy-color-accent-rgb: 20, 100, 74;
+  --phy-color-bubble-user: #eaf6f1;
+  --phy-color-bubble-user-border: #cfe8dc;
+  --phy-color-bubble-assistant: #eaf2fe;
+  --phy-color-bubble-assistant-border: #d5e5fc;
+
+  /* Compatibility aliases for existing consumers. */
+  --phy-color-primary: var(--phy-color-brand-blue);
+  --phy-color-primary-hover: var(--phy-color-action-fill-hover);
+  --phy-color-primary-soft: var(--phy-color-brand-blue-soft);
+  --phy-color-action: var(--phy-color-action-text);
+  --phy-color-border: var(--phy-color-border-subtle);
+  --phy-bubble-user-bg: #eaf6f1;
+  --phy-bubble-user-border: #cfe8dc;
+  --phy-bubble-assistant-bg: #eaf2fe;
+  --phy-bubble-assistant-border: #d5e5fc;
+
+  /* Legacy page aliases remain CSS-owned while routed pages migrate. */
+  --color-background: var(--phy-color-bg-page);
+  --color-background-soft: var(--phy-color-bg-page);
+  --color-background-mute: var(--phy-color-fill-subtle);
+  --color-background-card: var(--phy-color-bg-elevated);
+  --color-background-hover: var(--phy-color-fill-subtle);
+  --color-border: var(--phy-color-border-subtle);
+  --color-border-hover: var(--phy-color-border-control);
+  --color-heading: var(--phy-color-text);
+  --color-text: var(--phy-color-text);
+  --sidebar-btn-bg: var(--phy-color-bg-elevated);
+  --sidebar-btn-bg-hover: var(--phy-color-fill-subtle);
+  --sidebar-btn-color: var(--phy-color-action-text);
+  --sidebar-btn-border: var(--phy-color-border-subtle);
+  --sidebar-btn-active-bg: var(--phy-color-brand-blue-soft);
+  --sidebar-btn-active-color: var(--phy-color-action-text);
+  --sidebar-btn-shadow: var(--phy-shadow-soft);
+  --sidebar-btn-shadow-hover: var(--phy-shadow-soft);
+  --page-card-bg: var(--phy-color-bg-elevated);
+  --page-card-border: var(--phy-color-border-subtle);
+  --page-card-shadow: var(--phy-shadow-soft);
+  --page-text-secondary: var(--phy-color-text-secondary);
+
+  /* Element Plus primary bridge. */
+  --el-color-primary: var(--phy-color-action-fill);
+  --el-color-primary-dark-2: var(--phy-color-action-fill-hover);
+  --el-color-primary-light-3: #6d9ae1;
+  --el-color-primary-light-5: #97b7ea;
+  --el-color-primary-light-7: #c1d4f2;
+  --el-color-primary-light-8: #d5e2f6;
+  --el-color-primary-light-9: #eaf1fb;
+  --el-color-primary-hover: var(--phy-color-action-fill-hover);
+  --el-color-primary-rgb: var(--phy-color-action-rgb);
+  --el-color-primary-text: var(--phy-color-action-text);
+  --el-link-color: var(--phy-color-action-text);
+  --el-link-hover-color: var(--phy-color-action-text-hover);
+  --el-focus-color: var(--phy-color-focus);
+
+  /* Element Plus success bridge. */
+  --el-color-success: var(--phy-color-accent);
+  --el-color-success-dark-2: var(--phy-color-accent-hover);
+  --el-color-success-light-3: #3d8f72;
+  --el-color-success-light-5: #7eb59a;
+  --el-color-success-light-7: #b6d7c8;
+  --el-color-success-light-8: var(--phy-color-accent-soft);
+  --el-color-success-light-9: var(--phy-color-bubble-user);
+  --el-color-success-rgb: var(--phy-color-accent-rgb);
+  --el-color-success-text: var(--phy-color-accent-text);
+
+  /* Element Plus surface bridge. */
+  --el-bg-color: var(--phy-color-bg-elevated);
+  --el-bg-color-page: var(--phy-color-bg-page);
+  --el-bg-color-overlay: var(--phy-color-bg-elevated);
+  --el-bg-color-soft: var(--phy-color-bg-sidebar);
+  --el-text-color-primary: var(--phy-color-text);
+  --el-text-color-regular: var(--phy-color-text-secondary);
+  --el-text-color-secondary: var(--phy-color-text-muted);
+  --el-text-color-placeholder: var(--phy-color-text-placeholder);
+  --el-text-color-disabled: var(--phy-color-text-disabled);
+  --el-border-color: var(--phy-color-border-subtle);
+  --el-border-color-light: var(--phy-color-border-subtle);
+  --el-border-color-lighter: var(--phy-color-border-subtle);
+  --el-border-color-extra-light: var(--phy-color-fill-subtle);
+  --el-border-color-dark: var(--phy-color-border-control);
+  --el-border-color-darker: var(--phy-color-border-control);
+  --el-border-color-hover: var(--phy-color-border-control);
+  --el-fill-color: var(--phy-color-fill-subtle);
+  --el-fill-color-light: var(--phy-color-fill-subtle);
+  --el-fill-color-lighter: var(--phy-color-bg-elevated);
+  --el-fill-color-extra-light: var(--phy-color-bg-elevated);
+  --el-fill-color-dark: var(--phy-color-border-subtle);
+  --el-fill-color-darker: var(--phy-color-border-subtle);
+  --el-fill-color-blank: var(--phy-color-bg-elevated);
+  --el-disabled-bg-color: var(--phy-color-fill-subtle);
+  --el-disabled-text-color: var(--phy-color-text-disabled);
+  --el-disabled-border-color: var(--phy-color-border-subtle);
+  --el-overlay-color: var(--phy-color-overlay);
+  --el-button-bg-color: var(--phy-color-action-fill);
+  --el-button-border-color: var(--phy-color-action-fill);
+  --el-button-text-color: var(--phy-color-on-action);
+  --el-button-hover-bg-color: var(--phy-color-action-fill-hover);
+  --el-button-hover-border-color: var(--phy-color-action-fill-hover);
+
+  /* Shared geometry and typography. */
+  --phy-radius-sm: 8px;
+  --phy-radius-md: 12px;
+  --phy-radius-lg: 16px;
+  --phy-radius-pill: 999px;
+  --phy-shadow-soft: 0 1px 2px rgba(20, 32, 27, 0.04),
+    0 4px 16px rgba(20, 32, 27, 0.06);
+  --phy-motion-fast: 150ms;
+  --phy-motion-normal: 220ms;
+  --phy-font-shell: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+  --phy-font-reading: "Times New Roman", "FangSong", "仿宋", "STFangsong",
+    serif;
+  --phy-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Auth Field Horizon H1 — blue top → green bottom. */
+  --phy-auth-horizon: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--phy-color-brand-blue-soft) 55%, #fff) 0%,
+    var(--phy-color-bg-page) 48%,
+    color-mix(in srgb, var(--phy-color-accent-soft) 60%, #fff) 100%
+  );
+}
+
+.theme-dark {
+  /* Semantic dark mode */
+  --phy-color-bg-page: #101815;
+  --phy-color-bg-elevated: #17221d;
+  --phy-color-bg-sidebar: #121d19;
+  --phy-color-fill-subtle: #1d2b24;
+  --phy-color-overlay: rgba(0, 0, 0, 0.64);
+  --phy-color-text: #f2f7f4;
+  --phy-color-text-secondary: #b7c5be;
+  --phy-color-text-muted: #9aaba2;
+  --phy-color-text-placeholder: #a5b6ad;
+  --phy-color-text-disabled: #7f9188;
+  --phy-color-border-subtle: #2a3a32;
+  --phy-color-border-control: #71857a;
+  --phy-color-action-fill: #2f6fd4;
+  --phy-color-action-fill-hover: #255eb8;
+  --phy-color-action-rgb: 47, 111, 212;
+  --phy-color-on-action: #ffffff;
+  --phy-color-action-text: #8cb8ff;
+  --phy-color-action-text-hover: #b7d4ff;
+  --phy-color-focus: #8cb8ff;
+  --phy-color-brand-blue: #3a83f7;
+  --phy-color-brand-blue-soft: #203d63;
+  --phy-color-accent: #2b7a59;
+  --phy-color-accent-hover: #347f61;
+  --phy-color-accent-soft: #193a2e;
+  --phy-color-accent-text: #7fd0ae;
+  --phy-color-accent-rgb: 43, 122, 89;
+  --phy-color-bubble-user: #17352a;
+  --phy-color-bubble-user-border: #2b5b48;
+  --phy-color-bubble-assistant: #182d49;
+  --phy-color-bubble-assistant-border: #2c4d73;
+
+  /* Compatibility aliases for existing consumers. */
+  --phy-color-primary: var(--phy-color-brand-blue);
+  --phy-color-primary-hover: var(--phy-color-action-fill-hover);
+  --phy-color-primary-soft: var(--phy-color-brand-blue-soft);
+  --phy-color-action: var(--phy-color-action-text);
+  --phy-color-border: var(--phy-color-border-subtle);
+  --phy-bubble-user-bg: #17352a;
+  --phy-bubble-user-border: #2b5b48;
+  --phy-bubble-assistant-bg: #182d49;
+  --phy-bubble-assistant-border: #2c4d73;
+
+  /* Legacy page aliases remain CSS-owned while routed pages migrate. */
+  --color-background: var(--phy-color-bg-page);
+  --color-background-soft: var(--phy-color-bg-page);
+  --color-background-mute: var(--phy-color-fill-subtle);
+  --color-background-card: var(--phy-color-bg-elevated);
+  --color-background-hover: var(--phy-color-fill-subtle);
+  --color-border: var(--phy-color-border-subtle);
+  --color-border-hover: var(--phy-color-border-control);
+  --color-heading: var(--phy-color-text);
+  --color-text: var(--phy-color-text);
+  --sidebar-btn-bg: var(--phy-color-bg-elevated);
+  --sidebar-btn-bg-hover: var(--phy-color-fill-subtle);
+  --sidebar-btn-color: var(--phy-color-action-text);
+  --sidebar-btn-border: var(--phy-color-border-subtle);
+  --sidebar-btn-active-bg: var(--phy-color-brand-blue-soft);
+  --sidebar-btn-active-color: var(--phy-color-action-text);
+  --sidebar-btn-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --sidebar-btn-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --page-card-bg: var(--phy-color-bg-elevated);
+  --page-card-border: var(--phy-color-border-subtle);
+  --page-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --page-text-secondary: var(--phy-color-text-secondary);
+
+  /* Element Plus primary bridge. */
+  --el-color-primary: var(--phy-color-action-fill);
+  --el-color-primary-dark-2: var(--phy-color-action-fill-hover);
+  --el-color-primary-light-3: #295eaf;
+  --el-color-primary-light-5: #244e8c;
+  --el-color-primary-light-7: #1e3e69;
+  --el-color-primary-light-8: #1b3458;
+  --el-color-primary-light-9: #172a46;
+  --el-color-primary-hover: var(--phy-color-action-fill-hover);
+  --el-color-primary-rgb: var(--phy-color-action-rgb);
+  --el-color-primary-text: var(--phy-color-action-text);
+  --el-link-color: var(--phy-color-action-text);
+  --el-link-hover-color: var(--phy-color-action-text-hover);
+  --el-focus-color: var(--phy-color-focus);
+
+  /* Element Plus success bridge. */
+  --el-color-success: var(--phy-color-accent);
+  --el-color-success-dark-2: var(--phy-color-accent-hover);
+  --el-color-success-light-3: #245f46;
+  --el-color-success-light-5: #204d3a;
+  --el-color-success-light-7: #1c3b2e;
+  --el-color-success-light-8: #193229;
+  --el-color-success-light-9: #172922;
+  --el-color-success-rgb: var(--phy-color-accent-rgb);
+  --el-color-success-text: var(--phy-color-accent-text);
+
+  /* Element Plus surface bridge. */
+  --el-bg-color: var(--phy-color-bg-elevated);
+  --el-bg-color-page: var(--phy-color-bg-page);
+  --el-bg-color-overlay: var(--phy-color-bg-elevated);
+  --el-bg-color-soft: var(--phy-color-bg-sidebar);
+  --el-text-color-primary: var(--phy-color-text);
+  --el-text-color-regular: var(--phy-color-text-secondary);
+  --el-text-color-secondary: var(--phy-color-text-muted);
+  --el-text-color-placeholder: var(--phy-color-text-placeholder);
+  --el-text-color-disabled: var(--phy-color-text-disabled);
+  --el-border-color: var(--phy-color-border-subtle);
+  --el-border-color-light: var(--phy-color-border-subtle);
+  --el-border-color-lighter: var(--phy-color-border-subtle);
+  --el-border-color-extra-light: var(--phy-color-fill-subtle);
+  --el-border-color-dark: var(--phy-color-border-control);
+  --el-border-color-darker: var(--phy-color-border-control);
+  --el-border-color-hover: var(--phy-color-border-control);
+  --el-fill-color: var(--phy-color-fill-subtle);
+  --el-fill-color-light: var(--phy-color-fill-subtle);
+  --el-fill-color-lighter: var(--phy-color-bg-elevated);
+  --el-fill-color-extra-light: var(--phy-color-bg-elevated);
+  --el-fill-color-dark: var(--phy-color-border-subtle);
+  --el-fill-color-darker: var(--phy-color-border-subtle);
+  --el-fill-color-blank: var(--phy-color-bg-elevated);
+  --el-disabled-bg-color: var(--phy-color-fill-subtle);
+  --el-disabled-text-color: var(--phy-color-text-disabled);
+  --el-disabled-border-color: var(--phy-color-border-subtle);
+  --el-overlay-color: var(--phy-color-overlay);
+  --el-button-bg-color: var(--phy-color-action-fill);
+  --el-button-border-color: var(--phy-color-action-fill);
+  --el-button-text-color: var(--phy-color-on-action);
+  --el-button-hover-bg-color: var(--phy-color-action-fill-hover);
+  --el-button-hover-border-color: var(--phy-color-action-fill-hover);
+
+  /* Shared geometry and typography. */
+  --phy-radius-sm: 8px;
+  --phy-radius-md: 12px;
+  --phy-radius-lg: 16px;
+  --phy-radius-pill: 999px;
+  --phy-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.24),
+    0 4px 16px rgba(0, 0, 0, 0.22);
+  --phy-motion-fast: 150ms;
+  --phy-motion-normal: 220ms;
+  --phy-font-shell: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+  --phy-font-reading: "Times New Roman", "FangSong", "仿宋", "STFangsong",
+    serif;
+  --phy-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --phy-auth-horizon: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--phy-color-brand-blue-soft) 55%, #101815) 0%,
+    var(--phy-color-bg-page) 48%,
+    color-mix(in srgb, var(--phy-color-accent-soft) 60%, #101815) 100%
+  );
+}
+
+/* Element Plus success text surfaces use the accessible text role, not the fill. */
+.el-link.el-link--success,
+.el-button.el-button--success.is-text,
+.el-button.el-button--success.is-link,
+.el-tag.el-tag--success {
+  color: var(--phy-color-accent-text);
+}
+
+/* Shared dimensions are theme-independent and intentionally defined once. */
+:root {
+  /* Approved spacing scale. */
+  --phy-space-4: 4px;
+  --phy-space-8: 8px;
+  --phy-space-12: 12px;
+  --phy-space-16: 16px;
+  --phy-space-20: 20px;
+  --phy-space-24: 24px;
+  --phy-space-32: 32px;
+  --phy-space-40: 40px;
+  --phy-space-48: 48px;
+  --phy-space-64: 64px;
+
+  /* Control heights: compact, default, and primary composer/auth sizes. */
+  --phy-control-height-compact: 32px;
+  --phy-control-height-default: 40px;
+  --phy-control-height-primary: 48px;
+
+  /* Layout measures: one source of truth for shell and content consumers. */
+  --phy-layout-sidebar-expanded-width: 272px;
+  --phy-layout-sidebar-compact-width: 56px;
+  --phy-layout-transcript-max-width: clamp(860px, 72vw, 1600px);
+  --phy-layout-document-max-width: clamp(1120px, 78vw, 1600px);
+  --phy-layout-reading-max-width: clamp(760px, 52vw, 1160px);
+  --phy-layout-artifact-wide-max-width: clamp(1120px, 72vw, 1600px);
+  --phy-layout-artifact-document-max-width: clamp(760px, 46vw, 1040px);
+  --phy-layout-artifact-chat-min-width: 360px;
+  --phy-layout-artifact-content-min-width: 560px;
+
+  /* Breakpoint reference values; media queries keep literal standards. */
+  --phy-breakpoint-small: 600px;
+  --phy-breakpoint-medium: 900px;
+  --phy-breakpoint-large: 1280px;
+
+  /* Motion scale and the shared ease-out curve. */
+  --phy-motion-slow: 360ms;
+  --phy-motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Layer order: sticky < dropdown < drawer < modal < toast < transfer overlay. */
+  --phy-z-sticky: 10;
+  --phy-z-dropdown: 100;
+  --phy-z-drawer: 1000;
+  --phy-z-modal: 2000;
+  --phy-z-toast: 3000;
+  --phy-z-transfer: 4000;
+}
+
+.phy-reading {
+  font-family: var(--phy-font-reading);
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--phy-color-text);
+  max-width: var(--phy-layout-reading-max-width);
+}
+
+.phy-reading code,
+.phy-reading pre,
+.phy-reading kbd {
+  font-family: var(--phy-font-mono);
+}
+
+.phy-bubble-user {
+  background: var(--phy-bubble-user-bg);
+  border: 1px solid var(--phy-bubble-user-border);
+  border-radius: var(--phy-radius-lg);
+  box-shadow: 0 1px 2px rgba(20, 32, 27, 0.03);
+}
+
+.phy-bubble-assistant {
+  background: var(--phy-bubble-assistant-bg);
+  border: 1px solid var(--phy-bubble-assistant-border);
+  border-radius: var(--phy-radius-lg);
+  box-shadow: 0 1px 2px rgba(20, 32, 27, 0.03);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --phy-motion-fast: 0ms;
+    --phy-motion-normal: 0ms;
+    --phy-motion-slow: 0ms;
+  }
+}

@@ -6,6 +6,7 @@ const FILES = [
   "src/views/chat/composables/useSendMessage.ts",
   "src/views/chat/composables/useRefreshMessage.ts",
   "src/views/chat/composables/useSelectChat.ts",
+  "src/views/chat/components/ChatMessageContent.vue",
 ];
 const LEGACY = [
   "ChatAgents",
@@ -37,5 +38,17 @@ describe("render-switch agent names are canonical", () => {
     );
     expect(src).not.toContain('response.data === "ChatAgent"');
     expect(src).toContain('response.data.tool_name === "ChatAgent"');
+  });
+  it("ChatMessageContent uses canonical tool_name agent strings", () => {
+    const src = readFileSync(
+      resolve(
+        __dirname,
+        "../../../src/views/chat/components/ChatMessageContent.vue"
+      ),
+      "utf8"
+    );
+    expect(src).toContain("'GeneNetworkAgent'");
+    expect(src).toContain("'DigitalDesignAgent'");
+    expect(src).toContain("'DeepGenomeAgent'");
   });
 });

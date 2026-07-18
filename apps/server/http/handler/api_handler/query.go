@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"phytomni-server/common"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -30,8 +31,18 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, "unknown tool type"
 	case errors.Is(err, api_service.ErrExpertDisabled):
 		return http.StatusServiceUnavailable, "expert mode not available"
+	case errors.Is(err, api_service.ErrRemoteProductDisabled):
+		return http.StatusServiceUnavailable, "remote product temporarily unavailable"
+	case errors.Is(err, api_service.ErrRemoteProductForbidden):
+		return http.StatusNotFound, "remote product not found"
 	case errors.Is(err, api_service.ErrMissingBotRunID):
 		return http.StatusConflict, "task is not syncable through bot run state"
+	case errors.Is(err, api_service.ErrInteropRequired):
+		return http.StatusFailedDependency, "required interop evidence unavailable"
+	case errors.Is(err, api_service.ErrInteropTargetForbidden):
+		return http.StatusBadRequest, "interop target is not allowlisted"
+	case errors.Is(err, api_service.ErrInvalidA2uiSurface):
+		return http.StatusBadRequest, "invalid input-required surface"
 	case errors.Is(err, rxBot.ErrBotTimeout):
 		return http.StatusGatewayTimeout, "request timed out, please narrow your query or try again later"
 	case errors.Is(err, api_service.ErrStreamUnsupported):
@@ -43,9 +54,41 @@ func queryErrorStatus(err error) (int, string) {
 	return http.StatusInternalServerError, "request failed"
 }
 
+func writeQueryError(ctx *gin.Context, status int, message string) {
+	body := gin.H{"code": status, "message": message}
+	if requestID := common.A2uiRequestID(ctx); requestID != "" {
+		body["request_id"] = requestID
+	}
+	ctx.JSON(status, body)
+}
+
 // wantsStream reports whether the caller opted into SSE via the Accept header.
 func wantsStream(ctx *gin.Context) bool {
 	return strings.Contains(ctx.GetHeader("Accept"), "text/event-stream")
+}
+
+func parseInteropTargets(raw string) ([]string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, true
+	}
+	// A valid target id is at most 64 bytes and the service accepts at most
+	// MaxInteropTargets. Reject oversized JSON before unmarshalling so a caller
+	// cannot use the multipart budget to create a large temporary slice.
+	if len(raw) > 4096 {
+		return nil, false
+	}
+	if raw[0] != '[' || raw[len(raw)-1] != ']' {
+		return nil, false
+	}
+	var targets []string
+	if err := json.Unmarshal([]byte(raw), &targets); err != nil || targets == nil {
+		return nil, false
+	}
+	if len(targets) > rxBot.MaxInteropTargets {
+		return nil, false
+	}
+	return targets, true
 }
 
 // streamEnabled reports whether the AG-UI streaming dark-launch flag is on.
@@ -96,6 +139,21 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		History: ctx.DefaultPostForm("history", "[]"),
 		Mode:    ctx.DefaultPostForm("mode", "instant"),
 	}
+	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
+	// Bound this caller-controlled label before it can reach service errors or
+	// request logs. The only accepted values remain off|auto|required; an
+	// overlong value fails closed at the HTTP boundary instead of being echoed
+	// by a downstream validation error.
+	if len([]rune(in.InteropMode)) > rxBot.MaxInteropModeLength {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.invalid_interop_controls")})
+		return
+	}
+	interopTargets, ok := parseInteropTargets(ctx.PostForm("interop_targets"))
+	if !ok {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.invalid_interop_controls")})
+		return
+	}
+	in.InteropTargets = interopTargets
 	if strings.TrimSpace(in.Query) == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.query_empty")})
 		return
@@ -105,6 +163,18 @@ func (ph *Handler) Query(ctx *gin.Context) {
 	// refresh_id still travels in the multipart body.
 	in.Id, _ = strconv.ParseInt(ctx.Param("id"), 10, 64)
 	in.RefreshId, _ = strconv.ParseInt(ctx.DefaultPostForm("refresh_id", "0"), 10, 64)
+
+	// Product permissions are checked after parsing the explicit tool/mode but
+	// before opening uploads or dispatching to QueryStream/Query. This keeps the
+	// browser convenience guard and the Go authorization boundary aligned while
+	// preserving the existing body-size and quota checks above.
+	if api_service.IsRemoteProductTool(in.Tool) {
+		if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), in.Tool); err != nil {
+			status, message := queryErrorStatus(err)
+			writeQueryError(ctx, status, message)
+			return
+		}
+	}
 
 	if form != nil {
 		files := form.File["files"]
@@ -134,8 +204,8 @@ func (ph *Handler) Query(ctx *gin.Context) {
 
 	// SSE branch (dark-launch). Taken when the caller accepts
 	// text/event-stream, the flag is on, and the turn is Instant. The
-	// chat-family restriction is enforced downstream in QueryStream (via
-	// ChatModelFor); a non-chat slug reaching here is refused with
+	// stream-capability restriction is enforced downstream in QueryStream (via
+	// StreamModelFor); a non-capable slug reaching here is refused with
 	// ErrStreamUnsupported before any frame. Expert must fall through to the
 	// blocking path, which owns RouteQuery dispatch and the expert_enabled dark
 	// gate — the frontend forces tool="" in Expert, so slug alone cannot tell
@@ -156,6 +226,10 @@ func (ph *Handler) Query(ctx *gin.Context) {
 			// an SSE-aware client would silently fail to
 			// parse the error.
 			headerSent := false
+			onReady := func(identity api_service.StreamIdentity) {
+				ctx.Header("X-Phyto-Dialogue-Id", identity.DialogueID)
+				ctx.Header("X-Phyto-Message-Id", strconv.FormatInt(identity.MessageID, 10))
+			}
 			forward := func(frame []byte) error {
 				if !headerSent {
 					ctx.Header("Content-Type", "text/event-stream")
@@ -171,7 +245,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 				flusher.Flush()
 				return nil
 			}
-			_, serr := ph.service.QueryStream(ctx, name.(string), in, forward)
+			_, serr := ph.service.QueryStream(ctx, name.(string), in, onReady, forward)
 			if serr != nil {
 				status, msg := queryErrorStatus(serr)
 				if headerSent {
@@ -185,7 +259,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 				} else {
 					// Pre-first-byte failure: no SSE headers were written, so a
 					// normal JSON error with the right Content-Type still ships.
-					ctx.JSON(status, gin.H{"code": status, "message": msg})
+					writeQueryError(ctx, status, msg)
 				}
 			}
 			return
@@ -202,8 +276,18 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		} else {
 			rxLog.Sugar().Warnw("ApiQuery client error", "user", name, "status", status, "err", err)
 		}
-		ctx.JSON(status, gin.H{"code": status, "message": msg})
+		writeQueryError(ctx, status, msg)
 		return
+	}
+	// QueryData carries the Web request id for client correlation. The service
+	// normally derives it from Gin's context; keep the handler as the final
+	// boundary so custom service contexts cannot drop the id from the envelope.
+	if data.RequestID == "" {
+		if requestID, ok := ctx.Get("x-request-id"); ok {
+			if id, ok := requestID.(string); ok {
+				data.RequestID = strings.TrimSpace(id)
+			}
+		}
 	}
 	ctx.JSON(errs.SucResp(data))
 }
@@ -227,7 +311,7 @@ func (ph *Handler) QueryAnalystUpdateLog(ctx *gin.Context) {
 		} else {
 			rxLog.Sugar().Warnw("ApiQueryAnalystUpdateLog client error", "user", name, "status", status, "err", err)
 		}
-		ctx.JSON(status, gin.H{"code": status, "message": msg})
+		writeQueryError(ctx, status, msg)
 		return
 	}
 	ctx.JSON(errs.SucResp(result))

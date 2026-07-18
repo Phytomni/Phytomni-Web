@@ -40,11 +40,22 @@ type Choice struct {
 
 // ChatCompletionResponse is the non-streaming response for a sync chat model.
 type ChatCompletionResponse struct {
-	ID        string    `json:"id"`
-	Object    string    `json:"object"`
-	Model     string    `json:"model"`
-	Choices   []Choice  `json:"choices"`
-	Formatted Formatted `json:"formatted"`
+	ID               string  `json:"id"`
+	RunID            *string `json:"run_id"`
+	DegradedTracking bool    `json:"degraded_tracking,omitempty"`
+	ReportRevision   *int64  `json:"report_revision,omitempty"`
+	// Review pauses intentionally return the native agent.run envelope from
+	// the chat-completions route. These fields stay optional so ordinary
+	// OpenAI-shaped responses remain unchanged and callers never index choices
+	// merely to discover a pause.
+	Agent     string             `json:"agent,omitempty"`
+	Status    string             `json:"status,omitempty"`
+	Interrupt *AgentRunInterrupt `json:"interrupt,omitempty"`
+	Result    AgentRunResult     `json:"result,omitempty"`
+	Object    string             `json:"object"`
+	Model     string             `json:"model"`
+	Choices   []Choice           `json:"choices"`
+	Formatted Formatted          `json:"formatted"`
 }
 
 // AgentRunRequest is the body for POST /v1/agents/{slug}/runs.
@@ -57,21 +68,26 @@ type AgentRunRequest struct {
 // AgentRunResult carries either a finished formatted payload (sync agents) or
 // a dedup-hit marker (analyst re-submit of an identical input fingerprint).
 type AgentRunResult struct {
-	Formatted *Formatted `json:"formatted,omitempty"`
-	DedupHit  bool       `json:"dedup_hit,omitempty"`
-	TaskID    string     `json:"task_id,omitempty"`
+	Formatted      *Formatted `json:"formatted,omitempty"`
+	DedupHit       bool       `json:"dedup_hit,omitempty"`
+	TaskID         string     `json:"task_id,omitempty"`
+	ReportRevision *int64     `json:"report_revision,omitempty"`
 }
 
 // AgentRunResponse covers both the 200 sync shape (status=succeeded) and the
 // 202 remote shape (status=running, task_ids populated). ID is a pointer
 // because a dedup hit returns id=null.
 type AgentRunResponse struct {
-	ID      *string        `json:"id"`
-	Object  string         `json:"object"`
-	Agent   string         `json:"agent"`
-	Status  string         `json:"status"`
-	TaskIDs []string       `json:"task_ids"`
-	Result  AgentRunResult `json:"result"`
+	ID               *string            `json:"id"`
+	RunID            *string            `json:"run_id"`
+	DegradedTracking bool               `json:"degraded_tracking,omitempty"`
+	ReportRevision   *int64             `json:"report_revision,omitempty"`
+	Interrupt        *AgentRunInterrupt `json:"interrupt,omitempty"`
+	Object           string             `json:"object"`
+	Agent            string             `json:"agent"`
+	Status           string             `json:"status"`
+	TaskIDs          []string           `json:"task_ids"`
+	Result           AgentRunResult     `json:"result"`
 }
 
 // RouteQueryRequest is the body for POST /v1/query/route — Bot's MCP semantic

@@ -1,5 +1,5 @@
 <template>
-  <div class="md-block" v-html="rendered"></div>
+  <div class="md-block phy-markdown phy-markdown--chat" v-html="rendered"></div>
 </template>
 
 <script setup lang="ts">

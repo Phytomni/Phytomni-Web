@@ -1,6 +1,6 @@
 import { nextTick } from "vue";
 import type { Ref } from "vue";
-import type { ChatMessage, Chat } from "../types";
+import type { ChatComposerHandle, ChatMessage, Chat, DialogueReconciliationResult } from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
 import i18n from "@/locales";
 import {
@@ -12,88 +12,266 @@ import {
 import { readServerFile } from "../utils/agent-log";
 import {
   writePendingChat,
-  clearPendingChat,
   isLocalStorageChat,
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
-import { getQueryAbortable, getAnswerCheck } from "@/api/chat";
+import {
+  getQueryAbortable,
+  getAnswerCheck,
+  type QueryData,
+} from "@/api/chat";
+import { createTransferTracker } from "@/utils/transfer-progress";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
+import { createChatRequestKey } from "../utils/chat-request-key";
+import { parentRowIdForDialogue } from "../utils/chat-parent-row";
+import { parseBotProjection } from "../botProjection";
+import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
+import { createFetchA2uiTransport } from "../streaming/a2uiAction";
+import { getToken } from "@/utils/auth";
+import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
+
+const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
+
+function isCanonicalToolName(value: unknown): value is string {
+  return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
+}
+
+function parseBlockingProjection(data: QueryData) {
+  const payload =
+    data.answer === undefined && data.final_answer !== undefined
+      ? { ...data, answer: data.final_answer }
+      : data;
+  try {
+    return parseBotProjection(payload);
+  } catch {
+    // Legacy responses may contain fields outside the projection contract. Do
+    // not copy an unvalidated envelope into the reactive message state.
+    return undefined;
+  }
+}
+
+const EXPERT_RUN_ID_KEYS = ["bot_run_id", "run_id", "runId"] as const;
+const EXPERT_PROJECTION_KEYS = ["projection", "result", "data"] as const;
+
+function isProjectionRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.prototype.toString.call(value) === "[object Object]"
+  );
+}
+
+function hasMalformedExpertRunIdentity(value: unknown): boolean {
+  if (!isProjectionRecord(value)) return false;
+  const sources: Record<string, unknown>[] = [value];
+  const seen = new Set<Record<string, unknown>>(sources);
+  for (const key of EXPERT_PROJECTION_KEYS) {
+    const nested = value[key];
+    if (isProjectionRecord(nested) && !seen.has(nested)) {
+      sources.push(nested);
+      seen.add(nested);
+    }
+  }
+
+  for (const source of sources) {
+    for (const key of EXPERT_RUN_ID_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+      const raw = source[key];
+      if (raw === undefined || raw === null || raw === "") continue;
+      if (typeof raw !== "string") return true;
+      const trimmed = raw.trim();
+      if (
+        Array.from(raw).length > 128 ||
+        raw.includes("\u0000") ||
+        /[\r\n\t]/u.test(raw) ||
+        /[\\/]/u.test(trimmed) ||
+        trimmed === ""
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+const SAFE_DIALOGUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
+
+function attachBlockingLegacyFields(
+  message: ChatMessage,
+  data: QueryData
+): void {
+  if (typeof data.task_id === "string" && data.task_id.trim() !== "") {
+    message.task_id = data.task_id;
+  }
+  if (
+    typeof data.download_path === "string" &&
+    data.download_path.trim() !== ""
+  ) {
+    message.download_path = data.download_path;
+  }
+}
+
+function attachBlockingA2ui(
+  message: ChatMessage,
+  data: QueryData,
+  projection: ReturnType<typeof parseBotProjection> | undefined,
+): void {
+  if (
+    !projection ||
+    projection.status !== "INPUT_REQUIRED" ||
+    data.a2ui === undefined ||
+    data.a2ui === null
+  ) {
+    return;
+  }
+
+  const decoded = decodeA2uiOpenSurface(data.a2ui);
+  if (!decoded.ok) return;
+
+  message.blocks = [
+    {
+      type: "agent-surface",
+      authority: "agent",
+      interactive: true,
+      a2ui: {
+        surface: decoded.value,
+        state: { status: "ready", round: 1 },
+      },
+    },
+  ];
+
+  const runId = projection.runId;
+  const dialogueId = data.dialogue_id?.trim() ?? "";
+  const messageId =
+    data.id === undefined || data.id === null ? "" : String(data.id);
+  if (
+    !runId ||
+    !SAFE_DIALOGUE_ID_PATTERN.test(dialogueId) ||
+    !/^[1-9]\d*$/u.test(messageId)
+  ) {
+    return;
+  }
+
+  message.a2uiRuntime = {
+    dialogueId,
+    messageId,
+    runId,
+    transport: createFetchA2uiTransport({
+      conversationId: dialogueId,
+      getToken,
+      acceptLanguage: i18n.global.locale.value,
+    }),
+  };
+}
 
 export function useSendMessage(opts: {
   getChatState: (dialogueId: string) => any;
   currentChatId: Ref<string>;
   currentChat: Ref<any>;
-  senderRef: Ref<any>;
-  currentRequestId: Ref<string>;
-  isAborted: Ref<boolean>;
+  composerRef: Ref<ChatComposerHandle | null>;
   t: (key: string) => string;
   userStore: () => any;
-  getHistoryQuestionData: () => Promise<any> | any;
-  updateUrlWithChatId: (dialogueId: string) => void;
+  getHistoryQuestionData: (
+    sendingDialogueId?: string,
+    options?: { blockingDialogueId?: string }
+  ) => Promise<DialogueReconciliationResult | undefined> | DialogueReconciliationResult | undefined;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
   selectChat: (dialogueId: string) => Promise<void> | void;
-  getDialogueIdFromChatId: (chatId?: any) => any;
-  getChatIdFromUrl: () => any;
   scrollToBottom: () => void;
 }) {
   const {
     getChatState,
     currentChatId,
     currentChat,
-    senderRef,
-    currentRequestId,
-    isAborted,
+    composerRef,
     t,
     userStore,
     getHistoryQuestionData,
-    updateUrlWithChatId,
     chatList,
     timestamp,
     selectChat,
-    getDialogueIdFromChatId,
-    getChatIdFromUrl,
     scrollToBottom,
   } = opts;
+
+  const isForeground = (sendingDialogueId: string) =>
+    currentChatId.value === sendingDialogueId;
 
   const sendMessage = async () => {
     if (!currentChatId.value) return;
 
-    const chatState = getChatState(currentChatId.value);
-    if (!chatState || !chatState.messageInput.trim() || chatState.isSending)
+    const sendingDialogueId = currentChatId.value;
+    const chatState = getChatState(sendingDialogueId);
+    if (
+      !chatState ||
+      !chatState.messageInput.trim() ||
+      chatState.isSending ||
+      chatState.activeRequestId
+    )
       return;
 
     const newMessageValue = extractAtValues(chatState.messageInput);
     const currentMessage = newMessageValue.cleanedText;
     if (!currentMessage.trim()) return;
 
+    // Capture parent row, files, mode, history, and request key before any await
+    // so an A→B switch during scrollToBottom cannot retarget the payload.
+    const parentRowId = parentRowIdForDialogue(
+      sendingDialogueId,
+      chatList.value
+    );
+    const capturedFiles = [...chatState.fileList];
+    const capturedMode = chatState.mode;
+    const capturedHistory = chatState.historyQuestion;
+    const capturedMatches = [...newMessageValue.matches];
+    const requestKey = createChatRequestKey();
+
     chatState.isSending = true;
+    chatState.generationStopped = false;
+    chatState.activeRequestId = requestKey;
     chatState.sendStartedAt = Date.now();
     chatState.activeAgentName =
-      newMessageValue.matches.length > 0
-        ? newMessageValue.matches[0]
-        : "ChatAgent";
+      capturedMatches.length > 0 ? capturedMatches[0] : "ChatAgent";
     chatState.completing = false;
     chatState.messageInput = "";
 
-    const isNewChat =
-      !currentChat.value?.messages || currentChat.value.messages.length === 0;
-    if (isNewChat) currentChat.value = { messages: [] };
+    const isNewChat = (() => {
+      if (!chatState.renderedChat) {
+        if (
+          currentChatId.value === sendingDialogueId &&
+          currentChat.value?.messages
+        ) {
+          chatState.renderedChat = currentChat.value;
+        } else {
+          chatState.renderedChat = { messages: [] };
+        }
+      }
+      return chatState.renderedChat.messages.length === 0;
+    })();
+    // Keep the shell currentChat view in sync when this dialogue is focused
+    // (production computed setter writes the same object; test harnesses may
+    // still pass a separate ref).
+    if (currentChatId.value === sendingDialogueId) {
+      currentChat.value = chatState.renderedChat;
+    }
 
     // build the user message, including attached file info
     const userMessage = {
       role: "user",
       content: currentMessage,
-      attachedFiles:
-        chatState.fileList.length > 0 ? [...chatState.fileList] : undefined,
+      attachedFiles: capturedFiles.length > 0 ? [...capturedFiles] : undefined,
     };
 
     // append file info to the message content so it persists in history
     let messageContent = currentMessage;
-    if (chatState.fileList.length > 0) {
-      const fileInfo = chatState.fileList
-        .map((file: any) => `[Attachment: ${file.name} (${formatFileSize(file.size)})]`)
+    if (capturedFiles.length > 0) {
+      const fileInfo = capturedFiles
+        .map(
+          (file: any) =>
+            `[Attachment: ${file.name} (${formatFileSize(file.size)})]`
+        )
         .join("\n");
       messageContent = `${currentMessage}\n\n${fileInfo}`;
     }
@@ -101,59 +279,86 @@ export function useSendMessage(opts: {
     // update the user message content to include file info
     userMessage.content = messageContent;
 
-    currentChat.value.messages.push(userMessage);
+    const sendingMessages = chatState.renderedChat.messages;
+    sendingMessages.push(userMessage);
 
-    // Capture sending IDs and messages here so the write+clear below run against
-    // a stable snapshot, immune to currentChatId / currentChat rotation during
-    // the awaits below (scrollToBottom, getQueryAbortable, and finally
-    // getHistoryQuestionData).
-    const sendingDialogueId = currentChatId.value;
-    const sendingMessages = currentChat.value.messages;
     const sendingTitle = messageContent;
+    let blockingDialogueId: string | undefined;
+
+    if (parentRowId === null) {
+      // Hard no-send: missing/ambiguous existing parent mapping.
+      sendingMessages.push({
+        role: "assistant",
+        content: t("chat.sendFailed"),
+        steps: [],
+        status: "",
+        upload_path: "",
+        download_path: "",
+        instantMessage: true,
+        tool_name: "",
+        followUpQuestions: [],
+        showFollowUpQuestions: false,
+        showLog: false,
+      });
+      if (chatState.activeRequestId === requestKey) {
+        chatState.activeRequestId = "";
+        chatState.isSending = false;
+        chatState.sendStartedAt = null;
+        chatState.completing = false;
+        chatState.activeAgentName = "";
+        chatState.generationStopped = false;
+      }
+      if (isForeground(sendingDialogueId)) {
+        await scrollToBottom();
+      }
+      return;
+    }
 
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
       writePendingChat(sendingDialogueId, sendingMessages, {
         title: sendingTitle,
-        mode: chatState.mode,
-        onError: () => ElMessage.warning(t("chat.pendingWriteFailed")),
+        mode: capturedMode,
+        onError: () => {
+          if (isForeground(sendingDialogueId)) {
+            ElMessage.warning(t("chat.pendingWriteFailed"));
+          }
+        },
       });
     }
 
-    await scrollToBottom();
+    if (isForeground(sendingDialogueId)) {
+      await scrollToBottom();
+    }
 
     try {
-      const urlChatId = getDialogueIdFromChatId();
       const queryData = new FormData();
       queryData.append("query", messageContent); // use the message content that includes file info
-      queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
+      queryData.append("id", parentRowId.toString());
       queryData.append(
         "tool",
-        chatState.mode === "expert"
+        capturedMode === "expert"
           ? ""
-          : newMessageValue.matches.length > 0
-            ? newMessageValue.matches.join(",")
+          : capturedMatches.length > 0
+            ? capturedMatches.join(",")
             : ""
       );
-      queryData.append("mode", chatState.mode);
-      if (chatState.historyQuestion) {
-        queryData.append("history", JSON.stringify(chatState.historyQuestion));
+      queryData.append("mode", capturedMode);
+      if (capturedHistory) {
+        queryData.append("history", JSON.stringify(capturedHistory));
       }
-      if (chatState.fileList.length > 0) {
-        chatState.fileList.forEach((fileItem: any) => {
+      if (capturedFiles.length > 0) {
+        capturedFiles.forEach((fileItem: any) => {
           queryData.append("files", fileItem.file);
         });
       }
 
-      // generate a request ID
-      currentRequestId.value = Date.now().toString();
-
       // Stream branch: chat-family + instant mode + dark-launch flag. The
       // insertion point is inside the existing try, so returning here still
-      // runs the enclosing finally (request-id cleanup, history refresh,
-      // pending-chat clear, title update, fileList clear) exactly once —
-      // no duplicate cleanup needed, and none is done here.
+      // runs the enclosing finally (request-id cleanup, history refresh via
+      // coordinator, title update, fileList clear) exactly once — no duplicate
+      // cleanup needed, and none is done here.
       const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
-      if (shouldStream(chatState.activeAgentName, chatState.mode, streamFlag)) {
+      if (shouldStream(chatState.activeAgentName, capturedMode, streamFlag)) {
         const placeholder: ChatMessage = {
           role: "assistant",
           content: "",
@@ -164,30 +369,97 @@ export function useSendMessage(opts: {
           followUpQuestions: [],
           showFollowUpQuestions: false,
           showLog: false,
+          // Runtime-only Activity identity — reuse the captured request key.
+          streamPresentationKey: requestKey,
         };
-        currentChat.value.messages.push(placeholder);
-        const { streamMessage } = useStreamMessage({ getChatState, t });
-        await streamMessage({
+        sendingMessages.push(placeholder);
+        // Bind stream lookups to the captured state object so a post-rekey
+        // getChatState(oldTempId) cannot resurrect an empty temp record.
+        const getStreamChatState = (id: string) =>
+          id === sendingDialogueId ? chatState : getChatState(id);
+        const { streamMessage } = useStreamMessage({
+          getChatState: getStreamChatState,
+          t,
+        });
+        const streamResult = await streamMessage({
           dialogueId: sendingDialogueId,
           formData: queryData,
-          requestId: currentRequestId.value,
+          requestId: requestKey,
           placeholder,
         });
+        if (
+          chatState.activeRequestId === requestKey &&
+          streamResult.dialogueId
+        ) {
+          blockingDialogueId = streamResult.dialogueId;
+        }
         return;
       }
 
+      const hasFiles = capturedFiles.length > 0;
+      const tracker = hasFiles
+        ? createTransferTracker({
+            phase: "upload",
+            requestId: requestKey,
+          })
+        : null;
+
       const response = await getQueryAbortable(
         queryData as any,
-        currentRequestId.value
+        requestKey,
+        tracker
+          ? {
+              onUploadProgress: (e) => {
+                const snap = tracker.update({
+                  loaded: e.loaded,
+                  total: e.total ?? 0,
+                });
+                chatState.uploadTransfer = snap;
+                if (
+                  !snap.indeterminate &&
+                  snap.loaded >= snap.total &&
+                  snap.total > 0
+                ) {
+                  chatState.uploadTransfer = null;
+                }
+              },
+            }
+          : undefined
       );
 
       // On response: first fast-animate the progress bar to 100% (CSS 300ms), then swap in the answer.
-      if (!isAborted.value) {
+      if (!chatState.generationStopped) {
         chatState.completing = true;
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
       if (response.data) {
+        const responseData = response.data as QueryData;
+        const botProjection = parseBlockingProjection(responseData);
+        const expertSucceeded =
+          botProjection?.status === "SUCCEEDED" ||
+          (botProjection === undefined &&
+            typeof responseData.status === "string" &&
+            responseData.status.trim().toUpperCase() === "SUCCEEDED");
+        if (
+          capturedMode === "expert" &&
+          (!isCanonicalToolName(responseData.tool_name) ||
+            (botProjection && botProjection.agent !== responseData.tool_name) ||
+            hasMalformedExpertRunIdentity(responseData) ||
+            (!expertSucceeded && (!botProjection || !botProjection.runId)))
+        ) {
+          // Expert responses must have crossed the Go canonical projection
+          // boundary. Unknown or malformed envelopes use the existing send
+          // failure path instead of entering reactive message state.
+          throw new Error("invalid expert response projection");
+        }
+        if (
+          chatState.activeRequestId === requestKey &&
+          typeof responseData.dialogue_id === "string" &&
+          responseData.dialogue_id !== ""
+        ) {
+          blockingDialogueId = responseData.dialogue_id;
+        }
         let assistantMessage: ChatMessage | undefined;
         if (response.data.final_answer) {
           assistantMessage = {
@@ -276,10 +548,13 @@ export function useSendMessage(opts: {
                     } else if (assistantMessage) {
                       assistantMessage.content = "File content is empty or failed to load";
                     }
-                    // force a view update
+                    // force a view update (foreground only — do not bump shared
+                    // timestamp / scroll while the user is on another dialogue)
                     nextTick(() => {
-                      timestamp.value = Date.now();
-                      scrollToBottom();
+                      if (isForeground(sendingDialogueId)) {
+                        timestamp.value = Date.now();
+                        scrollToBottom();
+                      }
                     });
                   })
                   .catch((error) => {
@@ -287,10 +562,11 @@ export function useSendMessage(opts: {
                     if (assistantMessage) {
                       assistantMessage.content = "Failed to load file, please try again later";
                     }
-                    // force a view update
                     nextTick(() => {
-                      timestamp.value = Date.now();
-                      scrollToBottom();
+                      if (isForeground(sendingDialogueId)) {
+                        timestamp.value = Date.now();
+                        scrollToBottom();
+                      }
                     });
                   });
               }
@@ -440,13 +716,31 @@ export function useSendMessage(opts: {
           }
         }
 
-        // ensure assistantMessage was created to avoid pushing undefined
         if (assistantMessage) {
-          currentChat.value.messages.push(assistantMessage);
+          attachBlockingLegacyFields(assistantMessage, responseData);
+          // Keep the Web row id and Bot umbrella identity in distinct fields;
+          // only the parser output crosses into reactive message state.
+          if (botProjection) {
+            assistantMessage.botProjection = botProjection;
+            attachBlockingA2ui(assistantMessage, responseData, botProjection);
+          }
+        }
+
+        // ensure assistantMessage was created to avoid pushing undefined.
+        // Ownership: Stop without resend leaves generationStopped while
+        // activeRequestId may still equal requestKey until finally; Stop then
+        // resend replaces activeRequestId. Skip append in both cases.
+        const ownsResponse =
+          chatState.activeRequestId === requestKey &&
+          !chatState.generationStopped;
+        if (!ownsResponse) {
+          // stale / stopped — finally still clears when this key owns
+        } else if (assistantMessage) {
+          sendingMessages.push(assistantMessage);
         } else {
           // if assistantMessage was not created, create a default message
           console.warn("assistantMessage was not created; using a default message");
-          currentChat.value.messages.push({
+          assistantMessage = {
             role: "assistant",
             content: response.data?.answer || "Sorry, I cannot answer this question.",
             status: response.data?.status || "",
@@ -458,10 +752,19 @@ export function useSendMessage(opts: {
             followUpQuestions: [],
             showFollowUpQuestions: false,
             showLog: false,
-          });
+          };
+          attachBlockingLegacyFields(assistantMessage, responseData);
+          if (botProjection) {
+            assistantMessage.botProjection = botProjection;
+            attachBlockingA2ui(assistantMessage, responseData, botProjection);
+          }
+          sendingMessages.push(assistantMessage);
         }
-      } else {
-        currentChat.value.messages.push({
+      } else if (
+        chatState.activeRequestId === requestKey &&
+        !chatState.generationStopped
+      ) {
+        sendingMessages.push({
           role: "assistant",
           content: "Sorry, I cannot answer this question.",
           steps: [],
@@ -482,9 +785,15 @@ export function useSendMessage(opts: {
       if (
         error.name === "AbortError" ||
         error.code === "ERR_CANCELED" ||
-        isAborted.value
+        chatState.generationStopped
       ) {
         return; // don't show an error message when the request is aborted
+      }
+
+      // A newer same-dialogue send owns the key — do not mutate this dialogue's
+      // messages or steal focus for a stale failure.
+      if (chatState.activeRequestId !== requestKey) {
+        return;
       }
 
       // check whether it's a token-expired error
@@ -494,74 +803,79 @@ export function useSendMessage(opts: {
         error.response.data.detail &&
         error.response.data.detail.code === 403
       ) {
-        ElMessageBox.alert(
-          i18n.global.t("common.sessionExpired"),
-          i18n.global.t("common.notice"),
-          {
-            confirmButtonText: i18n.global.t("request.confirmButtonText"),
-            type: "warning",
-          callback: () => {
-            const UserStore = userStore();
-            UserStore.FedLogOut().finally(() => {
-              // clear all caches and cookies
-              localStorage.clear();
-              sessionStorage.clear();
-              document.cookie.split(";").forEach(function (c) {
-                document.cookie = c
-                  .replace(/^ +/, "")
-                  .replace(
-                    /=.*/,
-                    "=;expires=" + new Date().toUTCString() + ";path=/"
-                  );
+        // Modal only when foreground — background must not steal focus on B.
+        if (isForeground(sendingDialogueId)) {
+          ElMessageBox.alert(
+            i18n.global.t("common.sessionExpired"),
+            i18n.global.t("common.notice"),
+            {
+              confirmButtonText: i18n.global.t("request.confirmButtonText"),
+              type: "warning",
+            callback: () => {
+              const UserStore = userStore();
+              UserStore.FedLogOut().finally(() => {
+                // clear all caches and cookies
+                localStorage.clear();
+                sessionStorage.clear();
+                document.cookie.split(";").forEach(function (c) {
+                  document.cookie = c
+                    .replace(/^ +/, "")
+                    .replace(
+                      /=.*/,
+                      "=;expires=" + new Date().toUTCString() + ";path=/"
+                    );
+                });
+                location.href = "/login";
               });
-              location.href = "/login";
-            });
-          },
-        });
+            },
+          });
+        }
         return;
       }
 
       // check for a network/timeout error; if so, first verify whether the message was sent successfully
-      if (isNetworkError(error) && !isAborted.value) {
+      if (isNetworkError(error) && !chatState.generationStopped) {
         try {
           // wait a short while to give the server time to process the request
           await new Promise((resolve) => setTimeout(resolve, 1000));
 
-          // for a new chat, check by refreshing the history
+          // for a new chat, check by refreshing the history — foreground only so
+          // background recovery cannot refresh chatList while the user is on B.
           if (isNewChat) {
-            await getHistoryQuestionData();
-            // if the history has a new chat, the message was sent successfully
-            if (chatList.value.length > 0) {
-              const newChat = chatList.value[0];
-              const checkRes = await getAnswerCheck({
-                dialogue_id: newChat.dialogue_id,
-              });
-              if (
-                checkRes.code === 200 &&
-                checkRes.data &&
-                checkRes.data.length > 0
-              ) {
-                return;
+            if (isForeground(sendingDialogueId)) {
+              await getHistoryQuestionData(sendingDialogueId);
+              // if the history has a new chat, the message was sent successfully
+              if (chatList.value.length > 0) {
+                const newChat = chatList.value[0];
+                const checkRes = await getAnswerCheck({
+                  dialogue_id: newChat.dialogue_id,
+                });
+                if (
+                  checkRes.code === 200 &&
+                  checkRes.data &&
+                  checkRes.data.length > 0
+                ) {
+                  return;
+                }
               }
             }
           } else {
-            // for an existing chat, check the current conversation directly
-            const urlDialogueId = getChatIdFromUrl();
-            if (urlDialogueId) {
-              const checkRes = await getAnswerCheck({
-                dialogue_id: urlDialogueId,
-              });
-              if (
-                checkRes.code === 200 &&
-                checkRes.data &&
-                checkRes.data.length > 0
-              ) {
-                // check whether the last message contains the one we just sent
-                const lastItem = checkRes.data[checkRes.data.length - 1];
-                if (lastItem && lastItem.query === messageContent) {
-                  await selectChat(urlDialogueId);
-                  return;
+            // for an existing chat, check the captured sending dialogue directly
+            const checkRes = await getAnswerCheck({
+              dialogue_id: sendingDialogueId,
+            });
+            if (
+              checkRes.code === 200 &&
+              checkRes.data &&
+              checkRes.data.length > 0
+            ) {
+              // check whether the last message contains the one we just sent
+              const lastItem = checkRes.data[checkRes.data.length - 1];
+              if (lastItem && lastItem.query === messageContent) {
+                if (isForeground(sendingDialogueId)) {
+                  await selectChat(sendingDialogueId);
                 }
+                return;
               }
             }
           }
@@ -571,10 +885,13 @@ export function useSendMessage(opts: {
         }
       }
 
-      // only add an error message if not aborted
-      if (!isAborted.value) {
+      // only add an error message if this request still owns the dialogue
+      if (
+        chatState.activeRequestId === requestKey &&
+        !chatState.generationStopped
+      ) {
         const isTimeout = error.response?.status === 504;
-        currentChat.value.messages.push({
+        sendingMessages.push({
           role: "assistant",
           content: isTimeout ? t("chat.timeoutFailed") : t("chat.sendFailed"),
           steps: [],
@@ -589,68 +906,66 @@ export function useSendMessage(opts: {
         });
       }
     } finally {
-      // clean up the request ID
-      currentRequestId.value = "";
+      // Capture ownership before the first await. Only the request that still
+      // owns this dialogue may reconcile a temporary id, update its title, or
+      // release lifecycle fields. A stale request must be entirely read-only.
+      const ownsLifecycle = chatState.activeRequestId === requestKey;
+      if (ownsLifecycle) {
+        const historyOpts =
+          blockingDialogueId !== undefined
+            ? { blockingDialogueId }
+            : undefined;
+        await getHistoryQuestionData(sendingDialogueId, historyOpts);
 
-      // refresh the sidebar history data whether or not it's a new chat
-      await getHistoryQuestionData();
-
-      // Clear the pending record using the captured sendingDialogueId. Using
-      // currentChatId.value would clear the wrong key if the user switched
-      // chats during the await above (chatStates parallel-chat model).
-      if (isLocalStorageChat(sendingDialogueId)) {
-        clearPendingChat(sendingDialogueId);
-      }
-
-      if (isNewChat) {
-        // for a new chat, select the newly created conversation
-        if (chatList.value.length > 0) {
-          const newChat = chatList.value[0];
-          currentChatId.value = newChat.dialogue_id;
-          updateUrlWithChatId(newChat.dialogue_id);
-        }
-      } else {
-        // for an existing chat, update the current conversation's title (if it changed)
-        if (
-          currentChat.value?.messages &&
-          currentChat.value.messages.length > 0
-        ) {
-          const userMessage =
-            currentChat.value.messages[currentChat.value.messages.length - 2]; // the second-to-last is the user message
-          if (userMessage && userMessage.role === "user") {
-            // find the current conversation in the list and update its title
-            const currentChatIndex = chatList.value.findIndex(
-              (chat) => chat.dialogue_id === currentChatId.value
-            );
-            if (currentChatIndex !== -1) {
-              // take the user message content as the title (length-limited)
-              const newTitle =
-                userMessage.content.length > 50
-                  ? userMessage.content.substring(0, 50) + "..."
-                  : userMessage.content;
-              chatList.value[currentChatIndex].title = newTitle;
+        if (!isNewChat) {
+          // for an existing chat, update the sending conversation's title (if it changed)
+          if (sendingMessages.length > 0) {
+            const userMessage =
+              sendingMessages[sendingMessages.length - 2]; // the second-to-last is the user message
+            if (userMessage && userMessage.role === "user") {
+              // find the sending conversation in the list and update its title
+              const currentChatIndex = chatList.value.findIndex(
+                (chat) => chat.dialogue_id === sendingDialogueId
+              );
+              if (currentChatIndex !== -1) {
+                // take the user message content as the title (length-limited)
+                const newTitle =
+                  userMessage.content.length > 50
+                    ? userMessage.content.substring(0, 50) + "..."
+                    : userMessage.content;
+                chatList.value[currentChatIndex].title = newTitle;
+              }
             }
           }
         }
-      }
 
-      // clear the file list
-      if (chatState.fileList.length > 0) {
-        chatState.fileList = [];
-        // close the header after clearing the file list
-        nextTick(() => {
-          if (senderRef.value) {
-            senderRef.value.closeHeader();
+        // Clear lifecycle fields only for this request — never a newer same-dialogue key
+        // and never recreate a rekeyed temp state via getChatState(oldTempId).
+        chatState.activeRequestId = "";
+        chatState.uploadTransfer = null;
+        chatState.generationStopped = false;
+
+        // clear the file list
+        if (chatState.fileList.length > 0) {
+          chatState.fileList = [];
+          // close the header after clearing the file list (foreground only)
+          if (isForeground(sendingDialogueId)) {
+            nextTick(() => {
+              if (composerRef.value) {
+                composerRef.value.closeHeader();
+              }
+            });
           }
-        });
+        }
+
+        chatState.isSending = false;
+        chatState.sendStartedAt = null;
+        chatState.completing = false;
+        chatState.activeAgentName = "";
+        if (isForeground(sendingDialogueId)) {
+          await scrollToBottom();
+        }
       }
-
-      chatState.isSending = false;
-      chatState.sendStartedAt = null;
-      chatState.completing = false;
-      chatState.activeAgentName = "";
-
-      await scrollToBottom();
     }
   };
 

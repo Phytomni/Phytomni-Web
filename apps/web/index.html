@@ -7,7 +7,7 @@
   <meta name="renderer" content="webkit">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <link rel="icon" href="/logo.png" />
-  <title>CAAS Breeding Large Model Intelligence Platform</title>
+  <title>Phytomni</title>
   <style>
     html,
     body,
@@ -43,7 +43,7 @@
       margin: -75px 0 0 -75px;
       border-radius: 50%;
       border: 3px solid transparent;
-      border-top-color: #FFF;
+      border-top-color: #3A83F7;
       -webkit-animation: spin 2s linear infinite;
       -ms-animation: spin 2s linear infinite;
       -moz-animation: spin 2s linear infinite;
@@ -61,7 +61,7 @@
       bottom: 5px;
       border-radius: 50%;
       border: 3px solid transparent;
-      border-top-color: #FFF;
+      border-top-color: #6BA4F9;
       -webkit-animation: spin 3s linear infinite;
       -moz-animation: spin 3s linear infinite;
       -o-animation: spin 3s linear infinite;
@@ -78,7 +78,7 @@
       bottom: 15px;
       border-radius: 50%;
       border: 3px solid transparent;
-      border-top-color: #FFF;
+      border-top-color: #D6E6FE;
       -moz-animation: spin 1.5s linear infinite;
       -o-animation: spin 1.5s linear infinite;
       -ms-animation: spin 1.5s linear infinite;
@@ -121,7 +121,7 @@
       top: 0;
       width: 51%;
       height: 100%;
-      background: #7171C6;
+      background: #ffffff;
       z-index: 1000;
       -webkit-transform: translateX(0);
       -ms-transform: translateX(0);
@@ -141,22 +141,22 @@
       -webkit-transform: translateX(-100%);
       -ms-transform: translateX(-100%);
       transform: translateX(-100%);
-      -webkit-transition: all 0.7s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
-      transition: all 0.7s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
+      -webkit-transition: -webkit-transform 0.7s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
+      transition: transform 0.7s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
     }
 
     .loaded #loader-wrapper .loader-section.section-right {
       -webkit-transform: translateX(100%);
       -ms-transform: translateX(100%);
       transform: translateX(100%);
-      -webkit-transition: all 0.7s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
-      transition: all 0.7s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
+      -webkit-transition: -webkit-transform 0.7s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
+      transition: transform 0.7s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
     }
 
     .loaded #loader {
       opacity: 0;
-      -webkit-transition: all 0.3s ease-out;
-      transition: all 0.3s ease-out;
+      -webkit-transition: opacity 0.3s ease-out;
+      transition: opacity 0.3s ease-out;
     }
 
     .loaded #loader-wrapper {
@@ -164,8 +164,8 @@
       -webkit-transform: translateY(-100%);
       -ms-transform: translateY(-100%);
       transform: translateY(-100%);
-      -webkit-transition: all 0.3s 1s ease-out;
-      transition: all 0.3s 1s ease-out;
+      -webkit-transition: -webkit-transform 0.3s 1s ease-out, visibility 0s 1s;
+      transition: transform 0.3s 1s ease-out, visibility 0s 1s;
     }
 
     .no-js #loader-wrapper {
@@ -177,8 +177,8 @@
     }
 
     #loader-wrapper .load_title {
-      font-family: 'Open Sans';
-      color: #FFF;
+      font-family: Inter, system-ui, sans-serif;
+      color: #5B6B63;
       font-size: 19px;
       width: 100%;
       text-align: center;
@@ -193,7 +193,7 @@
       font-weight: normal;
       font-style: italic;
       font-size: 13px;
-      color: #FFF;
+      color: #8B9790;
       opacity: 0.5;
     }
   </style>

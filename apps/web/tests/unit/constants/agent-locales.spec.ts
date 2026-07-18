@@ -5,6 +5,8 @@ import {
   CANONICAL_AGENT_PAGE_TITLE_KEYS,
   CANONICAL_AGENT_TOOLS,
   CANONICAL_AGENT_ZH_NAMES,
+  CANONICAL_AT_ABLE_TOOLS,
+  derivePickerOptions,
 } from "@/constants/agents";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
@@ -18,6 +20,41 @@ const getMessage = (messages: unknown, path: string) =>
   }, messages);
 
 describe("canonical agent locale names", () => {
+  it("contains each release agent exactly once with complete metadata", () => {
+    const releaseTools = [
+      "ChatAgent",
+      "KnowledgeAgent",
+      "DataAgent",
+      "ReviewAgent",
+      "BriefGeneAgent",
+      "AnalystAgent",
+      "DeepGenomeAgent",
+      "InSilicoResearchAgent",
+      "DigitalDesignAgent",
+      "GeneNetworkAgent",
+    ];
+
+    expect(CANONICAL_AGENT_TOOLS).toEqual(releaseTools);
+    expect(new Set(CANONICAL_AGENT_TOOLS).size).toBe(releaseTools.length);
+    for (const toolName of releaseTools) {
+      expect(CANONICAL_AGENT_DISPLAY_NAMES[toolName]).toEqual(
+        expect.any(String)
+      );
+      expect(CANONICAL_AGENT_ZH_NAMES[toolName]).toEqual(expect.any(String));
+      expect(CANONICAL_AGENT_I18N_KEYS[toolName]).toEqual(expect.any(String));
+    }
+  });
+
+  it("keeps remote tools out of the role-backed picker subset", () => {
+    expect(CANONICAL_AT_ABLE_TOOLS).toEqual([
+      "ChatAgent",
+      "KnowledgeAgent",
+      "DataAgent",
+      "ReviewAgent",
+      "BriefGeneAgent",
+    ]);
+  });
+
   it("keeps every canonical tool mapped to one stable chat-agent i18n key", () => {
     expect(Object.keys(CANONICAL_AGENT_I18N_KEYS).sort()).toEqual(
       [...CANONICAL_AGENT_TOOLS].sort()
@@ -68,6 +105,20 @@ describe("canonical agent locale names", () => {
     expect(getMessage(zhCN, CANONICAL_AGENT_I18N_KEYS.BriefGeneAgent)).toContain(
       "基因综述"
     );
+  });
+
+  it("maps every picker option to a localized chat-agent label key", () => {
+    const options = derivePickerOptions([...CANONICAL_AT_ABLE_TOOLS]);
+    for (const option of options) {
+      expect(option.labelKey).toBe(
+        CANONICAL_AGENT_I18N_KEYS[option.tool]
+      );
+      expect(getMessage(enUS, option.labelKey)).toEqual(expect.any(String));
+      expect(getMessage(zhCN, option.labelKey)).toEqual(expect.any(String));
+      expect(option.displayName).toBe(
+        CANONICAL_AGENT_DISPLAY_NAMES[option.tool]
+      );
+    }
   });
 
   it("does not keep legacy GeneFunction locale aliases in chat labels", () => {

@@ -8,7 +8,7 @@
 > is the only place that rollback is written down). It is **not** pending work and
 > is **not** the doc for the next upgrade.
 >
-> - **Upgrading a `0.1.1` production to `0.1.2`?** → **[`upgrading.md`](../upgrading.md)** (the only doc you need).
+> - **Upgrading a `0.1.1` production to `0.1.2`?** → **[`upgrade-0.1.1-to-0.1.2.md`](upgrade-0.1.1-to-0.1.2.md)** (the only doc you need).
 > - **Not on `0.1.1` yet?** → do the §1–§11 cutover below.
 > - Lost? → [`README.md`](../README.md) routes by production version.
 
@@ -397,7 +397,7 @@ team before any removal.
 > The Instant/Expert `mode` column and `bot.expert_enabled` flag landed in
 > **`0.1.2`**, after this cutover. The authoritative steps (column DDL +
 > activation order) now live in
-> [`upgrading.md`](../upgrading.md) §3.2 / §7.1 — kept
+> [`upgrade-0.1.1-to-0.1.2.md`](upgrade-0.1.1-to-0.1.2.md) §3.2 / §7.1 — kept
 > there so the SQL has a single source of truth. Nothing to do for the `0.1.1`
 > cutover.
 
@@ -406,7 +406,7 @@ team before any removal.
 > The `tool_names` Chinese→English permission-identifier migration is a
 > **`0.1.2`** change (it ships with the `0.1.2` frontend). The authoritative
 > 8-row `UPDATE` + the "ship together or the admin UI breaks" warning now live in
-> [`upgrading.md`](../upgrading.md) §3.1. Nothing to do for
+> [`upgrade-0.1.1-to-0.1.2.md`](upgrade-0.1.1-to-0.1.2.md) §3.1. Nothing to do for
 > the `0.1.1` cutover.
 
 ---
@@ -648,7 +648,7 @@ cutover. Its operator steps are **additive or dark-launched** — no DB/table
 rename, no port move. They are **not** documented here; the authoritative,
 self-contained runbook is:
 
-**→ [`upgrading.md`](../upgrading.md)**
+**→ [`upgrade-0.1.1-to-0.1.2.md`](upgrade-0.1.1-to-0.1.2.md)**
 
 That doc carries the permission-key migration, the optional config keys, the
 smoke additions, and the Expert/streaming activation gates. Full commit-level

@@ -1,10 +1,11 @@
 import axios, {
   type AxiosInstance,
+  type AxiosProgressEvent,
   type AxiosRequestConfig,
   type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from "axios";
-import { ElMessage, ElMessageBox, ElLoading } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import { userStore } from "@/stores";
 import { getToken } from "@/utils/auth";
@@ -13,11 +14,15 @@ import { tansParams, blobValidate } from "@/utils";
 import cache from "@/plugins/cache";
 import { saveAs } from "file-saver";
 import i18n from "@/locales";
+import { createTransferTracker } from "@/utils/transfer-progress";
+import {
+  removeDownloadTransfer,
+  upsertDownloadTransfer,
+} from "@/utils/download-transfers";
 
 const CancelToken = axios.CancelToken;
 const source = CancelToken.source();
 
-let downloadLoadingInstance: ReturnType<typeof ElLoading.service> | undefined;
 // whether to show the re-login prompt
 export const isRelogin = { show: false };
 
@@ -123,6 +128,15 @@ service.interceptors.request.use(
 // runtime path.
 type ErrorCodeLookup = Record<string, (() => string) | string>;
 
+function isCanceledRequest(error: unknown): boolean {
+  const err = error as { code?: unknown; name?: unknown };
+  return (
+    axios.isCancel(error) ||
+    err?.code === "ERR_CANCELED" ||
+    err?.name === "CanceledError"
+  );
+}
+
 // response interceptor
 service.interceptors.response.use(
   (res: AxiosResponse) => {
@@ -198,6 +212,9 @@ service.interceptors.response.use(
       url: error?.config?.url,
       message: error?.message,
     });
+    if (isCanceledRequest(error)) {
+      return Promise.reject(error);
+    }
     const { response } = error;
     let { message } = error;
     if (response?.data?.detail?.code === 403) {
@@ -248,17 +265,19 @@ service.interceptors.response.use(
   }
 );
 
+let downloadRequestSeq = 0;
+
 // generic download method
 export function download(
   url: string,
   params: unknown,
   filename: string
 ): Promise<void> {
-  downloadLoadingInstance = ElLoading.service({
-    text: "Downloading data, please wait",
-    spinner: "el-icon-loading",
-    background: "rgba(0, 0, 0, 0.7)",
-  });
+  const controller = new AbortController();
+  const requestId = `download-${Date.now()}-${++downloadRequestSeq}`;
+  const tracker = createTransferTracker({ phase: "download", requestId });
+  registerAbortController(requestId, controller);
+
   // The response interceptor above unwraps `res.data` for `responseType:
   // 'blob'`, so at runtime the promise resolves to a Blob rather than an
   // AxiosResponse. The cast aligns axios's static type with that runtime
@@ -271,6 +290,10 @@ export function download(
       ],
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       responseType: "blob",
+      signal: controller.signal,
+      onDownloadProgress: (event: AxiosProgressEvent) => {
+        upsertDownloadTransfer(tracker.update(event));
+      },
     }) as unknown as Promise<Blob>
   )
     .then(async (data) => {
@@ -287,12 +310,18 @@ export function download(
           (errorCode as ErrorCodeLookup)["default"];
         ElMessage.error(errMsg as string);
       }
-      downloadLoadingInstance?.close();
     })
     .catch((r) => {
+      if (isCanceledRequest(r)) {
+        ElMessage.info(i18n.global.t("chat.downloadCancelled"));
+        return;
+      }
       console.error(r);
       ElMessage.error(i18n.global.t("chat.downloadError"));
-      downloadLoadingInstance?.close();
+    })
+    .finally(() => {
+      removeDownloadTransfer(requestId);
+      unregisterAbortController(requestId);
     });
 }
 

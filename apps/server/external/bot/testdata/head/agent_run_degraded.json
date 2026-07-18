@@ -1,0 +1,20 @@
+{
+  "id": null,
+  "run_id": null,
+  "degraded_tracking": true,
+  "object": "agent.run",
+  "agent": "analyst",
+  "status": "succeeded",
+  "task_ids": [],
+  "result": {
+    "formatted": {
+      "answer": "Synthetic degraded answer",
+      "follow_up_questions": [],
+      "metadata": {},
+      "references": [],
+      "tabular": {},
+      "output_dirs": []
+    },
+    "dedup_hit": false
+  }
+}

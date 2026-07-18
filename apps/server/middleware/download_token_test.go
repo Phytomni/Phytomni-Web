@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/viper"
 )
 
@@ -70,5 +71,22 @@ func TestDownloadTokenWrongSecret(t *testing.T) {
 	viper.Set("jwt.secret_key", "rotated-secret")
 	if _, err := ParseDownloadToken(tok); err == nil {
 		t.Error("token signed with old secret must fail after rotation")
+	}
+}
+
+func TestDownloadTokenRejectsNonHS256Algorithm(t *testing.T) {
+	setTestSecret(t)
+	claims := &downloadClaims{
+		ObsKey: "k.zip",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(DownloadTokenTTL)),
+		},
+	}
+	tok, err := jwt.NewWithClaims(jwt.SigningMethodHS384, claims).SignedString(jwtSecret())
+	if err != nil {
+		t.Fatalf("sign HS384 token: %v", err)
+	}
+	if _, err := ParseDownloadToken(tok); err == nil {
+		t.Error("download token signed with HS384 must fail")
 	}
 }

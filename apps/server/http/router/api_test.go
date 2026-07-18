@@ -1,9 +1,19 @@
 package router
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"phytomni-server/db"
+	rxBot "phytomni-server/external/bot"
+	"phytomni-server/middleware"
+
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"github.com/spf13/viper"
+	"gorm.io/gorm"
 )
 
 // routeSet builds the engine through the real Api() registration and returns a
@@ -47,6 +57,7 @@ func TestApiV1AuthUserRoutes(t *testing.T) {
 	routes := routeSet(t)
 	assertRoutes(t, routes,
 		[]string{
+			"GET /api/v1/bot/capabilities",
 			"POST /api/v1/auth/sessions",
 			"POST /api/v1/auth/registrations",
 			"POST /api/v1/users",
@@ -73,6 +84,123 @@ func TestApiV1AuthUserRoutes(t *testing.T) {
 	)
 }
 
+// TestBotCapabilitiesRouteRejectsUnauthenticatedBeforeBotCall pins the
+// middleware ordering: a request without a JWT must be rejected by
+// AuthMiddleware before the manifest handler can ask Bot for /v1/agents.
+func TestBotCapabilitiesRouteRejectsUnauthenticatedBeforeBotCall(t *testing.T) {
+	var botCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		botCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 1}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bot/capabilities", nil)
+	res := httptest.NewRecorder()
+	engine.ServeHTTP(res, req)
+
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d (body=%s)", res.Code, http.StatusUnauthorized, res.Body.String())
+	}
+	if botCalls != 0 {
+		t.Fatalf("Bot listing was called %d times before authentication", botCalls)
+	}
+}
+
+// TestBotCapabilitiesAuthenticatedRouteReturnsManifest drives the real
+// authenticated route through AuthMiddleware and LoginStatusMiddleware. The
+// response is the standard Web envelope and contains only the public DTO.
+func TestBotCapabilitiesAuthenticatedRouteReturnsManifest(t *testing.T) {
+	previousSecret := viper.GetString("jwt.secret_key")
+	viper.Set("jwt.secret_key", "bot-capability-router-test-secret")
+	t.Cleanup(func() { viper.Set("jwt.secret_key", previousSecret) })
+
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT,
+			first_login_status TEXT,
+			password_change_at DATETIME
+		)`,
+		`CREATE TABLE user_operation_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER,
+			user_email TEXT,
+			method TEXT,
+			path TEXT,
+			query_params TEXT,
+			body_params TEXT,
+			client_ip TEXT,
+			user_agent TEXT,
+			status_code INTEGER,
+			latency INTEGER,
+			error_message TEXT,
+			created_at DATETIME
+		)`,
+	} {
+		if err := gdb.Exec(stmt).Error; err != nil {
+			t.Fatalf("create router test table: %v", err)
+		}
+	}
+	if err := gdb.Exec(`INSERT INTO users (email, first_login_status) VALUES ('alice@example.com', '1')`).Error; err != nil {
+		t.Fatalf("seed router test user: %v", err)
+	}
+	db.Set("phytomni-server", gdb)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"slug":"chat","tool":"ChatAgent"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	previousBotConfig := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 1}
+	t.Cleanup(func() { rxBot.BotConfig = previousBotConfig })
+
+	token, err := middleware.GenerateToken("alice@example.com")
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bot/capabilities", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res := httptest.NewRecorder()
+	engine.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body=%s)", res.Code, http.StatusOK, res.Body.String())
+	}
+	var envelope struct {
+		Code int                      `json:"code"`
+		Data []map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode envelope: %v", err)
+	}
+	if envelope.Code != http.StatusOK || len(envelope.Data) != 10 {
+		t.Fatalf("envelope = %#v, want success with ten rows", envelope)
+	}
+	if _, ok := envelope.Data[0]["api_key"]; ok {
+		t.Fatal("private field leaked through authenticated route")
+	}
+	if enabled, _ := envelope.Data[0]["enabled"].(bool); !enabled {
+		t.Fatal("present ChatAgent should be enabled")
+	}
+}
+
 // TestApiV1ConversationRoutes pins the §5.6 RESTful migration of the conversation
 // group: list/collect-list collapse onto GET /api/v1/conversations (the dispatcher
 // branches on ?favorite=true), and the per-conversation actions move the id into
@@ -83,6 +211,7 @@ func TestApiV1ConversationRoutes(t *testing.T) {
 		[]string{
 			"GET /api/v1/conversations",
 			"GET /api/v1/conversations/:id/messages",
+			"POST /api/v1/conversations/:id/a2ui-actions",
 			"DELETE /api/v1/conversations/:id",
 			"PATCH /api/v1/conversations/:id",
 			"PUT /api/v1/conversations/:id/reaction",

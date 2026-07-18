@@ -1,0 +1,21 @@
+{
+  "status": "succeeded",
+  "result": {
+    "formatted": {
+      "answer": "Analysis complete."
+    },
+    "a2ui": {
+      "catalog_version": "v1.0",
+      "surface_id": "sfc-contract-1",
+      "widget": "confirm",
+      "props": {
+        "title": "Continue?",
+        "body": "Run the analysis as planned.",
+        "confirm_label": "Confirm",
+        "cancel_label": "Cancel",
+        "status": "submitted",
+        "accepted": true
+      }
+    }
+  }
+}

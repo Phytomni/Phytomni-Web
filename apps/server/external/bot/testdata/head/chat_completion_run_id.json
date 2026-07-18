@@ -1,0 +1,25 @@
+{
+  "id": "chatcmpl-1",
+  "run_id": "run-chat-1",
+  "degraded_tracking": false,
+  "object": "chat.completion",
+  "model": "phyto-chat",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Synthetic chat answer"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "formatted": {
+    "answer": "",
+    "follow_up_questions": [],
+    "metadata": {},
+    "references": [],
+    "tabular": {},
+    "output_dirs": []
+  }
+}

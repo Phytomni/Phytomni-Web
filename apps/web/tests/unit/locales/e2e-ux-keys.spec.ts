@@ -15,9 +15,8 @@ describe("e2e UX i18n keys", () => {
     "chat.sendAriaLabel",
     "chat.abortAriaLabel",
     "chat.timeoutFailed",
-    "chat.eta.fast",
-    "chat.eta.medium",
-    "chat.eta.slow",
+    "chat.progress.processing",
+    "chat.progress.valueText",
     "chat.agentsArchitectureTitle",
     "chat.agentsArchitectureAlt",
   ];
@@ -31,4 +30,21 @@ describe("e2e UX i18n keys", () => {
       expect((en as string).length, `${key} en-US non-empty`).toBeGreaterThan(0);
     });
   }
+
+  it("has exact progress copy and no chat.eta.* subtree", () => {
+    expect(getMessage(enUS, "chat.progress.processing")).toBe("Processing");
+    expect(getMessage(zhCN, "chat.progress.processing")).toBe("处理中");
+    expect(getMessage(enUS, "chat.progress.valueText")).toBe(
+      "Processing, {percent}%"
+    );
+    expect(getMessage(zhCN, "chat.progress.valueText")).toBe(
+      "处理中，{percent}%"
+    );
+    expect(getMessage(enUS, "chat.eta")).toBeUndefined();
+    expect(getMessage(zhCN, "chat.eta")).toBeUndefined();
+    for (const leaf of ["fast", "medium", "slow"] as const) {
+      expect(getMessage(enUS, `chat.eta.${leaf}`)).toBeUndefined();
+      expect(getMessage(zhCN, `chat.eta.${leaf}`)).toBeUndefined();
+    }
+  });
 });

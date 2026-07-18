@@ -18,3 +18,11 @@ func TestSlugToToolNameIsCanonical(t *testing.T) {
 		}
 	}
 }
+
+func TestSlugToToolNameContainsEveryCanonicalTool(t *testing.T) {
+	for slug, want := range rxBot.CanonicalAgentTool {
+		if got, ok := slugToToolName[slug]; !ok || got != want {
+			t.Errorf("slugToToolName[%q]=%q,%v; want %q,true", slug, got, ok, want)
+		}
+	}
+}

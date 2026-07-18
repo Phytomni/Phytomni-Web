@@ -14,15 +14,20 @@ import CitedAnswer from "@/components/CitedAnswer.vue";
 
 // MarkdownViewer is stubbed so these tests isolate CitedAnswer's reference-list wiring
 // (the body renderer and its XSS rules are locked in MarkdownViewer's own specs).
+// CitationReferenceList is real so CitedAnswer→list parity stays locked.
 const mountCited = (props: Record<string, unknown>) =>
   mount(CitedAnswer, {
     props,
     global: {
       stubs: {
         MarkdownViewer: {
-          template: '<div class="mv-stub">{{ content }}|{{ instantMessage }}|{{ ns }}</div>',
-          props: ["content", "instantMessage", "ns"],
+          template:
+            '<div class="mv-stub">{{ content }}|{{ instantMessage }}|{{ ns }}|{{ surface }}</div>',
+          props: ["content", "instantMessage", "ns", "surface"],
         },
+      },
+      mocks: {
+        $t: (key: string) => key,
       },
     },
   });
@@ -44,6 +49,21 @@ describe("CitedAnswer", () => {
   it("renders no reference list when references is empty or absent", () => {
     expect(mountCited({ content: "body", references: [] }).find(".doc-list").exists()).toBe(false);
     expect(mountCited({ content: "body" }).find(".doc-list").exists()).toBe(false);
+  });
+
+  it("keeps the cited body and namespace while references are presented externally", () => {
+    const wrapper = mountCited({
+      content: "Evidence-backed body [1]",
+      references: [{ title: "External source" }],
+      ns: "artifact-a",
+      surface: "artifact",
+      referencePresentation: "external",
+    });
+
+    expect(wrapper.find(".mv-stub").text()).toContain("Evidence-backed body [1]");
+    expect(wrapper.find(".mv-stub").text()).toContain("artifact-a");
+    expect(wrapper.find(".mv-stub").text()).toContain("artifact");
+    expect(wrapper.find(".doc-list").exists()).toBe(false);
   });
 
   it("passes content and instantMessage through to MarkdownViewer", () => {
@@ -73,5 +93,20 @@ describe("CitedAnswer", () => {
   it("passes ns through to MarkdownViewer", () => {
     const wrapper = mountCited({ content: "hi", references: [], ns: "m3" });
     expect(wrapper.find(".mv-stub").text()).toContain("m3");
+  });
+
+  it("forwards each explicit surface to MarkdownViewer", () => {
+    for (const surface of ["chat", "artifact", "document"]) {
+      const withSurface = mountCited({
+        content: "hi",
+        references: [],
+        surface,
+      });
+      expect(withSurface.find(".mv-stub").text()).toContain(surface);
+    }
+
+    const legacyDefault = mountCited({ content: "hi", references: [] });
+    // Absent surface is not forwarded as chat — stub interpolates empty/undefined.
+    expect(legacyDefault.find(".mv-stub").text()).not.toContain("chat");
   });
 });

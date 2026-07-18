@@ -1,154 +1,67 @@
 <template>
-  <div class="deep-genome-agent-container">
-    <div class="chat-header">
-      <div class="header-content">
-        <el-button
-          type="primary"
-          :icon="ArrowLeft"
-          @click="goBack"
-          class="back-button"
-        >
-          {{ $t("common.back") }}
-        </el-button>
-        <div class="header-text">
-          <h1>{{ $t("agents.deepGenome.title") }}</h1>
-          <p>{{ $t("agents.deepGenome.subtitle") }}</p>
-        </div>
-      </div>
-    </div>
+  <AgentDemoShell
+    :title="$t('agents.deepGenome.title')"
+    :subtitle="$t('agents.deepGenome.subtitle')"
+    @back="goBack"
+  >
+    <template #question>
+      [Species Name: rice (Oryza sativa) Gene Names:
+      d18h|GA3ox1|OsGA3OX2|OsGA3ox-2|d18-h|GA3OX2|d18-I|d25|dwf15|ga3ox2|d18-dy|OsGA3ox2|d18|d18-k|d18-AD|D18|GA3ox-2]
+      Provide a scientifically rigorous and integrated account of the rice
+      (Oryza sativa)
+      d18h|GA3ox1|OsGA3OX2|OsGA3ox-2|d18-h|GA3OX2|d18-I|d25|dwf15|ga3ox2|d18-dy|OsGA3ox2|d18|d18-k|d18-AD|D18|GA3ox-2
+      gene. Consolidate data for all gene aliases (separated by '|') as
+      representing identical genetic entities. Maintain strict adherence to
+      evidence-based reporting, excluding unsupported assertions. Prioritize
+      conciseness while preserving informational density comparable to source
+      materials.
+    </template>
 
-    <div class="chat-messages">
-      <!-- User question -->
-      <div class="message user-message">
-        <div class="message-content">
-          <div class="message-text">
-            [Species Name: rice (Oryza sativa) Gene Names:
-            d18h|GA3ox1|OsGA3OX2|OsGA3ox-2|d18-h|GA3OX2|d18-I|d25|dwf15|ga3ox2|d18-dy|OsGA3ox2|d18|d18-k|d18-AD|D18|GA3ox-2]
-            Provide a scientifically rigorous and integrated account of the rice
-            (Oryza sativa)
-            d18h|GA3ox1|OsGA3OX2|OsGA3ox-2|d18-h|GA3OX2|d18-I|d25|dwf15|ga3ox2|d18-dy|OsGA3ox2|d18|d18-k|d18-AD|D18|GA3ox-2
-            gene. Consolidate data for all gene aliases (separated by '|') as
-            representing identical genetic entities. Maintain strict adherence
-            to evidence-based reporting, excluding unsupported assertions.
-            Prioritize conciseness while preserving informational density
-            comparable to source materials.
-          </div>
-        </div>
-      </div>
+    <template #result>
+      <DeepGenomeArtifact
+        :title="$t('agents.deepGenome.title')"
+        :metadata="$t('agents.deepGenome.subtitle')"
+        :markdown="deepGenomeAgentResponse.replace(/\n/g, '\\n')"
+        :references="docList"
+        ns="deep-genome-demo"
+        :tab-labels="artifactTabLabels"
+        :tablist-label="t('common.operation')"
+        artifact-id="deep-genome-demo-artifact"
+        :back-label="t('common.back')"
+        :close-label="t('common.close')"
+        :action-label="t('common.operation')"
+        @back="goBack"
+        @close="goBack"
+      />
+    </template>
 
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
-        </div>
-        <div class="message-content">
-          <div class="message-text">
-            {{ $t("agents.deepGenome.taskCreated") }}:
-            4a7715a-996a-22e0-acd5-fb278e7d45b3
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- AI answer -->
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
-        </div>
-        <div class="message-content">
-          <div class="message-text">
-            <DeepGenomeResultViewer
-              :markdown="deepGenomeAgentResponse.replace(/\n/g, '\\n')"
-              :references="docList"
-            />
-            <div class="message-fotter">
-              <!-- Like / dislike buttons -->
-              <div class="reaction-buttons">
-                <el-tooltip
-                  effect="dark"
-                  :content="getReactionTooltip(1)"
-                  placement="top"
-                >
-                  <div
-                    class="message-fotter-item reaction-btn"
-                    :class="{ active: loveThisState === 1 }"
-                    @click="handleReaction(1)"
-                  >
-                    <el-icon>
-                      <SuccessFilled v-if="loveThisState === 1" />
-                      <CircleCheck v-else />
-                    </el-icon>
-                  </div>
-                </el-tooltip>
-                <el-tooltip
-                  effect="dark"
-                  :content="getReactionTooltip(2)"
-                  placement="top"
-                >
-                  <div
-                    class="message-fotter-item reaction-btn"
-                    :class="{ active: needsImprovementState === 2 }"
-                    @click="handleReaction(2)"
-                  >
-                    <el-icon>
-                      <CircleCloseFilled v-if="needsImprovementState === 2" />
-                      <CircleClose v-else />
-                    </el-icon>
-                  </div>
-                </el-tooltip>
-              </div>
-            </div>
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="ai-disclaimer">
-      {{ $t("common.aiDisclaimer") }}
-    </div>
-  </div>
+    <template #footer>{{ $t("common.aiDisclaimer") }}</template>
+  </AgentDemoShell>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import {
-  ArrowLeft,
-  SuccessFilled,
-  CircleCheck,
-  CircleCloseFilled,
-  CircleClose,
-} from "@element-plus/icons-vue";
-import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
-import { ref } from "vue";
+import { AgentDemoShell } from "@/components/demo";
+import { DeepGenomeArtifact } from "@/components/research";
 
 const { t } = useI18n();
-
-const loveThisState = ref(0);
-const needsImprovementState = ref(0);
-
 const router = useRouter();
+
 const goBack = () => {
   router.back();
 };
 
-const getReactionTooltip = (reactionType: number) => {
-  if (reactionType === 1) return t("chat.loveThis");
-  if (reactionType === 2) return t("chat.needsImprovement");
-  return "";
-};
+const artifactTabLabels = computed(() => ({
+  content: t("common.view"),
+  evidence: t("agents.deepGenome.references"),
+  activity: t("chat.log.activityLabel"),
+  downloads: t("chat.actions.downloadAttachments"),
+}));
 
-const handleReaction = (reactionType: number) => {
-  if (reactionType === 1) {
-    loveThisState.value = loveThisState.value === 1 ? 2 : 1;
-  } else if (reactionType === 2) {
-    needsImprovementState.value = needsImprovementState.value === 2 ? 1 : 2;
-  }
-};
-
-const botAvatar = "/logo.png";
-
-// References list for DeepGenomeResultViewer (demo data; the file_id / au / ti
-// fields in docList align with the schema the viewer expects)
+// References list for DeepGenomeArtifact (demo data; the file_id / au / ti
+// fields in docList align with the schema the embedded viewer expects)
 const docList = [
   {
     file_id: "65c0d139-67b8-4dab-bb4a-b8e9b57dd990",
@@ -339,250 +252,3 @@ GA3ox-2/D18 in rice (Oryza sativa) is pivotal in the biosynthesis of gibberellin
 Future research should focus on resolving mechanistic uncertainties and exploring the gene's regulatory networks. Detailed studies on the interaction of GA3ox-2/D18 with other genes in the gibberellin pathway, such as GA20ox and GA2ox, will provide deeper insights into its regulatory mechanisms [1][6]. Additionally, investigating the gene's response to various environmental stresses and its role in different developmental stages will enhance our understanding of its pleiotropic effects [4][2].
 `;
 </script>
-
-<style lang="scss" scoped>
-.deep-genome-agent-container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background-color: #f5f5f5;
-}
-
-.chat-header {
-  background: #fff;
-  padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .back-button {
-    flex-shrink: 0;
-  }
-
-  .header-text {
-    flex: 1;
-    text-align: center;
-
-    h1 {
-      margin: 0 0 8px 0;
-      color: #333;
-      font-size: 24px;
-    }
-
-    p {
-      margin: 0;
-      color: #666;
-      font-size: 14px;
-    }
-  }
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin: 20px 0px 52px 0px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  background: var(--el-bg-color);
-  box-shadow: 0 0 10px 0 rgb(218, 217, 217);
-  border-radius: 10px 10px 0 0;
-}
-
-.message {
-  display: flex;
-  margin-bottom: 16px;
-
-  &.user-message {
-    justify-content: flex-end;
-
-    .message-content {
-      background: #409eff;
-      color: #ffffff;
-      border-radius: 18px 18px 4px 18px;
-      max-width: 100%;
-    }
-  }
-
-  &.ai-message {
-    justify-content: flex-start;
-
-    .message-avatar {
-      flex-shrink: 0;
-      align-self: flex-start;
-      margin-right: 8px;
-    }
-
-    .message-content {
-      background: white;
-      color: #333;
-      border-radius: 18px 18px 18px 4px;
-      max-width: 99%;
-      border: 1px solid #e0e0e0;
-    }
-  }
-}
-
-.message-content {
-  padding: 12px 16px;
-  word-wrap: break-word;
-
-  .message-text {
-    line-height: 1.5;
-
-    :deep(h1),
-    :deep(h2),
-    :deep(h3),
-    :deep(h4),
-    :deep(h5),
-    :deep(h6) {
-      margin-top: 0;
-      margin-bottom: 12px;
-      color: #000;
-    }
-
-    :deep(p) {
-      margin-bottom: 12px;
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
-
-    :deep(ul),
-    :deep(ol) {
-      margin-bottom: 12px;
-      padding-left: 20px;
-    }
-
-    :deep(li) {
-      margin-bottom: 4px;
-    }
-
-    :deep(strong) {
-      font-weight: 600;
-    }
-
-    :deep(code) {
-      background: rgba(0, 0, 0, 0.1);
-      padding: 2px 4px;
-      border-radius: 3px;
-      font-family: "Courier New", monospace;
-    }
-
-    :deep(pre) {
-      background: rgba(0, 0, 0, 0.05);
-      padding: 12px;
-      border-radius: 6px;
-      overflow-x: auto;
-      margin-bottom: 12px;
-    }
-  }
-}
-
-.tip-text {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 10px;
-  width: 100%;
-  text-align: right;
-}
-
-.ai-disclaimer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--el-bg-color);
-  border-top: 1px solid var(--el-border-color);
-  padding: 12px 20px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  z-index: 1000;
-}
-
-.theme-dark {
-  .deep-genome-agent-container {
-    background-color: var(--color-background);
-  }
-
-  .chat-header {
-    background: var(--color-background-card);
-    border-bottom: 1px solid var(--el-border-color);
-
-    h1 {
-      color: var(--el-text-color-primary);
-    }
-
-    p {
-      color: var(--el-text-color-secondary);
-    }
-  }
-
-  .chat-messages {
-    background: var(--color-background-card);
-    box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.3);
-  }
-
-  .message {
-    &.ai-message .message-content {
-      background: var(--color-background);
-      color: var(--el-text-color-primary);
-      border: 1px solid var(--color-border);
-    }
-  }
-
-  :deep(code) {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  :deep(pre) {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .ai-disclaimer {
-    background: var(--color-background);
-    border-top: 1px solid var(--el-border-color);
-    color: var(--el-text-color-secondary);
-  }
-}
-
-.message-fotter {
-  width: 100%;
-  height: auto;
-  display: flex;
-  gap: 10px;
-  flex-direction: row;
-  justify-content: flex-end;
-  align-items: center;
-  margin-top: 5px;
-
-  &-item {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 22px;
-    height: 22px;
-    padding: 2px;
-    box-sizing: border-box;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  &-item:hover {
-    color: #1890ff;
-    background: #e8e6e6;
-  }
-
-  .reaction-buttons {
-    display: flex;
-  }
-}
-</style>

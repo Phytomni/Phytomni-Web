@@ -1,6 +1,6 @@
 # Configuration reference (`app.yml` + environment)
 
-**Evergreen — describes the config surface as of the current release (`0.1.2`).**
+**Evergreen — describes the config surface as of the current release (`0.1.3`).**
 This is the single source of truth for *what every key does*. The per-release
 [`upgrading.md`](upgrading.md) and the archived cutover manuals under
 [`history/`](history/) reference this file instead of re-documenting keys — when a
@@ -23,14 +23,13 @@ Secrets are placeholders — substitute real values out-of-band on the server.
 ## Secret injection from the environment (optional)
 
 Three secrets can be injected from the environment instead of `app.yml`, for
-12-factor / secret-manager delivery. **When the env var is unset, the `app.yml`
-value wins** — leaving the environment untouched keeps file-based config
-byte-identical. Do **not** set an empty value (an empty `PHYTOMNI_JWT_SECRET`
-overrides the file with a blank secret).
+12-factor / secret-manager delivery. **When the env var is unset or empty, the
+`app.yml` value wins** — leaving the environment untouched (or setting an empty
+string) keeps file-based config. Only a **non-empty** env value overrides the file.
 
 | Env var | Overrides | Mechanism |
 |---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | `viper.BindEnv` |
+| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | explicit non-empty `os.Getenv` |
 | `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
 | `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
 
@@ -55,7 +54,7 @@ jwt:
   secret_key: "<JWT_SECRET>"           # e.g. openssl rand -hex 32
 ```
 
-Verification is pinned to HS256 (`0.1.2`). Keep the secret stable across
+Verification is pinned to HS256 (`0.1.3`). Keep the secret stable across
 deploys so issued tokens stay valid. Overridable via `PHYTOMNI_JWT_SECRET`.
 
 ### `redis` — user/product layer (critical; fail-open)
@@ -125,6 +124,12 @@ bot:
   key_audit_redact: true
   expert_enabled: false                  # dark-launch: Expert routing (operations.md §11.1)
   stream_enabled: false                  # dark-launch: AG-UI SSE streaming (operations.md §11.2)
+  a2ui_actions_enabled: false            # dark-launch: A2UI action relay; owner/run checks stay dormant
+  interop_enabled: false                 # dark-launch: sanitized capability/provenance discovery
+  research_enabled: false                # dark-launch: remote Research product surface
+  design_enabled: false                  # dark-launch: remote Design product surface
+  network_enabled: false                 # dark-launch: remote Network product surface
+  history_dual_read: false               # observation path; legacy/projection fallback remains primary
   max_upload_file_bytes: 26214400        # 25 MiB per file (matches Bot /v1/files 413)
   max_upload_file_count: 10
   max_upload_total_bytes: 52428800       # 50 MiB per request
@@ -134,6 +139,19 @@ The `ptm_<web>` key must carry the `agents` and `relay:obs` scopes; the Bot must
 run with `RELAY_ENABLED=true` or relay downloads 404. See
 [`operations.md`](operations.md).
 
+The remote-product switches (`research_enabled`, `design_enabled`, and
+`network_enabled`) plus `a2ui_actions_enabled` are default-off capability gates.
+They remain off until the corresponding Bot-owner, security, staging, and live
+acceptance evidence is reviewed. `interop_enabled` follows the same rule and
+must additionally keep capability/provenance output allowlisted, owner-scoped,
+bounded, and redacted.
+
+`history_dual_read` is also false by default. When enabled by an authorized
+operator, it is an observation/compatibility read path layered on top of the
+sanitized projection and legacy fallback; it does not replace the projection
+migration or permit older revisions to overwrite visible reports. Keep it false
+until the RC-WEB-007 and RC-LIVE-001 acceptance rows are complete.
+
 ### `gene_obsfs_path` — gene-example serving
 
 ```yaml
@@ -141,7 +159,7 @@ gene_obsfs_path: ""   # obsfs FUSE mount root; empty ⇒ Bot relay fallback
 ```
 
 Set to the mount root (e.g. `/obs/<bucket>/.../gene-examples`) to serve gene
-list/detail/images from obsfs (`0.1.2`); empty falls back to the Bot relay.
+list/detail/images from obsfs (`0.1.3`); empty falls back to the Bot relay.
 
 ### Other keys
 
@@ -152,7 +170,7 @@ list/detail/images from obsfs (`0.1.2`); empty falls back to the Bot relay.
 
 ### Orphan blocks — `email:` and `huawei:` (no consumer; safe to delete)
 
-As of `0.1.2` **neither block has a live consumer**:
+As of `0.1.3` **neither block has a live consumer**:
 
 - **`email:`** — the SMTP package (`common/email/`) was removed in `0.1.1` (zero
   importers). The block is dead config.

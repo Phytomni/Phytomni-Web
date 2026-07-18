@@ -1,1446 +1,636 @@
 <template>
-  <div class="chat-container">
-    <!-- Tutorial guide overlay -->
-    <div
-      v-if="showTutorial"
-      class="tutorial-overlay"
-      @click="handleTutorialOverlayClick"
+  <div
+    class="chat-page-root"
+    data-testid="chat-root"
+    :data-chat-state="chatStateAttr"
+    :data-sidebar-drawer-state="sidebarDrawerStateAttr"
+  >
+    <PhyAdaptiveShell
+      :sidebar-collapsed="effectiveSidebarCollapsed"
+      :artifact-open="artifactOpen"
+      :artifact-fullscreen="artifactOpen && isMobileViewport"
+      :main-inert="isMobileViewport && leftSidebarDrawerOpen"
     >
-      <!-- Step 1: highlight the left sidebar -->
-      <div v-if="currentTutorialStep === 1" class="tutorial-step-1">
-        <!-- Left sidebar highlight area -->
-        <div class="sidebar-highlight-area"></div>
-        <!-- Tutorial content -->
-        <div class="tutorial-content sidebar-tutorial">
-          <h3>{{ $t("tutorial.step1.title") }}</h3>
-          <p>{{ $t("tutorial.step1.content") }}</p>
-          <div class="tutorial-actions">
-            <el-button type="primary" @click="nextTutorialStep">{{
-              $t("tutorial.nextStep")
-            }}</el-button>
-            <div class="tutorial-hint">
-              <small>{{ $t("tutorial.navigationHint") }}</small>
-            </div>
-          </div>
+      <template #sidebar>
+        <!-- Left sidebar -->
+        <div ref="tourSidebarTarget" class="tour-sidebar-wrap">
+          <Sidebar
+            :chatList="chatList"
+            :currentChatId="currentChatId"
+            :collapsed="leftSidebarCollapsed"
+            :effective-collapsed="effectiveSidebarCollapsed"
+            :drawer-open="leftSidebarDrawerOpen"
+            @selectChat="selectChat"
+            @startNewChat="startNewChat"
+            @handleSidebarCollapse="handleSidebarCollapse"
+            @drawerOpenChange="leftSidebarDrawerOpen = $event"
+            @startTutorial="startTutorial"
+            @showArchitecture="showAgentsView"
+            @chatRenamed="handleChatRenamed"
+            @chatDeleted="handleChatDeleted"
+            @chatFavorited="handleChatFavorited"
+          />
         </div>
-      </div>
+      </template>
 
-      <!-- Step 2: highlight the bottom case bar -->
-      <div v-if="currentTutorialStep === 2" class="tutorial-step-2">
-        <!-- Bottom case bar highlight area -->
-        <div class="bottom-highlight-area"></div>
-        <!-- Tutorial content -->
-        <div class="tutorial-content bottom-tutorial">
-          <h3>{{ $t("tutorial.step2.title") }}</h3>
-          <p>{{ $t("tutorial.step2.content") }}</p>
-          <div class="tutorial-actions">
-            <el-button @click="prevTutorialStep">{{
-              $t("tutorial.prevStep")
-            }}</el-button>
-            <el-button type="primary" @click="nextTutorialStep">{{
-              $t("tutorial.nextStep")
-            }}</el-button>
-            <div class="tutorial-hint">
-              <small>{{ $t("tutorial.navigationHint") }}</small>
-            </div>
-          </div>
-        </div>
-      </div>
+      <template #main>
+        <el-tour
+          v-model="showTutorial"
+          :mask="true"
+          :close-on-press-escape="true"
+          @finish="completeTutorial"
+          @close="completeTutorial"
+        >
+          <el-tour-step
+            :target="tourSidebarTarget"
+            :title="t('tutorial.step1.title')"
+            :description="t('tutorial.step1.content')"
+          />
+          <el-tour-step
+            :target="tourCasesTarget"
+            :title="t('tutorial.step2.title')"
+            :description="t('tutorial.step2.content')"
+          />
+          <el-tour-step
+            :target="tourInputTarget"
+            :title="t('tutorial.step3.title')"
+            :description="t('tutorial.step3.content')"
+          />
+        </el-tour>
 
-      <!-- Step 3: highlight the chat bar -->
-      <div v-if="currentTutorialStep === 3" class="tutorial-step-3">
-        <!-- Chat input area highlight area -->
-        <div class="input-highlight-area"></div>
-        <!-- Tutorial content -->
-        <div class="tutorial-content input-tutorial">
-          <h3>{{ $t("tutorial.step3.title") }}</h3>
-          <p>{{ $t("tutorial.step3.content") }}</p>
-          <div class="tutorial-actions">
-            <el-button @click="prevTutorialStep">{{
-              $t("tutorial.prevStep")
-            }}</el-button>
-            <el-button type="primary" @click="completeTutorial">{{
-              $t("tutorial.complete")
-            }}</el-button>
-            <div class="tutorial-hint">
-              <small>{{ $t("tutorial.navigationHint") }}</small>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+        <div class="chat-main-layout">
+          <!-- Center chat area -->
+          <div class="chat-main">
+            <header class="chat-header">
+              <div class="chat-header-inner">
+                <div class="header-leading">
+                  <el-button
+                    ref="sidebarTriggerRef"
+                    class="mobile-sidebar-toggle"
+                    data-testid="chat-sidebar-trigger"
+                    :class="{ 'is-visible': leftSidebarCollapsed }"
+                    text
+                    circle
+                    :aria-label="$t('chat.openNavigation')"
+                    @click="toggleSidebarFromHeader"
+                  >
+                    <el-icon><Menu /></el-icon>
+                  </el-button>
+                  <h2 class="chat-header-title" :title="chatHeaderTitle">
+                    {{ chatHeaderTitle }}
+                  </h2>
+                  <span
+                    v-if="chatMode === 'expert'"
+                    class="chat-expert-indicator"
+                    data-test="chat-expert-indicator"
+                  >
+                    {{ $t("chat.mode.expert") }}
+                  </span>
+                </div>
+              </div>
+            </header>
 
-    <!-- Left sidebar -->
-    <Sidebar
-      :chatList="chatList"
-      :currentChatId="currentChatId"
-      :collapsed="leftSidebarCollapsed"
-      :showTutorial="showTutorial && currentTutorialStep === 1"
-      @selectChat="selectChat"
-      @startNewChat="startNewChat"
-      @openKnowledgeBase="openKnowledgeBase"
-      @handleSidebarCollapse="handleSidebarCollapse"
-      @startTutorial="startTutorial"
-      @chatRenamed="handleChatRenamed"
-      @chatDeleted="handleChatDeleted"
-      @chatFavorited="handleChatFavorited"
-    />
-    <!-- Center chat area -->
-    <div class="chat-main">
-      <div class="chat-header">
-        <router-link v-if="UserStore.permission !== 'guest'" to="/help">
-          <h2>{{ $t("chat.title") }}</h2>
-        </router-link>
-        <div v-else></div>
-        <div class="header-controls">
-          <LangSwitch class="header-lang-switch" />
-          <el-button
-            v-if="isDevelopment"
-            type="primary"
-            size="small"
-            @click="testParallelChats"
-            style="margin-left: 10px"
-          >
-            {{ $t("chat.testParallel") }}
-          </el-button>
-        </div>
-      </div>
-
-      <!-- Message area -->
-      <div class="message-container" ref="messageContainer" :key="timestamp">
-        <template v-if="currentChat?.messages?.length">
-          <div
-            v-for="(message, index) in currentChat.messages"
-            :key="index"
-            class="message"
-            :class="message.role"
-          >
-            <!-- Only assistant messages show an avatar -->
-            <div v-if="message.role === 'assistant'" class="message-avatar">
-              <el-avatar :size="36" :src="botAvatar" />
-            </div>
-            <div class="message-content">
-              <!-- User message, or an answer without reasoning steps -->
-              <div
-                v-if="
-                  message.role === 'user' ||
-                  (!message.steps && !message.tableHeaders)
-                "
-                class="message-text"
-                :class="{ 'has-user': message.role === 'user' }"
-              >
-                <!-- Log view - two-column layout -->
-                <div
-                  v-if="
-                    message.role === 'assistant' &&
-                    message.tool_name === 'AnalystAgent' &&
-                    message.showLog
-                  "
-                  class="log-view-container"
+            <!-- Message area -->
+            <div
+              class="message-container"
+              data-testid="chat-transcript"
+              data-test="chat-transcript-scroll-root"
+              ref="messageContainer"
+              :key="timestamp"
+            >
+              <div v-if="!currentChat?.messages?.length" class="empty-chat">
+                <PhyEmptyState
+                  :title="$t('chat.welcomeTitle')"
+                  :subtitle="$t('chat.welcomeSubtitle')"
+                  class="empty-chat-starters-shell"
                 >
-                  <div class="log-view-left">
-                    <h4>{{ $t("chat.log.replyContent") }}</h4>
-                    <MarkdownViewer
-                      :instantMessage="
-                        (message?.instantMessage &&
-                          currentChat.messages.length - 1 == index) ||
-                        false
-                      "
-                      :content="message.content"
-                      @finish="() => handleMarkdownFinish(index)"
+                  <template #mark>
+                    <img
+                      src="../../assets/images/chat/logo.png"
+                      class="empty-chat-mark"
+                      alt=""
+                    />
+                  </template>
+                  <div
+                    ref="tourCasesTarget"
+                    class="empty-chat-starters-region"
+                    role="group"
+                    :aria-label="$t('chat.starter.title')"
+                  >
+                    <Prompts
+                      class="empty-chat-starters"
+                      :items="starterItems"
+                      wrap
+                      @item-click="onStarterClick"
                     />
                   </div>
-                  <div class="log-view-right">
-                    <h4>{{ $t("chat.log.execLog", { id: message.id }) }}</h4>
+                </PhyEmptyState>
+              </div>
+              <div class="transcript-content">
+                <template v-if="currentChat?.messages?.length">
+                  <ChatMessageRow
+                    v-for="(message, index) in currentChat.messages"
+                    :key="index"
+                    :role="message.role === 'user' ? 'user' : 'assistant'"
+                    :message-id="message.id || undefined"
+                    :streaming="!!message.streaming"
+                    :wide="
+                      message.role === 'assistant' &&
+                      (message.tool_name === 'DeepGenomeAgent' ||
+                        !!artifactPreviewForMessage(message))
+                    "
+                  >
+                    <template #avatar>
+                      <el-avatar :size="36" :src="botAvatar" />
+                    </template>
+                    <ChatMessageContent
+                      :message="message"
+                      :index="index"
+                      :is-last-message="
+                        currentChat.messages.length - 1 == index
+                      "
+                      :artifact-preview="artifactPreviewForMessage(message)"
+                      :activity-expanded-by-message="
+                        getChatState(currentChatId).activityExpandedByMessage
+                      "
+                      :gene-network-images="geneNetworkImages"
+                      :gene-network-images-loading="geneNetworkImagesLoading"
+                      :digital-design-images="digitalDesignImages"
+                      :digital-design-images-loading="
+                        digitalDesignImagesLoading
+                      "
+                      @finish="() => handleMarkdownFinish(index)"
+                      @open-artifact="openArtifact(String(message.id))"
+                      @update:activity-expanded="
+                        (key, open) =>
+                          (getChatState(
+                            currentChatId
+                          ).activityExpandedByMessage[key] = open)
+                      "
+                      @a2ui-action="(event) => submitAction(message, event)"
+                      @a2ui-retry="(surfaceId) => retryAction(message, surfaceId)"
+                    />
 
-                    <!-- Update log button -->
-                    <div class="log-actions">
-                      <el-button
-                        type="primary"
-                        size="small"
-                        @click="updateLog(message.task_id)"
-                        :loading="updatingLog[message.task_id || '']"
-                        :disabled="!message.task_id"
+                    <template #activity>
+                      <!-- Only mount when rowId is a valid positive-decimal id;
+                     missing/invalid ids never GET/PATCH and hide the log disclosure. -->
+                      <ChatActivity
+                        v-if="
+                          message.role === 'assistant' &&
+                          message.tool_name === 'AnalystAgent' &&
+                          !!deriveAnalystLogRowId(message)
+                        "
+                        :state-key="analystLogStateKey(message)"
+                        :expanded="isAnalystLogExpanded(message)"
+                        :label="$t('chat.log.activityLabel')"
+                        :hide-count="true"
+                        @update:expanded="
+                          (open) => setLogExpanded(message, open)
+                        "
                       >
-                        <el-icon>
-                          <Refresh />
-                        </el-icon>
-                        {{ $t("chat.log.updateLog") }}
-                      </el-button>
-                    </div>
-
-                    <div
-                      v-if="loadingLog[message.id || '']"
-                      class="log-loading"
-                    >
-                      <el-icon class="is-loading">
-                        <Loading />
-                      </el-icon>
-                      {{ $t("chat.log.loading") }}
-                    </div>
-                    <div
-                      v-else-if="logData[message.id || '']"
-                      class="log-content"
-                    >
-                      <!-- New log rendering logic -->
-                      <div
-                        v-if="typeof logData[message.id || ''] === 'string'"
-                        class="log-text-content"
-                      >
-                        <pre
-                          class="log-pre"
-                          v-html="
-                            formatLogContentWithColors(
-                              logData[message.id || '']
-                            )
-                          "
-                        ></pre>
-                      </div>
-                      <!-- Legacy table rendering logic (backward compatible) -->
-                      <el-table
-                        v-else-if="Array.isArray(logData[message.id || ''])"
-                        :data="logData[message.id || '']"
-                        border
-                        style="width: 100%"
-                      >
-                        <el-table-column
-                          prop="content"
-                          :label="$t('chat.log.contentColumn')"
-                          align="left"
+                        <ChatAnalystLog
+                          :row-id="deriveAnalystLogRowId(message)"
+                          :task-id="deriveAnalystLogTaskId(message)"
+                          :log-data="
+                      getChatState(currentChatId).logData[
+                        deriveAnalystLogRowId(message)!
+                      ]
+                    "
+                          :loading="
+                      !!getChatState(currentChatId).loadingLog[
+                        deriveAnalystLogRowId(message)!
+                      ]
+                    "
+                          :updating="
+                      !!getChatState(currentChatId).updatingLog[
+                        deriveAnalystLogRowId(message)!
+                      ]
+                    "
+                          :error-kind="
+                      getChatState(currentChatId).logErrorKinds[
+                        deriveAnalystLogRowId(message)!
+                      ]
+                    "
+                          @update="updateLog(message)"
+                          @retry="retryLog(message)"
                         />
-                      </el-table>
-                    </div>
-                    <div v-else class="log-error">
-                      {{ $t("chat.log.noData") }} (loadingLog:
-                      {{ loadingLog[message.id || ""] }}, logData:
-                      {{ !!logData[message.id || ""] }})
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Normal message content -->
-                <div v-else>
-                  <!-- Streaming assistant messages (AG-UI content blocks) render via
-                       StreamMessage; P0 mount passes no ns (no references yet, citation
-                       gate keeps [N] literal, consistent with the no-ns MarkdownViewer
-                       branch below). Non-streaming messages fall through unchanged. -->
-                  <StreamMessage
-                    v-if="
-                      message.role === 'assistant' &&
-                      (message.streaming ||
-                        (message.blocks && message.blocks.length))
-                    "
-                    :blocks="message.blocks || []"
-                  />
-                  <!-- GeneNetworkAgent image display -->
-                  <div
-                    v-else-if="
-                      message.role === 'assistant' &&
-                      message.tool_name === 'GeneNetworkAgent'
-                    "
-                    class="gene-network-images"
-                  >
-                    <div
-                      v-if="geneNetworkImagesLoading[message.id || '']"
-                      class="images-loading"
-                    >
-                      <el-icon class="is-loading"><Loading /></el-icon>
-                      {{ $t("common.loading") }}
-                    </div>
-                    <div
-                      v-else-if="
-                        geneNetworkImages[message.id || '']?.length > 0
-                      "
-                      class="images-container"
-                    >
-                      <img
-                        v-for="(imgUrl, imgIndex) in geneNetworkImages[
-                          message.id || ''
-                        ]"
-                        :key="imgIndex"
-                        :src="imgUrl"
-                        :alt="'Result ' + (imgIndex + 1)"
-                        class="result-image"
-                      />
-                    </div>
-                    <div v-else class="no-images">
-                      {{ $t("common.noData") }}
-                    </div>
-                  </div>
-                  <!-- DigitalDesignAgent image display -->
-                  <div
-                    v-else-if="
-                      message.role === 'assistant' &&
-                      message.tool_name === 'DigitalDesignAgent'
-                    "
-                    class="gene-network-images"
-                  >
-                    <div
-                      v-if="digitalDesignImagesLoading[message.id || '']"
-                      class="images-loading"
-                    >
-                      <el-icon class="is-loading"><Loading /></el-icon>
-                      {{ $t("common.loading") }}
-                    </div>
-                    <div
-                      v-else-if="
-                        digitalDesignImages[message.id || '']?.length > 0
-                      "
-                      class="images-container"
-                    >
-                      <img
-                        v-for="(imgUrl, imgIndex) in digitalDesignImages[
-                          message.id || ''
-                        ]"
-                        :key="imgIndex"
-                        :src="imgUrl"
-                        :alt="'Result ' + (imgIndex + 1)"
-                        class="result-image"
-                      />
-                    </div>
-                    <div v-else class="no-images">
-                      {{ $t("common.noData") }}
-                    </div>
-                  </div>
-                  <!-- DeepGenomeAgent responses use a dedicated viewer component with a references list;
-                       other tool_name values fall back to the generic MarkdownViewer -->
-                  <DeepGenomeResultViewer
-                    v-else-if="
-                      message.doc_list &&
-                      message.doc_list.length > 0 &&
-                      message.role === 'assistant' &&
-                      message.tool_name === 'DeepGenomeAgent'
-                    "
-                    :markdown="message.content.replace(/\n/g, '\\n')"
-                    :references="message.doc_list || []"
-                    :ns="'m' + index"
-                  />
-                  <CitedAnswer
-                    v-else-if="
-                      message.doc_list &&
-                      message.doc_list.length > 0 &&
-                      message.role === 'assistant'
-                    "
-                    :content="message.content"
-                    :references="message.doc_list"
-                    :ns="'m' + index"
-                    :instant-message="
-                      (message?.instantMessage &&
-                        currentChat.messages.length - 1 == index) ||
-                      false
-                    "
-                    @finish="() => handleMarkdownFinish(index)"
-                  />
-                  <MarkdownViewer
-                    v-else
-                    :instantMessage="
-                      (message?.instantMessage &&
-                        currentChat.messages.length - 1 == index) ||
-                      false
-                    "
-                    :content="message.content"
-                    @finish="() => handleMarkdownFinish(index)"
-                  />
-                </div>
-
-                <!-- File list display for user messages -->
-                <div
-                  v-if="
-                    message.role === 'user' &&
-                    message.attachedFiles &&
-                    message.attachedFiles.length > 0
-                  "
-                  class="message-files"
-                >
-                  <div class="files-list">
-                    <div
-                      v-for="(file, fileIndex) in message.attachedFiles"
-                      :key="fileIndex"
-                      class="file-item-display"
-                    >
-                      <FilesCard
-                        :uid="fileIndex"
-                        :name="file.name"
-                        :file-size="file.size"
-                        :show-del-icon="false"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <el-button
-                  @click="() => downloadFile(message?.upload_path)"
-                  v-if="
-                    message?.status &&
-                    message?.status == 'SUCCEEDED' &&
-                    message?.upload_path &&
-                    message?.upload_path !== ''
-                  "
-                  type="primary"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadURL")
-                  }}</span>
-                </el-button>
-
-                <!-- Download button based on download_path -->
-                <el-button
-                  @click="() => downloadFile(message?.download_path)"
-                  v-if="
-                    message?.download_path &&
-                    message?.download_path !== '' &&
-                    message?.tool_name !== 'GeneNetworkAgent' &&
-                    message?.tool_name !== 'DigitalDesignAgent'
-                  "
-                  type="primary"
-                  style="margin-left: 8px"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadFile")
-                  }}</span>
-                </el-button>
-
-                <!-- Log button - only shown for the AnalystAgent type -->
-                <div
-                  v-if="
-                    message.role === 'assistant' &&
-                    message.tool_name === 'AnalystAgent'
-                  "
-                  class="log-button-container"
-                >
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click="toggleLogView(message.id)"
-                    :class="{ active: message.showLog }"
-                  >
-                    <el-icon>
-                      <Document />
-                    </el-icon>
-                    {{
-                      message.showLog ? $t("chat.hideLog") : $t("chat.showLog")
-                    }}
-                  </el-button>
-                </div>
-
-                <!-- Follow-up questions display -->
-                <FollowUpQuestions
-                  v-if="
-                    message.role === 'assistant' &&
-                    message.followUpQuestions &&
-                    message.followUpQuestions.length > 0 &&
-                    message.showFollowUpQuestions &&
-                    index == currentChat.messages.length - 1
-                  "
-                  :questions="message.followUpQuestions"
-                  @question-click="handleFollowUpQuestionClick"
-                />
-
-                <div v-if="message.role === 'user'" class="message-user">
-                  <div
-                    class="message-fotter"
-                    v-if="copyVisible == 0 || copyVisible !== index + 1"
-                  >
-                    <el-tooltip
-                      effect="dark"
-                      :content="$t('chat.copy')"
-                      placement="top-start"
-                    >
-                      <div class="message-fotter-item">
-                        <el-icon
-                          @click="
-                            () => {
-                              fallbackCopyText(message.content, index + 1);
-                            }
-                          "
-                        >
-                          <CopyDocument />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                  </div>
-                  <div
-                    class="message-fotter"
-                    v-else-if="copyVisible == index + 1"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon>
-                        <SuccessFilled />
-                      </el-icon>
-                    </div>
-                  </div>
-                </div>
-                <div v-else>
-                  <div class="message-fotter">
-                    <el-tooltip
-                      effect="dark"
-                      :content="$t('chat.copy')"
-                      placement="top-start"
-                      v-if="copyVisible == 0 || copyVisible !== index + 1"
-                    >
-                      <div class="message-fotter-item">
-                        <el-icon
-                          @click="() => copyMessageWithDocs(message, index)"
-                        >
-                          <CopyDocument />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                    <div
-                      class="message-fotter-item"
-                      v-else-if="copyVisible == index + 1"
-                    >
-                      <el-icon>
-                        <SuccessFilled />
-                      </el-icon>
-                    </div>
-                    <el-tooltip
-                      effect="dark"
-                      :content="$t('chat.refreshReply')"
-                      placement="top-start"
-                    >
-                      <div class="message-fotter-item">
-                        <el-icon
-                          @click="() => refreshMessage(index)"
-                          :class="{
-                            'is-loading':
-                              refreshingMessages[
-                                `${index}_${message.id || ''}`
-                              ] || isSending,
-                          }"
-                        >
-                          <Refresh />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-
-                    <!-- Upvote / downvote buttons -->
-                    <div
-                      v-if="message.role === 'assistant' && message.id"
-                      class="reaction-buttons"
-                    >
-                      <el-tooltip
-                        effect="dark"
-                        :content="getReactionTooltip(message.id, 1)"
-                        placement="top"
-                      >
-                        <div
-                          class="message-fotter-item reaction-btn"
-                          :class="{
-                            active: getReactionState(message.id) === 1,
-                          }"
-                          @click="handleReaction(message.id, 1)"
-                        >
-                          <el-icon>
-                            <SuccessFilled
-                              v-if="getReactionState(message.id) === 1"
-                            />
-                            <CircleCheck v-else />
-                          </el-icon>
-                        </div>
-                      </el-tooltip>
-                      <el-tooltip
-                        effect="dark"
-                        :content="getReactionTooltip(message.id, 2)"
-                        placement="top"
-                      >
-                        <div
-                          class="message-fotter-item reaction-btn"
-                          :class="{
-                            active: getReactionState(message.id) === 2,
-                          }"
-                          @click="handleReaction(message.id, 2)"
-                        >
-                          <el-icon>
-                            <CircleCloseFilled
-                              v-if="getReactionState(message.id) === 2"
-                            />
-                            <CircleClose v-else />
-                          </el-icon>
-                        </div>
-                      </el-tooltip>
-                    </div>
-
-                    <el-dropdown
-                      v-if="downloadWhiteList.includes(message.tool_name)"
-                      placement="top-start"
-                      trigger="click"
-                      @command="(v) => getFileDownUrl(message.id, v)"
-                    >
-                      <div class="message-fotter-item">
-                        <el-icon style="vertical-align: middle">
-                          <Download />
-                        </el-icon>
-                      </div>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item
-                            v-for="(item, index) in message?.tool_name ==
-                            'DataAgent'
-                              ? ['PDF', 'Markdown', 'Xlsx']
-                              : ['PDF', 'Markdown', 'Word']"
-                            :key="index"
-                            :command="item"
-                            >{{ item }}</el-dropdown-item
-                          >
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </div>
-                </div>
-                <div v-if="message.role === 'assistant'" class="tip-text">
-                  {{ $t("common.Tip") }}
-                </div>
-              </div>
-              <!-- Table data display -->
-              <div v-else-if="message.tableHeaders" class="table-response">
-                <el-table :data="message.content" border style="width: 100%">
-                  <el-table-column
-                    v-for="header in message.tableHeaders"
-                    :key="header.prop"
-                    :prop="header.prop"
-                    :label="header.label"
-                    align="center"
-                  />
-                </el-table>
-                <el-button
-                  @click="() => downloadFile(message?.upload_path)"
-                  v-if="
-                    message?.status &&
-                    message?.status == 'SUCCEEDED' &&
-                    message?.upload_path &&
-                    message?.upload_path !== ''
-                  "
-                  type="primary"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadURL")
-                  }}</span>
-                </el-button>
-
-                <!-- Download button based on download_path -->
-                <el-button
-                  @click="() => downloadFile(message?.download_path)"
-                  v-if="
-                    message?.download_path &&
-                    message?.download_path !== '' &&
-                    message?.tool_name !== 'GeneNetworkAgent' &&
-                    message?.tool_name !== 'DigitalDesignAgent'
-                  "
-                  type="primary"
-                  style="margin-left: 8px"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadFile")
-                  }}</span>
-                </el-button>
-
-                <!-- Follow-up questions display -->
-                <FollowUpQuestions
-                  v-if="
-                    message.followUpQuestions &&
-                    message.followUpQuestions.length > 0 &&
-                    message.showFollowUpQuestions &&
-                    index == currentChat.messages.length - 1
-                  "
-                  :questions="message.followUpQuestions"
-                  @question-click="handleFollowUpQuestionClick"
-                />
-                <div class="message-fotter">
-                  <el-tooltip
-                    effect="dark"
-                    :content="$t('chat.copy')"
-                    placement="top-start"
-                    v-if="copyVisible == 0 || copyVisible !== index + 1"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon
-                        @click="fallbackCopyText(message.original, index + 1)"
-                      >
-                        <CopyDocument />
-                      </el-icon>
-                    </div>
-                  </el-tooltip>
-                  <div
-                    class="message-fotter-item"
-                    v-else-if="copyVisible == index + 1"
-                  >
-                    <el-icon>
-                      <SuccessFilled />
-                    </el-icon>
-                  </div>
-                  <el-tooltip
-                    effect="dark"
-                    :content="$t('chat.refreshReply')"
-                    placement="top-start"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon
-                        @click="() => refreshMessage(index)"
-                        :class="{
-                          'is-loading':
-                            refreshingMessages[
-                              `${index}_${message.id || ''}`
-                            ] || isSending,
-                        }"
-                      >
-                        <Refresh />
-                      </el-icon>
-                    </div>
-                  </el-tooltip>
-
-                  <!-- Upvote / downvote buttons -->
-                  <div
-                    v-if="message.role === 'assistant' && message.id"
-                    class="reaction-buttons"
-                  >
-                    <el-tooltip
-                      effect="dark"
-                      :content="getReactionTooltip(message.id, 1)"
-                      placement="top"
-                    >
-                      <div
-                        class="message-fotter-item reaction-btn"
-                        :class="{ active: getReactionState(message.id) === 1 }"
-                        @click="handleReaction(message.id, 1)"
-                      >
-                        <el-icon>
-                          <SuccessFilled
-                            v-if="getReactionState(message.id) === 1"
-                          />
-                          <CircleCheck v-else />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                    <el-tooltip
-                      effect="dark"
-                      :content="getReactionTooltip(message.id, 2)"
-                      placement="top"
-                    >
-                      <div
-                        class="message-fotter-item reaction-btn"
-                        :class="{ active: getReactionState(message.id) === 2 }"
-                        @click="handleReaction(message.id, 2)"
-                      >
-                        <el-icon>
-                          <CircleCloseFilled
-                            v-if="getReactionState(message.id) === 2"
-                          />
-                          <CircleClose v-else />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                  </div>
-
-                  <el-dropdown
-                    v-if="downloadWhiteList.includes(message.tool_name)"
-                    placement="top-start"
-                    trigger="click"
-                    @command="(v) => getFileDownUrl(message.id, v)"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon style="vertical-align: middle">
-                        <Download />
-                      </el-icon>
-                    </div>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item
-                          v-for="(item, index) in message?.tool_name ==
-                          'DataAgent'
-                            ? ['PDF', 'Markdown', 'Xlsx']
-                            : ['PDF', 'Markdown', 'Word']"
-                          :key="index"
-                          :command="item"
-                          >{{ item }}</el-dropdown-item
-                        >
-                      </el-dropdown-menu>
+                      </ChatActivity>
                     </template>
-                  </el-dropdown>
-                </div>
-              </div>
-              <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
-              <div v-else class="ai-response">
-                <!-- Reasoning steps -->
-                <div v-if="message.steps && message.steps.length > 0">
-                  <div class="steps-title">{{ $t("chat.stepResult") }}：</div>
-                  <div
-                    v-for="(step, stepIndex) in message.steps"
-                    :key="stepIndex"
-                    class="step-item"
-                  >
-                    <div v-if="stepIndex === 0" class="step-label">
-                      {{ $t("chat.useTool") }}
-                    </div>
-                    <div v-else class="step-label">
-                      {{ $t("chat.stepResult") }}
-                    </div>
-                    <div class="step-text">{{ step }}</div>
-                  </div>
-                </div>
-                <!-- Final answer -->
-                <div class="final-answer">
-                  <MarkdownViewer
-                    :instantMessage="
-                      (message?.instantMessage &&
-                        currentChat.messages.length - 1 == index) ||
-                      false
-                    "
-                    :content="message.content"
-                    @finish="() => handleMarkdownFinish(index)"
-                  />
-                </div>
-                <el-button
-                  @click="() => downloadFile(message?.upload_path)"
-                  v-if="
-                    message?.status &&
-                    message?.status == 'SUCCEEDED' &&
-                    message?.upload_path &&
-                    message?.upload_path !== ''
-                  "
-                  type="primary"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadURL")
-                  }}</span>
-                </el-button>
 
-                <!-- Download button based on download_path -->
-                <el-button
-                  @click="() => downloadFile(message?.download_path)"
-                  v-if="
-                    message?.download_path &&
-                    message?.download_path !== '' &&
-                    message?.tool_name !== 'GeneNetworkAgent' &&
-                    message?.tool_name !== 'DigitalDesignAgent'
-                  "
-                  type="primary"
-                  style="margin-left: 8px"
-                >
-                  <el-icon style="vertical-align: middle">
-                    <Download />
-                  </el-icon>
-                  <span style="vertical-align: middle">{{
-                    $t("chat.downloadFile")
-                  }}</span>
-                </el-button>
-
-                <!-- Follow-up questions display -->
-                <FollowUpQuestions
-                  v-if="
-                    message.followUpQuestions &&
-                    message.followUpQuestions.length > 0 &&
-                    message.showFollowUpQuestions &&
-                    index == currentChat.messages.length - 1
-                  "
-                  :questions="message.followUpQuestions"
-                  @question-click="handleFollowUpQuestionClick"
-                />
-                <div class="message-fotter">
-                  <el-tooltip
-                    effect="dark"
-                    :content="$t('chat.copy')"
-                    placement="top-start"
-                    v-if="copyVisible == 0 || copyVisible !== index + 1"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon
-                        @click="() => copyMessageWithDocs(message, index)"
-                      >
-                        <CopyDocument />
-                      </el-icon>
-                    </div>
-                  </el-tooltip>
-                  <div
-                    class="message-fotter-item"
-                    v-else-if="copyVisible == index + 1"
-                  >
-                    <el-icon>
-                      <SuccessFilled />
-                    </el-icon>
-                  </div>
-                  <el-tooltip
-                    effect="dark"
-                    :content="$t('chat.refreshReply')"
-                    placement="top-start"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon
-                        @click="() => refreshMessage(index)"
-                        :class="{
-                          'is-loading':
-                            refreshingMessages[`${index}_${message.id || ''}`],
-                        }"
-                      >
-                        <Refresh />
-                      </el-icon>
-                    </div>
-                  </el-tooltip>
-
-                  <!-- Upvote / downvote buttons -->
-                  <div
-                    v-if="message.role === 'assistant' && message.id"
-                    class="reaction-buttons"
-                  >
-                    <el-tooltip
-                      effect="dark"
-                      :content="getReactionTooltip(message.id, 1)"
-                      placement="top"
+                    <!-- Shared message chrome: files, follow-ups, actions -->
+                    <div
+                      v-if="
+                        message.role === 'user' &&
+                        message.attachedFiles &&
+                        message.attachedFiles.length > 0
+                      "
+                      class="message-files"
                     >
-                      <div
-                        class="message-fotter-item reaction-btn"
-                        :class="{ active: getReactionState(message.id) === 1 }"
-                        @click="handleReaction(message.id, 1)"
-                      >
-                        <el-icon>
-                          <SuccessFilled
-                            v-if="getReactionState(message.id) === 1"
-                          />
-                          <CircleCheck v-else />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                    <el-tooltip
-                      effect="dark"
-                      :content="getReactionTooltip(message.id, 2)"
-                      placement="top"
-                    >
-                      <div
-                        class="message-fotter-item reaction-btn"
-                        :class="{ active: getReactionState(message.id) === 2 }"
-                        @click="handleReaction(message.id, 2)"
-                      >
-                        <el-icon>
-                          <CircleCloseFilled
-                            v-if="getReactionState(message.id) === 2"
-                          />
-                          <CircleClose v-else />
-                        </el-icon>
-                      </div>
-                    </el-tooltip>
-                  </div>
-
-                  <el-dropdown
-                    v-if="downloadWhiteList.includes(message.tool_name)"
-                    placement="top-start"
-                    trigger="click"
-                    @command="(v) => getFileDownUrl(message.id, v)"
-                  >
-                    <div class="message-fotter-item">
-                      <el-icon style="vertical-align: middle">
-                        <Download />
-                      </el-icon>
-                    </div>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item
-                          v-for="(item, index) in message?.tool_name ==
-                          'DataAgent'
-                            ? ['PDF', 'Markdown', 'Xlsx']
-                            : ['PDF', 'Markdown', 'Word']"
-                          :key="index"
-                          :command="item"
-                          >{{ item }}</el-dropdown-item
+                      <div class="files-list">
+                        <div
+                          v-for="(file, fileIndex) in message.attachedFiles"
+                          :key="fileIndex"
+                          class="file-item-display"
                         >
-                      </el-dropdown-menu>
+                          <FilesCard
+                            :uid="fileIndex"
+                            :name="file.name"
+                            :file-size="file.size"
+                            :show-del-icon="false"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <template #follow-up>
+                      <FollowUpQuestions
+                        v-if="
+                          message.role === 'assistant' &&
+                          message.followUpQuestions &&
+                          message.followUpQuestions.length > 0 &&
+                          message.showFollowUpQuestions &&
+                          index == currentChat.messages.length - 1
+                        "
+                        :questions="message.followUpQuestions"
+                        @question-click="handleFollowUpQuestionClick"
+                      />
                     </template>
-                  </el-dropdown>
-                </div>
+
+                    <template #actions>
+                      <ChatMessageActions
+                        :role="message.role === 'user' ? 'user' : 'assistant'"
+                        :copied="copyVisible === index + 1"
+                        :can-refresh="
+                          messageActionCapabilities(message).canRefresh
+                        "
+                        :refresh-busy="
+                          !!refreshingMessages[
+                            `${index}_${message.id || ''}`
+                          ] ||
+                          (!message.steps && isSending)
+                        "
+                        :can-react="messageActionCapabilities(message).canReact"
+                        :reaction-active="
+                          message.id ? getReactionState(message.id) : 0
+                        "
+                        :direct-downloads="getDirectDownloads(message)"
+                        :generated-formats="
+                          messageActionCapabilities(message).generatedFormats
+                        "
+                        @copy="handleMessageCopy(message, index)"
+                        @refresh="() => refreshMessage(index)"
+                        @reaction="
+                          (type) => {
+                            if (message.id) handleReaction(message.id, type);
+                          }
+                        "
+                        @direct-download="(path) => downloadFile(path)"
+                        @download-format="
+                          (format) => {
+                            if (message.id) getFileDownUrl(message.id, format);
+                          }
+                        "
+                      />
+                      <div
+                        v-if="
+                          message.role === 'assistant' &&
+                          !message.steps &&
+                          !message.tableHeaders
+                        "
+                        class="tip-text"
+                      >
+                        {{ $t("common.Tip") }}
+                      </div>
+                    </template>
+                  </ChatMessageRow>
+                </template>
+
+                <!-- Loading message: real TransferProgress XOR simulated SendProgress,
+             suppressed while an AG-UI stream is in flight — the placeholder already
+             shows streaming content, so both would double the "is responding" cue. -->
+                <ChatMessageRow
+                  v-if="isSending && !getChatState(currentChatId).isStreaming"
+                  role="assistant"
+                  loading
+                >
+                  <template #avatar>
+                    <el-avatar :size="36" :src="botAvatar" />
+                  </template>
+                  <div
+                    class="message-text loading-message phy-bubble-assistant"
+                  >
+                    {{ $t("chat.ladingInner") }}
+                    <div class="loading-dots">
+                      <span class="dot"></span>
+                      <span class="dot"></span>
+                      <span class="dot"></span>
+                    </div>
+                    <TransferProgress
+                      v-if="getChatState(currentChatId).uploadTransfer"
+                      :snapshot="getChatState(currentChatId).uploadTransfer!"
+                      @cancel="(id) => abortTransfer(id)"
+                    />
+                    <SendProgress
+                      v-else
+                      :started-at="getChatState(currentChatId).sendStartedAt"
+                      :agent-name="getChatState(currentChatId).activeAgentName"
+                      :completing="getChatState(currentChatId).completing"
+                    />
+                  </div>
+                </ChatMessageRow>
               </div>
             </div>
-          </div>
-        </template>
+            <el-backtop target=".message-container" :right="40" :bottom="80" />
 
-        <!-- Loading message: fake ETA progress, suppressed while an AG-UI stream is in
-             flight — the placeholder message already shows real streaming content, so
-             showing both would double up the "is responding" indicator on screen. -->
-        <div
-          v-if="isSending && !getChatState(currentChatId).isStreaming"
-          class="message assistant"
-        >
-          <div class="message-avatar">
-            <el-avatar :size="36" :src="botAvatar" />
-          </div>
-          <div class="message-content">
-            <div class="message-text loading-message">
-              {{ $t("chat.ladingInner") }}
-              <div class="loading-dots">
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
-              </div>
-              <SendProgress
-                :started-at="getChatState(currentChatId).sendStartedAt"
-                :agent-name="getChatState(currentChatId).activeAgentName"
-                :completing="getChatState(currentChatId).completing"
+            <!-- Input area -->
+            <div class="input-container">
+              <ChatComposer
+                ref="composerRef"
+                v-model="displayMessageInput"
+                :is-sending="isSending"
+                v-model:chat-mode="chatMode"
+                :expert-mode-enabled="expertModeEnabled"
+                :show-mode-selector="!currentChat?.messages?.length"
+                :file-list="fileList"
+                :roles-tool="rolesTool"
+                :roles-loading="rolesLoading"
+                :has-messages="!!currentChat?.messages?.length"
+                :selected-agent="selectedAgent"
+                :picker-options="pickerOptions"
+                :set-tour-input-target="setTourInputTarget"
+                @submit="sendMessage"
+                @stop="abortCurrentRequest"
+                @select="handleSelect"
+                @search="handleSearch"
+                @command="handleCommand"
+                @file-change="handleFileChange"
+                @remove-file="removeFile"
+                @clear-agent="clearSelectedAgent"
               />
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Input area -->
-      <div
-        class="input-container"
-        :style="{ bottom: currentChat?.messages?.length ? '2%' : '30%' }"
-      >
-        <div v-if="!currentChat?.messages?.length" class="empty-chat">
-          <div class="welcome-container">
-            <div class="welcome-container-text">
-              <div class="welcome-container-text1">
-                <img
-                  src="../../assets/images/chat/logo.png"
-                  class="logo"
-                  alt="Logo"
-                />{{ $t("chat.welcomeTitle") }}
-              </div>
-              <div class="welcome-container-text2">
-                {{ $t("chat.welcomeSubtitle") }}
-              </div>
-            </div>
-          </div>
-          <ChatModeSelector
-            v-model="chatMode"
-            :expert-enabled="expertModeEnabled"
-            class="empty-chat-mode"
-          />
-        </div>
-        <div
-          class="input-container-warpper"
-          :class="{
-            'show-tutorial': showTutorial && currentTutorialStep === 3,
-          }"
+        <!-- Agents architecture diagram dialog -->
+        <el-dialog
+          v-model="agentsViewVisible"
+          :title="t('chat.agentsArchitectureTitle')"
+          :close-on-click-modal="true"
+          :close-on-press-escape="true"
+          width="min(800px, calc(100vw - 32px))"
+          center
         >
-          <div class="input-box">
-            <!-- Abort button - moved outside MentionSender so it stays clickable while sending -->
-            <div v-if="isSending" class="abort-button-overlay">
-              <el-tooltip :content="$t('chat.abortTooltip')" placement="top">
-                <el-button round color="#f56c6c" :aria-label="$t('chat.abortAriaLabel')" @click="abortCurrentRequest">
-                  <el-icon>
-                    <Close />
-                  </el-icon>
-                </el-button>
-              </el-tooltip>
-            </div>
-
-            <MentionSender
-              v-model="messageInput"
-              ref="senderRef"
-              :loading="isSending"
-              :disabled="isSending"
-              variant="updown"
-              @submit="sendMessage"
-              :auto-size="{ minRows: 2, maxRows: 5 }"
-              clearable
-              allow-speech
-              :placeholder="$t('chat.inputPlaceholder', { symbol: '@' })"
-              :options="rolesTool.map((x) => ({ value: x }))"
-              :trigger-strings="['@']"
-              trigger-split=","
-              :whole="true"
-              @select="handleSelect"
-              @search="handleSearch"
-              submit-type="enter"
-              @keydown.enter.capture="onComposerEnterCapture"
-            >
-              <!-- Custom header feature list -->
-              <template #header>
-                <div class="header-self-wrap">
-                  <!-- File list area - only shown before sending -->
-                  <div
-                    v-if="fileList.length > 0 && !isSending"
-                    class="file-list-container"
-                  >
-                    <div class="file-list">
-                      <div
-                        v-for="(file, index) in fileList"
-                        :key="index"
-                        class="file-item"
-                      >
-                        <FilesCard
-                          :uid="index"
-                          :name="file.name"
-                          :file-size="file.size"
-                          :show-del-icon="true"
-                          @delete="removeFile(index)"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </template>
-
-              <!-- Custom bottom-left feature list -->
-              <template #prefix>
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    flex-wrap: wrap;
-                  "
-                >
-                  <el-upload
-                    ref="uploadRef"
-                    class="upload-demo"
-                    :limit="10"
-                    accept=".pdf,.doc,.xlsx,.ppt,.txt,.png"
-                    :show-file-list="false"
-                    :auto-upload="false"
-                    :disabled="isSending"
-                    :on-change="handleFileChange"
-                    multiple
-                    action="#"
-                  >
-                    <template #trigger>
-                      <el-tooltip
-                        :content="$t('chat.uploadFile')"
-                        placement="top"
-                      >
-                        <el-button round plain color="#626aef" :aria-label="$t('chat.uploadFile')">
-                          <el-icon>
-                            <Paperclip />
-                          </el-icon>
-                        </el-button>
-                      </el-tooltip>
-                    </template>
-                  </el-upload>
-                  <el-dropdown
-                    v-if="currentChat?.messages?.length"
-                    placement="top-start"
-                    trigger="click"
-                    :disabled="isSending"
-                    @command="handleCommand"
-                  >
-                    <el-button round plain color="#626aef">
-                      <el-icon>
-                        <Menu />
-                      </el-icon>
-                    </el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu v-if="rolesTool.length > 0">
-                        <el-dropdown-item
-                          v-for="(item, index) in rolesTool"
-                          :key="index"
-                          :command="'@' + item + ','"
-                          >{{ item }}</el-dropdown-item
-                        >
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                </div>
-              </template>
-
-              <!-- Custom bottom-right feature list -->
-              <template #action-list>
-                <div style="display: flex; align-items: center; gap: 8px">
-                  <!-- Send button -->
-                  <div
-                    v-if="!messageInput.trim() || isSending"
-                    class="send-btn"
-                  >
-                    <el-tooltip
-                      :content="$t('chat.inputPlaceholderTip')"
-                      placement="top"
-                    >
-                      <el-button round color="#cbcdcd" :aria-label="$t('chat.sendAriaLabel')">
-                        <el-icon>
-                          <Promotion />
-                        </el-icon>
-                      </el-button>
-                    </el-tooltip>
-                  </div>
-                  <div v-else class="send-btn" @click="sendMessage">
-                    <el-button round color="#626aef" :aria-label="$t('chat.sendAriaLabel')">
-                      <el-icon>
-                        <Promotion />
-                      </el-icon>
-                    </el-button>
-                  </div>
-                </div>
-              </template>
-
-              <!-- Custom footer slot -->
-              <template #footer>
-                <div
-                  v-if="!currentChat?.messages?.length"
-                  style="
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 12px;
-                  "
-                >
-                  <!-- Permission loading state -->
-                  <div v-if="rolesLoading" class="roles-loading">
-                    <el-icon class="is-loading">
-                      <Loading />
-                    </el-icon>
-                    {{ $t("chat.loadingAgentPerms") }}
-                  </div>
-
-                  <!-- Agent button area -->
-                  <template v-else-if="rolesTool.length > 0 && chatMode === 'instant'">
-                    <div
-                      style="
-                        width: 100px;
-                        height: 50px;
-                        margin-right: 20px;
-                        cursor: pointer;
-                      "
-                      @click="showAgentsView"
-                    >
-                      <img
-                        src="/src/assets/images/chat/Agents.png"
-                        alt="Agents"
-                        style="width: 100%; height: 100%"
-                      />
-                    </div>
-                    <div class="input-actions">
-                      <div
-                        v-for="(item, index) in rolesTool"
-                        :key="index"
-                        class="agent-item-wrapper"
-                      >
-                        <el-tooltip placement="top">
-                          <template #content>
-                            <div class="agent-tooltip-content">
-                              <p>{{ getAgentTooltip(item) }}</p>
-                            </div>
-                            <a
-                              class="more-button"
-                              @click="showMoreInfo(item)"
-                              :disabled="isSending"
-                            >
-                              {{ $t("chat.more") }}
-                            </a>
-                          </template>
-                          <div
-                            class="agent-button"
-                            :class="{
-                              'agent-button-active': activeButton === item,
-                            }"
-                            @click="handleButtonClick(item)"
-                            :style="{
-                              opacity: isSending ? 0.6 : 1,
-                              cursor: isSending ? 'not-allowed' : 'pointer',
-                            }"
-                          >
-                            {{ item }}
-                          </div>
-                        </el-tooltip>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-              </template>
-            </MentionSender>
-          </div>
-        </div>
-      </div>
-      <div
-        v-if="
-          !currentChat?.messages?.length &&
-          UserStore.permission !== 'guest' &&
-          chatMode === 'instant'
-        "
-        class="input-container-bottom"
-        :class="{ 'show-tutorial': showTutorial && currentTutorialStep === 2 }"
-        @wheel.prevent="handleScroll"
-        :style="containerStyle"
-      >
-        <div class="agent-list">
-          <div class="agent-page">
-            <div
-              v-for="agent in presetAgents"
-              :key="agent.id"
-              class="input-container-bottom-item"
-              @click="isSending ? null : handleAgentClick(agent)"
-              :style="{
-                opacity: isSending ? 0.6 : 1,
-                cursor: isSending ? 'not-allowed' : 'pointer',
-              }"
-            >
-              <span>{{ agent.name }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="chat-footer">
-        {{ $t("chat.footer") }}
-        <a
-          href="https://beian.miit.gov.cn/"
-          target="_blank"
-          class="icp-link"
-          :aria-label="$t('chat.icpAriaLabel')"
-          >京ICP备07026971号-9</a
-        >
-      </div>
-    </div>
-
-    <!-- Right sidebar -->
-    <div class="right-sidebar" :class="{ 'is-open': drawerVisible }">
-      <div class="sidebar-header">
-        <h3>{{ $t("chat.detailInfo") }}</h3>
-        <el-button type="text" @click="drawerVisible = false" class="close-btn">
-          <el-icon><icon-close /></el-icon>
-        </el-button>
-      </div>
-      <div class="sidebar-content">
-        <h3>{{ $t("chat.relatedLinks") }}</h3>
-        <div class="links-container">
           <div
-            v-for="(link, index) in currentLinks"
-            :key="index"
-            class="link-item"
+            class="agents-view-container"
+            @wheel="handleWheel"
+            @mousedown="handleMouseDown"
+            @mousemove="handleMouseMove"
+            @mouseup="handleMouseUp"
+            @mouseleave="handleMouseUp"
+            ref="containerRef"
+            style="overflow: hidden; cursor: grab"
           >
-            <el-icon>
-              <Link />
-            </el-icon>
-            <a :href="link.url" target="_blank">{{ link.title }}</a>
+            <img
+              ref="imageRef"
+              :src="AgentsViewImg"
+              :alt="t('chat.agentsArchitectureAlt')"
+              class="agents-view-image"
+              :style="imageStyle"
+            />
           </div>
-        </div>
-      </div>
-    </div>
+        </el-dialog>
+      </template>
 
-    <!-- Agents architecture diagram dialog -->
-    <el-dialog
-      v-model="agentsViewVisible"
-      :title="t('chat.agentsArchitectureTitle')"
-      :close-on-click-modal="true"
-      :close-on-press-escape="true"
-      width="800px"
-      center
-    >
-      <div
-        class="agents-view-container"
-        @wheel="handleWheel"
-        @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseup="handleMouseUp"
-        @mouseleave="handleMouseUp"
-        ref="containerRef"
-        style="overflow: hidden; cursor: grab"
-      >
-        <img
-          ref="imageRef"
-          :src="AgentsViewImg"
-          :alt="t('chat.agentsArchitectureAlt')"
-          class="agents-view-image"
-          :style="imageStyle"
+      <template #artifact>
+        <DeepGenomeArtifact
+          v-if="
+            currentArtifactMessage &&
+            currentArtifactMessage.tool_name === 'DeepGenomeAgent'
+          "
+          :title="chatHeaderTitle"
+          :metadata="artifactAgentLabel(currentArtifactMessage)"
+          :status="currentArtifactStatusLabel"
+          :markdown="
+            String(currentArtifactMessage.content).replace(/\n/g, '\\n')
+          "
+          :references="currentArtifactMessage.doc_list"
+          :ns="artifactNamespace"
+          :tab="artifactTab"
+          :tab-labels="artifactTabLabels"
+          :tablist-label="t('common.operation')"
+          :artifact-id="artifactId"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t('common.operation')"
+          @back="closeArtifact"
+          @close="closeArtifact"
+          @tab="selectArtifactTab"
         />
-      </div>
-    </el-dialog>
+        <ResearchArtifactShell
+          v-else-if="currentArtifactMessage"
+          :title="chatHeaderTitle"
+          :metadata="artifactAgentLabel(currentArtifactMessage)"
+          :status="currentArtifactStatusLabel"
+          :report-status="currentArtifactReportStatus || undefined"
+          :tab="artifactTab"
+          :tab-labels="artifactTabLabels"
+          :tablist-label="t('common.operation')"
+          :artifact-id="artifactId"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t('common.operation')"
+          @back="closeArtifact"
+          @close="closeArtifact"
+          @tab="selectArtifactTab"
+        >
+          <template #content>
+            <BotReportState
+              v-if="currentArtifactLifecycle"
+              :state="currentArtifactLifecycle"
+              :progress="currentArtifactProjection?.progress"
+              :updated-at="currentArtifactProjection?.reportUpdatedAt"
+              :labels="currentArtifactBotReportLabels"
+              :empty-report-label="currentArtifactEmptyReportLabel"
+              :ns="artifactNamespace"
+            />
+            <CitedAnswer
+              v-else
+              :content="String(currentArtifactMessage.content)"
+              :references="currentArtifactMessage.doc_list"
+              :ns="artifactNamespace"
+              surface="artifact"
+              reference-presentation="external"
+            />
+          </template>
+          <template #evidence>
+            <ResearchEvidencePanel
+              :references="currentArtifactMessage.doc_list"
+              :ns="artifactNamespace"
+              @activate="selectArtifactTab('evidence')"
+            />
+          </template>
+          <template #activity>{{ t("chat.log.noData") }}</template>
+          <template #downloads>
+            <BotArtifactList
+              v-if="currentArtifactLifecycle"
+              :artifacts="currentArtifactLifecycle.artifacts"
+              :empty-label="t('chat.botReport.emptyArtifacts')"
+              :download="downloadFile"
+            />
+            <span v-else>{{ t("common.noData") }}</span>
+          </template>
+        </ResearchArtifactShell>
+      </template>
+    </PhyAdaptiveShell>
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, nextTick, watch, computed } from "vue";
-import Sidebar from "./sidebar.vue";
-import { MentionSender } from "vue-element-plus-x";
-import SendProgress from "./components/SendProgress.vue";
-import StreamMessage from "./components/StreamMessage.vue";
-import ChatModeSelector from "@/components/ChatModeSelector.vue";
 import {
-  Close as IconClose,
-  Document,
-  CopyDocument,
-  SuccessFilled,
-  Download,
-  Menu,
-  Loading,
-  Refresh,
-  Link,
-  CircleCheck,
-  CircleClose,
-  CircleCloseFilled,
-} from "@element-plus/icons-vue";
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  nextTick,
+  watch,
+  computed,
+} from "vue";
+import Sidebar from "./sidebar.vue";
+import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
+import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
+import { Prompts } from "vue-element-plus-x";
+import TransferProgress from "@/components/TransferProgress.vue";
+import SendProgress from "./components/SendProgress.vue";
+import ChatComposer from "./components/ChatComposer.vue";
+import ChatMessageRow from "./components/ChatMessageRow.vue";
+import ChatMessageContent from "./components/ChatMessageContent.vue";
+import ChatMessageActions from "./components/ChatMessageActions.vue";
+import ChatActivity from "./components/ChatActivity.vue";
+import ChatAnalystLog from "./components/ChatAnalystLog.vue";
+import type { DirectDownloadItem } from "./components/ChatMessageActions.vue";
+import { PhyAdaptiveShell, PhyEmptyState } from "@/components/shell";
+import {
+  DeepGenomeArtifact,
+  ResearchArtifactShell,
+  ResearchEvidencePanel,
+} from "@/components/research";
+import BotArtifactList from "@/components/research/BotArtifactList.vue";
+import BotReportState from "@/components/research/BotReportState.vue";
+import CitedAnswer from "@/components/CitedAnswer.vue";
+import { Menu } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
 import { useTutorial } from "./composables/useTutorial";
 import { useImageZoomPan } from "./composables/useImageZoomPan";
 import { useChatStates } from "./composables/useChatStates";
+import { useArtifactPanel } from "./composables/useArtifactPanel";
 import { useAgentImages } from "./composables/useAgentImages";
 import { useReactions } from "./composables/useReactions";
 import { useCopyDownload } from "./composables/useCopyDownload";
 import { useFileUpload } from "./composables/useFileUpload";
-import { useAgentsPanel } from "./composables/useAgentsPanel";
+import { useComposer } from "./composables/useComposer";
+import {
+  CANONICAL_AGENT_DISPLAY_NAMES,
+  CANONICAL_AGENT_I18N_KEYS,
+  CANONICAL_AGENT_ZH_NAMES,
+  derivePickerOptions,
+} from "@/constants/agents";
+import type { CanonicalAgentTool } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useSendMessage } from "./composables/useSendMessage";
+import { useA2uiInteraction } from "./composables/useA2uiInteraction";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
-import { useLogView } from "./composables/useLogView";
-import { useComposer } from "./composables/useComposer";
-import LangSwitch from "@/components/LangSwitch.vue";
-import { useI18n } from "vue-i18n";
-import type { UploadInstance } from "element-plus";
 import {
-  Paperclip,
-  Promotion,
-  Close,
-} from "@element-plus/icons-vue";
+  useLogView,
+  deriveAnalystLogRowId,
+  deriveAnalystLogTaskId,
+  analystLogActivityKey,
+} from "./composables/useLogView";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
-import CitedAnswer from "@/components/CitedAnswer.vue";
-import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
+import { abortRequest } from "@/utils/request";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
+import {
+  STARTER_PROMPTS,
+  applyStarterPrompt,
+  getStarterPromptItems,
+} from "@/views/chat/utils/starterPrompts";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
-import { isValidPendingRecord, matchesChat, safeParse } from "@/utils/pending-chat";
+import chatLogo from "@/assets/images/chat/logo.png";
+import {
+  clearPendingChat,
+  isLocalStorageChat,
+  isValidPendingRecord,
+  matchesChat,
+  safeParse,
+} from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
-import { formatLogContentWithColors } from "./utils/agent-log";
-import { guardEnterSubmit } from "./utils/guardEnterSubmit";
-import type { Chat, ChatMessage } from "./types";
+import { parentRowIdForDialogue } from "./utils/chat-parent-row";
+import { messageActionCapabilities } from "./utils/message-action-capabilities";
+import { artifactKindForMessage } from "./utils/artifact-policy";
+import type {
+  Chat,
+  ChatMessage,
+  ChatComposerHandle,
+  ChatUIState,
+  DialogueReconciliationResult,
+} from "./types";
+import type { BotRunProjection } from "./botProjection";
+import {
+  cloneBotInterop,
+  type BotLifecycleState,
+} from "./streaming/botLifecycleReducer";
 
-const uploadRef = ref<UploadInstance>();
-const senderRef = ref();
-
-// Capture-phase guard that swallows Enter while the mention dropdown is open,
-// preventing MentionSender's internal handleKeyDown from triggering submit()
-// while the dropdown is still visible.
-// popoverVisible is a ComputedRef exposed by MentionSender via __expose.
-const onComposerEnterCapture = (e: KeyboardEvent) => {
-  guardEnterSubmit(e, senderRef.value?.popoverVisible);
-};
+const composerRef = ref<ChatComposerHandle | null>(null);
 
 const timestamp = ref(Date.now());
-
-const submitUpload = () => {
-  uploadRef.value!.submit();
-};
-const { t } = useI18n();
-// Drawer state
-const drawerVisible = ref(false);
+const { locale, t } = useI18n();
 
 // Left sidebar state
 const leftSidebarCollapsed = ref(false);
+const leftSidebarDrawerOpen = ref(false);
+const sidebarTriggerRef = ref<{ $el?: HTMLElement } | null>(null);
+provide(CHAT_SIDEBAR_DRAWER_OPEN_KEY, leftSidebarDrawerOpen);
+
+const isMobileViewport = ref(
+  typeof window !== "undefined"
+    ? window.innerWidth < SIDEBAR_MOBILE_BREAKPOINT
+    : false
+);
+const updateMobileViewport = () => {
+  isMobileViewport.value = window.innerWidth < SIDEBAR_MOBILE_BREAKPOINT;
+};
+
+const chatStateAttr = computed(() =>
+  currentChat.value?.messages?.length ? "populated" : "empty"
+);
+const sidebarDrawerStateAttr = computed(() => {
+  if (!isMobileViewport.value) return "not-mobile";
+  return leftSidebarDrawerOpen.value ? "open" : "closed";
+});
+
+watch(leftSidebarDrawerOpen, async (isOpen, wasOpen) => {
+  if (isOpen || !wasOpen || !isMobileViewport.value) return;
+  await nextTick();
+  sidebarTriggerRef.value?.$el?.focus();
+});
 
 // Agents architecture diagram dialog
 const agentsViewVisible = ref(false);
-const { scale, isDragging, imageOffset, containerRef, imageRef, imageStyle, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp } = useImageZoomPan(agentsViewVisible);
+const {
+  scale,
+  isDragging,
+  imageOffset,
+  containerRef,
+  imageRef,
+  imageStyle,
+  handleWheel,
+  handleMouseDown,
+  handleMouseMove,
+  handleMouseUp,
+} = useImageZoomPan(agentsViewVisible);
 
-// Watch the right sidebar state; when the right side opens, ensure the left side is collapsed
-watch(drawerVisible, (newValue) => {
-  if (newValue === true && !leftSidebarCollapsed.value) {
-    // Right side opened, so collapse the left side
-    leftSidebarCollapsed.value = true;
-  }
-});
-
-const botAvatar =
-  "/avatars/bot.svg";
+const botAvatar = chatLogo;
 
 // Show the Agents architecture diagram dialog
 const showAgentsView = () => {
@@ -1452,6 +642,13 @@ const chatList = ref<Chat[]>([]);
 
 // Fix: changed a static reference to a computed property to ensure reactive updates
 const rolesTool = computed(() => userStore().roles);
+const pickerOptions = computed(() =>
+  derivePickerOptions(rolesTool.value).map((option) => ({
+    tool: option.tool,
+    labelKey: option.labelKey,
+    label: t(option.labelKey) || option.displayName,
+  }))
+);
 const UserStore = userStore();
 const expertModeEnabled = computed(() => userStore().expertEnabled);
 
@@ -1465,14 +662,6 @@ const buttonPermissions = {
   GA: "GA",
   webSearch: "web search",
 };
-// Download display whitelist
-const downloadWhiteList = [
-  "ChatAgent",
-  "KnowledgeAgent",
-  "DataAgent",
-  "ReviewAgent",
-];
-
 // Check button permission
 const hasButtonPermission = (buttonType: string) => {
   const permission =
@@ -1481,6 +670,31 @@ const hasButtonPermission = (buttonType: string) => {
 };
 
 const router = useRouter();
+
+const chatHeaderTitle = computed(() => {
+  const currentTitle =
+    typeof currentChat.value?.title === "string"
+      ? currentChat.value.title.trim()
+      : "";
+  if (currentTitle) return currentTitle;
+
+  const listTitle = chatList.value.find(
+    (chat) => chat.dialogue_id === currentChatId.value
+  )?.title;
+  return listTitle?.trim() || t("chat.untitledConversation");
+});
+
+const toggleSidebarFromHeader = async () => {
+  if (leftSidebarCollapsed.value) {
+    leftSidebarCollapsed.value = false;
+  } else {
+    leftSidebarDrawerOpen.value = true;
+    await nextTick();
+    document
+      .querySelector<HTMLElement>('[data-testid="sidebar-drawer-close"]')
+      ?.focus();
+  }
+};
 
 // Optimize the permission loading logic
 const loadUserTools = async () => {
@@ -1497,14 +711,14 @@ const loadUserTools = async () => {
 };
 
 onMounted(async () => {
+  updateMobileViewport();
+  window.addEventListener("resize", updateMobileViewport);
+
   // Load permission info first
   await loadUserTools();
 
   // Fetch the history question list
   getHistoryQuestionData().then(() => {
-    // Restore incomplete sessions
-    restorePendingChats();
-
     // Get the chatId from the URL
     const urlChatId = getChatIdFromUrl();
 
@@ -1512,7 +726,6 @@ onMounted(async () => {
     if (urlChatId) {
       // First check whether it is an incomplete session
       if (loadPendingChat(urlChatId)) {
-        currentChatId.value = urlChatId;
         return;
       }
 
@@ -1540,106 +753,11 @@ onMounted(async () => {
 
   // Check whether the tutorial guide needs to be shown
   checkTutorialStatus();
-
 });
 
-// Fetch history question data
-const getHistoryQuestionData = () => {
-  return new Promise<void>((resolve) => {
-    getHistoryQuestionList()
-      .then((res: any) => {
-        if (res.code === 200 && res.data) {
-          // Process the returned data while keeping the original structure
-          const formattedData = res.data.map((item: any) => {
-            return {
-              id: item.id,
-              dialogue_id: item.dialogue_id,
-              title: item.title_query || item.query, // Prefer title_query, fall back to query
-              date: item.created_at, // Keep the original time string
-              isFavorite: false, // Not favorited by default
-            };
-          });
-
-          // Check the temporary chat data in localStorage
-          // Scan + clean temporary localStorage records via the shared helpers
-          restorePendingChats();
-
-          // Update chatList, preserving the order returned by the API
-          chatList.value = formattedData;
-
-          // If there is currently a new chat state, try to associate it with the API-returned data
-          if (currentChatId.value && currentChatId.value.startsWith("new_")) {
-            // Find whether there is a newly created chat (by comparing user message content)
-            const currentUserMessage = currentChat.value?.messages?.find(
-              (msg: ChatMessage) => msg.role === "user"
-            );
-            if (currentUserMessage) {
-              const matchingChat = formattedData.find((chat: Chat) => {
-                // Compare the chat title with the user message content
-                return (
-                  chat.title === currentUserMessage.content ||
-                  chat.title.includes(
-                    currentUserMessage.content.substring(0, 20)
-                  ) ||
-                  currentUserMessage.content.includes(
-                    chat.title.substring(0, 20)
-                  )
-                );
-              });
-
-              if (matchingChat) {
-                // Found a matching chat, update the current chat ID
-                currentChatId.value = matchingChat.dialogue_id;
-                updateUrlWithChatId(matchingChat.dialogue_id);
-              }
-            }
-          }
-        }
-        resolve();
-      })
-      .catch((err: any) => {
-        console.error("Failed to fetch history question data:", err);
-        resolve();
-      });
-  });
-};
-
-// Check localStorage for all incomplete sessions and remove placeholders that
-// already match an entry in chatList. Unlike the legacy frontend, the Web app
-// does not push placeholder entries into chatList — here chatList is driven by
-// backend fetches, and pending-chat URLs are handled by loadPendingChat, avoiding
-// conflicts with the parallel chatStates model.
-const restorePendingChats = () => {
-  const pendingChatKeys = Object.keys(localStorage).filter((key) =>
-    key.startsWith("pending_chat_")
-  );
-
-  pendingChatKeys.forEach((key) => {
-    const tempChatId = key.replace("pending_chat_", "");
-    const pendingChatData = safeParse(localStorage.getItem(key));
-
-    if (!isValidPendingRecord(pendingChatData)) {
-      // Records that violate the contract (corrupt / legacy / partial write) — silently clean
-      if (pendingChatData !== null) {
-        localStorage.removeItem(key);
-      }
-      return;
-    }
-
-    const matchingChat = chatList.value.find((chat) =>
-      matchesChat(chat, pendingChatData, tempChatId)
-    );
-
-    if (matchingChat) {
-      localStorage.removeItem(key);
-      if (currentChatId.value === tempChatId) {
-        currentChatId.value = matchingChat.dialogue_id;
-        updateUrlWithChatId(matchingChat.dialogue_id);
-      }
-    }
-    // No match → keep in localStorage so a later loadPendingChat can load it via the URL
-  });
-};
+onUnmounted(() => {
+  window.removeEventListener("resize", updateMobileViewport);
+});
 
 // Load a specific incomplete session from localStorage (used by onMounted keyed on the url chatId)
 const loadPendingChat = (dialogueId: string) => {
@@ -1653,7 +771,10 @@ const loadPendingChat = (dialogueId: string) => {
     return false;
   }
 
-  currentChat.value = { messages: pendingChatData.messages };
+  currentChatId.value = dialogueId;
+  getChatState(dialogueId).renderedChat = {
+    messages: pendingChatData.messages,
+  };
   getChatState(dialogueId).mode =
     pendingChatData.mode === "expert" ? "expert" : "instant";
   return true;
@@ -1663,27 +784,430 @@ const loadPendingChat = (dialogueId: string) => {
 const {
   chatStates,
   getChatState,
+  rekeyChatState,
   currentChatId,
   currentChat,
   messageInput,
   isSending,
   chatMode,
+  selectedAgent,
   fileList,
   copyVisible,
   copyTimeRef,
-  logData,
-  loadingLog,
   refreshingMessages,
-  updatingLog,
 } = useChatStates();
 
-// Copy conversation + file download
-const { fallbackCopyText, downloadFile, getFileDownUrl } =
-  useCopyDownload({
-    copyVisible,
-    copyTimeRef,
-    t,
+const {
+  artifactOpen,
+  activeArtifactMessageId,
+  artifactTab,
+  currentArtifactMessage,
+  openArtifact: setArtifactOpen,
+  closeArtifact: resetArtifactPanel,
+  selectArtifactTab,
+  hasAutoOpened,
+  markAutoOpened,
+} = useArtifactPanel({ currentChatId, currentChat, getChatState });
+
+const effectiveSidebarCollapsed = computed(
+  () => leftSidebarCollapsed.value || artifactOpen.value
+);
+
+function canonicalAgentTool(toolName?: string): CanonicalAgentTool | null {
+  if (!toolName || !(toolName in CANONICAL_AGENT_I18N_KEYS)) return null;
+  return toolName as CanonicalAgentTool;
+}
+
+function artifactAgentLabel(message: ChatMessage): string {
+  const tool = canonicalAgentTool(message.tool_name);
+  if (!tool) return message.tool_name || "";
+  return locale.value === "zh-CN"
+    ? CANONICAL_AGENT_ZH_NAMES[tool]
+    : CANONICAL_AGENT_DISPLAY_NAMES[tool];
+}
+
+const DEEP_GENOME_SUCCESS_STATUSES = new Set(["SUCCEEDED"]);
+
+function isCompletedDeepGenomeMessage(message: ChatMessage): boolean {
+  if (artifactKindForMessage(message) !== "deep-genome") return false;
+
+  const status = String(message.status || "")
+    .trim()
+    .toUpperCase();
+  if (!DEEP_GENOME_SUCCESS_STATUSES.has(status)) return false;
+
+  const content =
+    typeof message.content === "string" ? message.content.trim() : "";
+  return (
+    content !== "" &&
+    !/^Loading file content\.\.\.?$/i.test(content) &&
+    !/^File content is empty or failed to load$/i.test(content) &&
+    !/^Failed to load file/i.test(content)
+  );
+}
+
+function artifactPreviewForMessage(message: ChatMessage) {
+  const artifactKind = artifactKindForMessage(message);
+  if (artifactKind === null) return null;
+  if (
+    artifactKind === "deep-genome" &&
+    !isCompletedDeepGenomeMessage(message)
+  ) {
+    return null;
+  }
+
+  const tool = canonicalAgentTool(message.tool_name);
+  if (!tool) return null;
+  return {
+    title: t("common.finished"),
+    kind: artifactAgentLabel(message),
+    summary: t(CANONICAL_AGENT_I18N_KEYS[tool]),
+    openLabel: t("common.view"),
+  };
+}
+
+const artifactId = computed(() => {
+  const id = activeArtifactMessageId.value || "none";
+  return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+});
+const artifactNamespace = computed(() => `${artifactId.value}-references`);
+const artifactTabLabels = computed(() => ({
+  content: t("common.view"),
+  evidence: t("agents.deepGenome.references"),
+  activity: t("chat.log.activityLabel"),
+  downloads: t("chat.actions.downloadAttachments"),
+}));
+
+type ChatArtifactReportStatus = "loading" | "degraded" | "complete" | "failed";
+type ChatArtifactLifecycleState = BotLifecycleState &
+  Partial<
+    Pick<BotRunProjection, "reportStage" | "reportUpdatedAt" | "progress">
+  >;
+
+const currentArtifactProjection = computed(
+  () => currentArtifactMessage.value?.botProjection ?? null
+);
+
+function lifecycleFromMessage(
+  message: ChatMessage
+): ChatArtifactLifecycleState | null {
+  const projection = message.botProjection;
+  if (message.botLifecycle) {
+    if (!projection) {
+      return {
+        ...message.botLifecycle,
+        degradedInterop: message.botLifecycle.degradedInterop === true,
+        interop: cloneBotInterop(message.botLifecycle.interop),
+      };
+    }
+    return {
+      ...message.botLifecycle,
+      degradedInterop: projection.degradedInterop === true,
+      interop: cloneBotInterop(projection.interop),
+      reportStage: projection.reportStage,
+      reportUpdatedAt: projection.reportUpdatedAt,
+      progress: projection.progress,
+    };
+  }
+  if (!projection) return null;
+
+  let status: BotLifecycleState["status"] = "RUNNING";
+  switch (projection.status) {
+    case "INPUT_REQUIRED":
+      status = "INPUT_REQUIRED";
+      break;
+    case "SUCCEEDED":
+      status = "SUCCEEDED";
+      break;
+    case "FAILED":
+    case "CANCELLED":
+    case "TIMED_OUT":
+      status = "FAILED";
+      break;
+  }
+
+  const intermediateReport = projection.intermediateReport || "";
+  const finalReport = projection.finalReport || "";
+  return {
+    runId: projection.runId,
+    status,
+    reportRevision: projection.reportRevision,
+    visibleReport: finalReport.trim() ? finalReport : intermediateReport,
+    intermediateReport,
+    finalReport,
+    degraded: projection.degraded || projection.trackingDegraded,
+    degradedInterop: projection.degradedInterop === true,
+    interop: cloneBotInterop(projection.interop),
+    failures: projection.failures,
+    artifacts: projection.artifacts,
+    reportStage: projection.reportStage,
+    reportUpdatedAt: projection.reportUpdatedAt,
+    progress: projection.progress,
+  };
+}
+
+const currentArtifactLifecycle = computed(() => {
+  const message = currentArtifactMessage.value;
+  return message ? lifecycleFromMessage(message) : null;
+});
+
+function reportStatusForArtifact(
+  state: BotLifecycleState
+): ChatArtifactReportStatus {
+  const stage = (
+    state as BotLifecycleState & {
+      reportStage?: "waiting_for_brief_gene" | "intermediate" | "final" | null;
+    }
+  ).reportStage;
+  if (state.status === "FAILED") return "failed";
+  if (state.status === "INPUT_REQUIRED" || stage === "waiting_for_brief_gene") {
+    return "loading";
+  }
+  if (state.degraded || stage === "intermediate") return "degraded";
+  if (
+    state.status === "SUCCEEDED" ||
+    stage === "final" ||
+    state.finalReport.trim() !== ""
+  ) {
+    return "complete";
+  }
+  return "loading";
+}
+
+const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
+  () =>
+    currentArtifactLifecycle.value
+      ? reportStatusForArtifact(currentArtifactLifecycle.value)
+      : null
+);
+
+function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
+  const stage = state.reportStage;
+  if (state.status === "FAILED") return t("chat.botReport.failed");
+  if (state.status === "INPUT_REQUIRED") {
+    return t("chat.botReport.inputRequired");
+  }
+  if (stage === "waiting_for_brief_gene") {
+    return t("chat.botReport.waiting");
+  }
+  if (state.degraded) return t("chat.botReport.degraded");
+  if (stage === "intermediate") return t("chat.botReport.partial");
+  if (state.status === "RUNNING") return t("chat.botReport.waiting");
+  return t("chat.botReport.complete");
+}
+
+const currentArtifactBotReportLabels = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  if (!state) return {};
+  const status = reportStatusForArtifact(state);
+  return {
+    loading:
+      status === "loading"
+        ? botReportLabelForLifecycle(state)
+        : t("chat.botReport.waiting"),
+    degraded:
+      status === "degraded"
+        ? botReportLabelForLifecycle(state)
+        : t("chat.botReport.degraded"),
+    failed: t("chat.botReport.failed"),
+    complete: t("chat.botReport.complete"),
+  };
+});
+
+const currentArtifactEmptyReportLabel = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  return state
+    ? botReportLabelForLifecycle(state)
+    : t("chat.botReport.waiting");
+});
+
+const currentArtifactStatusLabel = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  return state ? botReportLabelForLifecycle(state) : t("common.finished");
+});
+
+const reconcileMatchedDialogue = (
+  tempId: string,
+  serverId: string,
+  pendingKey?: string
+): DialogueReconciliationResult => {
+  const wasCurrent = currentChatId.value === tempId;
+  const rekey = rekeyChatState(tempId, serverId);
+  const benign =
+    rekey.outcome === "moved" ||
+    rekey.outcome === "same-id" ||
+    rekey.outcome === "source-absent";
+  const reconciled = rekey.outcome === "moved" || rekey.outcome === "same-id";
+
+  if (benign) {
+    if (pendingKey !== undefined) {
+      localStorage.removeItem(pendingKey);
+    } else if (isLocalStorageChat(tempId)) {
+      clearPendingChat(tempId);
+    }
+  } else if (rekey.outcome === "target-collision") {
+    console.warn(
+      `[chat] dialogue reconciliation collision (temp=${tempId}, server=${serverId})`
+    );
+    return { status: "retained", tempId, reason: "collision" };
+  }
+
+  if (reconciled && wasCurrent && currentChatId.value === tempId) {
+    currentChatId.value = serverId;
+    updateUrlWithChatId(serverId);
+  }
+
+  if (reconciled) {
+    return { status: "reconciled", tempId, serverId, rekey };
+  }
+
+  return { status: "retained", tempId, reason: "unmatched" };
+};
+
+// Fetch history question data; optional sendingDialogueId drives post-send reconciliation.
+const getHistoryQuestionData = (
+  sendingDialogueId?: string,
+  options?: { blockingDialogueId?: string }
+): Promise<DialogueReconciliationResult | undefined> => {
+  return new Promise((resolve) => {
+    getHistoryQuestionList()
+      .then((res: any) => {
+        if (res.code === 200 && res.data) {
+          const formattedData = res.data.map((item: any) => {
+            return {
+              id: item.id,
+              dialogue_id: item.dialogue_id,
+              title: item.title_query || item.query,
+              date: item.created_at,
+              isFavorite: false,
+            };
+          });
+
+          chatList.value = formattedData;
+          const skipRestoreTempIds =
+            sendingDialogueId &&
+            isLocalStorageChat(sendingDialogueId) &&
+            options?.blockingDialogueId
+              ? new Set([sendingDialogueId])
+              : undefined;
+          restorePendingChats(formattedData, skipRestoreTempIds);
+
+          if (sendingDialogueId && isLocalStorageChat(sendingDialogueId)) {
+            if (options?.blockingDialogueId) {
+              resolve(
+                reconcileMatchedDialogue(
+                  sendingDialogueId,
+                  options.blockingDialogueId
+                )
+              );
+              return;
+            }
+
+            const pendingData = safeParse(
+              localStorage.getItem(`pending_chat_${sendingDialogueId}`)
+            );
+            if (!isValidPendingRecord(pendingData)) {
+              resolve({
+                status: "retained",
+                tempId: sendingDialogueId,
+                reason: "unmatched",
+              });
+              return;
+            }
+
+            const candidates = formattedData.filter((chat: Chat) =>
+              matchesChat(
+                { dialogue_id: chat.dialogue_id, title: chat.title },
+                pendingData,
+                sendingDialogueId
+              )
+            );
+            if (candidates.length === 1) {
+              resolve(
+                reconcileMatchedDialogue(
+                  sendingDialogueId,
+                  candidates[0].dialogue_id
+                )
+              );
+              return;
+            }
+
+            const reason = candidates.length === 0 ? "no-match" : "ambiguous";
+            console.warn(
+              `[chat] dialogue reconciliation retained: ${reason} (temp=${sendingDialogueId})`
+            );
+            resolve({
+              status: "retained",
+              tempId: sendingDialogueId,
+              reason,
+            });
+            return;
+          }
+        }
+        resolve(undefined);
+      })
+      .catch((err: any) => {
+        console.error("Failed to fetch history question data:", err);
+        resolve(undefined);
+      });
   });
+};
+
+// Scan pending localStorage records against the authoritative chat list; reconcile
+// only when matchesChat yields exactly one candidate per temp key.
+const restorePendingChats = (
+  knownChats: Chat[],
+  skipTempIds?: ReadonlySet<string>
+) => {
+  const pendingChatKeys = Object.keys(localStorage).filter((key) =>
+    key.startsWith("pending_chat_")
+  );
+
+  pendingChatKeys.forEach((key) => {
+    const tempChatId = key.replace("pending_chat_", "");
+    if (skipTempIds?.has(tempChatId)) {
+      return;
+    }
+    const pendingChatData = safeParse(localStorage.getItem(key));
+
+    if (!isValidPendingRecord(pendingChatData)) {
+      if (pendingChatData !== null) {
+        localStorage.removeItem(key);
+      }
+      return;
+    }
+
+    const candidates = knownChats.filter((chat) =>
+      matchesChat(
+        { dialogue_id: chat.dialogue_id, title: chat.title },
+        pendingChatData,
+        tempChatId
+      )
+    );
+
+    if (candidates.length === 1) {
+      reconcileMatchedDialogue(tempChatId, candidates[0].dialogue_id, key);
+    }
+  });
+};
+
+// Starter prompt cards — computed so labels/descriptions react to locale changes
+const starterItems = computed(() => getStarterPromptItems(t, isSending.value));
+
+const onStarterClick = (item: { key: string | number }) => {
+  const prompt = STARTER_PROMPTS.find((p) => p.key === item.key);
+  if (!prompt) return;
+  applyStarterPrompt(prompt, t, (text) => {
+    messageInput.value = text;
+  });
+};
+
+// Copy conversation + file download
+const { fallbackCopyText, downloadFile, getFileDownUrl } = useCopyDownload({
+  copyVisible,
+  copyTimeRef,
+  t,
+});
 
 // Agent image fetch state (GeneNetworkAgent / DigitalDesignAgent)
 const {
@@ -1692,10 +1216,6 @@ const {
   digitalDesignImages,
   digitalDesignImagesLoading,
 } = useAgentImages(currentChat);
-
-// Abort-request related
-const currentRequestId = ref<string>("");
-const isAborted = ref(false);
 
 // Start a new chat
 const startNewChat = () => {
@@ -1718,17 +1238,6 @@ const startNewChat = () => {
   });
 };
 
-// Open the chat agent
-const openChatAgent = () => {
-  // If the left sidebar is expanded, collapse it first
-  if (!leftSidebarCollapsed.value) {
-    leftSidebarCollapsed.value = true;
-  }
-
-  // Open the right sidebar
-  drawerVisible.value = true;
-};
-
 // Knowledge agent
 const openKnowledgeAgent = () => {
   // Implement the knowledge agent feature here
@@ -1749,39 +1258,126 @@ const openReviewAgent = () => {
   // Implement the review agent feature here
 };
 
-// Open the knowledge base
-const openKnowledgeBase = () => {
-  // If the left sidebar is expanded, collapse it first
-  if (!leftSidebarCollapsed.value) {
-    leftSidebarCollapsed.value = true;
-  }
-
-  // Open the right sidebar
-  drawerVisible.value = true;
-};
-
 // Message container ref, used for auto-scrolling
 const messageContainer = ref<HTMLElement | null>(null);
+const artifactScrollPositions = new Map<string, number>();
+
+const restoreTranscriptScroll = async (
+  dialogueId: string,
+  scrollTop: number
+) => {
+  await nextTick();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (currentChatId.value === dialogueId && messageContainer.value) {
+        messageContainer.value.scrollTop = scrollTop;
+      }
+    });
+  });
+};
+
+const openArtifact = (messageId: string) => {
+  const dialogueId = currentChatId.value;
+  const scrollTop = messageContainer.value?.scrollTop;
+  setArtifactOpen(messageId);
+  if (
+    !dialogueId ||
+    scrollTop === undefined ||
+    !artifactOpen.value ||
+    activeArtifactMessageId.value !== messageId
+  ) {
+    return;
+  }
+  artifactScrollPositions.set(dialogueId, scrollTop);
+  void restoreTranscriptScroll(dialogueId, scrollTop);
+};
+
+const closeArtifact = () => {
+  resetArtifactPanel();
+};
+
+const observeDeepGenomeArtifacts = () => {
+  const foregroundDialogueId = currentChatId.value;
+  let foregroundCandidate: string | null = null;
+
+  Object.entries(chatStates.value).forEach(([dialogueId, state]) => {
+    (state.renderedChat?.messages ?? []).forEach((message) => {
+      if (!isCompletedDeepGenomeMessage(message)) return;
+      if (typeof message.id !== "string" && typeof message.id !== "number") {
+        return;
+      }
+      const normalizedId = String(message.id).trim();
+      if (!normalizedId) return;
+
+      if (hasAutoOpened(normalizedId, dialogueId)) return;
+
+      // Mark every eligible server id as considered in its own dialogue. A
+      // background result is therefore never auto-opened when the user later
+      // switches into that conversation.
+      markAutoOpened(normalizedId, dialogueId);
+      if (dialogueId === foregroundDialogueId) {
+        foregroundCandidate = normalizedId;
+      }
+    });
+  });
+
+  if (foregroundCandidate !== null) {
+    // Mark before opening so the same reactive update, close/reopen cycle, or
+    // history refresh cannot take focus from the user a second time.
+    markAutoOpened(foregroundCandidate);
+    openArtifact(foregroundCandidate);
+  }
+};
+
+watch([chatStates, currentChatId], observeDeepGenomeArtifacts, {
+  deep: true,
+  flush: "post",
+});
+
+watch(
+  artifactOpen,
+  (isOpen, wasOpen) => {
+    if (isOpen || !wasOpen) return;
+    const dialogueId = currentChatId.value;
+    const scrollTop = artifactScrollPositions.get(dialogueId);
+    if (scrollTop === undefined) return;
+    artifactScrollPositions.delete(dialogueId);
+    void restoreTranscriptScroll(dialogueId, scrollTop);
+  },
+  { flush: "sync" }
+);
 
 // Auto-scroll to the latest message
 const scrollToBottom = async () => {
   await nextTick();
   if (messageContainer.value) {
-    messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
+    const mobileSafeInset =
+      typeof window !== "undefined" && window.innerWidth < 600 ? 24 : 0;
+    messageContainer.value.scrollTop = Math.max(
+      0,
+      messageContainer.value.scrollHeight -
+        messageContainer.value.clientHeight -
+        mobileSafeInset
+    );
   }
 };
 
 // Input toolbar buttons + mention-selection state machine — logic extracted into the useComposer composable
 const {
-  activeButton,
-  handleButtonClick,
+  displayMessageInput,
+  clearSelectedAgent,
   handleCommand,
   handleSelect,
   handleSearch,
-} = useComposer({ messageInput, isSending, currentChatId, scrollToBottom });
-
-// Log panel toggle + log update — logic extracted into the useLogView composable
-const { toggleLogView, updateLog } = useLogView({
+} = useComposer({
+  messageInput,
+  isSending,
+  currentChatId,
+  selectedAgent,
+  scrollToBottom,
+  rolesTool,
+});
+const { setLogExpanded, updateLog, retryLog } = useLogView({
   isSending,
   currentChat,
   currentChatId,
@@ -1789,65 +1385,109 @@ const { toggleLogView, updateLog } = useLogView({
   scrollToBottom,
 });
 
+function analystLogStateKey(message: ChatMessage): string | null {
+  const rowId = deriveAnalystLogRowId(message);
+  return rowId ? analystLogActivityKey(rowId) : null;
+}
+
+function isAnalystLogExpanded(message: ChatMessage): boolean {
+  const rowId = deriveAnalystLogRowId(message);
+  if (!rowId || !currentChatId.value) return false;
+  return (
+    getChatState(currentChatId.value).activityExpandedByMessage[
+      analystLogActivityKey(rowId)
+    ] === true
+  );
+}
+
 // File upload handling — state and logic extracted into the useFileUpload composable
 const { handleFileChange, removeFile } = useFileUpload({
   fileList,
   currentChatId,
   getChatState,
-  senderRef,
+  composerRef,
   scrollToBottom,
 });
 
 // Message upvote/downvote feature — state and logic extracted into the useReactions composable
-const { getReactionState, handleReaction, getReactionTooltip } = useReactions({
+const { getReactionState, handleReaction } = useReactions({
   currentChatId,
   getChatState,
   scrollToBottom,
 });
 
-// Agents panel — state and logic extracted into the useAgentsPanel composable
-const {
-  presetAgents,
-  containerStyle,
-  handleScroll,
-  handleAgentClick,
-  getAgentTooltip,
-  showMoreInfo,
-} = useAgentsPanel({ t, isSending, router, scrollToBottom });
+function findStateByRequestId(
+  requestId: string
+): { dialogueId: string; state: ChatUIState } | null {
+  for (const [dialogueId, state] of Object.entries(chatStates.value)) {
+    if (
+      state.activeRequestId === requestId ||
+      state.uploadTransfer?.requestId === requestId
+    ) {
+      return { dialogueId, state };
+    }
+  }
+  return null;
+}
 
-// Abort the current request
+function abortTransfer(requestId: string) {
+  const owned = findStateByRequestId(requestId);
+  if (owned) {
+    owned.state.uploadTransfer = null;
+  }
+  if (owned && owned.state.activeRequestId === requestId) {
+    void abortDialogueRequest(owned.dialogueId, owned.state);
+    return;
+  }
+  abortRequest(requestId);
+}
+
+// Abort the current (focused) dialogue's in-flight request
 const abortCurrentRequest = async () => {
-  if (!currentRequestId.value) return;
+  const dialogueId = currentChatId.value;
+  if (!dialogueId) return;
+  const chatState = getChatState(dialogueId);
+  await abortDialogueRequest(dialogueId, chatState);
+};
+
+const abortDialogueRequest = async (
+  dialogueId: string,
+  chatState: ChatUIState
+) => {
+  const requestId = chatState.activeRequestId;
+  if (!requestId || chatState.generationStopped) return;
+
+  // Claim the stop before aborting so a double click cannot race two abort
+  // attempts or append duplicate local stopped rows.
+  chatState.generationStopped = true;
 
   try {
-    // Import the abort-request helper
-    const requestModule = (await import("@/utils/request")) as any;
-    const success = requestModule.abortRequest(currentRequestId.value);
+    const success = abortRequest(requestId);
     if (success) {
-      isAborted.value = true;
-
-      // Add an abort message
-      if (currentChat.value?.messages) {
+      // Local stopped row: no server message id — copy may remain; the shared
+      // capability helper keeps every server-backed action unavailable.
+      const messages = chatState.renderedChat?.messages;
+      if (messages) {
         const abortMessage: ChatMessage = {
           role: "assistant",
           content: t("chat.generationStopped"),
           instantMessage: true,
-          id: Date.now().toString(),
         };
-        currentChat.value.messages.push(abortMessage);
+        messages.push(abortMessage);
       }
 
-      // Reset state
-      const chatState = getChatState(currentChatId.value);
-      if (chatState) {
-        chatState.isSending = false;
+      chatState.uploadTransfer = null;
+      // Leave isSending + activeRequestId for the owning send finally. This
+      // serializes a same-dialogue resend until authoritative reconciliation.
+
+      if (currentChatId.value === dialogueId) {
+        await scrollToBottom();
       }
-
-      currentRequestId.value = "";
-
-      await scrollToBottom();
+    } else {
+      chatState.generationStopped = false;
     }
   } catch (error) {
+    chatState.generationStopped = false;
     console.error("Failed to abort request:", error);
   }
 };
@@ -1865,31 +1505,9 @@ const usePrompt = (prompt: string) => {
   sendMessage();
 };
 
-// Related links
-const currentLinks = ref([
-  {
-    title: t("chat.links.riceStress"),
-    url: "https://ricefrend.dna.affrc.go.jp/",
-  },
-  {
-    title: t("chat.links.wheatYield"),
-    url: "https://plants.ensembl.org/Triticum_aestivum/",
-  },
-  {
-    title: t("chat.links.maizeQTL"),
-    url: "https://www.maizegdb.org/",
-  },
-]);
-
 // Sidebar control function
 const handleSidebarCollapse = (isCollapsed: boolean) => {
-  // Update the left sidebar state
   leftSidebarCollapsed.value = isCollapsed;
-
-  // If the left sidebar is expanded and the right sidebar is also open, close the right side
-  if (!isCollapsed && drawerVisible.value) {
-    drawerVisible.value = false;
-  }
 };
 
 // After the sidebar renames a session, the parent updates the chatList it holds (the child emits instead of mutating the prop)
@@ -1930,7 +1548,6 @@ const updateUrlWithChatId = (dialogueId: string) => {
 const { selectChat } = useSelectChat({
   getChatState,
   currentChatId,
-  currentChat,
   scrollToBottom,
   updateUrlWithChatId,
   chatList,
@@ -1942,14 +1559,10 @@ const getChatIdFromUrl = () => {
   const urlParams = new URLSearchParams(window.location.search);
   return urlParams.get("dialogue_id");
 };
-// Read the dialogue ID based on the chat ID
+
+/** Parent row id for the focused dialogue — refresh only; send uses a pre-await capture. */
 const getDialogueIdFromChatId = () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const dialogueId = urlParams.get("dialogue_id");
-  const chatRealId = chatList.value.find(
-    (c: Chat) => c.dialogue_id === dialogueId
-  )?.id;
-  return chatRealId;
+  return parentRowIdForDialogue(currentChatId.value, chatList.value);
 };
 
 // Send message — send logic extracted into the useSendMessage composable
@@ -1957,20 +1570,17 @@ const { sendMessage } = useSendMessage({
   getChatState,
   currentChatId,
   currentChat,
-  senderRef,
-  currentRequestId,
-  isAborted,
+  composerRef,
   t,
   userStore,
   getHistoryQuestionData,
-  updateUrlWithChatId,
   chatList,
   timestamp,
   selectChat,
-  getDialogueIdFromChatId,
-  getChatIdFromUrl,
   scrollToBottom,
 });
+
+const { submitAction, retryAction } = useA2uiInteraction();
 
 // Handle the Markdown typing-effect completion event
 const handleMarkdownFinish = (messageIndex: number) => {
@@ -2021,44 +1631,19 @@ const { refreshMessage } = useRefreshMessage({
 });
 
 // Tutorial guide feature — state and logic extracted into the useTutorial composable
-const {
-  showTutorial,
-  currentTutorialStep,
-  startTutorial,
-  nextTutorialStep,
-  prevTutorialStep,
-  completeTutorial,
-  handleTutorialOverlayClick,
-  checkTutorialStatus,
-} = useTutorial();
+const { showTutorial, startTutorial, completeTutorial, checkTutorialStatus } =
+  useTutorial();
 
-// Test the parallel chat feature
-const testParallelChats = () => {
-  // Create two test chats
-  const chat1Id = "test_chat_1";
-  const chat2Id = "test_chat_2";
-
-  // Initialize the chat state
-  getChatState(chat1Id);
-  getChatState(chat2Id);
-
-  // Set different input contents
-  chatStates.value[chat1Id].messageInput = "Test message for chat 1";
-  chatStates.value[chat2Id].messageInput = "Test message for chat 2";
-
-  // Set different sending states
-  chatStates.value[chat1Id].isSending = true;
-  chatStates.value[chat2Id].isSending = false;
-
-  // Verify state independence
+const tourSidebarTarget = ref<HTMLElement | null>(null);
+const tourCasesTarget = ref<HTMLElement | null>(null);
+const tourInputTarget = ref<HTMLElement | null>(null);
+const setTourInputTarget = (el: HTMLElement | null) => {
+  tourInputTarget.value = el;
 };
-
-// Add a test button in the development environment
-const isDevelopment = import.meta.env.DEV;
 
 // Copy message content + cited document list (extracted from an inline @click to work around a
 // vue-tsc 0.39.5 bug where it mis-maps a local const declared inside a multi-statement template
-// arrow function onto the component instance — see the 2 @click usages in index.vue)
+// arrow function onto the component instance — see the @copy handler wiring below)
 const copyMessageWithDocs = (message: any, index: number) => {
   const docs =
     message.doc_list && message.doc_list.length > 0
@@ -2077,13 +1662,72 @@ const copyMessageWithDocs = (message: any, index: number) => {
     message.content + (docs && docs !== "" ? "\nReferences:\n" : "") + docs;
   fallbackCopyText(text, index + 1);
 };
+
+const handleMessageCopy = (message: any, index: number) => {
+  if (message.role === "user") {
+    fallbackCopyText(message.content, index + 1);
+    return;
+  }
+  if (message.tableHeaders) {
+    fallbackCopyText(message.original, index + 1);
+    return;
+  }
+  copyMessageWithDocs(message, index);
+};
+
+const getDirectDownloads = (message: any): DirectDownloadItem[] => {
+  const items: DirectDownloadItem[] = [];
+  if (
+    message?.status === "SUCCEEDED" &&
+    message?.upload_path &&
+    message.upload_path !== ""
+  ) {
+    items.push({ kind: "upload", path: message.upload_path });
+  }
+  if (
+    message?.download_path &&
+    message.download_path !== "" &&
+    message?.tool_name !== "GeneNetworkAgent" &&
+    message?.tool_name !== "DigitalDesignAgent"
+  ) {
+    items.push({ kind: "file", path: message.download_path });
+  }
+  return items;
+};
 </script>
 
 <style lang="scss" scoped>
-.chat-container {
-  display: flex;
-  height: 100vh;
+.tour-sidebar-wrap {
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.phy-btn-primary {
+  --el-button-bg-color: var(--phy-color-primary);
+  --el-button-border-color: var(--phy-color-primary);
+  --el-button-hover-bg-color: var(--phy-color-primary-hover);
+  --el-button-hover-border-color: var(--phy-color-primary-hover);
+  --el-button-text-color: #fff;
+}
+
+.phy-btn-primary.is-plain {
+  --el-button-bg-color: var(--phy-color-primary-soft);
+  --el-button-text-color: var(--phy-color-primary);
+  --el-button-border-color: var(--phy-color-primary-soft);
+}
+
+.chat-page-root {
   width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-main-layout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -2092,67 +1736,50 @@ const copyMessageWithDocs = (message: any, index: number) => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.chat-footer {
-  position: relative;
-  z-index: 1;
-  color: #090909;
-  font-size: 14px;
-  text-align: center;
-  background: var(--color-background) !important;
-  line-height: 1;
-  bottom: 4px;
-
-  .icp-link {
-    color: #909399;
-    text-decoration: none;
-    transition: color 0.3s;
-    font-size: 12px;
-
-    &:hover {
-      color: #409eff;
-      text-decoration: underline;
-    }
-
-    &:visited {
-      color: #909399;
-    }
-  }
-}
-
-.theme-dark .chat-footer {
-  color: #fff;
-
-  .icp-link {
-    color: #909399;
-
-    &:hover {
-      color: #409eff;
-    }
-
-    &:visited {
-      color: #909399;
-    }
-  }
+  min-width: 0;
+  min-height: 0;
 }
 
 .chat-header {
-  padding: 0 16px;
-  border-bottom: 1px solid #e6e6e6;
-  text-align: center;
-  height: 62px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 0 var(--phy-space-16);
+  border-bottom: 1px solid var(--phy-color-border);
+  min-height: var(--phy-control-height-primary);
+  height: var(--phy-control-height-primary);
 
-  h2 {
+  .chat-header-inner {
+    width: min(100%, var(--phy-layout-transcript-max-width));
+    height: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-leading {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--phy-space-8);
+  }
+
+  .chat-header-title {
+    min-width: 0;
     margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 18px;
     font-weight: 500;
+  }
+
+  .mobile-sidebar-toggle {
+    display: none;
+
+    &.is-visible {
+      display: inline-flex;
+    }
   }
 
   .header-controls {
@@ -2161,110 +1788,44 @@ const copyMessageWithDocs = (message: any, index: number) => {
     gap: 10px;
   }
 
-  .header-lang-switch {
-    margin-left: auto;
+  .chat-expert-indicator {
+    flex-shrink: 0;
+    margin-left: var(--phy-space-8);
+    padding: 2px var(--phy-space-8);
+    border: 1px solid var(--phy-color-accent-soft);
+    border-radius: var(--phy-radius-pill);
+    color: var(--phy-color-accent);
+    font-size: 12px;
+    line-height: 1.4;
   }
 }
 
 .message-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: var(--phy-space-16) var(--phy-space-16)
+    calc(
+      var(--phy-control-height-primary) + var(--phy-space-32) +
+        env(safe-area-inset-bottom, 0px)
+    );
   display: flex;
   flex-direction: column;
+  background: var(--phy-color-bg-page);
+}
+
+.transcript-content {
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
 }
 
 .message {
-  display: flex;
-  margin-bottom: 16px;
-
-  &.user {
-    justify-content: flex-end;
-
-    .message-content {
-      display: flex;
-      justify-content: flex-end;
-      width: calc(100% - 48px);
-      border-radius: 15px;
-      background-color: transparent;
-
-      .message-text {
-      }
-    }
-
-    .has-user {
-      background-color: #eff6ff;
-    }
-  }
-
-  &.assistant {
-    flex-direction: row;
-
-    .message-content {
-      border-radius: 15px;
-      margin-left: 12px;
-      background-color: transparent;
-      width: 100%;
-    }
-  }
-
-  .message-avatar {
-    flex-shrink: 0;
-    align-self: flex-start;
-  }
-
-  .message-content {
-    padding: 0 12px 12px;
-    max-width: 100%;
-
-    .message-text {
-      position: relative;
-      word-break: break-word;
-      white-space: pre-wrap;
-      box-shadow: 0 0 10px 0 rgba(212, 210, 210, 0.35);
-      width: 100%;
-      padding: 12px;
-      border-radius: 8px;
-
-      // GeneNetworkAgent image styles
-      .gene-network-images {
-        .images-loading {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          color: #909399;
-          font-size: 14px;
-          padding: 12px 0;
-        }
-
-        .images-container {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-
-          .result-image {
-            max-width: 100%;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          }
-        }
-
-        .no-images {
-          color: #909399;
-          font-size: 14px;
-          padding: 12px 0;
-        }
-      }
-    }
-
-    .message-text:hover .message-user {
-      display: block !important;
-    }
-
+  // Row owns bubble alignment/surface; Content owns overflow + gene image chrome.
+  :deep(.message-content) {
     .ai-response {
       border-radius: 16px;
       padding: 16px;
-      box-shadow: 0 0 10px 0 rgba(212, 210, 210, 0.35);
+      box-shadow: none;
 
       .steps-title {
         font-weight: bold;
@@ -2277,7 +1838,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
         padding: 12px 16px;
         background-color: #fff;
         border-radius: 8px;
-        border-left: 3px solid #1890ff;
+        border-left: 3px solid var(--el-color-primary);
 
         .step-label {
           font-weight: bold;
@@ -2314,346 +1875,138 @@ const copyMessageWithDocs = (message: any, index: number) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  margin-bottom: 50px;
+  justify-content: center;
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
+  padding: clamp(var(--phy-space-24), 5vh, var(--phy-space-48))
+    var(--phy-space-16) var(--phy-space-24);
+  box-sizing: border-box;
 
-  .welcome-container {
-    width: 80%;
-    max-width: 800px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  .empty-chat-starters-shell {
+    width: 100%;
+    padding: 0;
+  }
 
-    h3 {
-      text-align: center;
-      margin-bottom: 24px;
-      color: #333;
-      margin-top: 100px;
-    }
+  .empty-chat-mark {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+  }
 
-    &-text {
-      height: 100%;
+  .empty-chat-starters-region {
+    width: 100%;
+  }
+
+  .empty-chat-starters {
+    width: 100%;
+
+    :deep(.el-prompts-items) {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--phy-space-12);
       width: 100%;
-      text-align: center;
-      color: #090909;
     }
 
-    &-text1 {
-      text-align: center;
+    :deep(.el-prompts-item) {
+      min-width: 0;
+      padding: var(--phy-space-12) var(--phy-space-16);
+      border: 1px solid var(--phy-color-border-subtle);
+      border-radius: var(--phy-radius-md);
+      background: var(--phy-color-bg-elevated);
+      text-align: left;
+      box-shadow: none;
+      transition: background-color var(--phy-motion-fast)
+          var(--phy-motion-ease-out),
+        border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+        transform var(--phy-motion-fast) var(--phy-motion-ease-out);
+    }
 
-      font-size: 22px;
-      line-height: 1.5;
+    :deep(.el-prompts-item:first-child) {
+      grid-column: 1 / -1;
+      border-color: var(--phy-color-bubble-user-border);
+      background: var(--phy-color-bubble-user);
+    }
 
-      .logo {
-        width: 40px;
-        height: 40px;
-        margin-right: 10px;
+    :deep(.el-prompts-item:hover) {
+      border-color: var(--phy-color-border-control);
+      background: var(--phy-color-fill-subtle);
+      transform: translateY(-1px);
+    }
+
+    :deep(.el-prompts-item:first-child:hover) {
+      border-color: var(--phy-color-accent);
+      background: var(--phy-color-accent-soft);
+    }
+
+    :deep(.el-prompts-item:focus-visible) {
+      outline: 2px solid var(--phy-color-focus);
+      outline-offset: 2px;
+    }
+
+    :deep(.el-prompts-item-disabled) {
+      cursor: not-allowed;
+      opacity: 0.55;
+      transform: none;
+    }
+
+    :deep(.el-prompts-item-label) {
+      overflow-wrap: anywhere;
+      color: var(--phy-color-text);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    :deep(.el-prompts-item:first-child .el-prompts-item-label) {
+      color: var(--phy-color-accent-text);
+    }
+
+    :deep(.el-prompts-item-description) {
+      margin-top: var(--phy-space-4);
+      overflow-wrap: anywhere;
+      color: var(--phy-color-text-secondary);
+      font-size: 0.8125rem;
+      line-height: 1.4;
+    }
+  }
+}
+
+@media (max-width: 720px) {
+  .empty-chat {
+    .empty-chat-starters {
+      :deep(.el-prompts-items) {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      :deep(.el-prompts-item:first-child) {
+        grid-column: auto;
       }
     }
   }
+}
 
-  .suggestion-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 40px;
+@media (max-width: 600px) {
+  .empty-chat {
+    padding: var(--phy-space-20) var(--phy-space-12) var(--phy-space-16);
 
-    .suggestion-item {
-      background-color: #f5f5f5;
-      padding: 12px 16px;
-      border-radius: 8px;
-      cursor: pointer;
-
-      &:hover {
-        background-color: #e6f7ff;
-      }
-    }
-  }
-
-  .feature-container {
-    margin-top: 40px;
-
-    .feature-title {
-      text-align: center;
-      font-size: 16px;
-      margin-bottom: 16px;
-      color: #333;
-    }
-
-    .feature-list {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 16px;
-
-      .feature-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        width: 100px;
-        padding: 16px;
-        background-color: #f9f9f9;
-        border-radius: 8px;
-
-        .el-icon {
-          font-size: 24px;
-          color: #1890ff;
-        }
-      }
+    .empty-chat-mark {
+      width: 36px;
+      height: 36px;
     }
   }
 }
 
 .input-container {
   width: 100%;
+  flex-shrink: 0;
   position: relative;
-  background-color: #fff;
-
-  .input-container-warpper {
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 85%;
-    border: 1px solid #e7e7e7;
-    border-radius: 10px;
-    box-shadow: 0 5px 16px -4px rgba(0, 0, 0, 0.17);
-
-    &.show-tutorial {
-      z-index: 1000 !important;
-      background: #fff !important;
-      border: 2px solid #1890ff;
-      box-shadow: 0 0 10px 0 rgba(24, 144, 255, 0.3);
-    }
-  }
-
-  .input-box {
-    .header-self-wrap {
-      padding: 3px 2px 2px 3px;
-      box-sizing: border-box;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-
-      .file-list-container {
-        .file-list-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 8px;
-
-          h4 {
-            margin: 0;
-            color: #606266;
-          }
-        }
-
-        .file-list {
-          display: flex;
-          flex-direction: row;
-          gap: 3px;
-          flex-wrap: wrap;
-          padding: 4px;
-        }
-
-        .file-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0px 4px;
-          font-size: 12px;
-
-          .file-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-
-            .el-icon {
-              color: #909399;
-            }
-
-            .file-name {
-              color: #303133;
-            }
-
-            .file-size {
-              color: #909399;
-              font-size: 12px;
-            }
-          }
-
-          .remove-btn {
-            padding: 2px;
-
-            &:hover {
-              color: #f56c6c;
-            }
-          }
-        }
-      }
-    }
-
-    .send-btn,
-    .abort-btn {
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .abort-button-overlay {
-      position: absolute;
-      top: -50px;
-      right: 20px;
-      z-index: 1000;
-      pointer-events: auto;
-    }
-    .input-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-
-      .agent-button {
-        padding: 4px 10px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 400;
-        color: #223e36;
-        border: 1.5px solid transparent;
-        background-color: #fff;
-        transition: all 0.3s ease;
-        border: 1px solid #d4d4d4;
-
-        &:hover:not(.agent-button-disabled) {
-          border-color: #3695c4;
-          color: #2b738f;
-        }
-
-        &.agent-button-active {
-          background-color: #3695c4;
-          color: #fff;
-          border-color: #1ea0ac;
-
-          &:hover {
-            opacity: 0.8;
-            color: #fff;
-          }
-        }
-
-        &.agent-button-disabled {
-          background-color: #fff;
-          border: 1px solid #d4d4d4;
-          color: #999;
-          cursor: not-allowed;
-          opacity: 0.6;
-        }
-      }
-    }
-  }
+  background-color: var(--phy-color-bg-page);
 }
 
-// Right sidebar styles
-.right-sidebar {
-  width: 0;
-  height: 100%;
-  background-color: #fff;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: width 0.3s ease;
-
-  &.is-open {
-    width: 350px;
-    min-width: 350px;
-  }
-
-  .sidebar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px;
-    border-bottom: 1px solid #e6e6e6;
-
-    h3 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 500;
-    }
-
-    .close-btn {
-      padding: 4px;
-    }
-  }
-
-  .sidebar-content {
-    flex: 1;
-    padding: 16px;
-    overflow-y: auto;
-    width: 350px;
-
-    h3 {
-      margin-top: 0;
-      margin-bottom: 16px;
-    }
-
-    .links-container {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-
-      .link-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-
-        a {
-          color: #1890ff;
-          text-decoration: none;
-
-          &:hover {
-            text-decoration: underline;
-          }
-        }
-      }
-    }
-  }
-}
-
+/* Action hover chrome lives on ChatMessageActions + ChatMessageRow.
+   Keep this empty selector as the stable CSS section boundary that frame
+   layout contract tests use after `.input-container`. */
 .message-user {
-  position: absolute;
-  bottom: 0px;
-  right: 1px;
-  display: none;
-}
-
-.message-fotter {
-  width: 100%;
-  height: auto;
-  display: flex;
-  gap: 10px;
-  flex-direction: row;
-  justify-content: flex-end;
-  align-items: center;
-  margin-top: 5px;
-
-  &-item {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 22px;
-    height: 22px;
-    padding: 2px;
-    box-sizing: border-box;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  &-item:hover {
-    color: #1890ff;
-    background: #e8e6e6;
-  }
 }
 
 // Loading animation
@@ -2662,7 +2015,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
   align-items: center;
   justify-content: center;
   min-height: 40px;
-  background-color: #f5f5f5;
+  background-color: var(--phy-bubble-assistant-bg);
   padding: 12px;
   border-radius: 8px;
   width: 75px;
@@ -2679,7 +2032,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background-color: #1890ff;
+      background-color: var(--el-color-primary);
       animation: dot-pulse 1.4s infinite ease-in-out;
 
       &:nth-child(1) {
@@ -2746,19 +2099,19 @@ const copyMessageWithDocs = (message: any, index: number) => {
         transition: color 0.2s ease;
 
         &.doi-link {
-          color: #1890ff;
+          color: var(--el-color-primary);
 
           &:hover {
-            color: #40a9ff;
+            color: var(--phy-color-primary-hover);
             text-decoration: underline;
           }
         }
 
         &.pmid-link {
-          color: #1890ff;
+          color: var(--el-color-primary);
 
           &:hover {
-            color: #40a9ff;
+            color: var(--phy-color-primary-hover);
             text-decoration: underline;
           }
         }
@@ -2771,14 +2124,14 @@ const copyMessageWithDocs = (message: any, index: number) => {
 .message-files {
   margin-top: 12px;
   padding: 12px;
-  background-color: #f8f9fa;
+  background-color: var(--phy-color-bg-elevated);
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--phy-color-border-subtle);
 
   .files-title {
     font-size: 14px;
     font-weight: 500;
-    color: #495057;
+    color: var(--phy-color-text-secondary);
     margin-bottom: 8px;
   }
 
@@ -2806,272 +2159,6 @@ const copyMessageWithDocs = (message: any, index: number) => {
   box-shadow: none;
 }
 
-.input-container-bottom {
-  margin-top: 30px;
-  padding: 8px 16px;
-  overflow: hidden;
-  box-sizing: border-box;
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 19px;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 12px;
-  z-index: 998;
-
-  &.show-tutorial {
-    z-index: 1000 !important;
-    background: #fff !important;
-  }
-
-  &::before {
-    content: "";
-    position: absolute;
-    top: -20px;
-    left: 0;
-    right: 0;
-    height: 20px;
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      rgba(255, 255, 255, 0.9)
-    );
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-
-  &::after {
-    content: "";
-    position: absolute;
-    bottom: -20px;
-    left: 0;
-    right: 0;
-    height: 20px;
-    background: linear-gradient(to top, transparent, rgba(255, 255, 255, 0.9));
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-
-  &:hover {
-    &::before,
-    &::after {
-      opacity: 1;
-    }
-  }
-
-  .agent-list {
-    height: 100%;
-  }
-
-  .agent-page {
-    height: 100%;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-around;
-    align-content: flex-start;
-    gap: 12px;
-    padding-bottom: 8px;
-  }
-
-  .input-container-bottom-item {
-    display: flex;
-    width: 22%;
-    height: 120px;
-    align-items: center;
-    justify-content: center;
-    padding: 8px 16px;
-    background-color: #156082;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-
-    &:hover {
-      background-color: rgba(21, 97, 132, 0.8);
-      transform: translateY(-2px) scale(1.02);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-
-    span {
-      color: #fff;
-      font-size: 14px;
-      white-space: nowrap;
-    }
-  }
-}
-
-.show-tutorial {
-  z-index: 1000 !important;
-  background: #fff !important;
-}
-// Ensure the container can overlay other content
-.input-container {
-  position: relative;
-}
-
-.welcome-container-text1 {
-  font-size: 40px !important;
-}
-
-.welcome-container-text2 {
-  font-size: 18px !important;
-}
-
-// Log button styles
-.log-button-container {
-  margin-top: 8px;
-  margin-bottom: 8px;
-
-  .el-button {
-    &.active {
-      background-color: #67c23a;
-      border-color: #67c23a;
-    }
-  }
-}
-
-// Log view container
-.log-view-container {
-  display: flex;
-  gap: 20px;
-  margin-top: 12px;
-
-  .log-view-left,
-  .log-view-right {
-    flex: 1;
-    min-width: 0;
-
-    h4 {
-      margin: 0 0 12px 0;
-      font-size: 14px;
-      font-weight: 600;
-      color: #333;
-      border-bottom: 1px solid #e6e6e6;
-      padding-bottom: 8px;
-    }
-
-    .log-actions {
-      margin-bottom: 12px;
-      display: flex;
-      justify-content: flex-end;
-
-      .el-button {
-        font-size: 12px;
-        padding: 6px 12px;
-
-        .el-icon {
-          margin-right: 4px;
-        }
-      }
-    }
-  }
-
-  .log-view-right {
-    border-left: 1px solid #e6e6e6;
-    padding-left: 20px;
-
-    .log-loading {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #909399;
-      font-size: 14px;
-
-      .el-icon {
-        font-size: 16px;
-      }
-    }
-
-    .log-content {
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #e6e6e6;
-      border-radius: 4px;
-      padding: 12px;
-      background-color: #fff;
-
-      .log-text-content {
-        .log-pre {
-          margin: 0;
-          padding: 0;
-          font-family: "Courier New", monospace;
-          font-size: 12px;
-          line-height: 1.4;
-          color: #333;
-          white-space: pre-wrap;
-          word-break: break-word;
-          background-color: #1e1e1e; // Dark background, better suited for showing colored text
-          border-radius: 4px;
-          padding: 8px;
-          border: 1px solid #e9ecef;
-
-          // Ensure colors inside span tags display correctly
-          span {
-            display: inline;
-
-            &[style*="color: #ff0000"] {
-              color: #ff6b6b !important; // Red
-            }
-
-            &[style*="color: #00ff00"] {
-              color: #51cf66 !important; // Green
-            }
-
-            &[style*="color: #ffff00"] {
-              color: #ffd43b !important; // Yellow
-            }
-
-            &[style*="color: #0000ff"] {
-              color: #74c0fc !important; // Blue
-            }
-
-            &[style*="color: #ff00ff"] {
-              color: #f783ac !important; // Magenta
-            }
-
-            &[style*="color: #00ffff"] {
-              color: #63e6be !important; // Cyan
-            }
-
-            &[style*="color: #ffffff"] {
-              color: #f8f9fa !important; // White
-            }
-          }
-
-          // Bold text styles
-          strong {
-            font-weight: bold;
-            color: #f8f9fa;
-          }
-
-          // Underline text styles
-          u {
-            text-decoration: underline;
-            color: #f8f9fa;
-          }
-        }
-      }
-
-      .el-table {
-        font-size: 12px;
-
-        .el-table__cell {
-          padding: 8px;
-          word-break: break-word;
-          white-space: pre-wrap;
-        }
-      }
-    }
-
-    .log-error {
-      color: #f56c6c;
-      font-size: 14px;
-      text-align: center;
-      padding: 20px;
-    }
-  }
-}
-
 // Upvote / downvote button styles
 .reaction-buttons {
   display: flex;
@@ -3079,62 +2166,24 @@ const copyMessageWithDocs = (message: any, index: number) => {
   margin-left: 8px;
 
   .reaction-btn {
-    transition: all 0.2s ease;
+    transition: color var(--phy-motion-fast) var(--phy-motion-ease-out),
+      background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+      transform var(--phy-motion-fast) var(--phy-motion-ease-out);
 
     &:hover {
-      color: #1890ff;
+      color: var(--el-color-primary);
       background-color: #f0f9ff;
       transform: scale(1.1);
     }
 
     &.active {
-      color: #1890ff;
+      color: var(--el-color-primary);
       background-color: #e6f7ff;
 
       &:hover {
         background-color: #bae7ff;
       }
     }
-  }
-}
-
-// Agent item wrapper styles
-.agent-item-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-right: 12px;
-}
-
-// More button styles
-.more-button {
-  color: #909399;
-  font-size: 12px;
-  cursor: pointer;
-
-  &:hover {
-    color: #1890ff;
-    text-decoration: underline;
-  }
-
-  &:disabled {
-    color: #c0c4cc;
-    cursor: not-allowed;
-  }
-}
-
-// Permission loading state styles
-.roles-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #909399;
-  font-size: 14px;
-  padding: 20px;
-
-  .el-icon {
-    font-size: 16px;
   }
 }
 
@@ -3162,7 +2211,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
           padding: 15px;
           background-color: #f8f9fa;
           border-radius: 8px;
-          border-left: 3px solid #1890ff;
+          border-left: 3px solid var(--el-color-primary);
 
           p {
             margin: 0;
@@ -3177,7 +2226,7 @@ const copyMessageWithDocs = (message: any, index: number) => {
           padding: 15px;
           background-color: #f8f9fa;
           border-radius: 8px;
-          border-left: 3px solid #1890ff;
+          border-left: 3px solid var(--el-color-primary);
           text-align: center;
           width: 300px !important;
           height: 200px !important;
@@ -3245,346 +2294,13 @@ const copyMessageWithDocs = (message: any, index: number) => {
   max-width: 800px !important;
 }
 
-/* Tutorial guide overlay styles */
-.tutorial-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
-  pointer-events: auto;
-  animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Step 1: highlight the left sidebar */
-.tutorial-step-1 {
-  position: relative;
-  width: 100%;
-  height: 100%;
-
-  .sidebar-tutorial {
-    position: absolute;
-    top: 50%;
-    left: 300px;
-    transform: translateY(-50%);
-    z-index: 1002;
-  }
-}
-
-/* Step 2: highlight the bottom case bar */
-.tutorial-step-2 {
-  position: relative;
-  width: 100%;
-  height: 100%;
-
-  .bottom-tutorial {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1002;
-  }
-}
-
-/* Step 3: highlight the chat input area */
-.tutorial-step-3 {
-  position: relative;
-  width: 100%;
-  height: 100%;
-
-  .input-tutorial {
-    position: absolute;
-    top: 5%;
-    left: 50%;
-    transform: translate(-50%, 5%);
-    z-index: 1002;
-  }
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .tutorial-indicator {
-    bottom: 10px;
-    padding: 8px 16px;
-    min-width: 160px;
-
-    .tutorial-progress {
-      gap: 8px;
-
-      .progress-bar {
-        height: 3px;
-      }
-
-      .tutorial-steps {
-        gap: 6px;
-
-        .tutorial-step {
-          width: 24px;
-          height: 24px;
-
-          .step-number {
-            font-size: 11px;
-          }
-        }
-      }
-    }
-  }
-}
-
-/* Common tutorial content styles */
-.tutorial-content {
-  position: relative;
-  width: 90%;
-  max-width: 800px;
-  background-color: #fff;
-  border-radius: 15px;
-  padding: 25px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  text-align: center;
-  pointer-events: auto;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  animation: slideInUp 0.4s ease-out;
-
-  h3 {
-    margin-bottom: 15px;
-    color: #333;
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.3;
-  }
-
-  p {
-    margin-bottom: 25px;
-    color: #666;
-    line-height: 1.7;
-    font-size: 15px;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .tutorial-actions {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
-
-    .el-button {
-      padding: 12px 24px;
-      font-size: 14px;
-      border-radius: 8px;
-      min-width: 90px;
-      font-weight: 500;
-      transition: all 0.3s ease;
-
-      &:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      }
-    }
-
-    .tutorial-hint {
-      text-align: center;
-      color: #909399;
-      font-size: 12px;
-      line-height: 1.4;
-
-      small {
-        display: block;
-        padding: 8px 12px;
-        background: rgba(144, 147, 153, 0.1);
-        border-radius: 6px;
-        border: 1px solid rgba(144, 147, 153, 0.2);
-      }
-    }
-  }
-}
-
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .tutorial-content {
-    width: 95%;
-    padding: 20px;
-    margin: 10px;
-
-    h3 {
-      font-size: 18px;
-      margin-bottom: 12px;
-    }
-
-    p {
-      font-size: 14px;
-      margin-bottom: 20px;
-    }
-
-    .tutorial-actions {
-      gap: 15px;
-
-      .el-button {
-        padding: 10px 20px;
-        min-width: 80px;
-        font-size: 13px;
-      }
-    }
-  }
-
-  /* Mobile highlight area adjustments */
-  .tutorial-step-1 {
-    .sidebar-tutorial {
-      left: 220px;
-    }
-  }
-
-  .tutorial-step-2 {
-    .bottom-tutorial {
-      width: 90%;
-    }
-  }
-
-  .tutorial-step-3 {
-    .input-tutorial {
-      top: 10%;
-    }
-  }
-}
-
-/* Small-screen device optimizations */
-@media (max-width: 480px) {
-  .tutorial-content {
-    width: 98%;
-    padding: 15px;
-    margin: 5px;
-
-    h3 {
-      font-size: 16px;
-      margin-bottom: 10px;
-    }
-
-    p {
-      font-size: 13px;
-      margin-bottom: 15px;
-    }
-
-    .tutorial-actions {
-      flex-direction: column;
-      gap: 10px;
-
-      .el-button {
-        width: 100%;
-        padding: 12px 20px;
-        font-size: 14px;
-      }
-    }
-  }
-
-  /* Extra-small screen highlight area adjustments */
-  .tutorial-step-1 {
-    .sidebar-tutorial {
-      left: 170px;
-      width: 80%;
-    }
-  }
-
-  .tutorial-step-2 {
-    .bottom-tutorial {
-      width: 90%;
-    }
-  }
-
-  .tutorial-step-3 {
-    .input-tutorial {
-      width: 90%;
-    }
-  }
-}
 .tip-text {
   font-size: 12px;
-  color: #909399;
+  color: var(--phy-color-text-muted);
   margin-top: 10px;
   width: 100%;
   text-align: right;
 }
-/* Common animation definitions */
-@keyframes tutorial-pulse {
-  0%,
-  100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-
-@keyframes tutorial-bounce-left {
-  0%,
-  20%,
-  50%,
-  80%,
-  100% {
-    transform: translateY(-50%) translateX(0);
-  }
-  40% {
-    transform: translateY(-50%) translateX(-5px);
-  }
-  60% {
-    transform: translateY(-50%) translateX(-3px);
-  }
-}
-
-@keyframes tutorial-bounce-down {
-  0%,
-  20%,
-  50%,
-  80%,
-  100% {
-    transform: translateX(-50%) translateY(0);
-  }
-  40% {
-    transform: translateX(-50%) translateY(5px);
-  }
-  60% {
-    transform: translateX(-50%) translateY(3px);
-  }
-}
-
-@keyframes tutorial-bounce-up {
-  0%,
-  20%,
-  50%,
-  80%,
-  100% {
-    transform: translateX(-50%) translateY(0);
-  }
-  40% {
-    transform: translateX(-50%) translateY(-5px);
-  }
-  60% {
-    transform: translateX(-50%) translateY(-3px);
-  }
-}
-
 /* Agents architecture diagram dialog styles */
 .agents-view-container {
   display: flex;
@@ -3618,7 +2334,11 @@ const copyMessageWithDocs = (message: any, index: number) => {
 }
 
 /* Responsive design */
-@media (max-width: 900px) {
+@media (max-width: 899px) {
+  .mobile-sidebar-toggle {
+    display: inline-flex !important;
+  }
+
   .agents-view-image {
     width: 100% !important;
     height: auto !important;

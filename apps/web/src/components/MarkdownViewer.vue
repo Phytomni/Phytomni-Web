@@ -1,5 +1,12 @@
 <template>
-  <div class="markdown-viewer">
+  <div
+    :class="[
+      'markdown-viewer',
+      'phy-markdown',
+      `phy-markdown--${surface}`,
+      surface === 'legacy' ? 'phy-reading' : null,
+    ]"
+  >
     <!-- Use the Typewriter component when the typing effect is needed -->
     <Typewriter
       v-if="instantMessage"
@@ -22,11 +29,18 @@ import { computed } from "vue";
 import { escapeHtml, sanitizeEscapedHref } from "@/utils/sanitize-markup";
 import { linkifyCitations } from "@/utils/linkify-citations";
 
-const props = defineProps<{
-  content: string;
-  instantMessage?: boolean;
-  ns?: string;
-}>();
+export type MarkdownSurface = "legacy" | "chat" | "artifact" | "document";
+
+const props = withDefaults(
+  defineProps<{
+    content: string;
+    instantMessage?: boolean;
+    ns?: string;
+    /** Visual skin; legacy is unchanged. Chat gets the transcript skin. */
+    surface?: MarkdownSurface;
+  }>(),
+  { surface: "legacy" }
+);
 
 const emit = defineEmits<{
   finish: [];
@@ -96,17 +110,26 @@ const handleFinish = () => {
 </script>
 
 <style lang="scss">
-.markdown-viewer {
+/* Legacy surface keeps the historical reset + typography. Chat/artifact/document
+   skins live in styles/markdown.css and must not fight these nested selectors. */
+.markdown-viewer.phy-markdown--legacy {
   all: initial;
+  &.phy-reading {
+    font-family: var(--phy-font-reading);
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--phy-color-text);
+    max-width: 760px;
+  }
+
   * {
     all: revert;
   }
 
   .markdown-content {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
-      Helvetica, Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
     word-wrap: break-word;
     color: #1f2328;
     background-color: transparent;
@@ -210,10 +233,9 @@ const handleFinish = () => {
   }
 
   .markdown-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
-      Helvetica, Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
     word-wrap: break-word;
     color: var(--el-text-color-primary);
     background-color: transparent;

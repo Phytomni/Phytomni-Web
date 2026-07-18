@@ -132,3 +132,71 @@ func TestAccumulator_EmptyDeltaIsNoOp(t *testing.T) {
 		t.Fatalf("empty delta appended %q, want empty", a.AnswerText())
 	}
 }
+
+// TestAGUICompatibilityFixture_BoundedMixedTerminal folds the synthetic
+// stream fixture used by the Web compatibility gate in arrival order. The
+// fixture deliberately mixes LF and CRLF frames, carries one forward-compatible
+// unknown event, and ends with both the Bot RunError and legacy [DONE] marker.
+// The parser observes the bytes; the gateway owns forwarding them unchanged.
+func TestAGUICompatibilityFixture_BoundedMixedTerminal(t *testing.T) {
+	frames := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "run started",
+			raw:  "event: RunStarted\r\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run-task27\"}",
+		},
+		{
+			name: "unknown step",
+			raw:  "event: FutureEvent\ndata: {\"type\":\"FutureEvent\",\"value\":\"ignored\"}",
+		},
+		{
+			name: "content",
+			raw:  "event: TextMessageContent\r\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"synthetic\"}",
+		},
+		{
+			name: "run error",
+			raw:  "event: RunError\ndata: {\"type\":\"RunError\",\"code\":\"fixture_failure\",\"message\":\"synthetic failure\"}",
+		},
+		{
+			name: "done",
+			raw:  "data: [DONE]",
+		},
+	}
+
+	expectedTypes := []string{"RunStarted", "FutureEvent", "TextMessageContent", "RunError"}
+	var gotTypes []string
+	acc := &AGUIAccumulator{}
+	for _, frame := range frames {
+		ev, ok := ParseAGUIFrame([]byte(frame.raw))
+		if frame.name == "done" {
+			if ok {
+				t.Fatal("[DONE] must not become an AG-UI event")
+			}
+			continue
+		}
+		if !ok {
+			t.Fatalf("%s fixture frame did not parse", frame.name)
+		}
+		gotTypes = append(gotTypes, ev.Type)
+		acc.Observe(ev)
+	}
+	if len(gotTypes) != len(expectedTypes) {
+		t.Fatalf("event types = %v, want %v", gotTypes, expectedTypes)
+	}
+	for index, want := range expectedTypes {
+		if gotTypes[index] != want {
+			t.Fatalf("event %d = %q, want %q", index, gotTypes[index], want)
+		}
+	}
+	if acc.RunID() != "run-task27" {
+		t.Fatalf("run id = %q, want run-task27", acc.RunID())
+	}
+	if acc.AnswerText() != "synthetic" {
+		t.Fatalf("answer = %q, want synthetic", acc.AnswerText())
+	}
+	if acc.Err() == nil || acc.Err().Code != "fixture_failure" {
+		t.Fatalf("terminal error = %+v, want fixture_failure", acc.Err())
+	}
+}

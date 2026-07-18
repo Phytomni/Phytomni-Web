@@ -12,6 +12,8 @@ export const WHITELIST = [
   "/login",
   "/register",
   "/forgot-password",
+  "/terms",
+  "/privacy",
   "/home",
   "/about",
 ] as const;

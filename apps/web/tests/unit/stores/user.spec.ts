@@ -81,3 +81,47 @@ describe("userStore.expertEnabled", () => {
     expect(store.expertEnabled).toBe(true);
   });
 });
+
+describe("userStore.isFirstLogin", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+  });
+
+  it("is true when login_status is 0", () => {
+    const store = userStore();
+    store.SET_LOGIN_STATUS("0");
+    expect(store.isFirstLogin).toBe(true);
+  });
+
+  it("is false when login_status is 1", () => {
+    const store = userStore();
+    store.SET_LOGIN_STATUS("1");
+    expect(store.isFirstLogin).toBe(false);
+  });
+});
+
+describe("userStore.getUserTools $patch end-state", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+  });
+
+  it("sets permission, roles, permission_list, and expertEnabled together", async () => {
+    (getUserTool as any).mockResolvedValue({
+      code: 200,
+      data: {
+        permission: "admin",
+        tool_list: ["ChatAgent"],
+        permission_list: ["p1"],
+        expert_enabled: true,
+      },
+    });
+    const store = userStore();
+    await store.getUserTools();
+    expect(store.permission).toBe("admin");
+    expect(store.roles).toEqual(["ChatAgent"]);
+    expect(store.permission_list).toEqual(["p1"]);
+    expect(store.expertEnabled).toBe(true);
+  });
+});

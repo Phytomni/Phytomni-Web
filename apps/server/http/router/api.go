@@ -30,6 +30,8 @@ func Api(r *gin.RouterGroup) {
 	// Middleware chain is identical to the old v1 group.
 	apiV1Router := r.Group("api/v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
 	{
+		apiV1Router.GET("/bot/capabilities", apiHandler.BotCapabilities)             // Web-owned, authenticated Bot capability manifest
+		apiV1Router.GET("/bot/interop/capabilities", apiHandler.InteropCapabilities) // opt-in, sanitized interop capability discovery
 		apiV1Router.POST("/users", apiHandler.Register)                              // admin registers a user or vip user
 		apiV1Router.GET("/users", apiHandler.PermissionUserList)                     // admin user list
 		apiV1Router.GET("/users/me", apiHandler.GetUserProfile)                      // get own profile (email from JWT, IDOR closed)
@@ -61,6 +63,21 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/downloads/analyst-agent/obs-images", apiHandler.DownloadAnalystAgentObsImages) // AnalystAgent OBS image download links
 		apiV1Router.POST("/downloads/rendering-file", apiHandler.DownloadObsRenderingFile)               // file-format-conversion download
 	}
+
+	// A2UI action bodies must be bounded and validated before OperationLog reads
+	// them. Keep the same localization, auth, first-login, and CORS gates as the
+	// generic authenticated v1 group while inserting the body guard immediately
+	// before audit logging.
+	a2uiRouter := r.Group("api/v1").Use(
+		i18n.Localize(),
+		middleware.GlobalMiddleware(),
+		middleware.AuthMiddleware(),
+		middleware.LoginStatusMiddleware(),
+		middleware.CORS(),
+		middleware.A2uiJSONGuard(),
+		middleware.OperationLog(),
+	)
+	a2uiRouter.POST("/conversations/:id/a2ui-actions", apiHandler.A2uiAction) // interactive agent-surface action uplink
 
 	// /api/v1/auth lifecycle group: logout / logout-all. Carries AuthMiddleware (handler needs
 	// ctx username/token) but NOT LoginStatusMiddleware — first-login users must still be able

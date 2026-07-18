@@ -2,7 +2,109 @@ import {
   createRouter,
   createWebHistory,
   createWebHashHistory,
+  type RouteLocationNormalized,
+  type RouteLocationRaw,
 } from "vue-router";
+import {
+  REMOTE_AGENT_PRODUCT_REGISTRY,
+  type RemoteAgentTool,
+} from "@/constants/agents";
+
+/**
+ * Capability-gated route contracts for remote product views. The Research
+ * surface has a real lazy component but remains dark until its `live` contract
+ * is enabled; the other registry entries remain metadata-only demos. Keeping
+ * them outside `constantRoutes` avoids advertising inactive products.
+ */
+export const REMOTE_AGENT_ROUTE_CONTRACTS = REMOTE_AGENT_PRODUCT_REGISTRY;
+
+export type RemoteAgentRouteAccess = {
+  roles?: readonly string[];
+  capabilities?: Readonly<
+    Record<string, { enabled?: boolean; execution?: string } | undefined>
+  >;
+};
+
+export function canActivateRemoteAgentRoute(
+  tool: RemoteAgentTool,
+  access: RemoteAgentRouteAccess
+): boolean {
+  const contract = REMOTE_AGENT_ROUTE_CONTRACTS[tool];
+  if (!contract) return false;
+  if (contract.live !== true) return false;
+  const roles = access.roles ?? [];
+  const capability = access.capabilities?.[tool];
+  return (
+    roles.includes(contract.requiredRole) &&
+    capability?.enabled === true &&
+    capability.execution === contract.capability
+  );
+}
+
+export const isRemoteAgentRouteAllowed = canActivateRemoteAgentRoute;
+
+/**
+ * Route-level guard used by the lazy contract below and by the future live
+ * Research view. Metadata access is useful for deterministic tests and future
+ * server-provided route context; normal navigation loads the authenticated
+ * role and Bot capability manifest here.
+ */
+export function remoteAgentRouteGuard(tool: RemoteAgentTool) {
+  return async (
+    to: RouteLocationNormalized
+  ): Promise<true | RouteLocationRaw> => {
+    const metadataAccess = to.meta.remoteAccess as
+      | RemoteAgentRouteAccess
+      | undefined;
+    if (metadataAccess) {
+      return canActivateRemoteAgentRoute(tool, metadataAccess)
+        ? true
+        : { name: "NotFound" };
+    }
+
+    // Dynamic imports keep the chat capability/request graph out of router
+    // initialization, which also runs before Pinia is mounted during boot.
+    try {
+      const [{ userStore }, { useBotCapabilities }] = await Promise.all([
+        import("@/stores"),
+        import("@/views/chat/composables/useBotCapabilities"),
+      ]);
+      const store = userStore();
+      const capabilities = useBotCapabilities(`route:${tool}`);
+      await capabilities.load();
+      const access: RemoteAgentRouteAccess = {
+        roles: store.roles,
+        capabilities: { [tool]: capabilities.byTool.value[tool] },
+      };
+      return canActivateRemoteAgentRoute(tool, access)
+        ? true
+        : { name: "NotFound" };
+    } catch {
+      // A missing auth/capability context must fail closed. The 404 fallback
+      // keeps a dark route from becoming a successful but non-functional UI.
+      return { name: "NotFound" };
+    }
+  };
+}
+
+/**
+ * The Research route is mounted separately from the static product-route
+ * inventory. This keeps the existing visual-contract route list stable while
+ * still giving the dark surface a real, guarded, lazy view.
+ */
+export const REMOTE_AGENT_LAZY_ROUTES = [
+  {
+    path: "/research-agent",
+    name: "researchAgent",
+    component: () => import("@/views/research-agent/index.vue"),
+    beforeEnter: remoteAgentRouteGuard("InSilicoResearchAgent"),
+    meta: {
+      title: "Research Agent",
+      layout: "nolayout",
+      remoteTool: "InSilicoResearchAgent",
+    },
+  },
+] as const;
 
 export const dynamicRoutes = [
   {
@@ -46,6 +148,18 @@ export const constantRoutes = [
     name: "Unauthorized",
     component: () => import("@/views/error/401.vue"),
     meta: { title: "401 error", layout: "nolayout" },
+  },
+  {
+    path: "/terms",
+    name: "terms",
+    component: () => import("@/views/legal/index.vue"),
+    meta: { title: "Terms of Service", layout: "nolayout", doc: "terms" },
+  },
+  {
+    path: "/privacy",
+    name: "privacy",
+    component: () => import("@/views/legal/index.vue"),
+    meta: { title: "Privacy Policy", layout: "nolayout", doc: "privacy" },
   },
   {
     path: "/:pathMatch(.*)*",
@@ -212,4 +326,9 @@ const router = createRouter({
   // history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: constantRoutes,
 });
+
+for (const route of REMOTE_AGENT_LAZY_ROUTES) {
+  router.addRoute(route);
+}
+
 export default router;

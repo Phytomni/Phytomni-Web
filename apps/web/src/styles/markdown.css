@@ -1,0 +1,487 @@
+/**
+ * Markdown surface skins.
+ *
+ * - `.phy-markdown--legacy` — no new visual declarations (existing MarkdownViewer
+ *   scoped styles + `.phy-reading` remain authoritative).
+ * - `.phy-markdown--chat` — quiet lab sans/mono transcript skin.
+ * - `.phy-markdown--artifact` — research prose with sans/mono structure.
+ * - `.phy-markdown--document` — sans document hierarchy for explicit consumers.
+ */
+
+/* Beat `.markdown-viewer.phy-markdown--legacy { all: initial }` when both classes compete. */
+.markdown-viewer.phy-markdown--chat,
+.md-block.phy-markdown--chat,
+.phy-markdown.phy-markdown--chat {
+  all: revert;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.phy-markdown--chat h1,
+.phy-markdown--chat h2,
+.phy-markdown--chat h3,
+.phy-markdown--chat h4,
+.phy-markdown--chat h5,
+.phy-markdown--chat h6 {
+  margin: 0.65em 0 0.25em;
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.phy-markdown--chat h1 {
+  font-size: 1.28em;
+}
+
+.phy-markdown--chat h2 {
+  font-size: 1.16em;
+}
+
+.phy-markdown--chat h3 {
+  font-size: 1.06em;
+}
+
+.phy-markdown--chat p {
+  margin: 0.5em 0;
+  line-height: 1.6;
+}
+
+.phy-markdown--chat ul,
+.phy-markdown--chat ol {
+  margin: 0.5em 0;
+  padding-left: 1.35em;
+}
+
+.phy-markdown--chat li {
+  margin: 0.2em 0;
+}
+
+.phy-markdown--chat li > ul,
+.phy-markdown--chat li > ol {
+  margin: 0.2em 0;
+}
+
+.phy-markdown--chat blockquote {
+  margin: 0.6em 0;
+  padding: 0.1em 0 0.1em 0.8em;
+  border-left: 2px solid var(--phy-color-border-control);
+  color: var(--phy-color-text-secondary);
+}
+
+.phy-markdown--chat code {
+  padding: 0.12em 0.32em;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  background-color: var(--phy-color-fill-subtle);
+  font-family: var(--phy-font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+.phy-markdown--chat pre {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.65em 0;
+  padding: var(--phy-space-12) var(--phy-space-16);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  background-color: var(--phy-color-fill-subtle);
+  scrollbar-width: thin;
+}
+
+.phy-markdown--chat pre code {
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  font-size: 0.88em;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.phy-markdown--chat a {
+  color: var(--phy-color-action-text);
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
+}
+
+.phy-markdown--chat a:hover {
+  color: var(--phy-color-action-text-hover);
+}
+
+.phy-markdown--chat a:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+  border-radius: var(--phy-radius-sm);
+}
+
+.phy-markdown--chat img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--phy-radius-sm);
+}
+
+.phy-markdown--chat table {
+  display: block;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 100%;
+  margin: 0.65em 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  border-collapse: collapse;
+  scrollbar-width: thin;
+}
+
+.phy-markdown--chat th,
+.phy-markdown--chat td {
+  border: 1px solid var(--phy-color-border-subtle);
+  padding: var(--phy-space-8) var(--phy-space-12);
+  color: var(--phy-color-text);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.phy-markdown--chat th {
+  font-weight: 600;
+  background-color: var(--phy-color-fill-subtle);
+}
+
+.phy-markdown--chat tr:nth-child(2n) {
+  background-color: var(--phy-color-bg-elevated);
+}
+
+.phy-markdown--chat hr {
+  margin: var(--phy-space-16) 0;
+  border: 0;
+  border-top: 1px solid var(--phy-color-border-subtle);
+}
+
+/* The legacy static parser preserves every source newline as <br>. Keep prose
+   breaks real (so adjacent words cannot join), and suppress only the first
+   break directly associated with a block boundary. Never use a two-hop
+   sibling selector here: sibling combinators ignore intervening text nodes and
+   can otherwise hide a later prose break. */
+.phy-markdown--chat .markdown-content br {
+  display: inline;
+}
+
+.phy-markdown--chat
+  .markdown-content
+  :is(h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol)
+  + br,
+.phy-markdown--chat .markdown-content li + br,
+.phy-markdown--chat
+  .markdown-content
+  br:has(+ :is(h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol)) {
+  display: none;
+}
+
+.phy-markdown--chat > :first-child,
+.phy-markdown--chat .markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.phy-markdown--chat > :last-child,
+.phy-markdown--chat .markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+/* Nested content wrappers from MarkdownViewer / streaming blocks. */
+.phy-markdown--chat .markdown-content,
+.phy-markdown--chat.md-block {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: visible;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* Artifact and document skins stay opt-in. Their root is always UI sans so
+   surrounding chrome cannot inherit the artifact's research serif. */
+.phy-markdown--artifact,
+.phy-markdown--document {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+  font-size: 16px;
+  line-height: 1.68;
+  overflow-wrap: anywhere;
+}
+
+.phy-markdown--artifact :is(.markdown-content, .markdown-body) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 740px;
+  min-width: 0;
+  margin-inline: auto;
+  color: inherit;
+  font-family: var(--phy-font-reading);
+  font-size: 17px;
+  line-height: 1.72;
+  overflow-x: visible;
+}
+
+.phy-markdown--document {
+  font-family: var(--phy-font-shell);
+}
+
+.phy-markdown--document :is(.markdown-content, .markdown-body) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  color: inherit;
+  font-family: var(--phy-font-shell);
+  font-size: inherit;
+  line-height: inherit;
+  overflow-x: visible;
+}
+
+.phy-markdown--document p {
+  font-family: var(--phy-font-shell);
+}
+
+/* Serif is reserved for artifact narrative prose. Structural and supporting
+   content remains part of the sans UI/document system. */
+.phy-markdown--artifact :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--phy-font-shell);
+}
+
+.phy-markdown--artifact :is(ul, ol, li, blockquote) {
+  font-family: var(--phy-font-shell);
+}
+
+.phy-markdown--artifact :is(code, pre, kbd, samp) {
+  font-family: var(--phy-font-mono);
+}
+
+.phy-markdown--artifact :is(caption, figcaption, button, input, select, textarea, [role="button"], .doc-list, .doc-list-title, .doc-list-item) {
+  font-family: var(--phy-font-shell);
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.2em 0 0.4em;
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+  font-weight: 600;
+  line-height: 1.28;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) h1 {
+  font-size: 1.72em;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) h2 {
+  font-size: 1.42em;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) h3 {
+  font-size: 1.18em;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) p {
+  margin: 0.78em 0;
+  line-height: inherit;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) :is(ul, ol) {
+  margin: 0.78em 0;
+  padding-left: 1.6em;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) li {
+  margin: 0.3em 0;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) li > :is(ul, ol) {
+  margin: 0.3em 0;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) blockquote {
+  margin: 1em 0;
+  padding: 0.2em 0 0.2em var(--phy-space-16);
+  border-left: 3px solid var(--phy-color-border-control);
+  color: var(--phy-color-text-secondary);
+  font-family: var(--phy-font-shell);
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) code {
+  padding: 0.12em 0.34em;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  background-color: var(--phy-color-fill-subtle);
+  font-family: var(--phy-font-mono);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) pre {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 1em 0;
+  padding: var(--phy-space-16);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  background-color: var(--phy-color-fill-subtle);
+  font-family: var(--phy-font-mono);
+  scrollbar-width: thin;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) pre code {
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  font-family: inherit;
+  font-size: 0.86em;
+  line-height: 1.55;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) table {
+  display: block;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 100%;
+  margin: 1em 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  border-collapse: collapse;
+  font-family: var(--phy-font-shell);
+  scrollbar-width: thin;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) :is(th, td) {
+  border: 1px solid var(--phy-color-border-subtle);
+  padding: var(--phy-space-8) var(--phy-space-12);
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) th {
+  background-color: var(--phy-color-fill-subtle);
+  font-weight: 600;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) tr:nth-child(2n) {
+  background-color: var(--phy-color-bg-elevated);
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+  border-radius: var(--phy-radius-sm);
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) :is(caption, figcaption) {
+  margin-top: var(--phy-space-8);
+  color: var(--phy-color-text-secondary);
+  font-family: var(--phy-font-shell);
+  font-size: 0.86em;
+  line-height: 1.5;
+  text-align: center;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) a {
+  color: var(--phy-color-action-text);
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) a:hover {
+  color: var(--phy-color-action-text-hover);
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) a:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+  border-radius: var(--phy-radius-sm);
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) :is(button, input, select, textarea, [role="button"]) {
+  font-family: var(--phy-font-shell);
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) hr {
+  margin: var(--phy-space-24) 0;
+  border: 0;
+  border-top: 1px solid var(--phy-color-border-subtle);
+}
+
+/* Reference rows are siblings of MarkdownViewer in CitedAnswer, so keep them
+   sans when the body opts into either research surface. */
+.cited-answer:has(> .phy-markdown--artifact) .doc-list,
+.cited-answer:has(> .phy-markdown--document) .doc-list {
+  font-family: var(--phy-font-shell);
+}
+
+/* The static renderer preserves source newlines as <br>. As on Chat, CSS owns
+   block-boundary rhythm without changing the generated safe HTML. */
+:is(.phy-markdown--artifact, .phy-markdown--document) .markdown-content br {
+  display: inline;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document)
+  .markdown-content
+  :is(h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol)
+  + br,
+:is(.phy-markdown--artifact, .phy-markdown--document)
+  .markdown-content
+  li
+  + br,
+:is(.phy-markdown--artifact, .phy-markdown--document)
+  .markdown-content
+  br:has(+ :is(h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol)) {
+  display: none;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) > :first-child,
+:is(.phy-markdown--artifact, .phy-markdown--document)
+  :is(.markdown-content, .markdown-body)
+  > :first-child {
+  margin-top: 0;
+}
+
+:is(.phy-markdown--artifact, .phy-markdown--document) > :last-child,
+:is(.phy-markdown--artifact, .phy-markdown--document)
+  :is(.markdown-content, .markdown-body)
+  > :last-child {
+  margin-bottom: 0;
+}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"phytomni-server/db"
+	rxBot "phytomni-server/external/bot"
 
 	"github.com/glebarez/sqlite"
 	"github.com/spf13/viper"
@@ -32,6 +33,19 @@ func setupChatGateDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("ddl users: %v", err)
 	}
+	if err := gdb.Exec(`CREATE TABLE tool_names (
+		id INTEGER PRIMARY KEY,
+		tool_name TEXT NOT NULL
+	)`).Error; err != nil {
+		t.Fatalf("ddl tool_names: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE user_tool_names (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		code TEXT NOT NULL,
+		tool_id TEXT NOT NULL
+	)`).Error; err != nil {
+		t.Fatalf("ddl user_tool_names: %v", err)
+	}
 	db.Set("phytomni-server", gdb)
 	return gdb
 }
@@ -44,6 +58,16 @@ func seedChatGateUser(t *testing.T, gdb *gorm.DB, email, code string, chatLimit 
 		email, code, chatLimit,
 	).Error; err != nil {
 		t.Fatalf("seed user %s: %v", email, err)
+	}
+}
+
+func seedRemoteProductPermission(t *testing.T, gdb *gorm.DB, code, tool string, id int) {
+	t.Helper()
+	if err := gdb.Exec(`INSERT INTO tool_names (id, tool_name) VALUES (?, ?)`, id, tool).Error; err != nil {
+		t.Fatalf("seed tool %s: %v", tool, err)
+	}
+	if err := gdb.Exec(`INSERT INTO user_tool_names (code, tool_id) VALUES (?, ?)`, code, id).Error; err != nil {
+		t.Fatalf("seed user tool %s/%s: %v", code, tool, err)
 	}
 }
 
@@ -187,5 +211,147 @@ func TestCheckChatAllowed_FailOpen_EmptyEmail(t *testing.T) {
 	ps := NewService()
 	if err := ps.CheckChatAllowed(context.Background(), ""); err != nil {
 		t.Errorf("fail-open: empty email must allow, got %v", err)
+	}
+}
+
+func TestCheckRemoteProductAllowed_FlagOff(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
+	seedRemoteProductPermission(t, gdb, "network-role", "GeneNetworkAgent", 1)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckRemoteProductAllowed(context.Background(), "network@example.com", "GeneNetworkAgent")
+	if !errors.Is(err, ErrRemoteProductDisabled) {
+		t.Fatalf("flag-off remote product error = %v, want ErrRemoteProductDisabled", err)
+	}
+}
+
+func TestCheckRemoteProductAllowed_RequiresRolePermission(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{NetworkEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckRemoteProductAllowed(context.Background(), "network@example.com", "GeneNetworkAgent")
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("missing remote role error = %v, want ErrRemoteProductForbidden", err)
+	}
+}
+
+func TestCheckRemoteProductAllowed_GrantedRole(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
+	seedRemoteProductPermission(t, gdb, "network-role", "GeneNetworkAgent", 1)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{NetworkEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	if err := NewService().CheckRemoteProductAllowed(context.Background(), "network@example.com", "GeneNetworkAgent"); err != nil {
+		t.Fatalf("granted remote role must pass: %v", err)
+	}
+}
+
+func TestCheckRemoteProductAllowed_UnknownToolFailsClosed(t *testing.T) {
+	setupChatGateDB(t)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{NetworkEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckRemoteProductAllowed(context.Background(), "network@example.com", "UnknownAgent")
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("unknown remote product error = %v, want ErrRemoteProductForbidden", err)
+	}
+}
+
+func TestCheckExpertRemoteProductsAllowedRequiresEveryProductFlag(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "expert@example.com", "admin", 5)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ResearchEnabled: true,
+		DesignEnabled:   true,
+		NetworkEnabled:  false,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckExpertRemoteProductsAllowed(context.Background(), "expert@example.com")
+	if !errors.Is(err, ErrRemoteProductDisabled) {
+		t.Fatalf("Expert with one product flag off = %v, want ErrRemoteProductDisabled", err)
+	}
+}
+
+func TestCheckExpertRemoteProductsAllowedRequiresEveryGrant(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "expert@example.com", "expert-role", 5)
+	seedRemoteProductPermission(t, gdb, "expert-role", "InSilicoResearchAgent", 1)
+	seedRemoteProductPermission(t, gdb, "expert-role", "DigitalDesignAgent", 2)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ResearchEnabled: true,
+		DesignEnabled:   true,
+		NetworkEnabled:  true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckExpertRemoteProductsAllowed(context.Background(), "expert@example.com")
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("Expert with one product grant missing = %v, want ErrRemoteProductForbidden", err)
+	}
+}
+
+func TestQueryRemoteProductFlagOffStopsBeforeBot(t *testing.T) {
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, BaseURL: "http://127.0.0.1:1"}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	_, err := NewService().Query(context.Background(), "network@example.com", QueryInput{
+		Query: "network",
+		Tool:  "GeneNetworkAgent",
+		Mode:  "instant",
+	})
+	if !errors.Is(err, ErrRemoteProductDisabled) {
+		t.Fatalf("flag-off Query error = %v, want ErrRemoteProductDisabled", err)
+	}
+}
+
+func TestQueryRemoteProductRoleDeniedStopsBeforeBot(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, NetworkEnabled: true, BaseURL: "http://127.0.0.1:1"}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	_, err := NewService().Query(context.Background(), "network@example.com", QueryInput{
+		Query: "network",
+		Tool:  "GeneNetworkAgent",
+		Mode:  "instant",
+	})
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("role-denied Query error = %v, want ErrRemoteProductForbidden", err)
+	}
+}
+
+func TestQueryRemoteProductEmptyModeStillChecksPermission(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ProxyEnabled:   true,
+		NetworkEnabled: true,
+		BaseURL:        "http://127.0.0.1:1",
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	_, err := NewService().Query(context.Background(), "network@example.com", QueryInput{
+		Query: "network",
+		Tool:  "GeneNetworkAgent",
+		// Mode intentionally omitted: direct service calls must still enforce
+		// the explicit remote tool boundary.
+	})
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("empty-mode role-denied Query error = %v, want ErrRemoteProductForbidden", err)
 	}
 }

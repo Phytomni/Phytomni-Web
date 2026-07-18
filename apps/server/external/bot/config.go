@@ -28,6 +28,22 @@ type Config struct {
 	// to true (per deploy) to serve text/event-stream for chat-family slugs.
 	// Zero value false = safe dormant default, like ProxyEnabled.
 	StreamEnabled bool `json:"stream_enabled" yaml:"stream_enabled" mapstructure:"stream_enabled"`
+	// A2uiActionsEnabled is the dark-launch switch for POST
+	// /api/v1/conversations/:id/a2ui-actions → Bot
+	// /v1/runs/{run_id}/a2ui-actions. While false the gateway returns a local
+	// 503 after ownership checks (no Bot call). Zero value false = safe dormant
+	// default, like StreamEnabled.
+	A2uiActionsEnabled bool `json:"a2ui_actions_enabled" yaml:"a2ui_actions_enabled" mapstructure:"a2ui_actions_enabled"`
+	// InteropEnabled is the Web-owned dark-launch switch for the optional
+	// /v1/interop/capabilities discovery call. It deliberately defaults false:
+	// a missing key must never expose Bot registry metadata to the browser.
+	InteropEnabled bool `json:"interop_enabled" yaml:"interop_enabled" mapstructure:"interop_enabled"`
+	// ResearchEnabled, DesignEnabled, and NetworkEnabled are independent
+	// product gates for the remote agent surfaces. They intentionally default
+	// false so a missing config key cannot activate a Bot-backed product.
+	ResearchEnabled bool `json:"research_enabled" yaml:"research_enabled" mapstructure:"research_enabled"`
+	DesignEnabled   bool `json:"design_enabled" yaml:"design_enabled" mapstructure:"design_enabled"`
+	NetworkEnabled  bool `json:"network_enabled" yaml:"network_enabled" mapstructure:"network_enabled"`
 	// KeyAuditRedact, when true, requires loggers to emit only the key prefix.
 	KeyAuditRedact bool `json:"key_audit_redact" yaml:"key_audit_redact" mapstructure:"key_audit_redact"`
 	// MaxUploadFileBytes / MaxUploadFileCount / MaxUploadTotalBytes bound the

@@ -1,4 +1,5 @@
 <template>
+  <PiiWatermark>
   <div class="admin-management-container">
     <!-- Top operation bar -->
     <div class="operation-bar">
@@ -165,11 +166,13 @@
       </template>
     </el-dialog>
   </div>
+  </PiiWatermark>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import { Plus } from "@element-plus/icons-vue";
+import PiiWatermark from "@/components/PiiWatermark.vue";
 import { ElMessage } from "element-plus";
 import { getUserList, addUser, changePermission } from "@/api/auth";
 import { useI18n } from "vue-i18n";
@@ -472,11 +475,11 @@ onMounted(() => {
 
 /* Table header styling */
 :deep(.table-header-row) {
-  background-color: #409eff !important;
+  background-color: var(--el-color-primary) !important;
 }
 
 :deep(.table-header-cell) {
-  background-color: #409eff !important;
+  background-color: var(--el-color-primary) !important;
   color: white !important;
   font-weight: bold !important;
 }

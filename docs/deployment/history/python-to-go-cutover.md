@@ -8,7 +8,7 @@
 > understand the baseline, to rebuild from scratch, or to roll the baseline back.
 > It is **not** pending work.
 >
-> - **Upgrading a `0.1.1` production to `0.1.2`?** → [`upgrading.md`](../upgrading.md).
+> - **Upgrading a `0.1.1` production to `0.1.2`?** → [`upgrade-0.1.1-to-0.1.2.md`](upgrade-0.1.1-to-0.1.2.md).
 > - **Getting to `0.1.1` from the pre-`apps/` layout?** → [`repo-reorg-cutover.md`](repo-reorg-cutover.md).
 > - Lost? → [`README.md`](../README.md) routes by production version.
 
@@ -30,7 +30,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 > - **`0.1.1`** (repo re-layout, `/api/v1`, Redis, auth hardening) →
 >   [`repo-reorg-cutover.md`](repo-reorg-cutover.md) §1–§11.
 > - **`0.1.2`** (i18n, Instant/Expert dark, streaming dark, gene obsfs, backend
->   hardening) → [`upgrading.md`](../upgrading.md), plus [`CHANGELOG.md`](../../../CHANGELOG.md).
+>   hardening) → [`upgrade-0.1.1-to-0.1.2.md`](upgrade-0.1.1-to-0.1.2.md), plus [`CHANGELOG.md`](../../../CHANGELOG.md).
 >
 > Read this document only to confirm the baseline is in place (or to rebuild it
 > from scratch); for a production already on the baseline, go straight to the
@@ -218,7 +218,7 @@ As of `0.1.2`, three secrets can be injected from the environment instead of
 
 | Env var | Overrides | Mechanism |
 |---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | `viper.BindEnv` |
+| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | explicit non-empty `os.Getenv` |
 | `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
 | `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
 
@@ -226,6 +226,8 @@ As of `0.1.2`, three secrets can be injected from the environment instead of
 environment untouched keeps the file-based config above byte-identical. Set these
 only if you want secrets out of `app.yml`; do not set an empty value (an empty
 `PHYTOMNI_JWT_SECRET` would override the file with a blank secret).
+Current releases ignore an empty `PHYTOMNI_JWT_SECRET`, so the file secret still
+wins when the env var is unset or empty.
 
 ---
 

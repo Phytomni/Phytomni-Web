@@ -54,6 +54,8 @@ type QuestionAgentLog struct {
 	FId               int64      `gorm:"column:f_id;type:int(11);comment:state: parent id;NOT NULL" json:"f_id"`
 	ServerId          string     `gorm:"column:server_id;type:varchar(255);comment:state: server_id;NOT NULL" json:"server_id"`
 	BotRunId          string     `gorm:"column:bot_run_id;type:varchar(64);comment:Bot run_id cross-service join key;NULL" json:"bot_run_id"`
+	BotProjectionJSON string     `gorm:"column:bot_projection_json;type:longtext;comment:sanitized Bot run projection;NULL" json:"-"`
+	BotReportRevision int64      `gorm:"column:bot_report_revision;type:bigint;default:-1;comment:last Bot report revision" json:"-"`
 	UserName          string     `gorm:"column:user_name;type:varchar(255);comment:user name;NOT NULL" json:"user_name"`
 	Query             string     `gorm:"column:query;type:text;comment:question;NOT NULL" json:"query"`
 	TitleQuery        string     `gorm:"column:title_query;type:text;comment:title question;NOT NULL" json:"title_query"`

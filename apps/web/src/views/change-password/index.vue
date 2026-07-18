@@ -1,121 +1,166 @@
 <template>
-  <div class="change-password-page">
-    <div class="page-header">
-      <div v-if="!isFirstLogin" class="back-button">
-        <el-button @click="goBack" icon="ArrowLeft" text>{{
-          $t("common.back")
-        }}</el-button>
+  <PhyAuthLayout>
+    <template #lang>
+      <LangSwitch />
+    </template>
+    <template #brand>
+      <div class="change-password-brand">
+        <PhyBrandMark :size="40" />
+        <span class="change-password-brand-title">
+          {{ $t("chat.appTitle") }}
+        </span>
       </div>
-      <h1 class="page-title">{{ $t("app.title") }}</h1>
-    </div>
+    </template>
 
-    <div class="change-password-container">
-      <div class="form-card">
-        <h2 class="title">{{ $t("user.changePassword") }}</h2>
-
-        <el-form
-          ref="passwordFormRef"
-          :model="passwordForm"
-          :rules="formRules"
-          label-width="180px"
-          status-icon
+    <template #title>
+      <div class="change-password-heading">
+        <el-button
+          v-if="!isFirstLogin"
+          class="change-password-back"
+          text
+          @click="goBack"
         >
-          <el-form-item :label="$t('user.username')" prop="username">
-            <el-input
-              v-model="passwordForm.username"
-              :placeholder="$t('changePassword.usernamePlaceholder')"
-              disabled
-              :readonly="true"
-            />
-          </el-form-item>
-
-          <el-form-item
-            :label="$t('changePassword.oldPassword')"
-            prop="oldPassword"
-          >
-            <el-input
-              v-model="passwordForm.oldPassword"
-              type="password"
-              show-password
-              :placeholder="$t('changePassword.oldPasswordPlaceholder')"
-            />
-          </el-form-item>
-
-          <el-form-item
-            :label="$t('changePassword.newPassword')"
-            prop="newPassword"
-          >
-            <el-input
-              v-model="passwordForm.newPassword"
-              type="password"
-              show-password
-              :placeholder="$t('changePassword.newPasswordPlaceholder')"
-            />
-          </el-form-item>
-
-          <el-form-item
-            :label="$t('changePassword.confirmPassword')"
-            prop="confirmPassword"
-          >
-            <el-input
-              v-model="passwordForm.confirmPassword"
-              type="password"
-              show-password
-              :placeholder="$t('changePassword.confirmPasswordPlaceholder')"
-            />
-          </el-form-item>
-
-          <el-form-item>
-            <el-space>
-              <el-button @click="resetForm">{{ $t("common.reset") }}</el-button>
-              <el-button type="primary" @click="submitForm">{{
-                $t("changePassword.confirm")
-              }}</el-button>
-            </el-space>
-          </el-form-item>
-        </el-form>
+          <el-icon aria-hidden="true"><ArrowLeft /></el-icon>
+          {{ $t("common.back") }}
+        </el-button>
+        <h1 class="change-password-title">
+          {{ $t("user.changePassword") }}
+        </h1>
       </div>
-    </div>
-  </div>
+    </template>
+
+    <template #description>
+      <p v-if="isFirstLogin" class="change-password-description">
+        {{ $t("login.firstLoginEnforceMessage") }}
+      </p>
+    </template>
+
+    <el-form
+      ref="passwordFormRef"
+      class="change-password-form"
+      :model="passwordForm"
+      :rules="formRules"
+      status-icon
+    >
+      <el-form-item
+        class="change-password-field"
+        :label="$t('user.username')"
+        prop="username"
+      >
+        <el-input
+          v-model="passwordForm.username"
+          :placeholder="$t('changePassword.usernamePlaceholder')"
+          disabled
+          readonly
+          size="large"
+        />
+      </el-form-item>
+
+      <el-form-item
+        class="change-password-field"
+        :label="$t('changePassword.oldPassword')"
+        prop="oldPassword"
+      >
+        <el-input
+          v-model="passwordForm.oldPassword"
+          type="password"
+          show-password
+          :placeholder="$t('changePassword.oldPasswordPlaceholder')"
+          size="large"
+        />
+      </el-form-item>
+
+      <el-form-item
+        class="change-password-field"
+        :label="$t('changePassword.newPassword')"
+        prop="newPassword"
+      >
+        <el-input
+          v-model="passwordForm.newPassword"
+          type="password"
+          show-password
+          :placeholder="$t('changePassword.newPasswordPlaceholder')"
+          size="large"
+        />
+      </el-form-item>
+
+      <el-form-item
+        class="change-password-field"
+        :label="$t('changePassword.confirmPassword')"
+        prop="confirmPassword"
+      >
+        <el-input
+          v-model="passwordForm.confirmPassword"
+          type="password"
+          show-password
+          :placeholder="$t('changePassword.confirmPasswordPlaceholder')"
+          size="large"
+        />
+      </el-form-item>
+
+      <el-form-item class="change-password-actions-item">
+        <div class="change-password-actions">
+          <el-button
+            class="change-password-reset"
+            :disabled="loading"
+            @click="resetForm"
+          >
+            {{ $t("common.reset") }}
+          </el-button>
+          <el-button
+            class="change-password-submit"
+            type="primary"
+            :loading="loading"
+            @click="submitForm"
+          >
+            {{ $t("changePassword.confirm") }}
+          </el-button>
+        </div>
+      </el-form-item>
+    </el-form>
+  </PhyAuthLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from "vue";
+import { onMounted, reactive, ref } from "vue";
+import { storeToRefs } from "pinia";
 import { ElMessage } from "element-plus";
+import { ArrowLeft } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
 import { userStore } from "@/stores";
 import { useI18n } from "vue-i18n";
 import { changePassword } from "@/api/auth";
+import LangSwitch from "@/components/LangSwitch.vue";
+import { PhyAuthLayout } from "@/components/shell";
+import { PhyBrandMark } from "@/components/brand";
 
 const { t } = useI18n();
 const router = useRouter();
+const UserStore = userStore();
+const { isFirstLogin } = storeToRefs(UserStore);
 
-// Form ref
 const passwordFormRef = ref();
+const loading = ref(false);
+const submitting = ref(false);
 
-// Form data
 const passwordForm = reactive({
-  id: "", // User ID
-  code: "", // User code / permission code
+  id: "",
+  code: "",
   username: "",
   oldPassword: "",
   newPassword: "",
   confirmPassword: "",
 });
 
-// First-login user has no legitimate back destination — router guard
-// will bounce them back. Hide goBack to avoid the visible "flash and
-// return" UX. Voluntary access (login_status='1') keeps the button.
-const UserStore = userStore();
-const isFirstLogin = computed(() => UserStore.login_status === "0");
-
-// Go back to the previous page
 const goBack = () => {
   router.back();
 };
 
-// Password validator - check that the confirm password matches the new password
-const validateConfirmPassword = (rule: any, value: string, callback: any) => {
+const validateConfirmPassword = (
+  _rule: unknown,
+  value: string,
+  callback: (error?: Error) => void
+) => {
   if (value === "") {
     callback(new Error(t("changePassword.confirmPasswordRequired")));
   } else if (value !== passwordForm.newPassword) {
@@ -125,38 +170,36 @@ const validateConfirmPassword = (rule: any, value: string, callback: any) => {
   }
 };
 
-// Password strength validator - check that the new password meets complexity requirements
-const validatePasswordStrength = (rule: any, value: string, callback: any) => {
+const validatePasswordStrength = (
+  _rule: unknown,
+  value: string,
+  callback: (error?: Error) => void
+) => {
   if (!value) {
     callback();
     return;
   }
 
-  // At least 8 characters
   if (value.length < 8) {
     callback(new Error(t("changePassword.passwordMinLength8")));
     return;
   }
 
-  // Contains an uppercase letter
   if (!/[A-Z]/.test(value)) {
     callback(new Error(t("changePassword.passwordNeedUppercase")));
     return;
   }
 
-  // Contains a lowercase letter
   if (!/[a-z]/.test(value)) {
     callback(new Error(t("changePassword.passwordNeedLowercase")));
     return;
   }
 
-  // Contains a digit
   if (!/[0-9]/.test(value)) {
     callback(new Error(t("changePassword.passwordNeedNumber")));
     return;
   }
 
-  // Contains a special character
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
     callback(new Error(t("changePassword.passwordNeedSpecial")));
     return;
@@ -165,7 +208,6 @@ const validatePasswordStrength = (rule: any, value: string, callback: any) => {
   callback();
 };
 
-// Form validation rules
 const formRules = reactive({
   username: [
     {
@@ -197,13 +239,16 @@ const formRules = reactive({
       trigger: "blur",
     },
     {
-      validator: (rule: any, value: string, callback: any) => {
+      validator: (
+        _rule: unknown,
+        value: string,
+        callback: (error?: Error) => void
+      ) => {
         if (value === passwordForm.oldPassword) {
           callback(new Error(t("changePassword.passwordSame")));
         } else {
-          // When the new password changes, re-validate the confirm password if it has already been entered
           if (passwordForm.confirmPassword !== "") {
-            passwordFormRef.value.validateField("confirmPassword");
+            passwordFormRef.value?.validateField("confirmPassword");
           }
           callback();
         }
@@ -221,198 +266,186 @@ const formRules = reactive({
   ],
 });
 
-// Reset the form
 const resetForm = () => {
   passwordForm.oldPassword = "";
   passwordForm.newPassword = "";
   passwordForm.confirmPassword = "";
-  passwordFormRef.value.resetFields();
+  passwordFormRef.value?.resetFields();
 };
 
-// Submit the form
-const submitForm = async () => {
-  if (!passwordFormRef.value) return;
-
-  await passwordFormRef.value.validate(async (valid: boolean, fields: any) => {
-    if (valid) {
+const finishPasswordChange = async () => {
+  await Promise.resolve(UserStore.FedLogOut())
+    .finally(() => {
       try {
-        // Prepare the API request payload - using FormData format
-        const formData = new FormData();
-        formData.append("password", passwordForm.oldPassword);
-        formData.append("new_password", passwordForm.newPassword);
-        // Call the change-password endpoint
-        const response = await changePassword(formData);
+        sessionStorage.setItem("tutorial_pending", "1");
+      } catch {
+        // Storage is best-effort; the login redirect must still happen.
+      }
+      router.replace("/login");
+    })
+    .catch(() => undefined);
+};
 
-        if (response.code === 200) {
-          ElMessage.success(t("changePassword.passwordChangeSuccess"));
-          const UserStore = userStore();
-          UserStore.FedLogOut().finally(() => {
-            // Tutorial hand-off (TW-D15): a completed password change is the only
-            // natural anchor for triggering the tutorial. sessionStorage is written
-            // after FedLogOut's .clear(), so the new write survives until the tab closes.
-            try {
-              sessionStorage.setItem("tutorial_pending", "1");
-            } catch (err) {
-              console.warn("sessionStorage unavailable for tutorial hand-off", err);
-            }
-            router.replace("/login");
-          });
-        } else {
-          ElMessage.error(
-            response.message || t("changePassword.passwordChangeFailed")
-          );
-        }
-      } catch (error: any) {
-        console.error("Failed to change password:", error);
-        ElMessage.warning(
-          error.response.data.message || t("changePassword.passwordChangeRetry")
+const submitForm = async () => {
+  if (!passwordFormRef.value || loading.value || submitting.value) return;
+
+  submitting.value = true;
+  try {
+    const valid = await passwordFormRef.value.validate();
+    if (!valid) {
+      ElMessage.warning(t("changePassword.formValidationFailed"));
+      return;
+    }
+
+    loading.value = true;
+    try {
+      const formData = new FormData();
+      formData.append("password", passwordForm.oldPassword);
+      formData.append("new_password", passwordForm.newPassword);
+      const response = await changePassword(formData);
+
+      if (response.code === 200) {
+        ElMessage.success(t("changePassword.passwordChangeSuccess"));
+        await finishPasswordChange();
+      } else {
+        ElMessage.error(
+          response.message || t("changePassword.passwordChangeFailed")
         );
       }
-    } else {
-      console.log("Form validation failed", fields);
-      ElMessage.warning(t("changePassword.formValidationFailed"));
-      return false;
+    } catch (error: unknown) {
+      const response =
+        typeof error === "object" && error !== null && "response" in error
+          ? (error as { response?: { data?: { message?: string } } }).response
+          : undefined;
+      ElMessage.warning(
+        response?.data?.message || t("changePassword.passwordChangeRetry")
+      );
+    } finally {
+      loading.value = false;
     }
-  });
+  } finally {
+    submitting.value = false;
+  }
 };
 
-// On page load, fetch the current logged-in user's info
 onMounted(() => {
-  // Read the current logged-in user's info from the user store
-  const UserStore = userStore();
   if (UserStore.name) {
     passwordForm.username = UserStore.name;
   }
-  // Note: the user ID and code must be obtained elsewhere, or entered manually by the user
-  // Adjust this according to the actual business requirements
 });
 </script>
 
 <style scoped lang="scss">
-.change-password-page {
-  height: 100vh;
-  width: 100%;
+.change-password-heading {
   display: flex;
   flex-direction: column;
-  background-color: #f5f7fa;
+  align-items: flex-start;
+  gap: var(--phy-space-8);
 }
 
-.page-header {
-  background-color: #fff;
-  height: 60px;
-  padding: 0 20px;
+.change-password-brand {
   display: flex;
   align-items: center;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
-  position: relative;
-
-  .back-button {
-    position: absolute;
-    left: 20px;
-    z-index: 10;
-  }
-
-  .page-title {
-    width: 100%;
-    text-align: center;
-    font-size: 20px;
-    font-weight: 600;
-    color: #409eff;
-    margin: 0;
-  }
+  gap: var(--phy-space-8);
+  min-width: 0;
 }
 
-.change-password-container {
-  flex: 1;
-  padding: 20px;
+.change-password-brand-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--phy-color-text);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-password-back {
+  min-height: var(--phy-control-height-compact);
+  padding: 0;
+  color: var(--phy-color-text-secondary);
+}
+
+.change-password-title {
+  margin: 0;
+  color: var(--phy-color-text);
+  font-size: 1.35rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.change-password-description {
+  margin: var(--phy-space-8) 0 0;
+  color: var(--phy-color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.change-password-form {
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--phy-space-4);
+}
 
-  .form-card {
-    background: #fff;
-    border-radius: 4px;
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-    width: 500px;
-    padding: 30px;
-    margin-top: 50px;
+.change-password-field {
+  margin-bottom: var(--phy-space-8);
+}
 
-    .title {
-      text-align: center;
-      margin-bottom: 30px;
-      color: #303133;
-    }
+.change-password-field :deep(.el-form-item__label) {
+  display: block;
+  float: none;
+  justify-content: flex-start;
+  width: auto !important;
+  height: auto;
+  margin-bottom: var(--phy-space-8);
+  padding: 0;
+  color: var(--phy-color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.change-password-field :deep(.el-form-item__content) {
+  display: block;
+  margin-left: 0 !important;
+}
+
+.change-password-field :deep(.el-input__wrapper),
+.change-password-field :deep(.el-input),
+.change-password-field :deep(input) {
+  min-height: var(--phy-control-height-primary);
+}
+
+@media (max-width: 599px) {
+  .change-password-field {
+    display: block;
   }
 }
-/* Dark mode adaptation */
-.theme-dark .change-password-page {
-  background-color: var(--color-background);
+
+.change-password-actions-item {
+  margin: var(--phy-space-8) 0 0;
 }
 
-.theme-dark .page-header {
-  background-color: var(--color-background-card);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+.change-password-actions-item :deep(.el-form-item__content) {
+  display: block;
+  margin-left: 0 !important;
 }
 
-.theme-dark .page-title {
-  color: var(--el-color-primary);
+.change-password-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--phy-space-12);
 }
 
-.theme-dark .change-password-container .form-card {
-  background: var(--color-background-card);
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
+.change-password-actions :deep(.el-button) {
+  width: 100%;
+  min-height: var(--phy-control-height-primary);
+  margin: 0;
 }
 
-.theme-dark .form-card .title {
-  color: var(--el-text-color-primary);
-}
-
-/* Element Plus form style adaptation in dark mode */
-.theme-dark :deep(.el-form-item__label) {
-  color: var(--el-text-color-primary);
-}
-
-/* Let inputs use Element Plus's default dark theme styling, without setting a separate background color */
-.theme-dark :deep(.el-input__inner) {
-  color: var(--el-text-color-primary);
-}
-
-.theme-dark :deep(.el-input__inner::placeholder) {
-  color: var(--el-text-color-placeholder);
-}
-
-/* Button styling in dark mode */
-.theme-dark :deep(.el-button) {
-  background-color: #f5f5f5;
-  border-color: #dcdcdc;
-  color: #333;
-}
-
-.theme-dark :deep(.el-button:hover) {
-  color: var(--el-color-primary);
-  border-color: var(--el-color-primary);
-}
-
-.theme-dark :deep(.el-button--primary) {
-  background-color: var(--el-color-primary);
-  border-color: var(--el-color-primary);
-  color: #fff;
-}
-
-.theme-dark :deep(.el-button--primary:hover) {
-  background-color: var(--el-color-primary-light-3);
-  border-color: var(--el-color-primary-light-3);
-  color: #fff;
-}
-.theme-dark .el-input :deep(.el-input__inner) {
-  background: #ffffff !important;
-  color: #333 !important;
-}
-
-.theme-dark .reset-btn {
-  color: #303133;
-}
-.theme-dark .reset-btn:hover {
-  color: #409eff;
+@media (max-width: 420px) {
+  .change-password-actions {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

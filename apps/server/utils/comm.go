@@ -9,15 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bwmarrin/snowflake"
 	"gorm.io/gorm/schema"
 )
-
-var node, _ = snowflake.NewNode(1)
-
-func SnowflakeGenUUID() string {
-	return node.Generate().String()
-}
 
 func GenDefaultPwd(n int) string {
 	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

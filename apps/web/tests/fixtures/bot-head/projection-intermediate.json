@@ -1,0 +1,22 @@
+{
+  "id": 101,
+  "tool_name": "DeepGenomeAgent",
+  "status": "RUNNING",
+  "dialogue_id": "dialogue-synthetic-1",
+  "bot_run_id": "run-dg-1",
+  "report_revision": 2,
+  "intermediate_report": "# Intermediate",
+  "final_report": "",
+  "report_stage": "intermediate",
+  "report_completeness": "partial",
+  "progress": {
+    "completed": 1,
+    "total": 2,
+    "failed": 0,
+    "pending": 1
+  },
+  "degraded": false,
+  "tracking_degraded": false,
+  "failures": [],
+  "artifacts": []
+}

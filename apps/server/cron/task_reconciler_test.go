@@ -28,6 +28,7 @@ func setupReconcilerDB(t *testing.T) *gorm.DB {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		dialogue_id TEXT, f_id INTEGER DEFAULT 0, user_name TEXT, query TEXT,
 		answer TEXT, tool_name TEXT, bot_run_id TEXT, server_id TEXT, task_id TEXT,
+		bot_projection_json TEXT, bot_report_revision INTEGER DEFAULT -1,
 		compute_resource TEXT, log_status TEXT, status TEXT,
 		download_path TEXT, image_paths TEXT,
 		created_at DATETIME, updated_at DATETIME, delete_at DATETIME

@@ -9,6 +9,10 @@ import { safeRedirect } from "@/utils/auth-redirect";
 import { ElNotification } from "element-plus";
 import type { NotificationHandle } from "element-plus";
 import { i18n } from "@/locales";
+import {
+  REMOTE_AGENT_PRODUCT_REGISTRY,
+  type RemoteAgentTool,
+} from "@/constants/agents";
 import type { RouteLocationNormalized, NavigationGuardNext } from "vue-router";
 
 NProgress.configure({ showSpinner: false });
@@ -60,13 +64,68 @@ function closeFirstLoginNotification(): void {
   }
 }
 
+type RemoteRouteStore = {
+  roles: string[];
+  hasRemoteAgentPermission?: (tool: RemoteAgentTool | string) => boolean;
+};
+
+function remoteToolForRoute(
+  to: RouteLocationNormalized
+): RemoteAgentTool | null {
+  const routePath = to.path;
+  const routeName = String(to.name ?? "");
+  for (const product of Object.values(REMOTE_AGENT_PRODUCT_REGISTRY)) {
+    if (product.route === routePath || product.routeName === routeName) {
+      return product.tool;
+    }
+  }
+  return null;
+}
+
+/**
+ * Route navigation is a convenience gate only. The Go service remains the
+ * authorization boundary for every query; this helper prevents a dark or
+ * ungranted remote surface from being advertised by the browser router.
+ */
+export async function canEnterRemoteAgentRoute(
+  to: RouteLocationNormalized,
+  store: RemoteRouteStore
+): Promise<boolean> {
+  const tool = remoteToolForRoute(to);
+  if (!tool) return true;
+
+  const contract = REMOTE_AGENT_PRODUCT_REGISTRY[tool];
+  const roleAllowed = store.hasRemoteAgentPermission
+    ? store.hasRemoteAgentPermission(contract.requiredRole)
+    : store.roles.includes(contract.requiredRole);
+  if (!roleAllowed || contract.live !== true) return false;
+
+  try {
+    const { useBotCapabilities } = await import(
+      "@/views/chat/composables/useBotCapabilities"
+    );
+    const capabilities = useBotCapabilities(`route:${tool}`);
+    await capabilities.load();
+    const capability = capabilities.byTool.value[tool];
+    return (
+      capability?.enabled === true &&
+      capability.execution === contract.capability
+    );
+  } catch {
+    // Capability fetch errors fail closed for navigation. Query authorization
+    // remains server-side and is not weakened by this client-side fallback.
+    return false;
+  }
+}
+
 export function beforeEachGuard(
   to: RouteLocationNormalized,
   from: RouteLocationNormalized,
   next: NavigationGuardNext
 ) {
   NProgress.start();
-  document.title = "Phytomni";
+  // Brand title from locale packs (en Phytomni / zh brand string).
+  document.title = i18n.global.t("chat.appTitle") as string;
   // Close stale first-login notification on /login transitions
   // (logout / post-FedLogOut). Runs unconditionally — even when
   // getToken() is false — so the FedLogOut + redirect-to-/login path
@@ -112,7 +171,11 @@ export function beforeEachGuard(
     } else {
       const UserStore = userStore();
       UserStore.getUserTools()
-        .then(() => {
+        .then(async () => {
+          if (!(await canEnterRemoteAgentRoute(to, UserStore))) {
+            next({ name: "NotFound" });
+            return;
+          }
           next();
         })
         .catch(() => {

@@ -1,0 +1,393 @@
+import { describe, it, expect } from "vitest";
+import type { ContentBlock } from "@/views/chat/types";
+import type {
+  A2uiActionEnvelope,
+  A2uiActionResponse,
+  A2uiOpenSurface,
+  A2uiTerminalSurface,
+} from "@/views/chat/streaming/a2uiContract";
+import { reduceA2uiSucceeded } from "@/views/chat/streaming/a2uiReducer";
+import {
+  activityDisclosureStateKey,
+  activityRegionDomId,
+  buildPresentationItems,
+  presentationBlockKey,
+  resolveMessagePresentationKey,
+  type PresentationItem,
+} from "@/views/chat/streaming/presentation";
+
+function md(text: string): ContentBlock {
+  return { type: "markdown", authority: "web", text };
+}
+
+function tool(toolName: string): ContentBlock {
+  return { type: "tool", authority: "web", toolName };
+}
+
+function step(label: string): ContentBlock {
+  return { type: "step", authority: "web", label };
+}
+
+function reasoning(text: string): ContentBlock {
+  return { type: "reasoning", authority: "web", text };
+}
+
+function agentSurface(surfaceKey: string): ContentBlock {
+  return {
+    type: "agent-surface",
+    authority: "agent",
+    interactive: true,
+    a2ui: {
+      surface: {
+        catalog_version: "v1.0",
+        surface_id: surfaceKey,
+        widget: "confirm",
+        props: {
+          title: "Continue?",
+          confirm_label: "Continue",
+          cancel_label: "Cancel",
+        },
+      },
+      state: { status: "ready", round: 1 },
+    },
+  };
+}
+
+function blockItem(index: number, block: ContentBlock): PresentationItem {
+  return {
+    kind: "block",
+    key: `block:${index}`,
+    index,
+    block,
+  };
+}
+
+function surfaceItem(index: number, block: ContentBlock): PresentationItem {
+  return {
+    kind: "block",
+    key: `surface:${block.a2ui?.surface.surface_id}`,
+    index,
+    block,
+  };
+}
+
+function activityItem(
+  startIndex: number,
+  endIndex: number,
+  blocks: ContentBlock[]
+): PresentationItem {
+  return {
+    kind: "activity",
+    key: `activity-${startIndex}`,
+    startIndex,
+    endIndex,
+    blocks,
+  };
+}
+
+type Case = {
+  name: string;
+  blocks: ContentBlock[];
+  expected: (blocks: ContentBlock[]) => PresentationItem[];
+};
+
+describe("buildPresentationItems", () => {
+  const cases: Case[] = [
+    {
+      name: "empty input",
+      blocks: [],
+      expected: () => [],
+    },
+    {
+      name: "single markdown block",
+      blocks: [md("hello")],
+      expected: (blocks) => [blockItem(0, blocks[0])],
+    },
+    {
+      name: "single activity block",
+      blocks: [tool("search")],
+      expected: (blocks) => [activityItem(0, 0, [blocks[0]])],
+    },
+    {
+      name: "consecutive activity blocks merge into one group",
+      blocks: [tool("a"), step("b"), reasoning("c")],
+      expected: (blocks) => [activityItem(0, 2, blocks)],
+    },
+    {
+      name: "interleaved markdown and activity",
+      blocks: [md("intro"), tool("t1"), step("s1"), md("outro")],
+      expected: (blocks) => [
+        blockItem(0, blocks[0]),
+        activityItem(1, 2, [blocks[1], blocks[2]]),
+        blockItem(3, blocks[3]),
+      ],
+    },
+    {
+      name: "leading activity blocks",
+      blocks: [reasoning("think"), md("answer")],
+      expected: (blocks) => [
+        activityItem(0, 0, [blocks[0]]),
+        blockItem(1, blocks[1]),
+      ],
+    },
+    {
+      name: "trailing activity blocks",
+      blocks: [md("answer"), tool("t1"), tool("t2")],
+      expected: (blocks) => [
+        blockItem(0, blocks[0]),
+        activityItem(1, 2, [blocks[1], blocks[2]]),
+      ],
+    },
+    {
+      name: "agent-surface splits activity groups",
+      blocks: [tool("before"), agentSurface("surf-1"), tool("after")],
+      expected: (blocks) => [
+        activityItem(0, 0, [blocks[0]]),
+        surfaceItem(1, blocks[1]),
+        activityItem(2, 2, [blocks[2]]),
+      ],
+    },
+    {
+      name: "multiple markdown blocks stay separate",
+      blocks: [md("a"), md("b")],
+      expected: (blocks) => [blockItem(0, blocks[0]), blockItem(1, blocks[1])],
+    },
+    {
+      name: "activity groups separated by markdown",
+      blocks: [tool("t1"), md("mid"), step("s1")],
+      expected: (blocks) => [
+        activityItem(0, 0, [blocks[0]]),
+        blockItem(1, blocks[1]),
+        activityItem(2, 2, [blocks[2]]),
+      ],
+    },
+  ];
+
+  it.each(cases)("$name", ({ blocks, expected }) => {
+    const items = buildPresentationItems(blocks);
+    expect(items).toEqual(expected(blocks));
+  });
+
+  it("preserves original block object references", () => {
+    const b0 = md("intro");
+    const b1 = tool("search");
+    const b2 = md("outro");
+    const items = buildPresentationItems([b0, b1, b2]);
+
+    expect(items[0].kind).toBe("block");
+    if (items[0].kind === "block") expect(items[0].block).toBe(b0);
+
+    expect(items[1].kind).toBe("activity");
+    if (items[1].kind === "activity") {
+      expect(items[1].blocks).toHaveLength(1);
+      expect(items[1].blocks[0]).toBe(b1);
+    }
+
+    expect(items[2].kind).toBe("block");
+    if (items[2].kind === "block") expect(items[2].block).toBe(b2);
+  });
+
+  it("preserves input order in activity group blocks array", () => {
+    const blocks = [step("first"), tool("second"), reasoning("third")];
+    const items = buildPresentationItems(blocks);
+    expect(items).toEqual([activityItem(0, 2, blocks)]);
+    if (items[0].kind === "activity") {
+      expect(items[0].blocks.map((b) => b.type)).toEqual([
+        "step",
+        "tool",
+        "reasoning",
+      ]);
+    }
+  });
+
+  it("keeps activity key stable when trailing activity blocks append", () => {
+    const t0 = tool("a");
+    const t1 = tool("b");
+    const first = buildPresentationItems([t0, t1]);
+    const t2 = tool("c");
+    const second = buildPresentationItems([t0, t1, t2]);
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(first[0].key).toBe("activity-0");
+    expect(second[0].key).toBe("activity-0");
+    if (first[0].kind === "activity" && second[0].kind === "activity") {
+      expect(first[0].endIndex).toBe(1);
+      expect(second[0].endIndex).toBe(2);
+      expect(second[0].blocks).toEqual([t0, t1, t2]);
+    }
+  });
+
+  it("never merges activity across agent-surface boundaries", () => {
+    const surface = agentSurface("x");
+    const items = buildPresentationItems([
+      tool("a"),
+      step("b"),
+      surface,
+      reasoning("c"),
+      tool("d"),
+    ]);
+    expect(items.map((item) => item.key)).toEqual([
+      "activity-0",
+      "surface:x",
+      "activity-3",
+    ]);
+    if (items[0].kind === "activity") expect(items[0].blocks).toHaveLength(2);
+    if (items[2].kind === "activity") expect(items[2].blocks).toHaveLength(2);
+  });
+
+  it("keys an agent surface by surface identity across unrelated appends", () => {
+    const surface = agentSurface("surface-stable");
+    const beforeAppend = buildPresentationItems([surface]);
+    const afterAppend = buildPresentationItems([surface, md("later")]);
+
+    expect(beforeAppend[0].key).toBe("surface:surface-stable");
+    expect(afterAppend[0].key).toBe("surface:surface-stable");
+  });
+
+  it("keys an action-answer Markdown block by its source action", () => {
+    const answer: ContentBlock = {
+      ...md("completed"),
+      sourceActionId: "action-42",
+    };
+
+    expect(buildPresentationItems([answer])[0].key).toBe("action:action-42");
+  });
+
+  it("uses an index fallback for generic Markdown blocks", () => {
+    expect(buildPresentationItems([md("generic")])[0].key).toBe("block:0");
+  });
+
+  it("does not use a shared surface key when the surface ID is missing", () => {
+    const missingSurface: ContentBlock = {
+      ...agentSurface("surface-missing"),
+      a2ui: {
+        ...agentSurface("surface-missing").a2ui!,
+        surface: {
+          ...agentSurface("surface-missing").a2ui!.surface,
+          surface_id: "",
+        },
+      },
+    };
+
+    expect(presentationBlockKey(missingSurface, 0)).not.toBe("surface:");
+    expect(buildPresentationItems([missingSurface])[0].key).toBe("block:0");
+  });
+
+  it("keeps action-answer keys unique after duplicate reduction", () => {
+    const surface: A2uiOpenSurface = {
+      catalog_version: "v1.0",
+      surface_id: "surface-once",
+      widget: "confirm",
+      props: {
+        title: "Continue?",
+        confirm_label: "Continue",
+        cancel_label: "Cancel",
+      },
+    };
+    const envelope: A2uiActionEnvelope = {
+      surface_id: surface.surface_id,
+      widget: surface.widget,
+      action_id: "action-once",
+      run_id: "run-once",
+      payload: { accepted: true },
+    };
+    const terminal: A2uiTerminalSurface = {
+      catalog_version: "v1.0",
+      surface_id: surface.surface_id,
+      widget: "confirm",
+      props: { status: "submitted", accepted: true },
+    };
+    const response: Extract<
+      A2uiActionResponse,
+      { status: "succeeded" }
+    > = {
+      status: "succeeded",
+      run_id: envelope.run_id,
+      result: {
+        a2ui: terminal,
+        formatted: { answer: "completed" },
+      },
+    };
+
+    const blocks: ContentBlock[] = [
+      {
+        type: "agent-surface",
+        authority: "agent",
+        interactive: true,
+        a2ui: {
+          surface,
+          state: { status: "submitting", round: 1, envelope },
+        },
+      },
+    ];
+    const first = reduceA2uiSucceeded(blocks, envelope, response);
+    const reduced = reduceA2uiSucceeded(first, envelope, response);
+    const items = buildPresentationItems(reduced);
+
+    expect(reduced).toBe(first);
+    expect(new Set(items.map((item) => item.key)).size).toBe(items.length);
+    expect(items.map((item) => item.key)).toEqual([
+      "surface:surface-once",
+      "action:action-once",
+    ]);
+  });
+});
+
+describe("activity disclosure identity helpers", () => {
+  it("prefers non-empty server message.id over streamPresentationKey", () => {
+    expect(
+      resolveMessagePresentationKey({
+        id: "srv-42",
+        streamPresentationKey: "chat-request-1",
+      })
+    ).toBe("srv-42");
+  });
+
+  it("falls back to streamPresentationKey when id is missing or blank", () => {
+    expect(
+      resolveMessagePresentationKey({ streamPresentationKey: "chat-request-1" })
+    ).toBe("chat-request-1");
+    expect(
+      resolveMessagePresentationKey({
+        id: "  ",
+        streamPresentationKey: "chat-request-1",
+      })
+    ).toBe("chat-request-1");
+  });
+
+  it("returns null when neither key exists (missing-key contract)", () => {
+    expect(resolveMessagePresentationKey({})).toBeNull();
+    expect(resolveMessagePresentationKey({ id: "", streamPresentationKey: "" })).toBeNull();
+  });
+
+  it("composes state key as stream:<messageKey>:activity-<startIndex>", () => {
+    expect(activityDisclosureStateKey("req-1", 3)).toBe(
+      "stream:req-1:activity-3"
+    );
+  });
+
+  it("builds region id with encodeURIComponent of the state key", () => {
+    const stateKey = activityDisclosureStateKey("req/1", 0);
+    expect(activityRegionDomId(stateKey)).toBe(
+      `chat-activity-${encodeURIComponent(stateKey)}`
+    );
+  });
+
+  it("keeps the same Activity state key before and after server id arrives", () => {
+    const requestKey = "chat-request-abc";
+    const duringStream = activityDisclosureStateKey(
+      resolveMessagePresentationKey({ streamPresentationKey: requestKey })!,
+      0
+    );
+    // After completion the placeholder still carries streamPresentationKey; if a
+    // server id is later assigned, that becomes the key — until then the request
+    // key keeps disclosure state stable across stream cleanup.
+    const afterCleanup = activityDisclosureStateKey(
+      resolveMessagePresentationKey({ streamPresentationKey: requestKey })!,
+      0
+    );
+    expect(duringStream).toBe(afterCleanup);
+    expect(duringStream).toBe("stream:chat-request-abc:activity-0");
+  });
+});

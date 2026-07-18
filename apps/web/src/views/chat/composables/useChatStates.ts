@@ -1,63 +1,66 @@
 import { ref, computed } from "vue";
-import type { Ref } from "vue";
-import type { UploadFile } from "../types";
+import type { UploadFile, ChatUIState, ChatView } from "../types";
+import type { RekeyChatStateOutcome } from "../types";
+
+function createDefaultChatUIState(): ChatUIState {
+  return {
+    isSending: false,
+    messageInput: "",
+    fileList: [],
+    historyQuestion: null,
+    copyVisible: 0,
+    copyTimeRef: undefined,
+    logData: {},
+    loadingLog: {},
+    refreshingMessages: {},
+    reactions: {},
+    updatingLog: {},
+    logErrorKinds: {},
+    sendStartedAt: null,
+    activeAgentName: "",
+    completing: false,
+    mode: "instant",
+    isStreaming: false,
+    streamingMessageId: null,
+    uploadTransfer: null,
+    selectedAgent: "",
+    renderedChat: null,
+    activeRequestId: "",
+    generationStopped: false,
+    activityExpandedByMessage: {},
+    artifactOpen: false,
+    activeArtifactMessageId: null,
+    artifactTab: "content",
+    autoOpenedArtifactMessageIds: [],
+  };
+}
 
 export function useChatStates() {
   // state management for all conversations
-  const chatStates = ref<
-    Record<
-      string,
-      {
-        isSending: boolean;
-        messageInput: string;
-        fileList: UploadFile[];
-        historyQuestion: any;
-        copyVisible: number;
-        copyTimeRef: ReturnType<typeof setTimeout> | undefined;
-        logData: Record<string, any>;
-        loadingLog: Record<string, boolean>;
-        refreshingMessages: Record<string, boolean>;
-        reactions: Record<string, number>; // reaction (like/dislike) state
-        updatingLog: Record<string, boolean>; // log-updating state
-        sendStartedAt: number | null; // start of this send; null = not sending
-        activeAgentName: string; // canonical agent name for this send (selects τ + ETA copy)
-        completing: boolean; // true = trigger the 99→100 fast progress animation
-        mode: "instant" | "expert"; // per-conversation routing mode (locked after first send)
-        isStreaming: boolean; // true while an AG-UI stream is in flight for this dialogue
-        streamingMessageId: string | null; // request id of the in-flight stream
-      }
-    >
-  >({});
+  const chatStates = ref<Record<string, ChatUIState>>({});
 
   // get or create the conversation state
-  const getChatState = (dialogueId: string) => {
+  const getChatState = (dialogueId: string): ChatUIState => {
     if (!chatStates.value[dialogueId]) {
-      chatStates.value[dialogueId] = {
-        isSending: false,
-        messageInput: "",
-        fileList: [],
-        historyQuestion: null,
-        copyVisible: 0,
-        copyTimeRef: undefined,
-        logData: {},
-        loadingLog: {},
-        refreshingMessages: {},
-        reactions: {}, // initialize reaction state
-        updatingLog: {}, // initialize log-updating state
-        sendStartedAt: null,
-        activeAgentName: "",
-        completing: false,
-        mode: "instant",
-        isStreaming: false,
-        streamingMessageId: null,
-      };
+      chatStates.value[dialogueId] = createDefaultChatUIState();
     }
     return chatStates.value[dialogueId];
   };
 
   // the currently selected conversation
   const currentChatId = ref("");
-  const currentChat: Ref<any> = ref(null);
+
+  // Writable view of chatStates[currentChatId].renderedChat — not a second owner
+  const currentChat = computed<ChatView | null>({
+    get: () => {
+      if (!currentChatId.value) return null;
+      return getChatState(currentChatId.value).renderedChat;
+    },
+    set: (value: ChatView | null) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).renderedChat = value;
+    },
+  });
 
   // input content - now based on the current conversation
   const messageInput = computed({
@@ -103,6 +106,18 @@ export function useChatStates() {
     },
   });
 
+  // selected Composer Agent — per the current conversation
+  const selectedAgent = computed({
+    get: (): string => {
+      if (!currentChatId.value) return "";
+      return getChatState(currentChatId.value).selectedAgent;
+    },
+    set: (value: string) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).selectedAgent = value;
+    },
+  });
+
   // file list - now based on the current conversation
   const fileList = computed({
     get: () => {
@@ -116,6 +131,18 @@ export function useChatStates() {
       if (chatState) {
         chatState.fileList = value;
       }
+    },
+  });
+
+  // upload transfer progress - now based on the current conversation
+  const uploadTransfer = computed({
+    get: () => {
+      if (!currentChatId.value) return null;
+      return getChatState(currentChatId.value).uploadTransfer;
+    },
+    set: (value: ChatUIState["uploadTransfer"]) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).uploadTransfer = value;
     },
   });
 
@@ -229,15 +256,37 @@ export function useChatStates() {
     },
   });
 
+  const rekeyChatState = (
+    fromDialogueId: string,
+    toDialogueId: string
+  ): RekeyChatStateOutcome => {
+    if (fromDialogueId === toDialogueId) {
+      return { outcome: "same-id" };
+    }
+    const source = chatStates.value[fromDialogueId];
+    if (!source) {
+      return { outcome: "source-absent" };
+    }
+    if (chatStates.value[toDialogueId]) {
+      return { outcome: "target-collision" };
+    }
+    chatStates.value[toDialogueId] = source;
+    delete chatStates.value[fromDialogueId];
+    return { outcome: "moved" };
+  };
+
   return {
     chatStates,
     getChatState,
+    rekeyChatState,
     currentChatId,
     currentChat,
     messageInput,
     isSending,
     chatMode,
+    selectedAgent,
     fileList,
+    uploadTransfer,
     copyVisible,
     copyTimeRef,
     logData,

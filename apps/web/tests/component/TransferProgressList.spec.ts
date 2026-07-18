@@ -1,0 +1,68 @@
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { mount } from "@vue/test-utils";
+import { createI18n } from "vue-i18n";
+import TransferProgressList from "@/components/TransferProgressList.vue";
+import enUS from "@/locales/langs/en-US";
+import type { TransferSnapshot } from "@/utils/transfer-progress";
+import {
+  upsertDownloadTransfer,
+  clearDownloadTransfers,
+} from "@/utils/download-transfers";
+
+vi.mock("@/utils/request", () => ({
+  abortRequest: vi.fn(),
+}));
+
+import { abortRequest } from "@/utils/request";
+
+const snap: TransferSnapshot = {
+  loaded: 512 * 1024,
+  total: 1024 * 1024,
+  percent: 50,
+  etaSec: 12,
+  indeterminate: false,
+  phase: "download",
+  requestId: "dl-req-1",
+};
+
+const i18n = createI18n({
+  legacy: false,
+  locale: "en-US",
+  messages: { "en-US": enUS },
+});
+
+describe("TransferProgressList.vue", () => {
+  afterEach(() => {
+    clearDownloadTransfers();
+  });
+
+  it("shows active downloads and aborts on cancel", async () => {
+    clearDownloadTransfers();
+    upsertDownloadTransfer(snap);
+
+    const wrapper = mount(TransferProgressList, {
+      global: {
+        plugins: [i18n],
+        stubs: {
+          "el-progress": true,
+        },
+      },
+    });
+
+    expect(wrapper.find('[data-test="transfer-progress-list"]').exists()).toBe(
+      true
+    );
+    expect(
+      wrapper.find('[data-test="transfer-progress-list"]').attributes("role")
+    ).toBe("region");
+    expect(
+      wrapper
+        .find('[data-test="transfer-progress-list"]')
+        .attributes("aria-label")
+    ).toBe("Active transfers");
+    expect(wrapper.findAll('[data-test="transfer-progress"]')).toHaveLength(1);
+
+    await wrapper.find('[data-test="transfer-cancel"]').trigger("click");
+    expect(abortRequest).toHaveBeenCalledWith("dl-req-1");
+  });
+});

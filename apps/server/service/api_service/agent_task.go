@@ -40,7 +40,7 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 	scoped := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("user_name = ?", username).
 		Where("status = ? or status = ? or status = ?", "RUNNING", "SUCCEEDED", "FAILED").
-		Where("server_id IS NOT NULL or task_id IS NOT NULL").
+		Where("NULLIF(TRIM(server_id), '') IS NOT NULL OR NULLIF(TRIM(task_id), '') IS NOT NULL OR NULLIF(TRIM(bot_run_id), '') IS NOT NULL").
 		Session(&gorm.Session{})
 
 	var total int64
@@ -57,7 +57,14 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 	for _, v := range QuestionAgentLogList {
 		if v.FId != 0 {
 			var result *model.QuestionAgentLog
-			if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("id = ?", v.FId).First(&result).Error; err != nil {
+			if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+				Where("id = ? and user_name = ?", v.FId, username).
+				First(&result).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					// A corrupt/mismatched parent must not leak another user's
+					// dialogue id or make the owner's list unusable.
+					continue
+				}
 				return nil, 0, 0, err
 			}
 			v.FDialogueId = result.DialogueId
@@ -75,7 +82,9 @@ func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (
 		Where("id = ? and user_name = ?", id, username).First(&QuestionAgentLogList).Error; err != nil {
 		return nil, errors.New("task not found")
 	}
-	if QuestionAgentLogList.TaskId == "" {
+	if strings.TrimSpace(QuestionAgentLogList.TaskId) == "" &&
+		strings.TrimSpace(QuestionAgentLogList.BotRunId) == "" &&
+		strings.TrimSpace(QuestionAgentLogList.ServerId) == "" {
 		return nil, errors.New("task not found")
 	}
 
@@ -144,6 +153,62 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 }
 
 func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.QuestionAgentLog, err error) {
+	result, err := ps.AnswerCheckWithMode(ctx, username, dialogueId, HistoryReadModeFromConfig())
+	if err != nil {
+		return nil, err
+	}
+	return result.Rows, nil
+}
+
+// AnswerCheckWithMode exposes the reversible history source boundary to Web
+// callers that need an observation outcome. The existing AnswerCheck wrapper
+// above deliberately returns only rows, preserving the public HTTP payload.
+func (ps *Service) AnswerCheckWithMode(ctx context.Context, username string, dialogueId string, mode HistoryReadMode) (HistoryReadResult, error) {
+	switch mode {
+	case HistoryReadModeDual:
+		return ps.answerCheckProjectionFirst(ctx, username, dialogueId, true)
+	case HistoryReadModeProjection:
+		return ps.answerCheckProjectionFirst(ctx, username, dialogueId, false)
+	default:
+		rows, err := ps.answerCheckLegacy(ctx, username, dialogueId)
+		result := HistoryReadResult{Rows: rows, Source: historySourceLegacy}
+		if len(rows) > 0 {
+			result.Sources = make([]string, len(rows))
+			for index := range result.Sources {
+				result.Sources[index] = historySourceLegacy
+			}
+		}
+		return result, err
+	}
+}
+
+// answerCheckLegacy is the compatibility path used when the dual-read flag is
+// disabled. Keep its projection and Bot overlay order unchanged so disabling
+// the new mode is an immediate rollback for existing callers.
+func (ps *Service) answerCheckLegacy(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.QuestionAgentLog, err error) {
+	QuestionAgentLogList, err = ps.loadHistoryRows(ctx, username, dialogueId)
+	if err != nil {
+		return nil, err
+	}
+
+	// A persisted bounded projection is the first history source during the
+	// reversible cutover. It remains available even when Bot is dark or
+	// temporarily unreachable; Web-owned fields stay on the row.
+	ps.overlayPersistedBotProjections(ctx, QuestionAgentLogList)
+
+	// Bot is the content source of truth when the gateway is active: overlay MySQL
+	// transition fields with Bot content, leaving Web-only fields (id,
+	// reaction_type, upload_path) intact. proxy_enabled=false or Bot unreachable
+	// falls back to MySQL legacy fields (degrade, not error).
+	if rxBot.BotConfig != nil && rxBot.BotConfig.ProxyEnabled {
+		ps.overlayBotContent(ctx, dialogueId, QuestionAgentLogList)
+	}
+	return QuestionAgentLogList, nil
+}
+
+// loadHistoryRows reads only the authenticated owner's parent and children.
+// Projection reads reuse the same owner predicate in LoadBotRunProjection.
+func (ps *Service) loadHistoryRows(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.QuestionAgentLog, err error) {
 	var QuestionAgentLog *model.QuestionAgentLog
 	// First() returns ErrRecordNotFound when there is no match but still fills the
 	// struct with &{Id:0}; if that Id were used to query children, f_id=0 (the
@@ -167,15 +232,165 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 	newList = append(newList, QuestionAgentLog)
 	newList = append(newList, QuestionAgentLogList...)
 	QuestionAgentLogList = newList
+	return QuestionAgentLogList, nil
+}
 
-	// Bot is the content source of truth when the gateway is active: overlay MySQL
-	// transition fields with Bot content, leaving Web-only fields (id,
-	// reaction_type, upload_path) intact. proxy_enabled=false or Bot unreachable
-	// falls back to MySQL legacy fields (degrade, not error).
-	if rxBot.BotConfig != nil && rxBot.BotConfig.ProxyEnabled {
-		ps.overlayBotContent(ctx, dialogueId, QuestionAgentLogList)
+const (
+	historyFallbackMissingRunID   = "blank_run_id"
+	historyFallbackProjectionRead = "projection_unavailable"
+	historyFallbackProjectionBad  = "projection_malformed"
+	historyFallbackRunIDMismatch  = "run_id_mismatch"
+	historyFallbackBotUnavailable = "bot_read_unavailable"
+)
+
+func projectionFallbackReason(row *model.QuestionAgentLog, projection BotRunProjection, err error) string {
+	if row == nil || strings.TrimSpace(row.BotRunId) == "" {
+		return historyFallbackMissingRunID
 	}
-	return
+	if err != nil {
+		var decodeErr *ProjectionDecodeError
+		if errors.As(err, &decodeErr) {
+			return historyFallbackProjectionBad
+		}
+		return historyFallbackProjectionRead
+	}
+	if strings.TrimSpace(projection.RunID) == "" || strings.TrimSpace(projection.RunID) != strings.TrimSpace(row.BotRunId) {
+		return historyFallbackRunIDMismatch
+	}
+	return historyFallbackProjectionRead
+}
+
+func cloneHistoryRows(rows []*model.QuestionAgentLog) []*model.QuestionAgentLog {
+	cloned := make([]*model.QuestionAgentLog, len(rows))
+	for index, row := range rows {
+		if row == nil {
+			continue
+		}
+		copy := *row
+		cloned[index] = &copy
+	}
+	return cloned
+}
+
+func normalizedHistoryStatus(status string) string {
+	return strings.ToUpper(strings.TrimSpace(status))
+}
+
+func aggregateHistorySource(sources []string) string {
+	if len(sources) == 0 {
+		return historySourceLegacy
+	}
+	for _, source := range sources {
+		if source != historySourceProjection {
+			return historySourceLegacy
+		}
+	}
+	return historySourceProjection
+}
+
+// answerCheckProjectionFirst renders validated persisted projections before
+// legacy row fields. Dual mode additionally performs a bounded Bot list read
+// solely for safe count/status/revision comparison; it never exposes that
+// response or lets it overwrite Web-owned history rows.
+func (ps *Service) answerCheckProjectionFirst(ctx context.Context, username string, dialogueId string, dual bool) (HistoryReadResult, error) {
+	rows, err := ps.loadHistoryRows(ctx, username, dialogueId)
+	if err != nil {
+		return HistoryReadResult{}, err
+	}
+	legacyRows := cloneHistoryRows(rows)
+	sources := make([]string, len(rows))
+	for index := range sources {
+		sources[index] = historySourceLegacy
+	}
+	fallbackReason := ""
+	hasRun := false
+	projectionByRun := make(map[string]BotRunProjection)
+	for index, row := range rows {
+		if row == nil {
+			continue
+		}
+		runID := strings.TrimSpace(row.BotRunId)
+		if runID != "" {
+			hasRun = true
+		}
+		projection, projectionErr := BotRunProjection{}, error(nil)
+		if runID != "" && strings.TrimSpace(row.UserName) != "" {
+			projection, projectionErr = LoadBotRunProjection(ctx, username, row.Id)
+		} else {
+			projectionErr = ErrBotProjectionNotFound
+		}
+		if projectionErr == nil && strings.TrimSpace(projection.RunID) == runID && runID != "" && applyBotProjectionToHistoryRow(row, projection) {
+			sources[index] = historySourceProjection
+			projectionByRun[runID] = projection
+			if dual {
+				observeHistoryRead(historyObservationProjectionHit)
+				if normalizedHistoryStatus(projection.Status) != normalizedHistoryStatus(legacyRows[index].Status) && normalizedHistoryStatus(legacyRows[index].Status) != "" {
+					observeHistoryRead(historyObservationStatusMismatch)
+				}
+			}
+			continue
+		}
+		if dual {
+			observeHistoryRead(historyObservationLegacyFallback)
+		}
+		if fallbackReason == "" {
+			fallbackReason = projectionFallbackReason(row, projection, projectionErr)
+		}
+	}
+
+	if dual && hasRun && rxBot.BotConfig != nil && rxBot.BotConfig.ProxyEnabled {
+		resp, listErr := rxBot.NewClient().ListRuns(ctx, dialogueId)
+		if listErr != nil {
+			observeHistoryRead(historyObservationBotUnavailable)
+			rows = legacyRows
+			for index := range sources {
+				if sources[index] == historySourceProjection {
+					observeHistoryRead(historyObservationLegacyFallback)
+				}
+				sources[index] = historySourceLegacy
+			}
+			fallbackReason = historyFallbackBotUnavailable
+		} else {
+			expectedRuns := make(map[string]struct{})
+			for _, row := range rows {
+				if row != nil {
+					if runID := strings.TrimSpace(row.BotRunId); runID != "" {
+						expectedRuns[runID] = struct{}{}
+					}
+				}
+			}
+			if len(resp.Data) != len(expectedRuns) {
+				observeHistoryRead(historyObservationCountMismatch)
+			}
+			for _, record := range resp.Data {
+				runID := strings.TrimSpace(record.RunID)
+				if runID == "" {
+					continue
+				}
+				projection, decodeErr := DecodeRunProjection(&record)
+				if decodeErr != nil {
+					continue
+				}
+				stored, ok := projectionByRun[runID]
+				if !ok {
+					continue
+				}
+				if normalizedHistoryStatus(stored.Status) != normalizedHistoryStatus(projection.Status) {
+					observeHistoryRead(historyObservationStatusMismatch)
+				}
+				if stored.ReportRevision >= 0 && projection.ReportRevision >= 0 && stored.ReportRevision != projection.ReportRevision {
+					observeHistoryRead(historyObservationRevisionMismatch)
+				}
+			}
+		}
+	}
+
+	return HistoryReadResult{
+		Rows:           rows,
+		Source:         aggregateHistorySource(sources),
+		FallbackReason: fallbackReason,
+		Sources:        sources,
+	}, nil
 }
 
 // overlayBotContent fetches Bot runs for a dialogue in a single call and
@@ -207,8 +422,20 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 		if row.BotRunId == "" {
 			continue
 		}
+		// A valid persisted projection has already crossed the modern boundary
+		// above. Do not let a legacy flat/list response replace it with an older
+		// or less complete shape during history replay. If the JSON is malformed,
+		// retain the Bot response as the safe fallback.
+		if projection, projectionErr := LoadBotRunProjection(ctx, row.UserName, row.Id); projectionErr == nil && projection.RunID == strings.TrimSpace(row.BotRunId) {
+			continue
+		}
 		rec, ok := byRun[row.BotRunId]
 		if !ok {
+			continue
+		}
+		if projection, projectionErr := DecodeRunProjection(&rec); projectionErr == nil && projection.RunID == strings.TrimSpace(row.BotRunId) {
+			formatted, _, _ := rxBot.ParseRunFormatted(rec.Result)
+			applyBotProjectionToHistoryRowWithFormatted(row, projection, formatted)
 			continue
 		}
 		if rec.Query != "" {
@@ -237,6 +464,39 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 			row.Status = strings.ToUpper(rec.Status)
 		}
 	}
+}
+
+func (ps *Service) overlayPersistedBotProjections(ctx context.Context, list []*model.QuestionAgentLog) {
+	for _, row := range list {
+		if row == nil || strings.TrimSpace(row.BotRunId) == "" || strings.TrimSpace(row.UserName) == "" {
+			continue
+		}
+		projection, err := LoadBotRunProjection(ctx, row.UserName, row.Id)
+		if err != nil || strings.TrimSpace(projection.RunID) == "" || projection.RunID != strings.TrimSpace(row.BotRunId) {
+			continue
+		}
+		applyBotProjectionToHistoryRow(row, projection)
+	}
+}
+
+func applyBotProjectionToHistoryRow(row *model.QuestionAgentLog, projection BotRunProjection) bool {
+	return applyBotProjectionToHistoryRowWithFormatted(row, projection, nil)
+}
+
+func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, projection BotRunProjection, formatted *rxBot.Formatted) bool {
+	if row == nil || strings.TrimSpace(projection.RunID) == "" {
+		return false
+	}
+	if report := strings.TrimSpace(projection.VisibleReport()); report != "" {
+		row.Answer = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted)
+	}
+	if strings.TrimSpace(projection.Status) != "" {
+		row.Status = projection.Status
+	}
+	if toolName := slugToToolName[projection.Agent]; toolName != "" {
+		row.ToolName = toolName
+	}
+	return true
 }
 
 func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (int, error) {

@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref, nextTick } from "vue";
 import { useFileUpload } from "@/views/chat/composables/useFileUpload";
+import type { ChatComposerHandle } from "@/views/chat/types";
 
 describe("useFileUpload", () => {
   let chatState: { fileList: any[] };
   let fileList: ReturnType<typeof ref<any[]>>;
   let currentChatId: ReturnType<typeof ref<string>>;
   let getChatState: (dialogueId: string) => any;
-  let senderRef: ReturnType<typeof ref<any>>;
+  let composerRef: ReturnType<typeof ref<ChatComposerHandle | null>>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -16,9 +17,10 @@ describe("useFileUpload", () => {
     fileList = ref([]);
     currentChatId = ref("d1");
     getChatState = (_dialogueId: string) => chatState;
-    senderRef = ref({
+    composerRef = ref({
       openHeader: vi.fn(),
       closeHeader: vi.fn(),
+      popoverVisible: false,
     });
     scrollToBottom = vi.fn();
   });
@@ -28,7 +30,7 @@ describe("useFileUpload", () => {
       fileList: fileList as any,
       currentChatId,
       getChatState,
-      senderRef,
+      composerRef,
       scrollToBottom,
     });
   }
@@ -46,7 +48,7 @@ describe("useFileUpload", () => {
     expect(chatState.fileList[0].file).toBe(rawFile);
 
     await nextTick();
-    expect(senderRef.value.openHeader).toHaveBeenCalled();
+    expect(composerRef.value!.openHeader).toHaveBeenCalled();
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
@@ -60,7 +62,7 @@ describe("useFileUpload", () => {
     expect(chatState.fileList).toHaveLength(0);
 
     await nextTick();
-    expect(senderRef.value.closeHeader).toHaveBeenCalled();
+    expect(composerRef.value!.closeHeader).toHaveBeenCalled();
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
@@ -70,7 +72,7 @@ describe("useFileUpload", () => {
     fileList.value = [{ name: "c.txt", size: 3, type: "text/plain", file: null }];
     await nextTick();
 
-    expect(senderRef.value.openHeader).toHaveBeenCalled();
+    expect(composerRef.value!.openHeader).toHaveBeenCalled();
   });
 
   it("watch: closeHeader when fileList becomes empty", async () => {
@@ -85,6 +87,6 @@ describe("useFileUpload", () => {
     fileList.value = [];
     await nextTick();
 
-    expect(senderRef.value.closeHeader).toHaveBeenCalled();
+    expect(composerRef.value!.closeHeader).toHaveBeenCalled();
   });
 });

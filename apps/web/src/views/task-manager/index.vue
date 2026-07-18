@@ -1,103 +1,138 @@
 <template>
-  <div class="task-management-container">
-    <div class="table-container">
-      <el-table
-        :data="tableData"
-        border
-        stripe
-        v-loading="loading"
-        style="width: 100%"
-        header-row-class-name="table-header-row"
-        header-cell-class-name="table-header-cell"
-      >
-        <el-table-column prop="query" :label="$t('taskManager.question')">
-          <template #default="{ row }">
-            <el-tooltip placement="top" :content="row?.query">
-              <div class="itemQuery">
-                {{ row?.query }}
-              </div>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="status"
-          :label="$t('taskManager.status')"
-          width="80"
-        >
-          <template #default="{ row }">
-            {{ showStatus(row) }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="updated_at"
-          :label="$t('taskManager.updated_at')"
-          width="200"
-        >
-          <template #default="{ row }">
-            {{ moment(row.updated_at).format("YYYY-MM-DD") }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="dialogue_id"
-          :label="$t('taskManager.operate')"
-          width="320"
-        >
-          <template #default="{ row }">
-            <el-space wrap alignment="start" :size="10">
-              <el-button
-                @click="handleDownClick(row)"
-                v-if="
-                  row?.status &&
-                  row?.status == 'SUCCEEDED' &&
-                  row?.download_path &&
-                  row?.download_path !== ''
-                "
-                type="primary"
-              >
-                <el-icon style="vertical-align: middle">
-                  <Download />
-                </el-icon>
-                <span style="vertical-align: middle">{{
-                  $t("taskManager.downloadURL")
-                }}</span>
-              </el-button>
-              <el-button @click="handleTaskClick(row)" type="primary">
-                <el-icon style="vertical-align: middle">
-                  <Link />
-                </el-icon>
-                <span style="vertical-align: middle">{{
-                  $t("taskManager.dialogue_link")
-                }}</span>
-              </el-button>
-            </el-space>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 30, 50]"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="total"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
+  <PhyWorkspaceShell class="task-manager-workspace">
+    <template #header>
+      <PhyPageHeader :title="$t('menu.taskManager')" />
+    </template>
+
+    <PhyAsyncState :state="asyncState">
+      <template #loading>
+        <PhySkeleton shape="table-row" :count="6" />
+      </template>
+
+      <template #empty>
+        <PhyEmptyState :title="$t('common.noData')" />
+      </template>
+
+      <template #error>
+        <PhyErrorState
+          :title="$t('taskManager.getFailed')"
+          :retry-label="$t('common.retry')"
+          @retry="fetchData"
         />
-      </div>
-    </div>
-  </div>
+      </template>
+
+      <template #ready>
+        <PhyDataToolbar class="task-manager-toolbar" />
+
+        <PhyTableFrame>
+          <el-table
+            :data="tableData"
+            class="task-manager-table"
+            table-layout="fixed"
+          >
+            <el-table-column
+              prop="query"
+              :label="$t('taskManager.question')"
+              min-width="320"
+            >
+              <template #default="{ row }">
+                <div class="task-query">{{ row.query }}</div>
+              </template>
+            </el-table-column>
+
+            <el-table-column
+              prop="status"
+              :label="$t('taskManager.status')"
+              width="120"
+            >
+              <template #default="{ row }">
+                <el-tag
+                  class="task-status-badge"
+                  :type="statusTagType(row.status)"
+                  effect="plain"
+                >
+                  {{ showStatus(row) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+
+            <el-table-column
+              prop="updated_at"
+              :label="$t('taskManager.updated_at')"
+              width="160"
+            >
+              <template #default="{ row }">
+                <span class="task-updated-at">
+                  {{ formatDisplayDate(d, row.updated_at, "date") }}
+                </span>
+              </template>
+            </el-table-column>
+
+            <el-table-column :label="$t('taskManager.operate')" min-width="240">
+              <template #default="{ row }">
+                <el-space
+                  class="task-manager-actions"
+                  wrap
+                  alignment="start"
+                  :size="10"
+                >
+                  <el-button
+                    v-if="row.status === 'SUCCEEDED' && row.download_path"
+                    class="task-download-action"
+                    type="primary"
+                    @click="handleDownClick(row)"
+                  >
+                    <el-icon><Download /></el-icon>
+                    {{ $t("taskManager.downloadURL") }}
+                  </el-button>
+                  <el-button
+                    class="task-dialogue-action"
+                    type="primary"
+                    @click="handleTaskClick(row)"
+                  >
+                    <el-icon><Link /></el-icon>
+                    {{ $t("taskManager.dialogue_link") }}
+                  </el-button>
+                </el-space>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <template #pagination>
+            <el-pagination
+              v-model:current-page="currentPage"
+              v-model:page-size="pageSize"
+              :page-sizes="[10, 20, 30, 50]"
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="total"
+              @size-change="handleSizeChange"
+              @current-change="handleCurrentChange"
+            />
+          </template>
+        </PhyTableFrame>
+      </template>
+    </PhyAsyncState>
+  </PhyWorkspaceShell>
 </template>
 
 <script setup lang="ts">
-import moment from "moment";
-import { ref, onMounted } from "vue";
-import { Link, Download } from "@element-plus/icons-vue";
+import { computed, onMounted, ref } from "vue";
+import { Download, Link } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
+import {
+  PhyDataToolbar,
+  PhyEmptyState,
+  PhyPageHeader,
+  PhyTableFrame,
+  PhyWorkspaceShell,
+} from "@/components/shell";
+import { PhyAsyncState, PhyErrorState, PhySkeleton } from "@/components/state";
 import { getTaskList } from "@/api/task";
 import { getChatdownloadURL } from "@/api/chat";
+import { formatDisplayDate } from "@/locales/format-display-date";
 
-const { t } = useI18n();
+type AsyncState = "loading" | "empty" | "error" | "ready";
 
 interface TaskData {
   query?: string;
@@ -109,14 +144,25 @@ interface TaskData {
   download_path?: string;
 }
 
+const { t, d } = useI18n();
 const loading = ref(false);
+const requestFailed = ref(false);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
 const tableData = ref<TaskData[]>([]);
 
+const asyncState = computed<AsyncState>(() => {
+  if (loading.value) return "loading";
+  if (requestFailed.value) return "error";
+  if (tableData.value.length === 0) return "empty";
+  return "ready";
+});
+
 const fetchData = async () => {
   loading.value = true;
+  requestFailed.value = false;
+
   try {
     const res = await getTaskList({
       current: currentPage.value,
@@ -126,15 +172,16 @@ const fetchData = async () => {
       tableData.value = res.data.gene_list || [];
       total.value = res.data.total || 0;
     } else {
-      ElMessage.error(t("taskManager.getFailed"));
       tableData.value = [];
       total.value = 0;
+      requestFailed.value = true;
+      ElMessage.error(t("taskManager.getFailed"));
     }
-  } catch (error) {
-    console.error(t("taskManager.logs.fetchDataFailed"), error);
-    ElMessage.error(t("taskManager.getFailed"));
+  } catch {
     tableData.value = [];
     total.value = 0;
+    requestFailed.value = true;
+    ElMessage.error(t("taskManager.getFailed"));
   } finally {
     loading.value = false;
   }
@@ -153,19 +200,30 @@ const showStatus = (data: TaskData) => {
   }
 };
 
-const handleDownClick = async (data: TaskData) => {
-  console.log(data, "data");
+const statusTagType = (status?: string) => {
+  switch (status) {
+    case "SUCCEEDED":
+      return "success";
+    case "FAILED":
+      return "danger";
+    case "RUNNING":
+      return "warning";
+    default:
+      return "info";
+  }
+};
 
-  if (!data?.download_path) return;
-  // Call the getChatdownloadURL API here to obtain the download link
+const handleDownClick = async (data: TaskData) => {
+  if (!data.download_path) return;
+
   const res = await getChatdownloadURL({ obs_path: data.download_path });
-  if (res.code == 200) {
+  if (res.code === 200) {
     window.open(res.data, "_blank", "noopener,noreferrer");
   }
 };
 
 const handleTaskClick = (data: TaskData) => {
-  const url = `/chat?dialogue_id=${data?.f_dialogue_id || data?.dialogue_id}`;
+  const url = `/chat?dialogue_id=${data.f_dialogue_id || data.dialogue_id}`;
   window.open(url, "_blank");
 };
 
@@ -185,45 +243,11 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.task-management-container {
-  padding: 20px;
-  height: auto;
-  min-height: 100%;
-  .table-container {
-    margin-bottom: 20px;
-
-    .el-table {
-      width: 100%;
-    }
-  }
-  .pagination-container {
-    margin-top: 20px;
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .itemQuery {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3; /* Limit the number of displayed lines */
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-}
-:deep(.table-header-row) {
-  background-color: #409eff !important;
+.task-manager-table {
+  min-width: 840px;
 }
 
-:deep(.table-header-cell) {
-  background-color: #409eff !important;
-  color: white !important;
-  font-weight: bold !important;
-}
-:deep(.el-input__wrapper) {
-  background-color: transparent !important;
-}
-:deep(.el-select__wrapper) {
-  background-color: transparent !important;
+.task-query {
+  overflow-wrap: anywhere;
 }
 </style>

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
 	"phytomni-server/db"
@@ -48,8 +49,8 @@ func readGalleryCols(t *testing.T, gdb *gorm.DB, id int64) (downloadPath, imageP
 // carries several `type:enum` GORM tags (MySQL-only) that SQLite AutoMigrate does
 // not recognise. The DDL includes only the columns read/written by the answer-check
 // / update-log / bot-sync paths (id/user_name/dialogue_id/f_id/bot_run_id/status/
-// answer + task_id/server_id/compute_resource/log_status/delete_at); all other
-// fields scan as zero values.
+// answer + task_id/server_id/compute_resource/log_status/mode/delete_at); all
+// other fields scan as zero values.
 //
 // Connection pool pinned to 1: each :memory: connection is its own database; if a
 // write and its verification read land on different connections the read returns
@@ -73,6 +74,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		answer TEXT,
 		tool_name TEXT,
 		bot_run_id TEXT,
+		bot_projection_json TEXT,
+		bot_report_revision INTEGER NOT NULL DEFAULT -1,
 		server_id TEXT,
 		task_id TEXT,
 		task_log TEXT,
@@ -83,6 +86,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		compute_resource TEXT,
 		server_file_path TEXT,
 		log_status TEXT,
+		mode TEXT,
 		status TEXT,
 		download_path TEXT,
 		image_paths TEXT,
@@ -246,6 +250,279 @@ func TestApiAnswerCheck_OverlayReshapesBotContent(t *testing.T) {
 	}
 	if got[0].Status != "SUCCEEDED" {
 		t.Errorf("status not uppercased, got %q", got[0].Status)
+	}
+}
+
+// TestAnswerCheckPrefersProjectionAndFallsBackToLegacy verifies that history
+// can render a persisted bounded projection without polling Bot, while rows
+// without one retain their Web-owned legacy answer and reaction fields.
+func TestAnswerCheckPrefersProjectionAndFallsBackToLegacy(t *testing.T) {
+	gdb := setupTestDB(t)
+	projection := BotRunProjection{
+		RunID:              "run-projected",
+		Agent:              "deep_genome",
+		Status:             "SUCCEEDED",
+		ReportRevision:     4,
+		ReportCompleteness: "complete",
+		FinalReport:        "# Projected report",
+	}
+	encoded, err := marshalPersistedProjection(projection)
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, reaction_type, upload_path, created_at) VALUES
+		(100, 'dlg-projection', 0, 'alice', 'projected-q', 'legacy-projected', 'DeepGenomeAgent', 'run-projected', ?, 4, 'RUNNING', '2', '/upload/projected', '2026-01-01 00:00:00'),
+		(101, 'dlg-projection', 100, 'alice', 'legacy-q', 'legacy-a', 'ChatAgent', '', '', -1, 'SUCCEEDED', '1', '/upload/legacy', '2026-01-01 00:01:00'),
+		(102, 'dlg-projection', 100, 'bob', 'foreign-q', 'foreign-a', 'ChatAgent', 'run-projected', ?, 4, 'SUCCEEDED', '0', '/upload/foreign', '2026-01-01 00:02:00')`, encoded, encoded).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	got, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-projection")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected owned parent + child, got %d: %+v", len(got), got)
+	}
+	if got[0].Id != 100 || !strings.Contains(got[0].Answer, "Projected report") || got[0].Status != "SUCCEEDED" {
+		t.Fatalf("projection was not preferred: %+v", got[0])
+	}
+	if got[0].ReactionType != "2" || got[0].UploadPath != "/upload/projected" {
+		t.Fatalf("Web-owned fields changed: reaction=%q upload=%q", got[0].ReactionType, got[0].UploadPath)
+	}
+	if got[1].Answer != "legacy-a" || got[1].ReactionType != "1" || got[1].UploadPath != "/upload/legacy" {
+		t.Fatalf("legacy fallback changed: %+v", got[1])
+	}
+	for _, row := range got {
+		if row.UserName != "alice" || row.Id == 102 {
+			t.Fatalf("foreign projection row leaked: %+v", row)
+		}
+	}
+}
+
+func historyObservationCount(t *testing.T, source string) uint64 {
+	t.Helper()
+	for _, observation := range HistoryReadObservations() {
+		if observation.Source == source {
+			return observation.Count
+		}
+	}
+	t.Fatalf("missing history observation source %q", source)
+	return 0
+}
+
+func TestHistoryReadModeFromConfigDefaultsOff(t *testing.T) {
+	previous := viper.Get("bot.history_dual_read")
+	t.Cleanup(func() { viper.Set("bot.history_dual_read", previous) })
+
+	viper.Set("bot.history_dual_read", false)
+	if got := HistoryReadModeFromConfig(); got != HistoryReadModeLegacy {
+		t.Fatalf("flag-off history mode=%q, want %q", got, HistoryReadModeLegacy)
+	}
+	viper.Set("bot.history_dual_read", true)
+	if got := HistoryReadModeFromConfig(); got != HistoryReadModeDual {
+		t.Fatalf("flag-on history mode=%q, want %q", got, HistoryReadModeDual)
+	}
+}
+
+// TestAnswerCheckDualReadRecordsSanitizedOutcome verifies that dual mode
+// renders an owner-scoped persisted projection while preserving Web-owned
+// reaction/upload fields and exposing only a bounded source classification.
+func TestAnswerCheckDualReadRecordsSanitizedOutcome(t *testing.T) {
+	gdb := setupTestDB(t)
+	ResetHistoryReadObservations()
+	projection := BotRunProjection{
+		RunID:          "run-dual",
+		Agent:          "deep_genome",
+		Status:         "SUCCEEDED",
+		ReportRevision: 7,
+		FinalReport:    "# Dual report",
+	}
+	encoded, err := marshalPersistedProjection(projection)
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, reaction_type, upload_path, created_at) VALUES
+		(110, 'dlg-dual', 0, 'alice', 'dual-q', 'legacy-a', 'DeepGenomeAgent', 'run-dual', ?, 7, 'RUNNING', '2', '/upload/dual', '2026-01-01 00:00:00')`, encoded).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg-dual", HistoryReadModeDual)
+	if err != nil {
+		t.Fatalf("dual read: %v", err)
+	}
+	if result.Source != historySourceProjection || result.FallbackReason != "" {
+		t.Fatalf("unexpected dual outcome: %#v", result)
+	}
+	if len(result.Rows) != 1 || !strings.Contains(result.Rows[0].Answer, "Dual report") {
+		t.Fatalf("projection was not rendered: %#v", result.Rows)
+	}
+	if result.Rows[0].ReactionType != "2" || result.Rows[0].UploadPath != "/upload/dual" {
+		t.Fatalf("Web-owned fields changed: reaction=%q upload=%q", result.Rows[0].ReactionType, result.Rows[0].UploadPath)
+	}
+	if got := historyObservationCount(t, historyObservationProjectionHit); got != 1 {
+		t.Fatalf("projection_hit=%d, want 1", got)
+	}
+	encodedObservations, err := json.Marshal(HistoryReadObservations())
+	if err != nil {
+		t.Fatalf("marshal observations: %v", err)
+	}
+	for _, forbidden := range []string{"dual-q", "legacy-a", "dlg-dual", "alice", "run-dual"} {
+		if strings.Contains(string(encodedObservations), forbidden) {
+			t.Fatalf("observation contains forbidden content %q: %s", forbidden, encodedObservations)
+		}
+	}
+}
+
+func TestAnswerCheckDualReadFallsBackForUnavailableProjection(t *testing.T) {
+	tests := []struct {
+		name       string
+		botRunID   string
+		projection string
+		revision   int64
+	}{
+		{name: "missing", botRunID: "run-missing", projection: "", revision: -1},
+		{name: "malformed", botRunID: "run-malformed", projection: "{not-json", revision: -1},
+		{name: "blank-run-id", botRunID: "", projection: "", revision: -1},
+		{name: "run-id-mismatch", botRunID: "run-row", projection: `{"run_id":"run-other","agent":"chat","status":"succeeded","report_revision":1}`, revision: 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupTestDB(t)
+			ResetHistoryReadObservations()
+			if err := gdb.Exec(`INSERT INTO question_agent_logs
+				(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+				(111, ?, 0, 'alice', 'legacy-q', 'legacy-a', 'ChatAgent', ?, ?, ?, 'RUNNING', '2026-01-01 00:00:00')`, "dlg-fallback-"+tc.name, tc.botRunID, tc.projection, tc.revision).Error; err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+			result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg-fallback-"+tc.name, HistoryReadModeDual)
+			if err != nil {
+				t.Fatalf("dual read: %v", err)
+			}
+			if result.Source != historySourceLegacy || result.FallbackReason == "" {
+				t.Fatalf("expected bounded legacy fallback, got %#v", result)
+			}
+			if len(result.Rows) != 1 || result.Rows[0].Answer != "legacy-a" {
+				t.Fatalf("legacy row changed: %#v", result.Rows)
+			}
+			if got := historyObservationCount(t, historyObservationLegacyFallback); got != 1 {
+				t.Fatalf("legacy_fallback=%d, want 1", got)
+			}
+		})
+	}
+}
+
+// TestAnswerCheckProjectionModeDoesNotPollBot makes the projection-only mode
+// safe to activate independently of Bot/list availability.
+func TestAnswerCheckProjectionModeDoesNotPollBot(t *testing.T) {
+	gdb := setupTestDB(t)
+	projection := BotRunProjection{RunID: "run-projection-only", Agent: "chat", Status: "SUCCEEDED", ReportRevision: 1, FinalReport: "projection"}
+	encoded, err := marshalPersistedProjection(projection)
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+		(112, 'dlg-projection-only', 0, 'alice', 'legacy', 'ChatAgent', 'run-projection-only', ?, 1, 'RUNNING', '2026-01-01 00:00:00')`, encoded).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	defer func() { rxBot.BotConfig = nil }()
+
+	result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg-projection-only", HistoryReadModeProjection)
+	if err != nil || result.Source != historySourceProjection {
+		t.Fatalf("projection read result=%#v err=%v", result, err)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("projection mode polled Bot %d time(s)", hits.Load())
+	}
+	if result.Rows[0].Answer == "legacy" {
+		t.Fatalf("projection content was not applied: %#v", result.Rows[0])
+	}
+	_ = gdb
+}
+
+func TestAnswerCheckDualReadRecordsCountMismatch(t *testing.T) {
+	gdb := setupTestDB(t)
+	ResetHistoryReadObservations()
+	projection := BotRunProjection{RunID: "run-count", Agent: "chat", Status: "SUCCEEDED", ReportRevision: 2, FinalReport: "count"}
+	encoded, err := marshalPersistedProjection(projection)
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+		(113, 'dlg-count', 0, 'alice', 'legacy', 'ChatAgent', 'run-count', ?, 2, 'SUCCEEDED', '2026-01-01 00:00:00')`, encoded).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"run_id":"run-count","agent":"chat","status":"running","result":{"report_revision":4}},{"run_id":"run-extra","agent":"chat","status":"succeeded","result":{}}]}`))
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	defer func() { rxBot.BotConfig = nil }()
+
+	result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg-count", HistoryReadModeDual)
+	if err != nil || result.Source != historySourceProjection {
+		t.Fatalf("dual count result=%#v err=%v", result, err)
+	}
+	if got := historyObservationCount(t, historyObservationCountMismatch); got != 1 {
+		t.Fatalf("count_mismatch=%d, want 1", got)
+	}
+	if got := historyObservationCount(t, historyObservationStatusMismatch); got != 1 {
+		t.Fatalf("status_mismatch=%d, want 1", got)
+	}
+	if got := historyObservationCount(t, historyObservationRevisionMismatch); got != 1 {
+		t.Fatalf("revision_mismatch=%d, want 1", got)
+	}
+}
+
+func TestAnswerCheckDualReadBotFailureFallsBackWithoutError(t *testing.T) {
+	gdb := setupTestDB(t)
+	ResetHistoryReadObservations()
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(114, 'dlg-bot-unavailable', 0, 'alice', 'legacy-q', 'legacy-a', 'ChatAgent', 'run-unavailable', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"private failure"}`))
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	defer func() { rxBot.BotConfig = nil }()
+
+	result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg-bot-unavailable", HistoryReadModeDual)
+	if err != nil {
+		t.Fatalf("Bot read failure must degrade, got %v", err)
+	}
+	if result.Source != historySourceLegacy || result.FallbackReason != historyFallbackBotUnavailable {
+		t.Fatalf("unexpected Bot failure outcome: %#v", result)
+	}
+	if len(result.Rows) != 1 || result.Rows[0].Answer != "legacy-a" {
+		t.Fatalf("legacy row not preserved: %#v", result.Rows)
+	}
+	if got := historyObservationCount(t, historyObservationBotUnavailable); got != 1 {
+		t.Fatalf("bot_read_unavailable=%d, want 1", got)
+	}
+	encodedObservations, err := json.Marshal(HistoryReadObservations())
+	if err != nil {
+		t.Fatalf("marshal observations: %v", err)
+	}
+	for _, forbidden := range []string{"private failure", "dlg-bot-unavailable", "alice", "run-unavailable", "legacy-a"} {
+		if strings.Contains(string(encodedObservations), forbidden) {
+			t.Fatalf("observation contains forbidden content %q: %s", forbidden, encodedObservations)
+		}
 	}
 }
 
@@ -458,6 +735,125 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	var paths []string
 	if err := json.Unmarshal([]byte(ip), &paths); err != nil || len(paths) != 1 || paths[0] != "/obs/p/r1/a.png" {
 		t.Errorf("image_paths = %q (%v)", ip, err)
+	}
+}
+
+// TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope closes the remote
+// DeepGenome compatibility path in one fixture: the Web submits one umbrella
+// run, reconciles two intermediate revisions and a final report, then reads
+// history through AnswerCheck. A foreign row carrying the same run id must not
+// appear in the owner's history response.
+func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
+	gdb := setupTestDB(t)
+	const runID = "run-deep-genome-e2e"
+	var submittedDialogue string
+	var poll atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents/deep_genome/runs":
+			var req rxBot.AgentRunRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("decode submit request: %v", err)
+			}
+			if req.DialogueID == "" {
+				t.Error("submit dialogue_id must be non-empty")
+			}
+			submittedDialogue = req.DialogueID
+			_, _ = w.Write([]byte(`{"id":"completion-deep-genome-e2e","run_id":"run-deep-genome-e2e","object":"agent.run","agent":"deep_genome","status":"running","task_ids":["child-deep-genome-e2e"],"result":{}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/"+runID:
+			var body string
+			switch poll.Add(1) {
+			case 1:
+				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"running","result":{"report_stage":"intermediate","report_completeness":"partial","report_revision":1,"intermediate_report":"# Revision 1"}}`
+			case 2:
+				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"running","result":{"report_stage":"intermediate","report_completeness":"partial","report_revision":2,"intermediate_report":"# Revision 2"}}`
+			default:
+				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"succeeded","result":{"report_stage":"final","report_completeness":"complete","report_revision":3,"intermediate_report":"# Revision 2","final_report":"# Final DeepGenome report"}}`
+			}
+			_, _ = w.Write([]byte(body))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs":
+			if got := r.URL.Query().Get("dialogue_id"); got != submittedDialogue {
+				t.Errorf("history dialogue_id=%q, want %q", got, submittedDialogue)
+			}
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"succeeded","result":{"report_stage":"final","report_revision":3,"final_report":"# Final DeepGenome report"}}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "inspect the gene", Tool: "DeepGenomeAgent", Id: 0,
+	})
+	if err != nil {
+		t.Fatalf("submit DeepGenome query: %v", err)
+	}
+	if out.Status != "RUNNING" || out.BotRunID != runID || out.BotRunID == "child-deep-genome-e2e" {
+		t.Fatalf("submission identity/status=%#v", out)
+	}
+	if out.DialogueId == "" || out.DialogueId != submittedDialogue {
+		t.Fatalf("generated dialogue id=%q, submitted=%q", out.DialogueId, submittedDialogue)
+	}
+	dialogueID := out.DialogueId
+
+	row := model.QuestionAgentLog{
+		Id: out.Id, UserName: "alice", BotRunId: out.BotRunID,
+		Status: out.Status, ToolName: out.ToolName,
+	}
+	SyncBotRuns([]model.QuestionAgentLog{row})
+	projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
+	if err != nil || projection.ReportRevision != 1 || projection.VisibleReport() != "# Revision 1" {
+		t.Fatalf("revision 1 projection=%#v err=%v", projection, err)
+	}
+	SyncBotRuns([]model.QuestionAgentLog{row})
+	projection, err = LoadBotRunProjection(context.Background(), "alice", out.Id)
+	if err != nil || projection.ReportRevision != 2 || projection.VisibleReport() != "# Revision 2" {
+		t.Fatalf("revision 2 projection=%#v err=%v", projection, err)
+	}
+	SyncBotRuns([]model.QuestionAgentLog{row})
+	if got := poll.Load(); got != 3 {
+		t.Fatalf("poll count=%d, want revision 1, revision 2, and final report", got)
+	}
+
+	projection, err = LoadBotRunProjection(context.Background(), "alice", out.Id)
+	if err != nil {
+		t.Fatalf("load final projection: %v", err)
+	}
+	if projection.RunID != runID || projection.ReportRevision != 3 || projection.VisibleReport() != "# Final DeepGenome report" {
+		t.Fatalf("final projection=%#v", projection)
+	}
+
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
+		(900, ?, ?, 'bob', 'foreign', 'foreign', 'DeepGenomeAgent', ?, 'SUCCEEDED', '2026-01-01 00:01:00')`, dialogueID, out.Id, runID).Error; err != nil {
+		t.Fatalf("seed foreign row: %v", err)
+	}
+	got, err := NewService().AnswerCheck(context.Background(), "alice", dialogueID)
+	if err != nil {
+		t.Fatalf("AnswerCheck: %v", err)
+	}
+	if len(got) != 1 || got[0].Id != out.Id || got[0].UserName != "alice" || got[0].Status != "SUCCEEDED" {
+		t.Fatalf("owner-scoped history=%+v", got)
+	}
+	var answer struct {
+		Content string        `json:"content"`
+		DocList []interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got[0].Answer), &answer); err != nil {
+		t.Fatalf("final history answer is not shaped JSON: %q (%v)", got[0].Answer, err)
+	}
+	if answer.Content != "# Final DeepGenome report" || answer.DocList == nil || len(answer.DocList) != 0 {
+		t.Fatalf("history final report=%+v", answer)
+	}
+	var distinctRunIDs int64
+	if err := gdb.Raw(`SELECT COUNT(DISTINCT bot_run_id) FROM question_agent_logs WHERE dialogue_id = ?`, dialogueID).Scan(&distinctRunIDs).Error; err != nil {
+		t.Fatalf("count umbrella run ids: %v", err)
+	}
+	if distinctRunIDs != 1 {
+		t.Fatalf("distinct bot_run_id=%d, want one umbrella run id", distinctRunIDs)
 	}
 }
 

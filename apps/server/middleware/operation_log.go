@@ -9,6 +9,7 @@ import (
 	"phytomni-server/model"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -166,6 +167,76 @@ func redactBodyByContentType(contentType string, body []byte) string {
 	}
 }
 
+const (
+	a2uiActionAuditInvalidBody = "[redacted: invalid a2ui action]"
+	a2uiActionAuditMask        = "[REDACTED]"
+)
+
+// a2uiActionAuditBody is deliberately separate from the service envelope. It
+// contains only the identifiers needed to correlate an action in an audit row;
+// the untrusted payload is replaced with a fixed mask before marshaling.
+type a2uiActionAuditBody struct {
+	SurfaceID string `json:"surface_id"`
+	Widget    string `json:"widget"`
+	ActionID  string `json:"action_id"`
+	RunID     string `json:"run_id"`
+	Payload   string `json:"payload"`
+}
+
+func validA2uiAuditString(raw json.RawMessage) (string, bool) {
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil || strings.TrimSpace(value) == "" {
+		return "", false
+	}
+	if utf8.RuneCountInString(value) > 256 {
+		return "", false
+	}
+	return value, true
+}
+
+// redactA2uiActionBody keeps only bounded action identifiers and masks the
+// complete payload. Unknown fields are intentionally ignored. Any malformed
+// or incorrectly shaped envelope collapses to a fixed placeholder so the
+// operation log never receives untrusted raw text.
+func redactA2uiActionBody(body []byte) string {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
+		return a2uiActionAuditInvalidBody
+	}
+
+	surfaceID, ok := validA2uiAuditString(fields["surface_id"])
+	if !ok {
+		return a2uiActionAuditInvalidBody
+	}
+	widget, ok := validA2uiAuditString(fields["widget"])
+	if !ok {
+		return a2uiActionAuditInvalidBody
+	}
+	actionID, ok := validA2uiAuditString(fields["action_id"])
+	if !ok {
+		return a2uiActionAuditInvalidBody
+	}
+	runID, ok := validA2uiAuditString(fields["run_id"])
+	if !ok {
+		return a2uiActionAuditInvalidBody
+	}
+	if payload, exists := fields["payload"]; !exists || len(payload) == 0 || !json.Valid(payload) {
+		return a2uiActionAuditInvalidBody
+	}
+
+	masked, err := json.Marshal(a2uiActionAuditBody{
+		SurfaceID: surfaceID,
+		Widget:    widget,
+		ActionID:  actionID,
+		RunID:     runID,
+		Payload:   a2uiActionAuditMask,
+	})
+	if err != nil {
+		return a2uiActionAuditInvalidBody
+	}
+	return string(masked)
+}
+
 func OperationLog() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
@@ -228,10 +299,17 @@ func OperationLog() gin.HandlerFunc {
 			errorMessage = c.Errors.String()
 		}
 
-		// Body redaction — route by content-type, never store raw plaintext:
-		// urlencoded uses the same masking as redactQueryParams (covers /login, /register,
-		// /modify/password PostForm credentials), JSON is recursively masked, everything else is a placeholder.
-		bodyStr := redactBodyByContentType(contentType, bodyBytes)
+		// Body redaction — the A2UI action route masks its complete payload while
+		// all other endpoints retain the generic content-type rules.
+		var bodyStr string
+		if c.FullPath() == "/api/v1/conversations/:id/a2ui-actions" {
+			bodyStr = redactA2uiActionBody(bodyBytes)
+		} else {
+			// urlencoded uses the same masking as redactQueryParams (covers /login,
+			// /register, /modify/password PostForm credentials), JSON is recursively
+			// masked, everything else is a placeholder.
+			bodyStr = redactBodyByContentType(contentType, bodyBytes)
+		}
 
 		// The same redaction rules cover the query string so ?token=xxx / ?api_key=xxx
 		// URL forms cannot leak credentials into the audit log.

@@ -140,11 +140,11 @@
       </template>
 
       <el-table :data="configHistory" style="width: 100%">
-        <el-table-column
-          prop="timestamp"
-          :label="$t('globalConfig.timestamp')"
-          width="180"
-        />
+        <el-table-column :label="$t('globalConfig.timestamp')" width="180">
+          <template #default="{ row }">
+            {{ formatDisplayDate(d, row.timestamp, "timestamp") }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="operator"
           :label="$t('globalConfig.operator')"
@@ -167,8 +167,9 @@
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useI18n } from "vue-i18n";
+import { formatDisplayDate } from "@/locales/format-display-date";
 
-const { t } = useI18n();
+const { t, d } = useI18n();
 
 // Configuration form data
 const configForm = reactive({
@@ -187,12 +188,12 @@ const configForm = reactive({
 // Configuration history data
 const configHistory = ref([
   {
-    timestamp: "2024-01-15 10:30:00",
+    timestamp: "2024-01-15T10:30:00",
     operator: "admin",
     changes: "Updated file upload size limit",
   },
   {
-    timestamp: "2024-01-14 15:20:00",
+    timestamp: "2024-01-14T15:20:00",
     operator: "admin",
     changes: "Updated password policy config",
   },
@@ -213,7 +214,7 @@ const handleSave = async () => {
 
     // Add to history records
     configHistory.value.unshift({
-      timestamp: new Date().toLocaleString("zh-CN"),
+      timestamp: new Date().toISOString(),
       operator: "admin",
       changes: "Saved global policy config",
     });
@@ -271,7 +272,7 @@ const handleTest = () => {
 const handleViewHistory = (row: any) => {
   ElMessageBox.alert(
     t("globalConfig.historyDetailContent", {
-      time: row.timestamp,
+      time: formatDisplayDate(d, row.timestamp, "timestamp"),
       operator: row.operator,
       changes: row.changes,
     }),

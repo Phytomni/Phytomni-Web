@@ -1,13 +1,17 @@
 <template>
   <div class="follow-up-questions">
     <h4>{{ $t("chat.followUpQuestions") }}</h4>
-    <div
-      v-for="(question, qIndex) in questions"
-      :key="qIndex"
-      class="question-item"
-      @click="handleQuestionClick(question)"
-    >
-      {{ qIndex + 1 }}. {{ question }}
+    <div class="follow-up-list">
+      <button
+        v-for="(question, qIndex) in questions"
+        :key="qIndex"
+        type="button"
+        class="question-item"
+        data-testid="follow-up-suggestion"
+        @click="handleQuestionClick(question)"
+      >
+        {{ qIndex + 1 }}. {{ question }}
+      </button>
     </div>
   </div>
 </template>
@@ -31,65 +35,60 @@ const handleQuestionClick = (question: string) => {
 
 <style lang="scss" scoped>
 .follow-up-questions {
-  margin-top: 12px;
-  padding: 12px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  border-left: 3px solid #1890ff;
+  max-width: 100%;
+  margin-top: var(--phy-space-12);
 
   h4 {
-    margin: 0 0 8px 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: #333;
+    margin: 0 0 var(--phy-space-4);
+    color: var(--phy-color-text-muted);
+    font-size: 12px;
+    font-weight: 500;
+  }
+}
+
+.follow-up-list {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: var(--phy-space-4);
+}
+
+.question-item {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: var(--phy-control-height-compact);
+  margin: 0;
+  padding: var(--phy-space-4) var(--phy-space-8);
+  border: 0;
+  border-radius: var(--phy-radius-sm);
+  background: transparent;
+  color: var(--phy-color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--phy-motion-fast) ease,
+    color var(--phy-motion-fast) ease;
+
+  &:hover {
+    color: var(--phy-color-action-text);
+    background: var(--phy-color-primary-soft);
   }
 
+  &:focus-visible {
+    outline: 2px solid var(--phy-color-focus);
+    outline-offset: 2px;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
   .question-item {
-    margin-bottom: 6px;
-    padding: 8px 12px;
-    background-color: #fff;
-    border-radius: 6px;
-    font-size: 13px;
-    color: #555;
-    border: 1px solid #e6e6e6;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    position: relative;
-    user-select: none;
-
-    &:hover {
-      background-color: #e6f7ff;
-      border-color: #1890ff;
-      color: #1890ff;
-      transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
-    }
-
-    &:active {
-      transform: translateY(0);
-      box-shadow: 0 1px 4px rgba(24, 144, 255, 0.2);
-    }
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-
-    // Add a click hint
-    &::after {
-      content: "";
-      position: absolute;
-      right: 8px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 11px;
-      color: #999;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-
-    &:hover::after {
-      opacity: 1;
-    }
+    min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
+    padding: var(--phy-space-8);
   }
 }
 </style>

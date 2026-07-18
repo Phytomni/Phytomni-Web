@@ -58,20 +58,27 @@ func addColumnIfMissing(db *gorm.DB, model interface{}, col, ddl string) error {
 	return nil
 }
 
-// addUniqueIndexIfMissing is an idempotent helper for creating a unique index.
-// addColumnIfMissing handles columns; this companion handles indexes using
-// db.Migrator().HasIndex since the column helpers cannot create indexes.
-func addUniqueIndexIfMissing(db *gorm.DB, model interface{}, indexName, ddl string) error {
+// addIndexIfMissing is an idempotent helper for creating an index. The DDL is
+// supplied by the operator-controlled migration command because production
+// schemas are not changed during service startup.
+func addIndexIfMissing(db *gorm.DB, model interface{}, indexName, ddl string) error {
 	if db.Migrator().HasIndex(model, indexName) {
 		rxLog.Sugar().Infof("%s index already exists, skip", indexName)
 		return nil
 	}
 	if err := db.Exec(ddl).Error; err != nil {
-		rxLog.Sugar().Errorw("create unique index failed", "index", indexName, "err", err)
+		rxLog.Sugar().Errorw("create index failed", "index", indexName, "err", err)
 		return err
 	}
-	rxLog.Sugar().Infof("%s unique index added", indexName)
+	rxLog.Sugar().Infof("%s index added", indexName)
 	return nil
+}
+
+// addUniqueIndexIfMissing is an idempotent helper for creating a unique index.
+// addColumnIfMissing handles columns; addIndexIfMissing handles the shared
+// HasIndex guard for both unique and non-unique indexes.
+func addUniqueIndexIfMissing(db *gorm.DB, model interface{}, indexName, ddl string) error {
+	return addIndexIfMissing(db, model, indexName, ddl)
 }
 
 // firstLoginBackfillSQL is the exact production statement run by `migrate up`.
@@ -235,6 +242,25 @@ func Migrate() *cli.Command {
 				Action: func(ctx *cli.Context) error {
 					return addColumnIfMissing(model.Default(), &model.QuestionAgentLog{}, "mode",
 						"ALTER TABLE question_agent_logs ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'instant' AFTER tool_name")
+				},
+			},
+			{
+				Name:        "add-bot-projection",
+				Usage:       "add Bot projection columns and revision index to question_agent_logs",
+				Description: "Add the sanitized Bot projection and report revision columns plus an index. Idempotent — safe to re-run. Production execution remains operator-controlled; no automatic DDL is run.",
+				Action: func(ctx *cli.Context) error {
+					rxLog.Sugar().Info("add-bot-projection is operator-controlled; applying additive production DDL")
+					db := model.Default()
+					if err := addColumnIfMissing(db, &model.QuestionAgentLog{}, "bot_projection_json",
+						"ALTER TABLE question_agent_logs ADD COLUMN bot_projection_json LONGTEXT NULL COMMENT 'sanitized Bot run projection' AFTER bot_run_id"); err != nil {
+						return err
+					}
+					if err := addColumnIfMissing(db, &model.QuestionAgentLog{}, "bot_report_revision",
+						"ALTER TABLE question_agent_logs ADD COLUMN bot_report_revision BIGINT NOT NULL DEFAULT -1 COMMENT 'last Bot report revision' AFTER bot_projection_json"); err != nil {
+						return err
+					}
+					return addIndexIfMissing(db, &model.QuestionAgentLog{}, "idx_question_agent_logs_bot_report_revision",
+						"CREATE INDEX idx_question_agent_logs_bot_report_revision ON question_agent_logs(bot_report_revision)")
 				},
 			},
 			{

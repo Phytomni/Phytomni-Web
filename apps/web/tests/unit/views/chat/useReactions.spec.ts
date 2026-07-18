@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref } from "vue";
 import { useReactions } from "@/views/chat/composables/useReactions";
+import i18n from "@/locales";
+import zhCN from "@/locales/langs/zh-CN";
 
 // Mock element-plus ElMessage
 vi.mock("element-plus", () => ({
@@ -156,6 +158,25 @@ describe("useReactions", () => {
     it("unknown reactionType returns an empty string", () => {
       const { getReactionTooltip } = makeComposable();
       expect(getReactionTooltip("m1", 99)).toBe("");
+    });
+
+    it("same-mount locale switch updates labels without API calls", async () => {
+      chatState.reactions = { m1: 1 };
+      const { getReactionTooltip } = makeComposable();
+      expect(getReactionTooltip("m1", 1)).toBe("Undo like");
+      expect(getReactionTooltip("m1", 2)).toBe("Dislike");
+
+      i18n.global.setLocaleMessage("zh-CN", zhCN);
+      const prevLocale = (i18n.global.locale as { value: string }).value;
+      (i18n.global.locale as { value: string }).value = "zh-CN";
+      try {
+        expect(getReactionTooltip("m1", 1)).toBe("取消点赞");
+        expect(getReactionTooltip("m1", 2)).toBe("点踩");
+        expect(mockGetReactionType).not.toHaveBeenCalled();
+        expect(chatState.reactions["m1"]).toBe(1);
+      } finally {
+        (i18n.global.locale as { value: string }).value = prevLocale;
+      }
     });
   });
 });

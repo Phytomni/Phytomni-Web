@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""Check the committed Bot HEAD/Web compatibility contract offline.
+
+The checker deliberately has no HTTP client and never leaves this checkout. It
+reads the Web-owned canonical agent maps, a small committed manifest, the
+synthetic response fixtures already checked into this repository, and the
+dark-launch configuration examples. It is intended to be deterministic enough
+for a local pre-commit gate.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from pathlib import Path
+from typing import Any, Iterable
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MANIFEST_REL = Path("apps/web/tests/fixtures/bot-head/contract-manifest.json")
+
+RELEASE_BOT_COMMIT = "e0c296e6773f6638bac57a181bc727fd97c8a9fb"
+REQUIRED_AGENT_SLUGS = (
+    "chat",
+    "knowledge",
+    "data",
+    "review",
+    "brief_gene",
+    "analyst",
+    "deep_genome",
+    "research",
+    "design",
+    "network",
+)
+REQUIRED_FIXTURE_IDS = (
+    "chat_completion_run_id",
+    "degraded_tracking",
+    "deep_genome_revision",
+    "review_input_required",
+)
+
+# Keep this set intentionally small. These keys are provider/debug payload
+# details and must not become part of a Web-facing compatibility fixture.
+FORBIDDEN_RAW_FIELDS = {
+    "payload",
+    "raw_payload",
+    "traceback",
+    "stack_trace",
+}
+
+SCOPED_FILES = {
+    "web_agents": Path("apps/web/src/constants/agents.ts"),
+    "go_agents": Path("apps/server/external/bot/agent_canonical.go"),
+    "go_aliases": Path("apps/server/external/bot/agent_map.go"),
+    "go_query_map": Path("apps/server/service/api_service/query.go"),
+    "feature_config": Path("apps/server/config/app.yml.example"),
+    "web_store": Path("apps/web/src/stores/user.ts"),
+    "web_stream": Path("apps/web/src/views/chat/composables/useSendMessage.ts"),
+}
+
+FIXTURE_PATHS = {
+    "chat_completion_run_id": (
+        Path("apps/server/external/bot/testdata/head/chat_completion_run_id.json"),
+    ),
+    "degraded_tracking": (
+        Path("apps/server/external/bot/testdata/head/agent_run_degraded.json"),
+    ),
+    "deep_genome_revision": (
+        Path("apps/server/external/bot/testdata/head/deep_genome_intermediate.json"),
+        Path("apps/server/external/bot/testdata/head/deep_genome_final.json"),
+    ),
+    "review_input_required": (
+        Path("apps/server/external/bot/testdata/head/review_input_required.json"),
+    ),
+}
+
+DEFAULT_OFF_FLAGS = (
+    "expert_enabled",
+    "stream_enabled",
+    "a2ui_actions_enabled",
+)
+
+PASS_LINE = "Bot/Web compatibility contract: PASS"
+FAIL_LINE = "Bot/Web compatibility contract: FAIL"
+MAX_FAILURE_LINES = 32
+MAX_FAILURE_LENGTH = 240
+
+_MANIFEST_FIELDS = {"schema_version", "bot_commit", "required_agents", "fixtures"}
+_GO_ENTRY_RE = re.compile(
+    r'(?m)^\s*"(?P<key>[A-Za-z0-9_]+)"\s*:\s*'
+    r'"(?P<value>[A-Za-z0-9_.-]+)"\s*,?\s*$'
+)
+_WEB_AGENT_ENTRY_RE = re.compile(r'"(?P<tool>[A-Za-z0-9_]+)"')
+_FLAG_RE_TEMPLATE = r"(?m)^\s*{key}\s*:\s*(?P<value>true|false)\b"
+
+
+def _unique(values: Iterable[str]) -> list[str]:
+    """Return values in first-seen order without exposing fixture contents."""
+
+    return list(dict.fromkeys(values))
+
+
+def _manifest_list(
+    manifest: dict[str, Any], key: str, violations: list[str]
+) -> list[str] | None:
+    value = manifest.get(key)
+    if not isinstance(value, list):
+        violations.append(f"manifest {key} must be a list")
+        return None
+    if any(not isinstance(item, str) or not item.strip() for item in value):
+        if key == "fixtures":
+            violations.append(
+                "manifest fixtures entries must be string fixture ids; raw payload fields are not allowed"
+            )
+        else:
+            violations.append(f"manifest {key} entries must be non-empty strings")
+        return None
+    return value
+
+
+def _compare_exact_set(
+    label: str, actual: list[str], expected: tuple[str, ...], violations: list[str]
+) -> None:
+    actual_set = set(actual)
+    expected_set = set(expected)
+    missing = sorted(expected_set - actual_set)
+    extra = sorted(actual_set - expected_set)
+    duplicate = sorted(value for value in _unique(actual) if actual.count(value) > 1)
+    if missing:
+        violations.append(f"{label} missing: {', '.join(missing)}")
+    if extra:
+        violations.append(f"{label} extra: {', '.join(extra)}")
+    if duplicate:
+        violations.append(f"{label} duplicate: {', '.join(duplicate)}")
+
+
+def validate_manifest(manifest: Any) -> list[str]:
+    """Validate release pins and fixture IDs without inspecting payload data."""
+
+    violations: list[str] = []
+    if not isinstance(manifest, dict):
+        return ["manifest root must be an object"]
+
+    unsupported = sorted(set(manifest) - _MANIFEST_FIELDS)
+    if unsupported:
+        violations.append(
+            "manifest contains unsupported fields: " + ", ".join(unsupported)
+        )
+
+    if manifest.get("schema_version") != 1:
+        violations.append("manifest schema_version must be 1")
+
+    bot_commit = manifest.get("bot_commit")
+    if bot_commit != RELEASE_BOT_COMMIT:
+        violations.append("manifest bot_commit is not the pinned release SHA")
+
+    agents = _manifest_list(manifest, "required_agents", violations)
+    if agents is not None:
+        _compare_exact_set("manifest required_agents", agents, REQUIRED_AGENT_SLUGS, violations)
+
+    fixtures = _manifest_list(manifest, "fixtures", violations)
+    if fixtures is not None:
+        _compare_exact_set("manifest fixtures", fixtures, REQUIRED_FIXTURE_IDS, violations)
+
+    return violations
+
+
+def _within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _read_bytes(root: Path, relative: Path, violations: list[str]) -> bytes | None:
+    path = root / relative
+    if not _within(path, root):
+        violations.append(f"refusing to read out-of-scope path: {relative}")
+        return None
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        violations.append(f"missing compatibility file: {relative}")
+    except OSError:
+        violations.append(f"cannot read compatibility file: {relative}")
+    return None
+
+
+def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
+    raw = _read_bytes(root, relative, violations)
+    if raw is None:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        violations.append(f"compatibility file is not UTF-8 text: {relative}")
+        return None
+
+
+def _load_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
+    raw = _read_bytes(root, relative, violations)
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        violations.append(f"invalid compatibility fixture JSON: {relative}")
+        return None
+
+
+def _extract_braced_block(text: str, marker: str) -> str | None:
+    declaration = re.search(
+        rf"(?m)^\s*(?:var|const)\s+{re.escape(marker)}\b", text
+    )
+    if declaration is None:
+        return None
+    start = declaration.start()
+    opening = text.find("{", start)
+    if opening < 0:
+        return None
+    closing = text.find("}", opening + 1)
+    if closing < 0:
+        return None
+    return text[opening + 1 : closing]
+
+
+def _parse_go_map(text: str, marker: str) -> dict[str, str] | None:
+    block = _extract_braced_block(text, marker)
+    if block is None:
+        return None
+    return {
+        match.group("key"): match.group("value")
+        for match in _GO_ENTRY_RE.finditer(block)
+    }
+
+
+def _parse_web_tools(text: str) -> list[str] | None:
+    marker = "CANONICAL_AGENT_TOOLS"
+    start = text.find(marker)
+    if start < 0:
+        return None
+    opening = text.find("[", start)
+    closing = text.find("]", opening + 1)
+    if opening < 0 or closing < 0:
+        return None
+    return [match.group("tool") for match in _WEB_AGENT_ENTRY_RE.finditer(text[opening + 1 : closing])]
+
+
+def _check_agent_maps(source_text: dict[str, str], violations: list[str]) -> None:
+    go_map = _parse_go_map(source_text.get("go_agents", ""), "CanonicalAgentTool")
+    if go_map is None:
+        violations.append("Go canonical agent map is missing or malformed")
+    else:
+        _compare_exact_set("Go canonical agent slugs", list(go_map), REQUIRED_AGENT_SLUGS, violations)
+
+    web_tools = _parse_web_tools(source_text.get("web_agents", ""))
+    if web_tools is None:
+        violations.append("Web canonical agent list is missing or malformed")
+    elif go_map is not None:
+        _compare_exact_set("Web canonical agent tools", web_tools, tuple(go_map.values()), violations)
+
+    aliases = _parse_go_map(source_text.get("go_aliases", ""), "aliasToSlug")
+    if aliases is None:
+        violations.append("Go alias-to-slug map is missing or malformed")
+    elif go_map is not None:
+        if set(aliases) != set(go_map.values()):
+            missing = sorted(set(go_map.values()) - set(aliases))
+            extra = sorted(set(aliases) - set(go_map.values()))
+            if missing:
+                violations.append("Go alias map missing tools: " + ", ".join(missing))
+            if extra:
+                violations.append("Go alias map extra tools: " + ", ".join(extra))
+        if set(aliases.values()) != set(REQUIRED_AGENT_SLUGS):
+            violations.append("Go alias map values do not cover the exact release slugs")
+        expected_aliases = {tool: slug for slug, tool in go_map.items()}
+        if aliases != expected_aliases:
+            violations.append("Go alias-to-slug values drift from the canonical map")
+
+    query_map = _parse_go_map(source_text.get("go_query_map", ""), "slugToToolName")
+    if query_map is None:
+        violations.append("Go query slug-to-tool map is missing or malformed")
+    elif go_map is not None:
+        if set(query_map) != set(go_map):
+            missing = sorted(set(go_map) - set(query_map))
+            extra = sorted(set(query_map) - set(go_map))
+            if missing:
+                violations.append("Go query map missing slugs: " + ", ".join(missing))
+            if extra:
+                violations.append("Go query map extra slugs: " + ", ".join(extra))
+        if query_map != {slug: go_map[slug] for slug in query_map if slug in go_map}:
+            violations.append("Go query slug-to-tool values drift from the canonical map")
+
+
+def _check_default_off_flags(text: str, violations: list[str]) -> None:
+    for key in DEFAULT_OFF_FLAGS:
+        matches = re.findall(_FLAG_RE_TEMPLATE.format(key=re.escape(key)), text)
+        if len(matches) != 1 or matches[0].lower() != "false":
+            violations.append(f"feature gate {key} default must be false")
+
+
+def _check_web_feature_defaults(source_text: dict[str, str], violations: list[str]) -> None:
+    store = source_text.get("web_store", "")
+    if not re.search(r"(?m)^\s*expertEnabled\s*:\s*false\b", store):
+        violations.append("Web expertEnabled default must be false")
+
+    stream = source_text.get("web_stream", "")
+    stream_refs = re.findall(r"import\.meta\.env\.VITE_STREAM_ENABLED", stream)
+    explicit_true = re.findall(
+        r'import\.meta\.env\.VITE_STREAM_ENABLED\s*===\s*["\']true["\']', stream
+    )
+    if stream_refs and len(stream_refs) != len(explicit_true):
+        violations.append("Web VITE_STREAM_ENABLED must use an explicit true opt-in")
+
+
+def _iter_keys(value: Any) -> Iterable[str]:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if isinstance(key, str):
+                yield key
+            yield from _iter_keys(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_keys(child)
+
+
+def _check_fixture(root: Path, fixture_id: str, relative: Path, violations: list[str]) -> None:
+    payload = _load_json(root, relative, violations)
+    if payload is None:
+        return
+    if not isinstance(payload, dict):
+        violations.append(f"fixture {fixture_id} must contain a JSON object")
+        return
+    forbidden = sorted(set(_iter_keys(payload)) & FORBIDDEN_RAW_FIELDS)
+    if forbidden:
+        violations.append(
+            f"fixture {fixture_id} contains raw payload field: {', '.join(forbidden)}"
+        )
+
+
+def _check_fixtures(root: Path, manifest: dict[str, Any] | None, violations: list[str]) -> None:
+    if manifest is None:
+        return
+    fixtures = manifest.get("fixtures")
+    if not isinstance(fixtures, list):
+        return
+    for fixture_id in fixtures:
+        if not isinstance(fixture_id, str):
+            # validate_manifest reports this without echoing the value.
+            continue
+        paths = FIXTURE_PATHS.get(fixture_id)
+        if paths is None:
+            continue
+        for relative in paths:
+            _check_fixture(root, fixture_id, relative, violations)
+
+
+def _load_manifest(root: Path, violations: list[str]) -> dict[str, Any] | None:
+    raw = _read_bytes(root, MANIFEST_REL, violations)
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        violations.append("invalid compatibility manifest JSON")
+        return None
+    violations.extend(validate_manifest(value))
+    return value if isinstance(value, dict) else None
+
+
+def _sanitize_failure(message: str) -> str:
+    compact = " ".join(str(message).split())
+    if len(compact) > MAX_FAILURE_LENGTH:
+        return compact[: MAX_FAILURE_LENGTH - 1] + "…"
+    return compact
+
+
+def check(root: Path) -> list[str]:
+    """Return bounded, deterministic violations for a checkout."""
+
+    root = root.resolve()
+    violations: list[str] = []
+    manifest = _load_manifest(root, violations)
+    _check_fixtures(root, manifest, violations)
+
+    source_text: dict[str, str] = {}
+    for name, relative in SCOPED_FILES.items():
+        text = _read_text(root, relative, violations)
+        if text is not None:
+            source_text[name] = text
+
+    _check_agent_maps(source_text, violations)
+    if "feature_config" in source_text:
+        _check_default_off_flags(source_text["feature_config"], violations)
+    _check_web_feature_defaults(source_text, violations)
+
+    # Keep output bounded even if a malformed checkout causes several related
+    # checks to fail at once. The full payloads are never included.
+    return [_sanitize_failure(item) for item in violations[:MAX_FAILURE_LINES]]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=ROOT,
+        help="repository root (defaults to the checkout containing this script)",
+    )
+    args = parser.parse_args(argv)
+    violations = check(args.root)
+    if violations:
+        print(FAIL_LINE)
+        for violation in violations:
+            print(f"- {violation}")
+        return 1
+    print(PASS_LINE)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

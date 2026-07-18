@@ -9,7 +9,6 @@ import (
 
 var defaultName string
 var clients map[string]redis.UniversalClient
-var clientDefault map[string]*redis.Client
 
 type Config struct {
 	Type         string   `json:"type" mapstructure:"type"` // cluster, failover,single-node , default is single-node
@@ -44,22 +43,6 @@ func InitFromViper() error {
 	for k := range cfg {
 		cfg[k] = applyEnvRedisPassword(cfg[k])
 		if clients[k], err = NewClient(cfg[k]); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func InitFromViperDefault() error {
-	defaultName = viper.GetString("redis.default")
-	var cfg map[string]Config
-	err := viper.UnmarshalKey("redis.clients", &cfg)
-	if err != nil {
-		return err
-	}
-	clientDefault = make(map[string]*redis.Client)
-	for k := range cfg {
-		if clientDefault[k], err = NewClientDefault(cfg[k]); err != nil {
 			return err
 		}
 	}

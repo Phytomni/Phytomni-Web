@@ -2,6 +2,21 @@ import { afterEach, vi } from "vitest";
 import { createI18n } from "vue-i18n";
 import { config } from "@vue/test-utils";
 import ElementPlus from "element-plus";
+import { Storage } from "happy-dom";
+
+// Node 26 exposes file-backed Web Storage accessors on globalThis. Without a
+// configured storage file they resolve to undefined and shadow happy-dom's
+// window storage objects, so bridge the browser-owned instances explicitly.
+Object.defineProperties(globalThis, {
+  localStorage: {
+    configurable: true,
+    value: new Storage(),
+  },
+  sessionStorage: {
+    configurable: true,
+    value: new Storage(),
+  },
+});
 
 // Global i18n stub — needed when mounting components like LangSwitch
 const i18n = createI18n({

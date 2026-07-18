@@ -9,7 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
@@ -205,9 +205,11 @@ func TestE2E_LogoutAllRevokesOtherDevice(t *testing.T) {
 	// After logout-all (epoch = now): iat=now-120s < epoch-60s=now-60s → revoked.
 	tok2Claims := &middleware.Claims{
 		Username: "bob@x.com",
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
 	}
-	tok2Claims.IssuedAt = time.Now().Add(-2 * time.Minute).Unix()
-	tok2Claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
 	tok2Signed := jwt.NewWithClaims(jwt.SigningMethodHS256, tok2Claims)
 	tok2, err2 := tok2Signed.SignedString([]byte("integration-test-secret"))
 	if err2 != nil {

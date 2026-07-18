@@ -1,0 +1,422 @@
+<template>
+  <div data-testid="chat-composer" class="chat-composer">
+    <div :ref="bindTourInputTarget" class="chat-composer-surface">
+      <div class="phy-composer-frame">
+        <div
+          v-if="fileList.length > 0 && !isSending"
+          class="phy-composer-frame__attachments composer-attachments file-list-container"
+        >
+          <div class="file-list">
+            <div
+              v-for="(file, index) in fileList"
+              :key="index"
+              class="file-item"
+            >
+              <FilesCard
+                :uid="index"
+                :name="file.name"
+                :file-size="file.size"
+                :show-del-icon="true"
+                @delete="emit('remove-file', index)"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-composer-body">
+          <MentionSender
+            :model-value="modelValue"
+            ref="senderRef"
+            :loading="isSending"
+            :disabled="isSending"
+            variant="updown"
+            :auto-size="{ minRows: 1, maxRows: 5 }"
+            :placeholder="t('chat.inputPlaceholder', { symbol: '@' })"
+            :options="rolesTool.map((x) => ({ value: x }))"
+            :trigger-strings="['@']"
+            trigger-split=","
+            :whole="true"
+            submit-type="enter"
+            @update:model-value="emit('update:modelValue', $event)"
+            @submit="emit('submit')"
+            @select="emit('select', $event)"
+            @search="emit('search', $event)"
+            @keydown.enter.capture="onComposerEnterCapture"
+          >
+            <template #prefix />
+            <template #action-list />
+          </MentionSender>
+        </div>
+
+        <div class="phy-composer-frame__actions composer-toolbar">
+          <div
+            v-if="showModeSelector || showAgentPicker"
+            class="composer-context-controls"
+          >
+            <ChatModeSelector
+              v-if="showModeSelector"
+              :model-value="chatMode"
+              :expert-enabled="expertModeEnabled"
+              class="composer-mode-selector"
+              @update:model-value="emit('update:chatMode', $event)"
+            />
+            <ChatAgentPicker
+              v-if="showAgentPicker"
+              :options="pickerOptions"
+              :roles-loading="rolesLoading"
+              :selected-agent="selectedAgent"
+              :disabled="isSending"
+              @select="emit('command', $event)"
+              @clear="emit('clear-agent')"
+            />
+          </div>
+
+          <div class="composer-utility-actions">
+            <el-upload
+              ref="uploadRef"
+              class="upload-demo"
+              :limit="10"
+              accept=".pdf,.doc,.xlsx,.ppt,.txt,.png"
+              :show-file-list="false"
+              :auto-upload="false"
+              :disabled="isSending"
+              :on-change="(file) => emit('file-change', file)"
+              multiple
+              action="#"
+            >
+              <template #trigger>
+                <el-tooltip :content="t('chat.uploadFile')" placement="top">
+                  <el-button
+                    circle
+                    class="composer-tool-button"
+                    :disabled="isSending"
+                    :aria-label="t('chat.uploadFile')"
+                  >
+                    <el-icon><Paperclip /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </template>
+            </el-upload>
+            <el-dropdown
+              v-if="hasMessages && rolesTool.length > 0"
+              placement="top-start"
+              trigger="click"
+              :disabled="isSending"
+              @command="emit('command', $event)"
+            >
+              <el-button
+                circle
+                class="composer-tool-button"
+                :disabled="isSending"
+                :aria-label="t('chat.agentPicker.label')"
+              >
+                <el-icon><Menu /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item
+                    v-for="(item, index) in rolesTool"
+                    :key="index"
+                    :command="'@' + item + ','"
+                    >{{ item }}</el-dropdown-item
+                  >
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+
+          <div class="composer-primary-action">
+            <div v-if="isSending" class="stop-btn">
+              <el-tooltip :content="t('chat.abortTooltip')" placement="top">
+                <el-button
+                  circle
+                  class="composer-stop-button"
+                  :aria-label="t('chat.abortAriaLabel')"
+                  @click="emit('stop')"
+                >
+                  <span class="stop-glyph" aria-hidden="true" />
+                </el-button>
+              </el-tooltip>
+            </div>
+            <div v-else class="send-btn">
+              <el-tooltip
+                :content="
+                  canSubmit
+                    ? t('chat.sendAriaLabel')
+                    : t('chat.inputPlaceholderTip')
+                "
+                placement="top"
+              >
+                <span class="composer-tooltip-anchor">
+                  <el-button
+                    circle
+                    class="composer-send-button"
+                    :class="{ 'phy-btn-primary': canSubmit }"
+                    :disabled="!canSubmit"
+                    :aria-label="t('chat.sendAriaLabel')"
+                    @click="emit('submit')"
+                  >
+                    <el-icon><Promotion /></el-icon>
+                  </el-button>
+                </span>
+              </el-tooltip>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, unref } from "vue";
+import type { VNodeRef } from "vue";
+import { useI18n } from "vue-i18n";
+import { MentionSender, FilesCard } from "vue-element-plus-x";
+import ChatModeSelector from "@/components/ChatModeSelector.vue";
+import ChatAgentPicker, {
+  type ChatAgentPickerOption,
+} from "./ChatAgentPicker.vue";
+import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
+import type { ChatComposerHandle, UploadFile } from "../types";
+import { guardEnterSubmit } from "../utils/guardEnterSubmit";
+
+const props = defineProps<{
+  modelValue: string;
+  isSending: boolean;
+  chatMode: "instant" | "expert";
+  expertModeEnabled: boolean;
+  showModeSelector: boolean;
+  fileList: UploadFile[];
+  rolesTool: string[];
+  rolesLoading: boolean;
+  hasMessages: boolean;
+  selectedAgent: string;
+  pickerOptions: ChatAgentPickerOption[];
+  setTourInputTarget?: (el: HTMLElement | null) => void;
+}>();
+
+const emit = defineEmits<{
+  "update:modelValue": [value: string];
+  "update:chatMode": [mode: "instant" | "expert"];
+  submit: [];
+  stop: [];
+  select: [option: unknown];
+  search: [query: string];
+  command: [cmd: string];
+  "file-change": [file: unknown];
+  "remove-file": [index: number];
+  "clear-agent": [];
+}>();
+
+const { t } = useI18n();
+const senderRef = ref<{
+  openHeader?: () => void;
+  closeHeader?: () => void;
+  popoverVisible?: boolean;
+} | null>(null);
+const uploadRef = ref();
+
+const showAgentPicker = computed(() => props.chatMode === "instant");
+const canSubmit = computed(
+  () => Boolean(props.modelValue.trim()) && !props.isSending
+);
+
+const popoverVisible = computed(() =>
+  unref(senderRef.value?.popoverVisible as boolean | undefined)
+);
+
+const onComposerEnterCapture = (e: KeyboardEvent) => {
+  guardEnterSubmit(e, popoverVisible.value);
+};
+
+const bindTourInputTarget: VNodeRef = (ref) => {
+  const el = (ref as Element | null) ?? null;
+  props.setTourInputTarget?.(el as HTMLElement | null);
+};
+
+defineExpose<ChatComposerHandle>({
+  openHeader: () => senderRef.value?.openHeader?.(),
+  closeHeader: () => senderRef.value?.closeHeader?.(),
+  get popoverVisible() {
+    return popoverVisible.value;
+  },
+});
+</script>
+
+<style scoped>
+.chat-composer {
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: var(--phy-space-8) var(--phy-space-16)
+    calc(var(--phy-space-8) + env(safe-area-inset-bottom, 0px));
+}
+
+.chat-composer-surface {
+  position: relative;
+  min-height: var(--phy-control-height-primary);
+}
+
+.phy-composer-frame {
+  border: 1px solid var(--phy-color-border);
+  border-radius: var(--phy-radius-lg);
+  background: var(--phy-color-bg-elevated);
+  box-shadow: var(--phy-shadow-soft);
+  padding: 10px 12px;
+  transition: border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    box-shadow var(--phy-motion-fast) var(--phy-motion-ease-out);
+}
+
+.phy-composer-frame:focus-within {
+  border-color: var(--phy-color-focus);
+  box-shadow: var(--phy-shadow-soft), 0 0 0 2px var(--phy-color-focus);
+}
+
+.phy-composer-frame__attachments {
+  margin-bottom: 8px;
+}
+
+.phy-composer-frame__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chat-composer-body {
+  position: relative;
+  min-height: var(--phy-control-height-primary);
+}
+
+.chat-composer-body :deep(.el-sender) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.chat-composer-body :deep(.el-sender-content) {
+  padding: var(--phy-space-4) var(--phy-space-4) 0;
+}
+
+.chat-composer-body :deep(.el-sender-updown-wrap) {
+  display: none !important;
+}
+
+.chat-composer .chat-composer-body :deep(.el-textarea__inner) {
+  min-height: 40px;
+  margin-bottom: 0 !important;
+  padding: var(--phy-space-8) var(--phy-space-4);
+  background-color: transparent !important;
+  color: var(--phy-color-text);
+  box-shadow: none;
+  line-height: 1.5;
+}
+
+.composer-toolbar {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--phy-space-8);
+}
+
+.composer-context-controls,
+.composer-utility-actions,
+.composer-primary-action {
+  display: flex;
+  align-items: center;
+  gap: var(--phy-space-8);
+}
+
+.composer-context-controls {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.composer-utility-actions {
+  gap: var(--phy-space-4);
+}
+
+.composer-tooltip-anchor {
+  display: inline-flex;
+}
+
+.composer-tool-button,
+.composer-send-button,
+.composer-stop-button {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: var(--phy-radius-pill);
+}
+
+.composer-tool-button {
+  --el-button-bg-color: var(--phy-color-fill-subtle);
+  --el-button-border-color: var(--phy-color-fill-subtle);
+  --el-button-text-color: var(--phy-color-text-secondary);
+  --el-button-hover-bg-color: var(--phy-color-primary-soft);
+  --el-button-hover-border-color: var(--phy-color-primary-soft);
+  --el-button-hover-text-color: var(--phy-color-action-text);
+}
+
+.composer-send-button:disabled {
+  --el-button-disabled-bg-color: var(--phy-color-fill-subtle);
+  --el-button-disabled-border-color: var(--phy-color-fill-subtle);
+  --el-button-disabled-text-color: var(--phy-color-text-disabled);
+}
+
+.composer-stop-button {
+  --el-button-bg-color: var(--phy-color-text);
+  --el-button-border-color: var(--phy-color-text);
+  --el-button-text-color: var(--phy-color-bg-elevated);
+  --el-button-hover-bg-color: var(--phy-color-text-secondary);
+  --el-button-hover-border-color: var(--phy-color-text-secondary);
+  --el-button-hover-text-color: var(--phy-color-bg-elevated);
+}
+
+.stop-glyph {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.file-list-container .file-list {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+  flex-wrap: wrap;
+  padding: 4px;
+}
+
+.file-list-container .file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.send-btn,
+.stop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  .composer-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .composer-context-controls {
+    grid-column: 1 / -1;
+  }
+
+  .composer-context-controls :deep(.picker-combobox-wrap) {
+    width: min(168px, calc(100vw - var(--phy-space-32)));
+  }
+}
+</style>

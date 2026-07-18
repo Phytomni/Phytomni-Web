@@ -68,8 +68,10 @@ same gates CI runs:
 
 This sets `core.hooksPath` to `.githooks/`, so the pre-commit hook will run
 `scripts/scan_secrets.py --staged` (catches literal credentials) and the
-full G-1 / G0 / G1..G12 gates from `scripts/validate_web_local.sh`
-(vue-tsc, eslint, vite build, gofmt, go vet, go build, go test, vitest)
+full G-1 / G0 / G1..G17 gates from `scripts/validate_web_local.sh`
+(vue-tsc, eslint, vite build, gofmt, go vet, go build, go test, vitest, strict
+i18n, visual contract, A2UI readiness, Bot/Web compatibility, and activation
+evidence)
 before letting the commit land.
 
 The hook is opt-in (no auto-install on clone) by design — it keeps a

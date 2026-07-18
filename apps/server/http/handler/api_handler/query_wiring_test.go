@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"phytomni-server/common/i18n"
@@ -66,6 +67,43 @@ func TestApiQuery_DisabledGatewayWiring(t *testing.T) {
 	}
 	if parsed.Message == "" {
 		t.Errorf("expected a non-empty user message, got empty")
+	}
+}
+
+func TestApiQueryRejectsOverlongInteropModeBeforeServiceDispatch(t *testing.T) {
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = nil
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField("query", "research query"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("tool", "InSilicoResearchAgent"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("interop_mode", strings.Repeat("x", rxBot.MaxInteropModeLength+1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &body)
+	c.Request.Header.Set("Content-Type", mw.FormDataContentType())
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	c.Set("username", "alice")
+	i18n.Localize()(c)
+
+	NewHandler().Query(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("overlong interop_mode status=%d body=%s, want 400", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), strings.Repeat("x", rxBot.MaxInteropModeLength)) {
+		t.Fatalf("overlong mode echoed in response: %s", w.Body.String())
 	}
 }
 

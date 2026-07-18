@@ -1,169 +1,162 @@
-# Phytomni Web — `0.1.1` → `0.1.2` Upgrade Runbook
+# Phytomni Web — `0.1.2` → `0.1.3` Upgrade Runbook
 
-**This is the only document ops needs to upgrade a production already on `0.1.1`.**
-It is self-contained: every step, SQL statement, config key, smoke check, and
-rollback is here. You do **not** need to read the `repo-reorg` manual (that one
-records how production *reached* `0.1.1`, and is now historical).
+**This is the only active procedure for production already running `0.1.2`.**
 
-> **Are you on `0.1.1`?** Confirm the running stack has: `apps/`-layout binary
+Operators own backups, database changes, service restarts, smoke checks, and
+rollback. This document records the Web-side release contract; it does not
+grant permission to change Phytomni-Bot or production operations code.
+
+> **Are you on `0.1.2`?** Confirm the running stack has the `apps/` layout,
 > `phytomni-server` on `:8080`, the `phytomni` MySQL database with unprefixed
-> plural tables (`users`, `question_agent_logs`, …), and `/api/v1/*` routes. If
-> any of those are missing, production is **not** on `0.1.1` — do the
-> [`history/repo-reorg-cutover.md`](history/repo-reorg-cutover.md) cutover
-> first, then return here. See [`README.md`](README.md) for the version map.
+> plural tables, the `phytomni-server` connection-registry key, and `/api/v1/*`
+> routes. If any prerequisite is missing, stop and complete the archived
+> cutover/upgrade procedure first.
 
-**Nature of this release.** `0.1.2` is a **feature + hardening** release. Unlike
-`0.1.1`, it needs **no database/table rename and no port move**. Everything is
-**additive or dark-launched** — with no operator action beyond the deploy, the
-runtime behavior is byte-identical to `0.1.1`. There is exactly **one required
-data migration** (the permission-key rename, §3.1) and it must ship *with* the
-frontend or the admin UI breaks. Full commit-level detail:
-[`CHANGELOG.md`](../../CHANGELOG.md) under `0.1.2`.
+> **Release boundary.** Web local gates prove repository readiness only. Bot
+> owner review, Bot CI, staging/live smoke evidence, and operations sign-off
+> remain `External Pending` until their owners return an acceptance packet.
 
----
+## 0. Conventions and contents
 
-## 0. Conventions
-
-- **Secrets are placeholders** (`<JWT_SECRET>`, `<REDIS_PASSWORD>`, …) —
-  substitute out-of-band on the server; never commit or paste real values.
-- **(verify on-server)** marks facts that live only on the production host.
-- **Wording.** "the current stack" = `0.1.1` running today; "this release" =
-  `0.1.2`.
+- Secrets are placeholders (`<JWT_SECRET>`, `<REDIS_PASSWORD>`, …). Substitute
+  them out-of-band and never paste real values into this document or a ticket.
+- `(verify on-server)` marks a fact that only the production operator can prove.
+- “Current stack” means the deployed `0.1.2`; “this release” means `0.1.3`.
+- Do not run the development `migrate all`/AutoMigrate path against production.
+  Production DDL is additive and operator-controlled.
+- Keep the 0.1.2 binary/dist and a database backup until smoke verification is
+  complete.
 
 **Contents.**
-1. [What changed](#1-what-changed-vs-011)
-2. [Configuration surface](#2-configuration-surface-appyml--env)
-3. [Operator actions (DB + coordination)](#3-operator-actions-db--coordination)
-4. [Deploy sequence](#4-deploy-sequence)
-5. [Verification & smoke](#5-verification--smoke)
-6. [Rollback](#6-rollback)
-7. [Dark-launch activation gates](#7-dark-launch-activation-gates-later--when-bot-is-ready)
 
----
+1. [What changed](#1-what-changed-vs-012)
+2. [Preflight](#2-preflight-and-backup)
+3. [Configuration](#3-configuration-surface)
+4. [Operator actions](#4-operator-actions-and-schema)
+5. [Deploy sequence](#5-deploy-sequence)
+6. [Verification and smoke](#6-verification-and-smoke)
+7. [Rollback](#7-rollback)
+8. [Activation gates](#8-dark-launch-activation-gates)
 
-## 1. What changed vs `0.1.1`
+## 1. What changed vs `0.1.2`
 
-| Area | `0.1.1` | `0.1.2` | Operator action |
+| Area | `0.1.2` | `0.1.3` | Operator action |
 |---|---|---|---|
-| Permission-gate identifiers | `tool_names` rows hold Chinese labels | Frontend matches **English** identifiers | **REQUIRED** — 8-row `UPDATE`, ship with frontend (§3.1) |
-| Expert chat mode | not present | Selector + `mode` column, **dark** (`bot.expert_enabled=false`) | Optional — column + flag only when enabling (§3.2) |
-| Chat streaming | blocking only | AG-UI SSE spine, **dark** (`bot.stream_enabled=false`) | None at deploy; gated flip later (§7) |
-| Secrets | in `app.yml` | may inject `PHYTOMNI_JWT_SECRET` / `_DB_DSN` / `_REDIS_PASSWORD` from env | Optional (§2) |
-| Redis pool | go-redis defaults | `pool_size` / `min_idle_conns` tunable | Optional (§2) |
-| Gene-example serving | Bot relay | obsfs FUSE mount (`gene_obsfs_path`) + new public image route | None if `gene_obsfs_path` already set; else relay fallback (§2) |
-| Server-task HTTP surface | present (unused) | **removed** | Ops drops the nginx `/v1/nky/server/` block on next window |
-| Email download link | live | returns **410 Gone** (authed relay intact) | None — verify in smoke |
-| Cron reconcilers | plain | panic-recovery + overlap-guard; admin `cron-entries` endpoint | None |
-| JWT verification | HS256 | HS256 **pinned** (alg-confusion blocked) | None — existing tokens still valid |
-| Auth revocation reads | two Redis calls | pipelined into one round-trip | None — fail-open unchanged |
-| i18n | partial | backend messages + templates routed through i18n; G13 gate | None |
+| Bot run identity | Legacy/task-compatible identity | Umbrella `run_id` stored as `bot_run_id` | Apply the additive projection migration before new traffic (§4.2) |
+| Bot reports | Legacy answer/status columns | Sanitized revisioned projection with CAS persistence | Apply projection columns and index; keep legacy columns (§4.2) |
+| History | Legacy Web rows | Projection-first read with legacy fallback; dual-read is optional | Keep `history_dual_read=false` until external evidence (§8.4) |
+| A2UI actions | No production action uplink | Typed, owner-scoped action relay | Keep `bot.a2ui_actions_enabled=false`; enable only after acceptance (§8.1) |
+| Remote product surfaces | Core Web agents only | Research, Design, and Network compatibility surfaces | Keep each remote flag false until resolver/attachment/permission evidence (§8.2) |
+| Interop | No browser-facing capability discovery | Allowlisted capability/provenance discovery | Keep `bot.interop_enabled=false` until security and external review (§8.3) |
+| Expert and AG-UI streaming | Dark in `0.1.2` | Compatibility and lifecycle hardening | Keep both flags false unless their existing acceptance rows are complete |
+| Frontend | Existing chat/workspace experience | Responsive, visual, accessibility, localization, and legal convergence | Deploy the matching Web frontend with the Go service |
+| Local release evidence | G13 baseline | G13, G14 visual, G15 A2UI, G16 compatibility, G17 activation evidence | Record local output; do not treat it as external acceptance |
 
-None of the "None" rows change runtime behavior at deploy — they are code-internal
-or dark-launched. The only rows that gate the deploy are §3.1 (required) and, if
-you choose to turn Expert on, §3.2.
+The release is additive when every new flag remains false. Existing blocking
+chat, legacy history, ownership checks, and rollback columns remain available.
 
----
+## 2. Preflight and backup
 
-## 2. Configuration surface (`app.yml` + env)
+Complete these checks on the production host before changing the database or
+stopping the service. A failed check is a stop condition.
 
-All new keys are **defaulted safe** — an unchanged `0.1.1` `app.yml` boots `0.1.2`
-with identical behavior. The full current-state reference for **every** key is
-[`configuration.md`](configuration.md); this section covers only the `0.1.2`
-*additions*.
+### 2.1 Confirm the running release (verify on-server)
 
-### 2.1 Environment-variable secret injection (optional)
-
-Three secrets may be injected from the environment instead of `app.yml`:
-
-| Env var | Overrides | Mechanism |
-|---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | `viper.BindEnv` |
-| `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
-| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
-
-**Unset ⇒ the `app.yml` value wins ⇒ behavior byte-identical.** Set these only to
-keep secrets out of the file. Do **not** set an empty value — an empty
-`PHYTOMNI_JWT_SECRET` overrides the file with a blank secret.
-
-### 2.2 Redis connection-pool knobs (optional)
-
-```yaml
-redis:
-  clients:
-    web:
-      # pool_size: 0        # 0 = go-redis default (10 * CPU cores)
-      # min_idle_conns: 0   # 0 = go-redis default
+```bash
+git rev-parse --verify HEAD
+./phytomni-server --version 2>/dev/null || true
+ss -ltnp | grep ':8080'
+mysql -e "SHOW DATABASES LIKE 'phytomni';"
+mysql phytomni -e "SHOW TABLES LIKE 'question_agent_logs';"
+curl -fsS http://127.0.0.1:8080/readyz
 ```
 
-Leave unset (or `0`) for the go-redis defaults — no behavior change.
+Record the running SHA and confirm that the service is the production `0.1.2`
+stack described in the opening block. Do not infer the deployed version from a
+local checkout.
 
-### 2.3 `gene_obsfs_path` (verify)
+### 2.2 Preserve rollback artifacts (verify on-server)
 
-```yaml
-gene_obsfs_path: ""   # obsfs FUSE mount root for gene-example data; empty ⇒ Bot relay fallback
-```
+1. Create a timestamped backup of the `phytomni` database using the approved
+   operations procedure.
+2. Copy the currently deployed 0.1.2 `phytomni-server` binary, frontend `dist/`,
+   and configuration template to the release directory.
+3. Confirm the backup can be read and the previous binary starts in a staging
+   or isolated rollback check.
 
-If your `0.1.1` config already sets this (the obsfs migration predates `0.1.2`
-in some deploys), no action. If empty, gene list/detail/images fall back to the
-Bot relay (unchanged behavior). Set it to the mount root (e.g.
-`/obs/<bucket>/.../gene-examples`) to serve from obsfs.
+Never record credentials, DSNs, tokens, cookies, or real biological data in the
+release evidence.
 
-### 2.4 Dark-launch flags (leave OFF at deploy)
+## 3. Configuration surface
+
+The complete key reference is [`configuration.md`](configuration.md). Preserve
+existing `proxy_enabled`, database, Redis, JWT, OBS, and cron values. The
+following Bot switches must remain false for the initial 0.1.3 deployment:
 
 ```yaml
 bot:
-  expert_enabled: false    # Expert routing mode — see §3.2 / §7.1
-  stream_enabled: false    # AG-UI SSE streaming — see §7.2
+  expert_enabled: false
+  stream_enabled: false
+  a2ui_actions_enabled: false
+  interop_enabled: false
+  research_enabled: false
+  design_enabled: false
+  network_enabled: false
+  history_dual_read: false
 ```
 
-Both default `false`. Keep them off for the `0.1.2` deploy — flipping them is a
-**separate, Bot-coordinated** step (§7), not part of this upgrade.
+`history_dual_read=false` keeps history on the legacy/projection fallback path
+without an active Bot history read. It is an observation/compatibility switch,
+not a migration substitute. Do not add a flag or flip one to true because an
+endpoint exists; the matching acceptance row and owner evidence are required.
 
----
+## 4. Operator actions and schema
 
-## 3. Operator actions (DB + coordination)
+### 4.1 Inspect the existing columns and index
 
-### 3.1 Permission-key rename — REQUIRED, ship WITH the frontend
-
-> **⚠️ Operator-only, and the local gate cannot catch a mistake here.** `0.1.2`
-> translated the 8 UI permission **identifiers** from Chinese to English. These
-> are **not** display copy — the SPA matches them verbatim against the
-> backend-supplied `permission_list` (built from the `tool_names` table via
-> `hasPermission(p) === permission_list.includes(p)`). If the new frontend is
-> deployed while the `tool_names` rows still hold the Chinese values, **every
-> `includes()` check returns `false` → all permission-gated admin/nav menu items
-> silently disappear for every user.** The vitest fixtures were updated in
-> lockstep, so the gate is green regardless of production data.
-
-Run this `UPDATE` against the production `phytomni` DB **in the same window as the
-`0.1.2` frontend deploy** (idempotent — the `WHERE` clause no-ops once renamed):
-
-```sql
-USE phytomni;
-UPDATE tool_names SET tool_name = 'User management'            WHERE tool_name = '用户管理';
-UPDATE tool_names SET tool_name = 'System monitor'             WHERE tool_name = '系统监控';
-UPDATE tool_names SET tool_name = 'Role permission assignment' WHERE tool_name = '角色权限分配';
-UPDATE tool_names SET tool_name = 'Global config'             WHERE tool_name = '全局策略配置';
-UPDATE tool_names SET tool_name = 'Admin management'          WHERE tool_name = '管理员管理';
-UPDATE tool_names SET tool_name = 'History'                   WHERE tool_name = '历史记录';
-UPDATE tool_names SET tool_name = 'Profile management'        WHERE tool_name = '个人资料管理';
-UPDATE tool_names SET tool_name = 'Cloud storage'             WHERE tool_name = '网盘空间';
+```bash
+mysql phytomni -e "SHOW COLUMNS FROM question_agent_logs;"
+mysql phytomni -e "SHOW INDEX FROM question_agent_logs;"
 ```
 
-**Rollback:** if you must serve the pre-`0.1.2` frontend again, reverse the
-mapping (English → Chinese) in the same table. Frontend and this data always move
-together.
+Before the new binary receives traffic, confirm these Web columns exist:
 
-### 3.2 Expert `mode` column — only if enabling Expert now
+- `bot_run_id`
+- `image_paths`
+- `mode`
+- `bot_projection_json`
+- `bot_report_revision`
 
-Expert ships **dark**; Instant works with no action. Skip this section unless you
-are turning Expert on in the same window (and only after the Bot endpoint is
-ready — §7.1). Adding the column early is harmless (additive, default-covered):
+Also confirm the index `idx_question_agent_logs_bot_report_revision` exists. If
+any item is absent, apply the corresponding idempotent additive command below
+and repeat the inspection.
+
+### 4.2 Mandatory additive projection migration
+
+From the repository root of the deployed release, run:
+
+```bash
+cd apps/server
+go run main.go migrate add-bot-projection
+```
+
+The command is idempotent and applies these statements in order:
 
 ```sql
 ALTER TABLE question_agent_logs
-  ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'instant';
+  ADD COLUMN bot_projection_json LONGTEXT NULL
+  COMMENT 'sanitized Bot run projection' AFTER bot_run_id;
+ALTER TABLE question_agent_logs
+  ADD COLUMN bot_report_revision BIGINT NOT NULL DEFAULT -1
+  COMMENT 'last Bot report revision' AFTER bot_projection_json;
+CREATE INDEX idx_question_agent_logs_bot_report_revision
+  ON question_agent_logs(bot_report_revision);
 ```
+
+This migration must complete successfully before the 0.1.3 Go service starts
+serving traffic. It is additive: do not drop, rename, or rewrite legacy answer,
+status, task, server, artifact, or identity columns. The compatibility reference
+contains the same [projection schema and precedence rules](../reference/bot-web-compatibility.md#old-and-new-column-mapping).
 
 Or the idempotent CLI (safe to re-run; no-op if the column already exists):
 
@@ -179,98 +172,164 @@ Existing rows get `'instant'`. Until Expert is fully activated (§7.1), the SPA
 disables the Expert pill and the gateway returns **503** for any `mode=expert`
 request — no Bot call.
 
----
+### 4.3 Mode-column preflight
 
-## 4. Deploy sequence
+The production comparison base contains an idempotent `add-mode` migration
+command, while the release branch adds `add-bot-projection` in the same CLI
+subcommand area. During the branch merge, resolve any `migrate.go` conflict by
+retaining **both** subcommands, then verify the merged binary exposes them. The
+target `main` line includes an idempotent `add-mode` migration command for
+the 0.1.2 Expert selector. If the inspection in §4.1 shows that `mode` is
+missing, run the command exposed by the merged target binary:
 
-`0.1.2` is a rebuild + redeploy — **no DB/table rename, no port change**. The
-frontend and backend ship together (the frontend's English permission identifiers
-require §3.1 in the same window).
+```bash
+cd apps/server
+go run main.go migrate add-mode
+```
 
-1. **Back up** — MySQL dump of `phytomni`, the live `dist`, and `config/app.yml`.
-2. **Build** the new Go binary and frontend `dist`:
+If the merged binary does not expose `add-mode`, stop and use the operator's
+approved equivalent additive DDL; do not invent a destructive migration. Repeat
+§4.1 after the command and keep `bot.expert_enabled=false`.
 
-   ```bash
-   cd apps/server && GOTOOLCHAIN=auto go build -o phytomni-server .
-   cd ../web && npm run build
-   ```
+## 5. Deploy sequence
 
-3. **Apply §3.1** (the `tool_names` `UPDATE`) against production `phytomni`.
-   If enabling Expert, also apply §3.2.
-4. **Deploy** the new binary (restart the `phytomni-server` service) and copy the
-   new `dist` into the nginx web root; `nginx -t && systemctl reload nginx`.
-   Config additions from §2 are optional — an unchanged `app.yml` is fine.
-5. **Smoke** (§5). If green, done.
+1. Confirm the backup and rollback artifacts from §2.
+2. Apply the `mode` preflight and the mandatory projection migration from §4.
+3. Build or copy the 0.1.3 Go binary and matching frontend `dist/` from the
+   reviewed release SHA.
+4. Preserve the production config, explicitly retaining all flags in §3 as
+   false and preserving `proxy_enabled`.
+5. Stop and start the service using the approved operations procedure; do not
+   change the public port or database/registry key.
+6. Check `/readyz` and service logs for migration, configuration, or Bot relay
+   errors before allowing normal traffic.
+7. Perform the smoke checks in §6.
 
-> **Order note.** §3.1 and the frontend deploy belong in the **same window**.
-> Applying the `UPDATE` a little early is safe (the old frontend sends Chinese
-> identifiers, which still match until you swap `dist`); the failure mode is
-> deploying the new `dist` *without* the `UPDATE`.
+Do not flip a feature flag during the deploy window. A flag change is a separate
+operator action that requires the evidence gates in §8.
 
----
+## 6. Verification and smoke
 
-## 5. Verification & smoke
+Record the command, timestamp, release SHA, and sanitized result for each check.
 
-Baseline (unchanged from `0.1.1`): `GET /readyz` 200; login via
-`POST /api/v1/auth/sessions`; a chat round-trip through
-`POST /api/v1/conversations/0/messages`. Then the `0.1.2` additions:
+### 6.1 Core Web behavior
 
-- **Permission gate** — a permission-gated nav item (e.g. **User management**) is
-  visible for an admin **after** the §3.1 `UPDATE`. If it is missing, the rename
-  did not run — this is the one failure that the local gate cannot catch.
-- **Gene images** — `GET /api/v1/gene-images/<gene>/<file>` returns a `200` image
-  when `gene_obsfs_path` is mounted; a traversal attempt (`..%2F…`) returns
-  `400`/`404`.
-- **Cron inspection** — `GET /api/v1/admin/cron-entries` returns `200` for an
-  admin, `403` for a non-admin.
-- **Email download** — the legacy unauthenticated email download URL returns
-  `410 Gone`; authenticated relay downloads still work.
-- **Expert stays dark** (if not enabled) — the Expert pill is disabled and any
-  `mode=expert` request returns `503`.
-- **Streaming stays dark** — chat uses the blocking path; no SSE frames.
+```bash
+curl -fsS http://127.0.0.1:8080/readyz
+```
 
----
+Using a non-production test account, verify:
 
-## 6. Rollback
+1. Login and authenticated route access succeed.
+2. Blocking chat submission returns the existing Web response shape.
+3. A conversation reload returns its legacy history and does not expose another
+   user's row.
+4. Async Analyst and DeepGenome reconciliation returns the latest non-empty
+   report and does not replace it with an empty revision.
+5. Validated artifacts/downloads remain owner-scoped; malformed or private Bot
+   paths are not exposed.
 
-`0.1.2` has **no irreversible step** (no table rename). To roll back to `0.1.1`:
+### 6.2 Dark-launch behavior
 
-1. Redeploy the previous `phytomni-server` binary and the previous `dist`;
-   reload nginx.
-2. **Reverse §3.1** — flip the `tool_names` rows English → Chinese (the previous
-   frontend matches the Chinese identifiers). Frontend and this data always move
-   together.
-3. The `mode` column (if added in §3.2), the unique/pipelined Redis changes, and
-   the JWT alg-pin are all additive/harmless to the `0.1.1` binary — leave them.
-   Drop the `mode` column only if you want the schema pristine:
-   `ALTER TABLE question_agent_logs DROP COLUMN mode;`.
+With every new flag still false, verify:
 
-**Frontend-only rollback:** restore the previous `dist` **and** reverse §3.1
-together, then reload nginx.
+- A2UI action submission remains disabled according to the documented Web
+  response and does not call Bot.
+- Interop capability discovery remains hidden/disabled and returns no raw Bot
+  payload.
+- Research, Design, and Network remote surfaces do not call Bot when their
+  local flags are false.
+- AG-UI SSE remains off and blocking chat is still the active path.
+- Expert mode remains unavailable unless the existing accepted Expert gate is
+  separately reviewed.
 
----
+Do not use a 404/403/503 response alone as acceptance evidence; capture the
+owner/CI/staging/live result required by the activation matrix.
 
-## 7. Dark-launch activation gates (later — when Bot is ready)
+### 6.3 Local release evidence
 
-Expert and streaming ship dark in `0.1.2`. Turning either on is a **separate,
-Bot-coordinated** operation — not part of this upgrade. Each flip needs a Bot-side
-capability **first**, documented authoritatively in
-[`operations.md`](operations.md) §11. Summary:
+The Web repository gate is run before merge, not on the production host:
 
-### 7.1 Expert routing (`bot.expert_enabled`)
+```bash
+GOCACHE=/tmp/phytomni-web-doc-gocache \
+GOTMPDIR=/tmp/phytomni-web-doc-gotmp \
+./scripts/validate_web_local.sh
+```
 
-Order: (1) Bot serves `POST /v1/query/route`; (2) add the `mode` column (§3.2);
-(3) set `bot.expert_enabled=true` and restart. Rollback = flip the flag back
-(instant). Expert is blocking — it never streams.
+G13–G17 passing is local Web evidence. It does not mark RC-WEB-001 through
+RC-WEB-007, RC-LIVE-001, or operations acceptance as passed.
 
-### 7.2 AG-UI SSE streaming (`bot.stream_enabled` + `VITE_STREAM_ENABLED`)
+## 7. Rollback
 
-> **⚠️ Load-bearing precondition.** The Bot must persist the **real accumulated
-> answer** in its run record (not the `"[streamed]"` placeholder) **before** the
-> flag flips, or reloading a streamed conversation overwrites the real answer.
+If `/readyz`, core smoke, or data correctness fails:
 
-Order: (1) Bot ships real-answer persistence; (2) flip `bot.stream_enabled=true`
-**and** the frontend `VITE_STREAM_ENABLED` in lockstep; (3) smoke a streamed chat
-+ reload to confirm the persisted answer survives. Rollback = flip both flags back
-(instant; the blocking path is unchanged underneath). Streaming is Instant×chat
-only — Expert and analyst/deep_genome async stay non-streaming.
+1. Stop the 0.1.3 service using the approved operations procedure.
+2. Restore the 0.1.2 Go binary, frontend `dist/`, and config from §2.2.
+3. Keep `bot_projection_json`, `bot_report_revision`, and their index in place;
+   the 0.1.2 binary can ignore additive columns.
+4. Keep all new flags false and preserve the legacy `answer`, `status`, task,
+   server, and artifact columns.
+5. Restart 0.1.2, check `/readyz`, and repeat the core smoke checks.
+6. Preserve the failed 0.1.3 logs and migration result for diagnosis, without
+   including secrets or user/biological data.
+
+Do not drop the projection columns or restore a pre-migration schema as part of
+rollback. A later forward deployment can reuse the additive schema.
+
+## 8. Dark-launch activation gates
+
+All rows below remain **External Pending** until an authorized acceptance packet
+is returned and reviewed. Local Web gates and endpoint presence are necessary
+but not sufficient.
+
+### 8.1 A2UI actions (`bot.a2ui_actions_enabled`)
+
+Prerequisites: Web G15 pass; Bot emit and action-accept evidence; owner review;
+staging/live action, expiry, ownership, and retry checks. Operator change:
+enable the Web flag only after those records are linked. Smoke: submit a
+synthetic valid action and verify the same `dialogue_id`, owner, and `run_id`.
+Rollback: set the flag false and restart; the blocking path remains unchanged.
+
+### 8.2 Remote product surfaces
+
+`research_enabled`, `design_enabled`, and `network_enabled` each require
+resolver, attachment, permission, bounded-result, and Bot/operations smoke
+evidence. Enable one surface at a time, record its owner and release SHAs, and
+set only that flag. Roll back by setting the individual flag false; do not
+enable all three as a proxy for acceptance.
+
+### 8.3 Interop (`bot.interop_enabled`)
+
+Prerequisites: security review of allowlists, owner scoping, capability and
+provenance redaction, Bot owner acceptance, and staging/live evidence. Keep the
+endpoint hidden/off otherwise. Never expose raw Bot envelopes, provider
+diagnostics, private paths, credentials, or unredacted provenance.
+
+### 8.4 History dual-read (`bot.history_dual_read`)
+
+This is an observation/compatibility mode, not a replacement for the persisted
+projection. Before enabling, compare projection-first, legacy fallback, and Bot
+history results for owner-scoped synthetic rows; record no data loss, no older
+revision overwrite, and a tested flag rollback. Keep false until RC-WEB-007 and
+RC-LIVE-001 evidence is reviewed.
+
+### 8.5 Existing Expert and streaming gates
+
+`expert_enabled` and `stream_enabled` retain their previous acceptance process.
+`stream_enabled` requires Bot real-answer persistence and the matching frontend
+flag; with it false, the blocking path must remain byte-compatible. Do not turn
+either flag on as part of the 0.1.3 deploy.
+
+## 9. Evidence and ownership
+
+The release record should include:
+
+- deployed Web SHA and comparison baseline;
+- backup and migration result (sanitized);
+- `/readyz`, core smoke, and dark-launch smoke results;
+- local G13–G17 gate output;
+- links to any returned Bot-owner, CI, staging/live, and operations acceptance
+  rows, or an explicit `External Pending` status.
+
+This Web repository change does not run production DDL, merge branches, push a
+release, deploy services, or modify Phytomni-Bot/operations code.

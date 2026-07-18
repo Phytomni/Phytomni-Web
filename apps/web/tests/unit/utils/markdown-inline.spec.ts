@@ -64,6 +64,22 @@ describe("processInlineMarkdown — XSS-critical paths", () => {
     expect(out).not.toMatch(/javascript:/i);
     expect(out).toContain('href="#"');
   });
+
+  it("neutralizes dangerous image and CIF schemes after caller escaping", () => {
+    const imageOut = processInlineMarkdown(
+      escapeHtml("![photo](javascript:evil.png)")
+    );
+    const cifOut = processInlineMarkdown(
+      escapeHtml("![model](javascript:evil.cif)")
+    );
+
+    const host = document.createElement("div");
+    host.innerHTML = imageOut + cifOut;
+    expect(host.querySelector("img")?.getAttribute("src")).toBe("#");
+    expect(
+      host.querySelector(".cif-container")?.getAttribute("data-src")
+    ).toBe("#");
+  });
 });
 
 describe("processInlineMarkdown — markdown rendering", () => {

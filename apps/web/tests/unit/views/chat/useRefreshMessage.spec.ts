@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { useRefreshMessage } from "@/views/chat/composables/useRefreshMessage";
+import type { ChatUIState, ChatView } from "@/views/chat/types";
 
 // Mock getQuery API (the only API refreshMessage calls)
 vi.mock("@/api/chat", () => ({
@@ -12,20 +13,12 @@ import { getQuery } from "@/api/chat";
 
 const mockGetQuery = vi.mocked(getQuery);
 
-type ChatStateRecord = {
-  isSending: boolean;
-  refreshingMessages: Record<string, boolean>;
-  reactions: Record<string, number>;
-  historyQuestion: any;
-  fileList: any[];
-};
-
 describe("useRefreshMessage", () => {
   // Each dialogueId maps to one mutable state record; repeated getChatState(id) returns the same object
-  let states: Map<string, ChatStateRecord>;
-  let getChatState: (dialogueId: string) => any;
+  let states: Map<string, ChatUIState>;
+  let getChatState: (dialogueId: string) => ChatUIState;
   let currentChatId: ReturnType<typeof ref<string>>;
-  let currentChat: ReturnType<typeof ref<any>>;
+  let currentChat: ReturnType<typeof computed<ChatView | null>>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
   let getHistoryQuestionData: ReturnType<typeof vi.fn>;
   let getDialogueIdFromChatId: ReturnType<typeof vi.fn>;
@@ -33,13 +26,28 @@ describe("useRefreshMessage", () => {
   // ElMessage.error spy (setup.ts's afterEach restoreAllMocks restores it, so rebuild it per case)
   let elMessageErrorSpy: ReturnType<typeof vi.spyOn>;
 
-  function makeState(): ChatStateRecord {
+  function makeState(): ChatUIState {
     return {
       isSending: false,
+      messageInput: "",
+      fileList: [],
+      historyQuestion: null,
+      copyVisible: 0,
+      copyTimeRef: undefined,
+      logData: {},
+      loadingLog: {},
       refreshingMessages: {},
       reactions: {},
-      historyQuestion: null,
-      fileList: [],
+      updatingLog: {},
+      sendStartedAt: null,
+      activeAgentName: "",
+      completing: false,
+      mode: "instant",
+      isStreaming: false,
+      streamingMessageId: null,
+      uploadTransfer: null,
+      selectedAgent: "",
+      renderedChat: null,
     };
   }
 
@@ -53,20 +61,35 @@ describe("useRefreshMessage", () => {
       if (!states.has(dialogueId)) {
         states.set(dialogueId, makeState());
       }
-      return states.get(dialogueId);
+      return states.get(dialogueId)!;
     };
     currentChatId = ref("A");
-    // Index 0 = user message, index 1 = assistant message
-    currentChat = ref({
+    // Index 0 = user message, index 1 = assistant message — owned by A's renderedChat
+    const messagesA = [
+      { role: "user", content: "Original question" },
+      {
+        role: "assistant",
+        content: "Old answer",
+        id: "msg-1",
+        tool_name: "ChatAgent",
+      },
+    ];
+    getChatState("A").renderedChat = { messages: messagesA };
+    getChatState("B").renderedChat = {
       messages: [
-        { role: "user", content: "Original question" },
-        {
-          role: "assistant",
-          content: "Old answer",
-          id: "msg-1",
-          tool_name: "ChatAgent",
-        },
+        { role: "user", content: "B question" },
+        { role: "assistant", content: "B answer", id: "msg-b" },
       ],
+    };
+    currentChat = computed({
+      get: () => {
+        if (!currentChatId.value) return null;
+        return getChatState(currentChatId.value).renderedChat;
+      },
+      set: (value: ChatView | null) => {
+        if (!currentChatId.value) return;
+        getChatState(currentChatId.value).renderedChat = value;
+      },
     });
     scrollToBottom = vi.fn();
     getHistoryQuestionData = vi.fn().mockResolvedValue(undefined);
@@ -101,8 +124,8 @@ describe("useRefreshMessage", () => {
     const { refreshMessage } = makeComposable();
     await refreshMessage(1);
 
-    // currentChat.value.messages[1] is replaced by the rebuilt assistant message
-    const rebuilt = currentChat.value.messages[1];
+    // A's captured messages[1] is replaced by the rebuilt assistant message
+    const rebuilt = getChatState("A").renderedChat!.messages[1];
     expect(rebuilt.role).toBe("assistant");
     expect(rebuilt.content).toBe("New answer");
     expect(rebuilt.doc_list).toEqual([{ pm: "1" }]);
@@ -132,6 +155,9 @@ describe("useRefreshMessage", () => {
     mockGetQuery.mockReturnValueOnce(pending as any);
 
     const { refreshMessage } = makeComposable();
+    const messagesA = getChatState("A").renderedChat!.messages;
+    const messagesB = getChatState("B").renderedChat!.messages;
+    const bAnswerBefore = messagesB[1].content;
 
     // Don't await — let the refresh hang at await getQuery
     const p = refreshMessage(1);
@@ -142,6 +168,7 @@ describe("useRefreshMessage", () => {
 
     // User switches to dialogue B
     currentChatId.value = "B";
+    scrollToBottom.mockClear();
 
     // Now resolve getQuery and wait for the whole thing to finish
     resolveQuery({
@@ -153,13 +180,37 @@ describe("useRefreshMessage", () => {
     expect(getChatState("A").isSending).toBe(false);
     expect(getChatState("A").refreshingMessages["1_msg-1"]).toBeUndefined();
 
-    // B's chatState is never touched by refreshMessage throughout:
-    // after refreshMessage captures A's chatState it never re-reads getChatState,
-    // so the "B" key never appears in the Map (B is never read/written at the chatState layer).
-    expect(states.has("B")).toBe(false);
+    // A's captured array was updated; B's messages/DOM side effects untouched
+    expect(messagesA[1].content).toBe("Late answer");
+    expect(messagesA[1].id).toBe("msg-2");
+    expect(getChatState("B").renderedChat!.messages).toBe(messagesB);
+    expect(messagesB[1].content).toBe(bAnswerBefore);
+    expect(scrollToBottom).not.toHaveBeenCalled();
+    expect(elMessageErrorSpy).not.toHaveBeenCalled();
 
     // finally still runs (fetching history)
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
+  });
+
+  it("A refresh pending→B active: failure toast is suppressed while B is foreground", async () => {
+    let rejectQuery!: (error: Error) => void;
+    const pending = new Promise((_resolve, reject) => {
+      rejectQuery = reject;
+    });
+    mockGetQuery.mockReturnValueOnce(pending as any);
+
+    const { refreshMessage } = makeComposable();
+    const p = refreshMessage(1);
+    currentChatId.value = "B";
+    scrollToBottom.mockClear();
+
+    rejectQuery(new Error("network down"));
+    await p;
+
+    expect(elMessageErrorSpy).not.toHaveBeenCalled();
+    expect(scrollToBottom).not.toHaveBeenCalled();
+    expect(getChatState("A").isSending).toBe(false);
+    expect(getChatState("B").isSending).toBe(false);
   });
 
   it("Failure path: getQuery rejects → ElMessage.error called, isSending reset in finally", async () => {

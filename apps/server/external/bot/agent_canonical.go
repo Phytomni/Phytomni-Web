@@ -3,7 +3,9 @@ package bot
 // CanonicalAgentTool pins the Bot /v1/agents {slug: tool} mapping as the single
 // source of truth for agent names. aliasToSlug (this package) and slugToToolName
 // (api_service) are validated against it by the drift-guard tests so a future
-// edit cannot let a Web name drift from the Bot function name again.
+// edit cannot let a Web name drift from the Bot function name again. The map is
+// intentionally explicit: every release slug must be mirrored by both Web
+// routing maps.
 var CanonicalAgentTool = map[string]string{
 	"chat":        "ChatAgent",
 	"knowledge":   "KnowledgeAgent",

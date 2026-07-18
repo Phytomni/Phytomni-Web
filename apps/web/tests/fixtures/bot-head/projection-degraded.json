@@ -1,0 +1,30 @@
+{
+  "id": 102,
+  "tool_name": "DeepGenomeAgent",
+  "status": "FAILED",
+  "dialogue_id": "dialogue-synthetic-2",
+  "bot_run_id": null,
+  "report_revision": -1,
+  "report_stage": "final",
+  "report_completeness": "partial",
+  "intermediate_report": "# Partial report",
+  "final_report": "",
+  "progress": {
+    "completed": 1,
+    "total": 2,
+    "failed": 1,
+    "pending": 0
+  },
+  "degraded": true,
+  "tracking_degraded": true,
+  "degraded_reason": "Final synthesis unavailable",
+  "failures": [
+    "final synthesis failed",
+    {
+      "work_item_key": "brief_gene",
+      "status": "failed",
+      "message": "Optional analysis unavailable"
+    }
+  ],
+  "artifacts": []
+}

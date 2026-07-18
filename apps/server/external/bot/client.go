@@ -38,6 +38,14 @@ func NewClient() *Client {
 // 500. Distinct from APIError, which is a decoded non-2xx Bot *response*.
 var ErrBotTimeout = errors.New("bot relay timed out")
 
+// ResponseMeta carries correlation and status metadata from a completed Bot
+// response. BotRequestID is intentionally separate from Web's request id;
+// callers must continue to use the Web context id for client-facing errors.
+type ResponseMeta struct {
+	StatusCode   int
+	BotRequestID string
+}
+
 // isTimeoutErr reports whether err is a transport/deadline timeout (client
 // Timeout trip, context deadline, or a net.Error with Timeout()).
 func isTimeoutErr(err error) bool {
@@ -46,6 +54,34 @@ func isTimeoutErr(err error) bool {
 	}
 	var ne net.Error
 	return errors.As(err, &ne) && ne.Timeout()
+}
+
+func wrapTransportError(err error) error {
+	if isTimeoutErr(err) {
+		return fmt.Errorf("%w: %v", ErrBotTimeout, err)
+	}
+	return err
+}
+
+func responseMeta(resp *http.Response) ResponseMeta {
+	if resp == nil {
+		return ResponseMeta{}
+	}
+	return ResponseMeta{
+		StatusCode:   resp.StatusCode,
+		BotRequestID: resp.Header.Get("X-Request-Id"),
+	}
+}
+
+func preferBotRequestID(err error, requestID string) error {
+	if requestID == "" {
+		return err
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		apiErr.RequestID = requestID
+	}
+	return err
 }
 
 // APIError is a non-2xx Bot response decoded into a typed error so callers can
@@ -111,19 +147,29 @@ func SurfaceableMessage(err error) (string, bool) {
 	return "", false
 }
 
-// doJSON sends an optional JSON body and decodes a JSON response into out.
-func (c *Client) doJSON(ctx context.Context, method, path string, body, out interface{}) error {
+// doJSONWithMeta sends an optional JSON body, captures response metadata, and
+// decodes a JSON response into out.
+func (c *Client) doJSONWithMeta(ctx context.Context, method, path string, body, out interface{}) (ResponseMeta, error) {
+	return c.doJSONWithMetaOptions(ctx, method, path, body, out, false)
+}
+
+// doJSONWithMetaOptions is the shared JSON transport with an opt-in strict
+// decoder for response envelopes whose identity controls a cross-service
+// write. Ordinary Bot responses keep encoding/json's existing behavior; the
+// Expert router response opts in so duplicate object keys cannot become a
+// last-value-wins agent/run identity.
+func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool) (ResponseMeta, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return err
+			return ResponseMeta{}, err
 		}
 		rdr = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, rdr)
 	if err != nil {
-		return err
+		return ResponseMeta{}, err
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -131,79 +177,203 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out inte
 	req.Header.Set("Authorization", "Bearer "+c.userKey)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		if isTimeoutErr(err) {
-			return fmt.Errorf("%w: %v", ErrBotTimeout, err)
+		return ResponseMeta{}, wrapTransportError(err)
+	}
+	defer resp.Body.Close()
+	meta := responseMeta(resp)
+	raw, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return meta, wrapTransportError(readErr)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return meta, preferBotRequestID(botError(method, path, resp.StatusCode, raw), meta.BotRequestID)
+	}
+	if rejectDuplicateKeys {
+		if err := rejectDuplicateJSONKeys(raw); err != nil {
+			return meta, err
+		}
+	}
+	if out != nil {
+		return meta, json.Unmarshal(raw, out)
+	}
+	return meta, nil
+}
+
+var errDuplicateJSONKey = errors.New("duplicate JSON object key")
+
+// rejectDuplicateJSONKeys walks one complete JSON value and rejects duplicate
+// keys at every object depth. encoding/json intentionally keeps the last value
+// for duplicate keys; that is unsafe for the Expert envelope because a
+// duplicate agent/run_id could change the identity after validation.
+func rejectDuplicateJSONKeys(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := walkJSONValue(decoder); err != nil {
+		return err
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return errors.New("multiple JSON values")
 		}
 		return err
 	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return botError(method, path, resp.StatusCode, raw)
+	return nil
+}
+
+func walkJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
 	}
-	if out != nil {
-		return json.Unmarshal(raw, out)
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+
+	switch delim {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return errors.New("JSON object key is not a string")
+			}
+			if _, duplicate := seen[key]; duplicate {
+				return fmt.Errorf("%w: %q", errDuplicateJSONKey, key)
+			}
+			seen[key] = struct{}{}
+			if err := walkJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if closing != json.Delim('}') {
+			return errors.New("JSON object did not close")
+		}
+	case '[':
+		for decoder.More() {
+			if err := walkJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if closing != json.Delim(']') {
+			return errors.New("JSON array did not close")
+		}
+	default:
+		return errors.New("unexpected JSON delimiter")
 	}
 	return nil
+}
+
+// doJSON sends an optional JSON body and decodes a JSON response into out.
+func (c *Client) doJSON(ctx context.Context, method, path string, body, out interface{}) error {
+	_, err := c.doJSONWithMeta(ctx, method, path, body, out)
+	return err
 }
 
 // ChatCompletion runs a sync chat model (stream=false) and returns the
 // formatted answer envelope.
 func (c *Client) ChatCompletion(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
-	req.Stream = false
-	var out ChatCompletionResponse
-	if err := c.doJSON(ctx, http.MethodPost, "/v1/chat/completions", req, &out); err != nil {
+	response, _, err := c.ChatCompletionWithMeta(ctx, req)
+	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return response, nil
+}
+
+// ChatCompletionWithMeta runs a sync chat model (stream=false) and returns
+// the formatted answer envelope plus Bot response metadata.
+func (c *Client) ChatCompletionWithMeta(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, ResponseMeta, error) {
+	req.Stream = false
+	var out ChatCompletionResponse
+	meta, err := c.doJSONWithMeta(ctx, http.MethodPost, "/v1/chat/completions", req, &out)
+	return &out, meta, err
 }
 
 // ChatCompletionStream opens a streaming chat completion and returns the raw
-// SSE body for the caller to io.Copy through to the Web app. Precondition
+// SSE body for the caller to forward to the Web app unchanged. Precondition
 // failures (auth, unsupported model) surface as a decoded error here, before
 // any frame is forwarded, because Bot validates them up front. The caller
 // owns closing the returned ReadCloser.
 func (c *Client) ChatCompletionStream(ctx context.Context, req ChatCompletionRequest) (io.ReadCloser, error) {
+	stream, _, err := c.ChatCompletionStreamWithMeta(ctx, req)
+	return stream, err
+}
+
+// ChatCompletionStreamWithMeta opens a streaming chat completion and returns
+// the raw SSE body together with metadata from the stream setup response.
+func (c *Client) ChatCompletionStreamWithMeta(ctx context.Context, req ChatCompletionRequest) (io.ReadCloser, ResponseMeta, error) {
 	req.Stream = true
 	b, err := json.Marshal(req)
 	if err != nil {
-		return nil, err
+		return nil, ResponseMeta{}, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/chat/completions", bytes.NewReader(b))
 	if err != nil {
-		return nil, err
+		return nil, ResponseMeta{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.userKey)
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, ResponseMeta{}, wrapTransportError(err)
 	}
+	meta := responseMeta(resp)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, botError(http.MethodPost, "/v1/chat/completions", resp.StatusCode, raw)
+		if readErr != nil {
+			return nil, meta, wrapTransportError(readErr)
+		}
+		return nil, meta, preferBotRequestID(botError(http.MethodPost, "/v1/chat/completions", resp.StatusCode, raw), meta.BotRequestID)
 	}
-	return resp.Body, nil
+	return resp.Body, meta, nil
 }
 
 // InvokeAgent submits a run to a remote/long-running agent by slug.
 func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, error) {
-	var out AgentRunResponse
-	if err := c.doJSON(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out); err != nil {
+	response, _, err := c.InvokeAgentWithMeta(ctx, slug, req)
+	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return response, nil
+}
+
+// InvokeAgentWithMeta submits a run and returns Bot response metadata.
+func (c *Client) InvokeAgentWithMeta(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, ResponseMeta, error) {
+	var out AgentRunResponse
+	meta, err := c.doJSONWithMeta(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out)
+	return &out, meta, err
 }
 
 // RouteQuery dispatches an Expert-mode query to Bot's MCP semantic router,
 // which selects and runs the appropriate agent and returns the agent.run shape.
 func (c *Client) RouteQuery(ctx context.Context, req RouteQueryRequest) (*RouteQueryResponse, error) {
-	var out RouteQueryResponse
-	if err := c.doJSON(ctx, http.MethodPost, "/v1/query/route", req, &out); err != nil {
+	response, _, err := c.RouteQueryWithMeta(ctx, req)
+	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return response, nil
+}
+
+// RouteQueryWithMeta dispatches an Expert-mode query and returns Bot response
+// metadata alongside the agent.run-shaped response.
+func (c *Client) RouteQueryWithMeta(ctx context.Context, req RouteQueryRequest) (*RouteQueryResponse, ResponseMeta, error) {
+	var out RouteQueryResponse
+	meta, err := c.doJSONWithMetaOptions(ctx, http.MethodPost, "/v1/query/route", req, &out, true)
+	return &out, meta, err
 }
 
 // ListRuns fetches every run for a dialogue in one call (server-side filter).
@@ -219,11 +389,18 @@ func (c *Client) ListRuns(ctx context.Context, dialogueID string) (*RunsListResp
 
 // GetRun fetches a single run by id.
 func (c *Client) GetRun(ctx context.Context, runID string) (*RunRecord, error) {
-	var out RunRecord
-	if err := c.doJSON(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID), nil, &out); err != nil {
+	response, _, err := c.GetRunWithMeta(ctx, runID)
+	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return response, nil
+}
+
+// GetRunWithMeta fetches a single run by id and returns Bot response metadata.
+func (c *Client) GetRunWithMeta(ctx context.Context, runID string) (*RunRecord, ResponseMeta, error) {
+	var out RunRecord
+	meta, err := c.doJSONWithMeta(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID), nil, &out)
+	return &out, meta, err
 }
 
 // GetRunLogs fetches the task logs for a run (used by the update-log path).
@@ -237,50 +414,72 @@ func (c *Client) GetRunLogs(ctx context.Context, runID string) (*RunLogsResponse
 
 // GetAgents lists the agents Bot exposes (used for startup slug validation).
 func (c *Client) GetAgents(ctx context.Context) (*AgentsListResponse, error) {
-	var out AgentsListResponse
-	if err := c.doJSON(ctx, http.MethodGet, "/v1/agents", nil, &out); err != nil {
+	response, _, err := c.GetAgentsWithMeta(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return response, nil
+}
+
+// GetAgentsWithMeta lists the agents Bot exposes and returns response
+// metadata for startup diagnostics.
+func (c *Client) GetAgentsWithMeta(ctx context.Context) (*AgentsListResponse, ResponseMeta, error) {
+	var out AgentsListResponse
+	meta, err := c.doJSONWithMeta(ctx, http.MethodGet, "/v1/agents", nil, &out)
+	return &out, meta, err
 }
 
 // UploadFile streams one file to Bot OBS ingestion and returns its metadata.
 func (c *Client) UploadFile(ctx context.Context, filename, purpose string, r io.Reader) (*FileUploadResponse, error) {
+	response, _, err := c.UploadFileWithMeta(ctx, filename, purpose, r)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// UploadFileWithMeta streams one file to Bot OBS ingestion and returns its
+// metadata together with the Bot response status and request id.
+func (c *Client) UploadFileWithMeta(ctx context.Context, filename, purpose string, r io.Reader) (*FileUploadResponse, ResponseMeta, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	part, err := mw.CreateFormFile("file", filename)
 	if err != nil {
-		return nil, err
+		return nil, ResponseMeta{}, err
 	}
 	if _, err := io.Copy(part, r); err != nil {
-		return nil, err
+		return nil, ResponseMeta{}, err
 	}
 	if purpose != "" {
 		if err := mw.WriteField("purpose", purpose); err != nil {
-			return nil, err
+			return nil, ResponseMeta{}, err
 		}
 	}
 	if err := mw.Close(); err != nil {
-		return nil, err
+		return nil, ResponseMeta{}, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/files", &buf)
 	if err != nil {
-		return nil, err
+		return nil, ResponseMeta{}, err
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+c.userKey)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, ResponseMeta{}, wrapTransportError(err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
+	meta := responseMeta(resp)
+	raw, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, meta, wrapTransportError(readErr)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, botError(http.MethodPost, "/v1/files", resp.StatusCode, raw)
+		return nil, meta, preferBotRequestID(botError(http.MethodPost, "/v1/files", resp.StatusCode, raw), meta.BotRequestID)
 	}
 	var out FileUploadResponse
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, err
+		return nil, meta, err
 	}
-	return &out, nil
+	return &out, meta, nil
 }

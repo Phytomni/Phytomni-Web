@@ -1,16 +1,17 @@
 import { nextTick } from "vue";
 import type { Ref } from "vue";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, ChatUIState, ChatView } from "../types";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getQuery } from "@/api/chat";
+import { createTransferTracker } from "@/utils/transfer-progress";
 import { isValidJSON, convertToTableData } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 
 export function useRefreshMessage(opts: {
-  currentChat: Ref<any>;
+  currentChat: Ref<ChatView | null>;
   currentChatId: Ref<string>;
-  getChatState: (dialogueId: string) => any;
+  getChatState: (dialogueId: string) => ChatUIState;
   scrollToBottom: () => void;
   getHistoryQuestionData: () => Promise<any> | any;
   getDialogueIdFromChatId: (chatId?: any) => any;
@@ -52,10 +53,11 @@ export function useRefreshMessage(opts: {
       return;
     }
 
-    const chatState = getChatState(currentChatId.value);
-    if (!chatState) {
-      return;
-    }
+    // Capture dialogue state + message array before await so a late result
+    // updates only that array and never B's DOM when the user has switched away.
+    const refreshDialogueId = currentChatId.value;
+    const chatState = getChatState(refreshDialogueId);
+    const targetMessages = currentChat.value.messages;
 
     // set the refresh state - keyed by both messageIndex and messageId
     const refreshKey = `${messageIndex}_${messageId}`;
@@ -63,6 +65,8 @@ export function useRefreshMessage(opts: {
 
     // set the overall sending state to true to show a loading state
     chatState.isSending = true;
+
+    const isStillActive = () => currentChatId.value === refreshDialogueId;
 
     try {
       const urlChatId = getDialogueIdFromChatId();
@@ -89,7 +93,35 @@ export function useRefreshMessage(opts: {
         });
       }
 
-      const response = await getQuery(queryData as any);
+      const hasFiles = chatState.fileList.length > 0;
+      const tracker = hasFiles
+        ? createTransferTracker({
+            phase: "upload",
+            requestId: Date.now().toString(),
+          })
+        : null;
+
+      const response = await getQuery(
+        queryData as any,
+        tracker
+          ? {
+              onUploadProgress: (e) => {
+                const snap = tracker.update({
+                  loaded: e.loaded,
+                  total: e.total ?? 0,
+                });
+                chatState.uploadTransfer = snap;
+                if (
+                  !snap.indeterminate &&
+                  snap.loaded >= snap.total &&
+                  snap.total > 0
+                ) {
+                  chatState.uploadTransfer = null;
+                }
+              },
+            }
+          : undefined
+      );
 
       if (response.data) {
         let newAssistantMessage: ChatMessage | undefined;
@@ -178,10 +210,11 @@ export function useRefreshMessage(opts: {
                     } else if (newAssistantMessage) {
                       newAssistantMessage.content = "File content is empty or failed to load";
                     }
-                    // force a view update
                     nextTick(() => {
                       timestamp.value = Date.now();
-                      scrollToBottom();
+                      if (isStillActive()) {
+                        scrollToBottom();
+                      }
                     });
                   })
                   .catch((error) => {
@@ -189,10 +222,11 @@ export function useRefreshMessage(opts: {
                     if (newAssistantMessage) {
                       newAssistantMessage.content = "Failed to load file, please try again later";
                     }
-                    // force a view update
                     nextTick(() => {
                       timestamp.value = Date.now();
-                      scrollToBottom();
+                      if (isStillActive()) {
+                        scrollToBottom();
+                      }
                     });
                   });
               }
@@ -308,9 +342,9 @@ export function useRefreshMessage(opts: {
           }
         }
 
-        // update the message
+        // update the captured message array only
         if (newAssistantMessage) {
-          currentChat.value.messages[messageIndex] = newAssistantMessage;
+          targetMessages[messageIndex] = newAssistantMessage;
 
           // clean up the old refresh state
           if (chatState.refreshingMessages[refreshKey]) {
@@ -323,18 +357,22 @@ export function useRefreshMessage(opts: {
           }`;
           chatState.refreshingMessages[newRefreshKey] = false;
 
-          // auto-scroll to the latest message
-          await scrollToBottom();
+          if (isStillActive()) {
+            await scrollToBottom();
+          }
         }
       }
     } catch (error: any) {
       console.error("Failed to refresh message:", error);
-      ElMessage.error(i18n.global.t("common.refreshFailedRetry"));
+      if (isStillActive()) {
+        ElMessage.error(i18n.global.t("common.refreshFailedRetry"));
+      }
     } finally {
-      // ensure it scrolls to the bottom
-      nextTick(() => {
-        scrollToBottom();
-      });
+      if (isStillActive()) {
+        nextTick(() => {
+          scrollToBottom();
+        });
+      }
 
       // clean up the old refresh state
       if (chatState.refreshingMessages[refreshKey]) {
@@ -343,6 +381,7 @@ export function useRefreshMessage(opts: {
 
       // reset the overall sending state
       chatState.isSending = false;
+      chatState.uploadTransfer = null;
 
       // refresh the sidebar history data to show the latest conversation info
       try {

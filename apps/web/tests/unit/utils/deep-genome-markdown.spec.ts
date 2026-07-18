@@ -187,6 +187,40 @@ describe("parseDeepGenomeMarkdown — v-html XSS invariant (escapeHtml pipeline)
     expect(body).not.toContain('onerror="alert(1)">');
   });
 
+  it("sanitizes image URL and alt attributes before v-html", () => {
+    const md = join(
+      "## Figures",
+      '![figure" onerror="window.__image_xss__=1](javascript:evil.png)'
+    );
+    const { contentBlocks } = parseDeepGenomeMarkdown(md);
+    const body = findType(contentBlocks, "standalone-content")?.content ?? "";
+    const host = document.createElement("div");
+    host.innerHTML = body;
+
+    const image = host.querySelector("img");
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute("src")).toBe("#");
+    expect(image?.getAttribute("onerror")).toBeNull();
+    expect(image?.getAttribute("alt")).toContain("figure");
+  });
+
+  it("sanitizes CIF data attributes before the viewer fetch path", () => {
+    const md = join(
+      "## Structure",
+      '![model" onmouseover="window.__cif_xss__=1](javascript:evil.cif)'
+    );
+    const { contentBlocks } = parseDeepGenomeMarkdown(md);
+    const body = findType(contentBlocks, "standalone-content")?.content ?? "";
+    const host = document.createElement("div");
+    host.innerHTML = body;
+
+    const cif = host.querySelector(".cif-container");
+    expect(cif).not.toBeNull();
+    expect(cif?.getAttribute("data-src")).toBe("#");
+    expect(cif?.getAttribute("onmouseover")).toBeNull();
+    expect(cif?.getAttribute("data-alt")).toContain("model");
+  });
+
   it("neutralizes a javascript: href in a .md link inside a paragraph", () => {
     // The .md-link path in processInlineMarkdown routes the URL through
     // sanitizeHref, which scheme-rejects javascript: -> href="#". NOTE the .md

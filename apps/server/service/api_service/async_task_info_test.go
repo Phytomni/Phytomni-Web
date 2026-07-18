@@ -31,3 +31,27 @@ func TestApiAsyncTaskInfo_ScopesToOwner(t *testing.T) {
 		t.Errorf("expected own task id=80, got %d", info.Id)
 	}
 }
+
+// TestAsyncTaskInfoNeverPollsChildTaskID accepts a modern run-only row. The
+// read endpoint must not require task_id or derive a Bot lifecycle lookup from
+// that legacy child identifier.
+func TestAsyncTaskInfoNeverPollsChildTaskID(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, bot_run_id, task_id, server_id, status, created_at) VALUES
+		(90, 'dlg-run-only', 0, 'alice', 'run-only', '', '', 'RUNNING', '2026-01-01 00:00:00'),
+		(91, 'dlg-foreign', 0, 'bob', 'run-only', '', '', 'RUNNING', '2026-01-01 00:01:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	info, err := NewService().AsyncTaskInfo(context.Background(), 90, "alice")
+	if err != nil {
+		t.Fatalf("run-only owner row rejected: %v", err)
+	}
+	if info.Id != 90 || info.BotRunId != "run-only" || info.TaskId != "" {
+		t.Fatalf("unexpected run-only info: %+v", info)
+	}
+	if _, err := NewService().AsyncTaskInfo(context.Background(), 91, "alice"); err == nil {
+		t.Fatal("foreign-owner run-only row was visible")
+	}
+}

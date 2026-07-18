@@ -1,12 +1,4 @@
-@import './base.css';
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-}
+@import "./base.css";
 
 #app {
   margin: 0;
@@ -17,11 +9,62 @@ body {
 }
 
 a {
-  text-decoration: none;
-  color: #409eff;
-  transition: 0.4s;
+  color: var(--phy-color-action-text);
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
+  transition: color var(--phy-motion-fast) ease-out;
 }
 
 a:hover {
-  color: #66b1ff;
+  color: var(--phy-color-action-text-hover);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+
+  a {
+    text-decoration: underline;
+  }
+
+  .el-input__wrapper {
+    border: 1px solid ButtonText;
+  }
+
+  .el-input__wrapper:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  summary {
+    border-color: ButtonText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

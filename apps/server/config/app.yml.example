@@ -183,10 +183,18 @@ bcrypt_cost: 10
 #                      deploy manual §5.6). Zero value false = safe dormant
 #                      default, mirroring proxy_enabled.
 # `stream_enabled`   — dark-launch switch for AG-UI SSE streaming on /query.
-#                      While false the gateway keeps using the blocking
-#                      ChatCompletion path; flip to true (per deploy) to serve
-#                      text/event-stream for chat-family slugs. Zero value false
-#                      = safe dormant default, mirroring expert_enabled.
+#                      Keep false until Web/Bot/ops activation evidence is
+#                      complete and reviewed. OFF stays a local pre-dispatch
+#                      503 with no Bot call; authorized operators, not this
+#                      implementation, change the value after external review.
+# `a2ui_actions_enabled` — dark-launch switch for A2UI action uplink.
+#                      Keep false until the A-G1 through A-G8 review and full
+#                      external acceptance evidence are recorded. OFF stays a
+#                      local pre-dispatch 503 with no Bot call; only authorized
+#                      operators change the value after that review.
+# `interop_enabled`  — dark-launch switch for sanitized Bot interop capability
+#                      discovery. Keep false until Web authorization,
+#                      redaction, and external acceptance evidence are reviewed.
 # Rotate `user_api_key` per Bot runbook ~90 days; ops procedure is
 # (1) issue new key via service-token curl above,
 # (2) edit production app.yml,
@@ -200,7 +208,12 @@ bot:
   proxy_enabled: true
   key_audit_redact: true
   expert_enabled: false   # dark-launch: Expert routing mode OFF until Bot /v1/query/route ships
-  stream_enabled: false   # dark-launch: AG-UI SSE streaming OFF until Bot P0 ships
+  stream_enabled: false   # OFF: local pre-dispatch 503/no Bot call; operator flips only with Web/Bot/ops evidence
+  a2ui_actions_enabled: false   # OFF: local pre-dispatch 503/no Bot call; operator flips only after A-G1 through A-G8 review
+  interop_enabled: false        # OFF: capability discovery stays hidden until security and external review
+  research_enabled: false   # dark-launch: Research product surface remains unavailable until external acceptance
+  design_enabled: false     # dark-launch: Design product surface remains unavailable until external acceptance
+  network_enabled: false    # dark-launch: Network product surface remains unavailable until external acceptance
   # /query upload bounds (0 or omitted = built-in default). Tune without recompiling.
   max_upload_file_bytes: 26214400    # 25 MiB per file (matches Bot /v1/files 413)
   max_upload_file_count: 10

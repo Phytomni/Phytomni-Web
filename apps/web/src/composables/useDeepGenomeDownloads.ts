@@ -49,7 +49,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     contentBlocksCopy.style.height = "auto";
 
     // grab everything inside el-main (excluding el-main itself)
-    const originalElMain = mainContentRef.value.$el;
+    const originalElMain = mainContentRef.value?.$el ?? mainContentRef.value;
     const contentInsideElMain = document.createElement("div");
 
     // clone all child nodes inside el-main
@@ -58,9 +58,9 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       contentInsideElMain.appendChild(childClone);
     }
 
-    // remove the download button group (via a more specific selector)
+    // remove the download button group via its semantic shell hook
     const downloadButtonGroup = contentInsideElMain.querySelector(
-      'div[style*="position: sticky"]'
+      ".deep-genome-toolbar"
     );
     if (downloadButtonGroup) {
       downloadButtonGroup.remove();
@@ -253,7 +253,8 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
           tempElement.innerHTML = ref.html;
 
           // get plain text and drop the reference number (we add it manually)
-          let plainText = tempElement.textContent || tempElement.innerText || "";
+          let plainText =
+            tempElement.textContent || tempElement.innerText || "";
           plainText = plainText.trim();
 
           // remove the leading number and dot (e.g. "1. ")

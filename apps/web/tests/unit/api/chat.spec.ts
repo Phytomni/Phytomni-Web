@@ -14,7 +14,7 @@ vi.mock("@/utils/request", () => ({
 }));
 
 import request from "@/utils/request";
-import { getReactionType, getUserTool } from "@/api/chat";
+import { getReactionType, getUserTool, type QueryData } from "@/api/chat";
 import { feedback } from "@/api/feedback";
 
 describe("getReactionType — wire contract", () => {
@@ -45,6 +45,22 @@ describe("getReactionType — wire contract", () => {
     await expect(
       getReactionType({ id: "abc", reaction_type: "like" })
     ).rejects.toBe(err);
+  });
+});
+
+describe("QueryData — interop wire contract", () => {
+  it("keeps the gateway provenance fields bounded and snake_case", () => {
+    const data: QueryData = {
+      tool_name: "InSilicoResearchAgent",
+      interop: {
+        mode: "auto",
+        status: "delegated",
+        target_id: "mcp-peer",
+        kind: "mcp",
+        code: "no_evidence",
+      },
+    };
+    expect(data.interop?.target_id).toBe("mcp-peer");
   });
 });
 

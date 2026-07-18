@@ -11,19 +11,27 @@ import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 
 function makeHarness(opts?: {
   headingIds?: string[];
-  nestedItems?: Array<{ id: string; children?: unknown[]; [key: string]: unknown }>;
+  nestedItems?: Array<{
+    id: string;
+    children?: unknown[];
+    [key: string]: unknown;
+  }>;
 }) {
   const headings = ref<Array<{ id: string; [key: string]: unknown }>>(
     (opts?.headingIds ?? []).map((id) => ({ id }))
   );
-  const nestedHeadings = ref<Array<{ id: string; children?: unknown[]; [key: string]: unknown }>>(
-    opts?.nestedItems ?? []
-  );
+  const nestedHeadings = ref<
+    Array<{ id: string; children?: unknown[]; [key: string]: unknown }>
+  >(opts?.nestedItems ?? []);
   const mainContentRef = ref<any>(null);
 
   const Harness = defineComponent({
     setup() {
-      const result = useDeepGenomeToc({ headings, nestedHeadings, mainContentRef });
+      const result = useDeepGenomeToc({
+        headings,
+        nestedHeadings,
+        mainContentRef,
+      });
       return result;
     },
     render() {
@@ -46,10 +54,12 @@ class MockIntersectionObserver {
   observe = vi.fn();
   unobserve = vi.fn();
   disconnect = vi.fn();
+  readonly options: IntersectionObserverInit;
   private _callback: IoCallback;
 
-  constructor(callback: IoCallback) {
+  constructor(callback: IoCallback, options: IntersectionObserverInit = {}) {
     this._callback = callback;
+    this.options = options;
     MockIntersectionObserver.lastInstance = this;
   }
 
@@ -74,7 +84,9 @@ describe("useDeepGenomeToc — initial state", () => {
 
   it("return surface includes activeHeadingId / handleNavSelect / setupIntersectionObserver", () => {
     const headings = ref<Array<{ id: string; [key: string]: unknown }>>([]);
-    const nestedHeadings = ref<Array<{ id: string; children?: unknown[]; [key: string]: unknown }>>([]);
+    const nestedHeadings = ref<
+      Array<{ id: string; children?: unknown[]; [key: string]: unknown }>
+    >([]);
     const mainContentRef = ref<any>(null);
     // Call the composable directly to verify the returned keys (no mount needed, since we only check property names)
     // Note: useDeepGenomeToc calls onUnmounted, which must run inside a setup context; mounting via makeHarness suffices
@@ -96,7 +108,9 @@ describe("useDeepGenomeToc — initial state", () => {
 describe("useDeepGenomeToc — handleNavSelect", () => {
   afterEach(() => {
     // Clean up test elements mounted on document.body
-    document.querySelectorAll("[data-testid='toc-heading']").forEach((el) => el.remove());
+    document
+      .querySelectorAll("[data-testid='toc-heading']")
+      .forEach((el) => el.remove());
   });
 
   it("calls scrollIntoView(smooth, center) when the target element exists", async () => {
@@ -115,7 +129,10 @@ describe("useDeepGenomeToc — handleNavSelect", () => {
     await nextTick();
 
     expect(scrollSpy).toHaveBeenCalledOnce();
-    expect(scrollSpy).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+    expect(scrollSpy).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "center",
+    });
     wrapper.unmount();
   });
 
@@ -145,7 +162,9 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
 
   afterEach(() => {
     globalThis.IntersectionObserver = originalIO;
-    document.querySelectorAll("[data-testid='toc-io-heading']").forEach((el) => el.remove());
+    document
+      .querySelectorAll("[data-testid='toc-io-heading']")
+      .forEach((el) => el.remove());
   });
 
   it("calls observe once for each headings id that has a matching DOM element", () => {
@@ -200,5 +219,123 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
     wrapper.unmount();
 
     expect(io.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("uses the nearest vertical scroll owner and ignores non-scrolling overflow wrappers", () => {
+    const scrollOwner = document.createElement("div");
+    scrollOwner.style.overflowY = "auto";
+    Object.defineProperties(scrollOwner, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, value: 800 },
+    });
+    const clippedWrapper = document.createElement("div");
+    clippedWrapper.style.overflow = "hidden";
+    const horizontalWrapper = document.createElement("div");
+    horizontalWrapper.style.overflowX = "auto";
+    Object.defineProperties(horizontalWrapper, {
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 500 },
+    });
+    const main = document.createElement("main");
+    const heading = document.createElement("h2");
+    heading.id = "embedded-scroll-heading";
+    heading.setAttribute("data-testid", "toc-io-heading");
+    main.appendChild(heading);
+    horizontalWrapper.appendChild(main);
+    clippedWrapper.appendChild(horizontalWrapper);
+    scrollOwner.appendChild(clippedWrapper);
+    document.body.appendChild(scrollOwner);
+
+    const { Harness, mainContentRef } = makeHarness({
+      headingIds: [heading.id],
+    });
+    mainContentRef.value = main;
+    const wrapper = mount(Harness);
+
+    wrapper.vm.setupIntersectionObserver();
+
+    expect(MockIntersectionObserver.lastInstance?.options.root).toBe(
+      scrollOwner
+    );
+    wrapper.unmount();
+    scrollOwner.remove();
+  });
+
+  it("uses the viewport when no ancestor owns vertical scrolling", () => {
+    const main = document.createElement("main");
+    const heading = document.createElement("h2");
+    heading.id = "viewport-scroll-heading";
+    heading.setAttribute("data-testid", "toc-io-heading");
+    main.appendChild(heading);
+    document.body.appendChild(main);
+
+    const { Harness, mainContentRef } = makeHarness({
+      headingIds: [heading.id],
+    });
+    mainContentRef.value = main;
+    const wrapper = mount(Harness);
+
+    wrapper.vm.setupIntersectionObserver();
+
+    expect(MockIntersectionObserver.lastInstance?.options.root).toBeNull();
+    wrapper.unmount();
+    main.remove();
+  });
+
+  it("expands parent menus only inside the viewer that owns the active heading", () => {
+    const createViewer = (titleTestId: string) => {
+      const viewer = document.createElement("div");
+      viewer.className = "deep-genome-viewer";
+      const toc = document.createElement("aside");
+      toc.className = "deep-genome-toc";
+      const submenu = document.createElement("div");
+      submenu.className = "el-sub-menu";
+      submenu.setAttribute("index", "parent-heading");
+      const title = document.createElement("button");
+      title.className = "el-sub-menu__title";
+      title.setAttribute("data-testid", titleTestId);
+      submenu.appendChild(title);
+      toc.appendChild(submenu);
+      const main = document.createElement("main");
+      viewer.append(toc, main);
+      document.body.appendChild(viewer);
+      return { viewer, main, title };
+    };
+
+    const owned = createViewer("owned-title");
+    const foreign = createViewer("foreign-title");
+    const heading = document.createElement("h3");
+    heading.id = "owned-child-heading";
+    heading.setAttribute("data-testid", "toc-io-heading");
+    owned.main.appendChild(heading);
+    const ownedClick = vi.spyOn(owned.title, "click");
+    const foreignClick = vi.spyOn(foreign.title, "click");
+
+    const { Harness, mainContentRef } = makeHarness({
+      headingIds: [heading.id],
+      nestedItems: [
+        {
+          id: "parent-heading",
+          children: [{ id: heading.id, children: [] }],
+        },
+      ],
+    });
+    mainContentRef.value = owned.main;
+    const wrapper = mount(Harness);
+    wrapper.vm.setupIntersectionObserver();
+
+    MockIntersectionObserver.lastInstance?.trigger([
+      {
+        target: heading,
+        isIntersecting: true,
+        boundingClientRect: { top: 10 },
+      },
+    ]);
+
+    expect(ownedClick).toHaveBeenCalledOnce();
+    expect(foreignClick).not.toHaveBeenCalled();
+    wrapper.unmount();
+    owned.viewer.remove();
+    foreign.viewer.remove();
   });
 });

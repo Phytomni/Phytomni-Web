@@ -1,79 +1,86 @@
 <template>
-  <div class="login-container">
-    <div class="login-left">
-      <div class="logo-container">
-        <div class="logo" style="width: 40px; height: 40px"></div>
-        <!-- <h1 class="title">Crop Wild Relatives Atlas</h1> -->
+  <PhyAuthLayout horizon>
+    <template #lang>
+      <LangSwitch />
+    </template>
+    <template #brand>
+      <div class="login-brand">
+        <PhyBrandMark :size="40" />
+        <span class="login-brand-title">{{ $t("chat.appTitle") }}</span>
       </div>
-      <div class="slogan">
-        <!-- <h2 class="main-slogan">CAAS Foundation Model</h2>
-        <h3 class="sub-slogan">Decoding Life</h3> -->
-      </div>
-    </div>
-    <div class="login-right">
-      <div class="lang-switch">
-        <LangSwitch />
-      </div>
-      <div class="login-form">
-        <h2 class="login-title">
-          {{ $t("login.title") }}
-        </h2>
-        <h5 class="login-subtitle">
-          {{ $t("login.subtitle") }}
-        </h5>
-        <el-form ref="formRef" :model="formData" :rules="formRules" status-icon>
-          <div class="form-item-label">{{ $t("login.email") }}</div>
-          <el-form-item prop="email">
-            <el-input
-              v-model="formData.email"
-              :placeholder="$t('login.emailPlaceholder')"
-              clearable
-              size="large"
-            />
-          </el-form-item>
+    </template>
 
-          <div class="form-item-label">{{ $t("login.password") }}</div>
-          <el-form-item prop="password">
-            <el-input
-              v-model="formData.password"
-              type="password"
-              :placeholder="$t('login.passwordPlaceholder')"
-              show-password
-              clearable
-              size="large"
-            />
-          </el-form-item>
-          <div class="login-agreement">
-            {{ $t("login.agreement.prefix") }}
-            <a href="#">{{ $t("login.agreement.terms") }}</a>
-            {{ $t("login.agreement.and") }}
-            <a href="#">{{ $t("login.agreement.privacy") }}</a>
-          </div>
-          <div class="forgot-password">
-            <a href="#" @click="goToForgotPassword">{{
-              $t("login.forgotPassword")
-            }}</a>
-          </div>
+    <template #title>
+      <h1 class="login-title">
+        {{ $t("login.title") }}
+      </h1>
+    </template>
+    <template #description>
+      <p class="login-subtitle">
+        {{ $t("login.subtitle") }}
+      </p>
+    </template>
+    <el-form
+      ref="formRef"
+      class="login-form"
+      :model="formData"
+      :rules="formRules"
+      status-icon
+    >
+      <div class="form-item-label">{{ $t("login.email") }}</div>
+      <el-form-item prop="email">
+        <el-input
+          v-model="formData.email"
+          :placeholder="$t('login.emailPlaceholder')"
+          clearable
+          size="large"
+        />
+      </el-form-item>
 
-          <el-button
-            type="primary"
-            class="login-button"
-            @click="handleSubmit"
-            :loading="loading"
-          >
-            {{ $t("login.loginButton") }}
-          </el-button>
-
-          <div class="register-container">
-            <span>{{ $t("login.noAccount") }}</span>
-            <a href="javascript:;" class="register-link" @click="goToRegister">
-              {{ $t("login.register") }}
-            </a>
-          </div>
-        </el-form>
+      <div class="form-item-label">{{ $t("login.password") }}</div>
+      <el-form-item prop="password">
+        <el-input
+          v-model="formData.password"
+          type="password"
+          :placeholder="$t('login.passwordPlaceholder')"
+          show-password
+          clearable
+          size="large"
+        />
+      </el-form-item>
+      <div class="login-agreement">
+        {{ $t("login.agreement.prefix") }}
+        <a href="/terms" target="_blank" rel="noopener noreferrer">{{
+          $t("login.agreement.terms")
+        }}</a>
+        {{ $t("login.agreement.and") }}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer">{{
+          $t("login.agreement.privacy")
+        }}</a>
       </div>
-    </div>
-  </div>
+      <div class="forgot-password">
+        <a href="/forgot-password" @click.prevent="goToForgotPassword">{{
+          $t("login.forgotPassword")
+        }}</a>
+      </div>
+
+      <el-button
+        type="primary"
+        class="login-button"
+        @click="handleSubmit"
+        :loading="loading"
+      >
+        {{ $t("login.loginButton") }}
+      </el-button>
+
+      <div class="register-container">
+        <span>{{ $t("login.noAccount") }}</span>
+        <a href="/register" class="register-link" @click.prevent="goToRegister">
+          {{ $t("login.register") }}
+        </a>
+      </div>
+    </el-form>
+  </PhyAuthLayout>
 </template>
 
 <script setup lang="ts">
@@ -88,6 +95,8 @@ import { login } from "@/api/login";
 import { register } from "@/api/auth";
 import { setToken } from "@/utils/auth";
 import LangSwitch from "@/components/LangSwitch.vue";
+import { PhyAuthLayout } from "@/components/shell";
+import { PhyBrandMark } from "@/components/brand";
 import { useI18n } from "vue-i18n";
 import { userStore } from "@/stores";
 
@@ -134,11 +143,6 @@ const formRules = reactive({
     },
   ],
 });
-
-const toggleLoginRegister = () => {
-  isLogin.value = !isLogin.value;
-  formRef.value?.resetFields();
-};
 
 const handleSubmit = () => {
   if (!formRef.value) return;
@@ -280,241 +284,69 @@ const goToRegister = () => {
 </script>
 
 <style lang="scss" scoped>
-.login-container {
+.login-brand {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  align-items: center;
+  gap: var(--phy-space-8);
+  min-width: 0;
+}
+
+.login-brand-title {
+  min-width: 0;
   overflow: hidden;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
-
-.login-left {
-  width: 100%;
-  // background: linear-gradient(135deg, #0078d4 0%, #42d3ff 100%);
-  background: #223e36;
-  display: flex;
-  flex-direction: column;
-  padding: 120px 60px;
-  color: white;
-  position: relative;
-
-  &::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: url("@/assets/hex-pattern.png");
-    background-size: cover;
-    opacity: 0.2;
-    pointer-events: none;
-  }
-}
-
-.logo-container {
-  display: flex;
-  align-items: center;
-  margin-bottom: 80px;
-
-  .logo {
-    width: 50px;
-    height: 50px;
-    margin-right: 15px;
-  }
-
-  .title {
-    font-size: 32px;
-    font-weight: 500;
-  }
-}
-
-.slogan {
-  margin-top: auto;
-  margin-bottom: 200px;
-
-  .main-slogan {
-    font-size: 48px;
-    font-weight: 700;
-    margin-bottom: 24px;
-    line-height: 60px;
-  }
-
-  .sub-slogan {
-    font-size: 36px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.8);
-  }
-}
-
-.login-right {
-  width: 60%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #fff;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-
-  .lang-switch {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-
-    :deep(.lang-dropdown-link) {
-      color: #223e36;
-      font-size: 14px;
-
-      &:hover {
-        color: #223e36;
-        opacity: 0.8;
-      }
-    }
-  }
-}
-
-.login-form {
-  width: 75%;
-  max-width: 450px;
+  color: var(--phy-color-text);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .login-title {
-  font-size: 42px;
+  margin: 0;
+  font-size: 1.35rem;
   font-weight: 600;
-  margin-bottom: 15px;
-  text-align: center;
-  color: #333;
 }
+
 .login-subtitle {
-  font-size: 16px;
-  margin-bottom: 40px;
-  text-align: center;
-  color: #333;
+  margin: var(--phy-space-8) 0 0;
+  font-weight: 400;
+  color: var(--phy-color-text-secondary);
 }
-.login-agreement {
-  font-size: 10px;
-  margin-bottom: 20px;
-  text-align: left;
-  color: #333;
-  a {
-    color: #1e2022;
-    font-weight: 500;
-    text-decoration: underline;
-  }
-}
+
 .form-item-label {
-  font-size: 16px;
-  margin-bottom: 8px;
-  color: #303133;
+  margin-bottom: 6px;
+  color: var(--phy-color-text-secondary);
+  font-size: 13px;
 }
 
-:deep(.el-input__wrapper) {
-  padding: 0 15px;
-  height: 50px;
-  box-shadow: 0 0 0 1px #dcdfe6;
-
-  &:hover {
-    box-shadow: 0 0 0 1px #c0c4cc;
-  }
-
-  &.is-focus {
-    box-shadow: 0 0 0 1px #409eff;
+.login-agreement,
+.forgot-password {
+  font-size: 13px;
+  color: var(--phy-color-text-secondary);
+  a {
+    color: var(--phy-color-primary);
+    text-decoration: none;
   }
 }
 
 .forgot-password {
   text-align: right;
-  margin: 8px 0 20px;
-
-  a {
-    color: #409eff;
-    text-decoration: none;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
+  margin-bottom: 12px;
 }
 
 .login-button {
   width: 100%;
-  padding: 12px 0;
-  font-size: 16px;
-  margin-bottom: 20px;
-  background: #1e2022;
-  height: 50px;
-
-  &:hover {
-    background: #1e2022;
-    opacity: 0.9;
-  }
+  margin-top: 8px;
 }
 
 .register-container {
+  margin-top: 16px;
   text-align: center;
-  margin-top: 20px;
-
-  span {
-    color: #606266;
-  }
-
-  .register-link {
-    color: #409eff;
+  font-size: 13px;
+  color: var(--phy-color-text-secondary);
+  a {
+    color: var(--phy-color-primary);
     text-decoration: none;
-    margin-left: 5px;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-}
-
-@media (max-width: 768px) {
-  .login-container {
-    flex-direction: column;
-  }
-
-  .login-left,
-  .login-right {
-    width: 100%;
-  }
-
-  .login-left {
-    height: 40vh;
-    padding: 40px 30px;
-  }
-
-  .logo-container {
-    margin-bottom: 30px;
-  }
-
-  .slogan {
-    margin-bottom: 30px;
-
-    .main-slogan {
-      font-size: 32px;
-      line-height: 40px;
-      margin-bottom: 16px;
-    }
-
-    .sub-slogan {
-      font-size: 24px;
-    }
-  }
-
-  .login-right {
-    height: 60vh;
-    padding: 40px 0;
-  }
-
-  .login-form {
-    width: 85%;
   }
 }
 </style>

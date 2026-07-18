@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "catalog_version": "v1.0",
+  "source_repository": "Phytomni-Bot",
+  "fixtures": [
+    {
+      "id": "chat-confirm-downlink",
+      "class": "upstream-projection",
+      "contract_kind": "open_surface",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_confirm/downlink.json",
+      "sha256": "a495fb8c9af8ab0bdedac6f23178863e8a8720d2a8d0b0af3d3861373addae67",
+      "file": "upstream/chat_confirm/downlink.json"
+    },
+    {
+      "id": "chat-form-downlink",
+      "class": "upstream-projection",
+      "contract_kind": "open_surface",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_form/downlink.json",
+      "sha256": "9068a2bd6885b8b87631bea819e543ea77fefb154acb7eff8d7291a464b2fd0e",
+      "file": "upstream/chat_form/downlink.json"
+    },
+    {
+      "id": "chat-choice-downlink",
+      "class": "upstream-projection",
+      "contract_kind": "open_surface",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_choice/downlink.json",
+      "sha256": "76b80db916ace2b384771535376ea2fefe45d245c514dfe3194ab4df0b301f16",
+      "file": "upstream/chat_choice/downlink.json"
+    },
+    {
+      "id": "multi-turn-round2-downlink",
+      "class": "upstream-projection",
+      "contract_kind": "open_surface",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/multi_turn/round2_downlink.json",
+      "sha256": "4f9d57799e06deeae324bddadc6b4ac1cbc683abec67d80838d60a34cb739cc4",
+      "file": "upstream/multi_turn/round2_downlink.json"
+    },
+    {
+      "id": "chat-confirm-success-accept",
+      "class": "upstream-projection",
+      "contract_kind": "terminal_projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_confirm/success_accept.json",
+      "sha256": "ff2707277e12c142c07f89027d3a84b99caa2756b3d67f8f4d465090cb4b172e",
+      "file": "upstream/chat_confirm/success_accept.json"
+    },
+    {
+      "id": "chat-form-success-submit",
+      "class": "upstream-projection",
+      "contract_kind": "terminal_projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_form/success_submit.json",
+      "sha256": "6907007f2824c83c6aa8fa92d826e065819355d8e4a17670b3ce995065652b28",
+      "file": "upstream/chat_form/success_submit.json"
+    },
+    {
+      "id": "chat-form-success-cancel",
+      "class": "upstream-projection",
+      "contract_kind": "terminal_projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_form/success_cancel.json",
+      "sha256": "155f80b6a1c51f6ee8dfa7f4f3b074e846343b266d88e2823bbf08e3f57a0d53",
+      "file": "upstream/chat_form/success_cancel.json"
+    },
+    {
+      "id": "chat-choice-success-submit",
+      "class": "upstream-projection",
+      "contract_kind": "terminal_projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_choice/success_submit.json",
+      "sha256": "61d1f9b9614d6c76ad14b88b8453835987ae132ea309c998ea39c9c625964f56",
+      "file": "upstream/chat_choice/success_submit.json"
+    },
+    {
+      "id": "chat-choice-success-cancel",
+      "class": "upstream-projection",
+      "contract_kind": "terminal_projection",
+      "partial": true,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_choice/success_cancel.json",
+      "sha256": "e801e85c0782ab47e3545b4fbb1e70b325c52f94cee10f8d82687f65bb6f090b",
+      "file": "upstream/chat_choice/success_cancel.json"
+    },
+    {
+      "id": "web-http-terminal-succeeded",
+      "class": "web-http-synthetic",
+      "contract_kind": "action_response",
+      "partial": false,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_confirm/success_accept.json",
+      "sha256": "5a37c3fd0ab6d825e5d2f151eaa4f3ef32698b018d6ff2c3aacb8f11de0e97d7",
+      "file": "http/terminal_succeeded.json"
+    },
+    {
+      "id": "web-http-input-required-round2",
+      "class": "web-http-synthetic",
+      "contract_kind": "action_response",
+      "partial": false,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/multi_turn/round2_downlink.json",
+      "sha256": "6cfb9b8e5311185177d4046855b06a0ffcc718735f1cc728f30feb796e305b76",
+      "file": "http/input_required_round2.json"
+    },
+    {
+      "id": "web-http-conflict-not-open",
+      "class": "web-http-synthetic",
+      "contract_kind": "error_response",
+      "partial": false,
+      "source_commit": "27448d121139699d99f24820afed3948658fe89f",
+      "source_path": "docs/contracts/a2ui/chat_confirm/errors/not_input_required_409.json",
+      "sha256": "5103ecff1dd4d6b67e12495e6187a1cb2328ddc2ec3e91a4eca36ffd07b2354d",
+      "file": "http/conflict_not_open.json"
+    }
+  ]
+}

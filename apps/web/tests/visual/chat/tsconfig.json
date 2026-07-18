@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.json",
+  "include": [
+    "../../../env.d.ts",
+    "../../../src/types/**/*.d.ts",
+    "../../../src/utils/type.d.ts",
+    "./**/*.ts",
+    "./**/*.vue",
+    "./**/*.d.ts",
+    "../../fixtures/chat/**/*.ts"
+  ],
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
+  }
+}

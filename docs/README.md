@@ -23,11 +23,12 @@ root [`README.md`](../README.md) for build/run instructions.
 | I want to… | Read |
 |---|---|
 | **Deploy / upgrade production** | [`deployment/README.md`](deployment/README.md) — routes by version |
-| **Upgrade a `0.1.1` prod to `0.1.2`** (current) | [`deployment/upgrading.md`](deployment/upgrading.md) |
+| **Upgrade a `0.1.2` prod to `0.1.3`** (current) | [`deployment/upgrading.md`](deployment/upgrading.md) |
 | See the full release history | [`../CHANGELOG.md`](../CHANGELOG.md) |
 | Look up a Go API endpoint | [`../apps/server/API_DOC.md`](../apps/server/API_DOC.md) |
 | Understand the parallel-chat frontend state model | [`../apps/web/docs/parallel-chat-state.md`](../apps/web/docs/parallel-chat-state.md) |
 | Run / write frontend tests | [`../apps/web/tests/README.md`](../apps/web/tests/README.md) |
+| Maintain the frontend visual system / run visual QA | [`frontend-design-system.md`](frontend-design-system.md) |
 | Read a design proposal / ADR | [`design/`](design/) — forward-looking, not-yet-implemented work |
 
 ## Where docs live

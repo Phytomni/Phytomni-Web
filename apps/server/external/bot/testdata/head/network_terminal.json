@@ -1,0 +1,19 @@
+{
+  "fixture_id": "rc-web-004-network-terminal",
+  "run_id": "run-rc-web-004-network-1",
+  "agent": "network",
+  "status": "succeeded",
+  "result": {
+    "report_stage": "final",
+    "report_completeness": "complete",
+    "report_revision": 1,
+    "report_updated_at": "2026-07-18T00:02:00Z",
+    "final_report": "# Network terminal report",
+    "artifacts": [
+      {
+        "output_dir": "obs://synthetic-bucket/rc-web-004/network",
+        "paths": []
+      }
+    ]
+  }
+}

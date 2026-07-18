@@ -125,6 +125,34 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
+  it("excludes the semantic download toolbar from the print clone", async () => {
+    const fakeEl = document.createElement("div");
+    const toolbar = document.createElement("div");
+    toolbar.className = "deep-genome-toolbar";
+    toolbar.appendChild(document.createElement("button"));
+    fakeEl.append(toolbar, document.createElement("p"));
+    const mainContentRef = ref({ $el: fakeEl });
+
+    let toolbarWasCloned = true;
+    const printSpy = vi.spyOn(window, "print").mockImplementation(async () => {
+      toolbarWasCloned = Boolean(
+        document
+          .querySelector("#print-container")
+          ?.querySelector(".deep-genome-toolbar")
+      );
+    });
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# PDF test", filename: "report.md" },
+      mainContentRef,
+      displayReferences: computed(() => []),
+    });
+
+    await downloadPDF();
+    expect(toolbarWasCloned).toBe(false);
+    printSpy.mockRestore();
+  });
+
   it("does not throw given a stub mainContentRef", async () => {
     // Build a minimal stub with $el, simulating an ElMain component instance
     const fakeEl = document.createElement("div");
@@ -140,6 +168,24 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
       displayReferences: computed(() => []),
     };
     const { downloadPDF } = useDeepGenomeDownloads(opts);
+
+    await expect(downloadPDF()).resolves.toBeUndefined();
+    expect(printSpy).toHaveBeenCalledOnce();
+
+    printSpy.mockRestore();
+  });
+
+  it("prints from a native embedded main element without requiring an Element Plus $el", async () => {
+    const nativeMain = document.createElement("main");
+    nativeMain.appendChild(document.createElement("p"));
+    const mainContentRef = ref<HTMLElement | null>(nativeMain);
+    const printSpy = vi.spyOn(window, "print").mockResolvedValue(undefined);
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# Embedded PDF", filename: "embedded.md" },
+      mainContentRef,
+      displayReferences: computed(() => []),
+    });
 
     await expect(downloadPDF()).resolves.toBeUndefined();
     expect(printSpy).toHaveBeenCalledOnce();

@@ -1,50 +1,36 @@
-import { describe, it, expect, vi } from "vitest";
-import type { Router } from "vue-router";
-import { useSidebarAgents } from "@/views/chat/composables/useSidebarAgents";
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  CANONICAL_AGENT_ROUTES,
+  deriveSidebarRouteOptions,
+} from "@/constants/agents";
 
-describe("useSidebarAgents", () => {
-  function makeRouter() {
-    return { push: vi.fn() } as unknown as Router;
-  }
+const SIDEBAR_SOURCE = readFileSync(
+  resolve(__dirname, "../../../../src/views/chat/sidebar.vue"),
+  "utf8"
+);
 
-  it("showAgentsList is initially false", () => {
-    const router = makeRouter();
-    const { showAgentsList } = useSidebarAgents(router);
-    expect(showAgentsList.value).toBe(false);
-  });
+describe("sidebar agent route options", () => {
+  it("derives seven routed options from the canonical registry", () => {
+    const options = deriveSidebarRouteOptions();
 
-  it("exploreAgent() toggles showAgentsList (false→true→false)", () => {
-    const router = makeRouter();
-    const { showAgentsList, exploreAgent } = useSidebarAgents(router);
-    expect(showAgentsList.value).toBe(false);
-    exploreAgent();
-    expect(showAgentsList.value).toBe(true);
-    exploreAgent();
-    expect(showAgentsList.value).toBe(false);
-  });
-
-  it("presetAgents has 7 entries, each with route, name, and img", () => {
-    const router = makeRouter();
-    const { presetAgents } = useSidebarAgents(router);
-    expect(presetAgents.value).toHaveLength(7);
-    for (const agent of presetAgents.value) {
-      expect(agent).toHaveProperty("route");
-      expect(agent).toHaveProperty("name");
-      expect(agent).toHaveProperty("img");
+    expect(options).toHaveLength(7);
+    for (const option of options) {
+      expect(option.route).toBe(CANONICAL_AGENT_ROUTES[option.toolName]);
+      expect(option.name).toBeTruthy();
+      expect(option.img).toBeTruthy();
     }
   });
 
-  it("handleAgentClick calls router.push and resets showAgentsList to false", () => {
-    const router = makeRouter();
-    const { showAgentsList, exploreAgent, handleAgentClick } = useSidebarAgents(router);
-
-    // First open the list
-    exploreAgent();
-    expect(showAgentsList.value).toBe(true);
-
-    // After clicking, navigate and close the list
-    handleAgentClick({ route: "/x" });
-    expect(router.push).toHaveBeenCalledWith("/x");
-    expect(showAgentsList.value).toBe(false);
+  it("keeps list visibility and navigation reset in the active sidebar", () => {
+    expect(SIDEBAR_SOURCE).toContain(
+      "const presetAgents = ref(deriveSidebarRouteOptions())"
+    );
+    expect(SIDEBAR_SOURCE).toContain(
+      "showAgentsList.value = !showAgentsList.value"
+    );
+    expect(SIDEBAR_SOURCE).toContain("router.push(agent.route)");
+    expect(SIDEBAR_SOURCE).toContain("showAgentsList.value = false");
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref } from "vue";
 import { useSelectChat } from "@/views/chat/composables/useSelectChat";
+import type { ChatMessage, ChatUIState } from "@/views/chat/types";
 
 // Mock getAnswerCheck API (the only API selectChat calls)
 vi.mock("@/api/chat", () => ({
@@ -11,12 +12,40 @@ import { getAnswerCheck } from "@/api/chat";
 
 const mockGetAnswerCheck = vi.mocked(getAnswerCheck);
 
+function makeState(): ChatUIState {
+  return {
+    isSending: false,
+    messageInput: "",
+    fileList: [],
+    historyQuestion: null,
+    copyVisible: 0,
+    copyTimeRef: undefined,
+    logData: {},
+    loadingLog: {},
+    refreshingMessages: {},
+    reactions: {},
+    updatingLog: {},
+    logErrorKinds: {},
+    sendStartedAt: null,
+    activeAgentName: "",
+    completing: false,
+    mode: "instant",
+    isStreaming: false,
+    streamingMessageId: null,
+    uploadTransfer: null,
+    selectedAgent: "",
+    renderedChat: null,
+    activeRequestId: "",
+    generationStopped: false,
+    activityExpandedByMessage: {},
+  };
+}
+
 describe("useSelectChat", () => {
   // Each dialogueId maps to one mutable state record; repeated getChatState(id) returns the same object
-  let states: Map<string, { reactions: Record<string, number>; historyQuestion: any }>;
-  let getChatState: (dialogueId: string) => any;
+  let states: Map<string, ChatUIState>;
+  let getChatState: (dialogueId: string) => ChatUIState;
   let currentChatId: ReturnType<typeof ref<string>>;
-  let currentChat: ReturnType<typeof ref<any>>;
   let chatList: ReturnType<typeof ref<any>>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
   let updateUrlWithChatId: ReturnType<typeof vi.fn>;
@@ -27,14 +56,14 @@ describe("useSelectChat", () => {
     states = new Map();
     getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) {
-        states.set(dialogueId, { reactions: {}, historyQuestion: null });
+        states.set(dialogueId, makeState());
       }
-      return states.get(dialogueId);
+      return states.get(dialogueId)!;
     };
     currentChatId = ref("");
-    currentChat = ref(null);
     chatList = ref([
       { id: 1, dialogue_id: "d1", title: "t", date: "", isFavorite: false },
+      { id: 2, dialogue_id: "d2", title: "t2", date: "", isFavorite: false },
     ]);
     scrollToBottom = vi.fn();
     updateUrlWithChatId = vi.fn();
@@ -45,7 +74,6 @@ describe("useSelectChat", () => {
     return useSelectChat({
       getChatState,
       currentChatId,
-      currentChat,
       scrollToBottom,
       updateUrlWithChatId,
       chatList,
@@ -76,9 +104,10 @@ describe("useSelectChat", () => {
     // reaction hydration (string "1" → number 1)
     expect(getChatState("d1").reactions["msg-1"]).toBe(1);
 
-    // messages rebuilt: one user + one assistant
-    expect(currentChat.value).not.toBeNull();
-    const messages = currentChat.value.messages;
+    // messages rebuilt into this dialogue's renderedChat owner
+    const rendered = getChatState("d1").renderedChat;
+    expect(rendered).not.toBeNull();
+    const messages = rendered!.messages;
     expect(Array.isArray(messages)).toBe(true);
     expect(messages.length).toBe(2);
 
@@ -92,9 +121,9 @@ describe("useSelectChat", () => {
     expect(assistantMsg.tool_name).toBe("ChatAgent");
     expect(assistantMsg.id).toBe("msg-1");
 
-    // currentChat merges in the original chat record's fields
-    expect(currentChat.value.dialogue_id).toBe("d1");
-    expect(currentChat.value.title).toBe("t");
+    // renderedChat merges in the original chat record's fields
+    expect(rendered!.dialogue_id).toBe("d1");
+    expect(rendered!.title).toBe("t");
 
     // historyQuestion is set (non-null, holding two condensed records)
     const hq = getChatState("d1").historyQuestion;
@@ -138,7 +167,61 @@ describe("useSelectChat", () => {
     expect(reactions["msg-1"]).toBe(1);
   });
 
-  it("non-200 response: does not rebuild messages or reset historyQuestion, but still updates URL", async () => {
+  it("ignores optional history source metadata and preserves legacy rendering", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce({
+      code: 200,
+      data: [
+        {
+          id: "msg-source",
+          query: "Question",
+          answer: "Answer",
+          tool_name: "ChatAgent",
+          source: "unexpected-diagnostic",
+          fallback_reason: "private upstream error",
+        },
+      ],
+    } as any);
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    const messages = getChatState("d1").renderedChat!.messages;
+    expect(messages[0]).toMatchObject({ role: "user", content: "Question" });
+    expect(messages[1]).toMatchObject({ role: "assistant", content: "Answer" });
+    expect((messages[1] as any).source).toBeUndefined();
+    expect((messages[1] as any).fallback_reason).toBeUndefined();
+  });
+
+  it("reselects a live rendered owner without overwriting its message runtime from history", async () => {
+    const transport = vi.fn();
+    const runtime = {
+      dialogueId: "d1",
+      messageId: "live-message",
+      runId: "live-run",
+      transport,
+    };
+    const liveMessage: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      a2uiRuntime: runtime,
+      blocks: [],
+    };
+    const state = getChatState("d1");
+    state.renderedChat = { dialogue_id: "d1", messages: [liveMessage] };
+    const renderedOwner = state.renderedChat;
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    expect(mockGetAnswerCheck).not.toHaveBeenCalled();
+    expect(state.renderedChat).toBe(renderedOwner);
+    expect(state.renderedChat?.messages[0].a2uiRuntime).toBe(runtime);
+    expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
+    expect(scrollToBottom).toHaveBeenCalledTimes(1);
+  });
+
+  it("non-200 response: does not rebuild messages or reset historyQuestion, but still updates URL when still active", async () => {
     // Seed a non-empty historyQuestion to verify the non-200 branch does not touch it
     const st = getChatState("d1");
     st.historyQuestion = [{ role: "user", content: "keep me" }];
@@ -150,13 +233,13 @@ describe("useSelectChat", () => {
 
     // The synchronous currentChatId write still happens
     expect(currentChatId.value).toBe("d1");
-    // The non-200 branch skips the currentChat assignment
-    expect(currentChat.value).toBeNull();
+    // The non-200 branch skips the renderedChat assignment
+    expect(getChatState("d1").renderedChat).toBeNull();
     // historyQuestion is not reset
     expect(getChatState("d1").historyQuestion).toEqual([
       { role: "user", content: "keep me" },
     ]);
-    // The URL is always updated (outside the if block)
+    // The URL is updated while still active
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
   });
 
@@ -201,5 +284,98 @@ describe("useSelectChat", () => {
     expect(Array.isArray(hq)).toBe(true);
     expect(hq.length).toBe(2);
     expect(getChatState("d2").historyQuestion).toBeNull();
+
+    // rendered data lands on d1 only; late response does not steal URL/scroll
+    expect(getChatState("d1").renderedChat?.messages.length).toBe(2);
+    expect(getChatState("d2").renderedChat).toBeNull();
+    expect(currentChatId.value).toBe("d2");
+    expect(updateUrlWithChatId).not.toHaveBeenCalled();
+    expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
+  it("out-of-order A/B history responses populate only their states and never revert current ID/URL/scroll", async () => {
+    let resolveA!: (v: any) => void;
+    let resolveB!: (v: any) => void;
+    const pendingA = new Promise<any>((resolve) => {
+      resolveA = resolve;
+    });
+    const pendingB = new Promise<any>((resolve) => {
+      resolveB = resolve;
+    });
+
+    mockGetAnswerCheck
+      .mockReturnValueOnce(pendingA)
+      .mockReturnValueOnce(pendingB);
+
+    const { selectChat } = makeComposable();
+    const pA = selectChat("d1");
+    const pB = selectChat("d2");
+
+    expect(currentChatId.value).toBe("d2");
+
+    // B resolves first
+    resolveB({
+      code: 200,
+      data: [
+        {
+          id: "msg-b",
+          query: "B-q",
+          answer: "B-a",
+          tool_name: "ChatAgent",
+        },
+      ],
+    });
+    await pB;
+
+    expect(currentChatId.value).toBe("d2");
+    expect(getChatState("d2").renderedChat?.messages[0].content).toBe("B-q");
+    expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
+    expect(updateUrlWithChatId).toHaveBeenCalledWith("d2");
+    expect(scrollToBottom).toHaveBeenCalledTimes(1);
+
+    // A resolves later — data only, no foreground steal
+    resolveA({
+      code: 200,
+      data: [
+        {
+          id: "msg-a",
+          query: "A-q",
+          answer: "A-a",
+          tool_name: "ChatAgent",
+        },
+      ],
+    });
+    await pA;
+
+    expect(currentChatId.value).toBe("d2");
+    expect(getChatState("d1").renderedChat?.messages[0].content).toBe("A-q");
+    expect(getChatState("d2").renderedChat?.messages[0].content).toBe("B-q");
+    expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
+    expect(updateUrlWithChatId).toHaveBeenCalledWith("d2");
+    expect(scrollToBottom).toHaveBeenCalledTimes(1);
+  });
+
+  it("history AnalystAgent hydrates the existing task_id onto the message", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce({
+      code: 200,
+      data: [
+        {
+          id: "1001",
+          query: "run analysis",
+          answer: "analysis started",
+          tool_name: "AnalystAgent",
+          task_id: "ei-task-abc",
+          compute_resource: "analyst-agents-small",
+        },
+      ],
+    } as any);
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    const assistant = getChatState("d1").renderedChat!.messages[1];
+    expect(assistant.tool_name).toBe("AnalystAgent");
+    expect(assistant.id).toBe("1001");
+    expect(assistant.task_id).toBe("ei-task-abc");
   });
 });

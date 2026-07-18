@@ -1,0 +1,38 @@
+{
+  "run_id": "run-dg-1",
+  "agent": "deep_genome",
+  "origin": "synthetic",
+  "user_id": "synthetic@example.invalid",
+  "status": "running",
+  "result": {
+    "report_stage": "intermediate",
+    "report_completeness": "partial",
+    "report_revision": 2,
+    "report_updated_at": "2026-07-16T00:00:00Z",
+    "intermediate_report": "# Intermediate",
+    "progress": {
+      "completed": 1,
+      "total": 2
+    },
+    "degraded": true,
+    "degraded_reason": "1 of 2 optional analyses unavailable",
+    "failures": [
+      {
+        "work_item_key": "protein_design",
+        "status": "failed",
+        "message": "analysis task failed"
+      }
+    ],
+    "artifacts": []
+  },
+  "error": "",
+  "created_at": "2026-07-16T00:00:00Z",
+  "updated_at": "2026-07-16T00:01:00Z",
+  "expires_at": "2026-07-17T00:00:00Z",
+  "task_ids": ["task-dg-1"],
+  "dialogue_id": "dialogue-synthetic-1",
+  "query": "synthetic deep genome query",
+  "tool_name": "deep_genome",
+  "model": "synthetic-model",
+  "answer": "# Intermediate"
+}

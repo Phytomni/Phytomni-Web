@@ -1,23 +1,17 @@
 // i18n configuration entry point.
 import { createI18n } from "vue-i18n";
 import enUS from "./langs/en-US";
-import zhCN from "./langs/zh-CN";
 import elementEnLocale from "element-plus/es/locale/lang/en";
-import elementZhLocale from "element-plus/es/locale/lang/zh-cn";
 import { useAppStore } from "@/stores";
+import { loadLocaleMessages, type SupportedLocales } from "./lazy";
+import { datetimeFormats } from "./datetime-formats";
 
-// Supported locales
-type SupportedLocales = "zh-CN" | "en-US";
-
-// Message bundles
+// Message bundles — en-US is eager (fallback locale, must always be present);
+// zh-CN is deferred behind a dynamic import in ./lazy.
 const messages = {
   "en-US": {
     ...enUS,
     ...elementEnLocale,
-  },
-  "zh-CN": {
-    ...zhCN,
-    ...elementZhLocale,
   },
 };
 
@@ -27,6 +21,7 @@ export const i18n = createI18n({
   locale: localStorage.getItem("language") || "en-US", // default locale
   fallbackLocale: "en-US", // fallback locale
   messages,
+  datetimeFormats,
 
   // Debug-oriented warning config
   missingWarn: true,
@@ -34,9 +29,11 @@ export const i18n = createI18n({
   silentTranslationWarn: false,
 });
 
-// Switch language
-export function setLanguage(lang: SupportedLocales) {
+// Switch language (loads the target pack on demand before switching).
+export async function setLanguage(lang: SupportedLocales): Promise<SupportedLocales> {
   try {
+    await loadLocaleMessages(i18n, lang);
+
     if (i18n.mode === "legacy") {
       (i18n.global.locale as any) = lang;
     } else {
@@ -47,17 +44,13 @@ export function setLanguage(lang: SupportedLocales) {
     const appStore = useAppStore();
     appStore.setLanguage(lang);
 
-    // Set the Element Plus locale
+    // Set the document language attribute
     const htmlEl = document.documentElement;
     htmlEl.setAttribute("lang", lang);
 
-    // Debug logging
-    console.log("Language changed:", {
-      lang,
-      localStorage: localStorage.getItem("language"),
-      i18nLocale: i18n.global.locale,
-      availableMessages: Object.keys(i18n.global.messages),
-    });
+    // Keep the browser tab title in sync with the locale pack
+    // (en Phytomni / zh brand string from chat.appTitle).
+    document.title = i18n.global.t("chat.appTitle") as string;
 
     return lang;
   } catch (error) {

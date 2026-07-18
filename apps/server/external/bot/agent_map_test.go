@@ -11,3 +11,11 @@ func TestSlugFor_BriefGene(t *testing.T) {
 		t.Errorf("SlugFor(BriefGeneAgent) = %q, want brief_gene", slug)
 	}
 }
+
+func TestAliasMapContainsEveryCanonicalTool(t *testing.T) {
+	for slug, tool := range CanonicalAgentTool {
+		if got, ok := aliasToSlug[tool]; !ok || got != slug {
+			t.Errorf("%s -> %q want %q", tool, got, slug)
+		}
+	}
+}

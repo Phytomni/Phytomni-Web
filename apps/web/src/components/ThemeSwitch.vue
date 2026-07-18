@@ -1,17 +1,21 @@
 <template>
   <div class="theme-switch">
     <el-dropdown @command="handleCommand" trigger="click">
-      <span class="theme-dropdown-link">
+      <button
+        type="button"
+        class="theme-dropdown-link"
+        :aria-label="$t('common.themeSelector')"
+      >
         <el-icon class="theme-icon">
           <Sunny v-if="currentTheme === 'light'" />
           <Moon v-else-if="currentTheme === 'dark'" />
           <Monitor v-else />
         </el-icon>
-        {{ themeStore.themeLabel }}
+        <span class="theme-label">{{ currentThemeLabel }}</span>
         <el-icon class="el-icon--right">
           <arrow-down />
         </el-icon>
-      </span>
+      </button>
       <template #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item
@@ -19,14 +23,14 @@
             :disabled="themeStore.theme === 'light'"
           >
             <el-icon><Sunny /></el-icon>
-            Light
+            {{ $t("common.lightTheme") }}
           </el-dropdown-item>
           <el-dropdown-item
             command="dark"
             :disabled="themeStore.theme === 'dark'"
           >
             <el-icon><Moon /></el-icon>
-            Dark
+            {{ $t("common.darkTheme") }}
           </el-dropdown-item>
           <el-dropdown-item
             command="system"
@@ -43,14 +47,22 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { ArrowDown, Sunny, Moon, Monitor } from "@element-plus/icons-vue";
 import { useThemeStore, type ThemeType } from "@/stores";
 
 const themeStore = useThemeStore();
+const { t } = useI18n();
 
 // the theme currently applied
 const currentTheme = computed(() => {
   return themeStore.currentTheme;
+});
+
+const currentThemeLabel = computed(() => {
+  if (themeStore.theme === "light") return t("common.lightTheme");
+  if (themeStore.theme === "dark") return t("common.darkTheme");
+  return t("common.followSystem");
 });
 
 // switch theme
@@ -68,22 +80,39 @@ const handleCommand = (command: ThemeType) => {
   .theme-dropdown-link {
     display: flex;
     align-items: center;
-    color: var(--el-text-color-primary);
+    min-height: var(--phy-control-height-compact);
+    gap: var(--phy-space-4);
+    padding: var(--phy-space-4) var(--phy-space-8);
+    border: 0;
+    border-radius: var(--phy-radius-sm);
+    background: transparent;
+    color: var(--phy-color-text-secondary);
+    cursor: pointer;
+    font-family: inherit;
     font-size: 14px;
-    min-width: 80px;
-    padding: 8px 12px;
-    border-radius: 4px;
-    transition: all 0.3s ease;
+    transition: color var(--phy-motion-fast) var(--phy-motion-ease-out),
+      background-color var(--phy-motion-fast) var(--phy-motion-ease-out);
 
     &:hover {
-      color: var(--el-color-primary);
-      background-color: var(--el-fill-color-light);
+      color: var(--phy-color-action-text-hover);
+      background-color: var(--phy-color-fill-subtle);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--phy-color-focus);
+      outline-offset: 2px;
     }
   }
 
   .theme-icon {
-    margin-right: 4px;
     font-size: 16px;
+  }
+}
+
+@media (max-width: 599px) {
+  .theme-label,
+  .theme-dropdown-link .el-icon--right {
+    display: none;
   }
 }
 

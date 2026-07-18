@@ -38,7 +38,7 @@ export const buildDisplayReferences = (
 
       if (hasLink) {
         const doiLink = doc.dl
-          ? `doi:<a href="${sanitizeHref(
+          ? `doi: <a href="${sanitizeHref(
               String(doc.dl)
             )}" target="_blank" class="doi-link">${escapeHtml(
               String(doc.dl)

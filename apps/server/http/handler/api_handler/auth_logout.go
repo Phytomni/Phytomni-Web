@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 
 	rxCache "phytomni-server/cache"
 	rxLog "phytomni-server/log"
@@ -59,12 +59,14 @@ func (ph *Handler) LogoutAll(ctx *gin.Context) {
 // Falls back to TokenLifetime if exp is unreadable (over-blocks slightly, safe).
 func tokenRemainingTTL(token string) time.Duration {
 	claims := &middleware.Claims{}
-	parser := &jwt.Parser{}
-	if _, _, err := parser.ParseUnverified(token, claims); err == nil && claims.ExpiresAt > 0 {
-		if d := time.Until(time.Unix(claims.ExpiresAt, 0)); d > 0 {
-			return d
+	parser := jwt.NewParser()
+	if _, _, err := parser.ParseUnverified(token, claims); err == nil {
+		if exp := claims.ExpiresAtUnix(); exp > 0 {
+			if d := time.Until(time.Unix(exp, 0)); d > 0 {
+				return d
+			}
+			return time.Second // already expired; blocklist briefly anyway
 		}
-		return time.Second // already expired; blocklist briefly anyway
 	}
 	return middleware.TokenLifetime
 }

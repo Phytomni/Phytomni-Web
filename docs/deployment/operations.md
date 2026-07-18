@@ -2,7 +2,8 @@
 
 **Evergreen — the recurring Web ↔ Phytomni-Bot operational procedures** that stay
 valid across releases: Bot key mint/rotation, the dark-launch activation gates
-(Expert, streaming), degraded-mode behavior, and rollback. All examples are
+(Expert, streaming, A2UI, remote product surfaces, interop, and history
+dual-read), degraded-mode behavior, and rollback. All examples are
 scrubbed — never paste real keys, tokens, or DSNs into this file or into commits.
 
 > **What's evergreen vs one-time here.** §1–§5 (service token, key mint, 90-day
@@ -176,12 +177,16 @@ Two windows, matching the staged §6:
   `UPDATE question_agent_logs SET status='FAILED' WHERE status='RUNNING' AND (bot_run_id IS NULL OR bot_run_id='') AND created_at < '<cutover-date>';`
   Run only after confirming such rows exist and are genuinely stale.
 
-## 11. `0.1.2` dark-launched features — Bot-coordination activation gates
+## 11. `0.1.3` dark-launched features — Bot-coordination activation gates
 
-Two `0.1.2` chat features ship **dark** on the Web side (default-OFF flags,
-byte-identical to today until flipped). Each flip requires a matching Bot-side
-capability **first**, or the feature breaks on activation. Both are Web↔Bot
-coordination points — keep them here so the Bot team and ops flip in lockstep.
+The `0.1.3` release ships several Web↔Bot capabilities **dark** on the Web side
+(default-OFF flags, byte-identical to the blocking behavior until flipped). Each
+flip requires a matching Bot-side capability, security review where applicable,
+and owner/CI/staging/live evidence **first**, or the feature breaks on
+activation. Keep these coordination points here so Bot owners and ops flip in
+lockstep. Local G15–G17 checks are readiness evidence only; every row in the
+activation matrix remains **External Pending** until an authorized packet is
+reviewed.
 
 ### 11.1 Expert routing mode (`bot.expert_enabled`)
 
@@ -216,3 +221,67 @@ coordination points — keep them here so the Bot team and ops flip in lockstep.
 - **Scope:** streaming is Instant×chat only. Expert (§11.1) and analyst/deep_genome
   async stay non-streaming.
 
+### 11.3 A2UI actions (`bot.a2ui_actions_enabled`)
+
+- **Web state:** typed A2UI surfaces and the owner/run-bound action relay are
+  deployed, but the gateway flag is `false`; the disabled path returns before a
+  Bot call. Submitted surfaces expire when their in-flight run is gone.
+- **Bot and review preconditions:** Bot must emit the accepted catalog and
+  accept the matching action contract. Web G15, the A2UI action review, owner
+  checks, expiry/retry tests, and staging/live evidence must be linked in the
+  acceptance record before a flag change.
+- **Activation order:** (1) Bot owner returns emit/action evidence; (2) Web
+  owner and security review the acceptance row; (3) ops enables
+  `bot.a2ui_actions_enabled` and smoke-tests a synthetic owner/run-matched
+  action. Rollback = set the flag back to `false` and restart; no schema
+  rollback is needed.
+
+### 11.4 Remote Research, Design, and Network surfaces
+
+- **Web state:** `bot.research_enabled`, `bot.design_enabled`, and
+  `bot.network_enabled` are all `false`. With a flag off, Web must not dispatch
+  to Bot and the user sees the documented unavailable state.
+- **Preconditions:** each surface needs its own Bot capability, resolver and
+  attachment checks, permission/owner checks, bounded result/artifact evidence,
+  and Bot/CI/staging/live smoke results. Do not treat the presence of a route or
+  a local fixture as evidence.
+- **Activation order:** enable one flag at a time after its acceptance row is
+  reviewed; record the Web/Bot SHAs and operator. Rollback = disable only the
+  affected flag and repeat its unavailable-state smoke check.
+
+### 11.5 Interop capability and provenance (`bot.interop_enabled`)
+
+- **Web state:** capability discovery is hidden/off while the flag is `false`.
+  The Web boundary remains the allowlist, owner-scope, bounded-size, and
+  redaction authority; the browser never calls Bot interop directly.
+- **Preconditions:** security review must confirm that capability/provenance
+  output excludes raw Bot envelopes, provider diagnostics, private paths,
+  credentials, and cross-user data. Bot owner, CI, staging/live, and operations
+  evidence must be linked before activation.
+- **Activation order:** ops flips `bot.interop_enabled` only after review and
+  restarts Web Go; smoke a permitted capability and a denied/owner-mismatch
+  request. Rollback = set it back to `false`; retain the sanitized projection
+  schema and legacy history.
+
+### 11.6 History dual-read (`bot.history_dual_read`)
+
+- **Web state:** the projection-first history path and legacy fallback are
+  always available. `history_dual_read=false` keeps the optional Bot history
+  observation path dormant.
+- **Preconditions:** compare projection, legacy, and Bot history for synthetic
+  owner-scoped rows; verify monotonic report revisions, non-empty report
+  precedence, artifact retention, and flag rollback. RC-WEB-007 and RC-LIVE-001
+  must be reviewed before enabling.
+- **Activation order:** ops enables the flag for observation only and records
+  the comparison window; it must not change user ownership or write raw Bot
+  history into MySQL. Rollback = set it back to `false`; do not drop
+  `bot_projection_json`, `bot_report_revision`, or their index.
+
+### 11.7 Shared evidence and deployment boundary
+
+The 0.1.3 projection migration is a deployment prerequisite, not an activation
+gate. Run `go run main.go migrate add-bot-projection` before new binary traffic
+as documented in [`upgrading.md`](upgrading.md). The local
+`validate_web_local.sh` G13–G17 result cannot substitute for Bot-owner,
+operations, staging, or live acceptance. Keep all flags false on the initial
+deploy unless a separately authorized acceptance packet says otherwise.

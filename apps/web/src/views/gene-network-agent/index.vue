@@ -1,282 +1,742 @@
 <template>
-  <div class="gene-network-agent-container">
-    <div class="chat-header">
-      <div class="header-content">
-        <el-button
-          type="primary"
-          :icon="ArrowLeft"
+  <main
+    class="gene-network-page"
+    data-scroll-root="gene-network-agent"
+    aria-labelledby="gene-network-title"
+  >
+    <section
+      v-if="!capabilityLoaded"
+      class="gene-network-state"
+      data-test="network-capability-loading"
+      role="status"
+      aria-live="polite"
+    >
+      <h1 id="gene-network-title">{{ t("agents.geneNetwork.title") }}</h1>
+      <p>{{ t("agents.geneNetwork.capabilityLoading") }}</p>
+      <button
+        type="button"
+        class="gene-network-back"
+        data-test="network-back"
+        @click="goBack"
+      >
+        {{ t("common.back") }}
+      </button>
+    </section>
+
+    <section
+      v-else-if="!capabilityAllowed"
+      class="gene-network-state"
+      data-test="network-unavailable"
+      role="status"
+      aria-live="polite"
+    >
+      <h1 id="gene-network-title">
+        {{ t("agents.geneNetwork.unavailableTitle") }}
+      </h1>
+      <p>{{ t("agents.geneNetwork.unavailableMessage") }}</p>
+      <button
+        type="button"
+        class="gene-network-back"
+        data-test="network-back"
+        @click="goBack"
+      >
+        {{ t("common.back") }}
+      </button>
+    </section>
+
+    <template v-else>
+      <header class="gene-network-header">
+        <div>
+          <p class="gene-network-eyebrow">
+            {{ t("agents.geneNetwork.agentLabel") }}
+          </p>
+          <h1 id="gene-network-title">
+            {{ t("agents.geneNetwork.title") }}
+          </h1>
+          <p class="gene-network-subtitle">
+            {{ t("agents.geneNetwork.subtitle") }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="gene-network-back"
+          data-test="network-back"
           @click="goBack"
-          class="back-button"
         >
-          {{ $t("common.back") }}
-        </el-button>
-        <div class="header-text">
-          <h1>{{ $t("agents.geneNetwork.title") }}</h1>
-          <p>{{ $t("agents.geneNetwork.subtitle") }}</p>
-        </div>
-      </div>
-    </div>
+          {{ t("common.back") }}
+        </button>
+      </header>
 
-    <div class="chat-messages">
-      <!-- User question -->
-      <div class="message user-message">
-        <div class="message-content">
-          <div class="message-text">
-            Please help me to analysis the hormone regulatory network in the
-            traits of TO:0000011
-          </div>
+      <form
+        class="gene-network-form"
+        novalidate
+        @submit.prevent="submitNetwork"
+      >
+        <div class="gene-network-field">
+          <label for="network-question">
+            {{ t("agents.geneNetwork.questionLabel") }}
+          </label>
+          <textarea
+            id="network-question"
+            v-model="question"
+            data-test="network-question"
+            :placeholder="t('agents.geneNetwork.questionPlaceholder')"
+            rows="5"
+            aria-required="true"
+          />
         </div>
-      </div>
 
-      <!-- AI answer -->
-      <div class="message ai-message">
-        <div class="message-avatar">
-          <el-avatar :size="36" :src="botAvatar" />
+        <div class="gene-network-field">
+          <label for="network-trait">
+            {{ t("agents.geneNetwork.traitLabel") }}
+          </label>
+          <select
+            id="network-trait"
+            v-model="toId"
+            data-test="network-trait"
+            aria-required="true"
+          >
+            <option value="">{{ t("agents.geneNetwork.traitPlaceholder") }}</option>
+            <option
+              v-for="trait in TRAIT_OPTIONS"
+              :key="trait.id"
+              :value="trait.id"
+            >
+              {{ t(trait.labelKey) }} ({{ trait.id }})
+            </option>
+          </select>
         </div>
-        <div class="message-content">
-          <div class="message-text">
-            {{ $t("agents.geneNetwork.taskCreated")
-            }}8ab4434b-772a-44f0-aaa5-fa163e7f84a3
-            <div class="download-section">
-              <el-button
-                type="primary"
-                :icon="Download"
-                @click="downloadResults"
-                :loading="isDownloading"
-                class="download-button"
-              >
-                {{ isDownloading ? $t("agents.geneNetwork.downloading") : $t("agents.geneNetwork.downloadResults") }}
-              </el-button>
-              <div v-if="isDownloading" class="download-progress">
-                <p>{{ $t("agents.geneNetwork.volumeProgress", { current: currentDownloadIndex + 1, total: 5 }) }}</p>
-                <p class="file-name">{{ currentDownloadFile }}</p>
-              </div>
+
+        <div class="gene-network-field">
+          <label for="network-species">
+            {{ t("agents.geneNetwork.speciesLabel") }}
+          </label>
+          <select
+            id="network-species"
+            v-model="speciesCode"
+            data-test="network-species"
+            aria-required="true"
+          >
+            <option value="">
+              {{ t("agents.geneNetwork.speciesPlaceholder") }}
+            </option>
+            <option
+              v-for="species in SPECIES_OPTIONS"
+              :key="species.code"
+              :value="species.code"
+            >
+              {{ t(species.labelKey) }} ({{ species.code }})
+            </option>
+          </select>
+        </div>
+
+        <ul
+          v-if="validationMessages.length"
+          class="gene-network-error-list"
+          data-test="network-validation"
+          role="alert"
+        >
+          <li
+            v-for="message in validationMessages"
+            :key="message"
+            class="gene-network-error"
+          >
+            {{ message }}
+          </li>
+        </ul>
+        <p
+          v-if="formError"
+          class="gene-network-error"
+          data-test="network-form-error"
+          role="alert"
+        >
+          {{ formError }}
+        </p>
+
+        <div class="gene-network-actions">
+          <button
+            type="submit"
+            class="gene-network-submit"
+            data-test="network-submit"
+            :disabled="isSubmitting"
+            @click="submitNetwork"
+            @keydown.enter.prevent="submitNetwork"
+          >
+            {{
+              isSubmitting
+                ? t("agents.geneNetwork.submitting")
+                : t("agents.geneNetwork.submit")
+            }}
+          </button>
+          <button
+            type="button"
+            class="gene-network-reset"
+            data-test="network-reset"
+            @click="resetNetwork"
+          >
+            {{ t("agents.geneNetwork.reset") }}
+          </button>
+          <button
+            v-if="isRunActive"
+            type="button"
+            class="gene-network-cancel"
+            data-test="network-cancel"
+            @click="cancelNetwork"
+          >
+            {{ t("common.cancel") }}
+          </button>
+        </div>
+      </form>
+
+      <p
+        v-if="trackingDegraded"
+        class="gene-network-degraded"
+        data-test="network-tracking-degraded"
+        role="status"
+        aria-live="polite"
+      >
+        {{ t("agents.geneNetwork.trackingDegraded") }}
+      </p>
+      <p
+        v-if="displayedState.degraded"
+        class="gene-network-degraded"
+        data-test="network-degraded"
+        role="status"
+        aria-live="polite"
+      >
+        {{ t("agents.geneNetwork.degraded") }}
+      </p>
+
+      <section
+        v-if="hasRun"
+        class="gene-network-artifact"
+        data-test="network-artifact"
+      >
+        <ResearchArtifactShell
+          :title="t('agents.geneNetwork.reportTitle')"
+          :metadata="t('agents.geneNetwork.agentLabel')"
+          :status="reportStatusLabel"
+          :report-status="reportStatus"
+          :tab-labels="tabLabels"
+          artifact-id="gene-network-artifact"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t('agents.geneNetwork.reset')"
+          :tablist-label="t('agents.geneNetwork.sectionsLabel')"
+          @back="goBack"
+          @close="resetNetwork"
+          @action="resetNetwork"
+        >
+          <template #content>
+            <BotReportState
+              :state="displayedState"
+              :progress="reportProgress"
+              :updated-at="reportUpdatedAt"
+              ns="gene-network-agent"
+              :labels="reportLabels"
+              :empty-report-label="t('agents.geneNetwork.emptyReport')"
+            />
+          </template>
+
+          <template #evidence>
+            <p
+              class="gene-network-empty"
+              data-test="network-evidence-empty"
+              role="status"
+            >
+              {{ t("agents.geneNetwork.noEvidence") }}
+            </p>
+          </template>
+
+          <template #activity>
+            <div
+              class="gene-network-activity"
+              data-test="network-progress"
+              role="status"
+              aria-live="polite"
+            >
+              <p>{{ progressLabel }}</p>
+              <p v-if="displayedState.failures.length">
+                {{ t("agents.geneNetwork.degraded") }}
+              </p>
             </div>
-            <div class="tip-text">{{ $t("common.Tip") }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+          </template>
+
+          <template #downloads>
+            <div
+              :data-test="
+                displayedState.artifacts.length === 0
+                  ? 'network-empty-artifacts'
+                  : undefined
+              "
+            >
+              <BotArtifactList
+                :artifacts="displayedState.artifacts"
+                :download="downloadArtifact"
+                :title-label="t('agents.geneNetwork.downloads')"
+                :download-text="t('agents.geneNetwork.download')"
+                :empty-label="t('agents.geneNetwork.noDownloads')"
+              />
+            </div>
+            <p
+              v-if="downloadError"
+              class="gene-network-error"
+              data-test="network-download-error"
+              role="alert"
+            >
+              {{ downloadError }}
+            </p>
+          </template>
+        </ResearchArtifactShell>
+      </section>
+    </template>
+  </main>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from "vue-router";
-import { ArrowLeft, Download } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
+import { getChatdownloadURL } from "@/api/chat";
+import BotArtifactList from "@/components/research/BotArtifactList.vue";
+import BotReportState from "@/components/research/BotReportState.vue";
+import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
+import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
+import {
+  useBotRemoteAgentRun,
+  type BotRemoteAgentRunState,
+} from "@/views/chat/composables/useBotRemoteAgentRun";
+import { useChatStates } from "@/views/chat/composables/useChatStates";
+import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
+import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
-import { ref } from "vue";
+const MAX_QUERY_LENGTH = 4000;
+const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
+const SAFE_TRAIT_ID = /^TO:\d{7}$/u;
 
+const TRAIT_OPTIONS = [
+  { id: "TO:0000011", labelKey: "agents.geneNetwork.traits.nitrogenSensitivity" },
+  { id: "TO:0000019", labelKey: "agents.geneNetwork.traits.seedlingHeight" },
+  { id: "TO:0000040", labelKey: "agents.geneNetwork.traits.panicleLength" },
+  { id: "TO:0000128", labelKey: "agents.geneNetwork.traits.harvestIndex" },
+  { id: "TO:0000207", labelKey: "agents.geneNetwork.traits.plantHeight" },
+  { id: "TO:0000430", labelKey: "agents.geneNetwork.traits.germinationRate" },
+] as const;
+const TRAIT_IDS = new Set<string>(TRAIT_OPTIONS.map((trait) => trait.id));
+const SPECIES_OPTIONS = [
+  { code: "ath", labelKey: "agents.geneNetwork.species.arabidopsis" },
+  { code: "osa", labelKey: "agents.geneNetwork.species.rice" },
+  { code: "zma", labelKey: "agents.geneNetwork.species.maize" },
+  { code: "sbi", labelKey: "agents.geneNetwork.species.sorghum" },
+  { code: "gma", labelKey: "agents.geneNetwork.species.soybean" },
+] as const;
+const SPECIES_CODES = new Set<string>(
+  SPECIES_OPTIONS.map((species) => species.code)
+);
+
+const props = defineProps<{ state?: BotLifecycleState }>();
+const { t } = useI18n();
+const route = useRoute();
 const router = useRouter();
-const goBack = () => {
+const { getChatState } = useChatStates();
+const capabilities = useBotCapabilities("gene-network-agent-view");
+
+const routeDialogueId =
+  typeof route.query.dialogue_id === "string" ? route.query.dialogue_id : "";
+const dialogueId = SAFE_DIALOGUE_ID.test(routeDialogueId)
+  ? routeDialogueId
+  : "gene-network-agent";
+const run = useBotRemoteAgentRun({
+  tool: "GeneNetworkAgent",
+  dialogueId,
+  getChatState,
+  capabilities,
+});
+
+const question = ref("");
+const toId = ref("");
+const speciesCode = ref("");
+const validationMessages = ref<string[]>([]);
+const formError = ref("");
+const downloadError = ref("");
+const isSubmitting = ref(false);
+
+const capabilityLoaded = computed(() => capabilities.loaded.value === true);
+const networkCapability = computed(
+  () => capabilities.byTool.value.GeneNetworkAgent
+);
+const networkProduct = REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent;
+const capabilityAllowed = computed(() => {
+  const capability = networkCapability.value;
+  return (
+    capabilityLoaded.value &&
+    networkProduct.live === true &&
+    capability?.enabled === true &&
+    capability.execution === "agent_run" &&
+    capability.resolver === true &&
+    capability.artifacts === true
+  );
+});
+
+const displayedState = computed(
+  () => (props.state ?? run.state.value) as BotRemoteAgentRunState
+);
+const reportProgress = computed<BotProgress | null>(
+  () => displayedState.value.projection?.progress ?? null
+);
+const reportUpdatedAt = computed(
+  () => displayedState.value.projection?.reportUpdatedAt ?? null
+);
+const trackingDegraded = computed(
+  () => displayedState.value.projection?.trackingDegraded === true
+);
+const isRunActive = computed(
+  () =>
+    Boolean(displayedState.value.requestId) &&
+    ["submitting", "running", "input_required"].includes(
+      displayedState.value.phase
+    )
+);
+const hasRun = computed(
+  () =>
+    props.state !== undefined ||
+    displayedState.value.phase !== "idle" ||
+    displayedState.value.projection !== null ||
+    displayedState.value.degraded
+);
+const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
+  () => {
+    if (displayedState.value.phase === "failed") return "failed";
+    if (displayedState.value.degraded) return "degraded";
+    if (displayedState.value.phase === "succeeded") return "complete";
+    return "loading";
+  }
+);
+const reportStatusLabel = computed(() => {
+  switch (reportStatus.value) {
+    case "complete":
+      return t("agents.geneNetwork.complete");
+    case "degraded":
+      return t("agents.geneNetwork.degraded");
+    case "failed":
+      return t("common.failed");
+    default:
+      return t("agents.geneNetwork.progress");
+  }
+});
+const progressLabel = computed(() =>
+  isRunActive.value
+    ? t("agents.geneNetwork.progress")
+    : reportStatusLabel.value
+);
+const reportLabels = computed(() => ({
+  loading: t("agents.geneNetwork.progress"),
+  degraded: t("agents.geneNetwork.degraded"),
+  complete: t("agents.geneNetwork.complete"),
+  failed: t("common.failed"),
+}));
+const tabLabels = computed(() => ({
+  content: t("agents.geneNetwork.report"),
+  evidence: t("agents.geneNetwork.evidence"),
+  activity: t("agents.geneNetwork.activity"),
+  downloads: t("agents.geneNetwork.downloads"),
+}));
+
+function normalizedTraitId(value: unknown): string | null {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return SAFE_TRAIT_ID.test(normalized) && TRAIT_IDS.has(normalized)
+    ? normalized
+    : null;
+}
+
+function normalizedSpeciesCode(value: unknown): string | null {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return SPECIES_CODES.has(normalized) ? normalized : null;
+}
+
+async function submitNetwork(): Promise<void> {
+  if (!capabilityAllowed.value || isSubmitting.value) return;
+
+  validationMessages.value = [];
+  formError.value = "";
+  const normalizedQuestion = question.value.trim();
+  const normalizedToId = normalizedTraitId(toId.value);
+  const normalizedSpecies = normalizedSpeciesCode(speciesCode.value);
+
+  if (!normalizedQuestion) {
+    formError.value = t("agents.geneNetwork.questionRequired");
+  } else if (Array.from(normalizedQuestion).length > MAX_QUERY_LENGTH) {
+    formError.value = t("agents.geneNetwork.questionTooLong");
+  }
+  if (!normalizedToId) {
+    validationMessages.value.push(t("agents.geneNetwork.traitValidation"));
+  }
+  if (!normalizedSpecies) {
+    validationMessages.value.push(t("agents.geneNetwork.speciesValidation"));
+  }
+  if (formError.value || validationMessages.value.length) return;
+  if (!normalizedToId || !normalizedSpecies) return;
+
+  isSubmitting.value = true;
+  try {
+    await run.submit({
+      query: normalizedQuestion,
+      resolver: {
+        toId: normalizedToId,
+        speciesCode: normalizedSpecies,
+      },
+    });
+  } catch {
+    formError.value = t("agents.geneNetwork.submitFailed");
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
+function cancelNetwork(): void {
+  run.cancel();
+}
+
+function resetNetwork(): void {
+  run.reset();
+  question.value = "";
+  toId.value = "";
+  speciesCode.value = "";
+  validationMessages.value = [];
+  formError.value = "";
+  downloadError.value = "";
+}
+
+function goBack(): void {
   router.back();
-};
+}
 
-const botAvatar =
-  "/avatars/bot.svg";
+function isSafeDownloadUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.trim() === "") return false;
+  try {
+    const parsed = new URL(value, window.location.origin);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
 
-// Download state management
-const isDownloading = ref(false);
-const currentDownloadIndex = ref(0);
-const currentDownloadFile = ref("");
+async function downloadArtifact(outputDir: string): Promise<void> {
+  downloadError.value = "";
+  if (!isSafeBotObsPath(outputDir)) {
+    downloadError.value = t("agents.geneNetwork.downloadFailed");
+    return;
+  }
+  try {
+    const response = await getChatdownloadURL({ obs_path: outputDir });
+    const data = response as { code?: unknown; data?: unknown };
+    if (data.code !== 200 || !isSafeDownloadUrl(data.data)) {
+      downloadError.value = t("agents.geneNetwork.downloadFailed");
+      return;
+    }
+    window.open(data.data, "_blank", "noopener,noreferrer");
+  } catch {
+    downloadError.value = t("agents.geneNetwork.downloadFailed");
+  }
+}
 
-// Download analysis results - supports multi-volume download
-const downloadResults = () => {
-  const fileParts = [
-    "network_results.zip.001",
-    "network_results.zip.002",
-    "network_results.zip.003",
-    "network_results.zip.004",
-    "network_results.zip.005",
-  ];
+onMounted(() => {
+  void capabilities.load();
+});
 
-  const basePath =
-    "/static/downloads/5.Gene Netwrok Agent/3.NetwrokAgent/results/";
-
-  // Start downloading
-  isDownloading.value = true;
-  currentDownloadIndex.value = 0;
-  currentDownloadFile.value = fileParts[0];
-
-  // Show download-start notice
-  ElMessage({
-    message: `Downloading ${fileParts.length} split file(s), please wait until all downloads finish`,
-    type: "info",
-    duration: 4000,
-  });
-
-  // Download each volume file in sequence
-  fileParts.forEach((fileName, index) => {
-    setTimeout(() => {
-      try {
-        // Update current download state
-        currentDownloadIndex.value = index;
-        currentDownloadFile.value = fileName;
-
-        const link = document.createElement("a");
-        link.href = basePath + fileName;
-        link.download = fileName;
-        link.style.display = "none";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        // Last file finished downloading
-        if (index === fileParts.length - 1) {
-          setTimeout(() => {
-            isDownloading.value = false;
-            ElMessage({
-              message: "All split files downloaded! Put them in the same directory and extract",
-              type: "success",
-              duration: 5000,
-            });
-          }, 1000);
-        }
-      } catch (error) {
-        console.error(`Failed to download file ${fileName}:`, error);
-        isDownloading.value = false;
-        ElMessage({
-          message: `Failed to download ${fileName}, please try again`,
-          type: "error",
-          duration: 3000,
-        });
-      }
-    }, index * 1000); // Download files 1 second apart to avoid browser limits
-  });
-};
+onBeforeUnmount(() => {
+  run.cancel();
+});
 </script>
 
-<style lang="scss" scoped>
-.gene-network-agent-container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background-color: #f5f5f5;
-}
-
-.chat-header {
-  background: #fff;
-  padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .back-button {
-    flex-shrink: 0;
-  }
-
-  .header-text {
-    flex: 1;
-    text-align: center;
-
-    h1 {
-      margin: 0 0 8px 0;
-      color: #333;
-      font-size: 24px;
-    }
-
-    p {
-      margin: 0;
-      color: #666;
-      font-size: 14px;
-    }
-  }
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin: 20px 0px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  background: var(--el-bg-color);
-  box-shadow: 0 0 10px 0 rgb(218, 217, 217);
-  border-radius: 10px;
-}
-
-.message {
-  display: flex;
-  margin-bottom: 16px;
-
-  &.user-message {
-    justify-content: flex-end;
-
-    .message-content {
-      background: #eff6ff;
-      color: #333;
-      border-radius: 18px 18px 4px 18px;
-      max-width: 100%;
-    }
-  }
-
-  &.ai-message {
-    justify-content: flex-start;
-
-    .message-avatar {
-      flex-shrink: 0;
-      align-self: flex-start;
-      margin-right: 8px;
-    }
-
-    .message-content {
-      background: white;
-      color: #333;
-      border-radius: 18px 18px 18px 4px;
-      max-width: 85%;
-      border: 1px solid #e0e0e0;
-    }
-  }
-}
-
-.message-content {
-  padding: 12px 16px;
-  word-wrap: break-word;
-
-  .message-text {
-    line-height: 1.5;
-  }
-}
-
-.download-section {
-  margin-top: 12px;
-
-  .download-button {
-    margin-top: 8px;
-  }
-
-  .download-progress {
-    margin-top: 12px;
-    padding: 12px;
-    background-color: #f0f9ff;
-    border: 1px solid #bae6fd;
-    border-radius: 8px;
-
-    p {
-      margin: 4px 0;
-      color: #0369a1;
-      font-size: 14px;
-
-      &.file-name {
-        font-weight: 500;
-        color: #0c4a6e;
-      }
-    }
-  }
-}
-
-.tip-text {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 10px;
+<style scoped>
+.gene-network-page {
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--phy-space-24);
   width: 100%;
-  text-align: right;
+  height: 100%;
+  min-height: 0;
+  padding: var(--phy-space-32) var(--phy-space-40) var(--phy-space-48);
+  overflow-y: auto;
+  background: var(--phy-color-bg-page);
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+}
+
+.gene-network-header,
+.gene-network-form,
+.gene-network-state,
+.gene-network-artifact {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+}
+
+.gene-network-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--phy-space-24);
+}
+
+.gene-network-eyebrow {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-accent-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gene-network-header h1,
+.gene-network-state h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  line-height: 1.2;
+}
+
+.gene-network-subtitle,
+.gene-network-state p,
+.gene-network-empty {
+  margin: var(--phy-space-8) 0 0;
+  color: var(--phy-color-text-secondary);
+  line-height: 1.6;
+}
+
+.gene-network-back,
+.gene-network-submit,
+.gene-network-reset,
+.gene-network-cancel {
+  min-height: var(--phy-control-height-default);
+  padding: 0 var(--phy-space-16);
+  border-radius: var(--phy-radius-sm);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.gene-network-back,
+.gene-network-reset,
+.gene-network-cancel {
+  border: 1px solid var(--phy-color-border-control);
+  background: var(--phy-color-bg-elevated);
+  color: var(--phy-color-action-text);
+}
+
+.gene-network-form {
+  display: grid;
+  gap: var(--phy-space-20);
+  padding: var(--phy-space-24);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-lg);
+  background: var(--phy-color-bg-elevated);
+}
+
+.gene-network-field {
+  display: grid;
+  gap: var(--phy-space-8);
+}
+
+.gene-network-field label {
+  font-weight: 650;
+}
+
+.gene-network-field textarea,
+.gene-network-field select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--phy-space-12);
+  border: 1px solid var(--phy-color-border-control);
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-bg-page);
+  color: var(--phy-color-text);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.gene-network-field textarea {
+  resize: vertical;
+}
+
+.gene-network-error-list {
+  display: grid;
+  gap: var(--phy-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gene-network-error {
+  margin: 0;
+  color: var(--phy-color-danger-text, var(--phy-color-text-muted));
+  line-height: 1.5;
+}
+
+.gene-network-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--phy-space-12);
+}
+
+.gene-network-submit {
+  border: 1px solid var(--phy-color-action);
+  background: var(--phy-color-action);
+  color: var(--phy-color-action-contrast);
+}
+
+.gene-network-submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.gene-network-degraded {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  padding: var(--phy-space-12) var(--phy-space-16);
+  border: 1px solid var(--phy-color-warning-border, var(--phy-color-border-subtle));
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-warning-bg, var(--phy-color-bg-elevated));
+  color: var(--phy-color-warning-text, var(--phy-color-text-secondary));
+  line-height: 1.5;
+}
+
+.gene-network-artifact {
+  display: flex;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-lg);
+}
+
+.gene-network-activity {
+  display: grid;
+  gap: var(--phy-space-8);
+}
+
+.gene-network-activity p {
+  margin: 0;
+  color: var(--phy-color-text-secondary);
+  line-height: 1.5;
+}
+
+.gene-network-back:focus-visible,
+.gene-network-submit:focus-visible,
+.gene-network-reset:focus-visible,
+.gene-network-cancel:focus-visible,
+.gene-network-field select:focus-visible,
+.gene-network-field textarea:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 700px) {
+  .gene-network-page {
+    padding: var(--phy-space-24) var(--phy-space-16) var(--phy-space-32);
+  }
+
+  .gene-network-header {
+    flex-direction: column-reverse;
+  }
 }
 </style>

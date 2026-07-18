@@ -1,0 +1,20 @@
+{
+  "status": "succeeded",
+  "result": {
+    "formatted": {
+      "answer": "Form submitted."
+    },
+    "a2ui": {
+      "catalog_version": "v1.0",
+      "surface_id": "sfc-contract-1",
+      "widget": "form",
+      "props": {
+        "title": "Gene ID",
+        "fields": {
+          "gene_id": "AT1G01010"
+        },
+        "status": "submitted"
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G7.5, G11, G12, G13)
+# validate_web_local.sh — full pre-commit gate for Phytomni-Web (G-1 + G0..G7.5, G11–G17)
 #
 # Runs every check listed in .claude/plans/production-backport.md:
 #   G-1  staged/unstaged secret scan
@@ -17,6 +17,14 @@
 #   G12  apps/web vitest run + coverage threshold
 #   G13  i18n hardcoded-copy scanner (CJK / ElMessage / gin.H ratchet against
 #        scripts/i18n_allowlist.md)
+#   G14  frontend visual design contract (brand colors, glass bubbles, legacy
+#        markers, unsafe focus/motion/layout rules, and global CSS side effects)
+#   G15  A2UI activation contract (fixture provenance, lifecycle ownership,
+#        middleware order, audit masking, body limits, and dark-launch defaults)
+#   G16  offline Bot HEAD/Web compatibility contract (release SHA, ten-agent
+#        parity, synthetic fixture IDs, raw-payload guard, and default-off flags)
+#   G17  offline Bot/Web activation evidence matrix (reviewed-row gate,
+#        fixture metadata, rollback markers, and dark-launch defaults)
 #
 # Exit 0 means safe to commit. Any failure aborts via `set -e`.
 
@@ -126,5 +134,17 @@ step "G12 apps/web: vitest run + coverage threshold"
 
 step "G13 i18n: hardcoded-copy scanner (ratchet against allowlist)"
 python3 scripts/check_i18n.py --check
+
+step "G14 frontend visual design contract"
+python3 scripts/check_brand_colors.py
+
+step "G15 A2UI activation contract"
+python3 scripts/check_a2ui_activation_contract.py
+
+step "G16 offline Bot HEAD/Web compatibility contract"
+python3 scripts/check_bot_web_compatibility.py
+
+step "G17 offline Bot/Web activation evidence matrix"
+python3 scripts/check_bot_web_activation.py
 
 step "validate_web_local.sh: ALL GATES PASS"

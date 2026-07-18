@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   isValidPendingRecord,
   matchesChat,
@@ -104,6 +104,21 @@ describe("matchesChat — ID + exact title only", () => {
     };
     const chat: ChatListEntry = { dialogue_id: "x", title: "system greeting" };
     expect(matchesChat(chat, pending, "temp-001")).toBe(false);
+  });
+
+  it("ambiguous title matches yield multiple candidates for restore (caller must retain temp)", () => {
+    const pending: PendingChatRecord = {
+      isPending: true,
+      messages: [{ role: "user", content: "shared title" }],
+    };
+    const chats: ChatListEntry[] = [
+      { dialogue_id: "srv-a", title: "shared title" },
+      { dialogue_id: "srv-b", title: "shared title" },
+    ];
+    const candidates = chats.filter((c) =>
+      matchesChat(c, pending, "new_ambiguous")
+    );
+    expect(candidates).toHaveLength(2);
   });
 });
 
@@ -460,5 +475,112 @@ describe("writePendingChat mode", () => {
       localStorage.getItem("pending_chat_new_1")
     );
     expect(rec?.mode).toBe("expert");
+  });
+});
+
+/** Mirrors index.vue streaming branch of getHistoryQuestionData (no blockingDialogueId). */
+function streamingReconciliationOutcome(
+  formattedData: ChatListEntry[],
+  pendingData: PendingChatRecord,
+  tempId: string
+): "reconcile" | "retain-no-match" | "retain-ambiguous" {
+  const candidates = formattedData.filter((chat) =>
+    matchesChat(chat, pendingData, tempId)
+  );
+  if (candidates.length === 1) return "reconcile";
+  if (candidates.length === 0) return "retain-no-match";
+  return "retain-ambiguous";
+}
+
+describe("streaming history reconciliation (getHistoryQuestionData contract)", () => {
+  const pending: PendingChatRecord = {
+    isPending: true,
+    messages: [{ role: "user", content: "unique stream title" }],
+  };
+
+  it("exactly one history candidate reconciles", () => {
+    const chats: ChatListEntry[] = [
+      { dialogue_id: "srv-other", title: "other" },
+      { dialogue_id: "srv-exact", title: "unique stream title" },
+    ];
+    expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
+      "reconcile"
+    );
+  });
+
+  it("zero candidates retain temp and pending", () => {
+    const chats: ChatListEntry[] = [
+      { dialogue_id: "srv-a", title: "different title" },
+    ];
+    expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
+      "retain-no-match"
+    );
+  });
+
+  it("multiple candidates retain temp and pending", () => {
+    const chats: ChatListEntry[] = [
+      { dialogue_id: "srv-a", title: "unique stream title" },
+      { dialogue_id: "srv-b", title: "unique stream title" },
+    ];
+    expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
+      "retain-ambiguous"
+    );
+  });
+});
+
+/** Mirrors restorePendingChats skipTempIds gate for blocking sends. */
+function restorePendingChatsHarness(
+  knownChats: ChatListEntry[],
+  skipTempIds: ReadonlySet<string> | undefined,
+  reconcile: (tempId: string, serverId: string, key: string) => void
+) {
+  const pendingChatKeys = Object.keys(localStorage).filter((key) =>
+    key.startsWith("pending_chat_")
+  );
+  pendingChatKeys.forEach((key) => {
+    const tempChatId = key.replace("pending_chat_", "");
+    if (skipTempIds?.has(tempChatId)) return;
+    const pendingChatData = safeParse<PendingChatRecord>(
+      localStorage.getItem(key)
+    );
+    if (!isValidPendingRecord(pendingChatData)) return;
+    const candidates = knownChats.filter((chat) =>
+      matchesChat(chat, pendingChatData, tempChatId)
+    );
+    if (candidates.length === 1) {
+      reconcile(tempChatId, candidates[0].dialogue_id, key);
+    }
+  });
+}
+
+describe("blocking restore ordering (restorePendingChats skip contract)", () => {
+  afterEach(() => {
+    localStorage.removeItem("pending_chat_new_block");
+  });
+
+  it("skips sending temp in restore so blocking dialogue_id wins over history title match", () => {
+    const tempId = "new_block";
+    localStorage.setItem(
+      `pending_chat_${tempId}`,
+      JSON.stringify({
+        isPending: true,
+        messages: [{ role: "user", content: "blocking send" }],
+      })
+    );
+    const knownChats: ChatListEntry[] = [
+      { dialogue_id: "history-wrong-id", title: "blocking send" },
+    ];
+    const reconciled: Array<{ tempId: string; serverId: string }> = [];
+
+    restorePendingChatsHarness(
+      knownChats,
+      new Set([tempId]),
+      (t, s) => {
+        reconciled.push({ tempId: t, serverId: s });
+      }
+    );
+
+    expect(reconciled).toEqual([]);
+    expect(localStorage.getItem(`pending_chat_${tempId}`)).not.toBeNull();
   });
 });

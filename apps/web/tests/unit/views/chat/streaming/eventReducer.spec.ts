@@ -1,7 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { initReducerState, reduceAGUIEvent } from "@/views/chat/streaming/eventReducer";
 
 describe("reduceAGUIEvent", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("accumulates TextMessageContent into one markdown block", () => {
     let s = initReducerState();
     s = reduceAGUIEvent(s, { type: "TextMessageContent", data: { delta: "hello " } });
@@ -85,5 +89,295 @@ describe("reduceAGUIEvent", () => {
     let s = initReducerState();
     s = reduceAGUIEvent(s, { type: "RunError", data: { message: "boom" } });
     expect(s.error?.message).toBe("boom");
+  });
+
+  it("keeps the first terminal RunError instead of duplicating a synthetic error", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "RunError",
+      data: { message: "upstream boom" },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "RunError",
+      data: { message: "chat.streamInterrupted" },
+    });
+    s = reduceAGUIEvent(s, { type: "RunFinished", data: {} });
+
+    expect(s.done).toBe(true);
+    expect(s.error?.message).toBe("upstream boom");
+  });
+
+  it("pushes an agent-surface block from phyto.a2ui confirm", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, { type: "RunStarted", data: { run_id: "r1" } });
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "surf-1",
+          widget: "confirm",
+          props: {
+            title: "OK?",
+            confirm_label: "Confirm",
+            cancel_label: "Cancel",
+          },
+        },
+      },
+    });
+    const b = s.blocks.find((x) => x.type === "agent-surface");
+    expect(b?.authority).toBe("agent");
+    expect(b?.interactive).toBe(true);
+    expect(b?.a2ui).toEqual({
+      surface: {
+        catalog_version: "v1.0",
+        surface_id: "surf-1",
+        widget: "confirm",
+        props: {
+          title: "OK?",
+          confirm_label: "Confirm",
+          cancel_label: "Cancel",
+        },
+      },
+      state: { status: "ready", round: 1 },
+    });
+    expect(b).not.toHaveProperty("surfaceId");
+    expect(b).not.toHaveProperty("widget");
+    expect(b).not.toHaveProperty("props");
+  });
+
+  it("keeps the decoded A2UI surface as the only block representation", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "form-1",
+          widget: "form",
+          props: {
+            title: "Details",
+            fields: [
+              {
+                name: "gene",
+                label: "Gene",
+                type: "text",
+                required: true,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const block = s.blocks.find((x) => x.type === "agent-surface");
+    expect(block?.a2ui?.surface.widget).toBe("form");
+    expect(block?.a2ui?.surface.props).toEqual({
+      title: "Details",
+      fields: [
+        {
+          name: "gene",
+          label: "Gene",
+          type: "text",
+          required: true,
+        },
+      ],
+    });
+    expect(block?.a2ui?.state).toEqual({ status: "ready", round: 1 });
+    expect(block).not.toHaveProperty("surfaceId");
+    expect(block).not.toHaveProperty("widget");
+    expect(block).not.toHaveProperty("props");
+  });
+
+  it("skips phyto.a2ui with unknown widget without adding a block", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "s",
+          widget: "chart",
+          props: {},
+        },
+      },
+    });
+    expect(s.blocks.filter((b) => b.type === "agent-surface")).toHaveLength(0);
+  });
+
+  it("skips phyto.a2ui when catalog is below v1", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v0.9.1",
+          surface_id: "s",
+          widget: "form",
+          props: {},
+        },
+      },
+    });
+    expect(s.blocks.filter((b) => b.type === "agent-surface")).toHaveLength(0);
+  });
+
+  it("expires ready and submitting agent surfaces on RunError", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "s",
+          widget: "choice",
+          props: {
+            title: "Pick",
+            options: [{ id: "a", label: "A" }],
+            multiple: false,
+          },
+        },
+      },
+    });
+    s = reduceAGUIEvent(s, { type: "RunError", data: { message: "boom" } });
+    const b = s.blocks.find((x) => x.type === "agent-surface");
+    expect(b?.a2ui?.state).toEqual({
+      status: "expired",
+      round: 1,
+      code: "run_failed",
+    });
+    expect(s.error?.message).toBe("boom");
+  });
+
+  it("preserves the submitting action identity while expiring on RunError", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "submitting-surface",
+          widget: "confirm",
+          props: { title: "Continue?", confirm_label: "Yes", cancel_label: "No" },
+        },
+      },
+    });
+    const block = s.blocks[0];
+    block.a2ui = {
+      ...block.a2ui!,
+      state: {
+        status: "submitting",
+        round: 1,
+        envelope: {
+          surface_id: "submitting-surface",
+          widget: "confirm",
+          action_id: "action-7",
+          run_id: "run-7",
+          payload: { accepted: true },
+        },
+      },
+    };
+
+    const next = reduceAGUIEvent(s, { type: "RunError", data: { message: "boom" } });
+    expect(next.blocks[0].a2ui?.state).toEqual({
+      status: "expired",
+      round: 1,
+      actionId: "action-7",
+      code: "run_failed",
+    });
+  });
+
+  it("skips a duplicate surface in the same message with a fixed reason", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const value = {
+      catalog_version: "v1.0",
+      surface_id: "duplicate-surface",
+      widget: "confirm",
+      props: {
+        title: "Continue?",
+        confirm_label: "Confirm",
+        cancel_label: "Cancel",
+      },
+    };
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, { type: "Custom", data: { name: "phyto.a2ui", value } });
+    s = reduceAGUIEvent(s, { type: "Custom", data: { name: "phyto.a2ui", value } });
+
+    expect(s.blocks.filter((block) => block.type === "agent-surface")).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith("[phyto.a2ui] skipped frame: duplicate_surface_id");
+  });
+
+  it("does not create a partial block for malformed A2UI frames", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: { catalog_version: "v1.0", surface_id: "malformed", widget: "form" },
+      },
+    });
+
+    expect(s.blocks).toEqual([]);
+    expect(s.blocks.some((block) => block.type === "agent-surface" && !block.a2ui)).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expire resolved, expired, or protocol-error surfaces on RunError", () => {
+    const surfaces = [
+      {
+        status: "resolved" as const,
+        round: 1 as const,
+        actionId: "a1",
+        resolution: "submitted" as const,
+      },
+      { status: "expired" as const, round: 1 as const, code: "old_error" },
+      { status: "protocol_error" as const, round: 1 as const, code: "bad_frame" },
+    ];
+    let s = initReducerState();
+    for (const state of surfaces) {
+      s = reduceAGUIEvent(s, {
+        type: "Custom",
+        data: {
+          name: "phyto.a2ui",
+          value: {
+            catalog_version: "v1.0",
+            surface_id: `surface-${state.status}`,
+            widget: "confirm",
+            props: { title: "Continue?", confirm_label: "Yes", cancel_label: "No" },
+          },
+        },
+      });
+      const block = s.blocks.at(-1);
+      if (block?.a2ui) block.a2ui = { ...block.a2ui, state };
+    }
+    const before = s.blocks.map((block) => block.a2ui?.state);
+    const next = reduceAGUIEvent(s, { type: "RunError", data: { message: "boom" } });
+
+    expect(next.blocks.map((block) => block.a2ui?.state)).toEqual(before);
+  });
+
+  it("keeps a valid input-required surface open when RunFinished arrives", () => {
+    let s = initReducerState();
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: {
+        name: "phyto.a2ui",
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "input-required",
+          widget: "choice",
+          props: { title: "Pick", options: [{ id: "a", label: "A" }], multiple: false },
+        },
+      },
+    });
+    s = reduceAGUIEvent(s, { type: "RunFinished", data: { run_id: "run-1" } });
+
+    expect(s.blocks[0].a2ui?.state).toEqual({ status: "ready", round: 1 });
   });
 });

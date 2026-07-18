@@ -43,6 +43,13 @@ empty_body = "反馈类型或反馈内容不能为空"
 [chat]
 quota_exhausted = "账户额度不足，请联系管理员开通"
 
+[bot]
+capabilities_unavailable = "Bot 能力不可用"
+
+[interop]
+capabilities_not_found = "互操作能力不存在"
+capabilities_unavailable = "互操作能力不可用"
+
 [gene]
 file_name_required = "参数file_name不能为空"
 fetch_failed = "获取文件失败"
@@ -59,6 +66,7 @@ upload_too_large = "上传内容过大"
 query_empty = "查询内容不能为空"
 file_unreadable = "无法读取上传的文件"
 task_id_required = "task_id必填"
+invalid_interop_controls = "互操作控制参数无效"
 
 [permission]
 user_id_required = "用户ID不能为空"
@@ -75,3 +83,21 @@ not_admin_create = "您不是管理员，无法创建用户"
 [agent_task]
 invalid_reaction_type = "无效的reaction_type值"
 invalid_collect_type = "无效的collect_type值"
+
+[a2ui]
+invalid_body = "请求体无效"
+invalid_json = "JSON 请求体无效"
+invalid_action = "无效的 A2UI 操作"
+unsupported_media_type = "不支持的媒体类型"
+request_too_large = "请求体过大"
+not_found = "未找到"
+gateway_disabled = "服务暂时不可用"
+request_timed_out = "请求超时，请稍后再试"
+upstream_too_large = "上游响应过大"
+upstream_invalid = "上游响应无效"
+internal = "请求失败"
+request_failed = "请求失败"
+disabled_stub = "a2ui 已禁用"
+
+[test]
+hello_name = "Hello {{.Name}}"
