@@ -1,0 +1,120 @@
+"""Contract tests for Staticcheck JSONL and Go directive collection."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from scripts.static_analysis.collectors.errors import CollectionError
+from scripts.static_analysis.collectors.go import (
+    collect_go_directives,
+    parse_staticcheck_jsonl,
+    validate_staticcheck_result,
+)
+from scripts.static_analysis.model import Mechanism, TargetKind
+
+pytestmark = pytest.mark.unit
+
+FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "go" / "project"
+STATICCHECK_FIXTURE = Path(__file__).parent / "fixtures" / "go" / "staticcheck.jsonl"
+
+
+def test_parser_covers_the_measured_staticcheck_findings_and_sorts_them() -> None:
+    text = STATICCHECK_FIXTURE.read_text(encoding="utf-8")
+
+    findings = parse_staticcheck_jsonl(FIXTURE_ROOT, text, "2025.1.1")
+
+    assert len(findings) == 14
+    assert {finding.rule for finding in findings} == {
+        "SA1016",
+        "SA4000",
+        "S1000",
+        "SA4006",
+        "U1000",
+        "SA1029",
+        "S1008",
+        "SA1019",
+        "S1002",
+    }
+    assert list(findings) == sorted(
+        findings,
+        key=lambda finding: (
+            finding.path,
+            finding.display_line or 0,
+            finding.rule,
+            finding.target,
+        ),
+    )
+    assert all(finding.tool == "staticcheck" for finding in findings)
+    assert all(finding.target_kind is TargetKind.SPAN for finding in findings)
+    assert all(finding.mechanism is Mechanism.DIAGNOSTIC for finding in findings)
+
+
+def test_parser_accepts_no_findings_and_rejects_stale_versions() -> None:
+    assert parse_staticcheck_jsonl(FIXTURE_ROOT, "", "2025.1.1") == ()
+    with pytest.raises(CollectionError, match="version"):
+        parse_staticcheck_jsonl(FIXTURE_ROOT, "", "2024.1.0")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "compile package failed",
+        '{"code":"SA1016"}',
+        '{"code":"SA9999","severity":"warning","location":{"file":"a.go","line":1,"column":1},"message":"unknown"}',
+        '{"code":"SA1016","severity":"warning","location":{"file":"a.go","line":1,"column":1},',
+    ],
+)
+def test_parser_rejects_compile_errors_malformed_lines_unknown_codes_or_truncation(
+    text: str,
+) -> None:
+    with pytest.raises(CollectionError):
+        parse_staticcheck_jsonl(FIXTURE_ROOT, text, "2025.1.1")
+
+
+@pytest.mark.parametrize(
+    "returncode, stdout, stderr",
+    [
+        (0, "", ""),
+        (1, STATICCHECK_FIXTURE.read_text(encoding="utf-8"), ""),
+    ],
+)
+def test_status_validation_accepts_clean_or_diagnostic_exit(
+    returncode: int, stdout: str, stderr: str
+) -> None:
+    assert validate_staticcheck_result(returncode, stdout, stderr) == stdout
+
+
+@pytest.mark.parametrize(
+    "returncode, stdout, stderr",
+    [
+        (1, "", "staticcheck crashed"),
+        (2, "", "compile package failed"),
+        (1, "compile package failed", ""),
+        (0, "compile package failed", ""),
+    ],
+)
+def test_status_validation_rejects_silent_or_non_json_failures(
+    returncode: int, stdout: str, stderr: str
+) -> None:
+    with pytest.raises(CollectionError):
+        validate_staticcheck_result(returncode, stdout, stderr)
+
+
+def test_go_directive_collector_covers_nolint_generated_and_lint_ignore() -> None:
+    files = tuple((FIXTURE_ROOT / "apps/server").rglob("*.go"))
+
+    findings = collect_go_directives(FIXTURE_ROOT, files)
+
+    identities = {(finding.tool, finding.rule) for finding in findings}
+    assert ("golangci-lint", "nolint") in identities
+    assert ("golangci-lint", "lint:ignore") in identities
+    assert ("go", "generated") in identities
+    assert all(finding.fingerprint.startswith("sha256:") for finding in findings)
+
+
+def test_staticcheck_fixture_is_valid_jsonl() -> None:
+    for line in STATICCHECK_FIXTURE.read_text(encoding="utf-8").splitlines():
+        assert isinstance(json.loads(line), dict)
