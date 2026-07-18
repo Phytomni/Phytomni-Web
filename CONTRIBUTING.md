@@ -65,10 +65,17 @@ historical):
 | `G11`  | `apps/web` `SET_LOGIN_STATUS` invariant                     |
 | `G12`  | `apps/web` vitest run + coverage threshold                  |
 | `G13`  | i18n hardcoded-copy scanner (strict mode)                   |
+| `G14`  | frontend visual contract and modality evidence              |
+| `G15`  | A2UI activation-readiness contract                          |
+| `G16`  | Bot/Web compatibility contract                              |
+| `G17`  | activation evidence and external-acceptance boundary        |
 
 > **`npm run lint` is a footgun** — it runs `eslint --fix` over the whole tree
 > and auto-mutates ~80 files. The gate's baseline is `type-check` + `build`; lint
 > a single file with `npx eslint <file> --no-fix`.
+
+G15–G17 are local readiness checks. They do not authorize a production flag
+change or replace Bot-owner, CI, staging/live, or operations acceptance.
 
 ## Testing
 
