@@ -12,278 +12,282 @@
       </template>
 
       <PhyTableFrame>
-      <el-table
-        :data="tableData"
-        border
-        stripe
-        v-loading="loading"
-        class="user-table"
-        table-layout="auto"
-        header-row-class-name="table-header-row"
-        header-cell-class-name="table-header-cell"
-      >
-        <el-table-column
-          type="index"
-          :label="$t('common.index')"
-          width="80"
-          align="center"
-        />
-        <el-table-column
-          prop="email"
-          :label="$t('user.username')"
-          min-width="220"
-          align="center"
-        />
-        <el-table-column
-          prop="description"
-          :label="$t('user.role')"
-          min-width="130"
-          align="center"
-        />
-        <el-table-column
-          prop="phone"
-          :label="$t('user.phone')"
-          min-width="140"
-          align="center"
+        <el-table
+          :data="tableData"
+          border
+          stripe
+          v-loading="loading"
+          class="user-table"
+          table-layout="auto"
+          header-row-class-name="table-header-row"
+          header-cell-class-name="table-header-cell"
         >
-          <template #default="scope">
-            {{ scope.row.phone || "-" }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="organization"
-          :label="$t('user.organization')"
-          min-width="180"
-          align="center"
-        >
-          <template #default="scope">
-            {{ scope.row.organization || "-" }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="position"
-          :label="$t('user.position')"
-          min-width="160"
-          align="center"
-        >
-          <template #default="scope">
-            {{ scope.row.position || "-" }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="last_login_at"
-          :label="$t('user.lastLoginAt')"
-          align="center"
-          width="180"
-        >
-          <template #default="scope">
-            {{
-              scope.row.last_login_at
-                ? scope.row.last_login_at.replace("T", " ").slice(0, 19)
-                : $t("user.notLoggedIn")
-            }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="chat_limit"
-          :label="$t('user.chatLimit')"
-          align="center"
-          width="120"
-        >
-          <template #default="scope">
-            {{
-              scope.row.code === "guest"
-                ? scope.row.chat_limit ?? "-"
-                : $t("user.unlimited")
-            }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          :label="$t('common.operation')"
-          width="250"
-          align="center"
-        >
-          <template #default="scope">
-            <el-space>
-              <el-button
-                size="small"
-                type="primary"
-                @click="handleView(scope.row)"
-              >
-                {{ $t("common.view") }}
-              </el-button>
-              <el-button
-                size="small"
-                type="success"
-                @click="handleEdit(scope.row)"
-              >
-                {{ $t("common.edit") }}
-              </el-button>
-              <el-button
-                v-if="scope.row.locked_until"
-                size="small"
-                type="warning"
-                @click="handleUnlock(scope.row)"
-              >
-                <el-icon><Unlock /></el-icon>
-                {{ $t("user.unlock") }}
-              </el-button>
-            </el-space>
-          </template>
-        </el-table-column>
-      </el-table>
+          <el-table-column
+            type="index"
+            :label="$t('common.index')"
+            width="80"
+            align="center"
+          />
+          <el-table-column
+            prop="email"
+            :label="$t('user.username')"
+            min-width="220"
+            align="center"
+          />
+          <el-table-column
+            prop="description"
+            :label="$t('user.role')"
+            min-width="130"
+            align="center"
+          />
+          <el-table-column
+            prop="phone"
+            :label="$t('user.phone')"
+            min-width="140"
+            align="center"
+          >
+            <template #default="scope">
+              {{ scope.row.phone || "-" }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="organization"
+            :label="$t('user.organization')"
+            min-width="180"
+            align="center"
+          >
+            <template #default="scope">
+              {{ scope.row.organization || "-" }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="position"
+            :label="$t('user.position')"
+            min-width="160"
+            align="center"
+          >
+            <template #default="scope">
+              {{ scope.row.position || "-" }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="last_login_at"
+            :label="$t('user.lastLoginAt')"
+            align="center"
+            width="180"
+          >
+            <template #default="scope">
+              {{
+                scope.row.last_login_at
+                  ? scope.row.last_login_at.replace("T", " ").slice(0, 19)
+                  : $t("user.notLoggedIn")
+              }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="chat_limit"
+            :label="$t('user.chatLimit')"
+            align="center"
+            width="120"
+          >
+            <template #default="scope">
+              {{
+                scope.row.code === "guest"
+                  ? scope.row.chat_limit ?? "-"
+                  : $t("user.unlimited")
+              }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            :label="$t('common.operation')"
+            width="250"
+            align="center"
+          >
+            <template #default="scope">
+              <el-space>
+                <el-button
+                  size="small"
+                  type="primary"
+                  @click="handleView(scope.row)"
+                >
+                  {{ $t("common.view") }}
+                </el-button>
+                <el-button
+                  size="small"
+                  type="success"
+                  @click="handleEdit(scope.row)"
+                >
+                  {{ $t("common.edit") }}
+                </el-button>
+                <el-button
+                  v-if="scope.row.locked_until"
+                  size="small"
+                  type="warning"
+                  @click="handleUnlock(scope.row)"
+                >
+                  <el-icon><Unlock /></el-icon>
+                  {{ $t("user.unlock") }}
+                </el-button>
+              </el-space>
+            </template>
+          </el-table-column>
+        </el-table>
 
-      <template #pagination>
-        <el-pagination
-          class="user-pagination"
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 30, 50]"
-          layout="total, sizes, prev, pager, next"
-          :total="total"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
-      </template>
+        <template #pagination>
+          <el-pagination
+            class="user-pagination"
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="[10, 20, 30, 50]"
+            layout="total, sizes, prev, pager, next"
+            :total="total"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
+          />
+        </template>
       </PhyTableFrame>
 
-    <!-- User edit dialog -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="dialogType === 'add' ? $t('user.add') : $t('user.edit')"
-      width="500px"
-      :close-on-click-modal="false"
-      @closed="resetForm"
-    >
-      <el-form
-        ref="userFormRef"
-        :model="userForm"
-        :rules="formRules"
-        label-width="85px"
-        autocomplete="off"
+      <!-- User edit dialog -->
+      <el-dialog
+        v-model="dialogVisible"
+        :title="dialogType === 'add' ? $t('user.add') : $t('user.edit')"
+        width="500px"
+        :close-on-click-modal="false"
+        @closed="resetForm"
       >
-        <el-form-item :label="$t('user.username')" prop="email">
-          <el-input
-            v-model="userForm.email"
-            autocomplete="new-email"
-            :disabled="dialogType === 'edit'"
-          />
-        </el-form-item>
-        <el-form-item
-          :label="$t('user.password')"
-          prop="password"
-          :required="dialogType === 'add'"
+        <el-form
+          ref="userFormRef"
+          :model="userForm"
+          :rules="formRules"
+          label-width="85px"
+          autocomplete="off"
         >
-          <el-input
-            v-model="userForm.password"
-            type="password"
-            autocomplete="new-password"
-            show-password
-            :placeholder="dialogType === 'edit' ? $t('user.passwordEditPlaceholder') : ''"
-          />
-        </el-form-item>
-        <el-form-item :label="$t('user.role')" prop="code">
-          <el-select
-            v-model="userForm.code"
-            :placeholder="$t('user.roleSelect')"
-            style="width: 100%"
+          <el-form-item :label="$t('user.username')" prop="email">
+            <el-input
+              v-model="userForm.email"
+              autocomplete="new-email"
+              :disabled="dialogType === 'edit'"
+            />
+          </el-form-item>
+          <el-form-item
+            :label="$t('user.password')"
+            prop="password"
+            :required="dialogType === 'add'"
           >
-            <el-option label="super_admin" value="super_admin" />
-            <el-option label="admin" value="admin" />
-            <el-option label="user" value="user" />
-            <el-option label="vip_user" value="vip_user" />
-            <el-option label="guest" value="guest" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('user.phone')">
-          <el-input
-            v-model="userForm.phone"
-            :placeholder="$t('user.phonePlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item :label="$t('user.organization')">
-          <el-input
-            v-model="userForm.organization"
-            :placeholder="$t('user.organizationPlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item :label="$t('user.position')">
-          <el-input
-            v-model="userForm.position"
-            :placeholder="$t('user.positionPlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item
-          v-if="userForm.code === 'guest'"
-          :label="$t('user.chatLimit')"
-          prop="chat_limit"
-        >
-          <el-input-number
-            v-model="userForm.chat_limit"
-            :min="0"
-            :placeholder="$t('user.chatLimitPlaceholder')"
-            style="width: 100%"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-space>
-            <el-button @click="closeDialog">{{
-              $t("common.cancel")
-            }}</el-button>
-            <el-button type="primary" @click="handleSubmit">{{
-              $t("common.confirm")
-            }}</el-button>
-          </el-space>
-        </span>
-      </template>
-    </el-dialog>
+            <el-input
+              v-model="userForm.password"
+              type="password"
+              autocomplete="new-password"
+              show-password
+              :placeholder="
+                dialogType === 'edit' ? $t('user.passwordEditPlaceholder') : ''
+              "
+            />
+          </el-form-item>
+          <el-form-item :label="$t('user.role')" prop="code">
+            <el-select
+              v-model="userForm.code"
+              :placeholder="$t('user.roleSelect')"
+              style="width: 100%"
+            >
+              <el-option label="super_admin" value="super_admin" />
+              <el-option label="admin" value="admin" />
+              <el-option label="user" value="user" />
+              <el-option label="vip_user" value="vip_user" />
+              <el-option label="guest" value="guest" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="$t('user.phone')">
+            <el-input
+              v-model="userForm.phone"
+              :placeholder="$t('user.phonePlaceholder')"
+            />
+          </el-form-item>
+          <el-form-item :label="$t('user.organization')">
+            <el-input
+              v-model="userForm.organization"
+              :placeholder="$t('user.organizationPlaceholder')"
+            />
+          </el-form-item>
+          <el-form-item :label="$t('user.position')">
+            <el-input
+              v-model="userForm.position"
+              :placeholder="$t('user.positionPlaceholder')"
+            />
+          </el-form-item>
+          <el-form-item
+            v-if="userForm.code === 'guest'"
+            :label="$t('user.chatLimit')"
+            prop="chat_limit"
+          >
+            <el-input-number
+              v-model="userForm.chat_limit"
+              :min="0"
+              :placeholder="$t('user.chatLimitPlaceholder')"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-space>
+              <el-button @click="closeDialog">{{
+                $t("common.cancel")
+              }}</el-button>
+              <el-button type="primary" @click="handleSubmit">{{
+                $t("common.confirm")
+              }}</el-button>
+            </el-space>
+          </span>
+        </template>
+      </el-dialog>
 
-    <!-- User view dialog -->
-    <el-dialog
-      v-model="viewDialogVisible"
-      :title="$t('user.detail')"
-      width="500px"
-    >
-      <div class="view-info" v-if="currentUser">
-        <div class="info-item">
-          <span class="label">{{ $t("user.username") }}：</span>
-          <span class="value">{{ currentUser.email }}</span>
+      <!-- User view dialog -->
+      <el-dialog
+        v-model="viewDialogVisible"
+        :title="$t('user.detail')"
+        width="500px"
+      >
+        <div class="view-info" v-if="currentUser">
+          <div class="info-item">
+            <span class="label">{{ $t("user.username") }}：</span>
+            <span class="value">{{ currentUser.email }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">{{ $t("user.role") }}：</span>
+            <span class="value">{{
+              getRoleName(currentUser.description)
+            }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">{{ $t("user.phone") }}：</span>
+            <span class="value">{{ currentUser.phone || "-" }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">{{ $t("user.organization") }}：</span>
+            <span class="value">{{ currentUser.organization || "-" }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">{{ $t("user.position") }}：</span>
+            <span class="value">{{ currentUser.position || "-" }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">{{ $t("user.lastLoginAt") }}：</span>
+            <span class="value">{{
+              currentUser.last_login_at || $t("user.notLoggedIn")
+            }}</span>
+          </div>
         </div>
-        <div class="info-item">
-          <span class="label">{{ $t("user.role") }}：</span>
-          <span class="value">{{ getRoleName(currentUser.description) }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">{{ $t("user.phone") }}：</span>
-          <span class="value">{{ currentUser.phone || "-" }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">{{ $t("user.organization") }}：</span>
-          <span class="value">{{ currentUser.organization || "-" }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">{{ $t("user.position") }}：</span>
-          <span class="value">{{ currentUser.position || "-" }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">{{ $t("user.lastLoginAt") }}：</span>
-          <span class="value">{{
-            currentUser.last_login_at || $t("user.notLoggedIn")
-          }}</span>
-        </div>
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-space>
-            <el-button @click="viewDialogVisible = false">{{
-              $t("common.close")
-            }}</el-button>
-          </el-space>
-        </span>
-      </template>
-    </el-dialog>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-space>
+              <el-button @click="viewDialogVisible = false">{{
+                $t("common.close")
+              }}</el-button>
+            </el-space>
+          </span>
+        </template>
+      </el-dialog>
     </PhyWorkspaceShell>
   </PiiWatermark>
 </template>
@@ -621,7 +625,9 @@ const handleSubmit = async () => {
         console.error("Operation failed:", error);
         ElMessage.error(
           error.message ||
-            (dialogType.value === "add" ? t("user.addFailed") : t("user.editFailed"))
+            (dialogType.value === "add"
+              ? t("user.addFailed")
+              : t("user.editFailed"))
         );
       }
     } else {
