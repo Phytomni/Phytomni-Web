@@ -59,3 +59,10 @@ def test_source_findings_are_deterministically_sorted_and_descriptions_are_ignor
     assert all(
         "documents eslint-disable" not in finding.message for finding in findings
     )
+
+
+def test_bot_activation_fixture_mutations_have_no_index_suppression() -> None:
+    path = Path(__file__).parents[1] / "test_check_bot_web_activation.py"
+    source = path.read_text(encoding="utf-8")
+
+    assert "type: ignore[index]" not in source

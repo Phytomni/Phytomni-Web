@@ -181,10 +181,9 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-d9b6e868add79f244a88fa4d6390c53d9b888c4460cfef5f0048ba906441c27e` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [tests/unit/api/chat.spec.ts:76](../../tests/unit/api/chat.spec.ts#L76) | `span:76:17-76:20:(request as any).mockResolvedValueOnce({ code: 0 });` | `web-maintainers` | `2026-07-19` |
 | `web-sa-786654cdaf151e3840ca6913a8468d9326958db2a6608ec2862ddefeee45497b` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [tests/unit/api/chat.spec.ts:87](../../tests/unit/api/chat.spec.ts#L87) | `span:87:17-87:20:(request as any).mockReset();` | `web-maintainers` | `2026-07-19` |
 | `web-sa-23d3d22950784d07603bbfd9888ac1e3c5d7ee32be56832e08e8e9547000ca50` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [tests/unit/api/chat.spec.ts:91](../../tests/unit/api/chat.spec.ts#L91) | `span:91:17-91:20:(request as any).mockResolvedValueOnce({ code: 0 });` | `web-maintainers` | `2026-07-19` |
-| `web-sa-b656d36cadb185f699b701ad6b68ae4f44950bc18584cf45d2dbf34d52012b86` | `2026-08-31` | `eslint` | `@typescript-eslint/no-non-null-assertion` | [tests/unit/composables/useDeepGenomeToc.spec.ts:180](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L180) | `VariableDeclarator:io@180:16-180:54` | `web-maintainers` | `2026-07-19` |
-| `web-sa-425dcc5a65b71dd703a9e0b844209f4ed63b42e45c0f3e0bd46022e5f032c63f` | `2026-08-31` | `eslint` | `@typescript-eslint/no-non-null-assertion` | [tests/unit/composables/useDeepGenomeToc.spec.ts:194](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L194) | `VariableDeclarator:io@194:16-194:54` | `web-maintainers` | `2026-07-19` |
-| `web-sa-0fa5aeafb7617a8c0d0ced6d46435d8283d8b2850dbf9c8cb46f413af5c3c2c9` | `2026-08-31` | `eslint` | `@typescript-eslint/no-non-null-assertion` | [tests/unit/composables/useDeepGenomeToc.spec.ts:211](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L211) | `VariableDeclarator:io@211:16-211:54` | `web-maintainers` | `2026-07-19` |
-| `web-sa-f3cd8e9cd9ee8b6449993ceb6e93c98d0e0c9e0251e1e9ced53b9442ac18773b` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [tests/unit/composables/useDeepGenomeToc.spec.ts:26](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L26) | `VariableDeclarator:mainContentRef@26:30-26:33` | `web-maintainers` | `2026-07-19` |
+| `web-sa-e92459f2d68f90bc0ac766aeafd6c3baa8585f259171adffefac08e77a0b1dee` | `2026-08-31` | `eslint` | `@typescript-eslint/no-non-null-assertion` | [tests/unit/composables/useDeepGenomeToc.spec.ts:187](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L187) | `VariableDeclarator:io@187:16-187:54` | `web-maintainers` | `2026-07-19` |
+| `web-sa-7fb26baf75b9b62d1840e742fe3efef930fd4e0562ec512b6c247484b78a45f4` | `2026-08-31` | `eslint` | `@typescript-eslint/no-non-null-assertion` | [tests/unit/composables/useDeepGenomeToc.spec.ts:201](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L201) | `VariableDeclarator:io@201:16-201:54` | `web-maintainers` | `2026-07-19` |
+| `web-sa-4395fb99446d26f0ac98d8a4578ae8a1738341e778891f6be7fadcff163649b4` | `2026-08-31` | `eslint` | `@typescript-eslint/no-non-null-assertion` | [tests/unit/composables/useDeepGenomeToc.spec.ts:218](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L218) | `VariableDeclarator:io@218:16-218:54` | `web-maintainers` | `2026-07-19` |
 | `web-sa-e63193e7ad1e32f194461faf5d70d9ae6479ab521eb32d887e3585923bfecb49` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [tests/unit/permission.spec.ts:105](../../tests/unit/permission.spec.ts#L105) | `span:105:64-105:67:route("/forgot-password", { name: "forgotPassword" }) as any,` | `web-maintainers` | `2026-07-19` |
 | `web-sa-c34b59077cfde0e23505594587dfde995417647a5d62ca9b323d5300787931a5` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [tests/unit/permission.spec.ts:106](../../tests/unit/permission.spec.ts#L106) | `span:106:21-106:24:route("/") as any,` | `web-maintainers` | `2026-07-19` |
 | `web-sa-2f63e85dfb2bfb9dea5a301eae16c574f130fc2dec3b80e93fc3972f9451a56d` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [tests/unit/permission.spec.ts:107](../../tests/unit/permission.spec.ts#L107) | `span:107:15-107:18:next as any` | `web-maintainers` | `2026-07-19` |
@@ -551,9 +550,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-5624d8081ef0b20a8edbd05c7d3d24cf04a9742ce92ad9df604350dad2060792` | `2026-08-31` | `golangci-lint` | `errcheck` | [scripts/tests/static_analysis/fixtures/source/go.go:3](../../scripts/tests/static_analysis/fixtures/source/go.go#L3) | `line:3:nolint:nolint:errcheck // fixture directive` | `web-maintainers` | `2026-07-19` |
 | `web-sa-bd2f3bd5c117d8622b87eb77bbc96e6c6f0e54f747af30727147f0eeba896678` | `2026-08-31` | `golangci-lint` | `nolint` | [scripts/tests/static_analysis/fixtures/source/go.go:3](../../scripts/tests/static_analysis/fixtures/source/go.go#L3) | `nolint:` | `web-maintainers` | `2026-07-19` |
 | `web-sa-a5dff64857c69c4a8761e6c2c8fbdd5f96d12d22d6704a24c2dda80b4e1ca53a` | `2026-08-31` | `mypy` | `index` | [scripts/tests/static_analysis/fixtures/source/python.py:1](../../scripts/tests/static_analysis/fixtures/source/python.py#L1) | `line:1:type: ignore:type: ignore[index]` | `web-maintainers` | `2026-07-19` |
-| `web-sa-a7fa85bef479adcae4d534c6ba71825f6ca77f458aa8fc3b04a39c5b4a7750ac` | `2026-08-31` | `mypy` | `index` | [scripts/tests/test_check_bot_web_activation.py:199](../../scripts/tests/test_check_bot_web_activation.py#L199) | `line:199:type: ignore:type: ignore[index]` | `web-maintainers` | `2026-07-19` |
-| `web-sa-585beec9c33422bc7745379b1711240fb48122493de8fb8a08fe35b728b69d43` | `2026-08-31` | `mypy` | `index` | [scripts/tests/test_check_bot_web_activation.py:203](../../scripts/tests/test_check_bot_web_activation.py#L203) | `line:203:type: ignore:type: ignore[index]` | `web-maintainers` | `2026-07-19` |
-| `web-sa-d0606923c724f1228d09771f0054ecb41fc4b4046b85e0290002dfe4626ace40` | `2026-08-31` | `mypy` | `index` | [scripts/tests/test_check_bot_web_activation.py:220](../../scripts/tests/test_check_bot_web_activation.py#L220) | `line:220:type: ignore:type: ignore[index]` | `web-maintainers` | `2026-07-19` |
 | `web-sa-51580c159da633ad32ca29dfe1b7ace27fa4a6a47ed83681e01ed0c8c785d982` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `coverage/` | `web-maintainers` | `2026-07-19` |
 | `web-sa-cab122e4c69bce930f24a6446c743a83cbba9d267c3011bb757ab46a69216a15` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `dist/` | `web-maintainers` | `2026-07-19` |
 | `web-sa-542993ee3c381d54810bcbc146a46e0ed6c8ef08798e066b517ef5a66474516a` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `node_modules/` | `web-maintainers` | `2026-07-19` |
@@ -594,7 +590,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-0c42ab6421536ec15b38679e04cd85fb0d5b13242f08ae3e0e9837220ef17136` | `2026-08-31` | `shell` | `max-warnings` | [scripts/tests/static_analysis/fixtures/ci/Makefile:2](../../scripts/tests/static_analysis/fixtures/ci/Makefile#L2) | `--max-warnings=0` | `web-maintainers` | `2026-07-19` |
 | `web-sa-e8734248b5a9e63e34a88813e37a507beef2e9a6b7aecccee94c5166dcd65670` | `2026-08-31` | `shell` | `quiet` | [scripts/tests/static_analysis/fixtures/ci/Makefile:2](../../scripts/tests/static_analysis/fixtures/ci/Makefile#L2) | `--quiet` | `web-maintainers` | `2026-07-19` |
 | `web-sa-a0b108033a68f19c922b088ac5d13ec68a3f2df791d8c19ff5f949b1b75a152e` | `2026-08-31` | `shell` | `shell-fallback-success` | [scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh:2](../../scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh#L2) | `\|\| true` | `web-maintainers` | `2026-07-19` |
-| `web-sa-54e7883c578b3e223f33d15fa3ebed94378bab12e9065dca63c1766df3c9daf4` | `2026-08-31` | `typescript` | `@ts-expect-error` | [apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts:152](../../apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts#L152) | `line:152:@ts-expect-error:@ts-expect-error replacing with minimal mock` | `web-maintainers` | `2026-07-19` |
 | `web-sa-7a1f035faed7a42bb12b6cb9242bb25cc52e01f98cfa915cc6c17a4a92c9bef2` | `2026-08-31` | `typescript` | `@ts-expect-error` | [apps/web/tests/unit/utils/reference-renderer.spec.ts:14](../../apps/web/tests/unit/utils/reference-renderer.spec.ts#L14) | `line:14:@ts-expect-error:@ts-expect-error exercising the nullish guard` | `web-maintainers` | `2026-07-19` |
 | `web-sa-f48d62f5e7e9b02053fc189f7385d6782e07492b03bc2e99a96181e57487e931` | `2026-08-31` | `typescript` | `@ts-expect-error` | [apps/web/tests/unit/utils/reference-renderer.spec.ts:16](../../apps/web/tests/unit/utils/reference-renderer.spec.ts#L16) | `line:16:@ts-expect-error:@ts-expect-error exercising the undefined guard` | `web-maintainers` | `2026-07-19` |
 | `web-sa-80167d38dca94bd15e6ca82cde7155f5145f90ba04eb1b0d78fc02cd2c1a43bb` | `2026-08-31` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.config.json](../../apps/web/tsconfig.config.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
@@ -1911,41 +1906,32 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: eslint reported @typescript-eslint/no-explicit-any at line 91; raw diagnostic omitted.
 
-### `web-sa-b656d36cadb185f699b701ad6b68ae4f44950bc18584cf45d2dbf34d52012b86`
+### `web-sa-e92459f2d68f90bc0ac766aeafd6c3baa8585f259171adffefac08e77a0b1dee`
 
-- Exact entry: [tests/unit/composables/useDeepGenomeToc.spec.ts:180](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L180)
+- Exact entry: [tests/unit/composables/useDeepGenomeToc.spec.ts:187](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L187)
 - Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
 - Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
 - Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-non-null-assertion at line 180; raw diagnostic omitted.
+- Observation: eslint reported @typescript-eslint/no-non-null-assertion at line 187; raw diagnostic omitted.
 
-### `web-sa-425dcc5a65b71dd703a9e0b844209f4ed63b42e45c0f3e0bd46022e5f032c63f`
+### `web-sa-7fb26baf75b9b62d1840e742fe3efef930fd4e0562ec512b6c247484b78a45f4`
 
-- Exact entry: [tests/unit/composables/useDeepGenomeToc.spec.ts:194](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L194)
+- Exact entry: [tests/unit/composables/useDeepGenomeToc.spec.ts:201](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L201)
 - Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
 - Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
 - Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-non-null-assertion at line 194; raw diagnostic omitted.
+- Observation: eslint reported @typescript-eslint/no-non-null-assertion at line 201; raw diagnostic omitted.
 
-### `web-sa-0fa5aeafb7617a8c0d0ced6d46435d8283d8b2850dbf9c8cb46f413af5c3c2c9`
+### `web-sa-4395fb99446d26f0ac98d8a4578ae8a1738341e778891f6be7fadcff163649b4`
 
-- Exact entry: [tests/unit/composables/useDeepGenomeToc.spec.ts:211](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L211)
+- Exact entry: [tests/unit/composables/useDeepGenomeToc.spec.ts:218](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L218)
 - Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
 - Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
 - Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-non-null-assertion at line 211; raw diagnostic omitted.
-
-### `web-sa-f3cd8e9cd9ee8b6449993ceb6e93c98d0e0c9e0251e1e9ced53b9442ac18773b`
-
-- Exact entry: [tests/unit/composables/useDeepGenomeToc.spec.ts:26](../../tests/unit/composables/useDeepGenomeToc.spec.ts#L26)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 26; raw diagnostic omitted.
+- Observation: eslint reported @typescript-eslint/no-non-null-assertion at line 218; raw diagnostic omitted.
 
 ### `web-sa-e63193e7ad1e32f194461faf5d70d9ae6479ab521eb32d887e3585923bfecb49`
 
@@ -5241,33 +5227,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: mypy reported index at line 1; raw diagnostic omitted.
 
-### `web-sa-a7fa85bef479adcae4d534c6ba71825f6ca77f458aa8fc3b04a39c5b4a7750ac`
-
-- Exact entry: [scripts/tests/test_check_bot_web_activation.py:199](../../scripts/tests/test_check_bot_web_activation.py#L199)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: mypy reported index at line 199; raw diagnostic omitted.
-
-### `web-sa-585beec9c33422bc7745379b1711240fb48122493de8fb8a08fe35b728b69d43`
-
-- Exact entry: [scripts/tests/test_check_bot_web_activation.py:203](../../scripts/tests/test_check_bot_web_activation.py#L203)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: mypy reported index at line 203; raw diagnostic omitted.
-
-### `web-sa-d0606923c724f1228d09771f0054ecb41fc4b4046b85e0290002dfe4626ace40`
-
-- Exact entry: [scripts/tests/test_check_bot_web_activation.py:220](../../scripts/tests/test_check_bot_web_activation.py#L220)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: mypy reported index at line 220; raw diagnostic omitted.
-
 ### `web-sa-51580c159da633ad32ca29dfe1b7ace27fa4a6a47ed83681e01ed0c8c785d982`
 
 - Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
@@ -5628,15 +5587,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: shell reported shell-fallback-success at line 2; raw diagnostic omitted.
 
-### `web-sa-54e7883c578b3e223f33d15fa3ebed94378bab12e9065dca63c1766df3c9daf4`
-
-- Exact entry: [apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts:152](../../apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts#L152)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported @ts-expect-error at line 152; raw diagnostic omitted.
-
 ### `web-sa-7a1f035faed7a42bb12b6cb9242bb25cc52e01f98cfa915cc6c17a4a92c9bef2`
 
 - Exact entry: [apps/web/tests/unit/utils/reference-renderer.spec.ts:14](../../apps/web/tests/unit/utils/reference-renderer.spec.ts#L14)
@@ -5798,8 +5748,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `575`
-- Matched: `575`
+- Findings: `570`
+- Matched: `570`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`

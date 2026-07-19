@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick, ref } from "vue";
 import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
+import { invalidInput } from "../../helpers/invalidInput";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Harness: a lightweight component that calls the composable inside a setup context,
@@ -23,7 +24,7 @@ function makeHarness(opts?: {
   const nestedHeadings = ref<
     Array<{ id: string; children?: unknown[]; [key: string]: unknown }>
   >(opts?.nestedItems ?? []);
-  const mainContentRef = ref<any>(null);
+  const mainContentRef = ref<HTMLElement | null>(null);
 
   const Harness = defineComponent({
     setup() {
@@ -74,6 +75,11 @@ class MockIntersectionObserver {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeToc — initial state", () => {
+  it("keeps invalid test values explicit at the call site", () => {
+    const value = { invalid: true };
+    expect(invalidInput(value)).toBe(value);
+  });
+
   it("activeHeadingId is initially an empty string", () => {
     const { Harness } = makeHarness();
     const wrapper = mount(Harness);
@@ -149,8 +155,9 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
 
   beforeEach(() => {
     originalIO = globalThis.IntersectionObserver;
-    // @ts-expect-error replacing with minimal mock
-    globalThis.IntersectionObserver = MockIntersectionObserver;
+    globalThis.IntersectionObserver = invalidInput(
+      MockIntersectionObserver
+    ) as typeof globalThis.IntersectionObserver;
     MockIntersectionObserver.lastInstance = null;
   });
 

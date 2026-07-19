@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 import pytest
 
@@ -22,6 +23,14 @@ ROW_IDS = (
     "RC-WEB-007",
     "RC-LIVE-001",
 )
+
+
+class MatrixValue(TypedDict):
+    schema_version: int
+    feature_flags: dict[str, bool]
+    rows: list[dict[str, str]]
+    rollback: list[str]
+    local_readiness: NotRequired[dict[str, object]]
 
 
 def row_rows(status: str = "External Pending") -> list[dict[str, str]]:
@@ -42,7 +51,7 @@ def matrix_value(
     flags: dict[str, bool] | None = None,
     rollback: list[str] | None = None,
     schema_version: int = 1,
-) -> dict[str, object]:
+) -> MatrixValue:
     return {
         "schema_version": schema_version,
         "feature_flags": {
@@ -57,7 +66,7 @@ def matrix_value(
     }
 
 
-def matrix_text(value: dict[str, object]) -> str:
+def matrix_text(value: MatrixValue) -> str:
     return "\n".join(
         (
             "# Bot/Web activation matrix",
@@ -79,7 +88,7 @@ def write(root: Path, relative: str, value: object) -> None:
         path.write_text(json.dumps(value), encoding="utf-8")
 
 
-def minimal_tree(tmp_path: Path, value: dict[str, object] | None = None) -> Path:
+def minimal_tree(tmp_path: Path, value: MatrixValue | None = None) -> Path:
     root = tmp_path
     write(
         root,
@@ -91,7 +100,7 @@ def minimal_tree(tmp_path: Path, value: dict[str, object] | None = None) -> Path
     return root
 
 
-def local_readiness_matrix_value() -> dict[str, object]:
+def local_readiness_matrix_value() -> MatrixValue:
     value = matrix_value()
     value["local_readiness"] = {
         "rc_web_004": {
@@ -196,11 +205,11 @@ def test_matrix_schema_status_flags_and_rollback_are_fail_closed(tmp_path: Path)
     assert any("schema_version" in error for error in checker.check(root))
 
     value = matrix_value()
-    value["feature_flags"]["unknown"] = False  # type: ignore[index]
+    value["feature_flags"]["unknown"] = False
     assert any("feature flag" in error for error in checker.check(minimal_tree(tmp_path, value)))
 
     value = matrix_value()
-    value["rows"][0]["status"] = "Accepted"  # type: ignore[index]
+    value["rows"][0]["status"] = "Accepted"
     assert any("status" in error for error in checker.check(minimal_tree(tmp_path, value)))
 
     value = matrix_value(rollback=checker.ROLLBACK_MARKERS[:-1])
@@ -217,7 +226,7 @@ def test_committed_matrix_is_dark_and_cli_has_one_stable_pass_line() -> None:
 
 def test_cli_failure_is_bounded_and_does_not_echo_raw_content(tmp_path: Path) -> None:
     value = matrix_value()
-    value["rows"][0]["fixture_id"] = "raw answer body"  # type: ignore[index]
+    value["rows"][0]["fixture_id"] = "raw answer body"
     root = minimal_tree(tmp_path, value)
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
