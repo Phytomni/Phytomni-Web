@@ -83,7 +83,10 @@ export function useComposer(opts: {
     }
   });
 
-  watch(authorizedAgentTools, (tools) => {
+  watch([authorizedAgentTools, isSending], ([tools, sending]) => {
+    // Keep the serialized draft stable while a request owns this dialogue;
+    // retry the same fail-closed cleanup when the send lifecycle settles.
+    if (sending) return;
     if (selectedAgent.value && !tools.includes(selectedAgent.value)) {
       clearSelectedAgent();
     }

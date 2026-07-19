@@ -192,6 +192,34 @@ describe("useComposer", () => {
       expect(selectedAgent.value).toBe("");
       expect(messageInput.value).toBe("body");
     });
+
+    it("defers revoked serialized selection cleanup until sending completes", async () => {
+      const authorizedAgentTools = ref(["ChatAgent", "KnowledgeAgent"]);
+      useComposer({
+        messageInput: messageInput as any,
+        isSending: isSending as any,
+        currentChatId,
+        selectedAgent: selectedAgent as any,
+        scrollToBottom,
+        authorizedAgentTools: authorizedAgentTools as any,
+      });
+
+      selectedAgent.value = "KnowledgeAgent";
+      messageInput.value = "@KnowledgeAgent,body";
+      isSending.value = true;
+
+      authorizedAgentTools.value = ["ChatAgent"];
+      await nextTick();
+
+      expect(selectedAgent.value).toBe("KnowledgeAgent");
+      expect(messageInput.value).toBe("@KnowledgeAgent,body");
+
+      isSending.value = false;
+      await nextTick();
+
+      expect(selectedAgent.value).toBe("");
+      expect(messageInput.value).toBe("body");
+    });
   });
 
   describe("per-dialogue selectedAgent", () => {
