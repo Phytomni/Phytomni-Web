@@ -1,12 +1,6 @@
 // User info store.
 import { defineStore } from "pinia";
-import {
-  getToken,
-  setToken,
-  setExpiresIn,
-  removeToken,
-  removeExpiresIn,
-} from "@/utils/auth";
+import { getToken, removeToken, removeExpiresIn } from "@/utils/auth";
 import { getUserTool } from "@/api/chat";
 import {
   CANONICAL_AT_ABLE_TOOLS,

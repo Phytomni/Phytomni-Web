@@ -174,7 +174,6 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
-import { Plus } from "@element-plus/icons-vue";
 import PiiWatermark from "@/components/PiiWatermark.vue";
 import { ElMessage } from "element-plus";
 import { getUserList, addUser, changePermission } from "@/api/auth";
@@ -289,17 +288,6 @@ const handleSizeChange = (size: number) => {
 const handleCurrentChange = (page: number) => {
   currentPage.value = page;
   fetchData();
-};
-
-// Add a user
-const handleAdd = () => {
-  dialogType.value = "add";
-  userForm.id = 0;
-  userForm.email = "";
-  userForm.password = "";
-  userForm.code = "";
-
-  dialogVisible.value = true;
 };
 
 // Edit a user
