@@ -1,54 +1,128 @@
 name: CI
 
-# Promotes all of scripts/validate_web_local.sh's G-checks from "run locally by
-# the developer" to "run automatically on PR + main push", as a contributor-side
-# defense backstop: even if someone hasn't installed scripts/install_git_hooks.sh,
-# CI still blocks the PR red; it also runs scripts/scan_secrets.py --all once more
-# to pin the whole-tree secret scan into CI (not just changed files).
-#
-# Making the status check a required merge gate is a GitHub repo setting
-# (Branches → required status checks), outside the scope of this workflow.
+# Shared gate groups run in parallel so a failing contract or static check does
+# not wait for the complete frontend runtime suite. The workflow remains a
+# contributor-side defense backstop when local hooks are not installed.
+
+permissions:
+  contents: read
 
 on:
   pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches:
+      - main
+      - "release/**"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  validate:
-    name: validate_web_local.sh + secret scan
+  hygiene:
+    name: hygiene
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
       - name: Checkout (full history for git diff)
         uses: actions/checkout@v4
         with:
-          # validate_web_local.sh G-1 / G0 use git diff; fetch-depth: 0 gives both the full ref
           fetch-depth: 0
 
-      - name: Setup Node 20 (apps/web vue-tsc / eslint / vite)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: apps/web/package-lock.json
-
-      - name: Setup Go 1.23 (apps/server gofmt / vet / build)
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-          cache-dependency-path: apps/server/go.sum
-
-      - name: Install ripgrep (validate_web_local.sh G-1 secret scan)
+      - name: Install ripgrep (shared hygiene gate)
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
-      - name: npm ci (apps/web)
+      - name: Run shared hygiene gate
+        run: ./scripts/run_gate_group.sh hygiene
+
+      - name: Scan the whole tree for secrets
+        run: python3 scripts/scan_secrets.py --all
+
+  frontend-static:
+    name: frontend-static
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20 (frontend static tools)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install frontend dependencies
         working-directory: apps/web
         run: npm ci
 
-      - name: validate_web_local.sh full gate (G-1 + G0 + G1..G7.5, G11, G12)
-        run: ./scripts/validate_web_local.sh
+      - name: Run shared frontend static gate
+        run: ./scripts/run_gate_group.sh frontend-static
 
-      - name: scan_secrets.py --all (whole tree, not just changes)
-        run: python3 scripts/scan_secrets.py --all
+  frontend-runtime:
+    name: frontend-runtime
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20 (frontend runtime tools)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Run shared frontend runtime gate
+        run: ./scripts/run_gate_group.sh frontend-runtime
+
+  server-static:
+    name: server-static
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.23 (server static tools)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: apps/server/go.sum
+
+      - name: Run shared server static gate
+        run: ./scripts/run_gate_group.sh server-static
+
+  server-runtime:
+    name: server-runtime
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.23 (server runtime tools)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: apps/server/go.sum
+
+      - name: Run shared server runtime gate
+        run: ./scripts/run_gate_group.sh server-runtime
+
+  contracts:
+    name: contracts
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run shared contract gate
+        run: ./scripts/run_gate_group.sh contracts

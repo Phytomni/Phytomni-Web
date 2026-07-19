@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GATES = ROOT / "scripts" / "gates"
 DISPATCHER = ROOT / "scripts" / "run_gate_group.sh"
 FULL_GATE = ROOT / "scripts" / "validate_web_local.sh"
+WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 GROUP_ORDER = (
     "hygiene",
@@ -95,3 +96,43 @@ def test_dispatcher_rejects_unknown_or_missing_groups() -> None:
     )
     assert unknown.returncode == 2
     assert "unknown gate group" in unknown.stderr
+
+
+def test_ci_targets_are_read_only_parallel_shared_groups() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "permissions:\n  contents: read" in text
+    assert re.search(r"(?m)^  pull_request:\s*$", text)
+    assert '  push:\n    branches:\n      - main\n      - "release/**"\n' in text
+    assert (
+        "group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+        in text
+    )
+    assert "cancel-in-progress: true" in text
+    assert "\t" not in text
+
+    for group in GROUP_ORDER:
+        assert re.search(rf"(?m)^  {re.escape(group)}:\s*$", text)
+        assert re.search(rf"(?m)^    name: {re.escape(group)}\s*$", text)
+        assert re.search(rf"(?m)^    timeout-minutes: 20\s*$", text)
+        assert text.count(f"./scripts/run_gate_group.sh {group}") == 1
+
+    assert text.count("./scripts/run_gate_group.sh ") == len(GROUP_ORDER)
+    assert "./scripts/validate_web_local.sh" not in text
+
+
+def test_ci_installs_only_group_owned_dependencies() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert text.count("uses: actions/setup-node@v4") == 2
+    assert text.count("node-version: \"20\"") == 2
+    assert text.count("cache: npm") == 2
+    assert text.count("cache-dependency-path: apps/web/package-lock.json") == 2
+    assert text.count("run: npm ci") == 2
+
+    assert text.count("uses: actions/setup-go@v5") == 2
+    assert text.count("go-version: \"1.23\"") == 2
+    assert text.count("cache-dependency-path: apps/server/go.sum") == 2
+
+    assert text.count("python3 scripts/scan_secrets.py --all") == 1
+    assert text.count("sudo apt-get install -y ripgrep") == 1
