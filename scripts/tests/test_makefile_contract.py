@@ -14,12 +14,14 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def test_bootstrap_scoped_gate_is_fail_safe(repo_root: Path) -> None:
+def test_make_targets_delegate_to_the_shared_scoped_gate(repo_root: Path) -> None:
     text = (repo_root / "Makefile").read_text(encoding="utf-8")
 
-    assert "scoped:" in text
-    assert "full:" in text
-    assert "./scripts/validate_web_local.sh" in text
+    assert ".PHONY: help scoped precommit prepush full push" in text
+    assert "scoped:\n\t@./scripts/scoped_gate.sh scoped" in text
+    assert "precommit:\n\t@./scripts/scoped_gate.sh precommit" in text
+    assert "prepush:\n\t@./scripts/scoped_gate.sh prepush" in text
+    assert "full:\n\t@./scripts/validate_web_local.sh" in text
     assert "--no-verify" not in text
     assert "|| true" not in text
 
@@ -31,11 +33,13 @@ def test_push_uses_keepalive_and_preserves_hooks(repo_root: Path) -> None:
     assert "ServerAliveCountMax=6" in text
     assert "GIT_SSH_COMMAND" in text
     assert "git push $(ARGS)" in text
-    assert "PHYTOMNI_SCOPED_GATE" not in text
 
 
-def test_help_explains_bootstrap_full_gate(repo_root: Path) -> None:
+def test_help_explains_scoped_and_full_gate_modes(repo_root: Path) -> None:
     text = (repo_root / "Makefile").read_text(encoding="utf-8")
+    lowered = text.lower()
 
-    assert "temporary" in text.lower()
+    assert "staged index" in lowered
+    assert "BASE..work-tree" in text
+    assert "alias of prepush" in text
     assert "full gate" in text.lower()
