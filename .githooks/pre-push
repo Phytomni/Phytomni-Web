@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+# Copyright (c) Biotechnology Research Institute,
+# Chinese Academy of Agricultural Sciences. 2024-2026. All rights reserved.
+# Author: xieshang (xieshang0608@gmail.com)
+#         guxiaofeng (guxiaofeng@caas.cn)
+#
+# Pre-push hook: use the complete repository gate by default. The scoped path
+# is an explicit local-iteration opt-in and must not be used for release pushes.
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+case "${PHYTOMNI_SCOPED_GATE:-}" in
+    "")
+        exec make full
+        ;;
+    1)
+        exec make prepush
+        ;;
+    *)
+        printf '%s\n' 'PHYTOMNI_SCOPED_GATE must be unset or exactly 1' >&2
+        exit 2
+        ;;
+esac

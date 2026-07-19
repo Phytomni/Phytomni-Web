@@ -14,9 +14,11 @@ repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
 git config core.hooksPath .githooks
-chmod +x .githooks/pre-commit
-chmod +x scripts/scan_secrets.py
+chmod +x .githooks/pre-commit .githooks/pre-push
+chmod +x scripts/scan_secrets.py scripts/scoped_gate.sh
+chmod +x scripts/run_gate_group.sh scripts/validate_web_local.sh
 
 printf '%s\n' "Installed Git hooks from .githooks"
-printf '%s\n' "  Pre-commit  -> scripts/scan_secrets.py --staged"
-printf '%s\n' "  Bypass once -> git commit --no-verify  (NOT recommended)"
+printf '%s\n' "  Pre-commit  -> staged secret scan, then make precommit"
+printf '%s\n' "  Pre-push    -> make full (default)"
+printf '%s\n' "  Scoped local iteration only -> PHYTOMNI_SCOPED_GATE=1 git push"
