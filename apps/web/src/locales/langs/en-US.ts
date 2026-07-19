@@ -418,6 +418,18 @@ export default {
       week: "Within 7 Days",
       older: "Older Than a Week",
     },
+    agentLabels: {
+      chatAgent: "Chat Agent",
+      knowledgeAgent: "Knowledge Agent",
+      dataAgent: "Data Agent",
+      analystAgent: "Analyst Agent",
+      reviewAgent: "Review Agent",
+      briefGeneAgent: "Brief Gene Agent",
+      deepGenomeAgent: "Deep Genome Agent",
+      inSilicoResearchAgent: "In Silico Research Agent",
+      geneNetworkAgent: "Gene Network Agent",
+      digitalDesignAgent: "Digital Design Agent",
+    },
     agents: {
       chatAgent:
         "Your AI assistant for answering plant research questions in natural language.",

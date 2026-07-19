@@ -416,6 +416,18 @@ export default {
       week: "7 天内",
       older: "一周前",
     },
+    agentLabels: {
+      chatAgent: "对话智能体",
+      knowledgeAgent: "知识智能体",
+      dataAgent: "数据智能体",
+      analystAgent: "分析智能体",
+      reviewAgent: "综述智能体",
+      briefGeneAgent: "基因综述智能体",
+      deepGenomeAgent: "基因深度分析智能体",
+      inSilicoResearchAgent: "虚拟研究智能体",
+      geneNetworkAgent: "基因网络智能体",
+      digitalDesignAgent: "智能设计智能体",
+    },
     agents: {
       chatAgent: "您的农业科研智能助手，用自然语言解答各类研究问题。",
       knowledgeAgent: "提供权威农业知识库，精准匹配科研需求。",

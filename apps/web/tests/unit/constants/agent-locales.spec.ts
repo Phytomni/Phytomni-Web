@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CANONICAL_AGENT_DISPLAY_NAMES,
   CANONICAL_AGENT_I18N_KEYS,
+  CANONICAL_AGENT_LABEL_I18N_KEYS,
   CANONICAL_AGENT_PAGE_TITLE_KEYS,
   CANONICAL_AGENT_TOOLS,
   CANONICAL_AGENT_ZH_NAMES,
@@ -41,6 +42,9 @@ describe("canonical agent locale names", () => {
       );
       expect(CANONICAL_AGENT_ZH_NAMES[toolName]).toEqual(expect.any(String));
       expect(CANONICAL_AGENT_I18N_KEYS[toolName]).toEqual(expect.any(String));
+      expect(CANONICAL_AGENT_LABEL_I18N_KEYS[toolName]).toEqual(
+        expect.any(String)
+      );
     }
   });
 
@@ -62,6 +66,25 @@ describe("canonical agent locale names", () => {
       expect(getMessage(enUS, i18nKey), `${toolName} en-US`).toEqual(
         expect.any(String)
       );
+    }
+  });
+
+  it("keeps compact picker labels separate from long agent descriptions", () => {
+    expect(Object.keys(CANONICAL_AGENT_LABEL_I18N_KEYS).sort()).toEqual(
+      [...CANONICAL_AGENT_TOOLS].sort()
+    );
+    for (const toolName of CANONICAL_AGENT_TOOLS) {
+      const labelKey = CANONICAL_AGENT_LABEL_I18N_KEYS[toolName];
+      expect(labelKey).toBe(
+        `chat.agentLabels.${toolName[0].toLowerCase()}${toolName.slice(1)}`
+      );
+      expect(getMessage(zhCN, labelKey), `${toolName} zh-CN label`).toEqual(
+        expect.any(String)
+      );
+      expect(getMessage(enUS, labelKey), `${toolName} en-US label`).toEqual(
+        expect.any(String)
+      );
+      expect(labelKey).not.toBe(CANONICAL_AGENT_I18N_KEYS[toolName]);
     }
   });
 
@@ -101,7 +124,9 @@ describe("canonical agent locale names", () => {
       ...CANONICAL_AGENT_TOOLS,
     ]);
     for (const option of options) {
-      expect(option.labelKey).toBe(CANONICAL_AGENT_I18N_KEYS[option.tool]);
+      expect(option.labelKey).toBe(
+        CANONICAL_AGENT_LABEL_I18N_KEYS[option.tool]
+      );
       expect(getMessage(enUS, option.labelKey)).toEqual(expect.any(String));
       expect(getMessage(zhCN, option.labelKey)).toEqual(expect.any(String));
       expect(option.displayName).toBe(

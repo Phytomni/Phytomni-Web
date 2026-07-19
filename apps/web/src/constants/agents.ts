@@ -57,6 +57,21 @@ export const CANONICAL_AGENT_I18N_KEYS: Record<CanonicalAgentTool, string> = {
   GeneNetworkAgent: "chat.agents.geneNetworkAgent",
 } as const;
 
+/** Short localized names used by the compact @ picker surfaces. */
+export const CANONICAL_AGENT_LABEL_I18N_KEYS: Record<CanonicalAgentTool, string> =
+  {
+    ChatAgent: "chat.agentLabels.chatAgent",
+    KnowledgeAgent: "chat.agentLabels.knowledgeAgent",
+    DataAgent: "chat.agentLabels.dataAgent",
+    ReviewAgent: "chat.agentLabels.reviewAgent",
+    BriefGeneAgent: "chat.agentLabels.briefGeneAgent",
+    AnalystAgent: "chat.agentLabels.analystAgent",
+    DeepGenomeAgent: "chat.agentLabels.deepGenomeAgent",
+    InSilicoResearchAgent: "chat.agentLabels.inSilicoResearchAgent",
+    DigitalDesignAgent: "chat.agentLabels.digitalDesignAgent",
+    GeneNetworkAgent: "chat.agentLabels.geneNetworkAgent",
+  } as const;
+
 export const CANONICAL_AGENT_PAGE_TITLE_KEYS: Partial<
   Record<CanonicalAgentTool, string>
 > = {
@@ -163,7 +178,7 @@ export function derivePickerOptions(
   return CANONICAL_AGENT_TOOLS.filter((tool) => roles.includes(tool)).map(
     (tool) => ({
       tool,
-      labelKey: CANONICAL_AGENT_I18N_KEYS[tool],
+      labelKey: CANONICAL_AGENT_LABEL_I18N_KEYS[tool],
       displayName: CANONICAL_AGENT_DISPLAY_NAMES[tool],
     })
   );
