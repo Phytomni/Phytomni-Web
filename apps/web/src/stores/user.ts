@@ -2,10 +2,7 @@
 import { defineStore } from "pinia";
 import { getToken, removeToken, removeExpiresIn } from "@/utils/auth";
 import { getUserTool } from "@/api/chat";
-import {
-  CANONICAL_AT_ABLE_TOOLS,
-  type RemoteAgentTool,
-} from "@/constants/agents";
+import type { RemoteAgentTool } from "@/constants/agents";
 import Cookies from "js-cookie";
 interface UserToolResponse {
   code: number;
@@ -37,7 +34,7 @@ export default defineStore({
   state: (): IState => ({
     name: localStorage.getItem("userName") || "",
     avatar: "",
-    roles: [...CANONICAL_AT_ABLE_TOOLS],
+    roles: [],
     permissions: [],
     permission_list: [], // permission list
     userType: "",

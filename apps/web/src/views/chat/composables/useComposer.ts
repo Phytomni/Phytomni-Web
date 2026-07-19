@@ -9,7 +9,7 @@ export function useComposer(opts: {
   currentChatId: Ref<string>;
   selectedAgent: WritableComputedRef<string>;
   scrollToBottom: () => void;
-  rolesTool: Ref<readonly string[]>;
+  authorizedAgentTools: Ref<readonly string[]>;
 }) {
   const {
     messageInput,
@@ -17,7 +17,7 @@ export function useComposer(opts: {
     currentChatId,
     selectedAgent,
     scrollToBottom,
-    rolesTool,
+    authorizedAgentTools,
   } = opts;
 
   const displayMessageInput = computed({
@@ -43,11 +43,12 @@ export function useComposer(opts: {
     messageInput.value = cleaned;
   };
 
-  const isPermittedTool = (tool: string) => rolesTool.value.includes(tool);
+  const isPermittedTool = (tool: string) =>
+    authorizedAgentTools.value.includes(tool);
 
   // handle button click
   const handleButtonClick = (buttonType: string) => {
-    if (isSending.value) return;
+    if (isSending.value || !isPermittedTool(buttonType)) return;
 
     if (selectedAgent.value === buttonType) {
       clearSelectedAgent();
@@ -82,7 +83,7 @@ export function useComposer(opts: {
     }
   });
 
-  watch(rolesTool, (tools) => {
+  watch(authorizedAgentTools, (tools) => {
     if (selectedAgent.value && !tools.includes(selectedAgent.value)) {
       clearSelectedAgent();
     }

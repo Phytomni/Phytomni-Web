@@ -29,7 +29,7 @@ import FormWidget from "@/views/chat/components/blocks/a2ui/FormWidget.vue";
 import ChoiceWidget from "@/views/chat/components/blocks/a2ui/ChoiceWidget.vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
-import { CANONICAL_AT_ABLE_TOOLS } from "@/constants/agents";
+import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import type { A2uiOpenSurface } from "@/views/chat/streaming/a2uiContract";
 import {
   A2UI_LIFECYCLE_LONG_BODY,
@@ -419,7 +419,7 @@ describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
 
 describe("ChatAccessibilityV2 — Composer picker keyboard", () => {
   it("opens, arrows, activates, and returns focus on Escape", async () => {
-    const tools = [...CANONICAL_AT_ABLE_TOOLS];
+    const tools = [...CANONICAL_AGENT_TOOLS];
     const wrapper = mount(ChatAgentPicker, {
       props: {
         options: makeOptions(tools),

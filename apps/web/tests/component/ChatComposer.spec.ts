@@ -63,8 +63,12 @@ const COMPACT_DOM_ORDER = [
 ];
 
 const pickerOptions = [
-  { tool: "RAG", label: "RAG", labelKey: "chat.agents.rAG" },
-  { tool: "BI", label: "BI", labelKey: "chat.agents.bI" },
+  { tool: "ChatAgent", label: "ChatAgent", labelKey: "chat.agents.chatAgent" },
+  {
+    tool: "KnowledgeAgent",
+    label: "KnowledgeAgent",
+    labelKey: "chat.agents.knowledgeAgent",
+  },
 ];
 
 const baseProps = () => ({
@@ -74,7 +78,7 @@ const baseProps = () => ({
   expertModeEnabled: true,
   showModeSelector: true,
   fileList: [] as UploadFile[],
-  rolesTool: ["RAG", "BI"],
+  rolesTool: ["ChatAgent", "KnowledgeAgent"],
   rolesLoading: false,
   hasMessages: false,
   selectedAgent: "",
@@ -315,16 +319,16 @@ describe("ChatComposer", () => {
   it("forwards mention select/search and picker command/clear", async () => {
     const wrapper = mountComposer();
     const mention = wrapper.findComponent({ name: "MentionSender" });
-    await mention.vm.$emit("select", { value: "RAG" });
+    await mention.vm.$emit("select", { value: "ChatAgent" });
     await mention.vm.$emit("search", "R");
-    expect(wrapper.emitted("select")?.[0]).toEqual([{ value: "RAG" }]);
+    expect(wrapper.emitted("select")?.[0]).toEqual([{ value: "ChatAgent" }]);
     expect(wrapper.emitted("search")?.[0]).toEqual(["R"]);
 
     const picker = wrapper.findComponent({ name: "ChatAgentPicker" });
     expect(picker.exists()).toBe(true);
-    await picker.vm.$emit("select", "@RAG,");
+    await picker.vm.$emit("select", "@ChatAgent,");
     await picker.vm.$emit("clear");
-    expect(wrapper.emitted("command")?.[0]).toEqual(["@RAG,"]);
+    expect(wrapper.emitted("command")?.[0]).toEqual(["@ChatAgent,"]);
     expect(wrapper.emitted("clear-agent")).toHaveLength(1);
   });
 

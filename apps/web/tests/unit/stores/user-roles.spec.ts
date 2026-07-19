@@ -1,32 +1,31 @@
 import { describe, it, expect } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 import { userStore } from "@/stores";
-import {
-  CANONICAL_AGENT_TOOLS,
-  CANONICAL_AT_ABLE_TOOLS,
-  derivePickerOptions,
-} from "@/constants/agents";
+import { CANONICAL_AGENT_TOOLS, derivePickerOptions } from "@/constants/agents";
 
-describe("user store default roles", () => {
-  it("fallback roles equal the canonical @-able set (no legacy/ghost names)", () => {
+describe("user store agent roles", () => {
+  it("starts with no granted agents before the server response", () => {
     setActivePinia(createPinia());
-    const roles = userStore().roles;
-    expect([...roles].sort()).toEqual([...CANONICAL_AT_ABLE_TOOLS].sort());
-    for (const r of roles) {
-      expect(CANONICAL_AGENT_TOOLS).toContain(r);
-    }
+    expect(userStore().roles).toEqual([]);
   });
 
-  it("derives picker options as the canonical-order permission intersection", () => {
-    const full = derivePickerOptions([...CANONICAL_AT_ABLE_TOOLS]);
-    expect(full.map((o) => o.tool)).toEqual([...CANONICAL_AT_ABLE_TOOLS]);
+  it("derives all granted canonical agents in canonical order", () => {
+    const all = derivePickerOptions([...CANONICAL_AGENT_TOOLS]);
+    expect(all.map((option) => option.tool)).toEqual([
+      ...CANONICAL_AGENT_TOOLS,
+    ]);
 
-    const partial = derivePickerOptions(["DataAgent", "ChatAgent"]);
-    expect(partial.map((o) => o.tool)).toEqual(["ChatAgent", "DataAgent"]);
-
+    const unordered = derivePickerOptions([
+      "DeepGenomeAgent",
+      "unknown-permission",
+      "ChatAgent",
+      "AnalystAgent",
+    ]);
+    expect(unordered.map((option) => option.tool)).toEqual([
+      "ChatAgent",
+      "AnalystAgent",
+      "DeepGenomeAgent",
+    ]);
     expect(derivePickerOptions([])).toEqual([]);
-    expect(derivePickerOptions(["AnalystAgent", "DeepGenomeAgent"])).toEqual(
-      []
-    );
   });
 });

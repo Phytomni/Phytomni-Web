@@ -21,14 +21,14 @@ describe("useComposer", () => {
 
   const permittedTools = ["ChatAgent", "KnowledgeAgent", "DataAgent"];
 
-  function makeComposable(rolesTool = permittedTools) {
+  function makeComposable(authorizedAgentTools = permittedTools) {
     return useComposer({
       messageInput: messageInput as any,
       isSending: isSending as any,
       currentChatId,
       selectedAgent: selectedAgent as any,
       scrollToBottom,
-      rolesTool: ref(rolesTool) as any,
+      authorizedAgentTools: ref(authorizedAgentTools) as any,
     });
   }
 
@@ -36,20 +36,20 @@ describe("useComposer", () => {
     it("activates the button and prepends the @tool, command when none active", () => {
       const { handleButtonClick } = makeComposable();
 
-      handleButtonClick("RAG");
+      handleButtonClick("ChatAgent");
 
-      expect(selectedAgent.value).toBe("RAG");
-      expect(messageInput.value).toBe("@RAG,");
+      expect(selectedAgent.value).toBe("ChatAgent");
+      expect(messageInput.value).toBe("@ChatAgent,");
     });
 
     it("toggles the same button OFF, clearing selectedAgent and removing the command", () => {
       const { handleButtonClick } = makeComposable();
 
-      handleButtonClick("RAG");
-      expect(selectedAgent.value).toBe("RAG");
-      expect(messageInput.value).toBe("@RAG,");
+      handleButtonClick("ChatAgent");
+      expect(selectedAgent.value).toBe("ChatAgent");
+      expect(messageInput.value).toBe("@ChatAgent,");
 
-      handleButtonClick("RAG");
+      handleButtonClick("ChatAgent");
       expect(selectedAgent.value).toBe("");
       expect(messageInput.value).toBe("");
     });
@@ -58,7 +58,25 @@ describe("useComposer", () => {
       isSending.value = true;
       const { handleButtonClick } = makeComposable();
 
-      handleButtonClick("RAG");
+      handleButtonClick("ChatAgent");
+
+      expect(selectedAgent.value).toBe("");
+      expect(messageInput.value).toBe("");
+    });
+
+    it("rejects a direct-selection tool outside the authorized set", () => {
+      const { handleButtonClick } = makeComposable(["ChatAgent"]);
+
+      handleButtonClick("DeepGenomeAgent");
+
+      expect(selectedAgent.value).toBe("");
+      expect(messageInput.value).toBe("");
+    });
+
+    it("rejects a mention selection outside the authorized set", () => {
+      const { handleSelect } = makeComposable(["ChatAgent"]);
+
+      handleSelect({ value: "DeepGenomeAgent" } as any);
 
       expect(selectedAgent.value).toBe("");
       expect(messageInput.value).toBe("");
@@ -144,7 +162,7 @@ describe("useComposer", () => {
   describe("watch(messageInput)", () => {
     it("clears selectedAgent when its @command is removed from the input", async () => {
       makeComposable();
-      selectedAgent.value = "RAG";
+      selectedAgent.value = "ChatAgent";
 
       messageInput.value = "no command here";
       await nextTick();
@@ -155,20 +173,20 @@ describe("useComposer", () => {
 
   describe("permission refresh", () => {
     it("clears an unauthorized selection once when roles shrink", async () => {
-      const rolesTool = ref(["ChatAgent", "KnowledgeAgent"]);
+      const authorizedAgentTools = ref(["ChatAgent", "KnowledgeAgent"]);
       useComposer({
         messageInput: messageInput as any,
         isSending: isSending as any,
         currentChatId,
         selectedAgent: selectedAgent as any,
         scrollToBottom,
-        rolesTool: rolesTool as any,
+        authorizedAgentTools: authorizedAgentTools as any,
       });
 
       selectedAgent.value = "KnowledgeAgent";
       messageInput.value = "@KnowledgeAgent,body";
 
-      rolesTool.value = ["ChatAgent"];
+      authorizedAgentTools.value = ["ChatAgent"];
       await nextTick();
 
       expect(selectedAgent.value).toBe("");
@@ -181,14 +199,18 @@ describe("useComposer", () => {
       const chatStates = useChatStates();
       chatStates.currentChatId.value = "A";
 
-      const rolesTool = ref(["ChatAgent", "KnowledgeAgent", "DataAgent"]);
+      const authorizedAgentTools = ref([
+        "ChatAgent",
+        "KnowledgeAgent",
+        "DataAgent",
+      ]);
       const { handleButtonClick } = useComposer({
         messageInput: chatStates.messageInput,
         isSending: chatStates.isSending,
         currentChatId: chatStates.currentChatId,
         selectedAgent: chatStates.selectedAgent,
         scrollToBottom,
-        rolesTool: rolesTool as any,
+        authorizedAgentTools: authorizedAgentTools as any,
       });
 
       handleButtonClick("KnowledgeAgent");
@@ -216,14 +238,18 @@ describe("useComposer", () => {
       const chatStates = useChatStates();
       chatStates.currentChatId.value = "A";
 
-      const rolesTool = ref(["ChatAgent", "KnowledgeAgent", "DataAgent"]);
+      const authorizedAgentTools = ref([
+        "ChatAgent",
+        "KnowledgeAgent",
+        "DataAgent",
+      ]);
       const { handleButtonClick } = useComposer({
         messageInput: chatStates.messageInput,
         isSending: chatStates.isSending,
         currentChatId: chatStates.currentChatId,
         selectedAgent: chatStates.selectedAgent,
         scrollToBottom,
-        rolesTool: rolesTool as any,
+        authorizedAgentTools: authorizedAgentTools as any,
       });
 
       handleButtonClick("KnowledgeAgent");
@@ -244,14 +270,18 @@ describe("useComposer", () => {
       chatStates.selectedAgent.value = "DataAgent";
       chatStates.messageInput.value = "@DataAgent,other";
 
-      const rolesTool = ref(["ChatAgent", "KnowledgeAgent", "DataAgent"]);
+      const authorizedAgentTools = ref([
+        "ChatAgent",
+        "KnowledgeAgent",
+        "DataAgent",
+      ]);
       useComposer({
         messageInput: chatStates.messageInput,
         isSending: chatStates.isSending,
         currentChatId: chatStates.currentChatId,
         selectedAgent: chatStates.selectedAgent,
         scrollToBottom,
-        rolesTool: rolesTool as any,
+        authorizedAgentTools: authorizedAgentTools as any,
       });
 
       chatStates.currentChatId.value = "A";

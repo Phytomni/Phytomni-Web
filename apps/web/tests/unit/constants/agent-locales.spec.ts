@@ -5,7 +5,6 @@ import {
   CANONICAL_AGENT_PAGE_TITLE_KEYS,
   CANONICAL_AGENT_TOOLS,
   CANONICAL_AGENT_ZH_NAMES,
-  CANONICAL_AT_ABLE_TOOLS,
   derivePickerOptions,
 } from "@/constants/agents";
 import enUS from "@/locales/langs/en-US";
@@ -43,16 +42,6 @@ describe("canonical agent locale names", () => {
       expect(CANONICAL_AGENT_ZH_NAMES[toolName]).toEqual(expect.any(String));
       expect(CANONICAL_AGENT_I18N_KEYS[toolName]).toEqual(expect.any(String));
     }
-  });
-
-  it("keeps remote tools out of the role-backed picker subset", () => {
-    expect(CANONICAL_AT_ABLE_TOOLS).toEqual([
-      "ChatAgent",
-      "KnowledgeAgent",
-      "DataAgent",
-      "ReviewAgent",
-      "BriefGeneAgent",
-    ]);
   });
 
   it("keeps every canonical tool mapped to one stable chat-agent i18n key", () => {
@@ -106,8 +95,11 @@ describe("canonical agent locale names", () => {
     ).toContain("基因综述");
   });
 
-  it("maps every picker option to a localized chat-agent label key", () => {
-    const options = derivePickerOptions([...CANONICAL_AT_ABLE_TOOLS]);
+  it("makes every granted canonical tool available to the picker", () => {
+    const options = derivePickerOptions([...CANONICAL_AGENT_TOOLS]);
+    expect(options.map((option) => option.tool)).toEqual([
+      ...CANONICAL_AGENT_TOOLS,
+    ]);
     for (const option of options) {
       expect(option.labelKey).toBe(CANONICAL_AGENT_I18N_KEYS[option.tool]);
       expect(getMessage(enUS, option.labelKey)).toEqual(expect.any(String));

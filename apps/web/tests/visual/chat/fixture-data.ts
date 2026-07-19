@@ -8,7 +8,7 @@ import type {
 } from "@/views/chat/streaming/a2uiContract";
 import type { ChatAgentPickerOption } from "@/views/chat/components/ChatAgentPicker.vue";
 import {
-  CANONICAL_AT_ABLE_TOOLS,
+  CANONICAL_AGENT_TOOLS,
   CANONICAL_AGENT_DISPLAY_NAMES,
   CANONICAL_AGENT_I18N_KEYS,
 } from "@/constants/agents";
@@ -119,14 +119,14 @@ export function buildSyntheticFileList(
 
 /** Deterministic picker options — no roles API / network. */
 export function buildSyntheticPickerOptions(): ChatAgentPickerOption[] {
-  return CANONICAL_AT_ABLE_TOOLS.map((tool) => ({
+  return CANONICAL_AGENT_TOOLS.map((tool) => ({
     tool,
     labelKey: CANONICAL_AGENT_I18N_KEYS[tool],
     label: CANONICAL_AGENT_DISPLAY_NAMES[tool],
   }));
 }
 
-export const SYNTHETIC_ROLES_TOOL: string[] = [...CANONICAL_AT_ABLE_TOOLS];
+export const SYNTHETIC_ROLES_TOOL: string[] = [...CANONICAL_AGENT_TOOLS];
 
 export const A2UI_LIFECYCLE_LONG_LABEL = "L".repeat(256);
 export const A2UI_LIFECYCLE_LONG_BODY = "B".repeat(4096);

@@ -354,7 +354,7 @@
                 :expert-mode-enabled="expertModeEnabled"
                 :show-mode-selector="!currentChat?.messages?.length"
                 :file-list="fileList"
-                :roles-tool="rolesTool"
+                :roles-tool="authorizedAgentTools"
                 :roles-loading="rolesLoading"
                 :has-messages="!!currentChat?.messages?.length"
                 :selected-agent="selectedAgent"
@@ -638,19 +638,20 @@ const showAgentsView = () => {
 // Chat list
 const chatList = ref<Chat[]>([]);
 
-// Fix: changed a static reference to a computed property to ensure reactive updates
-const rolesTool = computed(() => userStore().roles);
-const pickerOptions = computed(() =>
-  derivePickerOptions(rolesTool.value).map((option) => ({
+const authorizedAgentOptions = computed(() =>
+  derivePickerOptions(userStore().roles).map((option) => ({
     tool: option.tool,
     labelKey: option.labelKey,
     label: t(option.labelKey) || option.displayName,
   }))
 );
+const authorizedAgentTools = computed(() =>
+  authorizedAgentOptions.value.map((option) => option.tool)
+);
+const pickerOptions = authorizedAgentOptions;
 const expertModeEnabled = computed(() => userStore().expertEnabled);
 
-// Add permission loading state management
-const rolesLoading = ref(false);
+const rolesLoading = ref(userStore().roles.length === 0);
 
 const chatHeaderTitle = computed(() => {
   const currentTitle =
@@ -1336,7 +1337,7 @@ const {
   currentChatId,
   selectedAgent,
   scrollToBottom,
-  rolesTool,
+  authorizedAgentTools,
 });
 const { setLogExpanded, updateLog, retryLog } = useLogView({
   isSending,

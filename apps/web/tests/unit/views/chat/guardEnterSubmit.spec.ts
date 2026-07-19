@@ -35,7 +35,7 @@ const baseProps = () => ({
   expertModeEnabled: true,
   showModeSelector: false,
   fileList: [],
-  rolesTool: ["RAG"],
+  rolesTool: ["ChatAgent", "KnowledgeAgent"],
   rolesLoading: false,
   hasMessages: false,
   activeButton: "",

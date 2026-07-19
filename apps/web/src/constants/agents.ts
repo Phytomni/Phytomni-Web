@@ -1,6 +1,7 @@
 // Single source of truth for agent tool names on the Web side. These MUST equal
 // the Bot /v1/agents tool names (see apps/server external/bot CanonicalAgentTool
-// and its drift-guard test). The @-able subset is what users can mention/send.
+// and its drift-guard test). Every server-granted canonical tool is eligible for
+// Chat selection and mention; derivePickerOptions applies the grant intersection.
 export const CANONICAL_AGENT_TOOLS = [
   "ChatAgent",
   "KnowledgeAgent",
@@ -15,14 +16,6 @@ export const CANONICAL_AGENT_TOOLS = [
 ] as const;
 
 export type CanonicalAgentTool = typeof CANONICAL_AGENT_TOOLS[number];
-
-export const CANONICAL_AT_ABLE_TOOLS = [
-  "ChatAgent",
-  "KnowledgeAgent",
-  "DataAgent",
-  "ReviewAgent",
-  "BriefGeneAgent",
-] as const;
 
 export const CANONICAL_AGENT_DISPLAY_NAMES: Record<CanonicalAgentTool, string> =
   {
@@ -158,18 +151,16 @@ export const REMOTE_AGENT_ROUTE_CONTRACTS = REMOTE_AGENT_PRODUCT_REGISTRY;
 
 export type RoutedAgentTool = keyof typeof CANONICAL_AGENT_ROUTES;
 
-export type CanonicalAtAbleTool = typeof CANONICAL_AT_ABLE_TOOLS[number];
-
 export type PickerAgentOption = {
-  tool: CanonicalAtAbleTool;
+  tool: CanonicalAgentTool;
   labelKey: string;
   displayName: string;
 };
 
 export function derivePickerOptions(
-  rolesTool: readonly string[]
+  roles: readonly string[]
 ): PickerAgentOption[] {
-  return CANONICAL_AT_ABLE_TOOLS.filter((tool) => rolesTool.includes(tool)).map(
+  return CANONICAL_AGENT_TOOLS.filter((tool) => roles.includes(tool)).map(
     (tool) => ({
       tool,
       labelKey: CANONICAL_AGENT_I18N_KEYS[tool],

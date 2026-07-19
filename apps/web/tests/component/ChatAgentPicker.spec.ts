@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ChatAgentPicker from "@/views/chat/components/ChatAgentPicker.vue";
-import { CANONICAL_AT_ABLE_TOOLS } from "@/constants/agents";
+import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 
-const allTools = [...CANONICAL_AT_ABLE_TOOLS];
+const allTools = [...CANONICAL_AGENT_TOOLS];
 
 const makeOptions = (tools: string[]) =>
   tools.map((tool) => ({
