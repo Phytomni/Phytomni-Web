@@ -100,6 +100,7 @@ describe("download", () => {
   it("tracks progress while saving a valid blob", async () => {
     mocks.post.mockImplementation((_url, _params, config) => {
       expect(config.signal).toBeInstanceOf(AbortSignal);
+      expect(config.responseType).toBe("blob");
       expect(typeof config.onDownloadProgress).toBe("function");
 
       config.onDownloadProgress({ loaded: 50, total: 100 });
