@@ -12,7 +12,7 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = ROOT / "apps" / "web"
-VALIDATE_GATE = ROOT / "scripts" / "validate_web_local.sh"
+FRONTEND_STATIC_GATE = ROOT / "scripts" / "gates" / "frontend-static.sh"
 EXPECTED_SCOPE_MARKERS = (
     "src/**/*.",
     "tests/**/*.",
@@ -78,8 +78,8 @@ def test_prettier_ignore_is_exact_without_broad_source_or_public_bypass() -> Non
     assert all(not entry.startswith("**/") for entry in entries)
 
 
-def test_full_gate_runs_standalone_format_check_before_eslint() -> None:
-    gate = VALIDATE_GATE.read_text(encoding="utf-8")
+def test_frontend_static_group_runs_standalone_format_check_before_eslint() -> None:
+    gate = FRONTEND_STATIC_GATE.read_text(encoding="utf-8")
     format_step = 'step "G2.1 apps/web: Prettier format check (read-only)"'
     eslint_step = 'step "G2 apps/web: eslint (read-only)"'
 
