@@ -261,6 +261,11 @@ async function mountProductionChat(
     global: {
       plugins: [pinia],
       stubs: {
+        RouterLink: {
+          name: "RouterLink",
+          props: ["to"],
+          template: '<a :href="to"><slot /></a>',
+        },
         ChatComposer: {
           name: "ChatComposer",
           props: ["modelValue"],

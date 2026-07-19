@@ -400,7 +400,7 @@ describe("ChatMessageActions", () => {
       /:can-refresh="\s*messageActionCapabilities\(message\)\.canRefresh\s*"/
     );
     expect(INDEX_SOURCE).toMatch(
-      /:can-react="messageActionCapabilities\(message\)\.canReact"/
+      /:can-react="\s*messageActionCapabilities\(message\)\.canReact\s*"/
     );
     expect(INDEX_SOURCE).toMatch(
       /messageActionCapabilities\(message\)\.generatedFormats/
@@ -411,7 +411,9 @@ describe("ChatMessageActions", () => {
     // Analyst log mounts only when deriveAnalystLogRowId(message) is a valid
     // positive-decimal id; its existing boundary remains independent.
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\) handleReaction/);
-    expect(INDEX_SOURCE).toMatch(/if \(message\.id\) getFileDownUrl/);
+    expect(INDEX_SOURCE).toMatch(
+      /if \(message\.id\)\s*getFileDownUrl/
+    );
     expect(INDEX_SOURCE).toMatch(
       /AnalystAgent[\s\S]*!!deriveAnalystLogRowId\(message\)/
     );
