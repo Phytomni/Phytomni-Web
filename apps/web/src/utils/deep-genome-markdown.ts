@@ -153,9 +153,7 @@ export function parseDeepGenomeMarkdown(
         .split("|")
         .map((cell) => cell.trim())
         .filter((cell) => cell.length > 0);
-      tableHeaders = headerCells.map((cell) =>
-        inlineMd(escapeHtml(cell))
-      );
+      tableHeaders = headerCells.map((cell) => inlineMd(escapeHtml(cell)));
 
       i++; // skip the delimiter row
       const alignmentLine = lines[i];
@@ -315,9 +313,7 @@ export function parseDeepGenomeMarkdown(
           currentLineProcessed = true;
         } else {
           // handle a normal text line immediately following the table's end
-          const processedLineContent = `<p>${inlineMd(
-            escapeHtml(line)
-          )}</p>`;
+          const processedLineContent = `<p>${inlineMd(escapeHtml(line))}</p>`;
           const isLineContentEmpty = line.trim() === "";
 
           if (isInH3Card) {
@@ -466,9 +462,7 @@ export function parseDeepGenomeMarkdown(
       blocks.push({ type: "h1", id, content });
     } else {
       // handle normal paragraphs, images, links, etc.
-      const processedLineContent = `<p>${inlineMd(
-        escapeHtml(line)
-      )}</p>`;
+      const processedLineContent = `<p>${inlineMd(escapeHtml(line))}</p>`;
       const isLineContentEmpty = line.trim() === "";
 
       // check whether the current line contains an image

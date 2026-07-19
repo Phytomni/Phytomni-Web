@@ -76,7 +76,10 @@ export function useDeepGenomeImageViewer() {
 
     // adjust the zoom (multiplicative, unlike useImageZoomPan's additive zoom)
     const delta = event.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(minScale, Math.min(maxScale, scale.value * delta));
+    const newScale = Math.max(
+      minScale,
+      Math.min(maxScale, scale.value * delta)
+    );
 
     // compute the new image size
     const newWidth = originalWidth * newScale;
@@ -87,7 +90,8 @@ export function useDeepGenomeImageViewer() {
     const newImageY = mouseY - mousePercentY * newHeight;
 
     // convert back to the offset under the original scale (no clamp, unlike useImageZoomPan)
-    imageOffset.x = (newImageX - (containerRect.width - newWidth) / 2) / newScale;
+    imageOffset.x =
+      (newImageX - (containerRect.width - newWidth) / 2) / newScale;
     imageOffset.y =
       (newImageY - (containerRect.height - newHeight) / 2) / newScale;
 

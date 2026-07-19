@@ -1,6 +1,11 @@
 <template>
   <div class="phy-auth-brand">
-    <img class="phy-auth-brand__mark" src="/logo.png" alt="" aria-hidden="true" />
+    <img
+      class="phy-auth-brand__mark"
+      src="/logo.png"
+      alt=""
+      aria-hidden="true"
+    />
     <span class="phy-auth-brand__title">{{ title }}</span>
   </div>
 </template>

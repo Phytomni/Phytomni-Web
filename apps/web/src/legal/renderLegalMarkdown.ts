@@ -4,10 +4,13 @@ function renderInline(text: string): string {
   const escaped = escapeHtml(text);
   const withBold = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   // sanitizeHref returns "#" for unsafe schemes (never empty) — still emit <a href="#">.
-  return withBold.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label: string, url: string) => {
-    const href = sanitizeHref(url);
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-  });
+  return withBold.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (_m, label: string, url: string) => {
+      const href = sanitizeHref(url);
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    }
+  );
 }
 
 export function renderLegalMarkdown(src: string): string {

@@ -30,7 +30,9 @@ export const i18n = createI18n({
 });
 
 // Switch language (loads the target pack on demand before switching).
-export async function setLanguage(lang: SupportedLocales): Promise<SupportedLocales> {
+export async function setLanguage(
+  lang: SupportedLocales
+): Promise<SupportedLocales> {
   try {
     await loadLocaleMessages(i18n, lang);
 

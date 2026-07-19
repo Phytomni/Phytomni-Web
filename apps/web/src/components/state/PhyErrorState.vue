@@ -1,7 +1,9 @@
 <template>
   <section class="phy-error-state" role="alert">
     <h2 v-if="title" class="phy-error-state__title">{{ title }}</h2>
-    <p v-if="description" class="phy-error-state__description">{{ description }}</p>
+    <p v-if="description" class="phy-error-state__description">
+      {{ description }}
+    </p>
     <button
       v-if="$slots.retry || retryLabel"
       class="phy-error-state__retry"

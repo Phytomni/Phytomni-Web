@@ -794,7 +794,8 @@ onBeforeUnmount(() => {
   width: min(100%, 1080px);
   margin: 0 auto;
   padding: var(--phy-space-12) var(--phy-space-16);
-  border: 1px solid var(--phy-color-warning-border, var(--phy-color-border-subtle));
+  border: 1px solid
+    var(--phy-color-warning-border, var(--phy-color-border-subtle));
   border-radius: var(--phy-radius-sm);
   background: var(--phy-color-warning-bg, var(--phy-color-bg-elevated));
   color: var(--phy-color-warning-text, var(--phy-color-text-secondary));

@@ -767,7 +767,8 @@ export default {
       questionTooLong: "The network question is too long.",
       traitValidation: "Choose a supported Trait Ontology target.",
       speciesValidation: "Choose a supported species.",
-      submitFailed: "The gene network run could not be submitted. Please try again.",
+      submitFailed:
+        "The gene network run could not be submitted. Please try again.",
       downloadFailed: "The download request could not be completed.",
       sectionsLabel: "Gene network report sections",
       traits: {
@@ -806,7 +807,8 @@ export default {
       reset: "Start another run",
       progress: "Design run in progress",
       complete: "Design report ready",
-      degraded: "The design report is partial because some analysis was unavailable.",
+      degraded:
+        "The design report is partial because some analysis was unavailable.",
       trackingDegraded:
         "Run tracking is degraded. The displayed state may not include the latest Bot update.",
       reportTitle: "Digital design report",

@@ -6,7 +6,7 @@ export function formatDisplayDate(
   d: Composer["d"],
   value: string | number | Date | null | undefined,
   preset: DateDisplayPreset,
-  empty = "--",
+  empty = "--"
 ): string {
   if (value == null || value === "") return empty;
   const date = value instanceof Date ? value : new Date(value);

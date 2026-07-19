@@ -20,7 +20,9 @@ export const linkifyCitations = (html: string, ns = ""): string => {
     (_match, group: string) => {
       const anchors = group
         .split(/\s*,\s*/)
-        .map((n) => `<a href="#${safeNs}-ref-${n}" class="citation-ref">${n}</a>`)
+        .map(
+          (n) => `<a href="#${safeNs}-ref-${n}" class="citation-ref">${n}</a>`
+        )
         .join(", ");
       return `[${anchors}]`;
     }

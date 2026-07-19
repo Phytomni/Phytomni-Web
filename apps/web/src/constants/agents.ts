@@ -14,7 +14,7 @@ export const CANONICAL_AGENT_TOOLS = [
   "GeneNetworkAgent",
 ] as const;
 
-export type CanonicalAgentTool = (typeof CANONICAL_AGENT_TOOLS)[number];
+export type CanonicalAgentTool = typeof CANONICAL_AGENT_TOOLS[number];
 
 export const CANONICAL_AT_ABLE_TOOLS = [
   "ChatAgent",
@@ -24,18 +24,19 @@ export const CANONICAL_AT_ABLE_TOOLS = [
   "BriefGeneAgent",
 ] as const;
 
-export const CANONICAL_AGENT_DISPLAY_NAMES: Record<CanonicalAgentTool, string> = {
-  ChatAgent: "Chat Agent",
-  KnowledgeAgent: "Knowledge Agent",
-  DataAgent: "Data Agent",
-  ReviewAgent: "Review Agent",
-  BriefGeneAgent: "Brief Gene Agent",
-  AnalystAgent: "Analyst Agent",
-  DeepGenomeAgent: "Deep Genome Agent",
-  InSilicoResearchAgent: "In Silico Research Agent",
-  DigitalDesignAgent: "Digital Design Agent",
-  GeneNetworkAgent: "Gene Network Agent",
-} as const;
+export const CANONICAL_AGENT_DISPLAY_NAMES: Record<CanonicalAgentTool, string> =
+  {
+    ChatAgent: "Chat Agent",
+    KnowledgeAgent: "Knowledge Agent",
+    DataAgent: "Data Agent",
+    ReviewAgent: "Review Agent",
+    BriefGeneAgent: "Brief Gene Agent",
+    AnalystAgent: "Analyst Agent",
+    DeepGenomeAgent: "Deep Genome Agent",
+    InSilicoResearchAgent: "In Silico Research Agent",
+    DigitalDesignAgent: "Digital Design Agent",
+    GeneNetworkAgent: "Gene Network Agent",
+  } as const;
 
 export const CANONICAL_AGENT_ZH_NAMES: Record<CanonicalAgentTool, string> = {
   ChatAgent: "对话智能体",
@@ -157,7 +158,7 @@ export const REMOTE_AGENT_ROUTE_CONTRACTS = REMOTE_AGENT_PRODUCT_REGISTRY;
 
 export type RoutedAgentTool = keyof typeof CANONICAL_AGENT_ROUTES;
 
-export type CanonicalAtAbleTool = (typeof CANONICAL_AT_ABLE_TOOLS)[number];
+export type CanonicalAtAbleTool = typeof CANONICAL_AT_ABLE_TOOLS[number];
 
 export type PickerAgentOption = {
   tool: CanonicalAtAbleTool;

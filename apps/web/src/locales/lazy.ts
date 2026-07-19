@@ -11,10 +11,9 @@ type LocaleLoader = () => Promise<Record<string, unknown>>;
 // Loaders for packs that are NOT eagerly bundled. en-US is intentionally absent.
 const lazyLoaders: Partial<Record<SupportedLocales, LocaleLoader>> = {
   "zh-CN": async () => {
-    const [{ default: zhCN }, { default: elementZhLocale }] = await Promise.all([
-      import("./langs/zh-CN"),
-      import("element-plus/es/locale/lang/zh-cn"),
-    ]);
+    const [{ default: zhCN }, { default: elementZhLocale }] = await Promise.all(
+      [import("./langs/zh-CN"), import("element-plus/es/locale/lang/zh-cn")]
+    );
     return { ...zhCN, ...elementZhLocale };
   },
 };
@@ -25,7 +24,7 @@ export async function loadLocaleMessages(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   i18n: I18n<any, any, any, any, false>,
   lang: SupportedLocales,
-  loaders: Partial<Record<SupportedLocales, LocaleLoader>> = lazyLoaders,
+  loaders: Partial<Record<SupportedLocales, LocaleLoader>> = lazyLoaders
 ): Promise<void> {
   if (i18n.global.availableLocales.includes(lang)) return;
   const loader = loaders[lang];

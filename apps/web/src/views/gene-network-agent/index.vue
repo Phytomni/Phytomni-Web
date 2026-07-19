@@ -96,7 +96,9 @@
             data-test="network-trait"
             aria-required="true"
           >
-            <option value="">{{ t("agents.geneNetwork.traitPlaceholder") }}</option>
+            <option value="">
+              {{ t("agents.geneNetwork.traitPlaceholder") }}
+            </option>
             <option
               v-for="trait in TRAIT_OPTIONS"
               :key="trait.id"
@@ -316,7 +318,10 @@ const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
 const SAFE_TRAIT_ID = /^TO:\d{7}$/u;
 
 const TRAIT_OPTIONS = [
-  { id: "TO:0000011", labelKey: "agents.geneNetwork.traits.nitrogenSensitivity" },
+  {
+    id: "TO:0000011",
+    labelKey: "agents.geneNetwork.traits.nitrogenSensitivity",
+  },
   { id: "TO:0000019", labelKey: "agents.geneNetwork.traits.seedlingHeight" },
   { id: "TO:0000040", labelKey: "agents.geneNetwork.traits.panicleLength" },
   { id: "TO:0000128", labelKey: "agents.geneNetwork.traits.harvestIndex" },
@@ -426,9 +431,7 @@ const reportStatusLabel = computed(() => {
   }
 });
 const progressLabel = computed(() =>
-  isRunActive.value
-    ? t("agents.geneNetwork.progress")
-    : reportStatusLabel.value
+  isRunActive.value ? t("agents.geneNetwork.progress") : reportStatusLabel.value
 );
 const reportLabels = computed(() => ({
   loading: t("agents.geneNetwork.progress"),
@@ -444,14 +447,16 @@ const tabLabels = computed(() => ({
 }));
 
 function normalizedTraitId(value: unknown): string | null {
-  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  const normalized =
+    typeof value === "string" ? value.trim().toUpperCase() : "";
   return SAFE_TRAIT_ID.test(normalized) && TRAIT_IDS.has(normalized)
     ? normalized
     : null;
 }
 
 function normalizedSpeciesCode(value: unknown): string | null {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const normalized =
+    typeof value === "string" ? value.trim().toLowerCase() : "";
   return SPECIES_CODES.has(normalized) ? normalized : null;
 }
 
@@ -694,7 +699,8 @@ onBeforeUnmount(() => {
   width: min(100%, 1080px);
   margin: 0 auto;
   padding: var(--phy-space-12) var(--phy-space-16);
-  border: 1px solid var(--phy-color-warning-border, var(--phy-color-border-subtle));
+  border: 1px solid
+    var(--phy-color-warning-border, var(--phy-color-border-subtle));
   border-radius: var(--phy-radius-sm);
   background: var(--phy-color-warning-bg, var(--phy-color-bg-elevated));
   color: var(--phy-color-warning-text, var(--phy-color-text-secondary));

@@ -7,7 +7,10 @@ import { processInlineMarkdown } from "@/utils/markdown-inline";
 // pipeline neutralizes — is the security signal that adopting the candidate
 // would weaken the v-html boundary. Detection is structural: strip to the set of
 // live tags each side emits and compare.
-export type DiffVerdict = "identical" | "candidate-stricter" | "candidate-looser";
+export type DiffVerdict =
+  | "identical"
+  | "candidate-stricter"
+  | "candidate-looser";
 
 export interface SanitizerDiff {
   payload: string;
@@ -17,7 +20,8 @@ export interface SanitizerDiff {
 }
 
 // The tags/handlers whose presence means "live, potentially executable markup".
-const liveMarkup = /<(script|img|svg|iframe|object|embed)\b|on\w+\s*=|javascript:/gi;
+const liveMarkup =
+  /<(script|img|svg|iframe|object|embed)\b|on\w+\s*=|javascript:/gi;
 
 function liveHits(html: string): number {
   return (html.match(liveMarkup) || []).length;
@@ -25,7 +29,7 @@ function liveHits(html: string): number {
 
 export function diffSanitizers(
   payload: string,
-  renderCandidate: (md: string) => string,
+  renderCandidate: (md: string) => string
 ): SanitizerDiff {
   const current = processInlineMarkdown(escapeHtml(payload), "");
   const candidate = renderCandidate(payload);

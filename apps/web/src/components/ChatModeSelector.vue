@@ -62,9 +62,8 @@ defineEmits<{ (e: "update:modelValue", value: "instant" | "expert"): void }>();
 }
 
 .chat-mode-selector
-  :deep(
-    .el-radio-button__original-radio:focus-visible + .el-radio-button__inner
-  ) {
+  :deep(.el-radio-button__original-radio:focus-visible
+    + .el-radio-button__inner) {
   outline: 2px solid var(--phy-color-focus);
   outline-offset: 1px;
 }

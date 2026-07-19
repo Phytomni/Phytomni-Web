@@ -60,7 +60,10 @@ export const processInlineMarkdown = (line: string, ns = ""): string => {
     // vault is finite; the bound is a defensive backstop.
     let out = s;
     for (let i = 0; i <= vault.length; i++) {
-      const next = out.replace(/\uE000MD(\d+)\uE000/g, (_m, j) => vault[Number(j)] ?? "");
+      const next = out.replace(
+        /\uE000MD(\d+)\uE000/g,
+        (_m, j) => vault[Number(j)] ?? ""
+      );
       if (next === out) break;
       out = next;
     }
@@ -165,10 +168,8 @@ export const processInlineMarkdown = (line: string, ns = ""): string => {
   // handle reference citations, ensuring a citation does not sit on its own line. The anchor is a
   // native #ns-ref-N fragment jump (v-html content is not compiled, so the old @click was inert
   // dead text — dropped here). The digit run is widened to three to match multi-hundred references.
-  line = line.replace(
-    /\[(\d{1,3})\]/g,
-    (_m: string, n: string) =>
-      stash(`<a href="${refHref(n)}" style="display: inline-block;">[${n}]</a>`)
+  line = line.replace(/\[(\d{1,3})\]/g, (_m: string, n: string) =>
+    stash(`<a href="${refHref(n)}" style="display: inline-block;">[${n}]</a>`)
   );
   // handle bold
   line = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");

@@ -155,7 +155,10 @@ export function beforeEachGuard(
     // destination (changePassword) would 403 → FedLogOut → bounce back to
     // /login, locking the user out of the only page that clears the flag.
     // Reach those routes directly, skipping the tools probe.
-    if (loginStatus === "0" && FIRST_LOGIN_ALLOWED_ROUTE_NAMES.has(targetName)) {
+    if (
+      loginStatus === "0" &&
+      FIRST_LOGIN_ALLOWED_ROUTE_NAMES.has(targetName)
+    ) {
       next();
       return;
     }

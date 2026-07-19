@@ -131,7 +131,8 @@ In summary, epigenetic modifications like DNA methylation and histone modificati
     },
     {
       file_id: "kb-9",
-      title: "Epigenomics in stress tolerance of plants under the climate change.",
+      title:
+        "Epigenomics in stress tolerance of plants under the climate change.",
     },
     {
       file_id: "kb-10",

@@ -27,9 +27,7 @@ export interface ChatListEntry {
  * Strict predicate: isPending === true AND Array.isArray(messages) AND messages.length > 0.
  * Rejects truthy-but-non-boolean isPending values and empty / corrupt messages payloads.
  */
-export function isValidPendingRecord(
-  data: unknown
-): data is PendingChatRecord {
+export function isValidPendingRecord(data: unknown): data is PendingChatRecord {
   if (typeof data !== "object" || data === null) return false;
   const r = data as Record<string, unknown>;
   if (r.isPending !== true) return false;
@@ -51,10 +49,7 @@ export function matchesChat(
   pending: PendingChatRecord,
   tempChatId: string
 ): boolean {
-  if (
-    chat.dialogue_id === pending.id ||
-    chat.dialogue_id === tempChatId
-  ) {
+  if (chat.dialogue_id === pending.id || chat.dialogue_id === tempChatId) {
     return true;
   }
   const firstUserMsg = pending.messages.find((m) => m.role === "user");
@@ -136,9 +131,7 @@ export function writePendingChat(
         : titleSource;
 
     const sanitizedMessages = messages.map((m) => {
-      if (
-        Array.isArray((m as Record<string, unknown>).attachedFiles)
-      ) {
+      if (Array.isArray((m as Record<string, unknown>).attachedFiles)) {
         const files = (m as Record<string, unknown>).attachedFiles as Array<{
           name?: string;
           size?: number;
@@ -167,10 +160,7 @@ export function writePendingChat(
       isPending: true as const,
       ...(options?.mode ? { mode: options.mode } : {}),
     };
-    localStorage.setItem(
-      `pending_chat_${dialogueId}`,
-      JSON.stringify(record),
-    );
+    localStorage.setItem(`pending_chat_${dialogueId}`, JSON.stringify(record));
   } catch (error) {
     console.error("[pendingChat] writePendingChat failed:", error);
     options?.onError?.(error);

@@ -62,7 +62,8 @@ export default defineStore({
   getters: {
     isFirstLogin: (state): boolean => state.login_status === "0",
     hasRemoteAgentPermission:
-      (state) => (tool: RemoteAgentTool | string): boolean =>
+      (state) =>
+      (tool: RemoteAgentTool | string): boolean =>
         state.roles.includes(tool),
   },
   actions: {

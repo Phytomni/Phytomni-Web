@@ -139,7 +139,8 @@ In conclusion, single-cell RNA sequencing has revolutionized our understanding o
     },
     {
       file_id: "bg-15",
-      title: "Cold stress transcriptomics at single-cell resolution in plants.pdf",
+      title:
+        "Cold stress transcriptomics at single-cell resolution in plants.pdf",
     },
     {
       file_id: "bg-16",
