@@ -41,10 +41,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-2cadf9833f19cb4df032350313ad4c7f112140f0aa932ada7c337623f7dbd016` | `2026-08-31` | `eslint` | `prettier/prettier` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `prettier/prettier` | `web-maintainers` | `2026-07-19` |
 | `web-sa-562976b0164533c68dcd56b3b689e0b936c9fb49a1a6a893d9e88aaf08f55af8` | `2026-08-31` | `eslint` | `ignore-pattern` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `public/` | `web-maintainers` | `2026-07-19` |
 | `web-sa-df13542ef68f44f4a822d7d465eb64e1999b396c29a79f68d3773a06ea7c5505` | `2026-08-31` | `eslint` | `vue/multi-word-component-names` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `vue/multi-word-component-names` | `web-maintainers` | `2026-07-19` |
-| `web-sa-bc74840a4091e20a189ed956aa3fcc2d9627c755122a00847fc760b98b11be4c` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [apps/web/src/locales/lazy.ts:24](../../apps/web/src/locales/lazy.ts#L24) | `line:24:eslint-disable-next-line:eslint-disable-next-line @typescript-eslint/no-explicit-any` | `web-maintainers` | `2026-07-19` |
-| `web-sa-74785a4d3306398091aa15ea26e988e3c9f356b872392b9bd8d87b255b009e75` | `2026-08-31` | `eslint` | `no-console` | [apps/web/src/permission.ts:35](../../apps/web/src/permission.ts#L35) | `line:35:eslint-disable-next-line:eslint-disable-next-line no-console` | `web-maintainers` | `2026-07-19` |
-| `web-sa-53963dbb4f4a584443f43fb9ae21291bd2cc24f7e9ec9a74034201610a5da104` | `2026-08-31` | `eslint` | `no-control-regex` | [apps/web/src/views/chat/utils/agent-log.ts:101](../../apps/web/src/views/chat/utils/agent-log.ts#L101) | `line:101:eslint-disable:eslint-disable no-control-regex` | `web-maintainers` | `2026-07-19` |
-| `web-sa-b98619c477e9a08959c4ff477f838702cffbc526d3533349d15cc2cb88b9b373` | `2026-08-31` | `eslint` | `no-control-regex` | [apps/web/src/views/chat/utils/agent-log.ts:150](../../apps/web/src/views/chat/utils/agent-log.ts#L150) | `line:150:eslint-enable:eslint-enable no-control-regex` | `web-maintainers` | `2026-07-19` |
 | `web-sa-59e914bc4ddd68b4cafca441f848c9843a25f779577db1c65ceb14e1ff64375f` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [env.d.ts:9](../../env.d.ts#L9) | `VariableDeclarator:component@9:52-9:55` | `web-maintainers` | `2026-07-19` |
 | `web-sa-03a1b012664efe7b452648d40adc265f5a88682dd937dbf0f436bbb2b03057c4` | `2026-08-31` | `eslint` | `no-console` | [scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs](../../scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs) | `no-console` | `web-maintainers` | `2026-07-19` |
 | `web-sa-c5a5c577a301c08cadd785a1b9ce6ab692a85befb49d76bff2da72ed0bdcc314` | `2026-08-31` | `eslint` | `ignore-pattern` | [scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs](../../scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs) | `pattern-sha256:88eef563de83e808ced8a9450e869164bfe2739e4c12aab62f3182b1d5c75d60` | `web-maintainers` | `2026-07-19` |
@@ -654,42 +650,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: eslint reported vue/multi-word-component-names at line ?; raw diagnostic omitted.
-
-### `web-sa-bc74840a4091e20a189ed956aa3fcc2d9627c755122a00847fc760b98b11be4c`
-
-- Exact entry: [apps/web/src/locales/lazy.ts:24](../../apps/web/src/locales/lazy.ts#L24)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 24; raw diagnostic omitted.
-
-### `web-sa-74785a4d3306398091aa15ea26e988e3c9f356b872392b9bd8d87b255b009e75`
-
-- Exact entry: [apps/web/src/permission.ts:35](../../apps/web/src/permission.ts#L35)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported no-console at line 35; raw diagnostic omitted.
-
-### `web-sa-53963dbb4f4a584443f43fb9ae21291bd2cc24f7e9ec9a74034201610a5da104`
-
-- Exact entry: [apps/web/src/views/chat/utils/agent-log.ts:101](../../apps/web/src/views/chat/utils/agent-log.ts#L101)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported no-control-regex at line 101; raw diagnostic omitted.
-
-### `web-sa-b98619c477e9a08959c4ff477f838702cffbc526d3533349d15cc2cb88b9b373`
-
-- Exact entry: [apps/web/src/views/chat/utils/agent-log.ts:150](../../apps/web/src/views/chat/utils/agent-log.ts#L150)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported no-control-regex at line 150; raw diagnostic omitted.
 
 ### `web-sa-59e914bc4ddd68b4cafca441f848c9843a25f779577db1c65ceb14e1ff64375f`
 
@@ -5838,8 +5798,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `579`
-- Matched: `579`
+- Findings: `575`
+- Matched: `575`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`

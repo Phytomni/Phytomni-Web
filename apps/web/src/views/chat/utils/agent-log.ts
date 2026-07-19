@@ -1,5 +1,13 @@
 import { escapeHtml } from "@/utils/sanitize-markup";
 
+const ANSI_ESCAPE = "\u001b[";
+
+const replaceAll = (
+  value: string,
+  searchValue: string,
+  replacement: string
+): string => value.split(searchValue).join(replacement);
+
 // Process image paths in a Markdown file
 export const processImagePaths = (
   content: string,
@@ -82,11 +90,6 @@ export const formatLogContentWithColors = (logContent: string) => {
     .replace(/\n/g, "\n") // keep line breaks
     .trim();
 
-  // ANSI ESC (\u001b) is a control char by design; this contiguous block
-  // converts terminal escape sequences to HTML tags. no-control-regex is
-  // meant to catch accidental control chars in human regex, not ANSI
-  // parsing, so we disable it for the block only.
-
   // XSS protection: the log body is analyst-agent output (relayed via the
   // backend/EIHealth/Bot, influenced by agent/tool/RAG) and is ultimately injected
   // into the DOM via index.vue's v-html. Before the ANSI→HTML conversion we
@@ -98,56 +101,73 @@ export const formatLogContentWithColors = (logContent: string) => {
   // colored output renders unchanged.
   processedContent = escapeHtml(processedContent);
 
-  /* eslint-disable no-control-regex */
   // convert ANSI color codes into HTML styles
   // red text
-  processedContent = processedContent.replace(
-    /\u001b\[31m/g,
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}31m`,
     '<span style="color: #ff0000;">'
   );
   // green text
-  processedContent = processedContent.replace(
-    /\u001b\[32m/g,
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}32m`,
     '<span style="color: #00ff00;">'
   );
   // yellow text
-  processedContent = processedContent.replace(
-    /\u001b\[33m/g,
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}33m`,
     '<span style="color: #ffff00;">'
   );
   // blue text
-  processedContent = processedContent.replace(
-    /\u001b\[34m/g,
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}34m`,
     '<span style="color: #0000ff;">'
   );
   // magenta text
-  processedContent = processedContent.replace(
-    /\u001b\[35m/g,
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}35m`,
     '<span style="color: #ff00ff;">'
   );
   // cyan text
-  processedContent = processedContent.replace(
-    /\u001b\[36m/g,
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}36m`,
     '<span style="color: #00ffff;">'
   );
   // white text
-  processedContent = processedContent.replace(
-    /\u001b\[37m/g,
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}37m`,
     '<span style="color: #ffffff;">'
   );
 
   // reset color
-  processedContent = processedContent.replace(/\u001b\[0m/g, "</span>");
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}0m`,
+    "</span>"
+  );
 
   // handle other common ANSI codes
   // bold
-  processedContent = processedContent.replace(/\u001b\[1m/g, "<strong>");
-  processedContent = processedContent.replace(/\u001b\[22m/g, "</strong>");
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}1m`,
+    "<strong>"
+  );
+  processedContent = replaceAll(
+    processedContent,
+    `${ANSI_ESCAPE}22m`,
+    "</strong>"
+  );
 
   // underline
-  processedContent = processedContent.replace(/\u001b\[4m/g, "<u>");
-  processedContent = processedContent.replace(/\u001b\[24m/g, "</u>");
-  /* eslint-enable no-control-regex */
+  processedContent = replaceAll(processedContent, `${ANSI_ESCAPE}4m`, "<u>");
+  processedContent = replaceAll(processedContent, `${ANSI_ESCAPE}24m`, "</u>");
 
   return processedContent;
 };

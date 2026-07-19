@@ -235,4 +235,30 @@ describe("beforeEachGuard", () => {
     expect(next).toHaveBeenCalledWith({ name: "NotFound" });
     expect(mockCapabilities.load).not.toHaveBeenCalled();
   });
+
+  it("12: localStorage failure does not expose the caught error", () => {
+    mockGetToken.mockReturnValue("tok");
+    const storageSpy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new Error("blocked");
+      });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const next = vi.fn();
+
+    try {
+      beforeEachGuard(
+        route("/login", { name: "login" }) as unknown as Parameters<
+          typeof beforeEachGuard
+        >[0],
+        route("/") as unknown as Parameters<typeof beforeEachGuard>[1],
+        next as unknown as Parameters<typeof beforeEachGuard>[2]
+      );
+      expect(next).toHaveBeenCalledWith("/chat");
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      storageSpy.mockRestore();
+      warn.mockRestore();
+    }
+  });
 });

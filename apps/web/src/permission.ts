@@ -31,12 +31,7 @@ function readLoginStatusFromLocalStorage(): string {
   // alternative locks ALL legitimate users out when localStorage breaks.
   try {
     return localStorage.getItem("loginStatus") || "1";
-  } catch (err) {
-    // eslint-disable-next-line no-console -- non-sensitive storage diagnostic
-    console.warn(
-      'localStorage unavailable for login_status read; defaulting to "1"',
-      err
-    );
+  } catch {
     return "1";
   }
 }

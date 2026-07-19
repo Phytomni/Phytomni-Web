@@ -30,6 +30,13 @@ describe("formatLogContentWithColors", () => {
     expect(out).toContain('<span style="color: #ff0000;">red</span>');
   });
 
+  it("replaces repeated ANSI color sequences globally", () => {
+    const out = formatLogContentWithColors("[32mgreen[0m and [32magain[0m");
+    expect(out).toBe(
+      '<span style="color: #00ff00;">green</span> and <span style="color: #00ff00;">again</span>'
+    );
+  });
+
   it("valid ANSI bold still renders as <strong>", () => {
     const out = formatLogContentWithColors("[1mbold[22m");
     expect(out).toContain("<strong>bold</strong>");

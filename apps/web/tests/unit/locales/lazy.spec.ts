@@ -23,14 +23,15 @@ describe("loadLocaleMessages", () => {
 
   it("is idempotent — a second call does not re-run the loader", async () => {
     const i18n = freshI18n();
-    const spy = vi.fn(async () => ({ hello: "world" }));
-    const loaders = { "zh-CN": spy } as Record<
-      SupportedLocales,
-      () => Promise<Record<string, unknown>>
-    >;
+    const messages = { hello: "world", nested: { label: "Nested" } };
+    const spy = vi.fn(async () => messages);
+    const loaders: Partial<
+      Record<SupportedLocales, () => Promise<typeof messages>>
+    > = { "zh-CN": spy };
     await loadLocaleMessages(i18n, "zh-CN", loaders);
     await loadLocaleMessages(i18n, "zh-CN", loaders);
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(i18n.global.getLocaleMessage("zh-CN")).toEqual(messages);
   });
 
   it("no-ops for an already-present locale (en-US)", async () => {

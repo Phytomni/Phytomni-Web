@@ -4,26 +4,6 @@ schema_version = 1
 default = "deny"
 
 [[exemptions]]
-id = "web-sa-bc74840a4091e20a189ed956aa3fcc2d9627c755122a00847fc760b98b11be4c"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "inline"
-target_kind = "span"
-path = "apps/web/src/locales/lazy.ts"
-target = "line:24:eslint-disable-next-line:eslint-disable-next-line @typescript-eslint/no-explicit-any"
-fingerprint = "sha256:bc74840a4091e20a189ed956aa3fcc2d9627c755122a00847fc760b98b11be4c"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target apps/web/src/locales/lazy.ts:line:24:eslint-disable-next-line:eslint-disable-next-line @typescript-eslint/no-explicit-any"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-59e914bc4ddd68b4cafca441f848c9843a25f779577db1c65ceb14e1ff64375f"
 tool = "eslint"
 rule = "@typescript-eslint/no-explicit-any"
@@ -9884,26 +9864,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-74785a4d3306398091aa15ea26e988e3c9f356b872392b9bd8d87b255b009e75"
-tool = "eslint"
-rule = "no-console"
-classification = "temporary"
-mechanism = "inline"
-target_kind = "span"
-path = "apps/web/src/permission.ts"
-target = "line:35:eslint-disable-next-line:eslint-disable-next-line no-console"
-fingerprint = "sha256:74785a4d3306398091aa15ea26e988e3c9f356b872392b9bd8d87b255b009e75"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target apps/web/src/permission.ts:line:35:eslint-disable-next-line:eslint-disable-next-line no-console"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-03a1b012664efe7b452648d40adc265f5a88682dd937dbf0f436bbb2b03057c4"
 tool = "eslint"
 rule = "no-console"
@@ -9958,46 +9918,6 @@ introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
 remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/source/javascript.ts:line:5:eslint-disable-line:eslint-disable-line no-console"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-53963dbb4f4a584443f43fb9ae21291bd2cc24f7e9ec9a74034201610a5da104"
-tool = "eslint"
-rule = "no-control-regex"
-classification = "temporary"
-mechanism = "inline"
-target_kind = "span"
-path = "apps/web/src/views/chat/utils/agent-log.ts"
-target = "line:101:eslint-disable:eslint-disable no-control-regex"
-fingerprint = "sha256:53963dbb4f4a584443f43fb9ae21291bd2cc24f7e9ec9a74034201610a5da104"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target apps/web/src/views/chat/utils/agent-log.ts:line:101:eslint-disable:eslint-disable no-control-regex"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-b98619c477e9a08959c4ff477f838702cffbc526d3533349d15cc2cb88b9b373"
-tool = "eslint"
-rule = "no-control-regex"
-classification = "temporary"
-mechanism = "inline"
-target_kind = "span"
-path = "apps/web/src/views/chat/utils/agent-log.ts"
-target = "line:150:eslint-enable:eslint-enable no-control-regex"
-fingerprint = "sha256:b98619c477e9a08959c4ff477f838702cffbc526d3533349d15cc2cb88b9b373"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target apps/web/src/views/chat/utils/agent-log.ts:line:150:eslint-enable:eslint-enable no-control-regex"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
