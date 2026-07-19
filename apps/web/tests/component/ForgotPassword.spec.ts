@@ -76,7 +76,9 @@ describe("ForgotPassword view", () => {
 
   it("uses the production logo and semantic warning token", () => {
     const wrapper = mountView();
-    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(true);
+    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(
+      true
+    );
     expect(SOURCE).toContain("PhyAuthBrand");
     expect(SOURCE).toContain("var(--el-color-warning)");
     expect(SOURCE).not.toContain("#e6a23c");

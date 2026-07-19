@@ -47,8 +47,12 @@ describe("CitedAnswer", () => {
   });
 
   it("renders no reference list when references is empty or absent", () => {
-    expect(mountCited({ content: "body", references: [] }).find(".doc-list").exists()).toBe(false);
-    expect(mountCited({ content: "body" }).find(".doc-list").exists()).toBe(false);
+    expect(
+      mountCited({ content: "body", references: [] }).find(".doc-list").exists()
+    ).toBe(false);
+    expect(mountCited({ content: "body" }).find(".doc-list").exists()).toBe(
+      false
+    );
   });
 
   it("keeps the cited body and namespace while references are presented externally", () => {
@@ -60,14 +64,20 @@ describe("CitedAnswer", () => {
       referencePresentation: "external",
     });
 
-    expect(wrapper.find(".mv-stub").text()).toContain("Evidence-backed body [1]");
+    expect(wrapper.find(".mv-stub").text()).toContain(
+      "Evidence-backed body [1]"
+    );
     expect(wrapper.find(".mv-stub").text()).toContain("artifact-a");
     expect(wrapper.find(".mv-stub").text()).toContain("artifact");
     expect(wrapper.find(".doc-list").exists()).toBe(false);
   });
 
   it("passes content and instantMessage through to MarkdownViewer", () => {
-    const wrapper = mountCited({ content: "hello", references: [], instantMessage: true });
+    const wrapper = mountCited({
+      content: "hello",
+      references: [],
+      instantMessage: true,
+    });
     expect(wrapper.find(".mv-stub").text()).toContain("hello");
     expect(wrapper.find(".mv-stub").text()).toContain("true");
   });
@@ -84,8 +94,16 @@ describe("CitedAnswer", () => {
   });
 
   it("gives two CitedAnswers with different ns disjoint ids (multi-message regression lock)", () => {
-    const a = mountCited({ content: "a", references: [{ title: "A" }], ns: "m0" });
-    const b = mountCited({ content: "b", references: [{ title: "B" }], ns: "m1" });
+    const a = mountCited({
+      content: "a",
+      references: [{ title: "A" }],
+      ns: "m0",
+    });
+    const b = mountCited({
+      content: "b",
+      references: [{ title: "B" }],
+      ns: "m1",
+    });
     expect(a.find(".doc-list-item").attributes("id")).toBe("m0-ref-1");
     expect(b.find(".doc-list-item").attributes("id")).toBe("m1-ref-1");
   });

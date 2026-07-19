@@ -29,7 +29,7 @@ vi.mock("@/utils/auth-redirect", () => ({
 }));
 vi.mock("element-plus", async () => {
   const actual = await vi.importActual<typeof import("element-plus")>(
-    "element-plus",
+    "element-plus"
   );
   return {
     ...actual,
@@ -45,7 +45,7 @@ import Register from "@/views/register/index.vue";
 
 const SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/register/index.vue"),
-  "utf8",
+  "utf8"
 );
 
 type Rule = {
@@ -56,7 +56,7 @@ type Rule = {
   validator?: (
     rule: unknown,
     value: string,
-    callback: (error?: Error) => void,
+    callback: (error?: Error) => void
   ) => void;
 };
 
@@ -71,7 +71,7 @@ const ElFormStub = defineComponent({
       let valid = true;
       for (const [field, rawRules] of Object.entries(props.rules)) {
         const value = String(
-          (props.model as Record<string, unknown>)[field] ?? "",
+          (props.model as Record<string, unknown>)[field] ?? ""
         );
         for (const rule of rawRules as Rule[]) {
           if (rule.required && !value) {
@@ -151,7 +151,7 @@ const ElCheckboxStub = defineComponent({
           onChange: (event: Event) =>
             emit(
               "update:modelValue",
-              (event.target as HTMLInputElement).checked,
+              (event.target as HTMLInputElement).checked
             ),
         }),
         slots.default?.(),
@@ -178,7 +178,7 @@ const ElButtonStub = defineComponent({
           "aria-busy": props.loading ? "true" : "false",
           onClick: (event: MouseEvent) => emit("click", event),
         },
-        slots.default?.(),
+        slots.default?.()
       );
   },
 });
@@ -206,7 +206,7 @@ const mountView = () => mount(Register, { global: { stubs } });
 const fillRegistration = async (
   wrapper: ReturnType<typeof mount>,
   email = "researcher@example.test",
-  password = "Secure1!",
+  password = "Secure1!"
 ) => {
   const inputs = wrapper.findAll("input");
   await inputs[0].setValue(email);
@@ -226,7 +226,9 @@ describe("Registration auth surface", () => {
     const wrapper = mountView();
 
     expect(wrapper.find(".phy-auth-layout").exists()).toBe(true);
-    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(true);
+    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(
+      true
+    );
     expect(wrapper.find(".register-title").element.tagName).toBe("H1");
     expect(wrapper.find(".register-subtitle").element.tagName).toBe("P");
     expect(wrapper.findAll(".el-form")).toHaveLength(1);
@@ -239,7 +241,7 @@ describe("Registration auth surface", () => {
     expect(mocks.redirectIfAuthed).toHaveBeenCalledTimes(1);
     expect(mocks.redirectIfAuthed).toHaveBeenCalledWith(
       mocks.route,
-      expect.objectContaining({ replace: mocks.replace }),
+      expect.objectContaining({ replace: mocks.replace })
     );
     wrapper.unmount();
   });
@@ -275,15 +277,17 @@ describe("Registration auth surface", () => {
 
   it("renders one explicit consent copy and one link set in both locales", async () => {
     const wrapper = mountView();
-    const assertConsent = (
-      consent: string,
-      terms: string,
-      privacy: string,
-    ) => {
+    const assertConsent = (consent: string, terms: string, privacy: string) => {
       const agreement = wrapper.get(".register-agreement").text();
-      expect(wrapper.get(".register-agreement").findAll('input[type="checkbox"]')).toHaveLength(1);
-      expect(wrapper.get(".register-agreement").findAll('a[href="/terms"]')).toHaveLength(1);
-      expect(wrapper.get(".register-agreement").findAll('a[href="/privacy"]')).toHaveLength(1);
+      expect(
+        wrapper.get(".register-agreement").findAll('input[type="checkbox"]')
+      ).toHaveLength(1);
+      expect(
+        wrapper.get(".register-agreement").findAll('a[href="/terms"]')
+      ).toHaveLength(1);
+      expect(
+        wrapper.get(".register-agreement").findAll('a[href="/privacy"]')
+      ).toHaveLength(1);
       expect(agreement).toContain(consent);
       expect(agreement.split(terms).length - 1).toBe(1);
       expect(agreement.split(privacy).length - 1).toBe(1);
@@ -292,7 +296,7 @@ describe("Registration auth surface", () => {
     assertConsent(
       "I have read and agree to the legal documents below",
       "Terms of Service",
-      "Privacy Policy",
+      "Privacy Policy"
     );
     i18n.global.locale.value = "zh-CN";
     await nextTick();
@@ -301,7 +305,7 @@ describe("Registration auth surface", () => {
 
   it("wraps consent text inside the narrow auth card", () => {
     expect(SOURCE).toMatch(
-      /\.register-agreement :deep\(\.el-checkbox__label\)[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?white-space:\s*normal;/,
+      /\.register-agreement :deep\(\.el-checkbox__label\)[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?white-space:\s*normal;/
     );
   });
 
@@ -345,7 +349,7 @@ describe("Registration auth surface", () => {
     ]);
     expect(mocks.replace).toHaveBeenCalledWith("/login");
     expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
-      "false",
+      "false"
     );
   });
 
@@ -362,7 +366,7 @@ describe("Registration auth surface", () => {
 
     expect(mocks.error).toHaveBeenCalledWith("Registration failed");
     expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
-      "false",
+      "false"
     );
   });
 
@@ -376,7 +380,7 @@ describe("Registration auth surface", () => {
 
     expect(mocks.error).toHaveBeenCalledWith("Network unavailable");
     expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
-      "false",
+      "false"
     );
   });
 

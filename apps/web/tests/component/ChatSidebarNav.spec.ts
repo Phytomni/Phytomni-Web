@@ -77,13 +77,13 @@ describe("ChatSidebarNav", () => {
 
     const collapsed = mountNav({ collapsed: true });
     expect(collapsed.text()).not.toContain("t:chat.newChat");
-    expect(collapsed.find('[data-testid="chat-account-identity"]').exists()).toBe(
-      true
-    );
     expect(
-      collapsed.find('[data-testid="chat-account-identity"]').attributes(
-        "aria-hidden"
-      )
+      collapsed.find('[data-testid="chat-account-identity"]').exists()
+    ).toBe(true);
+    expect(
+      collapsed
+        .find('[data-testid="chat-account-identity"]')
+        .attributes("aria-hidden")
     ).toBe("true");
     expect(collapsed.find(".sidebar-nav").classes()).toContain("collapsed");
   });
@@ -198,15 +198,15 @@ describe("ChatSidebarNav", () => {
 
   it("keeps secondary destinations as quiet rows without primary styling", () => {
     const wrapper = mountNav({ activeItem: "knowledge-base" });
-    const secondaryRows = wrapper.findAll(".sidebar-nav-row:not(.sidebar-primary-action)");
+    const secondaryRows = wrapper.findAll(
+      ".sidebar-nav-row:not(.sidebar-primary-action)"
+    );
     expect(secondaryRows.length).toBeGreaterThanOrEqual(3);
     secondaryRows.forEach((row) => {
       expect(row.classes()).not.toContain("sidebar-primary-action");
     });
     expect(
-      wrapper
-        .find('[data-test="sidebar-nav-gene-display"]')
-        .classes()
+      wrapper.find('[data-test="sidebar-nav-gene-display"]').classes()
     ).toContain("is-active");
     expect(
       wrapper
@@ -224,7 +224,10 @@ describe("ChatSidebarNav", () => {
     );
     expect(wrapper.find(".sidebar-nav-secondary").exists()).toBe(true);
     expect(
-      wrapper.find(".sidebar-nav-secondary").find(".sidebar-nav-utility").exists()
+      wrapper
+        .find(".sidebar-nav-secondary")
+        .find(".sidebar-nav-utility")
+        .exists()
     ).toBe(false);
   });
 
@@ -239,12 +242,12 @@ describe("ChatSidebarNav", () => {
 
   it("keeps stable capture hooks on the real controls", () => {
     const expanded = mountNav();
-    expect(expanded.findAll('[data-testid="chat-primary-action"]')).toHaveLength(
-      1
-    );
-    expect(expanded.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
-      1
-    );
+    expect(
+      expanded.findAll('[data-testid="chat-primary-action"]')
+    ).toHaveLength(1);
+    expect(
+      expanded.findAll('[data-testid="chat-account-identity"]')
+    ).toHaveLength(1);
     expect(
       expanded.find('[data-testid="chat-account-identity"]').text()
     ).toContain("Ada Lovelace");
@@ -253,35 +256,35 @@ describe("ChatSidebarNav", () => {
     );
 
     const collapsed = mountNav({ collapsed: true });
-    expect(collapsed.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
-      1
-    );
     expect(
-      collapsed.find('[data-testid="chat-account-identity"]').attributes(
-        "aria-hidden"
-      )
+      collapsed.findAll('[data-testid="chat-account-identity"]')
+    ).toHaveLength(1);
+    expect(
+      collapsed
+        .find('[data-testid="chat-account-identity"]')
+        .attributes("aria-hidden")
     ).toBe("true");
   });
 
   it("keeps one identity hook across expanded, compact, and drawer mounts", () => {
     const expanded = mountNav();
-    expect(expanded.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
-      1
-    );
     expect(
-      expanded.find('[data-testid="chat-account-identity"]').attributes(
-        "aria-hidden"
-      )
+      expanded.findAll('[data-testid="chat-account-identity"]')
+    ).toHaveLength(1);
+    expect(
+      expanded
+        .find('[data-testid="chat-account-identity"]')
+        .attributes("aria-hidden")
     ).toBeUndefined();
 
     const compact = mountNav({ collapsed: true });
-    expect(compact.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
-      1
-    );
     expect(
-      compact.find('[data-testid="chat-account-identity"]').attributes(
-        "aria-hidden"
-      )
+      compact.findAll('[data-testid="chat-account-identity"]')
+    ).toHaveLength(1);
+    expect(
+      compact
+        .find('[data-testid="chat-account-identity"]')
+        .attributes("aria-hidden")
     ).toBe("true");
 
     const closedDrawer = mountNav({ offCanvas: true });
@@ -295,36 +298,38 @@ describe("ChatSidebarNav", () => {
     ).toBe("true");
 
     const openDrawer = mountNav({ offCanvas: false });
-    expect(openDrawer.findAll('[data-testid="chat-account-identity"]')).toHaveLength(
-      1
-    );
     expect(
-      openDrawer.find('[data-testid="chat-account-identity"]').attributes(
-        "aria-hidden"
-      )
+      openDrawer.findAll('[data-testid="chat-account-identity"]')
+    ).toHaveLength(1);
+    expect(
+      openDrawer
+        .find('[data-testid="chat-account-identity"]')
+        .attributes("aria-hidden")
     ).toBeUndefined();
   });
 
   it("exposes the primary action when the mobile drawer is open", () => {
     const closedDrawer = mountNav({ offCanvas: true });
-    expect(closedDrawer.find('[data-testid="chat-primary-action"]').exists()).toBe(
-      true
-    );
     expect(
-      closedDrawer.find('[data-testid="chat-account-identity"]').attributes(
-        "aria-hidden"
-      )
+      closedDrawer.find('[data-testid="chat-primary-action"]').exists()
+    ).toBe(true);
+    expect(
+      closedDrawer
+        .find('[data-testid="chat-account-identity"]')
+        .attributes("aria-hidden")
     ).toBe("true");
 
     const openDrawer = mountNav({ offCanvas: false });
-    const primaryAction = openDrawer.find('[data-testid="chat-primary-action"]');
+    const primaryAction = openDrawer.find(
+      '[data-testid="chat-primary-action"]'
+    );
     expect(primaryAction.exists()).toBe(true);
     expect(primaryAction.classes()).toContain("sidebar-primary-action");
     expect(openDrawer.text()).toContain("t:chat.newChat");
     expect(
-      openDrawer.find('[data-testid="chat-account-identity"]').attributes(
-        "aria-hidden"
-      )
+      openDrawer
+        .find('[data-testid="chat-account-identity"]')
+        .attributes("aria-hidden")
     ).toBeUndefined();
   });
 

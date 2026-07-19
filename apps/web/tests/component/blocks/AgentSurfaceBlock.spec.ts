@@ -196,9 +196,7 @@ describe("AgentSurfaceBlock", () => {
       const status = w.find(".a2ui-status");
       if (copyKey) {
         expect(status.text()).toBe(lifecycleCopy[copyKey]);
-        expect(status.text()).not.toContain(
-          "a2ui_gateway_disabled"
-        );
+        expect(status.text()).not.toContain("a2ui_gateway_disabled");
       } else {
         expect(status.exists()).toBe(false);
       }
@@ -229,10 +227,12 @@ describe("AgentSurfaceBlock", () => {
 
     expect(w.emitted("retry")).toHaveLength(1);
     expect(
-      (block.a2ui?.state as Extract<
-        A2uiSurfaceState,
-        { status: "temporarily_rejected" }
-      >).envelope.action_id
+      (
+        block.a2ui?.state as Extract<
+          A2uiSurfaceState,
+          { status: "temporarily_rejected" }
+        >
+      ).envelope.action_id
     ).toBe("action-retry-original");
     expect(w.emitted("action")).toBeUndefined();
   });
@@ -249,18 +249,22 @@ describe("AgentSurfaceBlock", () => {
       global: { plugins: [createLifecycleI18n(), ElementPlus] },
     });
 
-    expect(w.findAll(".a2ui-confirm button").every((button) =>
-      button.attributes("disabled") !== undefined
-    )).toBe(true);
+    expect(
+      w
+        .findAll(".a2ui-confirm button")
+        .every((button) => button.attributes("disabled") !== undefined)
+    ).toBe(true);
     w.unmount();
 
     const remounted = mount(AgentSurfaceBlock, {
       props: { block: lifecycleBlock(state) },
       global: { plugins: [createLifecycleI18n(), ElementPlus] },
     });
-    expect(remounted.findAll(".a2ui-confirm button").every((button) =>
-      button.attributes("disabled") !== undefined
-    )).toBe(true);
+    expect(
+      remounted
+        .findAll(".a2ui-confirm button")
+        .every((button) => button.attributes("disabled") !== undefined)
+    ).toBe(true);
   });
 
   it("keeps a ready surface disabled when the block is marked non-interactive", () => {
@@ -271,9 +275,11 @@ describe("AgentSurfaceBlock", () => {
       global: { plugins: [createLifecycleI18n(), ElementPlus] },
     });
 
-    expect(w.findAll(".a2ui-confirm button").every((button) =>
-      button.attributes("disabled") !== undefined
-    )).toBe(true);
+    expect(
+      w
+        .findAll(".a2ui-confirm button")
+        .every((button) => button.attributes("disabled") !== undefined)
+    ).toBe(true);
     expect(w.find(".a2ui-status").exists()).toBe(false);
   });
 
@@ -312,8 +318,8 @@ describe("AgentSurfaceBlock", () => {
           options &&
           typeof options === "object" &&
           "preventScroll" in options &&
-          options.preventScroll === true,
-      ),
+          options.preventScroll === true
+      )
     ).toHaveLength(1);
 
     await w.setProps({
@@ -321,7 +327,11 @@ describe("AgentSurfaceBlock", () => {
         ...block,
         a2ui: {
           ...block.a2ui!,
-          state: { status: "submitting", round: 2, envelope: submittingEnvelope },
+          state: {
+            status: "submitting",
+            round: 2,
+            envelope: submittingEnvelope,
+          },
         },
       },
     });
@@ -332,8 +342,8 @@ describe("AgentSurfaceBlock", () => {
           options &&
           typeof options === "object" &&
           "preventScroll" in options &&
-          options.preventScroll === true,
-      ),
+          options.preventScroll === true
+      )
     ).toHaveLength(1);
 
     w.unmount();

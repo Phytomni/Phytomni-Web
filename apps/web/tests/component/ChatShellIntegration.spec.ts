@@ -84,13 +84,18 @@ describe("Chat adaptive shell integration", () => {
     );
     expect(CHAT_SOURCE).toContain('ref="tourSidebarTarget"');
     expect(CHAT_SOURCE).toContain('ref="tourCasesTarget"');
-    expect(CHAT_SOURCE).toContain(':set-tour-input-target="setTourInputTarget"');
+    expect(CHAT_SOURCE).toContain(
+      ':set-tour-input-target="setTourInputTarget"'
+    );
     expect(CHAT_SOURCE).toContain("const setTourInputTarget");
     expect(CHAT_COMPOSER_SOURCE).toContain(':ref="bindTourInputTarget"');
     expect(countOccurrences(CHAT_SOURCE, 'ref="tourSidebarTarget"')).toBe(1);
     expect(countOccurrences(CHAT_SOURCE, 'ref="tourCasesTarget"')).toBe(1);
     expect(
-      countOccurrences(CHAT_SOURCE, ':set-tour-input-target="setTourInputTarget"')
+      countOccurrences(
+        CHAT_SOURCE,
+        ':set-tour-input-target="setTourInputTarget"'
+      )
     ).toBe(1);
     expect(CHAT_SOURCE).toContain(':target="tourSidebarTarget"');
     expect(CHAT_SOURCE).toContain(':target="tourCasesTarget"');
@@ -172,7 +177,10 @@ describe("Chat adaptive shell integration", () => {
       ':data-sidebar-drawer-state="sidebarDrawerStateAttr"'
     );
     expect(
-      countOccurrences(CHAT_MESSAGE_ROW_SOURCE, 'data-testid="chat-message-row"')
+      countOccurrences(
+        CHAT_MESSAGE_ROW_SOURCE,
+        'data-testid="chat-message-row"'
+      )
     ).toBe(1);
     expect(countOccurrences(CHAT_SOURCE, "<ChatMessageRow")).toBe(2);
   });
@@ -206,7 +214,9 @@ describe("Chat adaptive shell integration", () => {
     expect(
       countOccurrences(CHAT_NAV_SOURCE, 'data-testid="chat-account-identity"')
     ).toBe(1);
-    expect(CHAT_NAV_SOURCE).not.toContain("box-shadow: var(--sidebar-btn-shadow)");
+    expect(CHAT_NAV_SOURCE).not.toContain(
+      "box-shadow: var(--sidebar-btn-shadow)"
+    );
     expect(CHAT_NAV_SOURCE).not.toContain("transform: scale(1.05)");
     expect(CHAT_NAV_SOURCE).not.toContain("transform: translateY(-1px)");
   });
@@ -280,18 +290,16 @@ describe("Chat adaptive shell integration", () => {
 
   it("keeps agent selection scoped through per-dialogue chat state into useComposer", () => {
     expect(CHAT_SOURCE).toContain("selectedAgent");
-    expect(CHAT_SOURCE).toMatch(
-      /useComposer\(\{[\s\S]*selectedAgent/
-    );
+    expect(CHAT_SOURCE).toMatch(/useComposer\(\{[\s\S]*selectedAgent/);
     expect(CHAT_SOURCE).toContain("pickerOptions");
     expect(CHAT_SOURCE).toContain("derivePickerOptions");
   });
 
   it("removes the permanent bottom agent stage while keeping one inline selection path", () => {
     expect(CHAT_SOURCE).not.toContain('class="input-container-bottom"');
-    expect(CHAT_SOURCE).not.toContain("@wheel.prevent=\"handleScroll\"");
-    expect(CHAT_SOURCE).not.toContain(":style=\"containerStyle\"");
-    expect(CHAT_SOURCE).not.toContain("v-for=\"agent in presetAgents\"");
+    expect(CHAT_SOURCE).not.toContain('@wheel.prevent="handleScroll"');
+    expect(CHAT_SOURCE).not.toContain(':style="containerStyle"');
+    expect(CHAT_SOURCE).not.toContain('v-for="agent in presetAgents"');
     expect(CHAT_SOURCE).not.toContain(".input-container-bottom {");
 
     expect(CHAT_COMPOSER_SOURCE).not.toContain('class="agent-button"');
@@ -319,7 +327,9 @@ describe("Chat adaptive shell integration", () => {
     const coordStart = CHAT_SOURCE.indexOf("reconcileMatchedDialogue = (");
     const coordEnd = CHAT_SOURCE.indexOf("// Starter prompt cards", coordStart);
     const coordBlock = CHAT_SOURCE.slice(coordStart, coordEnd);
-    expect(coordBlock).toContain("const wasCurrent = currentChatId.value === tempId");
+    expect(coordBlock).toContain(
+      "const wasCurrent = currentChatId.value === tempId"
+    );
     expect(coordBlock).toMatch(
       /clearPendingChat|localStorage\.removeItem[\s\S]*currentChatId\.value = serverId/
     );
@@ -332,10 +342,10 @@ describe("Chat adaptive shell integration", () => {
       "utf8"
     );
     expect(sendMessageSource).toContain("blockingDialogueId");
-    expect(sendMessageSource).not.toContain("clearPendingChat(sendingDialogueId)");
-    expect(sendMessageSource).not.toMatch(
-      /chatList\.value\[0\]\.dialogue_id/
+    expect(sendMessageSource).not.toContain(
+      "clearPendingChat(sendingDialogueId)"
     );
+    expect(sendMessageSource).not.toMatch(/chatList\.value\[0\]\.dialogue_id/);
     expect(sendMessageSource).toContain("chatState.uploadTransfer");
     expect(sendMessageSource).toContain("getStreamChatState");
     expect(sendMessageSource).toContain("id === sendingDialogueId ? chatState");
@@ -368,7 +378,10 @@ describe("Chat adaptive shell integration", () => {
     );
     // Abort targets only the owning dialogue's activeRequestId — never abortAll
     const abortStart = CHAT_SOURCE.indexOf("const abortDialogueRequest");
-    const abortEnd = CHAT_SOURCE.indexOf("// Use a preset question", abortStart);
+    const abortEnd = CHAT_SOURCE.indexOf(
+      "// Use a preset question",
+      abortStart
+    );
     const abortBlock = CHAT_SOURCE.slice(abortStart, abortEnd);
     expect(abortBlock).toContain("chatState.activeRequestId");
     expect(abortBlock).toContain("abortRequest(requestId)");
@@ -381,7 +394,10 @@ describe("Chat adaptive shell integration", () => {
     expect(abortBlock).not.toMatch(/\bid:\s/);
 
     const streamSource = readFileSync(
-      resolve(__dirname, "../../src/views/chat/composables/useStreamMessage.ts"),
+      resolve(
+        __dirname,
+        "../../src/views/chat/composables/useStreamMessage.ts"
+      ),
       "utf8"
     );
     expect(streamSource).toContain(
@@ -395,7 +411,9 @@ describe("Chat adaptive shell integration", () => {
       "utf8"
     );
     expect(chatStatesSource).toContain("renderedChat: null");
-    expect(chatStatesSource).toContain("getChatState(currentChatId.value).renderedChat");
+    expect(chatStatesSource).toContain(
+      "getChatState(currentChatId.value).renderedChat"
+    );
     expect(CHAT_SOURCE).toContain("getChatState(dialogueId).renderedChat");
 
     const selectStart = CHAT_SOURCE.indexOf("useSelectChat({");
@@ -415,7 +433,9 @@ describe("Chat adaptive shell integration", () => {
     expect(chatStatesSource).toContain(
       "chatStates.value[toDialogueId] = source"
     );
-    expect(chatStatesSource).toContain("delete chatStates.value[fromDialogueId]");
+    expect(chatStatesSource).toContain(
+      "delete chatStates.value[fromDialogueId]"
+    );
     expect(chatStatesSource).toContain('outcome: "target-collision"');
     expect(chatStatesSource).toMatch(
       /if \(chatStates\.value\[toDialogueId\]\)[\s\S]*return \{ outcome: "target-collision" \}/

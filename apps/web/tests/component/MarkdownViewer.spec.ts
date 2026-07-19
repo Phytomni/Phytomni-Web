@@ -21,10 +21,7 @@ const TOKENS_CSS = readFileSync(
   "utf8"
 );
 const CHAT_MESSAGE_CONTENT_SOURCE = readFileSync(
-  resolve(
-    __dirname,
-    "../../src/views/chat/components/ChatMessageContent.vue"
-  ),
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageContent.vue"),
   "utf8"
 );
 
@@ -70,9 +67,7 @@ describe("MarkdownViewer — XSS hardening of the v-html render path", () => {
   });
 
   it("renders a benign link and image unharmed", () => {
-    const w = render(
-      "[doc](https://example.org/a) ![p](/attachments/p.png)"
-    );
+    const w = render("[doc](https://example.org/a) ![p](/attachments/p.png)");
     expect(w.find("a").attributes("href")).toBe("https://example.org/a");
     expect(w.find("img").attributes("src")).toBe("/attachments/p.png");
   });
@@ -111,18 +106,12 @@ describe("MarkdownViewer surface classes", () => {
       ".phy-markdown--artifact :is(.markdown-content, .markdown-body)"
     );
     expect(narrativeRule).toMatch(/max-width:\s*740px/);
-    expect(narrativeRule).toMatch(
-      /font-family:\s*var\(--phy-font-reading\)/
-    );
+    expect(narrativeRule).toMatch(/font-family:\s*var\(--phy-font-reading\)/);
     expect(
-      cssRuleBody(
-        ".phy-markdown--artifact :is(h1, h2, h3, h4, h5, h6)"
-      )
+      cssRuleBody(".phy-markdown--artifact :is(h1, h2, h3, h4, h5, h6)")
     ).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
     expect(
-      cssRuleBody(
-        ".phy-markdown--artifact :is(code, pre, kbd, samp)"
-      )
+      cssRuleBody(".phy-markdown--artifact :is(code, pre, kbd, samp)")
     ).toMatch(/font-family:\s*var\(--phy-font-mono\)/);
     expect(
       cssRuleBody(
@@ -194,16 +183,15 @@ describe("MarkdownViewer surface classes", () => {
       ".phy-markdown--document :is(.markdown-content, .markdown-body)"
     );
     expect(documentRule).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
-    expect(documentBodyRule).toMatch(
-      /font-family:\s*var\(--phy-font-shell\)/
-    );
+    expect(documentBodyRule).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
     expect(`${documentRule}${documentBodyRule}`).not.toContain(
       "--phy-font-reading"
     );
   });
 
   it("contains artifact and document overflow, caption, link, and focus affordances", () => {
-    const sharedSurface = ":is(.phy-markdown--artifact, .phy-markdown--document)";
+    const sharedSurface =
+      ":is(.phy-markdown--artifact, .phy-markdown--document)";
     expect(cssRuleBody(`${sharedSurface} pre`)).toMatch(
       /overflow-x:\s*auto[\s\S]*overscroll-behavior-inline:\s*contain/
     );
@@ -250,7 +238,12 @@ describe("MarkdownViewer surface classes", () => {
       "![wide](https://example.org/p.png)",
     ].join("\n");
     const w = mount(MarkdownViewer, {
-      props: { content: fixture, instantMessage: false, surface: "chat", ns: "m0" },
+      props: {
+        content: fixture,
+        instantMessage: false,
+        surface: "chat",
+        ns: "m0",
+      },
       global: { stubs: { Typewriter: true } },
     });
     const root = w.find(".phy-markdown.phy-markdown--chat");

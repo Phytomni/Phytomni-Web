@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { config, flushPromises, mount } from "@vue/test-utils";
-import { computed, defineComponent, h, reactive, ref, inject, provide } from "vue";
+import {
+  computed,
+  defineComponent,
+  h,
+  reactive,
+  ref,
+  inject,
+  provide,
+} from "vue";
 import { createI18n } from "vue-i18n";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -32,7 +40,7 @@ vi.mock("vue-router", () => ({
 }));
 vi.mock("element-plus", async () => {
   const actual = await vi.importActual<typeof import("element-plus")>(
-    "element-plus",
+    "element-plus"
   );
   return {
     ...actual,
@@ -53,7 +61,7 @@ type Rule = {
   validator?: (
     rule: unknown,
     value: string,
-    callback: (error?: Error) => void,
+    callback: (error?: Error) => void
   ) => void;
 };
 
@@ -72,7 +80,7 @@ const ElFormStub = defineComponent({
       const nextErrors: Record<string, string> = {};
       for (const [field, rawRules] of Object.entries(props.rules)) {
         const value = String(
-          (props.model as Record<string, unknown>)[field] ?? "",
+          (props.model as Record<string, unknown>)[field] ?? ""
         );
         for (const rule of rawRules as Rule[]) {
           if (rule.required && !value) {
@@ -102,7 +110,7 @@ const ElFormStub = defineComponent({
     const validateField = async (field: string) => {
       const rawRules = (props.rules as Record<string, Rule[]>)[field] ?? [];
       const value = String(
-        (props.model as Record<string, unknown>)[field] ?? "",
+        (props.model as Record<string, unknown>)[field] ?? ""
       );
       for (const rule of rawRules) {
         if (rule.validator) {
@@ -123,7 +131,7 @@ const ElFormItemStub = defineComponent({
   setup(props, { slots }) {
     const errors = inject(
       formErrorsKey,
-      computed(() => ({} as Record<string, string>)),
+      computed(() => ({} as Record<string, string>))
     );
     return () =>
       h("section", { class: "el-form-item", "data-prop": props.prop }, [
@@ -176,7 +184,7 @@ const ElButtonStub = defineComponent({
           "aria-busy": props.loading ? "true" : "false",
           onClick: (event: MouseEvent) => emit("click", event),
         },
-        slots.default?.(),
+        slots.default?.()
       );
   },
 });
@@ -217,7 +225,7 @@ const fillForm = async (
   wrapper: ReturnType<typeof mount>,
   oldPassword = "Current1!",
   newPassword = "Secure1!",
-  confirmPassword = newPassword,
+  confirmPassword = newPassword
 ) => {
   const inputs = wrapper.findAll("input");
   await inputs[1].setValue(oldPassword);
@@ -235,7 +243,9 @@ describe("Change Password surface", () => {
 
   it("uses the auth shell with one bounded form and hides Back for first login", () => {
     const wrapper = mountView("0");
-    expect(wrapper.findComponent({ name: "PhyAuthLayout" }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: "PhyAuthLayout" }).exists()).toBe(
+      true
+    );
     expect(wrapper.find('img[src="/logo.png"]').exists()).toBe(true);
     expect(wrapper.find(".phy-auth-brand").text()).toContain("Phytomni");
     expect(wrapper.find(".change-password-page").exists()).toBe(false);
@@ -255,21 +265,60 @@ describe("Change Password surface", () => {
   it.each([
     ["old password is required", "", "Secure1!", "Please enter old password"],
     ["new password is required", "Current1!", "", "Please enter new password"],
-    ["new password needs eight characters", "Current1!", "Short1!", "Password must be at least 8 characters"],
-    ["new password needs an uppercase letter", "Current1!", "secure1!", "Password must contain uppercase letters"],
-    ["new password needs a lowercase letter", "Current1!", "SECURE1!", "Password must contain lowercase letters"],
-    ["new password needs a number", "Current1!", "Secure!!", "Password must contain numbers"],
-    ["new password needs a special character", "Current1!", "Secure12", "Password must contain special characters"],
-    ["new password cannot equal old password", "Current1!", "Current1!", "New password cannot be the same as old password"],
-    ["confirmation must match", "Current1!", "Secure1!", "Passwords do not match", "Another1!"],
-  ])("rejects %s", async (_name, oldPassword, newPassword, message, confirmation) => {
-    const wrapper = mountView("1");
-    await fillForm(wrapper, oldPassword, newPassword, confirmation);
-    await wrapper.get(".change-password-submit").trigger("click");
-    await flushPromises();
-    expect(wrapper.text()).toContain(message);
-    expect(mocks.changePassword).not.toHaveBeenCalled();
-  });
+    [
+      "new password needs eight characters",
+      "Current1!",
+      "Short1!",
+      "Password must be at least 8 characters",
+    ],
+    [
+      "new password needs an uppercase letter",
+      "Current1!",
+      "secure1!",
+      "Password must contain uppercase letters",
+    ],
+    [
+      "new password needs a lowercase letter",
+      "Current1!",
+      "SECURE1!",
+      "Password must contain lowercase letters",
+    ],
+    [
+      "new password needs a number",
+      "Current1!",
+      "Secure!!",
+      "Password must contain numbers",
+    ],
+    [
+      "new password needs a special character",
+      "Current1!",
+      "Secure12",
+      "Password must contain special characters",
+    ],
+    [
+      "new password cannot equal old password",
+      "Current1!",
+      "Current1!",
+      "New password cannot be the same as old password",
+    ],
+    [
+      "confirmation must match",
+      "Current1!",
+      "Secure1!",
+      "Passwords do not match",
+      "Another1!",
+    ],
+  ])(
+    "rejects %s",
+    async (_name, oldPassword, newPassword, message, confirmation) => {
+      const wrapper = mountView("1");
+      await fillForm(wrapper, oldPassword, newPassword, confirmation);
+      await wrapper.get(".change-password-submit").trigger("click");
+      await flushPromises();
+      expect(wrapper.text()).toContain(message);
+      expect(mocks.changePassword).not.toHaveBeenCalled();
+    }
+  );
 
   it("preserves the FormData payload and writes tutorial state before /login when logout resolves", async () => {
     const store = makeStore("0");
@@ -322,14 +371,14 @@ describe("Change Password surface", () => {
     await wrapper.get(".change-password-submit").trigger("click");
     await flushPromises();
     expect(mocks.warning).toHaveBeenCalledWith(
-      "Failed to change password, please try again later",
+      "Failed to change password, please try again later"
     );
   });
 
   it("has no sensitive logging or status writer and keeps 48px shell controls", () => {
     const source = readFileSync(
       resolve(__dirname, "../../src/views/change-password/index.vue"),
-      "utf8",
+      "utf8"
     );
     expect(source).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
     expect(source).not.toContain("SET_LOGIN_STATUS");
@@ -337,7 +386,7 @@ describe("Change Password surface", () => {
     expect(source).toContain("--phy-control-height-primary");
     expect(source).toContain("@media (max-width: 599px)");
     expect(source).toMatch(
-      /@media \(max-width: 599px\)[\s\S]*?\.change-password-field\s*\{[\s\S]*?display:\s*block;/,
+      /@media \(max-width: 599px\)[\s\S]*?\.change-password-field\s*\{[\s\S]*?display:\s*block;/
     );
     expect(source).not.toContain("height: 100vh");
   });

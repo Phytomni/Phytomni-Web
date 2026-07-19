@@ -157,7 +157,7 @@ const mountContent = (
           props: ["blocks", "ns", "references"],
           emits: ["a2ui-action", "a2ui-retry"],
           template:
-            '<div data-testid="stream-message" :data-ns="ns === undefined || ns === \'\' ? \'__absent__\' : ns" :data-ref-count="Array.isArray(references) && references.length ? String(references.length) : \'0\'" />',
+            "<div data-testid=\"stream-message\" :data-ns=\"ns === undefined || ns === '' ? '__absent__' : ns\" :data-ref-count=\"Array.isArray(references) && references.length ? String(references.length) : '0'\" />",
         },
         DeepGenomeResultViewer: {
           name: "DeepGenomeResultViewer",
@@ -168,7 +168,7 @@ const mountContent = (
             embedded: Boolean,
           },
           template:
-            '<div data-testid="deep-genome" :data-ns="ns === undefined ? \'__absent__\' : ns" :data-embedded="embedded ? \'true\' : \'false\'" />',
+            "<div data-testid=\"deep-genome\" :data-ns=\"ns === undefined ? '__absent__' : ns\" :data-embedded=\"embedded ? 'true' : 'false'\" />",
         },
         CitedAnswer: {
           name: "CitedAnswer",
@@ -473,7 +473,7 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
           messageId: "142",
           runId: "run-42",
           transport,
-      },
+        },
       },
       { index: 4 }
     );
@@ -637,7 +637,9 @@ describe("ChatMessageContent live streaming citations", () => {
         wrapper.find('[data-testid="stream-message"]').attributes("data-ns")
       ).toBe("__absent__");
       expect(
-        wrapper.find('[data-testid="stream-message"]').attributes("data-ref-count")
+        wrapper
+          .find('[data-testid="stream-message"]')
+          .attributes("data-ref-count")
       ).toBe("0");
     }
   });
@@ -735,9 +737,7 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
       /box-shadow:\s*0\s+2px\s+8px\s+rgba\(0,\s*0,\s*0,\s*0\.1\)/
     );
     // Gene image chrome left index.vue — styles live on Content now.
-    expect(CHAT_SOURCE).not.toMatch(
-      /\.gene-network-images\s*\{[\s\S]*#909399/
-    );
+    expect(CHAT_SOURCE).not.toMatch(/\.gene-network-images\s*\{[\s\S]*#909399/);
   });
 
   it("does not change GeneNetwork image map keys or loading gates", () => {

@@ -52,7 +52,9 @@ describe("StreamMessage", () => {
     const w = mount(StreamMessage, {
       props: { blocks },
     });
-    await w.find(".a2ui-confirm button[type='button']:last-child").trigger("click");
+    await w
+      .find(".a2ui-confirm button[type='button']:last-child")
+      .trigger("click");
     await nextTick();
     expect(w.emitted("a2ui-action")).toEqual([
       [
@@ -294,7 +296,11 @@ describe("StreamMessage", () => {
             catalog_version: "v1.0",
             surface_id: "surf-beside",
             widget: "confirm",
-            props: { title: "Confirm?", confirm_label: "Yes", cancel_label: "No" },
+            props: {
+              title: "Confirm?",
+              confirm_label: "Yes",
+              cancel_label: "No",
+            },
           },
           state: { status: "ready", round: 1 },
         },

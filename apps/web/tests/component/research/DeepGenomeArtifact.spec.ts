@@ -73,13 +73,11 @@ describe("DeepGenomeArtifact", () => {
     expect(renderer.attributes("data-references")).toBe("false");
 
     expect(wrapper.findAll(".research-evidence-panel__item")).toHaveLength(2);
-    expect(wrapper.find(".research-evidence-panel__item").attributes("id")).toBe(
-      "artifactunder-ref-1"
-    );
     expect(
-      wrapper
-        .find(".research-artifact-shell__narrative-content")
-        .classes()
+      wrapper.find(".research-evidence-panel__item").attributes("id")
+    ).toBe("artifactunder-ref-1");
+    expect(
+      wrapper.find(".research-artifact-shell__narrative-content").classes()
     ).toContain("research-artifact-shell__narrative-content--wide");
   });
 
@@ -87,10 +85,12 @@ describe("DeepGenomeArtifact", () => {
     download.mockClear();
     const wrapper = mountArtifact();
 
-    await wrapper.get('[data-test="deep-genome-download-pdf"]').trigger("click");
-    await wrapper.get('[data-test="deep-genome-download-markdown"]').trigger(
-      "click"
-    );
+    await wrapper
+      .get('[data-test="deep-genome-download-pdf"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-test="deep-genome-download-markdown"]')
+      .trigger("click");
     await nextTick();
 
     expect(download).toHaveBeenNthCalledWith(1, "pdf");
@@ -124,9 +124,9 @@ describe("DeepGenomeArtifact", () => {
     await wrapper.get('a[href="#artifactunder-ref-2"]').trigger("click");
     await nextTick();
 
-    expect(wrapper.get('[data-tab-id="evidence"]').attributes("aria-selected")).toBe(
-      "true"
-    );
+    expect(
+      wrapper.get('[data-tab-id="evidence"]').attributes("aria-selected")
+    ).toBe("true");
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(focus).toHaveBeenCalledTimes(1);
   });

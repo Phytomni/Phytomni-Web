@@ -71,7 +71,9 @@ describe("Help product document", () => {
 
   it("keeps the five section ids, locale bodies, and document Markdown surface", () => {
     const wrapper = mountHelp();
-    const ids = wrapper.findAll(".help-section").map((section) => section.attributes("id"));
+    const ids = wrapper
+      .findAll(".help-section")
+      .map((section) => section.attributes("id"));
     expect(ids).toEqual([
       "what-is-phytomni",
       "getting-started",
@@ -106,7 +108,7 @@ describe("Help product document", () => {
     await link.trigger("keydown", { key: "Enter" });
 
     expect(scrollRoot.scrollTo).toHaveBeenCalledWith(
-      expect.objectContaining({ behavior: "smooth" }),
+      expect.objectContaining({ behavior: "smooth" })
     );
     expect(focus).toHaveBeenCalled();
     expect(link.classes()).toContain("active");
@@ -119,22 +121,26 @@ describe("Help product document", () => {
 
     expect(wrapper.find(".toc-title").text()).toBe("目录");
     expect(wrapper.find("#what-is-phytomni h1").text()).toBe(
-      zhCN.help.doc.whatIs.heading,
+      zhCN.help.doc.whatIs.heading
     );
     expect(wrapper.findAllComponents(MarkdownStub)[0].props("content")).toBe(
-      zhCN.help.doc.whatIs.body,
+      zhCN.help.doc.whatIs.body
     );
   });
 
   it("keeps token-aware back branches and one flowing footer in the help scroll root", async () => {
     const wrapper = mountHelp();
-    expect(wrapper.find(".help-header-actions [data-test=lang-switch]").exists()).toBe(true);
-    expect(wrapper.find(".help-header-actions .back-btn").exists()).toBe(true);
-    expect(wrapper.find(".help-page").findAll(".footer-container")).toHaveLength(1);
     expect(
-      wrapper.find(".help-page").element.contains(
-        wrapper.find(".help-page .footer-container").element,
-      ),
+      wrapper.find(".help-header-actions [data-test=lang-switch]").exists()
+    ).toBe(true);
+    expect(wrapper.find(".help-header-actions .back-btn").exists()).toBe(true);
+    expect(
+      wrapper.find(".help-page").findAll(".footer-container")
+    ).toHaveLength(1);
+    expect(
+      wrapper
+        .find(".help-page")
+        .element.contains(wrapper.find(".help-page .footer-container").element)
     ).toBe(true);
 
     await wrapper.find(".back-btn").trigger("click");

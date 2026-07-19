@@ -177,9 +177,7 @@ describe("ResearchArtifactShell", () => {
     const wrapper = mountShell("content", "wide");
 
     expect(
-      wrapper
-        .find(".research-artifact-shell__narrative-content")
-        .classes()
+      wrapper.find(".research-artifact-shell__narrative-content").classes()
     ).toContain("research-artifact-shell__narrative-content--wide");
   });
 });

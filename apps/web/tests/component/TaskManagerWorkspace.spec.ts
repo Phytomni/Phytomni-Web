@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { config, flushPromises, mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
-import { computed, defineComponent, h, inject, provide, type ComputedRef, type InjectionKey } from "vue";
+import {
+  computed,
+  defineComponent,
+  h,
+  inject,
+  provide,
+  type ComputedRef,
+  type InjectionKey,
+} from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
@@ -32,7 +40,11 @@ const ElButtonStub = defineComponent({
     return () =>
       h(
         "button",
-        { ...attrs, type: "button", onClick: (event: MouseEvent) => emit("click", event) },
+        {
+          ...attrs,
+          type: "button",
+          onClick: (event: MouseEvent) => emit("click", event),
+        },
         slots.default?.()
       );
   },
@@ -42,16 +54,27 @@ const ElTableStub = defineComponent({
   name: "ElTable",
   props: { data: { type: Array as () => TaskRow[], default: () => [] } },
   setup(props, { slots }) {
-    provide(tableDataKey, computed(() => props.data));
+    provide(
+      tableDataKey,
+      computed(() => props.data)
+    );
     return () => h("div", { class: "el-table" }, slots.default?.());
   },
 });
 
 const ElTableColumnStub = defineComponent({
   name: "ElTableColumn",
-  props: { prop: String, label: String, minWidth: [Number, String], width: [Number, String] },
+  props: {
+    prop: String,
+    label: String,
+    minWidth: [Number, String],
+    width: [Number, String],
+  },
   setup(props, { slots }) {
-    const rows = inject(tableDataKey, computed(() => []));
+    const rows = inject(
+      tableDataKey,
+      computed(() => [])
+    );
     return () =>
       h("div", { class: "el-table-column", "data-label": props.label }, [
         h("span", { class: "el-table-column__label" }, props.label ?? ""),
@@ -68,10 +91,22 @@ const ElTableColumnStub = defineComponent({
 
 const ElPaginationStub = defineComponent({
   name: "ElPagination",
-  props: { currentPage: Number, pageSize: Number, pageSizes: Array, layout: String, total: Number },
-  emits: ["update:currentPage", "update:pageSize", "current-change", "size-change"],
+  props: {
+    currentPage: Number,
+    pageSize: Number,
+    pageSizes: Array,
+    layout: String,
+    total: Number,
+  },
+  emits: [
+    "update:currentPage",
+    "update:pageSize",
+    "current-change",
+    "size-change",
+  ],
   setup() {
-    return () => h("nav", { class: "el-pagination", "aria-label": "Pagination" });
+    return () =>
+      h("nav", { class: "el-pagination", "aria-label": "Pagination" });
   },
 });
 
@@ -79,7 +114,12 @@ const ElTagStub = defineComponent({
   name: "ElTag",
   props: { type: String, effect: String },
   setup(props, { slots }) {
-    return () => h("span", { class: "el-tag", "data-type": props.type }, slots.default?.());
+    return () =>
+      h(
+        "span",
+        { class: "el-tag", "data-type": props.type },
+        slots.default?.()
+      );
   },
 });
 
@@ -151,7 +191,10 @@ describe("Task Manager workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getTaskList.mockResolvedValue(successResponse);
-    mocks.getChatdownloadURL.mockResolvedValue({ code: 200, data: "https://signed.example/results.zip" });
+    mocks.getChatdownloadURL.mockResolvedValue({
+      code: 200,
+      data: "https://signed.example/results.zip",
+    });
   });
 
   it("loads once initially and refetches the unchanged request shape on page changes without polling", async () => {
@@ -174,8 +217,14 @@ describe("Task Manager workspace", () => {
     wrapper.findComponent({ name: "ElPagination" }).vm.$emit("size-change", 50);
     await flushPromises();
 
-    expect(mocks.getTaskList).toHaveBeenNthCalledWith(2, { current: 2, size: 10 });
-    expect(mocks.getTaskList).toHaveBeenNthCalledWith(3, { current: 2, size: 50 });
+    expect(mocks.getTaskList).toHaveBeenNthCalledWith(2, {
+      current: 2,
+      size: 10,
+    });
+    expect(mocks.getTaskList).toHaveBeenNthCalledWith(3, {
+      current: 2,
+      size: 50,
+    });
   });
 
   it("renders semantic statuses, signed downloads, and the preferred dialogue target", async () => {
@@ -183,15 +232,15 @@ describe("Task Manager workspace", () => {
     const { wrapper } = mountView();
     await flushPromises();
 
-    expect(wrapper.findAll(".task-status-badge").map((badge) => badge.text())).toEqual([
-      "Finished",
-      "Failed",
-      "Running",
-    ]);
+    expect(
+      wrapper.findAll(".task-status-badge").map((badge) => badge.text())
+    ).toEqual(["Finished", "Failed", "Running"]);
     expect(wrapper.findAll("button.task-download-action")).toHaveLength(1);
 
     await wrapper.get("button.task-download-action").trigger("click");
-    expect(mocks.getChatdownloadURL).toHaveBeenCalledWith({ obs_path: "/obs/results.zip" });
+    expect(mocks.getChatdownloadURL).toHaveBeenCalledWith({
+      obs_path: "/obs/results.zip",
+    });
     expect(open).toHaveBeenCalledWith(
       "https://signed.example/results.zip",
       "_blank",
@@ -200,8 +249,16 @@ describe("Task Manager workspace", () => {
 
     await wrapper.findAll("button.task-dialogue-action")[0].trigger("click");
     await wrapper.findAll("button.task-dialogue-action")[1].trigger("click");
-    expect(open).toHaveBeenNthCalledWith(2, "/chat?dialogue_id=dialogue-preferred", "_blank");
-    expect(open).toHaveBeenNthCalledWith(3, "/chat?dialogue_id=dialogue-fallback-only", "_blank");
+    expect(open).toHaveBeenNthCalledWith(
+      2,
+      "/chat?dialogue_id=dialogue-preferred",
+      "_blank"
+    );
+    expect(open).toHaveBeenNthCalledWith(
+      3,
+      "/chat?dialogue_id=dialogue-fallback-only",
+      "_blank"
+    );
   });
 
   it("shows retryable error state and preserves raw date values for locale reformatting", async () => {
@@ -233,13 +290,17 @@ describe("Task Manager workspace", () => {
     await flushPromises();
 
     expect(wrapper.findAll('[data-horizontal-scroll="table"]')).toHaveLength(1);
-    expect(wrapper.find(".phy-table-frame__pagination .el-pagination").exists()).toBe(true);
+    expect(
+      wrapper.find(".phy-table-frame__pagination .el-pagination").exists()
+    ).toBe(true);
 
     const source = readFileSync(
       resolve(__dirname, "../../src/views/task-manager/index.vue"),
       "utf8"
     );
     expect(source).not.toMatch(/console\.(?:log|info|debug)\(/);
-    expect(source).not.toMatch(/console\.error\([^\n]*(?:download_path|f_dialogue_id|dialogue_id|query)/);
+    expect(source).not.toMatch(
+      /console\.error\([^\n]*(?:download_path|f_dialogue_id|dialogue_id|query)/
+    );
   });
 });

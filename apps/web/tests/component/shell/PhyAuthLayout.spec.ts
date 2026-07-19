@@ -6,7 +6,7 @@ import PhyAuthLayout from "@/components/shell/PhyAuthLayout.vue";
 
 const SOURCE = readFileSync(
   resolve(__dirname, "../../../src/components/shell/PhyAuthLayout.vue"),
-  "utf8",
+  "utf8"
 );
 
 describe("PhyAuthLayout", () => {
@@ -38,19 +38,21 @@ describe("PhyAuthLayout", () => {
   it("uses a neutral background by default and opts into the horizon explicitly", () => {
     const neutral = mount(PhyAuthLayout);
     expect(neutral.find(".phy-auth-layout").classes()).not.toContain(
-      "phy-auth-layout--horizon",
+      "phy-auth-layout--horizon"
     );
 
     const horizon = mount(PhyAuthLayout, { props: { horizon: true } });
     expect(horizon.find(".phy-auth-layout").classes()).toContain(
-      "phy-auth-layout--horizon",
+      "phy-auth-layout--horizon"
     );
   });
 
   it("uses the production logo in the fallback brand", () => {
     const wrapper = mount(PhyAuthLayout);
-    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(true);
-    expect(wrapper.find('.phy-auth-brand img').attributes("alt")).toBe("");
+    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find(".phy-auth-brand img").attributes("alt")).toBe("");
     expect(wrapper.find(".phy-auth-brand span").text()).toBe("Phytomni");
   });
 
@@ -59,7 +61,7 @@ describe("PhyAuthLayout", () => {
     expect(SOURCE).toMatch(/overflow-y:\s*auto/);
     expect(SOURCE).toMatch(/max-width:\s*432px/);
     expect(SOURCE).toMatch(
-      /@media\s*\(min-width:\s*600px\)[\s\S]*?clamp\(432px,\s*calc\(35vw - 72px\),\s*672px\)[\s\S]*?max-width:\s*672px/,
+      /@media\s*\(min-width:\s*600px\)[\s\S]*?clamp\(432px,\s*calc\(35vw - 72px\),\s*672px\)[\s\S]*?max-width:\s*672px/
     );
     expect(SOURCE).toMatch(/--phy-control-height-primary/);
     expect(SOURCE).toContain("phy-auth-content");

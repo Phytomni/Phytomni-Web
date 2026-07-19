@@ -232,15 +232,19 @@ describe("GeneNetworkAgentView", () => {
         .value
     ).toBe("TO:0000011");
     expect(
-      (wrapper.get('[data-test="network-species"]').element as HTMLSelectElement)
-        .value
+      (
+        wrapper.get('[data-test="network-species"]')
+          .element as HTMLSelectElement
+      ).value
     ).toBe("ath");
     wrapper.unmount();
   });
 
   it("blocks missing and malformed resolver values before transport", async () => {
     const wrapper = mountView();
-    await wrapper.get('[data-test="network-question"]').setValue("Analyze traits");
+    await wrapper
+      .get('[data-test="network-question"]')
+      .setValue("Analyze traits");
     await wrapper.get("form.gene-network-form").trigger("submit");
     expect(wrapper.get('[data-test="network-validation"]').text()).toContain(
       "Trait Ontology"
@@ -285,7 +289,9 @@ describe("GeneNetworkAgentView", () => {
   it("fails closed for dark and incomplete capability manifests", () => {
     REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live = false;
     let wrapper = mountView();
-    expect(wrapper.get('[data-test="network-unavailable"]').exists()).toBe(true);
+    expect(wrapper.get('[data-test="network-unavailable"]').exists()).toBe(
+      true
+    );
     expect(wrapper.find('[data-test="network-submit"]').exists()).toBe(false);
     wrapper.unmount();
 
@@ -311,7 +317,9 @@ describe("GeneNetworkAgentView", () => {
       execution: "chat",
     };
     wrapper = mountView();
-    expect(wrapper.get('[data-test="network-unavailable"]').exists()).toBe(true);
+    expect(wrapper.get('[data-test="network-unavailable"]').exists()).toBe(
+      true
+    );
     wrapper.unmount();
   });
 
@@ -333,7 +341,9 @@ describe("GeneNetworkAgentView", () => {
     await wrapper.get('[data-test="network-back"]').trigger("click");
     expect(mocks.routerBack).toHaveBeenCalledTimes(1);
 
-    await wrapper.get('[data-test="network-question"]').setValue("Analyze traits");
+    await wrapper
+      .get('[data-test="network-question"]')
+      .setValue("Analyze traits");
     await wrapper.get('[data-test="network-trait"]').setValue("TO:0000207");
     await wrapper.get('[data-test="network-species"]').setValue("osa");
     await wrapper.get('[data-test="network-submit"]').trigger("keydown.enter");

@@ -85,7 +85,9 @@ describe("Deep Genome Agent static demonstration", () => {
     const question = wrapper.get("[data-test=shell-question]").text();
     expect(question).toContain("Species Name: rice (Oryza sativa)");
     expect(question).toContain("d18h|GA3ox1|OsGA3OX2|OsGA3ox-2");
-    expect(question).toContain("Maintain strict adherence to evidence-based reporting");
+    expect(question).toContain(
+      "Maintain strict adherence to evidence-based reporting"
+    );
 
     expect(wrapper.findAll("[data-test=deep-genome-artifact]")).toHaveLength(1);
     const artifact = wrapper.get("[data-test=deep-genome-artifact]");
@@ -94,7 +96,9 @@ describe("Deep Genome Agent static demonstration", () => {
     expect(artifact.attributes("data-markdown")).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );
-    expect(artifact.attributes("data-markdown")).toContain("GA3ox-2|D18|GA3OX2");
+    expect(artifact.attributes("data-markdown")).toContain(
+      "GA3ox-2|D18|GA3OX2"
+    );
     expect(artifact.get("[data-test=artifact-evidence]").text()).toContain(
       "The rice YABBY1 gene is involved in the feedback regulation of gibberellin metabolism."
     );
@@ -120,9 +124,19 @@ describe("Deep Genome Agent static demonstration", () => {
     await wrapper.get("[data-test=shell-back]").trigger("click");
     expect(routerBack).toHaveBeenCalledTimes(1);
 
-    expect(wrapper.findAll("[data-test=legacy-deep-genome-viewer]")).toHaveLength(0);
-    expect(wrapper.findAll(".chat-header, .chat-messages, .message-avatar, .message-fotter")).toHaveLength(0);
-    expect(wrapper.findAll('[class*="reaction"], [data-test*="reaction"]')).toHaveLength(0);
-    expect(source).not.toMatch(/loveThisState|needsImprovementState|handleReaction|localStorage/);
+    expect(
+      wrapper.findAll("[data-test=legacy-deep-genome-viewer]")
+    ).toHaveLength(0);
+    expect(
+      wrapper.findAll(
+        ".chat-header, .chat-messages, .message-avatar, .message-fotter"
+      )
+    ).toHaveLength(0);
+    expect(
+      wrapper.findAll('[class*="reaction"], [data-test*="reaction"]')
+    ).toHaveLength(0);
+    expect(source).not.toMatch(
+      /loveThisState|needsImprovementState|handleReaction|localStorage/
+    );
   });
 });

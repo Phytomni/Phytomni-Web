@@ -215,7 +215,9 @@ describe("DigitalDesignAgentView", () => {
       type: "application/pdf",
     });
 
-    await wrapper.get('[data-test="design-question"]').setValue("Design a stable protein");
+    await wrapper
+      .get('[data-test="design-question"]')
+      .setValue("Design a stable protein");
     await wrapper.get('[data-test="design-gene-id"]').setValue("AT1G01010");
     await wrapper.get('[data-test="design-species-code"]').setValue("ath");
     const fileInput = wrapper.get('[data-test="design-files"]');
@@ -238,13 +240,19 @@ describe("DigitalDesignAgentView", () => {
 
   it("blocks missing or malformed resolver values before transport", async () => {
     const wrapper = mountView();
-    await wrapper.get('[data-test="design-question"]').setValue("Design a protein");
+    await wrapper
+      .get('[data-test="design-question"]')
+      .setValue("Design a protein");
     await wrapper.get('[data-test="design-gene-id"]').setValue("bad gene");
     await wrapper.get('[data-test="design-species-code"]').setValue("A");
     await wrapper.get("form.digital-design-form").trigger("submit");
 
-    expect(wrapper.get('[data-test="design-validation"]').text()).toContain("gene");
-    expect(wrapper.get('[data-test="design-validation"]').text()).toContain("species");
+    expect(wrapper.get('[data-test="design-validation"]').text()).toContain(
+      "gene"
+    );
+    expect(wrapper.get('[data-test="design-validation"]').text()).toContain(
+      "species"
+    );
     expect(mocks.submit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
@@ -267,9 +275,7 @@ describe("DigitalDesignAgentView", () => {
     await wrapper
       .get('[data-test="design-question"]')
       .setValue("x".repeat(4001));
-    await wrapper
-      .get('[data-test="design-gene-id"]')
-      .setValue("A".repeat(129));
+    await wrapper.get('[data-test="design-gene-id"]').setValue("A".repeat(129));
     await wrapper
       .get('[data-test="design-species-code"]')
       .setValue("a".repeat(33));
@@ -292,9 +298,7 @@ describe("DigitalDesignAgentView", () => {
     REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = false;
     const wrapper = mountView();
 
-    expect(wrapper.get('[data-test="design-unavailable"]').exists()).toBe(
-      true
-    );
+    expect(wrapper.get('[data-test="design-unavailable"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="design-submit"]').exists()).toBe(false);
     expect(mocks.submit).not.toHaveBeenCalled();
     wrapper.unmount();
@@ -356,7 +360,9 @@ describe("DigitalDesignAgentView", () => {
   it("keeps reset and back controls reachable", async () => {
     const wrapper = mountView({ state: degradedState() });
     await wrapper.get('[data-test="design-back"]').trigger("click");
-    await wrapper.get('[data-test="design-question"]').setValue("Design a protein");
+    await wrapper
+      .get('[data-test="design-question"]')
+      .setValue("Design a protein");
     await wrapper.get('[data-test="design-gene-id"]').setValue("AT1G01010");
     await wrapper.get('[data-test="design-species-code"]').setValue("ath");
     await wrapper.get('[data-test="design-submit"]').trigger("keydown.enter");

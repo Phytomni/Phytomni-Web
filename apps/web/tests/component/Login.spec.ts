@@ -40,7 +40,7 @@ vi.mock("@/utils/auth-redirect", () => ({
 vi.mock("@/stores", () => ({ userStore: () => mocks.store }));
 vi.mock("element-plus", async () => {
   const actual = await vi.importActual<typeof import("element-plus")>(
-    "element-plus",
+    "element-plus"
   );
   return {
     ...actual,
@@ -73,7 +73,7 @@ const ElFormStub = defineComponent({
       let valid = true;
       for (const [field, rawRules] of Object.entries(props.rules)) {
         const value = String(
-          (props.model as Record<string, unknown>)[field] ?? "",
+          (props.model as Record<string, unknown>)[field] ?? ""
         );
         for (const rule of rawRules as Rule[]) {
           if (rule.required && !value) {
@@ -147,7 +147,7 @@ const ElButtonStub = defineComponent({
           "aria-busy": props.loading ? "true" : "false",
           onClick: (event: MouseEvent) => emit("click", event),
         },
-        slots.default?.(),
+        slots.default?.()
       );
   },
 });
@@ -177,7 +177,7 @@ const mountView = (query: Record<string, unknown> = {}) => {
 const fillCredentials = async (
   wrapper: ReturnType<typeof mount>,
   email = "researcher@example.test",
-  password = "Secure1!",
+  password = "Secure1!"
 ) => {
   const inputs = wrapper.findAll("input");
   await inputs[0].setValue(email);
@@ -205,9 +205,11 @@ describe("Login auth surface", () => {
     const wrapper = mountView();
 
     expect(wrapper.find(".phy-auth-layout").classes()).toContain(
-      "phy-auth-layout--horizon",
+      "phy-auth-layout--horizon"
     );
-    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(true);
+    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(
+      true
+    );
     expect(wrapper.findAll(".el-form")).toHaveLength(1);
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
     expect(wrapper.find(".login-button").attributes("type")).toBe("button");
@@ -218,7 +220,7 @@ describe("Login auth surface", () => {
     expect(mocks.redirectIfAuthed).toHaveBeenCalledTimes(1);
     expect(mocks.redirectIfAuthed).toHaveBeenCalledWith(
       mocks.route,
-      expect.objectContaining({ replace: mocks.replace }),
+      expect.objectContaining({ replace: mocks.replace })
     );
     wrapper.unmount();
   });
@@ -272,14 +274,14 @@ describe("Login auth surface", () => {
       expect.objectContaining({
         title: "Password Security Notice",
         message: "Rotate your password soon",
-      }),
+      })
     );
-    expect(
-      mocks.setToken.mock.invocationCallOrder[0],
-    ).toBeLessThan(mocks.store.SET_USER_NAME.mock.invocationCallOrder[0]);
-    expect(
-      mocks.store.SET_USER_NAME.mock.invocationCallOrder[0],
-    ).toBeLessThan(mocks.store.SET_LOGIN_STATUS.mock.invocationCallOrder[0]);
+    expect(mocks.setToken.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.store.SET_USER_NAME.mock.invocationCallOrder[0]
+    );
+    expect(mocks.store.SET_USER_NAME.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.store.SET_LOGIN_STATUS.mock.invocationCallOrder[0]
+    );
   });
 
   it("notifies first-login users and replaces to password change before redirect", async () => {
@@ -298,7 +300,7 @@ describe("Login auth surface", () => {
 
     expect(mocks.store.SET_LOGIN_STATUS).toHaveBeenCalledTimes(1);
     expect(mocks.notification).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "First Login Notice" }),
+      expect.objectContaining({ title: "First Login Notice" })
     );
     expect(mocks.replace).toHaveBeenCalledWith("/change-password");
     expect(mocks.safeRedirect).not.toHaveBeenCalled();
@@ -309,7 +311,7 @@ describe("Login auth surface", () => {
     mocks.login.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveLogin = resolve;
-      }),
+      })
     );
     const wrapper = mountView();
     await fillCredentials(wrapper);
@@ -319,7 +321,7 @@ describe("Login auth surface", () => {
     resolveLogin({ code: 401, data: { locked: true }, message: "Locked" });
     await flushPromises();
     expect(mocks.notification).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Account Locked", message: "Locked" }),
+      expect.objectContaining({ title: "Account Locked", message: "Locked" })
     );
     expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
 
@@ -329,13 +331,19 @@ describe("Login auth surface", () => {
     await wrapper.get(".login-button").trigger("click");
     await flushPromises();
     expect(mocks.notification).toHaveBeenLastCalledWith(
-      expect.objectContaining({ title: "Account Locked", message: "Rejected lock" }),
+      expect.objectContaining({
+        title: "Account Locked",
+        message: "Rejected lock",
+      })
     );
     expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
   });
 
   it("uses the normal error toast for non-locked responses and rejections", async () => {
-    mocks.login.mockResolvedValueOnce({ code: 401, message: "Invalid credentials" });
+    mocks.login.mockResolvedValueOnce({
+      code: 401,
+      message: "Invalid credentials",
+    });
     const wrapper = mountView();
     await fillCredentials(wrapper);
     await wrapper.get(".login-button").trigger("click");
@@ -354,7 +362,7 @@ describe("Login auth surface", () => {
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
     const source = readFileSync(
       resolve(__dirname, "../../src/views/login/index.vue"),
-      "utf8",
+      "utf8"
     );
     expect(source).toContain("isLogin");
     expect(source).toContain("handleRegister");

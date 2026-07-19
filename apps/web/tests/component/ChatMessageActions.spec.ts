@@ -3,16 +3,11 @@ import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
-import {
-  messageActionCapabilities,
-} from "@/views/chat/utils/message-action-capabilities";
+import { messageActionCapabilities } from "@/views/chat/utils/message-action-capabilities";
 import type { ChatMessage } from "@/views/chat/types";
 
 const ACTIONS_SOURCE = readFileSync(
-  resolve(
-    __dirname,
-    "../../src/views/chat/components/ChatMessageActions.vue"
-  ),
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageActions.vue"),
   "utf8"
 );
 const INDEX_SOURCE = readFileSync(
@@ -20,10 +15,7 @@ const INDEX_SOURCE = readFileSync(
   "utf8"
 );
 const CONTENT_SOURCE = readFileSync(
-  resolve(
-    __dirname,
-    "../../src/views/chat/components/ChatMessageContent.vue"
-  ),
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageContent.vue"),
   "utf8"
 );
 
@@ -144,9 +136,9 @@ describe("ChatMessageActions", () => {
     expect(INDEX_SOURCE).not.toMatch(/getReactionTooltip/);
 
     const idle = mountActions({ reactionActive: 0 });
-    expect(idle.find('[data-testid="action-like"]').attributes("aria-label")).toBe(
-      "chat.actions.like"
-    );
+    expect(
+      idle.find('[data-testid="action-like"]').attributes("aria-label")
+    ).toBe("chat.actions.like");
     expect(
       idle.find('[data-testid="action-dislike"]').attributes("aria-label")
     ).toBe("chat.actions.dislike");
@@ -158,9 +150,9 @@ describe("ChatMessageActions", () => {
     expect(liked.find('[data-testid="action-like"]').classes()).toContain(
       "active"
     );
-    expect(liked.find('[data-testid="action-like"]').attributes("aria-label")).toBe(
-      "chat.actions.undoLike"
-    );
+    expect(
+      liked.find('[data-testid="action-like"]').attributes("aria-label")
+    ).toBe("chat.actions.undoLike");
     expect(
       liked.find('[data-testid="action-like"]').attributes("aria-pressed")
     ).toBe("true");
@@ -194,10 +186,9 @@ describe("ChatMessageActions", () => {
       wrapper.find('[data-testid="direct-download-obs://file"]').exists()
     ).toBe(true);
 
-    await wrapper.findComponent({ name: "ElDropdown" }).vm.$emit(
-      "command",
-      "obs://upload"
-    );
+    await wrapper
+      .findComponent({ name: "ElDropdown" })
+      .vm.$emit("command", "obs://upload");
     expect(wrapper.emitted("direct-download")?.[0]).toEqual(["obs://upload"]);
   });
 

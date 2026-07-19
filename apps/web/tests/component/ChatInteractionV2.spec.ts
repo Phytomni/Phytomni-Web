@@ -202,7 +202,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
 
   it("routes a surface intent through the owning message and resolves it in place", async () => {
     expect(CHAT_SOURCE).toContain(
-      'const { submitAction, retryAction } = useA2uiInteraction();'
+      "const { submitAction, retryAction } = useA2uiInteraction();"
     );
     expect(CHAT_SOURCE).toContain(
       '@a2ui-action="(event) => submitAction(message, event)"'
@@ -211,10 +211,13 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       /@a2ui-retry="\s*\(surfaceId\) => retryAction\(message, surfaceId\)\s*"/
     );
     expect(CONTENT_SOURCE).toContain(
-      '@a2ui-action="(event) => emit(\'a2ui-action\', event)"'
+      "@a2ui-action=\"(event) => emit('a2ui-action', event)\""
     );
 
-    const makeMessage = (surfaceId: string, messageId: string): ChatMessage => ({
+    const makeMessage = (
+      surfaceId: string,
+      messageId: string
+    ): ChatMessage => ({
       role: "assistant",
       content: "",
       id: messageId,
@@ -309,9 +312,9 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       "transport not wired"
     );
     expect(
-      wrapper.findAll(".a2ui-confirm button").every((button) =>
-        button.attributes("disabled") !== undefined
-      )
+      wrapper
+        .findAll(".a2ui-confirm button")
+        .every((button) => button.attributes("disabled") !== undefined)
     ).toBe(true);
     expect(other.blocks?.[0].a2ui?.state.status).toBe("ready");
 
@@ -331,10 +334,12 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     await flushPromises();
     await nextTick();
     expect(owner.blocks?.[0].a2ui?.state.status).toBe("resolved");
-    expect(owner.blocks?.some((block) => block.sourceActionId === "action-owner")).toBe(
+    expect(
+      owner.blocks?.some((block) => block.sourceActionId === "action-owner")
+    ).toBe(true);
+    expect(owner.blocks?.some((block) => block.text === "Completed")).toBe(
       true
     );
-    expect(owner.blocks?.some((block) => block.text === "Completed")).toBe(true);
     expect(other.blocks?.[0].a2ui?.state.status).toBe("ready");
     wrapper.unmount();
   });

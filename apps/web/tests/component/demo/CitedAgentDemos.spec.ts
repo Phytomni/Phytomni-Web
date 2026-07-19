@@ -71,7 +71,9 @@ describe("cited agent demonstrations", () => {
       expect(cited.attributes("data-surface")).toBe("artifact");
       expect(cited.attributes("data-reference-count")).toBe(referenceCount);
       expect(cited.text().toLowerCase()).toContain(contentMarker.toLowerCase());
-      expect(wrapper.findAll(".chat-header, .chat-messages, .message-avatar")).toHaveLength(0);
+      expect(
+        wrapper.findAll(".chat-header, .chat-messages, .message-avatar")
+      ).toHaveLength(0);
 
       await wrapper.get("[data-test=shell-back]").trigger("click");
       expect(routerBack).toHaveBeenCalledTimes(1);

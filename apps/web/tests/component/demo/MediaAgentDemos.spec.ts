@@ -13,7 +13,7 @@ describe("retired media agent demonstrations", () => {
     expect(source).not.toContain("/static/downloads/");
     expect(source).not.toContain("sampleTask");
     expect(source).not.toContain("downloadResults");
-    expect(source).toContain('useBotRemoteAgentRun');
+    expect(source).toContain("useBotRemoteAgentRun");
     expect(source).toContain('tool: "GeneNetworkAgent"');
   });
 });

@@ -19,22 +19,19 @@ vi.mock("vue-element-plus-x", () => ({
   Prompts: { name: "Prompts", template: "<div />" },
 }));
 
-vi.mock(
-  "@/views/chat/composables/useChatStates",
-  async (importOriginal) => {
-    const actual = await importOriginal<
-      typeof import("@/views/chat/composables/useChatStates")
-    >();
-    return {
-      ...actual,
-      useChatStates: () => {
-        const state = actual.useChatStates();
-        testState.chatStates = state;
-        return state;
-      },
-    };
-  }
-);
+vi.mock("@/views/chat/composables/useChatStates", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@/views/chat/composables/useChatStates")
+  >();
+  return {
+    ...actual,
+    useChatStates: () => {
+      const state = actual.useChatStates();
+      testState.chatStates = state;
+      return state;
+    },
+  };
+});
 
 vi.mock("@/views/chat/composables/useCopyDownload", () => ({
   useCopyDownload: () => ({
@@ -234,7 +231,10 @@ const mountedWrappers: VueWrapper[] = [];
 const globalI18n = config.global.plugins[0] as {
   global: {
     locale: { value: string };
-    setLocaleMessage: (locale: string, messages: Record<string, unknown>) => void;
+    setLocaleMessage: (
+      locale: string,
+      messages: Record<string, unknown>
+    ) => void;
   };
 };
 
@@ -506,21 +506,27 @@ describe("Chat artifact shell integration", () => {
 
     expect(renderedSidebar().classes()).not.toContain("is-collapsed");
     expect(sidebarContent().classes()).not.toContain("collapsed");
-    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("false");
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe(
+      "false"
+    );
 
     await wrapper.get("[data-test=artifact-open]").trigger("click");
     await nextTick();
 
     expect(renderedSidebar().classes()).toContain("is-collapsed");
     expect(sidebarContent().classes()).toContain("collapsed");
-    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("false");
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe(
+      "false"
+    );
 
     await wrapper.get("[data-test=artifact-close]").trigger("click");
     await nextTick();
 
     expect(renderedSidebar().classes()).not.toContain("is-collapsed");
     expect(sidebarContent().classes()).not.toContain("collapsed");
-    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("false");
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe(
+      "false"
+    );
   });
 
   it("opens and closes a split artifact without mutating sidebar preference, scroll, or composer", async () => {
@@ -540,10 +546,7 @@ describe("Chat artifact shell integration", () => {
     );
     expect(deepGenomeRow.find("[data-test=artifact-open]").exists()).toBe(true);
     expect(transcript.scrollTop).toBe(417);
-    expect(composer).toHaveProperty(
-      "value",
-      "draft A"
-    );
+    expect(composer).toHaveProperty("value", "draft A");
 
     await wrapper.get("[data-test=artifact-open]").trigger("click");
     transcript.scrollTop = 999;
@@ -554,7 +557,9 @@ describe("Chat artifact shell integration", () => {
     expect(wrapper.get(".phy-adaptive-shell").classes()).toContain(
       "is-sidebar-collapsed"
     );
-    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("false");
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe(
+      "false"
+    );
     const artifactBody = wrapper.get(
       '.phy-adaptive-shell__artifact [data-test="markdown-body"]'
     );
@@ -562,18 +567,14 @@ describe("Chat artifact shell integration", () => {
     expect(artifactBody.classes()).toEqual(
       expect.arrayContaining(["phy-markdown", "phy-markdown--artifact"])
     );
-    expect(artifactBody.text()).toContain(
-      "Full cited report"
-    );
+    expect(artifactBody.text()).toContain("Full cited report");
     expect(wrapper.findAll("[data-test=markdown-body]")).toHaveLength(1);
     const evidencePanel = wrapper.get(".research-evidence-panel");
     const evidenceTabPanel = evidencePanel.element.closest(
       '[data-panel-id="evidence"]'
     );
     expect(evidenceTabPanel?.hasAttribute("hidden")).toBe(true);
-    expect(evidencePanel.text()).toContain(
-      "Complete source document"
-    );
+    expect(evidencePanel.text()).toContain("Complete source document");
     expect(wrapper.findAll(".research-evidence-panel__item")).toHaveLength(1);
     expect(wrapper.find(".doc-list").exists()).toBe(false);
     expect(wrapper.get("[data-testid=chat-transcript]").element).toBe(
@@ -599,13 +600,17 @@ describe("Chat artifact shell integration", () => {
     expect(wrapper.get("[data-testid=chat-composer]").element).toBe(composer);
     expect(transcript.scrollTop).toBe(417);
     expect(composer).toHaveProperty("value", "draft A");
-    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("false");
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe(
+      "false"
+    );
 
     await wrapper.get("[data-test=copy-source]").trigger("click");
     expect(testState.copiedText).toHaveBeenCalledWith(
       `${citedMessage.content}\nReferences:\n1. Complete source document`
     );
-    expect(testState.copiedText.mock.calls[0][0]).not.toContain(preview.summary);
+    expect(testState.copiedText.mock.calls[0][0]).not.toContain(
+      preview.summary
+    );
   });
 
   it("uses the mobile full-surface hook while preserving the mounted transcript", async () => {
@@ -703,12 +708,10 @@ describe("Chat artifact shell integration", () => {
     expect(wrapper.text()).not.toContain("raw.phytomni_state");
 
     await wrapper.get('[data-tab-id="downloads"]').trigger("click");
-    expect(
-      wrapper.findAll('[data-test="bot-artifact-download"]')
-    ).toHaveLength(1);
-    await wrapper
-      .get('[data-test="bot-artifact-download"]')
-      .trigger("click");
+    expect(wrapper.findAll('[data-test="bot-artifact-download"]')).toHaveLength(
+      1
+    );
+    await wrapper.get('[data-test="bot-artifact-download"]').trigger("click");
     expect(testState.downloadFile).toHaveBeenCalledWith(
       "/obs/bucket/run-research-1"
     );
@@ -742,16 +745,14 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain("<template #artifact>");
     expect(CHAT_SOURCE).toContain("<DeepGenomeArtifact");
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-actions="false"');
-    expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(
-      ':show-references="false"'
-    );
+    expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-references="false"');
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");
     expect(CHAT_SOURCE).toContain('surface="artifact"');
     expect(CHAT_SOURCE).toContain("<CitedAnswer");
     expect(CHAT_SOURCE).toContain('reference-presentation="external"');
     expect(CHAT_SOURCE).toContain("<ResearchEvidencePanel");
     expect(CHAT_SOURCE).toContain(
-      '@activate="selectArtifactTab(\'evidence\')"'
+      "@activate=\"selectArtifactTab('evidence')\""
     );
     expect(CHAT_SOURCE).not.toContain("<CitationReferenceList");
     expect(CHAT_SOURCE).toContain("artifactPreviewForMessage(message)");

@@ -189,13 +189,15 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     expect(A2UI_SOURCE).not.toContain("@keydown");
     wrapper.unmount();
 
-    const formSurface: Extract<
-      A2uiOpenSurface,
-      { widget: "form" }
-    >["props"] = {
+    const formSurface: Extract<A2uiOpenSurface, { widget: "form" }>["props"] = {
       title: "Enter species",
       fields: [
-        { name: "species", label: "Species", type: "text" as const, required: true },
+        {
+          name: "species",
+          label: "Species",
+          type: "text" as const,
+          required: true,
+        },
       ],
     };
     const form = mount(FormWidget, {
@@ -648,9 +650,7 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
     });
     expect(wrapper.text()).toContain(enUS.chat.a2ui.expired);
     expect(wrapper.find(".a2ui-status").attributes("role")).toBe("status");
-    expect(wrapper.find(".a2ui-status").attributes("aria-live")).toBe(
-      "polite"
-    );
+    expect(wrapper.find(".a2ui-status").attributes("aria-live")).toBe("polite");
   });
 });
 

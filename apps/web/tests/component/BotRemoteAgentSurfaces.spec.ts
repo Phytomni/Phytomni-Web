@@ -212,7 +212,9 @@ function readProductFixture(fileName: string): TerminalFixture {
   ) as TerminalFixture;
 }
 
-function stateFromProductFixture(fixture: TerminalFixture): BotRemoteAgentRunState {
+function stateFromProductFixture(
+  fixture: TerminalFixture
+): BotRemoteAgentRunState {
   const result = fixture.result;
   const projection = parseBotProjection({
     bot_run_id: fixture.run_id,
@@ -443,9 +445,9 @@ describe("Bot remote-agent surface matrix", () => {
       expect(state.visibleReport).toBe(report);
       const wrapper = mountSurface(surface, state);
 
-      expect(
-        wrapper.find('[data-test="bot-report-content"]').text()
-      ).toContain(report);
+      expect(wrapper.find('[data-test="bot-report-content"]').text()).toContain(
+        report
+      );
       expect(
         wrapper.findAll('button[data-test="bot-artifact-download"]')
       ).toHaveLength(downloads);
@@ -479,8 +481,10 @@ describe("Bot remote-agent surface matrix", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(
-      (wrapper.find('[data-test="research-question"]').element as HTMLTextAreaElement)
-        .value
+      (
+        wrapper.find('[data-test="research-question"]')
+          .element as HTMLTextAreaElement
+      ).value
     ).toBe(question);
     expect(wrapper.find('[data-test="research-form-error"]').exists()).toBe(
       true

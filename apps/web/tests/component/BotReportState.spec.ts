@@ -41,7 +41,8 @@ function mountReport(state: BotLifecycleState & { reportStage?: ReportStage }) {
       stubs: {
         MarkdownViewer: {
           props: ["content"],
-          template: '<article data-test="report-markdown">{{ content }}</article>',
+          template:
+            '<article data-test="report-markdown">{{ content }}</article>',
         },
       },
     },
@@ -54,21 +55,23 @@ describe("BotReportState", () => {
     ["partial", "intermediate", "degraded"],
     ["final", "final", "complete"],
     ["failed", "final", "failed"],
-  ] as const)(
-    "renders %s with localized status",
-    (_name, stage, expected) => {
-      const state = lifecycle({
-        reportStage: stage,
-        status: expected === "failed" ? "FAILED" : expected === "complete" ? "SUCCEEDED" : "RUNNING",
-        visibleReport: expected === "complete" ? "# Final report" : "",
-        finalReport: expected === "complete" ? "# Final report" : "",
-      });
-      const wrapper = mountReport(state);
+  ] as const)("renders %s with localized status", (_name, stage, expected) => {
+    const state = lifecycle({
+      reportStage: stage,
+      status:
+        expected === "failed"
+          ? "FAILED"
+          : expected === "complete"
+          ? "SUCCEEDED"
+          : "RUNNING",
+      visibleReport: expected === "complete" ? "# Final report" : "",
+      finalReport: expected === "complete" ? "# Final report" : "",
+    });
+    const wrapper = mountReport(state);
 
-      expect(wrapper.attributes("data-report-status")).toBe(expected);
-      expect(wrapper.text()).not.toContain("raw.phytomni_state");
-    }
-  );
+    expect(wrapper.attributes("data-report-status")).toBe(expected);
+    expect(wrapper.text()).not.toContain("raw.phytomni_state");
+  });
 
   it("renders the sanitized report body and a localized timestamp", () => {
     const wrapper = mountReport(
@@ -152,8 +155,12 @@ describe("BotArtifactList", () => {
     });
 
     expect(wrapper.text()).toContain("Warning");
-    expect(wrapper.findAll('button[data-test="bot-artifact-download"]')).toHaveLength(1);
-    await wrapper.get('button[data-test="bot-artifact-download"]').trigger("click");
+    expect(
+      wrapper.findAll('button[data-test="bot-artifact-download"]')
+    ).toHaveLength(1);
+    await wrapper
+      .get('button[data-test="bot-artifact-download"]')
+      .trigger("click");
     expect(download).toHaveBeenCalledWith("/obs/bucket/run-1");
     expect(wrapper.html()).not.toContain('href="/obs/');
   });

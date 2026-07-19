@@ -101,9 +101,7 @@ describe("SendProgress.vue", () => {
     const nowVal = Number(root.attributes("aria-valuenow"));
     expect(nowVal).toBeGreaterThanOrEqual(40);
     expect(nowVal).toBeLessThanOrEqual(98);
-    expect(root.attributes("aria-valuetext")).toBe(
-      `Processing, ${nowVal}%`
-    );
+    expect(root.attributes("aria-valuetext")).toBe(`Processing, ${nowVal}%`);
   });
 
   it("uses optional stage label without inferring from elapsed time", async () => {

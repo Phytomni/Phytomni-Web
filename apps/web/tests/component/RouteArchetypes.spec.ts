@@ -291,13 +291,13 @@ function flattenLeafRoutes(records: RouteRecord[]): RouteRecord[] {
     record.children?.length
       ? flattenLeafRoutes(record.children)
       : record.component
-        ? [record]
-        : [],
+      ? [record]
+      : []
   );
 }
 
 const activeLeafRoutes = flattenLeafRoutes(
-  constantRoutes as unknown as RouteRecord[],
+  constantRoutes as unknown as RouteRecord[]
 );
 
 function readSource(relativePath: string): string {
@@ -321,16 +321,18 @@ describe("routed visual archetypes", () => {
 
       expect(source).toBeTruthy();
       expect(contract.productLayout).toMatch(
-        /^(auth|conversation|demo|document|standalone|workspace)$/,
+        /^(auth|conversation|demo|document|standalone|workspace)$/
       );
       expect(contract.migrationTask.trim()).not.toBe("");
-      expect(existsSync(resolve(__dirname, "../../", contract.behaviorTest))).toBe(
-        true,
-      );
+      expect(
+        existsSync(resolve(__dirname, "../../", contract.behaviorTest))
+      ).toBe(true);
       for (const marker of contract.sourceMarkers) {
-        expect(source, `${contract.path} is missing ${marker}`).toContain(marker);
+        expect(source, `${contract.path} is missing ${marker}`).toContain(
+          marker
+        );
       }
-    },
+    }
   );
 
   it("keeps dormant dynamic routes separate from active route inventory", () => {
@@ -339,7 +341,7 @@ describe("routed visual archetypes", () => {
     ]);
     expect(dynamicRoutes).toHaveLength(1);
     expect(ROUTE_CONTRACTS.map((route) => route.path)).not.toContain(
-      "/system/user-auth",
+      "/system/user-auth"
     );
   });
 
@@ -354,9 +356,7 @@ describe("routed visual archetypes", () => {
     ];
 
     expect(representatives).not.toContain(undefined);
-    expect(
-      representatives.map((route) => route?.productLayout),
-    ).toEqual([
+    expect(representatives.map((route) => route?.productLayout)).toEqual([
       "conversation",
       "workspace",
       "auth",

@@ -69,10 +69,12 @@ describe("Analyst Agent static demonstration", () => {
     expect(wrapper.get("[data-test=analyst-result-label]").text()).toContain(
       "Static sample result"
     );
-    expect(wrapper.text()).not.toMatch(/created successfully|completed|progress|loading/i);
-    expect(wrapper.findAll("[data-test*=progress], [aria-label*=progress i]")).toHaveLength(
-      0
+    expect(wrapper.text()).not.toMatch(
+      /created successfully|completed|progress|loading/i
     );
+    expect(
+      wrapper.findAll("[data-test*=progress], [aria-label*=progress i]")
+    ).toHaveLength(0);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });
@@ -91,7 +93,9 @@ describe("Analyst Agent static demonstration", () => {
 
     const anchors = appendSpy.mock.calls
       .map(([node]) => node)
-      .filter((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
+      .filter(
+        (node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement
+      );
     const anchor = anchors.at(-1);
     expect(anchor).toBeDefined();
     expect(anchor?.getAttribute("href")).toBe(
@@ -106,9 +110,9 @@ describe("Analyst Agent static demonstration", () => {
     routerBack.mockReset();
     const wrapper = mountDemo();
 
-    expect(wrapper.findAll(".chat-header, .chat-messages, .message-avatar")).toHaveLength(
-      0
-    );
+    expect(
+      wrapper.findAll(".chat-header, .chat-messages, .message-avatar")
+    ).toHaveLength(0);
     expect(wrapper.find("[data-test=analyst-question]").classes()).toEqual([]);
     expect(wrapper.find("[data-test=analyst-result]").classes()).toEqual([]);
     expect(wrapper.findAll(".analyst-message")).toHaveLength(0);

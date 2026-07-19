@@ -27,9 +27,9 @@ describe("CitationReferenceList", () => {
   });
 
   it("renders nothing when references are empty or absent", () => {
-    expect(mountList({ references: [], ns: "m0" }).find(".doc-list").exists()).toBe(
-      false
-    );
+    expect(
+      mountList({ references: [], ns: "m0" }).find(".doc-list").exists()
+    ).toBe(false);
     expect(mountList({ ns: "m0" }).find(".doc-list").exists()).toBe(false);
   });
 

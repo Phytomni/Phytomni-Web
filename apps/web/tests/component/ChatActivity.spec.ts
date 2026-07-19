@@ -27,7 +27,10 @@ const i18n = createI18n({
           count: "{count}",
           status: { running: "In progress", done: "Done" },
         },
-        tools: { knowledge_search: "Searching literature", generic: "Calling a tool" },
+        tools: {
+          knowledge_search: "Searching literature",
+          generic: "Calling a tool",
+        },
         steps: { retrieving: "Retrieving" },
         reasoning: { show: "Show reasoning", hide: "Hide reasoning" },
       },
