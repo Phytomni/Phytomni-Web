@@ -114,7 +114,10 @@ describe("useRefreshMessage", () => {
     mockGetQuery.mockResolvedValueOnce({
       data: {
         tool_name: "KnowledgeAgent",
-        answer: JSON.stringify({ content: "New answer", doc_list: [{ pm: "1" }] }),
+        answer: JSON.stringify({
+          content: "New answer",
+          doc_list: [{ pm: "1" }],
+        }),
         id: "msg-2",
         reaction_type: "1",
         status: "done",
@@ -220,7 +223,9 @@ describe("useRefreshMessage", () => {
     await refreshMessage(1);
 
     // The error message is triggered
-    expect(elMessageErrorSpy).toHaveBeenCalledWith("Refresh failed, please try again");
+    expect(elMessageErrorSpy).toHaveBeenCalledWith(
+      "Refresh failed, please try again"
+    );
 
     // isSending is reset to false in finally
     expect(getChatState("A").isSending).toBe(false);

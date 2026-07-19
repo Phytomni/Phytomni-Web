@@ -27,27 +27,43 @@ import { ElMessage } from "element-plus";
 
 describe("deriveAnalystLogRowId / deriveAnalystLogTaskId", () => {
   it("accepts only positive-decimal row ids", () => {
-    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: "42" })).toBe(
-      "42"
-    );
-    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: 7 as any })).toBe(
-      "7"
-    );
-    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: "0" })).toBeUndefined();
-    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: "-3" })).toBeUndefined();
-    expect(deriveAnalystLogRowId({ role: "assistant", content: "", id: "12a" })).toBeUndefined();
-    expect(deriveAnalystLogRowId({ role: "assistant", content: "" })).toBeUndefined();
+    expect(
+      deriveAnalystLogRowId({ role: "assistant", content: "", id: "42" })
+    ).toBe("42");
+    expect(
+      deriveAnalystLogRowId({ role: "assistant", content: "", id: 7 as any })
+    ).toBe("7");
+    expect(
+      deriveAnalystLogRowId({ role: "assistant", content: "", id: "0" })
+    ).toBeUndefined();
+    expect(
+      deriveAnalystLogRowId({ role: "assistant", content: "", id: "-3" })
+    ).toBeUndefined();
+    expect(
+      deriveAnalystLogRowId({ role: "assistant", content: "", id: "12a" })
+    ).toBeUndefined();
+    expect(
+      deriveAnalystLogRowId({ role: "assistant", content: "" })
+    ).toBeUndefined();
   });
 
   it("accepts only non-null non-empty trimmed task ids and never falls back to row id", () => {
     expect(
-      deriveAnalystLogTaskId({ role: "assistant", content: "", task_id: "task-1" })
+      deriveAnalystLogTaskId({
+        role: "assistant",
+        content: "",
+        task_id: "task-1",
+      })
     ).toBe("task-1");
     expect(
       deriveAnalystLogTaskId({ role: "assistant", content: "", task_id: "  " })
     ).toBeUndefined();
     expect(
-      deriveAnalystLogTaskId({ role: "assistant", content: "", task_id: null as any })
+      deriveAnalystLogTaskId({
+        role: "assistant",
+        content: "",
+        task_id: null as any,
+      })
     ).toBeUndefined();
     expect(
       deriveAnalystLogTaskId({ role: "assistant", content: "", id: "99" })
@@ -81,7 +97,9 @@ describe("useLogView", () => {
     };
   }
 
-  function msg(partial: Partial<ChatMessage> & { id?: string; task_id?: string }): ChatMessage {
+  function msg(
+    partial: Partial<ChatMessage> & { id?: string; task_id?: string }
+  ): ChatMessage {
     return {
       role: "assistant",
       content: "reply",
@@ -130,9 +148,9 @@ describe("useLogView", () => {
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
     expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "11" });
     expect(getChatState("A").logData["11"]).toBe("cached-log");
-    expect(getChatState("A").activityExpandedByMessage[analystLogActivityKey("11")]).toBe(
-      true
-    );
+    expect(
+      getChatState("A").activityExpandedByMessage[analystLogActivityKey("11")]
+    ).toBe(true);
 
     await setLogExpanded(message, false);
     await setLogExpanded(message, true);
@@ -195,7 +213,9 @@ describe("useLogView", () => {
     expect(form.get("task_id")).not.toBe("88");
 
     // refetch after update uses rowId
-    expect(mockGetAnalystAgentLog.mock.calls.some((c) => c[0].id === "88")).toBe(true);
+    expect(
+      mockGetAnalystAgentLog.mock.calls.some((c) => c[0].id === "88")
+    ).toBe(true);
 
     const noTask = msg({ id: "99" });
     currentChat.value = { messages: [noTask] };
@@ -213,7 +233,10 @@ describe("useLogView", () => {
     await setLogExpanded(message, true);
     expect(getChatState("A").logErrorKinds["5"]).toBe("fetch");
 
-    mockGetAnalystAgentLog.mockResolvedValueOnce({ code: 200, data: "recovered" });
+    mockGetAnalystAgentLog.mockResolvedValueOnce({
+      code: 200,
+      data: "recovered",
+    });
     await retryLog(message);
     expect(getChatState("A").logErrorKinds["5"]).toBeUndefined();
     expect(mockGetAnalystAgentLog).toHaveBeenLastCalledWith({ id: "5" });
@@ -224,10 +247,15 @@ describe("useLogView", () => {
     expect(getChatState("A").logErrorKinds["5"]).toBe("update");
 
     mockUpdateAnalystAgentLog.mockResolvedValueOnce({ code: 200 });
-    mockGetAnalystAgentLog.mockResolvedValueOnce({ code: 200, data: "after-patch" });
+    mockGetAnalystAgentLog.mockResolvedValueOnce({
+      code: 200,
+      data: "after-patch",
+    });
     await retryLog(message);
     expect(getChatState("A").logErrorKinds["5"]).toBeUndefined();
-    const lastPatch = mockUpdateAnalystAgentLog.mock.calls.at(-1)![0] as FormData;
+    const lastPatch = mockUpdateAnalystAgentLog.mock.calls.at(
+      -1
+    )![0] as FormData;
     expect(lastPatch.get("task_id")).toBe("task-5");
     expect(mockGetAnalystAgentLog).toHaveBeenLastCalledWith({ id: "5" });
   });
@@ -284,7 +312,8 @@ describe("useLogView", () => {
 
     const message = msg({ id: "41", task_id: "task-41", showLog: true });
     currentChat.value = { messages: [message] };
-    getChatState("A").activityExpandedByMessage[analystLogActivityKey("41")] = true;
+    getChatState("A").activityExpandedByMessage[analystLogActivityKey("41")] =
+      true;
 
     const { updateLog } = makeComposable();
     const inflight = updateLog(message);

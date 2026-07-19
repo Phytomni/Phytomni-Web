@@ -12,13 +12,13 @@ describe("linked password messages", () => {
     });
     const t = i18n.global.t;
     expect(t("register.validation.passwordMinLength8")).toBe(
-      "Password must be at least 8 characters",
+      "Password must be at least 8 characters"
     );
     expect(t("user.validation.passwordNeedUppercase")).toBe(
-      "Password must contain uppercase letters",
+      "Password must contain uppercase letters"
     );
     expect(t("profile.security.confirmPasswordPlaceholder")).toBe(
-      "Please confirm new password",
+      "Please confirm new password"
     );
   });
 

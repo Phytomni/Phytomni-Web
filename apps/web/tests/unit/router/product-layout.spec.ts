@@ -18,8 +18,8 @@ function flattenLeafRoutes(records: RouteRecord[]): RouteRecord[] {
     record.children?.length
       ? flattenLeafRoutes(record.children)
       : record.component
-        ? [record]
-        : [],
+      ? [record]
+      : []
   );
 }
 
@@ -65,7 +65,7 @@ describe("product route metadata", () => {
 
     expect(routerSource?.component).toBeDefined();
     expect(leafRoutes.map((route) => route.path)).not.toContain(
-      "/system/user-auth",
+      "/system/user-auth"
     );
   });
 });

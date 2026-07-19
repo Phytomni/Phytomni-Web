@@ -191,7 +191,7 @@ describe("useA2uiInteraction", () => {
 
   it("refuses a runtime copied to a different message or dialogue", async () => {
     const transport = vi.fn(async (envelope: A2uiActionEnvelope) =>
-      terminal(envelope),
+      terminal(envelope)
     );
     const message = messageWith(transport) as ChatMessage & {
       dialogue_id: string;
@@ -331,9 +331,9 @@ describe("useA2uiInteraction", () => {
     expect(
       inputMessage.blocks?.filter((block) =>
         ["ready", "submitting", "temporarily_rejected"].includes(
-          block.a2ui?.state.status ?? "",
-        ),
-      ),
+          block.a2ui?.state.status ?? ""
+        )
+      )
     ).toHaveLength(1);
   });
 
@@ -343,7 +343,7 @@ describe("useA2uiInteraction", () => {
       surface_id: "surface-open",
     };
     const transport = vi.fn(async (envelope: A2uiActionEnvelope) =>
-      inputRequired(envelope),
+      inputRequired(envelope)
     );
     const message = messageWith(transport, {
       blocks: [

@@ -232,9 +232,7 @@ describe("PHY_TOKENS", () => {
     const surfaces = [rowCss, contentCss, chatIndex].join("\n");
 
     expect(surfaces).not.toMatch(/backdrop-filter\s*:/);
-    expect(surfaces).not.toMatch(
-      /linear-gradient\s*\(|radial-gradient\s*\(/
-    );
+    expect(surfaces).not.toMatch(/linear-gradient\s*\(|radial-gradient\s*\(/);
     // Banned competing brand blues must not reappear as bubble fills.
     for (const hex of ["#409eff", "#66b1ff", "#1890ff", "#626aef"]) {
       expect(surfaces.toLowerCase()).not.toContain(hex);

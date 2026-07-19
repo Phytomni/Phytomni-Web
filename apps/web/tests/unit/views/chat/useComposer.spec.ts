@@ -249,7 +249,9 @@ describe("useComposer", () => {
 
       expect(chatStates.selectedAgent.value).toBe("");
       expect(chatStates.getChatState("B").selectedAgent).toBe("DataAgent");
-      expect(chatStates.getChatState("B").messageInput).toBe("@DataAgent,other");
+      expect(chatStates.getChatState("B").messageInput).toBe(
+        "@DataAgent,other"
+      );
     });
   });
 });

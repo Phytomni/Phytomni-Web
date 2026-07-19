@@ -9,9 +9,7 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(REAL_DEEP_GENOME_MARKDOWN).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );
-    expect(REAL_DEEP_GENOME_MARKDOWN).toContain(
-      "| d18-k | Kotaketamanishiki"
-    );
+    expect(REAL_DEEP_GENOME_MARKDOWN).toContain("| d18-k | Kotaketamanishiki");
     expect(REAL_DEEP_GENOME_MARKDOWN).toContain(
       "![Representative rice gene expression figure](/logo.png)"
     );

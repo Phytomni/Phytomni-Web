@@ -1,10 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import type { UploadFile } from "@/views/chat/types";
-import {
-  clearPendingChat,
-  isLocalStorageChat,
-} from "@/utils/pending-chat";
+import { clearPendingChat, isLocalStorageChat } from "@/utils/pending-chat";
 import type { RekeyChatStateOutcome } from "@/views/chat/types";
 
 // This is a characterization test of the just-extracted (behavior-unchanged) parallel
@@ -266,10 +263,7 @@ describe("useChatStates renderedChat ownership", () => {
       blocks: [a2uiBlock],
       id: "stream-a",
     };
-    const messagesA = [
-      { role: "user", content: "q-A" },
-      streamingPlaceholder,
-    ];
+    const messagesA = [{ role: "user", content: "q-A" }, streamingPlaceholder];
     const messagesB = [
       { role: "user", content: "q-B" },
       { role: "assistant", content: "a-B", id: "msg-b" },
@@ -446,18 +440,21 @@ describe("useChatStates rekeyChatState", () => {
 
 /** Mirrors index.vue reconcileMatchedDialogue for behavioral contract tests. */
 function reconcileMatchedDialogueHarness(opts: {
-  rekeyChatState: (
-    from: string,
-    to: string
-  ) => RekeyChatStateOutcome;
+  rekeyChatState: (from: string, to: string) => RekeyChatStateOutcome;
   currentChatId: { value: string };
   updateUrlWithChatId: (id: string) => void;
   tempId: string;
   serverId: string;
   pendingKey?: string;
 }) {
-  const { rekeyChatState, currentChatId, updateUrlWithChatId, tempId, serverId, pendingKey } =
-    opts;
+  const {
+    rekeyChatState,
+    currentChatId,
+    updateUrlWithChatId,
+    tempId,
+    serverId,
+    pendingKey,
+  } = opts;
   const wasCurrent = currentChatId.value === tempId;
   const rekey = rekeyChatState(tempId, serverId);
   const benign =
@@ -473,7 +470,11 @@ function reconcileMatchedDialogueHarness(opts: {
       clearPendingChat(tempId);
     }
   } else if (rekey.outcome === "target-collision") {
-    return { status: "retained" as const, tempId, reason: "collision" as const };
+    return {
+      status: "retained" as const,
+      tempId,
+      reason: "collision" as const,
+    };
   }
 
   if (reconciled && wasCurrent && currentChatId.value === tempId) {

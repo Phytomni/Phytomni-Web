@@ -142,7 +142,13 @@ describe("buildDisplayReferences — XSS invariant", () => {
 
   it("renders the rich branch when a doc carries BOTH title and au/ti (flip)", () => {
     const [ref] = buildDisplayReferences([
-      { title: "file.pdf", au: "Smith J", ti: "Gene study", so: "Nature", py: 2020 },
+      {
+        title: "file.pdf",
+        au: "Smith J",
+        ti: "Gene study",
+        so: "Nature",
+        py: 2020,
+      },
     ]);
     // rich branch fired (doc-citation wrapper), title-only branch did NOT
     expect(ref.html).toContain('<div class="doc-citation">');
@@ -153,20 +159,33 @@ describe("buildDisplayReferences — XSS invariant", () => {
 
   it("neutralizes a javascript: DOI even when the enriched doc also has a title", () => {
     const [ref] = buildDisplayReferences([
-      { title: "file.pdf", au: "A", ti: "T", so: "S", dl: "javascript:alert(1)" },
+      {
+        title: "file.pdf",
+        au: "A",
+        ti: "T",
+        so: "S",
+        dl: "javascript:alert(1)",
+      },
     ]);
     expect(ref.html).toContain('<a href="#" target="_blank" class="doi-link">');
     expect(ref.html).not.toContain('href="javascript:');
   });
 
   it("namespaces ids with ns when provided", () => {
-    const out = buildDisplayReferences([{ title: "A" }, { au: "X", ti: "Y", so: "Z" }], "m3");
+    const out = buildDisplayReferences(
+      [{ title: "A" }, { au: "X", ti: "Y", so: "Z" }],
+      "m3"
+    );
     expect(out.map((r) => r.id)).toEqual(["m3-ref-1", "m3-ref-2"]);
   });
 
   it("falls back to bare ref-N when ns is empty or absent (back-compat)", () => {
-    expect(buildDisplayReferences([{ title: "A" }]).map((r) => r.id)).toEqual(["ref-1"]);
-    expect(buildDisplayReferences([{ title: "A" }], "").map((r) => r.id)).toEqual(["ref-1"]);
+    expect(buildDisplayReferences([{ title: "A" }]).map((r) => r.id)).toEqual([
+      "ref-1",
+    ]);
+    expect(
+      buildDisplayReferences([{ title: "A" }], "").map((r) => r.id)
+    ).toEqual(["ref-1"]);
   });
 
   it("sanitizes illegal characters out of ns before building the id", () => {

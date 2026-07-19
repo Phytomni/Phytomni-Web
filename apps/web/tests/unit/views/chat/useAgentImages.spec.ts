@@ -43,7 +43,9 @@ describe("useAgentImages", () => {
     await flushPromises();
 
     expect(mockGetObsImages).toHaveBeenCalledOnce();
-    expect(mockGetObsImages).toHaveBeenCalledWith({ obs_path: "obs://bucket/path" });
+    expect(mockGetObsImages).toHaveBeenCalledWith({
+      obs_path: "obs://bucket/path",
+    });
     expect(geneNetworkImages["msg-001"]).toEqual([
       "http://obs/img1.png",
       "http://obs/img2.png",
@@ -104,8 +106,12 @@ describe("useAgentImages", () => {
     await flushPromises();
 
     expect(mockGetObsImages).toHaveBeenCalledTimes(2);
-    expect(mockGetObsImages).toHaveBeenNthCalledWith(1, { obs_path: "obs://p1" });
-    expect(mockGetObsImages).toHaveBeenNthCalledWith(2, { obs_path: "obs://p2" });
+    expect(mockGetObsImages).toHaveBeenNthCalledWith(1, {
+      obs_path: "obs://p1",
+    });
+    expect(mockGetObsImages).toHaveBeenNthCalledWith(2, {
+      obs_path: "obs://p2",
+    });
     expect(digitalDesignImages["msg-003"]).toEqual([
       "http://obs/a.png",
       "http://obs/b.png",
@@ -162,7 +168,10 @@ describe("useAgentImages", () => {
   });
 
   it("dedup: GeneNetworkAgent does not re-fetch on a second change with the same id", async () => {
-    mockGetObsImages.mockResolvedValue({ code: 200, data: ["http://obs/x.png"] });
+    mockGetObsImages.mockResolvedValue({
+      code: 200,
+      data: ["http://obs/x.png"],
+    });
 
     const currentChat = ref<any>(null);
     const { geneNetworkImages } = useAgentImages(currentChat);

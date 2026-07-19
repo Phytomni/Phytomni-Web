@@ -91,7 +91,10 @@ describe("redirectIfAuthed", () => {
   it("returns true and redirects to safe target when authed", () => {
     (getToken as any).mockReturnValue("token-abc");
     const router = { replace: vi.fn() };
-    const result = redirectIfAuthed({ query: { redirect: "/history" } }, router);
+    const result = redirectIfAuthed(
+      { query: { redirect: "/history" } },
+      router
+    );
     expect(result).toBe(true);
     expect(router.replace).toHaveBeenCalledWith("/history");
   });

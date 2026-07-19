@@ -16,13 +16,18 @@ describe("loadLocaleMessages", () => {
     expect(i18n.global.availableLocales).not.toContain("zh-CN");
     await loadLocaleMessages(i18n, "zh-CN");
     expect(i18n.global.availableLocales).toContain("zh-CN");
-    expect(Object.keys(i18n.global.getLocaleMessage("zh-CN")).length).toBeGreaterThan(0);
+    expect(
+      Object.keys(i18n.global.getLocaleMessage("zh-CN")).length
+    ).toBeGreaterThan(0);
   });
 
   it("is idempotent — a second call does not re-run the loader", async () => {
     const i18n = freshI18n();
     const spy = vi.fn(async () => ({ hello: "world" }));
-    const loaders = { "zh-CN": spy } as Record<SupportedLocales, () => Promise<Record<string, unknown>>>;
+    const loaders = { "zh-CN": spy } as Record<
+      SupportedLocales,
+      () => Promise<Record<string, unknown>>
+    >;
     await loadLocaleMessages(i18n, "zh-CN", loaders);
     await loadLocaleMessages(i18n, "zh-CN", loaders);
     expect(spy).toHaveBeenCalledTimes(1);
@@ -31,7 +36,10 @@ describe("loadLocaleMessages", () => {
   it("no-ops for an already-present locale (en-US)", async () => {
     const i18n = freshI18n();
     const spy = vi.fn(async () => ({}));
-    const loaders = { "en-US": spy } as Record<SupportedLocales, () => Promise<Record<string, unknown>>>;
+    const loaders = { "en-US": spy } as Record<
+      SupportedLocales,
+      () => Promise<Record<string, unknown>>
+    >;
     await loadLocaleMessages(i18n, "en-US", loaders);
     expect(spy).not.toHaveBeenCalled();
   });

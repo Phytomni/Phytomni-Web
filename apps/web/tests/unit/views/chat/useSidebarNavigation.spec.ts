@@ -145,7 +145,9 @@ describe("useSidebarNavigation", () => {
   it("openKnowledgeBase() navigates to /gene-display", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
-    const { openKnowledgeBase } = useSidebarNavigation(makeOpts(router, userStore));
+    const { openKnowledgeBase } = useSidebarNavigation(
+      makeOpts(router, userStore)
+    );
     openKnowledgeBase();
     expect(router.push).toHaveBeenCalledWith("/gene-display");
   });

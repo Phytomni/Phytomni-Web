@@ -76,9 +76,9 @@ describe("processInlineMarkdown — XSS-critical paths", () => {
     const host = document.createElement("div");
     host.innerHTML = imageOut + cifOut;
     expect(host.querySelector("img")?.getAttribute("src")).toBe("#");
-    expect(
-      host.querySelector(".cif-container")?.getAttribute("data-src")
-    ).toBe("#");
+    expect(host.querySelector(".cif-container")?.getAttribute("data-src")).toBe(
+      "#"
+    );
   });
 });
 

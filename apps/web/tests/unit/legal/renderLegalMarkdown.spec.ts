@@ -3,7 +3,7 @@ import { renderLegalMarkdown } from "@/legal/renderLegalMarkdown";
 
 describe("renderLegalMarkdown", () => {
   it("escapes raw HTML instead of executing it", () => {
-    const html = renderLegalMarkdown('Hello <script>alert(1)</script>');
+    const html = renderLegalMarkdown("Hello <script>alert(1)</script>");
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toContain("<script>");
   });

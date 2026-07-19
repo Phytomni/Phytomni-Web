@@ -80,7 +80,8 @@ describe("canonical agent locale names", () => {
     for (const [toolName, titleKey] of Object.entries(
       CANONICAL_AGENT_PAGE_TITLE_KEYS
     )) {
-      const canonicalTool = toolName as keyof typeof CANONICAL_AGENT_PAGE_TITLE_KEYS;
+      const canonicalTool =
+        toolName as keyof typeof CANONICAL_AGENT_PAGE_TITLE_KEYS;
       expect(getMessage(zhCN, titleKey), `${toolName} zh-CN title`).toBe(
         CANONICAL_AGENT_ZH_NAMES[canonicalTool]
       );
@@ -93,26 +94,22 @@ describe("canonical agent locale names", () => {
   it("keeps product-approved Chinese display names for renamed agents", () => {
     expect(CANONICAL_AGENT_ZH_NAMES.ChatAgent).toBe("对话智能体");
     expect(CANONICAL_AGENT_ZH_NAMES.BriefGeneAgent).toBe("基因综述智能体");
-    expect(CANONICAL_AGENT_ZH_NAMES.DeepGenomeAgent).toBe(
-      "基因深度分析智能体"
-    );
+    expect(CANONICAL_AGENT_ZH_NAMES.DeepGenomeAgent).toBe("基因深度分析智能体");
     expect(CANONICAL_AGENT_ZH_NAMES.InSilicoResearchAgent).toBe(
       "虚拟研究智能体"
     );
   });
 
   it("keeps BriefGeneAgent Chinese copy on the gene-review meaning", () => {
-    expect(getMessage(zhCN, CANONICAL_AGENT_I18N_KEYS.BriefGeneAgent)).toContain(
-      "基因综述"
-    );
+    expect(
+      getMessage(zhCN, CANONICAL_AGENT_I18N_KEYS.BriefGeneAgent)
+    ).toContain("基因综述");
   });
 
   it("maps every picker option to a localized chat-agent label key", () => {
     const options = derivePickerOptions([...CANONICAL_AT_ABLE_TOOLS]);
     for (const option of options) {
-      expect(option.labelKey).toBe(
-        CANONICAL_AGENT_I18N_KEYS[option.tool]
-      );
+      expect(option.labelKey).toBe(CANONICAL_AGENT_I18N_KEYS[option.tool]);
       expect(getMessage(enUS, option.labelKey)).toEqual(expect.any(String));
       expect(getMessage(zhCN, option.labelKey)).toEqual(expect.any(String));
       expect(option.displayName).toBe(

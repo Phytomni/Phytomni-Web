@@ -64,7 +64,10 @@ describe("matchesChat — ID + exact title only", () => {
   };
 
   it("returns true when chat.dialogue_id === pending.id", () => {
-    const chat: ChatListEntry = { dialogue_id: "stored-id-123", title: "anything" };
+    const chat: ChatListEntry = {
+      dialogue_id: "stored-id-123",
+      title: "anything",
+    };
     expect(matchesChat(chat, pendingBase, "temp-001")).toBe(true);
   });
 
@@ -84,7 +87,7 @@ describe("matchesChat — ID + exact title only", () => {
   it("returns false when chat.title is only a prefix of the pending content (no substring fuzzy)", () => {
     const chat: ChatListEntry = {
       dialogue_id: "backend-real-id",
-      title: "exact title",  // shorter than pending.messages[0].content, so equality must fail
+      title: "exact title", // shorter than pending.messages[0].content, so equality must fail
     };
     expect(matchesChat(chat, pendingBase, "temp-001")).toBe(false);
   });
@@ -130,12 +133,9 @@ describe("safeParse — log + null on fail", () => {
     });
   });
 
-  it.each([null, undefined, ""])(
-    "returns null for empty input %s",
-    (input) => {
-      expect(safeParse(input)).toBeNull();
-    }
-  );
+  it.each([null, undefined, ""])("returns null for empty input %s", (input) => {
+    expect(safeParse(input)).toBeNull();
+  });
 
   it("returns null + logs on malformed JSON", () => {
     const errSpy = vi.spyOn(console, "error").mockReturnValue(undefined);
@@ -184,9 +184,7 @@ describe("writePendingChat", () => {
       { role: "assistant", content: "" },
     ];
     writePendingChat("new_123", messages, { title: "explicit caller title" });
-    const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
-    );
+    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
     expect(parsed.title).toBe("explicit caller title");
   });
 
@@ -197,9 +195,7 @@ describe("writePendingChat", () => {
       { role: "user", content: "second user" },
     ];
     writePendingChat("new_123", messages);
-    const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
-    );
+    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
     expect(parsed.title).toBe("second user");
   });
 
@@ -209,18 +205,14 @@ describe("writePendingChat", () => {
       { role: "system", content: "system msg" },
     ];
     writePendingChat("new_123", messages);
-    const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
-    );
+    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
     expect(parsed.title).toBe("");
   });
 
   it("title length exactly 49 chars → no truncation, no ellipsis", () => {
     const title49 = "x".repeat(49);
     writePendingChat("new_123", [{ role: "user", content: title49 }]);
-    const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
-    );
+    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
     expect(parsed.title).toBe(title49);
     expect(parsed.title.length).toBe(49);
   });
@@ -228,9 +220,7 @@ describe("writePendingChat", () => {
   it("title length exactly 50 chars → no truncation, no ellipsis (boundary)", () => {
     const title50 = "x".repeat(50);
     writePendingChat("new_123", [{ role: "user", content: title50 }]);
-    const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
-    );
+    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
     expect(parsed.title).toBe(title50);
     expect(parsed.title.length).toBe(50);
   });
@@ -238,9 +228,7 @@ describe("writePendingChat", () => {
   it("title length exactly 51 chars → substring(0, 50) + '...'", () => {
     const title51 = "x".repeat(51);
     writePendingChat("new_123", [{ role: "user", content: title51 }]);
-    const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
-    );
+    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
     expect(parsed.title).toBe("x".repeat(50) + "...");
     expect(parsed.title.length).toBe(53);
   });
@@ -276,9 +264,7 @@ describe("writePendingChat", () => {
       },
     ];
     writePendingChat("new_123", messages);
-    const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
-    );
+    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
     expect(parsed.messages[0].attachedFiles).toEqual([
       {
         name: "data.csv",
@@ -291,18 +277,14 @@ describe("writePendingChat", () => {
   });
 
   it("returns void with console.warn on empty-string dialogueId", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat("", [{ role: "user", content: "hi" }]);
     expect(localStorage.length).toBe(0);
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns void with console.warn on null dialogueId", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat(null as unknown as string, [
       { role: "user", content: "hi" },
     ]);
@@ -311,9 +293,7 @@ describe("writePendingChat", () => {
   });
 
   it("returns void with console.warn on undefined dialogueId", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat(undefined as unknown as string, [
       { role: "user", content: "hi" },
     ]);
@@ -322,18 +302,14 @@ describe("writePendingChat", () => {
   });
 
   it("returns void with console.warn on empty messages array", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat("new_123", []);
     expect(localStorage.length).toBe(0);
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns void with console.warn on null messages", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat("new_123", null as unknown as never[]);
     expect(localStorage.length).toBe(0);
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
@@ -413,9 +389,7 @@ describe("clearPendingChat", () => {
   });
 
   it("returns void with console.warn on invalid dialogueId", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     clearPendingChat("");
     clearPendingChat(null as unknown as string);
     clearPendingChat(undefined as unknown as string);
@@ -572,13 +546,9 @@ describe("blocking restore ordering (restorePendingChats skip contract)", () => 
     ];
     const reconciled: Array<{ tempId: string; serverId: string }> = [];
 
-    restorePendingChatsHarness(
-      knownChats,
-      new Set([tempId]),
-      (t, s) => {
-        reconciled.push({ tempId: t, serverId: s });
-      }
-    );
+    restorePendingChatsHarness(knownChats, new Set([tempId]), (t, s) => {
+      reconciled.push({ tempId: t, serverId: s });
+    });
 
     expect(reconciled).toEqual([]);
     expect(localStorage.getItem(`pending_chat_${tempId}`)).not.toBeNull();

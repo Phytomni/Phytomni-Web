@@ -3,7 +3,8 @@ import { buildDisplayContent } from "@/views/gene-display/gene-markdown";
 
 describe("buildDisplayContent", () => {
   it("strips the DOC TITLES section", () => {
-    const raw = "# Gene\n\nBody text\n\n--- DOC TITLES ---\n1. Ref one\n2. Ref two";
+    const raw =
+      "# Gene\n\nBody text\n\n--- DOC TITLES ---\n1. Ref one\n2. Ref two";
     const out = buildDisplayContent(raw);
     expect(out).not.toContain("DOC TITLES");
     expect(out).not.toContain("Ref one");

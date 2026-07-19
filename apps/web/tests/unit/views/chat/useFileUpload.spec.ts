@@ -39,7 +39,12 @@ describe("useFileUpload", () => {
     const { handleFileChange } = makeComposable();
 
     const rawFile = new File(["content"], "a.txt", { type: "text/plain" });
-    handleFileChange({ name: "a.txt", size: 10, type: "text/plain", raw: rawFile });
+    handleFileChange({
+      name: "a.txt",
+      size: 10,
+      type: "text/plain",
+      raw: rawFile,
+    });
 
     expect(chatState.fileList).toHaveLength(1);
     expect(chatState.fileList[0].name).toBe("a.txt");
@@ -55,7 +60,9 @@ describe("useFileUpload", () => {
   it("removeFile removes a file from chatState.fileList and calls closeHeader when empty", async () => {
     const { removeFile } = makeComposable();
 
-    chatState.fileList = [{ name: "b.txt", size: 5, type: "text/plain", file: null }];
+    chatState.fileList = [
+      { name: "b.txt", size: 5, type: "text/plain", file: null },
+    ];
 
     removeFile(0);
 
@@ -69,7 +76,9 @@ describe("useFileUpload", () => {
   it("watch: openHeader when fileList becomes non-empty", async () => {
     makeComposable();
 
-    fileList.value = [{ name: "c.txt", size: 3, type: "text/plain", file: null }];
+    fileList.value = [
+      { name: "c.txt", size: 3, type: "text/plain", file: null },
+    ];
     await nextTick();
 
     expect(composerRef.value!.openHeader).toHaveBeenCalled();
@@ -79,7 +88,9 @@ describe("useFileUpload", () => {
     makeComposable();
 
     // First make it non-empty to trigger openHeader
-    fileList.value = [{ name: "d.txt", size: 3, type: "text/plain", file: null }];
+    fileList.value = [
+      { name: "d.txt", size: 3, type: "text/plain", file: null },
+    ];
     await nextTick();
     vi.clearAllMocks();
 

@@ -74,7 +74,12 @@ describe("userStore.expertEnabled", () => {
   it("is set from the tool-permissions expert_enabled flag", async () => {
     (getUserTool as any).mockResolvedValue({
       code: 200,
-      data: { permission: "user", tool_list: [], permission_list: [], expert_enabled: true },
+      data: {
+        permission: "user",
+        tool_list: [],
+        permission_list: [],
+        expert_enabled: true,
+      },
     });
     const store = userStore();
     await store.getUserTools();

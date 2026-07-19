@@ -199,9 +199,7 @@ describe("sanitizeHref — scheme allow-list for interpolated href URLs", () => 
 // (the MarkdownViewer source body, the DeepGenome reference text fields).
 describe("escapeHtml — entity-encode text before v-html", () => {
   it("encodes the five HTML-significant characters", () => {
-    expect(escapeHtml(`& < > " '`)).toBe(
-      "&amp; &lt; &gt; &quot; &#039;"
-    );
+    expect(escapeHtml(`& < > " '`)).toBe("&amp; &lt; &gt; &quot; &#039;");
   });
 
   it("neutralizes an onerror image payload into inert text", () => {

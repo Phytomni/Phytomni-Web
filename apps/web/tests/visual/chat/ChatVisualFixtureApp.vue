@@ -417,8 +417,7 @@ const isA2uiLifecycleContentFixture = computed(
 );
 
 const isStructuredContentFixture = computed(
-  () =>
-    isPhase3CContentFixture.value || isA2uiLifecycleContentFixture.value
+  () => isPhase3CContentFixture.value || isA2uiLifecycleContentFixture.value
 );
 
 const contentMessages = computed((): ChatMessage[] => {

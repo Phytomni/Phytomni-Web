@@ -112,14 +112,20 @@ describe("useChatHistoryActions", () => {
       expect(formData.get("rename")).toBe("New title");
 
       expect(onChatRenamed).toHaveBeenCalledTimes(1);
-      expect(onChatRenamed).toHaveBeenCalledWith({ ...chat, title: "New title" });
+      expect(onChatRenamed).toHaveBeenCalledWith({
+        ...chat,
+        title: "New title",
+      });
       expect(c.renameDialogVisible.value).toBe(false);
       expect(mockElSuccess).toHaveBeenCalledWith("Renamed successfully");
     });
 
     it("non-200 → ElMessage.error, does not call onChatRenamed", async () => {
       const chat = makeChat();
-      mockRenameHistory.mockResolvedValueOnce({ code: 500, message: "Rename failed" } as any);
+      mockRenameHistory.mockResolvedValueOnce({
+        code: 500,
+        message: "Rename failed",
+      } as any);
 
       const c = makeComposable();
       c.handleChatAction("rename", chat);
@@ -142,7 +148,9 @@ describe("useChatHistoryActions", () => {
       await c.handleRenameConfirm();
 
       expect(onChatRenamed).not.toHaveBeenCalled();
-      expect(mockElError).toHaveBeenCalledWith("Rename failed, please try again");
+      expect(mockElError).toHaveBeenCalledWith(
+        "Rename failed, please try again"
+      );
     });
   });
 
@@ -191,7 +199,10 @@ describe("useChatHistoryActions", () => {
     it("non-200 → ElMessage.error, no emit called", async () => {
       const chat = makeChat({ dialogue_id: "dx" });
       chatListData = [chat];
-      mockDeleteHistory.mockResolvedValueOnce({ code: 500, message: "Delete failed" } as any);
+      mockDeleteHistory.mockResolvedValueOnce({
+        code: 500,
+        message: "Delete failed",
+      } as any);
 
       const c = makeComposable();
       c.handleChatAction("delete", chat);

@@ -71,7 +71,9 @@ describe("removeToken / getExpiresIn / setExpiresIn / removeExpiresIn — thin C
   });
 
   it("removeToken delegates to Cookies.remove(Admin-Token)", () => {
-    const removeSpy = vi.spyOn(Cookies, "remove").mockReturnValue(undefined as any);
+    const removeSpy = vi
+      .spyOn(Cookies, "remove")
+      .mockReturnValue(undefined as any);
     removeToken();
     expect(removeSpy).toHaveBeenCalledWith("Admin-Token");
   });
@@ -93,7 +95,9 @@ describe("removeToken / getExpiresIn / setExpiresIn / removeExpiresIn — thin C
   });
 
   it("removeExpiresIn delegates to Cookies.remove(Admin-Expires-In)", () => {
-    const removeSpy = vi.spyOn(Cookies, "remove").mockReturnValue(undefined as any);
+    const removeSpy = vi
+      .spyOn(Cookies, "remove")
+      .mockReturnValue(undefined as any);
     removeExpiresIn();
     expect(removeSpy).toHaveBeenCalledWith("Admin-Expires-In");
   });

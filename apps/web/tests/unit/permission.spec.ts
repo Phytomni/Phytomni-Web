@@ -37,7 +37,9 @@ import { getToken } from "@/utils";
 import { ElNotification } from "element-plus";
 
 const mockGetToken = getToken as unknown as ReturnType<typeof vi.fn>;
-const mockElNotification = ElNotification as unknown as ReturnType<typeof vi.fn>;
+const mockElNotification = ElNotification as unknown as ReturnType<
+  typeof vi.fn
+>;
 // setTimeout(0) flushes the microtask chain (guard calls next() inside
 // getUserTools .then / .catch().finally).
 const flush = () => new Promise((r) => setTimeout(r, 0));

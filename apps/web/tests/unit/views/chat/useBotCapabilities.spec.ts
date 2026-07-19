@@ -104,7 +104,9 @@ describe("useBotCapabilities", () => {
     expect(state.byTool.value.KnowledgeAgent?.enabled).toBe(false);
     expect(state.byTool.value.AnalystAgent?.enabled).toBe(false);
     expect(state.capabilities.value).toHaveLength(CANONICAL_AGENT_TOOLS.length);
-    expect(state.capabilities.value.every((item) => item.tool !== "UnknownAgent")).toBe(true);
+    expect(
+      state.capabilities.value.every((item) => item.tool !== "UnknownAgent")
+    ).toBe(true);
   });
 
   it("rejects oversized manifests instead of widening the DTO", async () => {

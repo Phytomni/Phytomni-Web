@@ -25,9 +25,13 @@ describe("e2e UX i18n keys", () => {
       const zh = getMessage(zhCN, key);
       const en = getMessage(enUS, key);
       expect(zh, `${key} zh-CN`).toEqual(expect.any(String));
-      expect((zh as string).length, `${key} zh-CN non-empty`).toBeGreaterThan(0);
+      expect((zh as string).length, `${key} zh-CN non-empty`).toBeGreaterThan(
+        0
+      );
       expect(en, `${key} en-US`).toEqual(expect.any(String));
-      expect((en as string).length, `${key} en-US non-empty`).toBeGreaterThan(0);
+      expect((en as string).length, `${key} en-US non-empty`).toBeGreaterThan(
+        0
+      );
     });
   }
 

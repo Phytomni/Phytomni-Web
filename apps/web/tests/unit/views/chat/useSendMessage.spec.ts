@@ -79,7 +79,9 @@ describe("useSendMessage", () => {
   let selectChat: ReturnType<typeof vi.fn>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
 
-  function makeState(overrides: Partial<ChatStateRecord> = {}): ChatStateRecord {
+  function makeState(
+    overrides: Partial<ChatStateRecord> = {}
+  ): ChatStateRecord {
     return {
       isSending: false,
       messageInput: "hi",
@@ -114,7 +116,11 @@ describe("useSendMessage", () => {
     };
     currentChatId = ref("A");
     currentChat = ref({ messages: [] });
-    composerRef = ref({ closeHeader: vi.fn(), openHeader: vi.fn(), popoverVisible: false });
+    composerRef = ref({
+      closeHeader: vi.fn(),
+      openHeader: vi.fn(),
+      popoverVisible: false,
+    });
     chatList = ref([
       { id: 1, dialogue_id: "A", title: "t", date: "", isFavorite: false },
       { id: 2, dialogue_id: "B", title: "t2", date: "", isFavorite: false },
@@ -589,7 +595,13 @@ describe("useSendMessage", () => {
     currentChat.value = { messages: [] };
     states.set("new_888", makeState({ messageInput: "hello" }));
     chatList.value = [
-      { id: 99, dialogue_id: "wrong-first", title: "t", date: "", isFavorite: false },
+      {
+        id: 99,
+        dialogue_id: "wrong-first",
+        title: "t",
+        date: "",
+        isFavorite: false,
+      },
     ];
 
     mockGetQueryAbortable.mockResolvedValueOnce({
@@ -623,7 +635,8 @@ describe("useSendMessage", () => {
     state.messageInput = "late send";
     currentChat.value = { messages: [] };
 
-    getChatState = (dialogueId: string) => chatStatesApi.getChatState(dialogueId);
+    getChatState = (dialogueId: string) =>
+      chatStatesApi.getChatState(dialogueId);
 
     mockGetQueryAbortable.mockResolvedValueOnce({
       data: {
@@ -946,9 +959,7 @@ describe("useSendMessage", () => {
     expect(state.isSending).toBe(false);
     expect(state.messageInput).toBe("second draft");
     expect(
-      state.renderedChat!.messages.some(
-        (m) => m.content === "stale-answer-1"
-      )
+      state.renderedChat!.messages.some((m) => m.content === "stale-answer-1")
     ).toBe(false);
 
     // Mirror the coordinator's successful temp -> server rekey/history list.
@@ -1120,7 +1131,11 @@ describe("useSendMessage", () => {
   it("Expert rejects unknown or malformed response tools through the safe send-failure path", async () => {
     for (const data of [
       { tool_name: "UnknownAgent", status: "RUNNING", answer: "bad" },
-      { tool_name: "InSilicoResearchAgent", status: "not-a-status", answer: "bad" },
+      {
+        tool_name: "InSilicoResearchAgent",
+        status: "not-a-status",
+        answer: "bad",
+      },
     ]) {
       vi.clearAllMocks();
       states.get("A")!.messageInput = "bad expert response";
@@ -1128,7 +1143,9 @@ describe("useSendMessage", () => {
       states.get("A")!.renderedChat = null;
       currentChat.value = { messages: [] };
       mockGetQueryAbortable.mockResolvedValueOnce({ data } as any);
-      const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(vi.fn());
       try {
         const { sendMessage } = makeComposable();
         await sendMessage();

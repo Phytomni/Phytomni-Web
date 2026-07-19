@@ -130,7 +130,10 @@ describe("useSelectChat", () => {
     expect(Array.isArray(hq)).toBe(true);
     expect(hq.length).toBe(2);
     expect(hq[0]).toEqual({ role: "user", content: "Hello" });
-    expect(hq[1]).toEqual({ role: "assistant", content: "Hello, I'm the assistant" });
+    expect(hq[1]).toEqual({
+      role: "assistant",
+      content: "Hello, I'm the assistant",
+    });
 
     // URL updated
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");

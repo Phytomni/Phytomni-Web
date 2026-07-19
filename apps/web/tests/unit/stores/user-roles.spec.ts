@@ -25,8 +25,8 @@ describe("user store default roles", () => {
     expect(partial.map((o) => o.tool)).toEqual(["ChatAgent", "DataAgent"]);
 
     expect(derivePickerOptions([])).toEqual([]);
-    expect(
-      derivePickerOptions(["AnalystAgent", "DeepGenomeAgent"])
-    ).toEqual([]);
+    expect(derivePickerOptions(["AnalystAgent", "DeepGenomeAgent"])).toEqual(
+      []
+    );
   });
 });

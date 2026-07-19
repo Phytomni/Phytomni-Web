@@ -172,9 +172,7 @@
   const closedMobile = drawerState === "closed";
   const openMobile = drawerState === "open";
   const desktopState = drawerState === "not-mobile" || drawerState == null;
-  const mainSurface = root.querySelector?.(
-    ".phy-adaptive-shell__main"
-  );
+  const mainSurface = root.querySelector?.(".phy-adaptive-shell__main");
   const drawerSurface = root.querySelector?.(
     ".phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__surface"
   );

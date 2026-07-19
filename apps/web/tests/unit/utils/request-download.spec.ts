@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => {
     elMessageInfo: vi.fn(),
     loadingService: vi.fn(() => ({ close: vi.fn() })),
     CanceledError,
-    responseError: undefined as undefined | ((error: unknown) => Promise<never>),
+    responseError: undefined as
+      | undefined
+      | ((error: unknown) => Promise<never>),
   };
 });
 

@@ -115,7 +115,9 @@ describe("useReactions", () => {
       const { handleReaction } = makeComposable();
       await handleReaction("m1", 1);
 
-      expect(mockElError).toHaveBeenCalledWith("Operation failed, please try again");
+      expect(mockElError).toHaveBeenCalledWith(
+        "Operation failed, please try again"
+      );
       expect(chatState.reactions["m1"]).toBeUndefined();
     });
 
@@ -126,7 +128,9 @@ describe("useReactions", () => {
       const { handleReaction } = makeComposable();
       await handleReaction("m1", 1);
 
-      expect(mockElError).toHaveBeenCalledWith("Operation failed, please try again");
+      expect(mockElError).toHaveBeenCalledWith(
+        "Operation failed, please try again"
+      );
     });
   });
 

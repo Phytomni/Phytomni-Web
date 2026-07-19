@@ -252,7 +252,8 @@ describe("parseDeepGenomeMarkdown — ns threading (per-message citation namespa
   it("threads ns into inline [N] citation anchors (#m5-ref-1)", () => {
     const md = join("## Sec", "Some text with a citation [1] here.");
     const parsed = parseDeepGenomeMarkdown(md, "m5");
-    const body = findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
+    const body =
+      findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
     expect(body).toContain("#m5-ref-1");
     expect(body).not.toContain('"#ref-1"');
   });
@@ -260,7 +261,8 @@ describe("parseDeepGenomeMarkdown — ns threading (per-message citation namespa
   it("keeps the bare #ref-N anchor when ns is empty (back-compat)", () => {
     const md = join("## Sec", "Some text with a citation [1] here.");
     const parsed = parseDeepGenomeMarkdown(md);
-    const body = findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
+    const body =
+      findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
     expect(body).toContain("#ref-1");
     expect(body).not.toContain("#m5-ref-1");
   });
@@ -273,7 +275,8 @@ describe("parseDeepGenomeMarkdown — ns threading (per-message citation namespa
       "| BRCA1 | see [2] |"
     );
     const parsed = parseDeepGenomeMarkdown(md, "m9");
-    const body = findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
+    const body =
+      findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
     expect(body).toContain("#m9-ref-2");
   });
 });

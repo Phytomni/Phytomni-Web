@@ -3,13 +3,18 @@ import { parseMessageWithFiles } from "@/views/chat/utils/message-parse";
 
 describe("parseMessageWithFiles", () => {
   it("returns content unchanged and attachedFiles undefined when no marker is present", () => {
-    const result = parseMessageWithFiles("Plain text message without an attachment marker");
-    expect(result.content).toBe("Plain text message without an attachment marker");
+    const result = parseMessageWithFiles(
+      "Plain text message without an attachment marker"
+    );
+    expect(result.content).toBe(
+      "Plain text message without an attachment marker"
+    );
     expect(result.attachedFiles).toBeUndefined();
   });
 
   it("KB unit: parses name and size and strips the marker from content", () => {
-    const input = "Please analyze the following file: [Attachment: report.pdf (12.5 KB)]";
+    const input =
+      "Please analyze the following file: [Attachment: report.pdf (12.5 KB)]";
     const result = parseMessageWithFiles(input);
     expect(result.attachedFiles).toBeDefined();
     expect(result.attachedFiles!.length).toBe(1);

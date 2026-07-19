@@ -9,11 +9,11 @@ import type { Chat } from "@/views/chat/types";
 // weekAgo mid.    = 2026-06-09T00:00:00
 
 const NOW = new Date("2026-06-16T12:00:00");
-const TODAY_MID = new Date("2026-06-16T00:00:00");       // included in todayChats
-const YESTERDAY_MID = new Date("2026-06-15T00:00:00");   // lower bound of yesterdayChats (inclusive)
-const THREE_DAYS_AGO = new Date("2026-06-13T10:00:00");  // in weekChats
-const WEEK_AGO_MID = new Date("2026-06-09T00:00:00");    // lower bound of weekChats (inclusive); upper of olderChats (exclusive)
-const TEN_DAYS_AGO = new Date("2026-06-06T08:00:00");    // in olderChats
+const TODAY_MID = new Date("2026-06-16T00:00:00"); // included in todayChats
+const YESTERDAY_MID = new Date("2026-06-15T00:00:00"); // lower bound of yesterdayChats (inclusive)
+const THREE_DAYS_AGO = new Date("2026-06-13T10:00:00"); // in weekChats
+const WEEK_AGO_MID = new Date("2026-06-09T00:00:00"); // lower bound of weekChats (inclusive); upper of olderChats (exclusive)
+const TEN_DAYS_AGO = new Date("2026-06-06T08:00:00"); // in olderChats
 
 function makeChat(id: number, date: Date): Chat {
   return {
@@ -131,8 +131,8 @@ describe("useChatHistoryGroups", () => {
     const chats: Chat[] = [
       makeChat(20, new Date("2026-06-16T09:00:00")), // today
       makeChat(21, new Date("2026-06-15T10:00:00")), // yesterday
-      makeChat(22, THREE_DAYS_AGO),                   // this week
-      makeChat(23, TEN_DAYS_AGO),                     // older
+      makeChat(22, THREE_DAYS_AGO), // this week
+      makeChat(23, TEN_DAYS_AGO), // older
     ];
     const chatList = ref<Chat[]>(chats);
     const { todayChats, yesterdayChats, weekChats, olderChats } =
