@@ -20,6 +20,10 @@ module.exports = {
     ecmaVersion: "latest",
   },
   rules: {
+    // Formatting is enforced by the standalone G2.1 Prettier check. Keep
+    // eslint-config-prettier's conflict disabling without duplicating its
+    // formatter diagnostics in the semantic lint inventory.
+    "prettier/prettier": "off",
     // The Vue ecosystem (incl. Vue docs and `npm create vue@latest`)
     // routinely uses single-word names for layout/root components
     // (App, Layout, Sidebar, etc.). This codebase follows that

@@ -5,6 +5,7 @@
 #   G-1  staged/unstaged secret scan
 #   G0   git diff whitespace check
 #   G1   apps/web vue-tsc --noEmit
+#   G2.1 apps/web standalone Prettier format check (read-only)
 #   G2   apps/web eslint (read-only, no --fix)
 #   G3   apps/web vite build
 #   G4   apps/server go mod tidy
@@ -87,6 +88,12 @@ note "no whitespace errors"
 # ------------------------------------------------------------------
 step "G1 apps/web: vue-tsc --noEmit"
 ( cd apps/web && npm run --silent type-check )
+
+# ------------------------------------------------------------------
+# G2.1 — standalone formatting
+# ------------------------------------------------------------------
+step "G2.1 apps/web: Prettier format check (read-only)"
+( cd apps/web && npm run --silent format:check )
 
 step "G2 apps/web: eslint (read-only)"
 ( cd apps/web && npx --no-install eslint . \

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = ROOT / "apps" / "web"
+VALIDATE_GATE = ROOT / "scripts" / "validate_web_local.sh"
 EXPECTED_SCOPE_MARKERS = (
     "src/**/*.",
     "tests/**/*.",
@@ -74,3 +76,62 @@ def test_prettier_ignore_is_exact_without_broad_source_or_public_bypass() -> Non
     assert "tests/" not in entries
     assert "public/" not in entries
     assert all(not entry.startswith("**/") for entry in entries)
+
+
+def test_full_gate_runs_standalone_format_check_before_eslint() -> None:
+    gate = VALIDATE_GATE.read_text(encoding="utf-8")
+    format_step = 'step "G2.1 apps/web: Prettier format check (read-only)"'
+    eslint_step = 'step "G2 apps/web: eslint (read-only)"'
+
+    assert format_step in gate
+    assert "( cd apps/web && npm run --silent format:check )" in gate
+    assert gate.index(format_step) < gate.index(eslint_step)
+
+
+def test_eslint_keeps_prettier_only_as_conflict_config() -> None:
+    config = (WEB_ROOT / ".eslintrc.cjs").read_text(encoding="utf-8")
+
+    assert '"@vue/eslint-config-prettier"' in config
+    assert '"prettier/prettier": "off"' in config
+
+
+def test_first_party_format_check_is_clean() -> None:
+    completed = subprocess.run(
+        ["npm", "run", "--silent", "format:check"],
+        cwd=WEB_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_eslint_emits_no_prettier_diagnostics() -> None:
+    eslint = WEB_ROOT / "node_modules" / ".bin" / "eslint"
+    completed = subprocess.run(
+        [
+            str(eslint),
+            ".",
+            "--ext",
+            ".vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts",
+            "--ignore-path",
+            ".gitignore",
+            "--format",
+            "json",
+        ],
+        cwd=WEB_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    reports = json.loads(completed.stdout)
+    prettier_messages = [
+        message
+        for report in reports
+        for message in report.get("messages", [])
+        if message.get("ruleId") == "prettier/prettier"
+    ]
+    assert prettier_messages == []
