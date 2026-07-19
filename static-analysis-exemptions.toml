@@ -10924,6 +10924,26 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
+id = "web-sa-ade70f4f58e4c9a497d3e5cb01bd816de12661716cd3c02f5799a87f492b0fad"
+tool = "go"
+rule = "generated"
+classification = "temporary"
+mechanism = "marker"
+target_kind = "span"
+path = "scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go"
+target = "generated:"
+fingerprint = "sha256:ade70f4f58e4c9a497d3e5cb01bd816de12661716cd3c02f5799a87f492b0fad"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-07-19
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:generated:"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
 id = "web-sa-5185cbc65f93f84db28ded9310b75dba856c9dc0dfd347c77e68ddd66fc2d795"
 tool = "go"
 rule = "go:build"
@@ -10964,26 +10984,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-e9011ab949944d3c18540ca5b27f396971958fc017fe072d825aab3d7b31b590"
-tool = "go"
-rule = "quiet"
-classification = "temporary"
-mechanism = "command"
-target_kind = "command"
-path = "scripts/validate_web_local.sh"
-target = "--quiet"
-fingerprint = "sha256:e9011ab949944d3c18540ca5b27f396971958fc017fe072d825aab3d7b31b590"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/validate_web_local.sh:--quiet"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-675a37d0fd38a20cffffdf30e1aac3ebb85c9995e85c247a8c0bb8d353b5d34a"
 tool = "golangci-lint"
 rule = "errcheck"
@@ -11018,6 +11018,66 @@ introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
 remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/source/go.go:line:3:nolint:nolint:errcheck // fixture directive"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
+id = "web-sa-9ee7ac8b80307194e5665366c84d09c12ca50ba8677d392210e78e7bd712565b"
+tool = "golangci-lint"
+rule = "lint:ignore"
+classification = "temporary"
+mechanism = "inline"
+target_kind = "span"
+path = "scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go"
+target = "lint:ignore:"
+fingerprint = "sha256:9ee7ac8b80307194e5665366c84d09c12ca50ba8677d392210e78e7bd712565b"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-07-19
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:lint:ignore:"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
+id = "web-sa-c9d4748d9e0dbf22e0a5891193c1edaefb052152e43b2c0d9aa98786bc9cf0d6"
+tool = "golangci-lint"
+rule = "nolint"
+classification = "temporary"
+mechanism = "inline"
+target_kind = "span"
+path = "scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go"
+target = "nolint:"
+fingerprint = "sha256:c9d4748d9e0dbf22e0a5891193c1edaefb052152e43b2c0d9aa98786bc9cf0d6"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-07-19
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:nolint:"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
+id = "web-sa-bd2f3bd5c117d8622b87eb77bbc96e6c6f0e54f747af30727147f0eeba896678"
+tool = "golangci-lint"
+rule = "nolint"
+classification = "temporary"
+mechanism = "inline"
+target_kind = "span"
+path = "scripts/tests/static_analysis/fixtures/source/go.go"
+target = "nolint:"
+fingerprint = "sha256:bd2f3bd5c117d8622b87eb77bbc96e6c6f0e54f747af30727147f0eeba896678"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-07-19
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/source/go.go:nolint:"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
@@ -11844,26 +11904,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-aa62479462eec87a85afd4b8925eb07e2a90b37e1e43902b6fb4580c0f0d96be"
-tool = "shell"
-rule = "ignore-path"
-classification = "temporary"
-mechanism = "command"
-target_kind = "command"
-path = "scripts/validate_web_local.sh"
-target = "--ignore-path=.gitignore"
-fingerprint = "sha256:aa62479462eec87a85afd4b8925eb07e2a90b37e1e43902b6fb4580c0f0d96be"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/validate_web_local.sh:--ignore-path=.gitignore"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-0c42ab6421536ec15b38679e04cd85fb0d5b13242f08ae3e0e9837220ef17136"
 tool = "shell"
 rule = "max-warnings"
@@ -11918,46 +11958,6 @@ introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
 remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh:|| true"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-03d2c988d58aae1add5f416725a38c16a2dd86499587a14ca72e365596607c15"
-tool = "shell"
-rule = "shell-fallback-success"
-classification = "temporary"
-mechanism = "command"
-target_kind = "command"
-path = "scripts/validate_web_local.sh"
-target = "|| true"
-fingerprint = "sha256:03d2c988d58aae1add5f416725a38c16a2dd86499587a14ca72e365596607c15"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/validate_web_local.sh:|| true"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-27b4775027ba7d126fd4656dad5d4afa7b5b0bd1f14b6faf38789d6eb6e66f56"
-tool = "shell"
-rule = "shell-fallback-success"
-classification = "temporary"
-mechanism = "command"
-target_kind = "command"
-path = "scripts/validate_web_local.sh"
-target = "|| true"
-fingerprint = "sha256:27b4775027ba7d126fd4656dad5d4afa7b5b0bd1f14b6faf38789d6eb6e66f56"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/validate_web_local.sh:|| true"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."

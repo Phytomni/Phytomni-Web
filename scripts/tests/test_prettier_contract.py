@@ -78,10 +78,10 @@ def test_prettier_ignore_is_exact_without_broad_source_or_public_bypass() -> Non
     assert all(not entry.startswith("**/") for entry in entries)
 
 
-def test_frontend_static_group_runs_standalone_format_check_before_eslint() -> None:
+def test_frontend_static_group_runs_standalone_format_check_before_exact_eslint() -> None:
     gate = FRONTEND_STATIC_GATE.read_text(encoding="utf-8")
     format_step = 'step "G2.1 apps/web: Prettier format check (read-only)"'
-    eslint_step = 'step "G2 apps/web: eslint (read-only)"'
+    eslint_step = 'step "G2 apps/web: exact ESLint reconciliation"'
 
     assert format_step in gate
     assert "( cd apps/web && npm run --silent format:check )" in gate

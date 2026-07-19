@@ -6,9 +6,15 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/gates/common.sh
 source "$SCRIPT_DIR/common.sh"
 
+step "G4.1 apps/server: exact Go directives and config reconciliation"
+run_static_analysis_check - \
+  --collector go \
+  --collector config
+
 step "G4 apps/server: go mod tidy"
 ( cd apps/server && go mod tidy )
-if ! git diff --quiet -- apps/server/go.mod apps/server/go.sum; then
+changed_modules="$(git diff --name-only -- apps/server/go.mod apps/server/go.sum)"
+if [ -n "$changed_modules" ]; then
   fail "G4 go mod tidy touched go.mod/go.sum; review the diff and commit it before retrying."
 fi
 

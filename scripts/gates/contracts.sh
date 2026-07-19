@@ -7,15 +7,44 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 step "G11 apps/web: SET_LOGIN_STATUS invariant (definition + sole-caller + no-stray)"
-def_count="$( grep -c 'SET_LOGIN_STATUS(' apps/web/src/stores/user.ts 2>/dev/null || echo 0 )"
+if def_count="$(grep -c 'SET_LOGIN_STATUS(' apps/web/src/stores/user.ts)"; then
+  :
+else
+  def_rc=$?
+  [ "$def_rc" -eq 1 ] || fail "G11.1 SET_LOGIN_STATUS definition scan failed with status $def_rc."
+  def_count=0
+fi
 [ "$def_count" = "1" ] || fail "G11.1 SET_LOGIN_STATUS definition: expected 1 hit in apps/web/src/stores/user.ts, got $def_count"
-call_count="$( grep -c 'SET_LOGIN_STATUS(' apps/web/src/views/login/index.vue 2>/dev/null || echo 0 )"
+if call_count="$(grep -c 'SET_LOGIN_STATUS(' apps/web/src/views/login/index.vue)"; then
+  :
+else
+  call_rc=$?
+  [ "$call_rc" -eq 1 ] || fail "G11.2 SET_LOGIN_STATUS call scan failed with status $call_rc."
+  call_count=0
+fi
 [ "$call_count" = "1" ] || fail "G11.2 SET_LOGIN_STATUS sole legal call: expected 1 hit in apps/web/src/views/login/index.vue, got $call_count"
-stray="$( grep -rl 'SET_LOGIN_STATUS' apps/web/src/ \
-  --include='*.ts' --include='*.vue' 2>/dev/null \
-  | grep -v -E '^apps/web/src/stores/user\.ts$|^apps/web/src/views/login/index\.vue$' \
-  || true )"
-[ -z "$stray" ] || { printf '%s\n' "$stray" >&2; fail "G11.3 SET_LOGIN_STATUS stray caller: files above must not reference SET_LOGIN_STATUS — only stores/user.ts (definition) and views/login/index.vue (sole call) are allowed."; }
+
+candidate_files="$(mktemp)"
+stray_files="$(mktemp)"
+trap 'rm -f "$candidate_files" "$stray_files"' EXIT
+if grep -rl 'SET_LOGIN_STATUS' apps/web/src/ \
+  --include='*.ts' --include='*.vue' >"$candidate_files"; then
+  :
+else
+  candidate_rc=$?
+  [ "$candidate_rc" -eq 1 ] || fail "G11.3 SET_LOGIN_STATUS scan failed with status $candidate_rc."
+fi
+awk '
+  $0 != "apps/web/src/stores/user.ts" &&
+  $0 != "apps/web/src/views/login/index.vue" { print }
+' "$candidate_files" >"$stray_files" || fail "G11.3 SET_LOGIN_STATUS filtering failed."
+[ ! -s "$stray_files" ] || { cat "$stray_files" >&2; fail "G11.3 SET_LOGIN_STATUS stray caller: files above must not reference SET_LOGIN_STATUS — only stores/user.ts (definition) and views/login/index.vue (sole call) are allowed."; }
+
+step "G-0 contracts: exact static-analysis surface"
+run_static_analysis_check - \
+  --collector source \
+  --collector config \
+  --collector ci
 
 step "G13 i18n: hardcoded-copy scanner (ratchet against allowlist)"
 python3 scripts/check_i18n.py --check

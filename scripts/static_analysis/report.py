@@ -388,7 +388,7 @@ def render_ledger(inventory: Inventory) -> str:
             "```bash",
             "python3 scripts/check_static_analysis_exemptions.py --check \\",
             "  --collector eslint --collector typescript --collector source \\",
-            "  --collector config --collector ci \\",
+            "  --collector config --collector ci --collector go \\",
             "  --write-ledger docs/development/static-analysis-exemptions.md",
             "```",
             "",

@@ -124,11 +124,11 @@ def test_ci_targets_are_read_only_parallel_shared_groups() -> None:
 def test_ci_installs_only_group_owned_dependencies() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
 
-    assert text.count("uses: actions/setup-node@v4") == 2
-    assert text.count("node-version: \"20\"") == 2
-    assert text.count("cache: npm") == 2
-    assert text.count("cache-dependency-path: apps/web/package-lock.json") == 2
-    assert text.count("run: npm ci") == 2
+    assert text.count("uses: actions/setup-node@v4") == 3
+    assert text.count("node-version: \"20\"") == 3
+    assert text.count("cache: npm") == 3
+    assert text.count("cache-dependency-path: apps/web/package-lock.json") == 3
+    assert text.count("run: npm ci") == 3
 
     assert text.count("uses: actions/setup-go@v5") == 2
     assert text.count("go-version: \"1.23\"") == 2
@@ -136,3 +136,44 @@ def test_ci_installs_only_group_owned_dependencies() -> None:
 
     assert text.count("python3 scripts/scan_secrets.py --all") == 1
     assert text.count("sudo apt-get install -y ripgrep") == 1
+
+
+def test_every_gate_reaches_the_fail_closed_checker_through_one_helper() -> None:
+    gate_text = {
+        group: (GATES / f"{group}.sh").read_text(encoding="utf-8")
+        for group in GROUP_ORDER
+    }
+    for group, text in gate_text.items():
+        assert "run_static_analysis_check" in text, group
+        assert "--inventory" not in text, group
+
+    assert (
+        "run_static_analysis_check docs/development/static-analysis-exemptions.md"
+        in gate_text["hygiene"]
+    )
+    assert "--collector eslint" in gate_text["frontend-static"]
+    assert "--collector typescript" in gate_text["frontend-static"]
+    assert "npx --no-install eslint" not in gate_text["frontend-static"]
+    assert "--collector go" in gate_text["server-static"]
+    assert "--collector config" in gate_text["server-static"]
+
+    scoped = (ROOT / "scripts" / "scoped_gate.sh").read_text(encoding="utf-8")
+    assert "run_static_analysis_check" in scoped
+    hooks = "\n".join(
+        (ROOT / ".githooks" / name).read_text(encoding="utf-8")
+        for name in ("pre-commit", "pre-push")
+    )
+    assert "check_static_analysis_exemptions.py" not in hooks
+
+
+def test_gate_scripts_do_not_mask_suppression_or_command_failures() -> None:
+    texts = [
+        (GATES / f"{group}.sh").read_text(encoding="utf-8")
+        for group in GROUP_ORDER
+    ]
+    texts.append((ROOT / "scripts" / "scoped_gate.sh").read_text(encoding="utf-8"))
+    assert all("|| true" not in text for text in texts)
+    assert all("|| echo 0" not in text for text in texts)
+    assert "xargs" not in (GATES / "hygiene.sh").read_text(encoding="utf-8")
+    assert all("--quiet" not in text for text in texts)
+    assert all("--ignore-path" not in text for text in texts)

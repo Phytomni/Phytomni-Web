@@ -11,7 +11,14 @@ import pytest
 
 import scripts.check_static_analysis_exemptions as cli
 from scripts.static_analysis.collectors.errors import CollectionError
-from scripts.static_analysis.model import Finding, Mechanism, TargetKind
+from scripts.static_analysis.model import (
+    Classification,
+    Exemption,
+    Finding,
+    Mechanism,
+    Registry,
+    TargetKind,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -84,6 +91,96 @@ def test_check_mode_fails_only_for_exact_reconciliation_mismatch(
     assert '"status": "NOT ENFORCED"' in captured.out
     assert "fixture-secret" not in captured.out
     assert captured.err == ""
+
+
+def test_partial_collector_scope_does_not_mark_other_surfaces_stale(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    native = replace(
+        _finding(),
+        tool="eslint",
+        mechanism=Mechanism.DIAGNOSTIC,
+        target="span:eslint",
+    )
+    unrelated = replace(
+        native,
+        mechanism=Mechanism.INLINE,
+        target="line:1:eslint-disable",
+        fingerprint=(
+            "sha256:fedcba9876543210fedcba9876543210"
+            "fedcba9876543210fedcba9876543210fedcba9876543210"
+        ),
+    )
+    registry = Registry(
+        schema_version=1,
+        default="deny",
+        exemptions=(
+            Exemption(
+                id="native",
+                tool=native.tool,
+                rule=native.rule,
+                classification=Classification.TEMPORARY,
+                mechanism=native.mechanism,
+                target_kind=native.target_kind,
+                path=native.path,
+                target=native.target,
+                fingerprint=native.fingerprint,
+                owner="web-maintainers",
+                introduced_on=date(2026, 7, 19),
+                review_on=date(2026, 7, 19),
+                rationale="A fixture-only exact authorization.",
+                counterfactual="The native diagnostic remains tracked.",
+                risk="Fixture scope only.",
+                tests=("scripts/tests/static_analysis/test_cli.py",),
+                expires_on=date(2026, 8, 31),
+                remediation="Remove the fixture diagnostic.",
+            ),
+            Exemption(
+                id="unrelated-source",
+                tool=unrelated.tool,
+                rule=unrelated.rule,
+                classification=Classification.TEMPORARY,
+                mechanism=unrelated.mechanism,
+                target_kind=unrelated.target_kind,
+                path=unrelated.path,
+                target=unrelated.target,
+                fingerprint=unrelated.fingerprint,
+                owner="web-maintainers",
+                introduced_on=date(2026, 7, 19),
+                review_on=date(2026, 7, 19),
+                rationale="A fixture-only source marker.",
+                counterfactual="The source marker remains tracked.",
+                risk="Fixture scope only.",
+                tests=("scripts/tests/static_analysis/test_cli.py",),
+                expires_on=date(2026, 8, 31),
+                remediation="Remove the fixture marker.",
+            ),
+        ),
+    )
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: registry)
+    monkeypatch.setattr(cli, "collect_findings", lambda *_args, **_kwargs: (native,))
+
+    result = cli.main(
+        [
+            "--check",
+            "--json",
+            "--collector",
+            "eslint",
+            "--registry",
+            str(tmp_path / "registry.toml"),
+            "--today",
+            TODAY,
+        ]
+    )
+
+    payload = __import__("json").loads(capsys.readouterr().out)
+    assert result == 0
+    assert payload["counts"]["matched"] == 1
+    assert payload["counts"]["stale"] == 0
+    assert payload["counts"]["unregistered"] == 0
 
 
 def test_collector_exception_fails_closed_without_echoing_fixture_data(

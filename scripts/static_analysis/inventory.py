@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 from hashlib import sha256
 
-from .model import Exemption, Finding, Registry
+from .model import Exemption, Finding, Mechanism, Registry
 
 
 FindingKey = tuple[str, str, str, str, str, str, str]
@@ -88,6 +88,95 @@ def exemption_key(exemption: Exemption) -> FindingKey:
             exemption.mechanism.value, exemption.target_kind.value, exemption.target
         ),
         exemption.fingerprint,
+    )
+
+
+_GO_TOOLS = frozenset({"go", "golangci-lint", "staticcheck"})
+_REPOSITORY_TOOLS = frozenset(
+    {
+        "actionlint",
+        "markdownlint",
+        "prettier",
+        "secret-scan",
+        "shellcheck",
+        "shfmt",
+        "yamllint",
+    }
+)
+
+
+def _belongs_to_collector(exemption: Exemption, collector: str) -> bool:
+    """Return whether one registry identity belongs to a collector surface.
+
+    A registry record does not carry a collector column because the identity
+    itself is the durable authority.  These exact, mechanism-aware partitions
+    keep a scoped checker from treating records owned by another collector as
+    stale while preserving stale detection inside the selected surface.
+    """
+
+    if collector == "eslint":
+        return (
+            exemption.tool == "eslint"
+            and exemption.mechanism is Mechanism.DIAGNOSTIC
+        )
+    if collector == "typescript":
+        return (
+            exemption.tool == "typescript"
+            and exemption.mechanism is Mechanism.DIAGNOSTIC
+        )
+    if collector == "config":
+        return exemption.mechanism is Mechanism.CONFIG
+    if collector == "ci":
+        return exemption.mechanism is Mechanism.COMMAND and not (
+            exemption.tool == "go" and exemption.rule == "go:generate"
+        )
+    if collector == "go":
+        return (
+            exemption.tool in _GO_TOOLS
+            and exemption.mechanism
+            in {Mechanism.DIAGNOSTIC, Mechanism.INLINE, Mechanism.MARKER}
+            and (
+                exemption.tool == "staticcheck"
+                or exemption.target.startswith(
+                    ("generated:", "nolint:", "lint:ignore:")
+                )
+            )
+        )
+    if collector == "repository_tools":
+        return exemption.tool in _REPOSITORY_TOOLS
+    if collector == "source":
+        if exemption.mechanism is Mechanism.CONFIG:
+            return False
+        if exemption.mechanism is Mechanism.COMMAND:
+            return exemption.tool == "go" and exemption.rule == "go:generate"
+        if (
+            exemption.tool in {"eslint", "typescript"}
+            and exemption.mechanism is Mechanism.DIAGNOSTIC
+        ):
+            return False
+        if exemption.tool in _GO_TOOLS:
+            return exemption.target.startswith("line:")
+        if exemption.tool == "staticcheck":
+            return False
+        return True
+    raise ValueError(f"unknown collector {collector!r}")
+
+
+def select_registry_for_collectors(
+    registry: Registry, collectors: Sequence[str]
+) -> Registry:
+    """Project the registry onto the exact surfaces a checker will collect."""
+
+    selected = tuple(dict.fromkeys(collectors))
+    exemptions = tuple(
+        entry
+        for entry in registry.exemptions
+        if any(_belongs_to_collector(entry, collector) for collector in selected)
+    )
+    return Registry(
+        schema_version=registry.schema_version,
+        default=registry.default,
+        exemptions=exemptions,
     )
 
 
@@ -177,4 +266,5 @@ __all__ = [
     "exemption_key",
     "finding_key",
     "reconcile",
+    "select_registry_for_collectors",
 ]

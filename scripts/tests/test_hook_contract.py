@@ -51,7 +51,7 @@ def _init_hook_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _stub_bin(repo: Path, *, secret_exit: int = 0) -> Path:
+def _stub_bin(repo: Path, *, secret_exit: int = 0, make_exit: int = 0) -> Path:
     bin_dir = repo / "bin"
     _write_executable(
         bin_dir / "python3",
@@ -69,7 +69,7 @@ def _stub_bin(repo: Path, *, secret_exit: int = 0) -> Path:
         bin_dir / "make",
         "#!/usr/bin/env sh\n"
         "printf 'make %s\\n' \"$*\" >> \"${HOOK_LOG:?}\"\n"
-        "exit 0\n",
+        f"exit {make_exit}\n",
     )
     return bin_dir
 
@@ -80,9 +80,10 @@ def _run_hook(
     *,
     env_value: str | None = None,
     secret_exit: int = 0,
+    make_exit: int = 0,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     log = repo / "hook.log"
-    bin_dir = _stub_bin(repo, secret_exit=secret_exit)
+    bin_dir = _stub_bin(repo, secret_exit=secret_exit, make_exit=make_exit)
     env = os.environ.copy()
     env["HOOK_LOG"] = str(log)
     env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
@@ -135,6 +136,18 @@ def test_precommit_stops_before_quality_when_secret_scan_fails(tmp_path: Path) -
     assert lines == ["python3 scripts/scan_secrets.py --staged"]
 
 
+def test_precommit_propagates_shared_checker_failure(tmp_path: Path) -> None:
+    repo = _init_hook_repo(tmp_path)
+
+    result, lines = _run_hook(repo, "pre-commit", make_exit=2)
+
+    assert result.returncode == 2
+    assert lines == [
+        "python3 scripts/scan_secrets.py --staged",
+        "make precommit",
+    ]
+
+
 def test_prepush_defaults_to_full_gate(tmp_path: Path) -> None:
     repo = _init_hook_repo(tmp_path)
 
@@ -151,6 +164,15 @@ def test_prepush_scoped_gate_requires_explicit_opt_in(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert lines == ["make prepush"]
+
+
+def test_prepush_propagates_shared_checker_failure(tmp_path: Path) -> None:
+    repo = _init_hook_repo(tmp_path)
+
+    result, lines = _run_hook(repo, "pre-push", make_exit=2)
+
+    assert result.returncode == 2
+    assert lines == ["make full"]
 
 
 def test_prepush_rejects_unknown_scoped_gate_value(tmp_path: Path) -> None:

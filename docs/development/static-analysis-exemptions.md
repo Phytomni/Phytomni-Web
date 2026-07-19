@@ -9,7 +9,7 @@
 - Schema version: `1`
 - Policy default: `deny`
 - Scope: `full`
-- Collectors: `eslint`, `typescript`, `source`, `config`, `ci`
+- Collectors: `eslint`, `typescript`, `source`, `config`, `ci`, `go`
 - Tool versions:
   - `eslint`: `8.22.0`, `inventory`
   - `github-actions`: `inventory`
@@ -583,11 +583,14 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-6d60b563f518fe2c9f11c832a2b169f17e3381590d666f33a88b1244588387db` | `2026-08-31` | `github-actions` | `continue-on-error` | [scripts/tests/static_analysis/fixtures/ci/.github/workflows/fixture.yml:5](../../scripts/tests/static_analysis/fixtures/ci/.github/workflows/fixture.yml#L5) | `continue-on-error` | `web-maintainers` | `2026-07-19` |
 | `web-sa-8dadd8637a3c6dfd167ee1e64d695b5874e18bf1985bd171da858799bfc89b3e` | `2026-08-31` | `github-actions` | `ignore-pattern` | [scripts/tests/static_analysis/fixtures/ci/.github/workflows/fixture.yml:7](../../scripts/tests/static_analysis/fixtures/ci/.github/workflows/fixture.yml#L7) | `pattern-sha256:2a57fa9f88e3ce964cd3babb480375c485b63afe0ed26d063befd41ebf67c2bf` | `web-maintainers` | `2026-07-19` |
 | `web-sa-b85d82de920220d04f3376850c47aca9a7734562f2b17c6f5659b5b3ac7ea84c` | `2026-08-31` | `github-actions` | `unbounded-path-pattern` | [scripts/tests/static_analysis/fixtures/ci/.github/workflows/fixture.yml:7](../../scripts/tests/static_analysis/fixtures/ci/.github/workflows/fixture.yml#L7) | `pattern-sha256:6350b1dcb83395e89cd8449d27018abb61024a547015d8b766ef13fcc1347305` | `web-maintainers` | `2026-07-19` |
+| `web-sa-ade70f4f58e4c9a497d3e5cb01bd816de12661716cd3c02f5799a87f492b0fad` | `2026-08-31` | `go` | `generated` | [scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:1](../../scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go#L1) | `generated:` | `web-maintainers` | `2026-07-19` |
 | `web-sa-5185cbc65f93f84db28ded9310b75dba856c9dc0dfd347c77e68ddd66fc2d795` | `2026-08-31` | `go` | `go:build` | [scripts/tests/static_analysis/fixtures/source/go.go:8](../../scripts/tests/static_analysis/fixtures/source/go.go#L8) | `line:8:go:build:go:build linux` | `web-maintainers` | `2026-07-19` |
 | `web-sa-c9660261ff918a83c1535e8a6f641ef873e97054574caaa73fa2681b5b6db074` | `2026-08-31` | `go` | `go:generate` | [scripts/tests/static_analysis/fixtures/source/go.go:9](../../scripts/tests/static_analysis/fixtures/source/go.go#L9) | `line:9:go:generate:go:generate go run ./tools` | `web-maintainers` | `2026-07-19` |
-| `web-sa-e9011ab949944d3c18540ca5b27f396971958fc017fe072d825aab3d7b31b590` | `2026-08-31` | `go` | `quiet` | [scripts/validate_web_local.sh:108](../../scripts/validate_web_local.sh#L108) | `--quiet` | `web-maintainers` | `2026-07-19` |
 | `web-sa-675a37d0fd38a20cffffdf30e1aac3ebb85c9995e85c247a8c0bb8d353b5d34a` | `2026-08-31` | `golangci-lint` | `errcheck` | [scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:4](../../scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go#L4) | `line:4:nolint:nolint:errcheck fixture directive` | `web-maintainers` | `2026-07-19` |
+| `web-sa-9ee7ac8b80307194e5665366c84d09c12ca50ba8677d392210e78e7bd712565b` | `2026-08-31` | `golangci-lint` | `lint:ignore` | [scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:7](../../scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go#L7) | `lint:ignore:` | `web-maintainers` | `2026-07-19` |
+| `web-sa-c9d4748d9e0dbf22e0a5891193c1edaefb052152e43b2c0d9aa98786bc9cf0d6` | `2026-08-31` | `golangci-lint` | `nolint` | [scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:4](../../scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go#L4) | `nolint:` | `web-maintainers` | `2026-07-19` |
 | `web-sa-5624d8081ef0b20a8edbd05c7d3d24cf04a9742ce92ad9df604350dad2060792` | `2026-08-31` | `golangci-lint` | `errcheck` | [scripts/tests/static_analysis/fixtures/source/go.go:3](../../scripts/tests/static_analysis/fixtures/source/go.go#L3) | `line:3:nolint:nolint:errcheck // fixture directive` | `web-maintainers` | `2026-07-19` |
+| `web-sa-bd2f3bd5c117d8622b87eb77bbc96e6c6f0e54f747af30727147f0eeba896678` | `2026-08-31` | `golangci-lint` | `nolint` | [scripts/tests/static_analysis/fixtures/source/go.go:3](../../scripts/tests/static_analysis/fixtures/source/go.go#L3) | `nolint:` | `web-maintainers` | `2026-07-19` |
 | `web-sa-a5dff64857c69c4a8761e6c2c8fbdd5f96d12d22d6704a24c2dda80b4e1ca53a` | `2026-08-31` | `mypy` | `index` | [scripts/tests/static_analysis/fixtures/source/python.py:1](../../scripts/tests/static_analysis/fixtures/source/python.py#L1) | `line:1:type: ignore:type: ignore[index]` | `web-maintainers` | `2026-07-19` |
 | `web-sa-a7fa85bef479adcae4d534c6ba71825f6ca77f458aa8fc3b04a39c5b4a7750ac` | `2026-08-31` | `mypy` | `index` | [scripts/tests/test_check_bot_web_activation.py:199](../../scripts/tests/test_check_bot_web_activation.py#L199) | `line:199:type: ignore:type: ignore[index]` | `web-maintainers` | `2026-07-19` |
 | `web-sa-585beec9c33422bc7745379b1711240fb48122493de8fb8a08fe35b728b69d43` | `2026-08-31` | `mypy` | `index` | [scripts/tests/test_check_bot_web_activation.py:203](../../scripts/tests/test_check_bot_web_activation.py#L203) | `line:203:type: ignore:type: ignore[index]` | `web-maintainers` | `2026-07-19` |
@@ -632,9 +635,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-0c42ab6421536ec15b38679e04cd85fb0d5b13242f08ae3e0e9837220ef17136` | `2026-08-31` | `shell` | `max-warnings` | [scripts/tests/static_analysis/fixtures/ci/Makefile:2](../../scripts/tests/static_analysis/fixtures/ci/Makefile#L2) | `--max-warnings=0` | `web-maintainers` | `2026-07-19` |
 | `web-sa-e8734248b5a9e63e34a88813e37a507beef2e9a6b7aecccee94c5166dcd65670` | `2026-08-31` | `shell` | `quiet` | [scripts/tests/static_analysis/fixtures/ci/Makefile:2](../../scripts/tests/static_analysis/fixtures/ci/Makefile#L2) | `--quiet` | `web-maintainers` | `2026-07-19` |
 | `web-sa-a0b108033a68f19c922b088ac5d13ec68a3f2df791d8c19ff5f949b1b75a152e` | `2026-08-31` | `shell` | `shell-fallback-success` | [scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh:2](../../scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh#L2) | `\|\| true` | `web-maintainers` | `2026-07-19` |
-| `web-sa-aa62479462eec87a85afd4b8925eb07e2a90b37e1e43902b6fb4580c0f0d96be` | `2026-08-31` | `shell` | `ignore-path` | [scripts/validate_web_local.sh:101](../../scripts/validate_web_local.sh#L101) | `--ignore-path=.gitignore` | `web-maintainers` | `2026-07-19` |
-| `web-sa-03d2c988d58aae1add5f416725a38c16a2dd86499587a14ca72e365596607c15` | `2026-08-31` | `shell` | `shell-fallback-success` | [scripts/validate_web_local.sh:136](../../scripts/validate_web_local.sh#L136) | `\|\| true` | `web-maintainers` | `2026-07-19` |
-| `web-sa-27b4775027ba7d126fd4656dad5d4afa7b5b0bd1f14b6faf38789d6eb6e66f56` | `2026-08-31` | `shell` | `shell-fallback-success` | [scripts/validate_web_local.sh:68](../../scripts/validate_web_local.sh#L68) | `\|\| true` | `web-maintainers` | `2026-07-19` |
 | `web-sa-afd1a05c93ce8b14f823fd1a0c772b05e469a5e6ee036966fd037cbdb235842f` | `2026-08-31` | `typescript` | `@ts-expect-error` | [apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts:158](../../apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts#L158) | `line:158:@ts-expect-error:@ts-expect-error replacing with minimal mock` | `web-maintainers` | `2026-07-19` |
 | `web-sa-7a1f035faed7a42bb12b6cb9242bb25cc52e01f98cfa915cc6c17a4a92c9bef2` | `2026-08-31` | `typescript` | `@ts-expect-error` | [apps/web/tests/unit/utils/reference-renderer.spec.ts:14](../../apps/web/tests/unit/utils/reference-renderer.spec.ts#L14) | `line:14:@ts-expect-error:@ts-expect-error exercising the nullish guard` | `web-maintainers` | `2026-07-19` |
 | `web-sa-f48d62f5e7e9b02053fc189f7385d6782e07492b03bc2e99a96181e57487e931` | `2026-08-31` | `typescript` | `@ts-expect-error` | [apps/web/tests/unit/utils/reference-renderer.spec.ts:16](../../apps/web/tests/unit/utils/reference-renderer.spec.ts#L16) | `line:16:@ts-expect-error:@ts-expect-error exercising the undefined guard` | `web-maintainers` | `2026-07-19` |
@@ -5570,6 +5570,15 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: github-actions reported unbounded-path-pattern at line 7; raw diagnostic omitted.
 
+### `web-sa-ade70f4f58e4c9a497d3e5cb01bd816de12661716cd3c02f5799a87f492b0fad`
+
+- Exact entry: [scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:1](../../scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go#L1)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: go reported generated at line 1; raw diagnostic omitted.
+
 ### `web-sa-5185cbc65f93f84db28ded9310b75dba856c9dc0dfd347c77e68ddd66fc2d795`
 
 - Exact entry: [scripts/tests/static_analysis/fixtures/source/go.go:8](../../scripts/tests/static_analysis/fixtures/source/go.go#L8)
@@ -5588,15 +5597,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: go reported go:generate at line 9; raw diagnostic omitted.
 
-### `web-sa-e9011ab949944d3c18540ca5b27f396971958fc017fe072d825aab3d7b31b590`
-
-- Exact entry: [scripts/validate_web_local.sh:108](../../scripts/validate_web_local.sh#L108)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: go reported quiet at line 108; raw diagnostic omitted.
-
 ### `web-sa-675a37d0fd38a20cffffdf30e1aac3ebb85c9995e85c247a8c0bb8d353b5d34a`
 
 - Exact entry: [scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:4](../../scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go#L4)
@@ -5606,6 +5606,24 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: golangci-lint reported errcheck at line 4; raw diagnostic omitted.
 
+### `web-sa-9ee7ac8b80307194e5665366c84d09c12ca50ba8677d392210e78e7bd712565b`
+
+- Exact entry: [scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:7](../../scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go#L7)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: golangci-lint reported lint:ignore at line 7; raw diagnostic omitted.
+
+### `web-sa-c9d4748d9e0dbf22e0a5891193c1edaefb052152e43b2c0d9aa98786bc9cf0d6`
+
+- Exact entry: [scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go:4](../../scripts/tests/static_analysis/fixtures/go/project/apps/server/sample.go#L4)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: golangci-lint reported nolint at line 4; raw diagnostic omitted.
+
 ### `web-sa-5624d8081ef0b20a8edbd05c7d3d24cf04a9742ce92ad9df604350dad2060792`
 
 - Exact entry: [scripts/tests/static_analysis/fixtures/source/go.go:3](../../scripts/tests/static_analysis/fixtures/source/go.go#L3)
@@ -5614,6 +5632,15 @@ Temporary records track remediation debt and never grant structural approval.
 - Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: golangci-lint reported errcheck at line 3; raw diagnostic omitted.
+
+### `web-sa-bd2f3bd5c117d8622b87eb77bbc96e6c6f0e54f747af30727147f0eeba896678`
+
+- Exact entry: [scripts/tests/static_analysis/fixtures/source/go.go:3](../../scripts/tests/static_analysis/fixtures/source/go.go#L3)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: golangci-lint reported nolint at line 3; raw diagnostic omitted.
 
 ### `web-sa-a5dff64857c69c4a8761e6c2c8fbdd5f96d12d22d6704a24c2dda80b4e1ca53a`
 
@@ -6011,33 +6038,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: shell reported shell-fallback-success at line 2; raw diagnostic omitted.
 
-### `web-sa-aa62479462eec87a85afd4b8925eb07e2a90b37e1e43902b6fb4580c0f0d96be`
-
-- Exact entry: [scripts/validate_web_local.sh:101](../../scripts/validate_web_local.sh#L101)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: shell reported ignore-path at line 101; raw diagnostic omitted.
-
-### `web-sa-03d2c988d58aae1add5f416725a38c16a2dd86499587a14ca72e365596607c15`
-
-- Exact entry: [scripts/validate_web_local.sh:136](../../scripts/validate_web_local.sh#L136)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: shell reported shell-fallback-success at line 136; raw diagnostic omitted.
-
-### `web-sa-27b4775027ba7d126fd4656dad5d4afa7b5b0bd1f14b6faf38789d6eb6e66f56`
-
-- Exact entry: [scripts/validate_web_local.sh:68](../../scripts/validate_web_local.sh#L68)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: shell reported shell-fallback-success at line 68; raw diagnostic omitted.
-
 ### `web-sa-afd1a05c93ce8b14f823fd1a0c772b05e469a5e6ee036966fd037cbdb235842f`
 
 - Exact entry: [apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts:158](../../apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts#L158)
@@ -6222,7 +6222,7 @@ No unregistered, stale, duplicate, or expired items.
 ```bash
 python3 scripts/check_static_analysis_exemptions.py --check \
   --collector eslint --collector typescript --collector source \
-  --collector config --collector ci \
+  --collector config --collector ci --collector go \
   --write-ledger docs/development/static-analysis-exemptions.md
 ```
 

@@ -4,6 +4,8 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
+# shellcheck source=scripts/gates/common.sh
+source "$ROOT/scripts/gates/common.sh"
 
 requested_mode="${1:-}"
 case "$requested_mode" in
@@ -169,30 +171,24 @@ run_web_tool() {
 }
 
 run_suppression_scan() {
-  local output
-  output="$(mktemp)"
-  printf '\n==> scoped gate: repository-wide suppression scan\n'
-  if python3 scripts/check_static_analysis_exemptions.py --inventory --collector eslint --collector typescript --collector source --collector config --collector ci --json >"$output"; then
-    rm -f "$output"
-  else
-    local rc=$?
-    rm -f "$output"
-    return "$rc"
-  fi
+  printf '\n==> scoped gate: exact static-analysis reconciliation\n'
+  run_static_analysis_check - \
+    --collector eslint \
+    --collector typescript \
+    --collector source \
+    --collector config \
+    --collector ci \
+    --collector go
 }
 
 run_frontend_scope() {
   local prettier="$ROOT/apps/web/node_modules/.bin/prettier"
-  local eslint="$ROOT/apps/web/node_modules/.bin/eslint"
-  local vue_tsc="$ROOT/apps/web/node_modules/.bin/vue-tsc"
   local vitest="$ROOT/apps/web/node_modules/.bin/vitest"
   local path
   local -a web_paths=()
   local -a test_paths=()
 
   [ -x "$prettier" ] || fail "frontend formatter is missing or not executable: $prettier"
-  [ -x "$eslint" ] || fail "frontend ESLint is missing or not executable: $eslint"
-  [ -x "$vue_tsc" ] || fail "frontend type checker is missing or not executable: $vue_tsc"
   for path in "${frontend_paths[@]}"; do
     web_paths+=("${path#apps/web/}")
   done
@@ -201,12 +197,6 @@ run_frontend_scope() {
     run_web_tool "G2.1 Prettier changed frontend files" "$prettier" --check "${web_paths[@]}"
   else
     skip "Prettier changed frontend files (all changed files were deleted)"
-  fi
-  run_web_tool "G1 vue-tsc full project" "$vue_tsc" --noEmit
-  if [ "${#web_paths[@]}" -gt 0 ]; then
-    run_web_tool "G2 ESLint changed frontend files" "$eslint" "${web_paths[@]}" --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --ignore-path .gitignore
-  else
-    skip "ESLint changed frontend files (all changed files were deleted)"
   fi
   run_suppression_scan
 
@@ -276,7 +266,7 @@ if [ "$mode" = "precommit" ]; then
   append_git_paths diff --cached --name-only --diff-filter=ACMR
   printf '==> scoped gate (precommit, staged index)\n'
 else
-  if base="$(git rev-parse --verify --quiet '@{upstream}')"; then
+  if base="$(git rev-parse --verify '@{upstream}' 2>/dev/null)"; then
     base_source="upstream"
   elif base="$(git merge-base HEAD main 2>/dev/null)"; then
     base_source="merge-base"

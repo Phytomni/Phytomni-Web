@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Observe or exactly reconcile static-analysis findings.
+"""Collect and exactly reconcile static-analysis findings.
 
-The command is intentionally not wired into the repository's final gate yet.
-Observation output is bounded and explicitly labelled ``NOT ENFORCED``.
+Inventory mode remains available for diagnostics; final gates use ``--check``
+and never treat an observation report as authorization.
 """
 
 from __future__ import annotations
@@ -26,7 +26,11 @@ if __package__ in {None, ""}:  # pragma: no cover - direct script execution
     )
     from static_analysis.collectors.source import collect_source_suppressions
     from static_analysis.collectors.typescript import collect_typescript
-    from static_analysis.inventory import Inventory, reconcile
+    from static_analysis.inventory import (
+        Inventory,
+        reconcile,
+        select_registry_for_collectors,
+    )
     from static_analysis.model import RegistryError, load_registry
     from static_analysis.report import (
         render_json,
@@ -46,7 +50,11 @@ else:
     )
     from scripts.static_analysis.collectors.source import collect_source_suppressions
     from scripts.static_analysis.collectors.typescript import collect_typescript
-    from scripts.static_analysis.inventory import Inventory, reconcile
+    from scripts.static_analysis.inventory import (
+        Inventory,
+        reconcile,
+        select_registry_for_collectors,
+    )
     from scripts.static_analysis.model import RegistryError, load_registry
     from scripts.static_analysis.report import (
         render_json,
@@ -58,7 +66,7 @@ else:
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_COLLECTORS = ("source", "config", "ci")
-CANDIDATE_COLLECTORS = ("eslint", "typescript", "source", "config", "ci")
+CANDIDATE_COLLECTORS = ("eslint", "typescript", "source", "config", "ci", "go")
 COLLECTOR_NAMES = (
     "eslint",
     "typescript",
@@ -271,10 +279,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             scope=args.scope,
             range_ref=args.range_ref,
         )
-        reconciliation = reconcile(findings, registry, today=today)
+        scoped_registry = select_registry_for_collectors(registry, collector_names)
+        reconciliation = reconcile(findings, scoped_registry, today=today)
         inventory = Inventory(
             findings=findings,
-            registry=registry,
+            registry=scoped_registry,
             reconciliation=reconciliation,
             scope=args.scope,
             collectors=collector_names,

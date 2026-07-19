@@ -13,9 +13,12 @@ from scripts.static_analysis.model import (
     Classification,
     Exemption,
     Finding,
+    Mechanism,
     Registry,
+    TargetKind,
     load_registry,
 )
+from scripts.static_analysis.inventory import select_registry_for_collectors
 
 pytestmark = pytest.mark.unit
 
@@ -128,3 +131,128 @@ def test_empty_inventory_is_a_valid_no_tracked_files_result() -> None:
     assert result.matched == ()
     assert result.unregistered == ()
     assert result.stale == ()
+
+
+def _surface_entry(
+    entry_id: str,
+    *,
+    tool: str,
+    mechanism: Mechanism,
+    target: str,
+    path: str = "apps/web/src/fixture.ts",
+    rule: str = "fixture-rule",
+) -> Exemption:
+    import hashlib
+
+    digest = hashlib.sha256(entry_id.encode("utf-8")).hexdigest()
+    return Exemption(
+        id=entry_id,
+        tool=tool,
+        rule=rule,
+        classification=Classification.TEMPORARY,
+        mechanism=mechanism,
+        target_kind=(
+            TargetKind.COMMAND
+            if mechanism is Mechanism.COMMAND
+            else TargetKind.CONFIG
+            if mechanism is Mechanism.CONFIG
+            else TargetKind.SPAN
+        ),
+        path=path,
+        target=target,
+        fingerprint=f"sha256:{digest}",
+        owner="web-maintainers",
+        introduced_on=TODAY,
+        review_on=TODAY,
+        rationale="A fixture-only exact authorization.",
+        counterfactual="Removing the fixture marker would invalidate the collector fixture.",
+        risk="The scope is limited to a named test fixture.",
+        tests=("scripts/tests/static_analysis/test_inventory.py",),
+        expires_on=date(2026, 8, 31),
+        remediation="Remove the fixture marker when the fixture is retired.",
+    )
+
+
+def test_collector_scopes_reconcile_only_their_authorized_surface() -> None:
+    entries = (
+        _surface_entry(
+            "eslint-diagnostic",
+            tool="eslint",
+            mechanism=Mechanism.DIAGNOSTIC,
+            target="span:eslint",
+        ),
+        _surface_entry(
+            "typescript-diagnostic",
+            tool="typescript",
+            mechanism=Mechanism.DIAGNOSTIC,
+            target="span:typescript",
+        ),
+        _surface_entry(
+            "source-inline",
+            tool="eslint",
+            mechanism=Mechanism.INLINE,
+            target="line:1:eslint-disable",
+        ),
+        _surface_entry(
+            "config-entry",
+            tool="eslint",
+            mechanism=Mechanism.CONFIG,
+            target="ignore-pattern",
+            path="apps/web/.eslintrc.cjs",
+        ),
+        _surface_entry(
+            "ci-command",
+            tool="shell",
+            mechanism=Mechanism.COMMAND,
+            target="--quiet",
+            path="scripts/gates/example.sh",
+        ),
+        _surface_entry(
+            "source-go-generate",
+            tool="go",
+            mechanism=Mechanism.COMMAND,
+            target="line:1:go:generate:go:generate go run ./tools",
+            path="scripts/tests/static_analysis/fixtures/source/go.go",
+            rule="go:generate",
+        ),
+        _surface_entry(
+            "go-marker",
+            tool="go",
+            mechanism=Mechanism.MARKER,
+            target="generated:fixture",
+            path="apps/server/fixture.go",
+        ),
+        _surface_entry(
+            "go-source-inline",
+            tool="golangci-lint",
+            mechanism=Mechanism.INLINE,
+            target="line:1:nolint",
+            path="apps/server/fixture.go",
+        ),
+    )
+    registry = Registry(schema_version=1, default="deny", exemptions=entries)
+
+    native = select_registry_for_collectors(
+        registry, ("eslint", "typescript")
+    )
+    assert {entry.id for entry in native.exemptions} == {
+        "eslint-diagnostic",
+        "typescript-diagnostic",
+    }
+
+    suppressions = select_registry_for_collectors(
+        registry, ("source", "config", "ci")
+    )
+    assert {entry.id for entry in suppressions.exemptions} == {
+        "source-inline",
+        "go-source-inline",
+        "source-go-generate",
+        "config-entry",
+        "ci-command",
+    }
+
+    ci = select_registry_for_collectors(registry, ("ci",))
+    assert {entry.id for entry in ci.exemptions} == {"ci-command"}
+
+    go = select_registry_for_collectors(registry, ("go",))
+    assert {entry.id for entry in go.exemptions} == {"go-marker"}

@@ -32,6 +32,17 @@ jobs:
       - name: Install ripgrep (shared hygiene gate)
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
+      - name: Setup Node 20 (exact static-analysis checker)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install frontend dependencies for exact checker
+        working-directory: apps/web
+        run: npm ci
+
       - name: Run shared hygiene gate
         run: ./scripts/run_gate_group.sh hygiene
 

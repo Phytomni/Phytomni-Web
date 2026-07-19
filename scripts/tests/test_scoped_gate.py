@@ -13,6 +13,7 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
 SCOPED_GATE = ROOT / "scripts" / "scoped_gate.sh"
+COMMON_GATE = ROOT / "scripts" / "gates" / "common.sh"
 
 
 def _run_git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -50,6 +51,10 @@ def _init_repo(tmp_path: Path) -> Path:
     scoped_copy.parent.mkdir(parents=True)
     shutil.copy2(SCOPED_GATE, scoped_copy)
     scoped_copy.chmod(0o755)
+    common_copy = repo / "scripts" / "gates" / "common.sh"
+    common_copy.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(COMMON_GATE, common_copy)
+    common_copy.chmod(0o755)
     _executable(
         repo / "scripts" / "run_gate_group.sh",
         "#!/usr/bin/env bash\n"
@@ -167,6 +172,27 @@ def test_precommit_uses_staged_acmr_paths_and_preserves_special_names(tmp_path: 
     assert b"with space.ts" in log
     assert b"line\nname.ts" in log
     assert b"unstaged.ts" not in log
+
+
+def test_scoped_checker_failure_is_propagated_without_fallback_success(
+    tmp_path: Path,
+) -> None:
+    repo = _init_repo(tmp_path)
+    _install_frontend_tools(repo)
+    fake_bin = _install_command_stubs(repo, "python3")
+    _executable(
+        fake_bin / "python3",
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\0' checker-failure >> \"${SCOPED_TOOL_LOG:?}\"\n"
+        "exit 2\n",
+    )
+    _write(repo, "apps/web/src/checker-failure.ts")
+    _run_git(repo, "add", "-A")
+
+    result = _run_gate(repo, "precommit", extra_path=fake_bin)
+
+    assert result.returncode == 2
+    assert b"checker-failure\0" in _log(repo)
 
 
 def test_staged_rename_and_delete_use_only_the_new_acmr_path(tmp_path: Path) -> None:
