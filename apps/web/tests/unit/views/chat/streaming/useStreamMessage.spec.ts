@@ -48,7 +48,12 @@ describe("useStreamMessage", () => {
     ]);
     (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
 
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
@@ -115,7 +120,7 @@ describe("useStreamMessage", () => {
             "X-Request-Id": fixture.webRequestId,
             "X-Bot-Request-Id": fixture.botRequestId,
           },
-        }),
+        })
       );
       const formData = new FormData();
       formData.append("tool", fixture.tool);
@@ -143,9 +148,9 @@ describe("useStreamMessage", () => {
       expect(placeholder.a2uiRuntime?.runId).toBe(fixture.runId);
       expect(placeholder.a2uiRuntime?.messageId).toBe(fixture.messageId);
       expect(placeholder.a2uiRuntime?.messageId).not.toBe(fixture.runId);
-      expect(placeholder.blocks?.find((block) => block.type === "markdown")?.text).toBe(
-        fixture.tool,
-      );
+      expect(
+        placeholder.blocks?.find((block) => block.type === "markdown")?.text
+      ).toBe(fixture.tool);
       const request = (fetch as any).mock.calls[index][1] as RequestInit;
       expect((request.body as FormData).get("tool")).toBe(fixture.tool);
       expect((request.body as FormData).get("mode")).toBe("instant");
@@ -192,23 +197,46 @@ describe("useStreamMessage", () => {
       'event: RunError\ndata: {"type":"RunError","message":"boom"}\n\n',
     ]);
     (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     expect(placeholder.streaming).toBe(false);
     expect(placeholder.content).toContain("boom");
   });
 
   it("shows the interrupted copy and finalizes when the HTTP response is not ok", async () => {
     (fetch as any).mockResolvedValue(new Response(null, { status: 503 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
     });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     // A non-ok stream throws before the read loop; the catch marks it resend-able.
     expect(placeholder.content).toBe("chat.streamInterrupted");
     expect(placeholder.streaming).toBe(false);
@@ -218,10 +246,23 @@ describe("useStreamMessage", () => {
 
   it("shows the interrupted copy when the fetch itself fails (network error)", async () => {
     (fetch as any).mockRejectedValue(new Error("network down"));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     expect(placeholder.content).toBe("chat.streamInterrupted");
     expect(placeholder.streaming).toBe(false);
   });
@@ -230,10 +271,23 @@ describe("useStreamMessage", () => {
     const abortErr = new Error("aborted");
     abortErr.name = "AbortError";
     (fetch as any).mockRejectedValue(abortErr);
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     // A deliberate user abort is not an interruption — no error copy, but still finalized.
     expect(placeholder.content).toBe("");
     expect(placeholder.streaming).toBe(false);
@@ -247,10 +301,23 @@ describe("useStreamMessage", () => {
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
     (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     expect((placeholder as any).doc_list).toEqual([{ title: "T1" }]);
   });
 
@@ -262,10 +329,23 @@ describe("useStreamMessage", () => {
       '"delta":"split-safe"}\n\nevent: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
     (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     const md = placeholder.blocks!.find((b) => b.type === "markdown");
     expect(md?.text).toBe("split-safe");
     expect(placeholder.streaming).toBe(false);
@@ -279,11 +359,23 @@ describe("useStreamMessage", () => {
     ]);
     (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
-      role: "assistant", content: "", streaming: true, blocks: [], showFollowUpQuestions: false,
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      showFollowUpQuestions: false,
     };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     expect(placeholder.followUpQuestions).toEqual(["q1", "q2"]);
     // The blocking path reveals chips via MarkdownViewer @finish; the stream
     // path has no @finish, so finalize must flip the reveal flag itself.
@@ -300,19 +392,19 @@ describe("useStreamMessage", () => {
       async start(controller) {
         controller.enqueue(
           enc.encode(
-            'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-42"}\n\n',
-          ),
+            'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-42"}\n\n'
+          )
         );
         controller.enqueue(
           enc.encode(
-            'event: Custom\ndata: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-1","widget":"confirm","props":{"title":"OK?"}}}\n\n',
-          ),
+            'event: Custom\ndata: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-1","widget":"confirm","props":{"title":"OK?"}}}\n\n'
+          )
         );
         await gate;
         controller.enqueue(
           enc.encode(
-            'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-42"}\n\n',
-          ),
+            'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-42"}\n\n'
+          )
         );
         controller.close();
       },
@@ -348,7 +440,12 @@ describe("useStreamMessage", () => {
         )
       );
 
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = {
       isStreaming: false,
       streamingMessageId: null,
@@ -390,7 +487,7 @@ describe("useStreamMessage", () => {
     expect(fetch).toHaveBeenNthCalledWith(
       2,
       `/api/v1/conversations/${CANONICAL_DIALOGUE_ID}/a2ui-actions`,
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({ method: "POST" })
     );
   });
 
@@ -409,7 +506,7 @@ describe("useStreamMessage", () => {
           "X-Request-Id": "web-req-314",
           "X-Bot-Request-Id": "bot-req-2718",
         },
-      }),
+      })
     );
     const formData = new FormData();
     formData.append("id", "0");
@@ -456,7 +553,7 @@ describe("useStreamMessage", () => {
           "X-Request-Id": "web request with spaces",
           "X-Bot-Request-Id": "bot/request",
         },
-      }),
+      })
     );
     const placeholder: ChatMessage = {
       role: "assistant",
@@ -638,8 +735,8 @@ describe("useStreamMessage", () => {
           sent = true;
           controller.enqueue(
             enc.encode(
-              'event: RunError\ndata: {"type":"RunError","message":"upstream boom"}\n\n',
-            ),
+              'event: RunError\ndata: {"type":"RunError","message":"upstream boom"}\n\n'
+            )
           );
           return;
         }
@@ -712,7 +809,7 @@ describe("useStreamMessage", () => {
           "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
           "X-Phyto-Message-Id": "203",
         },
-      }),
+      })
     );
     const placeholder: ChatMessage = {
       role: "assistant",
@@ -792,10 +889,23 @@ describe("useStreamMessage", () => {
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
     (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
     const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "req-9", placeholder });
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "req-9",
+      placeholder,
+    });
     // The map must not accumulate a stale controller per streamed message.
     expect(unregisterAbortController).toHaveBeenCalledWith("req-9");
   });
@@ -815,14 +925,14 @@ describe("useStreamMessage", () => {
         async start(controller) {
           controller.enqueue(
             enc.encode(
-              `event: RunStarted\ndata: {"type":"RunStarted","run_id":"${runId}"}\n\n`,
-            ),
+              `event: RunStarted\ndata: {"type":"RunStarted","run_id":"${runId}"}\n\n`
+            )
           );
           await gate;
           controller.enqueue(
             enc.encode(
-              `event: RunFinished\ndata: {"type":"RunFinished","run_id":"${runId}"}\n\n`,
-            ),
+              `event: RunFinished\ndata: {"type":"RunFinished","run_id":"${runId}"}\n\n`
+            )
           );
           controller.close();
         },

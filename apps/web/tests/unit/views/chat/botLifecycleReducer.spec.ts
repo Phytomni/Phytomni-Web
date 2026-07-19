@@ -347,14 +347,11 @@ describe("bot lifecycle reducer", () => {
       code: "no_evidence",
     });
 
-    const stale = reduceBotProjection(
-      state,
-      {
-        ...projection({ agent: "InSilicoResearchAgent", reportRevision: 1 }),
-        interop: { mode: "off", status: "local" },
-        degradedInterop: false,
-      } as BotRunProjection
-    );
+    const stale = reduceBotProjection(state, {
+      ...projection({ agent: "InSilicoResearchAgent", reportRevision: 1 }),
+      interop: { mode: "off", status: "local" },
+      degradedInterop: false,
+    } as BotRunProjection);
     expect(stale.interop).toEqual(state.interop);
     expect(stale.degradedInterop).toBe(true);
   });

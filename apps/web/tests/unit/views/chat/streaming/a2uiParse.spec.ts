@@ -19,7 +19,10 @@ import type {
 
 const fixture = (relativePath: string): unknown =>
   JSON.parse(
-    readFileSync(resolve(process.cwd(), "tests/fixtures/a2ui", relativePath), "utf8")
+    readFileSync(
+      resolve(process.cwd(), "tests/fixtures/a2ui", relativePath),
+      "utf8"
+    )
   );
 
 const openSurface = (
@@ -288,19 +291,28 @@ describe("decodeA2uiOpenSurface", () => {
     });
     expect(
       decodeA2uiOpenSurface(
-        openSurface("form", { title: "Fields", fields: Array.from({ length: 20 }, (_, i) => field(i)) })
+        openSurface("form", {
+          title: "Fields",
+          fields: Array.from({ length: 20 }, (_, i) => field(i)),
+        })
       ).ok
     ).toBe(true);
     expectReason(
       decodeA2uiOpenSurface(
-        openSurface("form", { title: "Fields", fields: Array.from({ length: 21 }, (_, i) => field(i)) })
+        openSurface("form", {
+          title: "Fields",
+          fields: Array.from({ length: 21 }, (_, i) => field(i)),
+        })
       ),
       "limit_exceeded"
     );
   });
 
   it("allows 100 choice options and rejects 101", () => {
-    const option = (index: number) => ({ id: `option-${index}`, label: `Option ${index}` });
+    const option = (index: number) => ({
+      id: `option-${index}`,
+      label: `Option ${index}`,
+    });
     expect(
       decodeA2uiOpenSurface(
         openSurface("choice", {
@@ -328,9 +340,18 @@ describe("decodeA2uiOpenSurface", () => {
     [[], "invalid_object"],
     [{ ...openSurface("confirm", confirmProps), props: [] }, "props_invalid"],
     [{ ...openSurface("confirm", confirmProps), props: null }, "props_invalid"],
-    [{ ...openSurface("confirm", confirmProps), widget: "chart" }, "widget_unsupported"],
-    [{ ...openSurface("confirm", confirmProps), catalog_version: "v0.9" }, "catalog_unsupported"],
-    [{ ...openSurface("confirm", confirmProps), surface_id: 4 }, "identifier_invalid"],
+    [
+      { ...openSurface("confirm", confirmProps), widget: "chart" },
+      "widget_unsupported",
+    ],
+    [
+      { ...openSurface("confirm", confirmProps), catalog_version: "v0.9" },
+      "catalog_unsupported",
+    ],
+    [
+      { ...openSurface("confirm", confirmProps), surface_id: 4 },
+      "identifier_invalid",
+    ],
   ] as const)("fails closed for malformed open input %#", (value, reason) => {
     expectReason(decodeA2uiOpenSurface(value), reason);
   });
@@ -338,7 +359,10 @@ describe("decodeA2uiOpenSurface", () => {
   it("requires trimmed, non-empty strings for identifiers", () => {
     for (const surface_id of ["", " surface-1", "surface-1 "]) {
       expectReason(
-        decodeA2uiOpenSurface({ ...openSurface("confirm", confirmProps), surface_id }),
+        decodeA2uiOpenSurface({
+          ...openSurface("confirm", confirmProps),
+          surface_id,
+        }),
         surface_id ? "identifier_invalid" : "identifier_invalid"
       );
     }
@@ -385,7 +409,9 @@ describe("decodeA2uiTerminalSurface", () => {
   it.each([
     { ...openSurface("confirm", { status: "submitted", accepted: "yes" }) },
     { ...openSurface("form", { status: "submitted", fields: { gene: true } }) },
-    { ...openSurface("choice", { status: "submitted", selected: { id: "a" } }) },
+    {
+      ...openSurface("choice", { status: "submitted", selected: { id: "a" } }),
+    },
   ])("rejects invalid terminal scalar branches", (value) => {
     expectReason(decodeA2uiTerminalSurface(value), "props_invalid");
   });
@@ -393,7 +419,9 @@ describe("decodeA2uiTerminalSurface", () => {
 
 describe("decodeA2uiActionResponse", () => {
   it("decodes terminal_succeeded with full-envelope metadata", () => {
-    const result = decodeA2uiActionResponse(fixture("http/terminal_succeeded.json"));
+    const result = decodeA2uiActionResponse(
+      fixture("http/terminal_succeeded.json")
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.status).toBe("succeeded");
@@ -409,14 +437,22 @@ describe("decodeA2uiActionResponse", () => {
     if (result.ok) {
       expect(result.value.status).toBe("input_required");
       if (result.value.status === "input_required") {
-        expect(result.value.interrupt.draft.a2ui.surface_id).toBe("sfc-contract-2");
+        expect(result.value.interrupt.draft.a2ui.surface_id).toBe(
+          "sfc-contract-2"
+        );
       }
     }
   });
 
   it("rejects empty, malformed, unknown-status, missing-branch, and mixed branches", () => {
-    const terminal = fixture("http/terminal_succeeded.json") as Record<string, unknown>;
-    const input = fixture("http/input_required_round2.json") as Record<string, unknown>;
+    const terminal = fixture("http/terminal_succeeded.json") as Record<
+      string,
+      unknown
+    >;
+    const input = fixture("http/input_required_round2.json") as Record<
+      string,
+      unknown
+    >;
     const cases: [unknown, A2uiDecodeReason][] = [
       [null, "invalid_object"],
       [[], "invalid_object"],
@@ -433,7 +469,8 @@ describe("decodeA2uiActionResponse", () => {
         "response_invalid",
       ],
     ];
-    for (const [value, reason] of cases) expectReason(decodeA2uiActionResponse(value), reason);
+    for (const [value, reason] of cases)
+      expectReason(decodeA2uiActionResponse(value), reason);
   });
 
   it("does not accept conflict_not_open as a success response", () => {
@@ -444,12 +481,17 @@ describe("decodeA2uiActionResponse", () => {
   });
 
   it("requires a bounded trimmed run_id", () => {
-    const response = fixture("http/terminal_succeeded.json") as Record<string, unknown>;
+    const response = fixture("http/terminal_succeeded.json") as Record<
+      string,
+      unknown
+    >;
     for (const run_id of ["", " run-1", "run-1 ", "x".repeat(257)]) {
       const result = decodeA2uiActionResponse({ ...response, run_id });
       expectReason(
         result,
-        run_id.length > A2UI_LIMITS.identifierChars ? "limit_exceeded" : "identifier_invalid"
+        run_id.length > A2UI_LIMITS.identifierChars
+          ? "limit_exceeded"
+          : "identifier_invalid"
       );
     }
   });
@@ -462,7 +504,10 @@ describe("decodeA2uiActionResponse", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).not.toHaveProperty("attacker");
-      expect(result.value).toMatchObject({ status: "succeeded", run_id: "run-contract-1" });
+      expect(result.value).toMatchObject({
+        status: "succeeded",
+        run_id: "run-contract-1",
+      });
     }
   });
 });

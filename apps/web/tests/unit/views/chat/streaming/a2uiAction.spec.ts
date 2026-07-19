@@ -1,9 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect, vi } from "vitest";
-import {
-  decodeA2uiActionResponse,
-} from "@/views/chat/streaming/a2uiParse";
+import { decodeA2uiActionResponse } from "@/views/chat/streaming/a2uiParse";
 import {
   buildA2uiActionId,
   createMemoryA2uiTransport,
@@ -16,7 +14,10 @@ import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
 
 const fixture = (relativePath: string): unknown =>
   JSON.parse(
-    readFileSync(resolve(process.cwd(), "tests/fixtures/a2ui", relativePath), "utf8"),
+    readFileSync(
+      resolve(process.cwd(), "tests/fixtures/a2ui", relativePath),
+      "utf8"
+    )
   );
 
 const decodedFixture = (relativePath: string): A2uiActionResponse => {
@@ -26,7 +27,7 @@ const decodedFixture = (relativePath: string): A2uiActionResponse => {
 };
 
 const terminalResponseFor = (
-  envelope: A2uiActionEnvelope,
+  envelope: A2uiActionEnvelope
 ): A2uiActionResponse => {
   const response = decodedFixture("http/terminal_succeeded.json");
   return { ...response, run_id: envelope.run_id };
@@ -40,7 +41,10 @@ const envelope: A2uiActionEnvelope = {
   payload: { accepted: true },
 };
 
-const gatewayError = (code: string, overrides: Record<string, unknown> = {}) => ({
+const gatewayError = (
+  code: string,
+  overrides: Record<string, unknown> = {}
+) => ({
   error: {
     type: "gateway_error",
     code,
@@ -88,7 +92,7 @@ describe("a2uiAction", () => {
         new Response(JSON.stringify(fixture("http/terminal_succeeded.json")), {
           status: 200,
           headers: { "Content-Type": "application/json" },
-        }),
+        })
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -116,10 +120,13 @@ describe("a2uiAction", () => {
   it("fetch transport decodes input-required responses", async () => {
     const fetchImpl = vi.fn(
       async () =>
-        new Response(JSON.stringify(fixture("http/input_required_round2.json")), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify(fixture("http/input_required_round2.json")),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -147,17 +154,20 @@ describe("a2uiAction", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     await expect(
-      sendA2uiAction({ ...envelope, action_id: "network-failure" }, t),
+      sendA2uiAction({ ...envelope, action_id: "network-failure" }, t)
     ).rejects.toMatchObject({ kind: "unknown" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("maps an invalid upstream gateway envelope to an ambiguous outcome", async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(502, gatewayError("a2ui_upstream_invalid", {
-        forwarded: true,
-        retryable: false,
-      })),
+      jsonResponse(
+        502,
+        gatewayError("a2ui_upstream_invalid", {
+          forwarded: true,
+          retryable: false,
+        })
+      )
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -176,10 +186,13 @@ describe("a2uiAction", () => {
 
   it("maps an oversized upstream gateway envelope to an ambiguous outcome", async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(502, gatewayError("a2ui_upstream_too_large", {
-        forwarded: true,
-        retryable: false,
-      })),
+      jsonResponse(
+        502,
+        gatewayError("a2ui_upstream_too_large", {
+          forwarded: true,
+          retryable: false,
+        })
+      )
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -197,7 +210,7 @@ describe("a2uiAction", () => {
 
   it.each([404, 409])("maps HTTP %s to expired", async (status) => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(status, gatewayError("a2ui_not_found", { retryable: false })),
+      jsonResponse(status, gatewayError("a2ui_not_found", { retryable: false }))
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -217,7 +230,10 @@ describe("a2uiAction", () => {
     "maps HTTP %s to rejected",
     async (status) => {
       const fetchImpl = vi.fn(async () =>
-        jsonResponse(status, gatewayError("a2ui_invalid_action", { retryable: false })),
+        jsonResponse(
+          status,
+          gatewayError("a2ui_invalid_action", { retryable: false })
+        )
       );
       const t = createFetchA2uiTransport({
         conversationId: "42",
@@ -231,12 +247,12 @@ describe("a2uiAction", () => {
         forwarded: false,
         retryable: false,
       });
-    },
+    }
   );
 
   it("maps a proven pre-dispatch local rejection to temporarily_rejected", async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(503, gatewayError("a2ui_gateway_disabled")),
+      jsonResponse(503, gatewayError("a2ui_gateway_disabled"))
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -254,10 +270,13 @@ describe("a2uiAction", () => {
 
   it("does not trust non-boolean forwarding metadata", async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(503, gatewayError("a2ui_gateway_disabled", {
-        forwarded: "false",
-        retryable: true,
-      })),
+      jsonResponse(
+        503,
+        gatewayError("a2ui_gateway_disabled", {
+          forwarded: "false",
+          retryable: true,
+        })
+      )
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -273,7 +292,10 @@ describe("a2uiAction", () => {
 
   it.each([500, 502, 504])("maps HTTP %s to unknown", async (status) => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(status, gatewayError("a2ui_internal", { forwarded: true, retryable: false })),
+      jsonResponse(
+        status,
+        gatewayError("a2ui_internal", { forwarded: true, retryable: false })
+      )
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -291,7 +313,10 @@ describe("a2uiAction", () => {
 
   it.each([
     ["timeout", new Error("timeout")],
-    ["abort-after-send", new DOMException("The operation was aborted", "AbortError")],
+    [
+      "abort-after-send",
+      new DOMException("The operation was aborted", "AbortError"),
+    ],
     ["network", new TypeError("Failed to fetch")],
   ])("maps %s failures to unknown", async (_label, failure) => {
     const fetchImpl = vi.fn(async () => {
@@ -321,7 +346,7 @@ describe("a2uiAction", () => {
           ...gatewayError("a2ui_invalid_action").error,
           message: "upstream secret should not be exposed",
         },
-      }),
+      })
     );
     const t = createFetchA2uiTransport({
       conversationId: "42",

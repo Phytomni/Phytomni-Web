@@ -298,10 +298,7 @@ describe("buildPresentationItems", () => {
       widget: "confirm",
       props: { status: "submitted", accepted: true },
     };
-    const response: Extract<
-      A2uiActionResponse,
-      { status: "succeeded" }
-    > = {
+    const response: Extract<A2uiActionResponse, { status: "succeeded" }> = {
       status: "succeeded",
       run_id: envelope.run_id,
       result: {
@@ -358,7 +355,9 @@ describe("activity disclosure identity helpers", () => {
 
   it("returns null when neither key exists (missing-key contract)", () => {
     expect(resolveMessagePresentationKey({})).toBeNull();
-    expect(resolveMessagePresentationKey({ id: "", streamPresentationKey: "" })).toBeNull();
+    expect(
+      resolveMessagePresentationKey({ id: "", streamPresentationKey: "" })
+    ).toBeNull();
   });
 
   it("composes state key as stream:<messageKey>:activity-<startIndex>", () => {

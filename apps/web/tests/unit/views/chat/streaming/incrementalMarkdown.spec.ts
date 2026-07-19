@@ -21,7 +21,9 @@ describe("renderStreamingMarkdown — safe incremental rendering", () => {
   });
 
   it("renders complete bold normally", () => {
-    expect(renderStreamingMarkdown("**done**")).toContain("<strong>done</strong>");
+    expect(renderStreamingMarkdown("**done**")).toContain(
+      "<strong>done</strong>"
+    );
   });
 
   it("keeps [N] literal when no ns is given (citation scope gate)", () => {

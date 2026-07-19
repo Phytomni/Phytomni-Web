@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parseAGUIFrame, splitSSEFrames } from "@/views/chat/streaming/aguiEvents";
+import {
+  parseAGUIFrame,
+  splitSSEFrames,
+} from "@/views/chat/streaming/aguiEvents";
 
 describe("parseAGUIFrame", () => {
   it("parses a TextMessageContent frame", () => {
@@ -18,7 +21,9 @@ describe("parseAGUIFrame", () => {
   });
 
   it("prefers the data.type field over the event: line", () => {
-    const ev = parseAGUIFrame('event: X\ndata: {"type":"RunFinished","run_id":"r1"}');
+    const ev = parseAGUIFrame(
+      'event: X\ndata: {"type":"RunFinished","run_id":"r1"}'
+    );
     expect(ev!.type).toBe("RunFinished");
   });
 });
@@ -40,7 +45,7 @@ describe("splitSSEFrames", () => {
     expect(first.rest).toBe(firstChunk);
 
     const second = splitSSEFrames(
-      first.rest + '\ndata: [DONE]\r\n\r\n\r\n\r\npartial'
+      first.rest + "\ndata: [DONE]\r\n\r\n\r\n\r\npartial"
     );
     expect(second.frames).toEqual([
       'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"hi"}',
@@ -52,7 +57,7 @@ describe("splitSSEFrames", () => {
   });
 
   it("ignores empty LF and CRLF frames while consuming their separators", () => {
-    expect(splitSSEFrames("\n\n\r\n\r\ndata: {\"ok\":true}\n\n")).toEqual({
+    expect(splitSSEFrames('\n\n\r\n\r\ndata: {"ok":true}\n\n')).toEqual({
       frames: ['data: {"ok":true}'],
       rest: "",
     });
@@ -88,7 +93,7 @@ describe("combined gated compatibility fixture", () => {
       '\nevent: FutureEvent\ndata: {"type":"FutureEvent","value":"ignored"}\n\n',
       'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"synthetic"}\r\n\r\n',
       'event: RunError\ndata: {"type":"RunError","code":"fixture_failure","message":"synthetic failure"}\n\n',
-      'data: [DONE]\r\n\r\npartial',
+      "data: [DONE]\r\n\r\npartial",
     ];
     let buffer = "";
     const frames: string[] = [];
@@ -105,11 +110,7 @@ describe("combined gated compatibility fixture", () => {
     expect(frames[3]).toContain("\n");
     expect(buffer).toBe("partial");
 
-    const allowed = new Set([
-      "RunStarted",
-      "TextMessageContent",
-      "RunError",
-    ]);
+    const allowed = new Set(["RunStarted", "TextMessageContent", "RunError"]);
     const observed = frames
       .map((frame) => parseAGUIFrame(frame))
       .filter((event): event is NonNullable<typeof event> => event !== null);
@@ -119,11 +120,11 @@ describe("combined gated compatibility fixture", () => {
       "TextMessageContent",
       "RunError",
     ]);
-    expect(observed.filter((event) => allowed.has(event.type)).map((event) => event.type)).toEqual([
-      "RunStarted",
-      "TextMessageContent",
-      "RunError",
-    ]);
+    expect(
+      observed
+        .filter((event) => allowed.has(event.type))
+        .map((event) => event.type)
+    ).toEqual(["RunStarted", "TextMessageContent", "RunError"]);
     expect(observed[0].data.run_id).toBe("run-task27");
     expect(observed[3].data.message).toBe("synthetic failure");
     expect(parseAGUIFrame(frames[4])).toBeNull();

@@ -122,8 +122,7 @@ async function runGeometryHarness(
     {
       scrollHeight: 1200,
       clientHeight: 672,
-      clientWidth:
-        options.transcriptClientWidth ?? Math.max(1, width - 280),
+      clientWidth: options.transcriptClientWidth ?? Math.max(1, width - 280),
       scrollWidth: options.transcriptScrollWidth ?? Math.max(1, width - 280),
     }
   );
@@ -914,9 +913,9 @@ describe("Chat visual fixture rendering (no network)", () => {
     await flushPromises();
     await nextTick();
 
-    expect(
-      wrapper.findComponent({ name: "ChatMessageContent" }).exists()
-    ).toBe(true);
+    expect(wrapper.findComponent({ name: "ChatMessageContent" }).exists()).toBe(
+      true
+    );
     expect(wrapper.findComponent({ name: "StreamMessage" }).exists()).toBe(
       true
     );
@@ -926,9 +925,9 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(wrapper.find(".a2ui-form label").text()).toHaveLength(256);
     expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(true);
     expect(
-      wrapper.find('.agent-surface-block[data-widget="form"]').attributes(
-        "aria-busy"
-      )
+      wrapper
+        .find('.agent-surface-block[data-widget="form"]')
+        .attributes("aria-busy")
     ).toBe("true");
     expect(wrapper.findAll(".a2ui-actions")).toHaveLength(3);
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -947,9 +946,9 @@ describe("Chat visual fixture rendering (no network)", () => {
       await nextTick();
 
       expect(wrapper.findAll(".agent-surface-block")).toHaveLength(7);
-      expect(wrapper.findAll('[role="status"][aria-live="polite"]')).toHaveLength(
-        5
-      );
+      expect(
+        wrapper.findAll('[role="status"][aria-live="polite"]')
+      ).toHaveLength(5);
       expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(true);
       wrapper.unmount();
     }
@@ -978,9 +977,9 @@ describe("Chat visual fixture rendering (no network)", () => {
       lastMessageRect: rect(16, 620, 359, 700),
     });
     expect(mobile.pass).toBe(true);
-    expect((mobile.reasons ?? []).some((reason) => /overflow/.test(reason))).toBe(
-      false
-    );
+    expect(
+      (mobile.reasons ?? []).some((reason) => /overflow/.test(reason))
+    ).toBe(false);
     expect(CONTENT_SOURCE).toContain("overflow-x: auto");
     expect(CONTENT_SOURCE).toContain("word-break: break-word");
     expect(CONTENT_SOURCE).toContain("max-width: 100%");

@@ -37,7 +37,7 @@ const surface: A2uiOpenSurface = {
 
 const readyBlock = (
   overrides: Partial<ContentBlock> = {},
-  openSurface: A2uiOpenSurface = surface,
+  openSurface: A2uiOpenSurface = surface
 ): ContentBlock => ({
   type: "agent-surface",
   authority: "agent",
@@ -46,7 +46,9 @@ const readyBlock = (
   ...overrides,
 });
 
-const blocksWithTarget = (target: ContentBlock = readyBlock()): ContentBlock[] => [
+const blocksWithTarget = (
+  target: ContentBlock = readyBlock()
+): ContentBlock[] => [
   { type: "markdown", authority: "web", text: "before" },
   target,
   { type: "tool", authority: "web", toolName: "search", count: 2 },
@@ -88,10 +90,7 @@ const choiceSurface: A2uiOpenSurface = {
   },
 };
 
-type SucceededResponse = Extract<
-  A2uiActionResponse,
-  { status: "succeeded" }
->;
+type SucceededResponse = Extract<A2uiActionResponse, { status: "succeeded" }>;
 
 type InputRequiredResponse = Extract<
   A2uiActionResponse,
@@ -100,7 +99,7 @@ type InputRequiredResponse = Extract<
 
 const terminalConfirm = (
   surfaceKey: string,
-  accepted: boolean,
+  accepted: boolean
 ): A2uiTerminalSurface => ({
   catalog_version: "v1.0",
   surface_id: surfaceKey,
@@ -111,7 +110,7 @@ const terminalConfirm = (
 const terminalForm = (
   surfaceKey: string,
   fields: Record<string, string>,
-  cancelled = false,
+  cancelled = false
 ): A2uiTerminalSurface => ({
   catalog_version: "v1.0",
   surface_id: surfaceKey,
@@ -126,7 +125,7 @@ const terminalForm = (
 const terminalChoice = (
   surfaceKey: string,
   selected: string | string[] | undefined,
-  cancelled = false,
+  cancelled = false
 ): A2uiTerminalSurface => ({
   catalog_version: "v1.0",
   surface_id: surfaceKey,
@@ -141,16 +140,17 @@ const terminalChoice = (
 const beginSubmitting = (
   openSurface: A2uiOpenSurface,
   intent: A2uiActionIntent,
-  actionId = "action-1",
+  actionId = "action-1"
 ): { blocks: ContentBlock[]; envelope: A2uiActionEnvelope } => {
   const result = beginA2uiAction(
     blocksWithTarget(readyBlock({}, openSurface)),
     openSurface.surface_id,
     "run-9",
     intent,
-    actionId,
+    actionId
   );
-  if (!result.ok) throw new Error(`expected begin to succeed: ${result.reason}`);
+  if (!result.ok)
+    throw new Error(`expected begin to succeed: ${result.reason}`);
   return result;
 };
 
@@ -158,7 +158,7 @@ const succeeded = (
   envelope: A2uiActionEnvelope,
   a2ui: A2uiTerminalSurface,
   answer?: string,
-  runId = envelope.run_id,
+  runId = envelope.run_id
 ): SucceededResponse => ({
   status: "succeeded",
   run_id: runId,
@@ -171,7 +171,7 @@ const succeeded = (
 const inputRequired = (
   envelope: A2uiActionEnvelope,
   a2ui: A2uiOpenSurface,
-  runId = envelope.run_id,
+  runId = envelope.run_id
 ): InputRequiredResponse => ({
   status: "input_required",
   run_id: runId,
@@ -182,15 +182,15 @@ const fixture = (relativePath: string): unknown =>
   JSON.parse(
     readFileSync(
       resolve(process.cwd(), "tests/fixtures/a2ui", relativePath),
-      "utf8",
-    ),
+      "utf8"
+    )
   );
 
 const inputRequiredRound2Fixture = (
-  envelope: A2uiActionEnvelope,
+  envelope: A2uiActionEnvelope
 ): InputRequiredResponse => {
   const decoded = decodeA2uiActionResponse(
-    fixture("http/input_required_round2.json"),
+    fixture("http/input_required_round2.json")
   );
   if (!decoded.ok || decoded.value.status !== "input_required") {
     throw new Error("expected the round-2 fixture to decode as input_required");
@@ -207,7 +207,7 @@ describe("beginA2uiAction", () => {
       "surface-1",
       "run-9",
       confirmIntent,
-      "action-1",
+      "action-1"
     );
 
     expect(result).toEqual({
@@ -253,7 +253,7 @@ describe("beginA2uiAction", () => {
       "surface-1",
       "run-9",
       confirmIntent,
-      "action-1",
+      "action-1"
     );
 
     expect(result.ok).toBe(true);
@@ -270,7 +270,7 @@ describe("beginA2uiAction", () => {
       "surface-1",
       "run-9",
       confirmIntent,
-      "action-1",
+      "action-1"
     );
     if (!first.ok) throw new Error("expected first begin to succeed");
 
@@ -280,7 +280,7 @@ describe("beginA2uiAction", () => {
       "surface-1",
       "run-9",
       confirmIntent,
-      "action-2",
+      "action-2"
     );
 
     expect(second).toEqual({
@@ -292,29 +292,60 @@ describe("beginA2uiAction", () => {
   });
 
   it.each([
-    ["wrong widget", "intent_mismatch", "run-9", confirmIntent, "action-1", "surface-1"],
-    ["missing run ID", "run_missing", "", confirmIntent, "action-1", "surface-1"],
-    ["blank action ID", "action_id_invalid", "run-9", confirmIntent, "  ", "surface-1"],
-    ["missing surface", "surface_missing", "run-9", confirmIntent, "action-1", "missing"],
-  ] as const)("returns a fixed reason for %s without mutation", (_label, reason, runId, intent, actionId, surfaceKey) => {
-    const blocks = blocksWithTarget();
-    const original = structuredClone(blocks);
-    const mismatchedIntent: A2uiActionIntent = {
-      widget: "form",
-      payload: { cancelled: true },
-    };
+    [
+      "wrong widget",
+      "intent_mismatch",
+      "run-9",
+      confirmIntent,
+      "action-1",
+      "surface-1",
+    ],
+    [
+      "missing run ID",
+      "run_missing",
+      "",
+      confirmIntent,
+      "action-1",
+      "surface-1",
+    ],
+    [
+      "blank action ID",
+      "action_id_invalid",
+      "run-9",
+      confirmIntent,
+      "  ",
+      "surface-1",
+    ],
+    [
+      "missing surface",
+      "surface_missing",
+      "run-9",
+      confirmIntent,
+      "action-1",
+      "missing",
+    ],
+  ] as const)(
+    "returns a fixed reason for %s without mutation",
+    (_label, reason, runId, intent, actionId, surfaceKey) => {
+      const blocks = blocksWithTarget();
+      const original = structuredClone(blocks);
+      const mismatchedIntent: A2uiActionIntent = {
+        widget: "form",
+        payload: { cancelled: true },
+      };
 
-    const result = beginA2uiAction(
-      blocks,
-      surfaceKey,
-      runId,
-      reason === "intent_mismatch" ? mismatchedIntent : intent,
-      actionId,
-    );
+      const result = beginA2uiAction(
+        blocks,
+        surfaceKey,
+        runId,
+        reason === "intent_mismatch" ? mismatchedIntent : intent,
+        actionId
+      );
 
-    expect(result).toEqual({ ok: false, reason, blocks });
-    expect(blocks).toEqual(original);
-  });
+      expect(result).toEqual({ ok: false, reason, blocks });
+      expect(blocks).toEqual(original);
+    }
+  );
 
   it("rejects a non-ready target with the same fixed reason", () => {
     const blocks = blocksWithTarget({
@@ -335,7 +366,7 @@ describe("beginA2uiAction", () => {
       "surface-1",
       "run-9",
       confirmIntent,
-      "action-1",
+      "action-1"
     );
 
     expect(result).toEqual({ ok: false, reason: "surface_not_ready", blocks });
@@ -387,51 +418,48 @@ describe("reduceA2uiSucceeded", () => {
       terminalChoice(choiceSurface.surface_id, "a"),
       "submitted",
     ],
-  ] as const)("resolves %s from the authoritative terminal snapshot", (
-    _label,
-    openSurface,
-    intent,
-    terminal,
-    resolution,
-  ) => {
-    const { blocks, envelope } = beginSubmitting(openSurface, intent);
-    const next = reduceA2uiSucceeded(
-      blocks,
-      envelope,
-      succeeded(envelope, terminal, "Analysis complete."),
-    );
+  ] as const)(
+    "resolves %s from the authoritative terminal snapshot",
+    (_label, openSurface, intent, terminal, resolution) => {
+      const { blocks, envelope } = beginSubmitting(openSurface, intent);
+      const next = reduceA2uiSucceeded(
+        blocks,
+        envelope,
+        succeeded(envelope, terminal, "Analysis complete.")
+      );
 
-    expect(next).not.toBe(blocks);
-    expect(next[0]).toBe(blocks[0]);
-    expect(next[2]).toBe(blocks[2]);
-    expect(next[1]).not.toBe(blocks[1]);
-    expect(next[1]).not.toHaveProperty("surfaceId");
-    expect(next[1]).not.toHaveProperty("widget");
-    expect(next[1]).not.toHaveProperty("props");
-    expect(next[1].a2ui).toEqual({
-      surface: openSurface,
-      state: {
-        status: "resolved",
-        round: 1,
-        actionId: envelope.action_id,
-        resolution,
-        snapshot: terminal,
-      },
-    });
-    expect(next.at(-1)).toEqual({
-      type: "markdown",
-      authority: "agent",
-      text: "Analysis complete.",
-      sourceActionId: envelope.action_id,
-    });
-  });
+      expect(next).not.toBe(blocks);
+      expect(next[0]).toBe(blocks[0]);
+      expect(next[2]).toBe(blocks[2]);
+      expect(next[1]).not.toBe(blocks[1]);
+      expect(next[1]).not.toHaveProperty("surfaceId");
+      expect(next[1]).not.toHaveProperty("widget");
+      expect(next[1]).not.toHaveProperty("props");
+      expect(next[1].a2ui).toEqual({
+        surface: openSurface,
+        state: {
+          status: "resolved",
+          round: 1,
+          actionId: envelope.action_id,
+          resolution,
+          snapshot: terminal,
+        },
+      });
+      expect(next.at(-1)).toEqual({
+        type: "markdown",
+        authority: "agent",
+        text: "Analysis complete.",
+        sourceActionId: envelope.action_id,
+      });
+    }
+  );
 
   it("applies a terminal response exactly once and does not duplicate its answer", () => {
     const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
     const response = succeeded(
       envelope,
       terminalConfirm(surface.surface_id, true),
-      "Analysis complete.",
+      "Analysis complete."
     );
 
     const first = reduceA2uiSucceeded(blocks, envelope, response);
@@ -439,7 +467,7 @@ describe("reduceA2uiSucceeded", () => {
 
     expect(replay).toBe(first);
     expect(
-      replay.filter((block) => block.sourceActionId === envelope.action_id),
+      replay.filter((block) => block.sourceActionId === envelope.action_id)
     ).toHaveLength(1);
   });
 
@@ -459,8 +487,8 @@ describe("reduceA2uiSucceeded", () => {
         "a2ui_transport_error",
         undefined,
         true,
-        false,
-      ),
+        false
+      )
     );
 
     expect(next).toBe(blocks);
@@ -486,37 +514,35 @@ describe("reduceA2uiSucceeded", () => {
       "other-run",
       "run_id_mismatch",
     ],
-  ] as const)("marks the submitting surface protocol_error for %s", (
-    _label,
-    terminal,
-    runId,
-    code,
-  ) => {
-    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
-    const next = reduceA2uiSucceeded(
-      blocks,
-      envelope,
-      succeeded(envelope, terminal, "should not append", runId ?? undefined),
-    );
+  ] as const)(
+    "marks the submitting surface protocol_error for %s",
+    (_label, terminal, runId, code) => {
+      const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+      const next = reduceA2uiSucceeded(
+        blocks,
+        envelope,
+        succeeded(envelope, terminal, "should not append", runId ?? undefined)
+      );
 
-    expect(next[1].a2ui?.state).toEqual({
-      status: "protocol_error",
-      round: 1,
-      actionId: envelope.action_id,
-      code,
-    });
-    expect(next).toHaveLength(blocks.length);
-    expect(next.some((block) => block.sourceActionId === envelope.action_id)).toBe(
-      false,
-    );
-  });
+      expect(next[1].a2ui?.state).toEqual({
+        status: "protocol_error",
+        round: 1,
+        actionId: envelope.action_id,
+        code,
+      });
+      expect(next).toHaveLength(blocks.length);
+      expect(
+        next.some((block) => block.sourceActionId === envelope.action_id)
+      ).toBe(false);
+    }
+  );
 
   it("ignores a response when its action is already applied or is no longer submitting", () => {
     const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
     const response = succeeded(
       envelope,
       terminalConfirm(surface.surface_id, true),
-      "Analysis complete.",
+      "Analysis complete."
     );
     const resolved = reduceA2uiSucceeded(blocks, envelope, response);
 
@@ -533,14 +559,14 @@ describe("reduceA2uiSucceeded", () => {
       const next = reduceA2uiSucceeded(
         blocks,
         envelope,
-        succeeded(envelope, terminalConfirm(surface.surface_id, true), answer),
+        succeeded(envelope, terminalConfirm(surface.surface_id, true), answer)
       );
 
       expect(next).toHaveLength(blocks.length);
-      expect(next.some((block) => block.sourceActionId === envelope.action_id)).toBe(
-        false,
-      );
-    },
+      expect(
+        next.some((block) => block.sourceActionId === envelope.action_id)
+      ).toBe(false);
+    }
   );
 });
 
@@ -587,11 +613,7 @@ describe("reduceA2uiInputRequired", () => {
     const response = inputRequiredRound2Fixture(envelope);
     const fixtureSurface = response.interrupt.draft.a2ui;
 
-    const next = reduceA2uiInputRequired(
-      blocks,
-      envelope,
-      response,
-    );
+    const next = reduceA2uiInputRequired(blocks, envelope, response);
 
     expect(next).not.toBe(blocks);
     expect(next[0]).toBe(blocks[0]);
@@ -618,9 +640,9 @@ describe("reduceA2uiInputRequired", () => {
     expect(
       next.filter((block) =>
         ["ready", "submitting", "temporarily_rejected"].includes(
-          block.a2ui?.state.status ?? "",
-        ),
-      ),
+          block.a2ui?.state.status ?? ""
+        )
+      )
     ).toHaveLength(1);
     expect(blocks).toEqual(original);
   });
@@ -630,14 +652,14 @@ describe("reduceA2uiInputRequired", () => {
     const second = reduceA2uiInputRequired(
       first.blocks,
       first.envelope,
-      inputRequired(first.envelope, round2Surface),
+      inputRequired(first.envelope, round2Surface)
     );
     const round2Begin = beginA2uiAction(
       second,
       round2Surface.surface_id,
       first.envelope.run_id,
       { widget: "choice", payload: { selected: "a" } },
-      "action-2",
+      "action-2"
     );
     if (!round2Begin.ok) throw new Error("expected round 2 begin to succeed");
 
@@ -646,8 +668,8 @@ describe("reduceA2uiInputRequired", () => {
       round2Begin.envelope,
       succeeded(
         round2Begin.envelope,
-        terminalChoice(round2Surface.surface_id, "a"),
-      ),
+        terminalChoice(round2Surface.surface_id, "a")
+      )
     );
 
     expect(terminal.at(-1)?.a2ui?.state).toEqual({
@@ -660,9 +682,9 @@ describe("reduceA2uiInputRequired", () => {
     expect(
       terminal.filter((block) =>
         ["ready", "submitting", "temporarily_rejected"].includes(
-          block.a2ui?.state.status ?? "",
-        ),
-      ),
+          block.a2ui?.state.status ?? ""
+        )
+      )
     ).toHaveLength(0);
   });
 
@@ -674,28 +696,27 @@ describe("reduceA2uiInputRequired", () => {
       { ...round2Surface, widget: "slider" },
       "surface_invalid",
     ],
-  ] as const)("marks the submitting target protocol_error for %s", (
-    _label,
-    nextSurface,
-    code,
-  ) => {
-    const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
-    const response = inputRequired(
-      envelope,
-      nextSurface as A2uiOpenSurface,
-      code === "run_id_mismatch" ? "other-run" : envelope.run_id,
-    );
+  ] as const)(
+    "marks the submitting target protocol_error for %s",
+    (_label, nextSurface, code) => {
+      const { blocks, envelope } = beginSubmitting(surface, confirmIntent);
+      const response = inputRequired(
+        envelope,
+        nextSurface as A2uiOpenSurface,
+        code === "run_id_mismatch" ? "other-run" : envelope.run_id
+      );
 
-    const next = reduceA2uiInputRequired(blocks, envelope, response);
+      const next = reduceA2uiInputRequired(blocks, envelope, response);
 
-    expect(next[1].a2ui?.state).toEqual({
-      status: "protocol_error",
-      round: 1,
-      actionId: envelope.action_id,
-      code,
-    });
-    expect(next).toHaveLength(blocks.length);
-  });
+      expect(next[1].a2ui?.state).toEqual({
+        status: "protocol_error",
+        round: 1,
+        actionId: envelope.action_id,
+        code,
+      });
+      expect(next).toHaveLength(blocks.length);
+    }
+  );
 
   it.each([
     ["action", { action_id: "other-action" }, "action_mismatch"],
@@ -709,7 +730,7 @@ describe("reduceA2uiInputRequired", () => {
       const next = reduceA2uiInputRequired(
         blocks,
         mismatched,
-        inputRequired(mismatched, round2Surface),
+        inputRequired(mismatched, round2Surface)
       );
 
       expect(next[1].a2ui?.state).toEqual({
@@ -719,7 +740,7 @@ describe("reduceA2uiInputRequired", () => {
         code,
       });
       expect(next).toHaveLength(blocks.length);
-    },
+    }
   );
 
   it("rejects a fresh surface whose identity is already present elsewhere", () => {
@@ -736,14 +757,14 @@ describe("reduceA2uiInputRequired", () => {
           },
         },
       },
-      round2Surface,
+      round2Surface
     );
     const withDuplicate = [...blocks, duplicate];
 
     const next = reduceA2uiInputRequired(
       withDuplicate,
       envelope,
-      inputRequired(envelope, round2Surface),
+      inputRequired(envelope, round2Surface)
     );
 
     expect(next[1].a2ui?.state).toMatchObject({
@@ -771,9 +792,10 @@ describe("reduceA2uiInputRequired", () => {
           otherSurface.surface_id,
           first.envelope.run_id,
           { widget: "choice", payload: { selected: "a" } },
-          "action-open",
+          "action-open"
         );
-        if (!otherBegin.ok) throw new Error("expected the second begin to succeed");
+        if (!otherBegin.ok)
+          throw new Error("expected the second begin to succeed");
         withOther = otherBegin.blocks;
       } else if (openStatus === "temporarily_rejected") {
         const otherBegin = beginA2uiAction(
@@ -781,9 +803,10 @@ describe("reduceA2uiInputRequired", () => {
           otherSurface.surface_id,
           first.envelope.run_id,
           { widget: "choice", payload: { selected: "a" } },
-          "action-open",
+          "action-open"
         );
-        if (!otherBegin.ok) throw new Error("expected the second begin to succeed");
+        if (!otherBegin.ok)
+          throw new Error("expected the second begin to succeed");
         withOther = reduceA2uiFailure(
           otherBegin.blocks,
           otherBegin.envelope,
@@ -792,8 +815,8 @@ describe("reduceA2uiInputRequired", () => {
             "a2ui_gateway_disabled",
             undefined,
             false,
-            true,
-          ),
+            true
+          )
         );
       }
 
@@ -801,7 +824,7 @@ describe("reduceA2uiInputRequired", () => {
       const next = reduceA2uiInputRequired(
         withOther,
         first.envelope,
-        inputRequiredRound2Fixture(first.envelope),
+        inputRequiredRound2Fixture(first.envelope)
       );
 
       expect(next[1].a2ui?.state).toEqual({
@@ -812,7 +835,7 @@ describe("reduceA2uiInputRequired", () => {
       });
       expect(next).toHaveLength(withOther.length);
       expect(next.at(-1)).toBe(otherBefore);
-    },
+    }
   );
 
   it("marks a ready target protocol_error when its submitting action is missing", () => {
@@ -828,7 +851,7 @@ describe("reduceA2uiInputRequired", () => {
     const next = reduceA2uiInputRequired(
       blocks,
       envelope,
-      inputRequired(envelope, round2Surface),
+      inputRequired(envelope, round2Surface)
     );
 
     expect(next[1].a2ui?.state).toEqual({
@@ -845,7 +868,7 @@ describe("reduceA2uiInputRequired", () => {
     const second = reduceA2uiInputRequired(
       first.blocks,
       first.envelope,
-      inputRequired(first.envelope, round2Surface),
+      inputRequired(first.envelope, round2Surface)
     );
     const round2 = second.at(-1);
     if (!round2?.a2ui || round2.a2ui.state.status !== "ready") {
@@ -856,7 +879,7 @@ describe("reduceA2uiInputRequired", () => {
       round2Surface.surface_id,
       first.envelope.run_id,
       { widget: "choice", payload: { selected: "a" } },
-      "action-2",
+      "action-2"
     );
     if (!round2Begin.ok) throw new Error("expected round 2 begin to succeed");
 
@@ -873,7 +896,7 @@ describe("reduceA2uiInputRequired", () => {
             { name: "gene_id", label: "Gene ID", type: "text", required: true },
           ],
         },
-      } as A2uiOpenSurface),
+      } as A2uiOpenSurface)
     );
 
     expect(next[3].a2ui?.state).toEqual({
@@ -895,8 +918,8 @@ describe("reduceA2uiInputRequired", () => {
     expect(replay).toBe(first);
     expect(
       replay.filter(
-        (block) => block.a2ui?.surface.surface_id === round2Surface.surface_id,
-      ),
+        (block) => block.a2ui?.surface.surface_id === round2Surface.surface_id
+      )
     ).toHaveLength(1);
   });
 });
@@ -1095,7 +1118,7 @@ describe("A2UI transport failure and retry reducers", () => {
 describe("lockUnverifiedHistoryA2ui", () => {
   const historyMessage = (
     state: A2uiSurfaceState,
-    runtime = true,
+    runtime = true
   ): ChatMessage => ({
     role: "assistant",
     content: "history",
@@ -1150,27 +1173,31 @@ describe("lockUnverifiedHistoryA2ui", () => {
         code: "gateway_disabled",
       },
     ],
-  ] as const)("expires unverified %s state and strips runtime", (_label, state) => {
-    const message = historyMessage(state);
-    const messages = [message];
+  ] as const)(
+    "expires unverified %s state and strips runtime",
+    (_label, state) => {
+      const message = historyMessage(state);
+      const messages = [message];
 
-    const next = lockUnverifiedHistoryA2ui(messages);
+      const next = lockUnverifiedHistoryA2ui(messages);
 
-    expect(next).not.toBe(messages);
-    expect(next[0]).not.toBe(message);
-    expect(next[0]).not.toHaveProperty("a2uiRuntime");
-    expect(next[0].blocks).not.toBe(message.blocks);
-    expect(next[0].blocks?.[0]).not.toBe(message.blocks?.[0]);
-    expect(next[0].blocks?.[0].a2ui?.state).toEqual({
-      status: "expired",
-      round: state.round,
-      ...(state.status === "submitting" || state.status === "temporarily_rejected"
-        ? { actionId: state.envelope.action_id }
-        : {}),
-      code: "reload_unverified",
-    });
-    expect(message.blocks?.[0].a2ui?.state).toEqual(state);
-  });
+      expect(next).not.toBe(messages);
+      expect(next[0]).not.toBe(message);
+      expect(next[0]).not.toHaveProperty("a2uiRuntime");
+      expect(next[0].blocks).not.toBe(message.blocks);
+      expect(next[0].blocks?.[0]).not.toBe(message.blocks?.[0]);
+      expect(next[0].blocks?.[0].a2ui?.state).toEqual({
+        status: "expired",
+        round: state.round,
+        ...(state.status === "submitting" ||
+        state.status === "temporarily_rejected"
+          ? { actionId: state.envelope.action_id }
+          : {}),
+        code: "reload_unverified",
+      });
+      expect(message.blocks?.[0].a2ui?.state).toEqual(state);
+    }
+  );
 
   it.each([
     "resolved",

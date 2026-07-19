@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { initReducerState, reduceAGUIEvent } from "@/views/chat/streaming/eventReducer";
+import {
+  initReducerState,
+  reduceAGUIEvent,
+} from "@/views/chat/streaming/eventReducer";
 
 describe("reduceAGUIEvent", () => {
   afterEach(() => {
@@ -8,8 +11,14 @@ describe("reduceAGUIEvent", () => {
 
   it("accumulates TextMessageContent into one markdown block", () => {
     let s = initReducerState();
-    s = reduceAGUIEvent(s, { type: "TextMessageContent", data: { delta: "hello " } });
-    s = reduceAGUIEvent(s, { type: "TextMessageContent", data: { delta: "world" } });
+    s = reduceAGUIEvent(s, {
+      type: "TextMessageContent",
+      data: { delta: "hello " },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "TextMessageContent",
+      data: { delta: "world" },
+    });
     const md = s.blocks.find((b) => b.type === "markdown");
     expect(md?.text).toBe("hello world");
     expect(md?.authority).toBe("web");
@@ -30,8 +39,14 @@ describe("reduceAGUIEvent", () => {
 
   it("appends a tool block on ToolCallStart and patches count on ToolCallResult", () => {
     let s = initReducerState();
-    s = reduceAGUIEvent(s, { type: "ToolCallStart", data: { tool_call_id: "t1", tool_name: "knowledge_search" } });
-    s = reduceAGUIEvent(s, { type: "ToolCallResult", data: { tool_call_id: "t1", result_summary: { count: 12 } } });
+    s = reduceAGUIEvent(s, {
+      type: "ToolCallStart",
+      data: { tool_call_id: "t1", tool_name: "knowledge_search" },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "ToolCallResult",
+      data: { tool_call_id: "t1", result_summary: { count: 12 } },
+    });
     const tool = s.blocks.find((b) => b.type === "tool");
     expect(tool?.toolName).toBe("knowledge_search");
     expect(tool?.count).toBe(12);
@@ -39,18 +54,36 @@ describe("reduceAGUIEvent", () => {
 
   it("breaks text into separate markdown blocks when a tool interleaves", () => {
     let s = initReducerState();
-    s = reduceAGUIEvent(s, { type: "TextMessageContent", data: { delta: "before " } });
-    s = reduceAGUIEvent(s, { type: "ToolCallStart", data: { tool_name: "knowledge_search" } });
-    s = reduceAGUIEvent(s, { type: "TextMessageContent", data: { delta: "after" } });
+    s = reduceAGUIEvent(s, {
+      type: "TextMessageContent",
+      data: { delta: "before " },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "ToolCallStart",
+      data: { tool_name: "knowledge_search" },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "TextMessageContent",
+      data: { delta: "after" },
+    });
     const md = s.blocks.filter((b) => b.type === "markdown");
     expect(md.map((b) => b.text)).toEqual(["before ", "after"]);
   });
 
   it("patches count onto the MOST RECENT tool block", () => {
     let s = initReducerState();
-    s = reduceAGUIEvent(s, { type: "ToolCallStart", data: { tool_name: "first" } });
-    s = reduceAGUIEvent(s, { type: "ToolCallStart", data: { tool_name: "second" } });
-    s = reduceAGUIEvent(s, { type: "ToolCallResult", data: { result_summary: { count: 7 } } });
+    s = reduceAGUIEvent(s, {
+      type: "ToolCallStart",
+      data: { tool_name: "first" },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "ToolCallStart",
+      data: { tool_name: "second" },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "ToolCallResult",
+      data: { result_summary: { count: 7 } },
+    });
     const tools = s.blocks.filter((b) => b.type === "tool");
     expect(tools[0].count).toBeUndefined();
     expect(tools[1].count).toBe(7);
@@ -58,19 +91,30 @@ describe("reduceAGUIEvent", () => {
 
   it("adds a reasoning block from ReasoningMessageContent", () => {
     let s = initReducerState();
-    s = reduceAGUIEvent(s, { type: "ReasoningMessageContent", data: { delta: "weighing retrieval hits" } });
-    expect(s.blocks.find((b) => b.type === "reasoning")?.text).toBe("weighing retrieval hits");
+    s = reduceAGUIEvent(s, {
+      type: "ReasoningMessageContent",
+      data: { delta: "weighing retrieval hits" },
+    });
+    expect(s.blocks.find((b) => b.type === "reasoning")?.text).toBe(
+      "weighing retrieval hits"
+    );
   });
 
   it("appends a step block from StepStarted", () => {
     let s = initReducerState();
-    s = reduceAGUIEvent(s, { type: "StepStarted", data: { step_name: "retrieval" } });
+    s = reduceAGUIEvent(s, {
+      type: "StepStarted",
+      data: { step_name: "retrieval" },
+    });
     expect(s.blocks.find((b) => b.type === "step")?.label).toBe("retrieval");
   });
 
   it("marks done and captures follow_up on RunFinished + phyto.follow_up", () => {
     let s = initReducerState();
-    s = reduceAGUIEvent(s, { type: "Custom", data: { name: "phyto.follow_up", value: ["q1", "q2"] } });
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: { name: "phyto.follow_up", value: ["q1", "q2"] },
+    });
     s = reduceAGUIEvent(s, { type: "RunFinished", data: { run_id: "r9" } });
     expect(s.followUp).toEqual(["q1", "q2"]);
     expect(s.done).toBe(true);
@@ -80,7 +124,10 @@ describe("reduceAGUIEvent", () => {
     let s = initReducerState();
     s = reduceAGUIEvent(s, {
       type: "Custom",
-      data: { name: "phyto.references", value: { doc_list: [{ title: "T1" }] } },
+      data: {
+        name: "phyto.references",
+        value: { doc_list: [{ title: "T1" }] },
+      },
     });
     expect(s.references).toEqual([{ title: "T1" }]);
   });
@@ -263,7 +310,11 @@ describe("reduceAGUIEvent", () => {
           catalog_version: "v1.0",
           surface_id: "submitting-surface",
           widget: "confirm",
-          props: { title: "Continue?", confirm_label: "Yes", cancel_label: "No" },
+          props: {
+            title: "Continue?",
+            confirm_label: "Yes",
+            cancel_label: "No",
+          },
         },
       },
     });
@@ -283,7 +334,10 @@ describe("reduceAGUIEvent", () => {
       },
     };
 
-    const next = reduceAGUIEvent(s, { type: "RunError", data: { message: "boom" } });
+    const next = reduceAGUIEvent(s, {
+      type: "RunError",
+      data: { message: "boom" },
+    });
     expect(next.blocks[0].a2ui?.state).toEqual({
       status: "expired",
       round: 1,
@@ -305,11 +359,21 @@ describe("reduceAGUIEvent", () => {
       },
     };
     let s = initReducerState();
-    s = reduceAGUIEvent(s, { type: "Custom", data: { name: "phyto.a2ui", value } });
-    s = reduceAGUIEvent(s, { type: "Custom", data: { name: "phyto.a2ui", value } });
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: { name: "phyto.a2ui", value },
+    });
+    s = reduceAGUIEvent(s, {
+      type: "Custom",
+      data: { name: "phyto.a2ui", value },
+    });
 
-    expect(s.blocks.filter((block) => block.type === "agent-surface")).toHaveLength(1);
-    expect(warn).toHaveBeenCalledWith("[phyto.a2ui] skipped frame: duplicate_surface_id");
+    expect(
+      s.blocks.filter((block) => block.type === "agent-surface")
+    ).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(
+      "[phyto.a2ui] skipped frame: duplicate_surface_id"
+    );
   });
 
   it("does not create a partial block for malformed A2UI frames", () => {
@@ -319,12 +383,18 @@ describe("reduceAGUIEvent", () => {
       type: "Custom",
       data: {
         name: "phyto.a2ui",
-        value: { catalog_version: "v1.0", surface_id: "malformed", widget: "form" },
+        value: {
+          catalog_version: "v1.0",
+          surface_id: "malformed",
+          widget: "form",
+        },
       },
     });
 
     expect(s.blocks).toEqual([]);
-    expect(s.blocks.some((block) => block.type === "agent-surface" && !block.a2ui)).toBe(false);
+    expect(
+      s.blocks.some((block) => block.type === "agent-surface" && !block.a2ui)
+    ).toBe(false);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
@@ -337,7 +407,11 @@ describe("reduceAGUIEvent", () => {
         resolution: "submitted" as const,
       },
       { status: "expired" as const, round: 1 as const, code: "old_error" },
-      { status: "protocol_error" as const, round: 1 as const, code: "bad_frame" },
+      {
+        status: "protocol_error" as const,
+        round: 1 as const,
+        code: "bad_frame",
+      },
     ];
     let s = initReducerState();
     for (const state of surfaces) {
@@ -349,7 +423,11 @@ describe("reduceAGUIEvent", () => {
             catalog_version: "v1.0",
             surface_id: `surface-${state.status}`,
             widget: "confirm",
-            props: { title: "Continue?", confirm_label: "Yes", cancel_label: "No" },
+            props: {
+              title: "Continue?",
+              confirm_label: "Yes",
+              cancel_label: "No",
+            },
           },
         },
       });
@@ -357,7 +435,10 @@ describe("reduceAGUIEvent", () => {
       if (block?.a2ui) block.a2ui = { ...block.a2ui, state };
     }
     const before = s.blocks.map((block) => block.a2ui?.state);
-    const next = reduceAGUIEvent(s, { type: "RunError", data: { message: "boom" } });
+    const next = reduceAGUIEvent(s, {
+      type: "RunError",
+      data: { message: "boom" },
+    });
 
     expect(next.blocks.map((block) => block.a2ui?.state)).toEqual(before);
   });
@@ -372,7 +453,11 @@ describe("reduceAGUIEvent", () => {
           catalog_version: "v1.0",
           surface_id: "input-required",
           widget: "choice",
-          props: { title: "Pick", options: [{ id: "a", label: "A" }], multiple: false },
+          props: {
+            title: "Pick",
+            options: [{ id: "a", label: "A" }],
+            multiple: false,
+          },
         },
       },
     });

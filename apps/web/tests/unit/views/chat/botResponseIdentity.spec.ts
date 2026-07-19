@@ -226,7 +226,9 @@ describe("blocking Bot response identity", () => {
         state: { status: "ready", round: 1 },
       },
     });
-    expect(JSON.stringify(assistant.blocks)).not.toContain("raw_provider_field");
+    expect(JSON.stringify(assistant.blocks)).not.toContain(
+      "raw_provider_field"
+    );
   });
 
   it("retains the decoded A2UI surface without creating a runtime for an unsafe dialogue id", async () => {

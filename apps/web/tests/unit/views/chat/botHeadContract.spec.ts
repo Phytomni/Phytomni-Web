@@ -77,9 +77,9 @@ describe("Bot HEAD compatibility contract", () => {
       "required_agents",
       "schema_version",
     ]);
-    expect(manifest.fixtures.every((fixtureId) => typeof fixtureId === "string")).toBe(
-      true
-    );
+    expect(
+      manifest.fixtures.every((fixtureId) => typeof fixtureId === "string")
+    ).toBe(true);
     expect(JSON.stringify(manifest)).not.toContain("payload");
     expect(JSON.stringify(manifest)).not.toContain("traceback");
   });
@@ -104,7 +104,10 @@ describe("Bot HEAD compatibility contract", () => {
     expect(userStore).toMatch(/^\s*expertEnabled: false\b/m);
 
     const sendMessage = readFileSync(
-      resolve(repoRoot, "apps/web/src/views/chat/composables/useSendMessage.ts"),
+      resolve(
+        repoRoot,
+        "apps/web/src/views/chat/composables/useSendMessage.ts"
+      ),
       "utf8"
     );
     expect(sendMessage).toContain(

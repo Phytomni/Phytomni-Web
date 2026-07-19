@@ -7,19 +7,19 @@ describe("shouldStream", () => {
       shouldStream("KnowledgeAgent", "instant", {
         enabled: true,
         agents: ["KnowledgeAgent"],
-      }),
+      })
     ).toBe(true);
     expect(
       shouldStream("BriefGeneAgent", "instant", {
         enabled: false,
         agents: ["BriefGeneAgent"],
-      }),
+      })
     ).toBe(false);
     expect(
       shouldStream("AnalystAgent", "instant", {
         enabled: true,
         agents: ["AnalystAgent"],
-      }),
+      })
     ).toBe(false);
   });
 
