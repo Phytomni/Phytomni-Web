@@ -114,7 +114,7 @@ export function useComposer(opts: {
     });
   };
 
-  const handleSearch = (_searchValue: string, _prefix: string) => {
+  const handleSearch = () => {
     nextTick(() => {
       scrollToBottom();
     });

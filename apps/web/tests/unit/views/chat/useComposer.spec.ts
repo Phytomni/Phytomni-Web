@@ -97,6 +97,17 @@ describe("useComposer", () => {
     });
   });
 
+  describe("handleSearch", () => {
+    it("keeps the search event binding live and scrolls after the event", async () => {
+      const { handleSearch } = makeComposable();
+
+      handleSearch();
+      await nextTick();
+
+      expect(scrollToBottom).toHaveBeenCalled();
+    });
+  });
+
   describe("displayMessageInput adapter", () => {
     it("shows cleaned text while the underlying model keeps the serialized prefix", () => {
       messageInput.value = "@KnowledgeAgent,user text";

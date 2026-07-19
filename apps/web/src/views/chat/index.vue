@@ -548,7 +548,6 @@ import {
   analystLogActivityKey,
 } from "./composables/useLogView";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
 import { abortRequest } from "@/utils/request";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
@@ -620,9 +619,6 @@ watch(leftSidebarDrawerOpen, async (isOpen, wasOpen) => {
 // Agents architecture diagram dialog
 const agentsViewVisible = ref(false);
 const {
-  scale,
-  isDragging,
-  imageOffset,
   containerRef,
   imageRef,
   imageStyle,
@@ -651,27 +647,10 @@ const pickerOptions = computed(() =>
     label: t(option.labelKey) || option.displayName,
   }))
 );
-const UserStore = userStore();
 const expertModeEnabled = computed(() => userStore().expertEnabled);
 
 // Add permission loading state management
 const rolesLoading = ref(false);
-
-// Define the button permission mapping
-const buttonPermissions = {
-  RAG: "RAG",
-  BI: "BI",
-  GA: "GA",
-  webSearch: "web search",
-};
-// Check button permission
-const hasButtonPermission = (buttonType: string) => {
-  const permission =
-    buttonPermissions[buttonType as keyof typeof buttonPermissions];
-  return rolesTool.value.includes(permission);
-};
-
-const router = useRouter();
 
 const chatHeaderTitle = computed(() => {
   const currentTitle =
@@ -1240,26 +1219,6 @@ const startNewChat = () => {
   });
 };
 
-// Knowledge agent
-const openKnowledgeAgent = () => {
-  // Implement the knowledge agent feature here
-};
-
-// Database agent
-const openDataAgent = () => {
-  // Implement the database agent feature here
-};
-
-// Analyst agent
-const openAnalystAgent = () => {
-  // Implement the analyst agent feature here
-};
-
-// Review agent
-const openReviewAgent = () => {
-  // Implement the review agent feature here
-};
-
 // Message container ref, used for auto-scrolling
 const messageContainer = ref<HTMLElement | null>(null);
 const artifactScrollPositions = new Map<string, number>();
@@ -1492,19 +1451,6 @@ const abortDialogueRequest = async (
     chatState.generationStopped = false;
     console.error("Failed to abort request:", error);
   }
-};
-
-// Use a preset question
-const usePrompt = (prompt: string) => {
-  if (isSending.value) return;
-  messageInput.value = prompt;
-
-  // Ensure scrolling to the bottom
-  nextTick(() => {
-    scrollToBottom();
-  });
-
-  sendMessage();
 };
 
 // Sidebar control function

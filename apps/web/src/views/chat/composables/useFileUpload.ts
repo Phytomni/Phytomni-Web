@@ -15,7 +15,7 @@ export function useFileUpload(opts: {
   // watch the file list to control list visibility
   watch(
     () => fileList.value,
-    (newVal, oldVal) => {
+    (newVal) => {
       if (newVal?.length > 0 && composerRef.value) {
         composerRef.value.openHeader();
       } else if (composerRef.value) {
