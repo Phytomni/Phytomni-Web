@@ -87,287 +87,308 @@
                     {{ $t("chat.mode.expert") }}
                   </span>
                 </div>
+                <div
+                  class="header-controls"
+                  data-testid="chat-header-preferences"
+                >
+                  <LangSwitch />
+                  <ThemeSwitch />
+                </div>
               </div>
             </header>
 
-            <!-- Message area -->
             <div
-              class="message-container"
-              data-testid="chat-transcript"
-              data-test="chat-transcript-scroll-root"
-              ref="messageContainer"
-              :key="timestamp"
+              class="chat-content-stack"
+              data-testid="chat-content-stack"
+              :class="{
+                'is-empty': chatStateAttr === 'empty',
+                'is-populated': chatStateAttr === 'populated',
+              }"
             >
-              <div v-if="!currentChat?.messages?.length" class="empty-chat">
-                <PhyEmptyState
-                  :title="$t('chat.welcomeTitle')"
-                  :subtitle="$t('chat.welcomeSubtitle')"
-                  class="empty-chat-welcome"
-                >
-                  <template #mark>
-                    <img
-                      src="../../assets/images/chat/logo.png"
-                      class="empty-chat-mark"
-                      alt=""
-                    />
+              <!-- Message area -->
+              <div
+                class="message-container"
+                data-testid="chat-transcript"
+                data-test="chat-transcript-scroll-root"
+                ref="messageContainer"
+                :key="timestamp"
+              >
+                <div v-if="!currentChat?.messages?.length" class="empty-chat">
+                  <PhyEmptyState
+                    :title="$t('chat.welcomeTitle')"
+                    :subtitle="$t('chat.welcomeSubtitle')"
+                    class="empty-chat-welcome"
+                  >
+                    <template #mark>
+                      <img
+                        src="../../assets/images/chat/logo.png"
+                        class="empty-chat-mark"
+                        alt=""
+                      />
+                    </template>
+                  </PhyEmptyState>
+                </div>
+                <div class="transcript-content">
+                  <template v-if="currentChat?.messages?.length">
+                    <ChatMessageRow
+                      v-for="(message, index) in currentChat.messages"
+                      :key="index"
+                      :role="message.role === 'user' ? 'user' : 'assistant'"
+                      :message-id="message.id || undefined"
+                      :streaming="!!message.streaming"
+                      :wide="
+                        message.role === 'assistant' &&
+                        (message.tool_name === 'DeepGenomeAgent' ||
+                          !!artifactPreviewForMessage(message))
+                      "
+                    >
+                      <template #avatar>
+                        <el-avatar :size="36" :src="botAvatar" />
+                      </template>
+                      <ChatMessageContent
+                        :message="message"
+                        :index="index"
+                        :is-last-message="
+                          currentChat.messages.length - 1 == index
+                        "
+                        :artifact-preview="artifactPreviewForMessage(message)"
+                        :activity-expanded-by-message="
+                          getChatState(currentChatId).activityExpandedByMessage
+                        "
+                        :gene-network-images="geneNetworkImages"
+                        :gene-network-images-loading="geneNetworkImagesLoading"
+                        :digital-design-images="digitalDesignImages"
+                        :digital-design-images-loading="
+                          digitalDesignImagesLoading
+                        "
+                        @finish="() => handleMarkdownFinish(index)"
+                        @open-artifact="openArtifact(String(message.id))"
+                        @update:activity-expanded="
+                          (key, open) =>
+                            (getChatState(
+                              currentChatId
+                            ).activityExpandedByMessage[key] = open)
+                        "
+                        @a2ui-action="(event) => submitAction(message, event)"
+                        @a2ui-retry="
+                          (surfaceId) => retryAction(message, surfaceId)
+                        "
+                      />
+
+                      <template #activity>
+                        <!-- Only mount when rowId is a valid positive-decimal id;
+                   missing/invalid ids never GET/PATCH and hide the log disclosure. -->
+                        <ChatActivity
+                          v-if="
+                            message.role === 'assistant' &&
+                            message.tool_name === 'AnalystAgent' &&
+                            !!deriveAnalystLogRowId(message)
+                          "
+                          :state-key="analystLogStateKey(message)"
+                          :expanded="isAnalystLogExpanded(message)"
+                          :label="$t('chat.log.activityLabel')"
+                          :hide-count="true"
+                          @update:expanded="
+                            (open) => setLogExpanded(message, open)
+                          "
+                        >
+                          <ChatAnalystLog
+                            :row-id="deriveAnalystLogRowId(message)"
+                            :task-id="deriveAnalystLogTaskId(message)"
+                            :log-data="
+                    getChatState(currentChatId).logData[
+                      deriveAnalystLogRowId(message)!
+                    ]
+                  "
+                            :loading="
+                    !!getChatState(currentChatId).loadingLog[
+                      deriveAnalystLogRowId(message)!
+                    ]
+                  "
+                            :updating="
+                    !!getChatState(currentChatId).updatingLog[
+                      deriveAnalystLogRowId(message)!
+                    ]
+                  "
+                            :error-kind="
+                    getChatState(currentChatId).logErrorKinds[
+                      deriveAnalystLogRowId(message)!
+                    ]
+                  "
+                            @update="updateLog(message)"
+                            @retry="retryLog(message)"
+                          />
+                        </ChatActivity>
+                      </template>
+
+                      <!-- Shared message chrome: files, follow-ups, actions -->
+                      <div
+                        v-if="
+                          message.role === 'user' &&
+                          message.attachedFiles &&
+                          message.attachedFiles.length > 0
+                        "
+                        class="message-files"
+                      >
+                        <div class="files-list">
+                          <div
+                            v-for="(file, fileIndex) in message.attachedFiles"
+                            :key="fileIndex"
+                            class="file-item-display"
+                          >
+                            <FilesCard
+                              :uid="fileIndex"
+                              :name="file.name"
+                              :file-size="file.size"
+                              :show-del-icon="false"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <template #follow-up>
+                        <FollowUpQuestions
+                          v-if="
+                            message.role === 'assistant' &&
+                            message.followUpQuestions &&
+                            message.followUpQuestions.length > 0 &&
+                            message.showFollowUpQuestions &&
+                            index == currentChat.messages.length - 1
+                          "
+                          :questions="message.followUpQuestions"
+                          @question-click="handleFollowUpQuestionClick"
+                        />
+                      </template>
+
+                      <template #actions>
+                        <ChatMessageActions
+                          :role="message.role === 'user' ? 'user' : 'assistant'"
+                          :copied="copyVisible === index + 1"
+                          :can-refresh="
+                            messageActionCapabilities(message).canRefresh
+                          "
+                          :refresh-busy="
+                            !!refreshingMessages[
+                              `${index}_${message.id || ''}`
+                            ] ||
+                            (!message.steps && isSending)
+                          "
+                          :can-react="
+                            messageActionCapabilities(message).canReact
+                          "
+                          :reaction-active="
+                            message.id ? getReactionState(message.id) : 0
+                          "
+                          :direct-downloads="getDirectDownloads(message)"
+                          :generated-formats="
+                            messageActionCapabilities(message).generatedFormats
+                          "
+                          @copy="handleMessageCopy(message, index)"
+                          @refresh="() => refreshMessage(index)"
+                          @reaction="
+                            (type) => {
+                              if (message.id) handleReaction(message.id, type);
+                            }
+                          "
+                          @direct-download="(path) => downloadFile(path)"
+                          @download-format="
+                            (format) => {
+                              if (message.id)
+                                getFileDownUrl(message.id, format);
+                            }
+                          "
+                        />
+                        <div
+                          v-if="
+                            message.role === 'assistant' &&
+                            !message.steps &&
+                            !message.tableHeaders
+                          "
+                          class="tip-text"
+                        >
+                          {{ $t("common.Tip") }}
+                        </div>
+                      </template>
+                    </ChatMessageRow>
                   </template>
-                </PhyEmptyState>
-              </div>
-              <div class="transcript-content">
-                <template v-if="currentChat?.messages?.length">
+
+                  <!-- Loading message: real TransferProgress XOR simulated SendProgress,
+           suppressed while an AG-UI stream is in flight — the placeholder already
+           shows streaming content, so both would double the "is responding" cue. -->
                   <ChatMessageRow
-                    v-for="(message, index) in currentChat.messages"
-                    :key="index"
-                    :role="message.role === 'user' ? 'user' : 'assistant'"
-                    :message-id="message.id || undefined"
-                    :streaming="!!message.streaming"
-                    :wide="
-                      message.role === 'assistant' &&
-                      (message.tool_name === 'DeepGenomeAgent' ||
-                        !!artifactPreviewForMessage(message))
-                    "
+                    v-if="isSending && !getChatState(currentChatId).isStreaming"
+                    role="assistant"
+                    loading
                   >
                     <template #avatar>
                       <el-avatar :size="36" :src="botAvatar" />
                     </template>
-                    <ChatMessageContent
-                      :message="message"
-                      :index="index"
-                      :is-last-message="
-                        currentChat.messages.length - 1 == index
-                      "
-                      :artifact-preview="artifactPreviewForMessage(message)"
-                      :activity-expanded-by-message="
-                        getChatState(currentChatId).activityExpandedByMessage
-                      "
-                      :gene-network-images="geneNetworkImages"
-                      :gene-network-images-loading="geneNetworkImagesLoading"
-                      :digital-design-images="digitalDesignImages"
-                      :digital-design-images-loading="
-                        digitalDesignImagesLoading
-                      "
-                      @finish="() => handleMarkdownFinish(index)"
-                      @open-artifact="openArtifact(String(message.id))"
-                      @update:activity-expanded="
-                        (key, open) =>
-                          (getChatState(
-                            currentChatId
-                          ).activityExpandedByMessage[key] = open)
-                      "
-                      @a2ui-action="(event) => submitAction(message, event)"
-                      @a2ui-retry="
-                        (surfaceId) => retryAction(message, surfaceId)
-                      "
-                    />
-
-                    <template #activity>
-                      <!-- Only mount when rowId is a valid positive-decimal id;
-                     missing/invalid ids never GET/PATCH and hide the log disclosure. -->
-                      <ChatActivity
-                        v-if="
-                          message.role === 'assistant' &&
-                          message.tool_name === 'AnalystAgent' &&
-                          !!deriveAnalystLogRowId(message)
-                        "
-                        :state-key="analystLogStateKey(message)"
-                        :expanded="isAnalystLogExpanded(message)"
-                        :label="$t('chat.log.activityLabel')"
-                        :hide-count="true"
-                        @update:expanded="
-                          (open) => setLogExpanded(message, open)
-                        "
-                      >
-                        <ChatAnalystLog
-                          :row-id="deriveAnalystLogRowId(message)"
-                          :task-id="deriveAnalystLogTaskId(message)"
-                          :log-data="
-                      getChatState(currentChatId).logData[
-                        deriveAnalystLogRowId(message)!
-                      ]
-                    "
-                          :loading="
-                      !!getChatState(currentChatId).loadingLog[
-                        deriveAnalystLogRowId(message)!
-                      ]
-                    "
-                          :updating="
-                      !!getChatState(currentChatId).updatingLog[
-                        deriveAnalystLogRowId(message)!
-                      ]
-                    "
-                          :error-kind="
-                      getChatState(currentChatId).logErrorKinds[
-                        deriveAnalystLogRowId(message)!
-                      ]
-                    "
-                          @update="updateLog(message)"
-                          @retry="retryLog(message)"
-                        />
-                      </ChatActivity>
-                    </template>
-
-                    <!-- Shared message chrome: files, follow-ups, actions -->
                     <div
-                      v-if="
-                        message.role === 'user' &&
-                        message.attachedFiles &&
-                        message.attachedFiles.length > 0
-                      "
-                      class="message-files"
+                      class="message-text loading-message phy-bubble-assistant"
                     >
-                      <div class="files-list">
-                        <div
-                          v-for="(file, fileIndex) in message.attachedFiles"
-                          :key="fileIndex"
-                          class="file-item-display"
-                        >
-                          <FilesCard
-                            :uid="fileIndex"
-                            :name="file.name"
-                            :file-size="file.size"
-                            :show-del-icon="false"
-                          />
-                        </div>
+                      {{ $t("chat.ladingInner") }}
+                      <div class="loading-dots">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
                       </div>
+                      <TransferProgress
+                        v-if="getChatState(currentChatId).uploadTransfer"
+                        :snapshot="getChatState(currentChatId).uploadTransfer!"
+                        @cancel="(id) => abortTransfer(id)"
+                      />
+                      <SendProgress
+                        v-else
+                        :started-at="getChatState(currentChatId).sendStartedAt"
+                        :agent-name="
+                          getChatState(currentChatId).activeAgentName
+                        "
+                        :completing="getChatState(currentChatId).completing"
+                      />
                     </div>
-
-                    <template #follow-up>
-                      <FollowUpQuestions
-                        v-if="
-                          message.role === 'assistant' &&
-                          message.followUpQuestions &&
-                          message.followUpQuestions.length > 0 &&
-                          message.showFollowUpQuestions &&
-                          index == currentChat.messages.length - 1
-                        "
-                        :questions="message.followUpQuestions"
-                        @question-click="handleFollowUpQuestionClick"
-                      />
-                    </template>
-
-                    <template #actions>
-                      <ChatMessageActions
-                        :role="message.role === 'user' ? 'user' : 'assistant'"
-                        :copied="copyVisible === index + 1"
-                        :can-refresh="
-                          messageActionCapabilities(message).canRefresh
-                        "
-                        :refresh-busy="
-                          !!refreshingMessages[
-                            `${index}_${message.id || ''}`
-                          ] ||
-                          (!message.steps && isSending)
-                        "
-                        :can-react="messageActionCapabilities(message).canReact"
-                        :reaction-active="
-                          message.id ? getReactionState(message.id) : 0
-                        "
-                        :direct-downloads="getDirectDownloads(message)"
-                        :generated-formats="
-                          messageActionCapabilities(message).generatedFormats
-                        "
-                        @copy="handleMessageCopy(message, index)"
-                        @refresh="() => refreshMessage(index)"
-                        @reaction="
-                          (type) => {
-                            if (message.id) handleReaction(message.id, type);
-                          }
-                        "
-                        @direct-download="(path) => downloadFile(path)"
-                        @download-format="
-                          (format) => {
-                            if (message.id) getFileDownUrl(message.id, format);
-                          }
-                        "
-                      />
-                      <div
-                        v-if="
-                          message.role === 'assistant' &&
-                          !message.steps &&
-                          !message.tableHeaders
-                        "
-                        class="tip-text"
-                      >
-                        {{ $t("common.Tip") }}
-                      </div>
-                    </template>
                   </ChatMessageRow>
-                </template>
-
-                <!-- Loading message: real TransferProgress XOR simulated SendProgress,
-             suppressed while an AG-UI stream is in flight — the placeholder already
-             shows streaming content, so both would double the "is responding" cue. -->
-                <ChatMessageRow
-                  v-if="isSending && !getChatState(currentChatId).isStreaming"
-                  role="assistant"
-                  loading
-                >
-                  <template #avatar>
-                    <el-avatar :size="36" :src="botAvatar" />
-                  </template>
-                  <div
-                    class="message-text loading-message phy-bubble-assistant"
-                  >
-                    {{ $t("chat.ladingInner") }}
-                    <div class="loading-dots">
-                      <span class="dot"></span>
-                      <span class="dot"></span>
-                      <span class="dot"></span>
-                    </div>
-                    <TransferProgress
-                      v-if="getChatState(currentChatId).uploadTransfer"
-                      :snapshot="getChatState(currentChatId).uploadTransfer!"
-                      @cancel="(id) => abortTransfer(id)"
-                    />
-                    <SendProgress
-                      v-else
-                      :started-at="getChatState(currentChatId).sendStartedAt"
-                      :agent-name="getChatState(currentChatId).activeAgentName"
-                      :completing="getChatState(currentChatId).completing"
-                    />
-                  </div>
-                </ChatMessageRow>
+                </div>
               </div>
-            </div>
-            <el-backtop
-              v-if="currentChat?.messages?.length"
-              target=".message-container"
-              :right="40"
-              :bottom="80"
-            />
-
-            <!-- Input area -->
-            <div class="input-container">
-              <ChatComposer
-                ref="composerRef"
-                v-model="displayMessageInput"
-                :is-sending="isSending"
-                v-model:chat-mode="chatMode"
-                :expert-mode-enabled="expertModeEnabled"
-                :show-mode-selector="!currentChat?.messages?.length"
-                :file-list="fileList"
-                :roles-loading="rolesLoading"
-                :has-messages="!!currentChat?.messages?.length"
-                :selected-agent="selectedAgent"
-                :picker-options="pickerOptions"
-                :set-tour-input-target="setTourInputTarget"
-                @submit="sendMessage"
-                @stop="abortCurrentRequest"
-                @select="handleSelect"
-                @search="handleSearch"
-                @command="handleCommand"
-                @file-change="handleFileChange"
-                @remove-file="removeFile"
-                @clear-agent="clearSelectedAgent"
-                @toggle-agent="handleButtonClick"
+              <el-backtop
+                v-if="currentChat?.messages?.length"
+                target=".message-container"
+                :right="40"
+                :bottom="80"
               />
-            </div>
-            <div
-              v-if="!currentChat?.messages?.length"
-              ref="tourCasesTarget"
-              class="chat-cases-region"
-            >
-              <ChatCases />
+
+              <!-- Input area -->
+              <div class="input-container">
+                <ChatComposer
+                  ref="composerRef"
+                  v-model="displayMessageInput"
+                  :is-sending="isSending"
+                  v-model:chat-mode="chatMode"
+                  :expert-mode-enabled="expertModeEnabled"
+                  :show-mode-selector="!currentChat?.messages?.length"
+                  :file-list="fileList"
+                  :roles-loading="rolesLoading"
+                  :has-messages="!!currentChat?.messages?.length"
+                  :selected-agent="selectedAgent"
+                  :picker-options="pickerOptions"
+                  :set-tour-input-target="setTourInputTarget"
+                  @submit="sendMessage"
+                  @stop="abortCurrentRequest"
+                  @select="handleSelect"
+                  @search="handleSearch"
+                  @command="handleCommand"
+                  @file-change="handleFileChange"
+                  @remove-file="removeFile"
+                  @clear-agent="clearSelectedAgent"
+                  @toggle-agent="handleButtonClick"
+                />
+              </div>
+              <div
+                v-if="!currentChat?.messages?.length"
+                ref="tourCasesTarget"
+                class="chat-cases-region"
+              >
+                <ChatCases />
+              </div>
             </div>
           </div>
         </div>
@@ -520,6 +541,8 @@ import CitedAnswer from "@/components/CitedAnswer.vue";
 import { Menu } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
+import LangSwitch from "@/components/LangSwitch.vue";
+import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { useTutorial } from "./composables/useTutorial";
 import { useImageZoomPan } from "./composables/useImageZoomPan";
 import { useChatStates } from "./composables/useChatStates";
@@ -566,7 +589,7 @@ import { artifactKindForMessage } from "./utils/artifact-policy";
 import type {
   Chat,
   ChatMessage,
-  ChatComposerHandle,
+  ChatComposerHandle as ComposerHandle,
   ChatUIState,
   DialogueReconciliationResult,
 } from "./types";
@@ -576,7 +599,7 @@ import {
   type BotLifecycleState,
 } from "./streaming/botLifecycleReducer";
 
-const composerRef = ref<ChatComposerHandle | null>(null);
+const composerRef = ref<ComposerHandle | null>(null);
 
 const timestamp = ref(Date.now());
 const { locale, t } = useI18n();
@@ -1716,9 +1739,11 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
   }
 
   .header-controls {
+    flex: 0 0 auto;
+    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--phy-space-8);
   }
 
   .chat-expert-indicator {
@@ -1745,6 +1770,39 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
   display: flex;
   flex-direction: column;
   background: var(--phy-color-bg-page);
+}
+
+.chat-content-stack {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--phy-color-bg-page);
+}
+
+.chat-content-stack.is-empty {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.chat-content-stack.is-populated {
+  overflow: hidden;
+}
+
+.chat-content-stack.is-empty .message-container {
+  flex: 0 0 auto;
+  min-height: clamp(196px, 34vh, 340px);
+  overflow: visible;
+  padding: clamp(var(--phy-space-16), 4vh, var(--phy-space-40))
+    var(--phy-space-16) var(--phy-space-8);
+}
+
+.chat-content-stack.is-populated .message-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .transcript-content {
@@ -1805,15 +1863,14 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
 
 .empty-chat {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  min-height: 0;
   width: min(100%, var(--phy-layout-transcript-max-width));
   margin: 0 auto;
-  padding: clamp(var(--phy-space-24), 5vh, var(--phy-space-48))
-    var(--phy-space-16) var(--phy-space-24);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
+  padding: var(--phy-space-16);
 
   .empty-chat-welcome {
     width: 100%;
@@ -1828,18 +1885,38 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
 }
 
 .chat-cases-region {
-  flex-shrink: 0;
   width: 100%;
+  flex: 0 0 auto;
+  padding-bottom: clamp(var(--phy-space-24), 4vh, var(--phy-space-48));
 }
 
 @media (max-width: 600px) {
+  .chat-header {
+    padding: 0 var(--phy-space-8);
+
+    .header-controls {
+      gap: var(--phy-space-4);
+    }
+  }
+
+  .chat-content-stack.is-empty .message-container {
+    min-height: 180px;
+    padding: var(--phy-space-16) var(--phy-space-8) var(--phy-space-4);
+  }
+
   .empty-chat {
-    padding: var(--phy-space-20) var(--phy-space-12) var(--phy-space-16);
+    padding: var(--phy-space-12);
 
     .empty-chat-mark {
       width: 36px;
       height: 36px;
     }
+  }
+
+  .chat-cases-region {
+    padding-bottom: calc(
+      var(--phy-space-24) + env(safe-area-inset-bottom, 0px)
+    );
   }
 }
 

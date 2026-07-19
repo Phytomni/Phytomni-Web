@@ -72,6 +72,11 @@ describe("Chat empty state", () => {
     expect(CHAT_SOURCE).toContain(
       'v-for="(message, index) in currentChat.messages"'
     );
+    expect(CHAT_SOURCE).toContain('data-testid="chat-content-stack"');
+    expect(CHAT_SOURCE).toContain("'is-empty': chatStateAttr === 'empty'");
+    expect(CHAT_SOURCE).toContain(
+      "'is-populated': chatStateAttr === 'populated'"
+    );
   });
 
   it("orders Welcome, Composer, and Cases without starter prompts", () => {
@@ -106,5 +111,9 @@ describe("Chat empty state", () => {
       CHAT_SOURCE.indexOf(".input-container {")
     );
     expect(emptyChatBlock).toContain("justify-content: center");
+    expect(emptyChatBlock).toContain(
+      "width: min(100%, var(--phy-layout-transcript-max-width))"
+    );
+    expect(emptyChatBlock).toContain("padding: var(--phy-space-16)");
   });
 });

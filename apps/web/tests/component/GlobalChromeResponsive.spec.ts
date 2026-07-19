@@ -123,6 +123,6 @@ describe("Global application chrome", () => {
       /\.phy-adaptive-shell__main\[aria-hidden="true"\][\s\S]*visibility:\s*hidden/
     );
     expect(CHAT_FIXTURE_SOURCE).toContain(".empty-chat");
-    expect(CHAT_FIXTURE_SOURCE).toContain("flex: 1 1 auto");
+    expect(CHAT_FIXTURE_SOURCE).toContain("flex: 1;");
   });
 });

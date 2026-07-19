@@ -484,6 +484,30 @@ describe("Chat visual fixture source contracts", () => {
     expect(APP_SOURCE).not.toContain('class="fixture-message-row"');
     expect(scopedStyle).not.toContain(".fixture-message-row.is-user");
   });
+
+  it("mirrors the singleton header and state-specific landing scroll owners", () => {
+    expect(APP_SOURCE).toContain('data-testid="chat-header-preferences"');
+    expect(APP_SOURCE.match(/<LangSwitch/g) ?? []).toHaveLength(1);
+    expect(APP_SOURCE.match(/<ThemeSwitch/g) ?? []).toHaveLength(1);
+    expect(APP_SOURCE).toContain('data-testid="chat-content-stack"');
+    expect(
+      APP_SOURCE.match(/data-testid="chat-content-stack"/g) ?? []
+    ).toHaveLength(1);
+    expect(APP_SOURCE.match(/<ChatComposer/g) ?? []).toHaveLength(1);
+    expect(APP_SOURCE).toContain("'is-empty': fixture.chatState === 'empty'");
+    expect(APP_SOURCE).toContain(
+      "'is-populated': fixture.chatState === 'populated'"
+    );
+    expect(APP_SOURCE).toMatch(
+      /\.chat-content-stack\.is-empty\s*\{[\s\S]*?overflow-y:\s*auto/
+    );
+    expect(APP_SOURCE).toMatch(
+      /\.chat-content-stack\.is-populated\s*\{[\s\S]*?overflow:\s*hidden/
+    );
+    expect(APP_SOURCE).toMatch(
+      /\.chat-content-stack\.is-populated\s+\.message-container\s*\{[\s\S]*?overflow-y:\s*auto/
+    );
+  });
 });
 
 describe("Chat visual fixture boot contracts", () => {

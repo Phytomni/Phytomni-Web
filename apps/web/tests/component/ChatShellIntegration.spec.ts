@@ -191,9 +191,38 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("chatHeaderTitle");
     expect(CHAT_SOURCE).toContain("chat-expert-indicator");
     expect(CHAT_SOURCE).not.toContain('data-test="chat-header-overflow"');
-    expect(CHAT_SOURCE).not.toContain("<LangSwitch");
     expect(CHAT_SOURCE).not.toContain('class="chat-footer"');
     expect(CHAT_SOURCE).toContain('@showArchitecture="showAgentsView"');
+  });
+
+  it("renders language and theme preferences in the Chat header", () => {
+    expect(CHAT_SOURCE).toContain('data-testid="chat-header-preferences"');
+    expect(countOccurrences(CHAT_SOURCE, "<LangSwitch")).toBe(1);
+    expect(countOccurrences(CHAT_SOURCE, "<ThemeSwitch")).toBe(1);
+    expect(CHAT_SOURCE).toContain('class="header-controls"');
+  });
+
+  it("assigns one state-specific landing scroll owner without duplicating Composer", () => {
+    expect(
+      countOccurrences(CHAT_SOURCE, 'data-testid="chat-content-stack"')
+    ).toBe(1);
+    expect(countOccurrences(CHAT_SOURCE, "<ChatComposer")).toBe(1);
+    expect(CHAT_SOURCE).toContain("'is-empty': chatStateAttr === 'empty'");
+    expect(CHAT_SOURCE).toContain(
+      "'is-populated': chatStateAttr === 'populated'"
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.chat-content-stack\.is-empty\s*\{[\s\S]*?overflow-y:\s*auto/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.chat-content-stack\.is-populated\s*\{[\s\S]*?overflow:\s*hidden/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.chat-content-stack\.is-populated\s+\.message-container\s*\{[\s\S]*?overflow-y:\s*auto/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /<el-backtop[\s\S]*?v-if="currentChat\?\.messages\?\.length"[\s\S]*?target="\.message-container"/
+    );
   });
 
   it("routes help through the sidebar utility group and exposes shell capture hooks", () => {

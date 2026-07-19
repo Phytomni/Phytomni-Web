@@ -101,6 +101,20 @@ keep background content inert/hidden, trap Tab, close on Escape, and return focu
 to the opener. On narrow screens, the artifact split becomes a single visible
 surface rather than a squeezed two-column layout.
 
+Chat agent selection has one frontend source: canonical tools granted in
+`userStore.roles`, intersected in `CANONICAL_AGENT_TOOLS` order. The direct
+buttons, searchable picker, mention suggestions, populated dropdown, and
+`useComposer` runtime guard consume that same derived collection. Unresolved or
+failed role loading is fail-closed; Cases remains permission-independent because
+it links to static demonstration routes rather than granting live-agent access.
+
+The empty Chat landing owns vertical scroll at `chat-content-stack` and orders
+Welcome → Composer → Cases. After the first message, that stack stops scrolling,
+Cases unmounts, and `message-container` becomes the transcript scroll root while
+the singleton Composer remains its flex sibling. Browser geometry evidence must
+measure the state-appropriate owner instead of assuming the transcript always
+scrolls.
+
 ### Workspace and document surfaces
 
 - `PhyWorkspaceShell` owns authenticated data pages with a header, state region,

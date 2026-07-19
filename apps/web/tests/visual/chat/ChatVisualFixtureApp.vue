@@ -70,198 +70,220 @@
           <div class="chat-main-layout">
             <div class="chat-main">
               <header class="chat-header">
-                <div class="header-leading">
-                  <el-button
-                    v-if="fixture.showSidebarTrigger"
-                    class="mobile-sidebar-toggle is-visible"
-                    data-testid="chat-sidebar-trigger"
-                    text
-                    circle
-                    :aria-label="$t('chat.openNavigation')"
-                    @click="onFixtureAction('sidebar-trigger')"
+                <div class="chat-header-inner">
+                  <div class="header-leading">
+                    <el-button
+                      v-if="fixture.showSidebarTrigger"
+                      class="mobile-sidebar-toggle is-visible"
+                      data-testid="chat-sidebar-trigger"
+                      text
+                      circle
+                      :aria-label="$t('chat.openNavigation')"
+                      @click="onFixtureAction('sidebar-trigger')"
+                    >
+                      <el-icon><Menu /></el-icon>
+                    </el-button>
+                    <h2 class="chat-header-title">
+                      {{
+                        phase3cOverlay?.dialogueLabel ||
+                        $t("chat.untitledConversation")
+                      }}
+                    </h2>
+                  </div>
+                  <div
+                    class="header-controls"
+                    data-testid="chat-header-preferences"
                   >
-                    <el-icon><Menu /></el-icon>
-                  </el-button>
-                  <h2 class="chat-header-title">
-                    {{
-                      phase3cOverlay?.dialogueLabel ||
-                      $t("chat.untitledConversation")
-                    }}
-                  </h2>
+                    <LangSwitch />
+                    <ThemeSwitch />
+                  </div>
                 </div>
               </header>
 
               <div
-                class="message-container"
-                data-testid="chat-transcript"
-                ref="transcriptRef"
+                class="chat-content-stack"
+                data-testid="chat-content-stack"
+                :class="{
+                  'is-empty': fixture.chatState === 'empty',
+                  'is-populated': fixture.chatState === 'populated',
+                }"
               >
-                <div v-if="fixture.chatState === 'empty'" class="empty-chat">
-                  <PhyEmptyState
-                    :title="$t('chat.welcomeTitle')"
-                    :subtitle="$t('chat.welcomeSubtitle')"
-                  >
-                    <template #mark>
-                      <img
-                        src="@/assets/images/chat/logo.png"
-                        class="empty-chat-mark"
-                        alt=""
-                      />
-                    </template>
-                  </PhyEmptyState>
-                </div>
-
-                <div class="transcript-content">
-                  <!-- Phase 3B: production row + content renderer, shared fixtures -->
-                  <template v-if="isMessageContentFixture">
-                    <ChatMessageRow
-                      v-for="(message, index) in contentMessages"
-                      :key="message.id || index"
-                      :role="message.role === 'user' ? 'user' : 'assistant'"
-                      :message-id="message.id"
-                      :streaming="!!message.streaming"
-                      :wide="
-                        message.role === 'assistant' &&
-                        message.tool_name === 'DeepGenomeAgent'
-                      "
+                <div
+                  class="message-container"
+                  data-testid="chat-transcript"
+                  ref="transcriptRef"
+                >
+                  <div v-if="fixture.chatState === 'empty'" class="empty-chat">
+                    <PhyEmptyState
+                      :title="$t('chat.welcomeTitle')"
+                      :subtitle="$t('chat.welcomeSubtitle')"
                     >
-                      <ChatMessageContent
-                        :message="message"
-                        :index="index"
-                        :is-last-message="index === contentMessages.length - 1"
-                        :activity-expanded-by-message="activityExpandedMap"
-                        :gene-network-images="geneNetworkImages"
-                        :gene-network-images-loading="EMPTY_LOADING"
-                        :digital-design-images="EMPTY_IMAGES"
-                        :digital-design-images-loading="EMPTY_LOADING"
-                      />
-                    </ChatMessageRow>
-                  </template>
-
-                  <!-- Phase 3C content + overlay widgets (Activity / log / A2UI / parallel) -->
-                  <template v-else-if="isStructuredContentFixture">
-                    <ChatMessageRow
-                      v-for="(message, index) in contentMessages"
-                      :key="message.id || index"
-                      :role="message.role === 'user' ? 'user' : 'assistant'"
-                      :message-id="message.id"
-                      :streaming="!!message.streaming"
-                      :wide="
-                        message.role === 'assistant' &&
-                        message.tool_name === 'DeepGenomeAgent'
-                      "
-                    >
-                      <ChatMessageContent
-                        :message="message"
-                        :index="index"
-                        :is-last-message="index === contentMessages.length - 1"
-                        :activity-expanded-by-message="activityExpandedMap"
-                        :gene-network-images="EMPTY_IMAGES"
-                        :gene-network-images-loading="EMPTY_LOADING"
-                        :digital-design-images="EMPTY_IMAGES"
-                        :digital-design-images-loading="EMPTY_LOADING"
-                      />
-                      <template
-                        v-if="logOverlay && message.role === 'assistant'"
-                        #activity
-                      >
-                        <ChatActivity
-                          :state-key="'log:' + (logOverlay?.rowId || '')"
-                          :expanded="logOverlayExpanded"
-                          :label="$t('chat.log.activityLabel')"
-                          :hide-count="true"
-                          @update:expanded="onFixtureAction('log-expanded')"
-                        >
-                          <ChatAnalystLog
-                            :row-id="logOverlay?.rowId"
-                            :task-id="logOverlay?.taskId"
-                            :log-data="logOverlay?.logData"
-                            :loading="!!logOverlay?.loading"
-                            :updating="!!logOverlay?.updating"
-                            :error-kind="logOverlay?.errorKind"
-                            @update="onFixtureAction('log-update')"
-                            @retry="onFixtureAction('log-retry')"
-                          />
-                        </ChatActivity>
+                      <template #mark>
+                        <img
+                          src="@/assets/images/chat/logo.png"
+                          class="empty-chat-mark"
+                          alt=""
+                        />
                       </template>
-                    </ChatMessageRow>
-                  </template>
+                    </PhyEmptyState>
+                  </div>
 
-                  <!-- Frame fixtures: simple synthetic text rows -->
-                  <template v-else>
+                  <div class="transcript-content">
+                    <!-- Phase 3B: production row + content renderer, shared fixtures -->
+                    <template v-if="isMessageContentFixture">
+                      <ChatMessageRow
+                        v-for="(message, index) in contentMessages"
+                        :key="message.id || index"
+                        :role="message.role === 'user' ? 'user' : 'assistant'"
+                        :message-id="message.id"
+                        :streaming="!!message.streaming"
+                        :wide="
+                          message.role === 'assistant' &&
+                          message.tool_name === 'DeepGenomeAgent'
+                        "
+                      >
+                        <ChatMessageContent
+                          :message="message"
+                          :index="index"
+                          :is-last-message="
+                            index === contentMessages.length - 1
+                          "
+                          :activity-expanded-by-message="activityExpandedMap"
+                          :gene-network-images="geneNetworkImages"
+                          :gene-network-images-loading="EMPTY_LOADING"
+                          :digital-design-images="EMPTY_IMAGES"
+                          :digital-design-images-loading="EMPTY_LOADING"
+                        />
+                      </ChatMessageRow>
+                    </template>
+
+                    <!-- Phase 3C content + overlay widgets (Activity / log / A2UI / parallel) -->
+                    <template v-else-if="isStructuredContentFixture">
+                      <ChatMessageRow
+                        v-for="(message, index) in contentMessages"
+                        :key="message.id || index"
+                        :role="message.role === 'user' ? 'user' : 'assistant'"
+                        :message-id="message.id"
+                        :streaming="!!message.streaming"
+                        :wide="
+                          message.role === 'assistant' &&
+                          message.tool_name === 'DeepGenomeAgent'
+                        "
+                      >
+                        <ChatMessageContent
+                          :message="message"
+                          :index="index"
+                          :is-last-message="
+                            index === contentMessages.length - 1
+                          "
+                          :activity-expanded-by-message="activityExpandedMap"
+                          :gene-network-images="EMPTY_IMAGES"
+                          :gene-network-images-loading="EMPTY_LOADING"
+                          :digital-design-images="EMPTY_IMAGES"
+                          :digital-design-images-loading="EMPTY_LOADING"
+                        />
+                        <template
+                          v-if="logOverlay && message.role === 'assistant'"
+                          #activity
+                        >
+                          <ChatActivity
+                            :state-key="'log:' + (logOverlay?.rowId || '')"
+                            :expanded="logOverlayExpanded"
+                            :label="$t('chat.log.activityLabel')"
+                            :hide-count="true"
+                            @update:expanded="onFixtureAction('log-expanded')"
+                          >
+                            <ChatAnalystLog
+                              :row-id="logOverlay?.rowId"
+                              :task-id="logOverlay?.taskId"
+                              :log-data="logOverlay?.logData"
+                              :loading="!!logOverlay?.loading"
+                              :updating="!!logOverlay?.updating"
+                              :error-kind="logOverlay?.errorKind"
+                              @update="onFixtureAction('log-update')"
+                              @retry="onFixtureAction('log-retry')"
+                            />
+                          </ChatActivity>
+                        </template>
+                      </ChatMessageRow>
+                    </template>
+
+                    <!-- Frame fixtures: simple synthetic text rows -->
+                    <template v-else>
+                      <ChatMessageRow
+                        v-for="message in frameMessages"
+                        :key="message.id"
+                        :role="message.role === 'user' ? 'user' : 'assistant'"
+                        :message-id="message.id"
+                      >
+                        <div
+                          :class="[
+                            'message-text',
+                            message.role === 'user'
+                              ? 'phy-bubble-user'
+                              : 'phy-bubble-assistant',
+                          ]"
+                        >
+                          {{ message.content }}
+                        </div>
+                      </ChatMessageRow>
+                    </template>
+
+                    <!-- Phase 3C progress / transfer overlays (mutually exclusive) -->
                     <ChatMessageRow
-                      v-for="message in frameMessages"
-                      :key="message.id"
-                      :role="message.role === 'user' ? 'user' : 'assistant'"
-                      :message-id="message.id"
+                      v-if="showProgressOverlay || showTransferOverlay"
+                      role="assistant"
+                      loading
                     >
                       <div
-                        :class="[
-                          'message-text',
-                          message.role === 'user'
-                            ? 'phy-bubble-user'
-                            : 'phy-bubble-assistant',
-                        ]"
+                        class="message-text loading-message phy-bubble-assistant"
+                        data-testid="chat-fixture-progress-host"
                       >
-                        {{ message.content }}
+                        {{ $t("chat.ladingInner") }}
+                        <TransferProgress
+                          v-if="transferSnapshot"
+                          :snapshot="transferSnapshot"
+                          @cancel="onFixtureAction('transfer-cancel')"
+                        />
+                        <SendProgress
+                          v-else-if="progressProps"
+                          :started-at="progressProps.startedAt"
+                          :agent-name="progressProps.agentName"
+                          :completing="progressProps.completing"
+                        />
                       </div>
                     </ChatMessageRow>
-                  </template>
-
-                  <!-- Phase 3C progress / transfer overlays (mutually exclusive) -->
-                  <ChatMessageRow
-                    v-if="showProgressOverlay || showTransferOverlay"
-                    role="assistant"
-                    loading
-                  >
-                    <div
-                      class="message-text loading-message phy-bubble-assistant"
-                      data-testid="chat-fixture-progress-host"
-                    >
-                      {{ $t("chat.ladingInner") }}
-                      <TransferProgress
-                        v-if="transferSnapshot"
-                        :snapshot="transferSnapshot"
-                        @cancel="onFixtureAction('transfer-cancel')"
-                      />
-                      <SendProgress
-                        v-else-if="progressProps"
-                        :started-at="progressProps.startedAt"
-                        :agent-name="progressProps.agentName"
-                        :completing="progressProps.completing"
-                      />
-                    </div>
-                  </ChatMessageRow>
+                  </div>
                 </div>
-              </div>
 
-              <ChatComposer
-                :model-value="composerValue"
-                :is-sending="composerIsSending"
-                chat-mode="instant"
-                :expert-mode-enabled="false"
-                :show-mode-selector="fixture.chatState === 'empty'"
-                :file-list="fileList"
-                :roles-loading="false"
-                :has-messages="fixture.chatState === 'populated'"
-                :selected-agent="fixture.selectedAgent"
-                :picker-options="pickerOptions"
-                @update:model-value="composerValue = $event"
-                @submit="onFixtureAction('composer-submit')"
-                @stop="onFixtureAction('composer-stop')"
-                @select="onFixtureAction('composer-select')"
-                @search="onFixtureAction('composer-search')"
-                @command="onFixtureAction('composer-command')"
-                @file-change="onFixtureAction('composer-file-change')"
-                @remove-file="onFixtureAction('composer-remove-file')"
-                @clear-agent="onFixtureAction('composer-clear-agent')"
-                @toggle-agent="onFixtureAction('composer-toggle-agent')"
-              />
-              <div
-                v-if="fixture.chatState === 'empty'"
-                class="chat-cases-region"
-              >
-                <ChatCases />
+                <ChatComposer
+                  :model-value="composerValue"
+                  :is-sending="composerIsSending"
+                  chat-mode="instant"
+                  :expert-mode-enabled="false"
+                  :show-mode-selector="fixture.chatState === 'empty'"
+                  :file-list="fileList"
+                  :roles-loading="false"
+                  :has-messages="fixture.chatState === 'populated'"
+                  :selected-agent="fixture.selectedAgent"
+                  :picker-options="pickerOptions"
+                  @update:model-value="composerValue = $event"
+                  @submit="onFixtureAction('composer-submit')"
+                  @stop="onFixtureAction('composer-stop')"
+                  @select="onFixtureAction('composer-select')"
+                  @search="onFixtureAction('composer-search')"
+                  @command="onFixtureAction('composer-command')"
+                  @file-change="onFixtureAction('composer-file-change')"
+                  @remove-file="onFixtureAction('composer-remove-file')"
+                  @clear-agent="onFixtureAction('composer-clear-agent')"
+                  @toggle-agent="onFixtureAction('composer-toggle-agent')"
+                />
+                <div
+                  v-if="fixture.chatState === 'empty'"
+                  class="chat-cases-region"
+                >
+                  <ChatCases />
+                </div>
               </div>
             </div>
           </div>
@@ -309,6 +331,8 @@ import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
 import SendProgress from "@/views/chat/components/SendProgress.vue";
 import TransferProgress from "@/components/TransferProgress.vue";
+import LangSwitch from "@/components/LangSwitch.vue";
+import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { useAppStore } from "@/stores";
 import type { ChatMessage } from "@/views/chat/types";
 import type { ChatVisualFixtureDefinition } from "./fixture-registry";
@@ -566,18 +590,44 @@ onUnmounted(() => {
 }
 
 .chat-header {
-  flex: 0 0 auto;
-  padding: 8px 16px;
+  flex: 0 0 var(--phy-control-height-primary);
+  height: var(--phy-control-height-primary);
+  padding: 0 var(--phy-space-16);
+  border-bottom: 1px solid var(--phy-color-border-subtle);
+}
+
+.chat-header-inner {
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--phy-space-8);
+}
+
+.header-leading,
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--phy-space-8);
 }
 
 .header-leading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.header-controls {
+  flex: 0 0 auto;
 }
 
 .chat-header-title {
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 1rem;
   font-weight: 600;
 }
@@ -591,40 +641,89 @@ onUnmounted(() => {
 }
 
 .message-container {
-  flex: 1 1 auto;
+  flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   padding: 16px;
 }
 
-.empty-chat {
+.chat-content-stack {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
+  background: var(--phy-color-bg-page);
+}
+
+.chat-content-stack.is-empty {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.chat-content-stack.is-populated {
+  overflow: hidden;
+}
+
+.chat-content-stack.is-empty .message-container {
+  flex: 0 0 auto;
+  min-height: clamp(196px, 34vh, 340px);
+  overflow: visible;
+  padding: clamp(var(--phy-space-16), 4vh, var(--phy-space-40))
+    var(--phy-space-16) var(--phy-space-8);
+}
+
+.chat-content-stack.is-populated .message-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.empty-chat {
+  flex: 1;
+  min-height: 0;
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: min(100%, var(--phy-layout-transcript-max-width, 760px));
-  margin: 0 auto;
   box-sizing: border-box;
-  padding: clamp(24px, 5vh, 48px) 16px 24px;
-  text-align: center;
+  padding: var(--phy-space-16);
 }
 
 .transcript-content {
-  max-width: var(--phy-layout-transcript-max-width, 760px);
+  width: min(100%, var(--phy-layout-transcript-max-width));
   margin: 0 auto;
 }
 
-.empty-chat-mark {
-  width: 48px;
-  height: 48px;
+.chat-cases-region {
+  width: 100%;
+  flex: 0 0 auto;
+  padding-bottom: clamp(var(--phy-space-24), 4vh, var(--phy-space-48));
 }
 
-.chat-cases-region {
-  flex: 0 0 auto;
-  width: 100%;
+@media (max-width: 600px) {
+  .chat-header {
+    padding: 0 var(--phy-space-8);
+  }
+
+  .header-controls {
+    gap: var(--phy-space-4);
+  }
+
+  .chat-content-stack.is-empty .message-container {
+    min-height: 180px;
+    padding: var(--phy-space-16) var(--phy-space-8) var(--phy-space-4);
+  }
+
+  .chat-cases-region {
+    padding-bottom: calc(
+      var(--phy-space-24) + env(safe-area-inset-bottom, 0px)
+    );
+  }
 }
 
 .fixture-action-log {
