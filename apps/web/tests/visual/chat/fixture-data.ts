@@ -126,8 +126,6 @@ export function buildSyntheticPickerOptions(): ChatAgentPickerOption[] {
   }));
 }
 
-export const SYNTHETIC_ROLES_TOOL: string[] = [...CANONICAL_AGENT_TOOLS];
-
 export const A2UI_LIFECYCLE_LONG_LABEL = "L".repeat(256);
 export const A2UI_LIFECYCLE_LONG_BODY = "B".repeat(4096);
 

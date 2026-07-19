@@ -32,7 +32,7 @@
             variant="updown"
             :auto-size="{ minRows: 1, maxRows: 5 }"
             :placeholder="t('chat.inputPlaceholder', { symbol: '@' })"
-            :options="rolesTool.map((x) => ({ value: x }))"
+            :options="pickerOptions.map((option) => ({ value: option.tool }))"
             :trigger-strings="['@']"
             trigger-split=","
             :whole="true"
@@ -98,7 +98,7 @@
               </template>
             </el-upload>
             <el-dropdown
-              v-if="hasMessages && rolesTool.length > 0"
+              v-if="hasMessages && pickerOptions.length > 0"
               placement="top-start"
               trigger="click"
               :disabled="isSending"
@@ -115,10 +115,10 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item
-                    v-for="(item, index) in rolesTool"
-                    :key="index"
-                    :command="'@' + item + ','"
-                    >{{ item }}</el-dropdown-item
+                    v-for="item in pickerOptions"
+                    :key="item.tool"
+                    :command="'@' + item.tool + ','"
+                    >{{ item.label }}</el-dropdown-item
                   >
                 </el-dropdown-menu>
               </template>
@@ -164,6 +164,14 @@
           </div>
         </div>
       </div>
+      <ChatAgentQuickSelect
+        v-if="showQuickSelect"
+        :options="pickerOptions"
+        :roles-loading="rolesLoading"
+        :selected-agent="selectedAgent"
+        :disabled="isSending"
+        @toggle="emit('toggle-agent', $event)"
+      />
     </div>
   </div>
 </template>
@@ -177,6 +185,7 @@ import ChatModeSelector from "@/components/ChatModeSelector.vue";
 import ChatAgentPicker, {
   type ChatAgentPickerOption,
 } from "./ChatAgentPicker.vue";
+import ChatAgentQuickSelect from "./ChatAgentQuickSelect.vue";
 import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
 import type { ChatComposerHandle, UploadFile } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
@@ -188,7 +197,6 @@ const props = defineProps<{
   expertModeEnabled: boolean;
   showModeSelector: boolean;
   fileList: UploadFile[];
-  rolesTool: string[];
   rolesLoading: boolean;
   hasMessages: boolean;
   selectedAgent: string;
@@ -207,6 +215,7 @@ const emit = defineEmits<{
   "file-change": [file: unknown];
   "remove-file": [index: number];
   "clear-agent": [];
+  "toggle-agent": [tool: string];
 }>();
 
 const { t } = useI18n();
@@ -218,6 +227,9 @@ const senderRef = ref<{
 const uploadRef = ref();
 
 const showAgentPicker = computed(() => props.chatMode === "instant");
+const showQuickSelect = computed(
+  () => !props.hasMessages && props.chatMode === "instant"
+);
 const canSubmit = computed(
   () => Boolean(props.modelValue.trim()) && !props.isSending
 );

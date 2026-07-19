@@ -354,7 +354,6 @@
                 :expert-mode-enabled="expertModeEnabled"
                 :show-mode-selector="!currentChat?.messages?.length"
                 :file-list="fileList"
-                :roles-tool="authorizedAgentTools"
                 :roles-loading="rolesLoading"
                 :has-messages="!!currentChat?.messages?.length"
                 :selected-agent="selectedAgent"
@@ -368,6 +367,7 @@
                 @file-change="handleFileChange"
                 @remove-file="removeFile"
                 @clear-agent="clearSelectedAgent"
+                @toggle-agent="handleButtonClick"
               />
             </div>
           </div>
@@ -1328,6 +1328,7 @@ const scrollToBottom = async () => {
 const {
   displayMessageInput,
   clearSelectedAgent,
+  handleButtonClick,
   handleCommand,
   handleSelect,
   handleSearch,

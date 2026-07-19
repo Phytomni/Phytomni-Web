@@ -242,7 +242,6 @@
                 :expert-mode-enabled="false"
                 :show-mode-selector="fixture.chatState === 'empty'"
                 :file-list="fileList"
-                :roles-tool="SYNTHETIC_ROLES_TOOL"
                 :roles-loading="false"
                 :has-messages="fixture.chatState === 'populated'"
                 :selected-agent="fixture.selectedAgent"
@@ -256,6 +255,7 @@
                 @file-change="onFixtureAction('composer-file-change')"
                 @remove-file="onFixtureAction('composer-remove-file')"
                 @clear-agent="onFixtureAction('composer-clear-agent')"
+                @toggle-agent="onFixtureAction('composer-toggle-agent')"
               />
             </div>
           </div>
@@ -317,7 +317,6 @@ import {
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import {
   SYNTHETIC_IDENTITY,
-  SYNTHETIC_ROLES_TOOL,
   buildSyntheticFileList,
   buildSyntheticMessages,
   buildHarnessMessages,

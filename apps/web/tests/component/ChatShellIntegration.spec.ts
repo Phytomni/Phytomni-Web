@@ -295,19 +295,15 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("derivePickerOptions");
   });
 
-  it("removes the permanent bottom agent stage while keeping one inline selection path", () => {
+  it("keeps one picker and one bounded direct-selection surface in the composer", () => {
     expect(CHAT_SOURCE).not.toContain('class="input-container-bottom"');
-    expect(CHAT_SOURCE).not.toContain('@wheel.prevent="handleScroll"');
-    expect(CHAT_SOURCE).not.toContain(':style="containerStyle"');
     expect(CHAT_SOURCE).not.toContain('v-for="agent in presetAgents"');
-    expect(CHAT_SOURCE).not.toContain(".input-container-bottom {");
-
-    expect(CHAT_COMPOSER_SOURCE).not.toContain('class="agent-button"');
     expect(CHAT_COMPOSER_SOURCE).toContain("<ChatAgentPicker");
-    expect(CHAT_COMPOSER_SOURCE).toContain(':selected-agent="selectedAgent"');
+    expect(CHAT_COMPOSER_SOURCE).toContain("<ChatAgentQuickSelect");
     expect(CHAT_COMPOSER_SOURCE).toContain(':options="pickerOptions"');
+    expect(CHAT_COMPOSER_SOURCE).not.toContain("rolesTool");
     expect(CHAT_SOURCE).toContain(':picker-options="pickerOptions"');
-    expect(CHAT_SOURCE).toContain(':selected-agent="selectedAgent"');
+    expect(CHAT_SOURCE).toContain('@toggle-agent="handleButtonClick"');
     expect(CHAT_SOURCE).toContain('@clear-agent="clearSelectedAgent"');
   });
 

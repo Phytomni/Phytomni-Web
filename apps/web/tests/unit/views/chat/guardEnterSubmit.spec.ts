@@ -35,11 +35,16 @@ const baseProps = () => ({
   expertModeEnabled: true,
   showModeSelector: false,
   fileList: [],
-  rolesTool: ["ChatAgent", "KnowledgeAgent"],
   rolesLoading: false,
   hasMessages: false,
-  activeButton: "",
-  getAgentTooltip: (item: string) => item,
+  selectedAgent: "",
+  pickerOptions: [
+    {
+      tool: "ChatAgent",
+      label: "Chat Agent",
+      labelKey: "chat.agents.chatAgent",
+    },
+  ],
 });
 
 describe("guardEnterSubmit at ChatComposer boundary", () => {

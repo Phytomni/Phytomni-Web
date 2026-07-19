@@ -63,10 +63,10 @@ const COMPACT_DOM_ORDER = [
 ];
 
 const pickerOptions = [
-  { tool: "ChatAgent", label: "ChatAgent", labelKey: "chat.agents.chatAgent" },
+  { tool: "ChatAgent", label: "Chat Agent", labelKey: "chat.agents.chatAgent" },
   {
     tool: "KnowledgeAgent",
-    label: "KnowledgeAgent",
+    label: "Knowledge Agent",
     labelKey: "chat.agents.knowledgeAgent",
   },
 ];
@@ -78,7 +78,6 @@ const baseProps = () => ({
   expertModeEnabled: true,
   showModeSelector: true,
   fileList: [] as UploadFile[],
-  rolesTool: ["ChatAgent", "KnowledgeAgent"],
   rolesLoading: false,
   hasMessages: false,
   selectedAgent: "",
@@ -102,6 +101,13 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
             '<div class="chat-agent-picker" data-testid="chat-agent-picker" />',
           props: ["options", "rolesLoading", "selectedAgent", "disabled"],
           emits: ["select", "clear"],
+        },
+        ChatAgentQuickSelect: {
+          name: "ChatAgentQuickSelect",
+          template:
+            '<div data-testid="chat-agent-quick-select"><button v-for="option in options" :key="option.tool">{{ option.label }}</button></div>',
+          props: ["options", "rolesLoading", "selectedAgent", "disabled"],
+          emits: ["toggle"],
         },
         ElUpload: {
           name: "ElUpload",
@@ -223,6 +229,44 @@ describe("ChatComposer", () => {
     const mention = wrapper.findComponent({ name: "MentionSender" });
     await mention.vm.$emit("update:modelValue", "next");
     expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["next"]);
+  });
+
+  it("feeds mention suggestions from the same picker options", () => {
+    const wrapper = mountComposer();
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("options")
+    ).toEqual([{ value: "ChatAgent" }, { value: "KnowledgeAgent" }]);
+  });
+
+  it("shows direct selection only for an empty instant chat", () => {
+    const emptyInstant = mountComposer();
+    expect(
+      emptyInstant.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(true);
+
+    const populated = mountComposer({ hasMessages: true });
+    expect(
+      populated.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(false);
+
+    const expert = mountComposer({ chatMode: "expert" });
+    expect(
+      expert.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(false);
+  });
+
+  it("forwards a quick toggle and uses localized labels in the populated menu", async () => {
+    const empty = mountComposer();
+    await empty
+      .findComponent({ name: "ChatAgentQuickSelect" })
+      .vm.$emit("toggle", "KnowledgeAgent");
+    expect(empty.emitted("toggle-agent")?.[0]).toEqual(["KnowledgeAgent"]);
+
+    const populated = mountComposer({ hasMessages: true });
+    expect(populated.find(".el-dropdown").text()).toContain("Chat Agent");
+    expect(populated.find(".el-dropdown").text()).toContain(
+      "Knowledge Agent"
+    );
   });
 
   it("emits submit from MentionSender and the enabled primary action", async () => {
