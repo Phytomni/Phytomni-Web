@@ -10,7 +10,7 @@ export default defineConfig(({ mode, command }) => {
   // Load the .env file for the current working directory based on `mode`.
   // Passing '' as the third arg loads all env vars regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), "");
-  const { VITE_APP_BASE_URL, VITE_FILE_BASE, VITE_PORT } = env;
+  const { VITE_APP_BASE_URL, VITE_PORT } = env;
   const port = VITE_PORT || 5173; // port
 
   // Dev-only proxy targets — overridable via .env.dev so each engineer

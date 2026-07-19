@@ -23,6 +23,7 @@ from scripts.static_analysis.model import (
 pytestmark = pytest.mark.unit
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "registry"
+ROOT = Path(__file__).resolve().parents[3]
 TODAY = "2026-07-19"
 
 
@@ -398,3 +399,33 @@ def test_emit_encodes_wildcard_authority_as_exact_identity_tokens(
     assert entry["rule"].startswith("pattern-sha256:")
     assert entry["target"].startswith("pattern-sha256:")
     assert "*" not in text
+
+
+def test_low_risk_temporary_families_are_closed_from_the_live_registry() -> None:
+    document = tomllib.loads(
+        (ROOT / "static-analysis-exemptions.toml").read_text(encoding="utf-8")
+    )
+    entries = document["exemptions"]
+
+    assert not any(
+        entry["rule"] == "@typescript-eslint/no-unused-vars" for entry in entries
+    )
+    assert not any(
+        entry["path"] == "apps/web/.eslintrc.cjs" and entry["target"] == "public/"
+        for entry in entries
+    )
+    assert not any(
+        entry["path"] == "apps/web/tsconfig.json"
+        and "public/modle" in entry["target"]
+        for entry in entries
+    )
+    assert not any(
+        entry["path"] == "scripts/tests/test_check_bot_web_activation.py"
+        and entry["rule"] == "index"
+        for entry in entries
+    )
+    assert not any(
+        entry["path"].startswith("scripts/gates/")
+        and entry["rule"] == "shell-fallback-success"
+        for entry in entries
+    )

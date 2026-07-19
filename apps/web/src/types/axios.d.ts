@@ -12,8 +12,9 @@
 // fields the interceptor's payload surfaces. This is a documented lie:
 // the real runtime value is the .data payload, not an AxiosResponse,
 // but the type system accepts every access site without per-callsite
-// casts. The `data: any` member from the generic AxiosResponse<T> is
-// preserved (not redeclared here) so existing `res.data.foo` patterns
+// casts. The generic `data: T` and `config: InternalAxiosRequestConfig<D>`
+// members are redeclared with their original shapes so the type parameters
+// remain bound to the augmentation while existing `res.data.foo` patterns
 // keep working via the `any` escape hatch.
 
 import "axios";
@@ -27,5 +28,7 @@ declare module "axios" {
     download_path: string;
     file_name: string;
     result: any;
+    data: T;
+    config: InternalAxiosRequestConfig<D>;
   }
 }
