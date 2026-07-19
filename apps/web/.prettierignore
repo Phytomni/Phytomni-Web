@@ -1,0 +1,14 @@
+# Generated output and local dependencies
+dist/
+coverage/
+node_modules/
+package-lock.json
+
+# Binary and static download payloads
+public/static/downloads/
+public/static/pdb/
+public/static/js/3Dmol-min.js
+
+# Large agent artifact fixtures are reviewed as data, not source
+src/assets/agentExample/
+src/assets/agentOut/
