@@ -39,7 +39,7 @@ Temporary records track remediation debt and never grant structural approval.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `web-sa-1b411065fe537ec6948ba2eadca2021818272ee4c6b7ed313abc417e14667d86` | `2026-08-31` | `eslint` | `ignore-pattern` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `dist/` | `web-maintainers` | `2026-07-19` |
 | `web-sa-2cadf9833f19cb4df032350313ad4c7f112140f0aa932ada7c337623f7dbd016` | `2026-08-31` | `eslint` | `prettier/prettier` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `prettier/prettier` | `web-maintainers` | `2026-07-19` |
-| `web-sa-562976b0164533c68dcd56b3b689e0b936c9fb49a1a6a893d9e88aaf08f55af8` | `2026-08-31` | `eslint` | `ignore-pattern` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `public/` | `web-maintainers` | `2026-07-19` |
+| `web-sa-fc8a1bfb1baaacb8d08bdd02afcf449a6c537334664858c4aef8bbb461ebb0bf` | `2026-08-31` | `eslint` | `ignore-pattern` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `public/static/js/3Dmol-min.js` | `web-maintainers` | `2026-07-19` |
 | `web-sa-df13542ef68f44f4a822d7d465eb64e1999b396c29a79f68d3773a06ea7c5505` | `2026-08-31` | `eslint` | `vue/multi-word-component-names` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `vue/multi-word-component-names` | `web-maintainers` | `2026-07-19` |
 | `web-sa-59e914bc4ddd68b4cafca441f848c9843a25f779577db1c65ceb14e1ff64375f` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [env.d.ts:9](../../env.d.ts#L9) | `VariableDeclarator:component@9:52-9:55` | `web-maintainers` | `2026-07-19` |
 | `web-sa-03a1b012664efe7b452648d40adc265f5a88682dd937dbf0f436bbb2b03057c4` | `2026-08-31` | `eslint` | `no-console` | [scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs](../../scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs) | `no-console` | `web-maintainers` | `2026-07-19` |
@@ -628,7 +628,7 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: eslint reported prettier/prettier at line ?; raw diagnostic omitted.
 
-### `web-sa-562976b0164533c68dcd56b3b689e0b936c9fb49a1a6a893d9e88aaf08f55af8`
+### `web-sa-fc8a1bfb1baaacb8d08bdd02afcf449a6c537334664858c4aef8bbb461ebb0bf`
 
 - Exact entry: [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs)
 - Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.

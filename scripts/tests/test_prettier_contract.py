@@ -86,7 +86,7 @@ def test_prettier_is_exactly_pinned_and_scripts_have_one_write_boundary() -> Non
 def test_prettier_ignore_is_exact_without_broad_source_or_public_bypass() -> None:
     entries = _ignore_entries()
 
-    assert EXPECTED_IGNORES <= entries
+    assert entries == EXPECTED_IGNORES
     assert "src/" not in entries
     assert "tests/" not in entries
     assert "public/" not in entries

@@ -4,7 +4,7 @@
     "src/**/*",
     "src/**/*.vue",
     "vite"
-, "public/modle/3Dmol-min.js", "public/modle"  ],
+  ],
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Node",

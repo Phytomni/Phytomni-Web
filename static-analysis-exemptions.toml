@@ -9744,20 +9744,20 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-562976b0164533c68dcd56b3b689e0b936c9fb49a1a6a893d9e88aaf08f55af8"
+id = "web-sa-fc8a1bfb1baaacb8d08bdd02afcf449a6c537334664858c4aef8bbb461ebb0bf"
 tool = "eslint"
 rule = "ignore-pattern"
 classification = "temporary"
 mechanism = "config"
 target_kind = "config"
 path = "apps/web/.eslintrc.cjs"
-target = "public/"
-fingerprint = "sha256:562976b0164533c68dcd56b3b689e0b936c9fb49a1a6a893d9e88aaf08f55af8"
+target = "public/static/js/3Dmol-min.js"
+fingerprint = "sha256:fc8a1bfb1baaacb8d08bdd02afcf449a6c537334664858c4aef8bbb461ebb0bf"
 owner = "web-maintainers"
 introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target apps/web/.eslintrc.cjs:public/"
+remediation = "WEB-SA: remediate exact target apps/web/.eslintrc.cjs:public/static/js/3Dmol-min.js"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
