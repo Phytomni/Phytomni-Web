@@ -15,6 +15,9 @@ trap cleanup EXIT
 
 mkdir -p "${EVIDENCE_DIR}"
 test -d "${EVIDENCE_DIR}"
+# A failed rerun must never leave stale screenshots or geometry records that
+# can be mistaken for evidence from the current matrix.
+find "${EVIDENCE_DIR}" -mindepth 1 -maxdepth 1 -type f -delete
 
 viewports=(
   "320 568"
@@ -79,6 +82,14 @@ for locale in "${locales[@]}"; do
     capture_fixture "sidebar-mobile-closed" "390" "844" "${locale}" "${theme}"
     capture_fixture "sidebar-mobile-open" "390" "844" "${locale}" "${theme}"
   done
+done
+
+png_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')
+geometry_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.geometry.json' | wc -l | tr -d ' ')
+test "${png_count}" -eq 100
+test "${geometry_count}" -eq 100
+for png in "${EVIDENCE_DIR}"/*.png; do
+  test -f "${png%.png}.geometry.json"
 done
 
 agent-browser --session "${SESSION}" close
