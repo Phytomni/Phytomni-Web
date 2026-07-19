@@ -32,7 +32,8 @@ browser geometry check below.
 `agent-browser eval` cannot both preserve a returned JSON object and throw with
 that same stdout. Always:
 
-1. `measure-geometry.js` — scrolls the transcript owner, awaits two animation
+1. `measure-geometry.js` — selects and scrolls the state-appropriate owner,
+   awaits two animation
    frames, stores `window.__PHY_CHAT_GEOMETRY_RESULT__`, returns the object, and
    does **not** throw solely for `pass=false`.
 2. Save that JSON (`tee` + `test -s`).
