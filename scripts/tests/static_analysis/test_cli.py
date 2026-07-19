@@ -149,6 +149,50 @@ def test_ledger_write_and_check_are_byte_stable(
         ]
     ) == 0
     assert ledger.read_text(encoding="utf-8") == first
+    assert "Generated from schema version 1" in first
+    assert str(tmp_path) not in first
+
+
+def test_check_ledger_fails_closed_on_one_byte_difference(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "tracked_files", lambda _root: ())
+    ledger = tmp_path / "ledger.md"
+    args = [
+        "--inventory",
+        "--collector",
+        "source",
+        "--registry",
+        str(FIXTURE_DIR / "valid-empty.toml"),
+        "--today",
+        TODAY,
+        "--write-ledger",
+        str(ledger),
+    ]
+
+    assert cli.main(args) == 0
+    ledger.write_text(
+        ledger.read_text(encoding="utf-8").replace(
+            "Generated from schema version 1",
+            "Generated from schema version 2",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    assert cli.main(
+        [
+            "--inventory",
+            "--collector",
+            "source",
+            "--registry",
+            str(FIXTURE_DIR / "valid-empty.toml"),
+            "--today",
+            TODAY,
+            "--check-ledger",
+            str(ledger),
+        ]
+    ) == 1
 
 
 def _emit_args(registry: Path, output: Path) -> list[str]:

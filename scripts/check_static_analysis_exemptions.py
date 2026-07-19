@@ -30,6 +30,7 @@ if __package__ in {None, ""}:  # pragma: no cover - direct script execution
     from static_analysis.model import RegistryError, load_registry
     from static_analysis.report import (
         render_json,
+        render_ledger,
         render_markdown,
         render_temporary_candidates,
     )
@@ -49,6 +50,7 @@ else:
     from scripts.static_analysis.model import RegistryError, load_registry
     from scripts.static_analysis.report import (
         render_json,
+        render_ledger,
         render_markdown,
         render_temporary_candidates,
     )
@@ -277,7 +279,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             scope=args.scope,
             collectors=collector_names,
         )
-        markdown = render_markdown(inventory)
+        markdown = render_ledger(inventory)
         if args.write_ledger is not None:
             args.write_ledger.write_text(markdown, encoding="utf-8")
         if args.check_ledger is not None:
@@ -285,7 +287,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if expected != markdown:
                 print("static-analysis: ledger differs", file=sys.stderr)
                 return 1
-        print(render_json(inventory) if args.json else markdown, end="")
+        print(render_json(inventory) if args.json else render_markdown(inventory), end="")
         if args.check and (
             reconciliation.unregistered
             or reconciliation.stale

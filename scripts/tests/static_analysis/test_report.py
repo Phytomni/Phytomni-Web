@@ -9,9 +9,18 @@ from pathlib import Path
 import pytest
 
 from scripts.static_analysis.inventory import Inventory, reconcile
-from scripts.static_analysis.model import Finding, Mechanism, TargetKind, load_registry
+from scripts.static_analysis.model import (
+    Classification,
+    Exemption,
+    Finding,
+    Mechanism,
+    Registry,
+    TargetKind,
+    load_registry,
+)
 from scripts.static_analysis.report import (
     render_json,
+    render_ledger,
     render_markdown,
     render_temporary_candidates,
 )
@@ -49,6 +58,57 @@ def _inventory() -> Inventory:
     )
 
 
+def _reviewed_inventory() -> Inventory:
+    finding = _inventory().findings[0]
+    temporary = Exemption(
+        id="fixture-temporary",
+        tool=finding.tool,
+        rule=finding.rule,
+        classification=Classification.TEMPORARY,
+        mechanism=finding.mechanism,
+        target_kind=finding.target_kind,
+        path=finding.path,
+        target=finding.target,
+        fingerprint=finding.fingerprint,
+        owner="web-maintainers",
+        introduced_on=TODAY,
+        review_on=date(2026, 7, 26),
+        expires_on=date(2026, 8, 31),
+        remediation="WEB-SA: remove the exact fixture target",
+        rationale="A fixture boundary is being replaced.",
+        counterfactual="Removing it before replacement would reduce test clarity.",
+        risk="The temporary boundary is covered by the fixture test.",
+        tests=("scripts/tests/static_analysis/test_report.py",),
+    )
+    structural = Exemption(
+        id="fixture-structural",
+        tool="fixture-tool",
+        rule="fixture-structural-rule",
+        classification=Classification.STRUCTURAL,
+        mechanism=Mechanism.CONFIG,
+        target_kind=TargetKind.CONFIG,
+        path="apps/web/vite.config.ts",
+        target="fixture-config",
+        fingerprint="sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        owner="web-maintainers",
+        introduced_on=TODAY,
+        review_on=date(2026, 8, 19),
+        rationale="The fixture config is required by the test harness.",
+        counterfactual="Removing it would break the isolated fixture contract.",
+        risk="The config is restricted to a test-only path.",
+        tests=("scripts/tests/static_analysis/test_report.py",),
+    )
+    registry = Registry(schema_version=1, default="deny", exemptions=(temporary, structural))
+    reconciliation = reconcile((finding,), registry, today=TODAY)
+    return Inventory(
+        findings=(finding,),
+        registry=registry,
+        reconciliation=reconciliation,
+        scope="full",
+        collectors=("fixture-tool",),
+    )
+
+
 def test_json_is_machine_readable_and_omits_source_bodies() -> None:
     rendered = render_json(_inventory())
     payload = json.loads(rendered)
@@ -70,6 +130,27 @@ def test_markdown_is_bounded_and_explicitly_observation_only() -> None:
     assert "fixture-secret" not in rendered
     assert "source body" not in rendered
     assert rendered.endswith("\n")
+
+
+def test_ledger_is_deterministic_bounded_and_links_exact_entries() -> None:
+    rendered = render_ledger(_reviewed_inventory())
+
+    assert rendered == render_ledger(_reviewed_inventory())
+    assert "Generated from schema version 1" in rendered
+    assert "TOML remains the only authorization source" in rendered
+    assert "## Structural entries" in rendered
+    assert "## Temporary debt" in rendered
+    assert "## Risk and linked tests" in rendered
+    assert "## Reverse-probe status" in rendered
+    assert "## Reconciliation summary" in rendered
+    assert "## Regeneration" in rendered
+    assert "[apps/web/src/fixture.ts:11](../../apps/web/src/fixture.ts#L11)" in rendered
+    assert "[apps/web/vite.config.ts](../../apps/web/vite.config.ts)" in rendered
+    assert "fixture-secret" not in rendered
+    assert "source body" not in rendered
+    assert "Generated at" not in rendered
+    assert "\nsecond line" not in rendered
+    assert "raw diagnostic omitted" in rendered
 
 
 def test_temporary_candidate_toml_is_stable_and_exact() -> None:
