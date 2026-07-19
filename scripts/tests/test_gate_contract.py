@@ -15,6 +15,7 @@ GATES = ROOT / "scripts" / "gates"
 DISPATCHER = ROOT / "scripts" / "run_gate_group.sh"
 FULL_GATE = ROOT / "scripts" / "validate_web_local.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+RUNBOOK = ROOT / "docs" / "deployment" / "upgrading.md"
 
 GROUP_ORDER = (
     "hygiene",
@@ -199,3 +200,65 @@ def test_active_entrypoints_reject_warning_tolerant_and_observation_paths() -> N
         assert "--ignore-path" not in text
         assert not re.search(r"\beslint\b[^\n]*--fix", text)
         assert "npm run lint" not in text
+
+
+def test_rg_exit_codes_distinguish_findings_no_match_and_failure(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixture.txt"
+    fixture.write_text("needle\n", encoding="utf-8")
+
+    matched = subprocess.run(
+        ["rg", "-n", "needle", str(fixture)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    no_match = subprocess.run(
+        ["rg", "-n", "absent", str(fixture)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    invalid = subprocess.run(
+        ["rg", "-n", "[", str(fixture)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert matched.returncode == 0
+    assert matched.stdout
+    assert no_match.returncode == 1
+    assert no_match.stdout == ""
+    assert invalid.returncode > 1
+
+
+def test_match_status_helper_allows_only_match_and_no_match() -> None:
+    probe = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "source scripts/gates/common.sh; "
+            "check_match_status 0 probe; "
+            "check_match_status 1 probe; "
+            "check_match_status 2 probe",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert probe.returncode == 1
+    assert "probe failed with status 2" in probe.stderr
+
+
+def test_deployment_version_probe_classifies_unavailable_flag() -> None:
+    text = RUNBOOK.read_text(encoding="utf-8")
+
+    assert "./phytomni-server --version 2>/dev/null || true" not in text
+    assert "if ./phytomni-server --version >/dev/null 2>&1; then" in text
+    assert "./phytomni-server --version" in text
+    assert (
+        'printf \'%s\\n\' "Version flag unavailable; verify the artifact checksum instead."'
+        in text
+    )

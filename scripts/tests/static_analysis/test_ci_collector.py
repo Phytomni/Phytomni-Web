@@ -12,6 +12,7 @@ from scripts.static_analysis.model import Mechanism, TargetKind
 pytestmark = pytest.mark.unit
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ci"
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_collects_workflow_and_shell_fallback_suppressions() -> None:
@@ -46,3 +47,10 @@ def test_explicit_return_code_branches_are_not_fallback_success() -> None:
         for finding in findings
     ]
     assert keys == sorted(keys)
+
+
+def test_live_match_scans_use_shared_fail_closed_status_classification() -> None:
+    for name in ("hygiene.sh", "contracts.sh"):
+        text = (ROOT / "scripts" / "gates" / name).read_text(encoding="utf-8")
+        assert "check_match_status" in text
+        assert "|| true" not in text

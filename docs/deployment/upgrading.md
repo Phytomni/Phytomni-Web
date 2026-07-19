@@ -64,7 +64,11 @@ stopping the service. A failed check is a stop condition.
 
 ```bash
 git rev-parse --verify HEAD
-./phytomni-server --version 2>/dev/null || true
+if ./phytomni-server --version >/dev/null 2>&1; then
+    ./phytomni-server --version
+else
+    printf '%s\n' "Version flag unavailable; verify the artifact checksum instead."
+fi
 ss -ltnp | grep ':8080'
 mysql -e "SHOW DATABASES LIKE 'phytomni';"
 mysql phytomni -e "SHOW TABLES LIKE 'question_agent_logs';"

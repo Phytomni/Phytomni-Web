@@ -32,11 +32,11 @@ if [ -s "$changed" ]; then
       -e 'Bearer\s+[A-Za-z0-9._\-]{30,}' \
       -e 'eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}' \
       -- "$path" >>"$hits_file"; then
-      :
+      scan_rc=0
     else
       scan_rc=$?
-      [ "$scan_rc" -eq 1 ] || fail "G-1 secret scan command failed for '$path' with status $scan_rc."
     fi
+    check_match_status "$scan_rc" "G-1 secret scan command for '$path'"
   done
   if [ -s "$hits_file" ]; then
     cat "$hits_file"

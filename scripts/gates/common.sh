@@ -12,6 +12,17 @@ fail() {
   exit 1
 }
 
+# Treat ripgrep/grep status 0 (match) and 1 (no match) as expected. Any other
+# status is an execution failure and must stop the owning gate.
+check_match_status() {
+  local status="$1"
+  local label="${2:-match scan}"
+  case "$status" in
+    0|1) return 0 ;;
+    *) fail "$label failed with status $status." ;;
+  esac
+}
+
 run_static_analysis_check() {
   local ledger_path="$1"
   shift

@@ -11,7 +11,7 @@ if def_count="$(grep -c 'SET_LOGIN_STATUS(' apps/web/src/stores/user.ts)"; then
   :
 else
   def_rc=$?
-  [ "$def_rc" -eq 1 ] || fail "G11.1 SET_LOGIN_STATUS definition scan failed with status $def_rc."
+  check_match_status "$def_rc" "G11.1 SET_LOGIN_STATUS definition scan"
   def_count=0
 fi
 [ "$def_count" = "1" ] || fail "G11.1 SET_LOGIN_STATUS definition: expected 1 hit in apps/web/src/stores/user.ts, got $def_count"
@@ -19,7 +19,7 @@ if call_count="$(grep -c 'SET_LOGIN_STATUS(' apps/web/src/views/login/index.vue)
   :
 else
   call_rc=$?
-  [ "$call_rc" -eq 1 ] || fail "G11.2 SET_LOGIN_STATUS call scan failed with status $call_rc."
+  check_match_status "$call_rc" "G11.2 SET_LOGIN_STATUS call scan"
   call_count=0
 fi
 [ "$call_count" = "1" ] || fail "G11.2 SET_LOGIN_STATUS sole legal call: expected 1 hit in apps/web/src/views/login/index.vue, got $call_count"
@@ -32,7 +32,7 @@ if grep -rl 'SET_LOGIN_STATUS' apps/web/src/ \
   :
 else
   candidate_rc=$?
-  [ "$candidate_rc" -eq 1 ] || fail "G11.3 SET_LOGIN_STATUS scan failed with status $candidate_rc."
+  check_match_status "$candidate_rc" "G11.3 SET_LOGIN_STATUS scan"
 fi
 awk '
   $0 != "apps/web/src/stores/user.ts" &&
