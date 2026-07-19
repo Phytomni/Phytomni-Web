@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import tomllib
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -147,3 +149,110 @@ def test_ledger_write_and_check_are_byte_stable(
         ]
     ) == 0
     assert ledger.read_text(encoding="utf-8") == first
+
+
+def _emit_args(registry: Path, output: Path) -> list[str]:
+    return [
+        "--emit-temporary-candidates",
+        "--collector",
+        "source",
+        "--registry",
+        str(registry),
+        "--today",
+        TODAY,
+        "--owner",
+        "web-maintainers",
+        "--expires-on",
+        "2026-08-31",
+        "--remediation-prefix",
+        "WEB-SA",
+        "--output",
+        str(output),
+    ]
+
+
+def test_emit_temporary_candidates_requires_explicit_lifecycle_arguments(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "tracked_files", lambda _root: ())
+    registry = FIXTURE_DIR / "valid-empty.toml"
+    output = tmp_path / "candidates.toml"
+
+    for missing in ("--owner", "--expires-on", "--remediation-prefix"):
+        args = _emit_args(registry, output)
+        index = args.index(missing)
+        del args[index : index + 2]
+        assert cli.main(args) == 2
+        assert "failed closed" in capsys.readouterr().err
+
+
+def test_emit_temporary_candidates_writes_exact_targets_and_is_deterministic(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "collect_findings", lambda *args, **kwargs: (_finding(),))
+    registry = FIXTURE_DIR / "valid-empty.toml"
+    first_output = tmp_path / "first.toml"
+    second_output = tmp_path / "second.toml"
+
+    assert cli.main(_emit_args(registry, first_output)) == 0
+    assert cli.main(_emit_args(registry, second_output)) == 0
+    first = first_output.read_bytes()
+    assert first == second_output.read_bytes()
+
+    document = tomllib.loads(first.decode("utf-8"))
+    entries = document["exemptions"]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["classification"] == "temporary"
+    assert entry["path"] == _finding().path
+    assert entry["target"] == _finding().target
+    assert entry["fingerprint"] == _finding().fingerprint
+    assert entry["remediation"].startswith("WEB-SA")
+    assert "structural" not in first.decode("utf-8")
+    assert "*" not in entry["target"]
+    assert "\ncount =" not in first.decode("utf-8")
+
+
+def test_emit_refuses_non_empty_registry_unless_merge_and_preserves_ids(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "collect_findings", lambda *args, **kwargs: (_finding(),))
+    registry = FIXTURE_DIR / "valid-structural.toml"
+    output = tmp_path / "merged.toml"
+
+    assert cli.main(_emit_args(registry, output)) == 2
+    merge_args = _emit_args(registry, output)
+    merge_args.insert(1, "--merge")
+    assert cli.main(merge_args) == 0
+
+    document = tomllib.loads(output.read_text(encoding="utf-8"))
+    entries = document["exemptions"]
+    ids = {entry["id"] for entry in entries}
+    assert "web-eslint-structural-001" in ids
+    assert any(entry["classification"] == "temporary" for entry in entries)
+
+
+def test_emit_encodes_wildcard_authority_as_exact_identity_tokens(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    wildcard = replace(
+        _finding(),
+        rule="*",
+        mechanism=Mechanism.CONFIG,
+        target_kind=TargetKind.CONFIG,
+        target="src/**",
+    )
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "collect_findings", lambda *args, **kwargs: (wildcard,))
+    output = tmp_path / "wildcard.toml"
+
+    assert cli.main(_emit_args(FIXTURE_DIR / "valid-empty.toml", output)) == 0
+    text = output.read_text(encoding="utf-8")
+    document = tomllib.loads(text)
+    entry = document["exemptions"][0]
+    assert entry["rule"].startswith("pattern-sha256:")
+    assert entry["target"].startswith("pattern-sha256:")
+    assert "*" not in text

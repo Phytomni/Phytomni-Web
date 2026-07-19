@@ -10,7 +10,11 @@ import pytest
 
 from scripts.static_analysis.inventory import Inventory, reconcile
 from scripts.static_analysis.model import Finding, Mechanism, TargetKind, load_registry
-from scripts.static_analysis.report import render_json, render_markdown
+from scripts.static_analysis.report import (
+    render_json,
+    render_markdown,
+    render_temporary_candidates,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -66,3 +70,30 @@ def test_markdown_is_bounded_and_explicitly_observation_only() -> None:
     assert "fixture-secret" not in rendered
     assert "source body" not in rendered
     assert rendered.endswith("\n")
+
+
+def test_temporary_candidate_toml_is_stable_and_exact() -> None:
+    inventory = _inventory()
+    rendered = render_temporary_candidates(
+        inventory.findings,
+        inventory.registry,
+        owner="web-maintainers",
+        introduced_on=TODAY,
+        review_on=TODAY,
+        expires_on=date(2026, 8, 31),
+        remediation_prefix="WEB-SA",
+    )
+
+    assert rendered == render_temporary_candidates(
+        inventory.findings,
+        inventory.registry,
+        owner="web-maintainers",
+        introduced_on=TODAY,
+        review_on=TODAY,
+        expires_on=date(2026, 8, 31),
+        remediation_prefix="WEB-SA",
+    )
+    assert 'classification = "temporary"' in rendered
+    assert 'target = "target"' in rendered
+    assert 'fingerprint = "sha256:' in rendered
+    assert "classification = \"structural\"" not in rendered

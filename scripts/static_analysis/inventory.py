@@ -5,11 +5,28 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
+from hashlib import sha256
 
 from .model import Exemption, Finding, Registry
 
 
 FindingKey = tuple[str, str, str, str, str, str, str]
+_WILDCARD_CHARS = frozenset("*?[]")
+
+
+def canonical_identity(value: str) -> str:
+    """Encode broad native patterns as exact, immutable identity tokens."""
+
+    if any(char in value for char in _WILDCARD_CHARS):
+        digest = sha256(value.encode("utf-8")).hexdigest()
+        return f"pattern-sha256:{digest}"
+    return value
+
+
+def canonical_target(mechanism: str, target_kind: str, value: str) -> str:
+    if mechanism in {"config", "command"} or target_kind in {"config", "command"}:
+        return canonical_identity(value)
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,11 +64,13 @@ def finding_key(finding: Finding) -> FindingKey:
 
     return (
         finding.tool,
-        finding.rule,
+        canonical_identity(finding.rule),
         finding.mechanism.value,
         finding.target_kind.value,
         finding.path,
-        finding.target,
+        canonical_target(
+            finding.mechanism.value, finding.target_kind.value, finding.target
+        ),
         finding.fingerprint,
     )
 
@@ -61,11 +80,13 @@ def exemption_key(exemption: Exemption) -> FindingKey:
 
     return (
         exemption.tool,
-        exemption.rule,
+        canonical_identity(exemption.rule),
         exemption.mechanism.value,
         exemption.target_kind.value,
         exemption.path,
-        exemption.target,
+        canonical_target(
+            exemption.mechanism.value, exemption.target_kind.value, exemption.target
+        ),
         exemption.fingerprint,
     )
 
@@ -151,6 +172,8 @@ __all__ = [
     "Inventory",
     "Match",
     "Reconciliation",
+    "canonical_identity",
+    "canonical_target",
     "exemption_key",
     "finding_key",
     "reconcile",

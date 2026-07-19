@@ -12,6 +12,7 @@ const require = createRequire(resolve(webRoot, "package.json"));
 const { ESLint } = require("eslint");
 const eslintVersion = require("eslint/package.json").version;
 const tsParser = require("@typescript-eslint/parser");
+const tsParserPath = require.resolve("@typescript-eslint/parser");
 const vueParser = require("vue-eslint-parser");
 
 function usage() {
@@ -89,6 +90,9 @@ function nodeIdentity(node) {
 function containingSymbol(ast, message, source) {
   const offsets = lineStartOffsets(source);
   const point = locationOffset(offsets, message.line, message.column);
+  const endLine = message.endLine ?? message.line;
+  const endColumn = message.endColumn ?? message.column;
+  const location = `${message.line}:${message.column}-${endLine}:${endColumn}`;
   let best = null;
   const visited = new Set();
 
@@ -116,7 +120,7 @@ function containingSymbol(ast, message, source) {
   if (best) {
     return {
       kind: "symbol",
-      identity: best.identity,
+      identity: `${best.identity}@${location}`,
       normalizedSource: normalizeSource(
         source.slice(best.range[0], best.range[1])
       ),
@@ -126,7 +130,7 @@ function containingSymbol(ast, message, source) {
   const normalizedLine = normalizeSource(line);
   return {
     kind: "span",
-    identity: `span:${normalizedLine}`,
+    identity: `span:${location}:${normalizedLine}`,
     normalizedSource: normalizedLine,
   };
 }
@@ -142,7 +146,8 @@ function parseAst(source, filePath) {
     comment: true,
     ecmaVersion: "latest",
     sourceType: "module",
-    parser: extname(filePath).toLowerCase() === ".vue" ? tsParser : undefined,
+    parser:
+      extname(filePath).toLowerCase() === ".vue" ? tsParserPath : undefined,
   });
   return result.ast ?? result;
 }
@@ -176,7 +181,19 @@ async function inventory({ root, files }) {
     resolvePluginsRelativeTo: webRoot,
     useEslintrc: true,
   });
-  const results = await eslint.lintFiles(resolvedFiles);
+  const lintableFiles = [];
+  for (const file of resolvedFiles) {
+    if (!(await eslint.isPathIgnored(file))) lintableFiles.push(file);
+  }
+  if (lintableFiles.length === 0) {
+    return {
+      schemaVersion: 1,
+      toolVersion: eslintVersion,
+      filesScanned: 0,
+      findings: [],
+    };
+  }
+  const results = await eslint.lintFiles(lintableFiles);
   const findings = [];
   for (const result of results) {
     const source = result.source ?? (await readFile(result.filePath, "utf8"));
@@ -239,7 +256,7 @@ async function inventory({ root, files }) {
   return {
     schemaVersion: 1,
     toolVersion: eslintVersion,
-    filesScanned: resolvedFiles.length,
+    filesScanned: lintableFiles.length,
     findings,
   };
 }

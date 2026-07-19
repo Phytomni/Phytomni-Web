@@ -194,7 +194,11 @@ def _normalize_path(raw_path: str) -> str:
 
 
 def _validate_target(target: str, *, target_kind: TargetKind) -> str:
-    if "\x00" in target or any(char in target for char in _WILDCARD_CHARS):
+    if "\x00" in target:
+        raise _error(f"{target_kind.value} target may not use wildcard authority")
+    if target_kind is not TargetKind.SPAN and any(
+        char in target for char in _WILDCARD_CHARS
+    ):
         raise _error(f"{target_kind.value} target may not use wildcard authority")
     if "\n" in target or "\r" in target:
         raise _error("target must be a single-line identity")

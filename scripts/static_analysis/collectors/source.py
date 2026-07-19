@@ -171,7 +171,10 @@ def _collect_file(root: Path, path: Path) -> Iterable[Finding]:
             continue
         tool, rule_name, mechanism, rules = parsed
         for rule in rules:
-            target = f"{rule_name}:{body.split(' --', 1)[0].strip()}"
+            target = (
+                f"line:{line_number}:{rule_name}:"
+                f"{body.split(' --', 1)[0].strip()}"
+            )
             yield make_finding(
                 root=root,
                 path=path,
