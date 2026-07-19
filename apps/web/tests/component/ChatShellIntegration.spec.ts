@@ -145,7 +145,8 @@ describe("Chat adaptive shell integration", () => {
       )
     ).toBe(1);
     expect(CHAT_SOURCE).toContain("<PhyEmptyState");
-    expect(CHAT_SOURCE).toContain("<Prompts");
+    expect(CHAT_SOURCE).toContain("<ChatCases");
+    expect(CHAT_SOURCE).not.toContain("<" + "Prompts");
     expect(CHAT_SOURCE).toContain(
       'v-for="(message, index) in currentChat.messages"'
     );
@@ -321,7 +322,10 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).not.toMatch(/restorePendingChats\(\s*\)/);
 
     const coordStart = CHAT_SOURCE.indexOf("reconcileMatchedDialogue = (");
-    const coordEnd = CHAT_SOURCE.indexOf("// Starter prompt cards", coordStart);
+    const coordEnd = CHAT_SOURCE.indexOf(
+      "// Copy conversation + file download",
+      coordStart
+    );
     const coordBlock = CHAT_SOURCE.slice(coordStart, coordEnd);
     expect(coordBlock).toContain(
       "const wasCurrent = currentChatId.value === tempId"
@@ -438,7 +442,10 @@ describe("Chat adaptive shell integration", () => {
     );
 
     const coordStart = CHAT_SOURCE.indexOf("reconcileMatchedDialogue = (");
-    const coordEnd = CHAT_SOURCE.indexOf("// Starter prompt cards", coordStart);
+    const coordEnd = CHAT_SOURCE.indexOf(
+      "// Copy conversation + file download",
+      coordStart
+    );
     const coordBlock = CHAT_SOURCE.slice(coordStart, coordEnd);
     expect(coordBlock).toContain('rekey.outcome === "target-collision"');
     expect(coordBlock).toContain('reason: "collision"');

@@ -102,7 +102,7 @@
                 <PhyEmptyState
                   :title="$t('chat.welcomeTitle')"
                   :subtitle="$t('chat.welcomeSubtitle')"
-                  class="empty-chat-starters-shell"
+                  class="empty-chat-welcome"
                 >
                   <template #mark>
                     <img
@@ -111,19 +111,6 @@
                       alt=""
                     />
                   </template>
-                  <div
-                    ref="tourCasesTarget"
-                    class="empty-chat-starters-region"
-                    role="group"
-                    :aria-label="$t('chat.starter.title')"
-                  >
-                    <Prompts
-                      class="empty-chat-starters"
-                      :items="starterItems"
-                      wrap
-                      @item-click="onStarterClick"
-                    />
-                  </div>
                 </PhyEmptyState>
               </div>
               <div class="transcript-content">
@@ -342,7 +329,12 @@
                 </ChatMessageRow>
               </div>
             </div>
-            <el-backtop target=".message-container" :right="40" :bottom="80" />
+            <el-backtop
+              v-if="currentChat?.messages?.length"
+              target=".message-container"
+              :right="40"
+              :bottom="80"
+            />
 
             <!-- Input area -->
             <div class="input-container">
@@ -369,6 +361,13 @@
                 @clear-agent="clearSelectedAgent"
                 @toggle-agent="handleButtonClick"
               />
+            </div>
+            <div
+              v-if="!currentChat?.messages?.length"
+              ref="tourCasesTarget"
+              class="chat-cases-region"
+            >
+              <ChatCases />
             </div>
           </div>
         </div>
@@ -499,10 +498,10 @@ import {
 import Sidebar from "./sidebar.vue";
 import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
 import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
-import { Prompts } from "vue-element-plus-x";
 import TransferProgress from "@/components/TransferProgress.vue";
 import SendProgress from "./components/SendProgress.vue";
 import ChatComposer from "./components/ChatComposer.vue";
+import ChatCases from "./components/ChatCases.vue";
 import ChatMessageRow from "./components/ChatMessageRow.vue";
 import ChatMessageContent from "./components/ChatMessageContent.vue";
 import ChatMessageActions from "./components/ChatMessageActions.vue";
@@ -551,11 +550,6 @@ import { useI18n } from "vue-i18n";
 import { abortRequest } from "@/utils/request";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
-import {
-  STARTER_PROMPTS,
-  applyStarterPrompt,
-  getStarterPromptItems,
-} from "@/views/chat/utils/starterPrompts";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
 import chatLogo from "@/assets/images/chat/logo.png";
 import {
@@ -1170,17 +1164,6 @@ const restorePendingChats = (
     if (candidates.length === 1) {
       reconcileMatchedDialogue(tempChatId, candidates[0].dialogue_id, key);
     }
-  });
-};
-
-// Starter prompt cards — computed so labels/descriptions react to locale changes
-const starterItems = computed(() => getStarterPromptItems(t, isSending.value));
-
-const onStarterClick = (item: { key: string | number }) => {
-  const prompt = STARTER_PROMPTS.find((p) => p.key === item.key);
-  if (!prompt) return;
-  applyStarterPrompt(prompt, t, (text) => {
-    messageInput.value = text;
   });
 };
 
@@ -1832,7 +1815,7 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
     var(--phy-space-16) var(--phy-space-24);
   box-sizing: border-box;
 
-  .empty-chat-starters-shell {
+  .empty-chat-welcome {
     width: 100%;
     padding: 0;
   }
@@ -1842,97 +1825,11 @@ const getDirectDownloads = (message: any): DirectDownloadItem[] => {
     height: 40px;
     object-fit: contain;
   }
-
-  .empty-chat-starters-region {
-    width: 100%;
-  }
-
-  .empty-chat-starters {
-    width: 100%;
-
-    :deep(.el-prompts-items) {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: var(--phy-space-12);
-      width: 100%;
-    }
-
-    :deep(.el-prompts-item) {
-      min-width: 0;
-      padding: var(--phy-space-12) var(--phy-space-16);
-      border: 1px solid var(--phy-color-border-subtle);
-      border-radius: var(--phy-radius-md);
-      background: var(--phy-color-bg-elevated);
-      text-align: left;
-      box-shadow: none;
-      transition: background-color var(--phy-motion-fast)
-          var(--phy-motion-ease-out),
-        border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
-        transform var(--phy-motion-fast) var(--phy-motion-ease-out);
-    }
-
-    :deep(.el-prompts-item:first-child) {
-      grid-column: 1 / -1;
-      border-color: var(--phy-color-bubble-user-border);
-      background: var(--phy-color-bubble-user);
-    }
-
-    :deep(.el-prompts-item:hover) {
-      border-color: var(--phy-color-border-control);
-      background: var(--phy-color-fill-subtle);
-      transform: translateY(-1px);
-    }
-
-    :deep(.el-prompts-item:first-child:hover) {
-      border-color: var(--phy-color-accent);
-      background: var(--phy-color-accent-soft);
-    }
-
-    :deep(.el-prompts-item:focus-visible) {
-      outline: 2px solid var(--phy-color-focus);
-      outline-offset: 2px;
-    }
-
-    :deep(.el-prompts-item-disabled) {
-      cursor: not-allowed;
-      opacity: 0.55;
-      transform: none;
-    }
-
-    :deep(.el-prompts-item-label) {
-      overflow-wrap: anywhere;
-      color: var(--phy-color-text);
-      font-size: 0.9375rem;
-      font-weight: 600;
-      line-height: 1.35;
-    }
-
-    :deep(.el-prompts-item:first-child .el-prompts-item-label) {
-      color: var(--phy-color-accent-text);
-    }
-
-    :deep(.el-prompts-item-description) {
-      margin-top: var(--phy-space-4);
-      overflow-wrap: anywhere;
-      color: var(--phy-color-text-secondary);
-      font-size: 0.8125rem;
-      line-height: 1.4;
-    }
-  }
 }
 
-@media (max-width: 720px) {
-  .empty-chat {
-    .empty-chat-starters {
-      :deep(.el-prompts-items) {
-        grid-template-columns: minmax(0, 1fr);
-      }
-
-      :deep(.el-prompts-item:first-child) {
-        grid-column: auto;
-      }
-    }
-  }
+.chat-cases-region {
+  flex-shrink: 0;
+  width: 100%;
 }
 
 @media (max-width: 600px) {

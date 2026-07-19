@@ -79,8 +79,9 @@ export default {
         '首先，让我们了解一下导航功能。快速访问功能："开始新对话"启动全新任务，"深度基因收录"让您查看基因信息，"收藏夹"用于收集常用内容，还有按时间分类的历史交互记录，帮助您高效查找过往记录。',
     },
     step2: {
-      title: "试试示例问题",
-      content: "输入框上方的这些卡片是示例问题。点击即可将示例填入输入框。",
+      title: "浏览智能体案例",
+      content:
+        "输入框下方展示所有智能体案例。点击任一案例可打开对应的演示页面。",
     },
     step3: {
       title: "对话窗口",
@@ -403,17 +404,9 @@ export default {
     },
     reasoning: { show: "展开思考过程", hide: "收起思考过程" },
     welcomeSubtitle: "可以从文献、基因与物种研究，或深度基因组分析开始。",
-    starter: {
-      title: "试试这些",
-      geneLabel: "查询基因",
-      geneDesc: "查询基因的功能与同源基因",
-      genePrompt: "请介绍基因 Os01g0177400 的功能与同源基因",
-      speciesLabel: "探索物种",
-      speciesDesc: "查询某物种的关键基因与通路",
-      speciesPrompt: "水稻抗旱涉及哪些关键基因？",
-      deepGenomeLabel: "深度基因组分析",
-      deepGenomeDesc: "对基因运行深度基因组分析报告",
-      deepGenomePrompt: "对基因 Os01g0177400 运行深度基因组分析",
+    cases: {
+      title: "智能体案例",
+      ariaLabel: "智能体案例展示",
     },
     inputPlaceholderTip: "请输入您的问题",
     uploadFile: "支持文件上传（最多10个，接受.pdf,.doc,.xlsx,.ppt,.txt,.png）",

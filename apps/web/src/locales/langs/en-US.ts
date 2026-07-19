@@ -74,9 +74,9 @@ export default {
         'First, let\'s get to know the navigation. Quick access to functions: "Start New" initiates a brand-new task, "Deep Genome Database" allows you to view gene information, "Favorites" is for collecting frequently-used content, and there are also historical interactions categorized by time to help you efficiently find past records.',
     },
     step2: {
-      title: "Try a starter prompt",
+      title: "Explore agent cases",
       content:
-        "These suggestion cards above the input are starter prompts. Click one to fill the composer with an example question.",
+        "Browse the cases below the composer to open an existing agent demonstration.",
     },
     step3: {
       title: "Conversation Window",
@@ -405,19 +405,9 @@ export default {
     reasoning: { show: "Show reasoning", hide: "Hide reasoning" },
     welcomeSubtitle:
       "Start with literature, a gene or species, or a deeper genomic analysis.",
-    starter: {
-      title: "Try one of these",
-      geneLabel: "Query a gene",
-      geneDesc: "Function and homologs of a gene",
-      genePrompt:
-        "Tell me about the function and homologs of gene Os01g0177400",
-      speciesLabel: "Explore a species",
-      speciesDesc: "Key genes and pathways of a species",
-      speciesPrompt:
-        "Which key genes are involved in drought resistance in rice?",
-      deepGenomeLabel: "Deep genome analysis",
-      deepGenomeDesc: "Run a deep genome report on a gene",
-      deepGenomePrompt: "Run a deep genome analysis for gene Os01g0177400",
+    cases: {
+      title: "Explore Agent Cases",
+      ariaLabel: "Agent case demonstrations",
     },
     inputPlaceholderTip: "Please enter your question",
     uploadFile:

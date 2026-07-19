@@ -248,7 +248,6 @@ vi.mock("vue-element-plus-x", () => ({
     props: ["uid", "name", "fileSize", "showDelIcon"],
   },
   Typewriter: { name: "Typewriter", template: "<div></div>" },
-  Prompts: { name: "Prompts", template: "<div></div>" },
 }));
 
 import ChatVisualFixtureApp from "../../../visual/chat/ChatVisualFixtureApp.vue";
@@ -680,6 +679,11 @@ const mountFixtureApp = (
     ElTooltip: true,
     ElAvatar: true,
     ElIcon: true,
+    RouterLink: {
+      name: "RouterLink",
+      props: ["to"],
+      template: '<a :href="to"><slot /></a>',
+    },
     ElButton: {
       name: "ElButton",
       template: "<button><slot /></button>",

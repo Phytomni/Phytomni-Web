@@ -1,13 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import PhyEmptyState from "@/components/shell/PhyEmptyState.vue";
-import {
-  STARTER_PROMPTS,
-  applyStarterPrompt,
-  getStarterPromptItems,
-} from "@/views/chat/utils/starterPrompts";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/index.vue"),
@@ -26,61 +21,7 @@ const transcriptEnd = CHAT_SOURCE.indexOf("<el-backtop", transcriptStart);
 const TRANSCRIPT_SOURCE = CHAT_SOURCE.slice(transcriptStart, transcriptEnd);
 
 describe("Chat empty state", () => {
-  it("keeps the three starter prompts in the locked product order", () => {
-    expect(STARTER_PROMPTS.map((prompt) => prompt.key)).toEqual([
-      "gene",
-      "species",
-      "deepGenome",
-    ]);
-    expect(getStarterPromptItems((key) => `en:${key}`, false)).toEqual([
-      {
-        key: "gene",
-        label: "en:chat.starter.geneLabel",
-        description: "en:chat.starter.geneDesc",
-        disabled: false,
-      },
-      {
-        key: "species",
-        label: "en:chat.starter.speciesLabel",
-        description: "en:chat.starter.speciesDesc",
-        disabled: false,
-      },
-      {
-        key: "deepGenome",
-        label: "en:chat.starter.deepGenomeLabel",
-        description: "en:chat.starter.deepGenomeDesc",
-        disabled: false,
-      },
-    ]);
-  });
-
-  it("reacts to locale labels and disables prompt rows while sending", () => {
-    const t = (key: string) => `zh:${key}`;
-    const items = getStarterPromptItems(t, true);
-
-    expect(items.map((item) => item.label)).toEqual([
-      "zh:chat.starter.geneLabel",
-      "zh:chat.starter.speciesLabel",
-      "zh:chat.starter.deepGenomeLabel",
-    ]);
-    expect(items.every((item) => item.disabled)).toBe(true);
-  });
-
-  it("keeps starter clicks as fill-only composer actions", () => {
-    const setInput = vi.fn();
-    applyStarterPrompt(
-      STARTER_PROMPTS[2],
-      (key) => `resolved:${key}`,
-      setInput
-    );
-
-    expect(setInput).toHaveBeenCalledOnce();
-    expect(setInput).toHaveBeenCalledWith(
-      "resolved:chat.starter.deepGenomePrompt"
-    );
-  });
-
-  it("provides a stable mark/title/explanation surface and tour anchors", () => {
+  it("provides a stable mark/title/subtitle surface and tour anchors", () => {
     const wrapper = mount(PhyEmptyState, {
       props: {
         title: "Welcome",
@@ -88,7 +29,7 @@ describe("Chat empty state", () => {
       },
       slots: {
         mark: '<span data-test="empty-mark">P</span>',
-        default: '<button data-test="starter-row">Query a gene</button>',
+        default: '<button data-test="empty-content">Content</button>',
       },
     });
 
@@ -97,8 +38,11 @@ describe("Chat empty state", () => {
     expect(wrapper.find(".phy-empty-state__subtitle").text()).toBe(
       "One line of explanation"
     );
-    expect(wrapper.find('[data-test="starter-row"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="empty-content"]').exists()).toBe(true);
     expect(CHAT_SOURCE).toContain('ref="tourCasesTarget"');
+    expect(CHAT_SOURCE).toContain("<ChatCases />");
+    expect(CHAT_SOURCE).not.toContain("starterPrompts");
+    expect(CHAT_SOURCE).not.toContain("<" + "Prompts");
     expect(CHAT_SOURCE).toContain(
       ':set-tour-input-target="setTourInputTarget"'
     );
@@ -130,7 +74,26 @@ describe("Chat empty state", () => {
     );
   });
 
-  it("uses a restrained editorial hierarchy and a compact featured starter", () => {
+  it("orders Welcome, Composer, and Cases without starter prompts", () => {
+    const welcomeIndex = CHAT_SOURCE.indexOf("<PhyEmptyState");
+    const composerIndex = CHAT_SOURCE.indexOf("<ChatComposer");
+    const casesIndex = CHAT_SOURCE.indexOf("<ChatCases");
+
+    expect(welcomeIndex).toBeGreaterThan(0);
+    expect(composerIndex).toBeGreaterThan(welcomeIndex);
+    expect(casesIndex).toBeGreaterThan(composerIndex);
+    expect(CHAT_SOURCE).not.toContain("<" + "Prompts");
+    expect(CHAT_SOURCE).not.toContain(["STARTER", "_PROMPTS"].join(""));
+    expect(CHAT_SOURCE).not.toContain(["chat", "starter"].join("."));
+  });
+
+  it("targets the Cases region for the second tutorial step", () => {
+    expect(CHAT_SOURCE).toContain('ref="tourCasesTarget"');
+    expect(CHAT_SOURCE).toContain("<ChatCases />");
+    expect(CHAT_SOURCE).toContain(':target="tourCasesTarget"');
+  });
+
+  it("keeps the empty state visual hierarchy", () => {
     expect(EMPTY_STATE_SOURCE).toContain(
       "font-size: clamp(1.5rem, 1.15rem + 0.75vw, 1.75rem)"
     );
@@ -143,13 +106,5 @@ describe("Chat empty state", () => {
       CHAT_SOURCE.indexOf(".input-container {")
     );
     expect(emptyChatBlock).toContain("justify-content: center");
-    expect(emptyChatBlock).toContain(
-      "grid-template-columns: repeat(2, minmax(0, 1fr))"
-    );
-    expect(emptyChatBlock).toMatch(
-      /\.el-prompts-item:first-child[\s\S]*?grid-column: 1 \/ -1/
-    );
-    expect(CHAT_SOURCE).toContain('class="empty-chat-starters-region"');
-    expect(CHAT_SOURCE).toContain(":aria-label=\"$t('chat.starter.title')\"");
   });
 });

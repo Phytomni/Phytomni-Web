@@ -257,6 +257,12 @@
                 @clear-agent="onFixtureAction('composer-clear-agent')"
                 @toggle-agent="onFixtureAction('composer-toggle-agent')"
               />
+              <div
+                v-if="fixture.chatState === 'empty'"
+                class="chat-cases-region"
+              >
+                <ChatCases />
+              </div>
             </div>
           </div>
         </template>
@@ -296,6 +302,7 @@ import ChatSidebarNav, {
   CHAT_SIDEBAR_DRAWER_OPEN_KEY,
 } from "@/views/chat/components/ChatSidebarNav.vue";
 import ChatComposer from "@/views/chat/components/ChatComposer.vue";
+import ChatCases from "@/views/chat/components/ChatCases.vue";
 import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
@@ -613,6 +620,11 @@ onUnmounted(() => {
 .empty-chat-mark {
   width: 48px;
   height: 48px;
+}
+
+.chat-cases-region {
+  flex: 0 0 auto;
+  width: 100%;
 }
 
 .fixture-action-log {
