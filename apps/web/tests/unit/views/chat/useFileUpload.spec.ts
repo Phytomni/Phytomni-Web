@@ -16,7 +16,7 @@ describe("useFileUpload", () => {
     chatState = { fileList: [] };
     fileList = ref([]);
     currentChatId = ref("d1");
-    getChatState = (_dialogueId: string) => chatState;
+    getChatState = () => chatState;
     composerRef = ref({
       openHeader: vi.fn(),
       closeHeader: vi.fn(),

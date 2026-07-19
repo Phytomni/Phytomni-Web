@@ -34,7 +34,7 @@ describe("useReactions", () => {
     vi.clearAllMocks();
     chatState = { reactions: {} };
     currentChatId = ref("d1");
-    getChatState = (_dialogueId: string) => chatState;
+    getChatState = () => chatState;
     scrollToBottom = vi.fn();
   });
 

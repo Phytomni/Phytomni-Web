@@ -83,13 +83,7 @@ describe("useDeepGenomeToc — initial state", () => {
   });
 
   it("return surface includes activeHeadingId / handleNavSelect / setupIntersectionObserver", () => {
-    const headings = ref<Array<{ id: string; [key: string]: unknown }>>([]);
-    const nestedHeadings = ref<
-      Array<{ id: string; children?: unknown[]; [key: string]: unknown }>
-    >([]);
-    const mainContentRef = ref<any>(null);
-    // Call the composable directly to verify the returned keys (no mount needed, since we only check property names)
-    // Note: useDeepGenomeToc calls onUnmounted, which must run inside a setup context; mounting via makeHarness suffices
+    // Mounting through makeHarness provides the setup context required by onUnmounted.
     const { Harness } = makeHarness();
     const wrapper = mount(Harness);
     const result = wrapper.vm as Record<string, unknown>;

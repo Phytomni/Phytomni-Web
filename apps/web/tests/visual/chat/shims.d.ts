@@ -8,7 +8,7 @@ import "axios";
 import "vue-i18n";
 
 declare module "axios" {
-  export interface AxiosResponse<T = any, D = any> {
+  export interface AxiosResponse {
     code: number;
     msg: string;
     message: string;

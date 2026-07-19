@@ -2124,26 +2124,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-0681f61db9fb5aa27c0d87b574f52a1ad425d6ce290294373c7bc38dbd3c41f8"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/unit/composables/useDeepGenomeToc.spec.ts"
-target = "VariableDeclarator:mainContentRef@90:32-90:35"
-fingerprint = "sha256:0681f61db9fb5aa27c0d87b574f52a1ad425d6ce290294373c7bc38dbd3c41f8"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:mainContentRef@90:32-90:35"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-e63193e7ad1e32f194461faf5d70d9ae6479ab521eb32d887e3585923bfecb49"
 tool = "eslint"
 rule = "@typescript-eslint/no-explicit-any"
@@ -6604,46 +6584,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-cc4a77b41935ed03b6d5f987813ffa32a7164fc75590b51cf06970eac906a178"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/visual/chat/shims.d.ts"
-target = "TSInterfaceDeclaration:AxiosResponse@11:38-11:41"
-fingerprint = "sha256:cc4a77b41935ed03b6d5f987813ffa32a7164fc75590b51cf06970eac906a178"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/visual/chat/shims.d.ts:TSInterfaceDeclaration:AxiosResponse@11:38-11:41"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-1fa2bb1f1661c2b08e7dce6fe7f0aca98781056518ec5ba1f5221aa7e92786c5"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/visual/chat/shims.d.ts"
-target = "TSInterfaceDeclaration:AxiosResponse@11:47-11:50"
-fingerprint = "sha256:1fa2bb1f1661c2b08e7dce6fe7f0aca98781056518ec5ba1f5221aa7e92786c5"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/visual/chat/shims.d.ts:TSInterfaceDeclaration:AxiosResponse@11:47-11:50"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-30052d94b4e941d2e1b165c9cafd6b93beaf76c6b8e542f575474b5df3f4f768"
 tool = "eslint"
 rule = "@typescript-eslint/no-explicit-any"
@@ -6678,46 +6618,6 @@ introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
 remediation = "WEB-SA: remediate exact target tests/visual/chat/shims.d.ts:TSPropertySignature:result@18:13-18:16"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-cbc0101dbf4cbd8d1f3322ea97624b456dfd3805f5ed681a2edbb12014a72fae"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/visual/research/shims.d.ts"
-target = "TSInterfaceDeclaration:AxiosResponse@11:38-11:41"
-fingerprint = "sha256:cbc0101dbf4cbd8d1f3322ea97624b456dfd3805f5ed681a2edbb12014a72fae"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/visual/research/shims.d.ts:TSInterfaceDeclaration:AxiosResponse@11:38-11:41"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-3574b91c0007742eb1b67fd5e63ca48a853bc77b20d36865d7cfb989f81172dd"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/visual/research/shims.d.ts"
-target = "TSInterfaceDeclaration:AxiosResponse@11:47-11:50"
-fingerprint = "sha256:3574b91c0007742eb1b67fd5e63ca48a853bc77b20d36865d7cfb989f81172dd"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/visual/research/shims.d.ts:TSInterfaceDeclaration:AxiosResponse@11:47-11:50"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
@@ -7324,60 +7224,60 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-6757a38aa8dce9b3c36ae5973c2a48ade28c643a52f39eb606bfbb063bc368a2"
+id = "web-sa-b656d36cadb185f699b701ad6b68ae4f44950bc18584cf45d2dbf34d52012b86"
 tool = "eslint"
 rule = "@typescript-eslint/no-non-null-assertion"
 classification = "temporary"
 mechanism = "diagnostic"
 target_kind = "symbol"
 path = "tests/unit/composables/useDeepGenomeToc.spec.ts"
-target = "VariableDeclarator:io@186:16-186:54"
-fingerprint = "sha256:6757a38aa8dce9b3c36ae5973c2a48ade28c643a52f39eb606bfbb063bc368a2"
+target = "VariableDeclarator:io@180:16-180:54"
+fingerprint = "sha256:b656d36cadb185f699b701ad6b68ae4f44950bc18584cf45d2dbf34d52012b86"
 owner = "web-maintainers"
 introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:io@186:16-186:54"
+remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:io@180:16-180:54"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-7419f5a5bfa8eecccf7b57104fbb448defcd71da69b4ef46fe68bbb4fca83414"
+id = "web-sa-425dcc5a65b71dd703a9e0b844209f4ed63b42e45c0f3e0bd46022e5f032c63f"
 tool = "eslint"
 rule = "@typescript-eslint/no-non-null-assertion"
 classification = "temporary"
 mechanism = "diagnostic"
 target_kind = "symbol"
 path = "tests/unit/composables/useDeepGenomeToc.spec.ts"
-target = "VariableDeclarator:io@200:16-200:54"
-fingerprint = "sha256:7419f5a5bfa8eecccf7b57104fbb448defcd71da69b4ef46fe68bbb4fca83414"
+target = "VariableDeclarator:io@194:16-194:54"
+fingerprint = "sha256:425dcc5a65b71dd703a9e0b844209f4ed63b42e45c0f3e0bd46022e5f032c63f"
 owner = "web-maintainers"
 introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:io@200:16-200:54"
+remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:io@194:16-194:54"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-6b81949f5adc546f490ab91ded0eaa3a27155091e3caf700b09696fe854e6aba"
+id = "web-sa-0fa5aeafb7617a8c0d0ced6d46435d8283d8b2850dbf9c8cb46f413af5c3c2c9"
 tool = "eslint"
 rule = "@typescript-eslint/no-non-null-assertion"
 classification = "temporary"
 mechanism = "diagnostic"
 target_kind = "symbol"
 path = "tests/unit/composables/useDeepGenomeToc.spec.ts"
-target = "VariableDeclarator:io@217:16-217:54"
-fingerprint = "sha256:6b81949f5adc546f490ab91ded0eaa3a27155091e3caf700b09696fe854e6aba"
+target = "VariableDeclarator:io@211:16-211:54"
+fingerprint = "sha256:0fa5aeafb7617a8c0d0ced6d46435d8283d8b2850dbf9c8cb46f413af5c3c2c9"
 owner = "web-maintainers"
 introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:io@217:16-217:54"
+remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:io@211:16-211:54"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
@@ -9844,226 +9744,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-97d9f26ae198280c4082c11e860b708a9b9b75c5d0cc5c47d66b99bf7a7ed836"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "span"
-path = "tests/component/ChangePasswordSurface.spec.ts"
-target = "span:2:10-2:16:import { config, flushPromises, mount } from \"@vue/test-utils\";"
-fingerprint = "sha256:97d9f26ae198280c4082c11e860b708a9b9b75c5d0cc5c47d66b99bf7a7ed836"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/component/ChangePasswordSurface.spec.ts:span:2:10-2:16:import { config, flushPromises, mount } from \"@vue/test-utils\";"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-4cb16046046d61da018c599d5666c820cb7b6036244526eb933a68f307c20901"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "span"
-path = "tests/component/ChatAnalystLog.spec.ts"
-target = "span:1:32-1:34:import { describe, it, expect, vi } from \"vitest\";"
-fingerprint = "sha256:4cb16046046d61da018c599d5666c820cb7b6036244526eb933a68f307c20901"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/component/ChatAnalystLog.spec.ts:span:1:32-1:34:import { describe, it, expect, vi } from \"vitest\";"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-fcb551f2a2c1c58c6e27ab677b785e6e772f2bd4ba438cf4de4554e7bbfe0295"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/unit/composables/useDeepGenomeToc.spec.ts"
-target = "VariableDeclarator:headings@86:11-86:19"
-fingerprint = "sha256:fcb551f2a2c1c58c6e27ab677b785e6e772f2bd4ba438cf4de4554e7bbfe0295"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:headings@86:11-86:19"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-a24d7e93f0497f71fc2544328ae790b0bbeecd47f10c2483ad18dfbc441e49ec"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/unit/composables/useDeepGenomeToc.spec.ts"
-target = "VariableDeclarator:mainContentRef@90:11-90:25"
-fingerprint = "sha256:a24d7e93f0497f71fc2544328ae790b0bbeecd47f10c2483ad18dfbc441e49ec"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:mainContentRef@90:11-90:25"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-0522c87b32be18d6c6b9cbb4268fab8a087f5f73f5d60112d6650b2c259354d0"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/unit/composables/useDeepGenomeToc.spec.ts"
-target = "VariableDeclarator:nestedHeadings@87:11-87:25"
-fingerprint = "sha256:0522c87b32be18d6c6b9cbb4268fab8a087f5f73f5d60112d6650b2c259354d0"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/composables/useDeepGenomeToc.spec.ts:VariableDeclarator:nestedHeadings@87:11-87:25"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-51c6120ae807d7335d2d0c3d97917a4b189086e2dd3a160598d5c3376aaa4f94"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "span"
-path = "tests/unit/views/chat/useFileUpload.spec.ts"
-target = "span:19:21-19:40:getChatState = (_dialogueId: string) => chatState;"
-fingerprint = "sha256:51c6120ae807d7335d2d0c3d97917a4b189086e2dd3a160598d5c3376aaa4f94"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/views/chat/useFileUpload.spec.ts:span:19:21-19:40:getChatState = (_dialogueId: string) => chatState;"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-a10347fc4f614339ef620810d00a59f6fe6a20c1799625538432c3ba63855c9a"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "span"
-path = "tests/unit/views/chat/useReactions.spec.ts"
-target = "span:37:21-37:40:getChatState = (_dialogueId: string) => chatState;"
-fingerprint = "sha256:a10347fc4f614339ef620810d00a59f6fe6a20c1799625538432c3ba63855c9a"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/unit/views/chat/useReactions.spec.ts:span:37:21-37:40:getChatState = (_dialogueId: string) => chatState;"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-15373ed26a8a15da2537b4fdb0d2bbd2472e57f8cc81635bbd195047191fcfeb"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/visual/chat/shims.d.ts"
-target = "TSInterfaceDeclaration:AxiosResponse@11:34-11:35"
-fingerprint = "sha256:15373ed26a8a15da2537b4fdb0d2bbd2472e57f8cc81635bbd195047191fcfeb"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/visual/chat/shims.d.ts:TSInterfaceDeclaration:AxiosResponse@11:34-11:35"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-099f05925db8290a9179a7bab8ec74ec9533f22f03aa712671641d180ef77633"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/visual/chat/shims.d.ts"
-target = "TSInterfaceDeclaration:AxiosResponse@11:43-11:44"
-fingerprint = "sha256:099f05925db8290a9179a7bab8ec74ec9533f22f03aa712671641d180ef77633"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/visual/chat/shims.d.ts:TSInterfaceDeclaration:AxiosResponse@11:43-11:44"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-27060b28c4d5cae0b955a67c07b48d08b12971c41baa338e3f5502d74a3acc31"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/visual/research/shims.d.ts"
-target = "TSInterfaceDeclaration:AxiosResponse@11:34-11:35"
-fingerprint = "sha256:27060b28c4d5cae0b955a67c07b48d08b12971c41baa338e3f5502d74a3acc31"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/visual/research/shims.d.ts:TSInterfaceDeclaration:AxiosResponse@11:34-11:35"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-d0c2e47a09cffb66362f00212d5a6481c8592b4cf071f9224bd26e0a65fbda4f"
-tool = "eslint"
-rule = "@typescript-eslint/no-unused-vars"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "tests/visual/research/shims.d.ts"
-target = "TSInterfaceDeclaration:AxiosResponse@11:43-11:44"
-fingerprint = "sha256:d0c2e47a09cffb66362f00212d5a6481c8592b4cf071f9224bd26e0a65fbda4f"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target tests/visual/research/shims.d.ts:TSInterfaceDeclaration:AxiosResponse@11:43-11:44"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-2a21ba89c4b5de3b51abafc9a82ebb3c55fb37142a193c2115e3675c3b2de17c"
 tool = "eslint"
 rule = "@typescript-eslint/no-unused-vars"
@@ -11544,20 +11224,20 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-afd1a05c93ce8b14f823fd1a0c772b05e469a5e6ee036966fd037cbdb235842f"
+id = "web-sa-54e7883c578b3e223f33d15fa3ebed94378bab12e9065dca63c1766df3c9daf4"
 tool = "typescript"
 rule = "@ts-expect-error"
 classification = "temporary"
 mechanism = "inline"
 target_kind = "span"
 path = "apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts"
-target = "line:158:@ts-expect-error:@ts-expect-error replacing with minimal mock"
-fingerprint = "sha256:afd1a05c93ce8b14f823fd1a0c772b05e469a5e6ee036966fd037cbdb235842f"
+target = "line:152:@ts-expect-error:@ts-expect-error replacing with minimal mock"
+fingerprint = "sha256:54e7883c578b3e223f33d15fa3ebed94378bab12e9065dca63c1766df3c9daf4"
 owner = "web-maintainers"
 introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts:line:158:@ts-expect-error:@ts-expect-error replacing with minimal mock"
+remediation = "WEB-SA: remediate exact target apps/web/tests/unit/composables/useDeepGenomeToc.spec.ts:line:152:@ts-expect-error:@ts-expect-error replacing with minimal mock"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
