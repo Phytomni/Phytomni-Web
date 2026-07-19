@@ -38,7 +38,10 @@ export function useComposer(opts: {
 
   const clearSelectedAgent = () => {
     if (isSending.value || !selectedAgent.value) return;
-    const cleaned = extractAtValues(messageInput.value).cleanedText;
+    const command = `@${selectedAgent.value},`;
+    const cleaned = messageInput.value.startsWith(command)
+      ? messageInput.value.slice(command.length)
+      : messageInput.value;
     selectedAgent.value = "";
     messageInput.value = cleaned;
   };

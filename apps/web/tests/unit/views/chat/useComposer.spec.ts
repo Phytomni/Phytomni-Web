@@ -157,6 +157,17 @@ describe("useComposer", () => {
       expect(selectedAgent.value).toBe("");
       expect(messageInput.value).toBe("preserve me");
     });
+
+    it("preserves other serialized-looking mentions in the message body", () => {
+      selectedAgent.value = "KnowledgeAgent";
+      messageInput.value = "@KnowledgeAgent,body @foo,token";
+      const { clearSelectedAgent } = makeComposable();
+
+      clearSelectedAgent();
+
+      expect(selectedAgent.value).toBe("");
+      expect(messageInput.value).toBe("body @foo,token");
+    });
   });
 
   describe("watch(messageInput)", () => {
