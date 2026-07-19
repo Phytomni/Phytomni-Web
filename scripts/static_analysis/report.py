@@ -1,4 +1,4 @@
-"""Bounded deterministic renderers for static-analysis observation output."""
+"""Bounded deterministic renderers for static-analysis inventory output."""
 
 from __future__ import annotations
 
@@ -71,12 +71,12 @@ def _counts(inventory: Inventory) -> dict[str, int]:
     }
 
 
-def _payload(inventory: Inventory) -> dict[str, Any]:
+def _payload(inventory: Inventory, *, enforced: bool = False) -> dict[str, Any]:
     reconciliation = inventory.reconciliation
     findings = tuple(sorted(inventory.findings, key=_finding_sort_key))
     return {
         "schemaVersion": 1,
-        "status": "NOT ENFORCED",
+        "status": "ENFORCED" if enforced else "NOT ENFORCED",
         "scope": inventory.scope,
         "collectors": list(inventory.collectors),
         "counts": _counts(inventory),
@@ -90,11 +90,14 @@ def _payload(inventory: Inventory) -> dict[str, Any]:
     }
 
 
-def render_json(inventory: Inventory) -> str:
+def render_json(inventory: Inventory, *, enforced: bool = False) -> str:
     """Render stable JSON without raw diagnostic/source bodies."""
 
     return json.dumps(
-        _payload(inventory), ensure_ascii=False, indent=2, sort_keys=True
+        _payload(inventory, enforced=enforced),
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
     ) + "\n"
 
 
@@ -105,15 +108,21 @@ def _finding_row(finding: Any) -> str:
     )
 
 
-def render_markdown(inventory: Inventory) -> str:
-    """Render a bounded human-readable observation ledger."""
+def render_markdown(inventory: Inventory, *, enforced: bool = False) -> str:
+    """Render a bounded human-readable inventory report."""
 
     reconciliation = inventory.reconciliation
     counts = _counts(inventory)
+    status = "ENFORCED" if enforced else "NOT ENFORCED"
+    description = (
+        "this report reconciles exact findings and is a merge gate."
+        if enforced
+        else "this report observes exact findings but is not a merge gate."
+    )
     lines = [
-        "# Static-analysis observation",
+        f"# Static-analysis {'enforcement' if enforced else 'observation'}",
         "",
-        "> **NOT ENFORCED** — this report observes exact findings but is not a merge gate.",
+        f"> **{status}** — {description}",
         "",
         f"- Scope: `{inventory.scope}`",
         f"- Collectors: {', '.join(f'`{name}`' for name in inventory.collectors)}",

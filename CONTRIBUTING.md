@@ -54,8 +54,9 @@ historical):
 | ------ | ----------------------------------------------------------- |
 | `G-1`  | staged/unstaged secret scan                                 |
 | `G0`   | `git diff` whitespace check                                 |
-| `G1`   | `apps/web` `vue-tsc --noEmit` (there is no plain `tsc`)      |
-| `G2`   | `apps/web` eslint (read-only, **no** `--fix`)               |
+| `G-0`  | exact static-analysis registry and ledger reconciliation   |
+| `G1`   | `apps/web` TypeScript diagnostics through exact reconciliation |
+| `G2`   | `apps/web` ESLint diagnostics through exact reconciliation (read-only) |
 | `G3`   | `apps/web` vite build                                       |
 | `G4`   | `apps/server` `go mod tidy`                                 |
 | `G5`   | `apps/server` `gofmt -l` (must be empty)                    |
@@ -70,9 +71,9 @@ historical):
 | `G16`  | Bot/Web compatibility contract                              |
 | `G17`  | activation evidence and external-acceptance boundary        |
 
-> **`npm run lint` is a footgun** — it runs `eslint --fix` over the whole tree
-> and auto-mutates ~80 files. The gate's baseline is `type-check` + `build`; lint
-> a single file with `npx eslint <file> --no-fix`.
+> **Frontend lint commands are explicit:** `npm run lint` performs the exact
+> read-only ESLint reconciliation; `npm run lint:raw` emits diagnostic JSON only;
+> `npm run format:write` is the only broad formatter write command.
 
 G15–G17 are local readiness checks. They do not authorize a production flag
 change or replace Bot-owner, CI, staging/live, or operations acceptance.

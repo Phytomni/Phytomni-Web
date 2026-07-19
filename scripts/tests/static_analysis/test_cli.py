@@ -88,7 +88,8 @@ def test_check_mode_fails_only_for_exact_reconciliation_mismatch(
 
     captured = capsys.readouterr()
     assert result == 1
-    assert '"status": "NOT ENFORCED"' in captured.out
+    assert '"status": "ENFORCED"' in captured.out
+    assert '"status": "NOT ENFORCED"' not in captured.out
     assert "fixture-secret" not in captured.out
     assert captured.err == ""
 

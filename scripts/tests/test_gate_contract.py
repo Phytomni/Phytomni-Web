@@ -177,3 +177,25 @@ def test_gate_scripts_do_not_mask_suppression_or_command_failures() -> None:
     assert "xargs" not in (GATES / "hygiene.sh").read_text(encoding="utf-8")
     assert all("--quiet" not in text for text in texts)
     assert all("--ignore-path" not in text for text in texts)
+
+
+def test_active_entrypoints_reject_warning_tolerant_and_observation_paths() -> None:
+    paths = [
+        *(GATES / f"{group}.sh" for group in GROUP_ORDER),
+        ROOT / "scripts" / "scoped_gate.sh",
+        ROOT / "scripts" / "validate_web_local.sh",
+        ROOT / ".githooks" / "pre-commit",
+        ROOT / ".githooks" / "pre-push",
+        WORKFLOW,
+    ]
+    texts = [path.read_text(encoding="utf-8") for path in paths]
+    for text in texts:
+        assert "--inventory" not in text
+        assert "NOT ENFORCED" not in text
+        assert "observation" not in text.lower()
+        assert "|| true" not in text
+        assert "--quiet" not in text
+        assert "--max-warnings" not in text
+        assert "--ignore-path" not in text
+        assert not re.search(r"\beslint\b[^\n]*--fix", text)
+        assert "npm run lint" not in text

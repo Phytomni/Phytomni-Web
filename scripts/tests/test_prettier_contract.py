@@ -57,15 +57,30 @@ def test_prettier_is_exactly_pinned_and_scripts_have_one_write_boundary() -> Non
     check = scripts["format:check"]
     write = scripts["format:write"]
     lint = scripts["lint"]
+    raw_lint = scripts["lint:raw"]
     assert isinstance(check, str)
     assert isinstance(write, str)
     assert isinstance(lint, str)
+    assert isinstance(raw_lint, str)
     assert check != write
     assert "--write" not in check
     assert "--fix" not in check
-    assert "--fix" not in lint
+    assert lint == (
+        "python3 ../../scripts/check_static_analysis_exemptions.py "
+        "--check --collector eslint"
+    )
+    assert "eslint" in raw_lint
+    assert "--format json" in raw_lint
+    assert "--fix" not in raw_lint
     assert "format:write" not in lint
     assert all(marker in check and marker in write for marker in EXPECTED_SCOPE_MARKERS)
+
+    write_commands = [
+        name
+        for name, command in scripts.items()
+        if isinstance(command, str) and ("--write" in command or "--fix" in command)
+    ]
+    assert write_commands == ["format:write"]
 
 
 def test_prettier_ignore_is_exact_without_broad_source_or_public_bypass() -> None:
@@ -108,18 +123,8 @@ def test_first_party_format_check_is_clean() -> None:
 
 
 def test_eslint_emits_no_prettier_diagnostics() -> None:
-    eslint = WEB_ROOT / "node_modules" / ".bin" / "eslint"
     completed = subprocess.run(
-        [
-            str(eslint),
-            ".",
-            "--ext",
-            ".vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts",
-            "--ignore-path",
-            ".gitignore",
-            "--format",
-            "json",
-        ],
+        ["npm", "run", "--silent", "lint:raw"],
         cwd=WEB_ROOT,
         check=False,
         capture_output=True,

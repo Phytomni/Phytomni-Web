@@ -132,6 +132,16 @@ def test_markdown_is_bounded_and_explicitly_observation_only() -> None:
     assert rendered.endswith("\n")
 
 
+def test_enforced_reports_are_not_labelled_as_observation() -> None:
+    rendered_json = render_json(_inventory(), enforced=True)
+    rendered_markdown = render_markdown(_inventory(), enforced=True)
+
+    assert json.loads(rendered_json)["status"] == "ENFORCED"
+    assert "# Static-analysis enforcement" in rendered_markdown
+    assert "**ENFORCED**" in rendered_markdown
+    assert "NOT ENFORCED" not in rendered_markdown
+
+
 def test_ledger_is_deterministic_bounded_and_links_exact_entries() -> None:
     rendered = render_ledger(_reviewed_inventory())
 

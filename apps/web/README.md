@@ -43,6 +43,8 @@ npm run build
 
 ```sh
 npm run lint
+npm run lint:raw       # diagnostic-only structured ESLint JSON
+npm run format:write   # the explicit broad formatter write command
 ```
 
 ## SSH Public Key

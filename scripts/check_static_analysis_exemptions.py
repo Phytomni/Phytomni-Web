@@ -296,7 +296,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             if expected != markdown:
                 print("static-analysis: ledger differs", file=sys.stderr)
                 return 1
-        print(render_json(inventory) if args.json else render_markdown(inventory), end="")
+        rendered = (
+            render_json(inventory, enforced=args.check)
+            if args.json
+            else render_markdown(inventory, enforced=args.check)
+        )
+        print(rendered, end="")
         if args.check and (
             reconciliation.unregistered
             or reconciliation.stale
