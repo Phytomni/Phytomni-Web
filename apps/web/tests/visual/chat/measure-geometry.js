@@ -1,7 +1,7 @@
 /**
  * Page-context geometry measurement for Chat visual capture.
  *
- * Scrolls the transcript owner, applies every reviewed overflow / clearance /
+ * Scrolls the active transcript/content owner, applies every reviewed overflow / clearance /
  * responsive-navigation contract, stores the result on
  * window.__PHY_CHAT_GEOMETRY_RESULT__, and returns it. This measurement step
  * never throws solely because pass === false; assert-geometry.js is the only
@@ -74,9 +74,17 @@
       },
       root: { present: false },
       transcript: null,
+      contentStack: null,
+      scrollOwner: null,
+      emptyScrollPosition: null,
       primaryAction: measureRect(null),
       navigationTrigger: measureRect(null),
       composer: measureRect(null),
+      headerPreferences: measureRect(null),
+      quickSelectCount: 0,
+      caseRegionCount: 0,
+      caseLinkCount: 0,
+      lastCase: { present: false },
       lastMessage: { present: false },
       state: null,
       pass: false,
@@ -119,13 +127,50 @@
   }
 
   const transcriptEl = transcripts[0];
-  const mobileSafeInset = innerWidth < 600 ? 24 : 0;
-  transcriptEl.scrollTop = Math.max(
-    0,
-    transcriptEl.scrollHeight - transcriptEl.clientHeight - mobileSafeInset
+  const contentStacks = root.querySelectorAll(
+    '[data-testid="chat-content-stack"]'
   );
+  if (contentStacks.length !== 1) {
+    return persistFailure(
+      {
+        root: measureRect(root),
+        contentStack: { present: false, count: contentStacks.length },
+        state,
+      },
+      `Expected exactly one chat-content-stack; found ${contentStacks.length}`
+    );
+  }
+
+  const contentStackEl = contentStacks[0];
+  const emptyScrollPosition =
+    root.getAttribute("data-empty-scroll-position") === "bottom"
+      ? "bottom"
+      : "top";
+  const scrollOwnerEl = state === "empty" ? contentStackEl : transcriptEl;
+  const shouldScrollToBottom =
+    state === "populated" || emptyScrollPosition === "bottom";
+  const mobileSafeInset = innerWidth < 600 ? 24 : 0;
+
+  scrollOwnerEl.scrollTop = shouldScrollToBottom
+    ? Math.max(
+        0,
+        scrollOwnerEl.scrollHeight -
+          scrollOwnerEl.clientHeight -
+          mobileSafeInset
+      )
+    : 0;
   await frame();
   await frame();
+
+  const ownerScrollTop = scrollOwnerEl.scrollTop;
+  const ownerScrollHeight = scrollOwnerEl.scrollHeight;
+  const ownerClientHeight = scrollOwnerEl.clientHeight;
+  const ownerClientWidth = scrollOwnerEl.clientWidth;
+  const ownerScrollWidth = scrollOwnerEl.scrollWidth;
+  const ownerAtBottom =
+    ownerScrollHeight - ownerClientHeight - ownerScrollTop <=
+      Math.max(1, mobileSafeInset) || ownerScrollHeight <= ownerClientHeight;
+  const ownerAtTop = ownerScrollTop <= 1;
 
   const scrollTop = transcriptEl.scrollTop;
   const scrollHeight = transcriptEl.scrollHeight;
@@ -145,6 +190,16 @@
   const composerNodes = document.querySelectorAll(
     '[data-testid="chat-composer"]'
   );
+  const preferenceNodes = document.querySelectorAll(
+    '[data-testid="chat-header-preferences"]'
+  );
+  const quickSelectNodes = root.querySelectorAll(
+    '[data-testid="chat-agent-quick-select"]'
+  );
+  const caseRegions = root.querySelectorAll('[data-testid="chat-cases"]');
+  const caseLinks = root.querySelectorAll('[data-testid="chat-case-link"]');
+  const lastCase =
+    caseLinks.length > 0 ? caseLinks[caseLinks.length - 1] : null;
   const messageRows = root.querySelectorAll('[data-testid="chat-message-row"]');
   const lastRow =
     messageRows.length > 0 ? messageRows[messageRows.length - 1] : null;
@@ -163,6 +218,13 @@
       : { ...measureRect(null), count: composerNodes.length };
   const lastMessage = lastRow
     ? { present: true, ...measureRect(lastRow) }
+    : { present: false };
+  const headerPreferences =
+    preferenceNodes.length === 1
+      ? measureRect(preferenceNodes[0])
+      : { ...measureRect(null), count: preferenceNodes.length };
+  const lastCaseRect = lastCase
+    ? { present: true, ...measureRect(lastCase) }
     : { present: false };
   const rootRect = measureRect(root);
   const transcriptRect = measureRect(transcriptEl);
@@ -194,10 +256,14 @@
     );
   }
 
-  if (composerNodes.length !== 1 || (!openMobile && !composer.visible)) {
+  if (composerNodes.length !== 1 || (!composer.visible && !openMobile)) {
     reasons.push("composer missing or not visible");
-  } else if (!openMobile && !isInsideViewport(composer)) {
-    reasons.push("composer escapes viewport");
+  } else if (
+    !openMobile &&
+    (state === "populated" || emptyScrollPosition === "top") &&
+    !isInsideViewport(composer)
+  ) {
+    reasons.push("composer escapes viewport in the reviewed state");
   }
 
   if (lastMessage.present) {
@@ -222,8 +288,50 @@
   if (state === "empty" && lastMessage.present) {
     reasons.push("empty state must not present lastMessage");
   }
-  if (!atBottom) {
-    reasons.push("transcript not at bottom");
+  if (shouldScrollToBottom && !ownerAtBottom) {
+    reasons.push("active scroll owner is not at bottom");
+  }
+  if (!shouldScrollToBottom && !ownerAtTop) {
+    reasons.push("empty landing top fixture is not at top");
+  }
+  if (ownerScrollWidth > ownerClientWidth) {
+    reasons.push(
+      `content stack overflow scrollWidth=${ownerScrollWidth} > clientWidth=${ownerClientWidth}`
+    );
+  }
+
+  if (state === "empty") {
+    if (caseRegions.length !== 1 || caseLinks.length !== 7) {
+      reasons.push(
+        `empty state requires one Cases region with seven links; found regions=${caseRegions.length} links=${caseLinks.length}`
+      );
+    }
+    if (quickSelectNodes.length !== 1) {
+      reasons.push(
+        `empty state requires one quick selection region; found ${quickSelectNodes.length}`
+      );
+    }
+    if (
+      emptyScrollPosition === "bottom" &&
+      !isVisibleInViewport(lastCaseRect)
+    ) {
+      reasons.push("empty bottom fixture final case is not visible");
+    }
+  } else {
+    if (caseRegions.length !== 0 || caseLinks.length !== 0) {
+      reasons.push("populated state must not render Cases");
+    }
+    if (quickSelectNodes.length !== 0) {
+      reasons.push("populated state must not render quick selection");
+    }
+  }
+
+  if (preferenceNodes.length !== 1) {
+    reasons.push(
+      `expected one Chat header preference group; found ${preferenceNodes.length}`
+    );
+  } else if (!openMobile && !isVisibleInViewport(headerPreferences)) {
+    reasons.push("Chat header preferences escape the viewport");
   }
 
   if (isMobileViewport && !closedMobile && !openMobile) {
@@ -292,6 +400,23 @@
       atBottom,
       ...transcriptRect,
     },
+    contentStack: measureRect(contentStackEl),
+    scrollOwner: {
+      kind: state === "empty" ? "content-stack" : "transcript",
+      scrollTop: ownerScrollTop,
+      scrollHeight: ownerScrollHeight,
+      clientHeight: ownerClientHeight,
+      clientWidth: ownerClientWidth,
+      scrollWidth: ownerScrollWidth,
+      atTop: ownerAtTop,
+      atBottom: ownerAtBottom,
+    },
+    emptyScrollPosition,
+    headerPreferences,
+    quickSelectCount: quickSelectNodes.length,
+    caseRegionCount: caseRegions.length,
+    caseLinkCount: caseLinks.length,
+    lastCase: lastCaseRect,
     primaryAction,
     navigationTrigger,
     composer,

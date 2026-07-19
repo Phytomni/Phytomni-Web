@@ -2,6 +2,7 @@
 
 export const CHAT_VISUAL_FIXTURE_KEYS = [
   "empty",
+  "empty-cases",
   "populated",
   "attachment",
   "sending",
@@ -72,6 +73,20 @@ export type ChatVisualFixtureDefinition = {
 const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
   empty: {
     key: "empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+  },
+  "empty-cases": {
+    key: "empty-cases",
     chatState: "empty",
     sidebarCollapsed: false,
     drawerOpen: false,

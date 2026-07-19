@@ -13,6 +13,9 @@
       v-else
       data-testid="chat-visual-root"
       :data-chat-state="fixture.chatState"
+      :data-empty-scroll-position="
+        fixture.key === 'empty-cases' ? 'bottom' : 'top'
+      "
       :data-sidebar-drawer-state="drawerStateAttr"
       :data-phase3c-kind="phase3cKindAttr"
       class="chat-visual-fixture-root"
@@ -694,6 +697,12 @@ onUnmounted(() => {
   padding: var(--phy-space-16);
 }
 
+.empty-chat-mark {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
 .transcript-content {
   width: min(100%, var(--phy-layout-transcript-max-width));
   margin: 0 auto;
@@ -723,6 +732,11 @@ onUnmounted(() => {
     padding-bottom: calc(
       var(--phy-space-24) + env(safe-area-inset-bottom, 0px)
     );
+  }
+
+  .empty-chat-mark {
+    width: 36px;
+    height: 36px;
   }
 }
 

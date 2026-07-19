@@ -78,6 +78,10 @@ type Rect = {
 };
 
 type GeometryHarnessOptions = {
+  state?: "empty" | "populated";
+  emptyScrollPosition?: "top" | "bottom";
+  includeCases?: boolean;
+  includeQuickSelect?: boolean;
   width?: number;
   height?: number;
   documentScrollWidth?: number;
@@ -86,10 +90,14 @@ type GeometryHarnessOptions = {
   transcriptRect?: Rect;
   composerRect?: Rect;
   lastMessageRect?: Rect;
+  lastCaseRect?: Rect;
+  contentStackClientHeight?: number;
+  contentStackScrollHeight?: number;
   drawerState?: "closed" | "open" | "not-mobile";
   includeTrigger?: boolean;
   triggerVisible?: boolean;
   primaryVisible?: boolean;
+  composerVisible?: boolean;
 };
 
 const rect = (
@@ -112,6 +120,10 @@ async function runGeometryHarness(
   const width = options.width ?? 1440;
   const height = options.height ?? 900;
   const drawerState = options.drawerState ?? "not-mobile";
+  const state = options.state ?? "populated";
+  const emptyScrollPosition = options.emptyScrollPosition ?? "top";
+  const includeCases = options.includeCases ?? state === "empty";
+  const includeQuickSelect = options.includeQuickSelect ?? state === "empty";
   const makeElement = (bounds: Rect, visible = true) => ({
     __visible: visible,
     getBoundingClientRect: () => bounds,
@@ -138,19 +150,84 @@ async function runGeometryHarness(
     },
   });
 
+  const contentStack = Object.assign(makeElement(rect(0, 48, width, height)), {
+    scrollHeight: options.contentStackScrollHeight ?? 1200,
+    clientHeight: options.contentStackClientHeight ?? Math.max(1, height - 48),
+    clientWidth: width,
+    scrollWidth: width,
+  });
+  let contentStackScrollTop = 0;
+  Object.defineProperty(contentStack, "scrollTop", {
+    configurable: true,
+    get: () => contentStackScrollTop,
+    set: (value: number) => {
+      contentStackScrollTop = Math.max(
+        0,
+        Math.min(value, contentStack.scrollHeight - contentStack.clientHeight)
+      );
+    },
+  });
+
   const lastMessage = makeElement(
     options.lastMessageRect ?? rect(360, 620, Math.min(width - 40, 1080), 700)
   );
+  const casesRegion = makeElement(rect(240, 560, width - 24, 840));
+  const caseLinks = Array.from({ length: 7 }, (_value, index) =>
+    makeElement(
+      index === 6
+        ? options.lastCaseRect ?? rect(280, 720, width - 40, 800)
+        : rect(280, 560 + index * 20, width - 40, 600 + index * 20)
+    )
+  );
+  const quickSelect = makeElement(rect(280, 500, width - 40, 548));
+  const headerPreferences = makeElement(rect(width - 180, 8, width - 16, 40));
+  const mainSurface = {
+    getAttribute: (name: string) =>
+      name === "aria-hidden" && drawerState === "open" ? "true" : null,
+  };
+  const drawerSurface = makeElement(rect(0, 0, Math.min(width, 272), height));
+  const drawerScrim = makeElement(rect(0, 0, width, height));
   const root = Object.assign(makeElement(rect(0, 0, width, height)), {
     getAttribute: (name: string) => {
-      if (name === "data-chat-state") return "populated";
+      if (name === "data-chat-state") return state;
       if (name === "data-sidebar-drawer-state") return drawerState;
+      if (name === "data-empty-scroll-position") return emptyScrollPosition;
       return null;
     },
     querySelectorAll: (selector: string) => {
       if (selector === '[data-testid="chat-transcript"]') return [transcript];
-      if (selector === '[data-testid="chat-message-row"]') return [lastMessage];
+      if (selector === '[data-testid="chat-content-stack"]') {
+        return [contentStack];
+      }
+      if (selector === '[data-testid="chat-message-row"]') {
+        return state === "populated" ? [lastMessage] : [];
+      }
+      if (selector === '[data-testid="chat-cases"]') {
+        return includeCases ? [casesRegion] : [];
+      }
+      if (selector === '[data-testid="chat-case-link"]') {
+        return includeCases ? caseLinks : [];
+      }
+      if (selector === '[data-testid="chat-agent-quick-select"]') {
+        return includeQuickSelect ? [quickSelect] : [];
+      }
       return [];
+    },
+    querySelector: (selector: string) => {
+      if (selector === ".phy-adaptive-shell__main") return mainSurface;
+      if (
+        selector ===
+        ".phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__surface"
+      ) {
+        return drawerState === "open" ? drawerSurface : null;
+      }
+      if (
+        selector ===
+        ".phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__scrim"
+      ) {
+        return drawerState === "open" ? drawerScrim : null;
+      }
+      return null;
     },
   });
 
@@ -165,7 +242,9 @@ async function runGeometryHarness(
     options.triggerVisible ?? true
   );
   const composer = makeElement(
-    options.composerRect ?? rect(Math.min(300, width / 4), 740, width - 24, 880)
+    options.composerRect ??
+      rect(Math.min(300, width / 4), 740, width - 24, 880),
+    options.composerVisible ?? true
   );
   const includeTrigger = options.includeTrigger ?? drawerState === "closed";
   const documentMock = {
@@ -186,6 +265,9 @@ async function runGeometryHarness(
         return includeTrigger ? [trigger] : [];
       }
       if (selector === '[data-testid="chat-composer"]') return [composer];
+      if (selector === '[data-testid="chat-header-preferences"]') {
+        return [headerPreferences];
+      }
       return [];
     },
   };
@@ -269,6 +351,7 @@ describe("Chat visual fixture registry", () => {
   it("contains every exact frame, Phase 3B message-state, and Phase 3C key", () => {
     expect([...CHAT_VISUAL_FIXTURE_KEYS]).toEqual([
       "empty",
+      "empty-cases",
       "populated",
       "attachment",
       "sending",
@@ -617,6 +700,74 @@ describe("Chat visual fixture geometry negative controls", () => {
     expect(result).toMatchObject({ pass: true });
   });
 
+  it("keeps the empty landing at the top with Composer and Cases present", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      emptyScrollPosition: "top",
+      includeCases: true,
+      includeQuickSelect: true,
+      composerRect: rect(280, 360, 1160, 520),
+      lastCaseRect: rect(280, 760, 1160, 820),
+    });
+
+    expect(result.pass).toBe(true);
+  });
+
+  it("accepts the bottom Cases capture when the final case is visible", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      emptyScrollPosition: "bottom",
+      includeCases: true,
+      includeQuickSelect: true,
+      composerRect: rect(280, -260, 1160, -100),
+      lastCaseRect: rect(280, 720, 1160, 800),
+      contentStackScrollHeight: 1500,
+      contentStackClientHeight: 852,
+    });
+
+    expect(result.pass).toBe(true);
+  });
+
+  it("allows an open mobile drawer to hide the main Composer", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      width: 390,
+      height: 844,
+      drawerState: "open",
+      composerVisible: false,
+      includeCases: true,
+      includeQuickSelect: true,
+    });
+
+    expect(result.pass).toBe(true);
+  });
+
+  it("rejects an empty bottom capture that cannot show the final case", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      emptyScrollPosition: "bottom",
+      includeCases: true,
+      includeQuickSelect: true,
+      lastCaseRect: rect(280, 920, 1160, 1000),
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(/final case is not visible/);
+  });
+
+  it("rejects Cases or quick selection in populated Chat", async () => {
+    const result = await runGeometryHarness({
+      state: "populated",
+      includeCases: true,
+      includeQuickSelect: true,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(
+      /populated state must not render Cases|populated state must not render quick selection/
+    );
+  });
+
   it.each([
     {
       label: "document overflow",
@@ -812,6 +963,18 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
     expect(buildSyntheticFileList(fixture)).toHaveLength(0);
+  });
+
+  it("renders all seven Cases in both empty fixture positions", async () => {
+    for (const key of ["empty", "empty-cases"] as const) {
+      const wrapper = mountFixtureApp(getChatVisualFixture(key));
+      await flushPromises();
+      expect(wrapper.findAll('[data-testid="chat-case-link"]')).toHaveLength(7);
+      expect(
+        wrapper.get('[data-testid="chat-content-stack"]').classes()
+      ).toContain("is-empty");
+      wrapper.unmount();
+    }
   });
 
   it("renders populated fixture with matching message row count", async () => {

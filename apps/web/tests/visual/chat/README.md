@@ -12,7 +12,7 @@ Harness URL shape:
 
 Accepted dimensions:
 
-- `state`: `empty` | `populated` | `attachment` | `sending` | `picker-open` |
+- `state`: `empty` | `empty-cases` | `populated` | `attachment` | `sending` | `picker-open` |
   `picker-search` | `picker-selected` | `sidebar-expanded` | `sidebar-compact` |
   `sidebar-mobile-closed` | `sidebar-mobile-open`
 - `locale`: `en-US` | `zh-CN`
@@ -42,11 +42,15 @@ that same stdout. Always:
 
 ### Expected geometry JSON top-level fields
 
-`viewport`, `document`, `root`, `transcript`, `primaryAction`,
-`navigationTrigger`, `composer`, `lastMessage`, `state`, `pass`
+`viewport`, `document`, `root`, `transcript`, `contentStack`, `scrollOwner`,
+`emptyScrollPosition`, `primaryAction`, `navigationTrigger`, `composer`,
+`headerPreferences`, `quickSelectCount`, `caseRegionCount`, `caseLinkCount`, `lastCase`,
+`lastMessage`, `state`, `pass`
 
 `transcript` includes `scrollTop`, `scrollHeight`, `clientHeight`, `clientWidth`,
-`scrollWidth`, and `atBottom`. Rect records include measured edges.
+`scrollWidth`, and `atBottom`. `scrollOwner` reports the state-selected owner,
+including `kind`, `scrollTop`, `scrollHeight`, `clientHeight`, `clientWidth`,
+`scrollWidth`, `atTop`, and `atBottom`. Rect records include measured edges.
 `lastMessage.present=false` is permitted only when `state="empty"`.
 
 ### Safe script return shapes
@@ -64,10 +68,31 @@ For each evidence row record at least: viewport, locale, theme, state key,
 path. Harness rows do not need live identity redaction when the visible identity
 is already exact `Synthetic user`.
 
-## Canonical viewports
+## Chat home canonical viewports
 
-Repeat capture for each pair: `1440 900`, `1024 768`, `768 1024`, `390 844`.
-Repeat URL/media/evidence names for both locales and both themes.
+| Category | CSS viewport | Review identity |
+|---|---:|---|
+| Compact phone | `320x568` | iPhone SE / older Android lower bound |
+| Modern phone | `390x844` | current iPhone / Android |
+| Large phone or small tablet | `480x800` | unfolded phone / small tablet |
+| Tablet | `768x1024` | iPad-class portrait |
+| Small desktop | `1024x768` | compact laptop lower bound |
+| Mainstream laptop | `1366x768` | office notebook |
+| Desktop | `1440x900` | standard external display |
+| Large desktop | `1920x1080` | full-HD monitor |
+| 4K at 150% scaling | `2560x1440` | user's 3840x2160 physical setup expressed in CSS pixels |
+
+The synthetic home matrix is exact:
+
+- `empty` and `empty-cases`: all 9 viewports × 2 locales × 2 themes = 72 images.
+- `populated`: `320x568`, `768x1024`, `1024x768`, `1440x900`, and `2560x1440` × 2 locales × 2 themes = 20 images.
+- `sidebar-mobile-closed` and `sidebar-mobile-open`: `390x844` × 2 locales × 2 themes = 8 images.
+- Total synthetic review set: 100 PNG files and 100 geometry JSON files.
+
+`empty` proves the top composition and visible Composer. `empty-cases` runs the
+same page at the bottom of the empty-state scroll owner and proves the seventh
+case is reachable. A screenshot is invalid unless its geometry JSON passes
+before capture.
 
 Evidence filename matrix:
 
@@ -78,6 +103,12 @@ chat__<state>__<W>x<H>__<locale>__<theme>.geometry.json
 
 Closed and open mobile are different exact states — never infer one from the other
 (`sidebar-mobile-closed` / `sidebar-mobile-open`).
+
+The harness matrix can be captured in one deterministic run:
+
+```bash
+./tests/visual/chat/capture-home-matrix.sh
+```
 
 ## Terminal A — fixed Vite (hard stop on strict-port failure)
 
