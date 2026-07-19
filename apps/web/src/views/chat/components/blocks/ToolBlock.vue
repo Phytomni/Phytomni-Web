@@ -15,7 +15,12 @@ const { t } = useI18n();
 // Web owns the copy: map the structured toolName to a localized label, with a
 // generic fallback so an unknown tool still renders sensibly.
 const label = computed(() =>
-  t(`chat.tools.${props.block.toolName}`, props.block.toolName ?? t("chat.tools.generic"))
+  t(
+    `chat.tools.${props.block.toolName}`,
+    props.block.toolName ?? t("chat.tools.generic")
+  )
 );
-const countLabel = computed(() => t("chat.toolHits", { count: props.block.count }));
+const countLabel = computed(() =>
+  t("chat.toolHits", { count: props.block.count })
+);
 </script>

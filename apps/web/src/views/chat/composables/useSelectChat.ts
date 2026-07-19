@@ -66,7 +66,7 @@ export function useSelectChat(opts: {
       // row so refreshes/threads in this conversation route correctly. Default
       // to "instant" for legacy rows that predate the mode column.
       chatState.mode =
-        (res.data[0] && res.data[0].mode === "expert") ? "expert" : "instant";
+        res.data[0] && res.data[0].mode === "expert" ? "expert" : "instant";
       chatState.historyQuestion = null;
 
       // initialize reaction state
@@ -86,7 +86,9 @@ export function useSelectChat(opts: {
           // add the user message
           if (item.query) {
             // parse the message content and extract file info
-            const { content, attachedFiles } = parseMessageWithFiles(item.query);
+            const { content, attachedFiles } = parseMessageWithFiles(
+              item.query
+            );
 
             messages.push({
               role: "user",
@@ -273,7 +275,8 @@ export function useSelectChat(opts: {
                         if (fileContent && fileContent.trim()) {
                           deepGenomeMessage.content = fileContent;
                         } else {
-                          deepGenomeMessage.content = "File content is empty or failed to load";
+                          deepGenomeMessage.content =
+                            "File content is empty or failed to load";
                         }
                         // force a view update; scroll only if still foreground
                         nextTick(() => {
@@ -284,8 +287,12 @@ export function useSelectChat(opts: {
                         });
                       })
                       .catch((error) => {
-                        console.error("Failed to read DeepGenomeAgent file:", error);
-                        deepGenomeMessage.content = "Failed to load file, please try again later";
+                        console.error(
+                          "Failed to read DeepGenomeAgent file:",
+                          error
+                        );
+                        deepGenomeMessage.content =
+                          "Failed to load file, please try again later";
                         nextTick(() => {
                           timestamp.value = Date.now();
                           if (currentChatId.value === capturedDialogueId) {

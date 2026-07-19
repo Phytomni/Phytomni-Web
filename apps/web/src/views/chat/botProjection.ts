@@ -590,10 +590,7 @@ function parseRawArtifactArray(value: readonly unknown[]): BotArtifact[] {
         (path) => path !== outputDir && !path.startsWith(`${outputDir}/`)
       )
     ) {
-      error(
-        `artifacts[${index}].paths`,
-        "must remain within output_dir"
-      );
+      error(`artifacts[${index}].paths`, "must remain within output_dir");
     }
     pathCount += paths.length;
     if (pathCount > MAX_BOT_ARTIFACT_PATHS) {

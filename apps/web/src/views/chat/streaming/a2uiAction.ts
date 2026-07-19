@@ -12,12 +12,10 @@ import { decodeA2uiActionResponse } from "./a2uiParse";
 export type { A2uiActionEnvelope } from "./a2uiContract";
 
 export type A2uiActionTransport = (
-  envelope: A2uiActionEnvelope,
+  envelope: A2uiActionEnvelope
 ) => Promise<A2uiActionResponse>;
 
-type A2uiActionReply = (
-  envelope: A2uiActionEnvelope,
-) => A2uiActionResponse;
+type A2uiActionReply = (envelope: A2uiActionEnvelope) => A2uiActionResponse;
 
 const ACTION_REQUEST_ERROR_MESSAGE = "A2UI action request failed";
 const INVALID_RESPONSE_CODE = "a2ui_invalid_response";
@@ -38,7 +36,7 @@ export class A2uiTransportError extends Error {
     readonly code: string,
     readonly httpStatus: number | undefined,
     readonly forwarded: boolean,
-    readonly retryable: boolean,
+    readonly retryable: boolean
   ) {
     super(ACTION_REQUEST_ERROR_MESSAGE);
   }
@@ -56,7 +54,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseGatewayEnvelope(value: unknown): A2uiGatewayEnvelope {
   if (!isRecord(value) || !isRecord(value.error)) return {};
-  if (value.error.type !== "gateway_error" || typeof value.error.code !== "string") {
+  if (
+    value.error.type !== "gateway_error" ||
+    typeof value.error.code !== "string"
+  ) {
     return {};
   }
   return {
@@ -71,7 +72,7 @@ function parseGatewayEnvelope(value: unknown): A2uiGatewayEnvelope {
 }
 
 async function readJsonBody(
-  response: Response,
+  response: Response
 ): Promise<{ value?: unknown; tooLarge: boolean }> {
   const body = await response.text();
   const byteLength = new TextEncoder().encode(body).byteLength;
@@ -85,7 +86,7 @@ async function readJsonBody(
 
 function classifyHttpFailure(
   status: number,
-  body: unknown,
+  body: unknown
 ): A2uiTransportError {
   const envelope = parseGatewayEnvelope(body);
   const forwarded = envelope.forwarded ?? true;
@@ -108,7 +109,7 @@ function classifyHttpFailure(
 
 function invalidResponseError(
   status: number,
-  code: string = INVALID_RESPONSE_CODE,
+  code: string = INVALID_RESPONSE_CODE
 ): A2uiTransportError {
   return new A2uiTransportError("unknown", code, status, true, false);
 }
@@ -119,16 +120,18 @@ function unexpectedTransportError(): A2uiTransportError {
     TRANSPORT_ERROR_CODE,
     undefined,
     true,
-    false,
+    false
   );
 }
 
 export function buildA2uiActionId(): string {
-  return `a2ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return `a2ui-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
 function defaultMemoryA2uiReply(
-  envelope: A2uiActionEnvelope,
+  envelope: A2uiActionEnvelope
 ): A2uiActionResponse {
   const identity = {
     catalog_version: "v1.0" as const,
@@ -179,15 +182,15 @@ function defaultMemoryA2uiReply(
 
 export function createMemoryA2uiTransport(
   sink: A2uiActionEnvelope[],
-  reply: A2uiActionReply,
+  reply: A2uiActionReply
 ): A2uiActionTransport;
 /** Backwards-compatible overload for existing UI tests until their fixtures migrate. */
 export function createMemoryA2uiTransport(
-  sink: A2uiActionEnvelope[],
+  sink: A2uiActionEnvelope[]
 ): A2uiActionTransport;
 export function createMemoryA2uiTransport(
   sink: A2uiActionEnvelope[],
-  reply: A2uiActionReply = defaultMemoryA2uiReply,
+  reply: A2uiActionReply = defaultMemoryA2uiReply
 ): A2uiActionTransport {
   return async (envelope) => {
     sink.push(envelope);
@@ -219,13 +222,17 @@ export function createFetchA2uiTransport(opts: {
             satoken: token,
           },
           body: JSON.stringify(envelope),
-        },
+        }
       );
       const body = await readJsonBody(response);
       if (!response.ok) {
-        throw classifyHttpFailure(response.status, body.tooLarge ? undefined : body.value);
+        throw classifyHttpFailure(
+          response.status,
+          body.tooLarge ? undefined : body.value
+        );
       }
-      if (body.tooLarge) throw invalidResponseError(response.status, RESPONSE_TOO_LARGE_CODE);
+      if (body.tooLarge)
+        throw invalidResponseError(response.status, RESPONSE_TOO_LARGE_CODE);
       const decoded = decodeA2uiActionResponse(body.value);
       if (!decoded.ok) throw invalidResponseError(response.status);
       return decoded.value;
@@ -238,7 +245,7 @@ export function createFetchA2uiTransport(opts: {
 
 export function sendA2uiAction(
   envelope: A2uiActionEnvelope,
-  transport: A2uiActionTransport,
+  transport: A2uiActionTransport
 ): Promise<A2uiActionResponse> {
   return transport(envelope);
 }

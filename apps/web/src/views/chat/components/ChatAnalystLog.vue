@@ -1,6 +1,10 @@
 <template>
   <div class="chat-analyst-log" data-testid="chat-analyst-log">
-    <div v-if="!rowId" class="log-unavailable" data-testid="analyst-log-unavailable">
+    <div
+      v-if="!rowId"
+      class="log-unavailable"
+      data-testid="analyst-log-unavailable"
+    >
       {{ t("chat.log.unavailable") }}
     </div>
     <template v-else>
@@ -22,11 +26,7 @@
         </el-button>
       </div>
 
-      <div
-        v-if="errorKind"
-        class="log-error"
-        data-testid="analyst-log-error"
-      >
+      <div v-if="errorKind" class="log-error" data-testid="analyst-log-error">
         <span>{{
           errorKind === "fetch"
             ? t("chat.log.fetchError")
@@ -48,10 +48,7 @@
         {{ t("chat.log.loading") }}
       </div>
       <div v-else-if="logData != null && logData !== ''" class="log-content">
-        <div
-          v-if="typeof logData === 'string'"
-          class="log-text-content"
-        >
+        <div v-if="typeof logData === 'string'" class="log-text-content">
           <pre
             class="log-pre"
             v-html="formatLogContentWithColors(logData)"

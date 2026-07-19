@@ -19,7 +19,9 @@ export function useChatHistoryActions(opts: {
   });
   const renameFormRef = ref();
   const renameRules = {
-    title: [{ required: true, message: "Please enter a title", trigger: "blur" }],
+    title: [
+      { required: true, message: "Please enter a title", trigger: "blur" },
+    ],
   };
   const chatToRename = ref<Chat | null>(null);
 
@@ -69,7 +71,9 @@ export function useChatHistoryActions(opts: {
           // show a success message
           ElMessage.success(i18n.global.t("common.renamedSuccess"));
         } else {
-          ElMessage.error(response.message || i18n.global.t("common.renameFailedRetry"));
+          ElMessage.error(
+            response.message || i18n.global.t("common.renameFailedRetry")
+          );
         }
       }
     } catch (error) {
@@ -90,9 +94,9 @@ export function useChatHistoryActions(opts: {
       const response = await deleteHistory(formData);
       if (response.code === 200) {
         // the parent (owner of chatList) removes it from the list; the child does not mutate props.chatList directly.
-        const deletedChat = opts.chatList().find(
-          (c) => c.dialogue_id === chatToDelete.value!.dialogue_id
-        );
+        const deletedChat = opts
+          .chatList()
+          .find((c) => c.dialogue_id === chatToDelete.value!.dialogue_id);
         if (deletedChat) {
           // notify the parent that the chat was deleted
           opts.onChatDeleted(deletedChat);
@@ -106,7 +110,9 @@ export function useChatHistoryActions(opts: {
         // show a success message
         ElMessage.success(i18n.global.t("common.deletedSuccess"));
       } else {
-        ElMessage.error(response.message || i18n.global.t("common.deleteFailedRetry"));
+        ElMessage.error(
+          response.message || i18n.global.t("common.deleteFailedRetry")
+        );
       }
     } catch (error) {
       console.error("Delete failed:", error);
@@ -133,7 +139,9 @@ export function useChatHistoryActions(opts: {
             : i18n.global.t("favorites.removedSuccess")
         );
       } else {
-        ElMessage.error(response.message || i18n.global.t("common.opFailedRetry"));
+        ElMessage.error(
+          response.message || i18n.global.t("common.opFailedRetry")
+        );
       }
     } catch (error) {
       console.error("Favorite action failed:", error);

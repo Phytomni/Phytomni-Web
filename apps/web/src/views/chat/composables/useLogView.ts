@@ -50,8 +50,13 @@ export function useLogView(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
   scrollToBottom: () => void;
 }) {
-  const { isSending, currentChat, currentChatId, getChatState, scrollToBottom } =
-    opts;
+  const {
+    isSending,
+    currentChat,
+    currentChatId,
+    getChatState,
+    scrollToBottom,
+  } = opts;
 
   const fetchLogIfNeeded = async (
     rowId: string,
@@ -59,10 +64,7 @@ export function useLogView(opts: {
     force = false
   ) => {
     // Use `in` so a successful empty payload ("") still counts as cached.
-    if (
-      !force &&
-      (rowId in chatState.logData || chatState.loadingLog[rowId])
-    ) {
+    if (!force && (rowId in chatState.logData || chatState.loadingLog[rowId])) {
       return;
     }
     chatState.loadingLog[rowId] = true;
@@ -71,9 +73,7 @@ export function useLogView(opts: {
       // code===200 is success even when TaskLog is empty/falsy (show no-data).
       if (res.code === 200) {
         chatState.logData[rowId] =
-          res.data == null || res.data === ""
-            ? ""
-            : parseLogPayload(res.data);
+          res.data == null || res.data === "" ? "" : parseLogPayload(res.data);
         delete chatState.logErrorKinds[rowId];
         nextTick(() => {
           scrollToBottom();

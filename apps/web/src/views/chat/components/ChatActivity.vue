@@ -102,9 +102,7 @@ const regionId = computed(() =>
   props.stateKey ? activityRegionDomId(props.stateKey) : ""
 );
 
-const displayLabel = computed(
-  () => props.label || t("chat.activity.label")
-);
+const displayLabel = computed(() => props.label || t("chat.activity.label"));
 
 const statusLabel = computed(() =>
   props.streaming

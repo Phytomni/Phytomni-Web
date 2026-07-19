@@ -18,7 +18,9 @@ export const parseMessageWithFiles = (messageContent: string) => {
   // extract file info
   const attachedFiles: UploadFile[] = [];
   fileMatches.forEach((match) => {
-    const fileInfo = match.match(/\[(?:Attachment|附件): ([^(]+) \(([^)]+)\)\]/);
+    const fileInfo = match.match(
+      /\[(?:Attachment|附件): ([^(]+) \(([^)]+)\)\]/
+    );
     if (fileInfo) {
       const fileName = fileInfo[1].trim();
       const fileSizeStr = fileInfo[2].trim();

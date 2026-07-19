@@ -58,7 +58,8 @@ export function useSidebarNavigation(opts: {
         if (hasPermission("System monitor")) handleSystemMonitor();
         break;
       case "permissionManagement":
-        if (hasPermission("Role permission assignment")) handlePermissionManagement();
+        if (hasPermission("Role permission assignment"))
+          handlePermissionManagement();
         break;
       case "globalConfig":
         if (hasPermission("Global config")) handleGlobalConfig();

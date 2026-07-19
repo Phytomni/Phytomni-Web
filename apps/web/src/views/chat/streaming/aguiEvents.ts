@@ -19,7 +19,8 @@ export function parseAGUIFrame(frame: string): AGUIEvent | null {
     // SSE joins consecutive data: lines with "\n"; strip only the single
     // optional leading space after the colon, never inner whitespace (it may
     // be significant JSON string content). Mirrors the Go gateway parser.
-    else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+    else if (line.startsWith("data:"))
+      dataLines.push(line.slice(5).replace(/^ /, ""));
   }
   const dataLine = dataLines.join("\n").trim();
   if (!dataLine || dataLine === "[DONE]") return null;
@@ -39,7 +40,10 @@ export function parseAGUIFrame(frame: string): AGUIEvent | null {
 // separators, returning complete frames plus the trailing partial (rest) to
 // be prepended to the next chunk. The frame slices are intentionally not
 // normalized so parseAGUIFrame receives the provider's original line endings.
-export function splitSSEFrames(buffer: string): { frames: string[]; rest: string } {
+export function splitSSEFrames(buffer: string): {
+  frames: string[];
+  rest: string;
+} {
   const frames: string[] = [];
   let frameStart = 0;
   let searchFrom = 0;
@@ -49,8 +53,7 @@ export function splitSSEFrames(buffer: string): { frames: string[]; rest: string
     const crlfIndex = buffer.indexOf("\r\n\r\n", searchFrom);
     if (lfIndex < 0 && crlfIndex < 0) break;
 
-    const useCRLF =
-      crlfIndex >= 0 && (lfIndex < 0 || crlfIndex < lfIndex);
+    const useCRLF = crlfIndex >= 0 && (lfIndex < 0 || crlfIndex < lfIndex);
     const separatorIndex = useCRLF ? crlfIndex : lfIndex;
     const separatorLength = useCRLF ? 4 : 2;
     const frame = buffer.slice(frameStart, separatorIndex);

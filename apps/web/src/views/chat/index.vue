@@ -168,7 +168,9 @@
                           ).activityExpandedByMessage[key] = open)
                       "
                       @a2ui-action="(event) => submitAction(message, event)"
-                      @a2ui-retry="(surfaceId) => retryAction(message, surfaceId)"
+                      @a2ui-retry="
+                        (surfaceId) => retryAction(message, surfaceId)
+                      "
                     />
 
                     <template #activity>

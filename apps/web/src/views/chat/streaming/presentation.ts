@@ -8,7 +8,7 @@ export function isActivityBlock(block: ContentBlock): boolean {
 
 export function presentationBlockKey(
   block: ContentBlock,
-  index: number,
+  index: number
 ): string {
   if (block.type === "agent-surface" && block.a2ui?.surface.surface_id) {
     return "surface:" + block.a2ui.surface.surface_id;
@@ -36,7 +36,9 @@ export interface ActivityPresentationItem {
 
 export type PresentationItem = BlockPresentationItem | ActivityPresentationItem;
 
-export function buildPresentationItems(blocks: ContentBlock[]): PresentationItem[] {
+export function buildPresentationItems(
+  blocks: ContentBlock[]
+): PresentationItem[] {
   const items: PresentationItem[] = [];
   let activityStart: number | null = null;
   let activityBlocks: ContentBlock[] = [];

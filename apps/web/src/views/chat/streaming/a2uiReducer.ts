@@ -40,10 +40,10 @@ export type RetryA2uiResult =
 export function markA2uiRuntimeMismatch(
   blocks: ContentBlock[],
   surfaceKey: string,
-  code = "runtime_identity_mismatch",
+  code = "runtime_identity_mismatch"
 ): ContentBlock[] {
   const targetIndex = blocks.findIndex(
-    (block) => block.a2ui?.surface.surface_id === surfaceKey,
+    (block) => block.a2ui?.surface.surface_id === surfaceKey
   );
   if (targetIndex < 0) return blocks;
 
@@ -88,7 +88,7 @@ export function markA2uiRuntimeMismatch(
  * persisted data; any stale serialized runtime field is removed instead.
  */
 export function lockUnverifiedHistoryA2ui(
-  messages: ChatMessage[],
+  messages: ChatMessage[]
 ): ChatMessage[] {
   let changed = false;
   const nextMessages = messages.map((message) => {
@@ -134,7 +134,7 @@ export function lockUnverifiedHistoryA2ui(
 
     const hasSerializedRuntime = Object.prototype.hasOwnProperty.call(
       message,
-      "a2uiRuntime",
+      "a2uiRuntime"
     );
     if (!blocksChanged && !hasSerializedRuntime) return message;
 
@@ -153,10 +153,10 @@ export function beginA2uiAction(
   surfaceKey: string,
   runId: string,
   intent: A2uiActionIntent,
-  actionId: string,
+  actionId: string
 ): BeginA2uiResult {
   const targetIndex = blocks.findIndex(
-    (block) => block.a2ui?.surface.surface_id === surfaceKey,
+    (block) => block.a2ui?.surface.surface_id === surfaceKey
   );
   if (targetIndex < 0) {
     return { ok: false, reason: "surface_missing", blocks };
@@ -350,7 +350,7 @@ export function beginA2uiRetry(
 export function reduceA2uiSucceeded(
   blocks: ContentBlock[],
   envelope: A2uiActionEnvelope,
-  response: Extract<A2uiActionResponse, { status: "succeeded" }>,
+  response: Extract<A2uiActionResponse, { status: "succeeded" }>
 ): ContentBlock[] {
   const targetIndex = blocks.findIndex((block) => {
     const state = block.a2ui?.state;
@@ -375,7 +375,7 @@ export function reduceA2uiSucceeded(
     submitting.envelope,
     envelope,
     response.run_id,
-    terminal,
+    terminal
   );
   if (protocolCode) {
     const nextBlocks = blocks.slice();
@@ -448,7 +448,7 @@ export function reduceA2uiSucceeded(
 export function reduceA2uiInputRequired(
   blocks: ContentBlock[],
   envelope: A2uiActionEnvelope,
-  response: Extract<A2uiActionResponse, { status: "input_required" }>,
+  response: Extract<A2uiActionResponse, { status: "input_required" }>
 ): ContentBlock[] {
   const targetIndex = findInputRequiredTarget(blocks, envelope);
   if (targetIndex < 0) return blocks;
@@ -469,7 +469,7 @@ export function reduceA2uiInputRequired(
       targetIndex,
       runtime,
       envelope.action_id,
-      "target_missing",
+      "target_missing"
     );
   }
 
@@ -477,7 +477,7 @@ export function reduceA2uiInputRequired(
     runtime.surface,
     state.envelope,
     envelope,
-    response.run_id,
+    response.run_id
   );
   if (protocolCode) {
     return markInputRequiredProtocolError(
@@ -485,7 +485,7 @@ export function reduceA2uiInputRequired(
       targetIndex,
       runtime,
       envelope.action_id,
-      protocolCode,
+      protocolCode
     );
   }
 
@@ -495,7 +495,7 @@ export function reduceA2uiInputRequired(
       targetIndex,
       runtime,
       envelope.action_id,
-      "round_exhausted",
+      "round_exhausted"
     );
   }
 
@@ -506,7 +506,7 @@ export function reduceA2uiInputRequired(
   const openSurfaceCount = blocks.reduce(
     (count, block) =>
       count + (isOpenA2uiSurfaceState(block.a2ui?.state.status) ? 1 : 0),
-    0,
+    0
   );
   if (openSurfaceCount > 1) {
     return markInputRequiredProtocolError(
@@ -514,7 +514,7 @@ export function reduceA2uiInputRequired(
       targetIndex,
       runtime,
       envelope.action_id,
-      "multiple_open_surfaces",
+      "multiple_open_surfaces"
     );
   }
 
@@ -525,7 +525,7 @@ export function reduceA2uiInputRequired(
       targetIndex,
       runtime,
       envelope.action_id,
-      "surface_invalid",
+      "surface_invalid"
     );
   }
 
@@ -536,7 +536,7 @@ export function reduceA2uiInputRequired(
       targetIndex,
       runtime,
       envelope.action_id,
-      "surface_reused",
+      "surface_reused"
     );
   }
 
@@ -546,7 +546,7 @@ export function reduceA2uiInputRequired(
       targetIndex,
       runtime,
       envelope.action_id,
-      "surface_duplicate",
+      "surface_duplicate"
     );
   }
 
@@ -577,7 +577,7 @@ export function reduceA2uiInputRequired(
 
 function findInputRequiredTarget(
   blocks: ContentBlock[],
-  envelope: A2uiActionEnvelope,
+  envelope: A2uiActionEnvelope
 ): number {
   const actionIndex = blocks.findIndex((block) => {
     const state = block.a2ui?.state;
@@ -596,7 +596,8 @@ function findInputRequiredTarget(
     const runtime = block.a2ui;
     return (
       runtime?.surface.surface_id === envelope.surface_id &&
-      (runtime.state.status === "submitting" || runtime.state.status === "ready")
+      (runtime.state.status === "submitting" ||
+        runtime.state.status === "ready")
     );
   });
 }
@@ -605,7 +606,7 @@ function getA2uiInputRequiredProtocolCode(
   openSurface: { surface_id: string; widget: string },
   submitting: A2uiActionEnvelope,
   envelope: A2uiActionEnvelope,
-  responseRunId: string,
+  responseRunId: string
 ): string | undefined {
   if (submitting.action_id !== envelope.action_id) return "action_mismatch";
   if (submitting.run_id !== envelope.run_id) return "run_id_mismatch";
@@ -625,10 +626,11 @@ function getA2uiInputRequiredProtocolCode(
   return undefined;
 }
 
-function hasSurfaceIdentity(blocks: ContentBlock[], surfaceKey: string): boolean {
-  return blocks.some(
-    (block) => block.a2ui?.surface.surface_id === surfaceKey,
-  );
+function hasSurfaceIdentity(
+  blocks: ContentBlock[],
+  surfaceKey: string
+): boolean {
+  return blocks.some((block) => block.a2ui?.surface.surface_id === surfaceKey);
 }
 
 function isOpenA2uiSurfaceState(status: string | undefined): boolean {
@@ -647,7 +649,7 @@ function markInputRequiredProtocolError(
     state: { round: 1 | 2 };
   },
   actionId: string,
-  code: string,
+  code: string
 ): ContentBlock[] {
   const target = blocks[targetIndex];
   const nextBlocks = blocks.slice();
@@ -670,7 +672,7 @@ function getA2uiResolution(
   terminal: Extract<
     A2uiActionResponse,
     { status: "succeeded" }
-  >["result"]["a2ui"],
+  >["result"]["a2ui"]
 ): "submitted" | "cancelled" | "rejected" {
   if (terminal.widget === "confirm") {
     return terminal.props.accepted ? "submitted" : "rejected";
@@ -686,10 +688,9 @@ function getA2uiTerminalProtocolCode(
   submitting: A2uiActionEnvelope,
   envelope: A2uiActionEnvelope,
   responseRunId: string,
-  terminal: Extract<
-    A2uiActionResponse,
-    { status: "succeeded" }
-  >["result"]["a2ui"] | undefined,
+  terminal:
+    | Extract<A2uiActionResponse, { status: "succeeded" }>["result"]["a2ui"]
+    | undefined
 ): string | undefined {
   if (
     submitting.action_id !== envelope.action_id ||
@@ -697,7 +698,10 @@ function getA2uiTerminalProtocolCode(
   ) {
     return "action_mismatch";
   }
-  if (responseRunId !== envelope.run_id || submitting.run_id !== envelope.run_id) {
+  if (
+    responseRunId !== envelope.run_id ||
+    submitting.run_id !== envelope.run_id
+  ) {
     return "run_id_mismatch";
   }
   if (

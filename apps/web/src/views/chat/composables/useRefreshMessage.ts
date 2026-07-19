@@ -128,7 +128,9 @@ export function useRefreshMessage(opts: {
         if (response.data.final_answer) {
           newAssistantMessage = {
             role: "assistant",
-            content: response.data.final_answer || "Sorry, I cannot answer this question.",
+            content:
+              response.data.final_answer ||
+              "Sorry, I cannot answer this question.",
             steps: response.data.steps || [],
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
@@ -208,7 +210,8 @@ export function useRefreshMessage(opts: {
                     ) {
                       newAssistantMessage.content = fileContent;
                     } else if (newAssistantMessage) {
-                      newAssistantMessage.content = "File content is empty or failed to load";
+                      newAssistantMessage.content =
+                        "File content is empty or failed to load";
                     }
                     nextTick(() => {
                       timestamp.value = Date.now();
@@ -218,9 +221,13 @@ export function useRefreshMessage(opts: {
                     });
                   })
                   .catch((error) => {
-                    console.error("Failed to read DeepGenomeAgent file:", error);
+                    console.error(
+                      "Failed to read DeepGenomeAgent file:",
+                      error
+                    );
                     if (newAssistantMessage) {
-                      newAssistantMessage.content = "Failed to load file, please try again later";
+                      newAssistantMessage.content =
+                        "Failed to load file, please try again later";
                     }
                     nextTick(() => {
                       timestamp.value = Date.now();

@@ -20,7 +20,10 @@ export function initReducerState(): ReducerState {
 // reduceAGUIEvent folds one event into a NEW state (pure; never mutates input).
 // UI copy is the Web app's job: tool/step blocks carry structured identifiers
 // (toolName/label), not Bot-authored display strings.
-export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerState {
+export function reduceAGUIEvent(
+  state: ReducerState,
+  ev: AGUIEvent
+): ReducerState {
   const blocks = state.blocks.map((b) => ({ ...b }));
   const next: ReducerState = { ...state, blocks };
   switch (ev.type) {
@@ -74,7 +77,7 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
           const surface = parsed.value;
           if (
             blocks.some(
-              (block) => block.a2ui?.surface.surface_id === surface.surface_id,
+              (block) => block.a2ui?.surface.surface_id === surface.surface_id
             )
           ) {
             console.warn("[phyto.a2ui] skipped frame: duplicate_surface_id");

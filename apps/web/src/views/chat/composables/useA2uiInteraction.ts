@@ -57,7 +57,7 @@ function ownsSubmittingAction(
 
 function optionalMessageIdentity(
   message: ChatMessage,
-  keys: readonly string[],
+  keys: readonly string[]
 ): string | undefined {
   const record = message as unknown as Record<string, unknown>;
   for (const key of keys) {
@@ -75,7 +75,7 @@ function optionalMessageIdentity(
  */
 function runtimeOwnsMessage(
   message: ChatMessage,
-  runtime: NonNullable<ChatMessage["a2uiRuntime"]>,
+  runtime: NonNullable<ChatMessage["a2uiRuntime"]>
 ): boolean {
   if (
     !SAFE_RUNTIME_ID_PATTERN.test(runtime.dialogueId) ||
@@ -93,7 +93,9 @@ function runtimeOwnsMessage(
     "dialogue_id",
     "dialogueId",
   ]);
-  return declaredDialogue === undefined || declaredDialogue === runtime.dialogueId;
+  return (
+    declaredDialogue === undefined || declaredDialogue === runtime.dialogueId
+  );
 }
 
 async function dispatchTransport(
@@ -187,7 +189,10 @@ export function useA2uiInteraction(options: A2uiInteractionOptions = {}): {
     const transport = runtime?.transport;
 
     if (runtime && !runtimeOwnsMessage(message, runtime)) {
-      message.blocks = markA2uiRuntimeMismatch(message.blocks ?? [], event.surfaceId);
+      message.blocks = markA2uiRuntimeMismatch(
+        message.blocks ?? [],
+        event.surfaceId
+      );
       return;
     }
 

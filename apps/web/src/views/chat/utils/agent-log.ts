@@ -1,7 +1,10 @@
 import { escapeHtml } from "@/utils/sanitize-markup";
 
 // Process image paths in a Markdown file
-export const processImagePaths = (content: string, filePath: string): string => {
+export const processImagePaths = (
+  content: string,
+  filePath: string
+): string => {
   // get the file's directory
   const fileDir = filePath.substring(0, filePath.lastIndexOf("/"));
 
@@ -43,7 +46,11 @@ export const readServerFile = async (filePath: string): Promise<string> => {
 
       return content;
     } else {
-      console.error("Failed to read file:", response.status, response.statusText);
+      console.error(
+        "Failed to read file:",
+        response.status,
+        response.statusText
+      );
       return "";
     }
   } catch (error) {

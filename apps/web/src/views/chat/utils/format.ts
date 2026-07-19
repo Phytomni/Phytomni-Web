@@ -9,7 +9,10 @@ export const isValidJSON = (str: string): boolean => {
 };
 
 // Convert data into Element Plus Table format
-export const convertToTableData = (data: { headers: string[]; rows: any[][] }) => {
+export const convertToTableData = (data: {
+  headers: string[];
+  rows: any[][];
+}) => {
   return data.rows.map((row) => {
     const obj: Record<string, any> = {};
     data.headers.forEach((header, index) => {

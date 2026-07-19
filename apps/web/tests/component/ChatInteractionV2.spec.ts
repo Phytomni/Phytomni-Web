@@ -207,8 +207,8 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     expect(CHAT_SOURCE).toContain(
       '@a2ui-action="(event) => submitAction(message, event)"'
     );
-    expect(CHAT_SOURCE).toContain(
-      '@a2ui-retry="(surfaceId) => retryAction(message, surfaceId)"'
+    expect(CHAT_SOURCE).toMatch(
+      /@a2ui-retry="\s*\(surfaceId\) => retryAction\(message, surfaceId\)\s*"/
     );
     expect(CONTENT_SOURCE).toContain(
       '@a2ui-action="(event) => emit(\'a2ui-action\', event)"'

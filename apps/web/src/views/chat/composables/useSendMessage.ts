@@ -1,6 +1,11 @@
 import { nextTick } from "vue";
 import type { Ref } from "vue";
-import type { ChatComposerHandle, ChatMessage, Chat, DialogueReconciliationResult } from "../types";
+import type {
+  ChatComposerHandle,
+  ChatMessage,
+  Chat,
+  DialogueReconciliationResult,
+} from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
 import i18n from "@/locales";
 import {
@@ -10,16 +15,9 @@ import {
   convertToTableData,
 } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
-import {
-  writePendingChat,
-  isLocalStorageChat,
-} from "@/utils/pending-chat";
+import { writePendingChat, isLocalStorageChat } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
-import {
-  getQueryAbortable,
-  getAnswerCheck,
-  type QueryData,
-} from "@/api/chat";
+import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
 import { createTransferTracker } from "@/utils/transfer-progress";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
@@ -116,7 +114,7 @@ function attachBlockingLegacyFields(
 function attachBlockingA2ui(
   message: ChatMessage,
   data: QueryData,
-  projection: ReturnType<typeof parseBotProjection> | undefined,
+  projection: ReturnType<typeof parseBotProjection> | undefined
 ): void {
   if (
     !projection ||
@@ -176,7 +174,10 @@ export function useSendMessage(opts: {
   getHistoryQuestionData: (
     sendingDialogueId?: string,
     options?: { blockingDialogueId?: string }
-  ) => Promise<DialogueReconciliationResult | undefined> | DialogueReconciliationResult | undefined;
+  ) =>
+    | Promise<DialogueReconciliationResult | undefined>
+    | DialogueReconciliationResult
+    | undefined;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
   selectChat: (dialogueId: string) => Promise<void> | void;
@@ -339,8 +340,8 @@ export function useSendMessage(opts: {
         capturedMode === "expert"
           ? ""
           : capturedMatches.length > 0
-            ? capturedMatches.join(",")
-            : ""
+          ? capturedMatches.join(",")
+          : ""
       );
       queryData.append("mode", capturedMode);
       if (capturedHistory) {
@@ -464,7 +465,9 @@ export function useSendMessage(opts: {
         if (response.data.final_answer) {
           assistantMessage = {
             role: "assistant",
-            content: response.data.final_answer || "Sorry, I cannot answer this question.",
+            content:
+              response.data.final_answer ||
+              "Sorry, I cannot answer this question.",
             steps: response.data.steps || [],
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
@@ -546,7 +549,8 @@ export function useSendMessage(opts: {
                     if (fileContent && fileContent.trim() && assistantMessage) {
                       assistantMessage.content = fileContent;
                     } else if (assistantMessage) {
-                      assistantMessage.content = "File content is empty or failed to load";
+                      assistantMessage.content =
+                        "File content is empty or failed to load";
                     }
                     // force a view update (foreground only — do not bump shared
                     // timestamp / scroll while the user is on another dialogue)
@@ -558,9 +562,13 @@ export function useSendMessage(opts: {
                     });
                   })
                   .catch((error) => {
-                    console.error("Failed to read DeepGenomeAgent file:", error);
+                    console.error(
+                      "Failed to read DeepGenomeAgent file:",
+                      error
+                    );
                     if (assistantMessage) {
-                      assistantMessage.content = "Failed to load file, please try again later";
+                      assistantMessage.content =
+                        "Failed to load file, please try again later";
                     }
                     nextTick(() => {
                       if (isForeground(sendingDialogueId)) {
@@ -672,7 +680,9 @@ export function useSendMessage(opts: {
               // handle other unknown tool types with the default format
               assistantMessage = {
                 role: "assistant",
-                content: response.data?.answer || "Sorry, I cannot answer this question.",
+                content:
+                  response.data?.answer ||
+                  "Sorry, I cannot answer this question.",
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 download_path: response.data?.download_path || "",
@@ -739,10 +749,13 @@ export function useSendMessage(opts: {
           sendingMessages.push(assistantMessage);
         } else {
           // if assistantMessage was not created, create a default message
-          console.warn("assistantMessage was not created; using a default message");
+          console.warn(
+            "assistantMessage was not created; using a default message"
+          );
           assistantMessage = {
             role: "assistant",
-            content: response.data?.answer || "Sorry, I cannot answer this question.",
+            content:
+              response.data?.answer || "Sorry, I cannot answer this question.",
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
             download_path: response.data?.download_path || "",
@@ -811,24 +824,25 @@ export function useSendMessage(opts: {
             {
               confirmButtonText: i18n.global.t("request.confirmButtonText"),
               type: "warning",
-            callback: () => {
-              const UserStore = userStore();
-              UserStore.FedLogOut().finally(() => {
-                // clear all caches and cookies
-                localStorage.clear();
-                sessionStorage.clear();
-                document.cookie.split(";").forEach(function (c) {
-                  document.cookie = c
-                    .replace(/^ +/, "")
-                    .replace(
-                      /=.*/,
-                      "=;expires=" + new Date().toUTCString() + ";path=/"
-                    );
+              callback: () => {
+                const UserStore = userStore();
+                UserStore.FedLogOut().finally(() => {
+                  // clear all caches and cookies
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  document.cookie.split(";").forEach(function (c) {
+                    document.cookie = c
+                      .replace(/^ +/, "")
+                      .replace(
+                        /=.*/,
+                        "=;expires=" + new Date().toUTCString() + ";path=/"
+                      );
+                  });
+                  location.href = "/login";
                 });
-                location.href = "/login";
-              });
-            },
-          });
+              },
+            }
+          );
         }
         return;
       }
@@ -912,16 +926,13 @@ export function useSendMessage(opts: {
       const ownsLifecycle = chatState.activeRequestId === requestKey;
       if (ownsLifecycle) {
         const historyOpts =
-          blockingDialogueId !== undefined
-            ? { blockingDialogueId }
-            : undefined;
+          blockingDialogueId !== undefined ? { blockingDialogueId } : undefined;
         await getHistoryQuestionData(sendingDialogueId, historyOpts);
 
         if (!isNewChat) {
           // for an existing chat, update the sending conversation's title (if it changed)
           if (sendingMessages.length > 0) {
-            const userMessage =
-              sendingMessages[sendingMessages.length - 2]; // the second-to-last is the user message
+            const userMessage = sendingMessages[sendingMessages.length - 2]; // the second-to-last is the user message
             if (userMessage && userMessage.role === "user") {
               // find the sending conversation in the list and update its title
               const currentChatIndex = chatList.value.findIndex(

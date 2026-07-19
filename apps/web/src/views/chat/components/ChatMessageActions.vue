@@ -8,11 +8,7 @@
     data-testid="chat-message-actions"
     role="toolbar"
   >
-    <el-tooltip
-      effect="dark"
-      :content="copyLabel"
-      placement="top-start"
-    >
+    <el-tooltip effect="dark" :content="copyLabel" placement="top-start">
       <button
         type="button"
         class="message-footer-item"
@@ -215,8 +211,7 @@ const dislikeLabel = computed(() =>
 );
 
 const hasTwinDownloads = computed(
-  () =>
-    props.directDownloads.length > 0 && props.generatedFormats.length > 0
+  () => props.directDownloads.length > 0 && props.generatedFormats.length > 0
 );
 
 const directDownloadsLabel = computed(() => {

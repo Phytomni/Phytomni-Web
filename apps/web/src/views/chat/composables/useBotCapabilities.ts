@@ -41,19 +41,18 @@ const TOOL_TO_SLUG: Record<CanonicalAgentTool, string> = {
   GeneNetworkAgent: "network",
 };
 
-const EXECUTION_BY_TOOL: Record<CanonicalAgentTool, BotCapabilityExecution> =
-  {
-    ChatAgent: "chat",
-    KnowledgeAgent: "chat",
-    DataAgent: "blocking",
-    ReviewAgent: "chat",
-    BriefGeneAgent: "agent_run",
-    AnalystAgent: "agent_run",
-    DeepGenomeAgent: "agent_run",
-    InSilicoResearchAgent: "agent_run",
-    DigitalDesignAgent: "agent_run",
-    GeneNetworkAgent: "agent_run",
-  };
+const EXECUTION_BY_TOOL: Record<CanonicalAgentTool, BotCapabilityExecution> = {
+  ChatAgent: "chat",
+  KnowledgeAgent: "chat",
+  DataAgent: "blocking",
+  ReviewAgent: "chat",
+  BriefGeneAgent: "agent_run",
+  AnalystAgent: "agent_run",
+  DeepGenomeAgent: "agent_run",
+  InSilicoResearchAgent: "agent_run",
+  DigitalDesignAgent: "agent_run",
+  GeneNetworkAgent: "agent_run",
+};
 
 type CapabilityRecord = Record<string, unknown>;
 type CacheKeyInput = string | { cacheKey?: string } | undefined;
@@ -64,7 +63,11 @@ function cacheKeyFor(input: CacheKeyInput): string {
   if (typeof input === "string" && input.trim() !== "") {
     return input.trim().slice(0, 128);
   }
-  if (input && typeof input === "object" && typeof input.cacheKey === "string") {
+  if (
+    input &&
+    typeof input === "object" &&
+    typeof input.cacheKey === "string"
+  ) {
     const value = input.cacheKey.trim();
     if (value !== "") return value.slice(0, 128);
   }

@@ -151,7 +151,11 @@ export type A2uiActionIntent =
       payload: { selected: string | string[] } | { cancelled: true };
     };
 
-export type A2uiResolution = "submitted" | "cancelled" | "rejected" | "advanced";
+export type A2uiResolution =
+  | "submitted"
+  | "cancelled"
+  | "rejected"
+  | "advanced";
 
 export type A2uiSurfaceState =
   | { status: "ready"; round: A2uiRound; lastError?: "not_sent" }

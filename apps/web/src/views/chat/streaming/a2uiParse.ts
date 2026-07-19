@@ -1,6 +1,4 @@
-import {
-  A2UI_LIMITS,
-} from "./a2uiContract";
+import { A2UI_LIMITS } from "./a2uiContract";
 import type {
   A2uiActionResponse,
   A2uiFormField,
@@ -66,7 +64,11 @@ function hasOwn(value: A2uiObject, key: string): boolean {
 }
 
 function readIdentifier(value: unknown): A2uiDecodeResult<string> {
-  if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value !== value.trim()
+  ) {
     return fail("identifier_invalid");
   }
   if (value.length > A2UI_LIMITS.identifierChars) return fail("limit_exceeded");
@@ -100,7 +102,11 @@ function readScalar(value: unknown): A2uiDecodeResult<A2uiScalar> {
 }
 
 function readCatalog(value: unknown): A2uiDecodeResult<string> {
-  if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value !== value.trim()
+  ) {
     return fail("catalog_unsupported");
   }
   if (value.length > A2UI_LIMITS.identifierChars) return fail("limit_exceeded");
@@ -115,17 +121,17 @@ function readWidget(value: unknown): A2uiDecodeResult<A2uiWidgetKind> {
   return ok(value as A2uiWidgetKind);
 }
 
-function readIdentity(
-  value: A2uiObject
-): A2uiDecodeResult<{
+function readIdentity(value: A2uiObject): A2uiDecodeResult<{
   catalog_version: string;
   surface_id: string;
   widget: A2uiWidgetKind;
 }> {
-  const catalog = readCatalog(hasOwn(value, "catalog_version") ? value.catalog_version : undefined);
+  const catalog = readCatalog(
+    hasOwn(value, "catalog_version") ? value.catalog_version : undefined
+  );
   if (!catalog.ok) return catalog;
   const surfaceKey = readIdentifier(
-    hasOwn(value, "surface_id") ? value.surface_id : undefined,
+    hasOwn(value, "surface_id") ? value.surface_id : undefined
   );
   if (!surfaceKey.ok) return surfaceKey;
   const widget = readWidget(hasOwn(value, "widget") ? value.widget : undefined);
@@ -178,7 +184,8 @@ function readFormField(value: unknown): A2uiDecodeResult<A2uiFormField> {
   let options: A2uiScalar[] | undefined;
   if (hasOwn(value, "options")) {
     if (!Array.isArray(value.options)) return fail("props_invalid");
-    if (value.options.length > A2UI_LIMITS.choiceItems) return fail("limit_exceeded");
+    if (value.options.length > A2UI_LIMITS.choiceItems)
+      return fail("limit_exceeded");
     options = [];
     for (const option of value.options) {
       const scalar = readScalar(option);
@@ -218,18 +225,24 @@ interface A2uiChoiceOption {
   label: string;
 }
 
-function readChoiceOptions(value: unknown): A2uiDecodeResult<A2uiChoiceOption[]> {
+function readChoiceOptions(
+  value: unknown
+): A2uiDecodeResult<A2uiChoiceOption[]> {
   if (!Array.isArray(value)) return fail("props_invalid");
   if (value.length > A2UI_LIMITS.choiceItems) return fail("limit_exceeded");
   const options: A2uiChoiceOption[] = [];
   const ids = new Set<string>();
   for (const optionValue of value) {
     if (!isOrdinaryObject(optionValue)) return fail("props_invalid");
-    const id = readIdentifier(hasOwn(optionValue, "id") ? optionValue.id : undefined);
+    const id = readIdentifier(
+      hasOwn(optionValue, "id") ? optionValue.id : undefined
+    );
     if (!id.ok) return id;
     if (ids.has(id.value)) return fail("duplicate_field");
     ids.add(id.value);
-    const label = readLabel(hasOwn(optionValue, "label") ? optionValue.label : undefined);
+    const label = readLabel(
+      hasOwn(optionValue, "label") ? optionValue.label : undefined
+    );
     if (!label.ok) return label;
     options.push({ id: id.value, label: label.value });
   }
@@ -264,7 +277,9 @@ function decodeOpenProps(
   const title = readLabel(hasOwn(props, "title") ? props.title : undefined);
   if (!title.ok) return title;
   if (widget === "form") {
-    const fields = readFormFields(hasOwn(props, "fields") ? props.fields : undefined);
+    const fields = readFormFields(
+      hasOwn(props, "fields") ? props.fields : undefined
+    );
     if (!fields.ok) return fields;
     return ok({ title: title.value, fields: fields.value });
   }
@@ -280,7 +295,9 @@ function decodeOpenProps(
   return ok({ title: title.value, options: options.value, multiple });
 }
 
-function decodeOpenSurfaceInternal(value: unknown): A2uiDecodeResult<A2uiOpenSurface> {
+function decodeOpenSurfaceInternal(
+  value: unknown
+): A2uiDecodeResult<A2uiOpenSurface> {
   if (!isOrdinaryObject(value)) return fail("invalid_object");
   const identity = readIdentity(value);
   if (!identity.ok) return identity;
@@ -295,7 +312,9 @@ function decodeOpenSurfaceInternal(value: unknown): A2uiDecodeResult<A2uiOpenSur
   } as A2uiOpenSurface);
 }
 
-function readSubmittedFields(value: unknown): A2uiDecodeResult<Record<string, A2uiScalar>> {
+function readSubmittedFields(
+  value: unknown
+): A2uiDecodeResult<Record<string, A2uiScalar>> {
   if (!isOrdinaryObject(value)) return fail("props_invalid");
   const keys = Object.keys(value);
   if (keys.length > A2UI_LIMITS.formFields) return fail("limit_exceeded");
@@ -333,8 +352,12 @@ function decodeTerminalProps(
       status: "submitted",
       ...(title.value !== undefined ? { title: title.value } : {}),
       ...(body.value !== undefined ? { body: body.value } : {}),
-      ...(confirmLabel.value !== undefined ? { confirm_label: confirmLabel.value } : {}),
-      ...(cancelLabel.value !== undefined ? { cancel_label: cancelLabel.value } : {}),
+      ...(confirmLabel.value !== undefined
+        ? { confirm_label: confirmLabel.value }
+        : {}),
+      ...(cancelLabel.value !== undefined
+        ? { cancel_label: cancelLabel.value }
+        : {}),
       accepted: props.accepted,
     });
   }
@@ -379,7 +402,8 @@ function decodeTerminalProps(
       if (!value.ok) return value;
       selected = value.value;
     } else if (Array.isArray(props.selected)) {
-      if (props.selected.length > A2UI_LIMITS.choiceItems) return fail("limit_exceeded");
+      if (props.selected.length > A2UI_LIMITS.choiceItems)
+        return fail("limit_exceeded");
       const selectedValues: string[] = [];
       const selectedSet = new Set<string>();
       for (const selectedValue of props.selected) {
@@ -421,13 +445,17 @@ function decodeTerminalSurfaceInternal(
   } as A2uiTerminalSurface);
 }
 
-function decodeFormatted(value: unknown): A2uiDecodeResult<{ answer?: string } | undefined> {
+function decodeFormatted(
+  value: unknown
+): A2uiDecodeResult<{ answer?: string } | undefined> {
   if (value === undefined) return ok(undefined);
   if (!isOrdinaryObject(value)) return fail("response_invalid");
   if (!hasOwn(value, "answer")) return ok({});
   const answer = readText(value.answer, false);
   if (!answer.ok) return answer;
-  return ok({ ...(answer.value !== undefined ? { answer: answer.value } : {}) });
+  return ok({
+    ...(answer.value !== undefined ? { answer: answer.value } : {}),
+  });
 }
 
 export function isA2uiCatalogSupported(version: string): boolean {
@@ -437,7 +465,9 @@ export function isA2uiCatalogSupported(version: string): boolean {
   return /^v?1(?:\.|$)/.test(value);
 }
 
-export function decodeA2uiOpenSurface(value: unknown): A2uiDecodeResult<A2uiOpenSurface> {
+export function decodeA2uiOpenSurface(
+  value: unknown
+): A2uiDecodeResult<A2uiOpenSurface> {
   try {
     return decodeOpenSurfaceInternal(value);
   } catch {
@@ -465,11 +495,17 @@ export function decodeA2uiActionResponse(
       return fail("status_unsupported");
     }
 
-    const runId = readIdentifier(hasOwn(value, "run_id") ? value.run_id : undefined);
+    const runId = readIdentifier(
+      hasOwn(value, "run_id") ? value.run_id : undefined
+    );
     if (!runId.ok) return runId;
 
     if (status === "succeeded") {
-      if (hasOwn(value, "interrupt") || !hasOwn(value, "result") || !isOrdinaryObject(value.result)) {
+      if (
+        hasOwn(value, "interrupt") ||
+        !hasOwn(value, "result") ||
+        !isOrdinaryObject(value.result)
+      ) {
         return fail("response_invalid");
       }
       const result = value.result;
@@ -483,7 +519,9 @@ export function decodeA2uiActionResponse(
         run_id: runId.value,
         result: {
           a2ui: a2ui.value,
-          ...(formatted.value !== undefined ? { formatted: formatted.value } : {}),
+          ...(formatted.value !== undefined
+            ? { formatted: formatted.value }
+            : {}),
         },
       });
     }
