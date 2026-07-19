@@ -154,7 +154,7 @@
           <div class="info-item">
             <span class="label">{{ $t("user.role") }}：</span>
             <span class="value">{{
-              getRoleName(currentUser.description)
+              getRoleName(currentUser.description || currentUser.code)
             }}</span>
           </div>
         </div>
@@ -175,22 +175,18 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import PiiWatermark from "@/components/PiiWatermark.vue";
-import { ElMessage } from "element-plus";
+import {
+  ElMessage,
+  type FormInstance,
+  type FormValidateCallback,
+} from "element-plus";
 import { getUserList, addUser, changePermission } from "@/api/auth";
+import type { UserSummary } from "@/api/types";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 
-// User data interface
-interface UserData {
-  id: number;
-  email: string;
-  code: string;
-  description: string;
-  password: string;
-  createTime: string;
-  lastLogin: string;
-}
+type UserData = UserSummary;
 
 // Table-related state
 const loading = ref(false);
@@ -203,7 +199,7 @@ const tableData = ref<UserData[]>([]);
 const dialogVisible = ref(false);
 const viewDialogVisible = ref(false);
 const dialogType = ref<"add" | "edit">("add");
-const userFormRef = ref();
+const userFormRef = ref<FormInstance>();
 const currentUser = ref<UserData | null>(null);
 
 // Form data
@@ -297,7 +293,7 @@ const handleEdit = (row: UserData) => {
   userForm.id = row.id;
   userForm.email = row.email;
   userForm.code = row.code;
-  userForm.password = row.password;
+  userForm.password = "";
 
   dialogVisible.value = true;
 };
@@ -330,7 +326,10 @@ const resetForm = () => {
 const handleSubmit = async () => {
   if (!userFormRef.value) return;
 
-  await userFormRef.value.validate(async (valid: any, fields: any) => {
+  const form = userFormRef.value;
+  if (!form) return;
+
+  const submitForm: FormValidateCallback = async (valid, fields) => {
     if (valid) {
       try {
         if (dialogType.value === "add") {
@@ -371,10 +370,11 @@ const handleSubmit = async () => {
             ElMessage.error(res.message || t("user.editFailed"));
           }
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Operation failed:", error);
+        const message = error instanceof Error ? error.message : undefined;
         ElMessage.error(
-          error.message ||
+          message ||
             (dialogType.value === "add"
               ? t("user.addFailed")
               : t("user.editFailed"))
@@ -383,7 +383,9 @@ const handleSubmit = async () => {
     } else {
       console.log("Form validation failed", fields);
     }
-  });
+  };
+
+  await form.validate(submitForm);
 };
 
 // Fetch data on page load

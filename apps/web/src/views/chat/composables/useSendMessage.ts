@@ -5,6 +5,9 @@ import type {
   ChatMessage,
   Chat,
   DialogueReconciliationResult,
+  ChatUIState,
+  ChatView,
+  UploadFile,
 } from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
 import i18n from "@/locales";
@@ -28,8 +31,13 @@ import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { getToken } from "@/utils/auth";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
+import { isRecord } from "@/api/contracts";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
+
+type ChatUserStore = {
+  FedLogOut: () => Promise<unknown>;
+};
 
 function isCanonicalToolName(value: unknown): value is string {
   return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
@@ -165,12 +173,12 @@ function attachBlockingA2ui(
 }
 
 export function useSendMessage(opts: {
-  getChatState: (dialogueId: string) => any;
+  getChatState: (dialogueId: string) => ChatUIState;
   currentChatId: Ref<string>;
-  currentChat: Ref<any>;
+  currentChat: Ref<ChatView | null>;
   composerRef: Ref<ChatComposerHandle | null>;
   t: (key: string) => string;
-  userStore: () => any;
+  userStore: () => ChatUserStore;
   getHistoryQuestionData: (
     sendingDialogueId?: string,
     options?: { blockingDialogueId?: string }
@@ -223,7 +231,7 @@ export function useSendMessage(opts: {
       sendingDialogueId,
       chatList.value
     );
-    const capturedFiles = [...chatState.fileList];
+    const capturedFiles = [...(chatState.fileList as UploadFile[])];
     const capturedMode = chatState.mode;
     const capturedHistory = chatState.historyQuestion;
     const capturedMatches = [...newMessageValue.matches];
@@ -270,8 +278,7 @@ export function useSendMessage(opts: {
     if (capturedFiles.length > 0) {
       const fileInfo = capturedFiles
         .map(
-          (file: any) =>
-            `[Attachment: ${file.name} (${formatFileSize(file.size)})]`
+          (file) => `[Attachment: ${file.name} (${formatFileSize(file.size)})]`
         )
         .join("\n");
       messageContent = `${currentMessage}\n\n${fileInfo}`;
@@ -316,7 +323,12 @@ export function useSendMessage(opts: {
     }
 
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
-      writePendingChat(sendingDialogueId, sendingMessages, {
+      const pendingMessages = sendingMessages as unknown as Array<{
+        role: string;
+        content: string;
+        [key: string]: unknown;
+      }>;
+      writePendingChat(sendingDialogueId, pendingMessages, {
         title: sendingTitle,
         mode: capturedMode,
         onError: () => {
@@ -348,7 +360,7 @@ export function useSendMessage(opts: {
         queryData.append("history", JSON.stringify(capturedHistory));
       }
       if (capturedFiles.length > 0) {
-        capturedFiles.forEach((fileItem: any) => {
+        capturedFiles.forEach((fileItem) => {
           queryData.append("files", fileItem.file);
         });
       }
@@ -406,7 +418,7 @@ export function useSendMessage(opts: {
         : null;
 
       const response = await getQueryAbortable(
-        queryData as any,
+        queryData,
         requestKey,
         tracker
           ? {
@@ -434,7 +446,14 @@ export function useSendMessage(opts: {
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
-      if (response.data) {
+      // The runtime interceptor returns code 200 for decoded success envelopes;
+      // keep the data-presence fallback for lightweight test adapters and older
+      // callers that return the established `{ data }` shape without `code`.
+      const hasResponseData = Object.prototype.hasOwnProperty.call(
+        response,
+        "data"
+      );
+      if (response.code === 200 || hasResponseData) {
         const responseData = response.data as QueryData;
         const botProjection = parseBlockingProjection(responseData);
         const expertSucceeded =
@@ -791,13 +810,25 @@ export function useSendMessage(opts: {
           showLog: false,
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(t("chat.logs.sendMessageFailed"), error);
+
+      const errorRecord = isRecord(error) ? error : undefined;
+      const response =
+        errorRecord && isRecord(errorRecord.response)
+          ? errorRecord.response
+          : undefined;
+      const responseData =
+        response && isRecord(response.data) ? response.data : undefined;
+      const detail =
+        responseData && isRecord(responseData.detail)
+          ? responseData.detail
+          : undefined;
 
       // check whether the request was aborted
       if (
-        error.name === "AbortError" ||
-        error.code === "ERR_CANCELED" ||
+        errorRecord?.name === "AbortError" ||
+        errorRecord?.code === "ERR_CANCELED" ||
         chatState.generationStopped
       ) {
         return; // don't show an error message when the request is aborted
@@ -810,12 +841,7 @@ export function useSendMessage(opts: {
       }
 
       // check whether it's a token-expired error
-      if (
-        error.response &&
-        error.response.data &&
-        error.response.data.detail &&
-        error.response.data.detail.code === 403
-      ) {
+      if (detail?.code === 403) {
         // Modal only when foreground — background must not steal focus on B.
         if (isForeground(sendingDialogueId)) {
           ElMessageBox.alert(
@@ -904,7 +930,7 @@ export function useSendMessage(opts: {
         chatState.activeRequestId === requestKey &&
         !chatState.generationStopped
       ) {
-        const isTimeout = error.response?.status === 504;
+        const isTimeout = response?.status === 504;
         sendingMessages.push({
           role: "assistant",
           content: isTimeout ? t("chat.timeoutFailed") : t("chat.sendFailed"),

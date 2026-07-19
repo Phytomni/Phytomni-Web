@@ -14,16 +14,23 @@ vi.mock("@/utils/request", () => ({
 }));
 
 import request from "@/utils/request";
-import { getReactionType, getUserTool, type QueryData } from "@/api/chat";
+import {
+  decodeQueryData,
+  getReactionType,
+  getUserTool,
+  type QueryData,
+} from "@/api/chat";
 import { feedback } from "@/api/feedback";
+
+const mockRequest = vi.mocked(request);
 
 describe("getReactionType — wire contract", () => {
   beforeEach(() => {
-    (request as any).mockReset();
+    mockRequest.mockReset();
   });
 
   it("puts to /api/v1/conversations/:id/reaction with the supplied payload", async () => {
-    (request as any).mockResolvedValueOnce({ code: 0, msg: "ok" });
+    mockRequest.mockResolvedValueOnce({ code: 0, msg: "ok" });
     await getReactionType({ id: "abc", reaction_type: "dislike" });
     expect(request).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledWith({
@@ -34,14 +41,14 @@ describe("getReactionType — wire contract", () => {
   });
 
   it("resolves with the backend payload on success", async () => {
-    (request as any).mockResolvedValueOnce({ code: 0, msg: "ok" });
+    mockRequest.mockResolvedValueOnce({ code: 0, msg: "ok" });
     const result = await getReactionType({ id: "abc", reaction_type: "like" });
     expect(result).toEqual({ code: 0, msg: "ok" });
   });
 
   it("propagates errors from the underlying request without transformation", async () => {
     const err = new Error("Network error");
-    (request as any).mockRejectedValueOnce(err);
+    mockRequest.mockRejectedValueOnce(err);
     await expect(
       getReactionType({ id: "abc", reaction_type: "like" })
     ).rejects.toBe(err);
@@ -62,6 +69,40 @@ describe("QueryData — interop wire contract", () => {
     };
     expect(data.interop?.target_id).toBe("mcp-peer");
   });
+
+  it("accepts follow-up questions as either JSON text or a string array", () => {
+    expect(
+      decodeQueryData({
+        id: 1,
+        follow_up_questions: '["one", "two"]',
+      }).follow_up_questions
+    ).toBe('["one", "two"]');
+    expect(
+      decodeQueryData({
+        id: 2,
+        follow_up_questions: ["one", "two"],
+      }).follow_up_questions
+    ).toEqual(["one", "two"]);
+  });
+
+  it("preserves numeric wire IDs and nullable Bot run IDs", () => {
+    const result = decodeQueryData({ id: 41, bot_run_id: null });
+
+    expect(result.id).toBe("41");
+    expect(result.bot_run_id).toBeNull();
+  });
+
+  it("rejects missing IDs and malformed follow-up values without echoing them", () => {
+    expect(() => decodeQueryData({ answer: "missing id" })).toThrow(
+      "Invalid chat response"
+    );
+    expect(() =>
+      decodeQueryData({
+        id: 3,
+        follow_up_questions: { token: "secret-token" },
+      })
+    ).toThrow("Invalid chat response");
+  });
 });
 
 // Regression guard: these two wrappers were missed in the first sweep of the
@@ -69,11 +110,11 @@ describe("QueryData — interop wire contract", () => {
 // future revert fails here (the build/type-check cannot catch a wrong URL string).
 describe("getUserTool — wire contract", () => {
   beforeEach(() => {
-    (request as any).mockReset();
+    mockRequest.mockReset();
   });
 
   it("gets /api/v1/users/me/tool-permissions", async () => {
-    (request as any).mockResolvedValueOnce({ code: 0 });
+    mockRequest.mockResolvedValueOnce({ code: 0 });
     await getUserTool();
     expect(request).toHaveBeenCalledWith({
       url: "/api/v1/users/me/tool-permissions",
@@ -84,11 +125,11 @@ describe("getUserTool — wire contract", () => {
 
 describe("feedback — wire contract", () => {
   beforeEach(() => {
-    (request as any).mockReset();
+    mockRequest.mockReset();
   });
 
   it("posts to /api/v1/user-feedback with the supplied payload", async () => {
-    (request as any).mockResolvedValueOnce({ code: 0 });
+    mockRequest.mockResolvedValueOnce({ code: 0 });
     const data = { feedback_type: "bug", feedback_content: "x" };
     await feedback(data);
     expect(request).toHaveBeenCalledWith({

@@ -76,7 +76,7 @@ describe("useComposer", () => {
     it("rejects a mention selection outside the authorized set", () => {
       const { handleSelect } = makeComposable(["ChatAgent"]);
 
-      handleSelect({ value: "DeepGenomeAgent" } as any);
+      handleSelect({ value: "DeepGenomeAgent" });
 
       expect(selectedAgent.value).toBe("");
       expect(messageInput.value).toBe("");

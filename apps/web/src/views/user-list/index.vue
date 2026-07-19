@@ -256,7 +256,7 @@
           <div class="info-item">
             <span class="label">{{ $t("user.role") }}：</span>
             <span class="value">{{
-              getRoleName(currentUser.description)
+              getRoleName(currentUser.description || currentUser.code)
             }}</span>
           </div>
           <div class="info-item">
@@ -295,8 +295,14 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import { Plus, Unlock } from "@element-plus/icons-vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import {
+  ElMessage,
+  ElMessageBox,
+  type FormInstance,
+  type FormValidateCallback,
+} from "element-plus";
 import { getUserList, addUser, changePermission, unlockUser } from "@/api/auth";
+import type { UserSummary } from "@/api/types";
 import { useI18n } from "vue-i18n";
 import PiiWatermark from "@/components/PiiWatermark.vue";
 import {
@@ -307,22 +313,7 @@ import {
 
 const { t } = useI18n();
 
-// Define the user data interface
-interface UserData {
-  id: number;
-  email: string;
-  code: string;
-  description: string;
-  password: string;
-  createTime: string;
-  lastLogin: string;
-  locked_until: string | null;
-  last_login_at: string | null;
-  phone: string;
-  organization: string;
-  position: string;
-  chat_limit: number | null;
-}
+type UserData = UserSummary;
 
 // Table-related
 const loading = ref(false);
@@ -335,7 +326,7 @@ const tableData = ref<UserData[]>([]);
 const dialogVisible = ref(false);
 const viewDialogVisible = ref(false);
 const dialogType = ref<"add" | "edit">("add");
-const userFormRef = ref();
+const userFormRef = ref<FormInstance>();
 const currentUser = ref<UserData | null>(null);
 
 // Form data
@@ -351,51 +342,58 @@ const userForm = reactive({
 });
 
 // Password strength validation function - checks the password meets complexity requirements
-const validatePasswordStrength = (rule: any, value: string, callback: any) => {
+const validatePasswordStrength = (
+  rule: unknown,
+  value: unknown,
+  callback: (error?: string | Error) => void
+) => {
+  void rule;
+  const password = typeof value === "string" ? value : "";
+
   // In edit mode, skip validation when the password is empty (means keep current password)
-  if (dialogType.value === "edit" && !value) {
+  if (dialogType.value === "edit" && !password) {
     callback();
     return;
   }
 
   // In add mode, prompt that the password is required when empty
-  if (dialogType.value === "add" && !value) {
+  if (dialogType.value === "add" && !password) {
     callback(new Error(t("user.validation.passwordRequired")));
     return;
   }
 
   // At least 8 characters
-  if (value.length < 8) {
+  if (password.length < 8) {
     callback(new Error(t("user.validation.passwordMinLength8")));
     return;
   }
 
   // At most 16 characters
-  if (value.length > 16) {
+  if (password.length > 16) {
     callback(new Error(t("user.validation.passwordMaxLength16")));
     return;
   }
 
   // Must contain an uppercase letter
-  if (!/[A-Z]/.test(value)) {
+  if (!/[A-Z]/.test(password)) {
     callback(new Error(t("user.validation.passwordNeedUppercase")));
     return;
   }
 
   // Must contain a lowercase letter
-  if (!/[a-z]/.test(value)) {
+  if (!/[a-z]/.test(password)) {
     callback(new Error(t("user.validation.passwordNeedLowercase")));
     return;
   }
 
   // Must contain a digit
-  if (!/[0-9]/.test(value)) {
+  if (!/[0-9]/.test(password)) {
     callback(new Error(t("user.validation.passwordNeedNumber")));
     return;
   }
 
   // Must contain a special character
-  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) {
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(password)) {
     callback(new Error(t("user.validation.passwordNeedSpecial")));
     return;
   }
@@ -529,9 +527,12 @@ const handleUnlock = (row: UserData) => {
         } else {
           ElMessage.error(res.message || t("user.unlockFailed"));
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Failed to unlock user:", error);
-        ElMessage.error(error.message || t("user.unlockFailed"));
+        ElMessage.error(
+          (error instanceof Error ? error.message : undefined) ||
+            t("user.unlockFailed")
+        );
       }
     })
     .catch(() => {
@@ -565,7 +566,10 @@ const resetForm = () => {
 const handleSubmit = async () => {
   if (!userFormRef.value) return;
 
-  await userFormRef.value.validate(async (valid: any, fields: any) => {
+  const form = userFormRef.value;
+  if (!form) return;
+
+  const submitForm: FormValidateCallback = async (valid, fields) => {
     if (valid) {
       try {
         if (dialogType.value === "add") {
@@ -621,10 +625,11 @@ const handleSubmit = async () => {
             ElMessage.error(res.message || t("user.editFailed"));
           }
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Operation failed:", error);
+        const message = error instanceof Error ? error.message : undefined;
         ElMessage.error(
-          error.message ||
+          message ||
             (dialogType.value === "add"
               ? t("user.addFailed")
               : t("user.editFailed"))
@@ -634,7 +639,9 @@ const handleSubmit = async () => {
       console.log("Form validation failed", fields);
       ElMessage.warning(t("user.validation.formValidationFailed"));
     }
-  });
+  };
+
+  await form.validate(submitForm);
 };
 
 // Fetch data when the page loads

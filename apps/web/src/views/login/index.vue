@@ -90,6 +90,8 @@ import type { ElForm } from "element-plus";
 import { ElMessage, ElNotification } from "element-plus";
 import { login } from "@/api/login";
 import { register } from "@/api/auth";
+import type { ApiEnvelope } from "@/api/types";
+import { isRecord, optionalString } from "@/api/contracts";
 import { setToken } from "@/utils/auth";
 import LangSwitch from "@/components/LangSwitch.vue";
 import { PhyAuthBrand, PhyAuthLayout } from "@/components/shell";
@@ -161,77 +163,71 @@ const handleLogin = () => {
   loginFormData.append("password", formData.password);
 
   login(loginFormData)
-    .then(
-      (res: {
-        code: number;
-        data?: {
-          token: string;
-          user_name: string;
-          login_status: string;
-          password_warning?: string;
-          locked?: boolean;
-        };
-        message?: string;
-      }) => {
-        if (res.code === 200) {
-          ElMessage.success(t("login.loginSuccess"));
-          setToken(res.data!.token);
-          // Save the user name
-          useUserStore.SET_USER_NAME(res.data!.user_name);
-          // Save the login status
-          useUserStore.SET_LOGIN_STATUS(res.data!.login_status);
+    .then((res) => {
+      if (res.code === 200) {
+        const loginData = res.data;
+        ElMessage.success(t("login.loginSuccess"));
+        setToken(loginData.token);
+        // Save the user name
+        useUserStore.SET_USER_NAME(loginData.user_name);
+        // Save the login status
+        useUserStore.SET_LOGIN_STATUS(loginData.login_status);
 
-          // Check whether this is the first login and the password must be changed
-          if (res.data!.login_status === "0") {
-            // The tutorial trigger is not set here — after a successful password change,
-            // change-password.vue writes sessionStorage.tutorial_pending, and
-            // chat/index.vue checkTutorialStatus consumes it once and then flips
-            // SET_SEEN_TUTORIAL('0') (TW-D15).
-            ElNotification({
-              title: t("login.firstLoginTitle"),
-              message: t("login.firstLoginMessage"),
-              type: "warning",
-              duration: 0,
-              position: "top-right",
-            });
-            router.replace("/change-password");
-            return;
-          }
+        // Check whether this is the first login and the password must be changed
+        if (loginData.login_status === "0") {
+          // The tutorial trigger is not set here — after a successful password change,
+          // change-password.vue writes sessionStorage.tutorial_pending, and
+          // chat/index.vue checkTutorialStatus consumes it once and then flips
+          // SET_SEEN_TUTORIAL('0') (TW-D15).
+          ElNotification({
+            title: t("login.firstLoginTitle"),
+            message: t("login.firstLoginMessage"),
+            type: "warning",
+            duration: 0,
+            position: "top-right",
+          });
+          router.replace("/change-password");
+          return;
+        }
 
-          // Check the password warning message
-          if (res.data!.password_warning) {
-            ElNotification({
-              title: t("login.passwordWarningTitle"),
-              message: res.data!.password_warning,
-              type: "warning",
-              duration: 0, // Do not auto-close; requires the user to close it manually
-              position: "top-right",
-            });
-          }
+        // Check the password warning message
+        if (loginData.password_warning) {
+          ElNotification({
+            title: t("login.passwordWarningTitle"),
+            message: loginData.password_warning,
+            type: "warning",
+            duration: 0, // Do not auto-close; requires the user to close it manually
+            position: "top-right",
+          });
+        }
 
-          router.replace(safeRedirect(route.query.redirect, "/chat"));
+        router.replace(safeRedirect(route.query.redirect, "/chat"));
+      } else {
+        const errorMessage = res.message || t("login.loginFailed");
+
+        // The backend reports the locked state via the res.data.locked flag (replacing the old substring sniffing)
+        if (res.data?.locked === true) {
+          ElNotification({
+            title: t("login.accountLockedTitle"),
+            message: errorMessage,
+            type: "error",
+            duration: 0,
+            position: "top-right",
+          });
         } else {
-          const errorMessage = res.message || t("login.loginFailed");
-
-          // The backend reports the locked state via the res.data.locked flag (replacing the old substring sniffing)
-          if (res.data?.locked === true) {
-            ElNotification({
-              title: t("login.accountLockedTitle"),
-              message: errorMessage,
-              type: "error",
-              duration: 0,
-              position: "top-right",
-            });
-          } else {
-            ElMessage.error(errorMessage);
-          }
+          ElMessage.error(errorMessage);
         }
       }
-    )
-    .catch((err: any) => {
-      const response = err.response?.data;
+    })
+    .catch((err: unknown) => {
+      const responseData =
+        isRecord(err) && isRecord(err.response) ? err.response.data : undefined;
+      const response = isRecord(responseData) ? responseData : undefined;
       const errorMessage =
-        response?.message || err.message || t("login.loginFailed");
+        (response && optionalString(response, "message")) ||
+        (isRecord(err) && optionalString(err, "message")) ||
+        (err instanceof Error ? err.message : undefined) ||
+        t("login.loginFailed");
 
       // The backend reports the locked state via the response.locked flag (replacing the old substring sniffing)
       if (response?.locked === true) {
@@ -256,14 +252,17 @@ const handleRegister = () => {
   registerFormData.append("email", formData.email);
   registerFormData.append("password", formData.password);
   register(registerFormData)
-    .then((res: { code: number }) => {
+    .then((res: ApiEnvelope<string>) => {
       if (res.code === 200) {
         ElMessage.success(t("common.registrationSuccess"));
         isLogin.value = true;
       }
     })
-    .catch((err: { message: string }) => {
-      ElMessage.error(err.message || t("login.registerFailed"));
+    .catch((err: unknown) => {
+      ElMessage.error(
+        (err instanceof Error ? err.message : undefined) ||
+          t("login.registerFailed")
+      );
     })
     .finally(() => {
       loading.value = false;

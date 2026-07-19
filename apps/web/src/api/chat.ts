@@ -1,208 +1,258 @@
-import request, { createAbortableRequest } from "@/utils/request";
 import type { AxiosProgressEvent } from "axios";
-import type { BotInteropPayload } from "@/views/chat/botProjection";
 
-type QueryProgressOpts = {
+import { createAbortableRequest } from "@/utils/request";
+import type {
+  ApiEnvelope,
+  BinaryResponse,
+  ConversationSummary,
+  DecodedQueryData,
+  QueryRequest,
+} from "@/api/types";
+import {
+  decodeChatHistory,
+  decodeConversationList,
+  decodeImageData,
+  decodeMutationData,
+  decodeQueryData,
+  decodeString,
+  decodeUserToolResponse,
+  requestAbortableApi,
+  requestApi,
+  type ChatHistoryRecord,
+  type MutationData,
+  type UserToolResponse,
+} from "@/api/types";
+
+export type { QueryData } from "@/api/types";
+export { decodeQueryData } from "@/api/types";
+
+export type QueryProgressOpts = {
   onUploadProgress?: (e: AxiosProgressEvent) => void;
 };
 
-/** Stable blocking chat envelope returned by the Web Go gateway. */
-export interface QueryData {
-  id?: string | number;
-  final_answer?: string;
-  answer?: string;
-  follow_up_questions?: string | string[];
-  status?: string;
-  tool_name?: string;
-  upload_path?: string;
-  download_path?: string;
-  server_file_path?: string;
-  compute_resource?: string;
-  reaction_type?: string;
-  dialogue_id?: string;
-  task_id?: string;
-  bot_run_id?: string | null;
-  tracking_degraded?: boolean;
-  report_revision?: number;
-  request_id?: string | null;
-  degraded_interop?: boolean;
-  interop?: BotInteropPayload | null;
-  /** Bounded by the Go A2UI decoder; the client validates it again before use. */
-  a2ui?: unknown;
-}
-
-type DownloadProgressOpts = {
+export type DownloadProgressOpts = {
   requestId?: string;
   onDownloadProgress?: (e: AxiosProgressEvent) => void;
 };
 
+type FormIdPayload = { id: string | number };
+
+function getId(data: FormIdPayload | FormData, label: string): string | number {
+  const id = data instanceof FormData ? data.get("id") : data.id;
+  if (
+    !(
+      (typeof id === "number" && Number.isFinite(id)) ||
+      (typeof id === "string" && id.length > 0)
+    )
+  ) {
+    throw new TypeError(`Invalid ${label}`);
+  }
+  return id;
+}
+
 // History question list
-export const getHistoryQuestionList = () => {
-  return request({
-    url: "/api/v1/conversations",
-    method: "get",
-  });
-};
+export const getHistoryQuestionList = (): Promise<
+  ApiEnvelope<ConversationSummary[]>
+> =>
+  requestApi(
+    {
+      url: "/api/v1/conversations",
+      method: "get",
+    },
+    decodeConversationList
+  );
 
 // Conversation (send message; RESTful: conversation id in path, id=0 is a new conversation)
 export const getQuery = (
-  data:
-    | {
-        query: string;
-        id?: number;
-        tool?: string;
-        files?: File[];
-      }
-    | FormData,
+  data: QueryRequest | FormData,
   opts?: QueryProgressOpts
-) => {
+): Promise<ApiEnvelope<DecodedQueryData>> => {
   const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
-  return request({
-    url: `/api/v1/conversations/${id}/messages`,
-    method: "post",
-    data: data,
-    onUploadProgress: opts?.onUploadProgress,
-  });
+  return requestApi(
+    {
+      url: `/api/v1/conversations/${id}/messages`,
+      method: "post",
+      data,
+      onUploadProgress: opts?.onUploadProgress,
+    },
+    decodeQueryData
+  );
 };
 
 // Abortable conversation request (same as above)
 export const getQueryAbortable = (
-  data:
-    | {
-        query: string;
-        id?: number;
-        tool?: string;
-        files?: File[];
-      }
-    | FormData,
+  data: QueryRequest | FormData,
   requestId?: string,
   opts?: QueryProgressOpts
-) => {
+): Promise<ApiEnvelope<DecodedQueryData>> => {
   const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
-  return createAbortableRequest({
-    url: `/api/v1/conversations/${id}/messages`,
-    method: "post",
-    data: data,
-    requestId: requestId,
-    onUploadProgress: opts?.onUploadProgress,
-  });
+  return requestAbortableApi(
+    {
+      url: `/api/v1/conversations/${id}/messages`,
+      method: "post",
+      data,
+      requestId,
+      onUploadProgress: opts?.onUploadProgress,
+    },
+    decodeQueryData
+  );
 };
 
 // Query conversation (all child messages of a conversation)
-export const getAnswerCheck = (data: { dialogue_id: string }) => {
-  return request({
-    url: `/api/v1/conversations/${data.dialogue_id}/messages`,
-    method: "get",
-  });
-};
+export const getAnswerCheck = (data: {
+  dialogue_id: string;
+}): Promise<ApiEnvelope<ChatHistoryRecord[]>> =>
+  requestApi(
+    {
+      url: `/api/v1/conversations/${data.dialogue_id}/messages`,
+      method: "get",
+    },
+    decodeChatHistory
+  );
 
 // Get user tool permissions
-export const getUserTool = () => {
-  return request({
-    url: "/api/v1/users/me/tool-permissions",
-    method: "get",
-  });
-};
+export const getUserTool = (): Promise<ApiEnvelope<UserToolResponse>> =>
+  requestApi(
+    {
+      url: "/api/v1/users/me/tool-permissions",
+      method: "get",
+    },
+    decodeUserToolResponse
+  );
 
 // Get conversation download URL (analyst-agent OBS file)
-export const getChatdownloadURL = (data: { obs_path: string }) => {
-  return request({
-    url: "/api/v1/downloads/analyst-agent/obs-file",
-    method: "get",
-    params: data,
-  });
-};
+export const getChatdownloadURL = (data: {
+  obs_path: string;
+}): Promise<ApiEnvelope<string>> =>
+  requestApi(
+    {
+      url: "/api/v1/downloads/analyst-agent/obs-file",
+      method: "get",
+      params: data,
+    },
+    decodeString
+  );
 
 // Get rendering-file download URL
 export const getFileDownUrlApi = (
   data: { id: string; document_format: string } | FormData,
   opts?: DownloadProgressOpts
-) => {
-  return createAbortableRequest({
+): Promise<BinaryResponse> =>
+  createAbortableRequest({
     url: "/api/v1/downloads/rendering-file",
     method: "post",
-    data: data,
+    data,
     responseType: "blob",
     requestId: opts?.requestId,
     onDownloadProgress: opts?.onDownloadProgress,
-  });
-};
+  }) as unknown as Promise<BinaryResponse>;
 
 // Get analyst log (RESTful: task id in path)
-export const getAnalystAgentLog = (data: { id: string }) => {
-  return request({
-    url: `/api/v1/async-tasks/${data.id}/analyst-log`,
-    method: "get",
-  });
-};
+export const getAnalystAgentLog = (data: {
+  id: string;
+}): Promise<ApiEnvelope<string>> =>
+  requestApi(
+    {
+      url: `/api/v1/async-tasks/${data.id}/analyst-log`,
+      method: "get",
+    },
+    decodeString
+  );
+
 // Reaction like/dislike (RESTful: conversation id in path)
 export const getReactionType = (
-  data: { id: string; reaction_type: string } | FormData
-) => {
-  const id = data instanceof FormData ? data.get("id") : data.id;
-  return request({
-    url: `/api/v1/conversations/${id}/reaction`,
-    method: "put",
-    data: data,
-  });
+  data: (FormIdPayload & { reaction_type: string }) | FormData
+): Promise<ApiEnvelope<MutationData>> => {
+  const id = getId(data, "conversation id");
+  return requestApi(
+    {
+      url: `/api/v1/conversations/${id}/reaction`,
+      method: "put",
+      data,
+    },
+    decodeMutationData
+  );
 };
+
 // Delete conversation (RESTful: conversation id in path, no request body)
 export const deleteHistory = (
-  data: { id: string; reaction_type: string } | FormData
-) => {
-  const id = data instanceof FormData ? data.get("id") : data.id;
-  return request({
-    url: `/api/v1/conversations/${id}`,
-    method: "delete",
-  });
+  data: FormIdPayload | FormData
+): Promise<ApiEnvelope<MutationData>> => {
+  const id = getId(data, "conversation id");
+  return requestApi(
+    {
+      url: `/api/v1/conversations/${id}`,
+      method: "delete",
+    },
+    decodeMutationData
+  );
 };
+
 // Rename conversation (RESTful: conversation id in path, rename stays in body)
 export const renameHistory = (
-  data: { id: string; rename: string } | FormData
-) => {
-  const id = data instanceof FormData ? data.get("id") : data.id;
-  return request({
-    url: `/api/v1/conversations/${id}`,
-    method: "patch",
-    data: data,
-  });
+  data: (FormIdPayload & { rename: string }) | FormData
+): Promise<ApiEnvelope<MutationData>> => {
+  const id = getId(data, "conversation id");
+  return requestApi(
+    {
+      url: `/api/v1/conversations/${id}`,
+      method: "patch",
+      data,
+    },
+    decodeMutationData
+  );
 };
+
 // Favorite conversation (RESTful: conversation id in path, collect_type stays in body)
 export const collectHistory = (
-  data: { id: string; collect_type: string } | FormData
-) => {
-  const id = data instanceof FormData ? data.get("id") : data.id;
-  return request({
-    url: `/api/v1/conversations/${id}/favorite`,
-    method: "put",
-    data: data,
-  });
+  data: (FormIdPayload & { collect_type: string }) | FormData
+): Promise<ApiEnvelope<MutationData>> => {
+  const id = getId(data, "conversation id");
+  return requestApi(
+    {
+      url: `/api/v1/conversations/${id}/favorite`,
+      method: "put",
+      data,
+    },
+    decodeMutationData
+  );
 };
+
 // Get favorites (RESTful: merged into the conversation list, filtered by ?favorite=true)
-export const getCollectHistory = () => {
-  return request({
-    url: "/api/v1/conversations",
-    method: "get",
-    params: { favorite: true },
-  });
-};
+export const getCollectHistory = (): Promise<
+  ApiEnvelope<ConversationSummary[]>
+> =>
+  requestApi(
+    {
+      url: "/api/v1/conversations",
+      method: "get",
+      params: { favorite: true },
+    },
+    decodeConversationList
+  );
 
 // Update analyst log (RESTful: async-task subresource write-back)
 export const updateAnalystAgentLog = (
   data: { task_id: string; compute_resource: string } | FormData
-) => {
-  return request({
-    url: "/api/v1/async-tasks/analyst-log",
-    method: "patch",
-    data: data,
-  });
-};
+): Promise<ApiEnvelope<MutationData>> =>
+  requestApi(
+    {
+      url: "/api/v1/async-tasks/analyst-log",
+      method: "patch",
+      data,
+    },
+    decodeMutationData
+  );
 
 // Get AnalystAgent OBS image download URLs (GeneNetworkAgent / DigitalDesignAgent rendering dependency)
-export const getObsImages = (data: { obs_path: string }) => {
-  return request({
-    url: "/api/v1/downloads/analyst-agent/obs-images",
-    method: "get",
-    params: data,
-  });
-};
+export const getObsImages = (data: {
+  obs_path: string;
+}): Promise<ApiEnvelope<string | string[]>> =>
+  requestApi(
+    {
+      url: "/api/v1/downloads/analyst-agent/obs-images",
+      method: "get",
+      params: data,
+    },
+    decodeImageData
+  );

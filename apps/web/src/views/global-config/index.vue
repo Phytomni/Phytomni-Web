@@ -171,6 +171,12 @@ import { formatDisplayDate } from "@/locales/format-display-date";
 
 const { t, d } = useI18n();
 
+interface ConfigHistoryRecord {
+  timestamp: string;
+  operator: string;
+  changes: string;
+}
+
 // Configuration form data
 const configForm = reactive({
   systemName: "Phytomni",
@@ -186,7 +192,7 @@ const configForm = reactive({
 });
 
 // Configuration history data
-const configHistory = ref([
+const configHistory = ref<ConfigHistoryRecord[]>([
   {
     timestamp: "2024-01-15T10:30:00",
     operator: "admin",
@@ -269,7 +275,7 @@ const handleTest = () => {
 };
 
 // View history details
-const handleViewHistory = (row: any) => {
+const handleViewHistory = (row: ConfigHistoryRecord) => {
   ElMessageBox.alert(
     t("globalConfig.historyDetailContent", {
       time: formatDisplayDate(d, row.timestamp, "timestamp"),
