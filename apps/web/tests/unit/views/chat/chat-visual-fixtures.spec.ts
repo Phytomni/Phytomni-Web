@@ -965,6 +965,33 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(buildSyntheticFileList(fixture)).toHaveLength(0);
   });
 
+  it("derives Chinese quick-select labels from the active locale", async () => {
+    const wrapper = mountFixtureApp(getChatVisualFixture("empty"), null, {
+      renderA2ui: true,
+      locale: "zh-CN",
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(
+      wrapper
+        .findAll('[data-testid="chat-agent-quick-option"]')
+        .map((option) => option.text())
+    ).toEqual([
+      zhCN.chat.agentLabels.chatAgent,
+      zhCN.chat.agentLabels.knowledgeAgent,
+      zhCN.chat.agentLabels.dataAgent,
+      zhCN.chat.agentLabels.reviewAgent,
+      zhCN.chat.agentLabels.briefGeneAgent,
+      zhCN.chat.agentLabels.analystAgent,
+      zhCN.chat.agentLabels.deepGenomeAgent,
+      zhCN.chat.agentLabels.inSilicoResearchAgent,
+      zhCN.chat.agentLabels.digitalDesignAgent,
+      zhCN.chat.agentLabels.geneNetworkAgent,
+    ]);
+    wrapper.unmount();
+  });
+
   it("renders all seven Cases in both empty fixture positions", async () => {
     for (const key of ["empty", "empty-cases"] as const) {
       const wrapper = mountFixtureApp(getChatVisualFixture(key));

@@ -315,6 +315,7 @@ import {
   ref,
   watch,
 } from "vue";
+import { useI18n } from "vue-i18n";
 import en from "element-plus/es/locale/lang/en";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { Close, Menu } from "@element-plus/icons-vue";
@@ -370,6 +371,7 @@ const props = defineProps<{
 }>();
 
 const appStore = useAppStore();
+const { t } = useI18n();
 const epLocale = computed(() => (appStore.language === "zh-CN" ? zhCn : en));
 
 const viewportWidth = ref(
@@ -512,7 +514,9 @@ const geneNetworkImages = computed(() =>
 const fileList = computed(() =>
   props.fixture ? buildSyntheticFileList(props.fixture) : []
 );
-const pickerOptions = buildSyntheticPickerOptions();
+const pickerOptions = computed(() =>
+  buildSyntheticPickerOptions((key) => t(key))
+);
 
 const composerIsSending = computed(
   () =>

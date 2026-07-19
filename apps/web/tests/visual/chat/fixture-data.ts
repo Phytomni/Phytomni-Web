@@ -9,8 +9,7 @@ import type {
 import type { ChatAgentPickerOption } from "@/views/chat/components/ChatAgentPicker.vue";
 import {
   CANONICAL_AGENT_TOOLS,
-  CANONICAL_AGENT_DISPLAY_NAMES,
-  CANONICAL_AGENT_I18N_KEYS,
+  CANONICAL_AGENT_LABEL_I18N_KEYS,
 } from "@/constants/agents";
 import {
   isPhase3BMessageKey,
@@ -118,11 +117,13 @@ export function buildSyntheticFileList(
 }
 
 /** Deterministic picker options — no roles API / network. */
-export function buildSyntheticPickerOptions(): ChatAgentPickerOption[] {
+export function buildSyntheticPickerOptions(
+  translate: (key: string) => string = (key) => key
+): ChatAgentPickerOption[] {
   return CANONICAL_AGENT_TOOLS.map((tool) => ({
     tool,
-    labelKey: CANONICAL_AGENT_I18N_KEYS[tool],
-    label: CANONICAL_AGENT_DISPLAY_NAMES[tool],
+    labelKey: CANONICAL_AGENT_LABEL_I18N_KEYS[tool],
+    label: translate(CANONICAL_AGENT_LABEL_I18N_KEYS[tool]),
   }));
 }
 
