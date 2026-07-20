@@ -1,21 +1,33 @@
 import { nextTick } from "vue";
 import type { Ref } from "vue";
-import type { ChatMessage, ChatUIState, ChatView } from "../types";
+import type {
+  ChatMessage,
+  ChatUIState,
+  ChatView,
+  DialogueReconciliationResult,
+} from "../types";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getQuery } from "@/api/chat";
 import { createTransferTracker } from "@/utils/transfer-progress";
 import { isValidJSON, convertToTableData } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
-import { chatContentToText, decodeAgentSteps } from "../messageTypes";
+import {
+  chatContentToText,
+  decodeAgentSteps,
+  decodeFollowUpQuestions,
+} from "../messageTypes";
 
 export function useRefreshMessage(opts: {
   currentChat: Ref<ChatView | null>;
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
   scrollToBottom: () => void;
-  getHistoryQuestionData: () => Promise<any> | any;
-  getDialogueIdFromChatId: (chatId?: any) => any;
+  getHistoryQuestionData: () =>
+    | Promise<DialogueReconciliationResult | undefined>
+    | DialogueReconciliationResult
+    | undefined;
+  getDialogueIdFromChatId: () => string | number | null | undefined;
   timestamp: Ref<number>;
 }) {
   const {
@@ -89,7 +101,7 @@ export function useRefreshMessage(opts: {
 
       // add files (if any)
       if (chatState.fileList.length > 0) {
-        chatState.fileList.forEach((fileItem: any) => {
+        chatState.fileList.forEach((fileItem) => {
           queryData.append("files", fileItem.file);
         });
       }
@@ -103,7 +115,7 @@ export function useRefreshMessage(opts: {
         : null;
 
       const response = await getQuery(
-        queryData as any,
+        queryData,
         tracker
           ? {
               onUploadProgress: (e) => {
@@ -138,11 +150,9 @@ export function useRefreshMessage(opts: {
             instantMessage: true,
             id: response.data.id || messageId, // keep the original id if there is no new one
             tool_name: response.data.tool_name,
-            followUpQuestions: response.data.follow_up_questions
-              ? typeof response.data.follow_up_questions === "string"
-                ? JSON.parse(response.data.follow_up_questions)
-                : response.data.follow_up_questions
-              : [],
+            followUpQuestions: decodeFollowUpQuestions(
+              response.data.follow_up_questions
+            ),
             showFollowUpQuestions: false,
             showLog: false,
           };
@@ -164,11 +174,9 @@ export function useRefreshMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id || messageId, // keep the original id if there is no new one
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -185,11 +193,9 @@ export function useRefreshMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
                 server_file_path: response.data.server_file_path, // add the server file path
@@ -256,11 +262,9 @@ export function useRefreshMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -289,11 +293,9 @@ export function useRefreshMessage(opts: {
                 original: response.data.answer,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -313,11 +315,9 @@ export function useRefreshMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
                 compute_resource: response.data?.compute_resource || "",
@@ -339,11 +339,9 @@ export function useRefreshMessage(opts: {
               instantMessage: true,
               tool_name: response.data?.tool_name || "",
               id: response.data.id || messageId, // keep the original id if there is no new one
-              followUpQuestions: response.data.follow_up_questions
-                ? typeof response.data.follow_up_questions === "string"
-                  ? JSON.parse(response.data.follow_up_questions)
-                  : response.data.follow_up_questions
-                : [],
+              followUpQuestions: decodeFollowUpQuestions(
+                response.data.follow_up_questions
+              ),
               showFollowUpQuestions: false,
               showLog: false,
             };
@@ -370,7 +368,7 @@ export function useRefreshMessage(opts: {
           }
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to refresh message:", error);
       if (isStillActive()) {
         ElMessage.error(i18n.global.t("common.refreshFailedRetry"));

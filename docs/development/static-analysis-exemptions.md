@@ -63,13 +63,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-889ade21b4a72f3c522638de2a6931ad93bf6167366e5fd978930c6d7ed0875a` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useFileUpload.ts:28](../../src/views/chat/composables/useFileUpload.ts#L28) | `VariableDeclarator:handleFileChange@28:35-28:38` | `web-maintainers` | `2026-07-19` |
 | `web-sa-e10c4a43bae250cccc44af6244f7d7f6c6f10b741173578b40c80135f9e4e8be` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useLogView.ts:48](../../src/views/chat/composables/useLogView.ts#L48) | `TSPropertySignature:currentChat@48:20-48:23` | `web-maintainers` | `2026-07-19` |
 | `web-sa-7d552567370a1cd8294a8fb9e5e5f649eb0dd6dfb6450242c9841683aa0971ef` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useReactions.ts:9](../../src/views/chat/composables/useReactions.ts#L9) | `TSPropertySignature:getChatState@9:41-9:44` | `web-maintainers` | `2026-07-19` |
-| `web-sa-06b2beb245ed8949f3e60d36edbf1676c314913e43827ad20705b1b262f69b63` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useRefreshMessage.ts:17](../../src/views/chat/composables/useRefreshMessage.ts#L17) | `TSPropertySignature:getDialogueIdFromChatId@17:38-17:41` | `web-maintainers` | `2026-07-19` |
-| `web-sa-1501e9fe716ac700e2d10da991548dc540060cef9702e497e337167aab5b1223` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useRefreshMessage.ts:17](../../src/views/chat/composables/useRefreshMessage.ts#L17) | `TSPropertySignature:getDialogueIdFromChatId@17:46-17:49` | `web-maintainers` | `2026-07-19` |
-| `web-sa-9cf6c0ab66e9015a7ab8156c3fbfc50885b6e8282dbc5204866cf4b495407938` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useRefreshMessage.ts:16](../../src/views/chat/composables/useRefreshMessage.ts#L16) | `TSPropertySignature:getHistoryQuestionData@16:41-16:44` | `web-maintainers` | `2026-07-19` |
-| `web-sa-d915bef3ac3f1c616215ed22edc70c3ced0d9588910c5576b816082483441978` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useRefreshMessage.ts:16](../../src/views/chat/composables/useRefreshMessage.ts#L16) | `TSPropertySignature:getHistoryQuestionData@16:48-16:51` | `web-maintainers` | `2026-07-19` |
-| `web-sa-c24b19c5ca9cc5276a411713e299d30151cc4e541dd1d1df96367ee2191b02b5` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useRefreshMessage.ts:372](../../src/views/chat/composables/useRefreshMessage.ts#L372) | `VariableDeclarator:refreshMessage@372:21-372:24` | `web-maintainers` | `2026-07-19` |
-| `web-sa-42a469809be533e9860379eea6a3db1a1eb19e0cfaa91f5477de1afb9099b468` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useRefreshMessage.ts:91](../../src/views/chat/composables/useRefreshMessage.ts#L91) | `VariableDeclarator:refreshMessage@91:47-91:50` | `web-maintainers` | `2026-07-19` |
-| `web-sa-27a7a4f1351cc8ce414107ccee83c6058d8c35b5884e22cdbef43ad2acb4505e` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/composables/useRefreshMessage.ts:105](../../src/views/chat/composables/useRefreshMessage.ts#L105) | `VariableDeclarator:response@105:22-105:25` | `web-maintainers` | `2026-07-19` |
 | `web-sa-608ef8485c21112d53ddad5bfb0178741f072390d3fc8d3439550dcc080caa4c` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/index.vue:1603](../../src/views/chat/index.vue#L1603) | `VariableDeclarator:copyMessageWithDocs@1603:39-1603:42` | `web-maintainers` | `2026-07-19` |
 | `web-sa-acaeac1b9dbb8f486881ada1e65e6488bd01a0c587e5a6a37d6238d6b32f3934` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/index.vue:1607](../../src/views/chat/index.vue#L1607) | `VariableDeclarator:docs@1607:23-1607:26` | `web-maintainers` | `2026-07-19` |
 | `web-sa-585d050d11e405da837731ce6462b5bdf3e5dded50a4657a164c09de393a496c` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [src/views/chat/index.vue:1075](../../src/views/chat/index.vue#L1075) | `VariableDeclarator:formattedData@1075:53-1075:56` | `web-maintainers` | `2026-07-19` |
@@ -758,69 +751,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: eslint reported @typescript-eslint/no-explicit-any at line 9; raw diagnostic omitted.
-
-### `web-sa-06b2beb245ed8949f3e60d36edbf1676c314913e43827ad20705b1b262f69b63`
-
-- Exact entry: [src/views/chat/composables/useRefreshMessage.ts:17](../../src/views/chat/composables/useRefreshMessage.ts#L17)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 17; raw diagnostic omitted.
-
-### `web-sa-1501e9fe716ac700e2d10da991548dc540060cef9702e497e337167aab5b1223`
-
-- Exact entry: [src/views/chat/composables/useRefreshMessage.ts:17](../../src/views/chat/composables/useRefreshMessage.ts#L17)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 17; raw diagnostic omitted.
-
-### `web-sa-9cf6c0ab66e9015a7ab8156c3fbfc50885b6e8282dbc5204866cf4b495407938`
-
-- Exact entry: [src/views/chat/composables/useRefreshMessage.ts:16](../../src/views/chat/composables/useRefreshMessage.ts#L16)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 16; raw diagnostic omitted.
-
-### `web-sa-d915bef3ac3f1c616215ed22edc70c3ced0d9588910c5576b816082483441978`
-
-- Exact entry: [src/views/chat/composables/useRefreshMessage.ts:16](../../src/views/chat/composables/useRefreshMessage.ts#L16)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 16; raw diagnostic omitted.
-
-### `web-sa-c24b19c5ca9cc5276a411713e299d30151cc4e541dd1d1df96367ee2191b02b5`
-
-- Exact entry: [src/views/chat/composables/useRefreshMessage.ts:372](../../src/views/chat/composables/useRefreshMessage.ts#L372)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 372; raw diagnostic omitted.
-
-### `web-sa-42a469809be533e9860379eea6a3db1a1eb19e0cfaa91f5477de1afb9099b468`
-
-- Exact entry: [src/views/chat/composables/useRefreshMessage.ts:91](../../src/views/chat/composables/useRefreshMessage.ts#L91)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 91; raw diagnostic omitted.
-
-### `web-sa-27a7a4f1351cc8ce414107ccee83c6058d8c35b5884e22cdbef43ad2acb4505e`
-
-- Exact entry: [src/views/chat/composables/useRefreshMessage.ts:105](../../src/views/chat/composables/useRefreshMessage.ts#L105)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported @typescript-eslint/no-explicit-any at line 105; raw diagnostic omitted.
 
 ### `web-sa-608ef8485c21112d53ddad5bfb0178741f072390d3fc8d3439550dcc080caa4c`
 

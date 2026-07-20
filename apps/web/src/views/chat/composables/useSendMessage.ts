@@ -32,7 +32,11 @@ import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { getToken } from "@/utils/auth";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import { isRecord } from "@/api/contracts";
-import { chatContentToText, decodeAgentSteps } from "../messageTypes";
+import {
+  chatContentToText,
+  decodeAgentSteps,
+  decodeFollowUpQuestions,
+} from "../messageTypes";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 
@@ -455,7 +459,7 @@ export function useSendMessage(opts: {
         "data"
       );
       if (response.code === 200 || hasResponseData) {
-        const responseData = response.data as QueryData;
+        const responseData = response.data;
         const botProjection = parseBlockingProjection(responseData);
         const expertSucceeded =
           botProjection?.status === "SUCCEEDED" ||
@@ -493,11 +497,9 @@ export function useSendMessage(opts: {
             upload_path: response.data?.upload_path || "",
             instantMessage: true,
             id: response.data.id,
-            followUpQuestions: response.data.follow_up_questions
-              ? typeof response.data.follow_up_questions === "string"
-                ? JSON.parse(response.data.follow_up_questions)
-                : response.data.follow_up_questions
-              : [],
+            followUpQuestions: decodeFollowUpQuestions(
+              response.data.follow_up_questions
+            ),
             showFollowUpQuestions: false,
             showLog: false,
           };
@@ -519,11 +521,9 @@ export function useSendMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -547,11 +547,9 @@ export function useSendMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
                 server_file_path: response.data.server_file_path, // add the server file path
@@ -623,11 +621,9 @@ export function useSendMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -656,11 +652,9 @@ export function useSendMessage(opts: {
                 original: response.data.answer,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -680,11 +674,9 @@ export function useSendMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
                 compute_resource: response.data?.compute_resource || "",
@@ -709,11 +701,9 @@ export function useSendMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -735,11 +725,9 @@ export function useSendMessage(opts: {
               instantMessage: true,
               tool_name: response.data?.tool_name || "",
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions
-                ? typeof response.data.follow_up_questions === "string"
-                  ? JSON.parse(response.data.follow_up_questions)
-                  : response.data.follow_up_questions
-                : [],
+              followUpQuestions: decodeFollowUpQuestions(
+                response.data.follow_up_questions
+              ),
               showFollowUpQuestions: false,
               showLog: false,
             };

@@ -149,6 +149,25 @@ describe("useRefreshMessage", () => {
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
   });
 
+  it("normalizes malformed follow-up JSON without discarding the refreshed answer", async () => {
+    mockGetQuery.mockResolvedValueOnce({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "Refreshed answer",
+        id: "msg-2",
+        follow_up_questions: "not-json",
+      },
+    } as any);
+
+    const { refreshMessage } = makeComposable();
+    await refreshMessage(1);
+
+    const rebuilt = getChatState("A").renderedChat!.messages[1];
+    expect(rebuilt.content).toBe("Refreshed answer");
+    expect(rebuilt.followUpQuestions).toEqual([]);
+    expect(elMessageErrorSpy).not.toHaveBeenCalled();
+  });
+
   it("🔒 CAPTURE INVARIANT: switching dialogue during await, cleanup still lands on the initiating dialogue A, B is not touched", async () => {
     // Manually control when getQuery resolves
     let resolveQuery!: (value: any) => void;

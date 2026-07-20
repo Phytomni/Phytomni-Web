@@ -200,6 +200,25 @@ describe("useSendMessage", () => {
     expect(requestId.startsWith("chat-request-")).toBe(true);
   });
 
+  it("normalizes malformed follow-up JSON without discarding the blocking answer", async () => {
+    states.get("A")!.messageInput = "Keep the answer";
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "The answer is still usable",
+        id: "msg-follow-up",
+        follow_up_questions: "not-json",
+      },
+    } as any);
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const messages = getChatState("A").renderedChat!.messages;
+    expect(messages.at(-1)?.content).toBe("The answer is still usable");
+    expect(messages.at(-1)?.followUpQuestions).toEqual([]);
+  });
+
   it("two existing dialogues start in the same millisecond with unique keys and distinct parent row ids", async () => {
     states.get("A")!.messageInput = "from-A";
     states.get("B")!.messageInput = "from-B";
