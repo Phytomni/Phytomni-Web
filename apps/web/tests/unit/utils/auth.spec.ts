@@ -1,4 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  type MockInstance,
+} from "vitest";
 import Cookies from "js-cookie";
 import {
   getToken,
@@ -8,6 +15,21 @@ import {
   setExpiresIn,
   removeExpiresIn,
 } from "@/utils/auth";
+import { invalidInput } from "../../helpers/invalidInput";
+
+type CookieGetByName = (name: string) => string | undefined;
+
+function stubCookieGet(
+  value: string | undefined
+): MockInstance<CookieGetByName> {
+  // js-cookie overloads get() and get(name); this test only exercises the
+  // named-read contract used by auth.ts.
+  const spy = vi.spyOn(
+    Cookies,
+    "get"
+  ) as unknown as MockInstance<CookieGetByName>;
+  return spy.mockReturnValue(value);
+}
 
 describe("getToken — POISONED_VALUES filter", () => {
   beforeEach(() => {
@@ -17,18 +39,18 @@ describe("getToken — POISONED_VALUES filter", () => {
   it.each(["undefined", "null", ""])(
     "returns undefined when cookie value is poisoned literal %s",
     (poisoned) => {
-      vi.spyOn(Cookies, "get").mockReturnValue(poisoned as any);
+      stubCookieGet(poisoned);
       expect(getToken()).toBeUndefined();
     }
   );
 
   it("returns the raw token string when cookie holds a real value", () => {
-    vi.spyOn(Cookies, "get").mockReturnValue("real-token-abc123" as any);
+    stubCookieGet("real-token-abc123");
     expect(getToken()).toBe("real-token-abc123");
   });
 
   it("returns undefined when cookie is absent (Cookies.get returns undefined)", () => {
-    vi.spyOn(Cookies, "get").mockReturnValue(undefined as any);
+    stubCookieGet(undefined);
     expect(getToken()).toBeUndefined();
   });
 });
@@ -41,7 +63,7 @@ describe("setToken — input guard", () => {
   it("warns + returns undefined on non-string input", () => {
     const warn = vi.spyOn(console, "warn").mockReturnValue(undefined);
     const setSpy = vi.spyOn(Cookies, "set");
-    expect(setToken(null as any)).toBeUndefined();
+    expect(setToken(invalidInput<string>(null))).toBeUndefined();
     expect(warn).toHaveBeenCalledOnce();
     expect(setSpy).not.toHaveBeenCalled();
   });
@@ -58,7 +80,7 @@ describe("setToken — input guard", () => {
   );
 
   it("calls Cookies.set with Admin-Token for a valid non-poisoned string", () => {
-    const setSpy = vi.spyOn(Cookies, "set").mockReturnValue("ok" as any);
+    const setSpy = vi.spyOn(Cookies, "set").mockReturnValue("ok");
     const result = setToken("real-token");
     expect(setSpy).toHaveBeenCalledWith("Admin-Token", "real-token");
     expect(result).toBe("ok");
@@ -71,33 +93,29 @@ describe("removeToken / getExpiresIn / setExpiresIn / removeExpiresIn — thin C
   });
 
   it("removeToken delegates to Cookies.remove(Admin-Token)", () => {
-    const removeSpy = vi
-      .spyOn(Cookies, "remove")
-      .mockReturnValue(undefined as any);
+    const removeSpy = vi.spyOn(Cookies, "remove").mockReturnValue(undefined);
     removeToken();
     expect(removeSpy).toHaveBeenCalledWith("Admin-Token");
   });
 
   it("getExpiresIn returns cookie value when present", () => {
-    vi.spyOn(Cookies, "get").mockReturnValue("3600" as any);
+    stubCookieGet("3600");
     expect(getExpiresIn()).toBe("3600");
   });
 
   it("getExpiresIn returns -1 sentinel when cookie absent", () => {
-    vi.spyOn(Cookies, "get").mockReturnValue(undefined as any);
+    stubCookieGet(undefined);
     expect(getExpiresIn()).toBe(-1);
   });
 
   it("setExpiresIn writes Admin-Expires-In with the given duration", () => {
-    const setSpy = vi.spyOn(Cookies, "set").mockReturnValue("ok" as any);
+    const setSpy = vi.spyOn(Cookies, "set").mockReturnValue("ok");
     setExpiresIn(7200);
     expect(setSpy).toHaveBeenCalledWith("Admin-Expires-In", 7200);
   });
 
   it("removeExpiresIn delegates to Cookies.remove(Admin-Expires-In)", () => {
-    const removeSpy = vi
-      .spyOn(Cookies, "remove")
-      .mockReturnValue(undefined as any);
+    const removeSpy = vi.spyOn(Cookies, "remove").mockReturnValue(undefined);
     removeExpiresIn();
     expect(removeSpy).toHaveBeenCalledWith("Admin-Expires-In");
   });

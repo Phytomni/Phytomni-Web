@@ -1,4 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import type { RouteLocationNormalized } from "vue-router";
+import type {
+  BotCapability,
+  BotCapabilityByTool,
+} from "@/views/chat/composables/useBotCapabilities";
+import { buildRouteLocation } from "../helpers/mockFactories";
 
 // Stub the real router so importing @/permission neither pulls route
 // components nor registers a live navigation guard.
@@ -9,15 +15,26 @@ vi.mock("@/router", () => ({
 vi.mock("@/utils", () => ({ getToken: vi.fn() }));
 // Hand-stub the Pinia store factory (no real Pinia needed). Named with the
 // "mock" prefix so vitest's vi.mock hoisting allows the reference.
-const mockStore = {
+type GuardStoreMock = {
+  getUserTools: Mock<() => Promise<boolean>>;
+  FedLogOut: Mock<() => Promise<boolean>>;
+  roles: string[];
+};
+
+const mockStore: GuardStoreMock = {
   getUserTools: vi.fn(),
   FedLogOut: vi.fn(),
-  roles: [] as string[],
+  roles: [],
 };
 vi.mock("@/stores", () => ({ userStore: () => mockStore }));
-const mockCapabilities = {
-  byTool: { value: {} as Record<string, unknown> },
-  load: vi.fn().mockResolvedValue([]),
+type CapabilitiesMock = {
+  byTool: { value: BotCapabilityByTool };
+  load: Mock<(force?: boolean) => Promise<BotCapability[]>>;
+};
+
+const mockCapabilities: CapabilitiesMock = {
+  byTool: { value: {} },
+  load: vi.fn(),
 };
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
   useBotCapabilities: () => mockCapabilities,
@@ -36,21 +53,21 @@ import { beforeEachGuard } from "@/permission";
 import { getToken } from "@/utils";
 import { ElNotification } from "element-plus";
 
-const mockGetToken = getToken as unknown as ReturnType<typeof vi.fn>;
-const mockElNotification = ElNotification as unknown as ReturnType<
-  typeof vi.fn
->;
+const mockGetToken = vi.mocked(getToken);
+const mockElNotification = vi.mocked(ElNotification);
 // setTimeout(0) flushes the microtask chain (guard calls next() inside
 // getUserTools .then / .catch().finally).
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-function route(path: string, extra: Record<string, unknown> = {}) {
-  return {
+function route(
+  path: string,
+  extra: Partial<RouteLocationNormalized> = {}
+): RouteLocationNormalized {
+  return buildRouteLocation({
     path,
-    name: (extra.name as string) ?? undefined,
-    fullPath: (extra.fullPath as string) ?? path,
-    query: (extra.query as Record<string, unknown>) ?? {},
-  };
+    fullPath: extra.fullPath ?? path,
+    ...extra,
+  });
 }
 
 describe("beforeEachGuard", () => {
@@ -65,46 +82,42 @@ describe("beforeEachGuard", () => {
   });
 
   it("1: no token + whitelist path → next() with no arg", () => {
-    mockGetToken.mockReturnValue(false);
-    const next = vi.fn();
-    beforeEachGuard(route("/login") as any, route("/") as any, next as any);
+    mockGetToken.mockReturnValue(undefined);
+    const next = vi.fn<(value?: unknown) => void>();
+    beforeEachGuard(route("/login"), route("/"), next);
     expect(next).toHaveBeenCalledWith();
   });
 
   it("1b: no token + /terms whitelist path → next() with no arg", () => {
-    mockGetToken.mockReturnValue(false);
-    const next = vi.fn();
-    beforeEachGuard(route("/terms") as any, route("/") as any, next as any);
+    mockGetToken.mockReturnValue(undefined);
+    const next = vi.fn<(value?: unknown) => void>();
+    beforeEachGuard(route("/terms"), route("/"), next);
     expect(next).toHaveBeenCalledWith();
   });
 
   it("2: no token + non-whitelist → redirect to /login with redirect query", () => {
-    mockGetToken.mockReturnValue(false);
-    const next = vi.fn();
-    beforeEachGuard(route("/chat") as any, route("/") as any, next as any);
+    mockGetToken.mockReturnValue(undefined);
+    const next = vi.fn<(value?: unknown) => void>();
+    beforeEachGuard(route("/chat"), route("/"), next);
     expect(next).toHaveBeenCalledWith("/login?redirect=/chat");
   });
 
   it("3: token + first-login status 0 + non-allowed route → changePassword", () => {
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "0");
-    const next = vi.fn();
-    beforeEachGuard(
-      route("/chat", { name: "chat" }) as any,
-      route("/") as any,
-      next as any
-    );
+    const next = vi.fn<(value?: unknown) => void>();
+    beforeEachGuard(route("/chat", { name: "chat" }), route("/"), next);
     expect(next).toHaveBeenCalledWith({ name: "changePassword" });
   });
 
   it("4: token + guest-only path → safeRedirect to /chat", () => {
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "1");
-    const next = vi.fn();
+    const next = vi.fn<(value?: unknown) => void>();
     beforeEachGuard(
-      route("/forgot-password", { name: "forgotPassword" }) as any,
-      route("/") as any,
-      next as any
+      route("/forgot-password", { name: "forgotPassword" }),
+      route("/"),
+      next
     );
     expect(next).toHaveBeenCalledWith("/chat");
   });
@@ -112,8 +125,8 @@ describe("beforeEachGuard", () => {
   it("5: token + root path → next() with no arg", () => {
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "1");
-    const next = vi.fn();
-    beforeEachGuard(route("/") as any, route("/login") as any, next as any);
+    const next = vi.fn<(value?: unknown) => void>();
+    beforeEachGuard(route("/"), route("/login"), next);
     expect(next).toHaveBeenCalledWith();
   });
 
@@ -121,12 +134,8 @@ describe("beforeEachGuard", () => {
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "1");
     mockStore.getUserTools.mockResolvedValue(true);
-    const next = vi.fn();
-    beforeEachGuard(
-      route("/chat", { name: "chat" }) as any,
-      route("/") as any,
-      next as any
-    );
+    const next = vi.fn<(value?: unknown) => void>();
+    beforeEachGuard(route("/chat", { name: "chat" }), route("/"), next);
     await flush();
     expect(mockStore.getUserTools).toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith();
@@ -136,12 +145,8 @@ describe("beforeEachGuard", () => {
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "1");
     mockStore.getUserTools.mockRejectedValue(new Error("500"));
-    const next = vi.fn();
-    beforeEachGuard(
-      route("/chat", { name: "chat" }) as any,
-      route("/") as any,
-      next as any
-    );
+    const next = vi.fn<(value?: unknown) => void>();
+    beforeEachGuard(route("/chat", { name: "chat" }), route("/"), next);
     await flush();
     expect(mockStore.FedLogOut).toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith({
@@ -157,13 +162,9 @@ describe("beforeEachGuard", () => {
       .mockImplementation(() => {
         throw new Error("blocked");
       });
-    const next = vi.fn();
+    const next = vi.fn<(value?: unknown) => void>();
     // guest-only path keeps this synchronous (no getUserTools branch).
-    beforeEachGuard(
-      route("/login", { name: "login" }) as any,
-      route("/") as any,
-      next as any
-    );
+    beforeEachGuard(route("/login", { name: "login" }), route("/"), next);
     expect(next).not.toHaveBeenCalledWith({ name: "changePassword" });
     expect(next).toHaveBeenCalledWith("/chat");
     spy.mockRestore();
@@ -177,11 +178,11 @@ describe("beforeEachGuard", () => {
     // /change-password directly so the user can clear the flag — not probe the
     // gated endpoint, 403, FedLogOut and bounce to /login (the lockout bug).
     mockStore.getUserTools.mockRejectedValue(new Error("403"));
-    const next = vi.fn();
+    const next = vi.fn<(value?: unknown) => void>();
     beforeEachGuard(
-      route("/change-password", { name: "changePassword" }) as any,
-      route("/login") as any,
-      next as any
+      route("/change-password", { name: "changePassword" }),
+      route("/login"),
+      next
     );
     await flush();
     expect(mockStore.getUserTools).not.toHaveBeenCalled();
@@ -192,32 +193,28 @@ describe("beforeEachGuard", () => {
   it("10: first-login notification is closed on the post-logout /login transition", () => {
     // Reset any notification handle leaked from a prior test (module-level
     // state survives vi.clearAllMocks): a /login nav clears it to null.
-    mockGetToken.mockReturnValue(false);
-    beforeEachGuard(route("/login") as any, route("/") as any, vi.fn() as any);
+    mockGetToken.mockReturnValue(undefined);
+    beforeEachGuard(
+      route("/login"),
+      route("/"),
+      vi.fn<(value?: unknown) => void>()
+    );
     mockElNotification.mockClear();
     mockNotifClose.mockClear();
 
     // Show it: authed first-login user heading to a gated route.
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "0");
-    const next = vi.fn();
-    beforeEachGuard(
-      route("/chat", { name: "chat" }) as any,
-      route("/") as any,
-      next as any
-    );
+    const next = vi.fn<(value?: unknown) => void>();
+    beforeEachGuard(route("/chat", { name: "chat" }), route("/"), next);
     expect(mockElNotification).toHaveBeenCalledTimes(1);
 
     // Logout clears the token; the guard must STILL close the stale
     // notification on the /login transition — the close runs unconditionally,
     // before the auth check, so it fires even in the unauthed branch. Remove
     // that close call and this assertion goes red.
-    mockGetToken.mockReturnValue(false);
-    beforeEachGuard(
-      route("/login", { name: "login" }) as any,
-      route("/chat") as any,
-      next as any
-    );
+    mockGetToken.mockReturnValue(undefined);
+    beforeEachGuard(route("/login", { name: "login" }), route("/chat"), next);
     expect(mockNotifClose).toHaveBeenCalledTimes(1);
   });
 
@@ -225,11 +222,11 @@ describe("beforeEachGuard", () => {
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "1");
     mockStore.roles = [];
-    const next = vi.fn();
+    const next = vi.fn<(value?: unknown) => void>();
     beforeEachGuard(
-      route("/gene-network-agent", { name: "geneNetworkAgent" }) as any,
-      route("/chat") as any,
-      next as any
+      route("/gene-network-agent", { name: "geneNetworkAgent" }),
+      route("/chat"),
+      next
     );
     await flush();
     expect(next).toHaveBeenCalledWith({ name: "NotFound" });
@@ -244,16 +241,10 @@ describe("beforeEachGuard", () => {
         throw new Error("blocked");
       });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const next = vi.fn();
+    const next = vi.fn<(value?: unknown) => void>();
 
     try {
-      beforeEachGuard(
-        route("/login", { name: "login" }) as unknown as Parameters<
-          typeof beforeEachGuard
-        >[0],
-        route("/") as unknown as Parameters<typeof beforeEachGuard>[1],
-        next as unknown as Parameters<typeof beforeEachGuard>[2]
-      );
+      beforeEachGuard(route("/login", { name: "login" }), route("/"), next);
       expect(next).toHaveBeenCalledWith("/chat");
       expect(warn).not.toHaveBeenCalled();
     } finally {

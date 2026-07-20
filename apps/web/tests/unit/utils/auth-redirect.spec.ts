@@ -10,6 +10,11 @@ vi.mock("@/utils/auth", () => ({
   getToken: vi.fn(),
 }));
 import { getToken } from "@/utils/auth";
+const mockGetToken = vi.mocked(getToken);
+
+function makeRouter() {
+  return { replace: vi.fn<(to: string) => unknown>() };
+}
 
 describe("safeRedirect — fallback on bad input", () => {
   it("returns fallback when target is null", () => {
@@ -29,7 +34,7 @@ describe("safeRedirect — fallback on bad input", () => {
   });
 
   it("returns fallback when array's first element is null", () => {
-    expect(safeRedirect([null] as any, "/chat")).toBe("/chat");
+    expect(safeRedirect([null], "/chat")).toBe("/chat");
   });
 });
 
@@ -81,16 +86,16 @@ describe("safeRedirect — happy path + guest-path self-loop guard", () => {
 
 describe("redirectIfAuthed", () => {
   it("returns false and does not redirect when no token", () => {
-    (getToken as any).mockReturnValue(undefined);
-    const router = { replace: vi.fn() };
+    mockGetToken.mockReturnValue(undefined);
+    const router = makeRouter();
     const result = redirectIfAuthed({ query: {} }, router);
     expect(result).toBe(false);
     expect(router.replace).not.toHaveBeenCalled();
   });
 
   it("returns true and redirects to safe target when authed", () => {
-    (getToken as any).mockReturnValue("token-abc");
-    const router = { replace: vi.fn() };
+    mockGetToken.mockReturnValue("token-abc");
+    const router = makeRouter();
     const result = redirectIfAuthed(
       { query: { redirect: "/history" } },
       router
@@ -100,22 +105,22 @@ describe("redirectIfAuthed", () => {
   });
 
   it("redirects to default fallback /chat when query.redirect absent", () => {
-    (getToken as any).mockReturnValue("token-abc");
-    const router = { replace: vi.fn() };
+    mockGetToken.mockReturnValue("token-abc");
+    const router = makeRouter();
     redirectIfAuthed({ query: {} }, router);
     expect(router.replace).toHaveBeenCalledWith("/chat");
   });
 
   it("respects custom fallback when provided", () => {
-    (getToken as any).mockReturnValue("token-abc");
-    const router = { replace: vi.fn() };
+    mockGetToken.mockReturnValue("token-abc");
+    const router = makeRouter();
     redirectIfAuthed({ query: {} }, router, "/profile");
     expect(router.replace).toHaveBeenCalledWith("/profile");
   });
 
   it("sanitizes malicious redirect target before replacing", () => {
-    (getToken as any).mockReturnValue("token-abc");
-    const router = { replace: vi.fn() };
+    mockGetToken.mockReturnValue("token-abc");
+    const router = makeRouter();
     redirectIfAuthed({ query: { redirect: "//evil.com" } }, router);
     expect(router.replace).toHaveBeenCalledWith("/chat");
   });

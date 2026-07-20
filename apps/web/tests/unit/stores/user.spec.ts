@@ -60,6 +60,7 @@ describe("userStore.FedLogOut", () => {
 
 vi.mock("@/api/chat", () => ({ getUserTool: vi.fn() }));
 import { getUserTool } from "@/api/chat";
+const mockGetUserTool = vi.mocked(getUserTool);
 
 describe("userStore.expertEnabled", () => {
   beforeEach(() => {
@@ -72,7 +73,7 @@ describe("userStore.expertEnabled", () => {
   });
 
   it("is set from the tool-permissions expert_enabled flag", async () => {
-    (getUserTool as any).mockResolvedValue({
+    mockGetUserTool.mockResolvedValue({
       code: 200,
       data: {
         permission: "user",
@@ -113,7 +114,7 @@ describe("userStore.getUserTools $patch end-state", () => {
   });
 
   it("sets permission, roles, permission_list, and expertEnabled together", async () => {
-    (getUserTool as any).mockResolvedValue({
+    mockGetUserTool.mockResolvedValue({
       code: 200,
       data: {
         permission: "admin",
