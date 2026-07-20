@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { ref } from "vue";
+import { ref, type Ref } from "vue";
+import type { ChatUIState, ChatView } from "@/views/chat/types";
+import { buildChatState } from "../../../helpers/chatBuilders";
 
 const mockGetQueryAbortable = vi.hoisted(() => vi.fn());
 
@@ -31,34 +33,20 @@ vi.mock("@/utils/network-error", () => ({
 
 import { useSendMessage } from "@/views/chat/composables/useSendMessage";
 
-function makeState() {
-  return {
-    isSending: false,
-    messageInput: "question",
-    fileList: [],
-    historyQuestion: null,
-    reactions: {},
-    uploadTransfer: null,
-    activeRequestId: "",
-    generationStopped: false,
-    renderedChat: null as { messages: any[] } | null,
-    mode: "instant" as const,
-    sendStartedAt: null,
-    activeAgentName: "",
-    completing: false,
-  };
+function makeState(): ChatUIState {
+  return buildChatState({ messageInput: "question" });
 }
 
 describe("blocking Bot response identity", () => {
   let state: ReturnType<typeof makeState>;
-  let currentChat: ReturnType<typeof ref<any>>;
+  let currentChat: Ref<ChatView | null>;
   let getHistoryQuestionData: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("VITE_STREAM_ENABLED", "false");
     state = makeState();
-    currentChat = ref({ messages: [] });
+    currentChat = ref<ChatView | null>({ messages: [] });
     getHistoryQuestionData = vi.fn().mockResolvedValue(undefined);
   });
 
@@ -76,7 +64,11 @@ describe("blocking Bot response identity", () => {
         currentChat,
         composerRef: ref(null),
         t: (key: string) => key,
-        userStore: () => ({}),
+        userStore: () => ({
+          FedLogOut: vi
+            .fn<() => Promise<unknown>>()
+            .mockResolvedValue(undefined),
+        }),
         getHistoryQuestionData,
         chatList: ref([
           {

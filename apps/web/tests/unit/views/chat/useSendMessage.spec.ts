@@ -1,12 +1,31 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ref } from "vue";
-import type { ChatComposerHandle } from "@/views/chat/types";
+import type { Mock } from "vitest";
+import { ref, type Ref } from "vue";
+import type {
+  Chat,
+  ChatComposerHandle,
+  ChatMessage,
+  ChatUIState,
+  ChatView,
+  DialogueReconciliationResult,
+} from "@/views/chat/types";
+import type { AxiosProgressEvent } from "axios";
+import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
+import { deferred, mustGet } from "../../../helpers/mockFactories";
+import { buildChatState } from "../../../helpers/chatBuilders";
+import { invalidInput } from "../../../helpers/invalidInput";
+
+type StreamResult = { dialogueId?: string; messageId?: string };
+type StreamInput = {
+  placeholder: ChatMessage;
+  requestId: string;
+  dialogueId: string;
+  formData: FormData;
+};
 
 const streamHarness = vi.hoisted(() => ({
-  capturedGetChatState: undefined as ((id: string) => unknown) | undefined,
-  streamMessage: vi.fn(
-    async (): Promise<{ dialogueId?: string; messageId?: string }> => ({})
-  ),
+  capturedGetChatState: undefined as ((id: string) => ChatUIState) | undefined,
+  streamMessage: vi.fn<(input: StreamInput) => Promise<StreamResult>>(),
 }));
 
 // getQueryAbortable (main send) + getAnswerCheck (network-error recovery) are APIs the
@@ -17,7 +36,7 @@ vi.mock("@/api/chat", () => ({
 }));
 
 vi.mock("@/views/chat/composables/useStreamMessage", () => ({
-  useStreamMessage: (opts: { getChatState: (id: string) => unknown }) => {
+  useStreamMessage: (opts: { getChatState: (id: string) => ChatUIState }) => {
     streamHarness.capturedGetChatState = opts.getChatState;
     return { streamMessage: streamHarness.streamMessage };
   },
@@ -50,54 +69,29 @@ import { ElMessage } from "element-plus";
 const mockGetQueryAbortable = vi.mocked(getQueryAbortable);
 const mockClearPendingChat = vi.mocked(clearPendingChat);
 
-type ChatStateRecord = {
-  isSending: boolean;
-  messageInput: string;
-  fileList: any[];
-  historyQuestion: any;
-  reactions: Record<string, number>;
-  uploadTransfer: any | null;
-  activeRequestId: string;
-  generationStopped: boolean;
-  renderedChat: { messages: any[] } | null;
-  mode: "instant" | "expert";
-  sendStartedAt: number | null;
-  activeAgentName: string;
-  completing: boolean;
-};
+type ChatStateRecord = ChatUIState;
+type HistoryQuestionLookup = (
+  sendingDialogueId?: string,
+  options?: { blockingDialogueId?: string }
+) => Promise<DialogueReconciliationResult | undefined>;
 
 describe("useSendMessage", () => {
   // One mutable state per dialogueId; repeated getChatState(id) returns the same object
   let states: Map<string, ChatStateRecord>;
   let getChatState: (dialogueId: string) => ChatStateRecord;
-  let currentChatId: ReturnType<typeof ref<string>>;
-  let currentChat: ReturnType<typeof ref<any>>;
-  let composerRef: ReturnType<typeof ref<ChatComposerHandle | null>>;
-  let chatList: ReturnType<typeof ref<any>>;
-  let timestamp: ReturnType<typeof ref<number>>;
-  let getHistoryQuestionData: ReturnType<typeof vi.fn>;
-  let selectChat: ReturnType<typeof vi.fn>;
-  let scrollToBottom: ReturnType<typeof vi.fn>;
+  let currentChatId: Ref<string>;
+  let currentChat: Ref<ChatView | null>;
+  let composerRef: Ref<ChatComposerHandle | null>;
+  let chatList: Ref<Chat[]>;
+  let timestamp: Ref<number>;
+  let getHistoryQuestionData: Mock<HistoryQuestionLookup>;
+  let selectChat: Mock<(dialogueId: string) => Promise<void>>;
+  let scrollToBottom: Mock<() => Promise<void>>;
 
   function makeState(
     overrides: Partial<ChatStateRecord> = {}
   ): ChatStateRecord {
-    return {
-      isSending: false,
-      messageInput: "hi",
-      fileList: [],
-      historyQuestion: null,
-      reactions: {},
-      uploadTransfer: null,
-      activeRequestId: "",
-      generationStopped: false,
-      renderedChat: null,
-      mode: "instant",
-      sendStartedAt: null,
-      activeAgentName: "",
-      completing: false,
-      ...overrides,
-    };
+    return buildChatState({ messageInput: "hi", ...overrides });
   }
 
   beforeEach(() => {
@@ -115,7 +109,7 @@ describe("useSendMessage", () => {
       return states.get(dialogueId)!;
     };
     currentChatId = ref("A");
-    currentChat = ref({ messages: [] });
+    currentChat = ref<ChatView | null>({ messages: [] });
     composerRef = ref({
       closeHeader: vi.fn(),
       openHeader: vi.fn(),
@@ -126,8 +120,11 @@ describe("useSendMessage", () => {
       { id: 2, dialogue_id: "B", title: "t2", date: "", isFavorite: false },
     ]);
     timestamp = ref(0);
-    getHistoryQuestionData = vi.fn().mockResolvedValue(undefined);
-    selectChat = vi.fn();
+    getHistoryQuestionData = vi
+      .fn<HistoryQuestionLookup>()
+      .mockResolvedValue(undefined);
+    selectChat = vi.fn<(dialogueId: string) => Promise<void>>();
+    selectChat.mockResolvedValue(undefined);
     scrollToBottom = vi.fn().mockResolvedValue(undefined);
   });
 
@@ -138,14 +135,16 @@ describe("useSendMessage", () => {
   function makeComposable() {
     return useSendMessage({
       getChatState,
-      currentChatId: currentChatId as any,
+      currentChatId,
       currentChat,
       composerRef,
       t: (k: string) => k,
-      userStore: () => ({}),
+      userStore: () => ({
+        FedLogOut: vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined),
+      }),
       getHistoryQuestionData,
       chatList,
-      timestamp: timestamp as any,
+      timestamp,
       selectChat,
       scrollToBottom,
     });
@@ -153,18 +152,20 @@ describe("useSendMessage", () => {
 
   it("happy path: pushes user+assistant messages, clears input/files, resets isSending, syncs reaction", async () => {
     states.get("A")!.messageInput = "Hello world";
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "ChatAgents",
-        answer: "I'm the assistant",
-        id: "msg-1",
-        bot_run_id: "run-msg-1",
-        report_revision: 1,
-        request_id: "web-request-msg-1",
-        reaction_type: "1",
-        follow_up_questions: [],
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgents",
+          answer: "I'm the assistant",
+          id: "msg-1",
+          bot_run_id: "run-msg-1",
+          report_revision: 1,
+          request_id: "web-request-msg-1",
+          reaction_type: "1",
+          follow_up_questions: [],
+        },
+      })
+    );
 
     const { sendMessage } = makeComposable();
     await sendMessage();
@@ -202,14 +203,16 @@ describe("useSendMessage", () => {
 
   it("normalizes malformed follow-up JSON without discarding the blocking answer", async () => {
     states.get("A")!.messageInput = "Keep the answer";
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "The answer is still usable",
-        id: "msg-follow-up",
-        follow_up_questions: "not-json",
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "The answer is still usable",
+          id: "msg-follow-up",
+          follow_up_questions: "not-json",
+        },
+      })
+    );
 
     const { sendMessage } = makeComposable();
     await sendMessage();
@@ -223,18 +226,12 @@ describe("useSendMessage", () => {
     states.get("A")!.messageInput = "from-A";
     states.get("B")!.messageInput = "from-B";
 
-    let resolveA!: (v: any) => void;
-    let resolveB!: (v: any) => void;
-    const pendingA = new Promise((resolve) => {
-      resolveA = resolve;
-    });
-    const pendingB = new Promise((resolve) => {
-      resolveB = resolve;
-    });
+    const pendingA = deferred<ApiEnvelope<DecodedQueryData>>();
+    const pendingB = deferred<ApiEnvelope<DecodedQueryData>>();
 
     mockGetQueryAbortable
-      .mockReturnValueOnce(pendingA as any)
-      .mockReturnValueOnce(pendingB as any);
+      .mockReturnValueOnce(pendingA.promise)
+      .mockReturnValueOnce(pendingB.promise);
 
     const { sendMessage } = makeComposable();
     const sendA = sendMessage();
@@ -258,26 +255,30 @@ describe("useSendMessage", () => {
     expect(getChatState("A").isSending).toBe(true);
     expect(getChatState("B").isSending).toBe(true);
 
-    resolveA({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "answer-A",
-        id: "ma",
-        follow_up_questions: [],
-      },
-    });
+    pendingA.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "answer-A",
+          id: "ma",
+          follow_up_questions: [],
+        },
+      })
+    );
     await sendA;
     expect(getChatState("A").isSending).toBe(false);
     expect(getChatState("B").isSending).toBe(true);
 
-    resolveB({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "answer-B",
-        id: "mb",
-        follow_up_questions: [],
-      },
-    });
+    pendingB.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "answer-B",
+          id: "mb",
+          follow_up_questions: [],
+        },
+      })
+    );
     await sendB;
     expect(getChatState("B").isSending).toBe(false);
     expect(getChatState("A").renderedChat!.messages.at(-1).content).toBe(
@@ -291,7 +292,9 @@ describe("useSendMessage", () => {
   it("A→B switch during pre-request await still uses A's parent row/message/file/mode snapshot", async () => {
     states.get("A")!.messageInput = "payload-A";
     states.get("A")!.mode = "expert";
-    states.get("A")!.historyQuestion = { h: 1 };
+    states.get("A")!.historyQuestion = invalidInput<readonly ChatMessage[]>({
+      h: 1,
+    });
     states.get("A")!.fileList = [
       {
         name: "a.txt",
@@ -309,15 +312,17 @@ describe("useSendMessage", () => {
         })
     );
 
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "ok",
-        id: "m1",
-        bot_run_id: "run-captured-mode",
-        follow_up_questions: [],
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "ok",
+          id: "m1",
+          bot_run_id: "run-captured-mode",
+          follow_up_questions: [],
+        },
+      })
+    );
 
     const { sendMessage } = makeComposable();
     const sendPromise = sendMessage();
@@ -354,15 +359,15 @@ describe("useSendMessage", () => {
       },
     ];
 
-    let resolveQuery!: (v: any) => void;
     let capturedRequestId = "";
-    const pending = new Promise((resolve) => {
-      resolveQuery = resolve;
-    });
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
     mockGetQueryAbortable.mockImplementationOnce((_data, requestId, opts) => {
       capturedRequestId = requestId || "";
-      opts?.onUploadProgress?.({ loaded: 50, total: 100 } as any);
-      return pending as any;
+      opts?.onUploadProgress?.({
+        loaded: 50,
+        total: 100,
+      } as AxiosProgressEvent);
+      return pending.promise;
     });
 
     const { sendMessage } = makeComposable();
@@ -376,14 +381,16 @@ describe("useSendMessage", () => {
     expect(getChatState("A").uploadTransfer?.percent).toBe(50);
     expect(getChatState("A").activeRequestId).toBe(capturedRequestId);
 
-    resolveQuery({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "Uploaded",
-        id: "msg-upload",
-        follow_up_questions: [],
-      },
-    });
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "Uploaded",
+          id: "msg-upload",
+          follow_up_questions: [],
+        },
+      })
+    );
     await sendPromise;
 
     expect(getChatState("A").uploadTransfer).toBeNull();
@@ -425,11 +432,8 @@ describe("useSendMessage", () => {
     };
 
     // A manually-controlled promise, simulating a pending request
-    let resolveQuery!: (v: any) => void;
-    const pending = new Promise((resolve) => {
-      resolveQuery = resolve;
-    });
-    mockGetQueryAbortable.mockReturnValueOnce(pending as any);
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
 
     const { sendMessage } = makeComposable();
 
@@ -448,15 +452,17 @@ describe("useSendMessage", () => {
     currentChat.value = { messages: [] };
 
     // The request completes
-    resolveQuery({
-      data: {
-        tool_name: "ChatAgents",
-        answer: "Late answer",
-        id: "msg-late",
-        reaction_type: "2",
-        follow_up_questions: [],
-      },
-    });
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgents",
+          answer: "Late answer",
+          id: "msg-late",
+          reaction_type: "2",
+          follow_up_questions: [],
+        },
+      })
+    );
     await sendPromise;
 
     // Cleanup lands on the captured A: isSending reset, fileList cleared
@@ -476,12 +482,8 @@ describe("useSendMessage", () => {
 
   it("background A success does not scroll or toast while B is focused", async () => {
     states.get("A")!.messageInput = "bg-A";
-    let resolveQuery!: (v: any) => void;
-    mockGetQueryAbortable.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveQuery = resolve;
-      }) as any
-    );
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
 
     const { sendMessage } = makeComposable();
     const sendPromise = sendMessage();
@@ -492,14 +494,16 @@ describe("useSendMessage", () => {
     currentChatId.value = "B";
     currentChat.value = { messages: [] };
 
-    resolveQuery({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "done",
-        id: "x",
-        follow_up_questions: [],
-      },
-    });
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "done",
+          id: "x",
+          follow_up_questions: [],
+        },
+      })
+    );
     await sendPromise;
 
     expect(scrollToBottom).not.toHaveBeenCalled();
@@ -509,12 +513,8 @@ describe("useSendMessage", () => {
 
   it("stale cleanup cannot clear a newer same-dialogue activeRequestId", async () => {
     states.get("A")!.messageInput = "first";
-    let resolveFirst!: (v: any) => void;
-    mockGetQueryAbortable.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveFirst = resolve;
-      }) as any
-    );
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
 
     const { sendMessage } = makeComposable();
     const first = sendMessage();
@@ -530,15 +530,17 @@ describe("useSendMessage", () => {
     getChatState("A").activeRequestId = "chat-request-newer";
     getHistoryQuestionData.mockClear();
 
-    resolveFirst({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "old",
-        id: "old",
-        dialogue_id: "stale-dialogue-id",
-        follow_up_questions: [],
-      },
-    });
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "old",
+          id: "old",
+          dialogue_id: "stale-dialogue-id",
+          follow_up_questions: [],
+        },
+      })
+    );
     await first;
 
     expect(getChatState("A").activeRequestId).toBe("chat-request-newer");
@@ -580,15 +582,17 @@ describe("useSendMessage", () => {
     currentChat.value = { messages: [] };
     states.set(tempId, makeState({ messageInput: "First message" }));
 
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "ok",
-        dialogue_id: "server-exact-id",
-        id: "msg-1",
-        follow_up_questions: [],
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "ok",
+          dialogue_id: "server-exact-id",
+          id: "msg-1",
+          follow_up_questions: [],
+        },
+      })
+    );
 
     getHistoryQuestionData.mockResolvedValueOnce({
       status: "reconciled",
@@ -623,14 +627,16 @@ describe("useSendMessage", () => {
       },
     ];
 
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "ok",
-        id: "m1",
-        follow_up_questions: [],
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "ok",
+          id: "m1",
+          follow_up_questions: [],
+        },
+      })
+    );
     getHistoryQuestionData.mockResolvedValueOnce({
       status: "retained",
       tempId: "new_888",
@@ -657,15 +663,17 @@ describe("useSendMessage", () => {
     getChatState = (dialogueId: string) =>
       chatStatesApi.getChatState(dialogueId);
 
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "done",
-        dialogue_id: serverId,
-        id: "m-late",
-        follow_up_questions: [],
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "done",
+          dialogue_id: serverId,
+          id: "m-late",
+          follow_up_questions: [],
+        },
+      })
+    );
 
     getHistoryQuestionData.mockImplementation(async (sendingId, opts) => {
       if (opts?.blockingDialogueId) {
@@ -707,13 +715,14 @@ describe("useSendMessage", () => {
     currentChat.value = { messages: [] };
     getChatState = (id: string) => chatStatesApi.getChatState(id);
 
-    let resolveQuery!: (v: any) => void;
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
     mockGetQueryAbortable.mockImplementationOnce((_d, _r, opts) => {
-      opts?.onUploadProgress?.({ loaded: 25, total: 100 } as any);
+      opts?.onUploadProgress?.({
+        loaded: 25,
+        total: 100,
+      } as AxiosProgressEvent);
       chatStatesApi.rekeyChatState(tempId, serverId);
-      return new Promise((resolve) => {
-        resolveQuery = resolve;
-      }) as any;
+      return pending.promise;
     });
 
     const { sendMessage } = makeComposable();
@@ -724,15 +733,17 @@ describe("useSendMessage", () => {
     expect(state.uploadTransfer?.percent).toBe(25);
     expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
 
-    resolveQuery({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "ok",
-        dialogue_id: serverId,
-        id: "u1",
-        follow_up_questions: [],
-      },
-    });
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "ok",
+          dialogue_id: serverId,
+          id: "u1",
+          follow_up_questions: [],
+        },
+      })
+    );
     getHistoryQuestionData.mockResolvedValueOnce({
       status: "reconciled",
       tempId,
@@ -802,34 +813,37 @@ describe("useSendMessage", () => {
     states.get("A")!.activeAgentName = "ChatAgent";
     states.get("A")!.mode = "instant";
 
-    let capturedPlaceholder: any;
+    let capturedPlaceholder: ChatMessage | undefined;
     let capturedRequestId = "";
-    streamHarness.streamMessage.mockImplementationOnce(async (input: any) => {
-      capturedPlaceholder = input.placeholder;
-      capturedRequestId = input.requestId;
-      // Simulate stream finally clearing dialogue streaming fields.
-      const st = getChatState("A");
-      st.streamingMessageId = null;
-      st.isStreaming = false;
-      input.placeholder.streaming = false;
-      return {};
-    });
+    streamHarness.streamMessage.mockImplementationOnce(
+      async (input: StreamInput) => {
+        capturedPlaceholder = input.placeholder;
+        capturedRequestId = input.requestId;
+        // Simulate stream finally clearing dialogue streaming fields.
+        const st = getChatState("A");
+        st.streamingMessageId = null;
+        st.isStreaming = false;
+        input.placeholder.streaming = false;
+        return {};
+      }
+    );
 
     const { sendMessage } = makeComposable();
     await sendMessage();
 
     expect(capturedRequestId).toMatch(/^chat-request-/);
-    expect(capturedPlaceholder.streamPresentationKey).toBe(capturedRequestId);
-    expect(capturedPlaceholder.id).toBeUndefined();
+    const placeholder = mustGet(capturedPlaceholder, "stream placeholder");
+    expect(placeholder.streamPresentationKey).toBe(capturedRequestId);
+    expect(placeholder.id).toBeUndefined();
     // Survives stream cleanup on the placeholder object.
-    expect(capturedPlaceholder.streamPresentationKey).toBe(capturedRequestId);
+    expect(placeholder.streamPresentationKey).toBe(capturedRequestId);
     // Not written into FormData / reactions / artifact identity surfaces.
     const call = streamHarness.streamMessage.mock.calls[0][0];
     const fd = call.formData as FormData;
     expect(fd.get("streamPresentationKey")).toBeNull();
     expect(fd.has("stream_presentation_key")).toBe(false);
     const assistant = getChatState("A").renderedChat!.messages.find(
-      (m: any) => m.role === "assistant"
+      (m: ChatMessage) => m.role === "assistant"
     );
     expect(assistant.streamPresentationKey).toBe(capturedRequestId);
     expect(assistant.id).toBeUndefined();
@@ -839,19 +853,11 @@ describe("useSendMessage", () => {
     states.get("A")!.messageInput = "from-A";
     states.get("B")!.messageInput = "from-B";
 
-    let resolveA!: (v: any) => void;
-    let resolveB!: (v: any) => void;
+    const pendingA = deferred<ApiEnvelope<DecodedQueryData>>();
+    const pendingB = deferred<ApiEnvelope<DecodedQueryData>>();
     mockGetQueryAbortable
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveA = resolve;
-        }) as any
-      )
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveB = resolve;
-        }) as any
-      );
+      .mockReturnValueOnce(pendingA.promise)
+      .mockReturnValueOnce(pendingB.promise);
 
     const { sendMessage } = makeComposable();
     const sendA = sendMessage();
@@ -884,14 +890,16 @@ describe("useSendMessage", () => {
     expect(getChatState("B").isSending).toBe(true);
     expect(getChatState("B").activeRequestId).toBe(keyB);
 
-    resolveA({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "late-answer-must-not-land",
-        id: "late-a",
-        follow_up_questions: [],
-      },
-    });
+    pendingA.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "late-answer-must-not-land",
+          id: "late-a",
+          follow_up_questions: [],
+        },
+      })
+    );
     await sendA;
 
     const msgsA = getChatState("A").renderedChat!.messages;
@@ -904,14 +912,16 @@ describe("useSendMessage", () => {
     expect(getChatState("B").isSending).toBe(true);
     expect(getChatState("B").activeRequestId).toBe(keyB);
 
-    resolveB({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "answer-B",
-        id: "mb",
-        follow_up_questions: [],
-      },
-    });
+    pendingB.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "answer-B",
+          id: "mb",
+          follow_up_questions: [],
+        },
+      })
+    );
     await sendB;
     expect(getChatState("B").isSending).toBe(false);
     expect(getChatState("B").renderedChat!.messages.at(-1).content).toBe(
@@ -927,12 +937,8 @@ describe("useSendMessage", () => {
     states.set(tempId, state);
     chatList.value = [];
 
-    let resolveFirst!: (v: any) => void;
-    mockGetQueryAbortable.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveFirst = resolve;
-      }) as any
-    );
+    const pendingFirst = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pendingFirst.promise);
 
     const { sendMessage } = makeComposable();
     const first = sendMessage();
@@ -960,15 +966,17 @@ describe("useSendMessage", () => {
     expect(state.isSending).toBe(true);
     expect(state.messageInput).toBe("second draft");
 
-    resolveFirst({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "stale-answer-1",
-        id: "11",
-        dialogue_id: "server-stop-dialogue",
-        follow_up_questions: [],
-      },
-    });
+    pendingFirst.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "stale-answer-1",
+          id: "11",
+          dialogue_id: "server-stop-dialogue",
+          follow_up_questions: [],
+        },
+      })
+    );
     await first;
 
     expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, {
@@ -995,14 +1003,16 @@ describe("useSendMessage", () => {
         isFavorite: false,
       },
     ];
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "ChatAgent",
-        answer: "answer-2",
-        id: "m2",
-        follow_up_questions: [],
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "answer-2",
+          id: "m2",
+          follow_up_questions: [],
+        },
+      })
+    );
 
     await sendMessage();
 
@@ -1016,12 +1026,8 @@ describe("useSendMessage", () => {
   it("background session-expired does not open ElMessageBox", async () => {
     const { ElMessageBox } = await import("element-plus");
     states.get("A")!.messageInput = "auth-fail";
-    let rejectQuery!: (err: unknown) => void;
-    mockGetQueryAbortable.mockReturnValueOnce(
-      new Promise((_, reject) => {
-        rejectQuery = reject;
-      }) as any
-    );
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
     const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
 
     const { sendMessage } = makeComposable();
@@ -1031,7 +1037,7 @@ describe("useSendMessage", () => {
 
     currentChatId.value = "B";
     currentChat.value = { messages: [] };
-    rejectQuery({
+    pending.reject({
       response: { data: { detail: { code: 403 } } },
     });
     try {
@@ -1087,18 +1093,20 @@ describe("useSendMessage", () => {
     states.get("A")!.messageInput = "research please";
     states.get("A")!.mode = "expert";
     states.get("A")!.activeAgentName = "ChatAgent";
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "InSilicoResearchAgent",
-        answer: "Task created: child-1",
-        status: "RUNNING",
-        task_id: "child-1",
-        bot_run_id: "run-expert-1",
-        report_revision: 3,
-        request_id: "web-request-1",
-        follow_up_questions: [],
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "InSilicoResearchAgent",
+          answer: "Task created: child-1",
+          status: "RUNNING",
+          task_id: "child-1",
+          bot_run_id: "run-expert-1",
+          report_revision: 3,
+          request_id: "web-request-1",
+          follow_up_questions: [],
+        },
+      })
+    );
 
     const { sendMessage } = makeComposable();
     await sendMessage();
@@ -1123,15 +1131,17 @@ describe("useSendMessage", () => {
   it("Expert rejects a non-terminal response without bot run identity", async () => {
     states.get("A")!.messageInput = "research without identity";
     states.get("A")!.mode = "expert";
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "InSilicoResearchAgent",
-        answer: "Task created",
-        status: "RUNNING",
-        task_id: "child-missing-run",
-        follow_up_questions: [],
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "InSilicoResearchAgent",
+          answer: "Task created",
+          status: "RUNNING",
+          task_id: "child-missing-run",
+          follow_up_questions: [],
+        },
+      })
+    );
     const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
     try {
       const { sendMessage } = makeComposable();
@@ -1161,7 +1171,9 @@ describe("useSendMessage", () => {
       states.get("A")!.mode = "expert";
       states.get("A")!.renderedChat = null;
       currentChat.value = { messages: [] };
-      mockGetQueryAbortable.mockResolvedValueOnce({ data } as any);
+      mockGetQueryAbortable.mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({ data })
+      );
       const consoleError = vi
         .spyOn(console, "error")
         .mockImplementation(vi.fn());
@@ -1182,16 +1194,18 @@ describe("useSendMessage", () => {
 
   it("blocking AnalystAgent response does not invent task_id (Update stays unavailable)", async () => {
     states.get("A")!.messageInput = "analyze please";
-    mockGetQueryAbortable.mockResolvedValueOnce({
-      data: {
-        tool_name: "AnalystAgent",
-        answer: "job submitted",
-        id: "9001",
-        compute_resource: "analyst-agents-small",
-        follow_up_questions: [],
-        // Intentionally omit task_id — blocking QueryData does not provide it.
-      },
-    } as any);
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "AnalystAgent",
+          answer: "job submitted",
+          id: "9001",
+          compute_resource: "analyst-agents-small",
+          follow_up_questions: [],
+          // Intentionally omit task_id — blocking QueryData does not provide it.
+        },
+      })
+    );
 
     const { sendMessage } = makeComposable();
     await sendMessage();
