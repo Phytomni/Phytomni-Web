@@ -158,6 +158,26 @@ describe("useAgentImages", () => {
     expect(mockGetObsImages).not.toHaveBeenCalled();
   });
 
+  it("negative path: does not trigger fetch when download_path is blank", async () => {
+    const currentChat = ref<any>(null);
+    useAgentImages(currentChat);
+
+    currentChat.value = {
+      messages: [
+        {
+          role: "assistant",
+          tool_name: "GeneNetworkAgent",
+          download_path: "   ",
+          id: "msg-005-blank",
+        },
+      ],
+    };
+
+    await flushPromises();
+
+    expect(mockGetObsImages).not.toHaveBeenCalled();
+  });
+
   it("negative path: does not trigger fetch when currentChat is null", async () => {
     const currentChat = ref<any>(null);
     useAgentImages(currentChat);

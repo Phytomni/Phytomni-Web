@@ -1,11 +1,22 @@
 import { watch, nextTick } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
-import type { ChatComposerHandle, UploadFile } from "../types";
+import type { UploadFile as ElementUploadFile } from "element-plus";
+import type { ChatComposerHandle, ChatUIState, UploadFile } from "../types";
+
+const isElementUploadFile = (value: unknown): value is ElementUploadFile => {
+  if (typeof value !== "object" || value === null) return false;
+  const file = value as Partial<ElementUploadFile>;
+  return (
+    typeof file.name === "string" &&
+    typeof File !== "undefined" &&
+    file.raw instanceof File
+  );
+};
 
 export function useFileUpload(opts: {
   fileList: WritableComputedRef<UploadFile[]>;
   currentChatId: Ref<string>;
-  getChatState: (dialogueId: string) => any;
+  getChatState: (dialogueId: string) => ChatUIState;
   composerRef: Ref<ChatComposerHandle | null>;
   scrollToBottom: () => void;
 }) {
@@ -25,10 +36,16 @@ export function useFileUpload(opts: {
   );
 
   // file-handling functions
-  const handleFileChange = (file: any) => {
+  const handleFileChange = (file: unknown) => {
     if (!currentChatId.value) {
       return;
     }
+
+    if (!isElementUploadFile(file)) {
+      return;
+    }
+    const rawFile = file.raw;
+    if (!rawFile) return;
 
     const chatState = getChatState(currentChatId.value);
     if (!chatState) {
@@ -37,9 +54,9 @@ export function useFileUpload(opts: {
 
     const newFile: UploadFile = {
       name: file.name,
-      size: file.size,
-      type: file.type,
-      file: file.raw,
+      size: file.size ?? rawFile.size,
+      type: rawFile.type,
+      file: rawFile,
     };
 
     // update reactively

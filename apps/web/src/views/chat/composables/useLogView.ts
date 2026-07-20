@@ -1,6 +1,6 @@
 import { nextTick, watch } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
-import type { ChatMessage, ChatUIState } from "../types";
+import type { ChatMessage, ChatUIState, ChatView } from "../types";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getAnalystAgentLog, updateAnalystAgentLog } from "@/api/chat";
@@ -32,11 +32,9 @@ export function analystLogActivityKey(rowId: string): string {
 }
 
 function parseLogPayload(data: unknown): unknown {
-  if (typeof data === "string") {
-    return data;
-  }
+  if (typeof data !== "string") return data;
   try {
-    return JSON.parse(data as string);
+    return JSON.parse(data);
   } catch (parseError) {
     console.error("JSON parse failed:", parseError);
     return data;
@@ -45,7 +43,7 @@ function parseLogPayload(data: unknown): unknown {
 
 export function useLogView(opts: {
   isSending: WritableComputedRef<boolean>;
-  currentChat: Ref<any>;
+  currentChat: Ref<ChatView | null>;
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
   scrollToBottom: () => void;
@@ -93,10 +91,11 @@ export function useLogView(opts: {
   /** One-time legacy open: showLog===true seeds the Activity map once. */
   const ensureLegacyLogActivityInit = () => {
     if (!currentChatId.value) return;
-    const messages = currentChat.value?.messages as ChatMessage[] | undefined;
+    const messages = currentChat.value?.messages;
     if (!messages) return;
     const chatState = getChatState(currentChatId.value);
     for (const message of messages) {
+      if (!message || typeof message !== "object") continue;
       if (message.showLog !== true) continue;
       const rowId = deriveAnalystLogRowId(message);
       if (!rowId) continue;

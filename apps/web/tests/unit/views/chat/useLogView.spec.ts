@@ -336,4 +336,14 @@ describe("useLogView", () => {
     expect(mockGetAnalystAgentLog).not.toHaveBeenCalled();
     expect(getChatState("A").activityExpandedByMessage).toEqual({});
   });
+
+  it("legacy initialization ignores absent log rows instead of throwing", async () => {
+    currentChat.value = { messages: [null, undefined, msg({ id: "61" })] };
+
+    expect(() => makeComposable()).not.toThrow();
+    await nextTick();
+
+    expect(mockGetAnalystAgentLog).not.toHaveBeenCalled();
+    expect(getChatState("A").activityExpandedByMessage).toEqual({});
+  });
 });

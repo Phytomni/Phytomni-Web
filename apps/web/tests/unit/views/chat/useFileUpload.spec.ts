@@ -57,6 +57,22 @@ describe("useFileUpload", () => {
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
+  it("handleFileChange ignores an Element Plus file without a raw browser File", async () => {
+    const { handleFileChange } = makeComposable();
+
+    handleFileChange({
+      name: "invalid.txt",
+      size: 10,
+      type: "text/plain",
+      raw: undefined,
+    });
+
+    expect(chatState.fileList).toHaveLength(0);
+    await nextTick();
+    expect(composerRef.value!.openHeader).not.toHaveBeenCalled();
+    expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
   it("removeFile removes a file from chatState.fileList and calls closeHeader when empty", async () => {
     const { removeFile } = makeComposable();
 

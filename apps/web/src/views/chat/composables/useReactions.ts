@@ -3,13 +3,15 @@ import type { Ref } from "vue";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getReactionType } from "@/api/chat";
+import type { ChatUIState } from "../types";
 
 export function useReactions(opts: {
   currentChatId: Ref<string>;
-  getChatState: (dialogueId: string) => any;
+  getChatState: (dialogueId: string) => ChatUIState;
   scrollToBottom: () => void;
 }) {
   const { currentChatId, getChatState, scrollToBottom } = opts;
+  const reactionRequestSeq = new Map<string, number>();
 
   // get the reaction state
   const getReactionState = (messageId: string) => {
@@ -22,7 +24,8 @@ export function useReactions(opts: {
   const handleReaction = async (messageId: string, reactionType: number) => {
     if (!currentChatId.value || !messageId) return;
 
-    const chatState = getChatState(currentChatId.value);
+    const dialogueId = currentChatId.value;
+    const chatState = getChatState(dialogueId);
     if (!chatState) return;
 
     const currentReaction = chatState.reactions?.[messageId] || 0;
@@ -30,6 +33,11 @@ export function useReactions(opts: {
     // if clicking the current state, cancel it (send 0)
     // if clicking a different state, switch to it
     const newReaction = currentReaction === reactionType ? 0 : reactionType;
+    const requestKey = `${dialogueId}:${messageId}`;
+    const requestSeq = (reactionRequestSeq.get(requestKey) ?? 0) + 1;
+    reactionRequestSeq.set(requestKey, requestSeq);
+    const isLatestRequest = () =>
+      reactionRequestSeq.get(requestKey) === requestSeq;
 
     try {
       // call the API
@@ -38,6 +46,8 @@ export function useReactions(opts: {
       formData.append("reaction_type", newReaction.toString());
 
       const response = await getReactionType(formData);
+
+      if (!isLatestRequest()) return;
 
       if (response.code === 200) {
         // update local state
@@ -54,23 +64,17 @@ export function useReactions(opts: {
         } else if (newReaction === 2) {
           ElMessage.success(i18n.global.t("chat.disliked"));
         }
-
-        // ensure it scrolls to the bottom
-        nextTick(() => {
-          scrollToBottom();
-        });
       } else {
         ElMessage.error(i18n.global.t("common.opFailedRetry"));
       }
     } catch (error) {
+      if (!isLatestRequest()) return;
       console.error("Reaction failed:", error);
       ElMessage.error(i18n.global.t("common.opFailedRetry"));
     }
 
     // ensure it scrolls to the bottom
-    nextTick(() => {
-      scrollToBottom();
-    });
+    nextTick(scrollToBottom);
   };
 
   // Locale-reactive labels; reaction values/API unchanged.

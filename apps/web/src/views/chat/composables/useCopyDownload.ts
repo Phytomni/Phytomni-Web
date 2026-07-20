@@ -9,8 +9,11 @@ import {
 
 let renderingFileDownloadSeq = 0;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
 function isCanceledRequest(error: unknown): boolean {
-  const err = error as { code?: unknown; name?: unknown };
+  const err = isRecord(error) ? error : undefined;
   return err?.code === "ERR_CANCELED" || err?.name === "CanceledError";
 }
 
@@ -32,7 +35,7 @@ export function useCopyDownload(opts: {
   };
 
   // copy the conversation
-  const textAreaCopyCore = (text: any, index: number) => {
+  const textAreaCopyCore = (text: string, index: number) => {
     const textArea = document.createElement("textarea");
     textArea.value = text;
     // move the textarea off-viewport and make it invisible
@@ -49,7 +52,7 @@ export function useCopyDownload(opts: {
     ElMessage.success(t("chat.copySuccess"));
   };
 
-  const fallbackCopyText = (text: any, index: number) => {
+  const fallbackCopyText = (text: string, index: number) => {
     try {
       if (window.isSecureContext) {
         navigator.clipboard.writeText(text);

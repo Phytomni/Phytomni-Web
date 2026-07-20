@@ -212,6 +212,28 @@ describe("useChatHistoryActions", () => {
       expect(onSelectChat).not.toHaveBeenCalled();
       expect(mockElError).toHaveBeenCalledWith("Delete failed");
     });
+
+    it("missing history item during an in-flight delete does not dereference stale dialog state", async () => {
+      const chat = makeChat({ dialogue_id: "missing" });
+      let resolveDelete!: (value: { code: number }) => void;
+      mockDeleteHistory.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveDelete = resolve;
+        })
+      );
+
+      const c = makeComposable();
+      c.handleChatAction("delete", chat);
+      const inflight = c.handleDeleteConfirm();
+      c.chatToDelete.value = null;
+
+      resolveDelete({ code: 200 });
+      await expect(inflight).resolves.toBeUndefined();
+
+      expect(onChatDeleted).not.toHaveBeenCalled();
+      expect(c.deleteDialogVisible.value).toBe(false);
+      expect(mockElSuccess).toHaveBeenCalledWith("Deleted successfully");
+    });
   });
 
   describe("toggleFavorite (favorite owned by parent, not mutated locally)", () => {

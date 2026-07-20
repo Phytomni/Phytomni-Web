@@ -1,8 +1,17 @@
 import { reactive, watch } from "vue";
 import type { Ref } from "vue";
 import { getObsImages } from "@/api/chat";
+import type { ChatMessage, ChatView } from "../types";
 
-export function useAgentImages(currentChat: Ref<any>) {
+const isChatMessage = (value: unknown): value is ChatMessage =>
+  typeof value === "object" && value !== null;
+
+const nonEmptyStrings = (values: readonly unknown[]): string[] =>
+  values.filter(
+    (value): value is string => typeof value === "string" && value.trim() !== ""
+  );
+
+export function useAgentImages(currentChat: Ref<ChatView | null>) {
   // GeneNetworkAgent / DigitalDesignAgent image download state (indexed by message id,
   // consistent with the frontend chat/index.vue)
   const geneNetworkImages = reactive<Record<string, string[]>>({});
@@ -15,13 +24,14 @@ export function useAgentImages(currentChat: Ref<any>) {
     messageId: string,
     downloadPath: string
   ) => {
-    if (!messageId || !downloadPath || geneNetworkImages[messageId]) return;
+    const normalizedPath = downloadPath.trim();
+    if (!messageId || !normalizedPath || geneNetworkImages[messageId]) return;
     geneNetworkImagesLoading[messageId] = true;
     try {
-      const res: any = await getObsImages({ obs_path: downloadPath });
+      const res = await getObsImages({ obs_path: normalizedPath });
       if (res.code === 200 && res.data) {
         const images = Array.isArray(res.data) ? res.data : [res.data];
-        geneNetworkImages[messageId] = [...new Set(images)] as string[];
+        geneNetworkImages[messageId] = [...new Set(nonEmptyStrings(images))];
       } else {
         geneNetworkImages[messageId] = [];
       }
@@ -49,11 +59,13 @@ export function useAgentImages(currentChat: Ref<any>) {
     try {
       const allImages: string[] = [];
       for (const path of downloadPaths) {
-        const res: any = await getObsImages({ obs_path: path });
+        const normalizedPath = path.trim();
+        if (!normalizedPath) continue;
+        const res = await getObsImages({ obs_path: normalizedPath });
         if (res.code === 200 && res.data) {
           if (Array.isArray(res.data)) {
-            allImages.push(...res.data);
-          } else {
+            allImages.push(...nonEmptyStrings(res.data));
+          } else if (typeof res.data === "string" && res.data.trim() !== "") {
             allImages.push(res.data);
           }
         }
@@ -72,38 +84,43 @@ export function useAgentImages(currentChat: Ref<any>) {
     () => currentChat.value?.messages,
     (messages) => {
       if (!messages) return;
-      messages.forEach((msg: any) => {
+      messages.filter(isChatMessage).forEach((msg) => {
+        const messageId = typeof msg.id === "string" ? msg.id : "";
+        const rawDownloadPath: unknown = msg.download_path;
         if (
           msg.role === "assistant" &&
           msg.tool_name === "GeneNetworkAgent" &&
-          msg.download_path &&
-          msg.id &&
-          !geneNetworkImages[msg.id]
+          typeof rawDownloadPath === "string" &&
+          rawDownloadPath.trim() !== "" &&
+          messageId &&
+          !geneNetworkImages[messageId]
         ) {
-          fetchGeneNetworkImages(msg.id, msg.download_path);
+          void fetchGeneNetworkImages(messageId, rawDownloadPath);
         }
         if (
           msg.role === "assistant" &&
           msg.tool_name === "DigitalDesignAgent" &&
-          msg.download_path &&
-          msg.id &&
-          !digitalDesignImages[msg.id]
+          rawDownloadPath !== undefined &&
+          messageId &&
+          !digitalDesignImages[messageId]
         ) {
           let paths: string[] = [];
-          if (Array.isArray(msg.download_path)) {
-            paths = msg.download_path;
-          } else if (typeof msg.download_path === "string") {
+          if (Array.isArray(rawDownloadPath)) {
+            paths = nonEmptyStrings(rawDownloadPath);
+          } else if (typeof rawDownloadPath === "string") {
             try {
-              const parsed = JSON.parse(msg.download_path);
+              const parsed: unknown = JSON.parse(rawDownloadPath);
               if (Array.isArray(parsed)) {
-                paths = parsed;
+                paths = nonEmptyStrings(parsed);
+              } else if (typeof parsed === "string") {
+                paths = [parsed];
               }
-            } catch (e) {
-              paths = [msg.download_path];
+            } catch {
+              paths = [rawDownloadPath];
             }
           }
           if (paths.length > 0) {
-            fetchDigitalDesignImages(msg.id, paths);
+            void fetchDigitalDesignImages(messageId, paths);
           }
         }
       });

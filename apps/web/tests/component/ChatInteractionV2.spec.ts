@@ -685,7 +685,7 @@ describe("ChatInteractionV2 — progress exclusivity and legacy absences", () =>
     expect(LOADING_BUBBLE).toContain("<TransferProgress");
     expect(LOADING_BUBBLE).toContain("<SendProgress");
     expect(LOADING_BUBBLE).toMatch(
-      /<TransferProgress[\s\S]*?v-if="getChatState\(currentChatId\)\.uploadTransfer"/
+      /<TransferProgress[\s\S]*?v-if="uploadTransfer"/
     );
     expect(LOADING_BUBBLE).toMatch(/<SendProgress[\s\S]*?v-else/);
     expect(LOADING_BUBBLE).not.toMatch(

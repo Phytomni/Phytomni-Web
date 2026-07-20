@@ -132,6 +132,30 @@ describe("useReactions", () => {
         "Operation failed, please try again"
       );
     });
+
+    it("same-dialogue overlap keeps the latest reaction when responses resolve out of order", async () => {
+      let resolveFirst!: (value: { code: number }) => void;
+      let resolveSecond!: (value: { code: number }) => void;
+      mockGetReactionType
+        .mockImplementationOnce(
+          () => new Promise((resolve) => (resolveFirst = resolve))
+        )
+        .mockImplementationOnce(
+          () => new Promise((resolve) => (resolveSecond = resolve))
+        );
+
+      const { handleReaction } = makeComposable();
+      const first = handleReaction("m1", 1);
+      const second = handleReaction("m1", 2);
+
+      resolveSecond({ code: 200 });
+      await second;
+      expect(chatState.reactions["m1"]).toBe(2);
+
+      resolveFirst({ code: 200 });
+      await first;
+      expect(chatState.reactions["m1"]).toBe(2);
+    });
   });
 
   describe("getReactionTooltip", () => {

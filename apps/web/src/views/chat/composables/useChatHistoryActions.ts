@@ -4,6 +4,11 @@ import i18n from "@/locales";
 import { collectHistory, renameHistory, deleteHistory } from "@/api/chat";
 import type { Chat } from "../types";
 
+interface RenameFormRef {
+  validate: () => Promise<boolean>;
+  resetFields?: () => void;
+}
+
 export function useChatHistoryActions(opts: {
   chatList: () => Chat[];
   currentChatId: () => string;
@@ -17,7 +22,7 @@ export function useChatHistoryActions(opts: {
   const renameForm = ref({
     title: "",
   });
-  const renameFormRef = ref();
+  const renameFormRef = ref<RenameFormRef | null>(null);
   const renameRules = {
     title: [
       { required: true, message: "Please enter a title", trigger: "blur" },
@@ -49,19 +54,21 @@ export function useChatHistoryActions(opts: {
 
   // confirm rename
   const handleRenameConfirm = async () => {
-    if (!renameFormRef.value || !chatToRename.value) return;
+    const formRef = renameFormRef.value;
+    const chat = chatToRename.value;
+    if (!formRef || !chat) return;
 
     try {
-      const valid = await renameFormRef.value.validate();
+      const valid = await formRef.validate();
       if (valid) {
         const formData = new FormData();
-        formData.append("id", chatToRename.value.id.toString());
+        formData.append("id", chat.id.toString());
         formData.append("rename", renameForm.value.title);
 
         const response = await renameHistory(formData);
         if (response.code === 200) {
           const updatedChat = {
-            ...chatToRename.value,
+            ...chat,
             title: renameForm.value.title,
           };
           renameDialogVisible.value = false;
@@ -84,11 +91,12 @@ export function useChatHistoryActions(opts: {
 
   // confirm delete
   const handleDeleteConfirm = async () => {
-    if (!chatToDelete.value) return;
+    const chat = chatToDelete.value;
+    if (!chat) return;
 
     try {
       const formData = new FormData();
-      formData.append("id", chatToDelete.value.id.toString());
+      formData.append("id", chat.id.toString());
       formData.append("reaction_type", "0"); // 0 means delete
 
       const response = await deleteHistory(formData);
@@ -96,14 +104,14 @@ export function useChatHistoryActions(opts: {
         // the parent (owner of chatList) removes it from the list; the child does not mutate props.chatList directly.
         const deletedChat = opts
           .chatList()
-          .find((c) => c.dialogue_id === chatToDelete.value!.dialogue_id);
+          .find((c) => c.dialogue_id === chat.dialogue_id);
         if (deletedChat) {
           // notify the parent that the chat was deleted
           opts.onChatDeleted(deletedChat);
         }
         deleteDialogVisible.value = false;
         // refresh the current chat
-        if (opts.currentChatId() === chatToDelete.value!.dialogue_id) {
+        if (opts.currentChatId() === chat.dialogue_id) {
           opts.onSelectChat("");
         }
         chatToDelete.value = null;
@@ -153,7 +161,7 @@ export function useChatHistoryActions(opts: {
   const handleRenameDialogClose = () => {
     chatToRename.value = null;
     renameForm.value.title = "";
-    if (renameFormRef.value) {
+    if (renameFormRef.value?.resetFields) {
       renameFormRef.value.resetFields();
     }
   };

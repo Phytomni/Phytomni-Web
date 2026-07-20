@@ -195,26 +195,10 @@
                           <ChatAnalystLog
                             :row-id="deriveAnalystLogRowId(message)"
                             :task-id="deriveAnalystLogTaskId(message)"
-                            :log-data="
-                    getChatState(currentChatId).logData[
-                      deriveAnalystLogRowId(message)!
-                    ]
-                  "
-                            :loading="
-                    !!getChatState(currentChatId).loadingLog[
-                      deriveAnalystLogRowId(message)!
-                    ]
-                  "
-                            :updating="
-                    !!getChatState(currentChatId).updatingLog[
-                      deriveAnalystLogRowId(message)!
-                    ]
-                  "
-                            :error-kind="
-                    getChatState(currentChatId).logErrorKinds[
-                      deriveAnalystLogRowId(message)!
-                    ]
-                  "
+                            :log-data="analystLogData(message)"
+                            :loading="analystLogLoading(message)"
+                            :updating="analystLogUpdating(message)"
+                            :error-kind="analystLogErrorKind(message)"
                             @update="updateLog(message)"
                             @retry="retryLog(message)"
                           />
@@ -333,8 +317,8 @@
                         <span class="dot"></span>
                       </div>
                       <TransferProgress
-                        v-if="getChatState(currentChatId).uploadTransfer"
-                        :snapshot="getChatState(currentChatId).uploadTransfer!"
+                        v-if="uploadTransfer"
+                        :snapshot="uploadTransfer"
                         @cancel="(id) => abortTransfer(id)"
                       />
                       <SendProgress
@@ -583,6 +567,7 @@ import {
   safeParse,
 } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
+import { chatContentToText } from "./messageTypes";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import { messageActionCapabilities } from "./utils/message-action-capabilities";
 import { artifactKindForMessage } from "./utils/artifact-policy";
@@ -791,6 +776,7 @@ const {
   chatMode,
   selectedAgent,
   fileList,
+  uploadTransfer,
   copyVisible,
   copyTimeRef,
   refreshingMessages,
@@ -1070,13 +1056,13 @@ const getHistoryQuestionData = (
 ): Promise<DialogueReconciliationResult | undefined> => {
   return new Promise((resolve) => {
     getHistoryQuestionList()
-      .then((res: any) => {
+      .then((res) => {
         if (res.code === 200 && res.data) {
-          const formattedData = res.data.map((item: any) => {
+          const formattedData: Chat[] = res.data.map((item) => {
             return {
               id: item.id,
               dialogue_id: item.dialogue_id,
-              title: item.title_query || item.query,
+              title: item.title_query || item.query || "",
               date: item.created_at,
               isFavorite: false,
             };
@@ -1145,7 +1131,7 @@ const getHistoryQuestionData = (
         }
         resolve(undefined);
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         console.error("Failed to fetch history question data:", err);
         resolve(undefined);
       });
@@ -1367,6 +1353,37 @@ function isAnalystLogExpanded(message: ChatMessage): boolean {
       analystLogActivityKey(rowId)
     ] === true
   );
+}
+
+function analystLogState(message: ChatMessage): ChatUIState | null {
+  if (!currentChatId.value || !deriveAnalystLogRowId(message)) return null;
+  return getChatState(currentChatId.value);
+}
+
+function analystLogData(message: ChatMessage): unknown {
+  const rowId = deriveAnalystLogRowId(message);
+  const state = analystLogState(message);
+  return rowId && state ? state.logData[rowId] : undefined;
+}
+
+function analystLogLoading(message: ChatMessage): boolean {
+  const rowId = deriveAnalystLogRowId(message);
+  const state = analystLogState(message);
+  return rowId && state ? state.loadingLog[rowId] === true : false;
+}
+
+function analystLogUpdating(message: ChatMessage): boolean {
+  const rowId = deriveAnalystLogRowId(message);
+  const state = analystLogState(message);
+  return rowId && state ? state.updatingLog[rowId] === true : false;
+}
+
+function analystLogErrorKind(
+  message: ChatMessage
+): ChatUIState["logErrorKinds"][string] {
+  const rowId = deriveAnalystLogRowId(message);
+  const state = analystLogState(message);
+  return rowId && state ? state.logErrorKinds[rowId] : undefined;
 }
 
 // File upload handling — state and logic extracted into the useFileUpload composable
@@ -1600,11 +1617,11 @@ const setTourInputTarget = (el: HTMLElement | null) => {
 // Copy message content + cited document list (extracted from an inline @click to work around a
 // vue-tsc 0.39.5 bug where it mis-maps a local const declared inside a multi-statement template
 // arrow function onto the component instance — see the @copy handler wiring below)
-const copyMessageWithDocs = (message: any, index: number) => {
+const copyMessageWithDocs = (message: ChatMessage, index: number) => {
   const docs =
     message.doc_list && message.doc_list.length > 0
       ? message.doc_list
-          .map((item: any, idx: number) => {
+          .map((item, idx) => {
             if (item.au || item.ti) {
               return `${idx + 1}. ${formatDetailedCitation(item)}`;
             } else if (item.title) {
@@ -1615,23 +1632,25 @@ const copyMessageWithDocs = (message: any, index: number) => {
           .join("\n")
       : "";
   const text =
-    message.content + (docs && docs !== "" ? "\nReferences:\n" : "") + docs;
+    chatContentToText(message.content) +
+    (docs && docs !== "" ? "\nReferences:\n" : "") +
+    docs;
   fallbackCopyText(text, index + 1);
 };
 
-const handleMessageCopy = (message: any, index: number) => {
+const handleMessageCopy = (message: ChatMessage, index: number) => {
   if (message.role === "user") {
-    fallbackCopyText(message.content, index + 1);
+    fallbackCopyText(chatContentToText(message.content), index + 1);
     return;
   }
   if (message.tableHeaders) {
-    fallbackCopyText(message.original, index + 1);
+    fallbackCopyText(message.original ?? "", index + 1);
     return;
   }
   copyMessageWithDocs(message, index);
 };
 
-const getDirectDownloads = (message: any): DirectDownloadItem[] => {
+const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   const items: DirectDownloadItem[] = [];
   if (
     message?.status === "SUCCEEDED" &&
