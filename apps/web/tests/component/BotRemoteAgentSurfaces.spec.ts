@@ -19,6 +19,7 @@ import {
   initBotLifecycleState,
   reduceBotProjection,
 } from "@/views/chat/streaming/botLifecycleReducer";
+import { mustGet } from "../helpers/mockFactories";
 
 const mocks = vi.hoisted(() => {
   const state = {
@@ -301,8 +302,9 @@ function syntheticDegradedState(): BotRemoteAgentRunState {
 }
 
 function syntheticFailureState(): BotRemoteAgentRunState {
+  const degradedState = syntheticDegradedState();
   const projection: BotRunProjection = {
-    ...syntheticDegradedState().projection!,
+    ...mustGet(degradedState.projection, "synthetic degraded projection"),
     status: "TIMED_OUT",
     reportStage: "final",
     reportCompleteness: "none",
@@ -314,7 +316,7 @@ function syntheticFailureState(): BotRemoteAgentRunState {
     artifacts: [],
   };
   return {
-    ...syntheticDegradedState(),
+    ...degradedState,
     status: "FAILED",
     phase: "failed",
     visibleReport: "",

@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import ResearchAgentView from "@/views/research-agent/index.vue";
+import type { BotRunProjection } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import type {
+  BotRemoteAgentRunState,
+  RemoteAgentRunIdentity,
+} from "@/views/chat/composables/useBotRemoteAgentRun";
 
 const mocks = vi.hoisted(() => {
-  const state = {
+  const state: { value: BotRemoteAgentRunState } = {
     value: {
       runId: null,
       status: "RUNNING" as const,
@@ -25,33 +30,40 @@ const mocks = vi.hoisted(() => {
       messageId: null,
     },
   };
-  const hydrate = vi.fn((projection: any, identity: any = {}) => {
-    state.value = {
-      ...state.value,
-      phase:
-        projection.status === "SUCCEEDED"
-          ? "succeeded"
-          : projection.status === "FAILED" || projection.status === "CANCELLED"
-          ? "failed"
-          : "running",
-      projection,
-      runId: projection.runId,
-      status:
-        projection.status === "SUCCEEDED"
-          ? "SUCCEEDED"
-          : projection.status === "FAILED" || projection.status === "CANCELLED"
-          ? "FAILED"
-          : "RUNNING",
-      visibleReport: projection.finalReport || projection.intermediateReport,
-      finalReport: projection.finalReport,
-      intermediateReport: projection.intermediateReport,
-      degraded: projection.degraded,
-      failures: projection.failures,
-      artifacts: projection.artifacts,
-      dialogueId: identity.dialogueId ?? state.value.dialogueId,
-      messageId: identity.messageId ?? state.value.messageId,
-    };
-  });
+  const hydrate = vi.fn(
+    (
+      projection: BotRunProjection,
+      identity: Partial<RemoteAgentRunIdentity> = {}
+    ) => {
+      state.value = {
+        ...state.value,
+        phase:
+          projection.status === "SUCCEEDED"
+            ? "succeeded"
+            : projection.status === "FAILED" ||
+              projection.status === "CANCELLED"
+            ? "failed"
+            : "running",
+        projection,
+        runId: projection.runId,
+        status:
+          projection.status === "SUCCEEDED"
+            ? "SUCCEEDED"
+            : projection.status === "FAILED" ||
+              projection.status === "CANCELLED"
+            ? "FAILED"
+            : "RUNNING",
+        visibleReport: projection.finalReport || projection.intermediateReport,
+        finalReport: projection.finalReport,
+        intermediateReport: projection.intermediateReport,
+        degraded: projection.degraded,
+        failures: projection.failures,
+        artifacts: projection.artifacts,
+        dialogueId: identity.dialogueId ?? state.value.dialogueId,
+        messageId: identity.messageId ?? state.value.messageId,
+      };
+    }
+  );
   return {
     state,
     submit: vi.fn().mockResolvedValue(null),

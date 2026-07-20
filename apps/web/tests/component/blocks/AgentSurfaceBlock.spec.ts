@@ -10,6 +10,7 @@ import type {
   A2uiOpenSurface,
   A2uiSurfaceState,
 } from "@/views/chat/streaming/a2uiContract";
+import { mustGet } from "../../helpers/mockFactories";
 
 const lifecycleCopy = {
   submitting: "Waiting for the action to finish.",
@@ -326,7 +327,7 @@ describe("AgentSurfaceBlock", () => {
       block: {
         ...block,
         a2ui: {
-          ...block.a2ui!,
+          ...mustGet(block.a2ui, "agent surface A2UI state"),
           state: {
             status: "submitting",
             round: 2,

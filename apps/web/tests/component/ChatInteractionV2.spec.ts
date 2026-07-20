@@ -51,6 +51,7 @@ import {
   getSharedPhase3COverlay,
   SYNTHETIC_IDENTITY,
 } from "../visual/chat/fixture-data";
+import { mustGet } from "../helpers/mockFactories";
 
 vi.mock("vue-element-plus-x", () => ({
   MentionSender: {
@@ -262,7 +263,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
           resolveTransport = resolve;
         })
     );
-    owner.a2uiRuntime!.transport = transport;
+    mustGet(owner.a2uiRuntime, "owner A2UI runtime").transport = transport;
 
     const Harness = defineComponent({
       setup() {

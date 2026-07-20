@@ -38,9 +38,19 @@ const i18n = createI18n({
   },
 });
 
-function mountActivity(props: Record<string, unknown>) {
+type ChatActivityProps = {
+  blocks?: ContentBlock[];
+  stateKey?: string | null;
+  expanded?: boolean;
+  streaming?: boolean;
+  ns?: string;
+  label?: string;
+  hideCount?: boolean;
+};
+
+function mountActivity(props: ChatActivityProps) {
   return mount(ChatActivity, {
-    props: props as any,
+    props,
     global: {
       plugins: [i18n],
     },
@@ -164,7 +174,7 @@ describe("ChatActivity", () => {
         expanded: true,
         label: "Execution log",
         hideCount: true,
-      } as any,
+      },
       slots: { default: '<div data-testid="slot-body">analyst body</div>' },
       global: { plugins: [i18n] },
     });

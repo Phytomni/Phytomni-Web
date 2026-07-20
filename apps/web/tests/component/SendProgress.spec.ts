@@ -13,8 +13,15 @@ const PROGRESS_SOURCE = readFileSync(
   "utf8"
 );
 
+type SendProgressProps = {
+  startedAt: number | null;
+  agentName: string;
+  completing: boolean;
+  stageLabel?: string;
+};
+
 function mountProgress(
-  props: Record<string, unknown>,
+  props: SendProgressProps,
   locale: "en-US" | "zh-CN" = "en-US"
 ) {
   const i18n = createI18n({
@@ -27,7 +34,7 @@ function mountProgress(
   });
   return {
     wrapper: mount(SendProgress, {
-      props: props as any,
+      props,
       global: { plugins: [i18n] },
     }),
     i18n,

@@ -6,6 +6,7 @@ import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import DigitalDesignAgentView from "@/views/digital-design-agent/index.vue";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { mustGet } from "../helpers/mockFactories";
 
 const i18n = createI18n({
   legacy: false,
@@ -306,7 +307,10 @@ describe("DigitalDesignAgentView", () => {
 
   it("fails closed when the resolver capability is unavailable", async () => {
     mocks.capabilities.byTool.value.DigitalDesignAgent = {
-      ...mocks.capabilities.byTool.value.DigitalDesignAgent!,
+      ...mustGet(
+        mocks.capabilities.byTool.value.DigitalDesignAgent,
+        "DigitalDesignAgent capability"
+      ),
       resolver: false,
     };
     const wrapper = mountView();
@@ -321,7 +325,10 @@ describe("DigitalDesignAgentView", () => {
 
   it("fails closed for disabled execution, attachment, and artifact gates", () => {
     const baseCapability = {
-      ...mocks.capabilities.byTool.value.DigitalDesignAgent!,
+      ...mustGet(
+        mocks.capabilities.byTool.value.DigitalDesignAgent,
+        "DigitalDesignAgent capability"
+      ),
     };
 
     for (const field of ["enabled", "attachments", "artifacts"] as const) {

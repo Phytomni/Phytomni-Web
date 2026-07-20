@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
+import type { LogErrorKind } from "@/views/chat/composables/useLogView";
 
 const ANALYST_LOG_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatAnalystLog.vue"),
@@ -45,14 +46,23 @@ const messages = {
   },
 };
 
-function mountLog(props: Record<string, unknown>, locale = "en-US") {
+type ChatAnalystLogProps = {
+  rowId?: string;
+  taskId?: string;
+  logData?: unknown;
+  loading?: boolean;
+  updating?: boolean;
+  errorKind?: LogErrorKind;
+};
+
+function mountLog(props: ChatAnalystLogProps, locale = "en-US") {
   const i18n = createI18n({
     legacy: false,
     locale,
     messages,
   });
   return mount(ChatAnalystLog, {
-    props: props as any,
+    props,
     global: { plugins: [i18n, ElementPlus] },
   });
 }
@@ -93,7 +103,7 @@ describe("ChatAnalystLog", () => {
         rowId: "1",
         taskId: "t",
         logData: [{ content: "row-a" }],
-      } as any,
+      },
       global: {
         plugins: [i18n, ElementPlus],
         // happy-dom cannot host Element Plus table's MutationObserver
@@ -139,7 +149,7 @@ describe("ChatAnalystLog", () => {
         rowId: "9",
         taskId: "task-9",
         errorKind: "fetch",
-      } as any,
+      },
       global: { plugins: [i18n, ElementPlus] },
     });
     expect(w.text()).toContain("Failed to load log");

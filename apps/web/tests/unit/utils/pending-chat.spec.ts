@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { mustGet } from "../../helpers/mockFactories";
 import {
   isValidPendingRecord,
   matchesChat,
@@ -168,7 +169,7 @@ describe("writePendingChat", () => {
     writePendingChat("new_123", messages);
     const raw = localStorage.getItem("pending_chat_new_123");
     expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw!);
+    const parsed = JSON.parse(mustGet(raw, "pending chat record"));
     expect(parsed).toEqual({
       id: "new_123",
       title: "hello",
@@ -184,7 +185,12 @@ describe("writePendingChat", () => {
       { role: "assistant", content: "" },
     ];
     writePendingChat("new_123", messages, { title: "explicit caller title" });
-    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
+    const parsed = JSON.parse(
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
+    );
     expect(parsed.title).toBe("explicit caller title");
   });
 
@@ -195,7 +201,12 @@ describe("writePendingChat", () => {
       { role: "user", content: "second user" },
     ];
     writePendingChat("new_123", messages);
-    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
+    const parsed = JSON.parse(
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
+    );
     expect(parsed.title).toBe("second user");
   });
 
@@ -205,14 +216,24 @@ describe("writePendingChat", () => {
       { role: "system", content: "system msg" },
     ];
     writePendingChat("new_123", messages);
-    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
+    const parsed = JSON.parse(
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
+    );
     expect(parsed.title).toBe("");
   });
 
   it("title length exactly 49 chars → no truncation, no ellipsis", () => {
     const title49 = "x".repeat(49);
     writePendingChat("new_123", [{ role: "user", content: title49 }]);
-    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
+    const parsed = JSON.parse(
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
+    );
     expect(parsed.title).toBe(title49);
     expect(parsed.title.length).toBe(49);
   });
@@ -220,7 +241,12 @@ describe("writePendingChat", () => {
   it("title length exactly 50 chars → no truncation, no ellipsis (boundary)", () => {
     const title50 = "x".repeat(50);
     writePendingChat("new_123", [{ role: "user", content: title50 }]);
-    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
+    const parsed = JSON.parse(
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
+    );
     expect(parsed.title).toBe(title50);
     expect(parsed.title.length).toBe(50);
   });
@@ -228,7 +254,12 @@ describe("writePendingChat", () => {
   it("title length exactly 51 chars → substring(0, 50) + '...'", () => {
     const title51 = "x".repeat(51);
     writePendingChat("new_123", [{ role: "user", content: title51 }]);
-    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
+    const parsed = JSON.parse(
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
+    );
     expect(parsed.title).toBe("x".repeat(50) + "...");
     expect(parsed.title.length).toBe(53);
   });
@@ -264,7 +295,12 @@ describe("writePendingChat", () => {
       },
     ];
     writePendingChat("new_123", messages);
-    const parsed = JSON.parse(localStorage.getItem("pending_chat_new_123")!);
+    const parsed = JSON.parse(
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
+    );
     expect(parsed.messages[0].attachedFiles).toEqual([
       {
         name: "data.csv",

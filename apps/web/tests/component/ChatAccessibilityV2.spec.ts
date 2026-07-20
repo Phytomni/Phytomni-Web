@@ -36,6 +36,7 @@ import {
   A2UI_LIFECYCLE_LONG_LABEL,
   buildA2uiLifecycleMessages,
 } from "../visual/chat/fixture-data";
+import { mustGet } from "../helpers/mockFactories";
 
 const ACTIONS_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageActions.vue"),
@@ -98,7 +99,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     const block = {
       ...FIXTURE_A2UI_REQUIRED_BLOCK,
       a2ui: {
-        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        ...mustGet(FIXTURE_A2UI_REQUIRED_BLOCK.a2ui, "required A2UI fixture"),
         state: {
           status: "unknown" as const,
           round: 1 as const,
@@ -122,7 +123,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     const roundTwo = {
       ...FIXTURE_A2UI_REQUIRED_BLOCK,
       a2ui: {
-        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        ...mustGet(FIXTURE_A2UI_REQUIRED_BLOCK.a2ui, "required A2UI fixture"),
         state: { status: "ready" as const, round: 2 as const },
       },
     };
@@ -147,12 +148,13 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
       block: {
         ...roundTwo,
         a2ui: {
-          ...roundTwo.a2ui!,
+          ...mustGet(roundTwo.a2ui, "round-two A2UI fixture"),
           state: {
             status: "submitting" as const,
             round: 2 as const,
             envelope: {
-              surface_id: roundTwo.a2ui!.surface.surface_id,
+              surface_id: mustGet(roundTwo.a2ui, "round-two A2UI fixture")
+                .surface.surface_id,
               widget: "form",
               action_id: "round-two-action",
               run_id: "round-two-run",
@@ -634,7 +636,7 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
     const block = {
       ...FIXTURE_A2UI_REQUIRED_BLOCK,
       a2ui: {
-        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        ...mustGet(FIXTURE_A2UI_REQUIRED_BLOCK.a2ui, "required A2UI fixture"),
         state: {
           status: "expired" as const,
           round: 1 as const,
