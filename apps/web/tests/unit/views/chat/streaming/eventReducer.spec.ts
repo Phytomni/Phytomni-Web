@@ -24,10 +24,27 @@ describe("reduceAGUIEvent", () => {
     expect(md?.authority).toBe("web");
   });
 
+  it("drops non-string text deltas instead of stringifying hostile payloads", () => {
+    const state = reduceAGUIEvent(initReducerState(), {
+      type: "TextMessageContent",
+      data: { delta: { toString: () => "injected" } },
+    });
+    expect(state.blocks).toEqual([]);
+  });
+
   it("captures run_id from RunStarted", () => {
     let s = initReducerState();
     s = reduceAGUIEvent(s, { type: "RunStarted", data: { run_id: "r9" } });
     expect(s.runId).toBe("r9");
+  });
+
+  it("does not treat message start/end markers as run terminal events", () => {
+    let state = reduceAGUIEvent(initReducerState(), {
+      type: "TextMessageStart",
+      data: {},
+    });
+    state = reduceAGUIEvent(state, { type: "TextMessageEnd", data: {} });
+    expect(state.done).toBe(false);
   });
 
   it("does not clobber a captured run_id with a later blank RunStarted", () => {
@@ -120,6 +137,17 @@ describe("reduceAGUIEvent", () => {
     expect(s.done).toBe(true);
   });
 
+  it("keeps only string follow-up entries", () => {
+    const state = reduceAGUIEvent(initReducerState(), {
+      type: "Custom",
+      data: {
+        name: "phyto.follow_up",
+        value: ["q1", 7, null, { question: "q2" }],
+      },
+    });
+    expect(state.followUp).toEqual(["q1"]);
+  });
+
   it("captures doc_list from phyto.references (P1 cited streaming)", () => {
     let s = initReducerState();
     s = reduceAGUIEvent(s, {
@@ -130,6 +158,17 @@ describe("reduceAGUIEvent", () => {
       },
     });
     expect(s.references).toEqual([{ title: "T1" }]);
+  });
+
+  it("drops non-object citation rows at the stream boundary", () => {
+    const state = reduceAGUIEvent(initReducerState(), {
+      type: "Custom",
+      data: {
+        name: "phyto.references",
+        value: { doc_list: [{ title: "T1" }, "not-a-document", null] },
+      },
+    });
+    expect(state.references).toEqual([{ title: "T1" }]);
   });
 
   it("captures error from RunError", () => {

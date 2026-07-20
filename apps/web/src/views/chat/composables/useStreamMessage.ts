@@ -4,10 +4,14 @@ import {
   registerAbortController,
   unregisterAbortController,
 } from "@/utils/request";
-import { splitSSEFrames, parseAGUIFrame } from "../streaming/aguiEvents";
+import {
+  splitSSEFrames,
+  parseAGUIFrame,
+  type AguiEvent,
+} from "../streaming/aguiEvents";
 import { initReducerState, reduceAGUIEvent } from "../streaming/eventReducer";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, ChatUIState } from "../types";
 
 export interface StreamInput {
   dialogueId: string;
@@ -64,7 +68,7 @@ function isDoneFrame(frame: string): boolean {
 // reducer owns the detailed payload handling; this gate prevents an unknown
 // event type from becoming an accidental UI surface while retaining the
 // existing tool/reasoning events used by the chat stream.
-const BOUNDED_AGUI_EVENTS = new Set([
+const BOUNDED_AGUI_EVENTS: ReadonlySet<AguiEvent["type"]> = new Set([
   "RunStarted",
   "StepStarted",
   "TextMessageStart",
@@ -84,7 +88,7 @@ const BOUNDED_AGUI_EVENTS = new Set([
 // finalizes on RunFinished/RunError. It coexists with the axios path in
 // useSendMessage; the branch decision lives there.
 export function useStreamMessage(opts: {
-  getChatState: (dialogueId: string) => any;
+  getChatState: (dialogueId: string) => ChatUIState;
   t: (key: string) => string; // i18n lookup (mirrors useSendMessage opts)
 }) {
   const { getChatState, t } = opts;
@@ -210,13 +214,13 @@ export function useStreamMessage(opts: {
         // A completed stream without RunStarted cannot authorize an action.
         placeholder.a2uiRuntime = undefined;
       }
-    } catch (e: any) {
+    } catch (error: unknown) {
       // Once RunFinished has been reduced, a later transport close/error does
       // not revoke a successfully completed message. Before that terminal
       // event, Abort and broken streams invalidate the message-owned uplink.
       if (!state.done) {
         placeholder.a2uiRuntime = undefined;
-        if (e?.name !== "AbortError") {
+        if (!isAbortError(error)) {
           placeholder.content = t("chat.streamInterrupted");
         }
       } else if (state.error) {
@@ -241,4 +245,11 @@ export function useStreamMessage(opts: {
   };
 
   return { streamMessage };
+}
+
+function isAbortError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || Array.isArray(error)) {
+    return false;
+  }
+  return (error as { name?: unknown }).name === "AbortError";
 }

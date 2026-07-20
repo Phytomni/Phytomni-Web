@@ -364,46 +364,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-d26673afef225e1e2068f9edde1ce9ecbef16d1c46da062c63c87b891ed48dd9"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "src/views/chat/composables/useStreamMessage.ts"
-target = "TSPropertySignature:getChatState@87:41-87:44"
-fingerprint = "sha256:d26673afef225e1e2068f9edde1ce9ecbef16d1c46da062c63c87b891ed48dd9"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target src/views/chat/composables/useStreamMessage.ts:TSPropertySignature:getChatState@87:41-87:44"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-20438dc85f4ff53903544a3190e5b21311c79efe194fd9932454c080d904b460"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "src/views/chat/composables/useStreamMessage.ts"
-target = "VariableDeclarator:streamMessage@213:17-213:20"
-fingerprint = "sha256:20438dc85f4ff53903544a3190e5b21311c79efe194fd9932454c080d904b460"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target src/views/chat/composables/useStreamMessage.ts:VariableDeclarator:streamMessage@213:17-213:20"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-608ef8485c21112d53ddad5bfb0178741f072390d3fc8d3439550dcc080caa4c"
 tool = "eslint"
 rule = "@typescript-eslint/no-explicit-any"
@@ -538,86 +498,6 @@ introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
 remediation = "WEB-SA: remediate exact target src/views/chat/index.vue:VariableDeclarator:handleMessageCopy@1622:37-1622:40"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-2eaaef2507cdc5b73c3cacfeb0b2a1c8d09ce72e6bdfe0da6caa6e022b1c1d51"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "src/views/chat/streaming/aguiEvents.ts"
-target = "TSPropertySignature:data@6:24-6:27"
-fingerprint = "sha256:2eaaef2507cdc5b73c3cacfeb0b2a1c8d09ce72e6bdfe0da6caa6e022b1c1d51"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target src/views/chat/streaming/aguiEvents.ts:TSPropertySignature:data@6:24-6:27"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-a935087dca59d42092f16030f6fcb51cea2e14ba3abdcf315f49575eefa56113"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "src/views/chat/streaming/aguiEvents.ts"
-target = "VariableDeclarator:data@27:28-27:31"
-fingerprint = "sha256:a935087dca59d42092f16030f6fcb51cea2e14ba3abdcf315f49575eefa56113"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target src/views/chat/streaming/aguiEvents.ts:VariableDeclarator:data@27:28-27:31"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-59129d8bb0f4c410570f39c5d40188488c2102c32543db4183e780bae4b08267"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "src/views/chat/streaming/eventReducer.ts"
-target = "FunctionDeclaration:reduceAGUIEvent@66:47-66:50"
-fingerprint = "sha256:59129d8bb0f4c410570f39c5d40188488c2102c32543db4183e780bae4b08267"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target src/views/chat/streaming/eventReducer.ts:FunctionDeclaration:reduceAGUIEvent@66:47-66:50"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-183b9fa9251a820fcdc7278123295c27c0274305b66d65e2e7ba033ba14bff2c"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "src/views/chat/streaming/eventReducer.ts"
-target = "TSPropertySignature:references@11:15-11:18"
-fingerprint = "sha256:183b9fa9251a820fcdc7278123295c27c0274305b66d65e2e7ba033ba14bff2c"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target src/views/chat/streaming/eventReducer.ts:TSPropertySignature:references@11:15-11:18"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."

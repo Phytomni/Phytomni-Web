@@ -1,5 +1,5 @@
-import type { ContentBlock } from "../types";
-import type { AGUIEvent } from "./aguiEvents";
+import type { CitationDocument, ContentBlock } from "../types";
+import type { AguiEvent } from "./aguiEvents";
 import { parseA2uiCustomValue } from "./a2uiParse";
 
 // ReducerState folds the AG-UI event stream into ordered content blocks plus
@@ -8,7 +8,7 @@ export interface ReducerState {
   blocks: ContentBlock[];
   runId: string;
   followUp: string[];
-  references: any[]; // phyto.references doc_list (P1 cited streaming)
+  references: CitationDocument[]; // phyto.references doc_list (P1 cited streaming)
   done: boolean;
   error?: { message: string };
 }
@@ -22,7 +22,7 @@ export function initReducerState(): ReducerState {
 // (toolName/label), not Bot-authored display strings.
 export function reduceAGUIEvent(
   state: ReducerState,
-  ev: AGUIEvent
+  ev: AguiEvent
 ): ReducerState {
   const blocks = state.blocks.map((b) => ({ ...b }));
   const next: ReducerState = { ...state, blocks };
@@ -31,48 +31,54 @@ export function reduceAGUIEvent(
       // Guard against a later RunStarted (retry / duplicate frame) with a
       // blank run_id clobbering an already-captured id — mirrors the Go
       // accumulator's non-overwrite invariant.
-      const rid = String(ev.data.run_id ?? "");
+      const rid = stringField(ev.data.run_id);
       if (rid) next.runId = rid;
       break;
     }
     case "TextMessageContent":
-      appendText(blocks, "markdown", String(ev.data.delta ?? ""));
+      appendText(blocks, "markdown", stringField(ev.data.delta));
       break;
     case "ReasoningMessageContent":
-      appendText(blocks, "reasoning", String(ev.data.delta ?? ""));
+      appendText(blocks, "reasoning", stringField(ev.data.delta));
       break;
     case "ToolCallStart":
       blocks.push({
         type: "tool",
         authority: "web",
-        toolName: String(ev.data.tool_name ?? ""),
+        toolName: stringField(ev.data.tool_name),
       });
       break;
     case "ToolCallResult": {
-      const count = ev.data.result_summary?.count;
+      const summary = isRecord(ev.data.result_summary)
+        ? ev.data.result_summary
+        : undefined;
+      const count = summary?.count;
       const tool = [...blocks].reverse().find((b) => b.type === "tool");
-      if (tool && typeof count === "number") tool.count = count;
+      if (tool && typeof count === "number" && Number.isFinite(count)) {
+        tool.count = count;
+      }
       break;
     }
     case "StepStarted":
       blocks.push({
         type: "step",
         authority: "web",
-        label: String(ev.data.step_name ?? ""),
+        label: stringField(ev.data.step_name),
       });
       break;
-    case "Custom":
-      if (ev.data.name === "phyto.follow_up" && Array.isArray(ev.data.value)) {
-        next.followUp = ev.data.value.map((v: any) => String(v));
-      } else if (
-        ev.data.name === "phyto.references" &&
-        Array.isArray(ev.data.value?.doc_list)
-      ) {
+    case "Custom": {
+      const name = stringField(ev.data.name);
+      const value = ev.data.value;
+      if (name === "phyto.follow_up" && Array.isArray(value)) {
+        next.followUp = value.filter(
+          (item): item is string => typeof item === "string"
+        );
+      } else if (name === "phyto.references" && isRecord(value)) {
         // P1 cited streaming: finalize copies these into message.doc_list so
         // the ns-aware cited render path engages (citation ns invariant).
-        next.references = ev.data.value.doc_list;
-      } else if (ev.data.name === "phyto.a2ui") {
-        const parsed = parseA2uiCustomValue(ev.data.value);
+        next.references = decodeCitationDocuments(value.doc_list);
+      } else if (name === "phyto.a2ui") {
+        const parsed = parseA2uiCustomValue(value);
         if (parsed.ok) {
           const surface = parsed.value;
           if (
@@ -98,6 +104,10 @@ export function reduceAGUIEvent(
         }
       }
       break;
+    }
+    case "TextMessageStart":
+    case "TextMessageEnd":
+      break;
     case "RunFinished":
       next.done = true;
       break;
@@ -105,7 +115,9 @@ export function reduceAGUIEvent(
       // RunError is terminal. Preserve the first upstream message if a
       // transport layer later tries to append a synthetic error event.
       if (!next.error) {
-        next.error = { message: String(ev.data.message ?? "stream error") };
+        next.error = {
+          message: stringField(ev.data.message) || "stream error",
+        };
       }
       next.done = true;
       // A failed run expires only surfaces that are still open or submitting.
@@ -141,6 +153,21 @@ export function reduceAGUIEvent(
   return next;
 }
 
+function stringField(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function decodeCitationDocuments(value: unknown): CitationDocument[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) =>
+    isRecord(item) ? [item as CitationDocument] : []
+  );
+}
+
 // appendText appends a delta to the LAST block of the given type if it is the
 // tail block, otherwise starts a new one — so interleaved tool/step events
 // break text into separate markdown/reasoning blocks in arrival order.
@@ -149,6 +176,7 @@ function appendText(
   type: "markdown" | "reasoning",
   delta: string
 ): void {
+  if (!delta) return;
   const tail = blocks[blocks.length - 1];
   if (tail && tail.type === type) {
     tail.text = (tail.text ?? "") + delta;

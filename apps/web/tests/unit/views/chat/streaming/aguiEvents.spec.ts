@@ -77,6 +77,21 @@ describe("parseAGUIFrame multi-line data", () => {
     expect(parseAGUIFrame("data: {bad json")).toBeNull();
   });
 
+  it("rejects unknown events and non-object or malformed event payloads", () => {
+    expect(
+      parseAGUIFrame('data: {"type":"FutureEvent","value":"ignored"}')
+    ).toBeNull();
+    expect(parseAGUIFrame("data: null")).toBeNull();
+    expect(
+      parseAGUIFrame("event: TextMessageContent\ndata: [1,2,3]")
+    ).toBeNull();
+    expect(
+      parseAGUIFrame(
+        'event: TextMessageContent\ndata: {"type":123,"delta":"x"}'
+      )
+    ).toBeNull();
+  });
+
   it("falls back to the event: line when data has no type", () => {
     const ev = parseAGUIFrame('event: RunFinished\ndata: {"run_id":"r1"}');
     expect(ev?.type).toBe("RunFinished");
@@ -116,7 +131,6 @@ describe("combined gated compatibility fixture", () => {
       .filter((event): event is NonNullable<typeof event> => event !== null);
     expect(observed.map((event) => event.type)).toEqual([
       "RunStarted",
-      "FutureEvent",
       "TextMessageContent",
       "RunError",
     ]);
@@ -126,7 +140,7 @@ describe("combined gated compatibility fixture", () => {
         .map((event) => event.type)
     ).toEqual(["RunStarted", "TextMessageContent", "RunError"]);
     expect(observed[0].data.run_id).toBe("run-task27");
-    expect(observed[3].data.message).toBe("synthetic failure");
+    expect(observed[2].data.message).toBe("synthetic failure");
     expect(parseAGUIFrame(frames[4])).toBeNull();
   });
 });

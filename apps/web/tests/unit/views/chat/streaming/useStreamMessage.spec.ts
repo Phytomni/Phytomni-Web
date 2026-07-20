@@ -351,6 +351,82 @@ describe("useStreamMessage", () => {
     expect(placeholder.streaming).toBe(false);
   });
 
+  it("ignores unknown and malformed event frames without aborting the stream", async () => {
+    const body = sseStream([
+      'data: {"type":"FutureEvent","value":"ignored"}\n\n',
+      "data: null\n\n",
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":{"unsafe":true}}\n\n',
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"safe"}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished"}\n\n',
+    ]);
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "req-hostile-frame",
+      placeholder,
+    });
+
+    expect(placeholder.blocks?.map((block) => block.text)).toEqual(["safe"]);
+    expect(placeholder.content).toBe("");
+    expect(placeholder.streaming).toBe(false);
+  });
+
+  it("preserves a partial UTF-8 code point across reader chunks", async () => {
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          enc.encode(
+            'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"'
+          )
+        );
+        const value = enc.encode("叶");
+        controller.enqueue(value.slice(0, 1));
+        controller.enqueue(value.slice(1));
+        controller.enqueue(
+          enc.encode(
+            '"}\n\nevent: RunFinished\ndata: {"type":"RunFinished"}\n\n'
+          )
+        );
+        controller.close();
+      },
+    });
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "req-utf8",
+      placeholder,
+    });
+
+    expect(
+      placeholder.blocks?.find((block) => block.type === "markdown")?.text
+    ).toBe("叶");
+  });
+
   it("reveals follow-up questions on the live turn (no @finish from StreamMessage)", async () => {
     const body = sseStream([
       'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r1"}\n\n',
