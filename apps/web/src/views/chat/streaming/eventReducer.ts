@@ -144,7 +144,11 @@ export function reduceAGUIEvent(
 // appendText appends a delta to the LAST block of the given type if it is the
 // tail block, otherwise starts a new one — so interleaved tool/step events
 // break text into separate markdown/reasoning blocks in arrival order.
-function appendText(blocks: ContentBlock[], type: string, delta: string): void {
+function appendText(
+  blocks: ContentBlock[],
+  type: "markdown" | "reasoning",
+  delta: string
+): void {
   const tail = blocks[blocks.length - 1];
   if (tail && tail.type === type) {
     tail.text = (tail.text ?? "") + delta;

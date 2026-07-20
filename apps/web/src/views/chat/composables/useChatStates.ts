@@ -1,5 +1,5 @@
 import { ref, computed } from "vue";
-import type { UploadFile, ChatUIState, ChatView } from "../types";
+import type { ChatMessage, UploadFile, ChatUIState, ChatView } from "../types";
 import type { RekeyChatStateOutcome } from "../types";
 
 function createDefaultChatUIState(): ChatUIState {
@@ -178,13 +178,13 @@ export function useChatStates() {
   });
 
   // log state management - now based on the current conversation
-  const logData = computed({
+  const logData = computed<Record<string, unknown>>({
     get: () => {
       if (!currentChatId.value) return {};
       const chatState = getChatState(currentChatId.value);
       return chatState ? chatState.logData : {};
     },
-    set: (value: Record<string, any>) => {
+    set: (value: Record<string, unknown>) => {
       if (!currentChatId.value) return;
       const chatState = getChatState(currentChatId.value);
       if (chatState) {
@@ -225,13 +225,13 @@ export function useChatStates() {
   });
 
   // history question - now based on the current conversation
-  const historyQuestion = computed({
+  const historyQuestion = computed<readonly ChatMessage[] | null>({
     get: () => {
       if (!currentChatId.value) return null;
       const chatState = getChatState(currentChatId.value);
       return chatState ? chatState.historyQuestion : null;
     },
-    set: (value: any) => {
+    set: (value: readonly ChatMessage[] | null) => {
       if (!currentChatId.value) return;
       const chatState = getChatState(currentChatId.value);
       if (chatState) {

@@ -27,7 +27,7 @@ import CitationReferenceList from "@/components/CitationReferenceList.vue";
 withDefaults(
   defineProps<{
     content: string;
-    references?: unknown[];
+    references?: readonly unknown[];
     instantMessage?: boolean;
     ns?: string;
     surface?: MarkdownSurface;

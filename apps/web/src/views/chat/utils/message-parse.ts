@@ -1,7 +1,14 @@
-import type { UploadFile } from "../types";
+import type { ChatAttachment, HistoricalUploadFile } from "../types";
+
+export interface ParsedMessageWithFiles {
+  content: string;
+  attachedFiles?: readonly ChatAttachment[];
+}
 
 // Parse message content and extract file info
-export const parseMessageWithFiles = (messageContent: string) => {
+export const parseMessageWithFiles = (
+  messageContent: string
+): ParsedMessageWithFiles => {
   // check whether file-info markers are present; accept both the current
   // "Attachment" marker and the legacy "附件" marker still embedded in
   // already-persisted chat history
@@ -16,7 +23,7 @@ export const parseMessageWithFiles = (messageContent: string) => {
   }
 
   // extract file info
-  const attachedFiles: UploadFile[] = [];
+  const attachedFiles: HistoricalUploadFile[] = [];
   fileMatches.forEach((match) => {
     const fileInfo = match.match(
       /\[(?:Attachment|附件): ([^(]+) \(([^)]+)\)\]/
@@ -39,7 +46,7 @@ export const parseMessageWithFiles = (messageContent: string) => {
         name: fileName,
         size: fileSize,
         type: "", // file type is unavailable from history
-        file: null as any, // file object is unavailable from history
+        file: null, // file object is unavailable from history
       });
     }
   });

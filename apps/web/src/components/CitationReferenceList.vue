@@ -19,7 +19,7 @@ import { buildDisplayReferences } from "@/utils/reference-renderer";
 // The only v-html sink is fed exclusively by buildDisplayReferences output
 // (escapeHtml + sanitizeHref); never bind a raw href or agent HTML.
 const props = defineProps<{
-  references?: unknown[];
+  references?: readonly unknown[];
   /** Developer-owned page namespace (e.g. m<index>); never agent text. */
   ns?: string;
 }>();

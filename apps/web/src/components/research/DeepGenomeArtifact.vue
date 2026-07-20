@@ -99,7 +99,7 @@ type ArtifactTabLabels = Partial<Record<ArtifactTab, string>>;
 const props = withDefaults(
   defineProps<{
     markdown?: string;
-    references?: unknown[];
+    references?: readonly unknown[];
     ns: string;
     title: string;
     metadata?: string | string[];

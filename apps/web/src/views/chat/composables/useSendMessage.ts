@@ -32,6 +32,7 @@ import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { getToken } from "@/utils/auth";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import { isRecord } from "@/api/contracts";
+import { chatContentToText, decodeAgentSteps } from "../messageTypes";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 
@@ -487,7 +488,7 @@ export function useSendMessage(opts: {
             content:
               response.data.final_answer ||
               "Sorry, I cannot answer this question.",
-            steps: response.data.steps || [],
+            steps: decodeAgentSteps(response.data.steps),
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
             instantMessage: true,
@@ -966,10 +967,11 @@ export function useSendMessage(opts: {
               );
               if (currentChatIndex !== -1) {
                 // take the user message content as the title (length-limited)
+                const titleContent = chatContentToText(userMessage.content);
                 const newTitle =
-                  userMessage.content.length > 50
-                    ? userMessage.content.substring(0, 50) + "..."
-                    : userMessage.content;
+                  titleContent.length > 50
+                    ? titleContent.substring(0, 50) + "..."
+                    : titleContent;
                 chatList.value[currentChatIndex].title = newTitle;
               }
             }

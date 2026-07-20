@@ -7,6 +7,7 @@ import { getQuery } from "@/api/chat";
 import { createTransferTracker } from "@/utils/transfer-progress";
 import { isValidJSON, convertToTableData } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
+import { chatContentToText, decodeAgentSteps } from "../messageTypes";
 
 export function useRefreshMessage(opts: {
   currentChat: Ref<ChatView | null>;
@@ -71,7 +72,7 @@ export function useRefreshMessage(opts: {
     try {
       const urlChatId = getDialogueIdFromChatId();
       const queryData = new FormData();
-      queryData.append("query", userMessage.content);
+      queryData.append("query", chatContentToText(userMessage.content));
       queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
       queryData.append("refresh_id", messageId);
       queryData.append("mode", chatState.mode);
@@ -131,7 +132,7 @@ export function useRefreshMessage(opts: {
             content:
               response.data.final_answer ||
               "Sorry, I cannot answer this question.",
-            steps: response.data.steps || [],
+            steps: decodeAgentSteps(response.data.steps),
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
             instantMessage: true,

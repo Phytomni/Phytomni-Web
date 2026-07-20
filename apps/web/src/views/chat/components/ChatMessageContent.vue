@@ -106,7 +106,7 @@
       v-else-if="
         message.role === 'assistant' && message.tool_name === 'DeepGenomeAgent'
       "
-      :markdown="String(message.content).replace(/\n/g, '\\n')"
+      :markdown="chatContentToText(message.content).replace(/\n/g, '\\n')"
       :references="message.doc_list || []"
       :ns="'m' + index"
       embedded
@@ -117,7 +117,7 @@
         message.doc_list.length > 0 &&
         message.role === 'assistant'
       "
-      :content="message.content"
+      :content="chatContentToText(message.content)"
       :references="message.doc_list"
       :ns="'m' + index"
       surface="chat"
@@ -127,14 +127,18 @@
     <MarkdownViewer
       v-else
       :instantMessage="(message?.instantMessage && isLastMessage) || false"
-      :content="message.content"
+      :content="chatContentToText(message.content)"
       surface="chat"
       @finish="emit('finish')"
     />
   </div>
   <!-- Table data display -->
   <div v-else-if="message.tableHeaders" class="table-response">
-    <el-table :data="message.content" border style="width: 100%">
+    <el-table
+      :data="chatContentToRows(message.content)"
+      border
+      style="width: 100%"
+    >
       <el-table-column
         v-for="header in message.tableHeaders"
         :key="header.prop"
@@ -167,7 +171,7 @@
     <div class="final-answer">
       <MarkdownViewer
         :instantMessage="(message?.instantMessage && isLastMessage) || false"
-        :content="message.content"
+        :content="chatContentToText(message.content)"
         surface="chat"
         @finish="emit('finish')"
       />
@@ -184,6 +188,7 @@ import ResearchArtifactPreview from "@/components/research/ResearchArtifactPrevi
 import StreamMessage from "./StreamMessage.vue";
 import type { ChatMessage } from "../types";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
+import { chatContentToRows, chatContentToText } from "../messageTypes";
 
 defineProps<{
   message: ChatMessage;

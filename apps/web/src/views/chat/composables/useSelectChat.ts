@@ -6,6 +6,7 @@ import { isValidJSON, convertToTableData } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 import { getAnswerCheck } from "@/api/chat";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
+import { decodeAgentSteps } from "../messageTypes";
 
 // History rows may carry bounded source metadata during the reversible Web
 // cutover. Keep that metadata opaque to rendering and discard malformed rows
@@ -111,7 +112,7 @@ export function useSelectChat(opts: {
                 messages.push({
                   role: "assistant",
                   content: answerData.final_answer,
-                  steps: answerData.steps || [],
+                  steps: decodeAgentSteps(answerData.steps),
                   status: item?.status || "",
                   upload_path: item?.upload_path || "",
                   download_path: item?.download_path || "",

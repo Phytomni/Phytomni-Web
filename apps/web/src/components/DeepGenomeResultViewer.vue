@@ -185,7 +185,7 @@ const get3DMol = () => (window as DeepGenomeWindow).$3Dmol;
 const props = withDefaults(
   defineProps<{
     markdown?: string;
-    references?: unknown[];
+    references?: readonly unknown[];
     ns?: string;
     embedded?: boolean;
     showActions?: boolean;

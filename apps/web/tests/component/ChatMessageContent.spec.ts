@@ -213,6 +213,14 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       message: { role: "assistant", content: "answer", tool_name: "ChatAgent" },
     },
     {
+      name: "legacy object content → markdown",
+      message: {
+        role: "assistant",
+        content: { final_answer: "legacy answer", steps: ["retrieve"] },
+        tool_name: "ChatAgent",
+      },
+    },
+    {
       name: "assistant streaming → stream",
       message: {
         role: "assistant",

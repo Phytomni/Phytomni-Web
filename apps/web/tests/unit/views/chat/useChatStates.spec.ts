@@ -104,6 +104,30 @@ describe("useChatStates parallel chat state", () => {
     expect(s.getChatState("A").activityExpandedByMessage["log:12"]).toBe(true);
   });
 
+  it("keeps typed history messages and structured log payloads scoped to one dialogue", () => {
+    const s = useChatStates();
+    const history = [
+      { role: "user", content: "question A" },
+      {
+        role: "assistant",
+        content: { final_answer: "answer A" },
+        doc_list: [{ title: "Reference A" }],
+      },
+    ];
+
+    s.currentChatId.value = "A";
+    s.historyQuestion.value = history;
+    s.logData.value = { "12": { status: "done", rows: 2 } };
+
+    s.currentChatId.value = "B";
+    expect(s.historyQuestion.value).toBeNull();
+    expect(s.logData.value).toEqual({});
+
+    s.currentChatId.value = "A";
+    expect(s.historyQuestion.value).toEqual(history);
+    expect(s.logData.value).toEqual({ "12": { status: "done", rows: 2 } });
+  });
+
   it("isolates activityExpandedByMessage per dialogue (A→B→A restoration)", () => {
     const s = useChatStates();
     s.currentChatId.value = "A";
@@ -272,22 +296,33 @@ describe("useChatStates renderedChat ownership", () => {
     s.currentChatId.value = "A";
     s.currentChat.value = { dialogue_id: "A", messages: messagesA };
     // Capture identities after reactive ownership (Vue may proxy nested objects)
-    const ownedA = s.getChatState("A").renderedChat!;
+    const ownedA = s.getChatState("A").renderedChat;
+    expect(ownedA).not.toBeNull();
+    if (!ownedA) throw new Error("expected rendered chat for A");
     const ownedMessagesA = ownedA.messages;
     const ownedPlaceholder = ownedMessagesA[1];
-    const ownedBlock = ownedPlaceholder.blocks![0];
+    expect(ownedPlaceholder).toBeDefined();
+    if (!ownedPlaceholder) throw new Error("expected streaming placeholder");
+    const ownedBlock = ownedPlaceholder.blocks?.[0];
+    expect(ownedBlock).toBeDefined();
+    if (!ownedBlock) throw new Error("expected A2UI block");
 
     s.currentChatId.value = "B";
     s.currentChat.value = { dialogue_id: "B", messages: messagesB };
-    const ownedB = s.getChatState("B").renderedChat!;
+    const ownedB = s.getChatState("B").renderedChat;
+    expect(ownedB).not.toBeNull();
+    if (!ownedB) throw new Error("expected rendered chat for B");
     expect(s.currentChat.value).toBe(ownedB);
     expect(s.currentChat.value).not.toBe(ownedA);
 
     s.currentChatId.value = "A";
-    expect(s.currentChat.value).toBe(ownedA);
-    expect(s.currentChat.value!.messages).toBe(ownedMessagesA);
-    expect(s.currentChat.value!.messages[1]).toBe(ownedPlaceholder);
-    expect(s.currentChat.value!.messages[1].blocks![0]).toBe(ownedBlock);
+    const currentA = s.currentChat.value;
+    expect(currentA).toBe(ownedA);
+    if (!currentA) throw new Error("expected current rendered chat for A");
+    expect(currentA.messages).toBe(ownedMessagesA);
+    expect(currentA.messages[1]).toBe(ownedPlaceholder);
+    const currentBlock = currentA.messages[1]?.blocks?.[0];
+    expect(currentBlock).toBe(ownedBlock);
     expect(s.getChatState("B").renderedChat).toBe(ownedB);
   });
 
@@ -307,7 +342,9 @@ describe("useChatStates renderedChat ownership", () => {
         },
       ],
     };
-    const ownedRendered = state.renderedChat!;
+    const ownedRendered = state.renderedChat;
+    expect(ownedRendered).not.toBeNull();
+    if (!ownedRendered) throw new Error("expected rendered chat for rekey");
     const ownedMessages = ownedRendered.messages;
 
     const result = s.rekeyChatState(tempId, serverId);
@@ -315,9 +352,10 @@ describe("useChatStates renderedChat ownership", () => {
     expect(result).toEqual({ outcome: "moved" });
     expect(s.chatStates.value[serverId]).toBe(state);
     expect(s.chatStates.value[serverId].renderedChat).toBe(ownedRendered);
-    expect(s.chatStates.value[serverId].renderedChat!.messages).toBe(
-      ownedMessages
-    );
+    const rekeyedRendered = s.chatStates.value[serverId].renderedChat;
+    expect(rekeyedRendered).not.toBeNull();
+    if (!rekeyedRendered) throw new Error("expected rekeyed rendered chat");
+    expect(rekeyedRendered.messages).toBe(ownedMessages);
   });
 
   it("empty currentChatId yields null currentChat and setter is a no-op", () => {

@@ -9,12 +9,16 @@ export const isValidJSON = (str: string): boolean => {
 };
 
 // Convert data into Element Plus Table format
-export const convertToTableData = (data: {
-  headers: string[];
-  rows: any[][];
-}) => {
+export interface TableDataInput {
+  headers: readonly string[];
+  rows: readonly unknown[][];
+}
+
+export const convertToTableData = (
+  data: TableDataInput
+): Array<Record<string, unknown>> => {
   return data.rows.map((row) => {
-    const obj: Record<string, any> = {};
+    const obj: Record<string, unknown> = {};
     data.headers.forEach((header, index) => {
       // replace spaces with underscores to avoid spaces in property names
       const key = header.replace(/\s+/g, "_").toLowerCase();
@@ -34,7 +38,9 @@ export const formatFileSize = (size: number) => {
   }
 };
 
-export const extractAtValues = (text: any) => {
+export const extractAtValues = (
+  text: string
+): { matches: string[]; cleanedText: string } => {
   // match all substrings starting with @ and ending with a comma
   const regex = /@[^,]+,/g;
 
@@ -47,7 +53,7 @@ export const extractAtValues = (text: any) => {
   return {
     matches:
       uniqueAgents.length > 0
-        ? uniqueAgents.map((match: any) => match.slice(1, -1))
+        ? uniqueAgents.map((match) => match.slice(1, -1))
         : [], // strip the @ and the comma
     cleanedText: cleanedText,
   };

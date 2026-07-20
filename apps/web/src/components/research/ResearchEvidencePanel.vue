@@ -36,7 +36,7 @@ import { buildDisplayReferences } from "@/utils/reference-renderer";
 // Agent-influenced references cross the v-html boundary only after the existing
 // canonical helper escapes text and sanitizes external URLs.
 const props = defineProps<{
-  references?: unknown[];
+  references?: readonly unknown[];
   ns: string;
 }>();
 

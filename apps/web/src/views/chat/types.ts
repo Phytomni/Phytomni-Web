@@ -1,8 +1,25 @@
 import type { A2uiActionTransport } from "./streaming/a2uiAction";
-import type { A2uiSurfaceRuntime } from "./streaming/a2uiContract";
 import type { BotInteropPayload, BotRunProjection } from "./botProjection";
 import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
+import type {
+  AgentStep,
+  ChatContent,
+  CitationDocument,
+  StreamContentBlock,
+} from "./messageTypes";
+
+export type {
+  AgentStep,
+  ChatContent,
+  CitationDocument,
+  AgentSurfaceContentBlock,
+  MarkdownContentBlock,
+  ReasoningContentBlock,
+  StepContentBlock,
+  StreamContentBlock,
+  ToolContentBlock,
+} from "./messageTypes";
 
 export interface Chat {
   id: number;
@@ -44,10 +61,10 @@ export type ArtifactTab = "content" | "evidence" | "activity" | "downloads";
 
 export interface ChatMessage {
   role: string;
-  content: any;
+  content: ChatContent;
   id?: string;
-  steps?: any[];
-  doc_list?: any[];
+  steps?: readonly AgentStep[];
+  doc_list?: readonly CitationDocument[];
   tableHeaders?: Array<{
     prop: string;
     label: string;
@@ -61,12 +78,12 @@ export interface ChatMessage {
   followUpQuestions?: string[]; // follow-up questions list
   showFollowUpQuestions?: boolean; // whether to show follow-up questions
   showLog?: boolean;
-  attachedFiles?: UploadFile[]; // attached files list
+  attachedFiles?: readonly ChatAttachment[]; // attached file metadata
   compute_resource?: string; // compute resource info
   task_id?: string; // task ID
   server_file_path?: string; // server file path
   streaming?: boolean; // true while AG-UI stream is in flight (renderer shows cursor)
-  blocks?: ContentBlock[]; // typed content blocks (streaming path); content stays for the axios path
+  blocks?: StreamContentBlock[]; // typed content blocks (streaming path); content stays for the axios path
   /**
    * Runtime-only UI identity for Activity disclosure while a stream placeholder
    * has no server `id`. Stamped from the send request key; never written to
@@ -81,22 +98,8 @@ export interface ChatMessage {
   botLifecycle?: BotLifecycleState;
 }
 
-// ContentBlock is one typed unit in a streaming assistant message. authority
-// marks who composed it ("web" = Web renders structured data; "agent" =
-// agent-surface blocks). interactive flags user-interactive blocks.
-// The registry (blockRegistry.ts) maps `type` to a Vue renderer.
-export interface ContentBlock {
-  type: "markdown" | "tool" | "step" | "reasoning" | "agent-surface" | string;
-  authority: "web" | "agent";
-  interactive?: boolean;
-  text?: string; // markdown/reasoning accumulated text
-  toolName?: string; // tool block: structured tool identifier (Web maps to copy)
-  label?: string; // step block: structured step identifier
-  count?: number; // tool_result hit count
-  // agent-surface (phyto.a2ui):
-  a2ui?: A2uiSurfaceRuntime;
-  sourceActionId?: string;
-}
+/** Backward-compatible name for the bounded stream-block union. */
+export type ContentBlock = StreamContentBlock;
 
 export interface ChatResponse {
   query: string;
@@ -107,7 +110,7 @@ export interface ChatResponse {
   status?: string;
   upload_path?: string;
   download_path?: string; // download path
-  steps?: any[];
+  steps?: readonly AgentStep[];
   reaction_type?: string; // reaction (like/dislike) state field
   compute_resource?: string; // compute resource info
   follow_up_questions?: string | string[]; // follow-up questions list
@@ -132,6 +135,16 @@ export interface UploadFile {
   file: File;
 }
 
+/** Persisted history attachment metadata has no live browser File object. */
+export interface HistoricalUploadFile {
+  name: string;
+  size: number;
+  type: string;
+  file: null;
+}
+
+export type ChatAttachment = UploadFile | HistoricalUploadFile;
+
 export interface ChatComposerHandle {
   openHeader: () => void;
   closeHeader: () => void;
@@ -146,10 +159,10 @@ export interface ChatUIState {
   isSending: boolean;
   messageInput: string;
   fileList: UploadFile[];
-  historyQuestion: any;
+  historyQuestion: readonly ChatMessage[] | null;
   copyVisible: number;
   copyTimeRef: ReturnType<typeof setTimeout> | undefined;
-  logData: Record<string, any>;
+  logData: Record<string, unknown>;
   loadingLog: Record<string, boolean>;
   refreshingMessages: Record<string, boolean>;
   reactions: Record<string, number>;

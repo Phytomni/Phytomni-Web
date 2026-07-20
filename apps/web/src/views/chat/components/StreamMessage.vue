@@ -54,7 +54,7 @@ const props = withDefaults(
     /** Page-unique citation namespace (m<index>); empty/absent → literal [N]. */
     ns?: string;
     /** Live phyto.references rows (message.doc_list); render only when nonempty. */
-    references?: unknown[];
+    references?: readonly unknown[];
     /** Server message id when present (preferred Activity identity). */
     messageId?: string;
     /** Runtime-only request-key stamp on the streaming placeholder. */
