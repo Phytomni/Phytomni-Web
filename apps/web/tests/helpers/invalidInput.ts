@@ -1,4 +1,4 @@
-/** Return a runtime value as an unknown test boundary. */
-export function invalidInput(value: unknown): unknown {
-  return value;
+/** Cross a deliberately runtime-invalid boundary without manufacturing output. */
+export function invalidInput<T>(value: unknown): T {
+  return value as T;
 }
