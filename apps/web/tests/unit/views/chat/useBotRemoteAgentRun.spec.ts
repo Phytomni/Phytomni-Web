@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ref } from "vue";
+import { ref, type Ref } from "vue";
 
 const mockQuery = vi.hoisted(() => vi.fn());
 const mockAbortRequest = vi.hoisted(() => vi.fn(() => true));
@@ -37,8 +37,11 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
 import {
   useBotRemoteAgentRun,
   type RemoteAgentChatState,
-  type RemoteAgentCapabilitySource,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
+import type {
+  BotCapability,
+  BotCapabilityExecution,
+} from "@/views/chat/composables/useBotCapabilities";
 import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import router, {
   REMOTE_AGENT_ROUTE_CONTRACTS,
@@ -46,6 +49,7 @@ import router, {
   canActivateRemoteAgentRoute,
   remoteAgentRouteGuard,
 } from "@/router";
+import { mustGet } from "../../../helpers/mockFactories";
 
 function makeState(): RemoteAgentChatState {
   return {
@@ -56,17 +60,23 @@ function makeState(): RemoteAgentChatState {
   };
 }
 
+type CapabilityMap = Record<string, Partial<BotCapability> | undefined>;
+type TestCapabilitySource = {
+  byTool: Ref<CapabilityMap>;
+  load?: (force?: boolean) => Promise<unknown>;
+};
+
 function makeCapabilities(
   tool: string,
   enabled = true,
   attachments: boolean | undefined = true,
-  execution = "agent_run",
+  execution: BotCapabilityExecution = "agent_run",
   resolver = false,
   load?: () => Promise<unknown>,
   artifacts: boolean | undefined = true
-): RemoteAgentCapabilitySource {
+): TestCapabilitySource {
   return {
-    byTool: ref({
+    byTool: ref<CapabilityMap>({
       [tool]: {
         enabled,
         attachments,
@@ -93,7 +103,10 @@ describe("useBotRemoteAgentRun", () => {
     const states = new Map<string, RemoteAgentChatState>();
     const getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) states.set(dialogueId, makeState());
-      return states.get(dialogueId)!;
+      return mustGet(
+        states.get(dialogueId),
+        `remote agent state ${dialogueId}`
+      );
     };
     const run = useBotRemoteAgentRun({
       tool: "GeneNetworkAgent",
@@ -145,7 +158,10 @@ describe("useBotRemoteAgentRun", () => {
     const states = new Map<string, RemoteAgentChatState>();
     const getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) states.set(dialogueId, makeState());
-      return states.get(dialogueId)!;
+      return mustGet(
+        states.get(dialogueId),
+        `remote agent state ${dialogueId}`
+      );
     };
     const paperFile = new File(["paper"], "paper.pdf", {
       type: "application/pdf",
@@ -387,7 +403,7 @@ describe("useBotRemoteAgentRun", () => {
     const cases: Array<
       [
         string,
-        RemoteAgentCapabilitySource,
+        TestCapabilitySource,
         { files?: File[]; resolver?: { geneId: string; speciesCode: string } }
       ]
     > = [

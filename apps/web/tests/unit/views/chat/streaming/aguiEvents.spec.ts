@@ -2,16 +2,18 @@ import { describe, it, expect } from "vitest";
 import {
   parseAGUIFrame,
   splitSSEFrames,
+  type AguiEvent,
 } from "@/views/chat/streaming/aguiEvents";
+import { mustGet } from "../../../../helpers/mockFactories";
 
 describe("parseAGUIFrame", () => {
   it("parses a TextMessageContent frame", () => {
     const ev = parseAGUIFrame(
       'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"photosynthesis"}'
     );
-    expect(ev).not.toBeNull();
-    expect(ev!.type).toBe("TextMessageContent");
-    expect(ev!.data.delta).toBe("photosynthesis");
+    const event = mustGet(ev, "TextMessageContent event");
+    expect(event.type).toBe("TextMessageContent");
+    expect(event.data.delta).toBe("photosynthesis");
   });
 
   it("returns null for [DONE] and blank frames", () => {
@@ -24,7 +26,7 @@ describe("parseAGUIFrame", () => {
     const ev = parseAGUIFrame(
       'event: X\ndata: {"type":"RunFinished","run_id":"r1"}'
     );
-    expect(ev!.type).toBe("RunFinished");
+    expect(mustGet(ev, "RunFinished event").type).toBe("RunFinished");
   });
 });
 
@@ -52,7 +54,11 @@ describe("splitSSEFrames", () => {
       "data: [DONE]",
     ]);
     expect(second.rest).toBe("partial");
-    expect(parseAGUIFrame(second.frames[0])?.data.delta).toBe("hi");
+    const textEvent = mustGet(
+      parseAGUIFrame(second.frames[0]),
+      "CRLF text event"
+    );
+    expect(textEvent.data.delta).toBe("hi");
     expect(parseAGUIFrame(second.frames[1])).toBeNull();
   });
 
@@ -126,7 +132,7 @@ describe("combined gated compatibility fixture", () => {
     expect(buffer).toBe("partial");
 
     const allowed = new Set(["RunStarted", "TextMessageContent", "RunError"]);
-    const observed = frames
+    const observed: AguiEvent[] = frames
       .map((frame) => parseAGUIFrame(frame))
       .filter((event): event is NonNullable<typeof event> => event !== null);
     expect(observed.map((event) => event.type)).toEqual([
@@ -139,8 +145,13 @@ describe("combined gated compatibility fixture", () => {
         .filter((event) => allowed.has(event.type))
         .map((event) => event.type)
     ).toEqual(["RunStarted", "TextMessageContent", "RunError"]);
-    expect(observed[0].data.run_id).toBe("run-task27");
-    expect(observed[2].data.message).toBe("synthetic failure");
+    expect(observed).toHaveLength(3);
+    expect(mustGet(observed[0], "RunStarted observed event").data.run_id).toBe(
+      "run-task27"
+    );
+    expect(mustGet(observed[2], "RunError observed event").data.message).toBe(
+      "synthetic failure"
+    );
     expect(parseAGUIFrame(frames[4])).toBeNull();
   });
 });

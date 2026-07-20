@@ -8,9 +8,36 @@ vi.mock("@/utils/request", () => ({
 
 import { useStreamMessage } from "@/views/chat/composables/useStreamMessage";
 import { unregisterAbortController } from "@/utils/request";
-import type { ChatMessage } from "@/views/chat/types";
+import type { ChatMessage, ChatUIState } from "@/views/chat/types";
+import { buildChatState } from "../../../../helpers/chatBuilders";
+import { mustGet } from "../../../../helpers/mockFactories";
 
 const CANONICAL_DIALOGUE_ID = "11111111-1111-4111-8111-111111111142";
+
+type FetchCall = Parameters<typeof fetch>;
+
+function mockedFetch() {
+  return vi.mocked(fetch);
+}
+
+function fetchCallAt(index: number, label: string): FetchCall {
+  return mustGet(mockedFetch().mock.calls[index], label);
+}
+
+function makeStreamState(): ChatUIState {
+  return buildChatState();
+}
+
+type StreamBlock = NonNullable<ChatMessage["blocks"]>[number];
+type MarkdownBlock = Extract<StreamBlock, { type: "markdown" }>;
+
+function markdownBlock(placeholder: ChatMessage, label: string): MarkdownBlock {
+  const blocks = mustGet(placeholder.blocks, `${label}: blocks`);
+  return mustGet(
+    blocks.find((block): block is MarkdownBlock => block.type === "markdown"),
+    `${label}: markdown block`
+  );
+}
 
 function sseStream(frames: string[]): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
@@ -46,7 +73,7 @@ describe("useStreamMessage", () => {
       'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"world"}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
 
     const placeholder: ChatMessage = {
       role: "assistant",
@@ -54,7 +81,7 @@ describe("useStreamMessage", () => {
       streaming: true,
       blocks: [],
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -67,7 +94,7 @@ describe("useStreamMessage", () => {
       placeholder,
     });
 
-    const md = placeholder.blocks!.find((b) => b.type === "markdown");
+    const md = markdownBlock(placeholder, "completed stream");
     expect(md?.text).toBe("hello world");
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
@@ -99,7 +126,7 @@ describe("useStreamMessage", () => {
     ];
 
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -111,7 +138,7 @@ describe("useStreamMessage", () => {
         `event: RunFinished\ndata: {"type":"RunFinished","run_id":"${fixture.runId}"}\n\n`,
         "data: [DONE]\r\n\r\n",
       ]);
-      (fetch as any).mockResolvedValueOnce(
+      mockedFetch().mockResolvedValueOnce(
         new Response(body, {
           status: 200,
           headers: {
@@ -151,11 +178,12 @@ describe("useStreamMessage", () => {
       expect(
         placeholder.blocks?.find((block) => block.type === "markdown")?.text
       ).toBe(fixture.tool);
-      const request = (fetch as any).mock.calls[index][1] as RequestInit;
-      expect((request.body as FormData).get("tool")).toBe(fixture.tool);
-      expect((request.body as FormData).get("mode")).toBe("instant");
+      const [, request] = fetchCallAt(index, `stream request ${index}`);
+      const requestInit = mustGet(request, `stream request ${index} init`);
+      expect((requestInit.body as FormData).get("tool")).toBe(fixture.tool);
+      expect((requestInit.body as FormData).get("mode")).toBe("instant");
     }
-    expect((fetch as any).mock.calls).toHaveLength(cases.length);
+    expect(mockedFetch().mock.calls).toHaveLength(cases.length);
   });
 
   it("preserves streamPresentationKey across stream finally cleanup", async () => {
@@ -164,7 +192,7 @@ describe("useStreamMessage", () => {
       'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"hi"}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
 
     const placeholder: ChatMessage = {
       role: "assistant",
@@ -173,7 +201,7 @@ describe("useStreamMessage", () => {
       blocks: [],
       streamPresentationKey: "chat-request-keep",
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -196,14 +224,14 @@ describe("useStreamMessage", () => {
     const body = sseStream([
       'event: RunError\ndata: {"type":"RunError","message":"boom"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
       streaming: true,
       blocks: [],
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -219,14 +247,14 @@ describe("useStreamMessage", () => {
   });
 
   it("shows the interrupted copy and finalizes when the HTTP response is not ok", async () => {
-    (fetch as any).mockResolvedValue(new Response(null, { status: 503 }));
+    mockedFetch().mockResolvedValue(new Response(null, { status: 503 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
       streaming: true,
       blocks: [],
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -245,14 +273,14 @@ describe("useStreamMessage", () => {
   });
 
   it("shows the interrupted copy when the fetch itself fails (network error)", async () => {
-    (fetch as any).mockRejectedValue(new Error("network down"));
+    mockedFetch().mockRejectedValue(new Error("network down"));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
       streaming: true,
       blocks: [],
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -270,14 +298,14 @@ describe("useStreamMessage", () => {
   it("does NOT show the interrupted copy when the user aborts (AbortError)", async () => {
     const abortErr = new Error("aborted");
     abortErr.name = "AbortError";
-    (fetch as any).mockRejectedValue(abortErr);
+    mockedFetch().mockRejectedValue(abortErr);
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
       streaming: true,
       blocks: [],
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -300,14 +328,14 @@ describe("useStreamMessage", () => {
       'event: Custom\ndata: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"T1"}]}}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
       streaming: true,
       blocks: [],
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -318,7 +346,7 @@ describe("useStreamMessage", () => {
       requestId: "r",
       placeholder,
     });
-    expect((placeholder as any).doc_list).toEqual([{ title: "T1" }]);
+    expect(placeholder.doc_list).toEqual([{ title: "T1" }]);
   });
 
   it("reassembles a frame whose bytes are split across two reader chunks", async () => {
@@ -328,14 +356,14 @@ describe("useStreamMessage", () => {
       'event: TextMessageContent\ndata: {"type":"TextMessageContent",',
       '"delta":"split-safe"}\n\nevent: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
       streaming: true,
       blocks: [],
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -346,7 +374,7 @@ describe("useStreamMessage", () => {
       requestId: "r",
       placeholder,
     });
-    const md = placeholder.blocks!.find((b) => b.type === "markdown");
+    const md = markdownBlock(placeholder, "split UTF-8 stream");
     expect(md?.text).toBe("split-safe");
     expect(placeholder.streaming).toBe(false);
   });
@@ -367,7 +395,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -411,7 +439,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -433,7 +461,7 @@ describe("useStreamMessage", () => {
       'event: Custom\ndata: {"type":"Custom","name":"phyto.follow_up","value":["q1","q2"]}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
@@ -441,7 +469,7 @@ describe("useStreamMessage", () => {
       blocks: [],
       showFollowUpQuestions: false,
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -459,7 +487,7 @@ describe("useStreamMessage", () => {
   });
 
   it("owns canonical A2UI identity on the message and retains it after RunFinished", async () => {
-    let release!: () => void;
+    let release: (() => void) | undefined;
     const gate = new Promise<void>((r) => {
       release = r;
     });
@@ -485,7 +513,7 @@ describe("useStreamMessage", () => {
         controller.close();
       },
     });
-    (fetch as any)
+    mockedFetch()
       .mockResolvedValueOnce(
         new Response(body, {
           status: 200,
@@ -522,10 +550,7 @@ describe("useStreamMessage", () => {
       streaming: true,
       blocks: [],
     };
-    const chatState: any = {
-      isStreaming: false,
-      streamingMessageId: null,
-    };
+    const chatState = makeStreamState();
     const formData = new FormData();
     formData.append("id", "42");
     const { streamMessage } = useStreamMessage({
@@ -545,7 +570,8 @@ describe("useStreamMessage", () => {
     expect(placeholder.id).toBe("142");
     expect(placeholder.a2uiRuntime?.dialogueId).toBe(CANONICAL_DIALOGUE_ID);
     expect(placeholder.a2uiRuntime?.messageId).toBe("142");
-    release();
+    const releaseStream = mustGet(release, "A2UI stream release");
+    releaseStream();
     const result = await streamPromise;
     expect(result).toEqual({
       dialogueId: CANONICAL_DIALOGUE_ID,
@@ -553,7 +579,8 @@ describe("useStreamMessage", () => {
     });
     expect(placeholder.a2uiRuntime?.runId).toBe("run-42");
     expect(placeholder.a2uiRuntime?.transport).toBeTypeOf("function");
-    await placeholder.a2uiRuntime!.transport({
+    const runtime = mustGet(placeholder.a2uiRuntime, "canonical A2UI runtime");
+    await runtime.transport({
       surface_id: "surf-1",
       widget: "confirm",
       action_id: "action-canonical-1",
@@ -573,7 +600,7 @@ describe("useStreamMessage", () => {
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-safe-ids"}\n\n',
       "data: [DONE]\n\n",
     ]);
-    (fetch as any).mockResolvedValue(
+    mockedFetch().mockResolvedValue(
       new Response(body, {
         status: 200,
         headers: {
@@ -593,7 +620,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -620,7 +647,7 @@ describe("useStreamMessage", () => {
     const body = sseStream([
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-safe"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(
+    mockedFetch().mockResolvedValue(
       new Response(body, {
         status: 200,
         headers: {
@@ -638,7 +665,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -661,7 +688,7 @@ describe("useStreamMessage", () => {
       'event: Custom\ndata: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-1","widget":"confirm","props":{"title":"OK?"}}}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-no-headers"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const formData = new FormData();
     formData.append("id", "42");
     const placeholder: ChatMessage = {
@@ -671,7 +698,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -693,7 +720,7 @@ describe("useStreamMessage", () => {
   });
 
   it("rejects partial or client-shaped response identities", async () => {
-    const bodies = [
+    const bodies: Array<Record<string, string>> = [
       {
         "X-Phyto-Dialogue-Id": "new_spoofed",
         "X-Phyto-Message-Id": "42",
@@ -706,12 +733,12 @@ describe("useStreamMessage", () => {
     ];
     const placeholders: ChatMessage[] = [];
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
     for (const [index, headers] of bodies.entries()) {
-      (fetch as any).mockResolvedValueOnce(
+      mockedFetch().mockResolvedValueOnce(
         new Response(
           sseStream([
             'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-x"}\n\n',
@@ -748,7 +775,7 @@ describe("useStreamMessage", () => {
           "X-Phyto-Message-Id": messageId,
         },
       });
-    (fetch as any)
+    mockedFetch()
       .mockResolvedValueOnce(
         response(
           [
@@ -767,7 +794,7 @@ describe("useStreamMessage", () => {
         )
       );
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
     const errored: ChatMessage = {
@@ -819,7 +846,7 @@ describe("useStreamMessage", () => {
         controller.error(new Error("late transport close"));
       },
     });
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
@@ -827,7 +854,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -847,7 +874,7 @@ describe("useStreamMessage", () => {
       'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-done"}\n\n',
       "data: [DONE]\n\n",
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
@@ -855,7 +882,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -878,7 +905,7 @@ describe("useStreamMessage", () => {
         controller.error(abortError);
       },
     });
-    (fetch as any).mockResolvedValue(
+    mockedFetch().mockResolvedValue(
       new Response(body, {
         status: 200,
         headers: {
@@ -894,7 +921,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -928,7 +955,7 @@ describe("useStreamMessage", () => {
         controller.error(new Error("late close failure"));
       },
     });
-    (fetch as any).mockResolvedValue(
+    mockedFetch().mockResolvedValue(
       new Response(body, {
         status: 200,
         headers: {
@@ -944,7 +971,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -964,14 +991,14 @@ describe("useStreamMessage", () => {
     const body = sseStream([
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
       streaming: true,
       blocks: [],
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -987,8 +1014,8 @@ describe("useStreamMessage", () => {
   });
 
   it("stale stream finally does not clear a newer request's streaming fields", async () => {
-    let releaseStale!: () => void;
-    let releaseFresh!: () => void;
+    let releaseStale: (() => void) | undefined;
+    let releaseFresh: (() => void) | undefined;
     const staleGate = new Promise<void>((r) => {
       releaseStale = r;
     });
@@ -1014,7 +1041,7 @@ describe("useStreamMessage", () => {
         },
       });
 
-    (fetch as any)
+    mockedFetch()
       .mockResolvedValueOnce(
         new Response(gatedBody("old", staleGate), {
           status: 200,
@@ -1034,10 +1061,7 @@ describe("useStreamMessage", () => {
         })
       );
 
-    const chatState: any = {
-      isStreaming: false,
-      streamingMessageId: null,
-    };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -1076,7 +1100,8 @@ describe("useStreamMessage", () => {
       expect(chatState.streamingMessageId).toBe("req-new");
     });
 
-    releaseStale();
+    const releaseStaleStream = mustGet(releaseStale, "stale stream release");
+    releaseStaleStream();
     await stalePromise;
 
     // Stale finally must not wipe the newer stream's ownership markers.
@@ -1088,7 +1113,8 @@ describe("useStreamMessage", () => {
     expect(freshPlaceholder.a2uiRuntime?.runId).toBe("new");
     expect(freshPlaceholder.a2uiRuntime?.messageId).toBe("302");
 
-    releaseFresh();
+    const releaseFreshStream = mustGet(releaseFresh, "fresh stream release");
+    releaseFreshStream();
     await freshPromise;
     expect(chatState.streamingMessageId).toBeNull();
     expect(chatState.isStreaming).toBe(false);

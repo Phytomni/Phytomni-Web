@@ -3,6 +3,7 @@ import {
   initReducerState,
   reduceAGUIEvent,
 } from "@/views/chat/streaming/eventReducer";
+import { mustGet } from "../../../../helpers/mockFactories";
 
 describe("reduceAGUIEvent", () => {
   afterEach(() => {
@@ -102,8 +103,9 @@ describe("reduceAGUIEvent", () => {
       data: { result_summary: { count: 7 } },
     });
     const tools = s.blocks.filter((b) => b.type === "tool");
-    expect(tools[0].count).toBeUndefined();
-    expect(tools[1].count).toBe(7);
+    expect(tools).toHaveLength(2);
+    expect(mustGet(tools[0], "first tool block").count).toBeUndefined();
+    expect(mustGet(tools[1], "second tool block").count).toBe(7);
   });
 
   it("adds a reasoning block from ReasoningMessageContent", () => {
@@ -357,9 +359,10 @@ describe("reduceAGUIEvent", () => {
         },
       },
     });
-    const block = s.blocks[0];
+    const block = mustGet(s.blocks[0], "submitting A2UI block");
+    const a2ui = mustGet(block.a2ui, "submitting A2UI state");
     block.a2ui = {
-      ...block.a2ui!,
+      ...a2ui,
       state: {
         status: "submitting",
         round: 1,
@@ -377,7 +380,8 @@ describe("reduceAGUIEvent", () => {
       type: "RunError",
       data: { message: "boom" },
     });
-    expect(next.blocks[0].a2ui?.state).toEqual({
+    const nextBlock = mustGet(next.blocks[0], "expired A2UI block");
+    expect(nextBlock.a2ui?.state).toEqual({
       status: "expired",
       round: 1,
       actionId: "action-7",
@@ -502,6 +506,7 @@ describe("reduceAGUIEvent", () => {
     });
     s = reduceAGUIEvent(s, { type: "RunFinished", data: { run_id: "run-1" } });
 
-    expect(s.blocks[0].a2ui?.state).toEqual({ status: "ready", round: 1 });
+    const block = mustGet(s.blocks[0], "input-required A2UI block");
+    expect(block.a2ui?.state).toEqual({ status: "ready", round: 1 });
   });
 });
