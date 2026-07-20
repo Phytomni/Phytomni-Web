@@ -107,6 +107,11 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-e8734248b5a9e63e34a88813e37a507beef2e9a6b7aecccee94c5166dcd65670` | `2026-08-31` | `shell` | `quiet` | [scripts/tests/static_analysis/fixtures/ci/Makefile:2](../../scripts/tests/static_analysis/fixtures/ci/Makefile#L2) | `--quiet` | `web-maintainers` | `2026-07-19` |
 | `web-sa-a0b108033a68f19c922b088ac5d13ec68a3f2df791d8c19ff5f949b1b75a152e` | `2026-08-31` | `shell` | `shell-fallback-success` | [scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh:2](../../scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh#L2) | `\|\| true` | `web-maintainers` | `2026-07-19` |
 | `web-sa-80167d38dca94bd15e6ca82cde7155f5145f90ba04eb1b0d78fc02cd2c1a43bb` | `2026-08-31` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.config.json](../../apps/web/tsconfig.config.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
+| `web-sa-fd9812ede5856bcc9bf4aac709c060a1fb42dcef070703b6ff16fd2507b4b2b7` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `coverage` | `web-maintainers` | `2026-07-20` |
+| `web-sa-60261879aad8e18307ebb1a63ffc494466ff77ff9d1f36388baefec6016566b9` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `dist` | `web-maintainers` | `2026-07-20` |
+| `web-sa-089e29caf578740215c06557960922ed1cccdb0222cd84e7b4a228658e59714d` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `node_modules` | `web-maintainers` | `2026-07-20` |
+| `web-sa-c7567bf794fceecc9c19f4a7a20c1b7f72ed2a2c08908cc7198732cd0c1ec16b` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147` | `web-maintainers` | `2026-07-20` |
+| `web-sa-b50a325c91340842ad819664a76c3e4e83c511e18c04ac7cac7165c81f7b53d6` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `public/static/js/3Dmol-min.js` | `web-maintainers` | `2026-07-20` |
 | `web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69` | `2026-08-31` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
 | `web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147` | `web-maintainers` | `2026-07-19` |
 | `web-sa-607ba295773cc3dfdc7de080f48f1cb2b228b8781142facf891451259a372037` | `2026-08-31` | `typescript` | `skipLibCheck` | [scripts/tests/static_analysis/fixtures/config/tsconfig.json](../../scripts/tests/static_analysis/fixtures/config/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
@@ -753,6 +758,51 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: typescript reported skipLibCheck at line ?; raw diagnostic omitted.
 
+### `web-sa-fd9812ede5856bcc9bf4aac709c060a1fb42dcef070703b6ff16fd2507b4b2b7`
+
+- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
+
+### `web-sa-60261879aad8e18307ebb1a63ffc494466ff77ff9d1f36388baefec6016566b9`
+
+- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
+
+### `web-sa-089e29caf578740215c06557960922ed1cccdb0222cd84e7b4a228658e59714d`
+
+- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
+
+### `web-sa-c7567bf794fceecc9c19f4a7a20c1b7f72ed2a2c08908cc7198732cd0c1ec16b`
+
+- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
+
+### `web-sa-b50a325c91340842ad819664a76c3e4e83c511e18c04ac7cac7165c81f7b53d6`
+
+- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
+- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
+- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
+- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
+- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
+
 ### `web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69`
 
 - Exact entry: [apps/web/tsconfig.json](../../apps/web/tsconfig.json)
@@ -878,8 +928,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `83`
-- Matched: `83`
+- Findings: `88`
+- Matched: `88`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`

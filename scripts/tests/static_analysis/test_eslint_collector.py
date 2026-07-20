@@ -192,3 +192,23 @@ def test_collect_eslint_invokes_the_installed_bridge() -> None:
     findings = collect_eslint(REPO_ROOT, (REPO_ROOT / "apps" / "web" / "src" / "main.ts",))
 
     assert findings == ()
+
+
+def test_bridge_accepts_repeatable_rule_overlays() -> None:
+    result = _run_bridge(
+        "--root",
+        str(FIXTURE_ROOT),
+        "--file",
+        "sample.ts",
+        "--rule",
+        "no-console=error",
+        "--rule",
+        "no-unused-vars=off",
+    )
+
+    assert result.returncode == 0, result.stderr
+    document = json.loads(result.stdout)
+    findings = document["findings"]
+    assert not any(finding["rule"] == "no-unused-vars" for finding in findings)
+    console = next(finding for finding in findings if finding["rule"] == "no-console")
+    assert console["severity"] == 2

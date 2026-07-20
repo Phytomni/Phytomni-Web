@@ -32,11 +32,33 @@ module.exports = {
   },
   overrides: [
     {
+      // Type-aware rules must see every first-party TypeScript/Vue file while
+      // JavaScript and config files keep their existing parser behavior.
+      files: ["**/*.ts", "**/*.tsx", "**/*.vue"],
+      parserOptions: {
+        project: "./tsconfig.eslint.json",
+        tsconfigRootDir: __dirname,
+      },
+    },
+    {
       // vite/plugins/*.js are build-time plugin factories that run in
       // Node context (process.cwd, path, etc.). Without an env flag,
       // ESLint flags `process` as no-undef. Limiting the override to
       // this directory keeps the browser-side default env intact.
       files: ["vite/plugins/*.js"],
+      env: {
+        node: true,
+      },
+    },
+    {
+      // Vite and Vitest configuration modules execute in Node, including the
+      // TypeScript variants covered by the ESLint project above.
+      files: [
+        "vite/**/*.ts",
+        "vite/**/*.js",
+        "vite.config.ts",
+        "vitest.config.ts",
+      ],
       env: {
         node: true,
       },

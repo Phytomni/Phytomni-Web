@@ -1524,6 +1524,106 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
+id = "web-sa-fd9812ede5856bcc9bf4aac709c060a1fb42dcef070703b6ff16fd2507b4b2b7"
+tool = "typescript"
+rule = "exclude"
+classification = "temporary"
+mechanism = "config"
+target_kind = "config"
+path = "apps/web/tsconfig.eslint.json"
+target = "coverage"
+fingerprint = "sha256:fd9812ede5856bcc9bf4aac709c060a1fb42dcef070703b6ff16fd2507b4b2b7"
+owner = "web-maintainers"
+introduced_on = 2026-07-20
+review_on = 2026-07-20
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target apps/web/tsconfig.eslint.json:coverage"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
+id = "web-sa-60261879aad8e18307ebb1a63ffc494466ff77ff9d1f36388baefec6016566b9"
+tool = "typescript"
+rule = "exclude"
+classification = "temporary"
+mechanism = "config"
+target_kind = "config"
+path = "apps/web/tsconfig.eslint.json"
+target = "dist"
+fingerprint = "sha256:60261879aad8e18307ebb1a63ffc494466ff77ff9d1f36388baefec6016566b9"
+owner = "web-maintainers"
+introduced_on = 2026-07-20
+review_on = 2026-07-20
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target apps/web/tsconfig.eslint.json:dist"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
+id = "web-sa-089e29caf578740215c06557960922ed1cccdb0222cd84e7b4a228658e59714d"
+tool = "typescript"
+rule = "exclude"
+classification = "temporary"
+mechanism = "config"
+target_kind = "config"
+path = "apps/web/tsconfig.eslint.json"
+target = "node_modules"
+fingerprint = "sha256:089e29caf578740215c06557960922ed1cccdb0222cd84e7b4a228658e59714d"
+owner = "web-maintainers"
+introduced_on = 2026-07-20
+review_on = 2026-07-20
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target apps/web/tsconfig.eslint.json:node_modules"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
+id = "web-sa-c7567bf794fceecc9c19f4a7a20c1b7f72ed2a2c08908cc7198732cd0c1ec16b"
+tool = "typescript"
+rule = "exclude"
+classification = "temporary"
+mechanism = "config"
+target_kind = "config"
+path = "apps/web/tsconfig.eslint.json"
+target = "pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147"
+fingerprint = "sha256:c7567bf794fceecc9c19f4a7a20c1b7f72ed2a2c08908cc7198732cd0c1ec16b"
+owner = "web-maintainers"
+introduced_on = 2026-07-20
+review_on = 2026-07-20
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target apps/web/tsconfig.eslint.json:pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
+id = "web-sa-b50a325c91340842ad819664a76c3e4e83c511e18c04ac7cac7165c81f7b53d6"
+tool = "typescript"
+rule = "exclude"
+classification = "temporary"
+mechanism = "config"
+target_kind = "config"
+path = "apps/web/tsconfig.eslint.json"
+target = "public/static/js/3Dmol-min.js"
+fingerprint = "sha256:b50a325c91340842ad819664a76c3e4e83c511e18c04ac7cac7165c81f7b53d6"
+owner = "web-maintainers"
+introduced_on = 2026-07-20
+review_on = 2026-07-20
+expires_on = 2026-08-31
+remediation = "WEB-SA: remediate exact target apps/web/tsconfig.eslint.json:public/static/js/3Dmol-min.js"
+rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
+counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
+risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
+tests = ["scripts/check_static_analysis_exemptions.py --check"]
+
+[[exemptions]]
 id = "web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977"
 tool = "typescript"
 rule = "exclude"

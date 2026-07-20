@@ -15,7 +15,6 @@
     "noImplicitThis": true,
     "strict": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": true,
     "target": "esnext",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,

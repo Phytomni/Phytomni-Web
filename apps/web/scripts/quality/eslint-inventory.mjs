@@ -22,31 +22,78 @@ function usage() {
     "Options:",
     "  --root <path>       ESLint project root (default: apps/web)",
     "  --file <path>       Tracked file relative to --root (repeatable)",
+    "  --rule <overlay>     Observation rule overlay (repeatable)",
     "  --help              Show this help text",
   ].join("\n");
+}
+
+function parseRuleOverlay(raw) {
+  const separator = raw.indexOf("=");
+  if (separator <= 0 || separator === raw.length - 1) {
+    throw new Error(
+      `--rule requires rule=severity[:options-json], received ${raw}`
+    );
+  }
+  const rule = raw.slice(0, separator);
+  const assignment = raw.slice(separator + 1);
+  const optionsSeparator = assignment.indexOf(":");
+  const severityToken =
+    optionsSeparator === -1
+      ? assignment
+      : assignment.slice(0, optionsSeparator);
+  const severity =
+    severityToken === "0" || severityToken === "1" || severityToken === "2"
+      ? Number(severityToken)
+      : severityToken;
+  if (!["off", "warn", "error", 0, 1, 2].includes(severity)) {
+    throw new Error(`--rule has invalid severity ${severityToken}`);
+  }
+  if (optionsSeparator === -1) return { rule, value: severity };
+
+  const optionsText = assignment.slice(optionsSeparator + 1);
+  if (!optionsText) {
+    throw new Error("--rule options-json must not be empty");
+  }
+  let options;
+  try {
+    options = JSON.parse(optionsText);
+  } catch (error) {
+    throw new Error(
+      `--rule options-json is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+  return { rule, value: [severity, options] };
 }
 
 function parseArgs(argv) {
   let root = webRoot;
   const files = [];
+  const rules = [];
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help") {
-      return { help: true, root, files };
+      return { help: true, root, files, rules };
     }
-    if (argument === "--root" || argument === "--file") {
+    if (
+      argument === "--root" ||
+      argument === "--file" ||
+      argument === "--rule"
+    ) {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) {
         throw new Error(`${argument} requires a value`);
       }
       if (argument === "--root") root = resolve(value);
-      else files.push(value);
+      else if (argument === "--file") files.push(value);
+      else rules.push(parseRuleOverlay(value));
       index += 1;
       continue;
     }
     throw new Error(`unknown argument: ${argument}`);
   }
-  return { help: false, root, files };
+  return { help: false, root, files, rules };
 }
 
 function normalizeSource(source) {
@@ -152,7 +199,7 @@ function parseAst(source, filePath) {
   return result.ast ?? result;
 }
 
-async function inventory({ root, files }) {
+async function inventory({ root, files, rules }) {
   const resolvedFiles = files.map((file) => resolve(root, file));
   for (const file of resolvedFiles) {
     const relativePath = relative(root, file);
@@ -180,6 +227,15 @@ async function inventory({ root, files }) {
     reportUnusedDisableDirectives: "error",
     resolvePluginsRelativeTo: webRoot,
     useEslintrc: true,
+    ...(rules.length > 0
+      ? {
+          overrideConfig: {
+            rules: Object.fromEntries(
+              rules.map(({ rule, value }) => [rule, value])
+            ),
+          },
+        }
+      : {}),
   });
   const lintableFiles = [];
   for (const file of resolvedFiles) {
