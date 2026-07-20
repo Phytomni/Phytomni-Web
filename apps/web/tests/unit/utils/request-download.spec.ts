@@ -26,21 +26,30 @@ vi.mock("axios", () => ({
       source: vi.fn(() => ({ token: "token", cancel: vi.fn() })),
     },
     CanceledError: mocks.CanceledError,
-    create: vi.fn(() => ({
-      post: mocks.post,
-      defaults: {},
-      interceptors: {
-        request: { use: vi.fn() },
-        response: {
-          use: vi.fn((_success, error) => {
-            mocks.responseError = error;
-          }),
-        },
-      },
-    })),
+    create: vi.fn(() => {
+      const client = Object.assign(
+        vi.fn((config: { url: string; data?: unknown }) =>
+          mocks.post(config.url, config.data, config)
+        ),
+        {
+          post: mocks.post,
+          defaults: {},
+          interceptors: {
+            request: { use: vi.fn() },
+            response: {
+              use: vi.fn((_success, error) => {
+                mocks.responseError = error;
+              }),
+            },
+          },
+        }
+      );
+      return client;
+    }),
     isCancel: vi.fn(
       (error: { code?: string }) => error?.code === "ERR_CANCELED"
     ),
+    isAxiosError: vi.fn(() => false),
   },
 }));
 

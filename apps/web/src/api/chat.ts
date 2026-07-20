@@ -138,14 +138,14 @@ export const getFileDownUrlApi = (
   data: { id: string; document_format: string } | FormData,
   opts?: DownloadProgressOpts
 ): Promise<BinaryResponse> =>
-  createAbortableRequest({
+  createAbortableRequest<BinaryResponse>({
     url: "/api/v1/downloads/rendering-file",
     method: "post",
     data,
     responseType: "blob",
     requestId: opts?.requestId,
     onDownloadProgress: opts?.onDownloadProgress,
-  }) as unknown as Promise<BinaryResponse>;
+  });
 
 // Get analyst log (RESTful: task id in path)
 export const getAnalystAgentLog = (data: {

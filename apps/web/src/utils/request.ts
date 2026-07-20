@@ -8,6 +8,7 @@ import axios, {
 import { ElMessage, ElMessageBox } from "element-plus";
 
 import { userStore } from "@/stores";
+import { isRecord, optionalString } from "@/api/contracts";
 import { getToken } from "@/utils/auth";
 import errorCode from "@/utils/error-code";
 import { tansParams, blobValidate } from "@/utils";
@@ -38,6 +39,15 @@ const service: AxiosInstance = axios.create({
   // timeout
   timeout: 100000000,
 });
+
+/** Axios returns the interceptor's unwrapped payload at runtime. */
+export interface UnwrappedHttpClient {
+  <T = unknown, D = unknown>(
+    config: AxiosRequestConfig<D> & { requestId?: string }
+  ): Promise<T>;
+}
+
+const request = service as unknown as UnwrappedHttpClient;
 
 // store active request controllers
 const activeControllers = new Map<string, AbortController>();
@@ -113,11 +123,8 @@ service.interceptors.request.use(
     // Only log the redacted message; never log the raw error object: an axios error
     // carries config.headers (here including the Authorization Bearer + satoken), so
     // logging the whole thing would write live tokens into the browser console.
-    console.log(
-      "request error:",
-      error instanceof Error ? error.message : String(error)
-    );
-    Promise.reject(error);
+    console.log("request error:", readErrorMessage(error));
+    return Promise.reject(error);
   }
 );
 
@@ -128,37 +135,87 @@ service.interceptors.request.use(
 // runtime path.
 type ErrorCodeLookup = Record<string, (() => string) | string>;
 
+const errorCodeLookup: ErrorCodeLookup = errorCode;
+
+type SafeErrorResponse = {
+  status?: number;
+  data?: unknown;
+};
+
+function readErrorResponse(error: unknown): SafeErrorResponse | undefined {
+  if (axios.isAxiosError<unknown>(error)) {
+    if (!error.response) return undefined;
+    return {
+      status: error.response.status,
+      data: error.response.data,
+    };
+  }
+  if (!isRecord(error) || !isRecord(error.response)) return undefined;
+  const status = error.response.status;
+  return {
+    status:
+      typeof status === "number" && Number.isFinite(status)
+        ? status
+        : undefined,
+    data: error.response.data,
+  };
+}
+
+function readErrorUrl(error: unknown): string | undefined {
+  if (axios.isAxiosError<unknown>(error)) return error.config?.url;
+  if (!isRecord(error) || !isRecord(error.config)) return undefined;
+  return optionalString(error.config, "url");
+}
+
+function readErrorMessage(error: unknown): string {
+  if (axios.isAxiosError<unknown>(error)) return error.message;
+  if (error instanceof Error) return error.message;
+  if (isRecord(error)) return optionalString(error, "message") ?? "";
+  return "";
+}
+
 function isCanceledRequest(error: unknown): boolean {
-  const err = error as { code?: unknown; name?: unknown };
-  return (
-    axios.isCancel(error) ||
-    err?.code === "ERR_CANCELED" ||
-    err?.name === "CanceledError"
-  );
+  if (axios.isCancel(error)) return true;
+  if (axios.isAxiosError<unknown>(error)) {
+    return error.code === "ERR_CANCELED" || error.name === "CanceledError";
+  }
+  if (!isRecord(error)) return false;
+  return error.code === "ERR_CANCELED" || error.name === "CanceledError";
 }
 
 // response interceptor
 service.interceptors.response.use(
   (res: AxiosResponse) => {
+    const responseData = isRecord(res.data) ? res.data : undefined;
     // default to a success status when no code is set
-    const code = res.data.code || 200;
+    const responseCode = responseData?.code;
+    const code =
+      typeof responseCode === "number" &&
+      Number.isFinite(responseCode) &&
+      responseCode !== 0
+        ? responseCode
+        : 200;
     // get the error message
     const msg =
-      (errorCode as ErrorCodeLookup)[code] ||
-      res.data.message ||
-      (errorCode as ErrorCodeLookup)["default"];
+      errorCodeLookup[code] ||
+      optionalString(responseData ?? {}, "message") ||
+      errorCodeLookup.default;
     // return binary data directly
-    if (res.headers["content-type"] === "application/octet-stream") {
+    if (res.headers?.["content-type"] === "application/octet-stream") {
       return res;
     }
-    if (
-      res.request.responseType === "blob" ||
-      res.request.responseType === "arraybuffer"
-    ) {
+    const responseType = isRecord(res.request)
+      ? res.request.responseType
+      : undefined;
+    if (responseType === "blob" || responseType === "arraybuffer") {
       return res.data;
     }
 
-    if (code === 401 || (res.data.detail && res.data.detail.code === 403)) {
+    const detailCode =
+      responseData && isRecord(responseData.detail)
+        ? responseData.detail.code
+        : undefined;
+    if (code === 401 || detailCode === 403) {
       if (!isRelogin.show) {
         isRelogin.show = true;
         ElMessageBox.alert(i18n.global.t("request.sessionExpired"), {
@@ -204,20 +261,26 @@ service.interceptors.response.use(
       return res.data;
     }
   },
-  (error: any) => {
+  (error: unknown) => {
+    const response = readErrorResponse(error);
+    const responseData =
+      response && isRecord(response.data) ? response.data : undefined;
+    let message = readErrorMessage(error);
     // Redacted log — the raw axios error embeds config.headers (Bearer token + satoken),
     // so we expose only the non-sensitive fields useful for debugging.
     console.log("response error:", {
-      status: error?.response?.status,
-      url: error?.config?.url,
-      message: error?.message,
+      status: response?.status,
+      url: readErrorUrl(error),
+      message,
     });
     if (isCanceledRequest(error)) {
       return Promise.reject(error);
     }
-    const { response } = error;
-    let { message } = error;
-    if (response?.data?.detail?.code === 403) {
+    const detailCode =
+      responseData && isRecord(responseData.detail)
+        ? responseData.detail.code
+        : undefined;
+    if (detailCode === 403) {
       isRelogin.show = false;
       const UserStore = userStore();
       UserStore.FedLogOut().finally(() => {
@@ -240,8 +303,8 @@ service.interceptors.response.use(
     // Prefer the readable server-returned message (Go gateway error body {code, message};
     // legacy Python service detail string), otherwise fall back to axios's generic error text.
     const serverMessage =
-      response?.data?.message ||
-      (typeof response?.data?.detail === "string" ? response.data.detail : "");
+      optionalString(responseData ?? {}, "message") ||
+      (typeof responseData?.detail === "string" ? responseData.detail : "");
     if (serverMessage) {
       message = serverMessage;
     } else if (message == "Network Error") {
@@ -278,24 +341,22 @@ export function download(
   const tracker = createTransferTracker({ phase: "download", requestId });
   registerAbortController(requestId, controller);
 
-  // The response interceptor above unwraps `res.data` for `responseType:
-  // 'blob'`, so at runtime the promise resolves to a Blob rather than an
-  // AxiosResponse. The cast aligns axios's static type with that runtime
-  // contract — see the `responseType === 'blob'` branch in the interceptor
-  // for the source of the unwrap.
-  return (
-    service.post(url, params, {
-      transformRequest: [
-        (p: unknown) => tansParams(p as { [x: string]: unknown }),
-      ],
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      responseType: "blob",
-      signal: controller.signal,
-      onDownloadProgress: (event: AxiosProgressEvent) => {
-        upsertDownloadTransfer(tracker.update(event));
-      },
-    }) as unknown as Promise<Blob>
-  )
+  // The response interceptor unwraps `res.data` for `responseType: 'blob'`;
+  // the generic request boundary records that runtime contract explicitly.
+  return request<Blob>({
+    url,
+    method: "post",
+    data: params,
+    transformRequest: [
+      (p: unknown) => tansParams(p as { [x: string]: unknown }),
+    ],
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    responseType: "blob",
+    signal: controller.signal,
+    onDownloadProgress: (event: AxiosProgressEvent) => {
+      upsertDownloadTransfer(tracker.update(event));
+    },
+  })
     .then(async (data) => {
       const isLogin = await blobValidate(data);
       if (isLogin) {
@@ -328,9 +389,9 @@ export function download(
 // Create an abortable request — accept the public AxiosRequestConfig shape (headers
 // optional) so call sites can pass plain config literals; the stored
 // `requestId` is just a tag used to address controller entries.
-export const createAbortableRequest = (
-  config: AxiosRequestConfig & { requestId?: string }
-) => {
+export const createAbortableRequest = <T = unknown, D = unknown>(
+  config: AxiosRequestConfig<D> & { requestId?: string }
+): Promise<T> => {
   const controller = new AbortController();
   const requestId = config.requestId || Date.now().toString();
 
@@ -341,7 +402,7 @@ export const createAbortableRequest = (
   config.signal = controller.signal;
   config.requestId = requestId;
 
-  return service(config).finally(() => {
+  return request<T, D>(config).finally(() => {
     // clean up the controller after the request completes
     activeControllers.delete(requestId);
   });
@@ -383,4 +444,4 @@ export const abortAllRequests = (): void => {
   activeControllers.clear();
 };
 
-export default service;
+export default request;

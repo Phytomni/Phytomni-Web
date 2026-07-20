@@ -44,6 +44,7 @@ vi.mock("@/plugins/cache", () => ({
 }));
 
 import service from "@/utils/request";
+import { AxiosError } from "axios";
 import type { AxiosResponse, InternalAxiosRequestConfig } from "axios";
 
 describe("request.ts interceptor pipeline via custom adapter", () => {
@@ -178,6 +179,89 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
     } finally {
       consoleLog.mockRestore();
     }
+  });
+
+  it("extracts safe fields from AxiosError without logging request headers", async () => {
+    const secret = "axios-secret-header";
+    const config = {
+      url: "/api/v1/private",
+      headers: { Authorization: secret, satoken: "axios-secret" },
+    } as InternalAxiosRequestConfig;
+    const response: AxiosResponse = {
+      data: { message: "upstream failure" },
+      status: 503,
+      statusText: "Service Unavailable",
+      headers: {},
+      config,
+      request: { responseType: "" },
+    };
+    const error = new AxiosError<unknown>(
+      "Request failed with status code 503",
+      "ERR_BAD_RESPONSE",
+      config,
+      undefined,
+      response
+    );
+    const consoleLog = vi
+      .spyOn(console, "log")
+      .mockImplementation(() => undefined);
+    service.defaults.adapter = async () => Promise.reject(error);
+
+    try {
+      await expect(service.get("/api/v1/private")).rejects.toBe(error);
+      expect(consoleLog).toHaveBeenCalledWith("response error:", {
+        status: 503,
+        url: "/api/v1/private",
+        message: error.message,
+      });
+      expect(JSON.stringify(consoleLog.mock.calls)).not.toContain(secret);
+    } finally {
+      consoleLog.mockRestore();
+    }
+  });
+
+  it("returns request interceptor rejections instead of dropping them", async () => {
+    type RequestInterceptor = {
+      rejected?: (error: unknown) => Promise<unknown>;
+    };
+    const handlers = (
+      service.interceptors.request as unknown as {
+        handlers?: RequestInterceptor[];
+      }
+    ).handlers;
+    const rejected = handlers?.[0]?.rejected;
+    if (!rejected)
+      throw new Error("request rejection interceptor not registered");
+
+    const error = new Error("request setup failed");
+    await expect(rejected(error)).rejects.toBe(error);
+  });
+
+  it("ignores non-string server messages and does not echo malformed payloads", async () => {
+    const secret = "malformed-response-secret";
+    const error = {
+      config: {
+        url: "/api/v1/private",
+        headers: {
+          Authorization: secret,
+          satoken: "malformed-response-secret",
+        },
+      },
+      response: {
+        status: 500,
+        data: {
+          message: { token: secret },
+          detail: { message: { token: secret } },
+        },
+      },
+      message: "Request failed with status code 500",
+    };
+    service.defaults.adapter = async () => Promise.reject(error);
+
+    await expect(service.get("/api/v1/private")).rejects.toBe(error);
+    expect(JSON.stringify(requestMocks.message.mock.calls)).not.toContain(
+      secret
+    );
   });
 
   it("offers logout for a 401 response without exposing request headers", async () => {

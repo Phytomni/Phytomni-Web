@@ -17,8 +17,12 @@ export type GatewayEnvelope<T> = {
   code?: number;
   msg?: string;
   message?: string;
-  detail?: GatewayErrorDetail | string;
+  detail?: GatewayErrorDetail | string | null;
+  data?: T;
   result?: T;
+  token?: string;
+  locked?: boolean;
+  request_id?: string | null;
 };
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

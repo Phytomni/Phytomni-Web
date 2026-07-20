@@ -814,9 +814,7 @@ export function requestApi<T, D = unknown>(
   config: AxiosRequestConfig<D>,
   decodeData: Decoder<T>
 ): Promise<ApiEnvelope<T>> {
-  const response = request<ApiEnvelope<T>, D>(
-    config
-  ) as unknown as Promise<unknown>;
+  const response = request<ApiEnvelope<T>, D>(config);
   return response.then((value) => decodeApiEnvelope(value, decodeData));
 }
 
@@ -824,8 +822,6 @@ export function requestAbortableApi<T, D = unknown>(
   config: AxiosRequestConfig<D> & { requestId?: string },
   decodeData: Decoder<T>
 ): Promise<ApiEnvelope<T>> {
-  const response = createAbortableRequest(
-    config
-  ) as unknown as Promise<unknown>;
+  const response = createAbortableRequest<ApiEnvelope<T>, D>(config);
   return response.then((value) => decodeApiEnvelope(value, decodeData));
 }
