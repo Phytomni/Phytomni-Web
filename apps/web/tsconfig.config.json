@@ -1,6 +1,7 @@
 {
   "include": [
     "vite.config.*",
+    "vite/**/*.ts",
     "vitest.config.*",
     "cypress.config.*"
   ],
@@ -19,8 +20,6 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   }
 }

@@ -4984,26 +4984,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-38f7b4213dfdda79ae21b407dae4d1c15747ec8d7ee9166411756fa82684f9a3"
-tool = "eslint"
-rule = "@typescript-eslint/no-explicit-any"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "symbol"
-path = "vite.config.ts"
-target = "Property:configure@75:30-75:33"
-fingerprint = "sha256:38f7b4213dfdda79ae21b407dae4d1c15747ec8d7ee9166411756fa82684f9a3"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target vite.config.ts:Property:configure@75:30-75:33"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-ec5aa1bf2890ed642f5cee427fc8ff4816eaa5963f6bd079a10e68c8434d579f"
 tool = "eslint"
 rule = "@typescript-eslint/no-non-null-assertion"
@@ -8638,26 +8618,6 @@ introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
 remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh:|| true"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-2b7d368312e19d3e3c2333c20af14a1e80ff67266000f3409b4fbbfd4ca9a801"
-tool = "typescript"
-rule = "@ts-expect-error"
-classification = "temporary"
-mechanism = "inline"
-target_kind = "span"
-path = "apps/web/vite.config.ts"
-target = "line:3:@ts-expect-error:@ts-expect-error: vite/plugins/index.js has not been migrated to TypeScript yet — drop this directive when the file becomes vite/plugins/index.ts"
-fingerprint = "sha256:2b7d368312e19d3e3c2333c20af14a1e80ff67266000f3409b4fbbfd4ca9a801"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target apps/web/vite.config.ts:line:3:@ts-expect-error:@ts-expect-error: vite/plugins/index.js has not been migrated to TypeScript yet — drop this directive when the file becomes vite/plugins/index.ts"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."

@@ -22,6 +22,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "typescript" / "project"
+WEB_ROOT = REPO_ROOT / "apps" / "web"
 
 
 def test_parser_handles_multiline_paths_spaces_and_vue_locations() -> None:
@@ -170,3 +171,11 @@ def test_config_fixture_ownership_is_explicit() -> None:
     assert len(skip_lib_check) == 1
     assert skip_lib_check[0].path == "tsconfig.json"
     assert skip_lib_check[0].target == "compilerOptions.skipLibCheck"
+
+
+def test_web_config_project_explicitly_includes_typed_vite_plugins() -> None:
+    config = json.loads(
+        (WEB_ROOT / "tsconfig.config.json").read_text(encoding="utf-8")
+    )
+
+    assert "vite/**/*.ts" in config["include"]

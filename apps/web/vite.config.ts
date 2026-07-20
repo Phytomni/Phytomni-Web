@@ -1,17 +1,23 @@
 import { fileURLToPath, URL } from "node:url";
+import type { IncomingMessage } from "node:http";
 import { defineConfig, loadEnv } from "vite";
-// @ts-expect-error: vite/plugins/index.js has not been migrated to TypeScript yet — drop this directive when the file becomes vite/plugins/index.ts
+import type { ConfigEnv, UserConfig } from "vite";
 import createVitePlugins from "./vite/plugins";
 // import vue from '@vitejs/plugin-vue';
 // import vueJsx from '@vitejs/plugin-vue-jsx';
 // https://vitejs.dev/config/
 
-export default defineConfig(({ mode, command }) => {
+const setSseNoDelay = (response: IncomingMessage): void => {
+  response.socket?.setNoDelay?.(true);
+};
+
+export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
   // Load the .env file for the current working directory based on `mode`.
   // Passing '' as the third arg loads all env vars regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), "");
   const { VITE_APP_BASE_URL, VITE_PORT } = env;
-  const port = VITE_PORT || 5173; // port
+  const parsedPort = Number.parseInt(VITE_PORT || "5173", 10);
+  const port = Number.isFinite(parsedPort) ? parsedPort : 5173;
 
   // Dev-only proxy targets — overridable via .env.dev so each engineer
   // points at their own LAN backend without editing this file. Defaults
@@ -19,7 +25,7 @@ export default defineConfig(({ mode, command }) => {
   // gateway (8080 is the canonical port from CLAUDE.md).
   const devProxyApi = env.VITE_DEV_PROXY_API || "http://localhost:8080";
 
-  return {
+  const config: UserConfig = {
     // envPrefix: "VITE_", // the env var prefix defaults to VITE_
     base: "/" + (VITE_APP_BASE_URL || ""),
     // plugins: [vue(), vueJsx()],
@@ -56,7 +62,7 @@ export default defineConfig(({ mode, command }) => {
     },
     server: {
       host: "0.0.0.0",
-      port: port as number,
+      port,
       open: true,
       proxy: {
         // detail: https://cli.vuejs.org/config/#devserver-proxy
@@ -72,7 +78,7 @@ export default defineConfig(({ mode, command }) => {
               if (
                 proxyRes.headers["content-type"]?.includes("text/event-stream")
               ) {
-                (proxyRes as any).socket?.setNoDelay?.(true);
+                setSseNoDelay(proxyRes);
               }
             });
           },
@@ -92,6 +98,7 @@ export default defineConfig(({ mode, command }) => {
       },
     },
   };
+  return config;
 });
 // export default defineConfig({
 //   // envPrefix: "VITE_",

@@ -1,13 +1,16 @@
 import compression from "vite-plugin-compression";
+import type { Plugin } from "vite";
 
-export default function createCompression(env) {
+export default function createCompression(
+  env: Record<string, string>
+): Plugin[] {
   const { VITE_BUILD_COMPRESS } = env;
-  const plugin = [];
+  const plugins: Plugin[] = [];
   if (VITE_BUILD_COMPRESS) {
     const compressList = VITE_BUILD_COMPRESS.split(",");
     if (compressList.includes("gzip")) {
       // See http://doc.ruoyi.vip/ruoyi-vue/other/faq.html (serving gzip-compressed static files)
-      plugin.push(
+      plugins.push(
         compression({
           ext: ".gz",
           deleteOriginFile: false,
@@ -15,7 +18,7 @@ export default function createCompression(env) {
       );
     }
     if (compressList.includes("brotli")) {
-      plugin.push(
+      plugins.push(
         compression({
           ext: ".br",
           algorithm: "brotliCompress",
@@ -24,5 +27,5 @@ export default function createCompression(env) {
       );
     }
   }
-  return plugin;
+  return plugins;
 }
