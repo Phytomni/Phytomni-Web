@@ -75,11 +75,6 @@ class MockIntersectionObserver {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeToc — initial state", () => {
-  it("keeps invalid test values explicit at the call site", () => {
-    const value = { invalid: true };
-    expect(invalidInput(value)).toBe(value);
-  });
-
   it("activeHeadingId is initially an empty string", () => {
     const { Harness } = makeHarness();
     const wrapper = mount(Harness);

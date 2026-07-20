@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { AxiosError } from "axios";
 import { buildAxiosError, buildChatResponse } from "../../helpers/apiBuilders";
 import { buildChatMessage, buildChatState } from "../../helpers/chatBuilders";
-import { invalidInput } from "../../helpers/invalidInput";
 import {
   buildRouteLocation,
   deferred,
@@ -96,12 +95,6 @@ describe("typed test builders", () => {
     expect(() => mustGet(null, "request call")).toThrow(
       "Missing test value: request call"
     );
-  });
-
-  it("keeps invalid-input identity at an explicit runtime boundary", () => {
-    const malformed = { status: 418 };
-    const typed = invalidInput<{ answer: string }>(malformed);
-    expect(typed).toBe(malformed);
   });
 
   it("creates an AxiosError instance with safe overrides", () => {

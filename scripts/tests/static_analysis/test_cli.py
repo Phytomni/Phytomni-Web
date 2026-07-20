@@ -429,3 +429,18 @@ def test_low_risk_temporary_families_are_closed_from_the_live_registry() -> None
         and entry["rule"] == "shell-fallback-success"
         for entry in entries
     )
+
+
+def test_live_frontend_eslint_semantic_findings_are_zero() -> None:
+    findings = cli.collect_findings(ROOT, collectors=("eslint",))
+    semantic_rules = {
+        "@typescript-eslint/no-explicit-any",
+        "@typescript-eslint/no-non-null-assertion",
+        "@typescript-eslint/no-unused-vars",
+    }
+
+    assert [
+        (finding.path, finding.rule, finding.display_line)
+        for finding in findings
+        if finding.rule in semantic_rules
+    ] == []
