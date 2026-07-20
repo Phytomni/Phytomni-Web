@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { ref, type Ref } from "vue";
-import type { ChatUIState, ChatView } from "@/views/chat/types";
+import type { ChatMessage, ChatUIState, ChatView } from "@/views/chat/types";
 import { buildChatState } from "../../../helpers/chatBuilders";
+import { mustGet } from "../../../helpers/mockFactories";
 
 const mockGetQueryAbortable = vi.hoisted(() => vi.fn());
 
@@ -35,6 +36,11 @@ import { useSendMessage } from "@/views/chat/composables/useSendMessage";
 
 function makeState(): ChatUIState {
   return buildChatState({ messageInput: "question" });
+}
+
+function lastMessage(state: ChatUIState, label: string): ChatMessage {
+  const renderedChat = mustGet(state.renderedChat, `${label}: rendered chat`);
+  return mustGet(renderedChat.messages.at(-1), `${label}: last message`);
 }
 
 describe("blocking Bot response identity", () => {
@@ -99,7 +105,7 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "bot run identity");
     expect(assistant.id).toBe(41);
     expect(assistant.botProjection?.runId).toBe("run-41");
     expect(assistant.botProjection?.status).toBe("SUCCEEDED");
@@ -119,7 +125,7 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "tracking-degraded response");
     expect(assistant.id).toBe(42);
     expect(assistant.botProjection?.runId).toBeNull();
     expect(assistant.botProjection?.trackingDegraded).toBe(true);
@@ -141,7 +147,7 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "report metadata response");
     expect(assistant.botProjection).toMatchObject({
       reportRevision: 4,
       requestId: "web-request-43",
@@ -163,7 +169,7 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "legacy analyst response");
     expect(assistant).toMatchObject({
       task_id: "task-45",
       download_path: "obs://bucket/report-45",
@@ -197,9 +203,10 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "A2UI input-required response");
     expect(assistant.blocks).toHaveLength(1);
-    expect(assistant.blocks[0]).toMatchObject({
+    const block = mustGet(assistant.blocks?.[0], "A2UI first block");
+    expect(block).toMatchObject({
       type: "agent-surface",
       authority: "agent",
       interactive: true,
@@ -248,9 +255,11 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "unsafe dialogue A2UI response");
     expect(assistant.blocks).toHaveLength(1);
-    expect(assistant.blocks[0].a2ui.surface.surface_id).toBe("surface-46");
+    expect(assistant.blocks?.[0]).toMatchObject({
+      a2ui: { surface: { surface_id: "surface-46" } },
+    });
     expect(assistant.a2uiRuntime).toBeUndefined();
   });
 });
