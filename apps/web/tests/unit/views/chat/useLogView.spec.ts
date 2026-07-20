@@ -1,6 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ref, nextTick } from "vue";
-import type { ChatMessage } from "@/views/chat/types";
+import {
+  computed,
+  ref,
+  nextTick,
+  type Ref,
+  type WritableComputedRef,
+} from "vue";
+import type { ApiEnvelope, MutationData } from "@/api/types";
+import type { ChatMessage, ChatUIState, ChatView } from "@/views/chat/types";
+import { buildApiEnvelope } from "../../../helpers/apiBuilders";
+import {
+  buildChatMessage,
+  buildChatState,
+} from "../../../helpers/chatBuilders";
+import { deferred, mustGet } from "../../../helpers/mockFactories";
+import { invalidInput } from "../../../helpers/invalidInput";
 
 vi.mock("element-plus", () => ({
   ElMessage: {
@@ -9,12 +23,20 @@ vi.mock("element-plus", () => ({
   },
 }));
 
-const mockGetAnalystAgentLog = vi.fn();
-const mockUpdateAnalystAgentLog = vi.fn();
+const mockGetAnalystAgentLog = vi.hoisted(() =>
+  vi.fn<(data: { id: string }) => Promise<ApiEnvelope<string>>>()
+);
+const mockUpdateAnalystAgentLog = vi.hoisted(() =>
+  vi.fn<
+    (
+      data: { task_id: string; compute_resource: string } | FormData
+    ) => Promise<ApiEnvelope<MutationData>>
+  >()
+);
 vi.mock("@/api/chat", () => ({
   getHistoryQuestionList: vi.fn(),
-  getAnalystAgentLog: (...args: any[]) => mockGetAnalystAgentLog(...args),
-  updateAnalystAgentLog: (...args: any[]) => mockUpdateAnalystAgentLog(...args),
+  getAnalystAgentLog: mockGetAnalystAgentLog,
+  updateAnalystAgentLog: mockUpdateAnalystAgentLog,
 }));
 
 import {
@@ -31,7 +53,9 @@ describe("deriveAnalystLogRowId / deriveAnalystLogTaskId", () => {
       deriveAnalystLogRowId({ role: "assistant", content: "", id: "42" })
     ).toBe("42");
     expect(
-      deriveAnalystLogRowId({ role: "assistant", content: "", id: 7 as any })
+      deriveAnalystLogRowId(
+        invalidInput<ChatMessage>({ role: "assistant", content: "", id: 7 })
+      )
     ).toBe("7");
     expect(
       deriveAnalystLogRowId({ role: "assistant", content: "", id: "0" })
@@ -59,11 +83,13 @@ describe("deriveAnalystLogRowId / deriveAnalystLogTaskId", () => {
       deriveAnalystLogTaskId({ role: "assistant", content: "", task_id: "  " })
     ).toBeUndefined();
     expect(
-      deriveAnalystLogTaskId({
-        role: "assistant",
-        content: "",
-        task_id: null as any,
-      })
+      deriveAnalystLogTaskId(
+        invalidInput<ChatMessage>({
+          role: "assistant",
+          content: "",
+          task_id: null,
+        })
+      )
     ).toBeUndefined();
     expect(
       deriveAnalystLogTaskId({ role: "assistant", content: "", id: "99" })
@@ -72,40 +98,24 @@ describe("deriveAnalystLogRowId / deriveAnalystLogTaskId", () => {
 });
 
 describe("useLogView", () => {
-  type ChatState = {
-    logData: Record<string, any>;
-    loadingLog: Record<string, boolean>;
-    updatingLog: Record<string, boolean>;
-    logErrorKinds: Record<string, "fetch" | "update" | undefined>;
-    activityExpandedByMessage: Record<string, boolean>;
-  };
-
-  let stateMap: Map<string, ChatState>;
-  let isSending: ReturnType<typeof ref<boolean>>;
-  let currentChatId: ReturnType<typeof ref<string>>;
-  let currentChat: ReturnType<typeof ref<any>>;
+  let stateMap: Map<string, ChatUIState>;
+  let isSending: Ref<boolean>;
+  let currentChatId: Ref<string>;
+  let currentChat: Ref<ChatView | null>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
-  let getChatState: (id: string) => ChatState;
+  let getChatState: (id: string) => ChatUIState;
 
-  function makeState(): ChatState {
-    return {
-      logData: {},
-      loadingLog: {},
-      updatingLog: {},
-      logErrorKinds: {},
-      activityExpandedByMessage: {},
-    };
+  function makeState(): ChatUIState {
+    return buildChatState();
   }
 
-  function msg(
-    partial: Partial<ChatMessage> & { id?: string; task_id?: string }
-  ): ChatMessage {
-    return {
+  function msg(partial: Partial<ChatMessage> = {}): ChatMessage {
+    return buildChatMessage({
       role: "assistant",
       content: "reply",
       tool_name: "AnalystAgent",
       ...partial,
-    };
+    });
   }
 
   beforeEach(() => {
@@ -116,7 +126,7 @@ describe("useLogView", () => {
 
     getChatState = (id: string) => {
       if (!stateMap.has(id)) stateMap.set(id, makeState());
-      return stateMap.get(id)!;
+      return mustGet(stateMap.get(id), `chat state ${id}`);
     };
 
     isSending = ref(false);
@@ -125,9 +135,38 @@ describe("useLogView", () => {
     scrollToBottom = vi.fn();
   });
 
+  function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {
+    return computed({
+      get: () => source.value,
+      set: (value: T) => {
+        source.value = value;
+      },
+    });
+  }
+
+  function logResponse(data: string, code = 200): ApiEnvelope<string> {
+    return buildApiEnvelope(data, { code });
+  }
+
+  function mutationResponse(code = 200): ApiEnvelope<MutationData> {
+    return buildApiEnvelope<MutationData>(null, { code });
+  }
+
+  function invalidLogResponse(code: number): ApiEnvelope<string> {
+    return invalidInput<ApiEnvelope<string>>(buildApiEnvelope(null, { code }));
+  }
+
+  function formDataCallAt(index: number, label: string): FormData {
+    const [data] = mustGet(mockUpdateAnalystAgentLog.mock.calls[index], label);
+    if (!(data instanceof FormData)) {
+      throw new Error(`Expected FormData: ${label}`);
+    }
+    return data;
+  }
+
   function makeComposable() {
     return useLogView({
-      isSending: isSending as any,
+      isSending: writableRef(isSending),
       currentChat,
       currentChatId,
       getChatState,
@@ -138,7 +177,7 @@ describe("useLogView", () => {
   it("closed does not fetch; first open fetches once; repeat open uses cache", async () => {
     const message = msg({ id: "11" });
     currentChat.value = { messages: [message] };
-    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "cached-log" });
+    mockGetAnalystAgentLog.mockResolvedValue(logResponse("cached-log"));
 
     const { setLogExpanded } = makeComposable();
 
@@ -160,7 +199,7 @@ describe("useLogView", () => {
   it("code===200 with empty/falsy data is empty success (no fetch error) and caches", async () => {
     const message = msg({ id: "12" });
     currentChat.value = { messages: [message] };
-    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "" });
+    mockGetAnalystAgentLog.mockResolvedValue(logResponse(""));
 
     const { setLogExpanded } = makeComposable();
     await setLogExpanded(message, true);
@@ -173,14 +212,14 @@ describe("useLogView", () => {
     await setLogExpanded(message, true);
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
 
-    mockGetAnalystAgentLog.mockResolvedValueOnce({ code: 200, data: null });
+    mockGetAnalystAgentLog.mockResolvedValueOnce(invalidLogResponse(200));
     const nullMsg = msg({ id: "13" });
     currentChat.value = { messages: [nullMsg] };
     await setLogExpanded(nullMsg, true);
     expect(getChatState("A").logData["13"]).toBe("");
     expect(getChatState("A").logErrorKinds["13"]).toBeUndefined();
 
-    mockGetAnalystAgentLog.mockResolvedValueOnce({ code: 500, data: null });
+    mockGetAnalystAgentLog.mockResolvedValueOnce(invalidLogResponse(500));
     const failMsg = msg({ id: "14" });
     currentChat.value = { messages: [failMsg] };
     await setLogExpanded(failMsg, true);
@@ -189,13 +228,16 @@ describe("useLogView", () => {
   });
 
   it("positive-decimal rowId drives GET; real taskId drives PATCH only; no fallback", async () => {
-    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "ok" });
-    mockUpdateAnalystAgentLog.mockResolvedValue({ code: 200 });
+    mockGetAnalystAgentLog.mockResolvedValue(logResponse("ok"));
+    mockUpdateAnalystAgentLog.mockResolvedValue(mutationResponse());
 
     const { setLogExpanded, updateLog } = makeComposable();
 
     for (const bad of ["0", "-1", "x", undefined]) {
-      const m = msg({ id: bad as any, task_id: "task-real" });
+      const m = invalidInput<ChatMessage>({
+        ...msg({ task_id: "task-real" }),
+        id: bad,
+      });
       await setLogExpanded(m, true);
       await updateLog(m);
     }
@@ -208,13 +250,13 @@ describe("useLogView", () => {
     expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "88" });
 
     await updateLog(distinct);
-    const form = mockUpdateAnalystAgentLog.mock.calls[0][0] as FormData;
+    const form = formDataCallAt(0, "distinct analyst log update");
     expect(form.get("task_id")).toBe("task-88");
     expect(form.get("task_id")).not.toBe("88");
 
     // refetch after update uses rowId
     expect(
-      mockGetAnalystAgentLog.mock.calls.some((c) => c[0].id === "88")
+      mockGetAnalystAgentLog.mock.calls.some(([request]) => request.id === "88")
     ).toBe(true);
 
     const noTask = msg({ id: "99" });
@@ -233,10 +275,7 @@ describe("useLogView", () => {
     await setLogExpanded(message, true);
     expect(getChatState("A").logErrorKinds["5"]).toBe("fetch");
 
-    mockGetAnalystAgentLog.mockResolvedValueOnce({
-      code: 200,
-      data: "recovered",
-    });
+    mockGetAnalystAgentLog.mockResolvedValueOnce(logResponse("recovered"));
     await retryLog(message);
     expect(getChatState("A").logErrorKinds["5"]).toBeUndefined();
     expect(mockGetAnalystAgentLog).toHaveBeenLastCalledWith({ id: "5" });
@@ -246,22 +285,20 @@ describe("useLogView", () => {
     await updateLog(message);
     expect(getChatState("A").logErrorKinds["5"]).toBe("update");
 
-    mockUpdateAnalystAgentLog.mockResolvedValueOnce({ code: 200 });
-    mockGetAnalystAgentLog.mockResolvedValueOnce({
-      code: 200,
-      data: "after-patch",
-    });
+    mockUpdateAnalystAgentLog.mockResolvedValueOnce(mutationResponse());
+    mockGetAnalystAgentLog.mockResolvedValueOnce(logResponse("after-patch"));
     await retryLog(message);
     expect(getChatState("A").logErrorKinds["5"]).toBeUndefined();
-    const lastPatch = mockUpdateAnalystAgentLog.mock.calls.at(
-      -1
-    )![0] as FormData;
+    const lastPatch = formDataCallAt(
+      mockUpdateAnalystAgentLog.mock.calls.length - 1,
+      "last analyst log update"
+    );
     expect(lastPatch.get("task_id")).toBe("task-5");
     expect(mockGetAnalystAgentLog).toHaveBeenLastCalledWith({ id: "5" });
   });
 
   it("legacy showLog=true initializes one open map entry once; absent/false stays closed", async () => {
-    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "legacy" });
+    mockGetAnalystAgentLog.mockResolvedValue(logResponse("legacy"));
     const legacy = msg({ id: "21", showLog: true });
     currentChat.value = { messages: [legacy] };
 
@@ -290,7 +327,7 @@ describe("useLogView", () => {
   });
 
   it("switching dialogue never exposes another dialogue's logs", async () => {
-    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "A-log" });
+    mockGetAnalystAgentLog.mockResolvedValue(logResponse("A-log"));
     const message = msg({ id: "31" });
     currentChat.value = { messages: [message] };
     const { setLogExpanded } = makeComposable();
@@ -303,12 +340,9 @@ describe("useLogView", () => {
   });
 
   it("🔒 capture invariant: updatingLog cleanup lands on the originating chat after mid-flight switch", async () => {
-    let resolveUpdate!: (value: any) => void;
-    const updatePromise = new Promise<any>((res) => {
-      resolveUpdate = res;
-    });
-    mockUpdateAnalystAgentLog.mockReturnValueOnce(updatePromise);
-    mockGetAnalystAgentLog.mockResolvedValue({ code: 200, data: "ok" });
+    const updatePromise = deferred<ApiEnvelope<MutationData>>();
+    mockUpdateAnalystAgentLog.mockReturnValueOnce(updatePromise.promise);
+    mockGetAnalystAgentLog.mockResolvedValue(logResponse("ok"));
 
     const message = msg({ id: "41", task_id: "task-41", showLog: true });
     currentChat.value = { messages: [message] };
@@ -320,7 +354,7 @@ describe("useLogView", () => {
     expect(getChatState("A").updatingLog["41"]).toBe(true);
 
     currentChatId.value = "B";
-    resolveUpdate({ code: 200 });
+    updatePromise.resolve(mutationResponse());
     await inflight;
 
     expect(getChatState("A").updatingLog["41"]).toBe(false);
@@ -338,7 +372,9 @@ describe("useLogView", () => {
   });
 
   it("legacy initialization ignores absent log rows instead of throwing", async () => {
-    currentChat.value = { messages: [null, undefined, msg({ id: "61" })] };
+    currentChat.value = invalidInput<ChatView>({
+      messages: [null, undefined, msg({ id: "61" })],
+    });
 
     expect(() => makeComposable()).not.toThrow();
     await nextTick();

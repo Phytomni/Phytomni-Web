@@ -3,6 +3,11 @@ import { ref } from "vue";
 import { useReactions } from "@/views/chat/composables/useReactions";
 import i18n from "@/locales";
 import zhCN from "@/locales/langs/zh-CN";
+import type { ApiEnvelope, MutationData } from "@/api/types";
+import type { ChatUIState } from "@/views/chat/types";
+import { buildApiEnvelope } from "../../../helpers/apiBuilders";
+import { buildChatState } from "../../../helpers/chatBuilders";
+import { deferred, mustGet } from "../../../helpers/mockFactories";
 
 // Mock element-plus ElMessage
 vi.mock("element-plus", () => ({
@@ -25,14 +30,14 @@ const mockElSuccess = vi.mocked(ElMessage.success);
 const mockElError = vi.mocked(ElMessage.error);
 
 describe("useReactions", () => {
-  let chatState: { reactions: Record<string, number> };
+  let chatState: ChatUIState;
   let currentChatId: ReturnType<typeof ref<string>>;
-  let getChatState: (dialogueId: string) => any;
+  let getChatState: (dialogueId: string) => ChatUIState;
   let scrollToBottom: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    chatState = { reactions: {} };
+    chatState = buildChatState();
     currentChatId = ref("d1");
     getChatState = () => chatState;
     scrollToBottom = vi.fn();
@@ -40,6 +45,20 @@ describe("useReactions", () => {
 
   function makeComposable() {
     return useReactions({ currentChatId, getChatState, scrollToBottom });
+  }
+
+  function mutationResponse(
+    overrides: Partial<ApiEnvelope<MutationData>> = {}
+  ): ApiEnvelope<MutationData> {
+    return buildApiEnvelope<MutationData>(null, overrides);
+  }
+
+  function reactionFormAt(index: number, label: string): FormData {
+    const [data] = mustGet(mockGetReactionType.mock.calls[index], label);
+    if (!(data instanceof FormData)) {
+      throw new Error(`Expected FormData: ${label}`);
+    }
+    return data;
   }
 
   describe("getReactionState", () => {
@@ -65,13 +84,13 @@ describe("useReactions", () => {
   describe("handleReaction", () => {
     it("current reaction is 1, click 1 again → cancel reaction_type=0, state=0, success=Cancelled", async () => {
       chatState.reactions = { m1: 1 };
-      mockGetReactionType.mockResolvedValueOnce({ code: 200 } as any);
+      mockGetReactionType.mockResolvedValueOnce(mutationResponse());
 
       const { handleReaction } = makeComposable();
       await handleReaction("m1", 1);
 
       // Check the FormData parameters
-      const formData: FormData = mockGetReactionType.mock.calls[0][0];
+      const formData = reactionFormAt(0, "cancel reaction");
       expect(formData.get("id")).toBe("m1");
       expect(formData.get("reaction_type")).toBe("0");
 
@@ -84,12 +103,12 @@ describe("useReactions", () => {
 
     it("current reaction is 0, click 2 → reaction_type=2, state=2, success=Disliked", async () => {
       chatState.reactions = {};
-      mockGetReactionType.mockResolvedValueOnce({ code: 200 } as any);
+      mockGetReactionType.mockResolvedValueOnce(mutationResponse());
 
       const { handleReaction } = makeComposable();
       await handleReaction("m1", 2);
 
-      const formData: FormData = mockGetReactionType.mock.calls[0][0];
+      const formData = reactionFormAt(0, "dislike reaction");
       expect(formData.get("reaction_type")).toBe("2");
       expect(chatState.reactions["m1"]).toBe(2);
       expect(mockElSuccess).toHaveBeenCalledWith("Disliked");
@@ -97,12 +116,12 @@ describe("useReactions", () => {
 
     it("current reaction is 0, click 1 → reaction_type=1, state=1, success=Liked", async () => {
       chatState.reactions = {};
-      mockGetReactionType.mockResolvedValueOnce({ code: 200 } as any);
+      mockGetReactionType.mockResolvedValueOnce(mutationResponse());
 
       const { handleReaction } = makeComposable();
       await handleReaction("m1", 1);
 
-      const formData: FormData = mockGetReactionType.mock.calls[0][0];
+      const formData = reactionFormAt(0, "like reaction");
       expect(formData.get("reaction_type")).toBe("1");
       expect(chatState.reactions["m1"]).toBe(1);
       expect(mockElSuccess).toHaveBeenCalledWith("Liked");
@@ -110,7 +129,9 @@ describe("useReactions", () => {
 
     it("non-200 response → ElMessage.error operation failed, state not updated", async () => {
       chatState.reactions = {};
-      mockGetReactionType.mockResolvedValueOnce({ code: 500 } as any);
+      mockGetReactionType.mockResolvedValueOnce(
+        mutationResponse({ code: 500 })
+      );
 
       const { handleReaction } = makeComposable();
       await handleReaction("m1", 1);
@@ -134,25 +155,21 @@ describe("useReactions", () => {
     });
 
     it("same-dialogue overlap keeps the latest reaction when responses resolve out of order", async () => {
-      let resolveFirst!: (value: { code: number }) => void;
-      let resolveSecond!: (value: { code: number }) => void;
+      const firstResponse = deferred<ApiEnvelope<MutationData>>();
+      const secondResponse = deferred<ApiEnvelope<MutationData>>();
       mockGetReactionType
-        .mockImplementationOnce(
-          () => new Promise((resolve) => (resolveFirst = resolve))
-        )
-        .mockImplementationOnce(
-          () => new Promise((resolve) => (resolveSecond = resolve))
-        );
+        .mockReturnValueOnce(firstResponse.promise)
+        .mockReturnValueOnce(secondResponse.promise);
 
       const { handleReaction } = makeComposable();
       const first = handleReaction("m1", 1);
       const second = handleReaction("m1", 2);
 
-      resolveSecond({ code: 200 });
+      secondResponse.resolve(mutationResponse());
       await second;
       expect(chatState.reactions["m1"]).toBe(2);
 
-      resolveFirst({ code: 200 });
+      firstResponse.resolve(mutationResponse());
       await first;
       expect(chatState.reactions["m1"]).toBe(2);
     });
