@@ -102,6 +102,10 @@ describe("parseDeepGenomeMarkdown — block-type golden master", () => {
 });
 
 describe("parseDeepGenomeMarkdown — headings + nested tree", () => {
+  it("ignores malformed heading markers without throwing", () => {
+    expect(() => parseDeepGenomeMarkdown(join("###", "##"))).not.toThrow();
+  });
+
   it("returns flat headings as { id, text, level } with a global counter", () => {
     const md = join("# Title", "## Section", "### Card", "#### Detail");
     const { headings } = parseDeepGenomeMarkdown(md);

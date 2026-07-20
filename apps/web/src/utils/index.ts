@@ -21,38 +21,34 @@ export function removeToken() {
   return Cookies.remove(TokenKey);
 }
 
-/**
- * Serialize params into a query string.
- * @param {*} params  the params object
- */
-export function tansParams(params: { [x: string]: any }) {
+/** Serialize an unknown params value into the query-string format used by the API. */
+export function tansParams(params: unknown): string {
   let result = "";
-  for (const propName of Object.keys(params)) {
-    const value = params[propName];
-    const part = encodeURIComponent(propName) + "=";
-    if (value !== null && value !== "" && typeof value !== "undefined") {
-      if (typeof value === "object") {
-        for (const key of Object.keys(value)) {
-          if (
-            value[key] !== null &&
-            value !== "" &&
-            typeof value[key] !== "undefined"
-          ) {
-            const params = propName + "[" + key + "]";
-            const subPart = encodeURIComponent(params) + "=";
-            result += subPart + encodeURIComponent(value[key]) + "&";
-          }
-        }
-      } else {
-        result += part + encodeURIComponent(value) + "&";
+  if (!params || typeof params !== "object") return result;
+
+  const append = (key: string, value: unknown): void => {
+    if (value === null || value === "" || typeof value === "undefined") {
+      return;
+    }
+    result += `${encodeURIComponent(key)}=${encodeURIComponent(
+      String(value)
+    )}&`;
+  };
+
+  for (const [propName, value] of Object.entries(params)) {
+    if (value && typeof value === "object") {
+      for (const [key, nestedValue] of Object.entries(value)) {
+        append(`${propName}[${key}]`, nestedValue);
       }
+    } else {
+      append(propName, value);
     }
   }
   return result;
 }
 
 // Validate whether the data is a blob
-export async function blobValidate(data: { text: () => any }) {
+export async function blobValidate(data: Blob): Promise<boolean> {
   try {
     const text = await data.text();
     JSON.parse(text);

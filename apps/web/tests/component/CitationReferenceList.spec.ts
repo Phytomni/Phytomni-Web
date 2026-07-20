@@ -51,6 +51,17 @@ describe("CitationReferenceList", () => {
     expect(html).not.toMatch(/\sonmouseover=/i);
   });
 
+  it("renders malformed and partially populated references without throwing", () => {
+    const wrapper = mountList({
+      references: [null, 42, { au: null, title: "Fallback" }],
+      ns: "m2",
+    });
+
+    expect(wrapper.findAll(".doc-list-item")).toHaveLength(3);
+    expect(wrapper.text()).toContain("Fallback");
+    expect(wrapper.html()).not.toContain("undefined");
+  });
+
   it("gives two lists with different ns disjoint DOM ids", () => {
     const a = mountList({ references: [{ title: "A" }], ns: "m0" });
     const b = mountList({ references: [{ title: "B" }], ns: "m1" });

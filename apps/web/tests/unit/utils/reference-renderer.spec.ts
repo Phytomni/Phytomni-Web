@@ -11,9 +11,7 @@ import { buildDisplayReferences } from "@/utils/reference-renderer";
 describe("buildDisplayReferences — XSS invariant", () => {
   it("returns [] for empty / nullish input", () => {
     expect(buildDisplayReferences([])).toEqual([]);
-    // @ts-expect-error exercising the nullish guard
     expect(buildDisplayReferences(null)).toEqual([]);
-    // @ts-expect-error exercising the undefined guard
     expect(buildDisplayReferences(undefined)).toEqual([]);
   });
 

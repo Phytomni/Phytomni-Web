@@ -1,12 +1,21 @@
 import { ref, onUnmounted, nextTick } from "vue";
 import type { Ref } from "vue";
 
+export interface DeepGenomeTocHeading {
+  id: string;
+  children?: DeepGenomeTocHeading[];
+  [key: string]: unknown;
+}
+
+export type DeepGenomeTocMainContentValue =
+  | HTMLElement
+  | { $el?: Element | null }
+  | null;
+
 export interface DeepGenomeTocOpts {
   headings: Ref<Array<{ id: string; [key: string]: unknown }>>;
-  nestedHeadings: Ref<
-    Array<{ id: string; children?: unknown[]; [key: string]: unknown }>
-  >;
-  mainContentRef: Ref<any>;
+  nestedHeadings: Ref<DeepGenomeTocHeading[]>;
+  mainContentRef: Ref<DeepGenomeTocMainContentValue>;
 }
 
 export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
@@ -21,8 +30,8 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
 
   const resolveMainElement = (): HTMLElement | null => {
     const value = mainContentRef.value;
-    const element = value?.$el ?? value;
-    return element instanceof HTMLElement ? element : null;
+    const candidate = value instanceof HTMLElement ? value : value?.$el;
+    return candidate instanceof HTMLElement ? candidate : null;
   };
 
   const resolveViewerRoot = (): HTMLElement | null =>
@@ -80,7 +89,7 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
     const findPath = (
       items: Array<{
         id: string;
-        children?: unknown[];
+        children?: DeepGenomeTocHeading[];
         [key: string]: unknown;
       }>,
       targetId: string,
@@ -92,15 +101,10 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
           return path;
         }
         if (item.children && item.children.length > 0) {
-          const childPath = findPath(
-            item.children as Array<{
-              id: string;
-              children?: unknown[];
-              [key: string]: unknown;
-            }>,
-            targetId,
-            [...path, item.id]
-          );
+          const childPath = findPath(item.children, targetId, [
+            ...path,
+            item.id,
+          ]);
           if (childPath) {
             return childPath;
           }
@@ -115,6 +119,7 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
     // expand all parent menus along the path (except the last, which is the active item itself)
     for (let i = 0; i < path.length - 1; i++) {
       const menuId = path[i];
+      if (!menuId) continue;
       const queryRoot =
         resolveViewerRoot()?.querySelector(".deep-genome-toc") ?? document;
       const subMenuItem = Array.from(
@@ -155,7 +160,9 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
           // sort by viewport position and choose the topmost heading
           visibleHeadings.sort((a, b) => a.top - b.top);
 
-          const currentActiveId = visibleHeadings[0].id;
+          const topHeading = visibleHeadings[0];
+          if (!topHeading) return;
+          const currentActiveId = topHeading.id;
 
           if (currentActiveId !== activeHeadingId.value) {
             activeHeadingId.value = currentActiveId;
@@ -187,13 +194,14 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
 
   // clean up the Intersection Observer on unmount
   onUnmounted(() => {
-    if (observerRef.value) {
+    const observer = observerRef.value;
+    if (observer) {
       // stop observing all elements
       observedElements.value.forEach((element) => {
-        observerRef.value!.unobserve(element);
+        observer.unobserve(element);
       });
       // disconnect the observer
-      observerRef.value.disconnect();
+      observer.disconnect();
       observerRef.value = null;
       observedElements.value.clear();
     }

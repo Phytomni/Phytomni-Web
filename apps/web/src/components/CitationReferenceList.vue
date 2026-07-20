@@ -25,7 +25,7 @@ const props = defineProps<{
 }>();
 
 const displayReferences = computed(() =>
-  buildDisplayReferences((props.references as any[]) || [], props.ns)
+  buildDisplayReferences(props.references ?? [], props.ns)
 );
 </script>
 

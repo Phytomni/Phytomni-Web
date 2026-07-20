@@ -1,5 +1,13 @@
 import { escapeHtml, sanitizeHref } from "@/utils/sanitize-markup";
-import { formatDetailedCitation } from "@/utils/citation";
+import {
+  formatDetailedCitation,
+  normalizeReferenceDocument,
+} from "@/utils/citation";
+
+export interface DisplayReference {
+  html: string;
+  id: string;
+}
 
 // Build the formatted HTML for the reference list (extracted verbatim from
 // DeepGenomeResultViewer's displayReferences computed).
@@ -10,9 +18,9 @@ import { formatDetailedCitation } from "@/utils/citation";
 // citation au-so / dl text / pm text / plain string / JSON) is escapeHtml-ed; the
 // DOI / PubMed href always goes through sanitizeHref for a scheme allow-list check.
 export const buildDisplayReferences = (
-  references: any[],
+  references: readonly unknown[] | null | undefined,
   ns = ""
-): Array<{ html: string; id: string }> => {
+): DisplayReference[] => {
   if (!references || references.length === 0) {
     return [];
   }
@@ -26,33 +34,34 @@ export const buildDisplayReferences = (
 
   return references.map((doc, index) => {
     const refIndex = index + 1;
+    const normalized = normalizeReferenceDocument(doc);
 
-    if (doc.au || doc.ti) {
+    if (normalized.au || normalized.ti) {
       // Rich branch FIRST: an enriched doc carries BOTH title and au/ti, and must render the full
       // bibliography rather than collapsing to the title-only row (enriched wins over title-only).
       const citation = formatDetailedCitation(doc);
 
       // build the DOI and PMID link parts
       let linkPart = "";
-      const hasLink = doc.dl || doc.pm;
+      const hasLink = normalized.dl || normalized.pm;
 
       if (hasLink) {
-        const doiLink = doc.dl
+        const doiLink = normalized.dl
           ? `doi: <a href="${sanitizeHref(
-              String(doc.dl)
+              normalized.dl
             )}" target="_blank" class="doi-link">${escapeHtml(
-              String(doc.dl)
+              normalized.dl
             )}</a>`
           : "";
-        const pmidLink = doc.pm
+        const pmidLink = normalized.pm
           ? `pmid:<a href="${sanitizeHref(
-              "https://pubmed.ncbi.nlm.nih.gov/" + String(doc.pm)
+              "https://pubmed.ncbi.nlm.nih.gov/" + normalized.pm
             )}" target="_blank" class="pmid-link">${escapeHtml(
-              String(doc.pm)
+              normalized.pm
             )}</a>`
           : "";
 
-        const separator = doc.dl && doc.pm ? "; " : "";
+        const separator = normalized.dl && normalized.pm ? "; " : "";
 
         linkPart = `. <span class="doc-link-inline">${doiLink}</span><span>${separator}</span><span class="doc-link-inline">${pmidLink}</span>`;
       }
@@ -66,9 +75,9 @@ export const buildDisplayReferences = (
         )}${linkPart}</div>`,
         id: refId(refIndex),
       };
-    } else if (doc.title) {
+    } else if (normalized.title) {
       return {
-        html: `<div>${refIndex}. ${escapeHtml(String(doc.title))}</div>`,
+        html: `<div>${refIndex}. ${escapeHtml(normalized.title)}</div>`,
         id: refId(refIndex),
       };
     } else {
@@ -81,8 +90,9 @@ export const buildDisplayReferences = (
       }
 
       // default case
+      const serialized = JSON.stringify(doc) ?? String(doc);
       return {
-        html: `<div>${refIndex}. ${escapeHtml(JSON.stringify(doc))}</div>`,
+        html: `<div>${refIndex}. ${escapeHtml(serialized)}</div>`,
         id: refId(refIndex),
       };
     }

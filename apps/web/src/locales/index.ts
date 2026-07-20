@@ -6,6 +6,9 @@ import { useAppStore } from "@/stores";
 import { loadLocaleMessages, type SupportedLocales } from "./lazy";
 import { datetimeFormats } from "./datetime-formats";
 
+const readInitialLocale = (): SupportedLocales =>
+  localStorage.getItem("language") === "zh-CN" ? "zh-CN" : "en-US";
+
 // Message bundles — en-US is eager (fallback locale, must always be present);
 // zh-CN is deferred behind a dynamic import in ./lazy.
 const messages = {
@@ -15,10 +18,20 @@ const messages = {
   },
 };
 
+type I18nOptions = {
+  legacy: false;
+  locale: SupportedLocales;
+  fallbackLocale: SupportedLocales;
+  messages: typeof messages;
+  datetimeFormats: typeof datetimeFormats;
+  missingWarn: boolean;
+  fallbackWarn: boolean;
+};
+
 // Create the vue-i18n instance
-export const i18n = createI18n({
+export const i18n = createI18n<false, I18nOptions>({
   legacy: false, // use the composition API
-  locale: localStorage.getItem("language") || "en-US", // default locale
+  locale: readInitialLocale(),
   fallbackLocale: "en-US", // fallback locale
   messages,
   datetimeFormats,
@@ -26,7 +39,6 @@ export const i18n = createI18n({
   // Debug-oriented warning config
   missingWarn: true,
   fallbackWarn: true,
-  silentTranslationWarn: false,
 });
 
 // Switch language (loads the target pack on demand before switching).
@@ -35,12 +47,7 @@ export async function setLanguage(
 ): Promise<SupportedLocales> {
   try {
     await loadLocaleMessages(i18n, lang);
-
-    if (i18n.mode === "legacy") {
-      (i18n.global.locale as any) = lang;
-    } else {
-      (i18n.global.locale as any).value = lang;
-    }
+    i18n.global.locale.value = lang;
 
     // Update the language in the store
     const appStore = useAppStore();
@@ -63,7 +70,7 @@ export async function setLanguage(
 
 // Get current locale
 export function getLanguage(): SupportedLocales {
-  return (i18n.global.locale as any).value as SupportedLocales;
+  return i18n.global.locale.value;
 }
 
 export default i18n;

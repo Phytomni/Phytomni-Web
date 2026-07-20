@@ -4,15 +4,28 @@ import { saveAs } from "file-saver";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { convertFilePath } from "@/utils/markdown-inline";
+import type { DisplayReference } from "@/utils/reference-renderer";
+
+export type DeepGenomeMainContentValue =
+  | HTMLElement
+  | { $el?: Element | null }
+  | null;
 
 export interface DeepGenomeDownloadsOpts {
   props: {
     markdown: string;
     filename?: string;
   };
-  mainContentRef: Ref<any>;
-  displayReferences: ComputedRef<Array<{ html?: string; id?: string }>>;
+  mainContentRef: Ref<DeepGenomeMainContentValue>;
+  displayReferences: ComputedRef<DisplayReference[]>;
 }
+
+const resolveMainElement = (
+  value: DeepGenomeMainContentValue
+): HTMLElement | null => {
+  const candidate = value instanceof HTMLElement ? value : value?.$el;
+  return candidate instanceof HTMLElement ? candidate : null;
+};
 
 export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
   const { props, mainContentRef, displayReferences } = opts;
@@ -49,7 +62,8 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     contentBlocksCopy.style.height = "auto";
 
     // grab everything inside el-main (excluding el-main itself)
-    const originalElMain = mainContentRef.value?.$el ?? mainContentRef.value;
+    const originalElMain = resolveMainElement(mainContentRef.value);
+    if (!originalElMain) return;
     const contentInsideElMain = document.createElement("div");
 
     // clone all child nodes inside el-main

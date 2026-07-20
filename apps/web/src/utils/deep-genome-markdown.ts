@@ -205,7 +205,7 @@ export function parseDeepGenomeMarkdown(
 
         if (/^####\s(.*)/.test(line)) {
           const match = line.match(/^####\s(.*)/);
-          const content = inlineMd(escapeHtml(match![1]));
+          const content = inlineMd(escapeHtml(match?.[1] ?? ""));
           const id = createHeadingId("h4");
           headingsList.push({ id, text: content, level: 4 });
           if (isInH3Card) {
@@ -238,7 +238,7 @@ export function parseDeepGenomeMarkdown(
           }
 
           const match = line.match(/^###\s(.*)/);
-          const content = inlineMd(escapeHtml(match![1]));
+          const content = inlineMd(escapeHtml(match?.[1] ?? ""));
           currentH3CardId = createHeadingId("h3");
           currentH3CardHeader = content;
           currentH3CardContent = "";
@@ -251,7 +251,7 @@ export function parseDeepGenomeMarkdown(
           currentLineProcessed = true;
         } else if (/^##\s(.*)/.test(line)) {
           const match = line.match(/^##\s(.*)/);
-          const content = inlineMd(escapeHtml(match![1]));
+          const content = inlineMd(escapeHtml(match?.[1] ?? ""));
           const id = createHeadingId("h2");
           headingsList.push({ id, text: content, level: 2 });
 
@@ -282,7 +282,7 @@ export function parseDeepGenomeMarkdown(
           currentLineProcessed = true;
         } else if (/^#\s(.*)/.test(line)) {
           const match = line.match(/^#\s(.*)/);
-          const content = inlineMd(escapeHtml(match![1]));
+          const content = inlineMd(escapeHtml(match?.[1] ?? ""));
           const id = createHeadingId("h1");
           headingsList.push({ id, text: content, level: 1 });
 
@@ -348,7 +348,7 @@ export function parseDeepGenomeMarkdown(
     // --- Other content handling logic ---
     if (/^####\s(.*)/.test(line)) {
       const match = line.match(/^####\s(.*)/);
-      const content = inlineMd(escapeHtml(match![1]));
+      const content = inlineMd(escapeHtml(match?.[1] ?? ""));
       const id = createHeadingId("h4");
       headingsList.push({ id, text: content, level: 4 });
       if (isInH3Card) {
@@ -380,7 +380,7 @@ export function parseDeepGenomeMarkdown(
       }
 
       const match = line.match(/^###\s(.*)/);
-      const content = inlineMd(escapeHtml(match![1]));
+      const content = inlineMd(escapeHtml(match?.[1] ?? ""));
       currentH3CardId = createHeadingId("h3");
       currentH3CardHeader = content;
       currentH3CardContent = "";
@@ -392,7 +392,7 @@ export function parseDeepGenomeMarkdown(
       });
     } else if (/^##\s(.*)/.test(line)) {
       const match = line.match(/^##\s(.*)/);
-      const content = inlineMd(escapeHtml(match![1]));
+      const content = inlineMd(escapeHtml(match?.[1] ?? ""));
       const id = createHeadingId("h2");
       headingsList.push({ id, text: content, level: 2 });
 
@@ -432,7 +432,7 @@ export function parseDeepGenomeMarkdown(
       isInStandaloneContentAfterH2 = true;
     } else if (/^#\s(.*)/.test(line)) {
       const match = line.match(/^#\s(.*)/);
-      const content = inlineMd(escapeHtml(match![1]));
+      const content = inlineMd(escapeHtml(match?.[1] ?? ""));
       const id = createHeadingId("h1");
       headingsList.push({ id, text: content, level: 1 });
 

@@ -6,7 +6,7 @@ declare module "*.vue" {
   // Props / RawBindings; replacing `{}` (which lint flags as "any
   // non-nullish value") with `object` keeps the shim compatible with
   // any consuming component while satisfying ban-types.
-  const component: DefineComponent<object, object, any>;
+  const component: DefineComponent<object, object, object>;
   export default component;
 }
 

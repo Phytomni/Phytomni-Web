@@ -1,11 +1,8 @@
 // Custom directives. Example usage: v-hasPermi="['*:*:*']"
+import type { App } from "vue";
 import hasPermi from "./permission/hasPermi";
 
-interface IApp {
-  directive: (arg0: string, arg1: (el: any, binding: any) => void) => void;
-}
-
-function install(app: IApp) {
+function install(app: App): void {
   app.directive("hasPermi", hasPermi);
 }
 

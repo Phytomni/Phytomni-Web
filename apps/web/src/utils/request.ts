@@ -347,9 +347,7 @@ export function download(
     url,
     method: "post",
     data: params,
-    transformRequest: [
-      (p: unknown) => tansParams(p as { [x: string]: unknown }),
-    ],
+    transformRequest: [(p: unknown) => tansParams(p)],
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     responseType: "blob",
     signal: controller.signal,

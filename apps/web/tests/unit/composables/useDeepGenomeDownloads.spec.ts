@@ -192,4 +192,19 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
 
     printSpy.mockRestore();
   });
+
+  it("skips printing when the main content ref has no DOM element", async () => {
+    const printSpy = vi.spyOn(window, "print").mockResolvedValue(undefined);
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# Missing content", filename: "missing.md" },
+      mainContentRef: ref(null),
+      displayReferences: computed(() => []),
+    });
+
+    await expect(downloadPDF()).resolves.toBeUndefined();
+    expect(printSpy).not.toHaveBeenCalled();
+
+    printSpy.mockRestore();
+  });
 });

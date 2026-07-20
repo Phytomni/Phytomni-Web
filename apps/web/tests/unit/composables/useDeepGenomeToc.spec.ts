@@ -184,8 +184,9 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
 
     wrapper.vm.setupIntersectionObserver();
 
-    const io = MockIntersectionObserver.lastInstance!;
+    const io = MockIntersectionObserver.lastInstance;
     expect(io).not.toBeNull();
+    if (!io) return;
     // observe should be called twice, once per heading
     expect(io.observe).toHaveBeenCalledTimes(2);
 
@@ -198,9 +199,22 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
 
     wrapper.vm.setupIntersectionObserver();
 
-    const io = MockIntersectionObserver.lastInstance!;
+    const io = MockIntersectionObserver.lastInstance;
+    expect(io).not.toBeNull();
+    if (!io) return;
     expect(io.observe).not.toHaveBeenCalled();
 
+    wrapper.unmount();
+  });
+
+  it("ignores observer batches with no visible headings", () => {
+    const { Harness } = makeHarness({ headingIds: ["hidden-heading"] });
+    const wrapper = mount(Harness);
+
+    wrapper.vm.setupIntersectionObserver();
+    MockIntersectionObserver.lastInstance?.trigger([]);
+
+    expect(wrapper.vm.activeHeadingId).toBe("");
     wrapper.unmount();
   });
 
@@ -215,7 +229,9 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
     const wrapper = mount(Harness);
 
     wrapper.vm.setupIntersectionObserver();
-    const io = MockIntersectionObserver.lastInstance!;
+    const io = MockIntersectionObserver.lastInstance;
+    expect(io).not.toBeNull();
+    if (!io) return;
 
     wrapper.unmount();
 
