@@ -1,13 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ref, nextTick } from "vue";
+import {
+  computed,
+  ref,
+  nextTick,
+  type Ref,
+  type WritableComputedRef,
+} from "vue";
+import type { MentionOption } from "vue-element-plus-x/types/components/MentionSender/types";
 import { useComposer } from "@/views/chat/composables/useComposer";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 
 describe("useComposer", () => {
-  let messageInput: ReturnType<typeof ref<string>>;
-  let isSending: ReturnType<typeof ref<boolean>>;
-  let currentChatId: ReturnType<typeof ref<string>>;
-  let selectedAgent: ReturnType<typeof ref<string>>;
+  let messageInput: Ref<string>;
+  let isSending: Ref<boolean>;
+  let currentChatId: Ref<string>;
+  let selectedAgent: Ref<string>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -21,14 +28,25 @@ describe("useComposer", () => {
 
   const permittedTools = ["ChatAgent", "KnowledgeAgent", "DataAgent"];
 
-  function makeComposable(authorizedAgentTools = permittedTools) {
+  function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {
+    return computed({
+      get: () => source.value,
+      set: (value: T) => {
+        source.value = value;
+      },
+    });
+  }
+
+  function makeComposable(
+    authorizedAgentTools: readonly string[] = permittedTools
+  ) {
     return useComposer({
-      messageInput: messageInput as any,
-      isSending: isSending as any,
+      messageInput: writableRef(messageInput),
+      isSending: writableRef(isSending),
       currentChatId,
-      selectedAgent: selectedAgent as any,
+      selectedAgent: writableRef(selectedAgent),
       scrollToBottom,
-      authorizedAgentTools: ref(authorizedAgentTools) as any,
+      authorizedAgentTools: ref<readonly string[]>(authorizedAgentTools),
     });
   }
 
@@ -109,7 +127,8 @@ describe("useComposer", () => {
     it("sets selectedAgent to the option value", () => {
       const { handleSelect } = makeComposable();
 
-      handleSelect({ value: "DataAgent" } as any);
+      const option: MentionOption = { value: "DataAgent" };
+      handleSelect(option);
 
       expect(selectedAgent.value).toBe("DataAgent");
     });
@@ -186,12 +205,12 @@ describe("useComposer", () => {
     it("clears an unauthorized selection once when roles shrink", async () => {
       const authorizedAgentTools = ref(["ChatAgent", "KnowledgeAgent"]);
       useComposer({
-        messageInput: messageInput as any,
-        isSending: isSending as any,
+        messageInput: writableRef(messageInput),
+        isSending: writableRef(isSending),
         currentChatId,
-        selectedAgent: selectedAgent as any,
+        selectedAgent: writableRef(selectedAgent),
         scrollToBottom,
-        authorizedAgentTools: authorizedAgentTools as any,
+        authorizedAgentTools,
       });
 
       selectedAgent.value = "KnowledgeAgent";
@@ -207,12 +226,12 @@ describe("useComposer", () => {
     it("defers revoked serialized selection cleanup until sending completes", async () => {
       const authorizedAgentTools = ref(["ChatAgent", "KnowledgeAgent"]);
       useComposer({
-        messageInput: messageInput as any,
-        isSending: isSending as any,
+        messageInput: writableRef(messageInput),
+        isSending: writableRef(isSending),
         currentChatId,
-        selectedAgent: selectedAgent as any,
+        selectedAgent: writableRef(selectedAgent),
         scrollToBottom,
-        authorizedAgentTools: authorizedAgentTools as any,
+        authorizedAgentTools,
       });
 
       selectedAgent.value = "KnowledgeAgent";
@@ -249,7 +268,7 @@ describe("useComposer", () => {
         currentChatId: chatStates.currentChatId,
         selectedAgent: chatStates.selectedAgent,
         scrollToBottom,
-        authorizedAgentTools: authorizedAgentTools as any,
+        authorizedAgentTools,
       });
 
       handleButtonClick("KnowledgeAgent");
@@ -288,7 +307,7 @@ describe("useComposer", () => {
         currentChatId: chatStates.currentChatId,
         selectedAgent: chatStates.selectedAgent,
         scrollToBottom,
-        authorizedAgentTools: authorizedAgentTools as any,
+        authorizedAgentTools,
       });
 
       handleButtonClick("KnowledgeAgent");
@@ -320,7 +339,7 @@ describe("useComposer", () => {
         currentChatId: chatStates.currentChatId,
         selectedAgent: chatStates.selectedAgent,
         scrollToBottom,
-        authorizedAgentTools: authorizedAgentTools as any,
+        authorizedAgentTools,
       });
 
       chatStates.currentChatId.value = "A";

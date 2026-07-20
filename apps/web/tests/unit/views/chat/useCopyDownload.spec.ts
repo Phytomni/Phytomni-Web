@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ref } from "vue";
+import { computed, ref, type Ref, type WritableComputedRef } from "vue";
+import type { AxiosProgressEvent } from "axios";
+import type { BinaryResponse } from "@/api/types";
 import { useCopyDownload } from "@/views/chat/composables/useCopyDownload";
 import {
   clearDownloadTransfers,
   listDownloadTransfers,
 } from "@/utils/download-transfers";
+import {
+  buildApiEnvelope,
+  buildBinaryResponse,
+} from "../../../helpers/apiBuilders";
+import { deferred, mustGet } from "../../../helpers/mockFactories";
 
 // Mock element-plus ElMessage
 vi.mock("element-plus", () => ({
@@ -31,10 +38,8 @@ const mockElError = vi.mocked(ElMessage.error);
 const mockElInfo = vi.mocked(ElMessage.info);
 
 describe("useCopyDownload", () => {
-  let copyVisible: ReturnType<typeof ref<number>>;
-  let copyTimeRef: ReturnType<
-    typeof ref<ReturnType<typeof setTimeout> | undefined>
-  >;
+  let copyVisible: Ref<number>;
+  let copyTimeRef: Ref<ReturnType<typeof setTimeout> | undefined>;
   const t = (k: string) => k;
 
   beforeEach(() => {
@@ -48,19 +53,30 @@ describe("useCopyDownload", () => {
     vi.unstubAllGlobals();
   });
 
+  function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {
+    return computed({
+      get: () => source.value,
+      set: (value: T) => {
+        source.value = value;
+      },
+    });
+  }
+
   function makeComposable() {
     return useCopyDownload({
-      copyVisible: copyVisible as any,
-      copyTimeRef: copyTimeRef as any,
+      copyVisible: writableRef(copyVisible),
+      copyTimeRef: writableRef(copyTimeRef),
       t,
     });
   }
 
   function stubBlobDownload() {
-    const createObjectURL = vi.fn().mockReturnValue("blob:fake");
-    const revokeObjectURL = vi.fn();
-    (window.URL as any).createObjectURL = createObjectURL;
-    (window.URL as any).revokeObjectURL = revokeObjectURL;
+    const createObjectURL = vi
+      .spyOn(window.URL, "createObjectURL")
+      .mockReturnValue("blob:fake");
+    const revokeObjectURL = vi
+      .spyOn(window.URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
     const clickSpy = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => undefined);
@@ -68,14 +84,16 @@ describe("useCopyDownload", () => {
     return { createObjectURL, revokeObjectURL, clickSpy };
   }
 
-  function blobResponse(filename: string) {
-    return {
-      headers: {
-        "content-disposition": `attachment; filename="${filename}"`,
-        "content-type": "application/octet-stream",
-      },
-      data: new Blob(["body"]),
-    };
+  function progressEvent(loaded: number, total: number): AxiosProgressEvent {
+    return { loaded, total, bytes: loaded };
+  }
+
+  function formDataCallAt(index: number, label: string): FormData {
+    const [data] = mustGet(mockGetFileDownUrlApi.mock.calls[index], label);
+    if (!(data instanceof FormData)) {
+      throw new Error(`Expected FormData: ${label}`);
+    }
+    return data;
   }
 
   describe("fallbackCopyText", () => {
@@ -100,10 +118,9 @@ describe("useCopyDownload", () => {
     it("API returns 200 → window.open opens the returned download link", async () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
-      mockGetChatdownloadURL.mockResolvedValueOnce({
-        code: 200,
-        data: "http://dl",
-      } as any);
+      mockGetChatdownloadURL.mockResolvedValueOnce(
+        buildApiEnvelope("http://dl")
+      );
 
       const { downloadFile } = makeComposable();
       await downloadFile("obs://x");
@@ -121,7 +138,9 @@ describe("useCopyDownload", () => {
     it("API not 200 → does not open a window", async () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
-      mockGetChatdownloadURL.mockResolvedValueOnce({ code: 500 } as any);
+      mockGetChatdownloadURL.mockResolvedValueOnce(
+        buildApiEnvelope<string>("", { code: 500 })
+      );
 
       const { downloadFile } = makeComposable();
       await downloadFile("obs://x");
@@ -134,10 +153,9 @@ describe("useCopyDownload", () => {
     it("downloadFile signs the internal path and opens only the returned relay URL", async () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
-      mockGetChatdownloadURL.mockResolvedValueOnce({
-        code: 200,
-        data: "/api/v1/downloads/relay-file?t=signed",
-      } as any);
+      mockGetChatdownloadURL.mockResolvedValueOnce(
+        buildApiEnvelope("/api/v1/downloads/relay-file?t=signed")
+      );
 
       const { downloadFile } = makeComposable();
       await downloadFile("/obs/internal/run/out");
@@ -174,15 +192,14 @@ describe("useCopyDownload", () => {
       const { createObjectURL, revokeObjectURL, clickSpy } = stubBlobDownload();
 
       mockGetFileDownUrlApi.mockResolvedValueOnce(
-        blobResponse("report.pdf") as any
+        buildBinaryResponse("report.pdf")
       );
 
       const { getFileDownUrl } = makeComposable();
       await getFileDownUrl("7", "pdf");
 
       // Verify the FormData parameters
-      const formData: FormData = mockGetFileDownUrlApi.mock
-        .calls[0][0] as FormData;
+      const formData = formDataCallAt(0, "single rendering-file request");
       expect(formData.get("document_format")).toBe("pdf");
       expect(formData.get("id")).toBe("7");
 
@@ -195,14 +212,12 @@ describe("useCopyDownload", () => {
 
     it("tracks two parallel rendering-file downloads independently", async () => {
       const { clickSpy } = stubBlobDownload();
-      const responses = [blobResponse("one.pdf"), blobResponse("two.pdf")];
-      const resolvers: Array<(value: any) => void> = [];
+      const pending: Array<ReturnType<typeof deferred<BinaryResponse>>> = [];
       mockGetFileDownUrlApi.mockImplementation((_data, opts) => {
-        opts?.onDownloadProgress?.({ loaded: 25, total: 100 } as any);
-        const index = resolvers.length;
-        return new Promise((resolve) => {
-          resolvers.push(() => resolve(responses[index]));
-        }) as any;
+        opts?.onDownloadProgress?.(progressEvent(25, 100));
+        const request = deferred<BinaryResponse>();
+        pending.push(request);
+        return request.promise;
       });
 
       const { getFileDownUrl } = makeComposable();
@@ -214,8 +229,13 @@ describe("useCopyDownload", () => {
       expect(new Set(inFlight.map((snap) => snap.requestId)).size).toBe(2);
       expect(inFlight.map((snap) => snap.percent)).toEqual([25, 25]);
 
-      resolvers[0](undefined);
-      resolvers[1](undefined);
+      expect(pending).toHaveLength(2);
+      mustGet(pending[0], "first rendering-file request").resolve(
+        buildBinaryResponse("one.pdf")
+      );
+      mustGet(pending[1], "second rendering-file request").resolve(
+        buildBinaryResponse("two.pdf")
+      );
       await Promise.all([first, second]);
 
       expect(listDownloadTransfers()).toHaveLength(0);
@@ -225,35 +245,40 @@ describe("useCopyDownload", () => {
 
     it("cancels one rendering-file download without reporting a download error", async () => {
       const { clickSpy } = stubBlobDownload();
-      const resolvers: Array<(value: any) => void> = [];
-      const rejecters: Array<(reason: unknown) => void> = [];
+      const pending: Array<ReturnType<typeof deferred<BinaryResponse>>> = [];
       mockGetFileDownUrlApi.mockImplementation((_data, opts) => {
-        opts?.onDownloadProgress?.({ loaded: 50, total: 100 } as any);
-        const index = resolvers.length;
-        return new Promise((resolve, reject) => {
-          resolvers.push(() => resolve(blobResponse(`report-${index}.pdf`)));
-          rejecters.push(reject);
-        }) as any;
+        opts?.onDownloadProgress?.(progressEvent(50, 100));
+        const request = deferred<BinaryResponse>();
+        pending.push(request);
+        return request.promise;
       });
 
       const { getFileDownUrl } = makeComposable();
       const first = getFileDownUrl("7", "pdf");
       const second = getFileDownUrl("8", "pdf");
-      const [firstRequestId, secondRequestId] = listDownloadTransfers().map(
-        (snap) => snap.requestId
-      );
+      const inFlight = listDownloadTransfers();
+      expect(inFlight).toHaveLength(2);
+      const firstRequestId = mustGet(inFlight[0], "first transfer").requestId;
+      const secondRequestId = mustGet(inFlight[1], "second transfer").requestId;
 
-      rejecters[0]({ code: "ERR_CANCELED" });
+      mustGet(pending[0], "canceled rendering-file request").reject({
+        code: "ERR_CANCELED",
+      });
       await first;
 
-      expect(listDownloadTransfers().map((snap) => snap.requestId)).toEqual([
+      const remaining = listDownloadTransfers();
+      expect(remaining.map((snap) => snap.requestId)).toEqual([
         secondRequestId,
       ]);
-      expect(listDownloadTransfers()[0].requestId).not.toBe(firstRequestId);
+      expect(mustGet(remaining[0], "remaining transfer").requestId).not.toBe(
+        firstRequestId
+      );
       expect(mockElInfo).toHaveBeenCalledWith("chat.downloadCancelled");
       expect(mockElError).not.toHaveBeenCalledWith("chat.downloadError");
 
-      resolvers[1](undefined);
+      mustGet(pending[1], "remaining rendering-file request").resolve(
+        buildBinaryResponse("report-1.pdf")
+      );
       await second;
 
       expect(listDownloadTransfers()).toHaveLength(0);

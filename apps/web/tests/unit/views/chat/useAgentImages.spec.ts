@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref } from "vue";
 import { flushPromises } from "@vue/test-utils";
+import type { ApiEnvelope } from "@/api/types";
+import type { ChatMessage, ChatView } from "@/views/chat/types";
+import { buildApiEnvelope } from "../../../helpers/apiBuilders";
+import { buildChatMessage } from "../../../helpers/chatBuilders";
 
 // getObsImages mock — hoisted so vi.mock factory can reference it
-const mockGetObsImages = vi.hoisted(() => vi.fn());
+const mockGetObsImages = vi.hoisted(() =>
+  vi.fn<
+    (data: { obs_path: string }) => Promise<ApiEnvelope<string | string[]>>
+  >()
+);
 
 vi.mock("@/api/chat", () => ({
   getObsImages: mockGetObsImages,
@@ -19,24 +27,30 @@ describe("useAgentImages", () => {
     mockGetObsImages.mockReset();
   });
 
-  it("GeneNetworkAgent: with download_path + id, calls getObsImages and writes geneNetworkImages", async () => {
-    mockGetObsImages.mockResolvedValue({
-      code: 200,
-      data: ["http://obs/img1.png", "http://obs/img2.png"],
-    });
+  function chatRef(): ReturnType<typeof ref<ChatView | null>> {
+    return ref<ChatView | null>(null);
+  }
 
-    const currentChat = ref<any>(null);
+  function message(overrides: Partial<ChatMessage>): ChatMessage {
+    return buildChatMessage({ role: "assistant", ...overrides });
+  }
+
+  it("GeneNetworkAgent: with download_path + id, calls getObsImages and writes geneNetworkImages", async () => {
+    mockGetObsImages.mockResolvedValue(
+      buildApiEnvelope(["http://obs/img1.png", "http://obs/img2.png"])
+    );
+
+    const currentChat = chatRef();
     const { geneNetworkImages, geneNetworkImagesLoading } =
       useAgentImages(currentChat);
 
     currentChat.value = {
       messages: [
-        {
-          role: "assistant",
+        message({
           tool_name: "GeneNetworkAgent",
           download_path: "obs://bucket/path",
           id: "msg-001",
-        },
+        }),
       ],
     };
 
@@ -54,23 +68,21 @@ describe("useAgentImages", () => {
   });
 
   it("DigitalDesignAgent: when download_path is a single string value, parses it then calls getObsImages", async () => {
-    mockGetObsImages.mockResolvedValue({
-      code: 200,
-      data: "http://obs/design.png",
-    });
+    mockGetObsImages.mockResolvedValue(
+      buildApiEnvelope("http://obs/design.png")
+    );
 
-    const currentChat = ref<any>(null);
+    const currentChat = chatRef();
     const { digitalDesignImages, digitalDesignImagesLoading } =
       useAgentImages(currentChat);
 
     currentChat.value = {
       messages: [
-        {
-          role: "assistant",
+        message({
           tool_name: "DigitalDesignAgent",
           download_path: "obs://bucket/design",
           id: "msg-002",
-        },
+        }),
       ],
     };
 
@@ -86,20 +98,19 @@ describe("useAgentImages", () => {
 
   it("DigitalDesignAgent: when download_path is a JSON string array, fetches each one", async () => {
     mockGetObsImages
-      .mockResolvedValueOnce({ code: 200, data: ["http://obs/a.png"] })
-      .mockResolvedValueOnce({ code: 200, data: ["http://obs/b.png"] });
+      .mockResolvedValueOnce(buildApiEnvelope(["http://obs/a.png"]))
+      .mockResolvedValueOnce(buildApiEnvelope(["http://obs/b.png"]));
 
-    const currentChat = ref<any>(null);
+    const currentChat = chatRef();
     const { digitalDesignImages } = useAgentImages(currentChat);
 
     currentChat.value = {
       messages: [
-        {
-          role: "assistant",
+        message({
           tool_name: "DigitalDesignAgent",
           download_path: JSON.stringify(["obs://p1", "obs://p2"]),
           id: "msg-003",
-        },
+        }),
       ],
     };
 
@@ -119,17 +130,16 @@ describe("useAgentImages", () => {
   });
 
   it("negative path: does not trigger fetch when tool_name is ChatAgent", async () => {
-    const currentChat = ref<any>(null);
+    const currentChat = chatRef();
     useAgentImages(currentChat);
 
     currentChat.value = {
       messages: [
-        {
-          role: "assistant",
+        message({
           tool_name: "ChatAgent",
           download_path: "obs://bucket/chat",
           id: "msg-004",
-        },
+        }),
       ],
     };
 
@@ -139,17 +149,16 @@ describe("useAgentImages", () => {
   });
 
   it("negative path: does not trigger fetch when download_path is missing", async () => {
-    const currentChat = ref<any>(null);
+    const currentChat = chatRef();
     useAgentImages(currentChat);
 
     currentChat.value = {
       messages: [
-        {
-          role: "assistant",
+        message({
           tool_name: "GeneNetworkAgent",
           // download_path intentionally omitted
           id: "msg-005",
-        },
+        }),
       ],
     };
 
@@ -159,17 +168,16 @@ describe("useAgentImages", () => {
   });
 
   it("negative path: does not trigger fetch when download_path is blank", async () => {
-    const currentChat = ref<any>(null);
+    const currentChat = chatRef();
     useAgentImages(currentChat);
 
     currentChat.value = {
       messages: [
-        {
-          role: "assistant",
+        message({
           tool_name: "GeneNetworkAgent",
           download_path: "   ",
           id: "msg-005-blank",
-        },
+        }),
       ],
     };
 
@@ -179,7 +187,7 @@ describe("useAgentImages", () => {
   });
 
   it("negative path: does not trigger fetch when currentChat is null", async () => {
-    const currentChat = ref<any>(null);
+    const currentChat = chatRef();
     useAgentImages(currentChat);
 
     await flushPromises();
@@ -188,27 +196,25 @@ describe("useAgentImages", () => {
   });
 
   it("dedup: GeneNetworkAgent does not re-fetch on a second change with the same id", async () => {
-    mockGetObsImages.mockResolvedValue({
-      code: 200,
-      data: ["http://obs/x.png"],
-    });
+    mockGetObsImages.mockResolvedValue(buildApiEnvelope(["http://obs/x.png"]));
 
-    const currentChat = ref<any>(null);
+    const currentChat = chatRef();
     const { geneNetworkImages } = useAgentImages(currentChat);
 
-    const msg = {
-      role: "assistant",
+    const msg: ChatMessage = message({
       tool_name: "GeneNetworkAgent",
       download_path: "obs://bucket/x",
       id: "msg-006",
-    };
+    });
 
     currentChat.value = { messages: [msg] };
     await flushPromises();
     expect(mockGetObsImages).toHaveBeenCalledOnce();
 
     // Reassign the same dialogue (simulating the deep watch firing again)
-    currentChat.value = { messages: [msg, { role: "user", content: "hi" }] };
+    currentChat.value = {
+      messages: [msg, buildChatMessage({ role: "user", content: "hi" })],
+    };
     await flushPromises();
 
     // Since geneNetworkImages[msg.id] already exists, it should not be called again

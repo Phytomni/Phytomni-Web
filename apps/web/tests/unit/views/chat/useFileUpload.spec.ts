@@ -1,20 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ref, nextTick } from "vue";
+import {
+  computed,
+  ref,
+  nextTick,
+  type Ref,
+  type WritableComputedRef,
+} from "vue";
+import type {
+  UploadFile as ElementUploadFile,
+  UploadRawFile,
+} from "element-plus";
 import { useFileUpload } from "@/views/chat/composables/useFileUpload";
-import type { ChatComposerHandle } from "@/views/chat/types";
+import type {
+  ChatComposerHandle,
+  ChatUIState,
+  UploadFile,
+} from "@/views/chat/types";
+import { buildChatState } from "../../../helpers/chatBuilders";
+import { mustGet } from "../../../helpers/mockFactories";
 
 describe("useFileUpload", () => {
-  let chatState: { fileList: any[] };
-  let fileList: ReturnType<typeof ref<any[]>>;
-  let currentChatId: ReturnType<typeof ref<string>>;
-  let getChatState: (dialogueId: string) => any;
-  let composerRef: ReturnType<typeof ref<ChatComposerHandle | null>>;
+  let chatState: ChatUIState;
+  let fileList: Ref<UploadFile[]>;
+  let currentChatId: Ref<string>;
+  let getChatState: (dialogueId: string) => ChatUIState;
+  let composerRef: Ref<ChatComposerHandle | null>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    chatState = { fileList: [] };
-    fileList = ref([]);
+    chatState = buildChatState();
+    fileList = ref<UploadFile[]>([]);
     currentChatId = ref("d1");
     getChatState = () => chatState;
     composerRef = ref({
@@ -25,9 +41,38 @@ describe("useFileUpload", () => {
     scrollToBottom = vi.fn();
   });
 
+  function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {
+    return computed({
+      get: () => source.value,
+      set: (value: T) => {
+        source.value = value;
+      },
+    });
+  }
+
+  function rawFile(name: string, content = "content"): UploadRawFile {
+    return Object.assign(new File([content], name, { type: "text/plain" }), {
+      uid: 1,
+    });
+  }
+
+  function elementFile(
+    name: string,
+    raw: UploadRawFile | undefined,
+    size = raw?.size
+  ): ElementUploadFile {
+    return {
+      name,
+      status: "ready",
+      uid: 1,
+      size,
+      raw,
+    };
+  }
+
   function makeComposable() {
     return useFileUpload({
-      fileList: fileList as any,
+      fileList: writableRef(fileList),
       currentChatId,
       getChatState,
       composerRef,
@@ -38,38 +83,33 @@ describe("useFileUpload", () => {
   it("handleFileChange adds a file to chatState.fileList and calls openHeader", async () => {
     const { handleFileChange } = makeComposable();
 
-    const rawFile = new File(["content"], "a.txt", { type: "text/plain" });
-    handleFileChange({
-      name: "a.txt",
-      size: 10,
-      type: "text/plain",
-      raw: rawFile,
-    });
+    const browserFile = rawFile("a.txt");
+    handleFileChange({ ...elementFile("a.txt", browserFile), size: 10 });
 
     expect(chatState.fileList).toHaveLength(1);
-    expect(chatState.fileList[0].name).toBe("a.txt");
-    expect(chatState.fileList[0].size).toBe(10);
-    expect(chatState.fileList[0].type).toBe("text/plain");
-    expect(chatState.fileList[0].file).toBe(rawFile);
+    const uploaded = mustGet(chatState.fileList[0], "uploaded file");
+    expect(uploaded.name).toBe("a.txt");
+    expect(uploaded.size).toBe(10);
+    expect(uploaded.type).toBe("text/plain");
+    expect(uploaded.file).toBe(browserFile);
 
     await nextTick();
-    expect(composerRef.value!.openHeader).toHaveBeenCalled();
+    expect(
+      mustGet(composerRef.value, "composer").openHeader
+    ).toHaveBeenCalled();
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
   it("handleFileChange ignores an Element Plus file without a raw browser File", async () => {
     const { handleFileChange } = makeComposable();
 
-    handleFileChange({
-      name: "invalid.txt",
-      size: 10,
-      type: "text/plain",
-      raw: undefined,
-    });
+    handleFileChange(elementFile("invalid.txt", undefined, 10));
 
     expect(chatState.fileList).toHaveLength(0);
     await nextTick();
-    expect(composerRef.value!.openHeader).not.toHaveBeenCalled();
+    expect(
+      mustGet(composerRef.value, "composer").openHeader
+    ).not.toHaveBeenCalled();
     expect(scrollToBottom).not.toHaveBeenCalled();
   });
 
@@ -77,7 +117,12 @@ describe("useFileUpload", () => {
     const { removeFile } = makeComposable();
 
     chatState.fileList = [
-      { name: "b.txt", size: 5, type: "text/plain", file: null },
+      {
+        name: "b.txt",
+        size: 5,
+        type: "text/plain",
+        file: rawFile("b.txt", "12345"),
+      },
     ];
 
     removeFile(0);
@@ -85,7 +130,9 @@ describe("useFileUpload", () => {
     expect(chatState.fileList).toHaveLength(0);
 
     await nextTick();
-    expect(composerRef.value!.closeHeader).toHaveBeenCalled();
+    expect(
+      mustGet(composerRef.value, "composer").closeHeader
+    ).toHaveBeenCalled();
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
@@ -93,11 +140,18 @@ describe("useFileUpload", () => {
     makeComposable();
 
     fileList.value = [
-      { name: "c.txt", size: 3, type: "text/plain", file: null },
+      {
+        name: "c.txt",
+        size: 3,
+        type: "text/plain",
+        file: rawFile("c.txt", "123"),
+      },
     ];
     await nextTick();
 
-    expect(composerRef.value!.openHeader).toHaveBeenCalled();
+    expect(
+      mustGet(composerRef.value, "composer").openHeader
+    ).toHaveBeenCalled();
   });
 
   it("watch: closeHeader when fileList becomes empty", async () => {
@@ -105,7 +159,12 @@ describe("useFileUpload", () => {
 
     // First make it non-empty to trigger openHeader
     fileList.value = [
-      { name: "d.txt", size: 3, type: "text/plain", file: null },
+      {
+        name: "d.txt",
+        size: 3,
+        type: "text/plain",
+        file: rawFile("d.txt", "123"),
+      },
     ];
     await nextTick();
     vi.clearAllMocks();
@@ -114,6 +173,8 @@ describe("useFileUpload", () => {
     fileList.value = [];
     await nextTick();
 
-    expect(composerRef.value!.closeHeader).toHaveBeenCalled();
+    expect(
+      mustGet(composerRef.value, "composer").closeHeader
+    ).toHaveBeenCalled();
   });
 });

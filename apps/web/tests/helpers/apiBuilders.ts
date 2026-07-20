@@ -1,6 +1,7 @@
-import { AxiosError } from "axios";
+import { AxiosError, AxiosHeaders } from "axios";
 import type {
   ApiEnvelope,
+  BinaryResponse,
   ChatHistoryRecord,
   DecodedQueryData,
 } from "@/api/types";
@@ -53,6 +54,22 @@ export function buildDecodedQueryData(
     answer: "fixture answer",
     tool_name: "ChatAgent",
     ...overrides,
+  };
+}
+
+export function buildBinaryResponse(
+  filename: string,
+  body = "body"
+): BinaryResponse {
+  return {
+    data: new Blob([body]),
+    status: 200,
+    statusText: "OK",
+    headers: new AxiosHeaders({
+      "content-disposition": `attachment; filename="${filename}"`,
+      "content-type": "application/octet-stream",
+    }),
+    config: { headers: new AxiosHeaders() },
   };
 }
 
