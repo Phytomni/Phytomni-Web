@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ref } from "vue";
 import { useChatHistoryGroups } from "@/views/chat/composables/useChatHistoryGroups";
 import type { Chat } from "@/views/chat/types";
+import { buildChat } from "../../../helpers/chatBuilders";
 
 // Frozen clock: 2026-06-16T12:00:00 UTC
 // today midnight  = 2026-06-16T00:00:00
@@ -16,13 +17,12 @@ const WEEK_AGO_MID = new Date("2026-06-09T00:00:00"); // lower bound of weekChat
 const TEN_DAYS_AGO = new Date("2026-06-06T08:00:00"); // in olderChats
 
 function makeChat(id: number, date: Date): Chat {
-  return {
+  return buildChat({
     id,
     dialogue_id: `d${id}`,
     title: `Chat ${id}`,
     date: date.toISOString(),
-    isFavorite: false,
-  };
+  });
 }
 
 describe("useChatHistoryGroups", () => {

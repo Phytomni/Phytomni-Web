@@ -1,7 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ref } from "vue";
+import { ref, type Ref } from "vue";
 import { useSelectChat } from "@/views/chat/composables/useSelectChat";
-import type { ChatMessage, ChatUIState } from "@/views/chat/types";
+import type {
+  Chat,
+  ChatMessage,
+  ChatUIState,
+  ChatView,
+} from "@/views/chat/types";
+import type { ApiEnvelope, ChatHistoryRecord } from "@/api/types";
+import { buildChat, buildChatState } from "../../../helpers/chatBuilders";
+import {
+  buildApiEnvelope,
+  buildChatHistoryRecord,
+} from "../../../helpers/apiBuilders";
+import { invalidInput } from "../../../helpers/invalidInput";
+import { deferred, mustGet } from "../../../helpers/mockFactories";
 
 // Mock getAnswerCheck API (the only API selectChat calls)
 vi.mock("@/api/chat", () => ({
@@ -12,63 +25,72 @@ import { getAnswerCheck } from "@/api/chat";
 
 const mockGetAnswerCheck = vi.mocked(getAnswerCheck);
 
-function makeState(): ChatUIState {
-  return {
-    isSending: false,
-    messageInput: "",
-    fileList: [],
-    historyQuestion: null,
-    copyVisible: 0,
-    copyTimeRef: undefined,
-    logData: {},
-    loadingLog: {},
-    refreshingMessages: {},
-    reactions: {},
-    updatingLog: {},
-    logErrorKinds: {},
-    sendStartedAt: null,
-    activeAgentName: "",
-    completing: false,
-    mode: "instant",
-    isStreaming: false,
-    streamingMessageId: null,
-    uploadTransfer: null,
-    selectedAgent: "",
-    renderedChat: null,
-    activeRequestId: "",
-    generationStopped: false,
-    activityExpandedByMessage: {},
-  };
-}
-
 describe("useSelectChat", () => {
   // Each dialogueId maps to one mutable state record; repeated getChatState(id) returns the same object
   let states: Map<string, ChatUIState>;
   let getChatState: (dialogueId: string) => ChatUIState;
-  let currentChatId: ReturnType<typeof ref<string>>;
-  let chatList: ReturnType<typeof ref<any>>;
+  let currentChatId: Ref<string>;
+  let chatList: Ref<Chat[]>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
   let updateUrlWithChatId: ReturnType<typeof vi.fn>;
-  let timestamp: ReturnType<typeof ref<number>>;
+  let timestamp: Ref<number>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     states = new Map();
     getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) {
-        states.set(dialogueId, makeState());
+        states.set(dialogueId, buildChatState());
       }
-      return states.get(dialogueId)!;
+      return mustGet(states.get(dialogueId), `chat state ${dialogueId}`);
     };
     currentChatId = ref("");
-    chatList = ref([
-      { id: 1, dialogue_id: "d1", title: "t", date: "", isFavorite: false },
-      { id: 2, dialogue_id: "d2", title: "t2", date: "", isFavorite: false },
+    chatList = ref<Chat[]>([
+      buildChat({ id: 1, dialogue_id: "d1", title: "t" }),
+      buildChat({ id: 2, dialogue_id: "d2", title: "t2" }),
     ]);
     scrollToBottom = vi.fn();
     updateUrlWithChatId = vi.fn();
     timestamp = ref(0);
   });
+
+  function historyResponse(
+    records: ChatHistoryRecord[],
+    overrides: Partial<ApiEnvelope<ChatHistoryRecord[]>> = {}
+  ): ApiEnvelope<ChatHistoryRecord[]> {
+    return buildApiEnvelope(records, overrides);
+  }
+
+  function stateFor(dialogueId: string): ChatUIState {
+    return mustGet(states.get(dialogueId), `chat state ${dialogueId}`);
+  }
+
+  function renderedFor(dialogueId: string, label: string): ChatView {
+    return mustGet(
+      stateFor(dialogueId).renderedChat,
+      `${label}: rendered chat`
+    );
+  }
+
+  function messageAt(
+    dialogueId: string,
+    index: number,
+    label: string
+  ): ChatMessage {
+    return mustGet(renderedFor(dialogueId, label).messages[index], label);
+  }
+
+  function historyAt(
+    dialogueId: string,
+    index: number,
+    label: string
+  ): ChatMessage {
+    const historyQuestion = mustGet(
+      stateFor(dialogueId).historyQuestion,
+      `${label}: history question`
+    );
+    return mustGet(historyQuestion[index], label);
+  }
 
   function makeComposable() {
     return useSelectChat({
@@ -83,17 +105,16 @@ describe("useSelectChat", () => {
 
   it("ChatAgent history: syncs currentChatId, hydrates reaction, rebuilds messages, sets historyQuestion, updates URL", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce({
-      code: 200,
-      data: [
-        {
+      ...historyResponse([
+        buildChatHistoryRecord({
           id: "msg-1",
           reaction_type: "1",
           query: "Hello",
           answer: "Hello, I'm the assistant",
           tool_name: "ChatAgent",
-        },
-      ],
-    } as any);
+        }),
+      ]),
+    });
 
     const { selectChat } = makeComposable();
     await selectChat("d1");
@@ -102,35 +123,38 @@ describe("useSelectChat", () => {
     expect(currentChatId.value).toBe("d1");
 
     // reaction hydration (string "1" → number 1)
-    expect(getChatState("d1").reactions["msg-1"]).toBe(1);
+    expect(stateFor("d1").reactions["msg-1"]).toBe(1);
 
     // messages rebuilt into this dialogue's renderedChat owner
-    const rendered = getChatState("d1").renderedChat;
-    expect(rendered).not.toBeNull();
-    const messages = rendered!.messages;
-    expect(Array.isArray(messages)).toBe(true);
-    expect(messages.length).toBe(2);
+    const rendered = renderedFor("d1", "ChatAgent history");
+    const messages = rendered.messages;
+    expect(messages).toHaveLength(2);
 
-    const userMsg = messages[0];
+    const userMsg = mustGet(messages[0], "ChatAgent history user message");
     expect(userMsg.role).toBe("user");
     expect(userMsg.content).toBe("Hello");
 
-    const assistantMsg = messages[1];
+    const assistantMsg = mustGet(
+      messages[1],
+      "ChatAgent history assistant message"
+    );
     expect(assistantMsg.role).toBe("assistant");
     expect(assistantMsg.content).toBe("Hello, I'm the assistant");
     expect(assistantMsg.tool_name).toBe("ChatAgent");
     expect(assistantMsg.id).toBe("msg-1");
 
     // renderedChat merges in the original chat record's fields
-    expect(rendered!.dialogue_id).toBe("d1");
-    expect(rendered!.title).toBe("t");
+    expect(rendered.dialogue_id).toBe("d1");
+    expect(rendered.title).toBe("t");
 
     // historyQuestion is set (non-null, holding two condensed records)
-    const hq = getChatState("d1").historyQuestion;
-    expect(Array.isArray(hq)).toBe(true);
-    expect(hq.length).toBe(2);
-    expect(hq[0]).toEqual({ role: "user", content: "Hello" });
-    expect(hq[1]).toEqual({
+    const hq = mustGet(stateFor("d1").historyQuestion, "ChatAgent history");
+    expect(hq).toHaveLength(2);
+    expect(historyAt("d1", 0, "ChatAgent history user record")).toEqual({
+      role: "user",
+      content: "Hello",
+    });
+    expect(historyAt("d1", 1, "ChatAgent history assistant record")).toEqual({
       role: "assistant",
       content: "Hello, I'm the assistant",
     });
@@ -147,23 +171,22 @@ describe("useSelectChat", () => {
     const stale = getChatState("d1");
     stale.reactions = { "old-msg": 2 };
 
-    mockGetAnswerCheck.mockResolvedValueOnce({
-      code: 200,
-      data: [
-        {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
           id: "msg-1",
           reaction_type: "1",
           query: "Question",
           answer: "Answer",
           tool_name: "ChatAgent",
-        },
-      ],
-    } as any);
+        }),
+      ])
+    );
 
     const { selectChat } = makeComposable();
     await selectChat("d1");
 
-    const reactions = getChatState("d1").reactions;
+    const reactions = stateFor("d1").reactions;
     // The stale entry is cleared
     expect(reactions["old-msg"]).toBeUndefined();
     // The new entry is hydrated
@@ -171,28 +194,34 @@ describe("useSelectChat", () => {
   });
 
   it("ignores optional history source metadata and preserves legacy rendering", async () => {
-    mockGetAnswerCheck.mockResolvedValueOnce({
-      code: 200,
-      data: [
-        {
-          id: "msg-source",
-          query: "Question",
-          answer: "Answer",
-          tool_name: "ChatAgent",
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        invalidInput<ChatHistoryRecord>({
+          ...buildChatHistoryRecord({
+            id: "msg-source",
+            query: "Question",
+            answer: "Answer",
+            tool_name: "ChatAgent",
+          }),
           source: "unexpected-diagnostic",
           fallback_reason: "private upstream error",
-        },
-      ],
-    } as any);
+        }),
+      ])
+    );
 
     const { selectChat } = makeComposable();
     await selectChat("d1");
 
-    const messages = getChatState("d1").renderedChat!.messages;
-    expect(messages[0]).toMatchObject({ role: "user", content: "Question" });
-    expect(messages[1]).toMatchObject({ role: "assistant", content: "Answer" });
-    expect((messages[1] as any).source).toBeUndefined();
-    expect((messages[1] as any).fallback_reason).toBeUndefined();
+    const messages = renderedFor("d1", "source metadata").messages;
+    expect(messages).toHaveLength(2);
+    expect(mustGet(messages[0], "source metadata user message")).toMatchObject({
+      role: "user",
+      content: "Question",
+    });
+    const assistant = mustGet(messages[1], "source metadata assistant message");
+    expect(assistant).toMatchObject({ role: "assistant", content: "Answer" });
+    expect("source" in assistant).toBe(false);
+    expect("fallback_reason" in assistant).toBe(false);
   });
 
   it("reselects a live rendered owner without overwriting its message runtime from history", async () => {
@@ -219,7 +248,7 @@ describe("useSelectChat", () => {
 
     expect(mockGetAnswerCheck).not.toHaveBeenCalled();
     expect(state.renderedChat).toBe(renderedOwner);
-    expect(state.renderedChat?.messages[0].a2uiRuntime).toBe(runtime);
+    expect(messageAt("d1", 0, "live rendered owner").a2uiRuntime).toBe(runtime);
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
   });
@@ -229,7 +258,9 @@ describe("useSelectChat", () => {
     const st = getChatState("d1");
     st.historyQuestion = [{ role: "user", content: "keep me" }];
 
-    mockGetAnswerCheck.mockResolvedValueOnce({ code: 500, data: [] } as any);
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([], { code: 500, message: "history unavailable" })
+    );
 
     const { selectChat } = makeComposable();
     await selectChat("d1");
@@ -237,9 +268,9 @@ describe("useSelectChat", () => {
     // The synchronous currentChatId write still happens
     expect(currentChatId.value).toBe("d1");
     // The non-200 branch skips the renderedChat assignment
-    expect(getChatState("d1").renderedChat).toBeNull();
+    expect(stateFor("d1").renderedChat).toBeNull();
     // historyQuestion is not reset
-    expect(getChatState("d1").historyQuestion).toEqual([
+    expect(stateFor("d1").historyQuestion).toEqual([
       { role: "user", content: "keep me" },
     ]);
     // The URL is updated while still active
@@ -248,11 +279,8 @@ describe("useSelectChat", () => {
 
   it("concurrent-switch safety: after mid-fetch currentChatId switch, reaction and historyQuestion write back to the argument dialogueId, not the live currentChatId", async () => {
     // Manually control when getAnswerCheck resolves
-    let resolveCheck!: (v: any) => void;
-    const pendingCheck = new Promise<any>((resolve) => {
-      resolveCheck = resolve;
-    });
-    mockGetAnswerCheck.mockReturnValueOnce(pendingCheck);
+    const pendingCheck = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    mockGetAnswerCheck.mockReturnValueOnce(pendingCheck.promise);
 
     const { selectChat } = makeComposable();
 
@@ -261,54 +289,47 @@ describe("useSelectChat", () => {
 
     // 2. During the await, the user switches to d2
     currentChatId.value = "d2";
+    getChatState("d2");
 
     // 3. Resolve the fetch with a ChatAgent-style reaction_type
-    resolveCheck({
-      code: 200,
-      data: [
-        {
+    pendingCheck.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
           id: "msg-concurrent",
           reaction_type: "2",
           query: "Concurrent question",
           answer: "Concurrent answer",
           tool_name: "ChatAgent",
-        },
-      ],
-    });
+        }),
+      ])
+    );
 
     await p;
 
     // reaction hydration writes to the argument d1, not to the live currentChatId d2
-    expect(getChatState("d1").reactions["msg-concurrent"]).toBe(2);
-    expect(getChatState("d2").reactions["msg-concurrent"]).toBeUndefined();
+    expect(stateFor("d1").reactions["msg-concurrent"]).toBe(2);
+    expect(stateFor("d2").reactions["msg-concurrent"]).toBeUndefined();
 
     // historyQuestion is also written to d1
-    const hq = getChatState("d1").historyQuestion;
-    expect(Array.isArray(hq)).toBe(true);
-    expect(hq.length).toBe(2);
-    expect(getChatState("d2").historyQuestion).toBeNull();
+    const hq = mustGet(stateFor("d1").historyQuestion, "concurrent history");
+    expect(hq).toHaveLength(2);
+    expect(stateFor("d2").historyQuestion).toBeNull();
 
     // rendered data lands on d1 only; late response does not steal URL/scroll
-    expect(getChatState("d1").renderedChat?.messages.length).toBe(2);
-    expect(getChatState("d2").renderedChat).toBeNull();
+    expect(renderedFor("d1", "concurrent history").messages).toHaveLength(2);
+    expect(stateFor("d2").renderedChat).toBeNull();
     expect(currentChatId.value).toBe("d2");
     expect(updateUrlWithChatId).not.toHaveBeenCalled();
     expect(scrollToBottom).not.toHaveBeenCalled();
   });
 
   it("out-of-order A/B history responses populate only their states and never revert current ID/URL/scroll", async () => {
-    let resolveA!: (v: any) => void;
-    let resolveB!: (v: any) => void;
-    const pendingA = new Promise<any>((resolve) => {
-      resolveA = resolve;
-    });
-    const pendingB = new Promise<any>((resolve) => {
-      resolveB = resolve;
-    });
+    const pendingA = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const pendingB = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
 
     mockGetAnswerCheck
-      .mockReturnValueOnce(pendingA)
-      .mockReturnValueOnce(pendingB);
+      .mockReturnValueOnce(pendingA.promise)
+      .mockReturnValueOnce(pendingB.promise);
 
     const { selectChat } = makeComposable();
     const pA = selectChat("d1");
@@ -317,66 +338,63 @@ describe("useSelectChat", () => {
     expect(currentChatId.value).toBe("d2");
 
     // B resolves first
-    resolveB({
-      code: 200,
-      data: [
-        {
+    pendingB.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
           id: "msg-b",
           query: "B-q",
           answer: "B-a",
           tool_name: "ChatAgent",
-        },
-      ],
-    });
+        }),
+      ])
+    );
     await pB;
 
     expect(currentChatId.value).toBe("d2");
-    expect(getChatState("d2").renderedChat?.messages[0].content).toBe("B-q");
+    expect(messageAt("d2", 0, "B history").content).toBe("B-q");
     expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d2");
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
 
     // A resolves later — data only, no foreground steal
-    resolveA({
-      code: 200,
-      data: [
-        {
+    pendingA.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
           id: "msg-a",
           query: "A-q",
           answer: "A-a",
           tool_name: "ChatAgent",
-        },
-      ],
-    });
+        }),
+      ])
+    );
     await pA;
 
     expect(currentChatId.value).toBe("d2");
-    expect(getChatState("d1").renderedChat?.messages[0].content).toBe("A-q");
-    expect(getChatState("d2").renderedChat?.messages[0].content).toBe("B-q");
+    expect(messageAt("d1", 0, "A history").content).toBe("A-q");
+    expect(messageAt("d2", 0, "B history").content).toBe("B-q");
     expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d2");
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
   });
 
   it("history AnalystAgent hydrates the existing task_id onto the message", async () => {
-    mockGetAnswerCheck.mockResolvedValueOnce({
-      code: 200,
-      data: [
-        {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
           id: "1001",
           query: "run analysis",
           answer: "analysis started",
           tool_name: "AnalystAgent",
           task_id: "ei-task-abc",
           compute_resource: "analyst-agents-small",
-        },
-      ],
-    } as any);
+        }),
+      ])
+    );
 
     const { selectChat } = makeComposable();
     await selectChat("d1");
 
-    const assistant = getChatState("d1").renderedChat!.messages[1];
+    const assistant = messageAt("d1", 1, "Analyst history");
     expect(assistant.tool_name).toBe("AnalystAgent");
     expect(assistant.id).toBe("1001");
     expect(assistant.task_id).toBe("ei-task-abc");

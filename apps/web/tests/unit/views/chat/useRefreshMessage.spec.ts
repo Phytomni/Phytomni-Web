@@ -1,8 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { Mock } from "vitest";
 import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { useRefreshMessage } from "@/views/chat/composables/useRefreshMessage";
-import type { ChatUIState, ChatView } from "@/views/chat/types";
+import type {
+  ChatMessage,
+  ChatUIState,
+  ChatView,
+  DialogueReconciliationResult,
+} from "@/views/chat/types";
+import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
+import {
+  buildApiEnvelope,
+  buildDecodedQueryData,
+} from "../../../helpers/apiBuilders";
+import {
+  buildChatMessage,
+  buildChatState,
+} from "../../../helpers/chatBuilders";
+import { deferred, mustGet } from "../../../helpers/mockFactories";
 
 // Mock getQuery API (the only API refreshMessage calls)
 vi.mock("@/api/chat", () => ({
@@ -20,65 +36,50 @@ describe("useRefreshMessage", () => {
   let currentChatId: ReturnType<typeof ref<string>>;
   let currentChat: ReturnType<typeof computed<ChatView | null>>;
   let scrollToBottom: ReturnType<typeof vi.fn>;
-  let getHistoryQuestionData: ReturnType<typeof vi.fn>;
-  let getDialogueIdFromChatId: ReturnType<typeof vi.fn>;
+  let getHistoryQuestionData: Mock<
+    () => Promise<DialogueReconciliationResult | undefined>
+  >;
+  let getDialogueIdFromChatId: Mock<() => string | number | null | undefined>;
   let timestamp: ReturnType<typeof ref<number>>;
   // ElMessage.error spy (setup.ts's afterEach restoreAllMocks restores it, so rebuild it per case)
   let elMessageErrorSpy: ReturnType<typeof vi.spyOn>;
 
   function makeState(): ChatUIState {
-    return {
-      isSending: false,
-      messageInput: "",
-      fileList: [],
-      historyQuestion: null,
-      copyVisible: 0,
-      copyTimeRef: undefined,
-      logData: {},
-      loadingLog: {},
-      refreshingMessages: {},
-      reactions: {},
-      updatingLog: {},
-      sendStartedAt: null,
-      activeAgentName: "",
-      completing: false,
-      mode: "instant",
-      isStreaming: false,
-      streamingMessageId: null,
-      uploadTransfer: null,
-      selectedAgent: "",
-      renderedChat: null,
-    };
+    return buildChatState();
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
     elMessageErrorSpy = vi
       .spyOn(ElMessage, "error")
-      .mockImplementation(() => undefined as any);
+      .mockImplementation(() => ({ close: vi.fn() }));
     states = new Map();
     getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) {
         states.set(dialogueId, makeState());
       }
-      return states.get(dialogueId)!;
+      return mustGet(states.get(dialogueId), `chat state ${dialogueId}`);
     };
     currentChatId = ref("A");
     // Index 0 = user message, index 1 = assistant message — owned by A's renderedChat
-    const messagesA = [
-      { role: "user", content: "Original question" },
-      {
+    const messagesA: ChatMessage[] = [
+      buildChatMessage({ role: "user", content: "Original question" }),
+      buildChatMessage({
         role: "assistant",
         content: "Old answer",
         id: "msg-1",
         tool_name: "ChatAgent",
-      },
+      }),
     ];
     getChatState("A").renderedChat = { messages: messagesA };
     getChatState("B").renderedChat = {
       messages: [
-        { role: "user", content: "B question" },
-        { role: "assistant", content: "B answer", id: "msg-b" },
+        buildChatMessage({ role: "user", content: "B question" }),
+        buildChatMessage({
+          role: "assistant",
+          content: "B answer",
+          id: "msg-b",
+        }),
       ],
     };
     currentChat = computed({
@@ -92,10 +93,37 @@ describe("useRefreshMessage", () => {
       },
     });
     scrollToBottom = vi.fn();
-    getHistoryQuestionData = vi.fn().mockResolvedValue(undefined);
-    getDialogueIdFromChatId = vi.fn().mockReturnValue(7);
+    getHistoryQuestionData = vi
+      .fn<() => Promise<DialogueReconciliationResult | undefined>>()
+      .mockResolvedValue(undefined);
+    getDialogueIdFromChatId = vi
+      .fn<() => string | number | null | undefined>()
+      .mockReturnValue(7);
     timestamp = ref(0);
   });
+
+  function queryResponse(
+    overrides: Partial<DecodedQueryData> = {}
+  ): ApiEnvelope<DecodedQueryData> {
+    return buildApiEnvelope(buildDecodedQueryData(overrides));
+  }
+
+  function stateFor(dialogueId: string): ChatUIState {
+    return mustGet(states.get(dialogueId), `chat state ${dialogueId}`);
+  }
+
+  function messagesFor(dialogueId: string, label: string): ChatMessage[] {
+    return mustGet(stateFor(dialogueId).renderedChat, `${label}: rendered chat`)
+      .messages;
+  }
+
+  function messageAt(
+    dialogueId: string,
+    index: number,
+    label: string
+  ): ChatMessage {
+    return mustGet(messagesFor(dialogueId, label)[index], label);
+  }
 
   function makeComposable() {
     return useRefreshMessage({
@@ -111,8 +139,8 @@ describe("useRefreshMessage", () => {
 
   it("Happy path: KnowledgeAgent rebuilds the assistant message, hydrates reaction, clears refresh state, resets isSending, fetches history in finally", async () => {
     // KnowledgeAgent branch: the JSON answer parses out content/doc_list, and it also syncs the reaction
-    mockGetQuery.mockResolvedValueOnce({
-      data: {
+    mockGetQuery.mockResolvedValueOnce(
+      queryResponse({
         tool_name: "KnowledgeAgent",
         answer: JSON.stringify({
           content: "New answer",
@@ -121,14 +149,14 @@ describe("useRefreshMessage", () => {
         id: "msg-2",
         reaction_type: "1",
         status: "done",
-      },
-    } as any);
+      })
+    );
 
     const { refreshMessage } = makeComposable();
     await refreshMessage(1);
 
     // A's captured messages[1] is replaced by the rebuilt assistant message
-    const rebuilt = getChatState("A").renderedChat!.messages[1];
+    const rebuilt = messageAt("A", 1, "KnowledgeAgent refresh");
     expect(rebuilt.role).toBe("assistant");
     expect(rebuilt.content).toBe("New answer");
     expect(rebuilt.doc_list).toEqual([{ pm: "1" }]);
@@ -137,32 +165,32 @@ describe("useRefreshMessage", () => {
     expect(rebuilt.instantMessage).toBe(true);
 
     // The reaction is hydrated into A's chatState (string "1" → number 1)
-    expect(getChatState("A").reactions["msg-2"]).toBe(1);
+    expect(stateFor("A").reactions["msg-2"]).toBe(1);
 
     // isSending is reset to false in finally
-    expect(getChatState("A").isSending).toBe(false);
+    expect(stateFor("A").isSending).toBe(false);
 
     // The old refreshKey is cleaned up (1_msg-1)
-    expect(getChatState("A").refreshingMessages["1_msg-1"]).toBeUndefined();
+    expect(stateFor("A").refreshingMessages["1_msg-1"]).toBeUndefined();
 
     // getHistoryQuestionData is called in finally
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes malformed follow-up JSON without discarding the refreshed answer", async () => {
-    mockGetQuery.mockResolvedValueOnce({
-      data: {
+    mockGetQuery.mockResolvedValueOnce(
+      queryResponse({
         tool_name: "ChatAgent",
         answer: "Refreshed answer",
         id: "msg-2",
         follow_up_questions: "not-json",
-      },
-    } as any);
+      })
+    );
 
     const { refreshMessage } = makeComposable();
     await refreshMessage(1);
 
-    const rebuilt = getChatState("A").renderedChat!.messages[1];
+    const rebuilt = messageAt("A", 1, "malformed follow-up refresh");
     expect(rebuilt.content).toBe("Refreshed answer");
     expect(rebuilt.followUpQuestions).toEqual([]);
     expect(elMessageErrorSpy).not.toHaveBeenCalled();
@@ -170,43 +198,45 @@ describe("useRefreshMessage", () => {
 
   it("🔒 CAPTURE INVARIANT: switching dialogue during await, cleanup still lands on the initiating dialogue A, B is not touched", async () => {
     // Manually control when getQuery resolves
-    let resolveQuery!: (value: any) => void;
-    const pending = new Promise((resolve) => {
-      resolveQuery = resolve;
-    });
-    mockGetQuery.mockReturnValueOnce(pending as any);
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQuery.mockReturnValueOnce(pending.promise);
 
     const { refreshMessage } = makeComposable();
-    const messagesA = getChatState("A").renderedChat!.messages;
-    const messagesB = getChatState("B").renderedChat!.messages;
-    const bAnswerBefore = messagesB[1].content;
+    const messagesA = messagesFor("A", "captured A messages");
+    const messagesB = messagesFor("B", "captured B messages");
+    const bAnswerBefore = messageAt("B", 1, "B before refresh").content;
 
     // Don't await — let the refresh hang at await getQuery
     const p = refreshMessage(1);
 
     // At this point the refresh is in-flight on A: isSending=true, refreshKey truthy
-    expect(getChatState("A").isSending).toBe(true);
-    expect(getChatState("A").refreshingMessages["1_msg-1"]).toBe(true);
+    expect(stateFor("A").isSending).toBe(true);
+    expect(stateFor("A").refreshingMessages["1_msg-1"]).toBe(true);
 
     // User switches to dialogue B
     currentChatId.value = "B";
     scrollToBottom.mockClear();
 
     // Now resolve getQuery and wait for the whole thing to finish
-    resolveQuery({
-      data: { tool_name: "ChatAgent", answer: "Late answer", id: "msg-2" },
-    });
+    pending.resolve(
+      queryResponse({
+        tool_name: "ChatAgent",
+        answer: "Late answer",
+        id: "msg-2",
+      })
+    );
     await p;
 
     // Cleanup lands on the captured dialogue A: isSending reset, refreshKey cleared
-    expect(getChatState("A").isSending).toBe(false);
-    expect(getChatState("A").refreshingMessages["1_msg-1"]).toBeUndefined();
+    expect(stateFor("A").isSending).toBe(false);
+    expect(stateFor("A").refreshingMessages["1_msg-1"]).toBeUndefined();
 
     // A's captured array was updated; B's messages/DOM side effects untouched
-    expect(messagesA[1].content).toBe("Late answer");
-    expect(messagesA[1].id).toBe("msg-2");
-    expect(getChatState("B").renderedChat!.messages).toBe(messagesB);
-    expect(messagesB[1].content).toBe(bAnswerBefore);
+    expect(messagesFor("A", "A after refresh")).toBe(messagesA);
+    expect(messageAt("A", 1, "A after refresh").content).toBe("Late answer");
+    expect(messageAt("A", 1, "A after refresh").id).toBe("msg-2");
+    expect(messagesFor("B", "B after refresh")).toBe(messagesB);
+    expect(messageAt("B", 1, "B after refresh").content).toBe(bAnswerBefore);
     expect(scrollToBottom).not.toHaveBeenCalled();
     expect(elMessageErrorSpy).not.toHaveBeenCalled();
 
@@ -215,24 +245,21 @@ describe("useRefreshMessage", () => {
   });
 
   it("A refresh pending→B active: failure toast is suppressed while B is foreground", async () => {
-    let rejectQuery!: (error: Error) => void;
-    const pending = new Promise((_resolve, reject) => {
-      rejectQuery = reject;
-    });
-    mockGetQuery.mockReturnValueOnce(pending as any);
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQuery.mockReturnValueOnce(pending.promise);
 
     const { refreshMessage } = makeComposable();
     const p = refreshMessage(1);
     currentChatId.value = "B";
     scrollToBottom.mockClear();
 
-    rejectQuery(new Error("network down"));
+    pending.reject(new Error("network down"));
     await p;
 
     expect(elMessageErrorSpy).not.toHaveBeenCalled();
     expect(scrollToBottom).not.toHaveBeenCalled();
-    expect(getChatState("A").isSending).toBe(false);
-    expect(getChatState("B").isSending).toBe(false);
+    expect(stateFor("A").isSending).toBe(false);
+    expect(stateFor("B").isSending).toBe(false);
   });
 
   it("Failure path: getQuery rejects → ElMessage.error called, isSending reset in finally", async () => {
@@ -247,10 +274,10 @@ describe("useRefreshMessage", () => {
     );
 
     // isSending is reset to false in finally
-    expect(getChatState("A").isSending).toBe(false);
+    expect(stateFor("A").isSending).toBe(false);
 
     // The old refreshKey is cleaned up in finally
-    expect(getChatState("A").refreshingMessages["1_msg-1"]).toBeUndefined();
+    expect(stateFor("A").refreshingMessages["1_msg-1"]).toBeUndefined();
 
     // The finally history fetch still runs
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);

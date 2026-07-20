@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatUIState } from "@/views/chat/types";
+import type { Chat, ChatMessage, ChatUIState } from "@/views/chat/types";
 
 export function buildChatState(
   overrides: Partial<ChatUIState> = {}
@@ -43,6 +43,17 @@ export function buildChatMessage(
     role: "assistant",
     content: "fixture answer",
     blocks: [],
+    ...overrides,
+  };
+}
+
+export function buildChat(overrides: Partial<Chat> = {}): Chat {
+  return {
+    id: 1,
+    dialogue_id: "fixture-dialogue",
+    title: "Fixture chat",
+    date: "2026-06-16T12:00:00.000Z",
+    isFavorite: false,
     ...overrides,
   };
 }
