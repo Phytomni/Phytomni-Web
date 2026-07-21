@@ -22,6 +22,11 @@ def test_repository_collector_covers_shell_yaml_markdown_formatter_and_secret_sc
 ) -> None:
     root = tmp_path / "project"
     shutil.copytree(FIXTURE_ROOT, root)
+    readme = root / "docs" / "README.md"
+    readme.write_text(
+        "<!-- prettier-ignore -->\n" + readme.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     marker = "pragma: " + "allowlist secret"
     (root / "docs" / "runtime-secret.md").write_text(
         f"<!-- {marker} -->\n", encoding="utf-8"
