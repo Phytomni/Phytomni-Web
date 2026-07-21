@@ -99,7 +99,7 @@ def test_frontend_static_group_runs_standalone_format_check_before_exact_eslint(
     eslint_step = 'step "G2 apps/web: exact ESLint reconciliation"'
 
     assert format_step in gate
-    assert "( cd apps/web && npm run --silent format:check )" in gate
+    assert "(cd apps/web && npm run --silent format:check)" in gate
     assert gate.index(format_step) < gate.index(eslint_step)
 
 

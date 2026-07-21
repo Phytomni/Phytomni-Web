@@ -13,14 +13,14 @@ repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
 case "${PHYTOMNI_SCOPED_GATE:-}" in
-    "")
-        exec make full
-        ;;
-    1)
-        exec make prepush
-        ;;
-    *)
-        printf '%s\n' 'PHYTOMNI_SCOPED_GATE must be unset or exactly 1' >&2
-        exit 2
-        ;;
+"")
+    exec make full
+    ;;
+1)
+    exec make prepush
+    ;;
+*)
+    printf '%s\n' 'PHYTOMNI_SCOPED_GATE must be unset or exactly 1' >&2
+    exit 2
+    ;;
 esac
