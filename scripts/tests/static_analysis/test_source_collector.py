@@ -41,6 +41,17 @@ def test_collects_supported_source_directives_with_exact_context(
         "export const uncheckedValue = \"fixture\";\n",
         encoding="utf-8",
     )
+    (root / "runtime-javascript.ts").write_text(
+        "/* eslint-disable no-console */\n"
+        'console.log("fixture");\n'
+        "// eslint-disable-next-line @typescript-eslint/no-explicit-any\n"
+        "const payload: any = {};\n"
+        "console.log(payload); // eslint-disable-line no-console\n"
+        "// prettier-ignore\n"
+        "const formatted = { value: payload };\n"
+        "const description = \"fixture\";\n",
+        encoding="utf-8",
+    )
     paths = tuple(sorted(root.glob("*")))
 
     findings = collect_source_suppressions(root, paths)
@@ -65,7 +76,7 @@ def test_collects_supported_source_directives_with_exact_context(
     )
     assert eslint.mechanism is Mechanism.INLINE
     assert eslint.target_kind is TargetKind.SPAN
-    assert eslint.path == "javascript.ts"
+    assert eslint.path == "runtime-javascript.ts"
     assert eslint.display_line is not None
     assert eslint.evidence
     assert eslint.fingerprint.startswith("sha256:")
