@@ -11,7 +11,7 @@ import enUS from "@/locales/langs/en-US";
 // initialized by the time the factories dereference them (a plain top-level
 // const would be in the TDZ when the hoisted factory runs).
 const { push, redirectIfAuthed, route, router } = vi.hoisted(() => {
-  const push = vi.fn();
+  const push = vi.fn(() => Promise.resolve());
   const route = { query: {} };
   const router = { push };
   return {
@@ -104,6 +104,16 @@ describe("ForgotPassword view", () => {
   it("routes to /login when Back-to-Login is clicked", async () => {
     const wrapper = mountView();
     await wrapper.find(".submit-button").trigger("click");
+    expect(push).toHaveBeenCalledWith("/login");
+  });
+
+  it("absorbs a rejected Back-to-Login navigation", async () => {
+    push.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountView();
+
+    await wrapper.find(".submit-button").trigger("click");
+    await Promise.resolve();
+
     expect(push).toHaveBeenCalledWith("/login");
   });
 });

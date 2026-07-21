@@ -343,6 +343,13 @@ describe("DeepGenomeResultViewer — scoped responsive media viewers", () => {
     );
   });
 
+  it("owns CIF setup promises inside the viewer lifecycle", () => {
+    expect(VIEWER_SOURCE).toContain("await loadCifFile();");
+    expect(VIEWER_SOURCE).toContain("await processCifContainers();");
+    expect(VIEWER_SOURCE).not.toMatch(/^\s*loadCifFile\(\);\s*$/m);
+    expect(VIEWER_SOURCE).not.toMatch(/^\s*processCifContainers\(\);\s*$/m);
+  });
+
   it("uses a semantic responsive class instead of fixed CIF inline dimensions", () => {
     expect(VIEWER_SOURCE).toContain(
       'viewerDiv.className = "deep-genome-cif-viewer"'

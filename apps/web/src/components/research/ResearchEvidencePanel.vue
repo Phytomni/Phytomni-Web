@@ -99,15 +99,19 @@ async function handleArtifactClick(event: MouseEvent): Promise<void> {
   row.focus();
 }
 
+const handleArtifactClickEvent = (event: Event): void => {
+  handleArtifactClick(event as MouseEvent).catch(() => undefined);
+};
+
 onMounted(() => {
   const closestArtifact = panelRef.value?.closest(".research-artifact-shell");
   artifactRoot =
     closestArtifact instanceof HTMLElement ? closestArtifact : null;
-  artifactRoot?.addEventListener("click", handleArtifactClick);
+  artifactRoot?.addEventListener("click", handleArtifactClickEvent);
 });
 
 onUnmounted(() => {
-  artifactRoot?.removeEventListener("click", handleArtifactClick);
+  artifactRoot?.removeEventListener("click", handleArtifactClickEvent);
   artifactRoot = null;
 });
 </script>

@@ -343,30 +343,36 @@ const handlePasswordChange = async () => {
   submitting.value = true;
 
   try {
-    await passwordFormRef.value.validate(async (valid) => {
-      if (!valid) {
-        submitting.value = false;
-        return;
-      }
-
-      try {
-        const formData = new FormData();
-        formData.append("password", passwordForm.oldPassword);
-        formData.append("new_password", passwordForm.newPassword);
-        const response = await apiChangePassword(formData);
-        if (response.code === 200) {
-          passwordDialogVisible.value = false;
-          ElMessage.success(t("profile.passwordChangeSuccess"));
-          await UserStore.FedLogOut().finally(() => router.replace("/login"));
-        } else {
-          ElMessage.error(t("profile.passwordChangeFailed"));
-        }
-      } catch {
-        ElMessage.warning(t("profile.passwordChangeFailed"));
-      } finally {
-        submitting.value = false;
-      }
+    let valid = false;
+    await passwordFormRef.value.validate((result) => {
+      valid = result;
     });
+    if (!valid) {
+      submitting.value = false;
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("password", passwordForm.oldPassword);
+      formData.append("new_password", passwordForm.newPassword);
+      const response = await apiChangePassword(formData);
+      if (response.code === 200) {
+        passwordDialogVisible.value = false;
+        ElMessage.success(t("profile.passwordChangeSuccess"));
+        try {
+          await UserStore.FedLogOut();
+        } finally {
+          await router.replace("/login").catch(() => undefined);
+        }
+      } else {
+        ElMessage.error(t("profile.passwordChangeFailed"));
+      }
+    } catch {
+      ElMessage.warning(t("profile.passwordChangeFailed"));
+    } finally {
+      submitting.value = false;
+    }
   } catch {
     submitting.value = false;
     ElMessage.warning(t("profile.passwordChangeFailed"));
@@ -408,7 +414,7 @@ const fetchUserInfo = async () => {
 };
 
 onMounted(() => {
-  void fetchUserInfo();
+  fetchUserInfo().catch(() => undefined);
 });
 </script>
 

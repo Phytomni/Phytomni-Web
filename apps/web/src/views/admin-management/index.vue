@@ -275,15 +275,23 @@ const fetchData = async () => {
   }
 };
 
-// Pagination methods
-const handleSizeChange = (size: number) => {
-  pageSize.value = size;
-  fetchData();
+const refreshData = async () => {
+  try {
+    await fetchData();
+  } catch {
+    ElMessage.error(t("common.refreshFailedRetry"));
+  }
 };
 
-const handleCurrentChange = (page: number) => {
+// Pagination methods
+const handleSizeChange = async (size: number) => {
+  pageSize.value = size;
+  await refreshData();
+};
+
+const handleCurrentChange = async (page: number) => {
   currentPage.value = page;
-  fetchData();
+  await refreshData();
 };
 
 // Edit a user
@@ -344,7 +352,7 @@ const handleSubmit = async () => {
             ElMessage.success(t("common.userAddedSuccess"));
             currentPage.value = 1;
             pageSize.value = 10;
-            fetchData();
+            await refreshData();
             closeDialog();
           } else {
             ElMessage.error(res.message || t("user.addFailed"));
@@ -364,7 +372,7 @@ const handleSubmit = async () => {
             ElMessage.success(t("common.userUpdatedSuccess"));
             currentPage.value = 1;
             pageSize.value = 10;
-            fetchData();
+            await refreshData();
             closeDialog();
           } else {
             ElMessage.error(res.message || t("user.editFailed"));
@@ -390,7 +398,7 @@ const handleSubmit = async () => {
 
 // Fetch data on page load
 onMounted(() => {
-  fetchData();
+  refreshData().catch(() => undefined);
 });
 </script>
 

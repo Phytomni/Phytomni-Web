@@ -169,7 +169,7 @@ function parseCapabilityResponse(payload: unknown): BotCapability[] {
 
 function setCache(key: string, manifest: readonly BotCapability[]): void {
   if (!cache.has(key) && cache.size >= MAX_BOT_CAPABILITY_CACHE_ENTRIES) {
-    const oldest = cache.keys().next().value;
+    const oldest: unknown = cache.keys().next().value;
     if (typeof oldest === "string") cache.delete(oldest);
   }
   cache.set(key, cloneManifest(manifest));
@@ -219,7 +219,7 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
 
     loading.value = true;
     try {
-      const response = await request({
+      const response = await request<unknown>({
         url: BOT_CAPABILITIES_URL,
         method: "get",
       });

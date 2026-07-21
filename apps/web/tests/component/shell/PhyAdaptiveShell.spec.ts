@@ -142,4 +142,8 @@ describe("PhyAdaptiveShell", () => {
       ])
     );
   });
+
+  it("contains rejected fullscreen focus scheduling", () => {
+    expect(SHELL_SOURCE).toContain("focusArtifact().catch(() => undefined);");
+  });
 });

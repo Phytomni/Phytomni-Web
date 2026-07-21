@@ -263,11 +263,13 @@ const refreshHistory = async () => {
 };
 
 const openChat = (history: History) => {
-  router.push(`/chat?dialogue_id=${history.dialogue_id}`);
+  Promise.resolve(
+    router.push(`/chat?dialogue_id=${history.dialogue_id}`)
+  ).catch(() => undefined);
 };
 
 const goToChat = () => {
-  router.push("/chat");
+  Promise.resolve(router.push("/chat")).catch(() => undefined);
 };
 
 const handleHistoryAction = (command: string, history: History) => {
@@ -344,7 +346,7 @@ const formatDate = (dateString: string) =>
   formatDisplayDate(d, dateString, "datetime");
 
 onMounted(() => {
-  void fetchHistoryData();
+  fetchHistoryData().catch(() => undefined);
 });
 </script>
 

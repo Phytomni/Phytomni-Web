@@ -111,7 +111,7 @@ describe("removeToken / getExpiresIn / setExpiresIn / removeExpiresIn — thin C
   it("setExpiresIn writes Admin-Expires-In with the given duration", () => {
     const setSpy = vi.spyOn(Cookies, "set").mockReturnValue("ok");
     setExpiresIn(7200);
-    expect(setSpy).toHaveBeenCalledWith("Admin-Expires-In", 7200);
+    expect(setSpy).toHaveBeenCalledWith("Admin-Expires-In", "7200");
   });
 
   it("removeExpiresIn delegates to Cookies.remove(Admin-Expires-In)", () => {

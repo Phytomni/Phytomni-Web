@@ -91,6 +91,11 @@ vi.mock("@/locales", () => ({
       t: (key: string) => key,
     },
   },
+  i18n: {
+    global: {
+      t: (key: string) => key,
+    },
+  },
 }));
 
 import { download } from "@/utils/request";
@@ -123,6 +128,21 @@ describe("download", () => {
     expect(mocks.saveAs).toHaveBeenCalledWith(expect.any(Blob), "export.xlsx");
     expect(listDownloadTransfers()).toHaveLength(0);
     expect(mocks.loadingService).not.toHaveBeenCalled();
+  });
+
+  it("drops hostile non-string error fields before showing a download error", async () => {
+    const secret = "download-error-secret";
+    mocks.blobValidate.mockResolvedValue(false);
+    mocks.post.mockResolvedValue(
+      new Blob([JSON.stringify({ code: "unknown", msg: { token: secret } })])
+    );
+
+    await download("/api/v1/export", { id: 1 }, "export.xlsx");
+
+    expect(JSON.stringify(mocks.elMessageError.mock.calls)).not.toContain(
+      secret
+    );
+    expect(mocks.elMessageError).toHaveBeenCalledWith("errorCode.default");
   });
 
   it("reports cancellation without the generic download error", async () => {

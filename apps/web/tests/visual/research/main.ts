@@ -30,7 +30,7 @@ async function boot() {
 
   app.mount("#app");
   await nextTick();
-  if (document.fonts?.ready) {
+  if (document.fonts) {
     await document.fonts.ready;
   }
 

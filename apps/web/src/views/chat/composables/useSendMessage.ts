@@ -12,10 +12,13 @@ import type {
 import { ElMessage, ElMessageBox } from "element-plus";
 import i18n from "@/locales";
 import {
+  decodeCitationDocuments,
+  decodeTableDataInput,
   extractAtValues,
   formatFileSize,
-  isValidJSON,
   convertToTableData,
+  optionalStringValue,
+  parseAgentAnswer,
 } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 import { writePendingChat, isLocalStorageChat } from "@/utils/pending-chat";
@@ -194,7 +197,7 @@ export function useSendMessage(opts: {
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
   selectChat: (dialogueId: string) => Promise<void> | void;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
 }) {
   const {
     getChatState,
@@ -535,13 +538,13 @@ export function useSendMessage(opts: {
                 );
               }
             } else if (response.data.tool_name === "DeepGenomeAgent") {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
+              const contentData = parseAgentAnswer(response.data.answer);
               assistantMessage = {
                 role: "assistant",
-                content: contentData?.content || response.data.answer,
-                doc_list: contentData?.doc_list,
+                content:
+                  optionalStringValue(contentData, "content") ||
+                  response.data.answer,
+                doc_list: decodeCitationDocuments(contentData.doc_list),
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
@@ -575,9 +578,9 @@ export function useSendMessage(opts: {
                     nextTick(() => {
                       if (isForeground(sendingDialogueId)) {
                         timestamp.value = Date.now();
-                        scrollToBottom();
+                        scrollToBottom().catch(() => undefined);
                       }
-                    });
+                    }).catch(() => undefined);
                   })
                   .catch((error) => {
                     console.error(
@@ -591,9 +594,9 @@ export function useSendMessage(opts: {
                     nextTick(() => {
                       if (isForeground(sendingDialogueId)) {
                         timestamp.value = Date.now();
-                        scrollToBottom();
+                        scrollToBottom().catch(() => undefined);
                       }
-                    });
+                    }).catch(() => undefined);
                   });
               }
 
@@ -608,14 +611,14 @@ export function useSendMessage(opts: {
               response.data.tool_name === "ReviewAgent" ||
               response.data.tool_name === "BriefGeneAgent"
             ) {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
+              const contentData = parseAgentAnswer(response.data.answer);
               // log the new message's doc_list data
               assistantMessage = {
                 role: "assistant",
-                content: contentData.content,
-                doc_list: contentData.doc_list,
+                content:
+                  optionalStringValue(contentData, "content") ||
+                  response.data.answer,
+                doc_list: decodeCitationDocuments(contentData.doc_list),
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
@@ -635,14 +638,13 @@ export function useSendMessage(opts: {
                 );
               }
             } else if (response.data.tool_name === "DataAgent") {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
-              const tableData = convertToTableData(contentData);
+              const contentData = parseAgentAnswer(response.data.answer);
+              const tableInput = decodeTableDataInput(contentData);
+              const tableData = convertToTableData(tableInput);
               assistantMessage = {
                 role: "assistant",
                 content: tableData,
-                tableHeaders: contentData.headers.map((header: string) => ({
+                tableHeaders: tableInput.headers.map((header: string) => ({
                   prop: header.replace(/\s+/g, "_").toLowerCase(),
                   label: header,
                 })),
@@ -857,7 +859,7 @@ export function useSendMessage(opts: {
                 });
               },
             }
-          );
+          ).catch(() => undefined);
         }
         return;
       }
@@ -981,7 +983,7 @@ export function useSendMessage(opts: {
               if (composerRef.value) {
                 composerRef.value.closeHeader();
               }
-            });
+            }).catch(() => undefined);
           }
         }
 

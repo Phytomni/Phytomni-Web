@@ -246,7 +246,7 @@ const handleFavoriteAction = (command: string, favorite: FavoriteItem) => {
   }
 
   if (command === "unfavorite") {
-    void handleUnfavorite(favorite);
+    Promise.resolve(handleUnfavorite(favorite)).catch(() => undefined);
   }
 };
 
@@ -305,18 +305,20 @@ const handleRenameDialogClose = () => {
 };
 
 const openChat = (favorite: FavoriteItem) => {
-  router.push(`/chat?dialogue_id=${favorite.dialogue_id}`);
+  Promise.resolve(
+    router.push(`/chat?dialogue_id=${favorite.dialogue_id}`)
+  ).catch(() => undefined);
 };
 
 const goToChat = () => {
-  router.push("/chat");
+  Promise.resolve(router.push("/chat")).catch(() => undefined);
 };
 
 const formatDate = (dateString: string) =>
   formatDisplayDate(d, dateString, "datetime");
 
 onMounted(() => {
-  void fetchFavorites();
+  fetchFavorites().catch(() => undefined);
 });
 </script>
 

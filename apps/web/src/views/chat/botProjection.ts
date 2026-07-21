@@ -184,6 +184,10 @@ function isJsonRecord(value: unknown): value is JsonRecord {
   );
 }
 
+function isUnknownArray(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
 function projectionSources(input: JsonRecord): JsonRecord[] {
   const sources: JsonRecord[] = [input];
   const seen = new Set<JsonRecord>(sources);
@@ -607,7 +611,7 @@ function parseGoArtifactObject(value: JsonRecord): BotArtifact[] {
   for (const key of ["directories", "output_dirs"]) {
     const directoryValue = value[key];
     if (directoryValue === undefined || directoryValue === null) continue;
-    if (!Array.isArray(directoryValue)) {
+    if (!isUnknownArray(directoryValue)) {
       error(`artifacts.${key}`, "must be an array");
     }
     if (directoryValue.length > MAX_BOT_ARTIFACTS) {

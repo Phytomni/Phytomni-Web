@@ -22,4 +22,8 @@ describe("Workspace navigation keyboard contract", () => {
     expect(SOURCE).not.toMatch(/transition:\s*all\b/);
     expect(SOURCE).not.toMatch(/outline:\s*(?:none|0|unset)\b/);
   });
+
+  it("handles a rejected Back-to-Chat navigation", () => {
+    expect(SOURCE).toContain('router.push("/chat").catch(() => undefined)');
+  });
 });

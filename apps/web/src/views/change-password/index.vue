@@ -119,7 +119,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { storeToRefs } from "pinia";
-import { ElMessage } from "element-plus";
+import { ElMessage, type FormInstance } from "element-plus";
 import { ArrowLeft } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
 import { userStore } from "@/stores";
@@ -133,7 +133,7 @@ const router = useRouter();
 const UserStore = userStore();
 const { isFirstLogin } = storeToRefs(UserStore);
 
-const passwordFormRef = ref();
+const passwordFormRef = ref<FormInstance>();
 const loading = ref(false);
 const submitting = ref(false);
 
@@ -242,7 +242,10 @@ const formRules = reactive({
           callback(new Error(t("changePassword.passwordSame")));
         } else {
           if (passwordForm.confirmPassword !== "") {
-            passwordFormRef.value?.validateField("confirmPassword");
+            const form = passwordFormRef.value;
+            if (form) {
+              form.validateField("confirmPassword").catch(() => undefined);
+            }
           }
           callback();
         }
@@ -268,16 +271,13 @@ const resetForm = () => {
 };
 
 const finishPasswordChange = async () => {
-  await Promise.resolve(UserStore.FedLogOut())
-    .finally(() => {
-      try {
-        sessionStorage.setItem("tutorial_pending", "1");
-      } catch {
-        // Storage is best-effort; the login redirect must still happen.
-      }
-      router.replace("/login");
-    })
-    .catch(() => undefined);
+  await Promise.resolve(UserStore.FedLogOut()).catch(() => undefined);
+  try {
+    sessionStorage.setItem("tutorial_pending", "1");
+  } catch {
+    // Storage is best-effort; the login redirect must still happen.
+  }
+  await router.replace("/login").catch(() => undefined);
 };
 
 const submitForm = async () => {

@@ -268,10 +268,13 @@ const handleMenuSelect = () => {
 // logout
 const handleLogout = () => {
   const UserStore = userStore();
-  UserStore.FedLogOut().finally(() => router.replace("/login"));
+  UserStore.FedLogOut()
+    .catch(() => undefined)
+    .then(() => router.replace("/login"))
+    .catch(() => undefined);
 };
 const handleBack = () => {
-  router.push("/chat");
+  router.push("/chat").catch(() => undefined);
 };
 
 // permission check

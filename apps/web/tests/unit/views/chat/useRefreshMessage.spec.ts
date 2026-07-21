@@ -35,7 +35,7 @@ describe("useRefreshMessage", () => {
   let getChatState: (dialogueId: string) => ChatUIState;
   let currentChatId: ReturnType<typeof ref<string>>;
   let currentChat: ReturnType<typeof computed<ChatView | null>>;
-  let scrollToBottom: ReturnType<typeof vi.fn>;
+  let scrollToBottom: Mock<() => Promise<void>>;
   let getHistoryQuestionData: Mock<
     () => Promise<DialogueReconciliationResult | undefined>
   >;
@@ -92,7 +92,7 @@ describe("useRefreshMessage", () => {
         getChatState(currentChatId.value).renderedChat = value;
       },
     });
-    scrollToBottom = vi.fn();
+    scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     getHistoryQuestionData = vi
       .fn<() => Promise<DialogueReconciliationResult | undefined>>()
       .mockResolvedValue(undefined);

@@ -7,46 +7,46 @@ export function useSidebarNavigation(opts: {
   onStartTutorial: () => void;
   onSelectChat: (dialogueId: string) => void;
 }) {
+  const navigate = (path: string) => {
+    Promise.resolve(opts.router.push(path)).catch(() => undefined);
+  };
+
   // user management
-  const handleUserManagement = () => opts.router.push("/user-list");
+  const handleUserManagement = () => navigate("/user-list");
 
   // system monitoring
-  const handleSystemMonitor = () => opts.router.push("/log-list");
+  const handleSystemMonitor = () => navigate("/log-list");
 
   // permission management
-  const handlePermissionManagement = () => opts.router.push("/permi-manage");
+  const handlePermissionManagement = () => navigate("/permi-manage");
 
   // global config
-  const handleGlobalConfig = () => opts.router.push("/global-config");
+  const handleGlobalConfig = () => navigate("/global-config");
 
   // admin management
-  const handleAdminManagement = () => opts.router.push("/admin-management");
+  const handleAdminManagement = () => navigate("/admin-management");
 
   // user feedback
-  const handleFeedback = () => opts.router.push("/feedback");
+  const handleFeedback = () => navigate("/feedback");
 
   // change password
-  const handleChangePassword = () => opts.router.push("/change-password");
+  const handleChangePassword = () => navigate("/change-password");
 
   // logout
   const handleLogout = () => {
-    opts.userStore.FedLogOut().finally(() => opts.router.replace("/login"));
+    Promise.resolve(opts.userStore.FedLogOut())
+      .then(() => Promise.resolve(opts.router.replace("/login")))
+      .catch(() => undefined);
   };
 
   // handle history click
-  const handleHistory = () => {
-    opts.router.push("/history");
-  };
+  const handleHistory = () => navigate("/history");
 
   // handle profile click
-  const handleProfile = () => {
-    opts.router.push("/profile");
-  };
+  const handleProfile = () => navigate("/profile");
 
   // handle cloud-storage click
-  const handleCloudStorage = () => {
-    opts.router.push("/cloud-storage");
-  };
+  const handleCloudStorage = () => navigate("/cloud-storage");
 
   // user menu
   const handleCommand = (command: string) => {
@@ -92,14 +92,10 @@ export function useSidebarNavigation(opts: {
   const startNewChat = () => opts.onStartNewChat();
 
   // handle knowledge-base click
-  const openKnowledgeBase = () => {
-    opts.router.push("/gene-display");
-  };
+  const openKnowledgeBase = () => navigate("/gene-display");
 
   // handle favorites click
-  const openFavorites = () => {
-    opts.router.push("/favorites");
-  };
+  const openFavorites = () => navigate("/favorites");
 
   // handle start-tutorial click
   const startTutorial = () => {

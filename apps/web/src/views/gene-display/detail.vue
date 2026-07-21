@@ -51,6 +51,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { getGeneDetails } from "@/api/gene-display";
+import { isRecord } from "@/api/contracts";
 import { DeepGenomeArtifact } from "@/components/research";
 import { useI18n } from "vue-i18n";
 import { buildDisplayContent } from "./gene-markdown";
@@ -172,17 +173,24 @@ const fetchGeneDetail = async (file_name: string) => {
 
 const retryFetch = () => {
   if (fileName.value) {
-    fetchGeneDetail(fileName.value);
+    fetchGeneDetail(fileName.value).catch(() => undefined);
   }
 };
 
 const handleArtifactNavigation = () => {
   if (window.history.length > 1) {
     window.history.back();
-  } else if (window.opener && !window.opener.closed) {
-    window.close();
   } else {
-    router.push({ name: "geneDisplay" });
+    const opener: unknown = window.opener;
+    if (isRecord(opener) && opener.closed === false) {
+      window.close();
+      return;
+    }
+  }
+  if (window.history.length <= 1) {
+    Promise.resolve(router.push({ name: "geneDisplay" })).catch(
+      () => undefined
+    );
   }
 };
 
@@ -194,7 +202,7 @@ watch(
     requestFailed.value = false;
 
     if (nextFileName) {
-      fetchGeneDetail(nextFileName);
+      fetchGeneDetail(nextFileName).catch(() => undefined);
     } else {
       activeRequest += 1;
       loading.value = false;

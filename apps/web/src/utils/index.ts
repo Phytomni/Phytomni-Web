@@ -21,6 +21,15 @@ export function removeToken() {
   return Cookies.remove(TokenKey);
 }
 
+// Object.entries exposes its values as `any[]`; preserve the runtime behavior
+// for records and arrays while keeping nested query values explicitly unknown.
+function entriesOf(value: object): Array<[string, unknown]> {
+  return Object.keys(value).map((key): [string, unknown] => [
+    key,
+    (value as Record<string, unknown>)[key],
+  ]);
+}
+
 /** Serialize an unknown params value into the query-string format used by the API. */
 export function tansParams(params: unknown): string {
   let result = "";
@@ -35,9 +44,9 @@ export function tansParams(params: unknown): string {
     )}&`;
   };
 
-  for (const [propName, value] of Object.entries(params)) {
+  for (const [propName, value] of entriesOf(params)) {
     if (value && typeof value === "object") {
-      for (const [key, nestedValue] of Object.entries(value)) {
+      for (const [key, nestedValue] of entriesOf(value)) {
         append(`${propName}[${key}]`, nestedValue);
       }
     } else {

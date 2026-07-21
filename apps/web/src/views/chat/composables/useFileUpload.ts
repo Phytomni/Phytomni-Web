@@ -18,7 +18,7 @@ export function useFileUpload(opts: {
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
   composerRef: Ref<ChatComposerHandle | null>;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
 }) {
   const { fileList, currentChatId, getChatState, composerRef, scrollToBottom } =
     opts;
@@ -69,8 +69,8 @@ export function useFileUpload(opts: {
       }
 
       // ensure it scrolls to the bottom
-      scrollToBottom();
-    });
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   const removeFile = (index: number) => {
@@ -91,8 +91,8 @@ export function useFileUpload(opts: {
       }
 
       // ensure it scrolls to the bottom
-      scrollToBottom();
-    });
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   return { handleFileChange, removeFile };

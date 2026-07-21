@@ -2,11 +2,17 @@ import { nextTick } from "vue";
 import type { Ref } from "vue";
 import type { Chat, ChatMessage, ChatResponse, ChatUIState } from "../types";
 import { parseMessageWithFiles } from "../utils/message-parse";
-import { isValidJSON, convertToTableData } from "../utils/format";
+import {
+  convertToTableData,
+  decodeCitationDocuments,
+  decodeTableDataInput,
+  optionalStringValue,
+  parseAgentAnswer,
+} from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 import { getAnswerCheck } from "@/api/chat";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
-import { decodeAgentSteps } from "../messageTypes";
+import { decodeAgentSteps, decodeFollowUpQuestions } from "../messageTypes";
 
 // History rows may carry bounded source metadata during the reversible Web
 // cutover. Keep that metadata opaque to rendering and discard malformed rows
@@ -22,7 +28,7 @@ function normalizedHistoryRows(data: unknown): ChatResponse[] {
 export function useSelectChat(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
   currentChatId: Ref<string>;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
   updateUrlWithChatId: (dialogueId: string) => void;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
@@ -105,31 +111,31 @@ export function useSelectChat(opts: {
           // add the assistant message
           if (item.answer) {
             try {
-              const answerData = isValidJSON(item.answer)
-                ? JSON.parse(item.answer)
-                : item.answer;
-              if (answerData.final_answer) {
+              const answerData = parseAgentAnswer(item.answer);
+              const finalAnswer = optionalStringValue(
+                answerData,
+                "final_answer"
+              );
+              if (finalAnswer) {
                 messages.push({
                   role: "assistant",
-                  content: answerData.final_answer,
+                  content: finalAnswer,
                   steps: decodeAgentSteps(answerData.steps),
                   status: item?.status || "",
                   upload_path: item?.upload_path || "",
                   download_path: item?.download_path || "",
                   id: item.id,
                   tool_name: item.tool_name,
-                  followUpQuestions: item.follow_up_questions
-                    ? typeof item.follow_up_questions === "string"
-                      ? JSON.parse(item.follow_up_questions)
-                      : item.follow_up_questions
-                    : [],
+                  followUpQuestions: decodeFollowUpQuestions(
+                    item.follow_up_questions
+                  ),
                   showFollowUpQuestions: true, // history messages show follow-up questions by default
                   showLog: false,
                   instantMessage: false,
                 });
                 historyMessages.push({
                   role: "assistant",
-                  content: answerData.final_answer,
+                  content: finalAnswer,
                 });
               } else {
                 if (item.tool_name === "ChatAgent") {
@@ -142,11 +148,9 @@ export function useSelectChat(opts: {
                     download_path: item?.download_path || "",
                     id: item.id,
                     tool_name: item.tool_name,
-                    followUpQuestions: item.follow_up_questions
-                      ? typeof item.follow_up_questions === "string"
-                        ? JSON.parse(item.follow_up_questions)
-                        : item.follow_up_questions
-                      : [],
+                    followUpQuestions: decodeFollowUpQuestions(
+                      item.follow_up_questions
+                    ),
                     showFollowUpQuestions: true, // history messages show follow-up questions by default
                     showLog: false,
                     instantMessage: false,
@@ -160,24 +164,22 @@ export function useSelectChat(opts: {
                   item.tool_name === "ReviewAgent" ||
                   item.tool_name === "BriefGeneAgent"
                 ) {
-                  const contentData = isValidJSON(item.answer)
-                    ? JSON.parse(item.answer)
-                    : item.answer;
+                  const contentData = parseAgentAnswer(item.answer);
                   // log the doc_list data
                   messages.push({
                     role: "assistant",
-                    content: contentData.content,
-                    doc_list: contentData.doc_list,
+                    content:
+                      optionalStringValue(contentData, "content") ||
+                      item.answer,
+                    doc_list: decodeCitationDocuments(contentData.doc_list),
                     status: item?.status || "",
                     upload_path: item?.upload_path || "",
                     download_path: item?.download_path || "",
                     id: item.id,
                     tool_name: item.tool_name,
-                    followUpQuestions: item.follow_up_questions
-                      ? typeof item.follow_up_questions === "string"
-                        ? JSON.parse(item.follow_up_questions)
-                        : item.follow_up_questions
-                      : [],
+                    followUpQuestions: decodeFollowUpQuestions(
+                      item.follow_up_questions
+                    ),
                     showFollowUpQuestions: true, // history messages show follow-up questions by default
                     showLog: false,
                     instantMessage: false,
@@ -187,14 +189,13 @@ export function useSelectChat(opts: {
                     content: item.answer,
                   });
                 } else if (item.tool_name === "DataAgent") {
-                  const contentData = isValidJSON(item.answer)
-                    ? JSON.parse(item.answer)
-                    : item.answer;
-                  const tableData = convertToTableData(contentData);
+                  const contentData = parseAgentAnswer(item.answer);
+                  const tableInput = decodeTableDataInput(contentData);
+                  const tableData = convertToTableData(tableInput);
                   messages.push({
                     role: "assistant",
                     content: tableData,
-                    tableHeaders: contentData.headers.map((header: string) => ({
+                    tableHeaders: tableInput.headers.map((header: string) => ({
                       prop: header.replace(/\s+/g, "_").toLowerCase(),
                       label: header,
                     })),
@@ -204,11 +205,9 @@ export function useSelectChat(opts: {
                     original: item.answer,
                     id: item.id,
                     tool_name: item.tool_name,
-                    followUpQuestions: item.follow_up_questions
-                      ? typeof item.follow_up_questions === "string"
-                        ? JSON.parse(item.follow_up_questions)
-                        : item.follow_up_questions
-                      : [],
+                    followUpQuestions: decodeFollowUpQuestions(
+                      item.follow_up_questions
+                    ),
                     showFollowUpQuestions: true, // history messages show follow-up questions by default
                     showLog: false,
                     instantMessage: false,
@@ -227,11 +226,9 @@ export function useSelectChat(opts: {
                     id: item.id,
                     task_id: item.task_id,
                     tool_name: item.tool_name,
-                    followUpQuestions: item.follow_up_questions
-                      ? typeof item.follow_up_questions === "string"
-                        ? JSON.parse(item.follow_up_questions)
-                        : item.follow_up_questions
-                      : [],
+                    followUpQuestions: decodeFollowUpQuestions(
+                      item.follow_up_questions
+                    ),
                     showFollowUpQuestions: true, // history messages show follow-up questions by default
                     showLog: false,
                     instantMessage: false,
@@ -242,25 +239,23 @@ export function useSelectChat(opts: {
                     content: item.answer,
                   });
                 } else if (item.tool_name === "DeepGenomeAgent") {
-                  const contentData = isValidJSON(item.answer)
-                    ? JSON.parse(item.answer)
-                    : item.answer;
+                  const contentData = parseAgentAnswer(item.answer);
 
                   // create the message object
                   const deepGenomeMessage = {
                     role: "assistant",
-                    content: contentData?.content || item.answer,
-                    doc_list: contentData?.doc_list,
+                    content:
+                      optionalStringValue(contentData, "content") ||
+                      item.answer,
+                    doc_list: decodeCitationDocuments(contentData.doc_list),
                     status: item?.status || "",
                     upload_path: item?.upload_path || "",
                     id: item.id,
                     task_id: item.task_id,
                     tool_name: item.tool_name,
-                    followUpQuestions: item.follow_up_questions
-                      ? typeof item.follow_up_questions === "string"
-                        ? JSON.parse(item.follow_up_questions)
-                        : item.follow_up_questions
-                      : [],
+                    followUpQuestions: decodeFollowUpQuestions(
+                      item.follow_up_questions
+                    ),
                     showFollowUpQuestions: true, // history messages show follow-up questions by default
                     instantMessage: false,
                     server_file_path: item.server_file_path, // add the server file path
@@ -283,9 +278,9 @@ export function useSelectChat(opts: {
                         nextTick(() => {
                           timestamp.value = Date.now();
                           if (currentChatId.value === capturedDialogueId) {
-                            scrollToBottom();
+                            scrollToBottom().catch(() => undefined);
                           }
-                        });
+                        }).catch(() => undefined);
                       })
                       .catch((error) => {
                         console.error(
@@ -297,9 +292,9 @@ export function useSelectChat(opts: {
                         nextTick(() => {
                           timestamp.value = Date.now();
                           if (currentChatId.value === capturedDialogueId) {
-                            scrollToBottom();
+                            scrollToBottom().catch(() => undefined);
                           }
-                        });
+                        }).catch(() => undefined);
                       });
                   }
 
@@ -318,11 +313,9 @@ export function useSelectChat(opts: {
                     id: item?.id || "",
                     task_id: item.task_id,
                     tool_name: item?.tool_name || "",
-                    followUpQuestions: item.follow_up_questions
-                      ? typeof item.follow_up_questions === "string"
-                        ? JSON.parse(item.follow_up_questions)
-                        : item.follow_up_questions
-                      : [],
+                    followUpQuestions: decodeFollowUpQuestions(
+                      item.follow_up_questions
+                    ),
                     showFollowUpQuestions: true, // history messages show follow-up questions by default
                     instantMessage: false,
                   });
@@ -343,11 +336,9 @@ export function useSelectChat(opts: {
                 id: item?.id || "",
                 task_id: item.task_id,
                 tool_name: item.tool_name || "",
-                followUpQuestions: item.follow_up_questions
-                  ? typeof item.follow_up_questions === "string"
-                    ? JSON.parse(item.follow_up_questions)
-                    : item.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  item.follow_up_questions
+                ),
                 showFollowUpQuestions: true, // history messages show follow-up questions by default
                 showLog: false,
                 instantMessage: false,

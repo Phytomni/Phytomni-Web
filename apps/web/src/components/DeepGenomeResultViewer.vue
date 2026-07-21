@@ -288,7 +288,7 @@ const processCifContainers = async () => {
 
       // load 3Dmol.js and render the structure
       load3DMol()
-        .then(() => {
+        .then(async () => {
           if (isUnmounted) return;
 
           // generate a unique id
@@ -362,7 +362,7 @@ const processCifContainers = async () => {
           };
 
           // run the load
-          loadCifFile();
+          await loadCifFile();
         })
         .catch((error) => {
           if (isUnmounted) return;
@@ -420,7 +420,7 @@ onMounted(async () => {
 
   // Use nextTick to process CIF containers and add image click handlers after the DOM updates
   await nextTick();
-  processCifContainers();
+  await processCifContainers();
   setupImageClickListeners(documentRef.value);
 
   // Wait for heading elements to render, then set up the Intersection Observer

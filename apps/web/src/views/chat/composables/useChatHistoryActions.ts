@@ -43,7 +43,7 @@ export function useChatHistoryActions(opts: {
         renameDialogVisible.value = true;
         break;
       case "favorite":
-        toggleFavorite(chat);
+        toggleFavorite(chat).catch(() => undefined);
         break;
       case "delete":
         chatToDelete.value = chat;

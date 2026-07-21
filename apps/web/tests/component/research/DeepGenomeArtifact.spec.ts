@@ -97,6 +97,16 @@ describe("DeepGenomeArtifact", () => {
     expect(download).toHaveBeenNthCalledWith(2, "markdown");
   });
 
+  it("contains a rejected embedded viewer download", async () => {
+    download.mockRejectedValueOnce(new Error("export failed"));
+    const wrapper = mountArtifact();
+
+    await expect(
+      wrapper.get('[data-test="deep-genome-download-pdf"]').trigger("click")
+    ).resolves.toBeUndefined();
+    expect(download).toHaveBeenCalledWith("pdf");
+  });
+
   it("expands the embedded report column on ultra-wide layouts", () => {
     const source = readFileSync(
       resolve(

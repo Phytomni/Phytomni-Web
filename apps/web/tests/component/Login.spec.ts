@@ -14,11 +14,12 @@ const mocks = vi.hoisted(() => ({
   setToken: vi.fn(),
   safeRedirect: vi.fn(() => "/chat"),
   redirectIfAuthed: vi.fn(),
-  push: vi.fn(),
+  push: vi.fn(() => Promise.resolve()),
   replace: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
   notification: vi.fn(),
+  formValidateReject: false,
   route: { query: {} as Record<string, unknown> },
   store: {
     SET_USER_NAME: vi.fn(),
@@ -70,6 +71,9 @@ const ElFormStub = defineComponent({
   },
   setup(props, { expose, slots }) {
     const validate = async (callback?: (valid: boolean) => void) => {
+      if (mocks.formValidateReject) {
+        throw new Error("validation unavailable");
+      }
       let valid = true;
       for (const [field, rawRules] of Object.entries(props.rules)) {
         const value = String(
@@ -189,6 +193,7 @@ describe("Login auth surface", () => {
     vi.clearAllMocks();
     i18n.global.locale.value = "en-US";
     mocks.route.query = {};
+    mocks.formValidateReject = false;
     mocks.safeRedirect.mockReturnValue("/chat");
     mocks.login.mockResolvedValue({
       code: 200,
@@ -253,6 +258,18 @@ describe("Login auth surface", () => {
     expect(mocks.setToken).not.toHaveBeenCalled();
   });
 
+  it("keeps a rejected form validation from becoming an unhandled promise", async () => {
+    mocks.formValidateReject = true;
+    const wrapper = mountView();
+    await fillCredentials(wrapper);
+
+    await wrapper.get(".login-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.login).not.toHaveBeenCalled();
+    expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
+  });
+
   it("preserves FormData, token/store order, warning, and safe redirect on success", async () => {
     mocks.safeRedirect.mockReturnValue("/history?tab=recent");
     const wrapper = mountView({ redirect: "/history" });
@@ -304,6 +321,46 @@ describe("Login auth surface", () => {
     );
     expect(mocks.replace).toHaveBeenCalledWith("/change-password");
     expect(mocks.safeRedirect).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a rejected first-login navigation through the login error path", async () => {
+    mocks.login.mockResolvedValueOnce({
+      code: 200,
+      data: {
+        token: "first-login-token",
+        user_name: "new-user",
+        login_status: "0",
+      },
+    });
+    mocks.replace.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountView();
+    await fillCredentials(wrapper);
+    await wrapper.get(".login-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.error).toHaveBeenCalledWith("navigation unavailable");
+    expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
+  });
+
+  it("surfaces a rejected post-login redirect through the login error path", async () => {
+    mocks.replace.mockRejectedValueOnce(new Error("redirect unavailable"));
+    const wrapper = mountView();
+    await fillCredentials(wrapper);
+    await wrapper.get(".login-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.error).toHaveBeenCalledWith("redirect unavailable");
+    expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
+  });
+
+  it("absorbs rejected auxiliary navigation without a global unhandled rejection", async () => {
+    mocks.push.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountView();
+
+    await wrapper.get('a[href="/forgot-password"]').trigger("click");
+    await flushPromises();
+
+    expect(mocks.push).toHaveBeenCalledWith("/forgot-password");
   });
 
   it("handles locked responses and rejected requests while resetting loading", async () => {

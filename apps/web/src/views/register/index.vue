@@ -196,7 +196,7 @@ const validatePasswordStrength = (
 
   // When the password changes, re-validate the confirm-password field if it has already been entered
   if (formData.confirmPassword !== "") {
-    formRef.value?.validateField("confirmPassword");
+    formRef.value?.validateField("confirmPassword").catch(() => undefined);
   }
 
   callback();
@@ -241,14 +241,16 @@ const handleSubmit = () => {
     return;
   }
   if (!formRef.value) return;
-  formRef.value.validate((valid: boolean) => {
-    if (valid) {
-      loading.value = true;
-      handleRegister();
-    } else {
-      ElMessage.warning(t("register.validation.formValidationFailed"));
-    }
-  });
+  formRef.value
+    .validate((valid: boolean) => {
+      if (valid) {
+        loading.value = true;
+        handleRegister();
+      } else {
+        ElMessage.warning(t("register.validation.formValidationFailed"));
+      }
+    })
+    .catch(() => undefined);
 };
 
 const handleRegister = () => {
@@ -259,7 +261,7 @@ const handleRegister = () => {
     .then((res: { code: number; message?: string }) => {
       if (res.code === 200) {
         ElMessage.success(t("common.registrationSuccess"));
-        router.replace("/login");
+        return router.replace("/login");
       } else {
         ElMessage.error(res.message || t("register.registrationFailed"));
       }
@@ -281,7 +283,7 @@ const handleRegister = () => {
 };
 
 const goToLogin = () => {
-  router.push("/login");
+  router.push("/login").catch(() => undefined);
 };
 </script>
 

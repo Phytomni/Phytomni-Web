@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { flushPromises } from "@vue/test-utils";
 import { computed, ref, type Ref, type WritableComputedRef } from "vue";
 import type { AxiosProgressEvent } from "axios";
 import type { BinaryResponse } from "@/api/types";
@@ -97,7 +98,7 @@ describe("useCopyDownload", () => {
   }
 
   describe("fallbackCopyText", () => {
-    it("secure context → calls clipboard.writeText, sets copyVisible, shows success message", () => {
+    it("secure context → calls clipboard.writeText, sets copyVisible, shows success message", async () => {
       vi.useFakeTimers();
       const writeText = vi.fn().mockResolvedValue(undefined);
       vi.stubGlobal("isSecureContext", true);
@@ -105,12 +106,27 @@ describe("useCopyDownload", () => {
 
       const { fallbackCopyText } = makeComposable();
       fallbackCopyText("hello", 2);
+      await flushPromises();
 
       expect(writeText).toHaveBeenCalledWith("hello");
       expect(copyVisible.value).toBe(2);
       expect(mockElSuccess).toHaveBeenCalledWith("chat.copySuccess");
 
       vi.useRealTimers();
+    });
+
+    it("secure context rejection → reports copy failure without showing success", async () => {
+      const writeText = vi.fn().mockRejectedValue(new Error("clipboard down"));
+      vi.stubGlobal("isSecureContext", true);
+      vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+      const { fallbackCopyText } = makeComposable();
+      fallbackCopyText("hello", 2);
+      await flushPromises();
+
+      expect(mockElError).toHaveBeenCalledWith("chat.copyFailed");
+      expect(mockElSuccess).not.toHaveBeenCalled();
+      expect(copyVisible.value).toBe(0);
     });
   });
 
@@ -207,6 +223,23 @@ describe("useCopyDownload", () => {
       expect(clickSpy).toHaveBeenCalledTimes(1);
       expect(revokeObjectURL).toHaveBeenCalledWith("blob:fake");
 
+      clickSpy.mockRestore();
+    });
+
+    it("ignores non-string response headers instead of treating them as filenames", async () => {
+      const { clickSpy } = stubBlobDownload();
+      const response = buildBinaryResponse("report.pdf");
+      response.headers = {
+        "content-disposition": { token: "header-secret" },
+        "content-type": { token: "header-secret" },
+      } as unknown as BinaryResponse["headers"];
+      mockGetFileDownUrlApi.mockResolvedValueOnce(response);
+
+      const { getFileDownUrl } = makeComposable();
+      await getFileDownUrl("7", "pdf");
+
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(mockElError).not.toHaveBeenCalled();
       clickSpy.mockRestore();
     });
 

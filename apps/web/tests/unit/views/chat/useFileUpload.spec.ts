@@ -25,7 +25,7 @@ describe("useFileUpload", () => {
   let currentChatId: Ref<string>;
   let getChatState: (dialogueId: string) => ChatUIState;
   let composerRef: Ref<ChatComposerHandle | null>;
-  let scrollToBottom: ReturnType<typeof vi.fn>;
+  let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -38,7 +38,7 @@ describe("useFileUpload", () => {
       closeHeader: vi.fn(),
       popoverVisible: false,
     });
-    scrollToBottom = vi.fn();
+    scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
   });
 
   function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {

@@ -91,7 +91,7 @@ const router = useRouter();
 
 function back() {
   if (route.query.noGoBack) {
-    router.push("/");
+    router.push("/").catch(() => undefined);
     return;
   }
 

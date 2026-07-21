@@ -128,7 +128,7 @@ function downloadLabel(name: string): string {
   return `${downloadText.value}: ${name}`;
 }
 
-function requestDownload(artifact: ArtifactRow): void {
+async function requestDownload(artifact: ArtifactRow): Promise<void> {
   if (
     !isSafeBotObsPath(artifact.path) ||
     !isSafeBotObsPath(artifact.outputDir)
@@ -136,7 +136,15 @@ function requestDownload(artifact: ArtifactRow): void {
     return;
   }
 
-  (props.download ?? props.downloadAction)?.(artifact.outputDir);
+  const download = props.download ?? props.downloadAction;
+  if (download) {
+    try {
+      await download(artifact.outputDir);
+    } catch {
+      // Download adapters own their user-facing error state; keep the click
+      // handler settled so the list can still emit its request event.
+    }
+  }
   emit("download", artifact.outputDir);
 }
 </script>

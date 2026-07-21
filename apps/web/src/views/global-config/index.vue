@@ -276,17 +276,19 @@ const handleTest = () => {
 
 // View history details
 const handleViewHistory = (row: ConfigHistoryRecord) => {
-  ElMessageBox.alert(
-    t("globalConfig.historyDetailContent", {
-      time: formatDisplayDate(d, row.timestamp, "timestamp"),
-      operator: row.operator,
-      changes: row.changes,
-    }),
-    t("globalConfig.historyDetail"),
-    {
-      confirmButtonText: t("common.confirm"),
-    }
-  );
+  Promise.resolve(
+    ElMessageBox.alert(
+      t("globalConfig.historyDetailContent", {
+        time: formatDisplayDate(d, row.timestamp, "timestamp"),
+        operator: row.operator,
+        changes: row.changes,
+      }),
+      t("globalConfig.historyDetail"),
+      {
+        confirmButtonText: t("common.confirm"),
+      }
+    )
+  ).catch(() => undefined);
 };
 
 // Load configuration on component mount

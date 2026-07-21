@@ -49,7 +49,7 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ElMessage } from "element-plus";
+import { ElMessage, type FormInstance } from "element-plus";
 import { feedback } from "@/api/feedback";
 import { PhyPageHeader, PhyWorkspaceShell } from "@/components/shell";
 
@@ -60,7 +60,7 @@ const feedbackForm = ref({
   feedback_type: "user_feedback",
   feedback_content: "",
 });
-const feedbackFormRef = ref();
+const feedbackFormRef = ref<FormInstance>();
 const submitting = ref(false);
 let submitInFlight = false;
 

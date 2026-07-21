@@ -46,7 +46,7 @@ export function useLogView(opts: {
   currentChat: Ref<ChatView | null>;
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
 }) {
   const {
     isSending,
@@ -74,8 +74,8 @@ export function useLogView(opts: {
           res.data == null || res.data === "" ? "" : parseLogPayload(res.data);
         delete chatState.logErrorKinds[rowId];
         nextTick(() => {
-          scrollToBottom();
-        });
+          scrollToBottom().catch(() => undefined);
+        }).catch(() => undefined);
       } else {
         console.error("Failed to fetch log:", res);
         chatState.logErrorKinds[rowId] = "fetch";
@@ -102,7 +102,7 @@ export function useLogView(opts: {
       const key = analystLogActivityKey(rowId);
       if (!(key in chatState.activityExpandedByMessage)) {
         chatState.activityExpandedByMessage[key] = true;
-        void fetchLogIfNeeded(rowId, chatState);
+        fetchLogIfNeeded(rowId, chatState).catch(() => undefined);
       }
     }
   };
@@ -133,8 +133,8 @@ export function useLogView(opts: {
     }
 
     nextTick(() => {
-      scrollToBottom();
-    });
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   /** @deprecated Prefer setLogExpanded — kept name for call-site clarity during fold. */
@@ -191,8 +191,8 @@ export function useLogView(opts: {
       chatState.updatingLog[rowId] = false;
 
       nextTick(() => {
-        scrollToBottom();
-      });
+        scrollToBottom().catch(() => undefined);
+      }).catch(() => undefined);
     }
   };
 

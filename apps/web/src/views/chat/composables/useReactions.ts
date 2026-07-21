@@ -8,7 +8,7 @@ import type { ChatUIState } from "../types";
 export function useReactions(opts: {
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
 }) {
   const { currentChatId, getChatState, scrollToBottom } = opts;
   const reactionRequestSeq = new Map<string, number>();
@@ -74,7 +74,9 @@ export function useReactions(opts: {
     }
 
     // ensure it scrolls to the bottom
-    nextTick(scrollToBottom);
+    nextTick(() => {
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   // Locale-reactive labels; reaction values/API unchanged.

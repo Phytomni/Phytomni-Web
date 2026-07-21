@@ -459,15 +459,23 @@ const fetchData = async () => {
   }
 };
 
-// Pagination methods
-const handleSizeChange = (size: number) => {
-  pageSize.value = size;
-  fetchData();
+const refreshData = async () => {
+  try {
+    await fetchData();
+  } catch {
+    ElMessage.error(t("common.refreshFailedRetry"));
+  }
 };
 
-const handleCurrentChange = (page: number) => {
+// Pagination methods
+const handleSizeChange = async (size: number) => {
+  pageSize.value = size;
+  await refreshData();
+};
+
+const handleCurrentChange = async (page: number) => {
   currentPage.value = page;
-  fetchData();
+  await refreshData();
 };
 
 // Add a user
@@ -508,36 +516,37 @@ const handleView = (row: UserData) => {
 };
 
 // Unlock a user
-const handleUnlock = (row: UserData) => {
-  ElMessageBox.confirm(
-    t("user.unlockConfirmMessage", { email: row.email }),
-    t("user.unlockConfirmTitle"),
-    {
-      confirmButtonText: t("common.confirm"),
-      cancelButtonText: t("common.cancel"),
-      type: "warning",
-    }
-  )
-    .then(async () => {
-      try {
-        const res = await unlockUser(row.id);
-        if (res.code === 200) {
-          ElMessage.success(t("user.unlockSuccess"));
-          fetchData();
-        } else {
-          ElMessage.error(res.message || t("user.unlockFailed"));
-        }
-      } catch (error: unknown) {
-        console.error("Failed to unlock user:", error);
-        ElMessage.error(
-          (error instanceof Error ? error.message : undefined) ||
-            t("user.unlockFailed")
-        );
+const handleUnlock = async (row: UserData) => {
+  try {
+    await ElMessageBox.confirm(
+      t("user.unlockConfirmMessage", { email: row.email }),
+      t("user.unlockConfirmTitle"),
+      {
+        confirmButtonText: t("common.confirm"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
       }
-    })
-    .catch(() => {
-      // User cancelled the operation
-    });
+    );
+  } catch {
+    // User cancelled the operation
+    return;
+  }
+
+  try {
+    const res = await unlockUser(row.id);
+    if (res.code === 200) {
+      ElMessage.success(t("user.unlockSuccess"));
+      await refreshData();
+    } else {
+      ElMessage.error(res.message || t("user.unlockFailed"));
+    }
+  } catch (error: unknown) {
+    console.error("Failed to unlock user:", error);
+    ElMessage.error(
+      (error instanceof Error ? error.message : undefined) ||
+        t("user.unlockFailed")
+    );
+  }
 };
 
 // Close the dialog
@@ -591,7 +600,7 @@ const handleSubmit = async () => {
             ElMessage.success(t("common.userAddedSuccess"));
             currentPage.value = 1;
             pageSize.value = 10;
-            fetchData();
+            await refreshData();
             closeDialog();
           } else {
             ElMessage.error(res.message || t("user.addFailed"));
@@ -619,7 +628,7 @@ const handleSubmit = async () => {
             ElMessage.success(t("common.userUpdatedSuccess"));
             currentPage.value = 1;
             pageSize.value = 10;
-            fetchData();
+            await refreshData();
             closeDialog();
           } else {
             ElMessage.error(res.message || t("user.editFailed"));
@@ -646,7 +655,7 @@ const handleSubmit = async () => {
 
 // Fetch data when the page loads
 onMounted(() => {
-  fetchData();
+  refreshData().catch(() => undefined);
 });
 </script>
 

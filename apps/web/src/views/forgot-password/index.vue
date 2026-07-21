@@ -44,7 +44,7 @@ onMounted(() => {
 });
 
 const goToLogin = () => {
-  router.push("/login");
+  router.push("/login").catch(() => undefined);
 };
 </script>
 

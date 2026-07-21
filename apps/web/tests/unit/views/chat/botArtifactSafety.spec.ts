@@ -55,6 +55,29 @@ describe("BotArtifactList provenance boundary", () => {
     expect(wrapper.html()).not.toContain("obs://");
   });
 
+  it("contains a rejected download callback without losing the download event", async () => {
+    const download = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("download failed"));
+    const wrapper = mount(BotArtifactList, {
+      props: {
+        artifacts: [
+          {
+            outputDir: "obs://bucket/run-1",
+            paths: ["obs://bucket/run-1/output.zip"],
+          },
+        ],
+        download,
+        emptyLabel: "No artifacts",
+      },
+    });
+
+    await expect(
+      wrapper.get('[data-test="bot-artifact-download"]').trigger("click")
+    ).resolves.toBeUndefined();
+    expect(wrapper.emitted("download")).toEqual([["obs://bucket/run-1"]]);
+  });
+
   it("keeps malformed paths warning-only and never exposes private diagnostics", () => {
     const wrapper = mount(BotArtifactList, {
       props: {

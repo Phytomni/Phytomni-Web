@@ -150,7 +150,7 @@ watch(
         document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
-      void focusArtifact();
+      focusArtifact().catch(() => undefined);
       return;
     }
     if (!isFullscreen && wasFullscreen) {

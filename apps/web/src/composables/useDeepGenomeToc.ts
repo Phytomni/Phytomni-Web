@@ -74,7 +74,7 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
       // use nextTick to scroll after the DOM updates
       nextTick(() => {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
+      }).catch(() => undefined);
     }
   };
 

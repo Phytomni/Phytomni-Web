@@ -183,7 +183,7 @@ function activateTab(tab: ResearchArtifactTab, moveFocus = false): void {
       shellRef.value
         ?.querySelector<HTMLElement>(`[data-tab-id="${tab}"]`)
         ?.focus();
-    });
+    }).catch(() => undefined);
   }
 }
 

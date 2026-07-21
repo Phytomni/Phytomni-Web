@@ -65,7 +65,14 @@ app.use(ElementPlus, {
 });
 
 // Load the active locale pack before first paint, then mount.
-setLanguage(currentLang).then(() => app.mount("#app"));
+setLanguage(currentLang).then(
+  () => app.mount("#app"),
+  (error: unknown) => {
+    // A failed locale load must not leave the application unmounted.
+    console.error("Failed to initialize the application locale:", error);
+    app.mount("#app");
+  }
+);
 
 // Clean up the theme listener on page unload
 window.addEventListener("beforeunload", () => {

@@ -145,10 +145,16 @@ function handleTab(tab: ArtifactTab): void {
   emit("tab", tab);
 }
 
-function delegateDownload(format: DeepGenomeDownloadFormat): void {
+async function delegateDownload(
+  format: DeepGenomeDownloadFormat
+): Promise<void> {
   const handle = viewerRef.value;
   if (!handle) return;
-  void handle.download(format);
+  try {
+    await handle.download(format);
+  } catch {
+    // The embedded viewer owns its download error surface.
+  }
 }
 
 function findEvidenceRow(targetId: string): HTMLElement | null {

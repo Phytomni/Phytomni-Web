@@ -8,7 +8,7 @@ export function useComposer(opts: {
   isSending: WritableComputedRef<boolean>;
   currentChatId: Ref<string>;
   selectedAgent: WritableComputedRef<string>;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
   authorizedAgentTools: Ref<readonly string[]>;
 }) {
   const {
@@ -69,8 +69,8 @@ export function useComposer(opts: {
     messageInput.value = `${command}${newMessageValue.cleanedText}`;
 
     nextTick(() => {
-      scrollToBottom();
-    });
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   watch(messageInput, (newVal) => {
@@ -108,8 +108,8 @@ export function useComposer(opts: {
     messageInput.value = `${command}${newMessageValue.cleanedText}`;
 
     nextTick(() => {
-      scrollToBottom();
-    });
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   const handleSelect = (option: MentionOption) => {
@@ -117,14 +117,14 @@ export function useComposer(opts: {
     selectedAgent.value = option.value;
 
     nextTick(() => {
-      scrollToBottom();
-    });
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   const handleSearch = () => {
     nextTick(() => {
-      scrollToBottom();
-    });
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   return {

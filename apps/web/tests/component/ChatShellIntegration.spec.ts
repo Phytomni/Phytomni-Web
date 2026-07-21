@@ -127,6 +127,12 @@ describe("Chat adaptive shell integration", () => {
     expect(SIDEBAR_SOURCE).toContain('@toggle="toggle"');
   });
 
+  it("settles sidebar agent navigation rejections", () => {
+    expect(SIDEBAR_SOURCE).toContain(
+      "Promise.resolve(router.push(agent.route)).catch(() => undefined);"
+    );
+  });
+
   it("keeps both empty and populated transcript branches in one scroll root", () => {
     expect(
       countOccurrences(CHAT_SOURCE, 'data-test="chat-transcript-scroll-root"')

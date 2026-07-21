@@ -95,7 +95,9 @@ export function useAgentImages(currentChat: Ref<ChatView | null>) {
           messageId &&
           !geneNetworkImages[messageId]
         ) {
-          void fetchGeneNetworkImages(messageId, rawDownloadPath);
+          fetchGeneNetworkImages(messageId, rawDownloadPath).catch(
+            () => undefined
+          );
         }
         if (
           msg.role === "assistant" &&
@@ -120,7 +122,7 @@ export function useAgentImages(currentChat: Ref<ChatView | null>) {
             }
           }
           if (paths.length > 0) {
-            void fetchDigitalDesignImages(messageId, paths);
+            fetchDigitalDesignImages(messageId, paths).catch(() => undefined);
           }
         }
       });

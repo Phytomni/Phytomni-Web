@@ -10,7 +10,13 @@ import {
 let renderingFileDownloadSeq = 0;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+function readResponseHeader(headers: unknown, key: string): string | undefined {
+  if (!isRecord(headers)) return undefined;
+  const value = headers[key];
+  return typeof value === "string" ? value : undefined;
+}
 
 function isCanceledRequest(error: unknown): boolean {
   const err = isRecord(error) ? error : undefined;
@@ -55,9 +61,15 @@ export function useCopyDownload(opts: {
   const fallbackCopyText = (text: string, index: number) => {
     try {
       if (window.isSecureContext) {
-        navigator.clipboard.writeText(text);
-        updateCopyIconHandler(index);
-        ElMessage.success(t("chat.copySuccess"));
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            updateCopyIconHandler(index);
+            ElMessage.success(t("chat.copySuccess"));
+          })
+          .catch(() => {
+            ElMessage.error(t("chat.copyFailed"));
+          });
       } else {
         textAreaCopyCore(text, index);
       }
@@ -91,7 +103,10 @@ export function useCopyDownload(opts: {
         },
       });
       // extract the filename from the response headers
-      const contentDisposition = response.headers["content-disposition"];
+      const contentDisposition = readResponseHeader(
+        response.headers,
+        "content-disposition"
+      );
       let fileName = "default_filename"; // default filename
       if (contentDisposition) {
         const fileNameMatch = contentDisposition.match(
@@ -102,7 +117,7 @@ export function useCopyDownload(opts: {
         }
       }
       const blob = new Blob([response.data], {
-        type: response.headers["content-type"],
+        type: readResponseHeader(response.headers, "content-type"),
       });
 
       // create the download link

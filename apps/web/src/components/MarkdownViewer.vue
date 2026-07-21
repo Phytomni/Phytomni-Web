@@ -68,17 +68,23 @@ const renderedContent = computed(() => {
       .replace(/^## (.*$)/gim, "<h2>$1</h2>")
       .replace(/^# (.*$)/gim, "<h1>$1</h1>")
       // images (src goes through the scheme allow-list; alt is escaped along with the whole body)
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
-        return `<img src="${sanitizeEscapedHref(
-          src
-        )}" alt="${alt}" style="max-width: 50%; height: auto; border-radius: 4px; margin: 8px 0;" />`;
-      })
+      .replace(
+        /!\[([^\]]*)\]\(([^)]+)\)/g,
+        (_match: string, alt: string, src: string) => {
+          return `<img src="${sanitizeEscapedHref(
+            src
+          )}" alt="${alt}" style="max-width: 50%; height: auto; border-radius: 4px; margin: 8px 0;" />`;
+        }
+      )
       // links (href goes through the scheme allow-list; link text is escaped along with the whole body)
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, href) => {
-        return `<a href="${sanitizeEscapedHref(
-          href
-        )}" target="_blank">${text}</a>`;
-      })
+      .replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        (_match: string, text: string, href: string) => {
+          return `<a href="${sanitizeEscapedHref(
+            href
+          )}" target="_blank">${text}</a>`;
+        }
+      )
       // lists
       .replace(/^\* (.*$)/gim, "<li>$1</li>")
       .replace(/^- (.*$)/gim, "<li>$1</li>")

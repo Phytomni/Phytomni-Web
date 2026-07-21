@@ -49,8 +49,43 @@ export interface UnwrappedHttpClient {
 
 const request = service as unknown as UnwrappedHttpClient;
 
+/**
+ * Axios types response interceptors as preserving `AxiosResponse<any>`, but
+ * this instance deliberately unwraps successful payloads before they reach
+ * callers. Keep that runtime contract explicit at the one third-party seam.
+ */
+interface UnwrappedResponseInterceptorManager {
+  use(
+    onFulfilled?: ((value: AxiosResponse<unknown>) => unknown) | null,
+    onRejected?: ((error: unknown) => unknown) | null
+  ): number;
+}
+
+const responseInterceptors = service.interceptors
+  .response as unknown as UnwrappedResponseInterceptorManager;
+
 // store active request controllers
 const activeControllers = new Map<string, AbortController>();
+
+type DuplicateRequestRecord = {
+  url?: string;
+  data?: unknown;
+  time?: number;
+};
+
+function readDuplicateRequestRecord(): DuplicateRequestRecord | undefined {
+  const raw: unknown = cache.session.getJSON("sessionObj");
+  if (!isRecord(raw)) return undefined;
+
+  return {
+    url: optionalString(raw, "url"),
+    data: raw.data,
+    time:
+      typeof raw.time === "number" && Number.isFinite(raw.time)
+        ? raw.time
+        : undefined,
+  };
+}
 
 // request interceptor
 service.interceptors.request.use(
@@ -83,20 +118,17 @@ service.interceptors.request.use(
       !isRepeatSubmit &&
       (config.method === "post" || config.method === "put")
     ) {
+      const requestData: unknown =
+        typeof config.data === "object"
+          ? JSON.stringify(config.data)
+          : (config.data as unknown);
       const requestObj = {
         url: config.url,
-        data:
-          typeof config.data === "object"
-            ? JSON.stringify(config.data)
-            : config.data,
+        data: requestData,
         time: new Date().getTime(),
       };
-      const sessionObj = cache.session.getJSON("sessionObj");
-      if (
-        sessionObj === undefined ||
-        sessionObj === null ||
-        sessionObj === ""
-      ) {
+      const sessionObj = readDuplicateRequestRecord();
+      if (!sessionObj) {
         cache.session.setJSON("sessionObj", requestObj);
       } else {
         const s_url = sessionObj.url; // request URL
@@ -106,6 +138,7 @@ service.interceptors.request.use(
         // pre-flight check
         if (
           s_data === requestObj.data &&
+          typeof s_time === "number" &&
           requestObj.time - s_time < interval &&
           s_url === requestObj.url
         ) {
@@ -136,6 +169,12 @@ service.interceptors.request.use(
 type ErrorCodeLookup = Record<string, (() => string) | string>;
 
 const errorCodeLookup: ErrorCodeLookup = errorCode;
+
+function resolveErrorCode(key: string): string | undefined {
+  const configured = errorCodeLookup[key];
+  if (typeof configured === "function") return configured();
+  return typeof configured === "string" ? configured : undefined;
+}
 
 type SafeErrorResponse = {
   status?: number;
@@ -184,8 +223,8 @@ function isCanceledRequest(error: unknown): boolean {
 }
 
 // response interceptor
-service.interceptors.response.use(
-  (res: AxiosResponse) => {
+responseInterceptors.use(
+  (res: AxiosResponse<unknown>) => {
     const responseData = isRecord(res.data) ? res.data : undefined;
     // default to a success status when no code is set
     const responseCode = responseData?.code;
@@ -224,22 +263,24 @@ service.interceptors.response.use(
           callback: () => {
             isRelogin.show = false;
             const UserStore = userStore();
-            UserStore.FedLogOut().finally(() => {
-              // clear all caches and cookies
-              localStorage.clear();
-              sessionStorage.clear();
-              document.cookie.split(";").forEach(function (c) {
-                document.cookie = c
-                  .replace(/^ +/, "")
-                  .replace(
-                    /=.*/,
-                    "=;expires=" + new Date().toUTCString() + ";path=/"
-                  );
-              });
-              location.href = "/login";
-            });
+            UserStore.FedLogOut()
+              .finally(() => {
+                // clear all caches and cookies
+                localStorage.clear();
+                sessionStorage.clear();
+                document.cookie.split(";").forEach(function (c) {
+                  document.cookie = c
+                    .replace(/^ +/, "")
+                    .replace(
+                      /=.*/,
+                      "=;expires=" + new Date().toUTCString() + ";path=/"
+                    );
+                });
+                location.href = "/login";
+              })
+              .catch(() => undefined);
           },
-        });
+        }).catch(() => undefined);
       }
       return Promise.reject(i18n.global.t("request.sessionInvalid"));
     } else if (code === 500) {
@@ -362,12 +403,19 @@ export function download(
         saveAs(blob, filename);
       } else {
         const resText = await data.text();
-        const rspObj = JSON.parse(resText);
+        const parsed: unknown = JSON.parse(resText);
+        const rspObj = isRecord(parsed) ? parsed : {};
+        const codeValue = rspObj.code;
+        const codeKey =
+          typeof codeValue === "string" || typeof codeValue === "number"
+            ? String(codeValue)
+            : undefined;
         const errMsg =
-          (errorCode as ErrorCodeLookup)[rspObj.code] ||
-          rspObj.msg ||
-          (errorCode as ErrorCodeLookup)["default"];
-        ElMessage.error(errMsg as string);
+          (codeKey ? resolveErrorCode(codeKey) : undefined) ||
+          optionalString(rspObj, "msg") ||
+          resolveErrorCode("default") ||
+          i18n.global.t("chat.downloadError");
+        ElMessage.error(errMsg);
       }
     })
     .catch((r) => {

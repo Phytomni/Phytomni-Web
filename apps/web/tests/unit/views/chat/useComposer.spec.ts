@@ -15,7 +15,7 @@ describe("useComposer", () => {
   let isSending: Ref<boolean>;
   let currentChatId: Ref<string>;
   let selectedAgent: Ref<string>;
-  let scrollToBottom: ReturnType<typeof vi.fn>;
+  let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -23,7 +23,7 @@ describe("useComposer", () => {
     isSending = ref(false);
     currentChatId = ref("A");
     selectedAgent = ref("");
-    scrollToBottom = vi.fn();
+    scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
   });
 
   const permittedTools = ["ChatAgent", "KnowledgeAgent", "DataAgent"];

@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick, ref } from "vue";
 import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 import { invalidInput } from "../../helpers/invalidInput";
+
+const TOC_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/composables/useDeepGenomeToc.ts"),
+  "utf8"
+);
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Harness: a lightweight component that calls the composable inside a setup context,
@@ -142,6 +149,10 @@ describe("useDeepGenomeToc — handleNavSelect", () => {
 
     expect(scrollSpy).not.toHaveBeenCalled();
     wrapper.unmount();
+  });
+
+  it("contains rejected scroll scheduling", () => {
+    expect(TOC_SOURCE).toContain("}).catch(() => undefined);");
   });
 });
 

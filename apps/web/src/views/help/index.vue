@@ -82,7 +82,7 @@ const goBack = () => {
     // Check whether the token exists
     if (!getToken()) {
       ElMessage.warning(t("help.goBackTokenExpired"));
-      router.replace("/login");
+      Promise.resolve(router.replace("/login")).catch(() => undefined);
       return;
     }
     // Try to go back to the previous page
@@ -92,7 +92,7 @@ const goBack = () => {
     console.error("Failed to go back:", error);
     ElMessage.error(t("help.goBackFailed"));
     // If going back fails, navigate to the default page
-    router.push("/");
+    Promise.resolve(router.push("/")).catch(() => undefined);
   }
 };
 

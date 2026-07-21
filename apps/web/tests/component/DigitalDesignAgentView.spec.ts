@@ -188,6 +188,7 @@ describe("DigitalDesignAgentView", () => {
     vi.clearAllMocks();
     resetState();
     mocks.submit.mockResolvedValue(null);
+    mocks.capabilities.load.mockResolvedValue([]);
   });
 
   it("keeps loading and unavailable Back actions labeled and reachable", async () => {
@@ -208,6 +209,17 @@ describe("DigitalDesignAgentView", () => {
     await unavailable.get('[data-test="design-back"]').trigger("click");
     expect(mocks.routerBack).toHaveBeenCalledTimes(2);
     unavailable.unmount();
+  });
+
+  it("contains a rejected capability bootstrap", async () => {
+    mocks.capabilities.load.mockRejectedValueOnce(
+      new Error("capabilities unavailable")
+    );
+    const wrapper = mountView();
+
+    await Promise.resolve();
+    expect(mocks.capabilities.load).toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it("submits structured gene/species resolver values without leaking them into query", async () => {

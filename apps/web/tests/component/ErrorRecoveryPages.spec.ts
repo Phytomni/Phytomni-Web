@@ -7,7 +7,7 @@ import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
 const mocks = vi.hoisted(() => ({
-  push: vi.fn(),
+  push: vi.fn(() => Promise.resolve()),
   go: vi.fn(),
   route: { query: {} as Record<string, unknown> },
 }));
@@ -62,6 +62,7 @@ const mountNotFound = (locale: "en-US" | "zh-CN" = "en-US") =>
 describe("standalone recovery pages", () => {
   beforeEach(() => {
     mocks.push.mockReset();
+    mocks.push.mockResolvedValue(undefined);
     mocks.go.mockReset();
     mocks.route.query = {};
   });
@@ -76,6 +77,17 @@ describe("standalone recovery pages", () => {
 
     expect(mocks.push).toHaveBeenCalledWith("/");
     expect(mocks.go).not.toHaveBeenCalled();
+  });
+
+  it("absorbs a rejected 401 root navigation", async () => {
+    mocks.route.query = { noGoBack: "1" };
+    mocks.push.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountUnauthorized();
+
+    await wrapper.get("button[data-action='back']").trigger("click");
+    await Promise.resolve();
+
+    expect(mocks.push).toHaveBeenCalledWith("/");
   });
 
   it("uses browser history for 401 Back when noGoBack is absent", async () => {

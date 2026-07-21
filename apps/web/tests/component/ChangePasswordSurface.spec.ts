@@ -354,6 +354,23 @@ describe("Change Password surface", () => {
     expect(mocks.replace).toHaveBeenCalledWith("/login");
   });
 
+  it("keeps the tutorial hand-off when the /login navigation rejects", async () => {
+    const store = makeStore("0");
+    const logout = vi.fn().mockResolvedValue(undefined);
+    store.FedLogOut = logout;
+    mocks.store = store;
+    mocks.replace.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountView("0");
+    (mocks.store as typeof store).FedLogOut = logout;
+    await fillForm(wrapper);
+
+    await wrapper.get(".change-password-submit").trigger("click");
+    await flushPromises();
+
+    expect(sessionStorage.getItem("tutorial_pending")).toBe("1");
+    expect(mocks.replace).toHaveBeenCalledWith("/login");
+  });
+
   it("reports server failures without logout or navigation", async () => {
     mocks.changePassword.mockResolvedValueOnce({
       code: 400,

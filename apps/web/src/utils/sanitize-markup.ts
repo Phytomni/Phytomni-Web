@@ -101,8 +101,12 @@ function decodeEntities(s: string): string {
       ? String.fromCodePoint(code)
       : fallback;
   return s
-    .replace(/&#x([0-9a-f]+);?/gi, (m, hex) => fromCp(parseInt(hex, 16), m))
-    .replace(/&#(\d+);?/g, (m, dec) => fromCp(parseInt(dec, 10), m))
+    .replace(/&#x([0-9a-f]+);?/gi, (m: string, hex: string) =>
+      fromCp(parseInt(hex, 16), m)
+    )
+    .replace(/&#(\d+);?/g, (m: string, dec: string) =>
+      fromCp(parseInt(dec, 10), m)
+    )
     .replace(/&colon;/gi, ":")
     .replace(/&tab;/gi, "\t")
     .replace(/&newline;/gi, "\n");
@@ -182,7 +186,7 @@ export function sanitizeHref(url: string): string {
  * MarkdownViewer source body, the DeepGenome reference text fields — so any raw
  * `<img onerror>` / quote-breakout becomes inert text. Coerces non-strings.
  */
-export function escapeHtml(text: string): string {
+export function escapeHtml(text: unknown): string {
   return String(text ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

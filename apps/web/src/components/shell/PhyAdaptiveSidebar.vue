@@ -111,13 +111,13 @@ function getSurfaceFocusables(): HTMLElement[] {
 }
 
 function focusDrawer(): void {
-  void nextTick(() => {
+  nextTick(() => {
     const closeControl = sidebarRef.value?.querySelector<HTMLElement>(
       '[data-testid="sidebar-drawer-close"]'
     );
     const focusTarget = closeControl || getSurfaceFocusables()[0];
     focusTarget?.focus();
-  });
+  }).catch(() => undefined);
 }
 
 function restoreDrawerFocus(): void {

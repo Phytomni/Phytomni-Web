@@ -9,6 +9,10 @@ const CHAT_SIDEBAR_SOURCE = readFileSync(
   resolve(__dirname, "../../../src/views/chat/sidebar.vue"),
   "utf8"
 );
+const SIDEBAR_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/shell/PhyAdaptiveSidebar.vue"),
+  "utf8"
+);
 
 describe("PhyAdaptiveSidebar", () => {
   it("renders expanded and collapsed presentation states", () => {
@@ -166,5 +170,9 @@ describe("PhyAdaptiveSidebar", () => {
       ":close-label=\"$t('common.close')\""
     );
     expect(CHAT_SIDEBAR_SOURCE).toContain("<Close />");
+  });
+
+  it("contains rejected drawer focus scheduling", () => {
+    expect(SIDEBAR_SOURCE).toContain("}).catch(() => undefined);");
   });
 });

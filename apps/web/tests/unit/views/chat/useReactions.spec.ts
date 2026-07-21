@@ -33,14 +33,14 @@ describe("useReactions", () => {
   let chatState: ChatUIState;
   let currentChatId: ReturnType<typeof ref<string>>;
   let getChatState: (dialogueId: string) => ChatUIState;
-  let scrollToBottom: ReturnType<typeof vi.fn>;
+  let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     chatState = buildChatState();
     currentChatId = ref("d1");
     getChatState = () => chatState;
-    scrollToBottom = vi.fn();
+    scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
   });
 
   function makeComposable() {

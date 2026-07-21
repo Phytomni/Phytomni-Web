@@ -70,4 +70,10 @@ describe("superseded visual infrastructure", () => {
     expect(VITEST_SOURCE).not.toContain("useAgentsPanel.ts");
     expect(VITEST_SOURCE).not.toContain("useSidebarAgents.ts");
   });
+
+  it("mounts even when the initial locale promise rejects", () => {
+    expect(MAIN_SOURCE).toMatch(
+      /setLanguage\(currentLang\)\.then\([\s\S]*?Failed to initialize the application locale:[\s\S]*?app\.mount\("#app"\)/
+    );
+  });
 });

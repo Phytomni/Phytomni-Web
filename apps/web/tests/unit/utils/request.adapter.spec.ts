@@ -4,7 +4,7 @@ const requestMocks = vi.hoisted(() => ({
   alert: vi.fn(),
   fedLogOut: vi.fn(() => Promise.resolve()),
   message: vi.fn(),
-  sessionGetJSON: vi.fn(() => null),
+  sessionGetJSON: vi.fn((): unknown => null),
   sessionSetJSON: vi.fn(),
 }));
 
@@ -153,6 +153,43 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
     expect(seen[1].cancelToken).toBeDefined();
   });
 
+  it.each([
+    ["missing", undefined],
+    ["null", null],
+    ["array", []],
+    ["primitive", "not-a-session-record"],
+    ["wrong fields", { url: 42, data: { token: "cache-secret" }, time: "now" }],
+  ] as Array<[string, unknown]>)(
+    "replaces %s duplicate-submit cache shapes instead of canceling",
+    async (_label, cached) => {
+      const seen: InternalAxiosRequestConfig[] = [];
+      requestMocks.sessionGetJSON.mockReturnValue(cached);
+      service.defaults.adapter = async (config) => {
+        seen.push(config as InternalAxiosRequestConfig);
+        return {
+          data: { code: 200, ok: true },
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config: config as InternalAxiosRequestConfig,
+          request: { responseType: "" },
+        };
+      };
+
+      await service.post("/api/v1/probe", { value: 1 });
+      await service.post("/api/v1/probe", { value: 1 });
+
+      expect(seen).toHaveLength(2);
+      expect(seen.every((config) => config.cancelToken === undefined)).toBe(
+        true
+      );
+      expect(requestMocks.sessionSetJSON).toHaveBeenCalledTimes(2);
+      expect(
+        JSON.stringify(requestMocks.sessionSetJSON.mock.calls)
+      ).not.toContain("cache-secret");
+    }
+  );
+
   it("logs response errors without exposing request headers", async () => {
     const secret = "Bearer request-secret";
     const error = {
@@ -271,6 +308,7 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
     requestMocks.alert.mockImplementation(
       (_message: unknown, options: { callback?: () => void }) => {
         options.callback?.();
+        return Promise.resolve();
       }
     );
     service.defaults.adapter = async (config) => ({
@@ -290,6 +328,32 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
     expect(JSON.stringify(requestMocks.alert.mock.calls)).not.toContain(
       "response-secret"
     );
+  });
+
+  it("continues cache cleanup when logout rejects after a 401 response", async () => {
+    requestMocks.fedLogOut.mockRejectedValueOnce(
+      new Error("logout unavailable")
+    );
+    requestMocks.alert.mockImplementation(
+      (_message: unknown, options: { callback?: () => void }) => {
+        options.callback?.();
+        return Promise.resolve();
+      }
+    );
+    service.defaults.adapter = async (config) => ({
+      data: { code: 401, message: "expired" },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: config as InternalAxiosRequestConfig,
+      request: { responseType: "" },
+    });
+
+    await expect(service.get("/api/v1/private")).rejects.toBe(
+      "request.sessionInvalid"
+    );
+    await Promise.resolve();
+    expect(requestMocks.fedLogOut).toHaveBeenCalledTimes(1);
   });
 
   it("logs out on a forbidden response without logging headers", async () => {

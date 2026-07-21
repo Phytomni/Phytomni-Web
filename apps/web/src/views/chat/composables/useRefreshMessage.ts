@@ -10,7 +10,13 @@ import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getQuery } from "@/api/chat";
 import { createTransferTracker } from "@/utils/transfer-progress";
-import { isValidJSON, convertToTableData } from "../utils/format";
+import {
+  convertToTableData,
+  decodeCitationDocuments,
+  decodeTableDataInput,
+  optionalStringValue,
+  parseAgentAnswer,
+} from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 import {
   chatContentToText,
@@ -22,7 +28,7 @@ export function useRefreshMessage(opts: {
   currentChat: Ref<ChatView | null>;
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
   getHistoryQuestionData: () =>
     | Promise<DialogueReconciliationResult | undefined>
     | DialogueReconciliationResult
@@ -181,13 +187,13 @@ export function useRefreshMessage(opts: {
                 showLog: false,
               };
             } else if (response.data.tool_name === "DeepGenomeAgent") {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
+              const contentData = parseAgentAnswer(response.data.answer);
               newAssistantMessage = {
                 role: "assistant",
-                content: contentData?.content || response.data.answer,
-                doc_list: contentData?.doc_list,
+                content:
+                  optionalStringValue(contentData, "content") ||
+                  response.data.answer,
+                doc_list: decodeCitationDocuments(contentData.doc_list),
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
@@ -223,9 +229,9 @@ export function useRefreshMessage(opts: {
                     nextTick(() => {
                       timestamp.value = Date.now();
                       if (isStillActive()) {
-                        scrollToBottom();
+                        scrollToBottom().catch(() => undefined);
                       }
-                    });
+                    }).catch(() => undefined);
                   })
                   .catch((error) => {
                     console.error(
@@ -239,9 +245,9 @@ export function useRefreshMessage(opts: {
                     nextTick(() => {
                       timestamp.value = Date.now();
                       if (isStillActive()) {
-                        scrollToBottom();
+                        scrollToBottom().catch(() => undefined);
                       }
-                    });
+                    }).catch(() => undefined);
                   });
               }
             } else if (
@@ -249,14 +255,14 @@ export function useRefreshMessage(opts: {
               response.data.tool_name === "ReviewAgent" ||
               response.data.tool_name === "BriefGeneAgent"
             ) {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
+              const contentData = parseAgentAnswer(response.data.answer);
               // log the refreshed message's doc_list data
               newAssistantMessage = {
                 role: "assistant",
-                content: contentData.content,
-                doc_list: contentData.doc_list,
+                content:
+                  optionalStringValue(contentData, "content") ||
+                  response.data.answer,
+                doc_list: decodeCitationDocuments(contentData.doc_list),
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
@@ -276,14 +282,13 @@ export function useRefreshMessage(opts: {
                 );
               }
             } else if (response.data.tool_name === "DataAgent") {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
-              const tableData = convertToTableData(contentData);
+              const contentData = parseAgentAnswer(response.data.answer);
+              const tableInput = decodeTableDataInput(contentData);
+              const tableData = convertToTableData(tableInput);
               newAssistantMessage = {
                 role: "assistant",
                 content: tableData,
-                tableHeaders: contentData.headers.map((header: string) => ({
+                tableHeaders: tableInput.headers.map((header: string) => ({
                   prop: header.replace(/\s+/g, "_").toLowerCase(),
                   label: header,
                 })),
@@ -376,8 +381,8 @@ export function useRefreshMessage(opts: {
     } finally {
       if (isStillActive()) {
         nextTick(() => {
-          scrollToBottom();
-        });
+          scrollToBottom().catch(() => undefined);
+        }).catch(() => undefined);
       }
 
       // clean up the old refresh state

@@ -144,16 +144,18 @@ const formRules = reactive({
 
 const handleSubmit = () => {
   if (!formRef.value) return;
-  formRef.value.validate((valid: boolean) => {
-    if (valid) {
-      loading.value = true;
-      if (isLogin.value) {
-        handleLogin();
-      } else {
-        handleRegister();
+  formRef.value
+    .validate((valid: boolean) => {
+      if (valid) {
+        loading.value = true;
+        if (isLogin.value) {
+          handleLogin();
+        } else {
+          handleRegister();
+        }
       }
-    }
-  });
+    })
+    .catch(() => undefined);
 };
 
 const handleLogin = () => {
@@ -186,8 +188,7 @@ const handleLogin = () => {
             duration: 0,
             position: "top-right",
           });
-          router.replace("/change-password");
-          return;
+          return router.replace("/change-password");
         }
 
         // Check the password warning message
@@ -201,7 +202,7 @@ const handleLogin = () => {
           });
         }
 
-        router.replace(safeRedirect(route.query.redirect, "/chat"));
+        return router.replace(safeRedirect(route.query.redirect, "/chat"));
       } else {
         const errorMessage = res.message || t("login.loginFailed");
 
@@ -270,11 +271,11 @@ const handleRegister = () => {
 };
 
 const goToForgotPassword = () => {
-  router.push("/forgot-password");
+  router.push("/forgot-password").catch(() => undefined);
 };
 
 const goToRegister = () => {
-  router.push("/register");
+  router.push("/register").catch(() => undefined);
 };
 </script>
 

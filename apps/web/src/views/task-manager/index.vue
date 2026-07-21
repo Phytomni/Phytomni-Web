@@ -227,18 +227,18 @@ const handleTaskClick = (data: TaskData) => {
   window.open(url, "_blank");
 };
 
-const handleSizeChange = (size: number) => {
+const handleSizeChange = async (size: number) => {
   pageSize.value = size;
-  fetchData();
+  await fetchData();
 };
 
-const handleCurrentChange = (page: number) => {
+const handleCurrentChange = async (page: number) => {
   currentPage.value = page;
-  fetchData();
+  await fetchData();
 };
 
 onMounted(() => {
-  fetchData();
+  fetchData().catch(() => undefined);
 });
 </script>
 

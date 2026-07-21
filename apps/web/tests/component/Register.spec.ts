@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   success: vi.fn(),
   warning: vi.fn(),
   error: vi.fn(),
+  formValidateReject: false,
+  validateFieldReject: false,
   route: { query: {} as Record<string, unknown> },
 }));
 
@@ -68,6 +70,9 @@ const ElFormStub = defineComponent({
   },
   setup(props, { expose, slots }) {
     const validate = async (callback?: (valid: boolean) => void) => {
+      if (mocks.formValidateReject) {
+        throw new Error("validation unavailable");
+      }
       let valid = true;
       for (const [field, rawRules] of Object.entries(props.rules)) {
         const value = String(
@@ -106,7 +111,12 @@ const ElFormStub = defineComponent({
       return valid;
     };
 
-    expose({ validate, validateField: vi.fn() });
+    const validateField = async () => {
+      if (mocks.validateFieldReject) {
+        throw new Error("field validation unavailable");
+      }
+    };
+    expose({ validate, validateField });
     return () => h("form", { class: "el-form" }, slots.default?.());
   },
 });
@@ -219,6 +229,8 @@ describe("Registration auth surface", () => {
     vi.clearAllMocks();
     i18n.global.locale.value = "en-US";
     mocks.route.query = {};
+    mocks.formValidateReject = false;
+    mocks.validateFieldReject = false;
     mocks.register.mockResolvedValue({ code: 200 });
   });
 
@@ -336,6 +348,33 @@ describe("Registration auth surface", () => {
     expect(mocks.register).not.toHaveBeenCalled();
   });
 
+  it("keeps a rejected form validation from becoming an unhandled promise", async () => {
+    mocks.formValidateReject = true;
+    const wrapper = mountView();
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await fillRegistration(wrapper);
+
+    await wrapper.get(".register-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.register).not.toHaveBeenCalled();
+    expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
+      "false"
+    );
+  });
+
+  it("keeps password revalidation best-effort when its promise rejects", async () => {
+    mocks.validateFieldReject = true;
+    const wrapper = mountView();
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await fillRegistration(wrapper);
+
+    await wrapper.get(".register-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.register).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves the exact FormData, success destination, and loading reset", async () => {
     const wrapper = mountView();
     await fillRegistration(wrapper);
@@ -348,6 +387,20 @@ describe("Registration auth surface", () => {
       ["password", "Secure1!"],
     ]);
     expect(mocks.replace).toHaveBeenCalledWith("/login");
+    expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
+      "false"
+    );
+  });
+
+  it("surfaces a rejected post-registration redirect through the registration error path", async () => {
+    mocks.replace.mockRejectedValueOnce(new Error("redirect unavailable"));
+    const wrapper = mountView();
+    await fillRegistration(wrapper);
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await wrapper.get(".register-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.error).toHaveBeenCalledWith("redirect unavailable");
     expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
       "false"
     );

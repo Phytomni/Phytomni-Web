@@ -213,7 +213,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
 
     // trigger print
     try {
-      await window.print();
+      window.print();
     } catch (error) {
       ElMessage.error(i18n.global.t("chat.printFailed"));
       console.error("Print error:", error);
@@ -233,7 +233,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     // convert image paths
     convertedMarkdown = convertedMarkdown.replace(
       /!\[(.*?)\]\((.*?)\)/g,
-      (match, alt, src) => {
+      (match: string, alt: string, src: string) => {
         const convertedSrc = convertFilePath(src);
         return `![${alt}](${convertedSrc})`;
       }
@@ -242,7 +242,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     // convert link paths
     convertedMarkdown = convertedMarkdown.replace(
       /\[([^\]]+?)\]\(([^)]+?)\)/g,
-      (match, text, url) => {
+      (match: string, text: string, url: string) => {
         // skip links that already start with http/https
         if (url.startsWith("http://") || url.startsWith("https://")) {
           return match;

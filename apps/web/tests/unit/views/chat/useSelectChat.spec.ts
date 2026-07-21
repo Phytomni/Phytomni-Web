@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { Mock } from "vitest";
 import { ref, type Ref } from "vue";
 import { useSelectChat } from "@/views/chat/composables/useSelectChat";
 import type {
@@ -31,7 +32,7 @@ describe("useSelectChat", () => {
   let getChatState: (dialogueId: string) => ChatUIState;
   let currentChatId: Ref<string>;
   let chatList: Ref<Chat[]>;
-  let scrollToBottom: ReturnType<typeof vi.fn>;
+  let scrollToBottom: Mock<() => Promise<void>>;
   let updateUrlWithChatId: ReturnType<typeof vi.fn>;
   let timestamp: Ref<number>;
 
@@ -49,7 +50,7 @@ describe("useSelectChat", () => {
       buildChat({ id: 1, dialogue_id: "d1", title: "t" }),
       buildChat({ id: 2, dialogue_id: "d2", title: "t2" }),
     ]);
-    scrollToBottom = vi.fn();
+    scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     updateUrlWithChatId = vi.fn();
     timestamp = ref(0);
   });

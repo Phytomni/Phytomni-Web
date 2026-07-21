@@ -29,7 +29,7 @@ export function getExpiresIn() {
 }
 
 export function setExpiresIn(time: number) {
-  return Cookies.set(ExpiresInKey, time);
+  return Cookies.set(ExpiresInKey, String(time));
 }
 
 export function removeExpiresIn() {

@@ -245,7 +245,7 @@ const exploreAgent = () => {
 };
 
 const handleAgentClick = (agent: { route: string }) => {
-  router.push(agent.route);
+  Promise.resolve(router.push(agent.route)).catch(() => undefined);
   showAgentsList.value = false;
 };
 

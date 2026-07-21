@@ -547,7 +547,7 @@ async function downloadArtifact(outputDir: string): Promise<void> {
 }
 
 onMounted(() => {
-  void capabilities.load();
+  Promise.resolve(capabilities.load()).catch(() => undefined);
 });
 
 onBeforeUnmount(() => {

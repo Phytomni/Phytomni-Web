@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ref, computed } from "vue";
+import { ref, computed, nextTick } from "vue";
 
 // file-saver mock — hoisted so the vi.mock factory can reference it
 const mockSaveAs = vi.hoisted(() => vi.fn());
@@ -125,6 +125,28 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
+  it("does not wait for the synchronous native print call before cleanup", async () => {
+    const fakeEl = document.createElement("div");
+    fakeEl.appendChild(document.createElement("p"));
+    const mainContentRef = ref({ $el: fakeEl });
+    const printPromise = new Promise<void>(() => undefined);
+    const printSpy = vi
+      .spyOn(window, "print")
+      .mockReturnValue(printPromise as unknown as void);
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# PDF test", filename: "report.md" },
+      mainContentRef,
+      displayReferences: computed(() => []),
+    });
+
+    const downloadPromise = downloadPDF();
+    await nextTick();
+    expect(document.querySelector("#print-container")).toBeNull();
+    await downloadPromise;
+    printSpy.mockRestore();
+  });
+
   it("excludes the semantic download toolbar from the print clone", async () => {
     const fakeEl = document.createElement("div");
     const toolbar = document.createElement("div");
@@ -134,7 +156,7 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
     const mainContentRef = ref({ $el: fakeEl });
 
     let toolbarWasCloned = true;
-    const printSpy = vi.spyOn(window, "print").mockImplementation(async () => {
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {
       toolbarWasCloned = Boolean(
         document
           .querySelector("#print-container")

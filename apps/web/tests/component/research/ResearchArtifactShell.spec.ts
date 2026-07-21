@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+
+const SHELL_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../../src/components/research/ResearchArtifactShell.vue"
+  ),
+  "utf8"
+);
 
 const tabs = {
   content: "Report",
@@ -179,5 +189,9 @@ describe("ResearchArtifactShell", () => {
     expect(
       wrapper.find(".research-artifact-shell__narrative-content").classes()
     ).toContain("research-artifact-shell__narrative-content--wide");
+  });
+
+  it("contains rejected roving-focus scheduling", () => {
+    expect(SHELL_SOURCE).toContain("}).catch(() => undefined);");
   });
 });

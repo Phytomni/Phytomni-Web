@@ -102,7 +102,7 @@ describe("useLogView", () => {
   let isSending: Ref<boolean>;
   let currentChatId: Ref<string>;
   let currentChat: Ref<ChatView | null>;
-  let scrollToBottom: ReturnType<typeof vi.fn>;
+  let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
   let getChatState: (id: string) => ChatUIState;
 
   function makeState(): ChatUIState {
@@ -132,7 +132,7 @@ describe("useLogView", () => {
     isSending = ref(false);
     currentChatId = ref("A");
     currentChat = ref({ messages: [] });
-    scrollToBottom = vi.fn();
+    scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
   });
 
   function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {

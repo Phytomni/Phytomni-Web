@@ -202,6 +202,7 @@ describe("ResearchAgentView", () => {
       messageId: null,
     };
     mocks.submit.mockResolvedValue(null);
+    mocks.load.mockResolvedValue([]);
     mocks.getAnswerCheck.mockResolvedValue({ code: 200, data: [] });
     mocks.capabilityLoaded.value = true;
   });
@@ -227,6 +228,15 @@ describe("ResearchAgentView", () => {
     await unavailable.get('[data-test="research-back"]').trigger("click");
     expect(mocks.routerBack).toHaveBeenCalledTimes(2);
     unavailable.unmount();
+  });
+
+  it("contains a rejected capability bootstrap", async () => {
+    mocks.load.mockRejectedValueOnce(new Error("capabilities unavailable"));
+    const wrapper = mountView();
+
+    await Promise.resolve();
+    expect(mocks.load).toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it("uses localized custom validation for empty and oversized questions", async () => {
