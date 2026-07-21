@@ -126,7 +126,7 @@ def test_ci_installs_only_group_owned_dependencies() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
 
     assert text.count("uses: actions/setup-node@v4") == 3
-    assert text.count("node-version: \"20\"") == 3
+    assert text.count("node-version: \"26\"") == 3
     assert text.count("cache: npm") == 3
     assert text.count("cache-dependency-path: apps/web/package-lock.json") == 3
     assert text.count("run: npm ci") == 3

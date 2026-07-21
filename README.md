@@ -15,7 +15,7 @@ tasks.
 
 ### apps/web (frontend)
 
-- Node 20+ and npm
+- Node 26+ and npm
 
 ## Installation & Setup
 

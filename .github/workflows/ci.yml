@@ -32,10 +32,10 @@ jobs:
       - name: Install ripgrep (shared hygiene gate)
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
-      - name: Setup Node 20 (exact static-analysis checker)
+      - name: Setup Node 26 (exact static-analysis checker)
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "26"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
@@ -63,10 +63,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 20 (frontend static tools)
+      - name: Setup Node 26 (frontend static tools)
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "26"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
@@ -85,10 +85,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 20 (frontend runtime tools)
+      - name: Setup Node 26 (frontend runtime tools)
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "26"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
