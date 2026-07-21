@@ -53,6 +53,7 @@
           class="sidebar-nav-row sidebar-primary-action"
           :class="{ 'is-active': activeItem === 'new-chat' }"
           :aria-label="collapsed ? $t('chat.newChat') : undefined"
+          :aria-current="activeItem === 'new-chat' ? 'page' : undefined"
           @click="emit('new-chat')"
         >
           <el-icon>
@@ -519,7 +520,7 @@ const handleHelpCommand = (command: string | number | object) => {
   min-height: var(--phy-control-height-default);
   padding: var(--phy-space-8) var(--phy-space-12);
   border: 0;
-  border-radius: var(--phy-radius-md);
+  border-radius: var(--phy-radius-pill);
   background: transparent;
   color: var(--phy-color-text-secondary);
   font: inherit;
@@ -545,37 +546,16 @@ const handleHelpCommand = (command: string | number | object) => {
     outline-offset: 2px;
   }
 
-  &.is-active:not(.sidebar-primary-action) {
+  &.is-active,
+  &.is-active:hover {
     background-color: var(--phy-color-primary-soft);
     color: var(--phy-color-action-text);
-
-    &::before {
-      position: absolute;
-      inset-block: var(--phy-space-8);
-      inset-inline-start: 0;
-      width: 2px;
-      border-radius: var(--phy-radius-pill);
-      background: var(--phy-color-action-fill);
-      content: "";
-    }
   }
 }
 
 .sidebar-primary-action {
-  min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
-  border-radius: var(--phy-radius-md);
-  background-color: var(--phy-color-action-fill);
-  color: var(--phy-color-on-action);
-
-  &:hover {
-    background-color: var(--phy-color-action-fill-hover);
-    color: var(--phy-color-on-action);
-  }
-
-  &.is-active {
-    background-color: var(--phy-color-action-fill-hover);
-    color: var(--phy-color-on-action);
-  }
+  min-height: var(--phy-control-height-default);
+  font-weight: 600;
 }
 
 .sidebar-utility-row {
@@ -599,11 +579,7 @@ const handleHelpCommand = (command: string | number | object) => {
     min-height: var(--phy-control-height-default);
     padding: 0;
     margin: 0 auto;
-    border-radius: var(--phy-radius-md);
-
-    &.is-active:not(.sidebar-primary-action)::before {
-      inset-block: var(--phy-space-8);
-    }
+    border-radius: var(--phy-radius-pill);
   }
 
   .sidebar-primary-action {

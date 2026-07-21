@@ -116,6 +116,25 @@ describe("ChatSidebarNav", () => {
     expect(wrapper.emitted("toggle-collapse")).toHaveLength(1);
   });
 
+  it("moves one selected state from Start New to Explore Agents", async () => {
+    const wrapper = mountNav({ activeItem: "new-chat" });
+    const newChat = wrapper.get('[data-test="sidebar-nav-new-chat"]');
+    const explore = wrapper.get('[data-test="sidebar-nav-explore-agent"]');
+
+    expect(wrapper.findAll(".sidebar-nav-row.is-active")).toHaveLength(1);
+    expect(newChat.classes()).toContain("is-active");
+    expect(newChat.attributes("aria-current")).toBe("page");
+    expect(explore.classes()).not.toContain("is-active");
+
+    await wrapper.setProps({ activeItem: "explore-agent" });
+
+    expect(wrapper.findAll(".sidebar-nav-row.is-active")).toHaveLength(1);
+    expect(newChat.classes()).not.toContain("is-active");
+    expect(newChat.attributes("aria-current")).toBeUndefined();
+    expect(explore.classes()).toContain("is-active");
+    expect(explore.attributes("aria-current")).toBe("page");
+  });
+
   it("forwards account commands and renders the temporary agent slot", async () => {
     const wrapper = mountNav(
       { showAgentsList: true },
@@ -186,15 +205,26 @@ describe("ChatSidebarNav", () => {
   it("locks the calm sidebar hierarchy to shared theme geometry", () => {
     expect(NAV_SOURCE).toContain("font-size: 20px;");
     expect(NAV_SOURCE).toContain("font-weight: 600;");
-    expect(NAV_SOURCE).toContain(
-      "var(--phy-control-height-default) + var(--phy-space-4)"
-    );
     expect(NAV_SOURCE).toContain("border-radius: var(--phy-radius-md);");
     expect(NAV_SOURCE).not.toContain(
       "min-height: var(--phy-control-height-primary);"
     );
     expect(NAV_SOURCE).not.toContain("border-radius: 50%;");
     expect(NAV_SOURCE).not.toContain("#f56c6c");
+  });
+
+  it("uses one soft pill selection skin for every primary destination", () => {
+    expect(NAV_SOURCE).toContain("border-radius: var(--phy-radius-pill);");
+    expect(NAV_SOURCE).toMatch(
+      /\.sidebar-nav-row\s*\{[\s\S]*?&\.is-active[\s\S]*?background-color:\s*var\(--phy-color-primary-soft\);/
+    );
+    const primaryBlock = NAV_SOURCE.slice(
+      NAV_SOURCE.indexOf(".sidebar-primary-action {"),
+      NAV_SOURCE.indexOf(".sidebar-utility-row {")
+    );
+    expect(primaryBlock).not.toContain("var(--phy-color-action-fill)");
+    expect(primaryBlock).not.toContain("var(--phy-color-on-action)");
+    expect(primaryBlock).not.toContain("::before");
   });
 
   it("keeps secondary destinations as quiet rows without primary styling", () => {
