@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
@@ -205,6 +205,191 @@ def _matched_findings(inventory: Inventory) -> dict[tuple[str, ...], Finding]:
 
 def _entry_linked_tests(entry: Exemption) -> str:
     return ", ".join(f"`{_one_line(test)}`" for test in entry.tests)
+
+
+def _candidate_family(finding: Finding) -> str:
+    """Classify one exact native mechanism without collapsing its identity."""
+
+    target = f"{finding.path} {finding.target}".lower()
+    if finding.tool == "typescript" and finding.rule == "skipLibCheck":
+        return "third-party-declarations"
+    if finding.tool == "eslint" and finding.rule == "vue/multi-word-component-names":
+        return "vue-component-naming"
+    if "3dmol-min.js" in target:
+        return "vendor-bundle-boundary"
+    if finding.tool == "secret-scan" or finding.rule in {
+        "pragma: allowlist secret",
+        "nosec",
+    }:
+        return "secret-marker-fixtures"
+    if finding.tool == "typescript" and finding.rule.startswith("@ts-"):
+        return "compiler-directive-fixtures"
+    if finding.rule in {"exclude", "ignore", "ignore-pattern"} and any(
+        token in target
+        for token in ("dist/", "coverage/", "node_modules/", "generated", "assets/")
+    ):
+        return "generated-output-boundary"
+    return "other-native-mechanism"
+
+
+_CANDIDATE_ALTERNATIVES = {
+    "third-party-declarations": (
+        "Upgrade or replace the conflicting declaration package, or isolate a "
+        "compatible type-check project; rerun the exact skipLibCheck=false probe.",
+        "Keeping the setting hides declaration diagnostics, so a structural decision "
+        "must remain tied to the measured dependency family and tool versions.",
+    ),
+    "vue-component-naming": (
+        "Rename each exact single-word component and update imports/routes/tests, "
+        "or use the rule's narrowest exact allow-list if convention is approved.",
+        "A global disable leaves every future single-word component unreported and "
+        "turns a cosmetic convention into an unbounded lint exception.",
+    ),
+    "vendor-bundle-boundary": (
+        "Remove or replace the vendored bundle, or analyze a bounded compatible "
+        "artifact after proving the parser/resource cost is safe.",
+        "Dropping the boundary can make lint/format execution non-terminating or "
+        "catastrophically expensive; retaining it without a content hash allows drift.",
+    ),
+    "secret-marker-fixtures": (
+        "Generate secret-shaped values in a temporary test directory and keep the "
+        "production-path marker test separate; register only irreducible exact lines.",
+        "Removing a marker without replacing the runtime oracle weakens scanner coverage; "
+        "a broad test-tree allowance would also hide a production marker by scope drift.",
+    ),
+    "compiler-directive-fixtures": (
+        "Use a named invalid-input boundary or a separate compile-contract fixture; "
+        "retain one exact directive only when the rejected-call oracle needs it.",
+        "Widening the public type or using a broad ignore would stop checking the API's "
+        "non-null contract and could make an invalid call look valid.",
+    ),
+    "generated-output-boundary": (
+        "Scope the checker to tracked first-party inputs and parse generated/data files "
+        "without formatting ownership; remove any redundant ignore pattern.",
+        "Removing a needed generated/data boundary can reformat artifacts or feed binary "
+        "content to a parser; retaining a broad pattern hides future first-party files.",
+    ),
+    "other-native-mechanism": (
+        "Replace the mechanism with a narrow typed/configured contract and add a focused "
+        "behavior test before considering any structural authorization.",
+        "A family-level approval would authorize unrelated future findings and obscure "
+        "whether the mechanism is still necessary.",
+    ),
+}
+
+
+def _candidate_note(value: str, *, limit: int = 600) -> str:
+    compact = " ".join(value.split())
+    if len(compact) > limit:
+        compact = compact[: limit - 1] + "…"
+    return _one_line(compact)
+
+
+def render_approval_candidates(
+    inventory: Inventory,
+    *,
+    probe_evidence: Mapping[str, str] | None = None,
+) -> str:
+    """Render every pending exact target for independent human adjudication."""
+
+    entries_by_key = {
+        exemption_key(item.exemption): item.exemption
+        for item in inventory.reconciliation.matched
+    }
+    candidates: list[tuple[Finding, Exemption | None, str]] = []
+    for finding in sorted(inventory.findings, key=_finding_sort_key):
+        entry = entries_by_key.get(exemption_key(finding))
+        if entry is not None and entry.classification is Classification.STRUCTURAL:
+            continue
+        candidates.append((finding, entry, _candidate_family(finding)))
+
+    evidence = probe_evidence or {}
+    lines = [
+        "# Static-analysis structural approval candidates",
+        "",
+        "<!-- Generated from live exact findings. This packet is evidence only. -->",
+        "",
+        "> **Pending human decision** — no record below authorizes a structural "
+        "exception or weakens a gate.",
+        "",
+        f"- Scope: `{_one_line(inventory.scope)}`",
+        f"- Collectors: {', '.join(f'`{_one_line(name)}`' for name in inventory.collectors)}",
+        f"- Exact pending targets: `{len(candidates)}`",
+        "- Every target is enumerated below; family summaries never substitute for an exact identity.",
+        "",
+        "## Exact candidate index",
+        "",
+        "| Candidate ID | Family | Tool | Rule | Path | Fingerprint | Decision |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    if not candidates:
+        lines.append("| *(none)* |  |  |  |  |  |  |")
+    for finding, entry, family in candidates:
+        candidate_id = entry.id if entry is not None else f"candidate-{finding.fingerprint.removeprefix('sha256:')}"
+        lines.append(
+            "| "
+            + " | ".join(
+                (
+                    f"`{_one_line(candidate_id)}`",
+                    f"`{family}`",
+                    f"`{_one_line(finding.tool)}`",
+                    f"`{_one_line(finding.rule)}`",
+                    _entry_link(finding.path, finding.display_line),
+                    f"`{_one_line(finding.fingerprint)}`",
+                    "`Pending human decision`",
+                )
+            )
+            + " |"
+        )
+
+    lines.extend(["", "## Exact decision records", ""])
+    for finding, entry, family in candidates:
+        candidate_id = entry.id if entry is not None else f"candidate-{finding.fingerprint.removeprefix('sha256:')}"
+        alternatives, degradation = _CANDIDATE_ALTERNATIVES[family]
+        expiry = (
+            f"Temporary record expires `{entry.expires_on.isoformat()}`; renewal is not approval."
+            if entry is not None and entry.expires_on is not None
+            else "No retention date is authorized; resolve before any structural approval."
+        )
+        owner = (
+            f"`{_one_line(entry.owner)}` (provisional; authorization still pending)"
+            if entry is not None
+            else "`web-maintainers` (provisional; assign a reviewer before approval)"
+        )
+        tests = (
+            _entry_linked_tests(entry)
+            if entry is not None and entry.tests
+            else "Needs Verification: add a focused owner test before approval"
+        )
+        review = (
+            f"`{entry.review_on.isoformat()}`"
+            if entry is not None
+            else "Needs Verification"
+        )
+        probe = evidence.get(family, "Needs Verification: no measured reverse-probe note supplied.")
+        lines.extend(
+            [
+                f"### `{_one_line(candidate_id)}`",
+                "",
+                "- Decision: **Pending human decision**",
+                f"- Family: `{family}`",
+                f"- Owner: {owner}",
+                f"- Review date: {review}",
+                f"- Native mechanism: `{_one_line(finding.mechanism.value)}`",
+                f"- Target kind: `{_one_line(finding.target_kind.value)}`",
+                f"- Exact path: {_entry_link(finding.path, finding.display_line)}",
+                f"- Exact target: `{_one_line(finding.target)}`",
+                f"- Exact fingerprint: `{_one_line(finding.fingerprint)}`",
+                f"- Tool/version: `{_one_line(finding.tool)} / {_one_line(finding.tool_version)}`",
+                f"- Linked tests: {tests}",
+                f"- Strongest reverse probe: {_candidate_note(probe)}",
+                f"- Reasonable alternatives: {_candidate_note(alternatives)}",
+                f"- Concrete degradation if rejected: {_candidate_note(degradation)}",
+                f"- Retention risk: {_candidate_note(expiry)}",
+                "",
+            ]
+        )
+    return "\n".join(lines)
 
 
 def _entry_target(entry: Exemption) -> str:
@@ -563,5 +748,6 @@ __all__ = [
     "render_json",
     "render_ledger",
     "render_markdown",
+    "render_approval_candidates",
     "render_temporary_candidates",
 ]

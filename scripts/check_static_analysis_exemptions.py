@@ -8,6 +8,7 @@ and never treat an observation report as authorization.
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from datetime import date
@@ -34,6 +35,7 @@ if __package__ in {None, ""}:  # pragma: no cover - direct script execution
     from static_analysis.model import RegistryError, load_registry
     from static_analysis.report import (
         render_json,
+        render_approval_candidates,
         render_ledger,
         render_markdown,
         render_temporary_candidates,
@@ -58,6 +60,7 @@ else:
     from scripts.static_analysis.model import RegistryError, load_registry
     from scripts.static_analysis.report import (
         render_json,
+        render_approval_candidates,
         render_ledger,
         render_markdown,
         render_temporary_candidates,
@@ -194,6 +197,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--remediation-prefix")
     parser.add_argument("--output", type=Path)
     parser.add_argument(
+        "--write-approval-packet",
+        type=Path,
+        help="write an evidence-only exact structural-candidate packet",
+    )
+    parser.add_argument(
+        "--probe-evidence",
+        type=Path,
+        help="JSON object mapping candidate families to measured probe notes",
+    )
+    parser.add_argument(
         "--merge",
         action="store_true",
         help="preserve existing registry records while adding candidates",
@@ -224,19 +237,67 @@ def _expires_on(raw: str | None) -> date:
         raise CollectionError(f"invalid --expires-on value {value!r}") from exc
 
 
+def _probe_evidence(path: Path | None) -> dict[str, str]:
+    if path is None:
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise CollectionError("probe evidence must be valid UTF-8 JSON") from exc
+    if not isinstance(payload, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in payload.items()
+    ):
+        raise CollectionError("probe evidence must be a JSON object of string notes")
+    return {key: value for key, value in payload.items()}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     root = REPO_ROOT.resolve()
     collector_names = tuple(
         dict.fromkeys(
             args.collector
-            or (CANDIDATE_COLLECTORS if args.emit_temporary_candidates else DEFAULT_COLLECTORS)
+            or (
+                CANDIDATE_COLLECTORS
+                if args.emit_temporary_candidates or args.write_approval_packet
+                else DEFAULT_COLLECTORS
+            )
         )
     )
     try:
         today = _today(args.today)
         registry_path = args.registry if args.registry.is_absolute() else root / args.registry
         registry = load_registry(registry_path.resolve(), today=today)
+        if args.write_approval_packet is not None:
+            findings = collect_findings(
+                root,
+                collectors=collector_names,
+                scope=args.scope,
+                range_ref=args.range_ref,
+            )
+            scoped_registry = select_registry_for_collectors(registry, collector_names)
+            reconciliation = reconcile(findings, scoped_registry, today=today)
+            inventory = Inventory(
+                findings=findings,
+                registry=scoped_registry,
+                reconciliation=reconciliation,
+                scope=args.scope,
+                collectors=collector_names,
+            )
+            output_path = (
+                args.write_approval_packet
+                if args.write_approval_packet.is_absolute()
+                else root / args.write_approval_packet
+            )
+            output_path.write_text(
+                render_approval_candidates(
+                    inventory,
+                    probe_evidence=_probe_evidence(args.probe_evidence),
+                ),
+                encoding="utf-8",
+            )
+            return 0
         if args.emit_temporary_candidates:
             if args.output is None:
                 raise CollectionError("--output is required with --emit-temporary-candidates")

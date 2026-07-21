@@ -444,3 +444,37 @@ def test_live_frontend_eslint_semantic_findings_are_zero() -> None:
         for finding in findings
         if finding.rule in semantic_rules
     ] == []
+
+
+def test_write_approval_packet_is_evidence_only_and_uses_probe_notes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "collect_findings", lambda *args, **kwargs: (_finding(),))
+    output = tmp_path / "approval-candidates.md"
+    probes = tmp_path / "probes.json"
+    probes.write_text(
+        '{"other-native-mechanism": "measured probe output"}', encoding="utf-8"
+    )
+
+    result = cli.main(
+        [
+            "--write-approval-packet",
+            str(output),
+            "--probe-evidence",
+            str(probes),
+            "--collector",
+            "source",
+            "--registry",
+            str(FIXTURE_DIR / "valid-empty.toml"),
+            "--today",
+            TODAY,
+        ]
+    )
+
+    assert result == 0
+    document = output.read_text(encoding="utf-8")
+    assert "Pending human decision" in document
+    assert "measured probe output" in document
+    assert _finding().fingerprint in document
+    assert "fixture-secret" not in document

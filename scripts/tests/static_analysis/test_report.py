@@ -19,6 +19,7 @@ from scripts.static_analysis.model import (
     load_registry,
 )
 from scripts.static_analysis.report import (
+    render_approval_candidates,
     render_json,
     render_ledger,
     render_markdown,
@@ -188,3 +189,22 @@ def test_temporary_candidate_toml_is_stable_and_exact() -> None:
     assert 'target = "target"' in rendered
     assert 'fingerprint = "sha256:' in rendered
     assert "classification = \"structural\"" not in rendered
+
+
+def test_approval_packet_enumerates_exact_pending_target_without_source_body() -> None:
+    rendered = render_approval_candidates(
+        _inventory(),
+        probe_evidence={"other-native-mechanism": "measured fixture probe: no authorization"},
+    )
+
+    assert "Pending human decision" in rendered
+    assert "Exact candidate index" in rendered
+    assert "Exact decision records" in rendered
+    assert "apps/web/src/fixture.ts:11" in rendered
+    assert "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" in rendered
+    assert "measured fixture probe: no authorization" in rendered
+    assert "Reasonable alternatives:" in rendered
+    assert "Concrete degradation if rejected:" in rendered
+    assert "Retention risk:" in rendered
+    assert "fixture-secret" not in rendered
+    assert "source body" not in rendered
