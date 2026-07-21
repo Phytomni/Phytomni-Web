@@ -16,6 +16,7 @@ DISPATCHER = ROOT / "scripts" / "run_gate_group.sh"
 FULL_GATE = ROOT / "scripts" / "validate_web_local.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 RUNBOOK = ROOT / "docs" / "deployment" / "upgrading.md"
+PUBLIC_GATE_DOCS = (ROOT / "README.md", ROOT / "CONTRIBUTING.md")
 
 GROUP_ORDER = (
     "hygiene",
@@ -149,6 +150,29 @@ def test_ci_caches_pinned_quality_tools_and_requests_server_race() -> None:
         "\n  contracts:\n", 1
     )[0]
     assert 'PHYTOMNI_RUN_RACE: "1"' in server_runtime
+
+
+def test_public_docs_match_quality_gate_entrypoints() -> None:
+    required_targets = (
+        "make precommit",
+        "make scoped",
+        "make prepush",
+        "make full",
+        "make push",
+    )
+    for path in PUBLIC_GATE_DOCS:
+        text = path.read_text(encoding="utf-8")
+        for target in required_targets:
+            assert target in text, (path, target)
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    assert "PHYTOMNI_SCOPED_GATE=1" in readme
+    assert "PHYTOMNI_SCOPED_GATE=1" in contributing
+    assert "branch-protection" in readme
+    assert "branch-protection" in contributing
+    assert "pre-commit hook runs the same script" not in contributing
+    assert "full G-1 / G0 / G1..G17 gates" not in readme
 
 
 def test_gate_groups_own_enhanced_repository_tools() -> None:

@@ -39,13 +39,30 @@ See the [README](README.md) for ports, the dev proxy, and troubleshooting.
 
 ## The local gate
 
-Run the full gate before pushing. The pre-commit hook runs the same script, so
-a local pass matches CI (`.github/workflows/ci.yml`):
+Use the entrypoint that matches the scope of the change. The full gate remains
+the CI-equivalent release check; staged and range-scoped gates are intended for
+fast local feedback:
 
 ```bash
 ./scripts/install_git_hooks.sh   # first-time: install the pre-commit hook
-./scripts/validate_web_local.sh  # run the full gate manually
+make precommit                    # staged index; used by pre-commit
+make scoped                       # changed range; local iteration
+make prepush                      # changed range; explicit pre-push opt-in
+make full                         # complete repository gate
+make push                         # git push wrapper; hooks still run
 ```
+
+The hooks are fail-closed. `pre-commit` scans staged files for secrets and
+then runs `make precommit`. `pre-push` runs `make full` by default; setting
+`PHYTOMNI_SCOPED_GATE=1` explicitly opts into `make prepush`, and any other
+value is rejected. The direct equivalent of `make full` is
+`./scripts/validate_web_local.sh`.
+
+These local checks cover the repository-owned gates. They do not prove
+external GitHub required checks, branch-protection policy, CODEOWNERS review,
+Bot-owner acceptance, staging/live smoke evidence, or operations sign-off.
+This quality-toolchain work does not modify Bot, operations, or deployment
+code.
 
 `validate_web_local.sh` runs these G-checks (no G8–G10; the numbering is
 historical):

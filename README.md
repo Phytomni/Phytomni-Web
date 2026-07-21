@@ -61,20 +61,35 @@ The dev server proxies `/query`, `/v1`, and the base API to the Go gateway
 
 ### Local pre-commit hooks (recommended)
 
-After cloning, install the pre-commit hooks so every `git commit` runs the
-same gates CI runs:
+After cloning, install the hooks so commits and pushes use the repository's
+fail-closed quality entrypoints:
 
 ```bash
 ./scripts/install_git_hooks.sh
 ```
 
-This sets `core.hooksPath` to `.githooks/`, so the pre-commit hook will run
-`scripts/scan_secrets.py --staged` (catches literal credentials) and the
-full G-1 / G0 / G1..G17 gates from `scripts/validate_web_local.sh`
-(vue-tsc, eslint, vite build, gofmt, go vet, go build, go test, vitest, strict
-i18n, visual contract, A2UI readiness, Bot/Web compatibility, and activation
-evidence)
-before letting the commit land.
+This sets `core.hooksPath` to `.githooks/`. The pre-commit hook runs
+`scripts/scan_secrets.py --staged` (catches literal credentials), then
+`make precommit` over the staged index. The pre-push hook runs `make full` by
+default; set `PHYTOMNI_SCOPED_GATE=1` only when an explicit changed-range
+`make prepush` check is appropriate. Other values are rejected.
+
+The Makefile entrypoints are:
+
+| Command          | Scope                                      |
+| ---------------- | ------------------------------------------ |
+| `make precommit` | staged index (the pre-commit hook)         |
+| `make scoped`    | changed range for local iteration          |
+| `make prepush`   | changed range for explicit pre-push opt-in |
+| `make full`      | complete CI-equivalent repository gate     |
+| `make push`      | `git push` wrapper; hooks still run        |
+
+The full gate covers vue-tsc, eslint, vite build, gofmt, go vet, go build, go
+test, vitest/coverage, strict i18n, visual contract, A2UI readiness, Bot/Web
+compatibility, and activation evidence. Local checks do not prove external
+GitHub required checks, branch-protection policy, CODEOWNERS review, Bot-owner
+acceptance, staging/live smoke evidence, or operations sign-off. This
+quality-toolchain work does not modify Bot, operations, or deployment code.
 
 The hook is opt-in (no auto-install on clone) by design — it keeps a
 bare-clone workflow simple. If you skip it, the `.github/workflows/ci.yml`
