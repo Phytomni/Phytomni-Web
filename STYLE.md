@@ -74,6 +74,19 @@ source comments.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the setup and gate, and the
 [CHANGELOG](CHANGELOG.md) for how commits are grouped into releases.
 
+## Quality-gate and suppression policy
+
+- Use the Makefile entrypoint that matches the scope of the change; the
+  complete gate is `make full`, and the pre-push hook defaults to it.
+- A native mechanism (an inline directive, config exclusion, or tool flag) is
+  not approval. Every live mechanism must have one exact registry and ledger
+  identity; family-wide or directory-wide allowances are not acceptable.
+- Remove a mechanism when doing so is non-degrading. Retain it only when the
+  reverse probe demonstrates a concrete quality, security, correctness, or
+  resource-safety regression and the exact target remains under human review.
+- Coverage is the independent G12 threshold and is unchanged by static-analysis
+  governance. Bot, operations, and deployment code are outside this scope.
+
 ## Change discipline
 
 Prefer the smallest viable change; do not perform unrelated refactors or

@@ -11,6 +11,17 @@ Newest first.
 > with no runtime contract change. "Dark-launched" = code shipped behind a
 > default-OFF flag, byte-identical to prior behavior until an operator flips it.
 
+## [Unreleased]
+
+### 🛡️ Quality gates
+
+- Public guidance now distinguishes staged, changed-range, full, and push
+  entrypoints; the pre-push hook defaults to the complete gate and scoped use is
+  explicit.
+- Static-analysis mechanisms remain exact, target-level records pending human
+  decisions; coverage G12 is unchanged, and Bot, operations, and deployment
+  code remain outside this quality-toolchain scope.
+
 ---
 
 ## [0.1.3] — 2026-07-18

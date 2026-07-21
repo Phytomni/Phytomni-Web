@@ -25,6 +25,7 @@ root [`README.md`](../README.md) for build/run instructions.
 | **Deploy / upgrade production**                     | [`deployment/README.md`](deployment/README.md) — routes by version                   |
 | **Upgrade a `0.1.2` prod to `0.1.3`** (current)     | [`deployment/upgrading.md`](deployment/upgrading.md)                                 |
 | See the full release history                        | [`../CHANGELOG.md`](../CHANGELOG.md)                                                 |
+| Understand repository quality gates                 | [`../README.md`](../README.md) and [`../CONTRIBUTING.md`](../CONTRIBUTING.md)        |
 | Look up a Go API endpoint                           | [`../apps/server/API_DOC.md`](../apps/server/API_DOC.md)                             |
 | Understand the parallel-chat frontend state model   | [`../apps/web/docs/parallel-chat-state.md`](../apps/web/docs/parallel-chat-state.md) |
 | Run / write frontend tests                          | [`../apps/web/tests/README.md`](../apps/web/tests/README.md)                         |
@@ -50,3 +51,7 @@ This repo places docs by **scope**, not by author:
 **Rule of thumb for new docs:** if it spans both subprojects (or is ops-facing),
 put it under `docs/`. If it describes one subproject's internals, co-locate it
 with that subproject.
+
+Quality-gate policy is public contributor guidance in the repository root. Keep
+generated ledgers and local approval packets in their designated working-set
+locations; do not add local governance notes under `docs/development/`.

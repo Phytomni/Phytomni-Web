@@ -175,6 +175,22 @@ def test_public_docs_match_quality_gate_entrypoints() -> None:
     assert "full G-1 / G0 / G1..G17 gates" not in readme
 
 
+def test_quality_policy_docs_preserve_scope_and_no_degradation_contract() -> None:
+    style = (ROOT / "STYLE.md").read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+    assert "native mechanism" in style
+    assert "non-degrading" in style
+    assert "Coverage is the independent G12 threshold" in style
+    assert "Bot, operations, and deployment code are outside this scope" in style
+    assert "Understand repository quality gates" in docs_index
+    assert "do not add local governance notes under `docs/development/`" in docs_index
+    assert "## [Unreleased]" in changelog
+    assert "coverage G12 is unchanged" in changelog
+    assert "Bot, operations, and deployment" in changelog
+
+
 def test_gate_groups_own_enhanced_repository_tools() -> None:
     hygiene = (GATES / "hygiene.sh").read_text(encoding="utf-8")
     server_static = (GATES / "server-static.sh").read_text(encoding="utf-8")
