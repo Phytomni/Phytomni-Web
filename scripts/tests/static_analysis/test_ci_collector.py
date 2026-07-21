@@ -15,8 +15,44 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ci"
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_collects_workflow_and_shell_fallback_suppressions() -> None:
-    findings = collect_ci_suppressions(FIXTURE_DIR)
+def _runtime_fixture_root(tmp_path: Path) -> Path:
+    root = tmp_path / "ci"
+    workflow_dir = root / ".github" / "workflows"
+    script_dir = root / "scripts"
+    workflow_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+    (workflow_dir / "fixture.yml").write_text(
+        "name: fixture\n\n"
+        "jobs:\n"
+        "  lint:\n"
+        "    continue-on-error: true\n"
+        "    steps:\n"
+        '      - run: npm run lint --quiet --max-warnings 20 --ignore-pattern "src/**"\n'
+        '      - run: npm run lint --ignore-pattern ""\n',
+        encoding="utf-8",
+    )
+    (root / "Makefile").write_text(
+        "lint:\n\tnpm run lint --quiet --max-warnings 0\n",
+        encoding="utf-8",
+    )
+    (script_dir / "fixture.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        "npm run lint || true\n"
+        "if ! npm run type-check; then\n"
+        "    exit 1\n"
+        "fi\n"
+        "npm run build || {\n"
+        "    rc=$?\n"
+        '    exit "$rc"\n'
+        "}\n"
+        "# The phrase npm run lint || true in this comment is not a live fallback.\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_collects_workflow_and_shell_fallback_suppressions(tmp_path: Path) -> None:
+    findings = collect_ci_suppressions(_runtime_fixture_root(tmp_path))
     rules = {finding.rule for finding in findings}
 
     assert "continue-on-error" in rules
@@ -36,8 +72,10 @@ def test_collects_workflow_and_shell_fallback_suppressions() -> None:
     assert "|| true" in fallback.message
 
 
-def test_explicit_return_code_branches_are_not_fallback_success() -> None:
-    findings = collect_ci_suppressions(FIXTURE_DIR)
+def test_explicit_return_code_branches_are_not_fallback_success(
+    tmp_path: Path,
+) -> None:
+    findings = collect_ci_suppressions(_runtime_fixture_root(tmp_path))
     messages = [finding.message for finding in findings]
 
     assert any("npm run lint || true" in message for message in messages)

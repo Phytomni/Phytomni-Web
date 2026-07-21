@@ -1,2 +1,2 @@
 lint:
-	npm run lint --quiet --max-warnings 0
+	npm run lint

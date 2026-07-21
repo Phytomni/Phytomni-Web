@@ -2,7 +2,5 @@ name: fixture
 
 jobs:
   lint:
-    continue-on-error: true
     steps:
-      - run: npm run lint --quiet --max-warnings 20 --ignore-pattern "src/**"
-      - run: npm run lint --ignore-pattern ""
+      - run: npm run lint

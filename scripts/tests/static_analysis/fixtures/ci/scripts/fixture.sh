@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-npm run lint || true
+npm run lint
 if ! npm run type-check; then
     exit 1
 fi
