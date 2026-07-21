@@ -558,7 +558,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	} else if chatModel, isChat := rxBot.ChatModelFor(slug); isChat {
 		req := rxBot.ChatCompletionRequest{
 			Model:      chatModel,
-			Messages:   []rxBot.ChatMessage{{Role: "user", Content: in.Query}},
+			Messages:   chatMessagesForRequest(in.History, in.Query),
 			DialogueID: dialogueID,
 		}
 		if len(obsPaths) > 0 {
@@ -778,8 +778,31 @@ func parseHistory(s string) []rxBot.ChatMessage {
 		return nil
 	}
 	var msgs []rxBot.ChatMessage
-	_ = json.Unmarshal([]byte(s), &msgs)
-	return msgs
+	if json.Unmarshal([]byte(s), &msgs) != nil {
+		return nil
+	}
+	const (
+		maxMessages     = 20
+		maxContentBytes = 32 * 1024
+	)
+	clean := make([]rxBot.ChatMessage, 0, len(msgs))
+	for _, msg := range msgs {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		content := strings.TrimSpace(msg.Content)
+		if (role != "user" && role != "assistant") || content == "" || len(content) > maxContentBytes {
+			continue
+		}
+		clean = append(clean, rxBot.ChatMessage{Role: role, Content: content})
+	}
+	if len(clean) > maxMessages {
+		clean = clean[len(clean)-maxMessages:]
+	}
+	return clean
+}
+
+func chatMessagesForRequest(history, query string) []rxBot.ChatMessage {
+	messages := parseHistory(history)
+	return append(messages, rxBot.ChatMessage{Role: "user", Content: query})
 }
 
 const botProjectionApplyAttempts = 3
@@ -1117,7 +1140,7 @@ func (ps *Service) QueryStream(
 
 	req := rxBot.ChatCompletionRequest{
 		Model:      chatModel,
-		Messages:   []rxBot.ChatMessage{{Role: "user", Content: in.Query}},
+		Messages:   chatMessagesForRequest(in.History, in.Query),
 		DialogueID: dialogueID,
 	}
 	if len(obsPaths) > 0 {
