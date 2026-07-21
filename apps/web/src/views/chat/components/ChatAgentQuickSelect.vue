@@ -76,8 +76,7 @@ const { t } = useI18n();
   font-size: 0.8125rem;
   line-height: 1.3;
   cursor: pointer;
-  transition:
-    border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+  transition: border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
     background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
     color var(--phy-motion-fast) var(--phy-motion-ease-out);
 }

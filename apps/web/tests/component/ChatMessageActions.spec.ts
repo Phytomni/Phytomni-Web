@@ -411,9 +411,7 @@ describe("ChatMessageActions", () => {
     // Analyst log mounts only when deriveAnalystLogRowId(message) is a valid
     // positive-decimal id; its existing boundary remains independent.
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\) handleReaction/);
-    expect(INDEX_SOURCE).toMatch(
-      /if \(message\.id\)\s*getFileDownUrl/
-    );
+    expect(INDEX_SOURCE).toMatch(/if \(message\.id\)\s*getFileDownUrl/);
     expect(INDEX_SOURCE).toMatch(
       /AnalystAgent[\s\S]*!!deriveAnalystLogRowId\(message\)/
     );

@@ -1,13 +1,13 @@
 # Development quality-toolchain approval packet
 
-Status: **Task 60 runners approved; Task 68 gate activation verified locally, pending commit and remote CI** (2026-07-21).
+Status: **Task 60 runners and Task 68 gate activation committed locally; remote CI pending** (2026-07-21).
 
 This packet evaluates the tools proposed for the repository-level quality gate
 and records the implementation boundary approved by the human reviewer. The
 approval covers four checksum-pinned official binaries on Linux amd64; Task 68
 now wires them into the local gates, hooks, scoped path, and CI jobs without
-changing dependency manifests. The activation is verified locally but remains
-uncommitted and has not yet received a remote GitHub Actions run.
+changing dependency manifests. The activation is verified locally and committed,
+but has not yet received a remote GitHub Actions run.
 
 ## Decision summary
 
@@ -43,8 +43,8 @@ parser does not understand GitHub Actions expressions or action metadata.
 - The rejected module-install path `GOTOOLCHAIN=auto go install ...` is retained
   in this record as a supply-chain risk; approved runners use release binaries.
 - The human approval recorded below authorizes Task 60's four pinned runners;
-  Task 68 records the separately approved activation boundary. Commit, push,
-  and remote CI execution remain explicit follow-up actions.
+  Task 68 records the separately approved activation boundary. Push and remote
+  CI execution remain explicit follow-up actions.
 
 ## Tool records
 
@@ -228,7 +228,8 @@ The human reviewer approved Task 60 on 2026-07-21 with the following scope:
 
 This approval allowed implementation and local verification of the runners.
 Task 68 activates CI, hooks, and repository gates through the checked-in
-scripts, while this worktree intentionally remains uncommitted and unpushed.
+scripts. The activation is committed locally but remains unpushed pending the
+explicit release handoff.
 Non-Linux assets, CI-image evidence, the remote workflow run, and cold/warm
 timing remain follow-up verification items.
 

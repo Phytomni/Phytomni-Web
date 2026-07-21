@@ -15,9 +15,7 @@ describe("canonical agent option ownership", () => {
   it("uses the canonical localized key for picker labels", () => {
     const [chatAgent] = derivePickerOptions(["ChatAgent"]);
 
-    expect(chatAgent.labelKey).toBe(
-      CANONICAL_AGENT_LABEL_I18N_KEYS.ChatAgent
-    );
+    expect(chatAgent.labelKey).toBe(CANONICAL_AGENT_LABEL_I18N_KEYS.ChatAgent);
     expect(derivePickerOptions(["UnknownAgent"])).toEqual([]);
   });
 

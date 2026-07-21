@@ -43,6 +43,12 @@ jobs:
         working-directory: apps/web
         run: npm ci
 
+      - name: Cache pinned quality tools
+        uses: actions/cache@v4
+        with:
+          path: .cache/phytomni
+          key: phytomni-web-quality-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/*_runner.sh', 'scripts/quality_runner_common.sh') }}
+
       - name: Run shared hygiene gate
         run: ./scripts/run_gate_group.sh hygiene
 
@@ -107,6 +113,12 @@ jobs:
           go-version: "1.23"
           cache-dependency-path: apps/server/go.sum
 
+      - name: Cache pinned quality tools
+        uses: actions/cache@v4
+        with:
+          path: .cache/phytomni
+          key: phytomni-web-quality-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/*_runner.sh', 'scripts/quality_runner_common.sh') }}
+
       - name: Run shared server static gate
         run: ./scripts/run_gate_group.sh server-static
 
@@ -114,6 +126,8 @@ jobs:
     name: server-runtime
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    env:
+      PHYTOMNI_RUN_RACE: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -134,6 +148,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cache pinned quality tools
+        uses: actions/cache@v4
+        with:
+          path: .cache/phytomni
+          key: phytomni-web-quality-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/*_runner.sh', 'scripts/quality_runner_common.sh') }}
 
       - name: Run shared contract gate
         run: ./scripts/run_gate_group.sh contracts

@@ -264,9 +264,7 @@ describe("ChatComposer", () => {
 
     const populated = mountComposer({ hasMessages: true });
     expect(populated.find(".el-dropdown").text()).toContain("Chat Agent");
-    expect(populated.find(".el-dropdown").text()).toContain(
-      "Knowledge Agent"
-    );
+    expect(populated.find(".el-dropdown").text()).toContain("Knowledge Agent");
   });
 
   it("emits submit from MentionSender and the enabled primary action", async () => {

@@ -193,9 +193,14 @@ def test_installer_is_idempotent_and_sets_all_required_modes(tmp_path: Path) -> 
     (scripts / "install_git_hooks.sh").chmod(0o755)
     for name in (
         "scan_secrets.py",
+        "check_repository_files.py",
         "scoped_gate.sh",
         "run_gate_group.sh",
         "validate_web_local.sh",
+        "staticcheck_runner.sh",
+        "shellcheck_runner.sh",
+        "shfmt_runner.sh",
+        "actionlint_runner.sh",
     ):
         _write_executable(scripts / name, "#!/usr/bin/env sh\nexit 0\n")
 
@@ -227,3 +232,16 @@ def test_installer_is_idempotent_and_sets_all_required_modes(tmp_path: Path) -> 
     ):
         assert path.stat().st_mode & stat.S_IXUSR
     assert "PHYTOMNI_SCOPED_GATE=1" in second.stdout
+
+
+def test_installer_covers_all_pinned_repository_quality_entrypoints() -> None:
+    text = INSTALLER.read_text(encoding="utf-8")
+
+    for name in (
+        "check_repository_files.py",
+        "staticcheck_runner.sh",
+        "shellcheck_runner.sh",
+        "shfmt_runner.sh",
+        "actionlint_runner.sh",
+    ):
+        assert name in text

@@ -32,9 +32,7 @@ const mountQuickSelect = (props: Record<string, unknown> = {}) =>
 describe("ChatAgentQuickSelect", () => {
   it("renders only supplied authorized options in order", () => {
     const wrapper = mountQuickSelect();
-    const buttons = wrapper.findAll(
-      '[data-testid="chat-agent-quick-option"]'
-    );
+    const buttons = wrapper.findAll('[data-testid="chat-agent-quick-option"]');
     expect(buttons).toHaveLength(2);
     expect(buttons.map((button) => button.text())).toEqual([
       "Chat Agent",
@@ -44,9 +42,7 @@ describe("ChatAgentQuickSelect", () => {
 
   it("marks the selected tool and emits a toggle for the clicked tool", async () => {
     const wrapper = mountQuickSelect({ selectedAgent: "DeepGenomeAgent" });
-    const buttons = wrapper.findAll(
-      '[data-testid="chat-agent-quick-option"]'
-    );
+    const buttons = wrapper.findAll('[data-testid="chat-agent-quick-option"]');
     expect(buttons[0].attributes("aria-pressed")).toBe("false");
     expect(buttons[1].attributes("aria-pressed")).toBe("true");
 

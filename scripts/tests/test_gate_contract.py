@@ -139,6 +139,37 @@ def test_ci_installs_only_group_owned_dependencies() -> None:
     assert text.count("sudo apt-get install -y ripgrep") == 1
 
 
+def test_ci_caches_pinned_quality_tools_and_requests_server_race() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert text.count("uses: actions/cache@v4") == 3
+    assert text.count("path: .cache/phytomni") == 3
+    assert "hashFiles('scripts/*_runner.sh', 'scripts/quality_runner_common.sh')" in text
+    server_runtime = text.split("\n  server-runtime:\n", 1)[1].split(
+        "\n  contracts:\n", 1
+    )[0]
+    assert 'PHYTOMNI_RUN_RACE: "1"' in server_runtime
+
+
+def test_gate_groups_own_enhanced_repository_tools() -> None:
+    hygiene = (GATES / "hygiene.sh").read_text(encoding="utf-8")
+    server_static = (GATES / "server-static.sh").read_text(encoding="utf-8")
+    server_runtime = (GATES / "server-runtime.sh").read_text(encoding="utf-8")
+    contracts = (GATES / "contracts.sh").read_text(encoding="utf-8")
+
+    assert "scripts/shellcheck_runner.sh" in hygiene
+    assert "scripts/shfmt_runner.sh" in hygiene
+    assert "python3 scripts/check_repository_files.py --check --scope full" in hygiene
+    assert "python3 scripts/scan_secrets.py --all" in hygiene
+    assert "python3 scripts/scan_secrets.py --range" in hygiene
+    assert "go mod verify" in server_static
+    assert "scripts/staticcheck_runner.sh" in server_static
+    assert "-f json ./..." in server_static
+    assert "go test ./..." in server_runtime
+    assert "go test -race ./..." in server_runtime
+    assert "scripts/actionlint_runner.sh" in contracts
+
+
 def test_every_gate_reaches_the_fail_closed_checker_through_one_helper() -> None:
     gate_text = {
         group: (GATES / f"{group}.sh").read_text(encoding="utf-8")

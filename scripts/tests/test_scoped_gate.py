@@ -55,6 +55,14 @@ def _init_repo(tmp_path: Path) -> Path:
     common_copy.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(COMMON_GATE, common_copy)
     common_copy.chmod(0o755)
+    _write(repo, "scripts/scan_secrets.py", "raise SystemExit(0)\n")
+    _write(repo, "scripts/check_repository_files.py", "raise SystemExit(0)\n")
+    for runner in (
+        "shellcheck_runner.sh",
+        "shfmt_runner.sh",
+        "actionlint_runner.sh",
+    ):
+        _executable(repo / "scripts" / runner, "#!/usr/bin/env bash\nexit 0\n")
     _executable(
         repo / "scripts" / "run_gate_group.sh",
         "#!/usr/bin/env bash\n"
@@ -129,6 +137,29 @@ def test_scope_partitioning_is_nul_safe_and_has_no_fallback_success() -> None:
     assert 'for path in "${changed_paths[@]}"' in text
     assert "eval " not in text
     assert "|| true" not in text
+
+
+def test_scoped_gate_owns_file_tools_and_commit_range_secret_scan() -> None:
+    text = SCOPED_GATE.read_text(encoding="utf-8")
+
+    assert "PHYTOMNI_HYGIENE_SCOPE=changed" in text
+    assert "scripts/check_repository_files.py" in text
+    assert "scripts/shellcheck_runner.sh" in text
+    assert "scripts/shfmt_runner.sh" in text
+    assert "scripts/actionlint_runner.sh" in text
+    assert "scripts/scan_secrets.py --range" in text
+
+
+def test_concurrency_go_changes_run_affected_package_race(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path)
+    fake_bin = _install_command_stubs(repo, "gofmt", "go")
+    _write(repo, "apps/server/cron/task.go")
+    _run_git(repo, "add", "-A")
+
+    result = _run_gate(repo, "precommit", extra_path=fake_bin)
+
+    assert result.returncode == 0, result.stderr
+    assert b"go\0test\0-race\0./cron\0" in _log(repo)
 
 
 def test_rejects_unknown_mode(tmp_path: Path) -> None:
