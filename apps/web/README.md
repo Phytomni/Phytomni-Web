@@ -60,6 +60,7 @@ An intelligent chat system that supports parallel handling of multiple conversat
 ## Features
 
 ### Conversation independence
+
 - Each conversation has its own independent state management
 - Supports parallel handling of multiple conversations
 - Each conversation maintains its own:
@@ -72,12 +73,14 @@ An intelligent chat system that supports parallel handling of multiple conversat
   - Refresh state (`refreshingMessages`)
 
 ### Parallel processing
+
 - Can send messages in multiple conversations at the same time
 - Each conversation's loading state is independent of the others
 - Supports fast switching between conversations
 - Preserves the full context of each conversation
 
 ### State management
+
 - Uses the `chatStates` object to manage all conversation state
 - Gets or creates conversation state via the `getChatState()` function
 - Uses computed properties for reactive state binding
@@ -86,19 +89,25 @@ An intelligent chat system that supports parallel handling of multiple conversat
 ## Implementation
 
 ### Core architecture
+
 ```typescript
 // Conversation state management
-const chatStates = ref<Record<string, {
-  isSending: boolean;
-  messageInput: string;
-  fileList: UploadFile[];
-  historyQuestion: any;
-  copyVisible: number;
-  copyTimeRef: number | undefined;
-  logData: Record<string, any>;
-  loadingLog: Record<string, boolean>;
-  refreshingMessages: Record<string, boolean>;
-}>>({});
+const chatStates = ref<
+  Record<
+    string,
+    {
+      isSending: boolean;
+      messageInput: string;
+      fileList: UploadFile[];
+      historyQuestion: any;
+      copyVisible: number;
+      copyTimeRef: number | undefined;
+      logData: Record<string, any>;
+      loadingLog: Record<string, boolean>;
+      refreshingMessages: Record<string, boolean>;
+    }
+  >
+>({});
 
 // Get or create conversation state
 const getChatState = (dialogueId: string) => {
@@ -112,17 +121,18 @@ const getChatState = (dialogueId: string) => {
 ```
 
 ### Reactive state binding
+
 ```typescript
 // Input content — based on the current conversation
 const messageInput = computed({
   get: () => {
-    if (!currentChatId.value) return '';
+    if (!currentChatId.value) return "";
     return getChatState(currentChatId.value).messageInput;
   },
   set: (value: string) => {
     if (!currentChatId.value) return;
     getChatState(currentChatId.value).messageInput = value;
-  }
+  },
 });
 ```
 

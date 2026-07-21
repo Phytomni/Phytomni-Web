@@ -65,11 +65,11 @@ source comments.
 | Emoji | Category | Use for                                      |
 | ----- | -------- | -------------------------------------------- |
 | ✨    | `Add`    | New capability                               |
-| 🐛    | `Fix`    | Bug fix                                       |
-| 📝    | `Docs`   | Documentation                                 |
-| 🧪    | `Tests`  | Test-only changes                             |
-| ♻️    | `Reorg`  | Behavior-preserving rename/move/refactor      |
-| 🎨    | `Style`  | Formatting / re-wrap with no behavior change  |
+| 🐛    | `Fix`    | Bug fix                                      |
+| 📝    | `Docs`   | Documentation                                |
+| 🧪    | `Tests`  | Test-only changes                            |
+| ♻️    | `Reorg`  | Behavior-preserving rename/move/refactor     |
+| 🎨    | `Style`  | Formatting / re-wrap with no behavior change |
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the setup and gate, and the
 [CHANGELOG](CHANGELOG.md) for how commits are grouped into releases.

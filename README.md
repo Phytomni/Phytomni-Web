@@ -9,10 +9,12 @@ tasks.
 ## Prerequisites
 
 ### apps/server (Go API gateway)
+
 - Go 1.23+ installed
 - Port 8080 available
 
 ### apps/web (frontend)
+
 - Node 20+ and npm
 
 ## Installation & Setup
@@ -46,10 +48,10 @@ The dev server proxies `/query`, `/v1`, and the base API to the Go gateway
 
 ## Port Configuration
 
-| Service         | Port   | Description                                  |
-| :-------------- | :----- | :------------------------------------------- |
-| Go API gateway  | 8080   | Auth, users, history, gene data, `/query`    |
-| Vite dev server | varies | Frontend (`VITE_PORT`)                       |
+| Service         | Port   | Description                               |
+| :-------------- | :----- | :---------------------------------------- |
+| Go API gateway  | 8080   | Auth, users, history, gene data, `/query` |
+| Vite dev server | varies | Frontend (`VITE_PORT`)                    |
 
 ## Development
 

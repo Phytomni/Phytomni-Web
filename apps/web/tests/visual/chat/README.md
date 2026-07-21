@@ -22,7 +22,7 @@ Unknown state/locale/theme render a fixture error and make evidence invalid —
 there is no silent default.
 
 Harness evidence label: `fixture_source=tests/visual/chat`  
-Authenticated evidence label: `fixture_source=authenticated-route`  
+Authenticated evidence label: `fixture_source=authenticated-route`
 
 Never label harness captures end-to-end. jsdom/Vitest never substitutes for the
 browser geometry check below.
@@ -71,17 +71,17 @@ is already exact `Synthetic user`.
 
 ## Chat home canonical viewports
 
-| Category | CSS viewport | Review identity |
-|---|---:|---|
-| Compact phone | `320x568` | iPhone SE / older Android lower bound |
-| Modern phone | `390x844` | current iPhone / Android |
-| Large phone or small tablet | `480x800` | unfolded phone / small tablet |
-| Tablet | `768x1024` | iPad-class portrait |
-| Small desktop | `1024x768` | compact laptop lower bound |
-| Mainstream laptop | `1366x768` | office notebook |
-| Desktop | `1440x900` | standard external display |
-| Large desktop | `1920x1080` | full-HD monitor |
-| 4K at 150% scaling | `2560x1440` | user's 3840x2160 physical setup expressed in CSS pixels |
+| Category                    | CSS viewport | Review identity                                         |
+| --------------------------- | -----------: | ------------------------------------------------------- |
+| Compact phone               |    `320x568` | iPhone SE / older Android lower bound                   |
+| Modern phone                |    `390x844` | current iPhone / Android                                |
+| Large phone or small tablet |    `480x800` | unfolded phone / small tablet                           |
+| Tablet                      |   `768x1024` | iPad-class portrait                                     |
+| Small desktop               |   `1024x768` | compact laptop lower bound                              |
+| Mainstream laptop           |   `1366x768` | office notebook                                         |
+| Desktop                     |   `1440x900` | standard external display                               |
+| Large desktop               |  `1920x1080` | full-HD monitor                                         |
+| 4K at 150% scaling          |  `2560x1440` | user's 3840x2160 physical setup expressed in CSS pixels |
 
 The synthetic home matrix is exact:
 
@@ -263,18 +263,18 @@ primary-action visibility, viewport escape, and last-message clearance.
 
 Required viewport pairs (plus the four canonical viewports above):
 
-| Viewport | Route / fixture | Expectation |
-|---|---|---|
-| `599x900` | auth `/chat` + harness when transient | mobile: closed trigger visible; open drawer primary visible |
-| `600x900` | auth `/chat` + harness when transient | same as 599 (still `< 900`) |
-| `899x900` | auth `/chat` + harness when transient | mobile boundary below 900 |
-| `900x900` | auth `/chat` + harness when transient | compact desktop; primary action visible |
-| `1279x900` | auth `/chat` + harness when transient | compact desktop; primary action visible |
-| `1280x900` | auth `/chat` + harness when transient | expanded desktop; primary action visible |
-| `1440x900` | canonical | desktop |
-| `1024x768` | canonical | compact |
-| `768x1024` | canonical | mobile pair (closed + open) |
-| `390x844` | canonical | mobile pair (closed + open) |
+| Viewport   | Route / fixture                       | Expectation                                                 |
+| ---------- | ------------------------------------- | ----------------------------------------------------------- |
+| `599x900`  | auth `/chat` + harness when transient | mobile: closed trigger visible; open drawer primary visible |
+| `600x900`  | auth `/chat` + harness when transient | same as 599 (still `< 900`)                                 |
+| `899x900`  | auth `/chat` + harness when transient | mobile boundary below 900                                   |
+| `900x900`  | auth `/chat` + harness when transient | compact desktop; primary action visible                     |
+| `1279x900` | auth `/chat` + harness when transient | compact desktop; primary action visible                     |
+| `1280x900` | auth `/chat` + harness when transient | expanded desktop; primary action visible                    |
+| `1440x900` | canonical                             | desktop                                                     |
+| `1024x768` | canonical                             | compact                                                     |
+| `768x1024` | canonical                             | mobile pair (closed + open)                                 |
+| `390x844`  | canonical                             | mobile pair (closed + open)                                 |
 
 Every PASS row must prove:
 
@@ -308,30 +308,30 @@ Record one row per capture. Geometry PASS requires saved measurement JSON plus
 `assert-geometry.js` exit 0; Blocked/Not Captured leave the wave FAIL (never a
 waiver).
 
-| viewport | locale | theme | state | fixture_source | geometry | identity_redaction | screenshot | notes |
-|---|---|---|---|---|---|---|---|---|
-| 599x900 | en-US | light | empty | authenticated-route / tests/visual/chat | PASS / FAIL / Blocked / Not Captured | dom-only / not-needed-synthetic | path or — | |
-| 600x900 | … | … | … | … | … | … | … | |
-| 899x900 | … | … | … | … | … | … | … | |
-| 900x900 | … | … | … | … | … | … | … | |
-| 1279x900 | … | … | … | … | … | … | … | |
-| 1280x900 | … | … | … | … | … | … | … | |
-| 1440x900 | … | … | … | … | … | … | … | |
-| 1024x768 | … | … | … | … | … | … | … | |
-| 768x1024 | … | … | sidebar-mobile-closed / open | … | … | … | … | pair required |
-| 390x844 | … | … | sidebar-mobile-closed / open | … | … | … | … | pair required |
+| viewport | locale | theme | state                        | fixture_source                          | geometry                             | identity_redaction              | screenshot | notes         |
+| -------- | ------ | ----- | ---------------------------- | --------------------------------------- | ------------------------------------ | ------------------------------- | ---------- | ------------- |
+| 599x900  | en-US  | light | empty                        | authenticated-route / tests/visual/chat | PASS / FAIL / Blocked / Not Captured | dom-only / not-needed-synthetic | path or —  |               |
+| 600x900  | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 899x900  | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 900x900  | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 1279x900 | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 1280x900 | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 1440x900 | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 1024x768 | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 768x1024 | …      | …     | sidebar-mobile-closed / open | …                                       | …                                    | …                               | …          | pair required |
+| 390x844  | …      | …     | sidebar-mobile-closed / open | …                                       | …                                    | …                               | …          | pair required |
 
 Manual assistive / zoom / touch rows (human):
 
-| check | result | notes |
-|---|---|---|
-| 200% zoom | PASS / FAIL / Not Captured | |
-| prefers-reduced-motion | PASS / FAIL / Not Captured | |
-| forced colors | PASS / FAIL / Not Captured | |
-| keyboard-only operation | PASS / FAIL / Not Captured | |
-| screen-reader announcements | PASS / FAIL / Not Captured | |
-| touch actions | PASS / FAIL / Not Captured | |
-| mobile soft-keyboard safe area | PASS / FAIL / Not Captured | |
+| check                          | result                     | notes |
+| ------------------------------ | -------------------------- | ----- |
+| 200% zoom                      | PASS / FAIL / Not Captured |       |
+| prefers-reduced-motion         | PASS / FAIL / Not Captured |       |
+| forced colors                  | PASS / FAIL / Not Captured |       |
+| keyboard-only operation        | PASS / FAIL / Not Captured |       |
+| screen-reader announcements    | PASS / FAIL / Not Captured |       |
+| touch actions                  | PASS / FAIL / Not Captured |       |
+| mobile soft-keyboard safe area | PASS / FAIL / Not Captured |       |
 
 When Vite/Go/Bot are unavailable, mark live geometry and authenticated rows
 `Blocked: services unavailable` / `Not Captured`. Do not invent PASS.

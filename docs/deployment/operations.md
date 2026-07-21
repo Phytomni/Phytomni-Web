@@ -150,7 +150,7 @@ Two windows, matching the staged §6:
    still-running Python service (reverse whichever method §6 step 2 used —
    nginx upstream or slot swap). Instantly restored — no git changes, no
    redeploy. This is exactly why §6 keeps Python standing until after smoke
-   + soak.
+   - soak.
 2. **After the production decommission:** the in-repo Python service was
    already removed in the cutover commit (in `main` history), so restore it
    with `git revert` of that commit, redeploy it, repoint `/query` at the

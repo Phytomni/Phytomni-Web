@@ -11,10 +11,10 @@ policy. It intentionally does **not** duplicate the [README](README.md)
 A polyglot monorepo with **two independently-runnable subprojects** and no
 top-level build. Always `cd` into the subproject first.
 
-| Path          | Stack                                        | Role                                   |
-| ------------- | -------------------------------------------- | -------------------------------------- |
-| `apps/web/`   | Vue 3 + Vite + TypeScript + Element Plus     | Frontend SPA                           |
-| `apps/server/`| Go 1.23 + Gin + GORM (MySQL) + Viper         | Business API + chat relay to Bot       |
+| Path           | Stack                                    | Role                             |
+| -------------- | ---------------------------------------- | -------------------------------- |
+| `apps/web/`    | Vue 3 + Vite + TypeScript + Element Plus | Frontend SPA                     |
+| `apps/server/` | Go 1.23 + Gin + GORM (MySQL) + Viper     | Business API + chat relay to Bot |
 
 ## Setup
 
@@ -50,26 +50,26 @@ a local pass matches CI (`.github/workflows/ci.yml`):
 `validate_web_local.sh` runs these G-checks (no G8–G10; the numbering is
 historical):
 
-| Check  | What it enforces                                             |
-| ------ | ----------------------------------------------------------- |
-| `G-1`  | staged/unstaged secret scan                                 |
-| `G0`   | `git diff` whitespace check                                 |
-| `G-0`  | exact static-analysis registry and ledger reconciliation   |
-| `G1`   | `apps/web` TypeScript diagnostics through exact reconciliation |
+| Check  | What it enforces                                                       |
+| ------ | ---------------------------------------------------------------------- |
+| `G-1`  | staged/unstaged secret scan                                            |
+| `G0`   | `git diff` whitespace check                                            |
+| `G-0`  | exact static-analysis registry and ledger reconciliation               |
+| `G1`   | `apps/web` TypeScript diagnostics through exact reconciliation         |
 | `G2`   | `apps/web` ESLint diagnostics through exact reconciliation (read-only) |
-| `G3`   | `apps/web` vite build                                       |
-| `G4`   | `apps/server` `go mod tidy`                                 |
-| `G5`   | `apps/server` `gofmt -l` (must be empty)                    |
-| `G6`   | `apps/server` `go vet`                                      |
-| `G7`   | `apps/server` `go build`                                    |
-| `G7.5` | `apps/server` `go test ./...`                               |
-| `G11`  | `apps/web` `SET_LOGIN_STATUS` invariant                     |
-| `G12`  | `apps/web` vitest run + coverage threshold                  |
-| `G13`  | i18n hardcoded-copy scanner (strict mode)                   |
-| `G14`  | frontend visual contract and modality evidence              |
-| `G15`  | A2UI activation-readiness contract                          |
-| `G16`  | Bot/Web compatibility contract                              |
-| `G17`  | activation evidence and external-acceptance boundary        |
+| `G3`   | `apps/web` vite build                                                  |
+| `G4`   | `apps/server` `go mod tidy`                                            |
+| `G5`   | `apps/server` `gofmt -l` (must be empty)                               |
+| `G6`   | `apps/server` `go vet`                                                 |
+| `G7`   | `apps/server` `go build`                                               |
+| `G7.5` | `apps/server` `go test ./...`                                          |
+| `G11`  | `apps/web` `SET_LOGIN_STATUS` invariant                                |
+| `G12`  | `apps/web` vitest run + coverage threshold                             |
+| `G13`  | i18n hardcoded-copy scanner (strict mode)                              |
+| `G14`  | frontend visual contract and modality evidence                         |
+| `G15`  | A2UI activation-readiness contract                                     |
+| `G16`  | Bot/Web compatibility contract                                         |
+| `G17`  | activation evidence and external-acceptance boundary                   |
 
 > **Frontend lint commands are explicit:** `npm run lint` performs the exact
 > read-only ESLint reconciliation; `npm run lint:raw` emits diagnostic JSON only;

@@ -40,17 +40,17 @@ grant permission to change Phytomni-Bot or production operations code.
 
 ## 1. What changed vs `0.1.2`
 
-| Area | `0.1.2` | `0.1.3` | Operator action |
-|---|---|---|---|
-| Bot run identity | Legacy/task-compatible identity | Umbrella `run_id` stored as `bot_run_id` | Apply the additive projection migration before new traffic (§4.2) |
-| Bot reports | Legacy answer/status columns | Sanitized revisioned projection with CAS persistence | Apply projection columns and index; keep legacy columns (§4.2) |
-| History | Legacy Web rows | Projection-first read with legacy fallback; dual-read is optional | Keep `history_dual_read=false` until external evidence (§8.4) |
-| A2UI actions | No production action uplink | Typed, owner-scoped action relay | Keep `bot.a2ui_actions_enabled=false`; enable only after acceptance (§8.1) |
-| Remote product surfaces | Core Web agents only | Research, Design, and Network compatibility surfaces | Keep each remote flag false until resolver/attachment/permission evidence (§8.2) |
-| Interop | No browser-facing capability discovery | Allowlisted capability/provenance discovery | Keep `bot.interop_enabled=false` until security and external review (§8.3) |
-| Expert and AG-UI streaming | Dark in `0.1.2` | Compatibility and lifecycle hardening | Keep both flags false unless their existing acceptance rows are complete |
-| Frontend | Existing chat/workspace experience | Responsive, visual, accessibility, localization, and legal convergence | Deploy the matching Web frontend with the Go service |
-| Local release evidence | G13 baseline | G13, G14 visual, G15 A2UI, G16 compatibility, G17 activation evidence | Record local output; do not treat it as external acceptance |
+| Area                       | `0.1.2`                                | `0.1.3`                                                                | Operator action                                                                  |
+| -------------------------- | -------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Bot run identity           | Legacy/task-compatible identity        | Umbrella `run_id` stored as `bot_run_id`                               | Apply the additive projection migration before new traffic (§4.2)                |
+| Bot reports                | Legacy answer/status columns           | Sanitized revisioned projection with CAS persistence                   | Apply projection columns and index; keep legacy columns (§4.2)                   |
+| History                    | Legacy Web rows                        | Projection-first read with legacy fallback; dual-read is optional      | Keep `history_dual_read=false` until external evidence (§8.4)                    |
+| A2UI actions               | No production action uplink            | Typed, owner-scoped action relay                                       | Keep `bot.a2ui_actions_enabled=false`; enable only after acceptance (§8.1)       |
+| Remote product surfaces    | Core Web agents only                   | Research, Design, and Network compatibility surfaces                   | Keep each remote flag false until resolver/attachment/permission evidence (§8.2) |
+| Interop                    | No browser-facing capability discovery | Allowlisted capability/provenance discovery                            | Keep `bot.interop_enabled=false` until security and external review (§8.3)       |
+| Expert and AG-UI streaming | Dark in `0.1.2`                        | Compatibility and lifecycle hardening                                  | Keep both flags false unless their existing acceptance rows are complete         |
+| Frontend                   | Existing chat/workspace experience     | Responsive, visual, accessibility, localization, and legal convergence | Deploy the matching Web frontend with the Go service                             |
+| Local release evidence     | G13 baseline                           | G13, G14 visual, G15 A2UI, G16 compatibility, G17 activation evidence  | Record local output; do not treat it as external acceptance                      |
 
 The release is additive when every new flag remains false. Existing blocking
 chat, legacy history, ownership checks, and rollback columns remain available.

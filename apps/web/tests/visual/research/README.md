@@ -21,17 +21,17 @@ lane for responsive Artifact geometry and copy review.
 The capture matrix uses one representative viewport per device category. The
 boundary smoke set additionally checks the edges where a category changes.
 
-| Category | CSS viewport | Device scale factor | Expected physical capture |
-| --- | ---: | ---: | ---: |
-| Compact phone | 320×568 | 1 | 320×568 |
-| Modern phone | 390×844 | 1 | 390×844 |
-| Large phone / small tablet | 480×900 | 1 | 480×900 |
-| Tablet / small desktop | 768×1024 | 1 | 768×1024 |
-| Notebook | 1024×768 | 1 | 1024×768 |
-| Notebook upper bound | 1366×768 | 1 | 1366×768 |
-| Desktop display | 1440×900 | 1 | 1440×900 |
-| Desktop upper bound | 1920×1080 | 1 | 1920×1080 |
-| Ultra-wide / 4K at 150% OS scaling | 2560×1440 | 1.5 | 3840×2160 |
+| Category                           | CSS viewport | Device scale factor | Expected physical capture |
+| ---------------------------------- | -----------: | ------------------: | ------------------------: |
+| Compact phone                      |      320×568 |                   1 |                   320×568 |
+| Modern phone                       |      390×844 |                   1 |                   390×844 |
+| Large phone / small tablet         |      480×900 |                   1 |                   480×900 |
+| Tablet / small desktop             |     768×1024 |                   1 |                  768×1024 |
+| Notebook                           |     1024×768 |                   1 |                  1024×768 |
+| Notebook upper bound               |     1366×768 |                   1 |                  1366×768 |
+| Desktop display                    |     1440×900 |                   1 |                  1440×900 |
+| Desktop upper bound                |    1920×1080 |                   1 |                 1920×1080 |
+| Ultra-wide / 4K at 150% OS scaling |    2560×1440 |                 1.5 |                 3840×2160 |
 
 The 4K case uses the CSS-equivalent viewport for a 3840×2160 display at 150%
 scaling. Capture names encode the CSS viewport, locale, and theme; the 4K

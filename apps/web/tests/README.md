@@ -27,6 +27,7 @@ The current `vitest.config.ts` `coverage.include` lists 3 fully-tested files: `s
 `src/api/chat.ts` has a spec file and runs (covering `getReactionType`), but is **not in coverage.include** — the file contains ~35 thin axios wrappers, and full coverage would force writing 30+ repetitive assertion templates. Once the reaction/collect test family grows (after TW-D10 / TW-D8 land), promote chat.ts into include.
 
 **Ramp plan:**
+
 - When adding new tests: if the new tests fully cover a new source file, expand `coverage.include` (list the newly covered files in the PR description)
 - Trigger condition for promoting chat.ts into include: reaction / collect / chat lifecycle test family reaches ≥ 5 cases
 - After 5-8 batches, try switching to `src/utils/**` full glob, keep thresholds at 80%

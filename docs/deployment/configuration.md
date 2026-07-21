@@ -1,7 +1,7 @@
 # Configuration reference (`app.yml` + environment)
 
 **Evergreen — describes the config surface as of the current release (`0.1.3`).**
-This is the single source of truth for *what every key does*. The per-release
+This is the single source of truth for _what every key does_. The per-release
 [`upgrading.md`](upgrading.md) and the archived cutover manuals under
 [`history/`](history/) reference this file instead of re-documenting keys — when a
 release adds or changes a key, update it **here**.
@@ -12,13 +12,13 @@ Secrets are placeholders — substitute real values out-of-band on the server.
 
 ## Target topology & ports
 
-| Component | Port | Role |
-|---|---|---|
-| nginx | `:443` (TLS) | TLS termination + reverse proxy by path + serves the SPA |
-| Go service (`phytomni-server`) | `:8080` | `/api/v1/*` + retained alias `/query/analyst/update_log`. Sole MySQL writer |
-| Bot | `:8000` (internal) | Go relays chat here; deployed by the Bot team |
-| MySQL | `:3306` | `phytomni` database |
-| Redis | `:6379` | Token revocation + rate limit + OBS listing cache (all fail-open) |
+| Component                      | Port               | Role                                                                        |
+| ------------------------------ | ------------------ | --------------------------------------------------------------------------- |
+| nginx                          | `:443` (TLS)       | TLS termination + reverse proxy by path + serves the SPA                    |
+| Go service (`phytomni-server`) | `:8080`            | `/api/v1/*` + retained alias `/query/analyst/update_log`. Sole MySQL writer |
+| Bot                            | `:8000` (internal) | Go relays chat here; deployed by the Bot team                               |
+| MySQL                          | `:3306`            | `phytomni` database                                                         |
+| Redis                          | `:6379`            | Token revocation + rate limit + OBS listing cache (all fail-open)           |
 
 ## Secret injection from the environment (optional)
 
@@ -27,11 +27,11 @@ Three secrets can be injected from the environment instead of `app.yml`, for
 `app.yml` value wins** — leaving the environment untouched (or setting an empty
 string) keeps file-based config. Only a **non-empty** env value overrides the file.
 
-| Env var | Overrides | Mechanism |
-|---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | explicit non-empty `os.Getenv` |
-| `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
-| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
+| Env var                   | Overrides                       | Mechanism                      |
+| ------------------------- | ------------------------------- | ------------------------------ |
+| `PHYTOMNI_JWT_SECRET`     | `jwt.secret_key`                | explicit non-empty `os.Getenv` |
+| `PHYTOMNI_DB_DSN`         | the `db.<key>.dsn`              | explicit `os.Getenv`           |
+| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv`           |
 
 ## `app.yml` blocks
 
@@ -39,7 +39,7 @@ string) keeps file-based config. Only a **non-empty** env value overrides the fi
 
 ```yaml
 db:
-  phytomni-server:                       # connection-registry key (must match)
+  phytomni-server: # connection-registry key (must match)
     dialect: mysql
     dsn: "<DB_USER>:<DB_PASSWORD>@tcp(<PROD_DB_HOST>:3306)/phytomni?charset=utf8mb4&parseTime=True&loc=Local"
 ```
@@ -51,7 +51,7 @@ The `phytomni` database and its unprefixed-plural tables must exist before boot
 
 ```yaml
 jwt:
-  secret_key: "<JWT_SECRET>"           # e.g. openssl rand -hex 32
+  secret_key: "<JWT_SECRET>" # e.g. openssl rand -hex 32
 ```
 
 Verification is pinned to HS256 (`0.1.3`). Keep the secret stable across
@@ -61,12 +61,12 @@ deploys so issued tokens stay valid. Overridable via `PHYTOMNI_JWT_SECRET`.
 
 ```yaml
 redis:
-  enabled: true                # default true = secure path; false ⇒ all Redis features fail-open
+  enabled: true # default true = secure path; false ⇒ all Redis features fail-open
   clients:
     web:
       addrs: ["<REDIS_HOST>:6379"]
       db: 0
-      password: <REDIS_PASSWORD>   # empty if none; overridable via PHYTOMNI_REDIS_PASSWORD
+      password: <REDIS_PASSWORD> # empty if none; overridable via PHYTOMNI_REDIS_PASSWORD
       type: single-node
       # pool_size: 0             # 0 = go-redis default (10 * CPU cores)
       # min_idle_conns: 0        # 0 = go-redis default
@@ -81,10 +81,10 @@ boot or auth. `/readyz` reports Redis status + the fail-open count.
 
 ```yaml
 ratelimit:
-  enabled: false               # master switch; default OFF (dark launch)
-  login:    { limit: 60, window: 60s }    # per-IP on /auth/sessions
-  register: { limit: 10, window: 1h  }    # per-IP on /auth/registrations
-  query:    { limit: 30, window: 60s }    # per-user on /query
+  enabled: false # master switch; default OFF (dark launch)
+  login: { limit: 60, window: 60s } # per-IP on /auth/sessions
+  register: { limit: 10, window: 1h } # per-IP on /auth/registrations
+  query: { limit: 30, window: 60s } # per-user on /query
 ```
 
 Leave `false` for zero behavior change. Redis down ⇒ always allow (auth never
@@ -106,7 +106,7 @@ non-empty results). Set `false` to bypass without affecting revocation/ratelimit
 
 ```yaml
 chatlimit:
-  enforce: false               # ON ⇒ self-registered users (chat_limit=0) blocked from /query
+  enforce: false # ON ⇒ self-registered users (chat_limit=0) blocked from /query
 ```
 
 `false` = everyone can chat. Flip `true` only when the invitation-quota model is
@@ -118,21 +118,21 @@ active. Bypass for `admin`/`super_admin`/`vip_user`; fail-open on DB error.
 ```yaml
 bot:
   base_url: "http://<BOT_HOST>:8000"
-  user_api_key: "<PTM_WEB_KEY>"          # mint/rotate per operations.md §1–3
-  timeout_seconds: 900                   # MUST exceed the slowest SYNC agent (chat ~140s / knowledge ~198s / review >300s)
+  user_api_key: "<PTM_WEB_KEY>" # mint/rotate per operations.md §1–3
+  timeout_seconds: 900 # MUST exceed the slowest SYNC agent (chat ~140s / knowledge ~198s / review >300s)
   proxy_enabled: true
   key_audit_redact: true
-  expert_enabled: false                  # dark-launch: Expert routing (operations.md §11.1)
-  stream_enabled: false                  # dark-launch: AG-UI SSE streaming (operations.md §11.2)
-  a2ui_actions_enabled: false            # dark-launch: A2UI action relay; owner/run checks stay dormant
-  interop_enabled: false                 # dark-launch: sanitized capability/provenance discovery
-  research_enabled: false                # dark-launch: remote Research product surface
-  design_enabled: false                  # dark-launch: remote Design product surface
-  network_enabled: false                 # dark-launch: remote Network product surface
-  history_dual_read: false               # observation path; legacy/projection fallback remains primary
-  max_upload_file_bytes: 26214400        # 25 MiB per file (matches Bot /v1/files 413)
+  expert_enabled: false # dark-launch: Expert routing (operations.md §11.1)
+  stream_enabled: false # dark-launch: AG-UI SSE streaming (operations.md §11.2)
+  a2ui_actions_enabled: false # dark-launch: A2UI action relay; owner/run checks stay dormant
+  interop_enabled: false # dark-launch: sanitized capability/provenance discovery
+  research_enabled: false # dark-launch: remote Research product surface
+  design_enabled: false # dark-launch: remote Design product surface
+  network_enabled: false # dark-launch: remote Network product surface
+  history_dual_read: false # observation path; legacy/projection fallback remains primary
+  max_upload_file_bytes: 26214400 # 25 MiB per file (matches Bot /v1/files 413)
   max_upload_file_count: 10
-  max_upload_total_bytes: 52428800       # 50 MiB per request
+  max_upload_total_bytes: 52428800 # 50 MiB per request
 ```
 
 The `ptm_<web>` key must carry the `agents` and `relay:obs` scopes; the Bot must
@@ -155,7 +155,7 @@ until the RC-WEB-007 and RC-LIVE-001 acceptance rows are complete.
 ### `gene_obsfs_path` — gene-example serving
 
 ```yaml
-gene_obsfs_path: ""   # obsfs FUSE mount root; empty ⇒ Bot relay fallback
+gene_obsfs_path: "" # obsfs FUSE mount root; empty ⇒ Bot relay fallback
 ```
 
 Set to the mount root (e.g. `/obs/<bucket>/.../gene-examples`) to serve gene

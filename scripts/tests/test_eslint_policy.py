@@ -68,6 +68,228 @@ def test_parser_project_is_scoped_to_typescript_and_vue_files() -> None:
     assert "tsconfigRootDir: __dirname" in text
 
 
+def test_handled_promise_rule_is_strictly_scoped_for_bootstrap_auth_batch() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    assert '"@typescript-eslint/no-floating-promises": [' in text
+    assert '"error",' in text
+    assert "{ ignoreVoid: false }" in text
+    assert "ignoreVoid: true" not in text
+    for path in (
+        "src/main.ts",
+        "src/utils/request.ts",
+        "src/layout/index.vue",
+        "src/views/change-password/index.vue",
+        "src/views/error/401.vue",
+        "src/views/forgot-password/index.vue",
+        "src/views/login/index.vue",
+        "src/views/register/index.vue",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_handled_promise_rule_is_strictly_scoped_for_research_surfaces_batch() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    for path in (
+        "src/components/DeepGenomeResultViewer.vue",
+        "src/components/research/BotArtifactList.vue",
+        "src/components/research/DeepGenomeArtifact.vue",
+        "src/components/research/ResearchArtifactShell.vue",
+        "src/components/shell/PhyAdaptiveShell.vue",
+        "src/components/shell/PhyAdaptiveSidebar.vue",
+        "src/composables/useDeepGenomeToc.ts",
+        "src/views/digital-design-agent/index.vue",
+        "src/views/gene-network-agent/index.vue",
+        "src/views/research-agent/index.vue",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_handled_promise_rule_is_strictly_scoped_for_data_admin_batch() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    for path in (
+        "src/views/admin-management/index.vue",
+        "src/views/favorites/index.vue",
+        "src/views/gene-display/detail.vue",
+        "src/views/gene-display/index.vue",
+        "src/views/global-config/index.vue",
+        "src/views/help/index.vue",
+        "src/views/history/index.vue",
+        "src/views/profile/index.vue",
+        "src/views/task-manager/index.vue",
+        "src/views/user-list/index.vue",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_handled_promise_rule_is_strictly_scoped_for_chat_composable_batch() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    for path in (
+        "src/views/chat/composables/useAgentImages.ts",
+        "src/views/chat/composables/useChatHistoryActions.ts",
+        "src/views/chat/composables/useComposer.ts",
+        "src/views/chat/composables/useCopyDownload.ts",
+        "src/views/chat/composables/useFileUpload.ts",
+        "src/views/chat/composables/useLogView.ts",
+        "src/views/chat/composables/useReactions.ts",
+        "src/views/chat/composables/useRefreshMessage.ts",
+        "src/views/chat/composables/useSelectChat.ts",
+        "src/views/chat/composables/useSendMessage.ts",
+        "src/views/chat/composables/useSidebarNavigation.ts",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_await_thenable_rule_is_scoped_to_characterized_async_contracts() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    assert '"@typescript-eslint/await-thenable": "error"' in text
+    for path in (
+        "src/composables/useDeepGenomeDownloads.ts",
+        "src/views/chat/composables/useRefreshMessage.ts",
+        "src/views/chat/composables/useSelectChat.ts",
+        "src/views/chat/composables/useSendMessage.ts",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_misused_promises_rule_is_scoped_to_callback_contract_batch() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    assert '"@typescript-eslint/no-misused-promises": [' in text
+    assert "checksConditionals: true" in text
+    assert "checksSpreads: true" in text
+    assert "checksVoidReturn: true" in text
+    for path in (
+        "src/components/research/ResearchEvidencePanel.vue",
+        "src/layout/index.vue",
+        "src/views/change-password/index.vue",
+        "src/views/chat/index.vue",
+        "src/views/chat/composables/useComposer.ts",
+        "src/views/chat/composables/useFileUpload.ts",
+        "src/views/chat/composables/useLogView.ts",
+        "src/views/chat/composables/useReactions.ts",
+        "src/views/profile/index.vue",
+        "tests/unit/composables/useDeepGenomeDownloads.spec.ts",
+        "tests/visual/chat/main.ts",
+        "tests/visual/research/main.ts",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_unsafe_boundary_rules_are_scoped_to_batch_56a() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    assert '"@typescript-eslint/no-unsafe-assignment": "error"' in text
+    assert '"@typescript-eslint/no-unsafe-member-access": "error"' in text
+    for path in (
+        "src/permission.ts",
+        "src/stores/app.ts",
+        "src/stores/theme.ts",
+        "src/stores/user.ts",
+        "src/utils/auth.ts",
+        "src/utils/index.ts",
+        "src/utils/markdown-inline.ts",
+        "src/utils/request.ts",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_unsafe_boundary_rules_are_scoped_to_batch_56b() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    assert '"@typescript-eslint/no-unsafe-assignment": "error"' in text
+    assert '"@typescript-eslint/no-unsafe-member-access": "error"' in text
+    for path in (
+        "src/composables/useDeepGenomeDownloads.ts",
+        "src/views/change-password/index.vue",
+        "src/views/chat/composables/useBotCapabilities.ts",
+        "src/views/chat/composables/useCopyDownload.ts",
+        "src/views/chat/composables/useRefreshMessage.ts",
+        "src/views/chat/composables/useSelectChat.ts",
+        "src/views/chat/composables/useSendMessage.ts",
+        "src/views/chat/streaming/a2uiParse.ts",
+        "src/views/feedback/index.vue",
+        "src/views/gene-display/detail.vue",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_unsafe_propagation_rules_are_scoped_to_characterized_production_owners() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    for rule in (
+        '"@typescript-eslint/no-unsafe-call": "error"',
+        '"@typescript-eslint/no-unsafe-argument": "error"',
+        '"@typescript-eslint/no-unsafe-return": "error"',
+    ):
+        assert rule in text
+    for path in (
+        "src/components/MarkdownViewer.vue",
+        "src/composables/useDeepGenomeDownloads.ts",
+        "src/utils/index.ts",
+        "src/utils/request.ts",
+        "src/utils/sanitize-markup.ts",
+        "src/views/chat/botProjection.ts",
+        "src/views/research-agent/index.vue",
+    ):
+        assert f'"{path}"' in text
+
+
+def test_final_frontend_lint_policy_is_strict_and_zero_warning() -> None:
+    package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
+    lint_raw = package["scripts"]["lint:raw"]
+    assert "--max-warnings 0" in lint_raw
+    assert "--format json" in lint_raw
+
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+    for rule in (
+        "@typescript-eslint/no-explicit-any",
+        "@typescript-eslint/no-non-null-assertion",
+        "@typescript-eslint/no-unused-vars",
+        "@typescript-eslint/no-floating-promises",
+        "@typescript-eslint/no-misused-promises",
+        "@typescript-eslint/await-thenable",
+        "@typescript-eslint/no-unsafe-assignment",
+        "@typescript-eslint/no-unsafe-member-access",
+        "@typescript-eslint/no-unsafe-call",
+        "@typescript-eslint/no-unsafe-argument",
+        "@typescript-eslint/no-unsafe-return",
+    ):
+        assert f'"{rule}"' in text
+        assert f'"{rule}": "off"' not in text
+
+    result = subprocess.run(
+        [
+            "node",
+            str(BRIDGE),
+            "--root",
+            str(WEB_ROOT),
+            "--rule",
+            "@typescript-eslint/no-explicit-any=error",
+            "--rule",
+            "@typescript-eslint/no-non-null-assertion=error",
+            "--rule",
+            "@typescript-eslint/no-unused-vars=error",
+            "--file",
+            "src/utils/request.ts",
+            "--file",
+            "src/utils/sanitize-markup.ts",
+            "--file",
+            "src/views/chat/botProjection.ts",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["findings"] == []
+
+
 def test_inventory_rejects_a_file_outside_the_project_root() -> None:
     result = subprocess.run(
         ["node", str(BRIDGE), "--root", str(WEB_ROOT), "--file", "../outside.ts"],

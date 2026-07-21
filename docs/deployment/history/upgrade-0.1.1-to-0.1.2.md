@@ -3,7 +3,7 @@
 **This is the only document ops needs to upgrade a production already on `0.1.1`.**
 It is self-contained: every step, SQL statement, config key, smoke check, and
 rollback is here. You do **not** need to read the `repo-reorg` manual (that one
-records how production *reached* `0.1.1`, and is now historical).
+records how production _reached_ `0.1.1`, and is now historical).
 
 > **Are you on `0.1.1`?** Confirm the running stack has: `apps/`-layout binary
 > `phytomni-server` on `:8080`, the `phytomni` MySQL database with unprefixed
@@ -16,7 +16,7 @@ records how production *reached* `0.1.1`, and is now historical).
 `0.1.1`, it needs **no database/table rename and no port move**. Everything is
 **additive or dark-launched** — with no operator action beyond the deploy, the
 runtime behavior is byte-identical to `0.1.1`. There is exactly **one required
-data migration** (the permission-key rename, §3.1) and it must ship *with* the
+data migration** (the permission-key rename, §3.1) and it must ship _with_ the
 frontend or the admin UI breaks. Full commit-level detail:
 [`CHANGELOG.md`](../../CHANGELOG.md) under `0.1.2`.
 
@@ -31,6 +31,7 @@ frontend or the admin UI breaks. Full commit-level detail:
   `0.1.2`.
 
 **Contents.**
+
 1. [What changed](#1-what-changed-vs-011)
 2. [Configuration surface](#2-configuration-surface-appyml--env)
 3. [Operator actions (DB + coordination)](#3-operator-actions-db--coordination)
@@ -43,20 +44,20 @@ frontend or the admin UI breaks. Full commit-level detail:
 
 ## 1. What changed vs `0.1.1`
 
-| Area | `0.1.1` | `0.1.2` | Operator action |
-|---|---|---|---|
-| Permission-gate identifiers | `tool_names` rows hold Chinese labels | Frontend matches **English** identifiers | **REQUIRED** — 8-row `UPDATE`, ship with frontend (§3.1) |
-| Expert chat mode | not present | Selector + `mode` column, **dark** (`bot.expert_enabled=false`) | Optional — column + flag only when enabling (§3.2) |
-| Chat streaming | blocking only | AG-UI SSE spine, **dark** (`bot.stream_enabled=false`) | None at deploy; gated flip later (§7) |
-| Secrets | in `app.yml` | may inject `PHYTOMNI_JWT_SECRET` / `_DB_DSN` / `_REDIS_PASSWORD` from env | Optional (§2) |
-| Redis pool | go-redis defaults | `pool_size` / `min_idle_conns` tunable | Optional (§2) |
-| Gene-example serving | Bot relay | obsfs FUSE mount (`gene_obsfs_path`) + new public image route | None if `gene_obsfs_path` already set; else relay fallback (§2) |
-| Server-task HTTP surface | present (unused) | **removed** | Ops drops the nginx `/v1/nky/server/` block on next window |
-| Email download link | live | returns **410 Gone** (authed relay intact) | None — verify in smoke |
-| Cron reconcilers | plain | panic-recovery + overlap-guard; admin `cron-entries` endpoint | None |
-| JWT verification | HS256 | HS256 **pinned** (alg-confusion blocked) | None — existing tokens still valid |
-| Auth revocation reads | two Redis calls | pipelined into one round-trip | None — fail-open unchanged |
-| i18n | partial | backend messages + templates routed through i18n; G13 gate | None |
+| Area                        | `0.1.1`                               | `0.1.2`                                                                   | Operator action                                                 |
+| --------------------------- | ------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Permission-gate identifiers | `tool_names` rows hold Chinese labels | Frontend matches **English** identifiers                                  | **REQUIRED** — 8-row `UPDATE`, ship with frontend (§3.1)        |
+| Expert chat mode            | not present                           | Selector + `mode` column, **dark** (`bot.expert_enabled=false`)           | Optional — column + flag only when enabling (§3.2)              |
+| Chat streaming              | blocking only                         | AG-UI SSE spine, **dark** (`bot.stream_enabled=false`)                    | None at deploy; gated flip later (§7)                           |
+| Secrets                     | in `app.yml`                          | may inject `PHYTOMNI_JWT_SECRET` / `_DB_DSN` / `_REDIS_PASSWORD` from env | Optional (§2)                                                   |
+| Redis pool                  | go-redis defaults                     | `pool_size` / `min_idle_conns` tunable                                    | Optional (§2)                                                   |
+| Gene-example serving        | Bot relay                             | obsfs FUSE mount (`gene_obsfs_path`) + new public image route             | None if `gene_obsfs_path` already set; else relay fallback (§2) |
+| Server-task HTTP surface    | present (unused)                      | **removed**                                                               | Ops drops the nginx `/v1/nky/server/` block on next window      |
+| Email download link         | live                                  | returns **410 Gone** (authed relay intact)                                | None — verify in smoke                                          |
+| Cron reconcilers            | plain                                 | panic-recovery + overlap-guard; admin `cron-entries` endpoint             | None                                                            |
+| JWT verification            | HS256                                 | HS256 **pinned** (alg-confusion blocked)                                  | None — existing tokens still valid                              |
+| Auth revocation reads       | two Redis calls                       | pipelined into one round-trip                                             | None — fail-open unchanged                                      |
+| i18n                        | partial                               | backend messages + templates routed through i18n; G13 gate                | None                                                            |
 
 None of the "None" rows change runtime behavior at deploy — they are code-internal
 or dark-launched. The only rows that gate the deploy are §3.1 (required) and, if
@@ -69,17 +70,17 @@ you choose to turn Expert on, §3.2.
 All new keys are **defaulted safe** — an unchanged `0.1.1` `app.yml` boots `0.1.2`
 with identical behavior. The full current-state reference for **every** key is
 [`configuration.md`](configuration.md); this section covers only the `0.1.2`
-*additions*.
+_additions_.
 
 ### 2.1 Environment-variable secret injection (optional)
 
 Three secrets may be injected from the environment instead of `app.yml`:
 
-| Env var | Overrides | Mechanism |
-|---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | explicit non-empty `os.Getenv` |
-| `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
-| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
+| Env var                   | Overrides                       | Mechanism                      |
+| ------------------------- | ------------------------------- | ------------------------------ |
+| `PHYTOMNI_JWT_SECRET`     | `jwt.secret_key`                | explicit non-empty `os.Getenv` |
+| `PHYTOMNI_DB_DSN`         | the `db.<key>.dsn`              | explicit `os.Getenv`           |
+| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv`           |
 
 **Unset or empty ⇒ the `app.yml` value wins ⇒ behavior byte-identical.** Set these
 only to a non-empty value when keeping secrets out of the file. An empty
@@ -100,7 +101,7 @@ Leave unset (or `0`) for the go-redis defaults — no behavior change.
 ### 2.3 `gene_obsfs_path` (verify)
 
 ```yaml
-gene_obsfs_path: ""   # obsfs FUSE mount root for gene-example data; empty ⇒ Bot relay fallback
+gene_obsfs_path: "" # obsfs FUSE mount root for gene-example data; empty ⇒ Bot relay fallback
 ```
 
 If your `0.1.1` config already sets this (the obsfs migration predates `0.1.2`
@@ -112,8 +113,8 @@ Bot relay (unchanged behavior). Set it to the mount root (e.g.
 
 ```yaml
 bot:
-  expert_enabled: false    # Expert routing mode — see §3.2 / §7.1
-  stream_enabled: false    # AG-UI SSE streaming — see §7.2
+  expert_enabled: false # Expert routing mode — see §3.2 / §7.1
+  stream_enabled: false # AG-UI SSE streaming — see §7.2
 ```
 
 Both default `false`. Keep them off for the `0.1.2` deploy — flipping them is a
@@ -195,7 +196,7 @@ require §3.1 in the same window).
 > **Order note.** §3.1 and the frontend deploy belong in the **same window**.
 > Applying the `UPDATE` a little early is safe (the old frontend sends Chinese
 > identifiers, which still match until you swap `dist`); the failure mode is
-> deploying the new `dist` *without* the `UPDATE`.
+> deploying the new `dist` _without_ the `UPDATE`.
 
 ---
 
@@ -261,6 +262,7 @@ Order: (1) Bot serves `POST /v1/query/route`; (2) add the `mode` column (§3.2);
 
 Order: (1) Bot ships real-answer persistence; (2) flip `bot.stream_enabled=true`
 **and** the frontend `VITE_STREAM_ENABLED` in lockstep; (3) smoke a streamed chat
-+ reload to confirm the persisted answer survives. Rollback = flip both flags back
-(instant; the blocking path is unchanged underneath). Streaming is Instant×chat
-only — Expert and analyst/deep_genome async stay non-streaming.
+
+- reload to confirm the persisted answer survives. Rollback = flip both flags back
+  (instant; the blocking path is unchanged underneath). Streaming is Instant×chat
+  only — Expert and analyst/deep_genome async stay non-streaming.

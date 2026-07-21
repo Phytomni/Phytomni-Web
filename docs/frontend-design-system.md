@@ -20,16 +20,16 @@ the authority when this document and the code disagree.
 
 ## Source of truth
 
-| Concern | Source | Rule |
-|---|---|---|
-| Semantic colors, geometry, type, motion, and layer order | `apps/web/src/styles/tokens.css` | Add or change a token before adding a repeated literal. |
-| Global focus, reduced motion, and forced colors | `apps/web/src/assets/main.css` | Preserve visible `:focus-visible`; never use a global outline reset. |
-| Element Plus theme bridge | `tokens.css` plus the root `el-config-provider` in `App.vue` | `app.use(ElementPlus)` has no boot-time locale. |
-| Locale UI copy | `apps/web/src/locales/langs/{en-US,zh-CN}.ts` | Keep keys in parity; Chinese belongs in `zh-CN.ts`. |
-| Full legal prose | `apps/web/src/legal/*.md` | Do not move legal bodies into locale packs. |
-| Route/layout ownership | `apps/web/src/router/index.ts` and route archetype tests | Update the owner test when adding a routed component. |
-| Frontend test gate | `scripts/validate_web_local.sh` | Run the repository gate before handoff. |
-| Visual contract gate | `scripts/check_brand_colors.py` | Keep the scanner narrow; do not add whole-file exceptions. |
+| Concern                                                  | Source                                                       | Rule                                                                 |
+| -------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Semantic colors, geometry, type, motion, and layer order | `apps/web/src/styles/tokens.css`                             | Add or change a token before adding a repeated literal.              |
+| Global focus, reduced motion, and forced colors          | `apps/web/src/assets/main.css`                               | Preserve visible `:focus-visible`; never use a global outline reset. |
+| Element Plus theme bridge                                | `tokens.css` plus the root `el-config-provider` in `App.vue` | `app.use(ElementPlus)` has no boot-time locale.                      |
+| Locale UI copy                                           | `apps/web/src/locales/langs/{en-US,zh-CN}.ts`                | Keep keys in parity; Chinese belongs in `zh-CN.ts`.                  |
+| Full legal prose                                         | `apps/web/src/legal/*.md`                                    | Do not move legal bodies into locale packs.                          |
+| Route/layout ownership                                   | `apps/web/src/router/index.ts` and route archetype tests     | Update the owner test when adding a routed component.                |
+| Frontend test gate                                       | `scripts/validate_web_local.sh`                              | Run the repository gate before handoff.                              |
+| Visual contract gate                                     | `scripts/check_brand_colors.py`                              | Keep the scanner narrow; do not add whole-file exceptions.           |
 
 ## Token contract
 
@@ -37,23 +37,23 @@ The values below are the review-facing contract. The complete token set,
 including compatibility aliases and Element Plus bridges, is in
 `apps/web/src/styles/tokens.css`.
 
-| Role | Light | Dark |
-|---|---|---|
-| Page background | `#f7f9fc` | `#101815` |
-| Elevated surface | `#ffffff` | `#17221d` |
-| Sidebar surface | `#f5f7fa` | `#121d19` |
-| Primary text | `#14201b` | `#f2f7f4` |
-| Secondary text | `#5b6b63` | `#b7c5be` |
-| Muted text | `#65736b` | `#9aaba2` |
-| Control border | `#6f7d75` | `#71857a` |
-| Action fill | `#2f6fd4` | `#2f6fd4` |
+| Role              | Light     | Dark      |
+| ----------------- | --------- | --------- |
+| Page background   | `#f7f9fc` | `#101815` |
+| Elevated surface  | `#ffffff` | `#17221d` |
+| Sidebar surface   | `#f5f7fa` | `#121d19` |
+| Primary text      | `#14201b` | `#f2f7f4` |
+| Secondary text    | `#5b6b63` | `#b7c5be` |
+| Muted text        | `#65736b` | `#9aaba2` |
+| Control border    | `#6f7d75` | `#71857a` |
+| Action fill       | `#2f6fd4` | `#2f6fd4` |
 | Action fill hover | `#255eb8` | `#255eb8` |
 | Action text/focus | `#2f6fd4` | `#8cb8ff` |
-| Brand blue | `#3a83f7` | `#3a83f7` |
-| Accent green | `#14644a` | `#2b7a59` |
-| Accent text | `#14644a` | `#7fd0ae` |
-| User bubble | `#eaf6f1` | `#17352a` |
-| Assistant bubble | `#eaf2fe` | `#182d49` |
+| Brand blue        | `#3a83f7` | `#3a83f7` |
+| Accent green      | `#14644a` | `#2b7a59` |
+| Accent text       | `#14644a` | `#7fd0ae` |
+| User bubble       | `#eaf6f1` | `#17352a` |
+| Assistant bubble  | `#eaf2fe` | `#182d49` |
 
 Bubble surfaces are opaque, bordered, and softly shadowed. They must not use
 `backdrop-filter`, `color-mix`, or transparent glass treatment. The semantic
@@ -102,11 +102,17 @@ to the opener. On narrow screens, the artifact split becomes a single visible
 surface rather than a squeezed two-column layout.
 
 Chat agent selection has one frontend source: canonical tools granted in
-`userStore.roles`, intersected in `CANONICAL_AGENT_TOOLS` order. The direct
-buttons, searchable picker, mention suggestions, populated dropdown, and
-`useComposer` runtime guard consume that same derived collection. Unresolved or
-failed role loading is fail-closed; Cases remains permission-independent because
-it links to static demonstration routes rather than granting live-agent access.
+`userStore.roles`, intersected in `CANONICAL_AGENT_DISPLAY_ORDER`. The fixed
+product sequence is `ChatAgent → KnowledgeAgent → DataAgent → AnalystAgent → ReviewAgent → InSilicoResearchAgent → GeneNetworkAgent → BriefGeneAgent → DeepGenomeAgent → DigitalDesignAgent`; this display order is intentionally
+independent from the Bot capability manifest order. The direct buttons,
+searchable picker, mention suggestions, populated dropdown, and `useComposer`
+runtime guard consume that same derived collection. Unresolved or failed role
+loading is fail-closed; Cases remains permission-independent because
+it links to static demonstration routes rather than granting live-agent access;
+the seven visible Cases use the same fixed order without applying agent
+permissions. Explore Agents is likewise a visible discovery entry for every
+user who can open Chat; its destinations are static demos, while live-agent
+execution remains protected by route and server authorization.
 
 The empty Chat landing owns vertical scroll at `chat-content-stack` and orders
 Welcome → Composer → Cases. After the first message, that stack stops scrolling,
@@ -138,15 +144,15 @@ owns the Footer exactly where its scroll root and page composition require it.
 The route inventory test is `apps/web/tests/component/RouteArchetypes.spec.ts`.
 When a route changes, update its owner and behavior test together.
 
-| Archetype | Representative routes | Primary owner |
-|---|---|---|
-| Auth | `/login`, `/register`, `/forgot-password`, `/change-password` | `PhyAuthLayout` and auth view |
-| Legal/document | `/terms`, `/privacy`, `/help` | route document shell and local scroll root |
-| Recovery | `/401`, unmatched routes | recovery page and local scroll root |
-| Adaptive chat | `/chat` | `PhyAdaptiveShell`, adaptive sidebar, chat composer |
-| Static agent demo | `/knowledge-agent`, `/data-agent`, `/analyst-agent`, `/brief-gene-agent`, `/gene-network-agent`, `/deep-genome-agent`, `/digital-design-agent`, `/design` | `AgentDemoShell` or the route's documented demo shell |
-| Workspace/data | `/history`, `/favorites`, `/profile`, `/cloud-storage`, `/feedback`, `/task-management`, `/log-list`, `/user-list`, `/permi-manage`, `/global-config`, `/admin-management` | `PhyWorkspaceShell` or the route's existing owner |
-| Dormant dynamic | `/system/user-auth` | no active component; do not count as a live visual surface |
+| Archetype         | Representative routes                                                                                                                                                      | Primary owner                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Auth              | `/login`, `/register`, `/forgot-password`, `/change-password`                                                                                                              | `PhyAuthLayout` and auth view                              |
+| Legal/document    | `/terms`, `/privacy`, `/help`                                                                                                                                              | route document shell and local scroll root                 |
+| Recovery          | `/401`, unmatched routes                                                                                                                                                   | recovery page and local scroll root                        |
+| Adaptive chat     | `/chat`                                                                                                                                                                    | `PhyAdaptiveShell`, adaptive sidebar, chat composer        |
+| Static agent demo | `/knowledge-agent`, `/data-agent`, `/analyst-agent`, `/brief-gene-agent`, `/gene-network-agent`, `/deep-genome-agent`, `/digital-design-agent`, `/design`                  | `AgentDemoShell` or the route's documented demo shell      |
+| Workspace/data    | `/history`, `/favorites`, `/profile`, `/cloud-storage`, `/feedback`, `/task-management`, `/log-list`, `/user-list`, `/permi-manage`, `/global-config`, `/admin-management` | `PhyWorkspaceShell` or the route's existing owner          |
+| Dormant dynamic   | `/system/user-auth`                                                                                                                                                        | no active component; do not count as a live visual surface |
 
 `layout: "nolayout"` and `hideSidebar` are route metadata contracts, not
 visual guesses. Public legal pages remain available to authenticated users;
@@ -218,13 +224,13 @@ production URLs, real user names, email addresses, gene records, or PII.
 
 ### Required matrix
 
-| Dimension | Values |
-|---|---|
-| Viewport | `1440x900`, `1024x768`, `768x1024`, `390x844` |
-| Locale | `en-US`, `zh-CN` |
-| Theme | light, dark, system-following |
-| Route states | loading, empty, error/retry, populated; chat also sending, streaming, artifact split, artifact fullscreen |
-| Input/accessibility | keyboard-only, 200% zoom, reduced motion, forced colors |
+| Dimension           | Values                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| Viewport            | `1440x900`, `1024x768`, `768x1024`, `390x844`                                                             |
+| Locale              | `en-US`, `zh-CN`                                                                                          |
+| Theme               | light, dark, system-following                                                                             |
+| Route states        | loading, empty, error/retry, populated; chat also sending, streaming, artifact split, artifact fullscreen |
+| Input/accessibility | keyboard-only, 200% zoom, reduced motion, forced colors                                                   |
 
 For each route archetype, verify one representative route first, then sample
 the changed routes. Check that the intended element is the only scroll root,
