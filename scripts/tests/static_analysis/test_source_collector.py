@@ -52,6 +52,22 @@ def test_collects_supported_source_directives_with_exact_context(
         "const description = \"fixture\";\n",
         encoding="utf-8",
     )
+    (root / "runtime-go.go").write_text(
+        "package fixture\n\n"
+        "//nolint:errcheck // runtime directive fixture\n"
+        "func run() { println(\"fixture\") }\n\n"
+        "//go:build linux\n"
+        "//go:generate go run ./tools\n",
+        encoding="utf-8",
+    )
+    filter_name = "filter" + "warnings"
+    (root / "runtime-python.py").write_text(
+        "# type: ignore[index]\n"
+        "# noqa: F401\n"
+        "import warnings\n\n"
+        f'warnings.{filter_name}("ignore", category=UserWarning)\n',
+        encoding="utf-8",
+    )
     paths = tuple(sorted(root.glob("*")))
 
     findings = collect_source_suppressions(root, paths)
