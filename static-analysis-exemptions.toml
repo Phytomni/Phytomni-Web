@@ -1344,26 +1344,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-d386941a8ede6338e729e562ccc9b02480c345d6bdcce6003fab9c4112aad857"
-tool = "shell"
-rule = "shell-fallback-success"
-classification = "temporary"
-mechanism = "command"
-target_kind = "command"
-path = "apps/web/tests/visual/chat/capture-home-matrix.sh"
-target = "|| true"
-fingerprint = "sha256:d386941a8ede6338e729e562ccc9b02480c345d6bdcce6003fab9c4112aad857"
-owner = "web-maintainers"
-introduced_on = 2026-07-20
-review_on = 2026-07-20
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target apps/web/tests/visual/chat/capture-home-matrix.sh:|| true"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-a0b108033a68f19c922b088ac5d13ec68a3f2df791d8c19ff5f949b1b75a152e"
 tool = "shell"
 rule = "shell-fallback-success"

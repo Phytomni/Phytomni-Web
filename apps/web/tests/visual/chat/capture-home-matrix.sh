@@ -9,7 +9,9 @@ SESSION="phy-chat-home-matrix"
 BASE_URL="http://127.0.0.1:5174/tests/visual/chat/"
 
 cleanup() {
-    agent-browser --session "${SESSION}" close >/dev/null 2>&1 || true
+    if ! agent-browser --session "${SESSION}" close >/dev/null 2>&1; then
+        printf 'visual matrix cleanup: browser close failed\n' >&2
+    fi
 }
 trap cleanup EXIT
 

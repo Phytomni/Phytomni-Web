@@ -102,7 +102,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-ed0f122114ef3ff181207cdd8f7165fee5f5465327df96ac89968171e493d350` | `2026-08-31` | `secret-scan` | `pragma: allowlist secret` | [scripts/tests/test_scan_secrets.py:85](../../scripts/tests/test_scan_secrets.py#L85) | `line:85:pragma: allowlist secret:pragma: allowlist secret` | `web-maintainers` | `2026-07-19` |
 | `web-sa-082a342aaee5fc8e6426655001d3fa831a65509cbb3d7619ba90229ac991625f` | `2026-08-31` | `secret-scan` | `pragma: allowlist secret` | [scripts/tests/test_scan_secrets.py:86](../../scripts/tests/test_scan_secrets.py#L86) | `line:86:pragma: allowlist secret:pragma: allowlist secret` | `web-maintainers` | `2026-07-19` |
 | `web-sa-d36847b66e60ffbd21b634cac8ddcce194d8f4fa4fc7c873e3edbff0caa96212` | `2026-08-31` | `secret-scan` | `pragma: allowlist secret` | [scripts/tests/test_scan_secrets.py:87](../../scripts/tests/test_scan_secrets.py#L87) | `line:87:pragma: allowlist secret:pragma: allowlist secret` | `web-maintainers` | `2026-07-19` |
-| `web-sa-d386941a8ede6338e729e562ccc9b02480c345d6bdcce6003fab9c4112aad857` | `2026-08-31` | `shell` | `shell-fallback-success` | [apps/web/tests/visual/chat/capture-home-matrix.sh:12](../../apps/web/tests/visual/chat/capture-home-matrix.sh#L12) | `\|\| true` | `web-maintainers` | `2026-07-20` |
 | `web-sa-0c42ab6421536ec15b38679e04cd85fb0d5b13242f08ae3e0e9837220ef17136` | `2026-08-31` | `shell` | `max-warnings` | [scripts/tests/static_analysis/fixtures/ci/Makefile:2](../../scripts/tests/static_analysis/fixtures/ci/Makefile#L2) | `--max-warnings=0` | `web-maintainers` | `2026-07-19` |
 | `web-sa-e8734248b5a9e63e34a88813e37a507beef2e9a6b7aecccee94c5166dcd65670` | `2026-08-31` | `shell` | `quiet` | [scripts/tests/static_analysis/fixtures/ci/Makefile:2](../../scripts/tests/static_analysis/fixtures/ci/Makefile#L2) | `--quiet` | `web-maintainers` | `2026-07-19` |
 | `web-sa-a0b108033a68f19c922b088ac5d13ec68a3f2df791d8c19ff5f949b1b75a152e` | `2026-08-31` | `shell` | `shell-fallback-success` | [scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh:2](../../scripts/tests/static_analysis/fixtures/ci/scripts/fixture.sh#L2) | `\|\| true` | `web-maintainers` | `2026-07-19` |
@@ -713,15 +712,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: secret-scan reported pragma: allowlist secret at line 87; raw diagnostic omitted.
 
-### `web-sa-d386941a8ede6338e729e562ccc9b02480c345d6bdcce6003fab9c4112aad857`
-
-- Exact entry: [apps/web/tests/visual/chat/capture-home-matrix.sh:12](../../apps/web/tests/visual/chat/capture-home-matrix.sh#L12)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: shell reported shell-fallback-success at line 12; raw diagnostic omitted.
-
 ### `web-sa-0c42ab6421536ec15b38679e04cd85fb0d5b13242f08ae3e0e9837220ef17136`
 
 - Exact entry: [scripts/tests/static_analysis/fixtures/ci/Makefile:2](../../scripts/tests/static_analysis/fixtures/ci/Makefile#L2)
@@ -928,8 +918,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `88`
-- Matched: `88`
+- Findings: `87`
+- Matched: `87`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`

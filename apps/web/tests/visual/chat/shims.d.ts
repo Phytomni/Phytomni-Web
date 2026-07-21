@@ -1,7 +1,5 @@
 /// <reference types="vue/jsx" />
 
-declare module "js-cookie";
-declare module "nprogress";
 declare module "file-saver";
 
 import "vue-i18n";
