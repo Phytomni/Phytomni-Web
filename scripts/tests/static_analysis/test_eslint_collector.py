@@ -41,12 +41,30 @@ def test_bridge_help_exits_zero() -> None:
     assert result.stderr == ""
 
 
-def test_bridge_emits_deterministic_ast_bound_findings() -> None:
+def test_bridge_emits_deterministic_ast_bound_findings(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "eslint-project"
+    runtime_root.mkdir()
+    for fixture in (".eslintrc.cjs", "Sample.vue"):
+        source = FIXTURE_ROOT / fixture
+        (runtime_root / fixture).write_text(
+            source.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    (runtime_root / "runtime-sample.ts").write_text(
+        "interface User {\n"
+        "  name: string;\n"
+        "}\n\n"
+        'const unused: User = { name: "fixture" };\n'
+        "console.log(unused);\n\n"
+        "/* eslint-disable no-alert */\n"
+        'const alertValue = "fixture";\n'
+        "/* eslint-enable no-alert */\n",
+        encoding="utf-8",
+    )
     result = _run_bridge(
         "--root",
-        str(FIXTURE_ROOT),
+        str(runtime_root),
         "--file",
-        "sample.ts",
+        "runtime-sample.ts",
         "--file",
         "Sample.vue",
     )

@@ -104,46 +104,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-b296578aeed3eadeae2bd5bb9e916ab5d4c226b9bdbaa2465eeb27bc1a06fcd9"
-tool = "eslint"
-rule = "no-alert"
-classification = "temporary"
-mechanism = "inline"
-target_kind = "span"
-path = "scripts/tests/static_analysis/fixtures/eslint/project/sample.ts"
-target = "line:10:eslint-enable:eslint-enable no-alert"
-fingerprint = "sha256:b296578aeed3eadeae2bd5bb9e916ab5d4c226b9bdbaa2465eeb27bc1a06fcd9"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/eslint/project/sample.ts:line:10:eslint-enable:eslint-enable no-alert"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-178fec1fefa676e6a645794f71d9830d6158d6970d0a549f844f7ebd0551d132"
-tool = "eslint"
-rule = "no-alert"
-classification = "temporary"
-mechanism = "inline"
-target_kind = "span"
-path = "scripts/tests/static_analysis/fixtures/eslint/project/sample.ts"
-target = "line:8:eslint-disable:eslint-disable no-alert"
-fingerprint = "sha256:178fec1fefa676e6a645794f71d9830d6158d6970d0a549f844f7ebd0551d132"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/eslint/project/sample.ts:line:8:eslint-disable:eslint-disable no-alert"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-03a1b012664efe7b452648d40adc265f5a88682dd937dbf0f436bbb2b03057c4"
 tool = "eslint"
 rule = "no-console"

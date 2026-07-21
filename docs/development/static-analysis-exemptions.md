@@ -43,8 +43,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-03a1b012664efe7b452648d40adc265f5a88682dd937dbf0f436bbb2b03057c4` | `2026-08-31` | `eslint` | `no-console` | [scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs](../../scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs) | `no-console` | `web-maintainers` | `2026-07-19` |
 | `web-sa-c5a5c577a301c08cadd785a1b9ce6ab692a85befb49d76bff2da72ed0bdcc314` | `2026-08-31` | `eslint` | `ignore-pattern` | [scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs](../../scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs) | `pattern-sha256:88eef563de83e808ced8a9450e869164bfe2739e4c12aab62f3182b1d5c75d60` | `web-maintainers` | `2026-07-19` |
 | `web-sa-5c1ca6360b6f1645d7abd69cbd96c221bef717d77590fb4c74a2ce957b23284c` | `2026-08-31` | `eslint` | `ignore-pattern` | [scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs](../../scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs) | `public/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-b296578aeed3eadeae2bd5bb9e916ab5d4c226b9bdbaa2465eeb27bc1a06fcd9` | `2026-08-31` | `eslint` | `no-alert` | [scripts/tests/static_analysis/fixtures/eslint/project/sample.ts:10](../../scripts/tests/static_analysis/fixtures/eslint/project/sample.ts#L10) | `line:10:eslint-enable:eslint-enable no-alert` | `web-maintainers` | `2026-07-19` |
-| `web-sa-178fec1fefa676e6a645794f71d9830d6158d6970d0a549f844f7ebd0551d132` | `2026-08-31` | `eslint` | `no-alert` | [scripts/tests/static_analysis/fixtures/eslint/project/sample.ts:8](../../scripts/tests/static_analysis/fixtures/eslint/project/sample.ts#L8) | `line:8:eslint-disable:eslint-disable no-alert` | `web-maintainers` | `2026-07-19` |
 | `web-sa-9ee749f50dc1fcb65c7dd0e9905c9f22ff7e46c37ad3c37e91d4e068078facc7` | `2026-08-31` | `eslint` | `no-console` | [scripts/tests/static_analysis/fixtures/source/javascript.ts:1](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L1) | `line:1:eslint-disable:eslint-disable no-console` | `web-maintainers` | `2026-07-19` |
 | `web-sa-1fe6a9d5dce89c743c71aa30d18670a9cdea058ba411c651966b3d6d2c34c72a` | `2026-08-31` | `eslint` | `@typescript-eslint/no-explicit-any` | [scripts/tests/static_analysis/fixtures/source/javascript.ts:3](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L3) | `line:3:eslint-disable-next-line:eslint-disable-next-line @typescript-eslint/no-explicit-any` | `web-maintainers` | `2026-07-19` |
 | `web-sa-817058687ff5b87eb0a36ed502c02e1c50515a3bfc34775bce2f4f0cb2d13562` | `2026-08-31` | `eslint` | `no-console` | [scripts/tests/static_analysis/fixtures/source/javascript.ts:5](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L5) | `line:5:eslint-disable-line:eslint-disable-line no-console` | `web-maintainers` | `2026-07-19` |
@@ -160,24 +158,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: eslint reported ignore-pattern at line ?; raw diagnostic omitted.
-
-### `web-sa-b296578aeed3eadeae2bd5bb9e916ab5d4c226b9bdbaa2465eeb27bc1a06fcd9`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/eslint/project/sample.ts:10](../../scripts/tests/static_analysis/fixtures/eslint/project/sample.ts#L10)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported no-alert at line 10; raw diagnostic omitted.
-
-### `web-sa-178fec1fefa676e6a645794f71d9830d6158d6970d0a549f844f7ebd0551d132`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/eslint/project/sample.ts:8](../../scripts/tests/static_analysis/fixtures/eslint/project/sample.ts#L8)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported no-alert at line 8; raw diagnostic omitted.
 
 ### `web-sa-9ee749f50dc1fcb65c7dd0e9905c9f22ff7e46c37ad3c37e91d4e068078facc7`
 
@@ -637,8 +617,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `59`
-- Matched: `59`
+- Findings: `57`
+- Matched: `57`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`
