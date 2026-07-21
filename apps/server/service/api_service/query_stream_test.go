@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
+	"phytomni-server/utils"
 )
 
 // sseChatServer stubs the Bot with a fixed AG-UI SSE stream (RunStarted + two
@@ -554,7 +555,7 @@ func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	ctx := context.WithValue(context.Background(), "x-request-id", "web-request-task27")
+	ctx := utils.WithRequestID(context.Background(), "web-request-task27")
 	out, err := (&Service{}).Query(ctx, "task27-expert@example.com", QueryInput{
 		Query: "synthetic", Tool: "StaleAgent", Mode: "expert",
 	})

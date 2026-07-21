@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 )
@@ -49,15 +48,6 @@ func ReadFileContentLineByLine(filename string) ([]string, error) {
 		content = append(content, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-		return nil, err
-	}
-	return content, nil
-}
-
-func readFileContentOnce(filename string) ([]byte, error) {
-	content, err := ioutil.ReadFile(filename)
-	if err != nil {
 		log.Fatal(err)
 		return nil, err
 	}

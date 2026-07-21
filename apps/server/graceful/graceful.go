@@ -11,6 +11,7 @@ import (
 
 var wg sync.WaitGroup
 var ctx, cancel = context.WithCancel(context.Background())
+var gracefulSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
 
 type Graceful interface {
 	GracefulStart(ctx context.Context)
@@ -34,7 +35,7 @@ func Start(srv Graceful) {
 
 func Wait() {
 	s := make(chan os.Signal, 1)
-	signal.Notify(s, os.Interrupt, os.Kill, syscall.SIGTERM)
+	signal.Notify(s, gracefulSignals...)
 	<-s
 	log.Println("graceful stopping...")
 	cancel()

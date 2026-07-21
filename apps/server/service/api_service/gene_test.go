@@ -334,3 +334,13 @@ func TestGeneDetails_MissingGene(t *testing.T) {
 		t.Fatal("expected error for missing md object")
 	}
 }
+
+func TestGeneDownloadPathValidationRejectsUnsafePaths(t *testing.T) {
+	for _, raw := range []string{"", "../escape", "http://private/secret", "obs://bucket/../escape"} {
+		t.Run(raw, func(t *testing.T) {
+			if err := validateDownloadArtifactPath(raw); err == nil {
+				t.Fatalf("validateDownloadArtifactPath(%q) returned nil", raw)
+			}
+		})
+	}
+}

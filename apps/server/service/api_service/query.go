@@ -13,6 +13,7 @@ import (
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
 	"phytomni-server/model"
+	"phytomni-server/utils"
 
 	"github.com/google/uuid"
 )
@@ -133,7 +134,7 @@ func requestIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	if id, ok := ctx.Value("x-request-id").(string); ok {
+	if id, ok := utils.RequestID(ctx); ok {
 		return strings.TrimSpace(id)
 	}
 	return ""

@@ -15,6 +15,7 @@ import (
 	"phytomni-server/db"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
+	"phytomni-server/utils"
 )
 
 // setupExpertTestDB opens an in-memory SQLite with the columns Query writes,
@@ -285,7 +286,7 @@ func TestQuery_ExpertResolvedRemoteUsesCanonicalProjection(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	expertRouteServer(t, `{"id":"completion-expert","run_id":"run-expert-1","object":"agent.run","agent":"research","status":"running","task_ids":["child-1"],"result":{}}`)
 
-	ctx := context.WithValue(context.Background(), "x-request-id", "web-request-1")
+	ctx := utils.WithRequestID(context.Background(), "web-request-1")
 	out, err := NewService().Query(ctx, "alice", QueryInput{
 		Query: "find a candidate gene", Tool: "StaleAgent", Mode: "expert",
 	})

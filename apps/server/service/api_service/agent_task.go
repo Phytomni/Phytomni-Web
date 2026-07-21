@@ -95,6 +95,12 @@ func (ps *Service) AnalystAgentGetLog(ctx context.Context, id int, name string) 
 
 	var questionAgentLogList *model.QuestionAgentLog
 	err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("id = ?", id).First(&questionAgentLogList).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", errors.New("log task not found")
+		}
+		return "", err
+	}
 	if questionAgentLogList.TaskId == "" {
 		return "", errors.New("log task not found")
 	}

@@ -3,6 +3,7 @@ package db
 import (
 	stdLog "log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
@@ -17,7 +18,10 @@ type Config struct {
 	Config gorm.Config `json:"config" yaml:"config"`
 }
 
-var dbs map[string]*gorm.DB
+var (
+	dbsMu sync.RWMutex
+	dbs   map[string]*gorm.DB
+)
 
 // applyEnvDSN overrides cfg.Dsn with PHYTOMNI_DB_DSN when the env var is set
 // and non-empty. When unset (the current production state) cfg is returned
@@ -37,7 +41,7 @@ func InitMysqlDB() error {
 	if err != nil {
 		return err
 	}
-	dbs = make(map[string]*gorm.DB)
+	next := make(map[string]*gorm.DB)
 	for name, cfg := range dbCfg {
 		cfg = applyEnvDSN(cfg)
 		var dbGorm gorm.Dialector
@@ -72,13 +76,16 @@ func InitMysqlDB() error {
 			return err
 		}
 
-		dbs[name] = db
+		next[name] = db
 	}
+	swapDBs(next)
 	return nil
 }
 
 func Get(name string) (*gorm.DB, bool) {
+	dbsMu.RLock()
 	db, ok := dbs[name]
+	dbsMu.RUnlock()
 	return db, ok
 }
 
@@ -93,8 +100,16 @@ func MustGet(name string) *gorm.DB {
 // Set registers a named *gorm.DB instance. Lets tests inject in-memory SQLite
 // without going through the viper-based InitMysqlDB; production still uses InitMysqlDB.
 func Set(name string, gormDB *gorm.DB) {
+	dbsMu.Lock()
+	defer dbsMu.Unlock()
 	if dbs == nil {
 		dbs = make(map[string]*gorm.DB)
 	}
 	dbs[name] = gormDB
+}
+
+func swapDBs(next map[string]*gorm.DB) {
+	dbsMu.Lock()
+	dbs = next
+	dbsMu.Unlock()
 }

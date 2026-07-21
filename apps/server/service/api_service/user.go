@@ -46,10 +46,7 @@ func (ps *Service) CheckEmailExists(ctx context.Context, email string) bool {
 	var count int64
 	db := model.DB(ctx).Model(&model.User{}).Debug().Where("email = ?", email)
 	db.Count(&count)
-	if count > 0 {
-		return true
-	}
-	return false
+	return count > 0
 }
 
 func (ps *Service) GetUserIdByEmail(ctx context.Context, email string) (userId int64) {

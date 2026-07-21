@@ -92,7 +92,7 @@ func RemoveDuplicates(slice []int64) []int64 {
 	result := []int64{}
 
 	for v := range slice {
-		if encountered[slice[v]] != true {
+		if !encountered[slice[v]] {
 			encountered[slice[v]] = true
 			result = append(result, slice[v])
 		}

@@ -886,3 +886,47 @@ func TestAsyncTaskList_ZeroPageSizeNoPanic(t *testing.T) {
 		t.Fatalf("expected 1 row, got %d", len(list))
 	}
 }
+
+func TestAnalystAgentGetLog_ReturnsDatabaseErrorBeforeRowAccess(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec("DROP TABLE question_agent_logs").Error; err != nil {
+		t.Fatalf("drop test table: %v", err)
+	}
+
+	_, err := NewService().AnalystAgentGetLog(context.Background(), 70, "alice")
+	if err == nil || !strings.Contains(err.Error(), "no such table") {
+		t.Fatalf("expected database error, got %v", err)
+	}
+}
+
+func TestAnalystAgentGetLog_PreservesBlankTaskBehavior(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, task_id, task_log) VALUES (71, 'alice', '', 'blank task')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	got, err := NewService().AnalystAgentGetLog(context.Background(), 71, "alice")
+	if err == nil || err.Error() != "log task not found" {
+		t.Fatalf("blank task error = %v, want log task not found", err)
+	}
+	if got != "" {
+		t.Fatalf("blank task log = %q, want empty result", got)
+	}
+}
+
+func TestAnalystAgentGetLog_PreservesOwnerMismatchBehavior(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, task_id, task_log) VALUES (72, 'bob', 'task-72', 'private log')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	got, err := NewService().AnalystAgentGetLog(context.Background(), 72, "alice")
+	if err == nil || err.Error() != "log does not match user" {
+		t.Fatalf("owner mismatch error = %v, want log does not match user", err)
+	}
+	if got != "" {
+		t.Fatalf("owner mismatch log = %q, want empty result", got)
+	}
+}

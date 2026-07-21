@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"phytomni-server/utils"
+
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -124,5 +126,6 @@ func Sugar() *zap.SugaredLogger {
 }
 
 func SugarContext(ctx context.Context) *zap.SugaredLogger {
-	return logger.Sugar().With("request_id", ctx.Value("x-request-id"))
+	requestID, _ := utils.RequestID(ctx)
+	return logger.Sugar().With("request_id", requestID)
 }

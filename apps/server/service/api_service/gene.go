@@ -185,20 +185,6 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 	return item, nil
 }
 
-// findObsKeyBySuffix returns the first key (case-insensitive) in the Bot-relayed
-// listing that matches the given suffix.
-func findObsKeyBySuffix(keys []string, suffix string) string {
-	for _, k := range keys {
-		if rxBot.ValidateProjectionOBSPath(k) != nil && !isSafeRelayObjectKey(k) {
-			continue
-		}
-		if strings.HasSuffix(strings.ToLower(k), suffix) {
-			return k
-		}
-	}
-	return ""
-}
-
 // friendlyRelayErr translates a Bot relay rejection for an out-of-prefix or
 // out-of-bucket path (characteristic of pre-cutover legacy download_paths) into
 // a user-readable message; all other errors pass through unchanged.

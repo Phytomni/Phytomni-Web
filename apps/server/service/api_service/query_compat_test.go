@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/utils"
 )
 
 // compatChatServer serves one synthetic ChatCompletion response so identity
@@ -36,7 +37,7 @@ func TestQueryUsesRunIDNotOpenAICompletionID(t *testing.T) {
 	setupExpertTestDB(t)
 	compatChatServer(t, `{"id":"chatcmpl-7","run_id":"run-7","report_revision":7,"choices":[{"message":{"content":"answer"}}]}`)
 
-	out, err := NewService().Query(context.WithValue(context.Background(), "x-request-id", "web-req-7"), "alice", QueryInput{Query: "q"})
+	out, err := NewService().Query(utils.WithRequestID(context.Background(), "web-req-7"), "alice", QueryInput{Query: "q"})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}

@@ -1,13 +1,54 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+func TestGracefulStartWaitsForCancellationAndShutsDownOnce(t *testing.T) {
+	h := &Http{Server: http.Server{Addr: "127.0.0.1:0"}}
+	var shutdownCalls int
+	shutdownDone := make(chan struct{})
+	h.RegisterOnShutdown(func() {
+		shutdownCalls++
+		close(shutdownDone)
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		h.GracefulStart(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() { _ = h.Close() })
+
+	select {
+	case <-done:
+		t.Fatal("GracefulStart returned before its context was canceled")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("GracefulStart did not return after context cancellation")
+	}
+	select {
+	case <-shutdownDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Shutdown callback did not run after context cancellation")
+	}
+	if shutdownCalls != 1 {
+		t.Fatalf("Shutdown callbacks = %d, want exactly one", shutdownCalls)
+	}
+}
 
 // TestReadyzHandler_IncludesRateLimitBlocked asserts that /readyz JSON exposes
 // the ratelimit_blocked field alongside redis and failopen_count, machine-locking
