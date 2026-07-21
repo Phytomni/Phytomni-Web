@@ -1,5 +1,5 @@
 <template>
-  <div data-testid="chat-composer" class="chat-composer">
+  <div data-testid="chat-composer" class="chat-composer" @paste="onPaste">
     <div :ref="bindTourInputTarget" class="chat-composer-surface">
       <div class="phy-composer-frame">
         <div
@@ -76,11 +76,12 @@
               ref="uploadRef"
               class="upload-demo"
               :limit="10"
-              accept=".pdf,.doc,.xlsx,.ppt,.txt,.png"
+              :accept="CHAT_ATTACHMENT_ACCEPT"
               :show-file-list="false"
               :auto-upload="false"
               :disabled="isSending"
               :on-change="(file) => emit('file-change', file)"
+              :on-exceed="onUploadExceed"
               multiple
               action="#"
             >
@@ -189,6 +190,7 @@ import ChatAgentQuickSelect from "./ChatAgentQuickSelect.vue";
 import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
 import type { ChatComposerHandle, UploadFile } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
+import { CHAT_ATTACHMENT_ACCEPT } from "../composables/useFileUpload";
 
 const props = defineProps<{
   modelValue: string;
@@ -213,6 +215,7 @@ const emit = defineEmits<{
   search: [query: string];
   command: [cmd: string];
   "file-change": [file: unknown];
+  "paste-files": [files: File[]];
   "remove-file": [index: number];
   "clear-agent": [];
   "toggle-agent": [tool: string];
@@ -240,6 +243,18 @@ const popoverVisible = computed(() =>
 
 const onComposerEnterCapture = (e: KeyboardEvent) => {
   guardEnterSubmit(e, popoverVisible.value);
+};
+
+const onPaste = (event: ClipboardEvent) => {
+  if (props.isSending) return;
+  const files = Array.from(event.clipboardData?.files ?? []);
+  if (files.length === 0) return;
+  event.preventDefault();
+  emit("paste-files", files);
+};
+
+const onUploadExceed = (files: File[]) => {
+  emit("paste-files", Array.from(files));
 };
 
 const bindTourInputTarget: VNodeRef = (ref) => {

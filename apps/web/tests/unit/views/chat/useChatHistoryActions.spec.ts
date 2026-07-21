@@ -100,6 +100,21 @@ describe("useChatHistoryActions", () => {
 
       expect(mockCollectHistory).toHaveBeenCalledTimes(1);
     });
+
+    it("ignores server-only actions while a conversation is still pending", () => {
+      const chat = makeChat({ id: 0, isPending: true });
+      const c = makeComposable();
+
+      c.handleChatAction("rename", chat);
+      c.handleChatAction("favorite", chat);
+      c.handleChatAction("delete", chat);
+
+      expect(c.renameDialogVisible.value).toBe(false);
+      expect(c.deleteDialogVisible.value).toBe(false);
+      expect(mockRenameHistory).not.toHaveBeenCalled();
+      expect(mockCollectHistory).not.toHaveBeenCalled();
+      expect(mockDeleteHistory).not.toHaveBeenCalled();
+    });
   });
 
   describe("handleRenameConfirm", () => {

@@ -40,4 +40,28 @@ describe("useTutorial", () => {
     expect(t.showTutorial.value).toBe(false);
     expect(userStore().seen_tutorial).toBe("1");
   });
+
+  it("prepares responsive navigation before opening the tour", () => {
+    const beforeStart = vi.fn(() => {
+      expect(tutorial.showTutorial.value).toBe(false);
+    });
+
+    const tutorial = useTutorial({ beforeStart });
+    tutorial.startTutorial();
+
+    expect(beforeStart).toHaveBeenCalledTimes(1);
+    expect(tutorial.showTutorial.value).toBe(true);
+  });
+
+  it("also prepares responsive navigation for delayed first-run tours", () => {
+    const beforeStart = vi.fn();
+    userStore().SET_SEEN_TUTORIAL("0");
+    const tutorial = useTutorial({ beforeStart });
+
+    tutorial.checkTutorialStatus();
+    vi.advanceTimersByTime(1000);
+
+    expect(beforeStart).toHaveBeenCalledTimes(1);
+    expect(tutorial.showTutorial.value).toBe(true);
+  });
 });

@@ -134,4 +134,38 @@ describe("ChatHistoryList", () => {
     expect(wrapper.emitted("action")).toEqual([["delete", groups[0].items[0]]]);
     expect(wrapper.emitted("select")).toBeUndefined();
   });
+
+  it("keys pending conversations by dialogue and hides server-only actions", () => {
+    const pendingGroups: ChatHistoryGroup[] = [
+      {
+        key: "today",
+        labelKey: "chat.timeGroup.today",
+        items: [
+          makeChat({
+            id: 0,
+            dialogue_id: "pending-a",
+            title: "Pending A",
+            isPending: true,
+          }),
+          makeChat({
+            id: 0,
+            dialogue_id: "pending-b",
+            title: "Pending B",
+            isPending: true,
+          }),
+          makeChat({
+            id: 9,
+            dialogue_id: "persisted",
+            title: "Persisted",
+          }),
+        ],
+      },
+    ];
+
+    const wrapper = mountList({ groups: pendingGroups });
+
+    expect(wrapper.findAll(".chat-item")).toHaveLength(3);
+    expect(wrapper.findAll(".chat-actions")).toHaveLength(1);
+    expect(HISTORY_SOURCE).toContain(':key="chat.dialogue_id"');
+  });
 });

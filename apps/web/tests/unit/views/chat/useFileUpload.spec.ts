@@ -10,7 +10,10 @@ import type {
   UploadFile as ElementUploadFile,
   UploadRawFile,
 } from "element-plus";
-import { useFileUpload } from "@/views/chat/composables/useFileUpload";
+import {
+  CHAT_ATTACHMENT_LIMITS,
+  useFileUpload,
+} from "@/views/chat/composables/useFileUpload";
 import type {
   ChatComposerHandle,
   ChatUIState,
@@ -26,6 +29,7 @@ describe("useFileUpload", () => {
   let getChatState: (dialogueId: string) => ChatUIState;
   let composerRef: Ref<ChatComposerHandle | null>;
   let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let onValidationError: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -39,6 +43,7 @@ describe("useFileUpload", () => {
       popoverVisible: false,
     });
     scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    onValidationError = vi.fn();
   });
 
   function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {
@@ -77,7 +82,14 @@ describe("useFileUpload", () => {
       getChatState,
       composerRef,
       scrollToBottom,
+      onValidationError,
     });
+  }
+
+  function sizedFile(name: string, size: number): File {
+    const file = new File(["x"], name, { type: "application/octet-stream" });
+    Object.defineProperty(file, "size", { value: size });
+    return file;
   }
 
   it("handleFileChange adds a file to chatState.fileList and calls openHeader", async () => {
@@ -89,7 +101,7 @@ describe("useFileUpload", () => {
     expect(chatState.fileList).toHaveLength(1);
     const uploaded = mustGet(chatState.fileList[0], "uploaded file");
     expect(uploaded.name).toBe("a.txt");
-    expect(uploaded.size).toBe(10);
+    expect(uploaded.size).toBe(browserFile.size);
     expect(uploaded.type).toBe("text/plain");
     expect(uploaded.file).toBe(browserFile);
 
@@ -111,6 +123,82 @@ describe("useFileUpload", () => {
       mustGet(composerRef.value, "composer").openHeader
     ).not.toHaveBeenCalled();
     expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
+  it("accepts pasted files through the same validation path", async () => {
+    const { handlePastedFiles } = makeComposable();
+    const pasted = sizedFile("notes.docx", 128);
+
+    handlePastedFiles([pasted]);
+
+    expect(chatState.fileList).toEqual([
+      expect.objectContaining({ name: "notes.docx", size: 128, file: pasted }),
+    ]);
+    expect(onValidationError).not.toHaveBeenCalled();
+    await nextTick();
+    expect(scrollToBottom).toHaveBeenCalled();
+  });
+
+  it("rejects unsupported CSV until the agent capability contract advertises a dataset channel", () => {
+    const { handlePastedFiles } = makeComposable();
+
+    handlePastedFiles([sizedFile("dataset.csv", 128)]);
+
+    expect(chatState.fileList).toHaveLength(0);
+    expect(onValidationError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "unsupported_type",
+        fileName: "dataset.csv",
+      })
+    );
+  });
+
+  it("rejects a 58 MB file before upload and enforces the aggregate limit", () => {
+    const { handlePastedFiles } = makeComposable();
+
+    handlePastedFiles([sizedFile("oversized.xlsx", 58 * 1024 * 1024)]);
+    expect(chatState.fileList).toHaveLength(0);
+    expect(onValidationError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "file_too_large" })
+    );
+
+    onValidationError.mockClear();
+    chatState.fileList = [
+      {
+        name: "first.xlsx",
+        size: CHAT_ATTACHMENT_LIMITS.maxTotalBytes - 10,
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        file: sizedFile(
+          "first.xlsx",
+          CHAT_ATTACHMENT_LIMITS.maxTotalBytes - 10
+        ),
+      },
+    ];
+    handlePastedFiles([sizedFile("second.txt", 11)]);
+    expect(chatState.fileList).toHaveLength(1);
+    expect(onValidationError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "total_too_large" })
+    );
+  });
+
+  it("enforces the ten-file limit for selection and paste", () => {
+    const { handlePastedFiles } = makeComposable();
+    chatState.fileList = Array.from(
+      { length: CHAT_ATTACHMENT_LIMITS.maxFiles },
+      (_, index) => ({
+        name: `existing-${index}.txt`,
+        size: 1,
+        type: "text/plain",
+        file: sizedFile(`existing-${index}.txt`, 1),
+      })
+    );
+
+    handlePastedFiles([sizedFile("extra.txt", 1)]);
+
+    expect(chatState.fileList).toHaveLength(CHAT_ATTACHMENT_LIMITS.maxFiles);
+    expect(onValidationError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "too_many_files" })
+    );
   });
 
   it("removeFile removes a file from chatState.fileList and calls closeHeader when empty", async () => {

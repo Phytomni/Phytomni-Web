@@ -7,9 +7,35 @@ import {
   writePendingChat,
   clearPendingChat,
   isLocalStorageChat,
+  upsertPendingChatListEntry,
   type PendingChatRecord,
   type ChatListEntry,
+  type SidebarChatListEntry,
 } from "@/utils/pending-chat";
+
+describe("upsertPendingChatListEntry", () => {
+  it("adds one selectable pending row and updates it without duplication", () => {
+    const chats: SidebarChatListEntry[] = [];
+
+    upsertPendingChatListEntry(chats, "new_visible", "x".repeat(55), {
+      date: "2026-07-21T00:00:00.000Z",
+    });
+    upsertPendingChatListEntry(chats, "new_visible", "Updated title", {
+      date: "2026-07-21T00:00:01.000Z",
+    });
+
+    expect(chats).toEqual([
+      expect.objectContaining({
+        id: 0,
+        dialogue_id: "new_visible",
+        title: "Updated title",
+        date: "2026-07-21T00:00:01.000Z",
+        isFavorite: false,
+        isPending: true,
+      }),
+    ]);
+  });
+});
 
 describe("isValidPendingRecord — strict predicate", () => {
   it("returns true for valid record", () => {

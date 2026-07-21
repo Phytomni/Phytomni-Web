@@ -33,6 +33,7 @@ export interface Chat {
   messageInput?: string; // per-conversation input content
   fileList?: UploadFile[]; // per-conversation file list
   isFavorite: boolean; // favorite state
+  isPending?: boolean; // local first turn remains selectable until reconciliation
 }
 
 /**

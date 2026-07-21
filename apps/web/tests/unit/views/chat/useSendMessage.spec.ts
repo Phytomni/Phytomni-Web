@@ -15,7 +15,11 @@ import { deferred, mustGet } from "../../../helpers/mockFactories";
 import { buildChatState } from "../../../helpers/chatBuilders";
 import { invalidInput } from "../../../helpers/invalidInput";
 
-type StreamResult = { dialogueId?: string; messageId?: string };
+type StreamResult = {
+  dialogueId?: string;
+  messageId?: string;
+  completed?: boolean;
+};
 type StreamInput = {
   placeholder: ChatMessage;
   requestId: string;
@@ -49,11 +53,15 @@ vi.mock("element-plus", () => ({
 }));
 
 // pending-chat utilities: localStorage write/clear (only new_-prefixed dialogues take this path).
-vi.mock("@/utils/pending-chat", () => ({
-  writePendingChat: vi.fn(),
-  clearPendingChat: vi.fn(),
-  isLocalStorageChat: vi.fn((id: string) => id.startsWith("new_")),
-}));
+vi.mock("@/utils/pending-chat", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/utils/pending-chat")>();
+  return {
+    ...actual,
+    writePendingChat: vi.fn(),
+    clearPendingChat: vi.fn(),
+    isLocalStorageChat: vi.fn((id: string) => id.startsWith("new_")),
+  };
+});
 
 // network-error detection: default is not a network error.
 vi.mock("@/utils/network-error", () => ({
@@ -219,6 +227,102 @@ describe("useSendMessage", () => {
     expect(formData.get("id")).toBe("1");
     const requestId = requestIdArg as string;
     expect(requestId.startsWith("chat-request-")).toBe(true);
+  });
+
+  it("commits each successful turn so the next request carries current multi-turn history", async () => {
+    const state = stateFor("A");
+    state.messageInput = "Follow up one";
+    state.historyQuestion = [
+      { role: "user", content: "Original question" },
+      { role: "assistant", content: "Original answer" },
+    ];
+    mockGetQueryAbortable
+      .mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: "ChatAgent",
+            answer: "First follow-up answer",
+            id: "history-1",
+            follow_up_questions: [],
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: "ChatAgent",
+            answer: "Second follow-up answer",
+            id: "history-2",
+            follow_up_questions: [],
+          },
+        })
+      );
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(state.historyQuestion).toEqual([
+      { role: "user", content: "Original question" },
+      { role: "assistant", content: "Original answer" },
+      { role: "user", content: "Follow up one" },
+      { role: "assistant", content: "First follow-up answer" },
+    ]);
+
+    state.messageInput = "Follow up two";
+    await sendMessage();
+
+    const [secondFormArg] = queryCallAt(1, "second multi-turn query call");
+    expect(
+      JSON.parse(String((secondFormArg as FormData).get("history")))
+    ).toEqual([
+      { role: "user", content: "Original question" },
+      { role: "assistant", content: "Original answer" },
+      { role: "user", content: "Follow up one" },
+      { role: "assistant", content: "First follow-up answer" },
+    ]);
+  });
+
+  it("keeps an optimistically listed pending chat selectable while its first response is in flight", async () => {
+    const tempId = "new_pending_sidebar";
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+    states.set(tempId, makeState({ messageInput: "Pending discovery" }));
+    chatList.value = [];
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
+
+    const { sendMessage } = makeComposable();
+    const sendPromise = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(chatList.value).toEqual([
+      expect.objectContaining({
+        id: 0,
+        dialogue_id: tempId,
+        title: "Pending discovery",
+        isPending: true,
+      }),
+    ]);
+
+    currentChatId.value = "B";
+    currentChat.value = { messages: [] };
+    expect(chatList.value.some((chat) => chat.dialogue_id === tempId)).toBe(
+      true
+    );
+
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "Done",
+          dialogue_id: "server-pending-sidebar",
+          id: "901",
+          follow_up_questions: [],
+        },
+      })
+    );
+    await sendPromise;
   });
 
   it("normalizes malformed follow-up JSON without discarding the blocking answer", async () => {
@@ -1178,6 +1282,7 @@ describe("useSendMessage", () => {
         requestId: "web-request-1",
       },
     });
+    expect(stateFor("A").historyQuestion).toBeNull();
   });
 
   it("Expert rejects a non-terminal response without bot run identity", async () => {

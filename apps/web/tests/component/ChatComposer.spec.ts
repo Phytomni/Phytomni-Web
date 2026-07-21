@@ -121,6 +121,7 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
             "multiple",
             "action",
             "onChange",
+            "onExceed",
           ],
           emits: ["change"],
         },
@@ -342,6 +343,39 @@ describe("ChatComposer", () => {
     upload.props("onChange")?.(file);
     await wrapper.vm.$nextTick();
     expect(wrapper.emitted("file-change")).toHaveLength(1);
+  });
+
+  it("forwards files rejected by the upload limit to shared validation", async () => {
+    const wrapper = mountComposer();
+    const upload = wrapper.findComponent({ name: "ElUpload" });
+    const extra = new File(["x"], "extra.txt", { type: "text/plain" });
+
+    upload.props("onExceed")?.([extra]);
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted("paste-files")?.[0]).toEqual([[extra]]);
+  });
+
+  it("emits clipboard files without intercepting ordinary text paste", () => {
+    const wrapper = mountComposer();
+    const pasted = new File(["x"], "notes.txt", { type: "text/plain" });
+    const filePaste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(filePaste, "clipboardData", {
+      value: { files: [pasted] },
+    });
+
+    wrapper.element.dispatchEvent(filePaste);
+
+    expect(filePaste.defaultPrevented).toBe(true);
+    expect(wrapper.emitted("paste-files")?.[0]).toEqual([[pasted]]);
+
+    const textPaste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(textPaste, "clipboardData", {
+      value: { files: [] },
+    });
+    wrapper.element.dispatchEvent(textPaste);
+    expect(textPaste.defaultPrevented).toBe(false);
+    expect(wrapper.emitted("paste-files")).toHaveLength(1);
   });
 
   it("disables upload and mention controls while sending", () => {

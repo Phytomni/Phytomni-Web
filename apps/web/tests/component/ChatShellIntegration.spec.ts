@@ -82,14 +82,13 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain(
       '@drawerOpenChange="leftSidebarDrawerOpen = $event"'
     );
-    expect(CHAT_SOURCE).toContain('ref="tourSidebarTarget"');
     expect(CHAT_SOURCE).toContain('ref="tourCasesTarget"');
     expect(CHAT_SOURCE).toContain(
       ':set-tour-input-target="setTourInputTarget"'
     );
     expect(CHAT_SOURCE).toContain("const setTourInputTarget");
     expect(CHAT_COMPOSER_SOURCE).toContain(':ref="bindTourInputTarget"');
-    expect(countOccurrences(CHAT_SOURCE, 'ref="tourSidebarTarget"')).toBe(1);
+    expect(CHAT_SOURCE).not.toContain('ref="tourSidebarTarget"');
     expect(countOccurrences(CHAT_SOURCE, 'ref="tourCasesTarget"')).toBe(1);
     expect(
       countOccurrences(
@@ -98,6 +97,12 @@ describe("Chat adaptive shell integration", () => {
       )
     ).toBe(1);
     expect(CHAT_SOURCE).toContain(':target="tourSidebarTarget"');
+    expect(CHAT_SOURCE).toContain("const tourSidebarTarget = () =>");
+    expect(CHAT_SOURCE).toContain('[data-testid="chat-primary-action"]');
+    expect(CHAT_SOURCE).toContain(':placement="tutorialSidebarPlacement"');
+    expect(CHAT_SOURCE).toContain(':content-style="tutorialContentStyle"');
+    expect(CHAT_SOURCE).toContain("beforeStart: prepareTutorialTarget");
+    expect(CHAT_SOURCE).toContain('@change="handleTutorialStepChange"');
     expect(CHAT_SOURCE).toContain(':target="tourCasesTarget"');
     expect(CHAT_SOURCE).toContain(':target="tourInputTarget"');
   });

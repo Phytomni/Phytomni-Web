@@ -22,11 +22,15 @@ vi.mock("element-plus", () => ({
   ElMessageBox: { alert: vi.fn() },
 }));
 
-vi.mock("@/utils/pending-chat", () => ({
-  writePendingChat: vi.fn(),
-  clearPendingChat: vi.fn(),
-  isLocalStorageChat: vi.fn(() => false),
-}));
+vi.mock("@/utils/pending-chat", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/utils/pending-chat")>();
+  return {
+    ...actual,
+    writePendingChat: vi.fn(),
+    clearPendingChat: vi.fn(),
+    isLocalStorageChat: vi.fn(() => false),
+  };
+});
 
 vi.mock("@/utils/network-error", () => ({
   isNetworkError: vi.fn(() => false),

@@ -29,6 +29,8 @@ export interface StreamResult {
   requestId?: string;
   /** Safe upstream Bot request id, when the gateway exposes one. */
   botRequestId?: string;
+  /** True only after a terminal successful stream was fully reduced. */
+  completed?: boolean;
 }
 
 const UUID_PATTERN =
@@ -107,6 +109,27 @@ export function useStreamMessage(opts: {
 
     let state = initReducerState();
     let result: StreamResult = {};
+    const applyTerminalState = () => {
+      placeholder.followUpQuestions = state.followUp;
+      if (state.followUp.length) {
+        // StreamMessage/MarkdownBlock emit no @finish (unlike the blocking
+        // MarkdownViewer path), so reveal the follow-up chips here.
+        placeholder.showFollowUpQuestions = true;
+      }
+      if (state.references.length) {
+        // Expose captured references so the namespace-aware cited render path
+        // can engage after finalization.
+        placeholder.doc_list = state.references;
+      }
+      if (state.error) {
+        placeholder.content = state.error.message;
+        placeholder.a2uiRuntime = undefined;
+      } else if (state.done && !state.runId) {
+        // A completed stream without RunStarted cannot authorize an action.
+        placeholder.a2uiRuntime = undefined;
+      }
+      result.completed = state.done && !state.error;
+    };
     try {
       const resp = await fetch(
         `/api/v1/conversations/${parentRowId}/messages`,
@@ -194,26 +217,7 @@ export function useStreamMessage(opts: {
         placeholder.content = t("chat.streamInterrupted");
         placeholder.a2uiRuntime = undefined;
       }
-      // Finalize.
-      placeholder.followUpQuestions = state.followUp;
-      if (state.followUp.length) {
-        // StreamMessage/MarkdownBlock emit no @finish (unlike the blocking
-        // MarkdownViewer path), so reveal the follow-up chips here — otherwise
-        // captured phyto.follow_up questions stay hidden until a history reload.
-        placeholder.showFollowUpQuestions = true;
-      }
-      if (state.references.length) {
-        // P1 cited streaming: expose captured references so the ns-aware
-        // cited render path can engage after finalize (ns invariant).
-        placeholder.doc_list = state.references;
-      }
-      if (state.error) {
-        placeholder.content = state.error.message;
-        placeholder.a2uiRuntime = undefined;
-      } else if (state.done && !state.runId) {
-        // A completed stream without RunStarted cannot authorize an action.
-        placeholder.a2uiRuntime = undefined;
-      }
+      applyTerminalState();
     } catch (error: unknown) {
       // Once RunFinished has been reduced, a later transport close/error does
       // not revoke a successfully completed message. Before that terminal
@@ -223,11 +227,10 @@ export function useStreamMessage(opts: {
         if (!isAbortError(error)) {
           placeholder.content = t("chat.streamInterrupted");
         }
-      } else if (state.error) {
-        // RunError is already terminal. A later reader/transport failure must
-        // not replace its upstream message with a duplicate synthetic copy.
-        placeholder.a2uiRuntime = undefined;
-        placeholder.content = state.error.message;
+      } else {
+        // RunFinished and RunError are already terminal. A later transport
+        // failure must preserve and fully finalize the upstream outcome.
+        applyTerminalState();
       }
     } finally {
       // Always finalize this request's placeholder and unregister its controller.

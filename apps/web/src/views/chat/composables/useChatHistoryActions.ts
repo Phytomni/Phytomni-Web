@@ -36,6 +36,8 @@ export function useChatHistoryActions(opts: {
 
   // handle chat history item actions
   const handleChatAction = (command: string, chat: Chat) => {
+    if (chat.isPending) return;
+
     switch (command) {
       case "rename":
         renameForm.value.title = chat.title;

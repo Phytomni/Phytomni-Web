@@ -19,7 +19,45 @@ export interface PendingChatRecord {
 export interface ChatListEntry {
   dialogue_id: string;
   title: string;
-  [k: string]: unknown;
+}
+
+export type SidebarChatListEntry = ChatListEntry & {
+  id: number;
+  date: string;
+  isFavorite: boolean;
+  isPending?: boolean;
+};
+
+function boundedPendingTitle(title: string): string {
+  return title.length > 50 ? title.substring(0, 50) + "..." : title;
+}
+
+/** Keep a local first turn reachable from the sidebar while its response runs. */
+export function upsertPendingChatListEntry(
+  entries: SidebarChatListEntry[],
+  dialogueId: string,
+  title: string,
+  options: { date?: string } = {}
+): void {
+  const pendingEntry: SidebarChatListEntry = {
+    id: 0,
+    dialogue_id: dialogueId,
+    title: boundedPendingTitle(title),
+    date: options.date ?? new Date().toISOString(),
+    isFavorite: false,
+    isPending: true,
+  };
+  const existingIndex = entries.findIndex(
+    (entry) => entry.dialogue_id === dialogueId
+  );
+  if (existingIndex === -1) {
+    entries.unshift(pendingEntry);
+    return;
+  }
+  entries[existingIndex] = {
+    ...entries[existingIndex],
+    ...pendingEntry,
+  };
 }
 
 /**
@@ -125,10 +163,7 @@ export function writePendingChat(
       titleSource =
         typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
     }
-    const title =
-      titleSource.length > 50
-        ? titleSource.substring(0, 50) + "..."
-        : titleSource;
+    const title = boundedPendingTitle(titleSource);
 
     const sanitizedMessages = messages.map((m) => {
       if (Array.isArray((m as Record<string, unknown>).attachedFiles)) {

@@ -13,7 +13,7 @@
     >
       <template #sidebar>
         <!-- Left sidebar -->
-        <div ref="tourSidebarTarget" class="tour-sidebar-wrap">
+        <div class="tour-sidebar-wrap">
           <Sidebar
             :chatList="chatList"
             :currentChatId="currentChatId"
@@ -37,12 +37,15 @@
         <el-tour
           v-model="showTutorial"
           :mask="true"
+          :content-style="tutorialContentStyle"
           :close-on-press-escape="true"
+          @change="handleTutorialStepChange"
           @finish="completeTutorial"
           @close="completeTutorial"
         >
           <el-tour-step
             :target="tourSidebarTarget"
+            :placement="tutorialSidebarPlacement"
             :title="t('tutorial.step1.title')"
             :description="t('tutorial.step1.content')"
           />
@@ -361,6 +364,7 @@
                   @search="handleSearch"
                   @command="handleCommand"
                   @file-change="handleFileChange"
+                  @paste-files="handlePastedFiles"
                   @remove-file="removeFile"
                   @clear-agent="clearSelectedAgent"
                   @toggle-agent="handleButtonClick"
@@ -534,7 +538,11 @@ import { useArtifactPanel } from "./composables/useArtifactPanel";
 import { useAgentImages } from "./composables/useAgentImages";
 import { useReactions } from "./composables/useReactions";
 import { useCopyDownload } from "./composables/useCopyDownload";
-import { useFileUpload } from "./composables/useFileUpload";
+import {
+  CHAT_ATTACHMENT_LIMITS,
+  useFileUpload,
+  type ChatAttachmentValidationError,
+} from "./composables/useFileUpload";
 import { useComposer } from "./composables/useComposer";
 import {
   CANONICAL_AGENT_DISPLAY_NAMES,
@@ -554,6 +562,7 @@ import {
   analystLogActivityKey,
 } from "./composables/useLogView";
 import { useI18n } from "vue-i18n";
+import { ElMessage } from "element-plus";
 import { abortRequest } from "@/utils/request";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
@@ -565,6 +574,7 @@ import {
   isValidPendingRecord,
   matchesChat,
   safeParse,
+  upsertPendingChatListEntry,
 } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
 import { chatContentToText } from "./messageTypes";
@@ -1172,7 +1182,24 @@ const restorePendingChats = (
 
     if (candidates.length === 1) {
       reconcileMatchedDialogue(tempChatId, candidates[0].dialogue_id, key);
+      return;
     }
+
+    const firstUserMessage = pendingChatData.messages.find(
+      (message) => message.role === "user"
+    );
+    const pendingTitle =
+      typeof pendingChatData.title === "string"
+        ? pendingChatData.title
+        : typeof firstUserMessage?.content === "string"
+        ? firstUserMessage.content
+        : "";
+    upsertPendingChatListEntry(knownChats, tempChatId, pendingTitle, {
+      date:
+        typeof pendingChatData.date === "string"
+          ? pendingChatData.date
+          : undefined,
+    });
   });
 };
 
@@ -1387,12 +1414,24 @@ function analystLogErrorKind(
 }
 
 // File upload handling — state and logic extracted into the useFileUpload composable
-const { handleFileChange, removeFile } = useFileUpload({
+const onAttachmentValidationError = (error: ChatAttachmentValidationError) => {
+  ElMessage.warning(
+    t(`chat.attachmentErrors.${error.code}`, {
+      file: error.fileName ?? "",
+      maxFiles: CHAT_ATTACHMENT_LIMITS.maxFiles,
+      maxFileMb: CHAT_ATTACHMENT_LIMITS.maxFileBytes / 1024 / 1024,
+      maxTotalMb: CHAT_ATTACHMENT_LIMITS.maxTotalBytes / 1024 / 1024,
+    })
+  );
+};
+
+const { handleFileChange, handlePastedFiles, removeFile } = useFileUpload({
   fileList,
   currentChatId,
   getChatState,
   composerRef,
   scrollToBottom,
+  onValidationError: onAttachmentValidationError,
 });
 
 // Message upvote/downvote feature — state and logic extracted into the useReactions composable
@@ -1604,10 +1643,40 @@ const { refreshMessage } = useRefreshMessage({
 });
 
 // Tutorial guide feature — state and logic extracted into the useTutorial composable
-const { showTutorial, startTutorial, completeTutorial, checkTutorialStatus } =
-  useTutorial();
+const prepareTutorialTarget = () => {
+  if (isMobileViewport.value) {
+    leftSidebarDrawerOpen.value = true;
+  }
+};
+const {
+  showTutorial,
+  startTutorial,
+  completeTutorial: markTutorialComplete,
+  checkTutorialStatus,
+} = useTutorial({ beforeStart: prepareTutorialTarget });
 
-const tourSidebarTarget = ref<HTMLElement | null>(null);
+const tourSidebarTarget = () =>
+  document.querySelector<HTMLElement>('[data-testid="chat-primary-action"]');
+const tutorialSidebarPlacement = computed<"bottom-start" | "right-start">(() =>
+  isMobileViewport.value ? "bottom-start" : "right-start"
+);
+const tutorialContentStyle = computed(() => ({
+  width: isMobileViewport.value ? "calc(100vw - 32px)" : "360px",
+  maxWidth: "calc(100vw - 32px)",
+  boxSizing: "border-box" as const,
+}));
+const handleTutorialStepChange = (step: number) => {
+  if (isMobileViewport.value) {
+    leftSidebarDrawerOpen.value = step === 0;
+  }
+};
+const completeTutorial = () => {
+  markTutorialComplete();
+  if (isMobileViewport.value) {
+    leftSidebarDrawerOpen.value = false;
+  }
+};
+
 const tourCasesTarget = ref<HTMLElement | null>(null);
 const tourInputTarget = ref<HTMLElement | null>(null);
 const setTourInputTarget = (el: HTMLElement | null) => {
@@ -1906,7 +1975,15 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
 .chat-cases-region {
   width: 100%;
   flex: 0 0 auto;
+  margin-top: auto;
   padding-bottom: clamp(var(--phy-space-24), 4vh, var(--phy-space-48));
+}
+
+@media (min-width: 900px) {
+  .chat-content-stack.is-empty {
+    max-height: 840px;
+    margin-block: auto;
+  }
 }
 
 @media (max-width: 600px) {
@@ -1935,6 +2012,15 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   .chat-cases-region {
     padding-bottom: calc(
       var(--phy-space-24) + env(safe-area-inset-bottom, 0px)
+    );
+  }
+}
+
+@media (min-width: 390px) and (max-width: 600px) {
+  .chat-cases-region {
+    padding-bottom: calc(
+      var(--phy-space-48) + var(--phy-space-48) +
+        env(safe-area-inset-bottom, 0px)
     );
   }
 }

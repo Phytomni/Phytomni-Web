@@ -1,10 +1,15 @@
 import { ref } from "vue";
 import { userStore } from "@/stores";
 
-export function useTutorial() {
+type TutorialOptions = {
+  beforeStart?: () => void;
+};
+
+export function useTutorial(options: TutorialOptions = {}) {
   const showTutorial = ref(false);
 
   const startTutorial = () => {
+    options.beforeStart?.();
     showTutorial.value = true;
   };
 

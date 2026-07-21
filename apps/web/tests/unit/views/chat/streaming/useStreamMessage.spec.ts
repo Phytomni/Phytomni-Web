@@ -171,6 +171,7 @@ describe("useStreamMessage", () => {
         messageId: fixture.messageId,
         requestId: fixture.webRequestId,
         botRequestId: fixture.botRequestId,
+        completed: true,
       });
       expect(placeholder.a2uiRuntime?.runId).toBe(fixture.runId);
       expect(placeholder.a2uiRuntime?.messageId).toBe(fixture.messageId);
@@ -236,12 +237,13 @@ describe("useStreamMessage", () => {
       getChatState: () => chatState,
       t: (k: string) => k,
     });
-    await streamMessage({
+    const result = await streamMessage({
       dialogueId: "d1",
       formData: new FormData(),
       requestId: "r",
       placeholder,
     });
+    expect(result.completed).toBe(false);
     expect(placeholder.streaming).toBe(false);
     expect(placeholder.content).toContain("boom");
   });
@@ -576,6 +578,7 @@ describe("useStreamMessage", () => {
     expect(result).toEqual({
       dialogueId: CANONICAL_DIALOGUE_ID,
       messageId: "142",
+      completed: true,
     });
     expect(placeholder.a2uiRuntime?.runId).toBe("run-42");
     expect(placeholder.a2uiRuntime?.transport).toBeTypeOf("function");
@@ -636,6 +639,7 @@ describe("useStreamMessage", () => {
       messageId: "314",
       requestId: "web-req-314",
       botRequestId: "bot-req-2718",
+      completed: true,
     });
     expect(placeholder.a2uiRuntime?.dialogueId).toBe(CANONICAL_DIALOGUE_ID);
     expect(placeholder.a2uiRuntime?.messageId).toBe("314");
@@ -679,6 +683,7 @@ describe("useStreamMessage", () => {
     expect(result).toEqual({
       dialogueId: CANONICAL_DIALOGUE_ID,
       messageId: "315",
+      completed: true,
     });
   });
 
@@ -709,7 +714,11 @@ describe("useStreamMessage", () => {
       placeholder,
     });
 
-    expect(result).toEqual({ dialogueId: undefined, messageId: undefined });
+    expect(result).toEqual({
+      dialogueId: undefined,
+      messageId: undefined,
+      completed: true,
+    });
     expect(placeholder.id).toBeUndefined();
     expect(placeholder.a2uiRuntime).toBeUndefined();
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -858,13 +867,14 @@ describe("useStreamMessage", () => {
       t: (k: string) => k,
     });
 
-    await streamMessage({
+    const result = await streamMessage({
       dialogueId: "local-terminal-error",
       formData: new FormData(),
       requestId: "req-terminal-error",
       placeholder,
     });
 
+    expect(result.completed).toBe(false);
     expect(placeholder.content).toBe("upstream boom");
     expect(placeholder.content).not.toBe("chat.streamInterrupted");
   });
@@ -975,13 +985,14 @@ describe("useStreamMessage", () => {
       t: (k: string) => k,
     });
 
-    await streamMessage({
+    const result = await streamMessage({
       dialogueId: "local-finished",
       formData: new FormData(),
       requestId: "req-finished-close",
       placeholder,
     });
 
+    expect(result.completed).toBe(true);
     expect(placeholder.a2uiRuntime?.runId).toBe("run-finished");
     expect(placeholder.a2uiRuntime?.messageId).toBe("204");
     expect(placeholder.content).toBe("");

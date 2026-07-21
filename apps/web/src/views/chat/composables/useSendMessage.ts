@@ -21,7 +21,11 @@ import {
   parseAgentAnswer,
 } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
-import { writePendingChat, isLocalStorageChat } from "@/utils/pending-chat";
+import {
+  writePendingChat,
+  isLocalStorageChat,
+  upsertPendingChatListEntry,
+} from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
 import { createTransferTracker } from "@/utils/transfer-progress";
@@ -42,6 +46,7 @@ import {
 } from "../messageTypes";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
+const MAX_CONTEXT_MESSAGES = 20;
 
 type ChatUserStore = {
   FedLogOut: () => Promise<unknown>;
@@ -49,6 +54,51 @@ type ChatUserStore = {
 
 function isCanonicalToolName(value: unknown): value is string {
   return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
+}
+
+function isHistoryMessage(value: unknown): value is ChatMessage {
+  return (
+    isRecord(value) &&
+    (value.role === "user" || value.role === "assistant") &&
+    Object.prototype.hasOwnProperty.call(value, "content")
+  );
+}
+
+function historyText(message: ChatMessage): string {
+  const content = chatContentToText(message.content).trim();
+  if (content) return content;
+  return (message.blocks ?? [])
+    .filter((block) => block.type === "markdown" && block.text)
+    .map((block) => block.text?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function commitSuccessfulTurn(
+  chatState: ChatUIState,
+  userMessage: ChatMessage,
+  assistantMessage: ChatMessage
+): void {
+  const status = (assistantMessage.status ?? "").trim().toUpperCase();
+  if (status !== "" && status !== "SUCCEEDED") return;
+
+  const userContent = historyText(userMessage);
+  const assistantContent = historyText(assistantMessage);
+  if (!userContent || !assistantContent) return;
+
+  const prior = (
+    Array.isArray(chatState.historyQuestion)
+      ? chatState.historyQuestion.filter(isHistoryMessage)
+      : []
+  ).flatMap((message) => {
+    const content = historyText(message);
+    return content ? [{ role: message.role, content }] : [];
+  });
+  chatState.historyQuestion = [
+    ...prior,
+    { role: "user", content: userContent },
+    { role: "assistant", content: assistantContent },
+  ].slice(-MAX_CONTEXT_MESSAGES);
 }
 
 function parseBlockingProjection(data: QueryData) {
@@ -345,6 +395,11 @@ export function useSendMessage(opts: {
           }
         },
       });
+      upsertPendingChatListEntry(
+        chatList.value,
+        sendingDialogueId,
+        sendingTitle
+      );
     }
 
     if (isForeground(sendingDialogueId)) {
@@ -413,6 +468,13 @@ export function useSendMessage(opts: {
           streamResult.dialogueId
         ) {
           blockingDialogueId = streamResult.dialogueId;
+        }
+        if (
+          chatState.activeRequestId === requestKey &&
+          !chatState.generationStopped &&
+          streamResult.completed === true
+        ) {
+          commitSuccessfulTurn(chatState, userMessage, placeholder);
         }
         return;
       }
@@ -757,6 +819,7 @@ export function useSendMessage(opts: {
           // stale / stopped — finally still clears when this key owns
         } else if (assistantMessage) {
           sendingMessages.push(assistantMessage);
+          commitSuccessfulTurn(chatState, userMessage, assistantMessage);
         } else {
           // if assistantMessage was not created, create a default message
           console.warn(
@@ -782,6 +845,7 @@ export function useSendMessage(opts: {
             attachBlockingA2ui(assistantMessage, responseData, botProjection);
           }
           sendingMessages.push(assistantMessage);
+          commitSuccessfulTurn(chatState, userMessage, assistantMessage);
         }
       } else if (
         chatState.activeRequestId === requestKey &&
