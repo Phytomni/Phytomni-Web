@@ -177,12 +177,18 @@ def test_bounded_collection_checks_versions_project_and_selected_files(
     assert "--project" in calls[2]
 
 
-def test_config_fixture_ownership_is_explicit() -> None:
-    config = json.loads(
-        (FIXTURE_ROOT / "tsconfig.json").read_text(encoding="utf-8")
+def test_config_fixture_ownership_is_explicit(tmp_path: Path) -> None:
+    assert "skipLibCheck" not in (
+        FIXTURE_ROOT / "tsconfig.json"
+    ).read_text(encoding="utf-8")
+    config_path = tmp_path / "tsconfig.json"
+    config_path.write_text(
+        json.dumps({"compilerOptions": {"skipLibCheck": True}}),
+        encoding="utf-8",
     )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
     assert config["compilerOptions"]["skipLibCheck"] is True
-    findings = collect_config_suppressions(FIXTURE_ROOT)
+    findings = collect_config_suppressions(tmp_path)
     skip_lib_check = [
         finding
         for finding in findings

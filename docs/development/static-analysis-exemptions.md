@@ -50,7 +50,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-b50a325c91340842ad819664a76c3e4e83c511e18c04ac7cac7165c81f7b53d6` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `public/static/js/3Dmol-min.js` | `web-maintainers` | `2026-07-20` |
 | `web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69` | `2026-08-31` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
 | `web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147` | `web-maintainers` | `2026-07-19` |
-| `web-sa-95247dee5bbd817be730e3d833b32606acf2796bbbacb9cbecbff2063332f3b8` | `2026-08-31` | `typescript` | `skipLibCheck` | [scripts/tests/static_analysis/fixtures/typescript/project/tsconfig.json](../../scripts/tests/static_analysis/fixtures/typescript/project/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
 
 ## Risk and linked tests
 
@@ -243,15 +242,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: typescript reported exclude at line ?; raw diagnostic omitted.
 
-### `web-sa-95247dee5bbd817be730e3d833b32606acf2796bbbacb9cbecbff2063332f3b8`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/typescript/project/tsconfig.json](../../scripts/tests/static_analysis/fixtures/typescript/project/tsconfig.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported skipLibCheck at line ?; raw diagnostic omitted.
-
 ## Reverse-probe status
 
 - Status: `pending`
@@ -260,8 +250,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `22`
-- Matched: `22`
+- Findings: `21`
+- Matched: `21`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`
