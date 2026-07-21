@@ -1,3 +1,1 @@
-# generated output is intentionally excluded
-generated/**
-dist/
+# The fixture root intentionally contains no ignore entries.

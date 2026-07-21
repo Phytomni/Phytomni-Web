@@ -44,66 +44,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-c5a5c577a301c08cadd785a1b9ce6ab692a85befb49d76bff2da72ed0bdcc314"
-tool = "eslint"
-rule = "ignore-pattern"
-classification = "temporary"
-mechanism = "config"
-target_kind = "config"
-path = "scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs"
-target = "pattern-sha256:88eef563de83e808ced8a9450e869164bfe2739e4c12aab62f3182b1d5c75d60"
-fingerprint = "sha256:c5a5c577a301c08cadd785a1b9ce6ab692a85befb49d76bff2da72ed0bdcc314"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs:pattern-sha256:88eef563de83e808ced8a9450e869164bfe2739e4c12aab62f3182b1d5c75d60"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-5c1ca6360b6f1645d7abd69cbd96c221bef717d77590fb4c74a2ce957b23284c"
-tool = "eslint"
-rule = "ignore-pattern"
-classification = "temporary"
-mechanism = "config"
-target_kind = "config"
-path = "scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs"
-target = "public/"
-fingerprint = "sha256:5c1ca6360b6f1645d7abd69cbd96c221bef717d77590fb4c74a2ce957b23284c"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs:public/"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-03a1b012664efe7b452648d40adc265f5a88682dd937dbf0f436bbb2b03057c4"
-tool = "eslint"
-rule = "no-console"
-classification = "temporary"
-mechanism = "config"
-target_kind = "config"
-path = "scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs"
-target = "no-console"
-fingerprint = "sha256:03a1b012664efe7b452648d40adc265f5a88682dd937dbf0f436bbb2b03057c4"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/config/.eslintrc.cjs:no-console"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-2cadf9833f19cb4df032350313ad4c7f112140f0aa932ada7c337623f7dbd016"
 tool = "eslint"
 rule = "prettier/prettier"
@@ -324,46 +264,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-5fe591aae9254c273e9410d1f49566eb73fcd30652c5156b8eabf944f3039612"
-tool = "prettier"
-rule = "ignore"
-classification = "temporary"
-mechanism = "config"
-target_kind = "config"
-path = "scripts/tests/static_analysis/fixtures/config/.prettierignore"
-target = "dist/"
-fingerprint = "sha256:5fe591aae9254c273e9410d1f49566eb73fcd30652c5156b8eabf944f3039612"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/config/.prettierignore:dist/"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-37632cf56f08a190c81b67979c8a16f48ade3902daf64cc3414e321ab7f9c2b8"
-tool = "prettier"
-rule = "ignore"
-classification = "temporary"
-mechanism = "config"
-target_kind = "config"
-path = "scripts/tests/static_analysis/fixtures/config/.prettierignore"
-target = "pattern-sha256:242732be25bb3ebe56e4ac39c402e13e192c87499852e8e8bf943e72b013ca8b"
-fingerprint = "sha256:37632cf56f08a190c81b67979c8a16f48ade3902daf64cc3414e321ab7f9c2b8"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/config/.prettierignore:pattern-sha256:242732be25bb3ebe56e4ac39c402e13e192c87499852e8e8bf943e72b013ca8b"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-11c190003a375cbe38384ba3cc4b313aedb3a02e368b55c4246047c347510188"
 tool = "prettier"
 rule = "prettier-ignore"
@@ -524,46 +424,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-b6f40d39efcafb61f92138d0a10c601f53709747101382fab6528617aea21774"
-tool = "typescript"
-rule = "exclude"
-classification = "temporary"
-mechanism = "config"
-target_kind = "config"
-path = "scripts/tests/static_analysis/fixtures/config/tsconfig.json"
-target = "pattern-sha256:8fdcf81225875d0d621ad1dee50a58b1f34f658d310e922651487cfc47001156"
-fingerprint = "sha256:b6f40d39efcafb61f92138d0a10c601f53709747101382fab6528617aea21774"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/config/tsconfig.json:pattern-sha256:8fdcf81225875d0d621ad1dee50a58b1f34f658d310e922651487cfc47001156"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-b1b860578b7c6c30475f33eb21339a2983a34bebd5e053ee8c600bfb97eced39"
-tool = "typescript"
-rule = "exclude"
-classification = "temporary"
-mechanism = "config"
-target_kind = "config"
-path = "scripts/tests/static_analysis/fixtures/config/tsconfig.json"
-target = "pattern-sha256:d3fc541fc0c66a095c8aaeb7f91e92026e75089b6aa2f325b5cda9a88692d657"
-fingerprint = "sha256:b1b860578b7c6c30475f33eb21339a2983a34bebd5e053ee8c600bfb97eced39"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/config/tsconfig.json:pattern-sha256:d3fc541fc0c66a095c8aaeb7f91e92026e75089b6aa2f325b5cda9a88692d657"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-80167d38dca94bd15e6ca82cde7155f5145f90ba04eb1b0d78fc02cd2c1a43bb"
 tool = "typescript"
 rule = "skipLibCheck"
@@ -598,26 +458,6 @@ introduced_on = 2026-07-19
 review_on = 2026-07-19
 expires_on = 2026-08-31
 remediation = "WEB-SA: remediate exact target apps/web/tsconfig.json:compilerOptions.skipLibCheck"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
-id = "web-sa-607ba295773cc3dfdc7de080f48f1cb2b228b8781142facf891451259a372037"
-tool = "typescript"
-rule = "skipLibCheck"
-classification = "temporary"
-mechanism = "config"
-target_kind = "config"
-path = "scripts/tests/static_analysis/fixtures/config/tsconfig.json"
-target = "compilerOptions.skipLibCheck"
-fingerprint = "sha256:607ba295773cc3dfdc7de080f48f1cb2b228b8781142facf891451259a372037"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/tests/static_analysis/fixtures/config/tsconfig.json:compilerOptions.skipLibCheck"
 rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
 counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
 risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."

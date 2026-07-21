@@ -12,12 +12,43 @@ from scripts.static_analysis.model import Mechanism, TargetKind
 
 pytestmark = pytest.mark.unit
 
-FIXTURE_DIR = Path(__file__).parent / "fixtures" / "config"
 WEB_ROOT = Path(__file__).resolve().parents[3] / "apps" / "web"
 
 
-def test_collects_eslint_typescript_and_prettier_configuration() -> None:
-    findings = collect_config_suppressions(FIXTURE_DIR)
+def _runtime_fixture_root(tmp_path: Path) -> Path:
+    root = tmp_path / "config"
+    root.mkdir()
+    (root / ".eslintrc.cjs").write_text(
+        "module.exports = {\n"
+        '  ignorePatterns: ["public/", "**/*.generated.ts"],\n'
+        "  rules: {\n"
+        '    "no-console": "off",\n'
+        "  },\n"
+        "};\n",
+        encoding="utf-8",
+    )
+    (root / ".prettierignore").write_text(
+        "# generated output is intentionally excluded\n"
+        "generated/**\n"
+        "dist/\n",
+        encoding="utf-8",
+    )
+    (root / "tsconfig.json").write_text(
+        '{\n'
+        '  "compilerOptions": {\n'
+        '    "skipLibCheck": true\n'
+        "  },\n"
+        '  "exclude": ["exclude.generated/**", "tests/**"]\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_collects_eslint_typescript_and_prettier_configuration(
+    tmp_path: Path,
+) -> None:
+    findings = collect_config_suppressions(_runtime_fixture_root(tmp_path))
     identities = {(finding.tool, finding.rule, finding.target) for finding in findings}
 
     assert ("eslint", "ignore-pattern", "public/") in identities
@@ -38,8 +69,9 @@ def test_collects_eslint_typescript_and_prettier_configuration() -> None:
 
 
 def test_config_findings_include_unbounded_patterns_for_later_policy_rejection(
+    tmp_path: Path,
 ) -> None:
-    findings = collect_config_suppressions(FIXTURE_DIR)
+    findings = collect_config_suppressions(_runtime_fixture_root(tmp_path))
 
     assert any(finding.target == "**/*.generated.ts" for finding in findings)
     assert [

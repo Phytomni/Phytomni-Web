@@ -1,6 +1,3 @@
 {
-  "compilerOptions": {
-    "skipLibCheck": true
-  },
-  "exclude": ["exclude.generated/**", "tests/**"]
+  "compilerOptions": {}
 }
