@@ -19,8 +19,8 @@ describe("canonical agent option ownership", () => {
     expect(derivePickerOptions(["UnknownAgent"])).toEqual([]);
   });
 
-  it("keeps the active sidebar as the owner of the agent list interaction", () => {
-    expect(SIDEBAR_SOURCE).toContain("deriveSidebarRouteOptions");
+  it("keeps the active sidebar as the owner of the formal Case list interaction", () => {
+    expect(SIDEBAR_SOURCE).toContain("deriveCaseRouteOptions");
     expect(SIDEBAR_SOURCE).toContain("const showAgentsList = ref(false)");
     expect(SIDEBAR_SOURCE).toContain(
       "showAgentsList.value = !showAgentsList.value"

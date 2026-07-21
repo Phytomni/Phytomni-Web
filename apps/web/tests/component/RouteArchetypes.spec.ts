@@ -125,6 +125,14 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     sourceMarkers: ["AgentDemoShell"],
   },
   {
+    path: "/cases/gene-network-agent",
+    component: "views/agent-cases/GeneNetworkCase.vue",
+    productLayout: "demo",
+    migrationTask: "agent case shell",
+    behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
+    sourceMarkers: ["AgentDemoShell", "gene-network-download"],
+  },
+  {
     path: "/gene-network-agent",
     component: "views/gene-network-agent/index.vue",
     productLayout: "standalone",
@@ -143,6 +151,14 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     migrationTask: "agent demo shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
     sourceMarkers: ["AgentDemoShell"],
+  },
+  {
+    path: "/cases/digital-design-agent",
+    component: "views/agent-cases/DigitalDesignCase.vue",
+    productLayout: "demo",
+    migrationTask: "agent case shell",
+    behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
+    sourceMarkers: ["AgentDemoShell", "digital-design-download"],
   },
   {
     path: "/digital-design-agent",
@@ -309,7 +325,7 @@ describe("routed visual archetypes", () => {
     const actualPaths = activeLeafRoutes.map((route) => route.path).sort();
     const contractPaths = ROUTE_CONTRACTS.map((route) => route.path).sort();
 
-    expect(contractPaths).toHaveLength(31);
+    expect(contractPaths).toHaveLength(33);
     expect(new Set(contractPaths).size).toBe(contractPaths.length);
     expect(actualPaths).toEqual(contractPaths);
   });

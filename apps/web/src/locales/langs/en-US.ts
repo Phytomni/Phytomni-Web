@@ -411,7 +411,14 @@ export default {
     },
     inputPlaceholderTip: "Please enter your question",
     uploadFile:
-      "Support file upload(max 10, accept .pdf,.doc,.xlsx,.ppt,.txt,.png)",
+      "Attach PDF, Word, Excel, PowerPoint, TXT, or PNG files (10 files, 25 MB each, 50 MB total). You can also paste copied files.",
+    attachmentErrors: {
+      unsupported_type:
+        '"{file}" is not supported. Use PDF, Word, Excel, PowerPoint, TXT, or PNG files.',
+      file_too_large: '"{file}" exceeds the {maxFileMb} MB per-file limit.',
+      total_too_large: "Attachments cannot exceed {maxTotalMb} MB in total.",
+      too_many_files: "You can attach up to {maxFiles} files.",
+    },
     timeGroup: {
       today: "Today",
       yesterday: "Yesterday",
@@ -735,6 +742,11 @@ export default {
       title: "Gene Network Agent",
       subtitle:
         "Gene Network Agent - Provides gene network analysis and phenotype trait association services",
+      sampleTask: "Static sample task ID",
+      sampleResult: "Static sample result",
+      downloadResults: "Start download requests",
+      startingDownload: "Starting download {current} of {total}",
+      allDownloadsStarted: "All five download requests started",
       agentLabel: "Gene network workflow",
       questionLabel: "Network question",
       questionPlaceholder:
@@ -793,6 +805,9 @@ export default {
       title: "Digital Design Agent",
       subtitle:
         "Digital Design Agent - Provides protein structure prediction and design services based on gene IDs",
+      sampleTask: "Static sample task ID",
+      sampleResult: "Static sample result",
+      downloadResults: "Start download request",
       agentLabel: "Digital design workflow",
       questionLabel: "Design question",
       questionPlaceholder:
@@ -966,9 +981,28 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 
 -   The **Gene Network Agent** accepts user-defined gene lists to identify interaction partners, regulatory relationships, and functional associations. It synthesizes this information into coherent networks (e.g., hormone–gene–phenotype maps), enabling on-demand candidate gene network construction to help uncover biological pathways and link molecular interactions to phenotypes.
 
+-   The **Brief Gene Agent** creates a rapid, citation-backed orientation for a target gene. It summarizes known functions, key evidence, and practical research leads when you need a focused starting point before commissioning a full gene report.
+
 -   The **Deep Genome Agent** generates in-depth functional summaries for target genes by integrating literature, multi-omics data, and network information. Its final output is a gene-focused review report covering gene function, regulation, known variants, and potential breeding applications—serving as a one-stop reference for researchers.
 
--   The **Digital Design Agent** leverages the other agents for allele and protein engineering. Via natural language queries, it supports protein sequence modification and gene promoter optimization, predicts beneficial mutations, and generates protein variants with enhanced traits. It bridges computational design and experimental validation to accelerate synthetic biology, functional genomics, and crop improvement.`,
+-   The **Digital Design Agent** leverages the other agents for allele and protein engineering. Via natural language queries, it supports protein sequence modification and gene promoter optimization, predicts beneficial mutations, and generates protein variants with enhanced traits. It bridges computational design and experimental validation to accelerate synthetic biology, functional genomics, and crop improvement.
+
+### Choosing the Right Input
+
+**Best starting input and attachment guidance:**
+
+-   **Chat Agent:** A specific research question with species and experimental context. Optional supported documents or images can provide context.
+-   **Knowledge Agent:** A literature question, keywords, date range, and evidence scope. Optional supported documents can narrow the evidence set.
+-   **Data Agent:** Species, gene or other entity identifiers, and the fields or relationship you need. It queries the integrated biological database; an uploaded spreadsheet is not required.
+-   **Analyst Agent:** Analysis objective, data type, species, and a description or location for each dataset. Use only dataset controls explicitly offered by this agent.
+-   **Review Agent:** Review topic, scope, species, date range, and desired report emphasis. Optional supported documents can seed the review.
+-   **In Silico Research Agent:** Paper or hypothesis to reproduce, expected outcome, and dataset descriptions or locations. Use only dataset controls explicitly offered by this agent.
+-   **Gene Network Agent:** Gene list, species, and optional trait or phenotype identifier. State the meaning of each list or dataset when prompted.
+-   **Brief Gene Agent:** Gene identifier, species, and the aspect you want summarized. Optional supported documents can add local evidence.
+-   **Deep Genome Agent:** Gene identifier and species, plus any requested functional or breeding focus. It uses integrated literature and multi-omics evidence.
+-   **Digital Design Agent:** Target gene or protein sequence, design objective, and experimental constraints. Use only sequence or dataset controls explicitly offered by this agent.
+
+General chat attachments currently support PDF, Word, Excel, PowerPoint, TXT, and PNG files, up to 10 files, 25 MB per file, and 50 MB in total. CSV is not a universal chat attachment format: use CSV only when an agent-specific dataset control explicitly advertises it.`,
       },
       resources: {
         heading: "4. What resources does Phytomni integrate?",

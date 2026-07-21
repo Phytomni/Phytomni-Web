@@ -203,6 +203,12 @@ export const constantRoutes = [
         meta: { title: "Brief Gene Agent", layout: "nolayout" },
       },
       {
+        path: "/cases/gene-network-agent",
+        name: "geneNetworkAgentCase",
+        component: () => import("@/views/agent-cases/GeneNetworkCase.vue"),
+        meta: { title: "Gene Network Agent Case", layout: "nolayout" },
+      },
+      {
         path: "/gene-network-agent",
         name: "geneNetworkAgent",
         component: () => import("@/views/gene-network-agent/index.vue"),
@@ -219,6 +225,12 @@ export const constantRoutes = [
         name: "digitalDesignAgent",
         component: () => import("@/views/digital-design-agent/index.vue"),
         meta: { title: "Digital Design Agent", layout: "nolayout" },
+      },
+      {
+        path: "/cases/digital-design-agent",
+        name: "digitalDesignAgentCase",
+        component: () => import("@/views/agent-cases/DigitalDesignCase.vue"),
+        meta: { title: "Digital Design Agent Case", layout: "nolayout" },
       },
       {
         path: "/design",

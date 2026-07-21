@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import router from "@/router";
 import {
   CANONICAL_AGENT_ROUTES,
+  deriveCaseRouteOptions,
   deriveSidebarRouteOptions,
 } from "@/constants/agents";
 
@@ -29,10 +30,42 @@ describe("CANONICAL_AGENT_ROUTES registry lock", () => {
   it("derives seven sidebar route options from the registry", () => {
     const options = deriveSidebarRouteOptions();
     expect(options).toHaveLength(7);
+    expect(options.map((option) => option.toolName)).toEqual([
+      "KnowledgeAgent",
+      "DataAgent",
+      "AnalystAgent",
+      "GeneNetworkAgent",
+      "BriefGeneAgent",
+      "DeepGenomeAgent",
+      "DigitalDesignAgent",
+    ]);
     for (const option of options) {
       expect(option.route).toBe(CANONICAL_AGENT_ROUTES[option.toolName]);
       expect(option.name).toBeTruthy();
       expect(option.img).toBeTruthy();
     }
+  });
+
+  it("derives case options in fixed product order", () => {
+    const caseOptions = deriveCaseRouteOptions();
+
+    expect(caseOptions.map((option) => option.toolName)).toEqual([
+      "KnowledgeAgent",
+      "DataAgent",
+      "AnalystAgent",
+      "GeneNetworkAgent",
+      "BriefGeneAgent",
+      "DeepGenomeAgent",
+      "DigitalDesignAgent",
+    ]);
+    expect(caseOptions.map((option) => option.route)).toEqual([
+      "/knowledge-agent",
+      "/data-agent",
+      "/analyst-agent",
+      "/cases/gene-network-agent",
+      "/brief-gene-agent",
+      "/deep-genome-agent",
+      "/cases/digital-design-agent",
+    ]);
   });
 });

@@ -148,8 +148,14 @@ const selectedLabel = computed(() => {
   return match?.label ?? props.selectedAgent;
 });
 
+const defaultAgentLabel = computed(
+  () =>
+    safeOptions.value.find((option) => option.tool === "ChatAgent")?.label ??
+    t("chat.agentPicker.auto")
+);
+
 const triggerLabel = computed(() =>
-  props.selectedAgent ? selectedLabel.value : t("chat.agentPicker.auto")
+  props.selectedAgent ? selectedLabel.value : defaultAgentLabel.value
 );
 
 const inputValue = computed(() =>

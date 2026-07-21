@@ -17,6 +17,26 @@ export const CANONICAL_AGENT_TOOLS = [
 
 export type CanonicalAgentTool = typeof CANONICAL_AGENT_TOOLS[number];
 
+/**
+ * Stable product order for every user-facing Chat agent selector.
+ *
+ * This intentionally stays separate from CANONICAL_AGENT_TOOLS: the latter
+ * mirrors the Bot capability manifest order, while the former preserves the
+ * product's fixed tool-permission display order.
+ */
+export const CANONICAL_AGENT_DISPLAY_ORDER = [
+  "ChatAgent",
+  "KnowledgeAgent",
+  "DataAgent",
+  "AnalystAgent",
+  "ReviewAgent",
+  "InSilicoResearchAgent",
+  "GeneNetworkAgent",
+  "BriefGeneAgent",
+  "DeepGenomeAgent",
+  "DigitalDesignAgent",
+] as const;
+
 export const CANONICAL_AGENT_DISPLAY_NAMES: Record<CanonicalAgentTool, string> =
   {
     ChatAgent: "Chat Agent",
@@ -95,6 +115,23 @@ export const CANONICAL_AGENT_ROUTES = {
   DeepGenomeAgent: "/deep-genome-agent",
   DigitalDesignAgent: "/digital-design-agent",
 } as const;
+
+/**
+ * Permission-independent destinations used by the seven Chat case cards.
+ *
+ * Gene Network and Digital Design have separate live product routes. Their
+ * case cards must continue to open the existing static examples instead of
+ * entering the capability-gated execution surfaces.
+ */
+export const CANONICAL_AGENT_CASE_ROUTES: Record<RoutedAgentTool, string> = {
+  KnowledgeAgent: "/knowledge-agent",
+  DataAgent: "/data-agent",
+  AnalystAgent: "/analyst-agent",
+  BriefGeneAgent: "/brief-gene-agent",
+  GeneNetworkAgent: "/cases/gene-network-agent",
+  DeepGenomeAgent: "/deep-genome-agent",
+  DigitalDesignAgent: "/cases/digital-design-agent",
+};
 
 /**
  * Remote product surfaces are intentionally separate from the seven sidebar
@@ -177,13 +214,13 @@ export type PickerAgentOption = {
 export function derivePickerOptions(
   roles: readonly string[]
 ): PickerAgentOption[] {
-  return CANONICAL_AGENT_TOOLS.filter((tool) => roles.includes(tool)).map(
-    (tool) => ({
-      tool,
-      labelKey: CANONICAL_AGENT_LABEL_I18N_KEYS[tool],
-      displayName: CANONICAL_AGENT_DISPLAY_NAMES[tool],
-    })
-  );
+  return CANONICAL_AGENT_DISPLAY_ORDER.filter((tool) =>
+    roles.includes(tool)
+  ).map((tool) => ({
+    tool,
+    labelKey: CANONICAL_AGENT_LABEL_I18N_KEYS[tool],
+    displayName: CANONICAL_AGENT_DISPLAY_NAMES[tool],
+  }));
 }
 
 export type SidebarRouteOption = {
@@ -194,6 +231,10 @@ export type SidebarRouteOption = {
   route: string;
   img: string;
 };
+
+function isRoutedAgentTool(tool: CanonicalAgentTool): tool is RoutedAgentTool {
+  return Object.prototype.hasOwnProperty.call(CANONICAL_AGENT_ROUTES, tool);
+}
 
 const SIDEBAR_ROUTE_META: Record<
   RoutedAgentTool,
@@ -209,7 +250,7 @@ const SIDEBAR_ROUTE_META: Record<
 };
 
 export function deriveSidebarRouteOptions(): SidebarRouteOption[] {
-  return (Object.keys(CANONICAL_AGENT_ROUTES) as RoutedAgentTool[]).map(
+  return CANONICAL_AGENT_DISPLAY_ORDER.filter(isRoutedAgentTool).map(
     (toolName) => ({
       id: SIDEBAR_ROUTE_META[toolName].id,
       name: CANONICAL_AGENT_DISPLAY_NAMES[toolName],
@@ -219,4 +260,21 @@ export function deriveSidebarRouteOptions(): SidebarRouteOption[] {
       img: SIDEBAR_ROUTE_META[toolName].img,
     })
   );
+}
+
+/**
+ * Cases are the routed subset of agents, but still follow the fixed product
+ * display order rather than the route-registry insertion order.
+ */
+export function deriveCaseRouteOptions(): SidebarRouteOption[] {
+  return deriveSidebarRouteOptions()
+    .map((option) => ({
+      ...option,
+      route: CANONICAL_AGENT_CASE_ROUTES[option.toolName],
+    }))
+    .sort(
+      (left, right) =>
+        CANONICAL_AGENT_DISPLAY_ORDER.indexOf(left.toolName) -
+        CANONICAL_AGENT_DISPLAY_ORDER.indexOf(right.toolName)
+    );
 }

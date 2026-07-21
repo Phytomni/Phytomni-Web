@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CANONICAL_AGENT_DISPLAY_NAMES,
+  CANONICAL_AGENT_DISPLAY_ORDER,
   CANONICAL_AGENT_I18N_KEYS,
   CANONICAL_AGENT_LABEL_I18N_KEYS,
   CANONICAL_AGENT_PAGE_TITLE_KEYS,
@@ -36,6 +37,18 @@ describe("canonical agent locale names", () => {
 
     expect(CANONICAL_AGENT_TOOLS).toEqual(releaseTools);
     expect(new Set(CANONICAL_AGENT_TOOLS).size).toBe(releaseTools.length);
+    expect(CANONICAL_AGENT_DISPLAY_ORDER).toEqual([
+      "ChatAgent",
+      "KnowledgeAgent",
+      "DataAgent",
+      "AnalystAgent",
+      "ReviewAgent",
+      "InSilicoResearchAgent",
+      "GeneNetworkAgent",
+      "BriefGeneAgent",
+      "DeepGenomeAgent",
+      "DigitalDesignAgent",
+    ]);
     for (const toolName of releaseTools) {
       expect(CANONICAL_AGENT_DISPLAY_NAMES[toolName]).toEqual(
         expect.any(String)
@@ -121,7 +134,7 @@ describe("canonical agent locale names", () => {
   it("makes every granted canonical tool available to the picker", () => {
     const options = derivePickerOptions([...CANONICAL_AGENT_TOOLS]);
     expect(options.map((option) => option.tool)).toEqual([
-      ...CANONICAL_AGENT_TOOLS,
+      ...CANONICAL_AGENT_DISPLAY_ORDER,
     ]);
     for (const option of options) {
       expect(option.labelKey).toBe(

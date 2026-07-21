@@ -35,9 +35,7 @@ describe("ChatAgentPicker", () => {
     const combobox = wrapper.find('[role="combobox"]');
     expect(combobox.exists()).toBe(true);
     expect(combobox.attributes("aria-expanded")).toBe("false");
-    expect((combobox.element as HTMLInputElement).value).toContain(
-      "chat.agentPicker.auto"
-    );
+    expect((combobox.element as HTMLInputElement).value).toBe("ChatAgent");
 
     await wrapper.find('[data-testid="agent-picker-trigger"]').trigger("click");
     await nextTick();

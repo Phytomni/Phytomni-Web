@@ -29,7 +29,7 @@ import { useI18n } from "vue-i18n";
 import { DataLine, Edit, Search } from "@element-plus/icons-vue";
 import {
   CANONICAL_AGENT_PAGE_TITLE_KEYS,
-  deriveSidebarRouteOptions,
+  deriveCaseRouteOptions,
 } from "@/constants/agents";
 
 const { t } = useI18n();
@@ -41,7 +41,7 @@ const CASE_ICONS: Record<string, Component> = {
 };
 
 const caseOptions = computed(() =>
-  deriveSidebarRouteOptions().map((option) => {
+  deriveCaseRouteOptions().map((option) => {
     const titleKey = CANONICAL_AGENT_PAGE_TITLE_KEYS[option.toolName];
     return {
       ...option,
@@ -54,7 +54,8 @@ const caseOptions = computed(() =>
 
 <style scoped>
 .chat-cases {
-  width: min(100%, var(--phy-layout-transcript-max-width));
+  width: 100%;
+  max-width: var(--phy-layout-transcript-max-width);
   margin: 0 auto;
   box-sizing: border-box;
   padding: var(--phy-space-16);
@@ -126,6 +127,44 @@ const caseOptions = computed(() =>
   line-height: 1.35;
 }
 
+@media (min-width: 1280px) {
+  .chat-case-link {
+    gap: var(--phy-space-4);
+    min-height: var(--phy-control-height-default);
+    padding: var(--phy-space-8);
+  }
+
+  .chat-case-icon {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+  }
+
+  .chat-case-icon :deep(svg) {
+    width: 15px;
+    height: 15px;
+  }
+
+  .chat-case-title {
+    overflow-wrap: normal;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    line-height: 1.25;
+  }
+}
+
+@media (min-width: 1360px) {
+  .chat-cases-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: var(--phy-space-4);
+  }
+
+  .chat-case-title {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}
+
 @media (max-width: 1279px) {
   .chat-cases-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -145,10 +184,23 @@ const caseOptions = computed(() =>
 
   .chat-cases-grid {
     grid-template-columns: minmax(0, 1fr);
+    gap: var(--phy-space-8);
   }
 
   .chat-case-link {
     min-height: var(--phy-control-height-primary);
+    padding: var(--phy-space-8) var(--phy-space-12);
+  }
+
+  .chat-case-icon {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .chat-case-icon :deep(svg) {
+    width: 16px;
+    height: 16px;
   }
 }
 </style>

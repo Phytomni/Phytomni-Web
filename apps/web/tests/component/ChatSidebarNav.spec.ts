@@ -73,6 +73,7 @@ describe("ChatSidebarNav", () => {
   it("renders expanded labels and compactly hides them", () => {
     const expanded = mountNav();
     expect(expanded.text()).toContain("t:chat.newChat");
+    expect(expanded.text()).toContain("t:chat.exploreAgent");
     expect(expanded.text()).toContain("Ada Lovelace");
 
     const collapsed = mountNav({ collapsed: true });

@@ -41,6 +41,11 @@ const DEMO_CONTRACTS: DemoContract[] = [
     required: ["AgentDemoShell", "analyst-download", "router.back"],
   },
   {
+    path: "/cases/gene-network-agent",
+    source: "views/agent-cases/GeneNetworkCase.vue",
+    required: ["AgentDemoShell", "gene-network-download", "router.back"],
+  },
+  {
     path: "/gene-network-agent",
     source: "views/gene-network-agent/index.vue",
     required: [
@@ -53,6 +58,11 @@ const DEMO_CONTRACTS: DemoContract[] = [
       "BotArtifactList",
       "router.back",
     ],
+  },
+  {
+    path: "/cases/digital-design-agent",
+    source: "views/agent-cases/DigitalDesignCase.vue",
+    required: ["AgentDemoShell", "digital-design-download", "router.back"],
   },
   {
     path: "/digital-design-agent",
@@ -111,7 +121,7 @@ function readDemoSource(source: string): string {
 }
 
 describe("routed agent demonstration inventory", () => {
-  it("keeps exactly the eight active agent/demo routes in the constant router", () => {
+  it("keeps all example and live agent routes in the constant router", () => {
     const activePaths = new Set(
       flattenRoutes(constantRoutes).map((route) => route.path)
     );
@@ -121,7 +131,9 @@ describe("routed agent demonstration inventory", () => {
       "/brief-gene-agent",
       "/data-agent",
       "/analyst-agent",
+      "/cases/gene-network-agent",
       "/gene-network-agent",
+      "/cases/digital-design-agent",
       "/digital-design-agent",
       "/deep-genome-agent",
       "/design",

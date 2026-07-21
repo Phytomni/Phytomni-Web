@@ -17,7 +17,7 @@
         :collapsed="renderedSidebarCollapsed"
         :active-item="activeButton"
         :user-name="UserStore.name || $t('user.unnamedUser')"
-        :can-explore-agents="UserStore.permission !== 'guest'"
+        :can-explore-agents="true"
         :can-history="hasPermission('History')"
         :can-profile="hasPermission('Profile management')"
         :can-cloud-storage="hasPermission('Cloud storage')"
@@ -133,7 +133,7 @@ import { userStore } from "@/stores";
 import type { Chat } from "./types";
 import { useChatHistoryGroups } from "./composables/useChatHistoryGroups";
 import { useSidebarResponsive } from "./composables/useSidebarResponsive";
-import { deriveSidebarRouteOptions } from "@/constants/agents";
+import { deriveCaseRouteOptions } from "@/constants/agents";
 import { useChatHistoryActions } from "./composables/useChatHistoryActions";
 import { useSidebarNavigation } from "./composables/useSidebarNavigation";
 import ChatHistoryList, {
@@ -238,7 +238,7 @@ const {
 });
 
 const showAgentsList = ref(false);
-const presetAgents = ref(deriveSidebarRouteOptions());
+const presetAgents = ref(deriveCaseRouteOptions());
 
 const exploreAgent = () => {
   showAgentsList.value = !showAgentsList.value;

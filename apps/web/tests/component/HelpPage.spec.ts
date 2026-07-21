@@ -128,6 +128,44 @@ describe("Help product document", () => {
     );
   });
 
+  it("documents all ten agents and distinguishes general attachments from dataset channels", () => {
+    const english = enUS.help.doc.howItWorks.body;
+    for (const agent of [
+      "Chat Agent",
+      "Knowledge Agent",
+      "Data Agent",
+      "Analyst Agent",
+      "Review Agent",
+      "In Silico",
+      "Gene Network Agent",
+      "Brief Gene Agent",
+      "Deep Genome Agent",
+      "Digital Design Agent",
+    ]) {
+      expect(english).toContain(agent);
+    }
+    expect(english).toContain("CSV is not a universal chat attachment format");
+    expect(english).toContain("Best starting input");
+
+    const chinese = zhCN.help.doc.howItWorks.body;
+    for (const agent of [
+      "对话智能体",
+      "知识智能体",
+      "数据智能体",
+      "分析智能体",
+      "综述智能体",
+      "虚拟研究智能体",
+      "基因网络智能体",
+      "基因综述智能体",
+      "基因深度分析智能体",
+      "智能设计智能体",
+    ]) {
+      expect(chinese).toContain(agent);
+    }
+    expect(chinese).toContain("CSV 不是所有对话智能体通用的附件格式");
+    expect(chinese).toContain("推荐起始输入");
+  });
+
   it("keeps token-aware back branches and one flowing footer in the help scroll root", async () => {
     const wrapper = mountHelp();
     expect(

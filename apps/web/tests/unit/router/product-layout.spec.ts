@@ -41,6 +41,8 @@ describe("product route metadata", () => {
       "/:pathMatch(.*)*",
       "/analyst-agent",
       "/brief-gene-agent",
+      "/cases/digital-design-agent",
+      "/cases/gene-network-agent",
       "/change-password",
       "/chat",
       "/data-agent",
