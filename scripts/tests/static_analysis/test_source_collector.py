@@ -30,6 +30,17 @@ def test_collects_supported_source_directives_with_exact_context(
         f'password = "fixture"  # {nosec} B105\n',
         encoding="utf-8",
     )
+    (root / "runtime_typescript.ts").write_text(
+        "// @ts-expect-error used: runtime directive fixture\n"
+        "const expected: string = 1;\n"
+        "// @ts-expect-error unused: runtime directive fixture\n"
+        "const validValue = 1;\n"
+        "// @ts-ignore broad runtime directive fixture\n"
+        "const ignoredValue: string = 1;\n"
+        "// @ts-nocheck runtime file-level directive fixture\n"
+        "export const uncheckedValue = \"fixture\";\n",
+        encoding="utf-8",
+    )
     paths = tuple(sorted(root.glob("*")))
 
     findings = collect_source_suppressions(root, paths)

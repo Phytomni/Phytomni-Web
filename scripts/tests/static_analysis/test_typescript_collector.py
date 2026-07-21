@@ -101,10 +101,30 @@ def test_parser_binds_global_diagnostics_to_project_configuration() -> None:
     assert findings[0].target.startswith("global:TS2468:")
 
 
-def test_directive_audit_keeps_used_unused_and_broad_markers_exact() -> None:
-    paths = (FIXTURE_ROOT / "directives.ts", FIXTURE_ROOT / "nocheck.ts")
+def test_directive_audit_keeps_used_unused_and_broad_markers_exact(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "typescript"
+    root.mkdir()
+    (root / "directives.ts").write_text(
+        "// @ts-expect-error used: the assignment below is intentionally invalid\n"
+        "const invalidValue: string = 1;\n"
+        "\n"
+        "// @ts-expect-error unused: this line is already valid\n"
+        "const validValue = 1;\n"
+        "\n"
+        "// @ts-ignore broad escape retained only as an inventory fixture\n"
+        "const ignoredValue: string = 1;\n",
+        encoding="utf-8",
+    )
+    (root / "nocheck.ts").write_text(
+        "// @ts-nocheck file-level escape retained only as an inventory fixture\n"
+        "export const uncheckedValue = \"fixture\";\n",
+        encoding="utf-8",
+    )
+    paths = (root / "directives.ts", root / "nocheck.ts")
 
-    findings = audit_typescript_directives(FIXTURE_ROOT, paths)
+    findings = audit_typescript_directives(root, paths)
 
     assert [finding.rule for finding in findings] == [
         "@ts-expect-error",

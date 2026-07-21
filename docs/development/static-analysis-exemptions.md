@@ -76,7 +76,7 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-5fe591aae9254c273e9410d1f49566eb73fcd30652c5156b8eabf944f3039612` | `2026-08-31` | `prettier` | `ignore` | [scripts/tests/static_analysis/fixtures/config/.prettierignore](../../scripts/tests/static_analysis/fixtures/config/.prettierignore) | `dist/` | `web-maintainers` | `2026-07-19` |
 | `web-sa-37632cf56f08a190c81b67979c8a16f48ade3902daf64cc3414e321ab7f9c2b8` | `2026-08-31` | `prettier` | `ignore` | [scripts/tests/static_analysis/fixtures/config/.prettierignore](../../scripts/tests/static_analysis/fixtures/config/.prettierignore) | `pattern-sha256:242732be25bb3ebe56e4ac39c402e13e192c87499852e8e8bf943e72b013ca8b` | `web-maintainers` | `2026-07-19` |
 | `web-sa-11c190003a375cbe38384ba3cc4b313aedb3a02e368b55c4246047c347510188` | `2026-08-31` | `prettier` | `prettier-ignore` | [scripts/tests/static_analysis/fixtures/repository_tools/project/docs/README.md:4](../../scripts/tests/static_analysis/fixtures/repository_tools/project/docs/README.md#L4) | `line:4:prettier-ignore:prettier-ignore` | `web-maintainers` | `2026-07-19` |
-| `web-sa-20be3b6a1ba5d9a76c7aad1e101a08a03beb1173756b1abb04b788a23dd741cd` | `2026-08-31` | `prettier` | `prettier-ignore` | [scripts/tests/static_analysis/fixtures/source/javascript.ts:11](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L11) | `line:11:prettier-ignore:prettier-ignore` | `web-maintainers` | `2026-07-19` |
+| `web-sa-95515e30277774be7b3bea53b975c0a9fc0086a202e5034f63850703dccb636b` | `2026-08-31` | `prettier` | `prettier-ignore` | [scripts/tests/static_analysis/fixtures/source/javascript.ts:8](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L8) | `line:8:prettier-ignore:prettier-ignore` | `web-maintainers` | `2026-07-19` |
 | `web-sa-696951ec1c3f0df062b18e784ab7fd32edb24a414fb50ac002f34543c6d8bea0` | `2026-08-31` | `python` | `filterwarnings` | [scripts/static_analysis/collectors/source.py:158](../../scripts/static_analysis/collectors/source.py#L158) | `call:filterwarnings` | `web-maintainers` | `2026-07-19` |
 | `web-sa-cff868a499f653eb1138f9e3054aad00efc3975d0821b45d54f3d97499065bbb` | `2026-08-31` | `python` | `filterwarnings` | [scripts/tests/static_analysis/fixtures/source/python.py:5](../../scripts/tests/static_analysis/fixtures/source/python.py#L5) | `call:filterwarnings` | `web-maintainers` | `2026-07-19` |
 | `web-sa-fb27ef247dcfef41834d6ce3c3349d228d8e7d6a9d0fbb4e2e44fa84c5b5138d` | `2026-08-31` | `ruff` | `F401` | [scripts/tests/static_analysis/fixtures/source/python.py:2](../../scripts/tests/static_analysis/fixtures/source/python.py#L2) | `line:2:noqa:noqa: F401` | `web-maintainers` | `2026-07-19` |
@@ -94,13 +94,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-607ba295773cc3dfdc7de080f48f1cb2b228b8781142facf891451259a372037` | `2026-08-31` | `typescript` | `skipLibCheck` | [scripts/tests/static_analysis/fixtures/config/tsconfig.json](../../scripts/tests/static_analysis/fixtures/config/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
 | `web-sa-b6f40d39efcafb61f92138d0a10c601f53709747101382fab6528617aea21774` | `2026-08-31` | `typescript` | `exclude` | [scripts/tests/static_analysis/fixtures/config/tsconfig.json](../../scripts/tests/static_analysis/fixtures/config/tsconfig.json) | `pattern-sha256:8fdcf81225875d0d621ad1dee50a58b1f34f658d310e922651487cfc47001156` | `web-maintainers` | `2026-07-19` |
 | `web-sa-b1b860578b7c6c30475f33eb21339a2983a34bebd5e053ee8c600bfb97eced39` | `2026-08-31` | `typescript` | `exclude` | [scripts/tests/static_analysis/fixtures/config/tsconfig.json](../../scripts/tests/static_analysis/fixtures/config/tsconfig.json) | `pattern-sha256:d3fc541fc0c66a095c8aaeb7f91e92026e75089b6aa2f325b5cda9a88692d657` | `web-maintainers` | `2026-07-19` |
-| `web-sa-71914dac3b6b9ddbf74d27268c469510ae866b144a0e954cb9bb9246eb437a3b` | `2026-08-31` | `typescript` | `@ts-nocheck` | [scripts/tests/static_analysis/fixtures/source/javascript.ts:10](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L10) | `line:10:@ts-nocheck:@ts-nocheck` | `web-maintainers` | `2026-07-19` |
-| `web-sa-228e3118321ec7de292a5dd78eb97293fe83904f330fe9276caaa6424e264a57` | `2026-08-31` | `typescript` | `@ts-expect-error` | [scripts/tests/static_analysis/fixtures/source/javascript.ts:6](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L6) | `line:6:@ts-expect-error:@ts-expect-error fixture intentionally checks a narrow boundary` | `web-maintainers` | `2026-07-19` |
-| `web-sa-045c0afe9c3b6aa1b96ce8c718bfc0f4a3f0fc7a07b5f26bce89230e67766114` | `2026-08-31` | `typescript` | `@ts-ignore` | [scripts/tests/static_analysis/fixtures/source/javascript.ts:8](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L8) | `line:8:@ts-ignore:@ts-ignore fixture intentionally checks a legacy boundary` | `web-maintainers` | `2026-07-19` |
-| `web-sa-9476443fa6fb0c81b5b5f59ed2e1ff4e7d4a928781beda3bae1833f4eb0a2c45` | `2026-08-31` | `typescript` | `@ts-expect-error` | [scripts/tests/static_analysis/fixtures/typescript/project/directives.ts:1](../../scripts/tests/static_analysis/fixtures/typescript/project/directives.ts#L1) | `line:1:@ts-expect-error:@ts-expect-error used: the assignment below is intentionally invalid` | `web-maintainers` | `2026-07-19` |
-| `web-sa-cbdd5d06adee772d84e0585326962fc72816c2fedd1f32994d14f931411dae9a` | `2026-08-31` | `typescript` | `@ts-expect-error` | [scripts/tests/static_analysis/fixtures/typescript/project/directives.ts:4](../../scripts/tests/static_analysis/fixtures/typescript/project/directives.ts#L4) | `line:4:@ts-expect-error:@ts-expect-error unused: this line is already valid` | `web-maintainers` | `2026-07-19` |
-| `web-sa-98c146681f2d77c6069b4893aa7afc09c9ff43c120d0c742a5a05ba95252b519` | `2026-08-31` | `typescript` | `@ts-ignore` | [scripts/tests/static_analysis/fixtures/typescript/project/directives.ts:7](../../scripts/tests/static_analysis/fixtures/typescript/project/directives.ts#L7) | `line:7:@ts-ignore:@ts-ignore broad escape retained only as an inventory fixture` | `web-maintainers` | `2026-07-19` |
-| `web-sa-46bdc2138d631aecd02a4e2f40dc20106931b460cd72f5b48d80e2523b4b82c8` | `2026-08-31` | `typescript` | `@ts-nocheck` | [scripts/tests/static_analysis/fixtures/typescript/project/nocheck.ts:1](../../scripts/tests/static_analysis/fixtures/typescript/project/nocheck.ts#L1) | `line:1:@ts-nocheck:@ts-nocheck file-level escape retained only as an inventory fixture` | `web-maintainers` | `2026-07-19` |
 | `web-sa-95247dee5bbd817be730e3d833b32606acf2796bbbacb9cbecbff2063332f3b8` | `2026-08-31` | `typescript` | `skipLibCheck` | [scripts/tests/static_analysis/fixtures/typescript/project/tsconfig.json](../../scripts/tests/static_analysis/fixtures/typescript/project/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
 
 ## Risk and linked tests
@@ -465,14 +458,14 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: prettier reported prettier-ignore at line 4; raw diagnostic omitted.
 
-### `web-sa-20be3b6a1ba5d9a76c7aad1e101a08a03beb1173756b1abb04b788a23dd741cd`
+### `web-sa-95515e30277774be7b3bea53b975c0a9fc0086a202e5034f63850703dccb636b`
 
-- Exact entry: [scripts/tests/static_analysis/fixtures/source/javascript.ts:11](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L11)
+- Exact entry: [scripts/tests/static_analysis/fixtures/source/javascript.ts:8](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L8)
 - Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
 - Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
 - Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported prettier-ignore at line 11; raw diagnostic omitted.
+- Observation: prettier reported prettier-ignore at line 8; raw diagnostic omitted.
 
 ### `web-sa-696951ec1c3f0df062b18e784ab7fd32edb24a414fb50ac002f34543c6d8bea0`
 
@@ -627,69 +620,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: typescript reported exclude at line ?; raw diagnostic omitted.
 
-### `web-sa-71914dac3b6b9ddbf74d27268c469510ae866b144a0e954cb9bb9246eb437a3b`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/source/javascript.ts:10](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L10)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported @ts-nocheck at line 10; raw diagnostic omitted.
-
-### `web-sa-228e3118321ec7de292a5dd78eb97293fe83904f330fe9276caaa6424e264a57`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/source/javascript.ts:6](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L6)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported @ts-expect-error at line 6; raw diagnostic omitted.
-
-### `web-sa-045c0afe9c3b6aa1b96ce8c718bfc0f4a3f0fc7a07b5f26bce89230e67766114`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/source/javascript.ts:8](../../scripts/tests/static_analysis/fixtures/source/javascript.ts#L8)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported @ts-ignore at line 8; raw diagnostic omitted.
-
-### `web-sa-9476443fa6fb0c81b5b5f59ed2e1ff4e7d4a928781beda3bae1833f4eb0a2c45`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/typescript/project/directives.ts:1](../../scripts/tests/static_analysis/fixtures/typescript/project/directives.ts#L1)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported @ts-expect-error at line 1; raw diagnostic omitted.
-
-### `web-sa-cbdd5d06adee772d84e0585326962fc72816c2fedd1f32994d14f931411dae9a`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/typescript/project/directives.ts:4](../../scripts/tests/static_analysis/fixtures/typescript/project/directives.ts#L4)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported @ts-expect-error at line 4; raw diagnostic omitted.
-
-### `web-sa-98c146681f2d77c6069b4893aa7afc09c9ff43c120d0c742a5a05ba95252b519`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/typescript/project/directives.ts:7](../../scripts/tests/static_analysis/fixtures/typescript/project/directives.ts#L7)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported @ts-ignore at line 7; raw diagnostic omitted.
-
-### `web-sa-46bdc2138d631aecd02a4e2f40dc20106931b460cd72f5b48d80e2523b4b82c8`
-
-- Exact entry: [scripts/tests/static_analysis/fixtures/typescript/project/nocheck.ts:1](../../scripts/tests/static_analysis/fixtures/typescript/project/nocheck.ts#L1)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported @ts-nocheck at line 1; raw diagnostic omitted.
-
 ### `web-sa-95247dee5bbd817be730e3d833b32606acf2796bbbacb9cbecbff2063332f3b8`
 
 - Exact entry: [scripts/tests/static_analysis/fixtures/typescript/project/tsconfig.json](../../scripts/tests/static_analysis/fixtures/typescript/project/tsconfig.json)
@@ -707,8 +637,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `66`
-- Matched: `66`
+- Findings: `59`
+- Matched: `59`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`
