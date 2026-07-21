@@ -14,7 +14,7 @@
       data-testid="chat-visual-root"
       :data-chat-state="fixture.chatState"
       :data-empty-scroll-position="
-        fixture.key === 'empty-cases' ? 'bottom' : 'top'
+        fixture.key === 'empty-cases' ? 'cases' : 'top'
       "
       :data-sidebar-drawer-state="drawerStateAttr"
       :data-phase3c-kind="phase3cKindAttr"
@@ -44,7 +44,7 @@
               :collapsed="fixture.sidebarCollapsed"
               active-item="new-chat"
               :user-name="SYNTHETIC_IDENTITY"
-              :can-explore-agents="false"
+              :can-explore-agents="true"
               :can-history="false"
               :can-profile="false"
               :can-cloud-storage="false"
@@ -715,7 +715,15 @@ onUnmounted(() => {
 .chat-cases-region {
   width: 100%;
   flex: 0 0 auto;
+  margin-top: auto;
   padding-bottom: clamp(var(--phy-space-24), 4vh, var(--phy-space-48));
+}
+
+@media (min-width: 900px) {
+  .chat-content-stack.is-empty {
+    max-height: 840px;
+    margin-block: auto;
+  }
 }
 
 @media (max-width: 600px) {
@@ -741,6 +749,15 @@ onUnmounted(() => {
   .empty-chat-mark {
     width: 36px;
     height: 36px;
+  }
+}
+
+@media (min-width: 390px) and (max-width: 600px) {
+  .chat-cases-region {
+    padding-bottom: calc(
+      var(--phy-space-48) + var(--phy-space-48) +
+        env(safe-area-inset-bottom, 0px)
+    );
   }
 }
 

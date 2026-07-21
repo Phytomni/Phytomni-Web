@@ -16,6 +16,10 @@ const EMPTY_STATE_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/shell/PhyEmptyState.vue"),
   "utf8"
 );
+const CASES_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatCases.vue"),
+  "utf8"
+);
 const transcriptStart = CHAT_SOURCE.indexOf('class="message-container"');
 const transcriptEnd = CHAT_SOURCE.indexOf("<el-backtop", transcriptStart);
 const TRANSCRIPT_SOURCE = CHAT_SOURCE.slice(transcriptStart, transcriptEnd);
@@ -105,6 +109,12 @@ describe("Chat empty state", () => {
     expect(EMPTY_STATE_SOURCE).toMatch(
       /@media \(max-width: 600px\)[\s\S]*?\.phy-empty-state__title \{[\s\S]*?font-size: 1\.375rem/
     );
+    expect(EMPTY_STATE_SOURCE).toMatch(
+      /\.phy-empty-state__title\s*\{[\s\S]*?text-wrap:\s*balance/
+    );
+    expect(EMPTY_STATE_SOURCE).toMatch(
+      /\.phy-empty-state__subtitle\s*\{[\s\S]*?text-wrap:\s*balance/
+    );
 
     const emptyChatBlock = CHAT_SOURCE.slice(
       CHAT_SOURCE.indexOf(".empty-chat {"),
@@ -115,5 +125,27 @@ describe("Chat empty state", () => {
       "width: min(100%, var(--phy-layout-transcript-max-width))"
     );
     expect(emptyChatBlock).toContain("padding: var(--phy-space-16)");
+  });
+
+  it("anchors Cases to the landing footer row on wide screens", () => {
+    const casesRegionStart = CHAT_SOURCE.indexOf(".chat-cases-region {");
+    const casesRegionEnd = CHAT_SOURCE.indexOf(
+      "@media (max-width: 600px)",
+      casesRegionStart
+    );
+    const casesRegionBlock = CHAT_SOURCE.slice(
+      casesRegionStart,
+      casesRegionEnd
+    );
+
+    expect(casesRegionBlock).toContain("margin-top: auto");
+    expect(CASES_SOURCE).toContain(
+      "grid-template-columns: repeat(4, minmax(0, 1fr))"
+    );
+    expect(CASES_SOURCE).toContain("@media (min-width: 1360px)");
+    expect(CASES_SOURCE).toContain(
+      "grid-template-columns: repeat(7, minmax(0, 1fr))"
+    );
+    expect(CASES_SOURCE).toContain("width: 100%;");
   });
 });

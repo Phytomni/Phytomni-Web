@@ -116,13 +116,21 @@ const { t } = useI18n();
     flex-wrap: nowrap;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
-    padding: 2px 2px var(--phy-space-4);
-    scrollbar-width: thin;
+    padding: 2px var(--phy-space-24) 2px 2px;
+    scroll-padding-inline: 2px var(--phy-space-24);
+    scroll-snap-type: inline proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .agent-quick-list::-webkit-scrollbar {
+    display: none;
   }
 
   .chat-agent-quick-option {
     flex: 0 0 auto;
     min-height: var(--phy-control-height-primary);
+    scroll-snap-align: start;
   }
 }
 </style>

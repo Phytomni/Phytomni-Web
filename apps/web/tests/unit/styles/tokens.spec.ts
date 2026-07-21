@@ -145,7 +145,7 @@ describe("PHY_TOKENS", () => {
       "--phy-control-height-primary: 48px;",
       "--phy-layout-sidebar-expanded-width: 272px;",
       "--phy-layout-sidebar-compact-width: 56px;",
-      "--phy-layout-transcript-max-width: clamp(860px, 72vw, 1600px);",
+      "--phy-layout-transcript-max-width: clamp(860px, 72vw, 1280px);",
       "--phy-layout-document-max-width: clamp(1120px, 78vw, 1600px);",
       "--phy-layout-reading-max-width: clamp(760px, 52vw, 1160px);",
       "--phy-layout-artifact-wide-max-width: clamp(1120px, 72vw, 1600px);",

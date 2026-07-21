@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import ChatAgentQuickSelect from "@/views/chat/components/ChatAgentQuickSelect.vue";
+
+const QUICK_SELECT_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/chat/components/ChatAgentQuickSelect.vue"
+  ),
+  "utf8"
+);
 
 const options = [
   {
@@ -30,6 +40,15 @@ const mountQuickSelect = (props: Record<string, unknown> = {}) =>
   });
 
 describe("ChatAgentQuickSelect", () => {
+  it("keeps the mobile rail touch-scrollable without native scrollbar chrome", () => {
+    expect(QUICK_SELECT_SOURCE).toMatch(
+      /@media \(max-width: 599px\)[\s\S]*?\.agent-quick-list\s*\{[\s\S]*?overflow-x:\s*auto;[\s\S]*?scrollbar-width:\s*none;/
+    );
+    expect(QUICK_SELECT_SOURCE).toMatch(
+      /\.agent-quick-list::-webkit-scrollbar\s*\{[\s\S]*?display:\s*none;/
+    );
+  });
+
   it("renders only supplied authorized options in order", () => {
     const wrapper = mountQuickSelect();
     const buttons = wrapper.findAll('[data-testid="chat-agent-quick-option"]');

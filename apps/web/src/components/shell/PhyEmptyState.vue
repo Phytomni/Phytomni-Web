@@ -43,6 +43,7 @@ defineProps<{
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
 .phy-empty-state__subtitle {
@@ -51,6 +52,7 @@ defineProps<{
   color: var(--phy-color-text-secondary);
   font-size: 0.9375rem;
   line-height: 1.6;
+  text-wrap: balance;
 }
 
 .phy-empty-state__chips {

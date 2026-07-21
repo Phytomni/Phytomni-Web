@@ -37,6 +37,10 @@ const SHELL_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/shell/PhyAdaptiveShell.vue"),
   "utf8"
 );
+const CHAT_FIXTURE_SOURCE = readFileSync(
+  resolve(__dirname, "../visual/chat/ChatVisualFixtureApp.vue"),
+  "utf8"
+);
 
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
@@ -217,6 +221,22 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
 });
 
 describe("ChatResponsiveContracts — single scroll owner and stable hooks", () => {
+  it("caps tall empty-state compositions in production and visual evidence", () => {
+    for (const source of [CHAT_SOURCE, CHAT_FIXTURE_SOURCE]) {
+      expect(source).toMatch(
+        /@media \(min-width: 900px\)[\s\S]*?\.chat-content-stack\.is-empty\s*\{[\s\S]*?max-height:\s*840px;[\s\S]*?margin-block:\s*auto;/
+      );
+    }
+  });
+
+  it("reserves a clean mobile Cases landing after the Composer", () => {
+    for (const source of [CHAT_SOURCE, CHAT_FIXTURE_SOURCE]) {
+      expect(source).toMatch(
+        /@media \(min-width: 390px\) and \(max-width: 600px\)[\s\S]*?\.chat-cases-region\s*\{[\s\S]*?padding-bottom:\s*calc\([\s\S]*?var\(--phy-space-48\)[\s\S]*?var\(--phy-space-48\)/
+      );
+    }
+  });
+
   it("keeps the architecture dialog within the mobile viewport", () => {
     expect(CHAT_SOURCE).toContain('width="min(800px, calc(100vw - 32px))"');
   });
@@ -250,8 +270,8 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
       countOccurrences(NAV_SOURCE, 'data-testid="chat-account-identity"')
     ).toBe(1);
     expect(
-      countOccurrences(CHAT_SOURCE, 'data-testid="chat-primary-action"')
-    ).toBe(0);
+      CHAT_SOURCE.match(/\sdata-testid="chat-primary-action"/g) ?? []
+    ).toHaveLength(0);
   });
 
   it("locks Composer safe-area padding on the composer root class", () => {

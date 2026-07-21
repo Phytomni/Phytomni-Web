@@ -8,8 +8,8 @@ import type {
 } from "@/views/chat/streaming/a2uiContract";
 import type { ChatAgentPickerOption } from "@/views/chat/components/ChatAgentPicker.vue";
 import {
-  CANONICAL_AGENT_TOOLS,
   CANONICAL_AGENT_LABEL_I18N_KEYS,
+  CANONICAL_AGENT_DISPLAY_ORDER,
 } from "@/constants/agents";
 import {
   isPhase3BMessageKey,
@@ -120,7 +120,7 @@ export function buildSyntheticFileList(
 export function buildSyntheticPickerOptions(
   translate: (key: string) => string = (key) => key
 ): ChatAgentPickerOption[] {
-  return CANONICAL_AGENT_TOOLS.map((tool) => ({
+  return CANONICAL_AGENT_DISPLAY_ORDER.map((tool) => ({
     tool,
     labelKey: CANONICAL_AGENT_LABEL_I18N_KEYS[tool],
     label: translate(CANONICAL_AGENT_LABEL_I18N_KEYS[tool]),

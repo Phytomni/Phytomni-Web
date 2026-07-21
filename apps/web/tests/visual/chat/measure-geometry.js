@@ -143,22 +143,36 @@
 
   const contentStackEl = contentStacks[0];
   const emptyScrollPosition =
-    root.getAttribute("data-empty-scroll-position") === "bottom"
-      ? "bottom"
+    root.getAttribute("data-empty-scroll-position") === "cases"
+      ? "cases"
       : "top";
   const scrollOwnerEl = state === "empty" ? contentStackEl : transcriptEl;
-  const shouldScrollToBottom =
-    state === "populated" || emptyScrollPosition === "bottom";
+  const shouldScrollToBottom = state === "populated";
+  const shouldLandOnCases =
+    state === "empty" && emptyScrollPosition === "cases";
   const mobileSafeInset = innerWidth < 600 ? 24 : 0;
 
-  scrollOwnerEl.scrollTop = shouldScrollToBottom
-    ? Math.max(
-        0,
-        scrollOwnerEl.scrollHeight -
-          scrollOwnerEl.clientHeight -
-          mobileSafeInset
-      )
-    : 0;
+  if (shouldScrollToBottom) {
+    scrollOwnerEl.scrollTop = Math.max(
+      0,
+      scrollOwnerEl.scrollHeight - scrollOwnerEl.clientHeight - mobileSafeInset
+    );
+  } else if (shouldLandOnCases) {
+    const landingSelector =
+      innerWidth >= 390 && innerWidth < 600
+        ? '[data-testid="chat-composer"]'
+        : '[data-testid="chat-cases"]';
+    const casesLandingEl = root.querySelector?.(landingSelector);
+    const ownerTop = scrollOwnerEl.getBoundingClientRect().top;
+    const casesTop = casesLandingEl?.getBoundingClientRect().top ?? ownerTop;
+    const landingInset = innerWidth < 600 ? 8 : 16;
+    scrollOwnerEl.scrollTop = Math.max(
+      0,
+      scrollOwnerEl.scrollTop + casesTop - ownerTop - landingInset
+    );
+  } else {
+    scrollOwnerEl.scrollTop = 0;
+  }
   await frame();
   await frame();
 
@@ -291,7 +305,7 @@
   if (shouldScrollToBottom && !ownerAtBottom) {
     reasons.push("active scroll owner is not at bottom");
   }
-  if (!shouldScrollToBottom && !ownerAtTop) {
+  if (!shouldScrollToBottom && !shouldLandOnCases && !ownerAtTop) {
     reasons.push("empty landing top fixture is not at top");
   }
   if (ownerScrollWidth > ownerClientWidth) {
@@ -311,11 +325,8 @@
         `empty state requires one quick selection region; found ${quickSelectNodes.length}`
       );
     }
-    if (
-      emptyScrollPosition === "bottom" &&
-      !isVisibleInViewport(lastCaseRect)
-    ) {
-      reasons.push("empty bottom fixture final case is not visible");
+    if (emptyScrollPosition === "cases" && !isVisibleInViewport(lastCaseRect)) {
+      reasons.push("empty Cases fixture final case is not visible");
     }
   } else {
     if (caseRegions.length !== 0 || caseLinks.length !== 0) {

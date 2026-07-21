@@ -79,7 +79,7 @@ type Rect = {
 
 type GeometryHarnessOptions = {
   state?: "empty" | "populated";
-  emptyScrollPosition?: "top" | "bottom";
+  emptyScrollPosition?: "top" | "cases";
   includeCases?: boolean;
   includeQuickSelect?: boolean;
   width?: number;
@@ -214,6 +214,10 @@ async function runGeometryHarness(
       return [];
     },
     querySelector: (selector: string) => {
+      if (selector === '[data-testid="chat-cases"]') {
+        return includeCases ? casesRegion : null;
+      }
+      if (selector === '[data-testid="chat-composer"]') return composer;
       if (selector === ".phy-adaptive-shell__main") return mainSurface;
       if (
         selector ===
@@ -654,6 +658,8 @@ describe("Chat visual fixture script contracts", () => {
     expect(MEASURE_SOURCE).toContain("transcript overflow");
     expect(MEASURE_SOURCE).toContain("composer escapes viewport");
     expect(MEASURE_SOURCE).toContain("lastMessage.bottom");
+    expect(MEASURE_SOURCE).toContain("innerWidth >= 390 && innerWidth < 600");
+    expect(MEASURE_SOURCE).toContain("chat-composer");
     expect(MEASURE_SOURCE).toContain(
       "viewport below 900 requires mobile drawer state"
     );
@@ -713,10 +719,10 @@ describe("Chat visual fixture geometry negative controls", () => {
     expect(result.pass).toBe(true);
   });
 
-  it("accepts the bottom Cases capture when the final case is visible", async () => {
+  it("accepts the Cases-anchored capture when the final case is visible", async () => {
     const result = await runGeometryHarness({
       state: "empty",
-      emptyScrollPosition: "bottom",
+      emptyScrollPosition: "cases",
       includeCases: true,
       includeQuickSelect: true,
       composerRect: rect(280, -260, 1160, -100),
@@ -742,10 +748,10 @@ describe("Chat visual fixture geometry negative controls", () => {
     expect(result.pass).toBe(true);
   });
 
-  it("rejects an empty bottom capture that cannot show the final case", async () => {
+  it("rejects a Cases-anchored capture that cannot show the final case", async () => {
     const result = await runGeometryHarness({
       state: "empty",
-      emptyScrollPosition: "bottom",
+      emptyScrollPosition: "cases",
       includeCases: true,
       includeQuickSelect: true,
       lastCaseRect: rect(280, 920, 1160, 1000),
@@ -955,6 +961,9 @@ describe("Chat visual fixture rendering (no network)", () => {
     ).toBe("empty");
     expect(wrapper.findAll('[data-testid="chat-message-row"]')).toHaveLength(0);
     expect(
+      wrapper.find('[data-test="sidebar-nav-explore-agent"]').exists()
+    ).toBe(true);
+    expect(
       wrapper.findAll('[data-testid="chat-account-identity"]')
     ).toHaveLength(1);
     expect(wrapper.find('[data-testid="chat-account-identity"]').text()).toBe(
@@ -981,13 +990,13 @@ describe("Chat visual fixture rendering (no network)", () => {
       zhCN.chat.agentLabels.chatAgent,
       zhCN.chat.agentLabels.knowledgeAgent,
       zhCN.chat.agentLabels.dataAgent,
-      zhCN.chat.agentLabels.reviewAgent,
-      zhCN.chat.agentLabels.briefGeneAgent,
       zhCN.chat.agentLabels.analystAgent,
-      zhCN.chat.agentLabels.deepGenomeAgent,
+      zhCN.chat.agentLabels.reviewAgent,
       zhCN.chat.agentLabels.inSilicoResearchAgent,
-      zhCN.chat.agentLabels.digitalDesignAgent,
       zhCN.chat.agentLabels.geneNetworkAgent,
+      zhCN.chat.agentLabels.briefGeneAgent,
+      zhCN.chat.agentLabels.deepGenomeAgent,
+      zhCN.chat.agentLabels.digitalDesignAgent,
     ]);
     wrapper.unmount();
   });
