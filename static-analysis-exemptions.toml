@@ -264,26 +264,6 @@ risk = "Tracking only; the registry entry does not authorize unrelated findings 
 tests = ["scripts/check_static_analysis_exemptions.py --check"]
 
 [[exemptions]]
-id = "web-sa-696951ec1c3f0df062b18e784ab7fd32edb24a414fb50ac002f34543c6d8bea0"
-tool = "python"
-rule = "filterwarnings"
-classification = "temporary"
-mechanism = "diagnostic"
-target_kind = "span"
-path = "scripts/static_analysis/collectors/source.py"
-target = "call:filterwarnings"
-fingerprint = "sha256:696951ec1c3f0df062b18e784ab7fd32edb24a414fb50ac002f34543c6d8bea0"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-07-19
-expires_on = 2026-08-31
-remediation = "WEB-SA: remediate exact target scripts/static_analysis/collectors/source.py:call:filterwarnings"
-rationale = "Observed by the bounded static-analysis inventory; this temporary record is not approval."
-counterfactual = "Not adjudicated; remove or replace the exact finding before the temporary record expires."
-risk = "Tracking only; the registry entry does not authorize unrelated findings or future occurrences."
-tests = ["scripts/check_static_analysis_exemptions.py --check"]
-
-[[exemptions]]
 id = "web-sa-fd9812ede5856bcc9bf4aac709c060a1fb42dcef070703b6ff16fd2507b4b2b7"
 tool = "typescript"
 rule = "exclude"

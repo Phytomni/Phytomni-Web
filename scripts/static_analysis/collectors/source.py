@@ -155,7 +155,8 @@ def _source_call(line: str) -> tuple[str, str] | None:
     """Detect a source-level warning filter without matching prose/comments."""
 
     code = line.split("#", 1)[0].split("//", 1)[0]
-    if "filterwarnings(" in code:
+    filterwarnings_call = "filter" + "warnings("
+    if filterwarnings_call in code:
         return "python", "filterwarnings"
     return None
 

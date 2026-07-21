@@ -119,6 +119,18 @@ def test_source_findings_are_deterministically_sorted_and_descriptions_are_ignor
     )
 
 
+def test_collector_pattern_is_not_reported_as_a_live_warning_filter() -> None:
+    root = Path(__file__).resolve().parents[3]
+    collector = root / "scripts" / "static_analysis" / "collectors" / "source.py"
+
+    findings = collect_source_suppressions(root, (collector,))
+
+    assert not any(
+        finding.tool == "python" and finding.rule == "filterwarnings"
+        for finding in findings
+    )
+
+
 def test_bot_activation_fixture_mutations_have_no_index_suppression() -> None:
     path = Path(__file__).parents[1] / "test_check_bot_web_activation.py"
     source = path.read_text(encoding="utf-8")

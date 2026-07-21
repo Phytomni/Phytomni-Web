@@ -13,7 +13,6 @@
 - Tool versions:
   - `eslint`: `inventory`
   - `prettier`: `inventory`
-  - `python`: `inventory`
   - `typescript`: `inventory`
 
 ## Structural entries
@@ -43,7 +42,6 @@ Temporary records track remediation debt and never grant structural approval.
 | `web-sa-ab261ad53d14386433fed304598c4610588c3ff09d8b2cee6346651fa276fc5a` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `public/static/pdb/` | `web-maintainers` | `2026-07-19` |
 | `web-sa-ea1aa5fdf087128d339edc9c3c48aa28b486207f924b3cc12ffbf36603a440f5` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `src/assets/agentExample/` | `web-maintainers` | `2026-07-19` |
 | `web-sa-496ce781bad5b04830a5ccbdd13b63936113471f1f80f74df259c5c7385429cb` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `src/assets/agentOut/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-696951ec1c3f0df062b18e784ab7fd32edb24a414fb50ac002f34543c6d8bea0` | `2026-08-31` | `python` | `filterwarnings` | [scripts/static_analysis/collectors/source.py:158](../../scripts/static_analysis/collectors/source.py#L158) | `call:filterwarnings` | `web-maintainers` | `2026-07-19` |
 | `web-sa-80167d38dca94bd15e6ca82cde7155f5145f90ba04eb1b0d78fc02cd2c1a43bb` | `2026-08-31` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.config.json](../../apps/web/tsconfig.config.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
 | `web-sa-fd9812ede5856bcc9bf4aac709c060a1fb42dcef070703b6ff16fd2507b4b2b7` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `coverage` | `web-maintainers` | `2026-07-20` |
 | `web-sa-60261879aad8e18307ebb1a63ffc494466ff77ff9d1f36388baefec6016566b9` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `dist` | `web-maintainers` | `2026-07-20` |
@@ -173,15 +171,6 @@ Temporary records track remediation debt and never grant structural approval.
 - Linked tests: `scripts/check_static_analysis_exemptions.py --check`
 - Observation: prettier reported ignore at line ?; raw diagnostic omitted.
 
-### `web-sa-696951ec1c3f0df062b18e784ab7fd32edb24a414fb50ac002f34543c6d8bea0`
-
-- Exact entry: [scripts/static_analysis/collectors/source.py:158](../../scripts/static_analysis/collectors/source.py#L158)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: python reported filterwarnings at line 158; raw diagnostic omitted.
-
 ### `web-sa-80167d38dca94bd15e6ca82cde7155f5145f90ba04eb1b0d78fc02cd2c1a43bb`
 
 - Exact entry: [apps/web/tsconfig.config.json](../../apps/web/tsconfig.config.json)
@@ -271,8 +260,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `23`
-- Matched: `23`
+- Findings: `22`
+- Matched: `22`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`
