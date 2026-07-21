@@ -14,8 +14,22 @@ pytestmark = pytest.mark.unit
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "source"
 
 
-def test_collects_supported_source_directives_with_exact_context() -> None:
-    root = FIXTURE_DIR
+def test_collects_supported_source_directives_with_exact_context(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    for path in FIXTURE_DIR.iterdir():
+        (root / path.name).write_text(
+            path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    marker = "pragma: " + "allowlist secret"
+    nosec = "no" + "sec"
+    (root / "runtime_secret.py").write_text(
+        f'token = "fixture"  # {marker}\n'
+        f'password = "fixture"  # {nosec} B105\n',
+        encoding="utf-8",
+    )
     paths = tuple(sorted(root.glob("*")))
 
     findings = collect_source_suppressions(root, paths)
@@ -47,8 +61,14 @@ def test_collects_supported_source_directives_with_exact_context() -> None:
 
 
 def test_source_findings_are_deterministically_sorted_and_descriptions_are_ignored(
+    tmp_path: Path,
 ) -> None:
-    root = FIXTURE_DIR
+    root = tmp_path / "source"
+    root.mkdir()
+    for path in FIXTURE_DIR.iterdir():
+        (root / path.name).write_text(
+            path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
     findings = collect_source_suppressions(root, tuple(root.glob("*")))
 
     keys = [

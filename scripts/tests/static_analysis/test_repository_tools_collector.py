@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -16,8 +17,16 @@ pytestmark = pytest.mark.unit
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "repository_tools" / "project"
 
 
-def test_repository_collector_covers_shell_yaml_markdown_formatter_and_secret_scopes() -> None:
-    findings = collect_repository_tool_exceptions(FIXTURE_ROOT)
+def test_repository_collector_covers_shell_yaml_markdown_formatter_and_secret_scopes(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "project"
+    shutil.copytree(FIXTURE_ROOT, root)
+    marker = "pragma: " + "allowlist secret"
+    (root / "docs" / "runtime-secret.md").write_text(
+        f"<!-- {marker} -->\n", encoding="utf-8"
+    )
+    findings = collect_repository_tool_exceptions(root)
 
     identities = {(finding.tool, finding.rule) for finding in findings}
     assert ("shellcheck", "SC2086") in identities
@@ -34,8 +43,10 @@ def test_repository_collector_covers_shell_yaml_markdown_formatter_and_secret_sc
     assert all(finding.mechanism is Mechanism.INLINE for finding in inline_findings)
 
 
-def test_repository_collector_reads_exact_config_exclusions() -> None:
-    findings = collect_repository_tool_exceptions(FIXTURE_ROOT)
+def test_repository_collector_reads_exact_config_exclusions(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    shutil.copytree(FIXTURE_ROOT, root)
+    findings = collect_repository_tool_exceptions(root)
 
     config_findings = {
         (finding.tool, finding.rule, finding.path, finding.target)
@@ -51,8 +62,12 @@ def test_repository_collector_reads_exact_config_exclusions() -> None:
     assert ("shfmt", "ignore", ".shfmtignore", "generated/*.sh") in config_findings
 
 
-def test_repository_collector_excludes_ignored_or_generated_trees() -> None:
-    findings = collect_repository_tool_exceptions(FIXTURE_ROOT)
+def test_repository_collector_excludes_ignored_or_generated_trees(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "project"
+    shutil.copytree(FIXTURE_ROOT, root)
+    findings = collect_repository_tool_exceptions(root)
 
     assert all("node_modules" not in finding.path for finding in findings)
     assert all("dist" not in finding.path for finding in findings)

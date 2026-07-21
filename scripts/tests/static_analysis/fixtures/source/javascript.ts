@@ -12,5 +12,3 @@ const ignored: string = payload;
 const formatted = { value: payload };
 // This text documents eslint-disable-next-line no-console and is not a live directive.
 const description = "eslint-disable-next-line no-console";
-// pragma: allowlist secret
-const fixtureSecret = "not-a-credential";

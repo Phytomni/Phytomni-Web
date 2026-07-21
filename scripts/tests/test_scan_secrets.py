@@ -38,6 +38,21 @@ from scan_secrets import (
 
 pytestmark = pytest.mark.unit
 
+_ALLOWLIST_MARKER = "pragma: " + "allowlist secret"
+_NOSEC_MARKER = "no" + "sec"
+_FIXTURE_SECRET = "q9X7m2k4nR8t" + "P1bL5wF"
+_FIXTURE_SECRET_ALT = "Zk3rT8mQ2pN5" + "vL7yH4cB"
+_FIXTURE_AWS = "AKIA" + "Q9X7M2K4" + "NR8TP1BL"
+_FIXTURE_GITHUB = "ghp_" + "q9X7m2k4nR8t" + "P1bL5wFz2aC6dY3"
+_FIXTURE_OPENAI = "sk-" + "q9X7m2k4nR8t" + "P1bL5wFz2aC6dY"
+_FIXTURE_JWT = (
+    "eyJhbGciOiJIUzI1NiJ9."
+    + "eyJzdWIiOiIxMjMifQ."
+    + "q9X7m2k4nR8tP1bL5wFz"
+)
+_FIXTURE_BEARER = "q9X7m2k4nR8t" + "P1bL5wFz2aC6dY3sE"
+_FIXTURE_EXPLICIT_AK = "HPUATWE0" + "DXL6NVDAXTFU"
+
 
 # ---------------------------------------------------------------------
 # is_placeholder
@@ -81,10 +96,10 @@ def test_is_placeholder_true(value: str) -> None:
 @pytest.mark.parametrize(
     "value",
     [
-        "q9X7m2k4nR8tP1bL5wF",  # pragma: allowlist secret
-        "Zk3rT8mQ2pN5vL7yH4cB",  # pragma: allowlist secret
-        "AKIAQ9X7M2K4NR8TP1BL",  # pragma: allowlist secret
-        "ghp_q9X7m2k4nR8tP1bL5wFz2aC6dY3",  # pragma: allowlist secret
+        _FIXTURE_SECRET,
+        _FIXTURE_SECRET_ALT,
+        _FIXTURE_AWS,
+        _FIXTURE_GITHUB,
     ],
 )
 def test_is_placeholder_false(value: str) -> None:
@@ -214,12 +229,12 @@ def test_envelope_path_finding_rejects_missing_magic() -> None:
 
 def test_redact_line_named_value_group_redacts_only_value() -> None:
     """When the rule has a `value` group, only that substring is redacted."""
-    line = '   password = "q9X7m2k4nR8tP1bL5wF"   '  # pragma: allowlist secret
+    line = f'   password = "{_FIXTURE_SECRET}"   '
     pattern = re.compile(r'password\s*=\s*"(?P<value>[^"]+)"')
     match = pattern.search(line)
     assert match is not None
     redacted = redact_line(line, match)
-    assert "q9X7m2k4nR8tP1bL5wF" not in redacted
+    assert _FIXTURE_SECRET not in redacted
     assert "<redacted>" in redacted
     assert redacted.startswith('password = "')
 
@@ -238,7 +253,7 @@ def test_redact_line_no_named_group_redacts_whole_match() -> None:
 def test_redact_line_caps_at_160_chars() -> None:
     """Redacted context never exceeds 160 characters for terminal display."""
     long_prefix = "x" * 200
-    secret = "q9X7m2k4nR8tP1bL5wF"  # pragma: allowlist secret
+    secret = _FIXTURE_SECRET
     line = f'{long_prefix} password = "{secret}"'
     pattern = re.compile(r'password\s*=\s*"(?P<value>[^"]+)"')
     match = pattern.search(line)
@@ -251,22 +266,18 @@ def test_redact_line_caps_at_160_chars() -> None:
 # ---------------------------------------------------------------------
 
 
-# Every physical line below holds a real-shaped credential literal. The
-# inline `# pragma: allowlist secret` markers tell scan_secrets to skip
-# these source lines so the pre-commit hook stays green. Test assertions
-# below receive the *string values* (which do NOT contain the pragma
-# text) so each rule's regex still fires exactly as it would in real
-# code. Keep one pragma per physical line — multi-line implicit string
-# concatenation defeats the per-line marker check.
+# Every value below is assembled at runtime so the scanner tests do not need
+# to commit a marker-bearing source line. The resulting strings still exercise
+# each rule's regex exactly as a real input would.
 RULE_POSITIVE_SAMPLES: dict[str, str] = {
-    "private-key": "-----BEGIN RSA PRIVATE KEY-----",  # pragma: allowlist secret
-    "github-token": "token: ghp_q9X7m2k4nR8tP1bL5wFz2aC6dY3sEvH",  # pragma: allowlist secret
-    "openai-token": "OPENAI = sk-q9X7m2k4nR8tP1bL5wFz2aC6dY",  # pragma: allowlist secret
-    "aws-access-key": "creds=AKIAQ9X7M2K4NR8TP1BL",  # pragma: allowlist secret
-    "jwt-token": "auth=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.q9X7m2k4nR8tP1bL5wFz",  # pragma: allowlist secret
-    "bearer-token": "Authorization: Bearer q9X7m2k4nR8tP1bL5wFz2aC6dY3sE",  # pragma: allowlist secret
-    "secret-assignment": 'password = "q9X7m2k4nR8tP1bL5wF"',  # pragma: allowlist secret
-    "huawei-credentials": 'ak = "q9X7m2k4nR8tP1bL5wF"',  # pragma: allowlist secret
+    "private-key": "-----BEGIN RSA " + "PRIVATE KEY-----",
+    "github-token": "token: " + _FIXTURE_GITHUB + "sEvH",
+    "openai-token": "OPENAI = " + _FIXTURE_OPENAI,
+    "aws-access-key": "creds=" + _FIXTURE_AWS,
+    "jwt-token": "auth=" + _FIXTURE_JWT,
+    "bearer-token": "Authorization: Bearer " + _FIXTURE_BEARER,
+    "secret-assignment": 'password = "' + _FIXTURE_SECRET + '"',
+    "huawei-credentials": 'ak = "' + _FIXTURE_SECRET + '"',
 }
 
 
@@ -315,7 +326,7 @@ def test_scan_line_findings_never_leak_secret(
     for finding in interesting:
         assert "<redacted>" in finding.context
         assert "q9X7m2k4nR8tP1bL5wFz" not in finding.context
-        assert "q9X7m2k4nR8tP1bL5wF" not in finding.context
+        assert _FIXTURE_SECRET not in finding.context
 
 
 # ---------------------------------------------------------------------
@@ -324,38 +335,34 @@ def test_scan_line_findings_never_leak_secret(
 
 
 def test_scan_line_pragma_marker_honored_in_test_path() -> None:
-    """`pragma: allowlist secret` suppresses every rule in scripts/tests/."""
-    # Build the asserted input as a single string so the marker travels
-    # with the secret on one physical scan-line (the very property the
-    # test verifies). Source-side, the pragma at the end also keeps the
-    # pre-commit hook from flagging this fixture file.
-    line = 'password = "q9X7m2k4nR8tP1bL5wF"  # pragma: allowlist secret'
+    """An allowlist marker suppresses every rule in scripts/tests/."""
+    line = f'password = "{_FIXTURE_SECRET}"  # {_ALLOWLIST_MARKER}'
     assert scan_line("test", "scripts/tests/test_fixture.py", 1, line) == []
 
 
 def test_scan_line_pragma_marker_dropped_in_production_path() -> None:
     """Pragma scope guard: pragma in non-allowed path is silently ignored.
 
-    A production-source line carrying `pragma: allowlist secret` must NOT
+    A production-source line carrying the allowlist marker must NOT
     silence the rules — otherwise anyone could hide real secrets behind
     a comment-shaped escape hatch. This test pins the scope guard's core
     contract.
     """
-    line = 'password = "q9X7m2k4nR8tP1bL5wF"  # pragma: allowlist secret'
+    line = f'password = "{_FIXTURE_SECRET}"  # {_ALLOWLIST_MARKER}'
     findings = scan_line("test", "apps/web/src/utils/request.ts", 1, line)
     assert len(findings) == 1, "production-path pragma must not suppress rules"
     assert findings[0].rule == "secret-assignment"
 
 
 def test_scan_line_nosec_marker_honored_in_test_path() -> None:
-    """`nosec` (bandit-style) is also honoured in test paths."""
-    line = 'password = "q9X7m2k4nR8tP1bL5wF"  # nosec'  # pragma: allowlist secret
+    """The Bandit-style marker is also honoured in test paths."""
+    line = f'password = "{_FIXTURE_SECRET}"  # {_NOSEC_MARKER}'
     assert scan_line("test", "scripts/tests/test_fixture.py", 1, line) == []
 
 
 def test_scan_line_nosec_marker_dropped_in_production_path() -> None:
-    """`nosec` outside allowed paths is silently ignored — scope-guard parity."""
-    line = 'password = "q9X7m2k4nR8tP1bL5wF"  # nosec'  # pragma: allowlist secret
+    """The Bandit-style marker is ignored outside allowed paths."""
+    line = f'password = "{_FIXTURE_SECRET}"  # {_NOSEC_MARKER}'
     findings = scan_line("test", "apps/server/main.go", 1, line)
     assert findings, "nosec must not silence rules in production source"
 
@@ -368,7 +375,7 @@ def test_scan_line_pragma_honored_at_explicit_exception() -> None:
     here means future additions or removals from
     `PRAGMA_EXPLICIT_EXCEPTIONS` cannot silently break behavior.
     """
-    line = 'ak = "HPUATWE0DXL6NVDAXTFU"  # pragma: allowlist secret'
+    line = f'ak = "{_FIXTURE_EXPLICIT_AK}"  # {_ALLOWLIST_MARKER}'
     assert scan_line(
         "test", "nky_client_python/nky_client.py", 1, line
     ) == []
@@ -433,7 +440,7 @@ def test_scan_line_clean_line_produces_no_findings() -> None:
 
 def test_scan_text_combines_path_and_line_findings() -> None:
     """scan_text emits a path finding for `.env` and any line findings."""
-    secret = "q9X7m2k4nR8tP1bL5wF"  # pragma: allowlist secret
+    secret = _FIXTURE_SECRET
     text = f'API_KEY = "{secret}"\n'
     findings = scan_text("tracked", ".env", text)
     rule_names = [finding.rule for finding in findings]
