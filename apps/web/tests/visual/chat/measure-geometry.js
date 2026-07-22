@@ -238,7 +238,10 @@
       : { ...measureRect(null), count: triggerNodes.length };
   const composer =
     composerNodes.length === 1
-      ? measureRect(composerNodes[0])
+      ? measureRect(
+          composerNodes[0].querySelector?.(".chat-composer-surface") ||
+            composerNodes[0]
+        )
       : { ...measureRect(null), count: composerNodes.length };
   const lastMessage = lastRow
     ? { present: true, ...measureRect(lastRow) }

@@ -74,6 +74,7 @@ const REFINEMENT_CAPTURE_SOURCE = readFileSync(
 type GeometryResult = {
   pass: boolean;
   chatMode?: string | null;
+  composer?: { bottom: number };
   error?: string;
   reasons?: string[];
 };
@@ -101,6 +102,7 @@ type GeometryHarnessOptions = {
   transcriptScrollWidth?: number;
   transcriptRect?: Rect;
   composerRect?: Rect;
+  composerSurfaceRect?: Rect;
   lastMessageRect?: Rect;
   lastCaseRect?: Rect;
   contentStackClientHeight?: number;
@@ -268,6 +270,18 @@ async function runGeometryHarness(
       rect(Math.min(300, width / 4), 740, width - 24, 880),
     options.composerVisible ?? true
   );
+  const composerSurface = makeElement(
+    options.composerSurfaceRect ??
+      options.composerRect ??
+      rect(Math.min(300, width / 4), 740, width - 24, 880),
+    options.composerVisible ?? true
+  );
+  if (options.composerSurfaceRect) {
+    Object.assign(composer, {
+      querySelector: (selector: string) =>
+        selector === ".chat-composer-surface" ? composerSurface : null,
+    });
+  }
   const includeTrigger = options.includeTrigger ?? drawerState === "closed";
   const documentMock = {
     documentElement: {
@@ -678,6 +692,9 @@ describe("Chat visual fixture script contracts", () => {
     expect(MEASURE_SOURCE).toContain("lastMessage.bottom");
     expect(MEASURE_SOURCE).toContain("innerWidth >= 390 && innerWidth < 600");
     expect(MEASURE_SOURCE).toContain("chat-composer");
+    expect(MEASURE_SOURCE).toContain('".chat-composer-surface"');
+    expect(MEASURE_SOURCE).toContain("querySelector?.");
+    expect(MEASURE_SOURCE).toContain("composerNodes[0]");
     expect(MEASURE_SOURCE).toContain(
       "viewport below 900 requires mobile drawer state"
     );
@@ -722,6 +739,21 @@ describe("Chat visual fixture geometry negative controls", () => {
   it("passes a valid populated desktop layout", async () => {
     const result = await runGeometryHarness();
     expect(result).toMatchObject({ pass: true });
+  });
+
+  it("measures the visible composer surface when the wrapper provides one", async () => {
+    const result = await runGeometryHarness({
+      composerRect: rect(280, 740, 1160, 880),
+      composerSurfaceRect: rect(280, 740, 1160, 865.84),
+    });
+    expect(result).toMatchObject({ pass: true, composer: { bottom: 865.84 } });
+  });
+
+  it("falls back to the composer wrapper when no surface descendant exists", async () => {
+    const result = await runGeometryHarness({
+      composerRect: rect(280, 740, 1160, 880),
+    });
+    expect(result).toMatchObject({ pass: true, composer: { bottom: 880 } });
   });
 
   it("accepts empty Expert without the Instant quick-select row", async () => {
