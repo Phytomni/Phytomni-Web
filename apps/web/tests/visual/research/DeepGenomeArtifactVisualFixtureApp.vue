@@ -8,7 +8,7 @@
       :metadata="metadata"
       :status="status"
       :markdown="markdown"
-      :references="REAL_DEEP_GENOME_REFERENCES"
+      :references="DEEP_GENOME_CASE_REFERENCES"
       ns="deep-genome-visual"
       artifact-id="deep-genome-visual-artifact"
       :tab-labels="tabLabels"
@@ -31,16 +31,16 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { DeepGenomeArtifact } from "@/components/research";
 import {
-  REAL_DEEP_GENOME_MARKDOWN,
-  REAL_DEEP_GENOME_REFERENCES,
-} from "./fixture-data";
+  DEEP_GENOME_CASE_REFERENCES,
+  DEEP_GENOME_CASE_VIEWER_MARKDOWN,
+} from "@/views/deep-genome-agent/deep-genome-case";
 
 const { t } = useI18n();
 const action = ref("idle");
 const title = "Os01g0177400 functional analysis";
 const metadata = ["Deep Genome Agent", "Oryza sativa", "Os01g0177400"];
 const status = computed(() => t("common.finished"));
-const markdown = REAL_DEEP_GENOME_MARKDOWN.replace(/\n/g, "\\n");
+const markdown = DEEP_GENOME_CASE_VIEWER_MARKDOWN;
 const tabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),

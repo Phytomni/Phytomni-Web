@@ -359,14 +359,14 @@ describe("DeepGenomeResultViewer — scoped responsive media viewers", () => {
     expect(VIEWER_SOURCE).not.toContain("window.$3Dmol");
   });
 
-  it("uses a semantic responsive class instead of fixed CIF inline dimensions", () => {
+  it("keeps the responsive CIF canvas positioned inside its report section", () => {
     expect(VIEWER_SOURCE).toContain(
       'viewerDiv.className = "deep-genome-cif-viewer"'
     );
     expect(VIEWER_SOURCE).not.toContain('viewerDiv.style.width = "100%"');
     expect(VIEWER_SOURCE).not.toContain('viewerDiv.style.height = "600px"');
     expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-document\s+:deep\(\.deep-genome-cif-viewer\)\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*clamp\([\s\S]*var\(--phy-space-64\)/
+      /\.deep-genome-document\s+:deep\(\.deep-genome-cif-viewer\)\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*100%;[\s\S]*height:\s*clamp\([\s\S]*var\(--phy-space-64\)/
     );
   });
 

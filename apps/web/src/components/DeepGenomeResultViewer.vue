@@ -633,6 +633,7 @@ onBeforeUnmount(() => {
 }
 
 .deep-genome-document :deep(.deep-genome-cif-viewer) {
+  position: relative;
   width: 100%;
   height: clamp(
     calc(var(--phy-space-64) * 4),
