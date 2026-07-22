@@ -18,6 +18,8 @@
       "
       :data-sidebar-drawer-state="drawerStateAttr"
       :data-phase3c-kind="phase3cKindAttr"
+      :data-active-sidebar-item="activeSidebarItem"
+      :data-chat-mode="fixtureChatMode"
       class="chat-visual-fixture-root"
     >
       <PhyAdaptiveShell
@@ -42,7 +44,7 @@
             </template>
             <ChatSidebarNav
               :collapsed="fixture.sidebarCollapsed"
-              active-item="new-chat"
+              :active-item="activeSidebarItem"
               :user-name="SYNTHETIC_IDENTITY"
               :can-explore-agents="true"
               :can-history="false"
@@ -262,8 +264,8 @@
                 <ChatComposer
                   :model-value="composerValue"
                   :is-sending="composerIsSending"
-                  chat-mode="instant"
-                  :expert-mode-enabled="false"
+                  :chat-mode="fixtureChatMode"
+                  :expert-mode-enabled="true"
                   :show-mode-selector="fixture.chatState === 'empty'"
                   :file-list="fileList"
                   :roles-loading="false"
@@ -271,6 +273,7 @@
                   :selected-agent="fixture.selectedAgent"
                   :picker-options="pickerOptions"
                   @update:model-value="composerValue = $event"
+                  @update:chat-mode="fixtureChatMode = $event"
                   @submit="onFixtureAction('composer-submit')"
                   @stop="onFixtureAction('composer-stop')"
                   @select="onFixtureAction('composer-select')"
@@ -531,9 +534,19 @@ const composerValue = ref(
 
 const lastFixtureAction = ref("");
 const transcriptRef = ref<HTMLElement | null>(null);
+const activeSidebarItem = ref("new-chat");
+const fixtureChatMode = ref<"instant" | "expert">("instant");
 
 const onFixtureAction = (name: string) => {
   lastFixtureAction.value = name;
+  if (name === "new-chat") activeSidebarItem.value = "new-chat";
+  if (name === "explore-agent") {
+    activeSidebarItem.value = "explore-agent";
+  }
+  if (name === "gene-display") {
+    activeSidebarItem.value = "knowledge-base";
+  }
+  if (name === "favorites") activeSidebarItem.value = "favorites";
 };
 
 async function applyPickerFixtureState() {

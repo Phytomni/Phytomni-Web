@@ -62,6 +62,14 @@ const ASSERT_PATH_SOURCE = readFileSync(
   resolve(VISUAL_CHAT, "assert-chat-path.js"),
   "utf8"
 );
+const REFINEMENT_ASSERT_SOURCE = readFileSync(
+  resolve(VISUAL_CHAT, "assert-refinement-styles.js"),
+  "utf8"
+);
+const REFINEMENT_CAPTURE_SOURCE = readFileSync(
+  resolve(VISUAL_CHAT, "capture-refinement-matrix.sh"),
+  "utf8"
+);
 
 type GeometryResult = {
   pass: boolean;
@@ -79,6 +87,7 @@ type Rect = {
 
 type GeometryHarnessOptions = {
   state?: "empty" | "populated";
+  chatMode?: "instant" | "expert";
   emptyScrollPosition?: "top" | "cases";
   includeCases?: boolean;
   includeQuickSelect?: boolean;
@@ -121,6 +130,7 @@ async function runGeometryHarness(
   const height = options.height ?? 900;
   const drawerState = options.drawerState ?? "not-mobile";
   const state = options.state ?? "populated";
+  const chatMode = options.chatMode ?? "instant";
   const emptyScrollPosition = options.emptyScrollPosition ?? "top";
   const includeCases = options.includeCases ?? state === "empty";
   const includeQuickSelect = options.includeQuickSelect ?? state === "empty";
@@ -192,6 +202,7 @@ async function runGeometryHarness(
       if (name === "data-chat-state") return state;
       if (name === "data-sidebar-drawer-state") return drawerState;
       if (name === "data-empty-scroll-position") return emptyScrollPosition;
+      if (name === "data-chat-mode") return chatMode;
       return null;
     },
     querySelectorAll: (selector: string) => {
@@ -704,6 +715,52 @@ describe("Chat visual fixture geometry negative controls", () => {
   it("passes a valid populated desktop layout", async () => {
     const result = await runGeometryHarness();
     expect(result).toMatchObject({ pass: true });
+  });
+
+  it("accepts empty Expert without the Instant quick-select row", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "expert",
+      includeCases: true,
+      includeQuickSelect: false,
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it("exposes interactive sidebar and mode state for visual review", () => {
+    expect(APP_SOURCE).toContain(
+      ':data-active-sidebar-item="activeSidebarItem"'
+    );
+    expect(APP_SOURCE).toContain(':data-chat-mode="fixtureChatMode"');
+    expect(APP_SOURCE).toContain(':active-item="activeSidebarItem"');
+    expect(APP_SOURCE).toContain(':chat-mode="fixtureChatMode"');
+    expect(APP_SOURCE).toContain(
+      '@update:chat-mode="fixtureChatMode = $event"'
+    );
+    expect(APP_SOURCE).toContain(':expert-mode-enabled="true"');
+  });
+
+  it("locks the focused computed-style capture contract", () => {
+    for (const needle of [
+      "--phy-color-primary-soft",
+      "--phy-color-action-text",
+      "chat-mode-selector",
+      "chat-header-inner",
+      "chat-case-icon img",
+      "In Silico",
+    ]) {
+      expect(REFINEMENT_ASSERT_SOURCE).toContain(needle);
+    }
+    for (const viewport of ["390 844", "1440 900", "2560 1440"]) {
+      expect(REFINEMENT_CAPTURE_SOURCE).toContain(viewport);
+    }
+    expect(REFINEMENT_CAPTURE_SOURCE).toContain('test "${png_count}" -eq 24');
+    expect(REFINEMENT_CAPTURE_SOURCE).toContain(
+      'test "${geometry_count}" -eq 24'
+    );
+    expect(REFINEMENT_CAPTURE_SOURCE).toContain(
+      'test "${refinement_count}" -eq 24'
+    );
   });
 
   it("keeps the empty landing at the top with Composer and Cases present", async () => {

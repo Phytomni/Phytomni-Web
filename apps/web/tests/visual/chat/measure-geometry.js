@@ -87,6 +87,7 @@
       lastCase: { present: false },
       lastMessage: { present: false },
       state: null,
+      chatMode: null,
       pass: false,
       error,
       ...partial,
@@ -111,6 +112,13 @@
     return persistFailure(
       { root: measureRect(root), state },
       `Root data-chat-state must be empty|populated; got "${String(state)}"`
+    );
+  }
+  const chatMode = root.getAttribute("data-chat-mode") || "instant";
+  if (chatMode !== "instant" && chatMode !== "expert") {
+    return persistFailure(
+      { root: measureRect(root), state, chatMode },
+      `Root data-chat-mode must be instant|expert; got "${String(chatMode)}"`
     );
   }
 
@@ -320,9 +328,11 @@
         `empty state requires one Cases region with seven links; found regions=${caseRegions.length} links=${caseLinks.length}`
       );
     }
-    if (quickSelectNodes.length !== 1) {
+    const expectedQuickSelectCount =
+      state === "empty" && chatMode === "instant" ? 1 : 0;
+    if (quickSelectNodes.length !== expectedQuickSelectCount) {
       reasons.push(
-        `empty state requires one quick selection region; found ${quickSelectNodes.length}`
+        `state=${state} mode=${chatMode} requires ${expectedQuickSelectCount} quick selection regions; found ${quickSelectNodes.length}`
       );
     }
     if (emptyScrollPosition === "cases" && !isVisibleInViewport(lastCaseRect)) {
@@ -436,6 +446,7 @@
     drawerScrim: measureRect(drawerScrim),
     lastMessage,
     state,
+    chatMode,
     drawerState,
     pass: reasons.length === 0,
     ...(reasons.length ? { reasons } : {}),

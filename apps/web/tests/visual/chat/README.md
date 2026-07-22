@@ -52,7 +52,8 @@ that same stdout. Always:
 `scrollWidth`, and `atBottom`. `scrollOwner` reports the state-selected owner,
 including `kind`, `scrollTop`, `scrollHeight`, `clientHeight`, `clientWidth`,
 `scrollWidth`, `atTop`, and `atBottom`. Rect records include measured edges.
-`lastMessage.present=false` is permitted only when `state="empty"`.
+`lastMessage.present=false` is permitted only when `state="empty"`. `chatMode`
+reports the fixture mode (`instant` or `expert`).
 
 ### Safe script return shapes
 
@@ -110,6 +111,19 @@ The harness matrix can be captured in one deterministic run:
 ```bash
 ./tests/visual/chat/capture-home-matrix.sh
 ```
+
+## Chat home visual refinement matrix
+
+After the canonical 100-image home matrix, run the focused capture script in
+tests/visual/chat.
+
+The focused set is 390x844, 1440x900, and 2560x1440 × light/dark × Start New
+selected, Explore Agents selected, Instant selected, and Expert selected = 24
+PNGs. Every PNG requires matching passing geometry/refinement JSON first.
+
+Review all 124 PNGs individually: 100 canonical plus 24 focused. Record one
+filename and PASS/FAIL row in the ignored visual-review ledger. Any failed or
+unreviewed row blocks packaging.
 
 ## Terminal A — fixed Vite (hard stop on strict-port failure)
 
