@@ -98,6 +98,9 @@
       :kind="artifactPreview.kind"
       :summary="artifactPreview.summary"
       :open-label="artifactPreview.openLabel"
+      :format-scientific-agent-name="
+        message.tool_name === 'InSilicoResearchAgent'
+      "
       @open="emit('open-artifact')"
     />
     <!-- Ineligible DeepGenome results (streaming, missing id, failed, or

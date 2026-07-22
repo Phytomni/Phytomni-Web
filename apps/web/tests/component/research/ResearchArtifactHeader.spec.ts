@@ -78,6 +78,26 @@ describe("ResearchArtifactHeader", () => {
     ).toBe("Close artifact");
   });
 
+  it("formats only explicitly identified scientific agent metadata", () => {
+    const base = {
+      title: "Report",
+      metadata: "In Silico Research Agent",
+      backLabel: "Back",
+      closeLabel: "Close",
+      actionLabel: "Actions",
+    };
+    expect(
+      mount(ResearchArtifactHeader, { props: base }).find("em").exists()
+    ).toBe(false);
+
+    const formatted = mount(ResearchArtifactHeader, {
+      props: { ...base, formatScientificAgentName: true },
+    });
+    expect(
+      formatted.get(".research-artifact-header__metadata-item em").text()
+    ).toBe("In Silico");
+  });
+
   it("marks Back as mobile-only and Close as desktop-only", () => {
     const wrapper = mount(ResearchArtifactHeader, {
       props: {

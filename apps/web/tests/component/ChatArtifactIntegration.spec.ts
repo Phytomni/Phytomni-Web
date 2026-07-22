@@ -79,6 +79,24 @@ const DEEP_GENOME_ARTIFACT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/research/DeepGenomeArtifact.vue"),
   "utf8"
 );
+const ARTIFACT_PREVIEW_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/components/research/ResearchArtifactPreview.vue"
+  ),
+  "utf8"
+);
+const ARTIFACT_HEADER_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/components/research/ResearchArtifactHeader.vue"
+  ),
+  "utf8"
+);
+const ARTIFACT_SHELL_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/research/ResearchArtifactShell.vue"),
+  "utf8"
+);
 const citedMessage: ChatMessage = {
   role: "assistant",
   id: "cited-1",
@@ -415,6 +433,28 @@ describe("Chat artifact message ownership", () => {
     expect(CHAT_SOURCE).not.toMatch(
       /handleMessageCopy[\s\S]{0,500}artifactPreview/
     );
+  });
+
+  it("opts Chat artifacts into scientific labels without adding HTML sinks", () => {
+    expect(CONTENT_SOURCE).toMatch(
+      /<ResearchArtifactPreview[\s\S]{0,500}:format-scientific-agent-name=/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /<ResearchArtifactShell[\s\S]{0,700}:format-scientific-agent-name=/
+    );
+    expect(CONTENT_SOURCE).toContain(
+      "message.tool_name === 'InSilicoResearchAgent'"
+    );
+    expect(CHAT_SOURCE).toContain(
+      "currentArtifactMessage.tool_name === 'InSilicoResearchAgent'"
+    );
+    for (const source of [
+      ARTIFACT_PREVIEW_SOURCE,
+      ARTIFACT_HEADER_SOURCE,
+      ARTIFACT_SHELL_SOURCE,
+    ]) {
+      expect(source).not.toContain("v-html");
+    }
   });
 });
 

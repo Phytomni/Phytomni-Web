@@ -57,6 +57,27 @@ describe("ResearchArtifactPreview", () => {
     ).toBe("Open report");
   });
 
+  it("formats an opted-in product kind but leaves the generic default plain", () => {
+    const props = {
+      title: "Finished",
+      kind: "In Silico Research Agent",
+      summary: "Research report",
+      openLabel: "Open report",
+    };
+    const plain = mount(ResearchArtifactPreview, { props });
+    expect(plain.find("em").exists()).toBe(false);
+
+    const formatted = mount(ResearchArtifactPreview, {
+      props: { ...props, formatScientificAgentName: true },
+    });
+    expect(formatted.get(".research-artifact-preview__kind").text()).toBe(
+      "In Silico Research Agent"
+    );
+    expect(formatted.get(".research-artifact-preview__kind em").text()).toBe(
+      "In Silico"
+    );
+  });
+
   it("uses only neutral semantic tokens for the nested surface", () => {
     const source = readFileSync(
       resolve(

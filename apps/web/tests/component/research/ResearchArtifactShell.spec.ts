@@ -96,6 +96,25 @@ describe("ResearchArtifactShell", () => {
     expect(wrapper.find(".research-artifact-header").exists()).toBe(false);
   });
 
+  it("forwards scientific agent formatting to the default header", () => {
+    const wrapper = mount(ResearchArtifactShell, {
+      props: {
+        title: "Report",
+        metadata: "In Silico Research Agent",
+        formatScientificAgentName: true,
+        tab: "content",
+        tabLabels: tabs,
+        backLabel: "Back",
+        closeLabel: "Close",
+        actionLabel: "Actions",
+      },
+    });
+
+    expect(
+      wrapper.get(".research-artifact-header__metadata-item em").text()
+    ).toBe("In Silico");
+  });
+
   it("forwards back, close, and action events from its default header", async () => {
     const wrapper = mountShell();
 

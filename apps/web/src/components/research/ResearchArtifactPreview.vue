@@ -1,7 +1,10 @@
 <template>
   <article class="research-artifact-preview research-artifact-preview--neutral">
     <div class="research-artifact-preview__body">
-      <p class="research-artifact-preview__kind">{{ kind }}</p>
+      <p class="research-artifact-preview__kind">
+        <AgentDisplayName v-if="formatScientificAgentName" :label="kind" />
+        <template v-else>{{ kind }}</template>
+      </p>
       <h3
         class="research-artifact-preview__title"
         :title="title"
@@ -25,12 +28,20 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  title: string;
-  kind: string;
-  summary: string;
-  openLabel: string;
-}>();
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
+
+withDefaults(
+  defineProps<{
+    title: string;
+    kind: string;
+    summary: string;
+    openLabel: string;
+    formatScientificAgentName?: boolean;
+  }>(),
+  {
+    formatScientificAgentName: false,
+  }
+);
 
 const emit = defineEmits<{
   (event: "open"): void;

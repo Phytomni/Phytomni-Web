@@ -414,6 +414,22 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
     );
   });
 
+  it("formats InSilico artifact labels only on the Chat preview path", () => {
+    const artifactPreview = {
+      title: "Finished",
+      kind: "In Silico Research Agent",
+      summary: "Research report",
+      openLabel: "View",
+    };
+    const wrapper = mountContent(
+      { ...MESSAGE_DEEP_GENOME, tool_name: "InSilicoResearchAgent" },
+      { artifactPreview }
+    );
+    expect(wrapper.get(".research-artifact-preview__kind em").text()).toBe(
+      "In Silico"
+    );
+  });
+
   it("specialized families are never captured by generic Markdown", () => {
     for (const message of [
       MESSAGE_CITED,

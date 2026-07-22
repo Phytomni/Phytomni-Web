@@ -17,6 +17,7 @@
           :title="title"
           :metadata="metadata"
           :status="status"
+          :format-scientific-agent-name="formatScientificAgentName"
           :back-label="backLabel"
           :close-label="closeLabel"
           :action-label="actionLabel"
@@ -117,6 +118,7 @@ const props = withDefaults(
     title: string;
     metadata?: string | string[];
     status?: string;
+    formatScientificAgentName?: boolean;
     tab?: ResearchArtifactTab;
     tabLabels?: ResearchArtifactTabLabels;
     contentLayout?: ResearchArtifactContentLayout;
@@ -132,6 +134,7 @@ const props = withDefaults(
     tabLabels: () => ({}),
     contentLayout: "reading",
     tablistLabel: "Report sections",
+    formatScientificAgentName: false,
   }
 );
 

@@ -441,6 +441,9 @@
           :title="chatHeaderTitle"
           :metadata="artifactAgentLabel(currentArtifactMessage)"
           :status="currentArtifactStatusLabel"
+          :format-scientific-agent-name="
+            currentArtifactMessage.tool_name === 'InSilicoResearchAgent'
+          "
           :report-status="currentArtifactReportStatus || undefined"
           :tab="artifactTab"
           :tab-labels="artifactTabLabels"

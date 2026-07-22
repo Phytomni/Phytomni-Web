@@ -29,7 +29,8 @@
           :key="item"
           class="research-artifact-header__metadata-item"
         >
-          {{ item }}
+          <AgentDisplayName v-if="formatScientificAgentName" :label="item" />
+          <template v-else>{{ item }}</template>
         </span>
         <span v-if="status" class="research-artifact-header__status">
           {{ status }}
@@ -66,15 +67,22 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 
-const props = defineProps<{
-  title: string;
-  metadata?: string | string[];
-  status?: string;
-  backLabel: string;
-  closeLabel: string;
-  actionLabel: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    metadata?: string | string[];
+    status?: string;
+    formatScientificAgentName?: boolean;
+    backLabel: string;
+    closeLabel: string;
+    actionLabel: string;
+  }>(),
+  {
+    formatScientificAgentName: false,
+  }
+);
 
 const emit = defineEmits<{
   (event: "back"): void;
