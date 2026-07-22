@@ -48,6 +48,31 @@ describe("ChatAgentPicker", () => {
     expect(options).toHaveLength(allTools.length);
   });
 
+  it("formats closed and list labels without changing combobox value", async () => {
+    const option = {
+      tool: "InSilicoResearchAgent",
+      label: "In Silico Research Agent",
+      labelKey: "chat.agentLabels.inSilicoResearchAgent",
+    };
+    const wrapper = mountPicker({
+      options: [option],
+      selectedAgent: "InSilicoResearchAgent",
+    });
+    const input = wrapper.get('[role="combobox"]');
+
+    expect((input.element as HTMLInputElement).value).toBe(
+      "In Silico Research Agent"
+    );
+    expect(input.classes()).toContain("has-display-label");
+    expect(wrapper.get(".picker-display-label em").text()).toBe("In Silico");
+
+    await input.trigger("click");
+    await nextTick();
+    expect(wrapper.find(".picker-display-label").exists()).toBe(false);
+    expect(input.classes()).not.toContain("has-display-label");
+    expect(wrapper.get('[role="option"] em').text()).toBe("In Silico");
+  });
+
   it("shows localized loading state while rolesLoading", () => {
     const wrapper = mountPicker({ rolesLoading: true, options: [] });
     expect(wrapper.text()).toContain("chat.agentPicker.loading");

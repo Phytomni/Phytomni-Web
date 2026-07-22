@@ -119,8 +119,8 @@
                     v-for="item in pickerOptions"
                     :key="item.tool"
                     :command="'@' + item.tool + ','"
-                    >{{ item.label }}</el-dropdown-item
-                  >
+                    ><AgentDisplayName :label="item.label"
+                  /></el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -182,6 +182,7 @@ import { computed, ref, unref } from "vue";
 import type { VNodeRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { MentionSender, FilesCard } from "vue-element-plus-x";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
 import ChatAgentPicker, {
   type ChatAgentPickerOption,

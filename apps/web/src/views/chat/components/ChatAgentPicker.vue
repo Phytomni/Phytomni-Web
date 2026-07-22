@@ -32,29 +32,38 @@
         @click="focusPicker"
       >
         <span class="picker-agent-mark" aria-hidden="true">@</span>
-        <input
-          ref="inputRef"
-          type="text"
-          role="combobox"
-          class="picker-combobox"
-          :value="inputValue"
-          :placeholder="open ? t('chat.agentPicker.searchPlaceholder') : ''"
-          :aria-label="t('chat.agentPicker.label')"
-          :aria-expanded="open ? 'true' : 'false'"
-          :aria-controls="listboxId"
-          :aria-activedescendant="activeDescendant"
-          :aria-disabled="disabled ? 'true' : 'false'"
-          aria-autocomplete="list"
-          autocomplete="off"
-          spellcheck="false"
-          :readonly="!open"
-          :disabled="disabled"
-          @focus="openList"
-          @input="onInput"
-          @click="openList"
-          @keydown="onKeydown"
-          @blur="onBlur"
-        />
+        <div class="picker-value">
+          <input
+            ref="inputRef"
+            type="text"
+            role="combobox"
+            class="picker-combobox"
+            :class="{ 'has-display-label': !open }"
+            :value="inputValue"
+            :placeholder="open ? t('chat.agentPicker.searchPlaceholder') : ''"
+            :aria-label="t('chat.agentPicker.label')"
+            :aria-expanded="open ? 'true' : 'false'"
+            :aria-controls="listboxId"
+            :aria-activedescendant="activeDescendant"
+            :aria-disabled="disabled ? 'true' : 'false'"
+            aria-autocomplete="list"
+            autocomplete="off"
+            spellcheck="false"
+            :readonly="!open"
+            :disabled="disabled"
+            @focus="openList"
+            @input="onInput"
+            @click="openList"
+            @keydown="onKeydown"
+            @blur="onBlur"
+          />
+          <AgentDisplayName
+            v-if="!open"
+            class="picker-display-label"
+            :label="triggerLabel"
+            aria-hidden="true"
+          />
+        </div>
         <button
           v-if="selectedAgent"
           type="button"
@@ -87,7 +96,7 @@
             :class="{ 'is-active': index === activeIndex }"
             @mousedown.prevent="selectOption(option)"
           >
-            {{ option.label }}
+            <AgentDisplayName :label="option.label" />
           </li>
           <li
             v-if="filteredOptions.length === 0"
@@ -105,6 +114,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 
 export type ChatAgentPickerOption = {
   tool: string;
@@ -385,6 +395,17 @@ defineExpose({ trySelect });
   outline-offset: 2px;
 }
 
+.picker-value {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  height: calc(var(--phy-control-height-compact) - 2px);
+}
+
+.picker-value .picker-combobox {
+  height: 100%;
+}
+
 .picker-agent-mark {
   display: inline-flex;
   align-items: center;
@@ -423,6 +444,29 @@ defineExpose({ trySelect });
 .picker-control.has-selection .picker-combobox {
   color: var(--phy-color-text);
   font-weight: 500;
+}
+
+.picker-display-label {
+  position: absolute;
+  inset: 0 var(--phy-space-8);
+  display: block;
+  overflow: hidden;
+  color: var(--phy-color-text-secondary);
+  font-size: 13px;
+  line-height: calc(var(--phy-control-height-compact) - 2px);
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-control.has-selection .picker-display-label {
+  color: var(--phy-color-text);
+  font-weight: 500;
+}
+
+.picker-control .picker-combobox.has-display-label {
+  color: transparent;
+  caret-color: transparent;
 }
 
 .picker-combobox::placeholder {

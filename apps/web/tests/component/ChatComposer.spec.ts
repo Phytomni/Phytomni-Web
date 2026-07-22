@@ -69,6 +69,11 @@ const pickerOptions = [
     label: "Knowledge Agent",
     labelKey: "chat.agents.knowledgeAgent",
   },
+  {
+    tool: "InSilicoResearchAgent",
+    label: "In Silico Research Agent",
+    labelKey: "chat.agents.inSilicoResearchAgent",
+  },
 ];
 
 const baseProps = () => ({
@@ -236,7 +241,11 @@ describe("ChatComposer", () => {
     const wrapper = mountComposer();
     expect(
       wrapper.findComponent({ name: "MentionSender" }).props("options")
-    ).toEqual([{ value: "ChatAgent" }, { value: "KnowledgeAgent" }]);
+    ).toEqual([
+      { value: "ChatAgent" },
+      { value: "KnowledgeAgent" },
+      { value: "InSilicoResearchAgent" },
+    ]);
   });
 
   it("shows direct selection only for an empty instant chat", () => {
@@ -266,6 +275,10 @@ describe("ChatComposer", () => {
     const populated = mountComposer({ hasMessages: true });
     expect(populated.find(".el-dropdown").text()).toContain("Chat Agent");
     expect(populated.find(".el-dropdown").text()).toContain("Knowledge Agent");
+    const menu = populated.get(".el-dropdown");
+    expect(menu.text()).toContain("In Silico Research Agent");
+    expect(menu.get("em").text()).toBe("In Silico");
+    expect(menu.get("em").text()).not.toContain("Research Agent");
   });
 
   it("emits submit from MentionSender and the enabled primary action", async () => {

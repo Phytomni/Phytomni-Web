@@ -46,7 +46,7 @@
               class="agent-option"
               @click="handleAgentClick(agent)"
             >
-              <span>{{ agent.name }}</span>
+              <AgentDisplayName :label="agent.name" />
             </div>
           </div>
         </template>
@@ -140,6 +140,7 @@ import ChatHistoryList, {
   type ChatHistoryGroup,
 } from "./components/ChatHistoryList.vue";
 import ChatSidebarNav from "./components/ChatSidebarNav.vue";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import { PhyAdaptiveSidebar } from "@/components/shell";
 
 // Define the received props

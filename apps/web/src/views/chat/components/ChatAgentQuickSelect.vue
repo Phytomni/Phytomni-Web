@@ -28,7 +28,7 @@
         :disabled="disabled"
         @click="emit('toggle', option.tool)"
       >
-        {{ option.label }}
+        <AgentDisplayName :label="option.label" />
       </button>
     </div>
   </div>
@@ -36,6 +36,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import type { ChatAgentPickerOption } from "./ChatAgentPicker.vue";
 
 defineProps<{

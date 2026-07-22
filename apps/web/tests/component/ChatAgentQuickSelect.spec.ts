@@ -23,6 +23,11 @@ const options = [
     label: "Deep Genome Agent",
     labelKey: "chat.agents.deepGenomeAgent",
   },
+  {
+    tool: "InSilicoResearchAgent",
+    label: "In Silico Research Agent",
+    labelKey: "chat.agents.inSilicoResearchAgent",
+  },
 ];
 
 const mountQuickSelect = (props: Record<string, unknown> = {}) =>
@@ -52,11 +57,22 @@ describe("ChatAgentQuickSelect", () => {
   it("renders only supplied authorized options in order", () => {
     const wrapper = mountQuickSelect();
     const buttons = wrapper.findAll('[data-testid="chat-agent-quick-option"]');
-    expect(buttons).toHaveLength(2);
+    expect(buttons).toHaveLength(3);
     expect(buttons.map((button) => button.text())).toEqual([
       "Chat Agent",
       "Deep Genome Agent",
+      "In Silico Research Agent",
     ]);
+  });
+
+  it("italicizes only In Silico in direct selection", () => {
+    const wrapper = mountQuickSelect();
+    const option = wrapper
+      .findAll('[data-testid="chat-agent-quick-option"]')
+      .find((button) => button.text() === "In Silico Research Agent");
+    expect(option).toBeTruthy();
+    expect(option?.get("em").text()).toBe("In Silico");
+    expect(option?.get("em").text()).not.toContain("Research Agent");
   });
 
   it("marks the selected tool and emits a toggle for the clicked tool", async () => {

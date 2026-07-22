@@ -138,6 +138,12 @@ describe("Chat adaptive shell integration", () => {
     );
   });
 
+  it("routes sidebar product labels through the safe display component", () => {
+    expect(SIDEBAR_SOURCE).toContain("<AgentDisplayName");
+    expect(SIDEBAR_SOURCE).toContain(':label="agent.name"');
+    expect(SIDEBAR_SOURCE).not.toContain("v-html");
+  });
+
   it("keeps both empty and populated transcript branches in one scroll root", () => {
     expect(
       countOccurrences(CHAT_SOURCE, 'data-test="chat-transcript-scroll-root"')
