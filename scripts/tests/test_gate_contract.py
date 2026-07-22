@@ -175,6 +175,17 @@ def test_public_docs_match_quality_gate_entrypoints() -> None:
     assert "full G-1 / G0 / G1..G17 gates" not in readme
 
 
+def test_public_docs_name_ci_jobs_without_claiming_remote_activation() -> None:
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+    for job in GROUP_ORDER:
+        assert f"`{job}`" in contributing
+    assert "recommended required checks" in contributing
+    assert "branch protection" in contributing
+    assert "does not assert that GitHub branch" in contributing
+    assert "CODEOWNERS rules" in contributing
+
+
 def test_quality_policy_docs_preserve_scope_and_no_degradation_contract() -> None:
     style = (ROOT / "STYLE.md").read_text(encoding="utf-8")
     docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")

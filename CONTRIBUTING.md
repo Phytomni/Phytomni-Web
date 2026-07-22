@@ -95,6 +95,24 @@ historical):
 G15–G17 are local readiness checks. They do not authorize a production flag
 change or replace Bot-owner, CI, staging/live, or operations acceptance.
 
+### CI job names and required-check recommendation
+
+The workflow publishes six status names, each backed by one shared gate group:
+
+| Job status         | Gate group                                                  |
+| ------------------ | ----------------------------------------------------------- |
+| `hygiene`          | repository hygiene and secret scanning                      |
+| `frontend-static`  | TypeScript, formatting, and ESLint reconciliation           |
+| `frontend-runtime` | frontend build, tests, and coverage                         |
+| `server-static`    | Go module, format, vet, and build checks                    |
+| `server-runtime`   | Go tests, including the race-enabled path                   |
+| `contracts`        | repository, i18n, visual, A2UI, and compatibility contracts |
+
+When branch protection is configured, the recommended required checks are all
+six exact status names above. This checkout does not assert that GitHub branch
+protection, required-check settings, or CODEOWNERS rules are currently active;
+verify those external settings separately.
+
 ## Testing
 
 - **`apps/web`** uses **vitest**. `npm run coverage` is the enforcing gate (G12);
