@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 from hashlib import sha256
 
-from .model import Exemption, Finding, Mechanism, Registry
+from .model import Classification, Exemption, Finding, Mechanism, Registry
 
 
 FindingKey = tuple[str, str, str, str, str, str, str]
@@ -177,6 +177,7 @@ def select_registry_for_collectors(
         schema_version=registry.schema_version,
         default=registry.default,
         exemptions=exemptions,
+        allow_temporary=registry.allow_temporary,
     )
 
 
@@ -256,6 +257,40 @@ def reconcile(
     )
 
 
+def closure_errors(
+    inventory: Inventory, *, pending_candidate: bool = False
+) -> tuple[str, ...]:
+    """Return bounded reasons an exact inventory cannot close the program."""
+
+    reconciliation = inventory.reconciliation
+    errors: list[str] = []
+    if inventory.registry.allow_temporary:
+        errors.append("closure requires policy allow_temporary = false")
+    if not inventory.registry.exemptions:
+        errors.append("closure rejects an empty registry")
+    if any(
+        entry.classification is Classification.TEMPORARY
+        for entry in inventory.registry.exemptions
+    ):
+        errors.append("closure rejects temporary registry records")
+    if any(
+        match.exemption.classification is not Classification.STRUCTURAL
+        for match in reconciliation.matched
+    ):
+        errors.append("closure requires every matched record to be structural")
+    if reconciliation.unregistered:
+        errors.append("closure found unregistered findings")
+    if reconciliation.stale:
+        errors.append("closure found stale structural records")
+    if reconciliation.duplicates:
+        errors.append("closure found duplicate identities")
+    if reconciliation.expired:
+        errors.append("closure found expired registry records")
+    if pending_candidate:
+        errors.append("closure found a pending candidate packet")
+    return tuple(errors)
+
+
 __all__ = [
     "FindingKey",
     "Inventory",
@@ -263,6 +298,7 @@ __all__ = [
     "Reconciliation",
     "canonical_identity",
     "canonical_target",
+    "closure_errors",
     "exemption_key",
     "finding_key",
     "reconcile",

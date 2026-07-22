@@ -30,6 +30,7 @@ def test_valid_empty_registry_is_deny_by_default() -> None:
 
     assert registry.schema_version == 1
     assert registry.default == "deny"
+    assert registry.allow_temporary is True
     assert registry.exemptions == ()
 
 
@@ -93,6 +94,31 @@ def test_expiration_boundary_is_inclusive() -> None:
 def test_temporary_expiration_is_bounded_by_policy() -> None:
     with pytest.raises(RegistryError, match="2026-08-31"):
         load_registry(FIXTURE_DIR / "after-policy-expiration.toml", today=TODAY)
+
+
+def test_policy_can_explicitly_disable_temporary_records(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.toml"
+    registry_path.write_text(
+        (FIXTURE_DIR / "valid-empty.toml").read_text(encoding="utf-8").replace(
+            'default = "deny"', 'default = "deny"\nallow_temporary = false'
+        ),
+        encoding="utf-8",
+    )
+
+    registry = load_registry(registry_path, today=TODAY)
+
+    assert registry.allow_temporary is False
+
+
+def test_policy_allow_temporary_must_be_boolean(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.toml"
+    registry_path.write_text(
+        'schema_version = 1\n\n[policy]\ndefault = "deny"\nallow_temporary = "false"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RegistryError, match="allow_temporary"):
+        load_registry(registry_path, today=TODAY)
 
 
 @pytest.mark.parametrize(

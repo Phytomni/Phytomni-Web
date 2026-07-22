@@ -129,6 +129,16 @@ the pinned metadata, asset checksum, contract tests, and this documentation in
 one review. If the upgraded gate is not acceptable, restore the prior pinned
 runner metadata and cache key instead of substituting an unpinned binary.
 
+The normal static-analysis gate is the exact reconciliation check. The dormant
+final-audit mode is opt-in and intentionally stricter:
+`python3 scripts/check_static_analysis_exemptions.py --closure`. It evaluates
+all six candidate collectors, requires an explicitly disabled temporary-policy
+flag, and accepts only non-empty exact structural authorizations with no stale,
+unregistered, duplicate, expired, or pending candidate records. When present,
+`.codex/specs/static-analysis-approval-candidates.md` is treated as pending
+evidence until its decisions are resolved; this mode is expected to remain
+blocked while the current approval packet and temporary records are open.
+
 ## Testing
 
 - **`apps/web`** uses **vitest**. `npm run coverage` is the enforcing gate (G12);

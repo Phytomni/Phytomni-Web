@@ -29,6 +29,7 @@ if __package__ in {None, ""}:  # pragma: no cover - direct script execution
     from static_analysis.collectors.typescript import collect_typescript
     from static_analysis.inventory import (
         Inventory,
+        closure_errors,
         reconcile,
         select_registry_for_collectors,
     )
@@ -54,6 +55,7 @@ else:
     from scripts.static_analysis.collectors.typescript import collect_typescript
     from scripts.static_analysis.inventory import (
         Inventory,
+        closure_errors,
         reconcile,
         select_registry_for_collectors,
     )
@@ -180,6 +182,11 @@ def _parser() -> argparse.ArgumentParser:
     mode.add_argument("--inventory", action="store_true", help="observe without failing mismatches")
     mode.add_argument("--check", action="store_true", help="fail on exact reconciliation mismatches")
     mode.add_argument(
+        "--closure",
+        action="store_true",
+        help="require zero temporary records and exact structural closure",
+    )
+    mode.add_argument(
         "--emit-temporary-candidates",
         action="store_true",
         help="render exact temporary records without approving them",
@@ -205,6 +212,11 @@ def _parser() -> argparse.ArgumentParser:
         "--probe-evidence",
         type=Path,
         help="JSON object mapping candidate families to measured probe notes",
+    )
+    parser.add_argument(
+        "--candidate-packet",
+        type=Path,
+        help="optional approval-candidate packet that must contain no pending decision",
     )
     parser.add_argument(
         "--merge",
@@ -252,6 +264,36 @@ def _probe_evidence(path: Path | None) -> dict[str, str]:
     return {key: value for key, value in payload.items()}
 
 
+_DEFAULT_CANDIDATE_PACKET = Path(".codex/specs/static-analysis-approval-candidates.md")
+_PENDING_CANDIDATE_MARKERS = (
+    "Pending human decision",
+    "Exact pending targets:",
+)
+
+
+def _candidate_packet_pending(root: Path, path: Path | None) -> bool:
+    """Return whether the optional candidate packet still carries open decisions."""
+
+    candidates = [_DEFAULT_CANDIDATE_PACKET]
+    if path is not None and path != _DEFAULT_CANDIDATE_PACKET:
+        candidates.append(path)
+    for raw_candidate in candidates:
+        candidate = (
+            raw_candidate if raw_candidate.is_absolute() else root / raw_candidate
+        )
+        if not candidate.exists():
+            if path is not None and raw_candidate == path:
+                raise CollectionError("candidate packet does not exist")
+            continue
+        try:
+            text = candidate.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise CollectionError("candidate packet must be readable UTF-8 text") from exc
+        if any(marker in text for marker in _PENDING_CANDIDATE_MARKERS):
+            return True
+    return False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     root = REPO_ROOT.resolve()
@@ -265,6 +307,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
     )
+    if args.closure:
+        collector_names = CANDIDATE_COLLECTORS
     try:
         today = _today(args.today)
         registry_path = args.registry if args.registry.is_absolute() else root / args.registry
@@ -358,11 +402,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print("static-analysis: ledger differs", file=sys.stderr)
                 return 1
         rendered = (
-            render_json(inventory, enforced=args.check)
+            render_json(inventory, enforced=args.check or args.closure)
             if args.json
-            else render_markdown(inventory, enforced=args.check)
+            else render_markdown(inventory, enforced=args.check or args.closure)
         )
         print(rendered, end="")
+        if args.closure:
+            errors = closure_errors(
+                inventory,
+                pending_candidate=_candidate_packet_pending(root, args.candidate_packet),
+            )
+            for error in errors:
+                print(f"static-analysis: {error}", file=sys.stderr)
+            return 1 if errors else 0
         if args.check and (
             reconciliation.unregistered
             or reconciliation.stale

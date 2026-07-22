@@ -103,10 +103,11 @@ class Registry:
     schema_version: int
     default: str
     exemptions: tuple[Exemption, ...]
+    allow_temporary: bool = True
 
 
 _TOP_LEVEL_KEYS = frozenset({"schema_version", "policy", "exemptions"})
-_POLICY_KEYS = frozenset({"default"})
+_POLICY_KEYS = frozenset({"default", "allow_temporary"})
 _ENTRY_KEYS = frozenset(
     {
         "id",
@@ -366,6 +367,9 @@ def load_registry(path: Path, *, today: date | None = None) -> Registry:
     default = policy.get("default")
     if default != "deny":
         raise _error("policy default must be deny")
+    allow_temporary = policy.get("allow_temporary", True)
+    if type(allow_temporary) is not bool:
+        raise _error("policy allow_temporary must be boolean")
 
     raw_exemptions = document.get("exemptions", [])
     if not isinstance(raw_exemptions, list):
@@ -388,4 +392,5 @@ def load_registry(path: Path, *, today: date | None = None) -> Registry:
         schema_version=schema_version,
         default=default,
         exemptions=tuple(exemptions),
+        allow_temporary=allow_temporary,
     )

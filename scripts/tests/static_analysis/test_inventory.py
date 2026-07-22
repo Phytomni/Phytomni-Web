@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.static_analysis.inventory import Inventory, reconcile
+from scripts.static_analysis.inventory import Inventory, closure_errors, reconcile
 from scripts.static_analysis.model import (
     Classification,
     Exemption,
@@ -131,6 +131,43 @@ def test_empty_inventory_is_a_valid_no_tracked_files_result() -> None:
     assert result.matched == ()
     assert result.unregistered == ()
     assert result.stale == ()
+
+
+def test_closure_requires_exact_structural_matches_and_no_pending_packet() -> None:
+    registry = replace(_registry(), allow_temporary=False)
+    entry = registry.exemptions[0]
+    findings = (_finding_from(entry),)
+    reconciliation = reconcile(findings, registry, today=TODAY)
+    inventory = Inventory(
+        findings=findings,
+        registry=registry,
+        reconciliation=reconciliation,
+        scope="full",
+        collectors=("source",),
+    )
+
+    assert closure_errors(inventory) == ()
+    assert closure_errors(inventory, pending_candidate=True) == (
+        "closure found a pending candidate packet",
+    )
+
+
+def test_closure_rejects_temporary_records_without_relying_on_expiration() -> None:
+    temporary = _registry("valid-temporary.toml").exemptions[0]
+    registry = replace(
+        Registry(schema_version=1, default="deny", exemptions=(temporary,)),
+        allow_temporary=False,
+    )
+    reconciliation = reconcile((_finding_from(temporary),), registry, today=TODAY)
+    inventory = Inventory(
+        findings=(_finding_from(temporary),),
+        registry=registry,
+        reconciliation=reconciliation,
+        scope="full",
+        collectors=("source",),
+    )
+
+    assert "closure rejects temporary registry records" in closure_errors(inventory)
 
 
 def _surface_entry(

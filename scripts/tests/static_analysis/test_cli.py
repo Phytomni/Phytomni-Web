@@ -478,3 +478,177 @@ def test_write_approval_packet_is_evidence_only_and_uses_probe_notes(
     assert "measured probe output" in document
     assert _finding().fingerprint in document
     assert "fixture-secret" not in document
+
+
+def _structural_finding() -> Finding:
+    return Finding(
+        tool="eslint",
+        rule="@typescript-eslint/no-explicit-any",
+        mechanism=Mechanism.INLINE,
+        target_kind=TargetKind.SYMBOL,
+        path="apps/web/src/views/chat/index.vue",
+        target="sendMessage",
+        fingerprint=(
+            "sha256:0123456789abcdef0123456789abcdef"
+            "0123456789abcdef0123456789abcdef"
+        ),
+        message="fixture-secret structural diagnostic",
+        display_line=4,
+        tool_version="fixture-version",
+        evidence=("fixture-secret structural diagnostic",),
+    )
+
+
+def _structural_registry(*, entries: tuple[Exemption, ...] | None = None) -> Registry:
+    return Registry(
+        schema_version=1,
+        default="deny",
+        allow_temporary=False,
+        exemptions=(
+            Exemption(
+                id="fixture-structural",
+                tool="eslint",
+                rule="@typescript-eslint/no-explicit-any",
+                classification=Classification.STRUCTURAL,
+                mechanism=Mechanism.INLINE,
+                target_kind=TargetKind.SYMBOL,
+                path="apps/web/src/views/chat/index.vue",
+                target="sendMessage",
+                fingerprint=_structural_finding().fingerprint,
+                owner="web-maintainers",
+                introduced_on=date(2026, 7, 19),
+                review_on=date(2026, 8, 19),
+                rationale="The fixture represents an exact reviewed native boundary.",
+                counterfactual="Removing the boundary would not improve the contract.",
+                risk="The exact boundary remains covered by the focused test.",
+                tests=("scripts/tests/static_analysis/test_cli.py",),
+            ),
+        )
+        if entries is None
+        else entries,
+    )
+
+
+def _closure_args(registry: Path, *, candidate_packet: Path | None = None) -> list[str]:
+    args = [
+        "--closure",
+        "--registry",
+        str(registry),
+        "--today",
+        TODAY,
+    ]
+    if candidate_packet is not None:
+        args.extend(("--candidate-packet", str(candidate_packet)))
+    return args
+
+
+def test_closure_rejects_temporary_records_even_before_expiry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    temporary = replace(
+        _structural_registry().exemptions[0],
+        classification=Classification.TEMPORARY,
+        expires_on=date(2026, 8, 31),
+        remediation="WEB-SA: remove the temporary record",
+    )
+    registry = _structural_registry(entries=(temporary,))
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: registry)
+    monkeypatch.setattr(cli, "collect_findings", lambda *_args, **_kwargs: (_structural_finding(),))
+
+    result = cli.main(_closure_args(tmp_path / "registry.toml"))
+
+    assert result == 1
+    assert "temporary" in capsys.readouterr().err
+
+
+def test_closure_rejects_empty_registry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registry = replace(_structural_registry(), exemptions=())
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: registry)
+    monkeypatch.setattr(cli, "collect_findings", lambda *_args, **_kwargs: ())
+
+    result = cli.main(_closure_args(tmp_path / "registry.toml"))
+
+    assert result == 1
+    assert "empty" in capsys.readouterr().err
+
+
+def test_closure_rejects_missing_registry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+
+    result = cli.main(_closure_args(tmp_path / "missing.toml"))
+
+    assert result == 2
+    assert "failed closed" in capsys.readouterr().err
+
+
+def test_closure_rejects_pending_candidate_packet(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registry = _structural_registry()
+    packet = tmp_path / "approval-candidates.md"
+    packet.write_text("> **Pending human decision**\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: registry)
+    monkeypatch.setattr(cli, "collect_findings", lambda *_args, **_kwargs: (_structural_finding(),))
+
+    result = cli.main(
+        _closure_args(tmp_path / "registry.toml", candidate_packet=packet)
+    )
+
+    assert result == 1
+    assert "pending candidate" in capsys.readouterr().err
+
+
+def test_closure_cannot_bypass_default_pending_candidate_packet(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registry = _structural_registry()
+    default_packet = tmp_path / ".codex/specs/static-analysis-approval-candidates.md"
+    default_packet.parent.mkdir(parents=True)
+    default_packet.write_text("Pending human decision", encoding="utf-8")
+    alternate_packet = tmp_path / "empty-candidates.md"
+    alternate_packet.write_text("No open decisions", encoding="utf-8")
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: registry)
+    monkeypatch.setattr(cli, "collect_findings", lambda *_args, **_kwargs: (_structural_finding(),))
+
+    result = cli.main(
+        _closure_args(tmp_path / "registry.toml", candidate_packet=alternate_packet)
+    )
+
+    assert result == 1
+    assert "pending candidate" in capsys.readouterr().err
+
+
+def test_closure_rejects_stale_structural_record(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registry = _structural_registry()
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: registry)
+    monkeypatch.setattr(cli, "collect_findings", lambda *_args, **_kwargs: ())
+
+    result = cli.main(_closure_args(tmp_path / "registry.toml"))
+
+    assert result == 1
+    assert "stale" in capsys.readouterr().err
+
+
+def test_closure_passes_only_for_exact_structural_matches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registry = _structural_registry()
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: registry)
+    monkeypatch.setattr(cli, "collect_findings", lambda *_args, **_kwargs: (_structural_finding(),))
+
+    result = cli.main(_closure_args(tmp_path / "registry.toml"))
+
+    assert result == 0
+    assert "ENFORCED" in capsys.readouterr().out
