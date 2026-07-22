@@ -27,9 +27,11 @@ describe("no-misused-promises callback contracts", () => {
   });
 
   it("keeps logout and password handlers synchronous at void-return boundaries", () => {
-    const layout = source("layout/index.vue");
-    const profile = source("views/profile/index.vue");
-    const changePassword = source("views/change-password/index.vue");
+    const layout = source("layout/LayoutView.vue");
+    const profile = source("views/profile/ProfileView.vue");
+    const changePassword = source(
+      "views/change-password/ChangePasswordView.vue"
+    );
 
     expect(layout).toMatch(
       /UserStore\.FedLogOut\(\)[\s\S]*?\.catch\(\(\) => undefined\)\n\s*\.then\(\(\) => router\.replace\("\/login"\)\)\n\s*\.catch\(\(\) => undefined\);/

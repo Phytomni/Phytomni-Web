@@ -7,7 +7,7 @@ import {
 } from "@/constants/agents";
 
 const SIDEBAR_SOURCE = readFileSync(
-  resolve(__dirname, "../../../../src/views/chat/sidebar.vue"),
+  resolve(__dirname, "../../../../src/views/chat/ChatSidebar.vue"),
   "utf8"
 );
 

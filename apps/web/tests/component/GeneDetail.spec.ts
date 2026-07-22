@@ -32,7 +32,7 @@ vi.mock("@/api/gene-display", () => ({
 }));
 
 // Keep the route parsing boundary observable: the real helper also strips the
-// trailer, which would otherwise mask detail.vue ignoring parseDocTitles.mainContent.
+// trailer, which would otherwise mask GeneDetailView.vue ignoring parseDocTitles.mainContent.
 vi.mock("@/views/gene-display/gene-markdown", () => ({
   buildDisplayContent: mocks.buildDisplayContent,
 }));
@@ -44,7 +44,7 @@ vi.mock("element-plus", () => ({
   },
 }));
 
-import GeneDetail from "@/views/gene-display/detail.vue";
+import GeneDetail from "@/views/gene-display/GeneDetailView.vue";
 
 const DeepGenomeArtifactStub = defineComponent({
   name: "DeepGenomeArtifact",

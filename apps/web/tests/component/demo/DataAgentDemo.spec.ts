@@ -61,7 +61,7 @@ function mountDemo() {
   });
 }
 
-import DataAgent from "@/views/data-agent/index.vue";
+import DataAgent from "@/views/data-agent/DataAgentView.vue";
 
 describe("Data Agent static demonstration", () => {
   it("keeps the three sample rounds in their exact order", () => {

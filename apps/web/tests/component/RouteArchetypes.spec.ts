@@ -30,7 +30,7 @@ type RouteContract = {
 const ROUTE_CONTRACTS: RouteContract[] = [
   {
     path: "/login",
-    component: "views/login/index.vue",
+    component: "views/login/LoginView.vue",
     productLayout: "auth",
     migrationTask: "auth shell",
     behaviorTest: "tests/component/shell/PhyAuthLayout.spec.ts",
@@ -38,7 +38,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/register",
-    component: "views/register/index.vue",
+    component: "views/register/RegisterView.vue",
     productLayout: "auth",
     migrationTask: "auth shell",
     behaviorTest: "tests/component/shell/PhyAuthLayout.spec.ts",
@@ -46,7 +46,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/forgot-password",
-    component: "views/forgot-password/index.vue",
+    component: "views/forgot-password/ForgotPasswordView.vue",
     productLayout: "auth",
     migrationTask: "auth shell",
     behaviorTest: "tests/component/shell/PhyAuthLayout.spec.ts",
@@ -54,7 +54,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/401",
-    component: "views/error/401.vue",
+    component: "views/error/UnauthorizedView.vue",
     productLayout: "standalone",
     migrationTask: "recovery surface",
     behaviorTest: "tests/component/ErrorRecoveryPages.spec.ts",
@@ -62,7 +62,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/terms",
-    component: "views/legal/index.vue",
+    component: "views/legal/LegalView.vue",
     productLayout: "document",
     migrationTask: "legal document shell",
     behaviorTest: "tests/component/LegalPage.spec.ts",
@@ -70,7 +70,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/privacy",
-    component: "views/legal/index.vue",
+    component: "views/legal/LegalView.vue",
     productLayout: "document",
     migrationTask: "legal document shell",
     behaviorTest: "tests/component/LegalPage.spec.ts",
@@ -78,7 +78,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/:pathMatch(.*)*",
-    component: "views/error/404.vue",
+    component: "views/error/NotFoundView.vue",
     productLayout: "standalone",
     migrationTask: "recovery surface",
     behaviorTest: "tests/component/ErrorRecoveryPages.spec.ts",
@@ -86,7 +86,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/gene-display",
-    component: "views/gene-display/index.vue",
+    component: "views/gene-display/GeneDisplayView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -94,7 +94,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/knowledge-agent",
-    component: "views/knowledge-agent/index.vue",
+    component: "views/knowledge-agent/KnowledgeAgentView.vue",
     productLayout: "demo",
     migrationTask: "agent demo shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
@@ -102,7 +102,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/data-agent",
-    component: "views/data-agent/index.vue",
+    component: "views/data-agent/DataAgentView.vue",
     productLayout: "demo",
     migrationTask: "agent demo shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
@@ -110,7 +110,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/analyst-agent",
-    component: "views/analyst-agent/index.vue",
+    component: "views/analyst-agent/AnalystAgentView.vue",
     productLayout: "demo",
     migrationTask: "agent demo shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
@@ -118,7 +118,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/brief-gene-agent",
-    component: "views/brief-gene-agent/index.vue",
+    component: "views/brief-gene-agent/BriefGeneAgentView.vue",
     productLayout: "demo",
     migrationTask: "agent demo shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
@@ -134,7 +134,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/gene-network-agent",
-    component: "views/gene-network-agent/index.vue",
+    component: "views/gene-network-agent/GeneNetworkAgentView.vue",
     productLayout: "standalone",
     migrationTask: "capability-gated remote agent surface",
     behaviorTest: "tests/component/GeneNetworkAgentView.spec.ts",
@@ -146,7 +146,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/deep-genome-agent",
-    component: "views/deep-genome-agent/index.vue",
+    component: "views/deep-genome-agent/DeepGenomeAgentView.vue",
     productLayout: "demo",
     migrationTask: "agent demo shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
@@ -162,7 +162,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/digital-design-agent",
-    component: "views/digital-design-agent/index.vue",
+    component: "views/digital-design-agent/DigitalDesignAgentView.vue",
     productLayout: "standalone",
     migrationTask: "capability-gated remote agent surface",
     behaviorTest: "tests/component/DigitalDesignAgentView.spec.ts",
@@ -174,7 +174,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/design",
-    component: "views/design/index.vue",
+    component: "views/design/DesignView.vue",
     productLayout: "demo",
     migrationTask: "agent demo shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
@@ -182,7 +182,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/gene-display/detail",
-    component: "views/gene-display/detail.vue",
+    component: "views/gene-display/GeneDetailView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -190,7 +190,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/log-list",
-    component: "views/log-list/index.vue",
+    component: "views/log-list/LogListView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -198,7 +198,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/user-list",
-    component: "views/user-list/index.vue",
+    component: "views/user-list/UserListView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -206,7 +206,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/permi-manage",
-    component: "views/permi-manage/index.vue",
+    component: "views/permi-manage/PermiManageView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -214,7 +214,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/change-password",
-    component: "views/change-password/index.vue",
+    component: "views/change-password/ChangePasswordView.vue",
     productLayout: "auth",
     migrationTask: "auth shell",
     behaviorTest: "tests/component/shell/PhyAuthLayout.spec.ts",
@@ -222,7 +222,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/chat",
-    component: "views/chat/index.vue",
+    component: "views/chat/ChatView.vue",
     productLayout: "conversation",
     migrationTask: "adaptive conversation shell",
     behaviorTest: "tests/component/ChatShellIntegration.spec.ts",
@@ -230,7 +230,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/favorites",
-    component: "views/favorites/index.vue",
+    component: "views/favorites/FavoritesView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -238,7 +238,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/history",
-    component: "views/history/index.vue",
+    component: "views/history/HistoryView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -246,7 +246,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/profile",
-    component: "views/profile/index.vue",
+    component: "views/profile/ProfileView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -254,7 +254,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/cloud-storage",
-    component: "views/cloud-storage/index.vue",
+    component: "views/cloud-storage/CloudStorageView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -262,7 +262,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/feedback",
-    component: "views/feedback/index.vue",
+    component: "views/feedback/FeedbackView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -270,7 +270,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/task-management",
-    component: "views/task-manager/index.vue",
+    component: "views/task-manager/TaskManagerView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -278,7 +278,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/help",
-    component: "views/help/index.vue",
+    component: "views/help/HelpView.vue",
     productLayout: "document",
     migrationTask: "help document shell",
     behaviorTest: "tests/component/HelpPage.spec.ts",
@@ -286,7 +286,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/global-config",
-    component: "views/global-config/index.vue",
+    component: "views/global-config/GlobalConfigView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",
@@ -294,7 +294,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   },
   {
     path: "/admin-management",
-    component: "views/admin-management/index.vue",
+    component: "views/admin-management/AdminManagementView.vue",
     productLayout: "workspace",
     migrationTask: "workspace shell",
     behaviorTest: "tests/component/WorkspaceLayout.spec.ts",

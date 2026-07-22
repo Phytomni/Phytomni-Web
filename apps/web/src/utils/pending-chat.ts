@@ -1,5 +1,5 @@
 /**
- * Helpers for the pending-chat localStorage record shape used by chat/index.vue
+ * Helpers for the pending-chat localStorage record shape used by ChatView.vue
  * scanners and the chat-send/finish writer side.
  *
  * Contract:
@@ -98,7 +98,7 @@ export function matchesChat(
 /**
  * Parses JSON safely. Returns null on parse failure, on null input, or on empty-string
  * input. Logs to console.error on parse failure only. Caller decides whether to
- * removeItem the originating key (current consumers: 3 scanners in chat/index.vue).
+ * removeItem the originating key (current consumers: 3 scanners in ChatView.vue).
  */
 export function safeParse<T = PendingChatRecord>(
   raw: string | null | undefined
@@ -233,7 +233,7 @@ export function clearPendingChat(dialogueId: string): void {
  * Predicate: does this dialogueId represent a localStorage-only pending chat?
  *
  * True iff dialogueId is a non-empty string matching /^new_.+$/ — the prefix
- * minted by startNewChat() at chat/index.vue:1946 (`"new_" + Date.now()`).
+ * minted by startNewChat() at ChatView.vue:1946 (`"new_" + Date.now()`).
  *
  * The require-at-least-one-char-after-prefix rule prevents the degenerate
  * 'new_' edge case (which would pass a startsWith-only check but cannot

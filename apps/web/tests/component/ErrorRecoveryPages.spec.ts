@@ -17,8 +17,8 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ push: mocks.push, go: mocks.go }),
 }));
 
-import Unauthorized from "@/views/error/401.vue";
-import NotFound from "@/views/error/404.vue";
+import Unauthorized from "@/views/error/UnauthorizedView.vue";
+import NotFound from "@/views/error/NotFoundView.vue";
 
 // Each mount installs a locale with the requested language. Remove the empty
 // global i18n plugin from tests/setup.ts so this focused suite does not stack
@@ -138,10 +138,16 @@ describe("standalone recovery pages", () => {
     expect(APP_SOURCE).not.toContain("app-footer");
     expect(APP_SOURCE).not.toContain("showFooter");
     expect(
-      readFileSync(resolve(__dirname, "../../src/views/error/401.vue"), "utf8")
+      readFileSync(
+        resolve(__dirname, "../../src/views/error/UnauthorizedView.vue"),
+        "utf8"
+      )
     ).not.toMatch(/<img\b|401_images/);
     expect(
-      readFileSync(resolve(__dirname, "../../src/views/error/404.vue"), "utf8")
+      readFileSync(
+        resolve(__dirname, "../../src/views/error/NotFoundView.vue"),
+        "utf8"
+      )
     ).not.toMatch(/<img\b|404_images/);
   });
 });

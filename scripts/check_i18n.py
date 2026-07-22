@@ -63,8 +63,8 @@ PERMANENT_EXACT_LITERALS = {
     # CJK fragments of 京ICP备07026971号-9 (legal filing identifier, permanent
     # exemption). The CJK regex splits the mixed-ASCII/CJK run into these
     # individual fragments, which don't individually match ICP_RE.
-    "apps/web/src/components/Footer.vue": {"京", "备", "号"},
-    "apps/web/src/views/chat/index.vue": {"京", "备", "号", "："},
+    "apps/web/src/components/AppFooter.vue": {"京", "备", "号"},
+    "apps/web/src/views/chat/ChatView.vue": {"京", "备", "号", "："},
     # Full-width colon (U+FF1A) appended after a $t() label in display
     # contexts. The label keys are reused in :label props (no colon) and in
     # {{ $t("...") }}： (with colon); baking the colon into the bundle value
@@ -72,8 +72,8 @@ PERMANENT_EXACT_LITERALS = {
     # colon-suffixed keys is a larger refactor outside this task's scope.
     # The colon is a punctuation convention, not translatable copy.
     "apps/web/src/components/CitedAnswer.vue": {"："},
-    "apps/web/src/views/admin-management/index.vue": {"："},
-    "apps/web/src/views/user-list/index.vue": {"："},
+    "apps/web/src/views/admin-management/AdminManagementView.vue": {"："},
+    "apps/web/src/views/user-list/UserListView.vue": {"："},
     # /ping health-check response: "pong" is a machine-consumed convention,
     # not user-facing copy, and the route is not behind i18n.Localize().
     "apps/server/server/http.go": {"pong"},

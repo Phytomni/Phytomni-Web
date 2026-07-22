@@ -29,10 +29,10 @@ vi.mock("@/legal/renderLegalMarkdown", async () => {
   };
 });
 
-import LegalPage from "@/views/legal/index.vue";
+import LegalPage from "@/views/legal/LegalView.vue";
 
 const SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/legal/index.vue"),
+  resolve(__dirname, "../../src/views/legal/LegalView.vue"),
   "utf8"
 );
 

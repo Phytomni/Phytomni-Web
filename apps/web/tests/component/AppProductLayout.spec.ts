@@ -20,7 +20,7 @@ describe("App product-layout ownership", () => {
   });
 
   it("leaves Footer ownership to route shells", () => {
-    expect(SOURCE).not.toContain("@/components/Footer.vue");
+    expect(SOURCE).not.toContain("@/components/AppFooter.vue");
     expect(SOURCE).toContain("<RouterView />");
   });
 });

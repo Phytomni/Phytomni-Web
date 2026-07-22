@@ -514,7 +514,7 @@ describe("writePendingChat mode", () => {
   });
 });
 
-/** Mirrors index.vue streaming branch of getHistoryQuestionData (no blockingDialogueId). */
+/** Mirrors ChatView.vue streaming branch of getHistoryQuestionData (no blockingDialogueId). */
 function streamingReconciliationOutcome(
   formattedData: ChatListEntry[],
   pendingData: PendingChatRecord,

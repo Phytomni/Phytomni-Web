@@ -135,7 +135,7 @@ def test_should_skip_path_true(path: str) -> None:
     [
         "src/main.py",
         "scripts/scan_secrets.py",
-        "apps/web/src/views/chat/index.vue",
+        "apps/web/src/views/chat/ChatView.vue",
         "apps/server/main.go",
         "docs/README.md",
     ],

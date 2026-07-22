@@ -52,7 +52,7 @@ export default defineConfig({
         "src/components/PiiWatermark.vue",
         "src/components/ChatModeSelector.vue",
         "src/permission.ts",
-        "src/views/forgot-password/index.vue",
+        "src/views/forgot-password/ForgotPasswordView.vue",
         "src/utils/citation.ts",
         "src/utils/markdown-inline.ts",
         "src/utils/sanitizer-diff.ts",

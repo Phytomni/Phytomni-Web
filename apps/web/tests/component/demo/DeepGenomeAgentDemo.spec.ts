@@ -63,7 +63,7 @@ const i18n = createI18n({
   messages: { "en-US": enUS, "zh-CN": zhCN },
 });
 
-import DeepGenomeAgent from "@/views/deep-genome-agent/index.vue";
+import DeepGenomeAgent from "@/views/deep-genome-agent/DeepGenomeAgentView.vue";
 
 function mountDemo() {
   return mount(DeepGenomeAgent, {
@@ -111,7 +111,10 @@ describe("Deep Genome Agent static demonstration", () => {
     routerBack.mockReset();
     const wrapper = mountDemo();
     const source = readFileSync(
-      resolve(__dirname, "../../../src/views/deep-genome-agent/index.vue"),
+      resolve(
+        __dirname,
+        "../../../src/views/deep-genome-agent/DeepGenomeAgentView.vue"
+      ),
       "utf8"
     );
 

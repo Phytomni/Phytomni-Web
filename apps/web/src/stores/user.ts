@@ -146,7 +146,7 @@ export default defineStore({
     /**
      * Server-write-only by convention AND enforced by G11 in
      * scripts/validate_web_local.sh — only stores/user.ts (this file)
-     * and views/login/index.vue may reference SET_LOGIN_STATUS.
+     * and views/login/LoginView.vue may reference SET_LOGIN_STATUS.
      * Calling this from any other code path can bypass the first-login
      * enforcement guard in permission.ts.
      */

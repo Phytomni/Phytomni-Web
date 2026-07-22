@@ -27,7 +27,7 @@ vi.mock("@/api/task", () => ({ getTaskList: mocks.getTaskList }));
 vi.mock("@/api/chat", () => ({ getChatdownloadURL: mocks.getChatdownloadURL }));
 vi.mock("element-plus", () => ({ ElMessage: { error: mocks.error } }));
 
-import TaskManager from "@/views/task-manager/index.vue";
+import TaskManager from "@/views/task-manager/TaskManagerView.vue";
 
 type TaskRow = Record<string, unknown>;
 const tableDataKey: InjectionKey<ComputedRef<TaskRow[]>> = Symbol("table-data");
@@ -295,7 +295,7 @@ describe("Task Manager workspace", () => {
     ).toBe(true);
 
     const source = readFileSync(
-      resolve(__dirname, "../../src/views/task-manager/index.vue"),
+      resolve(__dirname, "../../src/views/task-manager/TaskManagerView.vue"),
       "utf8"
     );
     expect(source).not.toMatch(/console\.(?:log|info|debug)\(/);

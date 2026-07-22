@@ -14,8 +14,8 @@ vi.mock("vue-element-plus-x", () => ({
   Typewriter: { name: "Typewriter", template: "<div />" },
 }));
 
-import KnowledgeAgent from "@/views/knowledge-agent/index.vue";
-import BriefGeneAgent from "@/views/brief-gene-agent/index.vue";
+import KnowledgeAgent from "@/views/knowledge-agent/KnowledgeAgentView.vue";
+import BriefGeneAgent from "@/views/brief-gene-agent/BriefGeneAgentView.vue";
 
 const i18n = createI18n({
   legacy: false,

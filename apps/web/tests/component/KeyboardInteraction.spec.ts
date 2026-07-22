@@ -6,8 +6,8 @@ const source = (relativePath: string) =>
   readFileSync(resolve(__dirname, "../../src", relativePath), "utf8");
 
 const MAIN_CSS = source("assets/main.css");
-const LAYOUT = source("layout/index.vue");
-const SIDEBAR = source("views/chat/sidebar.vue");
+const LAYOUT = source("layout/LayoutView.vue");
+const SIDEBAR = source("views/chat/ChatSidebar.vue");
 const NAV = source("views/chat/components/ChatSidebarNav.vue");
 const PICKER = source("views/chat/components/ChatAgentPicker.vue");
 const ARTIFACT = source("components/research/ResearchArtifactShell.vue");

@@ -476,7 +476,7 @@ describe("useChatStates rekeyChatState", () => {
   });
 });
 
-/** Mirrors index.vue reconcileMatchedDialogue for behavioral contract tests. */
+/** Mirrors ChatView.vue reconcileMatchedDialogue for behavioral contract tests. */
 function reconcileMatchedDialogueHarness(opts: {
   rekeyChatState: (from: string, to: string) => RekeyChatStateOutcome;
   currentChatId: { value: string };

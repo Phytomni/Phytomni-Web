@@ -17,17 +17,17 @@ type DemoContract = {
 const DEMO_CONTRACTS: DemoContract[] = [
   {
     path: "/knowledge-agent",
-    source: "views/knowledge-agent/index.vue",
+    source: "views/knowledge-agent/KnowledgeAgentView.vue",
     required: ["AgentDemoShell", 'ns="kb"', "CitedAnswer", "router.back"],
   },
   {
     path: "/brief-gene-agent",
-    source: "views/brief-gene-agent/index.vue",
+    source: "views/brief-gene-agent/BriefGeneAgentView.vue",
     required: ["AgentDemoShell", 'ns="bg"', "CitedAnswer", "router.back"],
   },
   {
     path: "/data-agent",
-    source: "views/data-agent/index.vue",
+    source: "views/data-agent/DataAgentView.vue",
     required: [
       "AgentDemoShell",
       "data-agent-round",
@@ -37,7 +37,7 @@ const DEMO_CONTRACTS: DemoContract[] = [
   },
   {
     path: "/analyst-agent",
-    source: "views/analyst-agent/index.vue",
+    source: "views/analyst-agent/AnalystAgentView.vue",
     required: ["AgentDemoShell", "analyst-download", "router.back"],
   },
   {
@@ -47,7 +47,7 @@ const DEMO_CONTRACTS: DemoContract[] = [
   },
   {
     path: "/gene-network-agent",
-    source: "views/gene-network-agent/index.vue",
+    source: "views/gene-network-agent/GeneNetworkAgentView.vue",
     required: [
       "useBotRemoteAgentRun",
       'tool: "GeneNetworkAgent"',
@@ -66,7 +66,7 @@ const DEMO_CONTRACTS: DemoContract[] = [
   },
   {
     path: "/digital-design-agent",
-    source: "views/digital-design-agent/index.vue",
+    source: "views/digital-design-agent/DigitalDesignAgentView.vue",
     required: [
       "useBotRemoteAgentRun",
       'tool: "DigitalDesignAgent"',
@@ -80,7 +80,7 @@ const DEMO_CONTRACTS: DemoContract[] = [
   },
   {
     path: "/deep-genome-agent",
-    source: "views/deep-genome-agent/index.vue",
+    source: "views/deep-genome-agent/DeepGenomeAgentView.vue",
     required: [
       "AgentDemoShell",
       "DeepGenomeArtifact",
@@ -90,7 +90,7 @@ const DEMO_CONTRACTS: DemoContract[] = [
   },
   {
     path: "/design",
-    source: "views/design/index.vue",
+    source: "views/design/DesignView.vue",
     required: [
       "AgentDemoShell",
       "design-unavailable",

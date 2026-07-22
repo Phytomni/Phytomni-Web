@@ -30,7 +30,7 @@ vi.mock("element-plus", () => ({
   ElMessageBox: {},
 }));
 
-import FeedbackWorkspace from "@/views/feedback/index.vue";
+import FeedbackWorkspace from "@/views/feedback/FeedbackView.vue";
 
 config.global.plugins = [];
 
@@ -352,7 +352,7 @@ describe("Feedback workspace", () => {
 
   it("does not retain hard-coded Feedback validation copy in the view", () => {
     const source = readFileSync(
-      resolve(__dirname, "../../src/views/feedback/index.vue"),
+      resolve(__dirname, "../../src/views/feedback/FeedbackView.vue"),
       "utf8"
     );
 

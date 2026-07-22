@@ -100,7 +100,7 @@ import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatVisualFixtureApp from "../visual/chat/ChatVisualFixtureApp.vue";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const artifactSlotStart = CHAT_SOURCE.indexOf("<template #artifact>");

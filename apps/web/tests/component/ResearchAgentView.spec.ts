@@ -4,7 +4,7 @@ import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import enUS from "@/locales/langs/en-US";
-import ResearchAgentView from "@/views/research-agent/index.vue";
+import ResearchAgentView from "@/views/research-agent/ResearchAgentView.vue";
 import type { BotRunProjection } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import type {

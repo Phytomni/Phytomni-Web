@@ -507,7 +507,7 @@ import {
   watch,
   computed,
 } from "vue";
-import Sidebar from "./sidebar.vue";
+import Sidebar from "./ChatSidebar.vue";
 import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
 import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
 import TransferProgress from "@/components/TransferProgress.vue";
@@ -1988,6 +1988,14 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   .chat-content-stack.is-empty {
     max-height: 840px;
     margin-block: auto;
+  }
+}
+
+@media (min-width: 1920px) {
+  .chat-content-stack.is-empty {
+    max-height: 840px;
+    margin-top: auto;
+    margin-bottom: 0;
   }
 }
 

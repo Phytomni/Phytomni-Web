@@ -226,7 +226,7 @@ describe("PHY_TOKENS", () => {
       "utf8"
     );
     const chatIndex = readFileSync(
-      resolve(__dirname, "../../../src/views/chat/index.vue"),
+      resolve(__dirname, "../../../src/views/chat/ChatView.vue"),
       "utf8"
     );
     const surfaces = [rowCss, contentCss, chatIndex].join("\n");

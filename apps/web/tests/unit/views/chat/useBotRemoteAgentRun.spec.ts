@@ -26,8 +26,8 @@ vi.mock("@/utils/transfer-progress", () => ({
 
 // Keep the route contract test focused on the lazy boundary. Loading the real
 // Research SFC would pull Element Plus CSS into the Node runner.
-vi.mock("@/views/research-agent/index.vue", () => ({
-  default: { __file: "/src/views/research-agent/index.vue" },
+vi.mock("@/views/research-agent/ResearchAgentView.vue", () => ({
+  default: { __file: "/src/views/research-agent/ResearchAgentView.vue" },
 }));
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
@@ -634,6 +634,8 @@ describe("useBotRemoteAgentRun", () => {
       default?: { __file?: string };
     }>;
     const loaded = await component();
-    expect(loaded.default?.__file).toContain("views/research-agent/index.vue");
+    expect(loaded.default?.__file).toContain(
+      "views/research-agent/ResearchAgentView.vue"
+    );
   });
 });

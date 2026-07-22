@@ -43,7 +43,6 @@ PARSE_ONLY_RATIONALES = {
 PRETTIER_IGNORE_PREFIXES = (
     "apps/web/public/static/downloads/",
     "apps/web/public/static/pdb/",
-    "apps/web/public/static/js/3Dmol-min.js",
 )
 MAX_MESSAGE_LENGTH = 200
 

@@ -95,7 +95,7 @@ export const REMOTE_AGENT_LAZY_ROUTES = [
   {
     path: "/research-agent",
     name: "researchAgent",
-    component: () => import("@/views/research-agent/index.vue"),
+    component: () => import("@/views/research-agent/ResearchAgentView.vue"),
     beforeEnter: remoteAgentRouteGuard("InSilicoResearchAgent"),
     meta: {
       title: "Research Agent",
@@ -127,79 +127,81 @@ export const constantRoutes = [
   {
     path: "/login",
     name: "login",
-    component: () => import("@/views/login/index.vue"),
+    component: () => import("@/views/login/LoginView.vue"),
     meta: { title: "Login", layout: "nolayout" },
   },
   {
     path: "/register",
     name: "register",
-    component: () => import("@/views/register/index.vue"),
+    component: () => import("@/views/register/RegisterView.vue"),
     meta: { title: "Register", layout: "nolayout" },
   },
   {
     path: "/forgot-password",
     name: "forgotPassword",
-    component: () => import("@/views/forgot-password/index.vue"),
+    component: () => import("@/views/forgot-password/ForgotPasswordView.vue"),
     meta: { title: "Forgot password", layout: "nolayout" },
   },
   {
     path: "/401",
     name: "Unauthorized",
-    component: () => import("@/views/error/401.vue"),
+    component: () => import("@/views/error/UnauthorizedView.vue"),
     meta: { title: "401 error", layout: "nolayout" },
   },
   {
     path: "/terms",
     name: "terms",
-    component: () => import("@/views/legal/index.vue"),
+    component: () => import("@/views/legal/LegalView.vue"),
     meta: { title: "Terms of Service", layout: "nolayout", doc: "terms" },
   },
   {
     path: "/privacy",
     name: "privacy",
-    component: () => import("@/views/legal/index.vue"),
+    component: () => import("@/views/legal/LegalView.vue"),
     meta: { title: "Privacy Policy", layout: "nolayout", doc: "privacy" },
   },
   {
     path: "/:pathMatch(.*)*",
     name: "NotFound",
-    component: () => import("@/views/error/404.vue"),
+    component: () => import("@/views/error/NotFoundView.vue"),
     meta: { title: "404 error", layout: "nolayout" },
   },
   // routes that need the layout
   {
     path: "/",
-    component: () => import("@/layout/index.vue"),
+    component: () => import("@/layout/LayoutView.vue"),
     redirect: "/login",
     children: [
       {
         path: "/gene-display",
         name: "geneDisplay",
-        component: () => import("@/views/gene-display/index.vue"),
+        component: () => import("@/views/gene-display/GeneDisplayView.vue"),
         meta: { title: "Gene display", hideSidebar: true },
       },
       {
         path: "/knowledge-agent",
         name: "knowledgeAgent",
-        component: () => import("@/views/knowledge-agent/index.vue"),
+        component: () =>
+          import("@/views/knowledge-agent/KnowledgeAgentView.vue"),
         meta: { title: "Knowledge Agent", layout: "nolayout" },
       },
       {
         path: "/data-agent",
         name: "dataAgent",
-        component: () => import("@/views/data-agent/index.vue"),
+        component: () => import("@/views/data-agent/DataAgentView.vue"),
         meta: { title: "Data Agent", layout: "nolayout" },
       },
       {
         path: "/analyst-agent",
         name: "analystAgent",
-        component: () => import("@/views/analyst-agent/index.vue"),
+        component: () => import("@/views/analyst-agent/AnalystAgentView.vue"),
         meta: { title: "Analyst Agent", layout: "nolayout" },
       },
       {
         path: "/brief-gene-agent",
         name: "briefGeneAgent",
-        component: () => import("@/views/brief-gene-agent/index.vue"),
+        component: () =>
+          import("@/views/brief-gene-agent/BriefGeneAgentView.vue"),
         meta: { title: "Brief Gene Agent", layout: "nolayout" },
       },
       {
@@ -211,19 +213,22 @@ export const constantRoutes = [
       {
         path: "/gene-network-agent",
         name: "geneNetworkAgent",
-        component: () => import("@/views/gene-network-agent/index.vue"),
+        component: () =>
+          import("@/views/gene-network-agent/GeneNetworkAgentView.vue"),
         meta: { title: "Gene Network Agent", layout: "nolayout" },
       },
       {
         path: "/deep-genome-agent",
         name: "deepGenomeAgent",
-        component: () => import("@/views/deep-genome-agent/index.vue"),
+        component: () =>
+          import("@/views/deep-genome-agent/DeepGenomeAgentView.vue"),
         meta: { title: "Deep Genome Agent", layout: "nolayout" },
       },
       {
         path: "/digital-design-agent",
         name: "digitalDesignAgent",
-        component: () => import("@/views/digital-design-agent/index.vue"),
+        component: () =>
+          import("@/views/digital-design-agent/DigitalDesignAgentView.vue"),
         meta: { title: "Digital Design Agent", layout: "nolayout" },
       },
       {
@@ -235,97 +240,99 @@ export const constantRoutes = [
       {
         path: "/design",
         name: "design",
-        component: () => import("@/views/design/index.vue"),
+        component: () => import("@/views/design/DesignView.vue"),
         meta: { title: "Design Agent", layout: "nolayout" },
       },
       {
         path: "/gene-display/detail",
         name: "geneDetail",
-        component: () => import("@/views/gene-display/detail.vue"),
+        component: () => import("@/views/gene-display/GeneDetailView.vue"),
         meta: { title: "Gene detail", layout: "nolayout" },
       },
       {
         path: "/log-list",
         name: "logList",
-        component: () => import("@/views/log-list/index.vue"),
+        component: () => import("@/views/log-list/LogListView.vue"),
         meta: { title: "Log list" },
       },
       {
         path: "/user-list",
         name: "userList",
-        component: () => import("@/views/user-list/index.vue"),
+        component: () => import("@/views/user-list/UserListView.vue"),
         meta: { title: "User list" },
       },
       {
         path: "/permi-manage",
         name: "permi-manage",
-        component: () => import("@/views/permi-manage/index.vue"),
+        component: () => import("@/views/permi-manage/PermiManageView.vue"),
         meta: { title: "Permission management" },
       },
       {
         path: "/change-password",
         name: "changePassword",
-        component: () => import("@/views/change-password/index.vue"),
+        component: () =>
+          import("@/views/change-password/ChangePasswordView.vue"),
         meta: { title: "Change password", layout: "nolayout" },
       },
       {
         path: "/chat",
         name: "chat",
-        component: () => import("@/views/chat/index.vue"),
+        component: () => import("@/views/chat/ChatView.vue"),
         meta: { title: "Chat", layout: "nolayout" },
       },
       {
         path: "/favorites",
         name: "favorites",
-        component: () => import("@/views/favorites/index.vue"),
+        component: () => import("@/views/favorites/FavoritesView.vue"),
         meta: { title: "Favorites" },
       },
       {
         path: "/history",
         name: "history",
-        component: () => import("@/views/history/index.vue"),
+        component: () => import("@/views/history/HistoryView.vue"),
         meta: { title: "History" },
       },
       {
         path: "/profile",
         name: "profile",
-        component: () => import("@/views/profile/index.vue"),
+        component: () => import("@/views/profile/ProfileView.vue"),
         meta: { title: "Profile" },
       },
       {
         path: "/cloud-storage",
         name: "cloudStorage",
-        component: () => import("@/views/cloud-storage/index.vue"),
+        component: () => import("@/views/cloud-storage/CloudStorageView.vue"),
         meta: { title: "Cloud storage" },
       },
       {
         path: "/feedback",
         name: "feedback",
-        component: () => import("@/views/feedback/index.vue"),
+        component: () => import("@/views/feedback/FeedbackView.vue"),
         meta: { title: "Feedback" },
       },
       {
         path: "/task-management",
         name: "taskManagement",
-        component: () => import("@/views/task-manager/index.vue"),
+        component: () => import("@/views/task-manager/TaskManagerView.vue"),
         meta: { title: "Task management" },
       },
       {
         path: "/help",
         name: "help",
-        component: () => import("@/views/help/index.vue"),
+        component: () => import("@/views/help/HelpView.vue"),
         meta: { title: "Help center", layout: "nolayout" },
       },
       {
         path: "/global-config",
         name: "globalConfig",
-        component: () => import("@/views/global-config/index.vue"),
+        component: () => import("@/views/global-config/GlobalConfigView.vue"),
         meta: { title: "Global config" },
       },
       {
         path: "/admin-management",
         name: "adminManagement",
-        component: () => import("@/views/admin-management/index.vue"),
+        component: () =>
+          import("@/views/admin-management/AdminManagementView.vue"),
         meta: { title: "Admin management" },
       },
     ],

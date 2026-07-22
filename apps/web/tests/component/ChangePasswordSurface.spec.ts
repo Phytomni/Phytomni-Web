@@ -52,7 +52,7 @@ vi.mock("element-plus", async () => {
   };
 });
 
-import ChangePassword from "@/views/change-password/index.vue";
+import ChangePassword from "@/views/change-password/ChangePasswordView.vue";
 
 type Rule = {
   required?: boolean;
@@ -394,7 +394,10 @@ describe("Change Password surface", () => {
 
   it("has no sensitive logging or status writer and keeps 48px shell controls", () => {
     const source = readFileSync(
-      resolve(__dirname, "../../src/views/change-password/index.vue"),
+      resolve(
+        __dirname,
+        "../../src/views/change-password/ChangePasswordView.vue"
+      ),
       "utf8"
     );
     expect(source).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);

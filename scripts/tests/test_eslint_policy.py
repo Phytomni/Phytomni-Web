@@ -51,13 +51,10 @@ def test_eslint_project_covers_every_linted_typescript_file() -> None:
     assert all(path.startswith(allowed) or path in exact for path in _tracked_frontend_type_files())
 
 
-def test_eslint_project_excludes_generated_and_biological_assets() -> None:
+def test_eslint_project_uses_an_include_only_first_party_scope() -> None:
     document = json.loads(PROJECT.read_text(encoding="utf-8"))
-    excluded = set(document["exclude"])
 
-    assert {"dist", "coverage", "node_modules"}.issubset(excluded)
-    assert "src/assets/**/*.md" in excluded
-    assert "public/static/js/3Dmol-min.js" in excluded
+    assert "exclude" not in document
 
 
 def test_parser_project_is_scoped_to_typescript_and_vue_files() -> None:
@@ -66,6 +63,13 @@ def test_parser_project_is_scoped_to_typescript_and_vue_files() -> None:
     assert 'files: ["**/*.ts", "**/*.tsx", "**/*.vue"]' in text
     assert 'project: "./tsconfig.eslint.json"' in text
     assert "tsconfigRootDir: __dirname" in text
+
+
+def test_vue_component_names_are_checked_by_the_rule() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    assert '"vue/multi-word-component-names": "error"' in text
+    assert '"vue/multi-word-component-names": "off"' not in text
 
 
 def test_handled_promise_rule_is_strictly_scoped_for_bootstrap_auth_batch() -> None:
@@ -78,12 +82,12 @@ def test_handled_promise_rule_is_strictly_scoped_for_bootstrap_auth_batch() -> N
     for path in (
         "src/main.ts",
         "src/utils/request.ts",
-        "src/layout/index.vue",
-        "src/views/change-password/index.vue",
-        "src/views/error/401.vue",
-        "src/views/forgot-password/index.vue",
-        "src/views/login/index.vue",
-        "src/views/register/index.vue",
+        "src/layout/LayoutView.vue",
+        "src/views/change-password/ChangePasswordView.vue",
+        "src/views/error/UnauthorizedView.vue",
+        "src/views/forgot-password/ForgotPasswordView.vue",
+        "src/views/login/LoginView.vue",
+        "src/views/register/RegisterView.vue",
     ):
         assert f'"{path}"' in text
 
@@ -99,9 +103,9 @@ def test_handled_promise_rule_is_strictly_scoped_for_research_surfaces_batch() -
         "src/components/shell/PhyAdaptiveShell.vue",
         "src/components/shell/PhyAdaptiveSidebar.vue",
         "src/composables/useDeepGenomeToc.ts",
-        "src/views/digital-design-agent/index.vue",
-        "src/views/gene-network-agent/index.vue",
-        "src/views/research-agent/index.vue",
+        "src/views/digital-design-agent/DigitalDesignAgentView.vue",
+        "src/views/gene-network-agent/GeneNetworkAgentView.vue",
+        "src/views/research-agent/ResearchAgentView.vue",
     ):
         assert f'"{path}"' in text
 
@@ -110,16 +114,16 @@ def test_handled_promise_rule_is_strictly_scoped_for_data_admin_batch() -> None:
     text = ESLINT_CONFIG.read_text(encoding="utf-8")
 
     for path in (
-        "src/views/admin-management/index.vue",
-        "src/views/favorites/index.vue",
-        "src/views/gene-display/detail.vue",
-        "src/views/gene-display/index.vue",
-        "src/views/global-config/index.vue",
-        "src/views/help/index.vue",
-        "src/views/history/index.vue",
-        "src/views/profile/index.vue",
-        "src/views/task-manager/index.vue",
-        "src/views/user-list/index.vue",
+        "src/views/admin-management/AdminManagementView.vue",
+        "src/views/favorites/FavoritesView.vue",
+        "src/views/gene-display/GeneDetailView.vue",
+        "src/views/gene-display/GeneDisplayView.vue",
+        "src/views/global-config/GlobalConfigView.vue",
+        "src/views/help/HelpView.vue",
+        "src/views/history/HistoryView.vue",
+        "src/views/profile/ProfileView.vue",
+        "src/views/task-manager/TaskManagerView.vue",
+        "src/views/user-list/UserListView.vue",
     ):
         assert f'"{path}"' in text
 
@@ -165,14 +169,14 @@ def test_misused_promises_rule_is_scoped_to_callback_contract_batch() -> None:
     assert "checksVoidReturn: true" in text
     for path in (
         "src/components/research/ResearchEvidencePanel.vue",
-        "src/layout/index.vue",
-        "src/views/change-password/index.vue",
-        "src/views/chat/index.vue",
+        "src/layout/LayoutView.vue",
+        "src/views/change-password/ChangePasswordView.vue",
+        "src/views/chat/ChatView.vue",
         "src/views/chat/composables/useComposer.ts",
         "src/views/chat/composables/useFileUpload.ts",
         "src/views/chat/composables/useLogView.ts",
         "src/views/chat/composables/useReactions.ts",
-        "src/views/profile/index.vue",
+        "src/views/profile/ProfileView.vue",
         "tests/unit/composables/useDeepGenomeDownloads.spec.ts",
         "tests/visual/chat/main.ts",
         "tests/visual/research/main.ts",
@@ -205,15 +209,15 @@ def test_unsafe_boundary_rules_are_scoped_to_batch_56b() -> None:
     assert '"@typescript-eslint/no-unsafe-member-access": "error"' in text
     for path in (
         "src/composables/useDeepGenomeDownloads.ts",
-        "src/views/change-password/index.vue",
+        "src/views/change-password/ChangePasswordView.vue",
         "src/views/chat/composables/useBotCapabilities.ts",
         "src/views/chat/composables/useCopyDownload.ts",
         "src/views/chat/composables/useRefreshMessage.ts",
         "src/views/chat/composables/useSelectChat.ts",
         "src/views/chat/composables/useSendMessage.ts",
         "src/views/chat/streaming/a2uiParse.ts",
-        "src/views/feedback/index.vue",
-        "src/views/gene-display/detail.vue",
+        "src/views/feedback/FeedbackView.vue",
+        "src/views/gene-display/GeneDetailView.vue",
     ):
         assert f'"{path}"' in text
 
@@ -234,7 +238,7 @@ def test_unsafe_propagation_rules_are_scoped_to_characterized_production_owners(
         "src/utils/request.ts",
         "src/utils/sanitize-markup.ts",
         "src/views/chat/botProjection.ts",
-        "src/views/research-agent/index.vue",
+        "src/views/research-agent/ResearchAgentView.vue",
     ):
         assert f'"{path}"' in text
 

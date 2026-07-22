@@ -26,7 +26,7 @@ vi.mock("element-plus", () => ({
   ElMessage: { success: mocks.success, error: mocks.error },
 }));
 
-import FavoritesWorkspace from "@/views/favorites/index.vue";
+import FavoritesWorkspace from "@/views/favorites/FavoritesView.vue";
 
 const favoriteRows = [
   {

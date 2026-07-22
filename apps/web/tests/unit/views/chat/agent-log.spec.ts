@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { formatLogContentWithColors } from "@/views/chat/utils/agent-log";
 
-// This function's output is injected into the DOM via index.vue's v-html, and the
+// This function's output is injected into the DOM via ChatView.vue's v-html, and the
 // log body is analyst-agent output (influenceable by agent/tool/RAG), so it must be
 // HTML-escaped before the ANSI→HTML conversion. Removing the escapeHtml call would
 // turn the XSS cases below red (regression lock).

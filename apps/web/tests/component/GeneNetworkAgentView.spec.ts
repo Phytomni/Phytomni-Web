@@ -4,7 +4,7 @@ import { createI18n } from "vue-i18n";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
-import GeneNetworkAgentView from "@/views/gene-network-agent/index.vue";
+import GeneNetworkAgentView from "@/views/gene-network-agent/GeneNetworkAgentView.vue";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
 const i18n = createI18n({

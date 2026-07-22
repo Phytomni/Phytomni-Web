@@ -28,7 +28,7 @@ const REQUIRED_BOT_LIFECYCLE_KEYS = [
 ] as const;
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 

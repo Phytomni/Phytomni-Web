@@ -13,7 +13,7 @@ const nonEmptyStrings = (values: readonly unknown[]): string[] =>
 
 export function useAgentImages(currentChat: Ref<ChatView | null>) {
   // GeneNetworkAgent / DigitalDesignAgent image download state (indexed by message id,
-  // consistent with the frontend chat/index.vue)
+  // consistent with the frontend ChatView.vue)
   const geneNetworkImages = reactive<Record<string, string[]>>({});
   const geneNetworkImagesLoading = reactive<Record<string, boolean>>({});
   const digitalDesignImages = reactive<Record<string, string[]>>({});

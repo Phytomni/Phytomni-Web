@@ -9,19 +9,19 @@ function source(path: string): string {
 }
 
 const dataSources = {
-  favorites: source("favorites/index.vue"),
-  geneDetail: source("gene-display/detail.vue"),
-  geneDisplay: source("gene-display/index.vue"),
-  history: source("history/index.vue"),
-  profile: source("profile/index.vue"),
-  taskManager: source("task-manager/index.vue"),
+  favorites: source("favorites/FavoritesView.vue"),
+  geneDetail: source("gene-display/GeneDetailView.vue"),
+  geneDisplay: source("gene-display/GeneDisplayView.vue"),
+  history: source("history/HistoryView.vue"),
+  profile: source("profile/ProfileView.vue"),
+  taskManager: source("task-manager/TaskManagerView.vue"),
 };
 
 const adminSources = {
-  adminManagement: source("admin-management/index.vue"),
-  globalConfig: source("global-config/index.vue"),
-  help: source("help/index.vue"),
-  userList: source("user-list/index.vue"),
+  adminManagement: source("admin-management/AdminManagementView.vue"),
+  globalConfig: source("global-config/GlobalConfigView.vue"),
+  help: source("help/HelpView.vue"),
+  userList: source("user-list/UserListView.vue"),
 };
 
 describe("data and admin async-owner contracts", () => {

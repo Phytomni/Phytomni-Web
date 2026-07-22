@@ -27,10 +27,10 @@ vi.mock("vue-router", () => ({
 }));
 vi.mock("@/utils/auth-redirect", () => ({ redirectIfAuthed }));
 
-import ForgotPassword from "@/views/forgot-password/index.vue";
+import ForgotPassword from "@/views/forgot-password/ForgotPasswordView.vue";
 
 const SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/forgot-password/index.vue"),
+  resolve(__dirname, "../../src/views/forgot-password/ForgotPasswordView.vue"),
   "utf8"
 );
 

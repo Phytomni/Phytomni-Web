@@ -53,7 +53,7 @@ vi.mock("element-plus", async () => {
   };
 });
 
-import Login from "@/views/login/index.vue";
+import Login from "@/views/login/LoginView.vue";
 
 type Rule = {
   required?: boolean;
@@ -418,7 +418,7 @@ describe("Login auth surface", () => {
     expect(wrapper.find(".register-container").exists()).toBe(true);
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
     const source = readFileSync(
-      resolve(__dirname, "../../src/views/login/index.vue"),
+      resolve(__dirname, "../../src/views/login/LoginView.vue"),
       "utf8"
     );
     expect(source).toContain("isLogin");

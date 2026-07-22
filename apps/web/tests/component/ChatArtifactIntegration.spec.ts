@@ -58,7 +58,7 @@ vi.mock("vue-router", async (importOriginal) => {
 });
 
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
-import ChatIndex from "@/views/chat/index.vue";
+import ChatIndex from "@/views/chat/ChatView.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
@@ -68,7 +68,7 @@ import type { BotRunProjection } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const CONTENT_SOURCE = readFileSync(

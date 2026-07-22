@@ -25,7 +25,7 @@ vi.mock("vue-element-plus-x", () => ({
   Typewriter: { name: "Typewriter", template: "<div />" },
 }));
 
-import HelpPage from "@/views/help/index.vue";
+import HelpPage from "@/views/help/HelpView.vue";
 
 const i18n = createI18n({
   legacy: false,

@@ -113,8 +113,8 @@ class CheckBrandColorsTests(unittest.TestCase):
         paths = [
             ROOT / "apps/web/src/components/shell/PhyAuthLayout.vue",
             ROOT / "apps/web/src/components/shell/PhyAdaptiveShell.vue",
-            ROOT / "apps/web/src/views/help/index.vue",
-            ROOT / "apps/web/src/views/legal/index.vue",
+            ROOT / "apps/web/src/views/help/HelpView.vue",
+            ROOT / "apps/web/src/views/legal/LegalView.vue",
             ROOT / "apps/web/src/components/demo/AgentDemoShell.vue",
         ]
         hits = mod.scan_paths(paths)

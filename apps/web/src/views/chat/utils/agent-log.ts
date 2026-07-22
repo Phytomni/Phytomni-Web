@@ -92,7 +92,7 @@ export const formatLogContentWithColors = (logContent: string) => {
 
   // XSS protection: the log body is analyst-agent output (relayed via the
   // backend/EIHealth/Bot, influenced by agent/tool/RAG) and is ultimately injected
-  // into the DOM via index.vue's v-html. Before the ANSI→HTML conversion we
+  // into the DOM via ChatView.vue's v-html. Before the ANSI→HTML conversion we
   // HTML-escape it, neutralizing malicious HTML in the body (<img onerror>,
   // <script>, etc.) into entities. ANSI control chars (ESC) and [31m etc. are not
   // among the & < > " ' that escapeHtml encodes, so they survive verbatim and the

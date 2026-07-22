@@ -4,7 +4,7 @@ import { createI18n } from "vue-i18n";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
-import DigitalDesignAgentView from "@/views/digital-design-agent/index.vue";
+import DigitalDesignAgentView from "@/views/digital-design-agent/DigitalDesignAgentView.vue";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import { mustGet } from "../helpers/mockFactories";
 

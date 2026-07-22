@@ -5,7 +5,10 @@ import { resolve } from "node:path";
 describe("retired media agent demonstrations", () => {
   it("does not retain the old Gene Network static download demonstration", () => {
     const source = readFileSync(
-      resolve(__dirname, "../../../src/views/gene-network-agent/index.vue"),
+      resolve(
+        __dirname,
+        "../../../src/views/gene-network-agent/GeneNetworkAgentView.vue"
+      ),
       "utf8"
     );
 

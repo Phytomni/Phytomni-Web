@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 // Presentational only — no auth logic, routing, or store dependencies.
-import Footer from "@/components/Footer.vue";
+import Footer from "@/components/AppFooter.vue";
 import PhyAuthBrand from "./PhyAuthBrand.vue";
 
 withDefaults(

@@ -8,7 +8,7 @@ Based on the `permission_list` returned by the permissions API, three correspond
 
 ### 1. History Page (`/history`)
 
-- **File location**: `src/views/history/index.vue`
+- **File location**: `src/views/history/HistoryView.vue`
 - **Description**: Displays the user's chat history
 - **Key features**:
   - History list display (grid layout)
@@ -18,7 +18,7 @@ Based on the `permission_list` returned by the permissions API, three correspond
 
 ### 2. Profile Management Page (`/profile`)
 
-- **File location**: `src/views/profile/index.vue`
+- **File location**: `src/views/profile/ProfileView.vue`
 - **Description**: Manage user personal information and account security
 - **Key features**:
   - Basic info editing (username, email, phone number, organization, position)
@@ -28,7 +28,7 @@ Based on the `permission_list` returned by the permissions API, three correspond
 
 ### 3. Cloud Storage Page (`/cloud-storage`)
 
-- **File location**: `src/views/cloud-storage/index.vue`
+- **File location**: `src/views/cloud-storage/CloudStorageView.vue`
 - **Description**: File storage and management system
 - **Key features**:
   - Storage statistics overview (total files, used storage, available storage, usage rate)
@@ -46,19 +46,19 @@ Three new routes have been added in `src/router/index.ts`:
 {
   path: '/history',
   name: 'history',
-  component: () => import('@/views/history/index.vue'),
+  component: () => import('@/views/history/HistoryView.vue'),
   meta: { title: 'History' },
 },
 {
   path: '/profile',
   name: 'profile',
-  component: () => import('@/views/profile/index.vue'),
+  component: () => import('@/views/profile/ProfileView.vue'),
   meta: { title: 'Profile' },
 },
 {
   path: '/cloud-storage',
   name: 'cloudStorage',
-  component: () => import('@/views/cloud-storage/index.vue'),
+  component: () => import('@/views/cloud-storage/CloudStorageView.vue'),
   meta: { title: 'Cloud storage' },
 },
 ```
@@ -69,7 +69,7 @@ Corresponding multilingual text has been added to `src/locales/langs/zh-CN.ts` a
 
 ## Sidebar Entries
 
-Three new buttons have been added in `src/views/chat/sidebar.vue`:
+Three new buttons have been added in `src/views/chat/ChatSidebar.vue`:
 
 - History button (Document icon)
 - Profile button (User icon)

@@ -5,7 +5,7 @@ import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
 const LAYOUT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/layout/index.vue"),
+  resolve(__dirname, "../../src/layout/LayoutView.vue"),
   "utf8"
 );
 const THEME_SOURCE = readFileSync(
@@ -17,7 +17,7 @@ const LANG_SOURCE = readFileSync(
   "utf8"
 );
 const USER_LIST_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/user-list/index.vue"),
+  resolve(__dirname, "../../src/views/user-list/UserListView.vue"),
   "utf8"
 );
 const TABLE_FRAME_SOURCE = readFileSync(
@@ -33,11 +33,11 @@ const AUTH_LAYOUT_SOURCE = readFileSync(
   "utf8"
 );
 const HELP_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/help/index.vue"),
+  resolve(__dirname, "../../src/views/help/HelpView.vue"),
   "utf8"
 );
 const LEGAL_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/legal/index.vue"),
+  resolve(__dirname, "../../src/views/legal/LegalView.vue"),
   "utf8"
 );
 const CHAT_ROW_SOURCE = readFileSync(

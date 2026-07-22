@@ -34,7 +34,7 @@ const i18n = createI18n({
   messages: { "en-US": enUS, "zh-CN": zhCN },
 });
 
-import Design from "@/views/design/index.vue";
+import Design from "@/views/design/DesignView.vue";
 
 function mountDesign() {
   return mount(Design, {

@@ -22,7 +22,7 @@ vi.mock("@/api/gene-display", () => ({
   getGeneList: mocks.getGeneList,
 }));
 
-import GeneDisplay from "@/views/gene-display/index.vue";
+import GeneDisplay from "@/views/gene-display/GeneDisplayView.vue";
 
 const rows = [
   {

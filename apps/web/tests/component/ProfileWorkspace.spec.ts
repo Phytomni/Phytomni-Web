@@ -49,7 +49,7 @@ vi.mock("element-plus", () => ({
   },
 }));
 
-import ProfileWorkspace from "@/views/profile/index.vue";
+import ProfileWorkspace from "@/views/profile/ProfileView.vue";
 
 type Rule = {
   required?: boolean;
@@ -507,7 +507,7 @@ describe("Profile workspace", () => {
 
   it("keeps profile free of sensitive logs and preserves the approved login-status writer boundary", () => {
     const profileSource = readFileSync(
-      resolve(__dirname, "../../src/views/profile/index.vue"),
+      resolve(__dirname, "../../src/views/profile/ProfileView.vue"),
       "utf8"
     );
     expect(profileSource).not.toMatch(
@@ -520,6 +520,6 @@ describe("Profile workspace", () => {
     const writers = findLoginStatusWriters(srcDirectory)
       .map((file) => file.replace(`${srcDirectory}/`, ""))
       .sort();
-    expect(writers).toEqual(["stores/user.ts", "views/login/index.vue"]);
+    expect(writers).toEqual(["stores/user.ts", "views/login/LoginView.vue"]);
   });
 });

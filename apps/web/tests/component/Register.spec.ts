@@ -43,10 +43,10 @@ vi.mock("element-plus", async () => {
   };
 });
 
-import Register from "@/views/register/index.vue";
+import Register from "@/views/register/RegisterView.vue";
 
 const SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/register/index.vue"),
+  resolve(__dirname, "../../src/views/register/RegisterView.vue"),
   "utf8"
 );
 

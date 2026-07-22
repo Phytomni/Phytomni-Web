@@ -26,7 +26,7 @@ vi.mock("element-plus", () => ({
   ElMessage: { success: mocks.success, error: mocks.error },
 }));
 
-import HistoryWorkspace from "@/views/history/index.vue";
+import HistoryWorkspace from "@/views/history/HistoryView.vue";
 
 const historyRows = [
   {

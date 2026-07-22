@@ -6,7 +6,7 @@ import { nextTick } from "vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
 
 const CHAT_SIDEBAR_SOURCE = readFileSync(
-  resolve(__dirname, "../../../src/views/chat/sidebar.vue"),
+  resolve(__dirname, "../../../src/views/chat/ChatSidebar.vue"),
   "utf8"
 );
 const SIDEBAR_SOURCE = readFileSync(

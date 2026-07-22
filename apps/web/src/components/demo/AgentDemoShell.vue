@@ -68,7 +68,7 @@
 import { getCurrentInstance } from "vue";
 import { useI18n } from "vue-i18n";
 import { ArrowLeft } from "@element-plus/icons-vue";
-import Footer from "@/components/Footer.vue";
+import Footer from "@/components/AppFooter.vue";
 
 defineProps<{
   title: string;

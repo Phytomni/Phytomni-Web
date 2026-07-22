@@ -5,7 +5,7 @@ import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const SEND_PROGRESS_SOURCE = readFileSync(

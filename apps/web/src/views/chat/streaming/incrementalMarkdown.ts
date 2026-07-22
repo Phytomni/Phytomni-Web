@@ -14,7 +14,7 @@ import { processInlineMarkdown } from "@/utils/markdown-inline";
 // reference row id is namespaced (m<i>-ref-N). gateCitations mirrors the
 // linkifyCitations scope gate: no ns ⇒ [N] stays literal text. P1 cited
 // streaming passes the page-unique per-message ns ('m' + index, matching the
-// blocking branches in index.vue).
+// blocking branches in ChatView.vue).
 export function renderStreamingMarkdown(text: string, ns = ""): string {
   const repaired = repairDanglingInline(text);
   const html = processInlineMarkdown(escapeHtml(repaired), ns);

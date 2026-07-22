@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const ROW_SOURCE = readFileSync(

@@ -38,7 +38,7 @@ const i18n = createI18n({
   messages: { "en-US": enUS, "zh-CN": zhCN },
 });
 
-import AnalystAgent from "@/views/analyst-agent/index.vue";
+import AnalystAgent from "@/views/analyst-agent/AnalystAgentView.vue";
 
 function mountDemo() {
   return mount(AnalystAgent, {

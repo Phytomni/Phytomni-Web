@@ -15,14 +15,14 @@ else
     def_count=0
 fi
 [ "$def_count" = "1" ] || fail "G11.1 SET_LOGIN_STATUS definition: expected 1 hit in apps/web/src/stores/user.ts, got $def_count"
-if call_count="$(grep -c 'SET_LOGIN_STATUS(' apps/web/src/views/login/index.vue)"; then
+if call_count="$(grep -c 'SET_LOGIN_STATUS(' apps/web/src/views/login/LoginView.vue)"; then
     :
 else
     call_rc=$?
     check_match_status "$call_rc" "G11.2 SET_LOGIN_STATUS call scan"
     call_count=0
 fi
-[ "$call_count" = "1" ] || fail "G11.2 SET_LOGIN_STATUS sole legal call: expected 1 hit in apps/web/src/views/login/index.vue, got $call_count"
+[ "$call_count" = "1" ] || fail "G11.2 SET_LOGIN_STATUS sole legal call: expected 1 hit in apps/web/src/views/login/LoginView.vue, got $call_count"
 
 candidate_files="$(mktemp)"
 stray_files="$(mktemp)"
@@ -36,11 +36,11 @@ else
 fi
 awk '
   $0 != "apps/web/src/stores/user.ts" &&
-  $0 != "apps/web/src/views/login/index.vue" { print }
+  $0 != "apps/web/src/views/login/LoginView.vue" { print }
 ' "$candidate_files" >"$stray_files" || fail "G11.3 SET_LOGIN_STATUS filtering failed."
 [ ! -s "$stray_files" ] || {
     cat "$stray_files" >&2
-    fail "G11.3 SET_LOGIN_STATUS stray caller: files above must not reference SET_LOGIN_STATUS — only stores/user.ts (definition) and views/login/index.vue (sole call) are allowed."
+    fail "G11.3 SET_LOGIN_STATUS stray caller: files above must not reference SET_LOGIN_STATUS — only stores/user.ts (definition) and views/login/LoginView.vue (sole call) are allowed."
 }
 
 step "G-0 contracts: exact static-analysis surface"

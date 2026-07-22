@@ -10,7 +10,7 @@ function read(rel: string) {
 
 describe("date call-site migration contracts", () => {
   it("profile keeps a raw lastLoginAt field and formats via formatDisplayDate", () => {
-    const src = read("profile/index.vue");
+    const src = read("profile/ProfileView.vue");
     expect(src).toMatch(/lastLoginAt/);
     expect(src).toMatch(/formatDisplayDate/);
     expect(src).not.toMatch(/toLocaleDateString\(\s*['"]zh-CN['"]/);
@@ -18,7 +18,7 @@ describe("date call-site migration contracts", () => {
   });
 
   it("global-config formats timestamps via formatDisplayDate and does not call toLocaleString zh-CN", () => {
-    const src = read("global-config/index.vue");
+    const src = read("global-config/GlobalConfigView.vue");
     expect(src).toMatch(/formatDisplayDate/);
     expect(src).not.toMatch(/toLocaleString\(\s*['"]zh-CN['"]/);
   });

@@ -66,7 +66,7 @@
 import { useRouter } from "vue-router";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
 import { PhyDocLayout, PhyPageHeader } from "@/components/shell";
-import Footer from "@/components/Footer.vue";
+import Footer from "@/components/AppFooter.vue";
 import LangSwitch from "@/components/LangSwitch.vue";
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";

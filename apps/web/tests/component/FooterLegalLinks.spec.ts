@@ -5,10 +5,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
-import Footer from "@/components/Footer.vue";
+import Footer from "@/components/AppFooter.vue";
 
 const SOURCE = readFileSync(
-  resolve(__dirname, "../../src/components/Footer.vue"),
+  resolve(__dirname, "../../src/components/AppFooter.vue"),
   "utf8"
 );
 

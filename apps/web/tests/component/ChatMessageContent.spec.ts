@@ -34,7 +34,7 @@ import {
 import { getSharedMessageFixture } from "../visual/chat/fixture-data";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 
@@ -670,7 +670,7 @@ describe("ChatMessageContent live streaming citations", () => {
 });
 
 describe("ChatMessageContent integration in chat index", () => {
-  it("is mounted from index.vue and index no longer inlines StreamMessage/CitedAnswer branches", () => {
+  it("is mounted from ChatView.vue and ChatView no longer inlines StreamMessage/CitedAnswer branches", () => {
     expect(CHAT_SOURCE).toContain("<ChatMessageContent");
     expect(CHAT_SOURCE).toMatch(
       /import ChatMessageContent from ["']\.\/components\/ChatMessageContent\.vue["']/
@@ -760,7 +760,7 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
     expect(contentStyles).not.toMatch(
       /box-shadow:\s*0\s+2px\s+8px\s+rgba\(0,\s*0,\s*0,\s*0\.1\)/
     );
-    // Gene image chrome left index.vue — styles live on Content now.
+    // Gene image chrome left ChatView.vue — styles live on Content now.
     expect(CHAT_SOURCE).not.toMatch(/\.gene-network-images\s*\{[\s\S]*#909399/);
   });
 

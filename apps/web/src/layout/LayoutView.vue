@@ -200,7 +200,7 @@ import {
 import { userStore } from "@/stores";
 import LangSwitch from "@/components/LangSwitch.vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
-import Footer from "@/components/Footer.vue";
+import Footer from "@/components/AppFooter.vue";
 const route = useRoute();
 const router = useRouter();
 const UserStore = userStore();

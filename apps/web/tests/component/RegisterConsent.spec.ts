@@ -16,7 +16,7 @@ vi.mock("vue-router", () => ({
 vi.mock("@/utils/auth-redirect", () => ({ redirectIfAuthed }));
 vi.mock("@/api/auth", () => ({ register: vi.fn() }));
 
-import Register from "@/views/register/index.vue";
+import Register from "@/views/register/RegisterView.vue";
 import { register } from "@/api/auth";
 
 const i18n = createI18n({

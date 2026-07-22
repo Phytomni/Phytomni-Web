@@ -33,7 +33,7 @@ import { computed, watchEffect, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import LangSwitch from "@/components/LangSwitch.vue";
-import Footer from "@/components/Footer.vue";
+import Footer from "@/components/AppFooter.vue";
 import { loadLegalDoc, type LegalDocKind } from "@/legal/loadLegalDoc";
 import { renderLegalMarkdown } from "@/legal/renderLegalMarkdown";
 

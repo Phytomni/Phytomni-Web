@@ -179,7 +179,7 @@ const handleLogin = () => {
         if (loginData.login_status === "0") {
           // The tutorial trigger is not set here — after a successful password change,
           // change-password.vue writes sessionStorage.tutorial_pending, and
-          // chat/index.vue checkTutorialStatus consumes it once and then flips
+          // ChatView.vue checkTutorialStatus consumes it once and then flips
           // SET_SEEN_TUTORIAL('0') (TW-D15).
           ElNotification({
             title: t("login.firstLoginTitle"),

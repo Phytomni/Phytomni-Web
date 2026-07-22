@@ -11,7 +11,7 @@ const ACTIONS_SOURCE = readFileSync(
   "utf8"
 );
 const INDEX_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const CONTENT_SOURCE = readFileSync(
