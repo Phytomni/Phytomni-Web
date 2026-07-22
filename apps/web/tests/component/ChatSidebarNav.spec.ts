@@ -156,6 +156,30 @@ describe("ChatSidebarNav", () => {
     expect(wrapper.emitted("account-command")).toEqual([["profile"]]);
   });
 
+  it("exposes the Explore Agents disclosure state", () => {
+    const collapsed = mountNav({ showAgentsList: false });
+    const expanded = mountNav({ showAgentsList: true });
+
+    expect(
+      collapsed
+        .get('[data-test="sidebar-nav-explore-agent"]')
+        .attributes("aria-expanded")
+    ).toBe("false");
+    expect(
+      expanded
+        .get('[data-test="sidebar-nav-explore-agent"]')
+        .attributes("aria-expanded")
+    ).toBe("true");
+    expect(
+      expanded
+        .get('[data-test="sidebar-nav-explore-agent"]')
+        .attributes("aria-controls")
+    ).toBe("chat-explore-agents-list");
+    expect(
+      expanded.get("#chat-explore-agents-list").attributes("data-testid")
+    ).toBe("chat-explore-agents-list");
+  });
+
   it("keeps support and legal destinations in the sidebar", () => {
     const wrapper = mountNav();
     const hrefs = wrapper.findAll("a").map((link) => link.attributes("href"));

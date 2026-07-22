@@ -5,7 +5,7 @@ import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const CHAT_MESSAGE_ROW_SOURCE = readFileSync(
@@ -17,7 +17,7 @@ const CHAT_COMPOSER_SOURCE = readFileSync(
   "utf8"
 );
 const SIDEBAR_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/sidebar.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatSidebar.vue"),
   "utf8"
 );
 const CHAT_HISTORY_SOURCE = readFileSync(
@@ -29,15 +29,15 @@ const CHAT_NAV_SOURCE = readFileSync(
   "utf8"
 );
 const HISTORY_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/history/index.vue"),
+  resolve(__dirname, "../../src/views/history/HistoryView.vue"),
   "utf8"
 );
 const FAVORITES_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/favorites/index.vue"),
+  resolve(__dirname, "../../src/views/favorites/FavoritesView.vue"),
   "utf8"
 );
 const LAYOUT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/layout/index.vue"),
+  resolve(__dirname, "../../src/layout/LayoutView.vue"),
   "utf8"
 );
 const FORM_LABEL_SOURCES = [
@@ -136,6 +136,17 @@ describe("Chat adaptive shell integration", () => {
     expect(SIDEBAR_SOURCE).toContain(
       "Promise.resolve(router.push(agent.route)).catch(() => undefined);"
     );
+  });
+
+  it("keeps Explore Agents as a click-to-expand sidebar disclosure", () => {
+    expect(SIDEBAR_SOURCE).toContain("const showAgentsList = ref(false);");
+    expect(SIDEBAR_SOURCE).toContain(
+      "showAgentsList.value = !showAgentsList.value;"
+    );
+    expect(SIDEBAR_SOURCE).toContain(':show-agents-list="showAgentsList"');
+    expect(SIDEBAR_SOURCE).toContain("<template #explore-agents>");
+    expect(CHAT_NAV_SOURCE).toContain(':aria-expanded="showAgentsList"');
+    expect(CHAT_NAV_SOURCE).toContain('data-testid="chat-explore-agents-list"');
   });
 
   it("routes sidebar product labels through the safe display component", () => {

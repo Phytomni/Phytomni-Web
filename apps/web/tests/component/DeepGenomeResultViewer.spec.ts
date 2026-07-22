@@ -350,6 +350,15 @@ describe("DeepGenomeResultViewer — scoped responsive media viewers", () => {
     expect(VIEWER_SOURCE).not.toMatch(/^\s*processCifContainers\(\);\s*$/m);
   });
 
+  it("loads 3Dmol through the package adapter instead of a public script tag", () => {
+    expect(VIEWER_SOURCE).toContain('@/utils/3dmol"');
+    expect(VIEWER_SOURCE).toContain("load3DMol");
+    expect(VIEWER_SOURCE).toMatch(/load3DMol\(\)[\s\S]*\.then\(/);
+    expect(VIEWER_SOURCE).not.toContain("/static/js/3Dmol-min.js");
+    expect(VIEWER_SOURCE).not.toContain('document.createElement("script")');
+    expect(VIEWER_SOURCE).not.toContain("window.$3Dmol");
+  });
+
   it("uses a semantic responsive class instead of fixed CIF inline dimensions", () => {
     expect(VIEWER_SOURCE).toContain(
       'viewerDiv.className = "deep-genome-cif-viewer"'

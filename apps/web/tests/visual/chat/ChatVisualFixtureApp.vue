@@ -56,7 +56,10 @@
               :can-global-config="false"
               :can-admin-management="false"
               :can-help="false"
-              :show-agents-list="false"
+              :show-agents-list="
+                !fixture.sidebarCollapsed &&
+                activeSidebarItem === 'explore-agent'
+              "
               :off-canvas="fixture.offCanvas"
               @new-chat="onFixtureAction('new-chat')"
               @gene-display="onFixtureAction('gene-display')"
@@ -67,7 +70,19 @@
               @toggle-collapse="onFixtureAction('toggle-collapse')"
               @show-architecture="onFixtureAction('show-architecture')"
               @help="onFixtureAction('help')"
-            />
+            >
+              <template #explore-agents>
+                <div class="agent-list" data-testid="chat-explore-agents-list">
+                  <div
+                    v-for="agent in presetAgents"
+                    :key="agent.id"
+                    class="agent-option"
+                  >
+                    <AgentDisplayName :label="agent.name" />
+                  </div>
+                </div>
+              </template>
+            </ChatSidebarNav>
           </PhyAdaptiveSidebar>
         </template>
 
@@ -327,6 +342,7 @@ import {
   PhyAdaptiveSidebar,
   PhyEmptyState,
 } from "@/components/shell";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import ChatSidebarNav, {
   CHAT_SIDEBAR_DRAWER_OPEN_KEY,
 } from "@/views/chat/components/ChatSidebarNav.vue";
@@ -363,10 +379,12 @@ import {
   COMPOSER_MODEL_VALUE_BY_KEY,
   type SyntheticMessage,
 } from "./fixture-data";
+import { deriveCaseRouteOptions } from "@/constants/agents";
 import { isA2uiLifecycleFixtureKey } from "./fixture-registry";
 
 const EMPTY_IMAGES = {} as Record<string, string[]>;
 const EMPTY_LOADING = {} as Record<string, boolean>;
+const presetAgents = deriveCaseRouteOptions();
 
 const props = defineProps<{
   fixture: ChatVisualFixtureDefinition | null;
@@ -738,6 +756,14 @@ onUnmounted(() => {
   .chat-content-stack.is-empty {
     max-height: 840px;
     margin-block: auto;
+  }
+}
+
+@media (min-width: 1920px) {
+  .chat-content-stack.is-empty {
+    max-height: 840px;
+    margin-top: auto;
+    margin-bottom: 0;
   }
 }
 

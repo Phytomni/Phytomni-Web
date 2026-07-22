@@ -64,6 +64,34 @@
     fail("inactive Start New retains a visible fill");
   }
 
+  const exploreAgentsList = root.querySelector(
+    '[data-testid="chat-explore-agents-list"]'
+  );
+  const exploreButton = root.querySelector(
+    '[data-test="sidebar-nav-explore-agent"]'
+  );
+  const exploreAgentOptions =
+    exploreAgentsList?.querySelectorAll(".agent-option");
+  if (activeItem === "explore-agent") {
+    if (exploreButton?.getAttribute("aria-expanded") !== "true") {
+      fail("Explore Agents selection lacks aria-expanded=true");
+    }
+    if (!exploreAgentsList || exploreAgentOptions?.length !== 7) {
+      fail(
+        "Explore Agents selection must reveal seven expandable agent options"
+      );
+    }
+  } else {
+    if (exploreButton?.getAttribute("aria-expanded") !== "false") {
+      fail("inactive Explore Agents row lacks aria-expanded=false");
+    }
+    if (exploreAgentsList) {
+      fail(
+        "Explore Agents list is visible while another sidebar item is active"
+      );
+    }
+  }
+
   const modeGroup = root.querySelector(".chat-mode-selector .el-radio-group");
   if (
     modeGroup &&

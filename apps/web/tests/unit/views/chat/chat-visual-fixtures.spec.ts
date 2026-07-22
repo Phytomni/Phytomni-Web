@@ -627,6 +627,16 @@ describe("Chat visual fixture source contracts", () => {
       /\.chat-content-stack\.is-populated\s+\.message-container\s*\{[\s\S]*?overflow-y:\s*auto/
     );
   });
+
+  it("mirrors the expanded Explore Agents disclosure in the fixture", () => {
+    expect(APP_SOURCE).toContain("deriveCaseRouteOptions");
+    expect(APP_SOURCE).toContain("AgentDisplayName");
+    expect(APP_SOURCE).toContain("activeSidebarItem === 'explore-agent'");
+    expect(APP_SOURCE).toContain('data-testid="chat-explore-agents-list"');
+    expect(APP_SOURCE).toMatch(
+      /<template #explore-agents>[\s\S]*?v-for="agent in presetAgents"/
+    );
+  });
 });
 
 describe("Chat visual fixture boot contracts", () => {

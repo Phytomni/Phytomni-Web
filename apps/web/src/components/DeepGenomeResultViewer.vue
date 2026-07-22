@@ -160,27 +160,7 @@ import {
   type NestedHeading,
 } from "@/utils/deep-genome-markdown";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
-
-interface DeepGenome3DViewer {
-  addModel(content: string, format: string): void;
-  setStyle(selection: Record<string, never>, style: unknown): void;
-  zoomTo(): void;
-  render(): void;
-  animate(): void;
-  stopAnimate?(): void;
-  clear?(): void;
-}
-
-interface DeepGenome3Dmol {
-  createViewer(
-    element: HTMLElement,
-    options: { backgroundColor: string }
-  ): DeepGenome3DViewer;
-}
-
-type DeepGenomeWindow = Window & { $3Dmol?: DeepGenome3Dmol };
-
-const get3DMol = () => (window as DeepGenomeWindow).$3Dmol;
+import { load3DMol, type ThreeDMolViewer } from "@/utils/3dmol";
 
 const props = withDefaults(
   defineProps<{
@@ -207,7 +187,7 @@ const nestedHeadings = ref<NestedHeading[]>([]);
 const mainContentRef = ref<HTMLElement | null>(null);
 const documentRef = ref<HTMLElement | null>(null);
 const cifAbortControllers = new Set<AbortController>();
-const cifViewers = new Set<DeepGenome3DViewer>();
+const cifViewers = new Set<ThreeDMolViewer>();
 let observerSetupTimer: number | null = null;
 let isUnmounted = false;
 
@@ -262,33 +242,9 @@ const processCifContainers = async () => {
     container.setAttribute("data-processed", "true");
 
     try {
-      // dynamically load 3Dmol.js
-      const load3DMol = () => {
-        return new Promise<void>((resolve, reject) => {
-          if (get3DMol()) {
-            resolve();
-            return;
-          }
-
-          const script = document.createElement("script");
-          script.src = "/static/js/3Dmol-min.js";
-          script.onload = () => {
-            if (get3DMol()) {
-              resolve();
-            } else {
-              reject(new Error("3Dmol.js loaded but $3Dmol is not defined"));
-            }
-          };
-          script.onerror = () => {
-            reject(new Error("Failed to load 3Dmol.js"));
-          };
-          document.head.appendChild(script);
-        });
-      };
-
       // load 3Dmol.js and render the structure
       load3DMol()
-        .then(async () => {
+        .then(async (threeDMol) => {
           if (isUnmounted) return;
 
           // generate a unique id
@@ -313,10 +269,6 @@ const processCifContainers = async () => {
           }
 
           // create the 3Dmol viewer
-          const threeDMol = get3DMol();
-          if (!threeDMol) {
-            throw new Error("3Dmol.js loaded but $3Dmol is not defined");
-          }
           const viewer = threeDMol.createViewer(viewerDiv, {
             backgroundColor: "#f5f5f5",
           });

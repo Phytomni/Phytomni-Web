@@ -74,6 +74,8 @@
           :class="{ 'is-active': activeItem === 'explore-agent' }"
           :aria-label="collapsed ? $t('chat.exploreAgent') : undefined"
           :aria-current="activeItem === 'explore-agent' ? 'page' : undefined"
+          :aria-expanded="showAgentsList"
+          aria-controls="chat-explore-agents-list"
           @click="emit('explore-agent')"
         >
           <el-icon>
@@ -83,7 +85,12 @@
             $t("chat.exploreAgent")
           }}</span>
         </button>
-        <div v-if="showAgentsList" class="agents-dropdown">
+        <div
+          v-if="showAgentsList"
+          id="chat-explore-agents-list"
+          data-testid="chat-explore-agents-list"
+          class="agents-dropdown"
+        >
           <slot name="explore-agents" />
         </div>
 

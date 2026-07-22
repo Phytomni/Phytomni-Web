@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import PhyEmptyState from "@/components/shell/PhyEmptyState.vue";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const CHAT_COMPOSER_SOURCE = readFileSync(
@@ -139,6 +139,15 @@ describe("Chat empty state", () => {
     );
 
     expect(casesRegionBlock).toContain("margin-top: auto");
+    const ultraWideStart = CHAT_SOURCE.indexOf("@media (min-width: 1920px)");
+    const ultraWideEnd = CHAT_SOURCE.indexOf(
+      "@media (max-width: 600px)",
+      ultraWideStart
+    );
+    const ultraWideBlock = CHAT_SOURCE.slice(ultraWideStart, ultraWideEnd);
+    expect(ultraWideBlock).toMatch(
+      /\.chat-content-stack\.is-empty\s*\{[\s\S]*?max-height:\s*840px;[\s\S]*?margin-top:\s*auto;[\s\S]*?margin-bottom:\s*0;/
+    );
     expect(CASES_SOURCE).toContain(
       "grid-template-columns: repeat(4, minmax(0, 1fr))"
     );

@@ -18,7 +18,7 @@ import PhyAdaptiveShell from "@/components/shell/PhyAdaptiveShell.vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const COMPOSER_SOURCE = readFileSync(
@@ -30,7 +30,7 @@ const NAV_SOURCE = readFileSync(
   "utf8"
 );
 const SIDEBAR_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/sidebar.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatSidebar.vue"),
   "utf8"
 );
 const SHELL_SOURCE = readFileSync(
@@ -225,6 +225,9 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
     for (const source of [CHAT_SOURCE, CHAT_FIXTURE_SOURCE]) {
       expect(source).toMatch(
         /@media \(min-width: 900px\)[\s\S]*?\.chat-content-stack\.is-empty\s*\{[\s\S]*?max-height:\s*840px;[\s\S]*?margin-block:\s*auto;/
+      );
+      expect(source).toMatch(
+        /@media \(min-width: 1920px\)[\s\S]*?\.chat-content-stack\.is-empty\s*\{[\s\S]*?max-height:\s*840px;[\s\S]*?margin-top:\s*auto;[\s\S]*?margin-bottom:\s*0;/
       );
     }
   });
