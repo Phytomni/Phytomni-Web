@@ -264,6 +264,8 @@ def closure_errors(
 
     reconciliation = inventory.reconciliation
     errors: list[str] = []
+    if inventory.scope != "full":
+        errors.append("closure requires full repository scope")
     if inventory.registry.allow_temporary:
         errors.append("closure requires policy allow_temporary = false")
     if not inventory.registry.exemptions:

@@ -151,6 +151,9 @@ def test_closure_requires_exact_structural_matches_and_no_pending_packet() -> No
         "closure found a pending candidate packet",
     )
 
+    partial = replace(inventory, scope="staged")
+    assert closure_errors(partial)[0] == "closure requires full repository scope"
+
 
 def test_closure_rejects_temporary_records_without_relying_on_expiration() -> None:
     temporary = _registry("valid-temporary.toml").exemptions[0]

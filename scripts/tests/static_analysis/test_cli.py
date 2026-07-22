@@ -587,6 +587,19 @@ def test_closure_rejects_missing_registry(
     assert "failed closed" in capsys.readouterr().err
 
 
+def test_closure_rejects_partial_scope_before_collecting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+
+    args = _closure_args(tmp_path / "registry.toml")
+    args.extend(("--scope", "staged"))
+    result = cli.main(args)
+
+    assert result == 2
+    assert capsys.readouterr().err == "static-analysis: failed closed (CollectionError)\n"
+
+
 def test_closure_rejects_pending_candidate_packet(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -311,6 +311,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         collector_names = CANDIDATE_COLLECTORS
     try:
         today = _today(args.today)
+        if args.closure and args.scope != "full":
+            raise CollectionError("closure requires --scope full")
         registry_path = args.registry if args.registry.is_absolute() else root / args.registry
         registry = load_registry(registry_path.resolve(), today=today)
         if args.write_approval_packet is not None:
