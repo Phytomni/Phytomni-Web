@@ -129,6 +129,7 @@
         root: measureRect(root),
         transcript: { present: false, count: transcripts.length },
         state,
+        chatMode,
       },
       `Expected exactly one chat-transcript; found ${transcripts.length}`
     );
@@ -144,6 +145,7 @@
         root: measureRect(root),
         contentStack: { present: false, count: contentStacks.length },
         state,
+        chatMode,
       },
       `Expected exactly one chat-content-stack; found ${contentStacks.length}`
     );

@@ -46,7 +46,7 @@ that same stdout. Always:
 `viewport`, `document`, `root`, `transcript`, `contentStack`, `scrollOwner`,
 `emptyScrollPosition`, `primaryAction`, `navigationTrigger`, `composer`,
 `headerPreferences`, `quickSelectCount`, `caseRegionCount`, `caseLinkCount`, `lastCase`,
-`lastMessage`, `state`, `pass`
+`lastMessage`, `state`, `chatMode`, `pass`
 
 `transcript` includes `scrollTop`, `scrollHeight`, `clientHeight`, `clientWidth`,
 `scrollWidth`, and `atBottom`. `scrollOwner` reports the state-selected owner,

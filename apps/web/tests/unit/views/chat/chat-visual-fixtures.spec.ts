@@ -73,6 +73,8 @@ const REFINEMENT_CAPTURE_SOURCE = readFileSync(
 
 type GeometryResult = {
   pass: boolean;
+  chatMode?: string | null;
+  error?: string;
   reasons?: string[];
 };
 
@@ -88,6 +90,7 @@ type Rect = {
 type GeometryHarnessOptions = {
   state?: "empty" | "populated";
   chatMode?: "instant" | "expert";
+  chatModeOverride?: string;
   emptyScrollPosition?: "top" | "cases";
   includeCases?: boolean;
   includeQuickSelect?: boolean;
@@ -103,6 +106,8 @@ type GeometryHarnessOptions = {
   contentStackClientHeight?: number;
   contentStackScrollHeight?: number;
   drawerState?: "closed" | "open" | "not-mobile";
+  includeTranscript?: boolean;
+  includeContentStack?: boolean;
   includeTrigger?: boolean;
   triggerVisible?: boolean;
   primaryVisible?: boolean;
@@ -130,7 +135,7 @@ async function runGeometryHarness(
   const height = options.height ?? 900;
   const drawerState = options.drawerState ?? "not-mobile";
   const state = options.state ?? "populated";
-  const chatMode = options.chatMode ?? "instant";
+  const chatMode = options.chatModeOverride ?? options.chatMode ?? "instant";
   const emptyScrollPosition = options.emptyScrollPosition ?? "top";
   const includeCases = options.includeCases ?? state === "empty";
   const includeQuickSelect = options.includeQuickSelect ?? state === "empty";
@@ -206,9 +211,11 @@ async function runGeometryHarness(
       return null;
     },
     querySelectorAll: (selector: string) => {
-      if (selector === '[data-testid="chat-transcript"]') return [transcript];
+      if (selector === '[data-testid="chat-transcript"]') {
+        return options.includeTranscript === false ? [] : [transcript];
+      }
       if (selector === '[data-testid="chat-content-stack"]') {
-        return [contentStack];
+        return options.includeContentStack === false ? [] : [contentStack];
       }
       if (selector === '[data-testid="chat-message-row"]') {
         return state === "populated" ? [lastMessage] : [];
@@ -726,6 +733,39 @@ describe("Chat visual fixture geometry negative controls", () => {
     });
     expect(result.pass).toBe(true);
   });
+
+  it("rejects an unsupported chat mode with explicit failure context", async () => {
+    const result = await runGeometryHarness({
+      chatModeOverride: "preview",
+    });
+    expect(result.pass).toBe(false);
+    expect(result.chatMode).toBe("preview");
+    expect(result.error).toMatch(/data-chat-mode must be instant\|expert/);
+  });
+
+  it.each([
+    {
+      label: "missing transcript",
+      options: { includeTranscript: false },
+      reason: /Expected exactly one chat-transcript/,
+    },
+    {
+      label: "missing content stack",
+      options: { includeContentStack: false },
+      reason: /Expected exactly one chat-content-stack/,
+    },
+  ])(
+    "retains validated mode context for $label",
+    async ({ options, reason }) => {
+      const result = await runGeometryHarness({
+        chatMode: "expert",
+        ...options,
+      });
+      expect(result.pass).toBe(false);
+      expect(result.chatMode).toBe("expert");
+      expect(result.error).toMatch(reason);
+    }
+  );
 
   it("exposes interactive sidebar and mode state for visual review", () => {
     expect(APP_SOURCE).toContain(
