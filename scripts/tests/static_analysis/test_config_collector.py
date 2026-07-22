@@ -83,6 +83,7 @@ def test_config_findings_include_unbounded_patterns_for_later_policy_rejection(
 
 def test_web_configuration_names_only_exact_owned_boundaries() -> None:
     findings = collect_config_suppressions(WEB_ROOT.parents[1])
+    legacy_model_root = "public/" + "modle"
     live = {
         (finding.tool, finding.rule, finding.target)
         for finding in findings
@@ -93,30 +94,14 @@ def test_web_configuration_names_only_exact_owned_boundaries() -> None:
         }
     }
 
-    assert ("eslint", "ignore-pattern", "dist/") in live
-    assert (
-        "eslint",
-        "ignore-pattern",
-        "public/static/js/3Dmol-min.js",
-    ) in live
+    assert ("eslint", "ignore-pattern", "dist/") not in live
     assert ("eslint", "ignore-pattern", "public/") not in live
 
     tsconfig = json.loads((WEB_ROOT / "tsconfig.json").read_text(encoding="utf-8"))
-    assert "public/modle/3Dmol-min.js" not in tsconfig["include"]
-    assert "public/modle" not in tsconfig["include"]
+    assert f"{legacy_model_root}/3Dmol-min.js" not in tsconfig["include"]
+    assert legacy_model_root not in tsconfig["include"]
 
-    prettier_ignores = {
-        line.strip()
-        for line in (WEB_ROOT / ".prettierignore")
-        .read_text(encoding="utf-8")
-        .splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    }
-    assert {
-        "public/static/downloads/",
-        "public/static/pdb/",
-        "public/static/js/3Dmol-min.js",
-        "src/assets/agentExample/",
-        "src/assets/agentOut/",
-    } <= prettier_ignores
-    assert "public/" not in prettier_ignores
+    assert not any(
+        finding.tool == "prettier" and finding.path == "apps/web/.prettierignore"
+        for finding in findings
+    )

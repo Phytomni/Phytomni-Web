@@ -1,14 +1,1 @@
-# Generated output and local dependencies
-dist/
-coverage/
-node_modules/
-package-lock.json
-
-# Repository-owned binary and static data payloads
-public/static/downloads/
-public/static/pdb/
-public/static/js/3Dmol-min.js
-
-# Repository-owned agent fixtures are reviewed as data, not source
-src/assets/agentExample/
-src/assets/agentOut/
+# The canonical format checks pass explicit first-party source scopes.

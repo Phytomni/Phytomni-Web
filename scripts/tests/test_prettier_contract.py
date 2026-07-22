@@ -21,17 +21,7 @@ EXPECTED_SCOPE_MARKERS = (
     ".eslintrc.cjs",
     ".prettierrc.cjs",
 )
-EXPECTED_IGNORES = {
-    "dist/",
-    "coverage/",
-    "node_modules/",
-    "package-lock.json",
-    "public/static/downloads/",
-    "public/static/pdb/",
-    "public/static/js/3Dmol-min.js",
-    "src/assets/agentExample/",
-    "src/assets/agentOut/",
-}
+EXPECTED_IGNORES: set[str] = set()
 
 
 def _package() -> dict[str, object]:
@@ -83,7 +73,7 @@ def test_prettier_is_exactly_pinned_and_scripts_have_one_write_boundary() -> Non
     assert write_commands == ["format:write"]
 
 
-def test_prettier_ignore_is_exact_without_broad_source_or_public_bypass() -> None:
+def test_prettier_ignore_has_no_redundant_path_bypass() -> None:
     entries = _ignore_entries()
 
     assert entries == EXPECTED_IGNORES
@@ -103,11 +93,11 @@ def test_frontend_static_group_runs_standalone_format_check_before_exact_eslint(
     assert gate.index(format_step) < gate.index(eslint_step)
 
 
-def test_eslint_keeps_prettier_only_as_conflict_config() -> None:
+def test_eslint_delegates_formatting_to_standalone_prettier() -> None:
     config = (WEB_ROOT / ".eslintrc.cjs").read_text(encoding="utf-8")
 
     assert '"@vue/eslint-config-prettier"' in config
-    assert '"prettier/prettier": "off"' in config
+    assert '"prettier/prettier"' not in config
 
 
 def test_first_party_format_check_is_clean() -> None:

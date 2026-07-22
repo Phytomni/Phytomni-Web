@@ -54,7 +54,7 @@ _PRETTIER_RE = re.compile(
     r"(?:^|//|#|<!--)\s*prettier-ignore\b", re.IGNORECASE
 )
 _SECRET_RE = re.compile(
-    r"(?:^|//|#|<!--)\s*(?P<rule>pragma:\s*allowlist\s+secret|nosec)\b",
+    r"(?://|#|<!--)\s*(?P<rule>pragma:\s*allowlist\s+secret|nosec)\b",
     re.IGNORECASE,
 )
 

@@ -67,6 +67,26 @@ def test_repository_collector_reads_exact_config_exclusions(tmp_path: Path) -> N
     assert ("shfmt", "ignore", ".shfmtignore", "generated/*.sh") in config_findings
 
 
+def test_repository_collector_does_not_treat_code_assignments_as_secret_markers(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "project"
+    shutil.copytree(FIXTURE_ROOT, root)
+    assignment = root / "scripts" / "nosec_assignment.py"
+    assignment.parent.mkdir(parents=True, exist_ok=True)
+    assignment.write_text(
+        'nosec = "a local variable, not a suppression marker"\n',
+        encoding="utf-8",
+    )
+
+    findings = collect_repository_tool_exceptions(root)
+
+    assert not any(
+        finding.tool == "secret-scan" and finding.path.endswith("nosec_assignment.py")
+        for finding in findings
+    )
+
+
 def test_repository_collector_excludes_ignored_or_generated_trees(
     tmp_path: Path,
 ) -> None:

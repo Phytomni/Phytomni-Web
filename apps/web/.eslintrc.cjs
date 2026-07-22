@@ -9,31 +9,15 @@ module.exports = {
     "@vue/eslint-config-typescript/recommended",
     "@vue/eslint-config-prettier",
   ],
-  // The tracked minified 3Dmol vendor bundle can trigger catastrophic parser
-  // backtracking; keep the rest of public/ lintable. dist/ is generated output
-  // from the build pipeline, not first-party source.
-  ignorePatterns: ["dist/", "public/static/js/3Dmol-min.js"],
   parserOptions: {
     ecmaVersion: "latest",
   },
   rules: {
-    // Formatting is enforced by the standalone G2.1 Prettier check. Keep
-    // eslint-config-prettier's conflict disabling without duplicating its
-    // formatter diagnostics in the semantic lint inventory.
-    "prettier/prettier": "off",
-    // The current source and test inventories are clean for these semantic
-    // debt rules; keep the zero-warning contract fail-closed for new code.
+    // Keep the zero-warning contract fail-closed for new code.
     "@typescript-eslint/no-explicit-any": "error",
     "@typescript-eslint/no-non-null-assertion": "error",
     "@typescript-eslint/no-unused-vars": "error",
-    // The Vue ecosystem (incl. Vue docs and `npm create vue@latest`)
-    // routinely uses single-word names for layout/root components
-    // (App, Layout, Sidebar, etc.). This codebase follows that
-    // convention everywhere — enforcing multi-word names would force
-    // 33 cosmetic renames across views/components without changing
-    // runtime behavior. Disable globally to align the rule set with
-    // project convention rather than fight it.
-    "vue/multi-word-component-names": "off",
+    "vue/multi-word-component-names": "error",
   },
   overrides: [
     {
@@ -52,12 +36,12 @@ module.exports = {
       files: [
         "src/main.ts",
         "src/utils/request.ts",
-        "src/layout/index.vue",
-        "src/views/change-password/index.vue",
-        "src/views/error/401.vue",
-        "src/views/forgot-password/index.vue",
-        "src/views/login/index.vue",
-        "src/views/register/index.vue",
+        "src/layout/LayoutView.vue",
+        "src/views/change-password/ChangePasswordView.vue",
+        "src/views/error/UnauthorizedView.vue",
+        "src/views/forgot-password/ForgotPasswordView.vue",
+        "src/views/login/LoginView.vue",
+        "src/views/register/RegisterView.vue",
         "src/components/DeepGenomeResultViewer.vue",
         "src/components/research/BotArtifactList.vue",
         "src/components/research/DeepGenomeArtifact.vue",
@@ -65,19 +49,19 @@ module.exports = {
         "src/components/shell/PhyAdaptiveShell.vue",
         "src/components/shell/PhyAdaptiveSidebar.vue",
         "src/composables/useDeepGenomeToc.ts",
-        "src/views/digital-design-agent/index.vue",
-        "src/views/gene-network-agent/index.vue",
-        "src/views/research-agent/index.vue",
-        "src/views/admin-management/index.vue",
-        "src/views/favorites/index.vue",
-        "src/views/gene-display/detail.vue",
-        "src/views/gene-display/index.vue",
-        "src/views/global-config/index.vue",
-        "src/views/help/index.vue",
-        "src/views/history/index.vue",
-        "src/views/profile/index.vue",
-        "src/views/task-manager/index.vue",
-        "src/views/user-list/index.vue",
+        "src/views/digital-design-agent/DigitalDesignAgentView.vue",
+        "src/views/gene-network-agent/GeneNetworkAgentView.vue",
+        "src/views/research-agent/ResearchAgentView.vue",
+        "src/views/admin-management/AdminManagementView.vue",
+        "src/views/favorites/FavoritesView.vue",
+        "src/views/gene-display/GeneDetailView.vue",
+        "src/views/gene-display/GeneDisplayView.vue",
+        "src/views/global-config/GlobalConfigView.vue",
+        "src/views/help/HelpView.vue",
+        "src/views/history/HistoryView.vue",
+        "src/views/profile/ProfileView.vue",
+        "src/views/task-manager/TaskManagerView.vue",
+        "src/views/user-list/UserListView.vue",
         "src/views/chat/composables/useAgentImages.ts",
         "src/views/chat/composables/useChatHistoryActions.ts",
         "src/views/chat/composables/useComposer.ts",
@@ -89,7 +73,7 @@ module.exports = {
         "src/views/chat/composables/useSelectChat.ts",
         "src/views/chat/composables/useSendMessage.ts",
         "src/views/chat/composables/useSidebarNavigation.ts",
-        "src/views/chat/sidebar.vue",
+        "src/views/chat/ChatSidebar.vue",
       ],
       rules: {
         "@typescript-eslint/no-floating-promises": [
@@ -104,14 +88,14 @@ module.exports = {
       // the owning synchronous wrapper or operation.
       files: [
         "src/components/research/ResearchEvidencePanel.vue",
-        "src/layout/index.vue",
-        "src/views/change-password/index.vue",
-        "src/views/chat/index.vue",
+        "src/layout/LayoutView.vue",
+        "src/views/change-password/ChangePasswordView.vue",
+        "src/views/chat/ChatView.vue",
         "src/views/chat/composables/useComposer.ts",
         "src/views/chat/composables/useFileUpload.ts",
         "src/views/chat/composables/useLogView.ts",
         "src/views/chat/composables/useReactions.ts",
-        "src/views/profile/index.vue",
+        "src/views/profile/ProfileView.vue",
         "tests/unit/composables/useDeepGenomeDownloads.spec.ts",
         "tests/visual/chat/main.ts",
         "tests/visual/research/main.ts",
@@ -167,15 +151,15 @@ module.exports = {
       // complete.
       files: [
         "src/composables/useDeepGenomeDownloads.ts",
-        "src/views/change-password/index.vue",
+        "src/views/change-password/ChangePasswordView.vue",
         "src/views/chat/composables/useBotCapabilities.ts",
         "src/views/chat/composables/useCopyDownload.ts",
         "src/views/chat/composables/useRefreshMessage.ts",
         "src/views/chat/composables/useSelectChat.ts",
         "src/views/chat/composables/useSendMessage.ts",
         "src/views/chat/streaming/a2uiParse.ts",
-        "src/views/feedback/index.vue",
-        "src/views/gene-display/detail.vue",
+        "src/views/feedback/FeedbackView.vue",
+        "src/views/gene-display/GeneDetailView.vue",
       ],
       rules: {
         "@typescript-eslint/no-unsafe-assignment": "error",
@@ -194,7 +178,7 @@ module.exports = {
         "src/utils/request.ts",
         "src/utils/sanitize-markup.ts",
         "src/views/chat/botProjection.ts",
-        "src/views/research-agent/index.vue",
+        "src/views/research-agent/ResearchAgentView.vue",
       ],
       rules: {
         "@typescript-eslint/no-unsafe-call": "error",

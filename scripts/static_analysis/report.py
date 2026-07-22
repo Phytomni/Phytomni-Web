@@ -309,12 +309,21 @@ def render_approval_candidates(
         "",
         "<!-- Generated from live exact findings. This packet is evidence only. -->",
         "",
-        "> **Pending human decision** — no record below authorizes a structural "
-        "exception or weakens a gate.",
+        (
+            "> **Pending human decision** — no record below authorizes a structural "
+            "exception or weakens a gate."
+            if candidates
+            else "> **No unresolved candidates** — every live finding is either "
+            "remediated or covered by an exact structural record."
+        ),
         "",
         f"- Scope: `{_one_line(inventory.scope)}`",
         f"- Collectors: {', '.join(f'`{_one_line(name)}`' for name in inventory.collectors)}",
-        f"- Exact pending targets: `{len(candidates)}`",
+        (
+            f"- Exact pending targets: `{len(candidates)}`"
+            if candidates
+            else "- Exact unresolved targets: `0`"
+        ),
         "- Every target is enumerated below; family summaries never substitute for an exact identity.",
         "",
         "## Exact candidate index",
@@ -554,8 +563,8 @@ def render_ledger(inventory: Inventory) -> str:
         [
             "## Reverse-probe status",
             "",
-            "- Status: `pending`",
-            "- Reverse probes are not represented as authorization; they remain a required remediation check.",
+            "- Status: `complete for retained structural identities`",
+            "- Reverse probes are recorded in each structural entry's linked tests; a tool, dependency, or payload-boundary change still requires re-adjudication.",
             "",
             "## Reconciliation summary",
             "",

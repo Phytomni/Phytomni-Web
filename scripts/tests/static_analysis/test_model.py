@@ -42,7 +42,7 @@ def test_valid_structural_entry_normalizes_and_types_fields() -> None:
     assert entry.classification is Classification.STRUCTURAL
     assert entry.mechanism is Mechanism.INLINE
     assert entry.target_kind is TargetKind.SYMBOL
-    assert entry.path == "apps/web/src/views/chat/index.vue"
+    assert entry.path == "apps/web/src/views/chat/ChatView.vue"
     assert entry.target == "sendMessage"
     assert entry.tests == ("scripts/tests/static_analysis/test_model.py",)
     assert entry.expires_on is None

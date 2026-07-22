@@ -208,3 +208,44 @@ def test_approval_packet_enumerates_exact_pending_target_without_source_body() -
     assert "Retention risk:" in rendered
     assert "fixture-secret" not in rendered
     assert "source body" not in rendered
+
+
+def test_approval_packet_has_no_pending_marker_after_exact_closure() -> None:
+    finding = _inventory().findings[0]
+    structural = Exemption(
+        id="fixture-structural-only",
+        tool=finding.tool,
+        rule=finding.rule,
+        classification=Classification.STRUCTURAL,
+        mechanism=finding.mechanism,
+        target_kind=finding.target_kind,
+        path=finding.path,
+        target=finding.target,
+        fingerprint=finding.fingerprint,
+        owner="web-maintainers",
+        introduced_on=TODAY,
+        review_on=date(2026, 8, 19),
+        rationale="The exact fixture target is covered by a structural test.",
+        counterfactual="Removing the target would break the fixture contract.",
+        risk="Only the exact fixture identity is authorized.",
+        tests=("scripts/tests/static_analysis/test_report.py",),
+    )
+    registry = Registry(
+        schema_version=1,
+        default="deny",
+        exemptions=(structural,),
+        allow_temporary=False,
+    )
+    inventory = Inventory(
+        findings=(finding,),
+        registry=registry,
+        reconciliation=reconcile((finding,), registry, today=TODAY),
+        scope="full",
+        collectors=("fixture-tool",),
+    )
+
+    rendered = render_approval_candidates(inventory)
+
+    assert "No unresolved candidates" in rendered
+    assert "Pending human decision" not in rendered
+    assert "Exact pending targets:" not in rendered

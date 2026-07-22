@@ -11,8 +11,6 @@
 - Scope: `full`
 - Collectors: `eslint`, `typescript`, `source`, `config`, `ci`, `go`
 - Tool versions:
-  - `eslint`: `inventory`
-  - `prettier`: `inventory`
   - `typescript`: `inventory`
 
 ## Structural entries
@@ -21,7 +19,8 @@ Structural records are exact reviewed identities; they do not authorize broader 
 
 | ID | Tool | Rule | Exact entry | Target | Owner | Review on |
 | --- | --- | --- | --- | --- | --- | --- |
-| *(none)* |  |  |  |  |  |  |
+| `web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977` | `typescript` | `exclude` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147` | `web-maintainers` | `2026-08-31` |
+| `web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-08-31` |
 
 ## Temporary debt
 
@@ -29,229 +28,38 @@ Temporary records track remediation debt and never grant structural approval.
 
 | ID | Expires on | Tool | Rule | Exact entry | Target | Owner | Review on |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `web-sa-1b411065fe537ec6948ba2eadca2021818272ee4c6b7ed313abc417e14667d86` | `2026-08-31` | `eslint` | `ignore-pattern` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `dist/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-2cadf9833f19cb4df032350313ad4c7f112140f0aa932ada7c337623f7dbd016` | `2026-08-31` | `eslint` | `prettier/prettier` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `prettier/prettier` | `web-maintainers` | `2026-07-19` |
-| `web-sa-fc8a1bfb1baaacb8d08bdd02afcf449a6c537334664858c4aef8bbb461ebb0bf` | `2026-08-31` | `eslint` | `ignore-pattern` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `public/static/js/3Dmol-min.js` | `web-maintainers` | `2026-07-19` |
-| `web-sa-df13542ef68f44f4a822d7d465eb64e1999b396c29a79f68d3773a06ea7c5505` | `2026-08-31` | `eslint` | `vue/multi-word-component-names` | [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs) | `vue/multi-word-component-names` | `web-maintainers` | `2026-07-19` |
-| `web-sa-51580c159da633ad32ca29dfe1b7ace27fa4a6a47ed83681e01ed0c8c785d982` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `coverage/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-cab122e4c69bce930f24a6446c743a83cbba9d267c3011bb757ab46a69216a15` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `dist/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-542993ee3c381d54810bcbc146a46e0ed6c8ef08798e066b517ef5a66474516a` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `node_modules/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-c1478fd328edfefec6013b8d54455d0cca82f6603acc1ca391e875e166f8cebd` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `package-lock.json` | `web-maintainers` | `2026-07-19` |
-| `web-sa-84e598ef05dcdd04f49096846baf5e1b8726d6f23fc27564f83566a2cfbfc922` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `public/static/downloads/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-cb2ca99e4bc7f98efebbce03cd540d9a55d4e75adc1e8ed2f90a0b1c77148419` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `public/static/js/3Dmol-min.js` | `web-maintainers` | `2026-07-19` |
-| `web-sa-ab261ad53d14386433fed304598c4610588c3ff09d8b2cee6346651fa276fc5a` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `public/static/pdb/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-ea1aa5fdf087128d339edc9c3c48aa28b486207f924b3cc12ffbf36603a440f5` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `src/assets/agentExample/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-496ce781bad5b04830a5ccbdd13b63936113471f1f80f74df259c5c7385429cb` | `2026-08-31` | `prettier` | `ignore` | [apps/web/.prettierignore](../../apps/web/.prettierignore) | `src/assets/agentOut/` | `web-maintainers` | `2026-07-19` |
-| `web-sa-80167d38dca94bd15e6ca82cde7155f5145f90ba04eb1b0d78fc02cd2c1a43bb` | `2026-08-31` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.config.json](../../apps/web/tsconfig.config.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
-| `web-sa-fd9812ede5856bcc9bf4aac709c060a1fb42dcef070703b6ff16fd2507b4b2b7` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `coverage` | `web-maintainers` | `2026-07-20` |
-| `web-sa-60261879aad8e18307ebb1a63ffc494466ff77ff9d1f36388baefec6016566b9` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `dist` | `web-maintainers` | `2026-07-20` |
-| `web-sa-089e29caf578740215c06557960922ed1cccdb0222cd84e7b4a228658e59714d` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `node_modules` | `web-maintainers` | `2026-07-20` |
-| `web-sa-c7567bf794fceecc9c19f4a7a20c1b7f72ed2a2c08908cc7198732cd0c1ec16b` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147` | `web-maintainers` | `2026-07-20` |
-| `web-sa-b50a325c91340842ad819664a76c3e4e83c511e18c04ac7cac7165c81f7b53d6` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json) | `public/static/js/3Dmol-min.js` | `web-maintainers` | `2026-07-20` |
-| `web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69` | `2026-08-31` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-07-19` |
-| `web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977` | `2026-08-31` | `typescript` | `exclude` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147` | `web-maintainers` | `2026-07-19` |
+| *(none)* |  |  |  |  |  |  |  |
 
 ## Risk and linked tests
 
-### `web-sa-1b411065fe537ec6948ba2eadca2021818272ee4c6b7ed313abc417e14667d86`
+### `web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977`
 
-- Exact entry: [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported ignore-pattern at line ?; raw diagnostic omitted.
-
-### `web-sa-2cadf9833f19cb4df032350313ad4c7f112140f0aa932ada7c337623f7dbd016`
-
-- Exact entry: [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported prettier/prettier at line ?; raw diagnostic omitted.
-
-### `web-sa-fc8a1bfb1baaacb8d08bdd02afcf449a6c537334664858c4aef8bbb461ebb0bf`
-
-- Exact entry: [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported ignore-pattern at line ?; raw diagnostic omitted.
-
-### `web-sa-df13542ef68f44f4a822d7d465eb64e1999b396c29a79f68d3773a06ea7c5505`
-
-- Exact entry: [apps/web/.eslintrc.cjs](../../apps/web/.eslintrc.cjs)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: eslint reported vue/multi-word-component-names at line ?; raw diagnostic omitted.
-
-### `web-sa-51580c159da633ad32ca29dfe1b7ace27fa4a6a47ed83681e01ed0c8c785d982`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-cab122e4c69bce930f24a6446c743a83cbba9d267c3011bb757ab46a69216a15`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-542993ee3c381d54810bcbc146a46e0ed6c8ef08798e066b517ef5a66474516a`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-c1478fd328edfefec6013b8d54455d0cca82f6603acc1ca391e875e166f8cebd`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-84e598ef05dcdd04f49096846baf5e1b8726d6f23fc27564f83566a2cfbfc922`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-cb2ca99e4bc7f98efebbce03cd540d9a55d4e75adc1e8ed2f90a0b1c77148419`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-ab261ad53d14386433fed304598c4610588c3ff09d8b2cee6346651fa276fc5a`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-ea1aa5fdf087128d339edc9c3c48aa28b486207f924b3cc12ffbf36603a440f5`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-496ce781bad5b04830a5ccbdd13b63936113471f1f80f74df259c5c7385429cb`
-
-- Exact entry: [apps/web/.prettierignore](../../apps/web/.prettierignore)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: prettier reported ignore at line ?; raw diagnostic omitted.
-
-### `web-sa-80167d38dca94bd15e6ca82cde7155f5145f90ba04eb1b0d78fc02cd2c1a43bb`
-
-- Exact entry: [apps/web/tsconfig.config.json](../../apps/web/tsconfig.config.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported skipLibCheck at line ?; raw diagnostic omitted.
-
-### `web-sa-fd9812ede5856bcc9bf4aac709c060a1fb42dcef070703b6ff16fd2507b4b2b7`
-
-- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
-
-### `web-sa-60261879aad8e18307ebb1a63ffc494466ff77ff9d1f36388baefec6016566b9`
-
-- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
-
-### `web-sa-089e29caf578740215c06557960922ed1cccdb0222cd84e7b4a228658e59714d`
-
-- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
-
-### `web-sa-c7567bf794fceecc9c19f4a7a20c1b7f72ed2a2c08908cc7198732cd0c1ec16b`
-
-- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
-
-### `web-sa-b50a325c91340842ad819664a76c3e4e83c511e18c04ac7cac7165c81f7b53d6`
-
-- Exact entry: [apps/web/tsconfig.eslint.json](../../apps/web/tsconfig.eslint.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Exact entry: [apps/web/tsconfig.json](../../apps/web/tsconfig.json)
+- Rationale: The application include glob reaches repository-owned agent Markdown that contains Vue examples; removing the exact exclusion makes vue-tsc parse that data as source and fails with four TS2339 diagnostics in the Markdown payloads.
+- Counterfactual: A same-directory reverse probe with this one exclude removed must remain non-clean and must report only the agent-example Markdown payload family; if the data is converted to non-source assets, remove this structural record.
+- Risk: Only the hashed src/assets/**/*.md exclusion in apps/web/tsconfig.json is authorized; a path, pattern, or diagnostic-family change is a stale identity and fails reconciliation.
+- Linked tests: `scripts/tests/test_typescript_dependency_probe.py::test_application_exclude_keeps_markdown_data_out_of_program`, `scripts/check_static_analysis_exemptions.py --check`
 - Observation: typescript reported exclude at line ?; raw diagnostic omitted.
 
 ### `web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69`
 
 - Exact entry: [apps/web/tsconfig.json](../../apps/web/tsconfig.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
+- Rationale: The supported TypeScript 4.7.4/vue-tsc 0.39.5 toolchain emits an exact third-party declaration family with skipLibCheck=false; the reverse probe binds this application setting to the direct 3dmol 2.5.5 dependency.
+- Counterfactual: Removing this exact setting fails the application probe on node_modules declaration errors; the config-project probe remains separate and exposes three first-party vitest.config.ts errors.
+- Risk: Only apps/web/tsconfig.json compilerOptions.skipLibCheck=true is authorized; project, tool-version, or diagnostic-family drift fails the probe and requires re-adjudication.
+- Linked tests: `scripts/tests/test_typescript_dependency_probe.py::test_skip_lib_check_probe_is_project_and_dependency_bound`, `scripts/tests/test_typescript_dependency_probe.py::test_first_party_canary_is_visible_with_or_without_skip_lib_check`, `scripts/check_static_analysis_exemptions.py --check`
 - Observation: typescript reported skipLibCheck at line ?; raw diagnostic omitted.
-
-### `web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977`
-
-- Exact entry: [apps/web/tsconfig.json](../../apps/web/tsconfig.json)
-- Rationale: Observed by the bounded static-analysis inventory; this temporary record is not approval.
-- Counterfactual: Not adjudicated; remove or replace the exact finding before the temporary record expires.
-- Risk: Tracking only; the registry entry does not authorize unrelated findings or future occurrences.
-- Linked tests: `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
 
 ## Reverse-probe status
 
-- Status: `pending`
-- Reverse probes are not represented as authorization; they remain a required remediation check.
+- Status: `complete for retained structural identities`
+- Reverse probes are recorded in each structural entry's linked tests; a tool, dependency, or payload-boundary change still requires re-adjudication.
 
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `21`
-- Matched: `21`
+- Findings: `2`
+- Matched: `2`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`

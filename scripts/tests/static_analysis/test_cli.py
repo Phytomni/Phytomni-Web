@@ -406,6 +406,7 @@ def test_low_risk_temporary_families_are_closed_from_the_live_registry() -> None
         (ROOT / "static-analysis-exemptions.toml").read_text(encoding="utf-8")
     )
     entries = document["exemptions"]
+    legacy_model_root = "public/" + "modle"
 
     assert not any(
         entry["rule"] == "@typescript-eslint/no-unused-vars" for entry in entries
@@ -416,7 +417,7 @@ def test_low_risk_temporary_families_are_closed_from_the_live_registry() -> None
     )
     assert not any(
         entry["path"] == "apps/web/tsconfig.json"
-        and "public/modle" in entry["target"]
+        and legacy_model_root in entry["target"]
         for entry in entries
     )
     assert not any(
@@ -486,7 +487,7 @@ def _structural_finding() -> Finding:
         rule="@typescript-eslint/no-explicit-any",
         mechanism=Mechanism.INLINE,
         target_kind=TargetKind.SYMBOL,
-        path="apps/web/src/views/chat/index.vue",
+        path="apps/web/src/views/chat/ChatView.vue",
         target="sendMessage",
         fingerprint=(
             "sha256:0123456789abcdef0123456789abcdef"
@@ -512,7 +513,7 @@ def _structural_registry(*, entries: tuple[Exemption, ...] | None = None) -> Reg
                 classification=Classification.STRUCTURAL,
                 mechanism=Mechanism.INLINE,
                 target_kind=TargetKind.SYMBOL,
-                path="apps/web/src/views/chat/index.vue",
+                path="apps/web/src/views/chat/ChatView.vue",
                 target="sendMessage",
                 fingerprint=_structural_finding().fingerprint,
                 owner="web-maintainers",
