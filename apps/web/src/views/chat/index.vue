@@ -1786,18 +1786,19 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
 
 .chat-header {
   flex-shrink: 0;
-  padding: 0 var(--phy-space-16);
+  padding: 0 clamp(var(--phy-space-16), 2vw, var(--phy-space-32));
   border-bottom: 1px solid var(--phy-color-border);
   min-height: var(--phy-control-height-primary);
   height: var(--phy-control-height-primary);
 
   .chat-header-inner {
-    width: min(100%, var(--phy-layout-transcript-max-width));
+    width: 100%;
     height: 100%;
-    margin: 0 auto;
+    margin: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--phy-space-8);
   }
 
   .header-leading {
@@ -1806,6 +1807,7 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
     display: flex;
     align-items: center;
     gap: var(--phy-space-8);
+    overflow: hidden;
   }
 
   .chat-header-title {

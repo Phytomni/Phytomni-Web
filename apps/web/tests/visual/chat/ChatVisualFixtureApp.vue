@@ -598,15 +598,16 @@ onUnmounted(() => {
 
 .chat-header {
   flex: 0 0 var(--phy-control-height-primary);
+  min-height: var(--phy-control-height-primary);
   height: var(--phy-control-height-primary);
-  padding: 0 var(--phy-space-16);
+  padding: 0 clamp(var(--phy-space-16), 2vw, var(--phy-space-32));
   border-bottom: 1px solid var(--phy-color-border-subtle);
 }
 
 .chat-header-inner {
-  width: min(100%, var(--phy-layout-transcript-max-width));
+  width: 100%;
   height: 100%;
-  margin: 0 auto;
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -623,6 +624,7 @@ onUnmounted(() => {
 .header-leading {
   min-width: 0;
   flex: 1;
+  overflow: hidden;
 }
 
 .header-controls {

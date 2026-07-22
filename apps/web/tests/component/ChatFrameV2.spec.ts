@@ -242,9 +242,6 @@ describe("ChatFrameV2 — frame state matrix via 3A.8 registry", () => {
     expect(CHAT_SOURCE).toContain("phy-layout-transcript-max-width");
     expect(CHAT_SOURCE).toContain('class="chat-header-inner"');
     expect(CHAT_SOURCE).toMatch(
-      /\.chat-header-inner \{[\s\S]*?width: min\(100%, var\(--phy-layout-transcript-max-width\)\)/
-    );
-    expect(CHAT_SOURCE).toMatch(
       /\.transcript-content \{[\s\S]*?width: min\(100%, var\(--phy-layout-transcript-max-width\)\)/
     );
     expect(CHAT_SOURCE).toContain('class="empty-chat"');
@@ -264,6 +261,29 @@ describe("ChatFrameV2 — frame state matrix via 3A.8 registry", () => {
     expect(inputBlock).not.toContain("overflow-y");
     expect(CHAT_COMPOSER_SOURCE).toContain(
       "var(--phy-layout-transcript-max-width)"
+    );
+  });
+
+  it("separates full-width header chrome from the bounded transcript lane", () => {
+    const start = CHAT_SOURCE.indexOf(".chat-header {");
+    const end = CHAT_SOURCE.indexOf(".chat-content-stack {", start);
+    const headerBlock = CHAT_SOURCE.slice(start, end);
+
+    expect(headerBlock).toMatch(
+      /\.chat-header-inner\s*\{[\s\S]*?width:\s*100%;[\s\S]*?margin:\s*0;/
+    );
+    expect(headerBlock).not.toContain("--phy-layout-transcript-max-width");
+    expect(headerBlock).toContain(
+      "clamp(var(--phy-space-16), 2vw, var(--phy-space-32))"
+    );
+    expect(FIXTURE_APP_SOURCE).toMatch(
+      /\.chat-header-inner\s*\{[\s\S]*?width:\s*100%;[\s\S]*?margin:\s*0;/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.transcript-content \{[\s\S]*?width: min\(100%, var\(--phy-layout-transcript-max-width\)\)/
+    );
+    expect(CHAT_COMPOSER_SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-transcript-max-width))"
     );
   });
 });
