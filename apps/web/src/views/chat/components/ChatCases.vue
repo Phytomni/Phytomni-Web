@@ -14,7 +14,7 @@
         data-testid="chat-case-link"
       >
         <span class="chat-case-icon" aria-hidden="true">
-          <component :is="item.iconComponent" />
+          <img :src="item.img" alt="" loading="eager" decoding="async" />
         </span>
         <span class="chat-case-title">{{ item.title }}</span>
       </RouterLink>
@@ -23,10 +23,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, type Component } from "vue";
+import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { DataLine, Edit, Search } from "@element-plus/icons-vue";
 import {
   CANONICAL_AGENT_PAGE_TITLE_KEYS,
   deriveCaseRouteOptions,
@@ -34,19 +33,12 @@ import {
 
 const { t } = useI18n();
 
-const CASE_ICONS: Record<string, Component> = {
-  Search,
-  DataLine,
-  Edit,
-};
-
 const caseOptions = computed(() =>
   deriveCaseRouteOptions().map((option) => {
     const titleKey = CANONICAL_AGENT_PAGE_TITLE_KEYS[option.toolName];
     return {
       ...option,
       title: titleKey ? t(titleKey) : option.name,
-      iconComponent: CASE_ICONS[option.icon] ?? Edit,
     };
   })
 );
@@ -114,9 +106,12 @@ const caseOptions = computed(() =>
   color: var(--phy-color-action-text);
 }
 
-.chat-case-icon :deep(svg) {
-  width: 18px;
-  height: 18px;
+.chat-case-icon img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .chat-case-title {
@@ -138,11 +133,6 @@ const caseOptions = computed(() =>
     width: 24px;
     height: 24px;
     flex-basis: 24px;
-  }
-
-  .chat-case-icon :deep(svg) {
-    width: 15px;
-    height: 15px;
   }
 
   .chat-case-title {
@@ -196,11 +186,6 @@ const caseOptions = computed(() =>
     width: 28px;
     height: 28px;
     flex-basis: 28px;
-  }
-
-  .chat-case-icon :deep(svg) {
-    width: 16px;
-    height: 16px;
   }
 }
 </style>

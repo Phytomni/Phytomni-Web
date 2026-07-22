@@ -240,13 +240,41 @@ const SIDEBAR_ROUTE_META: Record<
   RoutedAgentTool,
   { id: number; icon: string; img: string }
 > = {
-  KnowledgeAgent: { id: 2, icon: "Search", img: "/KnowledgeAgent.jpg" },
-  DataAgent: { id: 3, icon: "DataLine", img: "/DataAgent.jpg" },
-  AnalystAgent: { id: 4, icon: "Edit", img: "/AnalystAgent.jpg" },
-  BriefGeneAgent: { id: 5, icon: "Edit", img: "/BriefGeneAgent.jpg" },
-  GeneNetworkAgent: { id: 6, icon: "Edit", img: "/GeneNetworkAgent.jpg" },
-  DeepGenomeAgent: { id: 7, icon: "Edit", img: "/DeepGenomeAgent.jpg" },
-  DigitalDesignAgent: { id: 8, icon: "Edit", img: "/DigitalDesignAgent.jpg" },
+  KnowledgeAgent: {
+    id: 2,
+    icon: "Search",
+    img: "/agent-icons/KnowledgeAgent.jpg",
+  },
+  DataAgent: {
+    id: 3,
+    icon: "DataLine",
+    img: "/agent-icons/DataAgent.jpg",
+  },
+  AnalystAgent: {
+    id: 4,
+    icon: "Edit",
+    img: "/agent-icons/AnalystAgent.jpg",
+  },
+  BriefGeneAgent: {
+    id: 5,
+    icon: "Edit",
+    img: "/agent-icons/BriefReviewAgent.jpg",
+  },
+  GeneNetworkAgent: {
+    id: 6,
+    icon: "Edit",
+    img: "/agent-icons/GeneNetworkAgent.jpg",
+  },
+  DeepGenomeAgent: {
+    id: 7,
+    icon: "Edit",
+    img: "/agent-icons/DeepGenomeAgent.jpg",
+  },
+  DigitalDesignAgent: {
+    id: 8,
+    icon: "Edit",
+    img: "/agent-icons/DigitalDesignAgent.jpg",
+  },
 };
 
 export function deriveSidebarRouteOptions(): SidebarRouteOption[] {
