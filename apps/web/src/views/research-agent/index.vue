@@ -11,7 +11,9 @@
       role="status"
       aria-live="polite"
     >
-      <h1 id="research-agent-title">{{ t("agents.research.title") }}</h1>
+      <h1 id="research-agent-title">
+        <AgentDisplayName :label="t('agents.research.title')" />
+      </h1>
       <p>{{ t("agents.research.capabilityLoading") }}</p>
       <button
         type="button"
@@ -50,7 +52,9 @@
           <p class="research-agent-eyebrow">
             {{ t("agents.research.agentLabel") }}
           </p>
-          <h1 id="research-agent-title">{{ t("agents.research.title") }}</h1>
+          <h1 id="research-agent-title">
+            <AgentDisplayName :label="t('agents.research.title')" />
+          </h1>
           <p class="research-agent-subtitle">
             {{ t("agents.research.subtitle") }}
           </p>
@@ -271,6 +275,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { getAnswerCheck, getChatdownloadURL } from "@/api/chat";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";

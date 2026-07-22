@@ -146,6 +146,12 @@ describe("Help product document", () => {
     }
     expect(english).toContain("CSV is not a universal chat attachment format");
     expect(english).toContain("Best starting input");
+    expect(english).toContain("***In Silico* Research Agent:**");
+    expect(english).not.toContain("**In Silico Research Agent:**");
+    expect(enUS.chat.agentLabels.inSilicoResearchAgent).toBe(
+      "In Silico Research Agent"
+    );
+    expect(enUS.agents.research.title).toBe("In Silico Research Agent");
 
     const chinese = zhCN.help.doc.howItWorks.body;
     for (const agent of [

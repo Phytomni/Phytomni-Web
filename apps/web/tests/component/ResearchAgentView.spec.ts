@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { config, mount } from "@vue/test-utils";
+import { createI18n } from "vue-i18n";
+import ElementPlus from "element-plus";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
+import enUS from "@/locales/langs/en-US";
 import ResearchAgentView from "@/views/research-agent/index.vue";
 import type { BotRunProjection } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
@@ -77,6 +80,14 @@ const mocks = vi.hoisted(() => {
     routerBack: vi.fn(),
   };
 });
+
+const testI18n = createI18n({
+  legacy: false,
+  locale: "en-US",
+  fallbackLocale: "en-US",
+  messages: { "en-US": enUS },
+});
+config.global.plugins = [testI18n, ElementPlus];
 
 vi.mock("@/api/chat", () => ({
   getAnswerCheck: mocks.getAnswerCheck,
@@ -228,6 +239,15 @@ describe("ResearchAgentView", () => {
     await unavailable.get('[data-test="research-back"]').trigger("click");
     expect(mocks.routerBack).toHaveBeenCalledTimes(2);
     unavailable.unmount();
+  });
+
+  it("italicizes only In Silico in the product title", () => {
+    const wrapper = mountView();
+    const title = wrapper.get("#research-agent-title");
+    expect(title.text()).toBe("In Silico Research Agent");
+    expect(title.get("em").text()).toBe("In Silico");
+    expect(title.get("em").text()).not.toContain("Research Agent");
+    wrapper.unmount();
   });
 
   it("contains a rejected capability bootstrap", async () => {

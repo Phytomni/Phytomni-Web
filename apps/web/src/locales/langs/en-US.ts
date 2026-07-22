@@ -996,7 +996,7 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 -   **Data Agent:** Species, gene or other entity identifiers, and the fields or relationship you need. It queries the integrated biological database; an uploaded spreadsheet is not required.
 -   **Analyst Agent:** Analysis objective, data type, species, and a description or location for each dataset. Use only dataset controls explicitly offered by this agent.
 -   **Review Agent:** Review topic, scope, species, date range, and desired report emphasis. Optional supported documents can seed the review.
--   **In Silico Research Agent:** Paper or hypothesis to reproduce, expected outcome, and dataset descriptions or locations. Use only dataset controls explicitly offered by this agent.
+-   ***In Silico* Research Agent:** Paper or hypothesis to reproduce, expected outcome, and dataset descriptions or locations. Use only dataset controls explicitly offered by this agent.
 -   **Gene Network Agent:** Gene list, species, and optional trait or phenotype identifier. State the meaning of each list or dataset when prompted.
 -   **Brief Gene Agent:** Gene identifier, species, and the aspect you want summarized. Optional supported documents can add local evidence.
 -   **Deep Genome Agent:** Gene identifier and species, plus any requested functional or breeding focus. It uses integrated literature and multi-omics evidence.
