@@ -4,7 +4,7 @@
       :model-value="modelValue"
       @update:model-value="(v) => $emit('update:modelValue', v as 'instant' | 'expert')"
     >
-      <el-radio-button value="instant">{{
+      <el-radio-button value="instant" data-test="chat-mode-instant">{{
         $t("chat.mode.instant")
       }}</el-radio-button>
       <el-tooltip
@@ -12,11 +12,11 @@
         :content="$t('chat.mode.comingSoon')"
         placement="top"
       >
-        <el-radio-button value="expert" disabled>{{
-          $t("chat.mode.expert")
-        }}</el-radio-button>
+        <el-radio-button value="expert" disabled data-test="chat-mode-expert">
+          {{ $t("chat.mode.expert") }}
+        </el-radio-button>
       </el-tooltip>
-      <el-radio-button v-else value="expert">{{
+      <el-radio-button v-else value="expert" data-test="chat-mode-expert">{{
         $t("chat.mode.expert")
       }}</el-radio-button>
     </el-radio-group>
@@ -54,9 +54,16 @@ defineEmits<{ (e: "update:modelValue", value: "instant" | "expert"): void }>();
   line-height: 1.4;
 }
 
-.chat-mode-selector
-  :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  background: var(--phy-color-primary-soft);
+.chat-mode-selector :deep(.el-radio-button) {
+  --el-radio-button-checked-bg-color: var(--phy-color-primary-soft);
+  --el-radio-button-checked-text-color: var(--phy-color-action-text);
+  --el-radio-button-checked-border-color: transparent;
+}
+
+.chat-mode-selector :deep(.el-radio-button.is-active .el-radio-button__inner) {
+  border-color: transparent;
+  background-color: var(--phy-color-primary-soft);
+  box-shadow: none;
   color: var(--phy-color-action-text);
   font-weight: 600;
 }
