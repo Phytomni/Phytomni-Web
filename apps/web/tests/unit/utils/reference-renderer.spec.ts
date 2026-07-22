@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
+import { invalidInput } from "../../helpers/invalidInput";
 
 // Direct unit tests for the reference renderer extracted from
 // DeepGenomeResultViewer. references come from the Bot `formatted.references`
@@ -9,10 +10,14 @@ import { buildDisplayReferences } from "@/utils/reference-renderer";
 // sanitizeHref scheme-checked.
 
 describe("buildDisplayReferences — XSS invariant", () => {
-  it("returns [] for empty / nullish input", () => {
+  it("returns [] for empty / runtime-invalid nullish input", () => {
     expect(buildDisplayReferences([])).toEqual([]);
-    expect(buildDisplayReferences(null)).toEqual([]);
-    expect(buildDisplayReferences(undefined)).toEqual([]);
+    expect(
+      buildDisplayReferences(invalidInput<readonly unknown[]>(null))
+    ).toEqual([]);
+    expect(
+      buildDisplayReferences(invalidInput<readonly unknown[]>(undefined))
+    ).toEqual([]);
   });
 
   it("escapes a raw tag in the title-only branch", () => {

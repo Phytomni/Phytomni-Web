@@ -18,10 +18,10 @@ export interface DisplayReference {
 // citation au-so / dl text / pm text / plain string / JSON) is escapeHtml-ed; the
 // DOI / PubMed href always goes through sanitizeHref for a scheme allow-list check.
 export const buildDisplayReferences = (
-  references: readonly unknown[] | null | undefined,
+  references: readonly unknown[],
   ns = ""
 ): DisplayReference[] => {
-  if (!references || references.length === 0) {
+  if (references == null || references.length === 0) {
     return [];
   }
 
