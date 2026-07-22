@@ -186,6 +186,26 @@ def test_public_docs_name_ci_jobs_without_claiming_remote_activation() -> None:
     assert "CODEOWNERS rules" in contributing
 
 
+def test_public_docs_bind_tool_versions_cache_and_rollback() -> None:
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+    for version in (
+        "Node 26",
+        "Go 1.23",
+        "0.10.0",
+        "v3.10.0",
+        "v1.7.4",
+        "2025.1.1",
+    ):
+        assert version in contributing
+    assert ".cache/phytomni/<tool>-<version>/<platform>" in contributing
+    assert "QUALITY_RUNNER_CACHE_ROOT" in contributing
+    assert "QUALITY_RUNNER_OFFLINE=1" in contributing
+    assert "fails closed" in contributing
+    assert "unpinned binary" in contributing
+    assert "restore the prior pinned" in contributing
+
+
 def test_quality_policy_docs_preserve_scope_and_no_degradation_contract() -> None:
     style = (ROOT / "STYLE.md").read_text(encoding="utf-8")
     docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")

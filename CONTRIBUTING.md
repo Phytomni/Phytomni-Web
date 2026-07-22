@@ -113,6 +113,22 @@ six exact status names above. This checkout does not assert that GitHub branch
 protection, required-check settings, or CODEOWNERS rules are currently active;
 verify those external settings separately.
 
+### Tool versions, cache, and rollback
+
+The supported local and CI baselines are Node 26 and Go 1.23. Frontend
+dependencies are installed with `npm ci`; Go dependencies are verified by the
+server gate. Repository-downloaded quality tools are pinned and checksum
+verified: ShellCheck `0.10.0`, shfmt `v3.10.0`, actionlint `v1.7.4`, and
+Staticcheck `2025.1.1`.
+
+The runner cache defaults to `.cache/phytomni/<tool>-<version>/<platform>` and
+can be relocated with `QUALITY_RUNNER_CACHE_ROOT`. `QUALITY_RUNNER_OFFLINE=1`
+fails closed when an exact PATH or cache binary is unavailable; a mismatched
+PATH or cached version is never silently accepted. A tool upgrade must change
+the pinned metadata, asset checksum, contract tests, and this documentation in
+one review. If the upgraded gate is not acceptable, restore the prior pinned
+runner metadata and cache key instead of substituting an unpinned binary.
+
 ## Testing
 
 - **`apps/web`** uses **vitest**. `npm run coverage` is the enforcing gate (G12);
