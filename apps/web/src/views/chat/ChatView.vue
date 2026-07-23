@@ -1101,43 +1101,10 @@ const getHistoryQuestionData = (
               return;
             }
 
-            const pendingData = safeParse(
-              localStorage.getItem(`pending_chat_${sendingDialogueId}`)
-            );
-            if (!isValidPendingRecord(pendingData)) {
-              resolve({
-                status: "retained",
-                tempId: sendingDialogueId,
-                reason: "unmatched",
-              });
-              return;
-            }
-
-            const candidates = formattedData.filter((chat: Chat) =>
-              matchesChat(
-                { dialogue_id: chat.dialogue_id, title: chat.title },
-                pendingData,
-                sendingDialogueId
-              )
-            );
-            if (candidates.length === 1) {
-              resolve(
-                reconcileMatchedDialogue(
-                  sendingDialogueId,
-                  candidates[0].dialogue_id
-                )
-              );
-              return;
-            }
-
-            const reason = candidates.length === 0 ? "no-match" : "ambiguous";
-            console.warn(
-              `[chat] dialogue reconciliation retained: ${reason} (temp=${sendingDialogueId})`
-            );
             resolve({
               status: "retained",
               tempId: sendingDialogueId,
-              reason,
+              reason: "unmatched",
             });
             return;
           }
@@ -1151,8 +1118,8 @@ const getHistoryQuestionData = (
   });
 };
 
-// Scan pending localStorage records against the authoritative chat list; reconcile
-// only when matchesChat yields exactly one candidate per temp key.
+// Restore pending localStorage rows against the authoritative chat list. Only
+// explicit dialogue-id equality may reconcile; titles are never identities.
 const restorePendingChats = (
   knownChats: Chat[],
   skipTempIds?: ReadonlySet<string>

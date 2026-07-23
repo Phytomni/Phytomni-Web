@@ -343,6 +343,7 @@ export default {
     resultImageAlt: "结果图 {index}",
     sendFailed: "发送消息失败，请稍后重试。",
     timeoutFailed: "请求处理超时，请缩小查询范围或稍后重试。",
+    requestId: "请求 ID",
     sendAriaLabel: "发送",
     abortAriaLabel: "中止回答",
     progress: {

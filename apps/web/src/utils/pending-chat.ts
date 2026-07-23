@@ -76,23 +76,15 @@ export function isValidPendingRecord(data: unknown): data is PendingChatRecord {
 
 /**
  * Returns true iff `chat` (chatList entry) corresponds to `pending` (localStorage record).
- * Strategy:
- *   1. ID match: chat.dialogue_id === pending.id OR chat.dialogue_id === tempChatId
- *   2. Fallback: exact title equality with first user-role message content
- * Substring / prefix matching is deliberately NOT supported — short prompts like
- * "hi" / "help" collided and silently merged unrelated chats.
+ * Only explicit ID equality is authoritative. Titles are display copy, not
+ * identities: repeated prompts can legitimately produce multiple conversations.
  */
 export function matchesChat(
   chat: ChatListEntry,
   pending: PendingChatRecord,
   tempChatId: string
 ): boolean {
-  if (chat.dialogue_id === pending.id || chat.dialogue_id === tempChatId) {
-    return true;
-  }
-  const firstUserMsg = pending.messages.find((m) => m.role === "user");
-  if (!firstUserMsg || typeof firstUserMsg.content !== "string") return false;
-  return chat.title === firstUserMsg.content;
+  return chat.dialogue_id === pending.id || chat.dialogue_id === tempChatId;
 }
 
 /**

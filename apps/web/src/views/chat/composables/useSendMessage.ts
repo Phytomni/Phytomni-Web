@@ -47,6 +47,7 @@ import {
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 const MAX_CONTEXT_MESSAGES = 20;
+const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 type ChatUserStore = {
   FedLogOut: () => Promise<unknown>;
@@ -54,6 +55,12 @@ type ChatUserStore = {
 
 function isCanonicalToolName(value: unknown): value is string {
   return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
+}
+
+function safeWebRequestID(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return SAFE_WEB_REQUEST_ID_PATTERN.test(normalized) ? normalized : undefined;
 }
 
 function isHistoryMessage(value: unknown): value is ChatMessage {
@@ -915,27 +922,11 @@ export function useSendMessage(opts: {
           // wait a short while to give the server time to process the request
           await new Promise((resolve) => setTimeout(resolve, 1000));
 
-          // for a new chat, check by refreshing the history — foreground only so
-          // background recovery cannot refresh chatList while the user is on B.
-          if (isNewChat) {
-            if (isForeground(sendingDialogueId)) {
-              await getHistoryQuestionData(sendingDialogueId);
-              // if the history has a new chat, the message was sent successfully
-              if (chatList.value.length > 0) {
-                const newChat = chatList.value[0];
-                const checkRes = await getAnswerCheck({
-                  dialogue_id: newChat.dialogue_id,
-                });
-                if (
-                  checkRes.code === 200 &&
-                  checkRes.data &&
-                  checkRes.data.length > 0
-                ) {
-                  return;
-                }
-              }
-            }
-          } else {
+          // A new temporary chat has no persisted request correlation key, so
+          // neither chatList[0] nor a same-title history row can prove which
+          // server dialogue accepted a transport-uncertain send. Retain the
+          // temporary chat and surface retryable failure instead of guessing.
+          if (!isNewChat) {
             // for an existing chat, check the captured sending dialogue directly
             const checkRes = await getAnswerCheck({
               dialogue_id: sendingDialogueId,
@@ -967,9 +958,15 @@ export function useSendMessage(opts: {
         !chatState.generationStopped
       ) {
         const isTimeout = response?.status === 504;
+        const baseMessage = isTimeout
+          ? t("chat.timeoutFailed")
+          : t("chat.sendFailed");
+        const requestID = safeWebRequestID(responseData?.request_id);
         sendingMessages.push({
           role: "assistant",
-          content: isTimeout ? t("chat.timeoutFailed") : t("chat.sendFailed"),
+          content: requestID
+            ? `${baseMessage}\n\n${t("chat.requestId")}: ${requestID}`
+            : baseMessage,
           steps: [],
           status: "",
           upload_path: "",

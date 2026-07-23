@@ -69,12 +69,13 @@ vi.mock("@/utils/network-error", () => ({
 }));
 
 import { useSendMessage } from "@/views/chat/composables/useSendMessage";
-import { getQueryAbortable } from "@/api/chat";
+import { getAnswerCheck, getQueryAbortable } from "@/api/chat";
 import { clearPendingChat } from "@/utils/pending-chat";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { ElMessage } from "element-plus";
 
 const mockGetQueryAbortable = vi.mocked(getQueryAbortable);
+const mockGetAnswerCheck = vi.mocked(getAnswerCheck);
 const mockClearPendingChat = vi.mocked(clearPendingChat);
 
 type ChatStateRecord = ChatUIState;
@@ -588,6 +589,37 @@ describe("useSendMessage", () => {
     expect(getChatState("A").isSending).toBe(false);
   });
 
+  it("surfaces only the safe Web request id on a gateway failure", async () => {
+    stateFor("A").messageInput = "Trace this failure";
+    mockGetQueryAbortable.mockRejectedValueOnce({
+      response: {
+        status: 502,
+        data: {
+          request_id: "web-request-502",
+          bot_request_id: "bot-private-request",
+        },
+      },
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      const { sendMessage } = makeComposable();
+      await sendMessage();
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    const failedAssistant = lastMessageFor(
+      stateFor("A"),
+      "gateway request correlation"
+    );
+    expect(failedAssistant.content).toContain("chat.sendFailed");
+    expect(failedAssistant.content).toContain(
+      "chat.requestId: web-request-502"
+    );
+    expect(failedAssistant.content).not.toContain("bot-private-request");
+  });
+
   it("🔒 capture invariant: switching currentChatId mid-send, cleanup still lands on the captured original dialogue A", async () => {
     stateFor("A").messageInput = "Original dialogue message";
 
@@ -786,7 +818,7 @@ describe("useSendMessage", () => {
     expect(formData.get("id")).toBe("0");
   });
 
-  it("finally does not clear pending or reassign currentChatId from chatList[0]", async () => {
+  it("success without dialogue_id does not bind a pending chat to chatList[0] by title", async () => {
     currentChatId.value = "new_888";
     currentChat.value = { messages: [] };
     states.set("new_888", makeState({ messageInput: "hello" }));
@@ -794,7 +826,7 @@ describe("useSendMessage", () => {
       {
         id: 99,
         dialogue_id: "wrong-first",
-        title: "t",
+        title: "hello",
         date: "",
         isFavorite: false,
       },
@@ -821,6 +853,72 @@ describe("useSendMessage", () => {
 
     expect(mockClearPendingChat).not.toHaveBeenCalled();
     expect(currentChatId.value).toBe("new_888");
+  });
+
+  it.each([409, 500])(
+    "HTTP %i retains a new pending chat even when old history has the same title",
+    async (status) => {
+      const tempId = `new_http_${status}`;
+      currentChatId.value = tempId;
+      currentChat.value = { messages: [] };
+      states.set(tempId, makeState({ messageInput: "repeated question" }));
+      chatList.value = [
+        {
+          id: 70,
+          dialogue_id: "old-same-title",
+          title: "repeated question",
+          date: "",
+          isFavorite: false,
+        },
+      ];
+      mockGetQueryAbortable.mockRejectedValueOnce({
+        response: { status, data: { request_id: `web-${status}` } },
+      });
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(vi.fn());
+
+      try {
+        const { sendMessage } = makeComposable();
+        await sendMessage();
+      } finally {
+        consoleError.mockRestore();
+      }
+
+      expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, undefined);
+      expect(mockClearPendingChat).not.toHaveBeenCalled();
+      expect(currentChatId.value).toBe(tempId);
+      expect(chatList.value.map((chat) => chat.dialogue_id)).toContain(tempId);
+      expect(lastMessageFor(stateFor(tempId), `HTTP ${status}`)).toMatchObject({
+        role: "assistant",
+        content: expect.stringContaining("chat.sendFailed"),
+      });
+    }
+  );
+
+  it("abort retains the temporary chat without adding a failure assistant", async () => {
+    const tempId = "new_aborted";
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+    states.set(tempId, makeState({ messageInput: "cancel me" }));
+    mockGetQueryAbortable.mockRejectedValueOnce({ code: "ERR_CANCELED" });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      const { sendMessage } = makeComposable();
+      await sendMessage();
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, undefined);
+    expect(mockClearPendingChat).not.toHaveBeenCalled();
+    expect(currentChatId.value).toBe(tempId);
+    expect(
+      messagesFor(stateFor(tempId), "aborted pending").filter(
+        (message) => message.role === "assistant"
+      )
+    ).toEqual([]);
   });
 
   it("late finally cleanup uses captured state object and cannot resurrect the old temp key", async () => {
@@ -1279,6 +1377,52 @@ describe("useSendMessage", () => {
     );
     expect(recoveryCalls).toHaveLength(0);
     expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, undefined);
+  });
+
+  it("does not guess a new-chat identity from history after a foreground network error", async () => {
+    const { isNetworkError } = await import("@/utils/network-error");
+    vi.mocked(isNetworkError).mockReturnValue(true);
+    vi.useFakeTimers();
+
+    const tempId = "new_fg_net";
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+    states.set(tempId, makeState({ messageInput: "repeated question" }));
+    chatList.value = [
+      {
+        id: 44,
+        dialogue_id: "old-same-title",
+        title: "repeated question",
+        date: "",
+        isFavorite: false,
+      },
+    ];
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("Network Error"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    const { sendMessage } = makeComposable();
+    const sendPromise = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    try {
+      await vi.advanceTimersByTimeAsync(1000);
+      await sendPromise;
+    } finally {
+      consoleError.mockRestore();
+      vi.mocked(isNetworkError).mockReturnValue(false);
+      vi.useRealTimers();
+    }
+
+    expect(mockGetAnswerCheck).not.toHaveBeenCalled();
+    expect(getHistoryQuestionData.mock.calls).toEqual([[tempId, undefined]]);
+    expect(currentChatId.value).toBe(tempId);
+    expect(
+      lastMessageFor(stateFor(tempId), "network uncertainty")
+    ).toMatchObject({
+      role: "assistant",
+      content: "chat.sendFailed",
+    });
   });
 
   it("Expert renders the canonical resolved tool and projection while preserving the captured mode", async () => {

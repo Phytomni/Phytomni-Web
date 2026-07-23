@@ -83,7 +83,7 @@ describe("isValidPendingRecord — strict predicate", () => {
   });
 });
 
-describe("matchesChat — ID + exact title only", () => {
+describe("matchesChat — authoritative ID only", () => {
   const pendingBase: PendingChatRecord = {
     isPending: true,
     messages: [{ role: "user", content: "exact title from user submission" }],
@@ -103,12 +103,12 @@ describe("matchesChat — ID + exact title only", () => {
     expect(matchesChat(chat, pendingBase, "temp-001")).toBe(true);
   });
 
-  it("returns true when chat.title === first user message content", () => {
+  it("returns false when only the title matches", () => {
     const chat: ChatListEntry = {
       dialogue_id: "backend-real-id",
       title: "exact title from user submission",
     };
-    expect(matchesChat(chat, pendingBase, "temp-001")).toBe(true);
+    expect(matchesChat(chat, pendingBase, "temp-001")).toBe(false);
   });
 
   it("returns false when chat.title is only a prefix of the pending content (no substring fuzzy)", () => {
@@ -136,7 +136,7 @@ describe("matchesChat — ID + exact title only", () => {
     expect(matchesChat(chat, pending, "temp-001")).toBe(false);
   });
 
-  it("ambiguous title matches yield multiple candidates for restore (caller must retain temp)", () => {
+  it("same-title history rows never become reconciliation candidates", () => {
     const pending: PendingChatRecord = {
       isPending: true,
       messages: [{ role: "user", content: "shared title" }],
@@ -148,7 +148,7 @@ describe("matchesChat — ID + exact title only", () => {
     const candidates = chats.filter((c) =>
       matchesChat(c, pending, "new_ambiguous")
     );
-    expect(candidates).toHaveLength(2);
+    expect(candidates).toHaveLength(0);
   });
 });
 
@@ -514,7 +514,7 @@ describe("writePendingChat mode", () => {
   });
 });
 
-/** Mirrors ChatView.vue streaming branch of getHistoryQuestionData (no blockingDialogueId). */
+/** Mirrors ChatView.vue ID-only pending lookup without a response dialogue id. */
 function streamingReconciliationOutcome(
   formattedData: ChatListEntry[],
   pendingData: PendingChatRecord,
@@ -528,16 +528,25 @@ function streamingReconciliationOutcome(
   return "retain-ambiguous";
 }
 
-describe("streaming history reconciliation (getHistoryQuestionData contract)", () => {
+describe("history reconciliation without a response dialogue id", () => {
   const pending: PendingChatRecord = {
     isPending: true,
     messages: [{ role: "user", content: "unique stream title" }],
   };
 
-  it("exactly one history candidate reconciles", () => {
+  it("a unique same-title history row does not reconcile", () => {
     const chats: ChatListEntry[] = [
       { dialogue_id: "srv-other", title: "other" },
       { dialogue_id: "srv-exact", title: "unique stream title" },
+    ];
+    expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
+      "retain-no-match"
+    );
+  });
+
+  it("an exact temporary dialogue id remains an ID match", () => {
+    const chats: ChatListEntry[] = [
+      { dialogue_id: "new_stream", title: "server-normalized title" },
     ];
     expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
       "reconcile"
@@ -553,13 +562,13 @@ describe("streaming history reconciliation (getHistoryQuestionData contract)", (
     );
   });
 
-  it("multiple candidates retain temp and pending", () => {
+  it("multiple same-title rows remain non-candidates", () => {
     const chats: ChatListEntry[] = [
       { dialogue_id: "srv-a", title: "unique stream title" },
       { dialogue_id: "srv-b", title: "unique stream title" },
     ];
     expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
-      "retain-ambiguous"
+      "retain-no-match"
     );
   });
 });
@@ -609,6 +618,29 @@ describe("blocking restore ordering (restorePendingChats skip contract)", () => 
     const reconciled: Array<{ tempId: string; serverId: string }> = [];
 
     restorePendingChatsHarness(knownChats, new Set([tempId]), (t, s) => {
+      reconciled.push({ tempId: t, serverId: s });
+    });
+
+    expect(reconciled).toEqual([]);
+    expect(localStorage.getItem(`pending_chat_${tempId}`)).not.toBeNull();
+  });
+
+  it("does not reconcile a failed pending chat to an old same-title history row", () => {
+    const tempId = "new_block";
+    localStorage.setItem(
+      `pending_chat_${tempId}`,
+      JSON.stringify({
+        id: tempId,
+        isPending: true,
+        messages: [{ role: "user", content: "repeated question" }],
+      })
+    );
+    const knownChats: ChatListEntry[] = [
+      { dialogue_id: "old-dialogue", title: "repeated question" },
+    ];
+    const reconciled: Array<{ tempId: string; serverId: string }> = [];
+
+    restorePendingChatsHarness(knownChats, undefined, (t, s) => {
       reconciled.push({ tempId: t, serverId: s });
     });
 
