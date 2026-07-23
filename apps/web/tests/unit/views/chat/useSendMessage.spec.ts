@@ -551,6 +551,43 @@ describe("useSendMessage", () => {
     );
   });
 
+  it("does not treat an explicit failure envelope with data as success", async () => {
+    stateFor("A").messageInput = "Do not accept this response";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        code: 500,
+        data: {
+          tool_name: "ChatAgent",
+          answer: "This must not enter the chat history",
+          id: "masked-error-data",
+          follow_up_questions: [],
+        },
+      })
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      const { sendMessage } = makeComposable();
+      await sendMessage();
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    const assistants = messagesFor(
+      getChatState("A"),
+      "explicit failure envelope"
+    ).filter((message) => message.role === "assistant");
+    const failedAssistant = mustGet(
+      assistants.at(-1),
+      "explicit failure envelope assistant"
+    );
+    expect(failedAssistant.content).toBe("chat.sendFailed");
+    expect(failedAssistant.content).not.toContain(
+      "This must not enter the chat history"
+    );
+    expect(getChatState("A").isSending).toBe(false);
+  });
+
   it("🔒 capture invariant: switching currentChatId mid-send, cleanup still lands on the captured original dialogue A", async () => {
     stateFor("A").messageInput = "Original dialogue message";
 

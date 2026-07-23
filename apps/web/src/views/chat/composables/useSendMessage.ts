@@ -38,7 +38,7 @@ import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { getToken } from "@/utils/auth";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
-import { isRecord } from "@/api/contracts";
+import { isRecord, isSuccessfulDataEnvelope } from "@/api/contracts";
 import {
   chatContentToText,
   decodeAgentSteps,
@@ -517,13 +517,9 @@ export function useSendMessage(opts: {
       }
 
       // The runtime interceptor returns code 200 for decoded success envelopes;
-      // keep the data-presence fallback for lightweight test adapters and older
-      // callers that return the established `{ data }` shape without `code`.
-      const hasResponseData = Object.prototype.hasOwnProperty.call(
-        response,
-        "data"
-      );
-      if (response.code === 200 || hasResponseData) {
+      // the shared guard preserves only the established `{ data }` shape
+      // without `code` and rejects explicit non-success envelopes.
+      if (isSuccessfulDataEnvelope<QueryData>(response)) {
         const responseData = response.data;
         const botProjection = parseBlockingProjection(responseData);
         const expertSucceeded =
@@ -847,23 +843,8 @@ export function useSendMessage(opts: {
           sendingMessages.push(assistantMessage);
           commitSuccessfulTurn(chatState, userMessage, assistantMessage);
         }
-      } else if (
-        chatState.activeRequestId === requestKey &&
-        !chatState.generationStopped
-      ) {
-        sendingMessages.push({
-          role: "assistant",
-          content: "Sorry, I cannot answer this question.",
-          steps: [],
-          status: "",
-          upload_path: "",
-          download_path: "",
-          instantMessage: true,
-          tool_name: response.data?.tool_name || "",
-          followUpQuestions: [],
-          showFollowUpQuestions: false,
-          showLog: false,
-        });
+      } else {
+        throw new Error("invalid response envelope");
       }
     } catch (error: unknown) {
       console.error(t("chat.logs.sendMessageFailed"), error);

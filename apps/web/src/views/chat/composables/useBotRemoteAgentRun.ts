@@ -1,5 +1,6 @@
 import { ref, type Ref } from "vue";
 import { getQueryAbortable } from "@/api/chat";
+import { isSuccessfulDataEnvelope } from "@/api/contracts";
 import { abortRequest } from "@/utils/request";
 import {
   createTransferTracker,
@@ -294,8 +295,7 @@ function buildFormData(
 }
 
 function responsePayload(response: unknown): unknown {
-  if (!response || typeof response !== "object") return response;
-  if ("data" in response) return (response as { data?: unknown }).data;
+  if (isSuccessfulDataEnvelope(response)) return response.data;
   return response;
 }
 
@@ -601,7 +601,10 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
 
       if (activeToken !== token || token.cancelled) return null;
 
-      const projection = parseBotProjection(responsePayload(response));
+      if (!isSuccessfulDataEnvelope(response)) {
+        throw new Error("invalid response envelope");
+      }
+      const projection = parseBotProjection(response.data);
       const lifecycle = reduceBotProjection(state.value, projection);
       const identity = responseIdentity(response);
       state.value = {

@@ -260,6 +260,32 @@ describe("useBotRemoteAgentRun", () => {
     expect(JSON.stringify(state)).not.toContain("private.invalid");
   });
 
+  it("does not parse an explicit failure envelope that also carries data", async () => {
+    mockQuery.mockResolvedValueOnce({
+      code: 500,
+      data: {
+        bot_run_id: "run-error-data",
+        tool_name: "InSilicoResearchAgent",
+        status: "SUCCEEDED",
+        final_report: "This must not enter lifecycle state",
+      },
+    });
+    const state = makeState();
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-error-envelope",
+      getChatState: () => state,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await expect(run.submit({ query: "paper" })).rejects.toThrow(
+      "invalid response envelope"
+    );
+    expect(run.state.value.phase).toBe("failed");
+    expect(run.state.value.error).toBe("request_failed");
+    expect(state.botProjection).toBeUndefined();
+  });
+
   it("sanitizes pre-existing lifecycle interop before entering reactive state", () => {
     const rawInterop = {
       mode: "auto",

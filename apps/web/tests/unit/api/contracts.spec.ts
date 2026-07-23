@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isRecord,
+  isSuccessfulDataEnvelope,
   optionalString,
   type Decoder,
   type GatewayEnvelope,
@@ -28,6 +29,16 @@ describe("API contract primitives", () => {
     expect(optionalString(record, "own")).toBe("safe");
     expect(optionalString({ message: 403 }, "message")).toBeUndefined();
     expect(optionalString({ message: null }, "message")).toBeUndefined();
+  });
+
+  it("accepts only success or absent-code data envelopes", () => {
+    const data = { answer: "ok" };
+
+    expect(isSuccessfulDataEnvelope({ code: 200, data })).toBe(true);
+    expect(isSuccessfulDataEnvelope({ data })).toBe(true);
+    expect(isSuccessfulDataEnvelope({ code: 500, data })).toBe(false);
+    expect(isSuccessfulDataEnvelope({ code: undefined, data })).toBe(false);
+    expect(isSuccessfulDataEnvelope({ code: 200 })).toBe(false);
   });
 
   it("keeps nested JSON values and gateway envelopes type-bounded", () => {
