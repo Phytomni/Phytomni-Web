@@ -261,6 +261,59 @@ func TestDecodeRunProjectionSubmissionDegradedTrackingIsExplicit(t *testing.T) {
 	}
 }
 
+func TestDecodeAgentRunSubmissionNormalizesNativeRunIdentity(t *testing.T) {
+	stringPtr := func(value string) *string { return &value }
+	tests := []struct {
+		name      string
+		id        *string
+		runID     *string
+		wantRunID string
+		wantError bool
+	}{
+		{name: "native id only", id: stringPtr("run-native"), wantRunID: "run-native"},
+		{name: "compatibility alias only", runID: stringPtr("run-compat"), wantRunID: "run-compat"},
+		{name: "matching fields", id: stringPtr(" run-matching "), runID: stringPtr("run-matching"), wantRunID: "run-matching"},
+		{name: "conflicting fields", id: stringPtr("run-primary"), runID: stringPtr("run-conflict"), wantError: true},
+		{name: "missing fields", wantError: true},
+		{name: "blank native id", id: stringPtr(" "), wantError: true},
+		{name: "malformed native id", id: stringPtr("run/native"), wantError: true},
+		{name: "control character in alias", runID: stringPtr("run-\x00compat"), wantError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := rxBot.AgentRunResponse{
+				ID:      tt.id,
+				RunID:   tt.runID,
+				Agent:   "analyst",
+				Status:  "running",
+				TaskIDs: []string{"task-native-submit"},
+			}
+
+			got, err := DecodeAgentRunSubmission(response)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("DecodeAgentRunSubmission unexpectedly returned %#v", got)
+				}
+				var projectionErr *ProjectionDecodeError
+				if !errors.As(err, &projectionErr) || projectionErr.Field != "run_id" {
+					t.Fatalf("error = %T %v, want run_id ProjectionDecodeError", err, err)
+				}
+				if !reflect.DeepEqual(got, BotRunProjection{}) {
+					t.Fatalf("invalid identity returned partial projection %#v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DecodeAgentRunSubmission: %v", err)
+			}
+			if got.RunID != tt.wantRunID {
+				t.Fatalf("submission run id = %q, want %q", got.RunID, tt.wantRunID)
+			}
+		})
+	}
+}
+
 func TestDecodeAgentRunSubmissionRequiredInteropFailureIsTerminal(t *testing.T) {
 	response := rxBot.AgentRunResponse{
 		Agent:  "research",

@@ -75,8 +75,10 @@ type AgentRunResult struct {
 }
 
 // AgentRunResponse covers both the 200 sync shape (status=succeeded) and the
-// 202 remote shape (status=running, task_ids populated). ID is a pointer
-// because a dedup hit returns id=null.
+// 202 remote shape (status=running, task_ids populated). ID is the native
+// umbrella run identity and is a pointer because degraded/dedup responses can
+// return id=null. RunID is a compatibility alias; consumers must reject a
+// response when both non-null fields disagree.
 type AgentRunResponse struct {
 	ID               *string            `json:"id"`
 	RunID            *string            `json:"run_id"`

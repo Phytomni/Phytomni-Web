@@ -25,7 +25,7 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 		}
 		gotArgs = body.Arguments
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"completion-research","run_id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`))
+		_, _ = w.Write([]byte(`{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`))
 	}))
 	defer srv.Close()
 	rxBot.BotConfig = &rxBot.Config{
@@ -97,7 +97,7 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 				}
 				gotArgs = body.Arguments
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"id":"completion-remote","run_id":"run-remote","object":"agent.run","agent":"` + tt.name + `","status":"running","task_ids":["child-remote"],"result":{}}`))
+				_, _ = w.Write([]byte(`{"id":"run-remote","object":"agent.run","agent":"` + tt.name + `","status":"running","task_ids":["child-remote"],"result":{}}`))
 			}))
 			defer srv.Close()
 			rxBot.BotConfig = &rxBot.Config{

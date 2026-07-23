@@ -61,7 +61,7 @@ func newInteropDelegationServer(t *testing.T, discoveryStatus int, discoveryBody
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"id": "completion-" + slug, "run_id": "run-" + slug,
+				"id":     "run-" + slug,
 				"object": "agent.run", "agent": slug, "status": "running",
 				"task_ids": []string{"child-" + slug}, "result": map[string]interface{}{},
 			})
@@ -233,7 +233,7 @@ func TestRequiredInteropFailsBeforeAgentSubmission(t *testing.T) {
 
 func TestRequiredInteropRuntimeFailureDoesNotPersistRunning(t *testing.T) {
 	setupExpertTestDB(t)
-	h := newInteropDelegationServer(t, http.StatusOK, `{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"}],"errors":[]}`, `{"id":"completion-failed","run_id":"run-failed","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{"formatted":{"answer":"required peer failed","metadata":{"status":"FAILED","interop":[{"target_id":"mcp-peer","kind":"mcp","capability":"private-capability","status":"failed","latency_ms":11,"endpoint":"https://private.invalid","credential":"secret"}]}}}}`)
+	h := newInteropDelegationServer(t, http.StatusOK, `{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"}],"errors":[]}`, `{"id":"run-failed","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{"formatted":{"answer":"required peer failed","metadata":{"status":"FAILED","interop":[{"target_id":"mcp-peer","kind":"mcp","capability":"private-capability","status":"failed","latency_ms":11,"endpoint":"https://private.invalid","credential":"secret"}]}}}}`)
 	h.configure(t)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	rxBot "phytomni-server/external/bot"
 )
@@ -207,12 +208,9 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		status = "FAILED"
 	}
 
-	runID := ""
-	if response.RunID != nil {
-		runID, err = normalizeProjectionRunID(*response.RunID)
-		if err != nil {
-			return BotRunProjection{}, err
-		}
+	runID, err := normalizeAgentRunResponseID(response)
+	if err != nil {
+		return BotRunProjection{}, err
 	}
 	if runID == "" && !response.DegradedTracking && status != "FAILED" {
 		return BotRunProjection{}, projectionDecodeError("run_id", "missing umbrella run id")
@@ -685,10 +683,37 @@ func normalizeProjectionRunID(value string) (string, error) {
 	if value == "" {
 		return "", projectionDecodeError("run_id", "missing umbrella run id")
 	}
-	if len([]rune(value)) > maxProjectionRunID || strings.ContainsAny(value, "/\\\r\n\t") {
+	if len([]rune(value)) > maxProjectionRunID ||
+		strings.ContainsAny(value, "/\\") ||
+		strings.IndexFunc(value, unicode.IsControl) >= 0 {
 		return "", projectionDecodeError("run_id", "malformed umbrella run id")
 	}
 	return value, nil
+}
+
+func normalizeAgentRunResponseID(response rxBot.AgentRunResponse) (string, error) {
+	nativeID, err := normalizeOptionalAgentRunID(response.ID)
+	if err != nil {
+		return "", err
+	}
+	compatibilityID, err := normalizeOptionalAgentRunID(response.RunID)
+	if err != nil {
+		return "", err
+	}
+	if nativeID != "" && compatibilityID != "" && nativeID != compatibilityID {
+		return "", projectionDecodeError("run_id", "conflicting umbrella run ids")
+	}
+	if nativeID != "" {
+		return nativeID, nil
+	}
+	return compatibilityID, nil
+}
+
+func normalizeOptionalAgentRunID(value *string) (string, error) {
+	if value == nil {
+		return "", nil
+	}
+	return normalizeProjectionRunID(*value)
 }
 
 func normalizeProjectionAgent(value string) (string, error) {

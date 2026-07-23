@@ -156,7 +156,7 @@ func (c *Client) doJSONWithMeta(ctx context.Context, method, path string, body, 
 // doJSONWithMetaOptions is the shared JSON transport with an opt-in strict
 // decoder for response envelopes whose identity controls a cross-service
 // write. Ordinary Bot responses keep encoding/json's existing behavior; the
-// Expert router response opts in so duplicate object keys cannot become a
+// Agent-run responses opt in so duplicate object keys cannot become a
 // last-value-wins agent/run identity.
 func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool) (ResponseMeta, error) {
 	var rdr io.Reader
@@ -354,7 +354,7 @@ func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunReque
 // InvokeAgentWithMeta submits a run and returns Bot response metadata.
 func (c *Client) InvokeAgentWithMeta(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, ResponseMeta, error) {
 	var out AgentRunResponse
-	meta, err := c.doJSONWithMeta(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out)
+	meta, err := c.doJSONWithMetaOptions(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out, true)
 	return &out, meta, err
 }
 

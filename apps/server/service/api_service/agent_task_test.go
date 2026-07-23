@@ -760,7 +760,7 @@ func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
 				t.Error("submit dialogue_id must be non-empty")
 			}
 			submittedDialogue = req.DialogueID
-			_, _ = w.Write([]byte(`{"id":"completion-deep-genome-e2e","run_id":"run-deep-genome-e2e","object":"agent.run","agent":"deep_genome","status":"running","task_ids":["child-deep-genome-e2e"],"result":{}}`))
+			_, _ = w.Write([]byte(`{"id":"run-deep-genome-e2e","object":"agent.run","agent":"deep_genome","status":"running","task_ids":["child-deep-genome-e2e"],"result":{}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/"+runID:
 			var body string
 			switch poll.Add(1) {

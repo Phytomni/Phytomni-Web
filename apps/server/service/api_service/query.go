@@ -605,12 +605,15 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// status="running", answer polled later via /query/analyst/update_log).
 		// Branch on the returned status;
 		// never assume remote, or a sync agent's answer is silently dropped.
-		args, err := rxBot.BuildAgentArguments(slug, rxBot.AgentArgumentInput{
-			UserQuery:      in.Query,
-			OBSFileList:    obsPaths,
-			InteropMode:    in.InteropMode,
-			InteropTargets: in.InteropTargets,
-		})
+		argumentInput := rxBot.AgentArgumentInput{
+			UserQuery:   in.Query,
+			OBSFileList: obsPaths,
+		}
+		if interopAgent(slug) {
+			argumentInput.InteropMode = in.InteropMode
+			argumentInput.InteropTargets = in.InteropTargets
+		}
+		args, err := rxBot.BuildAgentArguments(slug, argumentInput)
 		if err != nil {
 			return nil, err
 		}
@@ -622,7 +625,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if err != nil {
 			return nil, err
 		}
-		botRunID = canonicalBotRunID(resp.RunID)
+		botRunID, err = normalizeAgentRunResponseID(*resp)
+		if err != nil {
+			return nil, err
+		}
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))

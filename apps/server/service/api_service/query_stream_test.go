@@ -546,7 +546,7 @@ func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 		requestCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Request-Id", "bot-request-task27")
-		_, _ = w.Write([]byte(`{"id":"submission-task27","run_id":"run-research-task27","object":"agent.run","agent":"research","status":"running","task_ids":["child-task27"],"result":{}}`))
+		_, _ = w.Write([]byte(`{"id":"run-research-task27","object":"agent.run","agent":"research","status":"running","task_ids":["child-task27"],"result":{}}`))
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{

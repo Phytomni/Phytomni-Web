@@ -80,6 +80,26 @@ func TestInvokeAgentDedupHit(t *testing.T) {
 	}
 }
 
+func TestInvokeAgentRejectsDuplicateRunIdentityKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-first","id":"run-last","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-1"],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	response, err := newTestClient(srv.URL).InvokeAgent(
+		context.Background(),
+		"analyst",
+		AgentRunRequest{Arguments: map[string]interface{}{"user_query": "x"}},
+	)
+	if err == nil {
+		t.Fatalf("InvokeAgent accepted duplicate identity keys: %#v", response)
+	}
+	if !errors.Is(err, errDuplicateJSONKey) {
+		t.Fatalf("InvokeAgent error = %T %v, want errDuplicateJSONKey", err, err)
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

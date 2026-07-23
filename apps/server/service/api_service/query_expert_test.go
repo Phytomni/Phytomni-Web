@@ -240,7 +240,7 @@ func expertRouteServer(t *testing.T, routeBody string) {
 // task id from task_ids, and surface the task id in the answer.
 func TestQuery_ExpertRunningArm(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"completion-async","run_id":"run-async","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-async-1"],"result":{}}`)
+	expertRouteServer(t, `{"id":"run-async","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-async-1"],"result":{}}`)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 	if err != nil {
@@ -269,7 +269,7 @@ func TestQuery_ExpertRunningArm(t *testing.T) {
 // persisted task_id is "" and the row strands RUNNING forever.
 func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"completion-dedup","run_id":"run-dedup","object":"agent.run","agent":"analyst","status":"running","task_ids":[],"result":{"dedup_hit":true,"task_id":"dedup-77"}}`)
+	expertRouteServer(t, `{"id":"run-dedup","object":"agent.run","agent":"analyst","status":"running","task_ids":[],"result":{"dedup_hit":true,"task_id":"dedup-77"}}`)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 	if err != nil {
@@ -284,7 +284,7 @@ func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
 
 func TestQuery_ExpertResolvedRemoteUsesCanonicalProjection(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"completion-expert","run_id":"run-expert-1","object":"agent.run","agent":"research","status":"running","task_ids":["child-1"],"result":{}}`)
+	expertRouteServer(t, `{"id":"run-expert-1","object":"agent.run","agent":"research","status":"running","task_ids":["child-1"],"result":{}}`)
 
 	ctx := utils.WithRequestID(context.Background(), "web-request-1")
 	out, err := NewService().Query(ctx, "alice", QueryInput{
@@ -332,7 +332,7 @@ func TestQuery_ExpertResolvedCanonicalRemoteSlugsKeepWebMappings(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			gdb := setupExpertTestDB(t)
-			expertRouteServer(t, `{"id":"completion-`+tc.slug+`","run_id":"run-`+tc.slug+`","object":"agent.run","agent":"`+tc.slug+`","status":"running","task_ids":["child-`+tc.slug+`"],"result":{}}`)
+			expertRouteServer(t, `{"id":"run-`+tc.slug+`","object":"agent.run","agent":"`+tc.slug+`","status":"running","task_ids":["child-`+tc.slug+`"],"result":{}}`)
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 			if err != nil {
