@@ -6,7 +6,6 @@ import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReduc
 import BotReportState from "@/components/research/BotReportState.vue";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import { datetimeFormats } from "@/locales/datetime-formats";
-import { formatDisplayDate } from "@/locales/format-display-date";
 
 vi.mock("@/components/MarkdownViewer.vue", () => ({
   default: {
@@ -97,7 +96,7 @@ describe("BotReportState", () => {
       datetimeFormats,
       messages: { "en-US": {}, "zh-CN": {} },
     });
-    const updatedAt = "2026-07-16T08:30:00.000Z";
+    const updatedAt = "2026-07-16T08:30:00";
     const wrapper = mount(BotReportState, {
       props: {
         state: lifecycle({
@@ -120,7 +119,7 @@ describe("BotReportState", () => {
     });
 
     expect(wrapper.get('[data-test="bot-report-updated-at"]').text()).toBe(
-      formatDisplayDate(i18n.global.d, updatedAt, "datetime")
+      "7/16/2026, 8:30 AM"
     );
   });
 

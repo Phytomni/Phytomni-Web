@@ -16,7 +16,6 @@ import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import { datetimeFormats } from "@/locales/datetime-formats";
-import { formatDisplayDate } from "@/locales/format-display-date";
 
 const mocks = vi.hoisted(() => ({
   getUserProfile: vi.fn(),
@@ -210,7 +209,7 @@ const profile = {
   organization: "CAAS BRI",
   position: "Scientist",
   dialogue_count: 12,
-  last_login_at: "2026-07-12T08:30:45.000Z",
+  last_login_at: "2026-07-12T08:30:45",
 };
 
 const makeI18n = () =>
@@ -319,15 +318,11 @@ describe("Profile workspace", () => {
     const { i18n, wrapper } = mountView();
     await flushPromises();
     const englishDate = wrapper.get(".profile-last-login").text();
-    expect(englishDate).toBe(
-      formatDisplayDate(i18n.global.d, profile.last_login_at, "datetime")
-    );
+    expect(englishDate).toBe("7/12/2026, 8:30 AM");
 
     i18n.global.locale.value = "zh-CN";
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".profile-last-login").text()).toBe(
-      formatDisplayDate(i18n.global.d, profile.last_login_at, "datetime")
-    );
+    expect(wrapper.get(".profile-last-login").text()).toBe("2026/7/12 08:30");
     expect(wrapper.get(".profile-last-login").text()).not.toBe(englishDate);
   });
 

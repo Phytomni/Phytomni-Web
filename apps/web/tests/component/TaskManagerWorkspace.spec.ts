@@ -15,7 +15,6 @@ import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import { datetimeFormats } from "@/locales/datetime-formats";
-import { formatDisplayDate } from "@/locales/format-display-date";
 
 const mocks = vi.hoisted(() => ({
   getTaskList: vi.fn(),
@@ -139,7 +138,7 @@ const rows = [
   {
     query: "Build a rice callpeak workflow",
     status: "SUCCEEDED",
-    updated_at: "2026-07-09T15:30:45.000Z",
+    updated_at: "2026-07-09T15:30:45",
     dialogue_id: "dialogue-fallback",
     f_dialogue_id: "dialogue-preferred",
     download_path: "/obs/results.zip",
@@ -147,13 +146,13 @@ const rows = [
   {
     query: "Summarize the failed workflow",
     status: "FAILED",
-    updated_at: "2026-07-08T15:30:45.000Z",
+    updated_at: "2026-07-08T15:30:45",
     dialogue_id: "dialogue-fallback-only",
   },
   {
     query: "Track a running workflow",
     status: "RUNNING",
-    updated_at: "2026-07-07T15:30:45.000Z",
+    updated_at: "2026-07-07T15:30:45",
     dialogue_id: "dialogue-running",
   },
 ];
@@ -274,14 +273,10 @@ describe("Task Manager workspace", () => {
     expect(mocks.getTaskList).toHaveBeenCalledTimes(2);
 
     const englishDate = wrapper.get(".task-updated-at").text();
-    expect(englishDate).toBe(
-      formatDisplayDate(i18n.global.d, rows[0].updated_at, "date")
-    );
+    expect(englishDate).toBe("7/9/2026");
     i18n.global.locale.value = "zh-CN";
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".task-updated-at").text()).toBe(
-      formatDisplayDate(i18n.global.d, rows[0].updated_at, "date")
-    );
+    expect(wrapper.get(".task-updated-at").text()).toBe("2026/7/9");
     expect(wrapper.get(".task-updated-at").text()).not.toBe(englishDate);
   });
 

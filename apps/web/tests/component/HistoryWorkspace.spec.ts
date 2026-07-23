@@ -5,7 +5,6 @@ import { defineComponent, h } from "vue";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import { datetimeFormats } from "@/locales/datetime-formats";
-import { formatDisplayDate } from "@/locales/format-display-date";
 
 const mocks = vi.hoisted(() => ({
   getHistoryQuestionList: vi.fn(),
@@ -33,13 +32,13 @@ const historyRows = [
     id: 17,
     dialogue_id: "rice-dialogue",
     title_query: "Map a long rice flowering-time conversation title",
-    created_at: "2026-07-10T15:30:45.000Z",
+    created_at: "2026-07-10T15:30:45",
   },
   {
     id: 18,
     dialogue_id: "wheat-dialogue",
     title_query: "Review wheat disease resistance evidence",
-    created_at: "2026-07-09T15:30:45.000Z",
+    created_at: "2026-07-09T15:30:45",
   },
 ];
 
@@ -326,14 +325,10 @@ describe("History workspace", () => {
     const { i18n, wrapper } = mountView();
     await flushPromises();
     const englishDate = wrapper.get(".history-date").text();
-    expect(englishDate).toBe(
-      formatDisplayDate(i18n.global.d, historyRows[0].created_at, "datetime")
-    );
+    expect(englishDate).toBe("7/10/2026, 3:30 PM");
     i18n.global.locale.value = "zh-CN";
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".history-date").text()).toBe(
-      formatDisplayDate(i18n.global.d, historyRows[0].created_at, "datetime")
-    );
+    expect(wrapper.get(".history-date").text()).toBe("2026/7/10 15:30");
     expect(wrapper.get(".history-date").text()).not.toBe(englishDate);
 
     mocks.getHistoryQuestionList.mockResolvedValueOnce({
