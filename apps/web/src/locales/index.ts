@@ -45,27 +45,22 @@ export const i18n = createI18n<false, I18nOptions>({
 export async function setLanguage(
   lang: SupportedLocales
 ): Promise<SupportedLocales> {
-  try {
-    await loadLocaleMessages(i18n, lang);
-    i18n.global.locale.value = lang;
+  await loadLocaleMessages(i18n, lang);
+  i18n.global.locale.value = lang;
 
-    // Update the language in the store
-    const appStore = useAppStore();
-    appStore.setLanguage(lang);
+  // Update the language in the store
+  const appStore = useAppStore();
+  appStore.setLanguage(lang);
 
-    // Set the document language attribute
-    const htmlEl = document.documentElement;
-    htmlEl.setAttribute("lang", lang);
+  // Set the document language attribute
+  const htmlEl = document.documentElement;
+  htmlEl.setAttribute("lang", lang);
 
-    // Keep the browser tab title in sync with the locale pack
-    // (en Phytomni / zh brand string from chat.appTitle).
-    document.title = i18n.global.t("chat.appTitle") as string;
+  // Keep the browser tab title in sync with the locale pack
+  // (en Phytomni / zh brand string from chat.appTitle).
+  document.title = i18n.global.t("chat.appTitle") as string;
 
-    return lang;
-  } catch (error) {
-    console.error("Failed to change language:", error);
-    return lang;
-  }
+  return lang;
 }
 
 // Get current locale

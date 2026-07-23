@@ -58,7 +58,11 @@ const currentLangCompactLabel = computed(() => {
 
 // switch language (setLanguage also syncs document.title via chat.appTitle)
 const handleCommand = async (command: string) => {
-  await setLanguage(command as "zh-CN" | "en-US");
+  try {
+    await setLanguage(command as "zh-CN" | "en-US");
+  } catch (error) {
+    console.error("Failed to change language:", error);
+  }
 };
 </script>
 
