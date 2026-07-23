@@ -12,8 +12,8 @@ import (
 
 // TestQueryErrorStatus pins the /query error contract: a disabled gateway is a
 // 503, an unknown tool is a 400, a client-correctable Bot 4xx surfaces its
-// message as a 400, and everything else (5xx, auth misconfig, plain errors)
-// stays an opaque 500. Before this mapping the first two collapsed into 500.
+// message as a 400, Bot gateway failures retain a safe upstream status, and
+// Web-internal/auth-misconfiguration errors stay opaque 500s.
 func TestQueryErrorStatus(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -46,10 +46,28 @@ func TestQueryErrorStatus(t *testing.T) {
 			wantMsg:    "request failed",
 		},
 		{
-			name:       "bot 5xx -> opaque 500",
+			name:       "bot 500 -> opaque 502",
+			err:        &rxBot.APIError{Status: 500, Message: "database detail"},
+			wantStatus: http.StatusBadGateway,
+			wantMsg:    "upstream service failed",
+		},
+		{
+			name:       "bot 502 -> opaque 502",
 			err:        &rxBot.APIError{Status: 502, Message: "upstream down"},
-			wantStatus: http.StatusInternalServerError,
-			wantMsg:    "request failed",
+			wantStatus: http.StatusBadGateway,
+			wantMsg:    "upstream service failed",
+		},
+		{
+			name:       "bot 503 -> opaque 502",
+			err:        &rxBot.APIError{Status: 503, Message: "provider unavailable"},
+			wantStatus: http.StatusBadGateway,
+			wantMsg:    "upstream service failed",
+		},
+		{
+			name:       "bot 504 -> safe 504",
+			err:        fmt.Errorf("route: %w", &rxBot.APIError{Status: 504, Message: "provider detail"}),
+			wantStatus: http.StatusGatewayTimeout,
+			wantMsg:    "request timed out, please narrow your query or try again later",
 		},
 		{
 			name:       "plain error -> opaque 500",

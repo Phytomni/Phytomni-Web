@@ -48,6 +48,15 @@ func queryErrorStatus(err error) (int, string) {
 	case errors.Is(err, api_service.ErrStreamUnsupported):
 		return http.StatusBadRequest, "streaming not supported for this request"
 	}
+	var botAPIError *rxBot.APIError
+	if errors.As(err, &botAPIError) {
+		switch {
+		case botAPIError.Status == http.StatusGatewayTimeout:
+			return http.StatusGatewayTimeout, "request timed out, please narrow your query or try again later"
+		case botAPIError.Status >= http.StatusInternalServerError && botAPIError.Status <= 599:
+			return http.StatusBadGateway, "upstream service failed"
+		}
+	}
 	if msg, ok := rxBot.SurfaceableMessage(err); ok {
 		return http.StatusBadRequest, msg
 	}
