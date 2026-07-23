@@ -104,8 +104,8 @@ func TestRedactBodyURLEncoded(t *testing.T) {
 // body with invalid percent-encoding (e.g. a bare '%' in the password) makes
 // url.ParseQuery fail; in that case we must NOT fall back to the raw body, or the
 // plaintext credentials of /login, /modify/password would land directly in
-// user_operation_logs. This is exactly the fork point where the query-string path
-// (redactQueryParams) intentionally keeps the raw text while the body path must mask it.
+// user_operation_logs. The query-string path follows the same no-raw-fallback
+// rule as the body path.
 func TestRedactBodyURLEncodedMalformed(t *testing.T) {
 	// "%pa" in "100%pass" is not valid hex → ParseQuery fails.
 	out := redactBodyByContentType(
@@ -117,5 +117,18 @@ func TestRedactBodyURLEncodedMalformed(t *testing.T) {
 	}
 	if out != "[redacted: unparseable body]" {
 		t.Fatalf("malformed body should collapse to the redaction placeholder, got %q", out)
+	}
+}
+
+// TestRedactQueryParamsMalformed pins the query-redaction invariant: malformed
+// percent-encoding must not fall back to raw query text that can contain a
+// credential.
+func TestRedactQueryParamsMalformed(t *testing.T) {
+	out := redactQueryParams("email=a@b.com&new_password=100%pass")
+	if strings.Contains(out, "100%pass") {
+		t.Fatalf("malformed query leaked plaintext credential verbatim: %s", out)
+	}
+	if out != "[redacted: unparseable query]" {
+		t.Fatalf("malformed query should collapse to the redaction placeholder, got %q", out)
 	}
 }

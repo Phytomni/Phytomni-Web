@@ -114,18 +114,16 @@ func maskParsedQuery(values url.Values, fallback string) string {
 }
 
 // redactQueryParams parses the raw query string and masks any sensitive
-// keys before re-encoding. A parse failure returns the input verbatim
-// so the audit log still captures *something*; the alternative (drop
-// the whole query) would lose forensic value. This raw-on-error fallback
-// is deliberate for query STRINGS only — request bodies go through
-// redactURLEncodedBody, which never falls back to raw.
+// keys before re-encoding. A parse failure returns a fixed placeholder rather
+// than raw text, because query strings can carry credentials just like request
+// bodies and malformed percent-encoding must not bypass the audit-log boundary.
 func redactQueryParams(raw string) string {
 	if raw == "" {
 		return ""
 	}
 	values, err := url.ParseQuery(raw)
 	if err != nil {
-		return raw
+		return "[redacted: unparseable query]"
 	}
 	return maskParsedQuery(values, raw)
 }
