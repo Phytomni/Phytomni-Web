@@ -213,6 +213,13 @@ function readProductFixture(fileName: string): TerminalFixture {
   ) as TerminalFixture;
 }
 
+/**
+ * Integration-boundary fixture: the checked-in Bot HEAD payloads intentionally
+ * pass through the production wire decoder and lifecycle reducer before the
+ * shared product surfaces are mounted. Parser and reducer behavior is owned by
+ * their unit suites; the matrix below keeps literal report/download/warning
+ * expectations as the independent surface oracle.
+ */
 function stateFromProductFixture(
   fixture: TerminalFixture
 ): BotRemoteAgentRunState {
