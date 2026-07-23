@@ -1,10 +1,14 @@
 # Configuration reference (`app.yml` + environment)
 
-**Evergreen — describes the config surface as of the current release (`0.1.3`).**
+**Evergreen — describes the config surface as of the current release (`0.1.4`).**
 This is the single source of truth for _what every key does_. The per-release
 [`upgrading.md`](upgrading.md) and the archived cutover manuals under
 [`history/`](history/) reference this file instead of re-documenting keys — when a
 release adds or changes a key, update it **here**.
+
+The `0.1.4` compatibility follow-up adds no configuration keys or production
+schema changes beyond the `0.1.3` baseline. Preserve the existing dark-launch
+defaults and use the release-specific upgrade addendum for deployment steps.
 
 Config is loaded by Viper from `apps/server/config/app.yml` (copy from
 `app.yml.example`; git-ignored, keep it out of VCS and not world-readable).

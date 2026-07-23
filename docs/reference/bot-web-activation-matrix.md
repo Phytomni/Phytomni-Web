@@ -170,7 +170,7 @@ above passed from local evidence alone.
   remains `External Pending` until an authorized Bot/operations acceptance
   packet is reviewed.
 
-## Current Web closure record (2026-07-18)
+## Historical Web closure record (2026-07-18)
 
 - Commit under test: `b6975f9` (`release/0.1.3`), including the final
   compatibility gate repairs.
@@ -183,3 +183,12 @@ above passed from local evidence alone.
 - The local closure supersedes the historical Task 27 gate snapshot above;
   it does not change the matrix JSON, external acceptance rows, or
   dark-launch defaults.
+
+## Current Web closure record (2026-07-24)
+
+- Commit under test: `802d439` (`release/0.1.4`).
+- `./scripts/validate_web_local.sh` — PASS; 201 frontend test files / 2551
+  tests passed with the configured coverage thresholds, Go module/build/vet/
+  test checks passed, and G13, G14, G15, G16, and G17 passed.
+- This is Web-owned local evidence only. It does not alter the machine-readable
+  matrix, external acceptance rows, or dark-launch defaults.

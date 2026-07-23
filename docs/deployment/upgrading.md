@@ -16,6 +16,12 @@ grant permission to change Phytomni-Bot or production operations code.
 > owner review, Bot CI, staging/live smoke evidence, and operations sign-off
 > remain `External Pending` until their owners return an acceptance packet.
 
+> **Already running `0.1.3`?** Use the focused
+> [0.1.3 → 0.1.4 upgrade addendum](history/upgrade-0.1.3-to-0.1.4.md).
+> This document remains the complete `0.1.2` → `0.1.3` procedure. Do not
+> assume an intermediate schema or deployment state; verify the running SHA and
+> required projection columns before selecting a procedure.
+
 ## 0. Conventions and contents
 
 - Secrets are placeholders (`<JWT_SECRET>`, `<REDIS_PASSWORD>`, …). Substitute

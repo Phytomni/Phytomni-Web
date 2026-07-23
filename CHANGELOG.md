@@ -13,14 +13,42 @@ Newest first.
 
 ## [Unreleased]
 
-### 🛡️ Quality gates
+No post-0.1.4 changes are recorded yet.
 
-- Public guidance now distinguishes staged, changed-range, full, and push
-  entrypoints; the pre-push hook defaults to the complete gate and scoped use is
-  explicit.
-- Static-analysis mechanisms remain exact, target-level records pending human
-  decisions; coverage G12 is unchanged, and Bot, operations, and deployment
-  code remain outside this quality-toolchain scope.
+## [0.1.4] — 2026-07-24 (release candidate)
+
+Quality and compatibility follow-up on the `0.1.3` Web/Bot contract. The
+release keeps all new Bot-facing capabilities dark-launched and does not claim
+Bot, operations, staging, or production acceptance.
+
+### 🛡️ Quality gates and CI governance
+
+- Static-analysis governance now closes the exact registry with zero temporary
+  records while retaining target-level evidence and fail-closed reconciliation.
+- The complete local gate covers the read-only frontend and Go checks,
+  repository policy checks, G13 i18n, G14 visual, G15 A2UI, G16 Bot/Web
+  compatibility, and G17 activation evidence.
+- Node 26 and the repository quality runners are aligned without changing
+  application coverage behavior or adding Bot/operations code to this scope.
+
+### 🔗 Bot compatibility and chat continuity
+
+- Native Bot responses normalize a compatible top-level `id` to the Web
+  `run_id` contract while rejecting conflicting identities.
+- Failed or ambiguous new-chat submissions retain temporary dialogue identity
+  until an authoritative Web dialogue id is returned.
+- Typed Bot upstream failures preserve 504 timeouts, map other upstream 5xx
+  responses to safe 502 errors, and keep genuine Web failures at 500.
+- All eight Bot/Web acceptance rows remain **External Pending** and all new
+  capability flags remain default-off.
+
+### 🎨 Frontend visual evidence
+
+- Chat visual refinement and the current release candidate were captured with
+  the deterministic fixture harness; the human-reviewed package covers desktop
+  light/dark, mobile drawer states, and wide desktop geometry.
+- Remaining 200% zoom, forced-colors, authenticated Chat, and public legal-page
+  evidence remain explicitly `Needs Verification` or `Not Captured`.
 
 ---
 

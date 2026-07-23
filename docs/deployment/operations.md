@@ -177,9 +177,12 @@ Two windows, matching the staged §6:
   `UPDATE question_agent_logs SET status='FAILED' WHERE status='RUNNING' AND (bot_run_id IS NULL OR bot_run_id='') AND created_at < '<cutover-date>';`
   Run only after confirming such rows exist and are genuinely stale.
 
-## 11. `0.1.3` dark-launched features — Bot-coordination activation gates
+## 11. `0.1.3` / `0.1.4` dark-launched features — Bot-coordination activation gates
 
-The `0.1.3` release ships several Web↔Bot capabilities **dark** on the Web side
+The `0.1.4` compatibility follow-up preserves the `0.1.3` dark-launch contract:
+it adds no new operator flag or migration, and every capability remains off
+until its external acceptance row is reviewed. The `0.1.3` release ships
+several Web↔Bot capabilities **dark** on the Web side
 (default-OFF flags, byte-identical to the blocking behavior until flipped). Each
 flip requires a matching Bot-side capability, security review where applicable,
 and owner/CI/staging/live evidence **first**, or the feature breaks on

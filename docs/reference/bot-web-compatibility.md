@@ -7,7 +7,7 @@ is the local checker input for reviewed acceptance rows and dark-launch flags.
 `scripts/check_bot_web_activation.py` is a deterministic, offline Web evidence
 gate; it does not turn local tests into external acceptance.
 
-This document records the boundary consumed by `release/0.1.3` Web Go. The
+This document records the boundary consumed by `release/0.1.4` Web Go. The
 browser talks only to Web Go. Web Go owns user identity, row ownership, legacy
 history compatibility, response shaping, and the sanitized projection stored
 in MySQL. Bot remains the source of Bot-run content and lifecycle state.
@@ -180,3 +180,16 @@ default (`expert_enabled`, `stream_enabled`, `a2ui_actions_enabled`,
 `interop_enabled`, `research_enabled`, `design_enabled`, `network_enabled`, and
 `history_dual_read` are false/off), and no Bot, operations, deployment, or
 live configuration change is part of this Web reference.
+
+## Current Web closure record (2026-07-24)
+
+- Commit under test: `802d439` (`release/0.1.4`).
+- `./scripts/validate_web_local.sh` — PASS; 201 frontend test files / 2551
+  tests passed with the configured coverage thresholds, Go module/build/vet/
+  test checks passed, and G13, G14, G15, G16, and G17 passed.
+- The current record includes Bot identity normalization, pending-chat
+  continuity, and typed upstream error mapping. No Bot or operations code is
+  included in this Web release.
+- This is repository-local evidence only. The matrix remains unchanged:
+  `RC-WEB-001` through `RC-WEB-007` and `RC-LIVE-001` are still
+  **External Pending**, and all capability flags remain dark by default.
