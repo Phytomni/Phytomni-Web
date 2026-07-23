@@ -18,7 +18,6 @@ import {
   FIXTURE_A2UI_REQUIRED_BLOCK,
   FIXTURE_PROGRESS_STARTED_AT,
 } from "../fixtures/chat";
-import { activityRegionDomId } from "@/views/chat/streaming/presentation";
 import ChatSidebarNav from "@/views/chat/components/ChatSidebarNav.vue";
 import ChatAgentPicker from "@/views/chat/components/ChatAgentPicker.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
@@ -491,7 +490,7 @@ describe("ChatAccessibilityV2 — Composer picker keyboard", () => {
 });
 
 describe("ChatAccessibilityV2 — Activity disclosure linkage", () => {
-  const regionId = activityRegionDomId(FIXTURE_ACTIVITY_STATE_KEY);
+  const regionId = "chat-activity-stream%3Afixture-activity-msg%3Aactivity-0";
 
   it("links the disclosure control to the region and restores focus after toggle", async () => {
     const wrapper = mount(ChatActivity, {

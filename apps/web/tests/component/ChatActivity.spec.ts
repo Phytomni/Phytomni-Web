@@ -6,10 +6,7 @@ import { resolve } from "node:path";
 import { createI18n } from "vue-i18n";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
-import {
-  activityDisclosureStateKey,
-  activityRegionDomId,
-} from "@/views/chat/streaming/presentation";
+import { activityDisclosureStateKey } from "@/views/chat/streaming/presentation";
 
 const ACTIVITY_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatActivity.vue"),
@@ -65,7 +62,7 @@ describe("ChatActivity", () => {
   ];
 
   const stateKey = activityDisclosureStateKey("req-1", 0);
-  const regionId = activityRegionDomId(stateKey);
+  const regionId = "chat-activity-stream%3Areq-1%3Aactivity-0";
 
   it("defaults closed with summary/count/status and controlled region id", () => {
     const w = mountActivity({
