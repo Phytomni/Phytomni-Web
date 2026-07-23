@@ -23,6 +23,7 @@ import { decodeA2uiActionResponse } from "@/views/chat/streaming/a2uiParse";
 import { A2uiTransportError } from "@/views/chat/streaming/a2uiAction";
 import * as a2uiAction from "@/views/chat/streaming/a2uiAction";
 import type { ChatMessage, ContentBlock } from "@/views/chat/types";
+import { createA2uiInputRequiredResponse } from "../../../../helpers/a2uiFixtures";
 
 const surface: A2uiOpenSurface = {
   catalog_version: "v1.0",
@@ -189,13 +190,11 @@ const fixture = (relativePath: string): unknown =>
 const inputRequiredRound2Fixture = (
   envelope: A2uiActionEnvelope
 ): InputRequiredResponse => {
-  const decoded = decodeA2uiActionResponse(
-    fixture("http/input_required_round2.json")
-  );
-  if (!decoded.ok || decoded.value.status !== "input_required") {
-    throw new Error("expected the round-2 fixture to decode as input_required");
+  const response = createA2uiInputRequiredResponse(envelope.run_id);
+  if (response.status !== "input_required") {
+    throw new Error("expected the round-2 fixture to be input_required");
   }
-  return { ...decoded.value, run_id: envelope.run_id };
+  return response;
 };
 
 describe("beginA2uiAction", () => {

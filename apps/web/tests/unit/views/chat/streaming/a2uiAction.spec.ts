@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect, vi } from "vitest";
-import { decodeA2uiActionResponse } from "@/views/chat/streaming/a2uiParse";
 import {
   buildA2uiActionId,
   createMemoryA2uiTransport,
@@ -11,6 +10,7 @@ import {
   type A2uiActionEnvelope,
 } from "@/views/chat/streaming/a2uiAction";
 import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
+import { createA2uiSucceededResponse } from "../../../../helpers/a2uiFixtures";
 
 const fixture = (relativePath: string): unknown =>
   JSON.parse(
@@ -20,17 +20,10 @@ const fixture = (relativePath: string): unknown =>
     )
   );
 
-const decodedFixture = (relativePath: string): A2uiActionResponse => {
-  const decoded = decodeA2uiActionResponse(fixture(relativePath));
-  if (!decoded.ok) throw new Error(`invalid test fixture: ${decoded.reason}`);
-  return decoded.value;
-};
-
 const terminalResponseFor = (
   envelope: A2uiActionEnvelope
 ): A2uiActionResponse => {
-  const response = decodedFixture("http/terminal_succeeded.json");
-  return { ...response, run_id: envelope.run_id };
+  return createA2uiSucceededResponse(envelope.run_id);
 };
 
 const envelope: A2uiActionEnvelope = {
