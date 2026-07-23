@@ -23,6 +23,16 @@ check_match_status() {
     esac
 }
 
+resolve_main_ref() {
+    if git show-ref --verify refs/heads/main >/dev/null 2>&1; then
+        printf '%s\n' main
+    elif git show-ref --verify refs/remotes/origin/main >/dev/null 2>&1; then
+        printf '%s\n' origin/main
+    else
+        return 1
+    fi
+}
+
 run_static_analysis_check() {
     local ledger_path="$1"
     shift

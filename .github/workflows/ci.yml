@@ -29,6 +29,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Python 3.12 (repository gates)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install ripgrep (shared hygiene gate)
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
@@ -63,6 +68,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python 3.12 (repository gates)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Setup Node 26 (frontend static tools)
         uses: actions/setup-node@v4
         with:
@@ -85,6 +95,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python 3.12 (repository gates)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Setup Node 26 (frontend runtime tools)
         uses: actions/setup-node@v4
         with:
@@ -106,6 +121,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Python 3.12 (repository gates)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Setup Go 1.23 (server static tools)
         uses: actions/setup-go@v5
@@ -132,6 +152,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python 3.12 (repository gates)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Setup Go 1.23 (server runtime tools)
         uses: actions/setup-go@v5
         with:
@@ -148,6 +173,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Python 3.12 (repository gates)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Cache pinned quality tools
         uses: actions/cache@v4

@@ -115,9 +115,9 @@ verify those external settings separately.
 
 ### Tool versions, cache, and rollback
 
-The supported local and CI baselines are Node 26 and Go 1.23. Frontend
-dependencies are installed with `npm ci`; Go dependencies are verified by the
-server gate. Repository-downloaded quality tools are pinned and checksum
+The supported local and CI baselines are Python 3.12, Node 26, and Go 1.23.
+Frontend dependencies are installed with `npm ci`; Go dependencies are verified
+by the server gate. Repository-downloaded quality tools are pinned and checksum
 verified: ShellCheck `0.10.0`, shfmt `v3.10.0`, actionlint `v1.7.4`, and
 Staticcheck `2025.1.1`.
 

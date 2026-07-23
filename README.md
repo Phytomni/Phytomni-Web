@@ -11,6 +11,7 @@ tasks.
 ### apps/server (Go API gateway)
 
 - Go 1.23+ installed
+- Python 3.12+ installed for repository quality gates
 - Port 8080 available
 
 ### apps/web (frontend)

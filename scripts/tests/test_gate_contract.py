@@ -126,6 +126,9 @@ def test_ci_targets_are_read_only_parallel_shared_groups() -> None:
 def test_ci_installs_only_group_owned_dependencies() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
 
+    assert text.count("uses: actions/setup-python@v5") == len(GROUP_ORDER)
+    assert text.count('python-version: "3.12"') == len(GROUP_ORDER)
+
     assert text.count("uses: actions/setup-node@v4") == 3
     assert text.count("node-version: \"26\"") == 3
     assert text.count("cache: npm") == 3
@@ -224,6 +227,7 @@ def test_quality_policy_docs_preserve_scope_and_no_degradation_contract() -> Non
 
 def test_gate_groups_own_enhanced_repository_tools() -> None:
     hygiene = (GATES / "hygiene.sh").read_text(encoding="utf-8")
+    common = (GATES / "common.sh").read_text(encoding="utf-8")
     server_static = (GATES / "server-static.sh").read_text(encoding="utf-8")
     server_runtime = (GATES / "server-runtime.sh").read_text(encoding="utf-8")
     contracts = (GATES / "contracts.sh").read_text(encoding="utf-8")
@@ -233,6 +237,8 @@ def test_gate_groups_own_enhanced_repository_tools() -> None:
     assert "python3 scripts/check_repository_files.py --check --scope full" in hygiene
     assert "python3 scripts/scan_secrets.py --all" in hygiene
     assert "python3 scripts/scan_secrets.py --range" in hygiene
+    assert "resolve_main_ref" in hygiene
+    assert "refs/remotes/origin/main" in common
     assert "go mod verify" in server_static
     assert "scripts/staticcheck_runner.sh" in server_static
     assert "-f json ./..." in server_static

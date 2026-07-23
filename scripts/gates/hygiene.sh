@@ -67,8 +67,10 @@ if [ "${PHYTOMNI_HYGIENE_SCOPE:-full}" = "full" ]; then
 
     python3 scripts/check_repository_files.py --check --scope full
     python3 scripts/scan_secrets.py --all
-    range_base="$(git merge-base HEAD main 2>/dev/null)" ||
-        fail "cannot resolve merge-base HEAD main for the range secret scan"
+    main_ref="$(resolve_main_ref)" ||
+        fail "cannot resolve main or origin/main for the range secret scan"
+    range_base="$(git merge-base HEAD "$main_ref" 2>/dev/null)" ||
+        fail "cannot resolve merge-base HEAD $main_ref for the range secret scan"
     python3 scripts/scan_secrets.py --range "$range_base..HEAD"
 else
     note "scoped hygiene: full-tree repository tools deferred to changed-file scope"

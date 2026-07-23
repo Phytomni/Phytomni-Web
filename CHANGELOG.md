@@ -28,8 +28,8 @@ Bot, operations, staging, or production acceptance.
 - The complete local gate covers the read-only frontend and Go checks,
   repository policy checks, G13 i18n, G14 visual, G15 A2UI, G16 Bot/Web
   compatibility, and G17 activation evidence.
-- Node 26 and the repository quality runners are aligned without changing
-  application coverage behavior or adding Bot/operations code to this scope.
+- Node 26, Python 3.12, and the repository quality runners are aligned without
+  changing application coverage behavior; coverage G12 is unchanged, and Bot, operations, and deployment code remain outside this scope.
 
 ### 🔗 Bot compatibility and chat continuity
 

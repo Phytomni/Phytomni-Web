@@ -316,10 +316,10 @@ if [ "$mode" = "precommit" ]; then
 else
     if base="$(git rev-parse --verify '@{upstream}' 2>/dev/null)"; then
         base_source="upstream"
-    elif base="$(git merge-base HEAD main 2>/dev/null)"; then
-        base_source="merge-base"
+    elif main_ref="$(resolve_main_ref)" && base="$(git merge-base HEAD "$main_ref" 2>/dev/null)"; then
+        base_source="merge-base/$main_ref"
     else
-        fail 'cannot resolve @{upstream} or merge-base HEAD main; run "make full" instead'
+        fail 'cannot resolve @{upstream} or merge-base HEAD main/origin/main; run "make full" instead'
     fi
     append_git_paths diff --name-only --diff-filter=ACMR "$base..HEAD"
     append_git_paths diff --name-only --diff-filter=ACMR
