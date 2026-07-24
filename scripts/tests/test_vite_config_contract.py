@@ -25,12 +25,9 @@ def test_vite_plugin_modules_are_typed_and_keep_the_ordered_pipeline() -> None:
     assert "import vue from \"@vitejs/plugin-vue\";" in plugin_index
     assert "import vueJsx from \"@vitejs/plugin-vue-jsx\";" in plugin_index
     assert "createAutoImport" in plugin_index
-    assert "createSetupExtend" in plugin_index
-    assert "createSvgIcon" in plugin_index
     assert "createCompression" in plugin_index
     assert re.search(
-        r"vue\(\).*vueJsx\(\).*createAutoImport\(\).*"
-        r"createSetupExtend\(\).*createSvgIcon\(isBuild\)",
+        r"vue\(\).*vueJsx\(\).*createAutoImport\(\)",
         plugin_index,
         flags=re.DOTALL,
     )
@@ -40,8 +37,6 @@ def test_vite_plugin_modules_are_typed_and_keep_the_ordered_pipeline() -> None:
 def test_plugin_factories_preserve_runtime_contracts() -> None:
     auto_import = _read(PLUGIN_ROOT / "auto-import.ts")
     compression = _read(PLUGIN_ROOT / "compression.ts")
-    setup_extend = _read(PLUGIN_ROOT / "setup-extend.ts")
-    svg_icon = _read(PLUGIN_ROOT / "svg-icon.ts")
 
     assert 'imports: ["vue", "vue-router", "pinia"]' in auto_import
     assert "dts: false" in auto_import
@@ -49,9 +44,19 @@ def test_plugin_factories_preserve_runtime_contracts() -> None:
     assert 'includes("gzip")' in compression
     assert 'includes("brotli")' in compression
     assert "algorithm: \"brotliCompress\"" in compression
-    assert "return setupExtend();" in setup_extend
-    assert 'symbolId: "icon-[dir]-[name]"' in svg_icon
-    assert "svgoOptions: isBuild" in svg_icon
+
+
+def test_unused_vite_plugins_and_fake_scss_package_are_absent() -> None:
+    package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
+    plugin_index = _read(PLUGIN_ROOT / "index.ts")
+
+    assert "createSetupExtend" not in plugin_index
+    assert "createSvgIcon" not in plugin_index
+    assert "vite-plugin-vue-setup-extend" not in package["devDependencies"]
+    assert "vite-plugin-svg-icons" not in package["devDependencies"]
+    assert "scss" not in package["devDependencies"]
+    assert not (PLUGIN_ROOT / "setup-extend.ts").exists()
+    assert not (PLUGIN_ROOT / "svg-icon.ts").exists()
 
 
 def test_vite_config_keeps_proxy_alias_and_chunk_contracts() -> None:
