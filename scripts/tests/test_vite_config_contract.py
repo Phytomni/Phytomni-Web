@@ -43,6 +43,13 @@ def test_plugin_factories_preserve_runtime_contracts() -> None:
     assert "npm-run-all" not in package["devDependencies"]
     assert package["devDependencies"]["unplugin-auto-import"] == "21.0.0"
     assert package["scripts"]["build"] == "run-p type-check build-only"
+    assert package["scripts"]["build-only:raw"] == "vite build --mode production"
+    assert (
+        package["scripts"]["build-only"]
+        == "node scripts/quality/run-with-warning-oracle.mjs build"
+    )
+    assert package["scripts"]["test:run"] == "vitest run"
+    assert package["scripts"]["coverage"] == "vitest run --coverage"
     assert 'imports: ["vue", "vue-router", "pinia"]' in auto_import
     assert "dts: false" in auto_import
     assert "PluginOption" in auto_import

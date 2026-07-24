@@ -11,9 +11,37 @@ import {
   createWarningDetector,
   runCheckedProcess,
 } from "./framework-warning-oracle.mjs";
+import { COMMANDS, main, resolveCommand } from "./run-with-warning-oracle.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const fixture = resolve(scriptDir, "fixtures/emit-output.mjs");
+
+test("limits warning-oracle modes to the approved local commands", () => {
+  assert.deepEqual(COMMANDS, {
+    build: ["vite", ["build", "--mode", "production"]],
+    test: ["vitest", ["run"]],
+    coverage: ["vitest", ["run", "--coverage"]],
+  });
+
+  const command = resolveCommand("build", ["--minify", "esbuild"]);
+  assert.equal(
+    command.executable,
+    resolve(scriptDir, "../../node_modules/.bin/vite")
+  );
+  assert.deepEqual(command.args, [
+    "build",
+    "--mode",
+    "production",
+    "--minify",
+    "esbuild",
+  ]);
+  assert.equal(command.cwd, resolve(scriptDir, "../.."));
+  assert.equal(resolveCommand("unknown", []), undefined);
+});
+
+test("rejects an unknown warning-oracle mode with EX_USAGE", async () => {
+  assert.equal(await main(["node", "runner", "unknown"]), 64);
+});
 
 test("classifies clean output without business-warning false positives", () => {
   assert.deepEqual(
