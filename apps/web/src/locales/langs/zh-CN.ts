@@ -438,6 +438,18 @@ export default {
       geneNetworkAgent: "基因网络智能体",
       digitalDesignAgent: "智能设计智能体",
     },
+    agentPresentation: {
+      chatAgentAlt: "对话智能体工作流程图",
+      knowledgeAgentAlt: "知识智能体工作流程图",
+      dataAgentAlt: "数据智能体工作流程图",
+      analystAgentAlt: "分析智能体工作流程图",
+      reviewAgentAlt: "综述智能体工作流程图",
+      inSilicoResearchAgentAlt: "虚拟研究智能体工作流程图",
+      geneNetworkAgentAlt: "基因网络智能体工作流程图",
+      briefGeneAgentAlt: "基因综述智能体工作流程图",
+      deepGenomeAgentAlt: "基因深度分析智能体工作流程图",
+      digitalDesignAgentAlt: "智能设计智能体工作流程图",
+    },
     agents: {
       chatAgent: "您的农业科研智能助手，用自然语言解答各类研究问题。",
       knowledgeAgent: "提供权威农业知识库，精准匹配科研需求。",

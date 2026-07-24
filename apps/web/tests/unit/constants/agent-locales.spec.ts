@@ -9,6 +9,7 @@ import {
   CANONICAL_AGENT_ZH_NAMES,
   derivePickerOptions,
 } from "@/constants/agents";
+import { CANONICAL_AGENT_PRESENTATIONS } from "@/components/agent";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
@@ -77,6 +78,18 @@ describe("canonical agent locale names", () => {
         expect.any(String)
       );
       expect(getMessage(enUS, i18nKey), `${toolName} en-US`).toEqual(
+        expect.any(String)
+      );
+    }
+  });
+
+  it("has Chinese and English alt text for every canonical flowchart", () => {
+    for (const toolName of CANONICAL_AGENT_DISPLAY_ORDER) {
+      const altKey = CANONICAL_AGENT_PRESENTATIONS[toolName].flowchartAltKey;
+      expect(getMessage(zhCN, altKey), `${toolName} zh-CN alt`).toEqual(
+        expect.any(String)
+      );
+      expect(getMessage(enUS, altKey), `${toolName} en-US alt`).toEqual(
         expect.any(String)
       );
     }

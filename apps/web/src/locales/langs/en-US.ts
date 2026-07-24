@@ -439,6 +439,19 @@ export default {
       geneNetworkAgent: "Gene Network Agent",
       digitalDesignAgent: "Digital Design Agent",
     },
+    agentPresentation: {
+      chatAgentAlt: "Chat Agent workflow flowchart",
+      knowledgeAgentAlt: "Knowledge Agent workflow flowchart",
+      dataAgentAlt: "Data Agent workflow flowchart",
+      analystAgentAlt: "Analyst Agent workflow flowchart",
+      reviewAgentAlt: "Review Agent workflow flowchart",
+      inSilicoResearchAgentAlt:
+        "In Silico Research Agent workflow flowchart",
+      geneNetworkAgentAlt: "Gene Network Agent workflow flowchart",
+      briefGeneAgentAlt: "Brief Gene Agent workflow flowchart",
+      deepGenomeAgentAlt: "Deep Genome Agent workflow flowchart",
+      digitalDesignAgentAlt: "Digital Design Agent workflow flowchart",
+    },
     agents: {
       chatAgent:
         "Your AI assistant for answering plant research questions in natural language.",
