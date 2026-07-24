@@ -27,3 +27,6 @@ declare module "file-saver" {
     options?: SaveAsOptions
   ): void;
 }
+
+declare module "@fontsource/inter/400";
+declare module "@fontsource/inter/600";

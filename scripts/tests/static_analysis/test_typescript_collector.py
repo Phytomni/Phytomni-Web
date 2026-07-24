@@ -34,7 +34,7 @@ def test_parser_handles_multiline_paths_spaces_and_vue_locations() -> None:
         ]
     )
 
-    findings = parse_vue_tsc_output(FIXTURE_ROOT, text, "0.39.5")
+    findings = parse_vue_tsc_output(FIXTURE_ROOT, text, "3.3.8")
 
     assert [finding.path for finding in findings] == [
         "src/App.vue",
@@ -80,11 +80,11 @@ def test_status_validation_rejects_failed_empty_invocations() -> None:
 )
 def test_parser_rejects_unknown_or_truncated_output(text: str) -> None:
     with pytest.raises(CollectionError):
-        parse_vue_tsc_output(FIXTURE_ROOT, text, "0.39.5")
+        parse_vue_tsc_output(FIXTURE_ROOT, text, "3.3.8")
 
 
 def test_parser_rejects_stale_tool_versions_and_accepts_empty_output() -> None:
-    assert parse_vue_tsc_output(FIXTURE_ROOT, "", "0.39.5") == ()
+    assert parse_vue_tsc_output(FIXTURE_ROOT, "", "3.3.8") == ()
     with pytest.raises(CollectionError, match="version"):
         parse_vue_tsc_output(FIXTURE_ROOT, "", "5.0.0")
 
@@ -93,7 +93,7 @@ def test_parser_binds_global_diagnostics_to_project_configuration() -> None:
     findings = parse_vue_tsc_output(
         FIXTURE_ROOT,
         "error TS2468: Cannot find global value 'Promise'.",
-        "0.39.5",
+        "3.3.8",
     )
 
     assert findings[0].path == "tsconfig.json"
@@ -150,9 +150,9 @@ def test_bounded_collection_checks_versions_project_and_selected_files(
         del cwd
         calls.append(command)
         if command[:4] == ("npx", "--no-install", "vue-tsc", "--version"):
-            return subprocess.CompletedProcess(command, 0, "Version 4.7.4\n", "")
+            return subprocess.CompletedProcess(command, 0, "Version 3.3.8\n", "")
         if command[:2] == ("node", "-p"):
-            return subprocess.CompletedProcess(command, 0, "0.39.5\n", "")
+            return subprocess.CompletedProcess(command, 0, "3.3.8\n", "")
         return subprocess.CompletedProcess(
             command,
             2,

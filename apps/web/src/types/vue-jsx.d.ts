@@ -1,4 +1,4 @@
-// Vue JSX intrinsics shim — vue-tsc 0.39.5 with `"jsx": "preserve"`
+// Vue JSX intrinsics shim — the current vue-tsc toolchain with `"jsx": "preserve"`
 // does not automatically pull Vue's JSX namespace into scope, so every
 // component that emits JSX (render functions, Icon*.vue templates)
 // triggers TS7026: "JSX element implicitly has type 'any' because no

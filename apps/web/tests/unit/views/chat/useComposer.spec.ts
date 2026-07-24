@@ -6,7 +6,7 @@ import {
   type Ref,
   type WritableComputedRef,
 } from "vue";
-import type { MentionOption } from "vue-element-plus-x/types/components/MentionSender/types";
+import type { MentionOption } from "vue-element-plus-x/types/MentionSender";
 import { useComposer } from "@/views/chat/composables/useComposer";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 

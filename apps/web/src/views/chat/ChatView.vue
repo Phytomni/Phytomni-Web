@@ -1728,7 +1728,7 @@ const setTourInputTarget = (el: HTMLElement | null) => {
 };
 
 // Copy message content + cited document list (extracted from an inline @click to work around a
-// vue-tsc 0.39.5 bug where it mis-maps a local const declared inside a multi-statement template
+// vue-tsc can mis-map a local const declared inside a multi-statement template
 // arrow function onto the component instance — see the @copy handler wiring below)
 const copyMessageWithDocs = (message: ChatMessage, index: number) => {
   const docs =

@@ -56,6 +56,10 @@ def test_plugin_factories_preserve_runtime_contracts() -> None:
     )
     assert package["scripts"]["test:run"] == "vitest run"
     assert package["scripts"]["coverage"] == "vitest run --coverage"
+    assert (
+        package["scripts"]["test:warning-oracle"]
+        == "node --test --test-isolation=none scripts/quality/framework-warning-oracle.test.mjs"
+    )
     assert 'imports: ["vue", "vue-router", "pinia"]' in auto_import
     assert "dts: false" in auto_import
     assert "PluginOption" in auto_import
@@ -97,7 +101,7 @@ def test_vite_config_keeps_proxy_alias_and_chunk_contracts() -> None:
     assert 'locales: ["./src/locales"]' in config
 
 
-def test_vite_toolchain_uses_the_checkpoint_versions_and_modern_sass_api() -> None:
+def test_vite_toolchain_keeps_checkpoint_versions_and_modern_sass_api() -> None:
     package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
     vite_config = _read(WEB_ROOT / "vite.config.mts")
 
@@ -106,11 +110,37 @@ def test_vite_toolchain_uses_the_checkpoint_versions_and_modern_sass_api() -> No
         "@vitejs/plugin-vue": "6.0.8",
         "@vitejs/plugin-vue-jsx": "5.1.6",
         "sass": "1.101.7",
-        "@types/node": "20.19.31",
     }
     for name, version in expected_versions.items():
         assert package["devDependencies"][name] == version
     assert 'api: "modern"' in vite_config
+
+
+def test_compiler_projects_use_bundler_resolution_without_suppression() -> None:
+    package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
+    application = json.loads((WEB_ROOT / "tsconfig.json").read_text(encoding="utf-8"))
+    config = json.loads(
+        (WEB_ROOT / "tsconfig.config.json").read_text(encoding="utf-8")
+    )
+
+    expected_versions = {
+        "typescript": "6.0.3",
+        "vue-tsc": "3.3.8",
+        "@types/node": "26.1.1",
+        "@vue/tsconfig": "0.9.1",
+        "@types/babel__core": "7.20.5",
+    }
+    for name, version in expected_versions.items():
+        assert package["devDependencies"][name] == version
+
+    for project in (application, config):
+        options = project["compilerOptions"]
+        assert options["moduleResolution"] == "Bundler"
+        assert "baseUrl" not in options
+        assert "ignoreDeprecations" not in options
+    assert application["compilerOptions"]["paths"] == {"@/*": ["./src/*"]}
+    assert config["compilerOptions"]["composite"] is True
+    assert config["compilerOptions"]["incremental"] is True
 
 
 def test_vite5_checkpoint_is_explicitly_diagnostic_and_evidence_backed() -> None:

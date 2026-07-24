@@ -13,7 +13,7 @@ from .errors import CollectionError
 from .helpers import make_finding
 
 
-EXPECTED_VUE_TSC_VERSION = "0.39.5"
+EXPECTED_VUE_TSC_VERSION = "3.3.8"
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _PAREN_DIAGNOSTIC_RE = re.compile(
     r"^(?P<path>.+)\((?P<line>\d+),(?P<column>\d+)\):\s*"

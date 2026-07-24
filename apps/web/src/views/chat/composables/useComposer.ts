@@ -1,6 +1,6 @@
 import { computed, watch, nextTick } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
-import type { MentionOption } from "vue-element-plus-x/types/components/MentionSender/types";
+import type { MentionOption } from "vue-element-plus-x/types/MentionSender";
 
 function selectedAgentPrefix(selectedAgent: string): string {
   return selectedAgent ? `@${selectedAgent},` : "";
@@ -14,6 +14,15 @@ function removeExactSelectedPrefix(
   return prefix !== "" && value.startsWith(prefix)
     ? value.slice(prefix.length)
     : value;
+}
+
+function isMentionOption(value: unknown): value is MentionOption {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "value" in value &&
+    typeof value.value === "string"
+  );
 }
 
 export function useComposer(opts: {
@@ -93,7 +102,9 @@ export function useComposer(opts: {
     }).catch(() => undefined);
   };
 
-  const handleSelect = (option: MentionOption) => {
+  const handleSelect = (rawOption: unknown) => {
+    if (!isMentionOption(rawOption)) return;
+    const option = rawOption;
     if (!isPermittedTool(option.value)) return;
     selectedAgent.value = option.value;
     messageInput.value = removeExactSelectedPrefix(

@@ -5,27 +5,6 @@ default = "deny"
 allow_temporary = false
 
 [[exemptions]]
-id = "web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977"
-tool = "typescript"
-rule = "exclude"
-classification = "structural"
-mechanism = "config"
-target_kind = "config"
-path = "apps/web/tsconfig.json"
-target = "pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147"
-fingerprint = "sha256:70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977"
-owner = "web-maintainers"
-introduced_on = 2026-07-19
-review_on = 2026-08-31
-rationale = "The application include glob reaches repository-owned agent Markdown that contains Vue examples; removing the exact exclusion makes vue-tsc parse that data as source and fails with four TS2339 diagnostics in the Markdown payloads."
-counterfactual = "A same-directory reverse probe with this one exclude removed must remain non-clean and must report only the agent-example Markdown payload family; if the data is converted to non-source assets, remove this structural record."
-risk = "Only the hashed src/assets/**/*.md exclusion in apps/web/tsconfig.json is authorized; a path, pattern, or diagnostic-family change is a stale identity and fails reconciliation."
-tests = [
-  "scripts/tests/test_typescript_dependency_probe.py::test_application_exclude_keeps_markdown_data_out_of_program",
-  "scripts/check_static_analysis_exemptions.py --check",
-]
-
-[[exemptions]]
 id = "web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69"
 tool = "typescript"
 rule = "skipLibCheck"
@@ -38,8 +17,8 @@ fingerprint = "sha256:77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d
 owner = "web-maintainers"
 introduced_on = 2026-07-19
 review_on = 2026-08-31
-rationale = "The supported TypeScript 4.7.4/vue-tsc 0.39.5 toolchain emits an exact third-party declaration family with skipLibCheck=false; the reverse probe binds this application setting to the direct 3dmol 2.5.5 dependency."
-counterfactual = "Removing this exact setting fails the application probe on node_modules declaration errors; the config-project probe remains separate and exposes three first-party vitest.config.mts errors."
+rationale = "The supported TypeScript 6.0.3/vue-tsc 3.3.8 toolchain still emits an exact third-party declaration family with skipLibCheck=false across the pinned 3dmol, Element Plus, Pinia, chatarea, vue-element-plus-x, and transitive declaration graph; the config project is clean independently."
+counterfactual = "Removing this exact setting fails the application probe only on node_modules declarations; the config-project probe remains clean with skipLibCheck=false."
 risk = "Only apps/web/tsconfig.json compilerOptions.skipLibCheck=true is authorized; project, tool-version, or diagnostic-family drift fails the probe and requires re-adjudication."
 tests = [
   "scripts/tests/test_typescript_dependency_probe.py::test_skip_lib_check_probe_is_project_and_dependency_bound",

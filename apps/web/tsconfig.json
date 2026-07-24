@@ -2,7 +2,7 @@
   "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
   "compilerOptions": {
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "useDefineForClassFields": true,
     "jsx": "preserve",
@@ -14,7 +14,6 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "baseUrl": ".",
     "types": ["element-plus/global"],
     "paths": {
       "@/*": ["./src/*"]
@@ -22,7 +21,6 @@
     "allowSyntheticDefaultImports": true,
     "allowJs": true
   },
-  "exclude": ["src/assets/**/*.md"],
   "references": [
     {
       "path": "./tsconfig.config.json"

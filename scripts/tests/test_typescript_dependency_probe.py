@@ -1,10 +1,10 @@
-"""Keep the third-party declaration reverse probe tied to the toolchain.
+"""Keep the declaration reverse probe tied to the active TypeScript toolchain.
 
 The application intentionally runs with ``skipLibCheck`` enabled while the
-installed declaration files are incompatible with the supported isolated-module
-toolchain.  This test does not authorize that choice; it makes the evidence
-fail closed when dependency versions, diagnostic families, or diagnostic
-ownership change.
+installed third-party declaration files remain incompatible with the supported
+isolated-module toolchain. The config project is independently required to be
+clean, and the tests fail closed when versions, diagnostic families, or
+diagnostic ownership change.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from collections import Counter
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
@@ -26,33 +25,28 @@ VUE_TSC = WEB_ROOT / "node_modules" / ".bin" / "vue-tsc"
 
 EXPECTED_PACKAGES = {
     "3dmol": "2.5.5",
-    "typescript": "4.7.4",
-    "vue-tsc": "0.39.5",
+    "typescript": "6.0.3",
+    "vue-tsc": "3.3.8",
 }
 EXPECTED_APPLICATION_DIAGNOSTIC_CODES = frozenset(
     {
         "TS1039",
-        "TS1169",
-        "TS1383",
         "TS2304",
         "TS2305",
         "TS2307",
-        "TS2315",
-        "TS2339",
         "TS2344",
-        "TS2380",
         "TS2411",
+        "TS2428",
         "TS2502",
         "TS2536",
-        "TS2691",
         "TS2694",
-        "TS2748",
         "TS2749",
+        "TS2590",
+        "TS2552",
+        "TS2846",
         "TS7010",
+        "TS7016",
     }
-)
-EXPECTED_CONFIG_DECLARATION_CODES = frozenset(
-    {"TS1169", "TS2304", "TS2307", "TS2339", "TS7016"}
 )
 PROJECTS = {
     "application": WEB_ROOT / "tsconfig.json",
@@ -154,30 +148,11 @@ def test_skip_lib_check_probe_is_project_and_dependency_bound() -> None:
 
     config = _run_probe(PROJECTS["config"], skip_lib_check=False)
     config_diagnostics = _diagnostics(config)
-    assert config.returncode != 0, "config skipLibCheck=false unexpectedly became clean"
-    assert config_diagnostics, "the config probe returned no diagnostics"
-    declaration_diagnostics = [
-        (path, code)
-        for path, code in config_diagnostics
-        if _relative_path(path).startswith("node_modules/")
-    ]
-    first_party_diagnostics = [
-        (_relative_path(path), code)
-        for path, code in config_diagnostics
-        if not _relative_path(path).startswith("node_modules/")
-    ]
-    assert {
-        code for _, code in declaration_diagnostics
-    } == EXPECTED_CONFIG_DECLARATION_CODES, (
-        "the config declaration diagnostic family changed; keep it separate from "
-        "the application structural decision"
+    assert config.returncode == 0, (
+        "config project is no longer clean with skipLibCheck=false; keep its "
+        "diagnostic family separate from the application structural decision"
     )
-    assert Counter(first_party_diagnostics) == Counter(
-        {("vitest.config.mts", "TS2769"): 3}
-    ), (
-        "config-project first-party diagnostics changed; do not classify them as "
-        "third-party declaration debt"
-    )
+    assert config_diagnostics == []
 
 
 def test_first_party_canary_is_visible_with_or_without_skip_lib_check() -> None:
@@ -215,12 +190,11 @@ def test_first_party_canary_is_visible_with_or_without_skip_lib_check() -> None:
             )
 
 
-def test_application_exclude_keeps_markdown_data_out_of_program() -> None:
-    """The application exclusion protects repository-owned Markdown payloads."""
+def test_application_markdown_data_no_longer_requires_an_exclusion() -> None:
+    """TypeScript 6 no longer treats the Markdown payloads as source files."""
 
     document = json.loads((WEB_ROOT / "tsconfig.json").read_text(encoding="utf-8"))
-    assert document["exclude"] == ["src/assets/**/*.md"]
-    document.pop("exclude")
+    assert "exclude" not in document
 
     temporary_path: Path | None = None
     try:
@@ -237,9 +211,9 @@ def test_application_exclude_keeps_markdown_data_out_of_program() -> None:
 
         result = _run_probe(temporary_path, skip_lib_check=True)
         output = result.stdout + result.stderr
-        assert result.returncode != 0
-        assert "src/assets/agentExample" in output
-        assert ".md(" in output
+        assert result.returncode == 0, output
+        assert "src/assets/agentExample" not in output
+        assert ".md(" not in output
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)

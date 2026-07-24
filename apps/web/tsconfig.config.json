@@ -7,8 +7,9 @@
   ],
   "compilerOptions": {
     "composite": true,
+    "incremental": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "useDefineForClassFields": true,
     "jsx": "preserve",
