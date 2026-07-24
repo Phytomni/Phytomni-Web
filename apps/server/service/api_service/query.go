@@ -433,26 +433,40 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
 		return nil, ErrExpertDisabled
 	}
-	// Expert routes through Bot's semantic router before Web learns which agent
-	// was selected. Require the complete remote product capability set before
-	// any upload, dialogue resolution, or RouteQueryWithMeta call.
-	if in.Mode == "expert" {
-		if err := ps.CheckExpertRemoteProductsAllowed(ctx, username); err != nil {
+	var (
+		permissions AgentPermissionResolution
+		err         error
+	)
+	if in.Surface == QuerySurfaceChat {
+		permissions, err = ps.ResolveAgentPermissions(ctx, username)
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent permissions: %w", err)
+		}
+	}
+	// Dedicated products retain their route-owned check. Chat always derives its
+	// effective capability set from the resolution above, including forced Expert
+	// selections, rather than treating a browser hint as a product route.
+	if in.Surface == QuerySurfaceAgentProduct {
+		if err = ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
 			return nil, err
 		}
 	}
-	// Dedicated products are checked through their route-owned product surface.
-	// Expert may carry one exact canonical forced tool (validated above), while
-	// Bot remains authoritative for the resolved agent. The same remote-product
-	// permission check therefore applies to either valid boundary.
-	if isRemoteProductTool(in.Tool) {
-		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
-			return nil, err
+	if in.Surface == QuerySurfaceChat {
+		if in.Mode == "instant" && !containsAgentTool(permissions.AllowedTools, "ChatAgent") {
+			return nil, permissionFailure(permissions, "ChatAgent")
+		}
+		if in.Mode == "expert" {
+			if len(permissions.AllowedTools) == 0 {
+				return nil, permissionFailure(permissions, "")
+			}
+			if in.Tool != "" && !containsAgentTool(permissions.AllowedTools, in.Tool) {
+				return nil, permissionFailure(permissions, in.Tool)
+			}
 		}
 	}
 	// 1. Web-owned alias -> Bot slug. Empty tool defaults to the chat agent.
-	// Expert deliberately ignores the picker value: the Bot router resolves the
-	// canonical slug, and a stale/unknown client-side tool must not steer it.
+	// Expert delegates agent choice to Bot unless its canonical forced selection
+	// has passed the server-owned effective allowlist above.
 	var slug string
 	if in.Mode != "expert" {
 		var ok bool
@@ -462,7 +476,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	}
 	interop := localInteropDecision("off")
-	var err error
 	if in.Mode != "expert" {
 		interop, err = ps.prepareInterop(ctx, username, slug, in.InteropMode, in.InteropTargets)
 		if err != nil {
@@ -517,13 +530,23 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	var botRunID, serverID, taskID, logStatus string
 	var expertProjection *BotRunProjection
 	if in.Mode == "expert" {
-		resp, meta, err := client.RouteQueryWithMeta(ctx, rxBot.RouteQueryRequest{
+		var forcedTool *string
+		if in.Tool != "" {
+			selected := in.Tool
+			forcedTool = &selected
+		}
+		routeRequest := rxBot.RouteQueryRequest{
 			UserQuery:   in.Query,
 			History:     parseHistory(in.History),
 			OBSFileList: obsPaths,
 			DialogueID:  dialogueID,
-			ForcedTool:  nil,
-		})
+			AllowedTools: append(
+				[]string(nil),
+				permissions.AllowedTools...,
+			),
+			ForcedTool: forcedTool,
+		}
+		resp, meta, err := client.RouteQueryWithMeta(ctx, routeRequest)
 		logBotResponseMeta(ctx, meta)
 		if err != nil {
 			return nil, err
@@ -1148,6 +1171,15 @@ func (ps *Service) QueryStream(
 		// an Expert turn into a streamed ChatAgent run (slug-gate invariant,
 		// query_expert_test.go).
 		return nil, fmt.Errorf("%w: expert mode", ErrStreamUnsupported)
+	}
+	// SSE is an Instant Chat surface, so it must enforce the same effective
+	// ChatAgent permission before any upload, dialogue lookup, or Bot stream.
+	permissions, err := ps.ResolveAgentPermissions(ctx, username)
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent permissions: %w", err)
+	}
+	if !containsAgentTool(permissions.AllowedTools, "ChatAgent") {
+		return nil, permissionFailure(permissions, "ChatAgent")
 	}
 	slug, ok := rxBot.SlugFor(in.Tool)
 	if !ok {

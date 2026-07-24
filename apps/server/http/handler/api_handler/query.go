@@ -33,6 +33,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusNotFound, "agent tool not found"
 	case errors.Is(err, api_service.ErrNoExecutableAgentTools):
 		return http.StatusNotFound, "no executable agent tools"
+	case errors.Is(err, api_service.ErrAgentToolsUnavailable):
+		return http.StatusServiceUnavailable, "agent tools temporarily unavailable"
 	case errors.Is(err, api_service.ErrExpertRouteContract):
 		return http.StatusBadGateway, "upstream routing contract failed"
 	case errors.Is(err, api_service.ErrUnknownTool):
@@ -228,17 +230,6 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	// refresh_id still travels in the multipart body.
 	in.Id, _ = strconv.ParseInt(ctx.Param("id"), 10, 64)
 	in.RefreshId, _ = strconv.ParseInt(ctx.DefaultPostForm("refresh_id", "0"), 10, 64)
-
-	// Chat retains its temporary compatibility gate after parsing its explicit
-	// tool. Dedicated product routes were already checked before reading the
-	// request body above.
-	if surface == api_service.QuerySurfaceChat && api_service.IsRemoteProductTool(in.Tool) {
-		if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), in.Tool); err != nil {
-			status, message := queryErrorStatus(err)
-			writeQueryError(ctx, status, message)
-			return
-		}
-	}
 
 	if form != nil {
 		files := form.File["files"]

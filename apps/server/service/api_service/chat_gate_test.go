@@ -281,7 +281,9 @@ func TestIsDedicatedAgentProductTool(t *testing.T) {
 	}
 }
 
-func TestCheckExpertRemoteProductsAllowedRequiresEveryProductFlag(t *testing.T) {
+// The deprecated helper is retained only while historical direct callers are
+// migrated. Query itself must never call this all-products policy.
+func TestDeprecatedCheckExpertRemoteProductsAllowedRequiresEveryProductFlag(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "expert@example.com", "admin", 5)
 	previous := rxBot.BotConfig
@@ -298,7 +300,7 @@ func TestCheckExpertRemoteProductsAllowedRequiresEveryProductFlag(t *testing.T) 
 	}
 }
 
-func TestCheckExpertRemoteProductsAllowedRequiresEveryGrant(t *testing.T) {
+func TestDeprecatedCheckExpertRemoteProductsAllowedRequiresEveryGrant(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "expert@example.com", "expert-role", 5)
 	seedRemoteProductPermission(t, gdb, "expert-role", "InSilicoResearchAgent", 1)
@@ -314,6 +316,42 @@ func TestCheckExpertRemoteProductsAllowedRequiresEveryGrant(t *testing.T) {
 	err := NewService().CheckExpertRemoteProductsAllowed(context.Background(), "expert@example.com")
 	if !errors.Is(err, ErrRemoteProductForbidden) {
 		t.Fatalf("Expert with one product grant missing = %v, want ErrRemoteProductForbidden", err)
+	}
+}
+
+func TestPermissionFailure(t *testing.T) {
+	tests := []struct {
+		name        string
+		permissions AgentPermissionResolution
+		requested   string
+		want        error
+	}{
+		{
+			name:        "requested canonical tool is not granted",
+			permissions: AgentPermissionResolution{GrantedTools: []string{"DataAgent"}},
+			requested:   "ChatAgent",
+			want:        ErrAgentToolForbidden,
+		},
+		{
+			name:      "no grants for autonomous routing",
+			requested: "",
+			want:      ErrNoExecutableAgentTools,
+		},
+		{
+			name: "granted tools are all unavailable",
+			permissions: AgentPermissionResolution{
+				GrantedTools: []string{"InSilicoResearchAgent"},
+				AllowedTools: []string{},
+			},
+			want: ErrAgentToolsUnavailable,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := permissionFailure(tc.permissions, tc.requested); !errors.Is(err, tc.want) {
+				t.Fatalf("permissionFailure(%#v, %q) = %v, want %v", tc.permissions, tc.requested, err, tc.want)
+			}
+		})
 	}
 }
 

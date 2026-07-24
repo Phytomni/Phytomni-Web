@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -47,15 +48,37 @@ func setupExpertTestDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("create users table: %v", err)
 	}
-	// Expert policy is deliberately authenticated and fail-closed. These
-	// synthetic callers represent the administrator fixture used by the
-	// existing allowed-path tests; production authorization still resolves the
-	// real JWT operator from the Web users table.
+	for _, statement := range []string{
+		`CREATE TABLE tool_names (id INTEGER PRIMARY KEY, tool_name TEXT NOT NULL)`,
+		`CREATE TABLE user_tool_names (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL, tool_id TEXT NOT NULL)`,
+	} {
+		if err := gdb.Exec(statement).Error; err != nil {
+			t.Fatalf("create permission table: %v", err)
+		}
+	}
+	// These synthetic callers represent administrator fixtures used by the
+	// shared blocking and streaming allowed-path tests; production authorization
+	// still resolves the real JWT operator from the Web users table.
 	for _, email := range []string{
 		"alice",
 		"dan",
 		"alice@x.com",
 		"task27-expert@example.com",
+		"alice@example.com",
+		"ready@example.com",
+		"broken@example.com",
+		"cancel@example.com",
+		"action@example.com",
+		"bob@example.com",
+		"eve@example.com",
+		"carol@example.com",
+		"compat@example.com",
+		"task27-stream@example.com",
+		"task27-error@example.com",
+		"gate@example.com",
+		"network@example.com",
+		"dan@example.com",
+		"erin@example.com",
 	} {
 		if err := gdb.Exec(`INSERT INTO users (email, code) VALUES (?, 'admin')`, email).Error; err != nil {
 			t.Fatalf("seed expert user %s: %v", email, err)
@@ -63,6 +86,23 @@ func setupExpertTestDB(t *testing.T) *gorm.DB {
 	}
 	db.Set("phytomni-server", gdb)
 	return gdb
+}
+
+func seedExpertPermissionUser(t *testing.T, gdb *gorm.DB, email, code string) {
+	t.Helper()
+	if err := gdb.Exec(`INSERT INTO users (email, code) VALUES (?, ?)`, email, code).Error; err != nil {
+		t.Fatalf("seed permission user %s: %v", email, err)
+	}
+}
+
+func seedExpertPermissionTool(t *testing.T, gdb *gorm.DB, code, tool string, id int) {
+	t.Helper()
+	if err := gdb.Exec(`INSERT INTO tool_names (id, tool_name) VALUES (?, ?)`, id, tool).Error; err != nil {
+		t.Fatalf("seed permission tool %s: %v", tool, err)
+	}
+	if err := gdb.Exec(`INSERT INTO user_tool_names (code, tool_id) VALUES (?, ?)`, code, id).Error; err != nil {
+		t.Fatalf("seed permission grant %s/%s: %v", code, tool, err)
+	}
 }
 
 // botRouter returns an httptest Bot that records the hit path and answers the
@@ -87,6 +127,83 @@ func botRouter(t *testing.T, hit *string) {
 		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
+}
+
+type queryPermissionEffects struct {
+	uploads           int
+	botCalls          int
+	dialogueQueries   int
+	persistenceWrites int
+}
+
+func observeQueryPermissionEffects(t *testing.T, gdb *gorm.DB) *queryPermissionEffects {
+	t.Helper()
+	effects := &queryPermissionEffects{}
+	const (
+		queryCallback  = "task13_observe_dialogue_resolution"
+		createCallback = "task13_observe_persistence_create"
+		updateCallback = "task13_observe_persistence_update"
+	)
+	if err := gdb.Callback().Query().Before("gorm:query").Register(queryCallback, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == "question_agent_logs" {
+			effects.dialogueQueries++
+		}
+	}); err != nil {
+		t.Fatalf("register dialogue callback: %v", err)
+	}
+	if err := gdb.Callback().Create().Before("gorm:create").Register(createCallback, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == "question_agent_logs" {
+			effects.persistenceWrites++
+		}
+	}); err != nil {
+		t.Fatalf("register create callback: %v", err)
+	}
+	if err := gdb.Callback().Update().Before("gorm:update").Register(updateCallback, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == "question_agent_logs" {
+			effects.persistenceWrites++
+		}
+	}); err != nil {
+		t.Fatalf("register update callback: %v", err)
+	}
+	return effects
+}
+
+func (effects *queryPermissionEffects) assertNone(t *testing.T) {
+	t.Helper()
+	if effects.uploads != 0 || effects.botCalls != 0 || effects.dialogueQueries != 0 || effects.persistenceWrites != 0 {
+		t.Fatalf("permission failure side effects = %+v, want all zero", effects)
+	}
+}
+
+func permissionRouteServer(t *testing.T, effects *queryPermissionEffects, captured *rxBot.RouteQueryRequest) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		effects.botCalls++
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/files":
+			effects.uploads++
+			_, _ = w.Write([]byte(`{"id":"file-task13","path":"obs://task13/file"}`))
+		case "/v1/query/route":
+			if captured != nil {
+				if err := json.NewDecoder(r.Body).Decode(captured); err != nil {
+					t.Errorf("decode route request: %v", err)
+				}
+			}
+			_, _ = w.Write([]byte(`{"id":"run-task13","run_id":"run-task13","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok","references":[]}}}`))
+		case "/v1/chat/completions":
+			_, _ = w.Write([]byte(`{"id":"chat-task13","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"formatted":{"answer":"ok"}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
 }
 
 // TestQuery_ExpertRoutesToRouteEndpoint is the slug-gate regression lock:
@@ -134,32 +251,302 @@ func TestQuery_ExpertDisabledReturns503Sentinel(t *testing.T) {
 	}
 }
 
-func TestQuery_ExpertRemotePolicyRejectsBeforeRoute(t *testing.T) {
-	setupExpertTestDB(t)
-	hits := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agent":"knowledge","status":"succeeded","result":{}}`))
-	}))
-	t.Cleanup(srv.Close)
-	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: false,
-	}
-	t.Cleanup(func() { rxBot.BotConfig = previous })
+func TestQuery_ExpertUsesServerOrderedAllowedTools(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seedExpertPermissionUser(t, gdb, "partial@example.com", "partial")
+	seedExpertPermissionTool(t, gdb, "partial", "AnalystAgent", 1)
+	seedExpertPermissionTool(t, gdb, "partial", "ChatAgent", 2)
+	seedExpertPermissionTool(t, gdb, "partial", "DataAgent", 3)
+	effects := &queryPermissionEffects{}
+	var captured rxBot.RouteQueryRequest
+	permissionRouteServer(t, effects, &captured)
 
-	// This locks the current pre-allowlist Expert policy: every remote product
-	// must be enabled before Bot routing, regardless of the canonical hint.
-	_, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "q", Tool: "InSilicoResearchAgent", Mode: "expert",
-	})
-	if !errors.Is(err, ErrRemoteProductDisabled) {
-		t.Fatalf("Expert remote policy error = %v, want ErrRemoteProductDisabled", err)
+	if _, err := NewService().Query(context.Background(), "partial@example.com", QueryInput{Query: "q", Mode: "expert"}); err != nil {
+		t.Fatalf("Query: %v", err)
 	}
-	if hits != 0 {
-		t.Fatalf("Expert policy must reject before RouteQueryWithMeta (hits=%d)", hits)
+	want := []string{"ChatAgent", "DataAgent", "AnalystAgent"}
+	if !reflect.DeepEqual(captured.AllowedTools, want) {
+		t.Fatalf("allowed tools = %#v, want %#v", captured.AllowedTools, want)
+	}
+	if captured.ForcedTool != nil {
+		t.Fatalf("autonomous Expert forced tool = %q, want nil", *captured.ForcedTool)
+	}
+}
+
+func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seedExpertPermissionUser(t, gdb, "forced@example.com", "forced")
+	seedExpertPermissionTool(t, gdb, "forced", "AnalystAgent", 1)
+	seedExpertPermissionTool(t, gdb, "forced", "ChatAgent", 2)
+	seedExpertPermissionTool(t, gdb, "forced", "DataAgent", 3)
+	effects := &queryPermissionEffects{}
+	var captured rxBot.RouteQueryRequest
+	permissionRouteServer(t, effects, &captured)
+
+	if _, err := NewService().Query(context.Background(), "forced@example.com", QueryInput{
+		Query: "q", Mode: "expert", Tool: "DataAgent",
+	}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	want := []string{"ChatAgent", "DataAgent", "AnalystAgent"}
+	if !reflect.DeepEqual(captured.AllowedTools, want) {
+		t.Fatalf("allowed tools = %#v, want %#v", captured.AllowedTools, want)
+	}
+	if captured.ForcedTool == nil || *captured.ForcedTool != "DataAgent" {
+		t.Fatalf("forced tool = %#v, want DataAgent", captured.ForcedTool)
+	}
+}
+
+func TestQuery_InstantAllowsEffectiveChatAgent(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seedExpertPermissionUser(t, gdb, "chat@example.com", "chat")
+	seedExpertPermissionTool(t, gdb, "chat", "ChatAgent", 1)
+	effects := &queryPermissionEffects{}
+	permissionRouteServer(t, effects, nil)
+
+	if _, err := NewService().Query(context.Background(), "chat@example.com", QueryInput{Query: "q", Mode: "instant"}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if effects.botCalls != 1 || effects.uploads != 0 {
+		t.Fatalf("instant Chat effects = %+v, want one chat call and no upload", effects)
+	}
+}
+
+func TestQuery_ExpertAllowsOneRemoteProductGrant(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seedExpertPermissionUser(t, gdb, "research@example.com", "research-role")
+	seedExpertPermissionTool(t, gdb, "research-role", "InSilicoResearchAgent", 1)
+	effects := &queryPermissionEffects{}
+	var captured rxBot.RouteQueryRequest
+	permissionRouteServer(t, effects, &captured)
+	rxBot.BotConfig.DesignEnabled = false
+	rxBot.BotConfig.NetworkEnabled = false
+
+	if _, err := NewService().Query(context.Background(), "research@example.com", QueryInput{Query: "q", Mode: "expert"}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if !reflect.DeepEqual(captured.AllowedTools, []string{"InSilicoResearchAgent"}) {
+		t.Fatalf("allowed tools = %#v, want only InSilicoResearchAgent", captured.AllowedTools)
+	}
+}
+
+func TestQuery_ExpertAdminUsesEveryCurrentlyAvailableTool(t *testing.T) {
+	setupExpertTestDB(t)
+	effects := &queryPermissionEffects{}
+	var captured rxBot.RouteQueryRequest
+	permissionRouteServer(t, effects, &captured)
+	rxBot.BotConfig.NetworkEnabled = false
+
+	if _, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	want := make([]string, 0, len(rxBot.CanonicalAgentDisplayOrder)-1)
+	for _, tool := range rxBot.CanonicalAgentDisplayOrder {
+		if tool != "GeneNetworkAgent" {
+			want = append(want, tool)
+		}
+	}
+	if !reflect.DeepEqual(captured.AllowedTools, want) {
+		t.Fatalf("admin allowed tools = %#v, want %#v", captured.AllowedTools, want)
+	}
+}
+
+func TestQuery_PermissionFailuresHaveNoSideEffects(t *testing.T) {
+	tests := []struct {
+		name      string
+		username  string
+		mode      string
+		tool      string
+		setup     func(t *testing.T, gdb *gorm.DB)
+		configure func()
+		assertErr func(t *testing.T, err error)
+	}{
+		{
+			name:     "instant without ChatAgent",
+			username: "no-chat@example.com",
+			mode:     "instant",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "no-chat@example.com", "no-chat")
+				seedExpertPermissionTool(t, gdb, "no-chat", "DataAgent", 1)
+			},
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentToolForbidden) {
+					t.Fatalf("error = %v, want ErrAgentToolForbidden", err)
+				}
+			},
+		},
+		{
+			name:     "forced canonical but ungranted",
+			username: "ungranted@example.com",
+			mode:     "expert",
+			tool:     "AnalystAgent",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "ungranted@example.com", "ungranted")
+				seedExpertPermissionTool(t, gdb, "ungranted", "DataAgent", 1)
+			},
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentToolForbidden) {
+					t.Fatalf("error = %v, want ErrAgentToolForbidden", err)
+				}
+			},
+		},
+		{
+			name:     "forced granted but disabled",
+			username: "disabled-forced@example.com",
+			mode:     "expert",
+			tool:     "InSilicoResearchAgent",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "disabled-forced@example.com", "disabled-forced")
+				seedExpertPermissionTool(t, gdb, "disabled-forced", "InSilicoResearchAgent", 1)
+			},
+			configure: func() { rxBot.BotConfig.ResearchEnabled = false },
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentToolsUnavailable) {
+					t.Fatalf("error = %v, want ErrAgentToolsUnavailable", err)
+				}
+			},
+		},
+		{
+			name:     "no grants",
+			username: "empty@example.com",
+			mode:     "expert",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "empty@example.com", "empty")
+			},
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrNoExecutableAgentTools) {
+					t.Fatalf("error = %v, want ErrNoExecutableAgentTools", err)
+				}
+			},
+		},
+		{
+			name:     "granted but all unavailable",
+			username: "disabled@example.com",
+			mode:     "expert",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "disabled@example.com", "disabled")
+				seedExpertPermissionTool(t, gdb, "disabled", "InSilicoResearchAgent", 1)
+			},
+			configure: func() { rxBot.BotConfig.ResearchEnabled = false },
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentToolsUnavailable) {
+					t.Fatalf("error = %v, want ErrAgentToolsUnavailable", err)
+				}
+			},
+		},
+		{
+			name:     "missing user",
+			username: "missing@example.com",
+			mode:     "expert",
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentPermissionUserNotFound) || !strings.Contains(err.Error(), "resolve agent permissions") {
+					t.Fatalf("error = %v, want wrapped ErrAgentPermissionUserNotFound", err)
+				}
+			},
+		},
+		{
+			name:     "permission database failure",
+			username: "db-failure@example.com",
+			mode:     "expert",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "db-failure@example.com", "db-failure")
+				if err := gdb.Exec(`DROP TABLE user_tool_names`).Error; err != nil {
+					t.Fatalf("drop permission table: %v", err)
+				}
+			},
+			assertErr: func(t *testing.T, err error) {
+				if err == nil || errors.Is(err, ErrAgentPermissionUserNotFound) || !strings.Contains(err.Error(), "resolve agent permissions") {
+					t.Fatalf("error = %v, want wrapped permission database failure", err)
+				}
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			if tc.setup != nil {
+				tc.setup(t, gdb)
+			}
+			effects := &queryPermissionEffects{}
+			permissionRouteServer(t, effects, nil)
+			if tc.configure != nil {
+				tc.configure()
+			}
+			observeQueryPermissionEffects(t, gdb)
+
+			_, err := NewService().Query(context.Background(), tc.username, QueryInput{
+				Query: "permission check", Id: 77, Mode: tc.mode, Tool: tc.tool,
+				Files: []QueryFile{{Filename: "permission.txt", Data: []byte("x")}},
+			})
+			tc.assertErr(t, err)
+			effects.assertNone(t)
+		})
+	}
+}
+
+func TestQueryStream_PermissionFailuresHaveNoSideEffects(t *testing.T) {
+	tests := []struct {
+		name      string
+		username  string
+		setup     func(t *testing.T, gdb *gorm.DB)
+		assertErr func(t *testing.T, err error)
+	}{
+		{
+			name:     "instant without ChatAgent",
+			username: "stream-no-chat@example.com",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "stream-no-chat@example.com", "stream-no-chat")
+				seedExpertPermissionTool(t, gdb, "stream-no-chat", "DataAgent", 1)
+			},
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentToolForbidden) {
+					t.Fatalf("error = %v, want ErrAgentToolForbidden", err)
+				}
+			},
+		},
+		{
+			name:     "missing user",
+			username: "stream-missing@example.com",
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentPermissionUserNotFound) || !strings.Contains(err.Error(), "resolve agent permissions") {
+					t.Fatalf("error = %v, want wrapped ErrAgentPermissionUserNotFound", err)
+				}
+			},
+		},
+		{
+			name:     "permission database failure",
+			username: "stream-db-failure@example.com",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "stream-db-failure@example.com", "stream-db-failure")
+				if err := gdb.Exec(`DROP TABLE user_tool_names`).Error; err != nil {
+					t.Fatalf("drop permission table: %v", err)
+				}
+			},
+			assertErr: func(t *testing.T, err error) {
+				if err == nil || errors.Is(err, ErrAgentPermissionUserNotFound) || !strings.Contains(err.Error(), "resolve agent permissions") {
+					t.Fatalf("error = %v, want wrapped permission database failure", err)
+				}
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			if tc.setup != nil {
+				tc.setup(t, gdb)
+			}
+			effects := &queryPermissionEffects{}
+			permissionRouteServer(t, effects, nil)
+			rxBot.BotConfig.StreamEnabled = true
+			observeQueryPermissionEffects(t, gdb)
+
+			_, err := NewService().QueryStream(context.Background(), tc.username, QueryInput{
+				Query: "permission check", Id: 77, Mode: "instant",
+				Files: []QueryFile{{Filename: "permission.txt", Data: []byte("x")}},
+			}, nil, nil)
+			tc.assertErr(t, err)
+			effects.assertNone(t)
+		})
 	}
 }
 

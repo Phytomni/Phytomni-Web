@@ -19,6 +19,10 @@ var ErrAgentToolForbidden = errors.New("agent tool forbidden")
 
 var ErrNoExecutableAgentTools = errors.New("no executable agent tools")
 
+var ErrAgentToolsUnavailable = errors.New(
+	"granted agent tools are unavailable",
+)
+
 var ErrExpertRouteContract = errors.New("expert route contract failed")
 
 // ChatRoutingDecision is the normalized Chat routing contract. Task 13 owns
@@ -200,12 +204,22 @@ func containsAgentTool(tools []string, target string) bool {
 	return false
 }
 
-// CheckExpertRemoteProductsAllowed is the fail-closed Expert pre-dispatch
-// policy. The router may select any canonical remote product, and its choice
-// is not known until after RouteQueryWithMeta has already reached Bot. Require
-// all three product flags and all three authenticated grants before that
-// request; administrators satisfy each grant through the same server-side
-// role check used by explicit product routes.
+func permissionFailure(permissions AgentPermissionResolution, requested string) error {
+	if requested != "" && !containsAgentTool(permissions.GrantedTools, requested) {
+		return ErrAgentToolForbidden
+	}
+	if len(permissions.GrantedTools) == 0 {
+		return ErrNoExecutableAgentTools
+	}
+	return ErrAgentToolsUnavailable
+}
+
+// CheckExpertRemoteProductsAllowed is retained only as a deprecated
+// compatibility wrapper for direct callers. Query no longer uses this
+// all-products policy; Chat Expert routing derives its constraints from the
+// effective resolver result instead.
+//
+// Deprecated: migrate callers to ResolveAgentPermissions.
 func (ps *Service) CheckExpertRemoteProductsAllowed(ctx context.Context, email string) error {
 	var resolution AgentPermissionResolution
 	resolved := false

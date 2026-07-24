@@ -52,6 +52,12 @@ func TestQueryErrorStatus(t *testing.T) {
 			wantMsg:    "no executable agent tools",
 		},
 		{
+			name:       "granted agent tools unavailable -> 503",
+			err:        api_service.ErrAgentToolsUnavailable,
+			wantStatus: http.StatusServiceUnavailable,
+			wantMsg:    "agent tools temporarily unavailable",
+		},
+		{
 			name:       "expert route contract -> 502",
 			err:        api_service.ErrExpertRouteContract,
 			wantStatus: http.StatusBadGateway,
