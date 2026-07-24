@@ -3,6 +3,7 @@ package api_handler
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,21 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
+
+type trackingReadCloser struct {
+	reader io.Reader
+	reads  int
+	bytes  int
+}
+
+func (r *trackingReadCloser) Read(p []byte) (int, error) {
+	r.reads++
+	n, err := r.reader.Read(p)
+	r.bytes += n
+	return n, err
+}
+
+func (r *trackingReadCloser) Close() error { return nil }
 
 func setupRemoteProductHandlerDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -89,6 +105,93 @@ func newRemoteProductHandlerRequest(t *testing.T, tool string) (*gin.Context, *h
 	c.Params = gin.Params{{Key: "tool", Value: tool}}
 	i18n.Localize()(c)
 	return c, w
+}
+
+func newAttachmentTrackingRequest(t *testing.T, tool string) (*gin.Context, *httptest.ResponseRecorder, *trackingReadCloser) {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField("query", "remote query"); err != nil {
+		t.Fatalf("write query: %v", err)
+	}
+	file, err := mw.CreateFormFile("files", "attachment.txt")
+	if err != nil {
+		t.Fatalf("create attachment: %v", err)
+	}
+	if _, err := file.Write([]byte("must not be parsed")); err != nil {
+		t.Fatalf("write attachment: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close form: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	tracked := &trackingReadCloser{reader: bytes.NewReader(body.Bytes())}
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/agent-products/"+tool+"/runs", nil)
+	c.Request.Body = tracked
+	c.Request.ContentLength = int64(body.Len())
+	c.Request.Header.Set("Content-Type", mw.FormDataContentType())
+	c.Params = gin.Params{{Key: "tool", Value: tool}}
+	i18n.Localize()(c)
+	return c, w, tracked
+}
+
+func TestAgentProductRunRejectsBeforeReadingAttachmentOrBot(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		email    string
+		code     string
+		config   *rxBot.Config
+		wantCode int
+	}{
+		{
+			name:     "disabled",
+			email:    "remote@example.com",
+			code:     "admin",
+			config:   &rxBot.Config{ProxyEnabled: true},
+			wantCode: http.StatusServiceUnavailable,
+		},
+		{
+			name:     "permission denied",
+			email:    "denied@example.com",
+			code:     "ordinary",
+			config:   &rxBot.Config{ProxyEnabled: true, ResearchEnabled: true},
+			wantCode: http.StatusNotFound,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupRemoteProductHandlerDB(t)
+			if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, tc.email, tc.code, 5).Error; err != nil {
+				t.Fatalf("seed user: %v", err)
+			}
+			previousConfig := rxBot.BotConfig
+			hits := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
+			t.Cleanup(srv.Close)
+			tc.config.BaseURL = srv.URL
+			rxBot.BotConfig = tc.config
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+			previousQuota := viper.Get("chatlimit.enforce")
+			viper.Set("chatlimit.enforce", false)
+			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+			c, w, tracked := newAttachmentTrackingRequest(t, "InSilicoResearchAgent")
+			c.Set("username", tc.email)
+			NewHandler().AgentProductRun(c)
+
+			if w.Code != tc.wantCode {
+				t.Fatalf("status = %d, body = %s; want %d", w.Code, w.Body.String(), tc.wantCode)
+			}
+			if tracked.reads != 0 || tracked.bytes != 0 {
+				t.Fatalf("rejected request read %d time(s), %d byte(s); want zero", tracked.reads, tracked.bytes)
+			}
+			if hits != 0 {
+				t.Fatalf("rejected request reached Bot %d time(s)", hits)
+			}
+		})
+	}
 }
 
 func TestAgentProductRunFlagOffReturns503BeforeBot(t *testing.T) {

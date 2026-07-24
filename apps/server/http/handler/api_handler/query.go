@@ -157,6 +157,17 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 			return
 		}
 	}
+	// A dedicated product's canonical tool is validated by AgentProductRun and
+	// owned by the route, so reject disabled or ungranted products before any
+	// multipart/body operation. Chat must wait until it has parsed its explicit
+	// compatibility tool below.
+	if surface == api_service.QuerySurfaceAgentProduct {
+		if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), routeTool); err != nil {
+			status, message := queryErrorStatus(err)
+			writeQueryError(ctx, status, message)
+			return
+		}
+	}
 
 	_, totalBytes, _ := rxBot.UploadLimits()
 	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, totalBytes)
@@ -200,11 +211,10 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	in.Id, _ = strconv.ParseInt(ctx.Param("id"), 10, 64)
 	in.RefreshId, _ = strconv.ParseInt(ctx.DefaultPostForm("refresh_id", "0"), 10, 64)
 
-	// Product permissions are checked after parsing the explicit tool/mode but
-	// before opening uploads or dispatching to QueryStream/Query. This keeps the
-	// browser convenience guard and the Go authorization boundary aligned while
-	// preserving the existing body-size and quota checks above.
-	if api_service.IsRemoteProductTool(in.Tool) {
+	// Chat retains its temporary compatibility gate after parsing its explicit
+	// tool. Dedicated product routes were already checked before reading the
+	// request body above.
+	if surface == api_service.QuerySurfaceChat && api_service.IsRemoteProductTool(in.Tool) {
 		if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), in.Tool); err != nil {
 			status, message := queryErrorStatus(err)
 			writeQueryError(ctx, status, message)
