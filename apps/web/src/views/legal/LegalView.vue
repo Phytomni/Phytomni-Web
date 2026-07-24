@@ -68,14 +68,15 @@ const draftBanner = computed(() => t("legal.draftBanner"));
 <style lang="scss" scoped>
 .legal-page {
   /* App.vue locks html/body/#app to overflow:hidden; this page is the scroll root. */
-  height: 100vh;
-  height: 100dvh;
+  height: 100%;
+  min-height: 100dvh;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  padding: 24px 20px 24px;
+  padding: 24px 20px 0;
+  padding-bottom: calc(var(--phy-space-64) + var(--phy-space-24));
   background: var(--el-bg-color-page, #f5f7fa);
   color: var(--el-text-color-primary, #303133);
   font-family: var(--phy-font-shell);

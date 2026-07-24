@@ -219,9 +219,10 @@ onUnmounted(() => {
 <style scoped>
 .help-page {
   box-sizing: border-box;
-  height: 100vh;
-  height: 100dvh;
+  height: 100%;
+  min-height: 100dvh;
   overflow-y: auto;
+  padding-bottom: calc(var(--phy-space-64) + var(--phy-space-24));
   background: var(--phy-color-bg-page);
   color: var(--phy-color-text);
   overscroll-behavior-y: contain;

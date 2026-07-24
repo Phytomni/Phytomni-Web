@@ -3,6 +3,8 @@ import { config, enableAutoUnmount, mount } from "@vue/test-utils";
 import { defineComponent, nextTick } from "vue";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
@@ -26,6 +28,11 @@ vi.mock("vue-element-plus-x", () => ({
 }));
 
 import HelpPage from "@/views/help/HelpView.vue";
+
+const SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/help/HelpView.vue"),
+  "utf8"
+);
 
 const i18n = createI18n({
   legacy: false,
@@ -93,6 +100,13 @@ describe("Help product document", () => {
       enUS.help.doc.limitations.body,
     ]);
     expect(wrapper.findAll('[data-surface="document"]')).toHaveLength(5);
+  });
+
+  it("keeps the Help scroll root and Footer clearance explicit", () => {
+    expect(SOURCE).toContain('data-scroll-root="help"');
+    expect(SOURCE).toMatch(
+      /\.help-page\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*100dvh;[\s\S]*overflow-y:\s*auto;[\s\S]*padding-bottom:\s*calc\(var\(--phy-space-64\)\s*\+\s*var\(--phy-space-24\)\);/
+    );
   });
 
   it("keeps TOC targets and moves focus after keyboard activation", async () => {

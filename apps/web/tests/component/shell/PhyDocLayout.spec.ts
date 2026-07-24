@@ -26,8 +26,10 @@ describe("PhyDocLayout", () => {
     expect(wrapper.find("[data-test=body]").exists()).toBe(true);
   });
 
-  it("owns a fixed narrative measure without becoming a scroll container", () => {
-    expect(SOURCE).toMatch(/\.phy-doc-body\s*\{[\s\S]*max-width:\s*760px/);
+  it("owns a fluid readable measure without becoming a scroll container", () => {
+    expect(SOURCE).toMatch(
+      /\.phy-doc-body\s*\{[\s\S]*width:\s*min\(100%,\s*var\(--phy-layout-reading-max-width\)\);[\s\S]*max-width:\s*var\(--phy-layout-reading-max-width\)/
+    );
     expect(SOURCE).not.toMatch(/\b(?:min-)?height\s*:/);
     expect(SOURCE).not.toMatch(/\boverflow(?:-x|-y)?\s*:/);
   });

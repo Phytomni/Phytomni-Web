@@ -102,7 +102,7 @@ describe("LegalPage", () => {
 
   it("keeps the legal scroll and sans-serif ownership explicit in the view", () => {
     expect(SOURCE).toMatch(
-      /\.legal-page\s*\{[\s\S]*height:\s*100vh;[\s\S]*overflow-y:\s*auto;/
+      /\.legal-page\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*100dvh;[\s\S]*overflow-y:\s*auto;[\s\S]*padding-bottom:\s*calc\(var\(--phy-space-64\)\s*\+\s*var\(--phy-space-24\)\);/
     );
     expect(SOURCE).toContain('data-scroll-root="legal"');
     expect(SOURCE).toContain("font-family: var(--phy-font-shell)");
