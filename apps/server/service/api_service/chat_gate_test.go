@@ -3,6 +3,8 @@ package api_service
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"phytomni-server/db"
@@ -366,5 +368,46 @@ func TestQueryRemoteProductEmptyModeStillChecksPermission(t *testing.T) {
 	})
 	if !errors.Is(err, ErrRemoteProductForbidden) {
 		t.Fatalf("empty-mode role-denied Query error = %v, want ErrRemoteProductForbidden", err)
+	}
+}
+
+func TestQueryRemoteProductRejectsNoncanonicalSurfaceBeforeBot(t *testing.T) {
+	previous := rxBot.BotConfig
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		hits++
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		ProxyEnabled:    true,
+		ResearchEnabled: true,
+		BaseURL:         srv.URL,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	for _, tc := range []struct {
+		name    string
+		surface QuerySurface
+		tool    string
+	}{
+		{name: "agent surface rejects legacy alias", surface: QuerySurfaceAgentProduct, tool: "research"},
+		{name: "unknown surface rejects canonical tool", surface: QuerySurface(99), tool: "InSilicoResearchAgent"},
+		{name: "agent surface rejects chat tool", surface: QuerySurfaceAgentProduct, tool: "ChatAgent"},
+		{name: "unknown surface rejects chat tool", surface: QuerySurface(99), tool: "ChatAgent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewService().Query(context.Background(), "remote@example.com", QueryInput{
+				Query:   "remote",
+				Tool:    tc.tool,
+				Mode:    "instant",
+				Surface: tc.surface,
+			})
+			if !errors.Is(err, ErrRemoteProductForbidden) {
+				t.Fatalf("Query error = %v, want ErrRemoteProductForbidden", err)
+			}
+		})
+	}
+	if hits != 0 {
+		t.Fatalf("noncanonical remote input reached Bot %d time(s)", hits)
 	}
 }

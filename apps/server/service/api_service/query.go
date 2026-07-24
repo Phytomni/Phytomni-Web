@@ -417,6 +417,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
+	// QuerySurface is exported, so no non-Chat caller may select an arbitrary
+	// tool. The only non-Chat surface is the route-owned dedicated product run.
+	if in.Surface != QuerySurfaceChat &&
+		(in.Surface != QuerySurfaceAgentProduct || !IsDedicatedAgentProductTool(in.Tool)) {
+		return nil, ErrRemoteProductForbidden
+	}
 	// Expert mode is dark-launched: refuse early (no Bot call) when disabled.
 	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
 		return nil, ErrExpertDisabled
@@ -429,12 +435,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, err
 		}
 	}
-	// Direct remote runs are owned by the dedicated product surface. The Chat
-	// branch is temporary compatibility for existing product pages and is removed
-	// in Task 12 after their migration is verified.
-	directRemoteProduct := in.Surface == QuerySurfaceAgentProduct && IsDedicatedAgentProductTool(in.Tool)
-	legacyRemoteProduct := in.Surface == QuerySurfaceChat && isRemoteProductTool(in.Tool)
-	if directRemoteProduct || legacyRemoteProduct {
+	// Remote products are accepted only on their authenticated HTTP surfaces.
+	// The Chat branch is temporary compatibility for existing product pages and
+	// is removed in Task 12 after their migration is verified.
+	if isRemoteProductTool(in.Tool) {
 		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
 			return nil, err
 		}

@@ -11,6 +11,8 @@ import (
 	"phytomni-server/common/i18n"
 	"phytomni-server/db"
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
+	"phytomni-server/service/api_service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -186,32 +188,66 @@ func TestAgentProductRunUnknownToolReturns400BeforeBodyOrBot(t *testing.T) {
 }
 
 func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
-	gdb := setupRemoteProductHandlerDB(t)
-	if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
-	previousConfig := rxBot.BotConfig
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["task-research"],"result":{}}`))
-	}))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
-	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
-	previousQuota := viper.Get("chatlimit.enforce")
-	viper.Set("chatlimit.enforce", false)
-	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+	for _, tc := range []struct {
+		tool string
+		slug string
+	}{
+		{tool: "InSilicoResearchAgent", slug: "research"},
+		{tool: "DigitalDesignAgent", slug: "design"},
+		{tool: "GeneNetworkAgent", slug: "network"},
+	} {
+		t.Run(tc.slug, func(t *testing.T) {
+			gdb := setupRemoteProductHandlerDB(t)
+			if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
+				t.Fatalf("seed user: %v", err)
+			}
+			previousConfig := rxBot.BotConfig
+			var gotPath string
+			runID := "run-" + tc.slug
+			taskID := "task-" + tc.slug
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":"` + runID + `","object":"agent.run","agent":"` + tc.slug + `","status":"running","task_ids":["` + taskID + `"],"result":{}}`))
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+			previousQuota := viper.Get("chatlimit.enforce")
+			viper.Set("chatlimit.enforce", false)
+			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
 
-	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent")
-	c.Set("username", "remote@example.com")
-	NewHandler().AgentProductRun(c)
+			c, w := newRemoteProductHandlerRequest(t, tc.tool)
+			captured := queryInputForSurface(c, api_service.QuerySurfaceAgentProduct, tc.tool)
+			if captured.Surface != api_service.QuerySurfaceAgentProduct || captured.Tool != tc.tool || captured.Mode != "instant" {
+				t.Fatalf("route-owned input = %#v; want product surface, %q, instant", captured, tc.tool)
+			}
+			c.Set("username", "remote@example.com")
+			NewHandler().AgentProductRun(c)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
-	}
-	if gotPath != "/v1/agents/research/runs" {
-		t.Fatalf("Bot path = %q, want dedicated research run", gotPath)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+			}
+			if gotPath != "/v1/agents/"+tc.slug+"/runs" {
+				t.Fatalf("Bot path = %q, want dedicated %s run", gotPath, tc.slug)
+			}
+			var response struct {
+				Code int                   `json:"code"`
+				Data api_service.QueryData `json:"data"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response %s: %v", w.Body.String(), err)
+			}
+			if response.Code != http.StatusOK || response.Data.DialogueId == "" || response.Data.BotRunID != runID || response.Data.TaskId != taskID {
+				t.Fatalf("response identity = %#v", response)
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.First(&row).Error; err != nil {
+				t.Fatalf("load persisted row: %v", err)
+			}
+			if row.DialogueId != response.Data.DialogueId || row.BotRunId != runID || row.TaskId != taskID || row.ToolName != tc.tool || row.Mode != "instant" {
+				t.Fatalf("persisted row = %#v", row)
+			}
+		})
 	}
 }

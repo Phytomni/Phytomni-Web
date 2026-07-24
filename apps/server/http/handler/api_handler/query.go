@@ -126,6 +126,24 @@ func (ph *Handler) AgentProductRun(ctx *gin.Context) {
 	ph.queryForSurface(ctx, api_service.QuerySurfaceAgentProduct, tool)
 }
 
+// queryInputForSurface makes the authenticated route the owner of product tool
+// and mode selection. Keeping that rule in one parser makes it independently
+// testable without exposing a caller-controlled service surface.
+func queryInputForSurface(ctx *gin.Context, surface api_service.QuerySurface, routeTool string) api_service.QueryInput {
+	in := api_service.QueryInput{
+		Query:   ctx.PostForm("query"),
+		Tool:    ctx.PostForm("tool"),
+		History: ctx.DefaultPostForm("history", "[]"),
+		Mode:    ctx.DefaultPostForm("mode", "instant"),
+		Surface: surface,
+	}
+	if surface == api_service.QuerySurfaceAgentProduct {
+		in.Tool = routeTool
+		in.Mode = "instant"
+	}
+	return in
+}
+
 func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySurface, routeTool string) {
 	name, _ := ctx.Get("username")
 
@@ -156,17 +174,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 	}
 
-	in := api_service.QueryInput{
-		Query:   ctx.PostForm("query"),
-		Tool:    ctx.PostForm("tool"),
-		History: ctx.DefaultPostForm("history", "[]"),
-		Mode:    ctx.DefaultPostForm("mode", "instant"),
-		Surface: surface,
-	}
-	if surface == api_service.QuerySurfaceAgentProduct {
-		in.Tool = routeTool
-		in.Mode = "instant"
-	}
+	in := queryInputForSurface(ctx, surface, routeTool)
 	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
 	// Bound this caller-controlled label before it can reach service errors or
 	// request logs. The only accepted values remain off|auto|required; an
