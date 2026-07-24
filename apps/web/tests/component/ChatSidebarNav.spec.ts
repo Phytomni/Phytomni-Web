@@ -203,6 +203,33 @@ describe("ChatSidebarNav", () => {
     wrapper.unmount();
   });
 
+  it("closes disclosure when resizing from 1280 into the compact range", async () => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "true");
+    setViewport(1280, 768);
+    const wrapper = mountChatSidebarWithExistingStubs();
+    await nextTick();
+
+    await wrapper
+      .get('[data-test="sidebar-nav-explore-agent"]')
+      .trigger("click");
+    expect(
+      wrapper.find('[data-testid="chat-explore-agents-list"]').exists()
+    ).toBe(true);
+
+    setViewport(1279, 768);
+    vi.advanceTimersByTime(100);
+    await nextTick();
+
+    expect(
+      wrapper.find('[data-testid="chat-explore-agents-list"]').exists()
+    ).toBe(false);
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).toContain(
+      "is-collapsed"
+    );
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("true");
+    wrapper.unmount();
+  });
+
   it("renders expanded labels and compactly hides them", () => {
     const expanded = mountNav();
     expect(expanded.text()).toContain("t:chat.newChat");

@@ -32,7 +32,10 @@ describe("Keyboard interaction contract", () => {
     expect(MAIN_CSS).toContain(":focus-visible");
     expect(MAIN_CSS).toContain("var(--phy-color-focus)");
     expect(SIDEBAR).toContain("<PhyAdaptiveSidebar");
-    expect(SIDEBAR).toContain('@close="closeDrawer"');
+    expect(SIDEBAR).toContain('@close="handleDrawerClose"');
+    expect(SIDEBAR).toMatch(
+      /const handleDrawerClose = \(\) => \{[\s\S]*?closeAgentDisclosure\(\);[\s\S]*?closeDrawer\(\);/
+    );
     expect(SIDEBAR).not.toMatch(/outline:\s*(?:none|0|unset)\b/);
     expect(PICKER).toContain(".picker-combobox:focus-visible");
     expect(PICKER).not.toMatch(/outline:\s*(?:none|0|unset)\b/);

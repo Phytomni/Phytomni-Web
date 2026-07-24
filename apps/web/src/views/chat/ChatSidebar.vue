@@ -246,6 +246,7 @@ const isCompactDisclosureViewport = () =>
   typeof window !== "undefined" &&
   window.innerWidth >= SIDEBAR_MOBILE_BREAKPOINT &&
   window.innerWidth < SIDEBAR_COMPACT_BREAKPOINT;
+let wasCompactDisclosureViewport = isCompactDisclosureViewport();
 
 const renderedSidebarCollapsed = computed(() => {
   const base = props.effectiveCollapsed ?? sidebarCollapsed.value;
@@ -316,10 +317,12 @@ const handleButtonClick = (buttonType: string, action: () => void) => {
   action();
 };
 
-const clearDisclosureOutsideCompactViewport = () => {
-  if (!isCompactDisclosureViewport()) {
+const handleDisclosureViewportChange = () => {
+  const isCompactViewport = isCompactDisclosureViewport();
+  if (isCompactViewport !== wasCompactDisclosureViewport) {
     closeAgentDisclosure();
   }
+  wasCompactDisclosureViewport = isCompactViewport;
 };
 
 watch(isMobile, closeAgentDisclosure);
@@ -330,11 +333,12 @@ watch(drawerOpen, (isOpen) => {
 });
 
 onMounted(() => {
-  window.addEventListener("resize", clearDisclosureOutsideCompactViewport);
+  wasCompactDisclosureViewport = isCompactDisclosureViewport();
+  window.addEventListener("resize", handleDisclosureViewportChange);
 });
 
 onUnmounted(() => {
-  window.removeEventListener("resize", clearDisclosureOutsideCompactViewport);
+  window.removeEventListener("resize", handleDisclosureViewportChange);
 });
 
 // Expand/collapse state for the 4 time groups
