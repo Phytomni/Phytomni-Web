@@ -267,6 +267,14 @@ onMounted(() => {
     :deep(.phy-table-frame__pagination) {
       justify-content: flex-start;
     }
+
+    :deep(.el-pagination) {
+      flex-wrap: wrap;
+    }
+
+    :deep(.el-pagination__jump) {
+      display: none;
+    }
   }
 }
 </style>

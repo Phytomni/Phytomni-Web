@@ -492,6 +492,10 @@ onMounted(() => {
 
 .admin-management-workspace {
   min-width: 0;
+
+  :deep(.el-watermark) {
+    height: 100%;
+  }
 }
 
 @container (max-width: 720px) {
@@ -502,6 +506,10 @@ onMounted(() => {
 
     :deep(.el-pagination__jump) {
       display: none;
+    }
+
+    :deep(.el-pagination) {
+      flex-wrap: wrap;
     }
   }
 }

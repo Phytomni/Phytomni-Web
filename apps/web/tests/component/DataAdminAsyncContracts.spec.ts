@@ -76,6 +76,9 @@ describe("data and admin async-owner contracts", () => {
     expect(adminSources.adminManagement).toContain("PhyWorkspaceShell");
     expect(adminSources.adminManagement).toContain("PhyTableFrame");
     expect(adminSources.adminManagement).toContain("el-pagination");
+    expect(adminSources.adminManagement).toContain(".el-pagination__jump");
+    expect(adminSources.adminManagement).toContain("flex-wrap: wrap");
+    expect(adminSources.adminManagement).toContain(".el-watermark");
     expect(adminSources.globalConfig).toContain("PhyWorkspaceShell");
     expect(adminSources.globalConfig).toContain("PhyTableFrame");
     expect(adminSources.logList).toContain("PhyWorkspaceShell");

@@ -299,5 +299,6 @@ describe("Task Manager workspace", () => {
     );
     expect(source).toContain("overflow-x: auto");
     expect(source).toContain("@container (max-width: 720px)");
+    expect(source).toContain(".el-pagination__jump");
   });
 });
