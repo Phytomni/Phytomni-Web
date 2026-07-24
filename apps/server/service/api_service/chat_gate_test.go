@@ -281,44 +281,6 @@ func TestIsDedicatedAgentProductTool(t *testing.T) {
 	}
 }
 
-// The deprecated helper is retained only while historical direct callers are
-// migrated. Query itself must never call this all-products policy.
-func TestDeprecatedCheckExpertRemoteProductsAllowedRequiresEveryProductFlag(t *testing.T) {
-	gdb := setupChatGateDB(t)
-	seedChatGateUser(t, gdb, "expert@example.com", "admin", 5)
-	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{
-		ResearchEnabled: true,
-		DesignEnabled:   true,
-		NetworkEnabled:  false,
-	}
-	t.Cleanup(func() { rxBot.BotConfig = previous })
-
-	err := NewService().CheckExpertRemoteProductsAllowed(context.Background(), "expert@example.com")
-	if !errors.Is(err, ErrRemoteProductDisabled) {
-		t.Fatalf("Expert with one product flag off = %v, want ErrRemoteProductDisabled", err)
-	}
-}
-
-func TestDeprecatedCheckExpertRemoteProductsAllowedRequiresEveryGrant(t *testing.T) {
-	gdb := setupChatGateDB(t)
-	seedChatGateUser(t, gdb, "expert@example.com", "expert-role", 5)
-	seedRemoteProductPermission(t, gdb, "expert-role", "InSilicoResearchAgent", 1)
-	seedRemoteProductPermission(t, gdb, "expert-role", "DigitalDesignAgent", 2)
-	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{
-		ResearchEnabled: true,
-		DesignEnabled:   true,
-		NetworkEnabled:  true,
-	}
-	t.Cleanup(func() { rxBot.BotConfig = previous })
-
-	err := NewService().CheckExpertRemoteProductsAllowed(context.Background(), "expert@example.com")
-	if !errors.Is(err, ErrRemoteProductForbidden) {
-		t.Fatalf("Expert with one product grant missing = %v, want ErrRemoteProductForbidden", err)
-	}
-}
-
 func TestPermissionFailure(t *testing.T) {
 	tests := []struct {
 		name        string

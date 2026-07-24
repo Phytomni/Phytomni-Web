@@ -1153,24 +1153,23 @@ func (ps *Service) QueryStream(
 	onReady func(StreamIdentity),
 	forward func(frame []byte) error,
 ) (*QueryData, error) {
+	decision, err := ValidateChatRouting(in.Mode, in.Tool)
+	if err != nil {
+		return nil, err
+	}
+	in.Mode = decision.Mode
+	in.Tool = decision.ForcedTool
+	if in.Mode == "expert" {
+		// Expert routes via RouteQuery (POST /v1/query/route, no streaming
+		// primitive). Reject it at this direct service boundary before any
+		// permission lookup, upload, dialogue resolution, or Bot request.
+		return nil, fmt.Errorf("%w: expert mode", ErrStreamUnsupported)
+	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
-	if isRemoteProductTool(in.Tool) {
-		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
-			return nil, err
-		}
-	}
 	if !rxBot.BotConfig.StreamEnabled {
 		return nil, fmt.Errorf("%w: stream gate is off", ErrStreamUnsupported)
-	}
-	if in.Mode == "expert" {
-		// Expert routes via RouteQuery (POST /v1/query/route, no streaming
-		// primitive). The handler gate keeps expert out of this branch; this
-		// guard is defense in depth so SlugFor("")->"chat" can never collapse
-		// an Expert turn into a streamed ChatAgent run (slug-gate invariant,
-		// query_expert_test.go).
-		return nil, fmt.Errorf("%w: expert mode", ErrStreamUnsupported)
 	}
 	// SSE is an Instant Chat surface, so it must enforce the same effective
 	// ChatAgent permission before any upload, dialogue lookup, or Bot stream.
@@ -1184,6 +1183,9 @@ func (ps *Service) QueryStream(
 	slug, ok := rxBot.SlugFor(in.Tool)
 	if !ok {
 		return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
+	}
+	if slugToToolName[slug] != "ChatAgent" {
+		return nil, ErrInvalidChatRouting
 	}
 	chatModel, streamCapable := rxBot.StreamModelFor(slug)
 	if !streamCapable {

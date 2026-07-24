@@ -550,6 +550,40 @@ func TestQueryStream_PermissionFailuresHaveNoSideEffects(t *testing.T) {
 	}
 }
 
+func TestQueryStream_InvalidRoutingHasNoSideEffects(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mode string
+		tool string
+	}{
+		{name: "instant non-ChatAgent", mode: "instant", tool: "AnalystAgent"},
+		{name: "unknown mode", mode: "autonomous", tool: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			effects := &queryPermissionEffects{}
+			permissionRouteServer(t, effects, nil)
+			observeQueryPermissionEffects(t, gdb)
+
+			_, err := NewService().QueryStream(context.Background(), "alice", QueryInput{
+				Query: "invalid routing", Id: 77, Mode: tc.mode, Tool: tc.tool,
+				Files: []QueryFile{{Filename: "invalid.txt", Data: []byte("x")}},
+			}, nil, nil)
+			if !errors.Is(err, ErrInvalidChatRouting) {
+				t.Fatalf("error = %v, want ErrInvalidChatRouting", err)
+			}
+			effects.assertNone(t)
+			var rows int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+				t.Fatalf("count question rows: %v", err)
+			}
+			if rows != 0 {
+				t.Fatalf("invalid routing created %d question rows, want zero", rows)
+			}
+		})
+	}
+}
+
 // TestQuery_InstantUnchanged: mode=instant keeps the existing ChatAgent path.
 func TestQuery_InstantUnchanged(t *testing.T) {
 	setupExpertTestDB(t)

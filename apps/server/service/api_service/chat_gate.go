@@ -109,17 +109,6 @@ var remoteProductRequirements = map[string]remoteProductRequirement{
 	},
 }
 
-// expertRemoteProductTools is the complete product capability set that must
-// be accepted before Expert can dispatch to Bot's semantic router. Expert
-// does not know which product the router will select until after that request,
-// so the pre-dispatch policy deliberately requires every canonical remote
-// product flag and grant up front.
-var expertRemoteProductTools = [...]string{
-	"InSilicoResearchAgent",
-	"DigitalDesignAgent",
-	"GeneNetworkAgent",
-}
-
 func isRemoteProductTool(tool string) bool {
 	_, ok := remoteProductRequirements[strings.TrimSpace(tool)]
 	return ok
@@ -212,35 +201,4 @@ func permissionFailure(permissions AgentPermissionResolution, requested string) 
 		return ErrNoExecutableAgentTools
 	}
 	return ErrAgentToolsUnavailable
-}
-
-// CheckExpertRemoteProductsAllowed is retained only as a deprecated
-// compatibility wrapper for direct callers. Query no longer uses this
-// all-products policy; Chat Expert routing derives its constraints from the
-// effective resolver result instead.
-//
-// Deprecated: migrate callers to ResolveAgentPermissions.
-func (ps *Service) CheckExpertRemoteProductsAllowed(ctx context.Context, email string) error {
-	var resolution AgentPermissionResolution
-	resolved := false
-	for _, tool := range expertRemoteProductTools {
-		if !isRemoteProductEnabled(tool) {
-			return ErrRemoteProductDisabled
-		}
-		if !resolved {
-			var err error
-			resolution, err = ps.ResolveAgentPermissions(ctx, email)
-			if err != nil {
-				return ErrRemoteProductForbidden
-			}
-			resolved = true
-		}
-		if !containsAgentTool(resolution.GrantedTools, tool) {
-			return ErrRemoteProductForbidden
-		}
-		if !containsAgentTool(resolution.AllowedTools, tool) {
-			return ErrRemoteProductDisabled
-		}
-	}
-	return nil
 }

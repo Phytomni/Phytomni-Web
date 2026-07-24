@@ -316,12 +316,12 @@ func TestQueryStream_NonChatSlugRefused(t *testing.T) {
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 	svc := &Service{}
-	// AnalystAgent -> "analyst", a remote-agent slug with no chat model, so it
-	// has no Bot streaming primitive and must be refused before any Bot call.
+	// Instant Chat streaming has no caller-selected agent. A non-ChatAgent tool
+	// is invalid before any Bot call, regardless of its stream capability.
 	_, err := svc.QueryStream(context.Background(), "eve@example.com",
 		QueryInput{Query: "hi", Id: 0, Tool: "AnalystAgent", Mode: "instant"}, nil, nil)
-	if !errors.Is(err, ErrStreamUnsupported) {
-		t.Fatalf("err = %v, want ErrStreamUnsupported (non-chat slug cannot stream)", err)
+	if !errors.Is(err, ErrInvalidChatRouting) {
+		t.Fatalf("err = %v, want ErrInvalidChatRouting (non-chat tool cannot stream)", err)
 	}
 	if botHits != 0 {
 		t.Fatalf("a non-chat slug must not touch the Bot streaming endpoint (hits=%d)", botHits)
@@ -358,8 +358,7 @@ func TestQueryStream_CompatibilityModelsPreserveAGUIBytes(t *testing.T) {
 		tool  string
 		model string
 	}{
-		{name: "knowledge", tool: "KnowledgeAgent", model: "phyto-knowledge"},
-		{name: "brief gene", tool: "BriefGeneAgent", model: "phyto-brief-gene"},
+		{name: "chat", tool: "", model: "phyto-chat"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			gdb := setupStreamTestDB(t)
@@ -424,9 +423,7 @@ func TestQueryStream_CombinedAGUICompatibilityFixture(t *testing.T) {
 		tool  string
 		model string
 	}{
-		{name: "chat", tool: "ChatAgent", model: "phyto-chat"},
-		{name: "knowledge", tool: "KnowledgeAgent", model: "phyto-knowledge"},
-		{name: "brief gene", tool: "BriefGeneAgent", model: "phyto-brief-gene"},
+		{name: "chat", tool: "", model: "phyto-chat"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			gdb := setupStreamTestDB(t)
@@ -504,7 +501,7 @@ func TestQueryStream_CombinedRunErrorFixture(t *testing.T) {
 
 	var forwarded strings.Builder
 	out, err := (&Service{}).QueryStream(context.Background(), "task27-error@example.com",
-		QueryInput{Query: "synthetic", Tool: "ChatAgent", Mode: "instant"}, nil,
+		QueryInput{Query: "synthetic", Tool: "", Mode: "instant"}, nil,
 		func(frame []byte) error {
 			_, _ = forwarded.Write(frame)
 			return nil
@@ -706,7 +703,7 @@ func TestQueryStream_StreamGateOffRefusesWithoutBotCall(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	_, err := (&Service{}).QueryStream(context.Background(), "gate@example.com",
-		QueryInput{Query: "hi", Tool: "KnowledgeAgent", Mode: "instant"}, nil, nil)
+		QueryInput{Query: "hi", Tool: "", Mode: "instant"}, nil, nil)
 	if !errors.Is(err, ErrStreamUnsupported) {
 		t.Fatalf("err = %v, want ErrStreamUnsupported while stream gate is off", err)
 	}
@@ -715,7 +712,7 @@ func TestQueryStream_StreamGateOffRefusesWithoutBotCall(t *testing.T) {
 	}
 }
 
-func TestQueryStream_RemoteProductGatePrecedesStreamGate(t *testing.T) {
+func TestQueryStream_NonChatRoutingRejectedBeforeAnyBotRequest(t *testing.T) {
 	setupStreamTestDB(t)
 	botHits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -725,17 +722,16 @@ func TestQueryStream_RemoteProductGatePrecedesStreamGate(t *testing.T) {
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
 		BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
-		NetworkEnabled: false,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	_, err := (&Service{}).QueryStream(context.Background(), "network@example.com",
 		QueryInput{Query: "network", Tool: "GeneNetworkAgent", Mode: "instant"}, nil, nil)
-	if !errors.Is(err, ErrRemoteProductDisabled) {
-		t.Fatalf("remote stream gate error = %v, want ErrRemoteProductDisabled", err)
+	if !errors.Is(err, ErrInvalidChatRouting) {
+		t.Fatalf("non-ChatAgent stream routing error = %v, want ErrInvalidChatRouting", err)
 	}
 	if botHits != 0 {
-		t.Fatalf("remote stream gate must reject before any Bot request (hits=%d)", botHits)
+		t.Fatalf("non-ChatAgent stream routing must reject before any Bot request (hits=%d)", botHits)
 	}
 }
 
