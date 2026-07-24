@@ -2,8 +2,11 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -30,6 +33,84 @@ func TestRouteQuery_PostsToRouteEndpoint(t *testing.T) {
 	}
 	if resp.Agent != "knowledge" || resp.Status != "succeeded" {
 		t.Errorf("decoded resp wrong: %+v", resp)
+	}
+}
+
+func TestRouteQuery_PostsOrderedToolConstraints(t *testing.T) {
+	forcedTool := "DataAgent"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		assertJSONEqual(t, `{
+			"user_query": "Compare drought candidates",
+			"history": [],
+			"obs_file_list": [],
+			"dialogue_id": "dialogue-1",
+			"allowed_tools": ["ChatAgent", "DataAgent", "AnalystAgent"],
+			"forced_tool": "DataAgent"
+		}`, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-1","agent":"data","status":"succeeded","task_ids":[],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery:    "Compare drought candidates",
+		History:      []ChatMessage{},
+		OBSFileList:  []string{},
+		DialogueID:   "dialogue-1",
+		AllowedTools: []string{"ChatAgent", "DataAgent", "AnalystAgent"},
+		ForcedTool:   &forcedTool,
+	})
+	if err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+}
+
+func TestRouteQuery_AutonomousToolConstraintsSerializeNullForcedTool(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		assertJSONEqual(t, `{
+			"user_query": "Compare drought candidates",
+			"history": [],
+			"obs_file_list": [],
+			"dialogue_id": "dialogue-1",
+			"allowed_tools": [],
+			"forced_tool": null
+		}`, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-1","agent":"data","status":"succeeded","task_ids":[],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery:    "Compare drought candidates",
+		History:      []ChatMessage{},
+		OBSFileList:  []string{},
+		DialogueID:   "dialogue-1",
+		AllowedTools: []string{},
+	})
+	if err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+}
+
+func assertJSONEqual(t *testing.T, want string, got []byte) {
+	t.Helper()
+	var wantValue, gotValue interface{}
+	if err := json.Unmarshal([]byte(want), &wantValue); err != nil {
+		t.Fatalf("decode expected JSON: %v", err)
+	}
+	if err := json.Unmarshal(got, &gotValue); err != nil {
+		t.Fatalf("decode request JSON: %v", err)
+	}
+	if !reflect.DeepEqual(gotValue, wantValue) {
+		t.Errorf("request JSON mismatch\nwant: %s\ngot:  %s", want, got)
 	}
 }
 

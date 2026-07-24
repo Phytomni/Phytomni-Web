@@ -93,13 +93,15 @@ type AgentRunResponse struct {
 }
 
 // RouteQueryRequest is the body for POST /v1/query/route — Bot's MCP semantic
-// router. ForcedTool=nil means autonomous routing (the v1 Expert contract).
+// router. AllowedTools preserves its caller-provided order; ForcedTool=nil
+// means autonomous routing (the v1 Expert contract).
 type RouteQueryRequest struct {
-	UserQuery   string        `json:"user_query"`
-	History     []ChatMessage `json:"history,omitempty"`
-	OBSFileList []string      `json:"obs_file_list,omitempty"`
-	DialogueID  string        `json:"dialogue_id,omitempty"`
-	ForcedTool  *string       `json:"forced_tool"`
+	UserQuery    string        `json:"user_query"`
+	History      []ChatMessage `json:"history"`
+	OBSFileList  []string      `json:"obs_file_list"`
+	DialogueID   string        `json:"dialogue_id"`
+	AllowedTools []string      `json:"allowed_tools"`
+	ForcedTool   *string       `json:"forced_tool"`
 }
 
 // RouteQueryResponse mirrors AgentRunResponse exactly: Bot's route endpoint
