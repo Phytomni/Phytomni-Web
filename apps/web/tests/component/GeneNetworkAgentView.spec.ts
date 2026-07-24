@@ -59,6 +59,7 @@ const mocks = vi.hoisted(() => {
     state,
     capabilities,
     submit: vi.fn().mockResolvedValue(null),
+    useBotRemoteAgentRun: vi.fn(),
     cancel: vi.fn().mockReturnValue(true),
     reset: vi.fn(),
     getChatState: vi.fn(() => ({})),
@@ -76,12 +77,14 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
 }));
 
 vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
-  useBotRemoteAgentRun: () => ({
-    state: mocks.state,
-    submit: mocks.submit,
-    cancel: mocks.cancel,
-    reset: mocks.reset,
-  }),
+  useBotRemoteAgentRun: mocks.useBotRemoteAgentRun,
+}));
+
+mocks.useBotRemoteAgentRun.mockImplementation(() => ({
+  state: mocks.state,
+  submit: mocks.submit,
+  cancel: mocks.cancel,
+  reset: mocks.reset,
 }));
 
 vi.mock("@/views/chat/composables/useChatStates", () => ({
@@ -188,9 +191,23 @@ function degradedState(): BotLifecycleState {
 describe("GeneNetworkAgentView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.useBotRemoteAgentRun.mockImplementation(() => ({
+      state: mocks.state,
+      submit: mocks.submit,
+      cancel: mocks.cancel,
+      reset: mocks.reset,
+    }));
     resetState();
     mocks.submit.mockResolvedValue(null);
     mocks.capabilities.load.mockResolvedValue([]);
+  });
+
+  it("passes the Gene Network tool to the shared product runner", () => {
+    const view = mountView();
+    expect(mocks.useBotRemoteAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "GeneNetworkAgent" })
+    );
+    view.unmount();
   });
 
   it("keeps loading and unavailable Back actions labeled and reachable", async () => {

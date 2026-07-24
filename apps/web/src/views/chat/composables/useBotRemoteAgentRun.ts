@@ -1,5 +1,5 @@
 import { ref, type Ref } from "vue";
-import { getQueryAbortable } from "@/api/chat";
+import { runAgentProductAbortable } from "@/api/chat";
 import { isSuccessfulDataEnvelope } from "@/api/contracts";
 import { abortRequest } from "@/utils/request";
 import {
@@ -259,14 +259,11 @@ function appendOptional(formData: FormData, key: string, value: unknown): void {
 
 function buildFormData(
   input: RemoteAgentSubmitInput,
-  tool: RemoteAgentTool,
   dialogueId: string
 ): FormData {
   const formData = new FormData();
   formData.append("id", dialogueId);
   formData.append("query", input.query);
-  formData.append("tool", tool);
-  formData.append("mode", "instant");
 
   for (const candidate of input.files ?? []) {
     const file = fileValue(candidate);
@@ -545,7 +542,6 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
 
     const formData = buildFormData(
       { ...input, files: validFiles },
-      tool,
       normalizedDialogueId
     );
     const requestId = requestIdFor(normalizedDialogueId);
@@ -572,7 +568,8 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     syncOwnedState();
 
     try {
-      const response = await getQueryAbortable(
+      const response = await runAgentProductAbortable(
+        tool,
         formData,
         requestId,
         tracker

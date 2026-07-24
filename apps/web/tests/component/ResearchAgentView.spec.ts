@@ -70,6 +70,7 @@ const mocks = vi.hoisted(() => {
   return {
     state,
     submit: vi.fn().mockResolvedValue(null),
+    useBotRemoteAgentRun: vi.fn(),
     hydrate,
     cancel: vi.fn().mockReturnValue(true),
     reset: vi.fn(),
@@ -95,13 +96,15 @@ vi.mock("@/api/chat", () => ({
 }));
 
 vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
-  useBotRemoteAgentRun: () => ({
-    state: mocks.state,
-    submit: mocks.submit,
-    hydrate: mocks.hydrate,
-    cancel: mocks.cancel,
-    reset: mocks.reset,
-  }),
+  useBotRemoteAgentRun: mocks.useBotRemoteAgentRun,
+}));
+
+mocks.useBotRemoteAgentRun.mockImplementation(() => ({
+  state: mocks.state,
+  submit: mocks.submit,
+  hydrate: mocks.hydrate,
+  cancel: mocks.cancel,
+  reset: mocks.reset,
 }));
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
@@ -193,6 +196,13 @@ function degradedState(): BotLifecycleState {
 describe("ResearchAgentView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.useBotRemoteAgentRun.mockImplementation(() => ({
+      state: mocks.state,
+      submit: mocks.submit,
+      hydrate: mocks.hydrate,
+      cancel: mocks.cancel,
+      reset: mocks.reset,
+    }));
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
     mocks.state.value = {
       runId: null,
@@ -220,6 +230,14 @@ describe("ResearchAgentView", () => {
 
   afterEach(() => {
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = false;
+  });
+
+  it("passes the Research tool to the shared product runner", () => {
+    const view = mountView();
+    expect(mocks.useBotRemoteAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "InSilicoResearchAgent" })
+    );
+    view.unmount();
   });
 
   it("keeps loading and dark-product Back actions reachable", async () => {

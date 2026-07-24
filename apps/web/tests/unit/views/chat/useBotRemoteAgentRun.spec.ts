@@ -9,7 +9,7 @@ const mockUseBotCapabilities = vi.hoisted(() => vi.fn());
 const mockLoadCapabilities = vi.hoisted(() => vi.fn());
 
 vi.mock("@/api/chat", () => ({
-  getQueryAbortable: mockQuery,
+  runAgentProductAbortable: mockQuery,
 }));
 
 vi.mock("@/utils/request", () => ({
@@ -61,6 +61,11 @@ function makeState(): RemoteAgentChatState {
 }
 
 type CapabilityMap = Record<string, Partial<BotCapability> | undefined>;
+const remoteTools = [
+  "InSilicoResearchAgent",
+  "DigitalDesignAgent",
+  "GeneNetworkAgent",
+] as const;
 type TestCapabilitySource = {
   byTool: Ref<CapabilityMap>;
   load?: (force?: boolean) => Promise<unknown>;
@@ -203,10 +208,10 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.dialogueId).toBe("42");
     expect(run.state.value.messageId).toBe("17");
 
-    const formData = mockQuery.mock.calls[0][0] as FormData;
+    const formData = mockQuery.mock.calls[0][1] as FormData;
     expect(formData.get("query")).toBe("paper");
-    expect(formData.get("tool")).toBe("InSilicoResearchAgent");
-    expect(formData.get("mode")).toBe("instant");
+    expect(formData.get("tool")).toBeNull();
+    expect(formData.get("mode")).toBeNull();
     expect(formData.get("id")).toBe("d1");
     expect(formData.get("files")).toBeInstanceOf(File);
     expect(formData.get("gene_id")).toBe("AT1G01010");
@@ -219,6 +224,45 @@ describe("useBotRemoteAgentRun", () => {
     expect(formData.get("query")).not.toContain("AT1G01010");
     expect(getChatState("d1").activeRequestId).toBe("");
   });
+
+  it.each(remoteTools)(
+    "submits %s through the product route without legacy form fields",
+    async (tool) => {
+      let capturedTool: string | undefined;
+      let capturedFormData: FormData | undefined;
+      mockQuery.mockImplementationOnce(
+        (submittedTool: string, formData: FormData) => {
+          capturedTool = submittedTool;
+          capturedFormData = formData;
+          return Promise.resolve({
+            data: {
+              bot_run_id: `run-${tool}`,
+              tool_name: tool,
+              status: "RUNNING",
+            },
+          });
+        }
+      );
+      const run = useBotRemoteAgentRun({
+        tool,
+        dialogueId: `product-${tool}`,
+        capabilities: makeCapabilities(tool, true, true, "agent_run", true),
+      });
+
+      await run.submit({ query: "Investigate drought tolerance" });
+
+      const entries = Array.from((capturedFormData as FormData).entries()).map(
+        ([key, value]) => [key, typeof value === "string" ? value : value.name]
+      );
+      expect(capturedTool).toBe(tool);
+      expect(entries.some(([key]) => key === "tool")).toBe(false);
+      expect(entries.some(([key]) => key === "mode")).toBe(false);
+      expect(entries).toContainEqual([
+        "query",
+        "Investigate drought tolerance",
+      ]);
+    }
+  );
 
   it("retains only safe interop provenance in owner lifecycle state", async () => {
     const state = makeState();
@@ -503,7 +547,7 @@ describe("useBotRemoteAgentRun", () => {
       phase: "upload",
       requestId: "pending",
     });
-    mockQuery.mockImplementationOnce((_formData, _requestId, config) => {
+    mockQuery.mockImplementationOnce((_tool, _formData, _requestId, config) => {
       config?.onUploadProgress?.({ loaded: 1, total: 2 });
       return new Promise((resolve) => {
         resolveRequest = resolve;

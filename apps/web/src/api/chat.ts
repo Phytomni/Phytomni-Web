@@ -1,6 +1,7 @@
 import type { AxiosProgressEvent } from "axios";
 
 import { createAbortableRequest } from "@/utils/request";
+import type { RemoteAgentTool } from "@/constants/agents";
 import type {
   ApiEnvelope,
   BinaryResponse,
@@ -97,6 +98,24 @@ export const getQueryAbortable = (
     decodeQueryData
   );
 };
+
+export function runAgentProductAbortable(
+  tool: RemoteAgentTool,
+  data: FormData,
+  requestId?: string,
+  opts?: QueryProgressOpts
+): Promise<ApiEnvelope<DecodedQueryData>> {
+  return requestAbortableApi(
+    {
+      url: `/api/v1/agent-products/${encodeURIComponent(tool)}/runs`,
+      method: "post",
+      data,
+      requestId,
+      onUploadProgress: opts?.onUploadProgress,
+    },
+    decodeQueryData
+  );
+}
 
 // Query conversation (all child messages of a conversation)
 export const getAnswerCheck = (data: {
