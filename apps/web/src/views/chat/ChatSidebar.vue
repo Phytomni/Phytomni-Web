@@ -4,7 +4,7 @@
     :drawer-open="drawerOpen"
     :off-canvas="isMobile && !drawerOpen"
     :close-label="$t('common.close')"
-    @close="closeDrawer"
+    @close="handleDrawerClose"
     @toggle="toggle"
   >
     <template #close>
@@ -33,9 +33,9 @@
         @gene-display="handleButtonClick('knowledge-base', openKnowledgeBase)"
         @favorites="handleButtonClick('favorites', openFavorites)"
         @tutorial="handleButtonClick('tutorial', startTutorial)"
-        @help="openHelp"
-        @show-architecture="emit('showArchitecture')"
-        @account-command="handleCommand"
+        @help="handleButtonClick('help', openHelp)"
+        @show-architecture="handleButtonClick('architecture', showArchitecture)"
+        @account-command="handleAccountCommand"
         @toggle-collapse="toggle"
       >
         <template #explore-agents>
@@ -56,7 +56,7 @@
             :current-chat-id="currentChatId"
             :expanded-groups="expandedGroups"
             :collapsed="renderedSidebarCollapsed"
-            @select="selectChat"
+            @select="handleChatSelection"
             @toggle-group="toggleExpand"
             @action="handleChatAction"
           />
@@ -126,13 +126,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef } from "vue";
+import { computed, onMounted, onUnmounted, ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Close, Warning } from "@element-plus/icons-vue";
 import { userStore } from "@/stores";
 import type { Chat } from "./types";
 import { useChatHistoryGroups } from "./composables/useChatHistoryGroups";
-import { useSidebarResponsive } from "./composables/useSidebarResponsive";
+import {
+  SIDEBAR_COMPACT_BREAKPOINT,
+  SIDEBAR_MOBILE_BREAKPOINT,
+  useSidebarResponsive,
+} from "./composables/useSidebarResponsive";
 import { deriveCaseRouteOptions } from "@/constants/agents";
 import { useChatHistoryActions } from "./composables/useChatHistoryActions";
 import { useSidebarNavigation } from "./composables/useSidebarNavigation";
@@ -214,10 +218,6 @@ const { isMobile, sidebarCollapsed, drawerOpen, toggle, closeDrawer } =
     onDrawerOpenChange: (value) => emit("drawerOpenChange", value),
   });
 
-const renderedSidebarCollapsed = computed(
-  () => props.effectiveCollapsed ?? sidebarCollapsed.value
-);
-
 const {
   renameDialogVisible,
   renameForm,
@@ -239,15 +239,35 @@ const {
 });
 
 const showAgentsList = ref(false);
+const compactDisclosureExpanded = ref(false);
 const presetAgents = ref(deriveCaseRouteOptions());
+
+const isCompactDisclosureViewport = () =>
+  typeof window !== "undefined" &&
+  window.innerWidth >= SIDEBAR_MOBILE_BREAKPOINT &&
+  window.innerWidth < SIDEBAR_COMPACT_BREAKPOINT;
+
+const renderedSidebarCollapsed = computed(() => {
+  const base = props.effectiveCollapsed ?? sidebarCollapsed.value;
+  const compactRail =
+    !isMobile.value && sidebarCollapsed.value && isCompactDisclosureViewport();
+  return base && !(compactRail && compactDisclosureExpanded.value);
+});
 
 const exploreAgent = () => {
   showAgentsList.value = !showAgentsList.value;
+  compactDisclosureExpanded.value =
+    showAgentsList.value && isCompactDisclosureViewport();
+};
+
+const closeAgentDisclosure = () => {
+  showAgentsList.value = false;
+  compactDisclosureExpanded.value = false;
 };
 
 const handleAgentClick = (agent: { route: string }) => {
   Promise.resolve(router.push(agent.route)).catch(() => undefined);
-  showAgentsList.value = false;
+  closeAgentDisclosure();
 };
 
 const {
@@ -267,6 +287,22 @@ const {
 });
 
 const openHelp = () => router.push("/help");
+const showArchitecture = () => emit("showArchitecture");
+
+const handleDrawerClose = () => {
+  closeAgentDisclosure();
+  closeDrawer();
+};
+
+const handleAccountCommand = (command: string) => {
+  closeAgentDisclosure();
+  handleCommand(command);
+};
+
+const handleChatSelection = (dialogueId: string) => {
+  closeAgentDisclosure();
+  selectChat(dialogueId);
+};
 
 // Currently active button
 const activeButton = ref("");
@@ -275,10 +311,31 @@ const activeButton = ref("");
 const handleButtonClick = (buttonType: string, action: () => void) => {
   activeButton.value = buttonType;
   if (buttonType !== "explore-agent") {
-    showAgentsList.value = false;
+    closeAgentDisclosure();
   }
   action();
 };
+
+const clearDisclosureOutsideCompactViewport = () => {
+  if (!isCompactDisclosureViewport()) {
+    closeAgentDisclosure();
+  }
+};
+
+watch(isMobile, closeAgentDisclosure);
+watch(drawerOpen, (isOpen) => {
+  if (!isOpen) {
+    closeAgentDisclosure();
+  }
+});
+
+onMounted(() => {
+  window.addEventListener("resize", clearDisclosureOutsideCompactViewport);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", clearDisclosureOutsideCompactViewport);
+});
 
 // Expand/collapse state for the 4 time groups
 const expandedGroups = ref({

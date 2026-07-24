@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
+import { createMemoryHistory, createRouter } from "vue-router";
+import { nextTick } from "vue";
 import ChatSidebarNav from "@/views/chat/components/ChatSidebarNav.vue";
+import ChatSidebar from "@/views/chat/ChatSidebar.vue";
+import { setViewport } from "../helpers/responsiveMatrix";
+import { SIDEBAR_COLLAPSED_PREFERENCE_KEY } from "@/views/chat/composables/useSidebarResponsive";
 
 const NAV_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatSidebarNav.vue"),
@@ -69,7 +75,134 @@ const mountNav = (props: Record<string, unknown> = {}, slots = {}) =>
     },
   });
 
+const mountChatSidebarWithExistingStubs = () => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
+  });
+
+  return mount(ChatSidebar, {
+    props: { chatList: [] },
+    global: {
+      plugins: [createPinia(), router],
+      mocks: {
+        $t: (key: string) => `t:${key}`,
+      },
+      stubs: {
+        PhyAdaptiveSidebar: {
+          props: ["collapsed"],
+          emits: ["close"],
+          template:
+            '<aside class="phy-adaptive-sidebar" :class="{ \'is-collapsed\': collapsed }"><button data-test="sidebar-close" @click="$emit(\'close\')" /><slot /></aside>',
+        },
+        AgentDisplayName: {
+          props: ["label"],
+          template: "<span>{{ label }}</span>",
+        },
+        ChatHistoryList: true,
+        ElButton: {
+          emits: ["click"],
+          template:
+            '<button v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>',
+        },
+        ElIcon: { template: "<span><slot /></span>" },
+        ElDropdown: {
+          template: '<div><slot /><slot name="dropdown" /></div>',
+        },
+        ElDropdownMenu: { template: "<div><slot /></div>" },
+        ElDropdownItem: { template: "<button><slot /></button>" },
+        ElAvatar: true,
+        ElDialog: true,
+        ElForm: true,
+        ElFormItem: true,
+        ElInput: true,
+        LangSwitch: true,
+        ThemeSwitch: true,
+      },
+    },
+  });
+};
+
 describe("ChatSidebarNav", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    localStorage.clear();
+  });
+
+  it("expands the compact rail only while the Agent list is open", async () => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "true");
+    setViewport(1024, 768);
+    const wrapper = mountChatSidebarWithExistingStubs();
+    await nextTick();
+
+    await wrapper
+      .get('[data-test="sidebar-nav-explore-agent"]')
+      .trigger("click");
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).not.toContain(
+      "is-collapsed"
+    );
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("true");
+
+    await wrapper.get('[data-test="sidebar-close"]').trigger("click");
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).toContain(
+      "is-collapsed"
+    );
+
+    await wrapper
+      .get('[data-test="sidebar-nav-explore-agent"]')
+      .trigger("click");
+    await wrapper.get('[data-test="sidebar-nav-favorites"]').trigger("click");
+    expect(
+      wrapper.find('[data-testid="chat-explore-agents-list"]').exists()
+    ).toBe(false);
+
+    await wrapper
+      .get('[data-test="sidebar-nav-explore-agent"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="chat-explore-agents-list"] .agent-option')
+      .trigger("click");
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).toContain(
+      "is-collapsed"
+    );
+    wrapper.unmount();
+  });
+
+  it("closes compact disclosure when the viewport leaves the compact range", async () => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "true");
+    setViewport(1024, 768);
+    const wrapper = mountChatSidebarWithExistingStubs();
+    await nextTick();
+
+    await wrapper
+      .get('[data-test="sidebar-nav-explore-agent"]')
+      .trigger("click");
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).not.toContain(
+      "is-collapsed"
+    );
+
+    setViewport(1280, 768);
+    await nextTick();
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).toContain(
+      "is-collapsed"
+    );
+
+    setViewport(899, 768);
+    vi.advanceTimersByTime(100);
+    await nextTick();
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).not.toContain(
+      "is-collapsed"
+    );
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("true");
+    wrapper.unmount();
+  });
+
   it("renders expanded labels and compactly hides them", () => {
     const expanded = mountNav();
     expect(expanded.text()).toContain("t:chat.newChat");

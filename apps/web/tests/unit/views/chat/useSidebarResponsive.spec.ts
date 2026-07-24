@@ -132,6 +132,29 @@ describe("useSidebarResponsive", () => {
     wrapper.unmount();
   });
 
+  it.each([
+    { width: 899, isMobile: true, sidebarCollapsed: false },
+    { width: 900, isMobile: false, sidebarCollapsed: true },
+    { width: 1024, isMobile: false, sidebarCollapsed: true },
+    { width: 1279, isMobile: false, sidebarCollapsed: true },
+    { width: 1280, isMobile: false, sidebarCollapsed: true },
+  ])(
+    "preserves the saved preference at $width pixels",
+    async ({ width, isMobile, sidebarCollapsed }) => {
+      localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "true");
+      setInnerWidth(width);
+      const wrapper = mount(makeHarness());
+      await nextTick();
+
+      expect(wrapper.vm.isMobile).toBe(isMobile);
+      expect(wrapper.vm.sidebarCollapsed).toBe(sidebarCollapsed);
+      expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe(
+        "true"
+      );
+      wrapper.unmount();
+    }
+  );
+
   it("keeps a mobile sidebar out of layout until the drawer is opened", async () => {
     setInnerWidth(390);
     const onDrawerOpenChange = vi.fn();

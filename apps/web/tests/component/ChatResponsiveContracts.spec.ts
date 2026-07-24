@@ -105,6 +105,12 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
       sidebarCollapsed: true,
     },
     {
+      label: "compact at 1024",
+      width: 1024,
+      isMobile: false,
+      sidebarCollapsed: true,
+    },
+    {
       label: "compact below 1280",
       width: 1279,
       isMobile: false,
@@ -300,5 +306,23 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
     expect(CHAT_SOURCE).toContain(
       ':data-sidebar-drawer-state="sidebarDrawerStateAttr"'
     );
+  });
+
+  it("keeps temporary Explore Agents disclosure inside the compact sidebar", () => {
+    expect(SIDEBAR_SOURCE).toContain("compactDisclosureExpanded");
+    expect(SIDEBAR_SOURCE).toContain(
+      "window.innerWidth >= SIDEBAR_MOBILE_BREAKPOINT"
+    );
+    expect(SIDEBAR_SOURCE).toContain(
+      "window.innerWidth < SIDEBAR_COMPACT_BREAKPOINT"
+    );
+    expect(SIDEBAR_SOURCE).toContain("watch(isMobile, closeAgentDisclosure)");
+    expect(SIDEBAR_SOURCE).toContain(
+      "closeAgentDisclosure();\n  closeDrawer();"
+    );
+    expect(NAV_SOURCE).toContain("width: min(100%, 248px);");
+    expect(NAV_SOURCE).toContain("max-height: min(400px, 52vh);");
+    expect(NAV_SOURCE).toContain("overflow-y: auto;");
+    expect(NAV_SOURCE).toContain("overflow-wrap: anywhere;");
   });
 });

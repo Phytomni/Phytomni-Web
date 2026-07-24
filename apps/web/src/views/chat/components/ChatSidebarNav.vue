@@ -595,6 +595,11 @@ const handleHelpCommand = (command: string | number | object) => {
     min-height: var(--phy-control-height-default);
   }
 
+  .agents-dropdown {
+    width: min(248px, calc(100vw - var(--phy-space-32)));
+    align-self: flex-start;
+  }
+
   .username {
     position: absolute;
     width: 1px;
@@ -609,10 +614,12 @@ const handleHelpCommand = (command: string | number | object) => {
 }
 
 .agents-dropdown {
-  max-height: 400px;
+  width: min(100%, 248px);
+  max-height: min(400px, 52vh);
   margin-left: var(--phy-space-8);
   padding: var(--phy-space-4) 0 var(--phy-space-4) var(--phy-space-12);
-  overflow-y: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
   border: 1px solid var(--phy-color-border-subtle);
   border-radius: var(--phy-radius-md);
   background: var(--phy-color-bg-elevated);
