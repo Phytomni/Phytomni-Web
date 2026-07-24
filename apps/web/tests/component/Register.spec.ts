@@ -243,6 +243,14 @@ describe("Registration auth surface", () => {
     );
     expect(wrapper.find(".register-title").element.tagName).toBe("H1");
     expect(wrapper.find(".register-subtitle").element.tagName).toBe("P");
+    expect(wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')).toHaveLength(
+      1
+    );
+    expect(wrapper.findAll("h1")).toHaveLength(1);
+    expect(wrapper.get(".register-title").text()).toBe("Create Account");
+    expect(wrapper.get(".register-subtitle").text()).toBe(
+      "Create your Phytomni account"
+    );
     expect(wrapper.findAll(".el-form")).toHaveLength(1);
     expect(wrapper.find(".phy-auth-footer").exists()).toBe(true);
   });
@@ -313,6 +321,17 @@ describe("Registration auth surface", () => {
     i18n.global.locale.value = "zh-CN";
     await nextTick();
     assertConsent("我已阅读并同意以下法律文件", "服务条款", "隐私政策");
+  });
+
+  it("uses the active locale for registration presentation copy", async () => {
+    const wrapper = mountView();
+    i18n.global.locale.value = "zh-CN";
+    await nextTick();
+
+    expect(wrapper.get(".register-title").text()).toBe("注册账户");
+    expect(wrapper.get(".register-subtitle").text()).toBe(
+      "创建您的农科发现大模型账户"
+    );
   });
 
   it("wraps consent text inside the narrow auth card", () => {
@@ -438,6 +457,8 @@ describe("Registration auth surface", () => {
   });
 
   it("does not log registration requests, responses, errors, or payloads", () => {
+    expect(SOURCE.match(/<PhyAuthBrand/g)).toHaveLength(1);
+    expect(SOURCE.match(/<h1/g)).toHaveLength(1);
     expect(SOURCE).not.toMatch(/console\./);
   });
 });

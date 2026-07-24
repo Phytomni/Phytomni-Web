@@ -94,7 +94,7 @@ withDefaults(
 }
 
 .phy-auth-card {
-  width: min(432px, calc(100vw - (var(--phy-space-16) * 2)));
+  width: min(432px, calc(100vw - 32px));
   max-width: 432px;
   box-sizing: border-box;
   padding: var(--phy-space-32) var(--phy-space-24) var(--phy-space-24);
@@ -108,10 +108,7 @@ withDefaults(
  * changing the compact/mobile contract or the approved 432px baseline. */
 @media (min-width: 600px) {
   .phy-auth-card {
-    width: min(
-      clamp(432px, calc(35vw - 72px), 672px),
-      calc(100vw - (var(--phy-space-16) * 2))
-    );
+    width: min(clamp(432px, calc(35vw - 72px), 672px), calc(100vw - 32px));
     max-width: 672px;
   }
 }
@@ -185,7 +182,8 @@ withDefaults(
 
   .phy-auth-card {
     width: 100%;
-    padding: var(--phy-space-24) var(--phy-space-16) var(--phy-space-20);
+    padding-block: var(--phy-space-24) var(--phy-space-20);
+    padding-inline: 16px;
   }
 }
 </style>

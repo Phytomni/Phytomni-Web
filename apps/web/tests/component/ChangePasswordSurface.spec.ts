@@ -54,6 +54,11 @@ vi.mock("element-plus", async () => {
 
 import ChangePassword from "@/views/change-password/ChangePasswordView.vue";
 
+const SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/change-password/ChangePasswordView.vue"),
+  "utf8"
+);
+
 type Rule = {
   required?: boolean;
   min?: number;
@@ -247,7 +252,10 @@ describe("Change Password surface", () => {
       true
     );
     expect(wrapper.find('img[src="/logo.png"]').exists()).toBe(true);
+    expect(wrapper.findAll('img[src="/logo.png"]')).toHaveLength(1);
     expect(wrapper.find(".phy-auth-brand").text()).toContain("Phytomni");
+    expect(wrapper.findAll("h1")).toHaveLength(1);
+    expect(wrapper.get(".change-password-title").text()).toBe("Change Password");
     expect(wrapper.find(".change-password-page").exists()).toBe(false);
     expect(wrapper.find(".change-password-back").exists()).toBe(false);
     expect(wrapper.find(".change-password-form").exists()).toBe(true);
@@ -393,21 +401,16 @@ describe("Change Password surface", () => {
   });
 
   it("has no sensitive logging or status writer and keeps 48px shell controls", () => {
-    const source = readFileSync(
-      resolve(
-        __dirname,
-        "../../src/views/change-password/ChangePasswordView.vue"
-      ),
-      "utf8"
-    );
-    expect(source).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
-    expect(source).not.toContain("SET_LOGIN_STATUS");
-    expect(source).toContain("PhyAuthLayout");
-    expect(source).toContain("--phy-control-height-primary");
-    expect(source).toContain("@media (max-width: 599px)");
-    expect(source).toMatch(
+    expect(SOURCE.match(/<PhyAuthBrand/g)).toHaveLength(1);
+    expect(SOURCE.match(/<h1/g)).toHaveLength(1);
+    expect(SOURCE).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
+    expect(SOURCE).not.toContain("SET_LOGIN_STATUS");
+    expect(SOURCE).toContain("PhyAuthLayout");
+    expect(SOURCE).toContain("--phy-control-height-primary");
+    expect(SOURCE).toContain("@media (max-width: 599px)");
+    expect(SOURCE).toMatch(
       /@media \(max-width: 599px\)[\s\S]*?\.change-password-field\s*\{[\s\S]*?display:\s*block;/
     );
-    expect(source).not.toContain("height: 100vh");
+    expect(SOURCE).not.toContain("height: 100vh");
   });
 });

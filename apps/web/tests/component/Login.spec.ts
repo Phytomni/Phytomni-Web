@@ -55,6 +55,11 @@ vi.mock("element-plus", async () => {
 
 import Login from "@/views/login/LoginView.vue";
 
+const SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/login/LoginView.vue"),
+  "utf8"
+);
+
 type Rule = {
   required?: boolean;
   type?: string;
@@ -218,6 +223,25 @@ describe("Login auth surface", () => {
     expect(wrapper.findAll(".el-form")).toHaveLength(1);
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
     expect(wrapper.find(".login-button").attributes("type")).toBe("button");
+    expect(wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')).toHaveLength(
+      1
+    );
+    expect(wrapper.findAll("h1")).toHaveLength(1);
+    expect(wrapper.get(".login-title").text()).toBe("Sign in");
+    expect(wrapper.get(".login-subtitle").text()).toBe(
+      "A multi-agent system for scientific discovery and plant design"
+    );
+  });
+
+  it("uses the active locale for the login title and description", async () => {
+    const wrapper = mountView();
+    i18n.global.locale.value = "zh-CN";
+    await nextTick();
+
+    expect(wrapper.get(".login-title").text()).toBe("登录");
+    expect(wrapper.get(".login-subtitle").text()).toBe(
+      "面向科学发现与植物设计的多智能体科研系统"
+    );
   });
 
   it("runs the authenticated reverse guard on mount", () => {
@@ -417,14 +441,12 @@ describe("Login auth surface", () => {
     const wrapper = mountView();
     expect(wrapper.find(".register-container").exists()).toBe(true);
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
-    const source = readFileSync(
-      resolve(__dirname, "../../src/views/login/LoginView.vue"),
-      "utf8"
-    );
-    expect(source).toContain("isLogin");
-    expect(source).toContain("handleRegister");
-    expect(source).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
-    expect(source).not.toContain("height: 100vh");
-    expect(source).not.toContain("overflow-y:");
+    expect(SOURCE.match(/<PhyAuthBrand/g)).toHaveLength(1);
+    expect(SOURCE.match(/<h1/g)).toHaveLength(1);
+    expect(SOURCE).toContain("isLogin");
+    expect(SOURCE).toContain("handleRegister");
+    expect(SOURCE).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
+    expect(SOURCE).not.toContain("height: 100vh");
+    expect(SOURCE).not.toContain("overflow-y:");
   });
 });
