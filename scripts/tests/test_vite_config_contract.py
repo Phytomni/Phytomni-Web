@@ -35,15 +35,21 @@ def test_vite_plugin_modules_are_typed_and_keep_the_ordered_pipeline() -> None:
 
 
 def test_plugin_factories_preserve_runtime_contracts() -> None:
+    package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
     auto_import = _read(PLUGIN_ROOT / "auto-import.ts")
     compression = _read(PLUGIN_ROOT / "compression.ts")
 
     assert 'imports: ["vue", "vue-router", "pinia"]' in auto_import
     assert "dts: false" in auto_import
-    assert 'VITE_BUILD_COMPRESS.split(",")' in compression
-    assert 'includes("gzip")' in compression
-    assert 'includes("brotli")' in compression
-    assert "algorithm: \"brotliCompress\"" in compression
+    assert package["devDependencies"]["vite-plugin-compression2"] == "2.5.3"
+    assert "vite-plugin-compression" not in package["devDependencies"]
+    assert 'import { compression } from "vite-plugin-compression2";' in compression
+    assert "export function parseCompressionAlgorithms" in compression
+    assert '(value ?? "")' in compression
+    assert '.split(",")' in compression
+    assert 'requested.has("gzip")' in compression
+    assert 'requested.has("brotli")' in compression
+    assert "deleteOriginalAssets: false" in compression
 
 
 def test_unused_vite_plugins_and_fake_scss_package_are_absent() -> None:
