@@ -45,9 +45,13 @@ describe("PhyTableFrame", () => {
 
   it("keeps horizontal overflow scoped to the table frame", () => {
     expect(SOURCE).toMatch(
-      /\.phy-table-frame__overflow\s*\{[\s\S]*overflow-x:\s*auto;[\s\S]*overflow-y:\s*hidden/
+      /\.phy-table-frame__scroll\s*\{[\s\S]*overflow-x:\s*auto;[\s\S]*overflow-y:\s*hidden/
     );
     expect(SOURCE).not.toMatch(/position:\s*fixed/);
     expect(SOURCE).toMatch(/min-width:\s*0/);
+    expect(SOURCE).toMatch(
+      /\.phy-table-frame__scroll\s*\{[\s\S]*max-width:\s*100%[\s\S]*overflow-x:\s*auto/
+    );
+    expect(SOURCE).not.toContain("width: 1200px");
   });
 });

@@ -29,9 +29,10 @@
   font-family: var(--phy-font-shell);
 }
 
-.phy-table-frame__overflow {
+.phy-table-frame__scroll {
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   background: var(--phy-color-bg-elevated);

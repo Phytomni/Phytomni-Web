@@ -8,6 +8,10 @@ const SOURCE = readFileSync(
   resolve(__dirname, "../../../src/components/shell/PhyWorkspaceShell.vue"),
   "utf8"
 );
+const HEADER_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/shell/PhyPageHeader.vue"),
+  "utf8"
+);
 
 describe("PhyWorkspaceShell", () => {
   it("renders the named page regions and default content", () => {
@@ -78,5 +82,10 @@ describe("PhyWorkspaceShell", () => {
     expect(wrapper.find(".phy-workspace-shell__filters").exists()).toBe(true);
     expect(wrapper.find(".phy-workspace-shell__footer").exists()).toBe(true);
     expect(SOURCE).not.toMatch(/position:\s*fixed/);
+  });
+
+  it("lets page-header actions wrap within the workspace measure", () => {
+    expect(HEADER_SOURCE).toContain("flex-wrap: wrap;");
+    expect(HEADER_SOURCE).toContain("min-width: 0;");
   });
 });
