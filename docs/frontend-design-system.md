@@ -179,8 +179,9 @@ the authenticated route owns those values and uses Instant mode.
 The cutover order is: deploy the Bot capability support with Expert disabled;
 deploy this Web compatibility build; verify the three product-page staging
 smokes and sanitized gateway telemetry; then obtain reviewer approval before
-removing legacy Chat Instant-plus-tool compatibility. Strict Chat validation
-and Expert activation are still pending. Deployment observations, gateway
+removing legacy Chat Instant-plus-tool compatibility. Strict Chat validation is
+implemented in this branch; its cross-repository deployment observation and
+Expert activation are still pending. Deployment observations, gateway
 telemetry, and the agreed no-legacy-traffic observation window are **External
 Pending** until an authorized environment supplies evidence.
 

@@ -58,6 +58,33 @@ The persisted `bot_projection_json` contains only the sanitized public
 projection fields. It does not contain `id`, `request_id`, raw Bot envelopes,
 provider diagnostics, child payloads, SQL, credentials, or private paths.
 
+## Constrained Expert routing
+
+The blocking Expert route is `POST /v1/query/route`. Instant requests do not
+use this endpoint; they execute `ChatAgent` through the normal Chat path. For
+Expert requests, Web/Go derives the authenticated user's effective tools and
+sends them as an ordered `allowed_tools` list. The browser never supplies that
+list as an authorization decision.
+
+`allowed_tools` is required, contains one to ten unique exact canonical tool
+names, and preserves the Web product order. `forced_tool` is either `null` for
+autonomous routing or one exact member of the allowlist. Bot filters its model
+tool schemas to that list and requires exactly one function selection. A
+no-choice, multi-choice, unknown, outside-allowlist, malformed, or forced-tool
+mismatch response is a sanitized `502` contract failure with no agent dispatch;
+there is no ChatAgent fallback on the constrained HTTP path.
+
+The response is the native `agent.run` envelope. `agent` contains the resolved
+Bot slug rather than `expert`; synchronous runs return `succeeded`, and accepted
+remote runs return `running` with `task_ids`. The selected agent's
+`result.formatted` block and umbrella run identity remain available for Web
+answer shaping and polling. Direct legacy A2A callers that omit the new
+constraint arguments retain their separate compatibility behavior.
+
+The route, selector, and failure matrix remain dark-launch compatible: Expert
+activation and cross-repository staging evidence are external acceptance
+requirements, not results of local Web tests.
+
 ## Old and new column mapping
 
 Projection persistence is additive and reversible. Existing Web fields remain
