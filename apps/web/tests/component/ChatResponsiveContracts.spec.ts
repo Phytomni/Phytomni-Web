@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick } from "vue";
+import { setViewport } from "../helpers/responsiveMatrix";
 import {
   SIDEBAR_COMPACT_BREAKPOINT,
   SIDEBAR_MOBILE_BREAKPOINT,
@@ -45,14 +46,6 @@ const CHAT_FIXTURE_SOURCE = readFileSync(
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
 
-function setInnerWidth(width: number) {
-  Object.defineProperty(window, "innerWidth", {
-    configurable: true,
-    writable: true,
-    value: width,
-  });
-}
-
 function makeHarness(opts?: {
   collapsed?: () => boolean;
   drawerOpen?: () => boolean;
@@ -78,7 +71,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     localStorage.clear();
-    setInnerWidth(1440);
+    setViewport(1440, 768);
   });
 
   afterEach(() => {
@@ -126,7 +119,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
   ])(
     "maps $label ($width CSS px) without geometry claims",
     async ({ width, isMobile, sidebarCollapsed }) => {
-      setInnerWidth(width);
+      setViewport(width, 768);
       const wrapper = mount(makeHarness());
       await nextTick();
 
@@ -138,7 +131,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
   );
 
   it("opens and closes the mobile drawer only below the mobile breakpoint", async () => {
-    setInnerWidth(899);
+    setViewport(899, 768);
     const onDrawer = vi.fn();
     const wrapper = mount(makeHarness({ onDrawerOpenChange: onDrawer }));
 
@@ -148,8 +141,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
     expect(wrapper.vm.drawerOpen).toBe(true);
     expect(onDrawer).toHaveBeenCalledWith(true);
 
-    setInnerWidth(900);
-    window.dispatchEvent(new Event("resize"));
+    setViewport(900, 768);
     vi.advanceTimersByTime(100);
     await nextTick();
     expect(wrapper.vm.isMobile).toBe(false);

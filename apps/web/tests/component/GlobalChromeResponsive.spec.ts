@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import {
+  RESPONSIVE_VIEWPORTS,
+  SEMANTIC_BOUNDARIES,
+} from "../helpers/responsiveMatrix";
 
 const LAYOUT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/layout/LayoutView.vue"),
@@ -52,6 +56,19 @@ const CHAT_FIXTURE_SOURCE = readFileSync(
   resolve(__dirname, "../../tests/visual/chat/ChatVisualFixtureApp.vue"),
   "utf8"
 );
+
+describe("responsive matrix", () => {
+  it("contains the agreed widths and boundaries", () => {
+    expect(RESPONSIVE_VIEWPORTS.map(({ width }) => width)).toEqual([
+      320, 390, 480, 768, 899, 900, 1024, 1199, 1279, 1280, 1366, 1920, 2560,
+    ]);
+    expect(SEMANTIC_BOUNDARIES).toEqual({
+      small: 600,
+      medium: 900,
+      large: 1280,
+    });
+  });
+});
 
 describe("Global application chrome", () => {
   it("removes the empty brand spacer and constrains both header groups", () => {
