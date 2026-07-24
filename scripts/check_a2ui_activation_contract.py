@@ -325,7 +325,11 @@ def _check_design_system(text: str, violations: list[str]) -> None:
     normalized = re.sub(r"\s+", " ", text)
     for match in UNBACKED_ENVIRONMENT_CLAIM_RE.finditer(normalized):
         context = match.group(0).strip()
-        if "external evidence" not in context.casefold():
+        lowered_context = context.casefold()
+        if not (
+            "external evidence" in lowered_context
+            or "external verification" in lowered_context
+        ):
             violations.append(f"unbacked environment proof claim: {context}")
 
 

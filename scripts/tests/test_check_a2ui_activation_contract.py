@@ -323,6 +323,19 @@ bot:
         )
         self.assert_fails(root, "unbacked environment proof claim")
 
+    def test_design_system_allows_explicit_external_verification_disclaimer(self) -> None:
+        temporary, root = self.make_tree()
+        self.addCleanup(temporary.cleanup)
+        doc = root / "docs/frontend-design-system.md"
+        doc.write_text(
+            doc.read_text(encoding="utf-8")
+            + "\nProduction acceptance remains external verification.\n",
+            encoding="utf-8",
+        )
+        code, output = self.run_checker(root)
+        self.assertEqual(code, 0, output)
+        self.assertEqual(output.strip(), "A2UI activation contract: PASS")
+
 
 if __name__ == "__main__":
     unittest.main()
