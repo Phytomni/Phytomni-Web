@@ -165,16 +165,20 @@ func containsAgentTool(tools []string, target string) bool {
 // request; administrators satisfy each grant through the same server-side
 // role check used by explicit product routes.
 func (ps *Service) CheckExpertRemoteProductsAllowed(ctx context.Context, email string) error {
+	var resolution AgentPermissionResolution
+	resolved := false
 	for _, tool := range expertRemoteProductTools {
 		if !isRemoteProductEnabled(tool) {
 			return ErrRemoteProductDisabled
 		}
-	}
-	resolution, err := ps.ResolveAgentPermissions(ctx, email)
-	if err != nil {
-		return ErrRemoteProductForbidden
-	}
-	for _, tool := range expertRemoteProductTools {
+		if !resolved {
+			var err error
+			resolution, err = ps.ResolveAgentPermissions(ctx, email)
+			if err != nil {
+				return ErrRemoteProductForbidden
+			}
+			resolved = true
+		}
 		if !containsAgentTool(resolution.GrantedTools, tool) {
 			return ErrRemoteProductForbidden
 		}

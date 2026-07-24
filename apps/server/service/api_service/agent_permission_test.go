@@ -203,3 +203,21 @@ func TestResolveAgentPermissions(t *testing.T) {
 		}
 	})
 }
+
+func TestCheckExpertRemoteProductsAllowedPreservesProductOrder(t *testing.T) {
+	previous := rxBot.BotConfig
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	gdb := setupAgentPermissionDB(t)
+	seedAgentPermissionUser(t, gdb, "expert@example.com", "expert-role")
+	rxBot.BotConfig = &rxBot.Config{
+		ResearchEnabled: true,
+		DesignEnabled:   false,
+		NetworkEnabled:  false,
+	}
+
+	err := NewService().CheckExpertRemoteProductsAllowed(context.Background(), "expert@example.com")
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("missing Research grant before later disabled products = %v, want ErrRemoteProductForbidden", err)
+	}
+}
