@@ -42,6 +42,7 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
     css: {
       preprocessorOptions: {
         scss: {
+          api: "modern",
           // additionalData: `$injectedColor: orange;`,
         },
       },

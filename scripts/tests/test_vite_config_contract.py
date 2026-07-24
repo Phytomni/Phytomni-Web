@@ -67,6 +67,22 @@ def test_vite_config_keeps_proxy_alias_and_chunk_contracts() -> None:
     assert 'locales: ["./src/locales"]' in config
 
 
+def test_vite_toolchain_uses_the_checkpoint_versions_and_modern_sass_api() -> None:
+    package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
+    vite_config = _read(WEB_ROOT / "vite.config.mts")
+
+    expected_versions = {
+        "vite": "5.4.21",
+        "@vitejs/plugin-vue": "6.0.8",
+        "@vitejs/plugin-vue-jsx": "5.1.6",
+        "sass": "1.101.7",
+        "@types/node": "20.19.31",
+    }
+    for name, version in expected_versions.items():
+        assert package["devDependencies"][name] == version
+    assert 'api: "modern"' in vite_config
+
+
 def test_application_typecheck_uses_the_target_esnext_library() -> None:
     config = json.loads(
         (WEB_ROOT / "tsconfig.json").read_text(encoding="utf-8")
