@@ -48,6 +48,17 @@ func setupRemoteProductHandlerDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("create user_tool_names: %v", err)
 	}
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		dialogue_id TEXT, f_id INTEGER DEFAULT 0, server_id TEXT, bot_run_id TEXT, bot_projection_json TEXT, bot_report_revision INTEGER NOT NULL DEFAULT -1,
+		user_name TEXT, query TEXT, title_query TEXT, answer TEXT,
+		follow_up_questions TEXT, task_id TEXT, task_log TEXT, file_name TEXT,
+		upload_path TEXT, download_path TEXT, image_paths TEXT, compute_resource TEXT,
+		server_file_path TEXT, tool_name TEXT, status TEXT, log_status TEXT, mode TEXT,
+		reaction_type TEXT, collect_type TEXT, created_at DATETIME, updated_at DATETIME, delete_at DATETIME
+	)`).Error; err != nil {
+		t.Fatalf("create question_agent_logs: %v", err)
+	}
 	db.Set("phytomni-server", gdb)
 	return gdb
 }
@@ -59,8 +70,11 @@ func newRemoteProductHandlerRequest(t *testing.T, tool string) (*gin.Context, *h
 	if err := mw.WriteField("query", "remote query"); err != nil {
 		t.Fatalf("write query: %v", err)
 	}
-	if err := mw.WriteField("tool", tool); err != nil {
+	if err := mw.WriteField("tool", "ChatAgent"); err != nil {
 		t.Fatalf("write tool: %v", err)
+	}
+	if err := mw.WriteField("mode", "expert"); err != nil {
+		t.Fatalf("write mode: %v", err)
 	}
 	if err := mw.Close(); err != nil {
 		t.Fatalf("close form: %v", err)
@@ -68,14 +82,14 @@ func newRemoteProductHandlerRequest(t *testing.T, tool string) (*gin.Context, *h
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &body)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/agent-products/"+tool+"/runs", &body)
 	c.Request.Header.Set("Content-Type", mw.FormDataContentType())
-	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	c.Params = gin.Params{{Key: "tool", Value: tool}}
 	i18n.Localize()(c)
 	return c, w
 }
 
-func TestQueryHandler_RemoteProductFlagOffReturns503BeforeBot(t *testing.T) {
+func TestAgentProductRunFlagOffReturns503BeforeBot(t *testing.T) {
 	gdb := setupRemoteProductHandlerDB(t)
 	if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
 		t.Fatalf("seed user: %v", err)
@@ -94,7 +108,7 @@ func TestQueryHandler_RemoteProductFlagOffReturns503BeforeBot(t *testing.T) {
 
 	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent")
 	c.Set("username", "remote@example.com")
-	NewHandler().Query(c)
+	NewHandler().AgentProductRun(c)
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("flag-off status = %d, body = %s; want 503", w.Code, w.Body.String())
@@ -113,7 +127,7 @@ func TestQueryHandler_RemoteProductFlagOffReturns503BeforeBot(t *testing.T) {
 	}
 }
 
-func TestQueryHandler_RemoteProductPermissionDeniedReturns404BeforeBot(t *testing.T) {
+func TestAgentProductRunPermissionDeniedReturns404BeforeBot(t *testing.T) {
 	gdb := setupRemoteProductHandlerDB(t)
 	if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "denied@example.com", "ordinary", 5).Error; err != nil {
 		t.Fatalf("seed user: %v", err)
@@ -132,7 +146,7 @@ func TestQueryHandler_RemoteProductPermissionDeniedReturns404BeforeBot(t *testin
 
 	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent")
 	c.Set("username", "denied@example.com")
-	NewHandler().Query(c)
+	NewHandler().AgentProductRun(c)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("permission-denied status = %d, body = %s; want 404", w.Code, w.Body.String())
@@ -148,5 +162,56 @@ func TestQueryHandler_RemoteProductPermissionDeniedReturns404BeforeBot(t *testin
 	}
 	if hits != 0 {
 		t.Fatalf("permission-denied request reached Bot %d time(s)", hits)
+	}
+}
+
+func TestAgentProductRunUnknownToolReturns400BeforeBodyOrBot(t *testing.T) {
+	previousConfig := rxBot.BotConfig
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+	c, w := newRemoteProductHandlerRequest(t, "UnknownAgent")
+	c.Set("username", "remote@example.com")
+	NewHandler().AgentProductRun(c)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unknown product status = %d, body = %s; want 400", w.Code, w.Body.String())
+	}
+	if hits != 0 {
+		t.Fatalf("unknown product reached Bot %d time(s)", hits)
+	}
+}
+
+func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
+	gdb := setupRemoteProductHandlerDB(t)
+	if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	previousConfig := rxBot.BotConfig
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["task-research"],"result":{}}`))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent")
+	c.Set("username", "remote@example.com")
+	NewHandler().AgentProductRun(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if gotPath != "/v1/agents/research/runs" {
+		t.Fatalf("Bot path = %q, want dedicated research run", gotPath)
 	}
 }

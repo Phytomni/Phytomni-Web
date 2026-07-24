@@ -44,10 +44,15 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/conversations", apiHandler.Conversations)                                             // conversation list (?favorite=true for favourites)
 		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)                                  // all child messages for a conversation
 		apiV1Router.POST("/conversations/:id/messages", middleware.PerUserRateLimit("query"), apiHandler.Query) // send message (id=0 for new conversation, relayed to Bot, per-user rate limited)
-		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)                                    // soft-delete conversation
-		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)                                     // rename conversation
-		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType)                            // like/dislike
-		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)                                 // favourite/unfavourite
+		apiV1Router.POST(
+			"/agent-products/:tool/runs",
+			middleware.PerUserRateLimit("query"),
+			apiHandler.AgentProductRun,
+		)
+		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)         // soft-delete conversation
+		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)          // rename conversation
+		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType) // like/dislike
+		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)      // favourite/unfavourite
 
 		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                       // task list (owner-scoped)
 		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                   // task status (owner-scoped)

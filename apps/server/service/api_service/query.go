@@ -64,6 +64,15 @@ type QueryFile struct {
 	Data     []byte
 }
 
+// QuerySurface identifies the authenticated HTTP surface that supplied a query.
+// Its zero value is Chat so existing callers retain their established behavior.
+type QuerySurface uint8
+
+const (
+	QuerySurfaceChat QuerySurface = iota
+	QuerySurfaceAgentProduct
+)
+
 // QueryInput is the parsed /query multipart form.
 type QueryInput struct {
 	Query          string
@@ -75,6 +84,18 @@ type QueryInput struct {
 	Files          []QueryFile
 	InteropMode    string
 	InteropTargets []string
+	Surface        QuerySurface
+}
+
+// IsDedicatedAgentProductTool reports whether tool has its own route-owned
+// product-run surface.
+func IsDedicatedAgentProductTool(tool string) bool {
+	switch tool {
+	case "InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent":
+		return true
+	default:
+		return false
+	}
 }
 
 // QueryData is the response payload the Web app reads off response.data. The
@@ -408,10 +429,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, err
 		}
 	}
-	// Every explicit remote product tool is gated, including zero-value direct
-	// service calls whose Mode is empty. Only the legacy zero-value tool remains
-	// unscoped and continues to default to ChatAgent below.
-	if isRemoteProductTool(in.Tool) {
+	// Direct remote runs are owned by the dedicated product surface. The Chat
+	// branch is temporary compatibility for existing product pages and is removed
+	// in Task 12 after their migration is verified.
+	directRemoteProduct := in.Surface == QuerySurfaceAgentProduct && IsDedicatedAgentProductTool(in.Tool)
+	legacyRemoteProduct := in.Surface == QuerySurfaceChat && isRemoteProductTool(in.Tool)
+	if directRemoteProduct || legacyRemoteProduct {
 		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
 			return nil, err
 		}

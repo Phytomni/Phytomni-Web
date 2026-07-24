@@ -113,6 +113,20 @@ func streamEnabled() bool {
 // mode=expert), the response streams as text/event-stream frames instead of the
 // blocking JSON envelope.
 func (ph *Handler) Query(ctx *gin.Context) {
+	ph.queryForSurface(ctx, api_service.QuerySurfaceChat, "")
+}
+
+// AgentProductRun accepts a direct run for a route-owned dedicated product.
+func (ph *Handler) AgentProductRun(ctx *gin.Context) {
+	tool := ctx.Param("tool")
+	if !api_service.IsDedicatedAgentProductTool(tool) {
+		writeQueryError(ctx, http.StatusBadRequest, "unknown agent product")
+		return
+	}
+	ph.queryForSurface(ctx, api_service.QuerySurfaceAgentProduct, tool)
+}
+
+func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySurface, routeTool string) {
 	name, _ := ctx.Get("username")
 
 	// Reject inert accounts before any body parsing or Bot relay.
@@ -147,6 +161,11 @@ func (ph *Handler) Query(ctx *gin.Context) {
 		Tool:    ctx.PostForm("tool"),
 		History: ctx.DefaultPostForm("history", "[]"),
 		Mode:    ctx.DefaultPostForm("mode", "instant"),
+		Surface: surface,
+	}
+	if surface == api_service.QuerySurfaceAgentProduct {
+		in.Tool = routeTool
+		in.Mode = "instant"
 	}
 	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
 	// Bound this caller-controlled label before it can reach service errors or
@@ -220,7 +239,7 @@ func (ph *Handler) Query(ctx *gin.Context) {
 	// gate — the frontend forces tool="" in Expert, so slug alone cannot tell
 	// the two apart. The route middleware (auth, per-user rate limit) and the
 	// multipart parse above have already run, so the gate order holds.
-	if streamEnabled() && wantsStream(ctx) && in.Mode != "expert" {
+	if surface == api_service.QuerySurfaceChat && streamEnabled() && wantsStream(ctx) && in.Mode != "expert" {
 		flusher, canFlush := ctx.Writer.(http.Flusher)
 		if canFlush {
 			// Write the SSE headers lazily — only when the first frame is

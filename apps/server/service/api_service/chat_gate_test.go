@@ -266,6 +266,19 @@ func TestCheckRemoteProductAllowed_UnknownToolFailsClosed(t *testing.T) {
 	}
 }
 
+func TestIsDedicatedAgentProductTool(t *testing.T) {
+	for _, tool := range []string{"InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
+		if !IsDedicatedAgentProductTool(tool) {
+			t.Fatalf("%s must have a dedicated product route", tool)
+		}
+	}
+	for _, tool := range []string{"ChatAgent", "research", "UnknownAgent", ""} {
+		if IsDedicatedAgentProductTool(tool) {
+			t.Fatalf("%q must not have a dedicated product route", tool)
+		}
+	}
+}
+
 func TestCheckExpertRemoteProductsAllowedRequiresEveryProductFlag(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "expert@example.com", "admin", 5)
