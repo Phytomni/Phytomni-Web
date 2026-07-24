@@ -1324,8 +1324,8 @@ const {
 } = useComposer({
   messageInput,
   isSending,
-  currentChatId,
   selectedAgent,
+  chatMode,
   scrollToBottom,
   authorizedAgentTools,
 });

@@ -1,49 +1,58 @@
 import { computed, watch, nextTick } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
 import type { MentionOption } from "vue-element-plus-x/types/components/MentionSender/types";
-import { extractAtValues } from "../utils/format";
+
+function selectedAgentPrefix(selectedAgent: string): string {
+  return selectedAgent ? `@${selectedAgent},` : "";
+}
+
+function removeExactSelectedPrefix(
+  value: string,
+  selectedAgent: string
+): string {
+  const prefix = selectedAgentPrefix(selectedAgent);
+  return prefix !== "" && value.startsWith(prefix)
+    ? value.slice(prefix.length)
+    : value;
+}
 
 export function useComposer(opts: {
   messageInput: WritableComputedRef<string>;
   isSending: WritableComputedRef<boolean>;
-  currentChatId: Ref<string>;
   selectedAgent: WritableComputedRef<string>;
+  chatMode: WritableComputedRef<"instant" | "expert">;
   scrollToBottom: () => Promise<void>;
   authorizedAgentTools: Ref<readonly string[]>;
 }) {
   const {
     messageInput,
     isSending,
-    currentChatId,
     selectedAgent,
+    chatMode,
     scrollToBottom,
     authorizedAgentTools,
   } = opts;
 
-  const displayMessageInput = computed({
+  const displayMessageInput = computed<string>({
     get() {
-      if (!selectedAgent.value) {
-        return messageInput.value;
-      }
-      return extractAtValues(messageInput.value).cleanedText;
+      const selected = chatMode.value === "expert" ? selectedAgent.value : "";
+      return `${selectedAgentPrefix(selected)}${messageInput.value}`;
     },
-    set(val: string) {
-      if (selectedAgent.value) {
-        messageInput.value = `@${selectedAgent.value},${val}`;
-      } else {
-        messageInput.value = val;
+    set(value: string) {
+      const selected = chatMode.value === "expert" ? selectedAgent.value : "";
+      const prefix = selectedAgentPrefix(selected);
+      if (prefix !== "" && !value.startsWith(prefix)) {
+        selectedAgent.value = "";
+        messageInput.value = value;
+        return;
       }
+      messageInput.value = removeExactSelectedPrefix(value, selected);
     },
   });
 
   const clearSelectedAgent = () => {
     if (isSending.value || !selectedAgent.value) return;
-    const command = `@${selectedAgent.value},`;
-    const cleaned = messageInput.value.startsWith(command)
-      ? messageInput.value.slice(command.length)
-      : messageInput.value;
     selectedAgent.value = "";
-    messageInput.value = cleaned;
   };
 
   const isPermittedTool = (tool: string) =>
@@ -53,41 +62,15 @@ export function useComposer(opts: {
   const handleButtonClick = (buttonType: string) => {
     if (isSending.value || !isPermittedTool(buttonType)) return;
 
-    if (selectedAgent.value === buttonType) {
-      clearSelectedAgent();
-      return;
-    }
-
-    if (selectedAgent.value) {
-      const oldCommand = "@" + selectedAgent.value + ",";
-      messageInput.value = messageInput.value.replace(oldCommand, "");
-    }
-
-    selectedAgent.value = buttonType;
-    const command = "@" + buttonType + ",";
-    const newMessageValue = extractAtValues(messageInput.value);
-    messageInput.value = `${command}${newMessageValue.cleanedText}`;
+    selectedAgent.value = selectedAgent.value === buttonType ? "" : buttonType;
 
     nextTick(() => {
       scrollToBottom().catch(() => undefined);
     }).catch(() => undefined);
   };
 
-  watch(messageInput, (newVal) => {
-    if (selectedAgent.value && currentChatId.value) {
-      const command = "@" + selectedAgent.value + ",";
-      const newMessageValue = extractAtValues(newVal);
-      const contains = newVal.includes(command);
-      if (!contains) {
-        selectedAgent.value = "";
-      } else {
-        messageInput.value = `${command}${newMessageValue.cleanedText}`;
-      }
-    }
-  });
-
   watch([authorizedAgentTools, isSending], ([tools, sending]) => {
-    // Keep the serialized draft stable while a request owns this dialogue;
+    // Keep the plain draft stable while a request owns this dialogue;
     // retry the same fail-closed cleanup when the send lifecycle settles.
     if (sending) return;
     if (selectedAgent.value && !tools.includes(selectedAgent.value)) {
@@ -98,14 +81,12 @@ export function useComposer(opts: {
   const handleCommand = (command: string) => {
     if (isSending.value) return;
 
-    const regex = /@([^,]+),/;
+    const regex = /^@([^,]+),$/u;
     const match = command.match(regex);
     const extractedValue = match ? match[1] : "";
     if (!isPermittedTool(extractedValue)) return;
 
     selectedAgent.value = extractedValue;
-    const newMessageValue = extractAtValues(messageInput.value);
-    messageInput.value = `${command}${newMessageValue.cleanedText}`;
 
     nextTick(() => {
       scrollToBottom().catch(() => undefined);
@@ -115,6 +96,10 @@ export function useComposer(opts: {
   const handleSelect = (option: MentionOption) => {
     if (!isPermittedTool(option.value)) return;
     selectedAgent.value = option.value;
+    messageInput.value = removeExactSelectedPrefix(
+      messageInput.value,
+      option.value
+    );
 
     nextTick(() => {
       scrollToBottom().catch(() => undefined);

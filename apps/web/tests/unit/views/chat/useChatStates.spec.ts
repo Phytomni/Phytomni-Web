@@ -215,6 +215,50 @@ describe("useChatStates mode", () => {
     s.currentChatId.value = "b";
     expect(s.chatMode.value).toBe("instant");
   });
+
+  it("clears only Expert selection when switching to Instant", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "c1";
+    s.chatMode.value = "expert";
+    s.selectedAgent.value = "DataAgent";
+    s.messageInput.value = "compare these genes";
+    const file = {
+      name: "genes.csv",
+      size: 12,
+      type: "text/csv",
+      file: {} as File,
+    };
+    s.fileList.value = [file];
+
+    s.chatMode.value = "instant";
+
+    expect(s.selectedAgent.value).toBe("");
+    expect(s.messageInput.value).toBe("compare these genes");
+    expect(s.fileList.value).toEqual([file]);
+  });
+
+  it("keeps mode, selection, and draft independent across dialogues", () => {
+    const s = useChatStates();
+
+    s.currentChatId.value = "A";
+    s.chatMode.value = "expert";
+    s.selectedAgent.value = "KnowledgeAgent";
+    s.messageInput.value = "question A";
+
+    s.currentChatId.value = "B";
+    s.chatMode.value = "instant";
+    s.messageInput.value = "question B";
+
+    s.currentChatId.value = "A";
+    expect(s.chatMode.value).toBe("expert");
+    expect(s.selectedAgent.value).toBe("KnowledgeAgent");
+    expect(s.messageInput.value).toBe("question A");
+
+    s.currentChatId.value = "B";
+    expect(s.chatMode.value).toBe("instant");
+    expect(s.selectedAgent.value).toBe("");
+    expect(s.messageInput.value).toBe("question B");
+  });
 });
 
 describe("useChatStates selectedAgent", () => {

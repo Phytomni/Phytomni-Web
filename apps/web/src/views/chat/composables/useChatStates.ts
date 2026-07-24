@@ -102,7 +102,11 @@ export function useChatStates() {
     },
     set: (value: "instant" | "expert") => {
       if (!currentChatId.value) return;
-      getChatState(currentChatId.value).mode = value;
+      const chatState = getChatState(currentChatId.value);
+      chatState.mode = value;
+      if (value === "instant") {
+        chatState.selectedAgent = "";
+      }
     },
   });
 
