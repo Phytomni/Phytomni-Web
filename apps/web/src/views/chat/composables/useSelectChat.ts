@@ -34,12 +34,23 @@ export function useSelectChat(opts: {
     chatList,
     timestamp,
   } = opts;
+  const hydrationGenerations = new Map<string, number>();
+
+  const beginHydration = (dialogueId: string) => {
+    const generation = (hydrationGenerations.get(dialogueId) || 0) + 1;
+    hydrationGenerations.set(dialogueId, generation);
+    return generation;
+  };
 
   const selectChat = async (dialogueId: string) => {
     // Capture dialogue + state before await so a late response never writes
     // another dialogue's renderedChat or steals foreground URL/scroll.
     const capturedDialogueId = dialogueId;
     const chatState = getChatState(capturedDialogueId);
+    // A newer selection of this same dialogue supersedes any older fetch.
+    const hydrationGeneration = beginHydration(capturedDialogueId);
+    const isCurrentHydration = () =>
+      hydrationGenerations.get(capturedDialogueId) === hydrationGeneration;
     currentChatId.value = capturedDialogueId;
     const chat = chatList.value.find(
       (c: Chat) => c.dialogue_id === capturedDialogueId
@@ -48,10 +59,12 @@ export function useSelectChat(opts: {
     // A live rendered owner already contains message-scoped stream/runtime
     // state. Re-selecting it must not rehydrate stale history over that tree.
     if (chatState.renderedChat) {
-      if (chatState.renderedChat.messages.length > 0) {
+      if (chatState.renderedChat.messages.length > 0 && isCurrentHydration()) {
         await scrollToBottom();
       }
-      updateUrlWithChatId(capturedDialogueId);
+      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
+        updateUrlWithChatId(capturedDialogueId);
+      }
       return;
     }
 
@@ -66,18 +79,21 @@ export function useSelectChat(opts: {
       // call getAnswerCheck to get the conversation records
       res = await getAnswerCheck({ dialogue_id: capturedDialogueId });
     } catch {
+      if (!isCurrentHydration()) return;
       chatState.historyHydration = "error";
       chatState.historyErrorKind = "request";
-      if (currentChatId.value === capturedDialogueId) {
+      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
         updateUrlWithChatId(capturedDialogueId);
       }
       return;
     }
 
+    if (!isCurrentHydration()) return;
+
     if (res.code !== 200) {
       chatState.historyHydration = "error";
       chatState.historyErrorKind = "request";
-      if (currentChatId.value === capturedDialogueId) {
+      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
         updateUrlWithChatId(capturedDialogueId);
       }
       return;
@@ -285,6 +301,7 @@ export function useSelectChat(opts: {
 
                     readServerFile(item.server_file_path)
                       .then((fileContent) => {
+                        if (!isCurrentHydration()) return;
                         if (fileContent && fileContent.trim()) {
                           deepGenomeMessage.content = fileContent;
                         } else {
@@ -293,13 +310,18 @@ export function useSelectChat(opts: {
                         }
                         // force a view update; scroll only if still foreground
                         nextTick(() => {
+                          if (!isCurrentHydration()) return;
                           timestamp.value = Date.now();
-                          if (currentChatId.value === capturedDialogueId) {
+                          if (
+                            isCurrentHydration() &&
+                            currentChatId.value === capturedDialogueId
+                          ) {
                             scrollToBottom().catch(() => undefined);
                           }
                         }).catch(() => undefined);
                       })
                       .catch((error) => {
+                        if (!isCurrentHydration()) return;
                         console.error(
                           "Failed to read DeepGenomeAgent file:",
                           error
@@ -307,8 +329,12 @@ export function useSelectChat(opts: {
                         deepGenomeMessage.content =
                           "Failed to load file, please try again later";
                         nextTick(() => {
+                          if (!isCurrentHydration()) return;
                           timestamp.value = Date.now();
-                          if (currentChatId.value === capturedDialogueId) {
+                          if (
+                            isCurrentHydration() &&
+                            currentChatId.value === capturedDialogueId
+                          ) {
                             scrollToBottom().catch(() => undefined);
                           }
                         }).catch(() => undefined);
@@ -380,17 +406,23 @@ export function useSelectChat(opts: {
         messages.length > 0 ? "ready" : "history-empty";
 
       // Foreground shell effects only while this dialogue is still selected
-      if (currentChatId.value === capturedDialogueId) {
+      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
         if (messages.length > 0) {
           await scrollToBottom();
         }
-        updateUrlWithChatId(capturedDialogueId);
+        if (
+          isCurrentHydration() &&
+          currentChatId.value === capturedDialogueId
+        ) {
+          updateUrlWithChatId(capturedDialogueId);
+        }
       }
       return;
     } catch {
+      if (!isCurrentHydration()) return;
       chatState.historyHydration = "error";
       chatState.historyErrorKind = "decode";
-      if (currentChatId.value === capturedDialogueId) {
+      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
         updateUrlWithChatId(capturedDialogueId);
       }
     }

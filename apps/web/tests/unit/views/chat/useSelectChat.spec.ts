@@ -442,6 +442,85 @@ describe("useSelectChat", () => {
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
   });
 
+  it("A→B→A ignores the stale first A response after the newer A hydration succeeds", async () => {
+    const firstA = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const pendingB = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const secondA = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    mockGetAnswerCheck
+      .mockReturnValueOnce(firstA.promise)
+      .mockReturnValueOnce(pendingB.promise)
+      .mockReturnValueOnce(secondA.promise);
+
+    const { selectChat } = makeComposable();
+    const firstASelection = selectChat("d1");
+    const bSelection = selectChat("d2");
+    const secondASelection = selectChat("d1");
+
+    secondA.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "new-a",
+          query: "New A question",
+          answer: "New A answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+    await secondASelection;
+
+    expect(messageAt("d1", 0, "new A history").content).toBe("New A question");
+    expect(stateFor("d1").historyHydration).toBe("ready");
+    expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
+    expect(scrollToBottom).toHaveBeenCalledTimes(1);
+
+    firstA.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "old-a",
+          query: "Old A question",
+          answer: "Old A answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+    await firstASelection;
+
+    expect(messageAt("d1", 0, "stale A history").content).toBe(
+      "New A question"
+    );
+    expect(stateFor("d1").historyHydration).toBe("ready");
+    expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
+    expect(scrollToBottom).toHaveBeenCalledTimes(1);
+
+    pendingB.resolve(historyResponse([]));
+    await bSelection;
+  });
+
+  it("a rejected stale request cannot overwrite the newer hydration error state", async () => {
+    const firstA = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const secondA = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    mockGetAnswerCheck
+      .mockReturnValueOnce(firstA.promise)
+      .mockReturnValueOnce(secondA.promise);
+
+    const { selectChat } = makeComposable();
+    const firstASelection = selectChat("d1");
+    const secondASelection = selectChat("d1");
+
+    secondA.resolve(historyResponse([], { code: 500 }));
+    await secondASelection;
+    expect(stateFor("d1").historyHydration).toBe("error");
+    expect(stateFor("d1").historyErrorKind).toBe("request");
+    expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
+
+    firstA.reject(new Error("stale request failed"));
+    await firstASelection;
+
+    expect(stateFor("d1").historyHydration).toBe("error");
+    expect(stateFor("d1").historyErrorKind).toBe("request");
+    expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
+  });
+
   it("history AnalystAgent hydrates the existing task_id onto the message", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce(
       historyResponse([
