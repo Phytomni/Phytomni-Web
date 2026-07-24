@@ -8,6 +8,8 @@ function createDefaultChatUIState(): ChatUIState {
     messageInput: "",
     fileList: [],
     historyQuestion: null,
+    historyHydration: "new",
+    historyErrorKind: null,
     copyVisible: 0,
     copyTimeRef: undefined,
     logData: {},

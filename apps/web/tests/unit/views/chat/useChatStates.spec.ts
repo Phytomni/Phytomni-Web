@@ -55,6 +55,8 @@ describe("useChatStates parallel chat state", () => {
       messageInput: "",
       fileList: [],
       historyQuestion: null,
+      historyHydration: "new",
+      historyErrorKind: null,
       copyVisible: 0,
       copyTimeRef: undefined,
       logData: {},
@@ -102,6 +104,19 @@ describe("useChatStates parallel chat state", () => {
     expect(s.getChatState("A").logErrorKinds["12"]).toBe("fetch");
     expect(s.getChatState("A").logData["12"]).toBe("A-log");
     expect(s.getChatState("A").activityExpandedByMessage["log:12"]).toBe(true);
+  });
+
+  it("starts each dialogue with independent history hydration state", () => {
+    const s = useChatStates();
+    const stateA = s.getChatState("A");
+    stateA.historyHydration = "loading";
+    stateA.historyErrorKind = "request";
+
+    const stateB = s.getChatState("B");
+    expect(stateB.historyHydration).toBe("new");
+    expect(stateB.historyErrorKind).toBeNull();
+    expect(stateA.historyHydration).toBe("loading");
+    expect(stateA.historyErrorKind).toBe("request");
   });
 
   it("keeps typed history messages and structured log payloads scoped to one dialogue", () => {

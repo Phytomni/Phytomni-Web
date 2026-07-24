@@ -254,10 +254,11 @@ describe("useSelectChat", () => {
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
   });
 
-  it("non-200 response: does not rebuild messages or reset historyQuestion, but still updates URL when still active", async () => {
-    // Seed a non-empty historyQuestion to verify the non-200 branch does not touch it
+  it("non-200 response: clears stale history and records a recoverable request error", async () => {
+    // Seed stale rendered/history state to verify this dialogue is reset before fetch.
     const st = getChatState("d1");
     st.historyQuestion = [{ role: "user", content: "keep me" }];
+    st.renderedChat = null;
 
     mockGetAnswerCheck.mockResolvedValueOnce(
       historyResponse([], { code: 500, message: "history unavailable" })
@@ -268,13 +269,76 @@ describe("useSelectChat", () => {
 
     // The synchronous currentChatId write still happens
     expect(currentChatId.value).toBe("d1");
-    // The non-200 branch skips the renderedChat assignment
+    // The non-200 branch leaves no stale rendered history behind.
     expect(stateFor("d1").renderedChat).toBeNull();
-    // historyQuestion is not reset
-    expect(stateFor("d1").historyQuestion).toEqual([
-      { role: "user", content: "keep me" },
-    ]);
+    expect(stateFor("d1").historyQuestion).toBeNull();
+    expect(stateFor("d1").historyHydration).toBe("error");
+    expect(stateFor("d1").historyErrorKind).toBe("request");
     // The URL is updated while still active
+    expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
+  });
+
+  it("hydrates legacy title-only rows without fabricating a missing assistant answer", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        invalidInput<ChatHistoryRecord>({
+          id: "legacy-title-only",
+          title_query: "Legacy title question",
+          answer: undefined,
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    expect(stateFor("d1").historyHydration).toBe("ready");
+    expect(stateFor("d1").historyErrorKind).toBeNull();
+    expect(renderedFor("d1", "legacy title-only").messages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "Legacy title question",
+      }),
+    ]);
+    expect(stateFor("d1").historyQuestion).toEqual([
+      { role: "user", content: "Legacy title question" },
+    ]);
+  });
+
+  it("records an empty successful history without rendering fabricated rows", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(historyResponse([]));
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    expect(stateFor("d1").historyHydration).toBe("history-empty");
+    expect(stateFor("d1").historyErrorKind).toBeNull();
+    expect(renderedFor("d1", "empty history").messages).toEqual([]);
+    expect(stateFor("d1").historyQuestion).toEqual([]);
+  });
+
+  it("records a decode error for a malformed successful payload", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<ChatHistoryRecord[]>>({ code: 200, data: null })
+    );
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    expect(stateFor("d1").historyHydration).toBe("error");
+    expect(stateFor("d1").historyErrorKind).toBe("decode");
+    expect(stateFor("d1").renderedChat).toBeNull();
+  });
+
+  it("records a request error when history retrieval rejects", async () => {
+    mockGetAnswerCheck.mockRejectedValueOnce(new Error("network unavailable"));
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    expect(stateFor("d1").historyHydration).toBe("error");
+    expect(stateFor("d1").historyErrorKind).toBe("request");
     expect(updateUrlWithChatId).toHaveBeenCalledWith("d1");
   });
 

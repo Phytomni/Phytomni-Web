@@ -129,6 +129,15 @@ export interface ChatResponse {
   a2ui?: unknown;
 }
 
+export type ChatHistoryHydrationStatus =
+  | "new"
+  | "loading"
+  | "ready"
+  | "history-empty"
+  | "error";
+
+export type ChatHistoryErrorKind = "request" | "decode";
+
 export interface UploadFile {
   name: string;
   size: number;
@@ -161,6 +170,10 @@ export interface ChatUIState {
   messageInput: string;
   fileList: UploadFile[];
   historyQuestion: readonly ChatMessage[] | null;
+  /** Lifecycle of this dialogue's persisted-history reconstruction. */
+  historyHydration: ChatHistoryHydrationStatus;
+  /** Bounded reason for a recoverable history hydration failure. */
+  historyErrorKind: ChatHistoryErrorKind | null;
   copyVisible: number;
   copyTimeRef: ReturnType<typeof setTimeout> | undefined;
   logData: Record<string, unknown>;

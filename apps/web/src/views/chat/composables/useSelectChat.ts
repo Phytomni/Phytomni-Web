@@ -13,17 +13,10 @@ import { readServerFile } from "../utils/agent-log";
 import { getAnswerCheck } from "@/api/chat";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
 import { decodeAgentSteps, decodeFollowUpQuestions } from "../messageTypes";
-
-// History rows may carry bounded source metadata during the reversible Web
-// cutover. Keep that metadata opaque to rendering and discard malformed rows
-// before the existing per-agent branches inspect content fields.
-function normalizedHistoryRows(data: unknown): ChatResponse[] {
-  if (!Array.isArray(data)) return [];
-  return data.filter(
-    (item): item is ChatResponse =>
-      typeof item === "object" && item !== null && !Array.isArray(item)
-  );
-}
+import {
+  normalizeHistoryRows,
+  resolveHistoryQuestion,
+} from "../utils/chat-history-normalization";
 
 export function useSelectChat(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
@@ -62,27 +55,52 @@ export function useSelectChat(opts: {
       return;
     }
 
-    // call getAnswerCheck to get the conversation records
-    const res = await getAnswerCheck({ dialogue_id: capturedDialogueId });
+    chatState.historyHydration = "loading";
+    chatState.historyErrorKind = null;
+    chatState.historyQuestion = null;
+    chatState.renderedChat = null;
+    chatState.reactions = {};
 
-    if (res.code === 200) {
+    let res;
+    try {
+      // call getAnswerCheck to get the conversation records
+      res = await getAnswerCheck({ dialogue_id: capturedDialogueId });
+    } catch {
+      chatState.historyHydration = "error";
+      chatState.historyErrorKind = "request";
+      if (currentChatId.value === capturedDialogueId) {
+        updateUrlWithChatId(capturedDialogueId);
+      }
+      return;
+    }
+
+    if (res.code !== 200) {
+      chatState.historyHydration = "error";
+      chatState.historyErrorKind = "request";
+      if (currentChatId.value === capturedDialogueId) {
+        updateUrlWithChatId(capturedDialogueId);
+      }
+      return;
+    }
+
+    try {
+      if (!Array.isArray(res.data)) {
+        throw new TypeError("History response data must be an array");
+      }
+
       // process the returned data into message format
       const messages: ChatMessage[] = [];
       const historyMessages: ChatMessage[] = [];
+      const historyRows = normalizeHistoryRows(res.data);
       // Reconstruct the per-conversation routing mode from the persisted parent
       // row so refreshes/threads in this conversation route correctly. Default
       // to "instant" for legacy rows that predate the mode column.
-      chatState.mode =
-        res.data[0] && res.data[0].mode === "expert" ? "expert" : "instant";
-      chatState.historyQuestion = null;
-
-      // initialize reaction state
-      chatState.reactions = {};
+      chatState.mode = historyRows[0]?.mode === "expert" ? "expert" : "instant";
 
       // iterate the returned array and convert to message format
-      const historyRows = normalizedHistoryRows(res.data);
       if (historyRows.length > 0) {
-        historyRows.forEach((item: ChatResponse) => {
+        historyRows.forEach((row) => {
+          const item: Partial<ChatResponse> = row;
           // sync the reaction state returned by the server
           if (item.id && item.reaction_type) {
             chatState.reactions[item.id.toString()] = parseInt(
@@ -90,12 +108,11 @@ export function useSelectChat(opts: {
             );
           }
 
-          // add the user message
-          if (item.query) {
+          // add the user message, including legacy title-only history rows
+          const question = resolveHistoryQuestion(row, chat?.title || "");
+          if (question) {
             // parse the message content and extract file info
-            const { content, attachedFiles } = parseMessageWithFiles(
-              item.query
-            );
+            const { content, attachedFiles } = parseMessageWithFiles(question);
 
             messages.push({
               role: "user",
@@ -108,8 +125,8 @@ export function useSelectChat(opts: {
             });
           }
 
-          // add the assistant message
-          if (item.answer) {
+          // add the assistant message only when the persisted value is usable
+          if (typeof item.answer === "string" && item.answer.trim()) {
             try {
               const answerData = parseAgentAnswer(item.answer);
               const finalAnswer = optionalStringValue(
@@ -359,6 +376,8 @@ export function useSelectChat(opts: {
         ...chat,
         messages: lockUnverifiedHistoryA2ui(messages),
       };
+      chatState.historyHydration =
+        messages.length > 0 ? "ready" : "history-empty";
 
       // Foreground shell effects only while this dialogue is still selected
       if (currentChatId.value === capturedDialogueId) {
@@ -368,9 +387,12 @@ export function useSelectChat(opts: {
         updateUrlWithChatId(capturedDialogueId);
       }
       return;
-    }
-    if (currentChatId.value === capturedDialogueId) {
-      updateUrlWithChatId(capturedDialogueId);
+    } catch {
+      chatState.historyHydration = "error";
+      chatState.historyErrorKind = "decode";
+      if (currentChatId.value === capturedDialogueId) {
+        updateUrlWithChatId(capturedDialogueId);
+      }
     }
   };
 
