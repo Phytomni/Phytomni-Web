@@ -5,10 +5,9 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/spf13/viper"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
-
-	"github.com/spf13/viper"
 )
 
 // ErrChatQuotaExhausted indicates insufficient/inactive account quota (handler maps to 403).
@@ -80,6 +79,11 @@ func isRemoteProductTool(tool string) bool {
 	return ok
 }
 
+func isRemoteProductEnabled(tool string) bool {
+	requirement, ok := remoteProductRequirements[tool]
+	return !ok || requirement.enabled(rxBot.BotConfig)
+}
+
 // IsRemoteProductTool reports whether a canonical or Bot-slug tool belongs to
 // one of the separately gated remote products. It lets the HTTP handler apply
 // the same pre-dispatch boundary after parsing multipart fields.
@@ -132,34 +136,26 @@ func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool st
 	if !requirement.enabled(rxBot.BotConfig) {
 		return ErrRemoteProductDisabled
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	db := model.DB(ctx)
-	var user model.User
-	if err := db.Model(&model.User{}).Where("email = ?", strings.TrimSpace(email)).First(&user).Error; err != nil {
+	resolution, err := ps.ResolveAgentPermissions(ctx, email)
+	if err != nil {
 		return ErrRemoteProductForbidden
 	}
-
-	// Administrators retain their existing server-side ability to operate all
-	// products once the explicit product flag is enabled. Regular accounts must
-	// carry a canonical tool grant; role names from the browser are ignored.
-	if user.Code == "admin" || user.Code == "super_admin" || user.Code == requirement.tool {
-		return nil
-	}
-
-	var grants int64
-	if err := db.Model(&model.UserToolName{}).
-		Joins("JOIN tool_names ON tool_names.id = user_tool_names.tool_id").
-		Where("user_tool_names.code = ? AND tool_names.tool_name = ?", user.Code, requirement.tool).
-		Count(&grants).Error; err != nil {
+	if !containsAgentTool(resolution.GrantedTools, requirement.tool) {
 		return ErrRemoteProductForbidden
 	}
-	if grants == 0 {
-		return ErrRemoteProductForbidden
+	if !containsAgentTool(resolution.AllowedTools, requirement.tool) {
+		return ErrRemoteProductDisabled
 	}
 	return nil
+}
+
+func containsAgentTool(tools []string, target string) bool {
+	for _, tool := range tools {
+		if tool == target {
+			return true
+		}
+	}
+	return false
 }
 
 // CheckExpertRemoteProductsAllowed is the fail-closed Expert pre-dispatch
@@ -170,8 +166,20 @@ func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool st
 // role check used by explicit product routes.
 func (ps *Service) CheckExpertRemoteProductsAllowed(ctx context.Context, email string) error {
 	for _, tool := range expertRemoteProductTools {
-		if err := ps.CheckRemoteProductAllowed(ctx, email, tool); err != nil {
-			return err
+		if !isRemoteProductEnabled(tool) {
+			return ErrRemoteProductDisabled
+		}
+	}
+	resolution, err := ps.ResolveAgentPermissions(ctx, email)
+	if err != nil {
+		return ErrRemoteProductForbidden
+	}
+	for _, tool := range expertRemoteProductTools {
+		if !containsAgentTool(resolution.GrantedTools, tool) {
+			return ErrRemoteProductForbidden
+		}
+		if !containsAgentTool(resolution.AllowedTools, tool) {
+			return ErrRemoteProductDisabled
 		}
 	}
 	return nil

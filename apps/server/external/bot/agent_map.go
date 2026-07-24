@@ -30,6 +30,29 @@ var WebAgentDefinitions = []WebAgentDefinition{
 	{Tool: "GeneNetworkAgent", Slug: "network", Execution: "agent_run"},
 }
 
+// CanonicalAgentDisplayOrder is the fixed product order for presenting and
+// evaluating Web-owned agent capabilities. Keep this separate from the Bot
+// manifest order: product display is intentionally chat, knowledge, data,
+// analyst, review, research, network, brief-gene, deep-genome, design.
+var CanonicalAgentDisplayOrder = []string{
+	"ChatAgent",
+	"KnowledgeAgent",
+	"DataAgent",
+	"AnalystAgent",
+	"ReviewAgent",
+	"InSilicoResearchAgent",
+	"GeneNetworkAgent",
+	"BriefGeneAgent",
+	"DeepGenomeAgent",
+	"DigitalDesignAgent",
+}
+
+// CanonicalAgentDisplayTools returns a copy so callers cannot mutate the
+// process-wide display order.
+func CanonicalAgentDisplayTools() []string {
+	return append([]string(nil), CanonicalAgentDisplayOrder...)
+}
+
 const maxBotAgentDescriptors = 32
 
 // ValidateWebAgentDescriptors validates only the public shape needed by the

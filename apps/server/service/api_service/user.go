@@ -2,14 +2,107 @@ package api_service
 
 import (
 	"context"
+	stdErrors "errors"
+	"fmt"
 	"phytomni-server/common"
+	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-errors/errors"
 	"gorm.io/gorm"
 )
+
+var ErrAgentPermissionUserNotFound = stdErrors.New("agent permission user not found")
+
+// AgentPermissionResolution separates the user's stored canonical grants from
+// tools presently executable under independently configured product flags.
+// PermissionKeys carries non-agent UI permissions for callers that need them.
+type AgentPermissionResolution struct {
+	Role           string
+	GrantedTools   []string
+	AllowedTools   []string
+	PermissionKeys []string
+}
+
+// ResolveAgentPermissions provides the server-owned canonical permission view
+// for an authenticated user. Agent identity comes from the canonical registry,
+// never from historical numeric tool IDs.
+func (ps *Service) ResolveAgentPermissions(ctx context.Context, email string) (AgentPermissionResolution, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	resolution := AgentPermissionResolution{
+		GrantedTools:   []string{},
+		AllowedTools:   []string{},
+		PermissionKeys: []string{},
+	}
+	db := model.DB(ctx)
+	var user model.User
+	if err := db.Where("email = ?", strings.TrimSpace(email)).First(&user).Error; err != nil {
+		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+			return resolution, fmt.Errorf("%w: %s", ErrAgentPermissionUserNotFound, strings.TrimSpace(email))
+		}
+		return resolution, err
+	}
+	resolution.Role = user.Code
+
+	canonical := make(map[string]struct{}, len(rxBot.CanonicalAgentDisplayOrder))
+	for _, tool := range rxBot.CanonicalAgentDisplayOrder {
+		canonical[tool] = struct{}{}
+	}
+	if user.Code == "admin" || user.Code == "super_admin" {
+		for _, tool := range rxBot.CanonicalAgentDisplayOrder {
+			resolution.GrantedTools = append(resolution.GrantedTools, tool)
+			if isRemoteProductEnabled(tool) {
+				resolution.AllowedTools = append(resolution.AllowedTools, tool)
+			}
+		}
+		return resolution, nil
+	}
+
+	var toolNames []string
+	if err := db.Table("user_tool_names").
+		Select("tool_names.tool_name").
+		Joins("JOIN tool_names ON tool_names.id = user_tool_names.tool_id").
+		Where("user_tool_names.code = ?", user.Code).
+		Pluck("tool_names.tool_name", &toolNames).Error; err != nil {
+		return resolution, err
+	}
+
+	granted := make(map[string]struct{}, len(canonical))
+	permissionKeys := make(map[string]struct{})
+	for _, tool := range toolNames {
+		if _, ok := canonical[tool]; ok {
+			granted[tool] = struct{}{}
+			continue
+		}
+		permissionKeys[tool] = struct{}{}
+	}
+	if _, ok := canonical[user.Code]; ok {
+		granted[user.Code] = struct{}{}
+	}
+
+	for _, tool := range rxBot.CanonicalAgentDisplayOrder {
+		if _, ok := granted[tool]; ok {
+			resolution.GrantedTools = append(resolution.GrantedTools, tool)
+			if isRemoteProductEnabled(tool) {
+				resolution.AllowedTools = append(resolution.AllowedTools, tool)
+			}
+		}
+	}
+	for _, tool := range toolNames {
+		if _, ok := permissionKeys[tool]; ok {
+			resolution.PermissionKeys = append(resolution.PermissionKeys, tool)
+			delete(permissionKeys, tool)
+		}
+	}
+
+	return resolution, nil
+}
 
 func (ps *Service) GetUserProfile(ctx context.Context, email string) (*common.UserProfileResponse, error) {
 	var user model.User
