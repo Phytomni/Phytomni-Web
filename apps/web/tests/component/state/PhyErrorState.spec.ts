@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import PhyErrorState from "@/components/state/PhyErrorState.vue";
+
+const ERROR_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/state/PhyErrorState.vue"),
+  "utf8"
+);
 
 describe("PhyErrorState", () => {
   it("renders the supplied copy as an actionable alert", () => {
+    expect(ERROR_SOURCE).toContain("overflow-wrap: anywhere;");
     const wrapper = mount(PhyErrorState, {
       props: {
         title: "Could not load",

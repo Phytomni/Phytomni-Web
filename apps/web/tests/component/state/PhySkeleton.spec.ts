@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import PhySkeleton from "@/components/state/PhySkeleton.vue";
+
+const SKELETON_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/state/PhySkeleton.vue"),
+  "utf8"
+);
 
 describe("PhySkeleton", () => {
   it.each([
@@ -8,6 +15,7 @@ describe("PhySkeleton", () => {
     ["card", ".phy-skeleton__card"],
     ["table-row", ".phy-skeleton__table-row"],
   ] as const)("renders the %s shape", (shape, selector) => {
+    expect(SKELETON_SOURCE).toContain("minmax(0, 1fr)");
     const wrapper = mount(PhySkeleton, { props: { shape } });
 
     expect(wrapper.find(".phy-skeleton").attributes("aria-hidden")).toBe(

@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import PhyAsyncState from "@/components/state/PhyAsyncState.vue";
+
+const ASYNC_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/state/PhyAsyncState.vue"),
+  "utf8"
+);
 
 describe("PhyAsyncState", () => {
   it("renders loading with a busy boundary and a polite status", () => {
+    expect(ASYNC_SOURCE).toContain("aria-busy");
     const wrapper = mount(PhyAsyncState, {
       props: { state: "loading" },
       slots: { loading: '<div data-test="loading-content">Loading</div>' },

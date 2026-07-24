@@ -104,6 +104,9 @@ describe("Chat empty state", () => {
 
   it("keeps the empty state visual hierarchy", () => {
     expect(EMPTY_STATE_SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-reading-max-width));"
+    );
+    expect(EMPTY_STATE_SOURCE).toContain(
       "font-size: clamp(1.5rem, 1.15rem + 0.75vw, 1.75rem)"
     );
     expect(EMPTY_STATE_SOURCE).toMatch(

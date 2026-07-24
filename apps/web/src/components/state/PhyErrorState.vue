@@ -50,8 +50,10 @@ const emit = defineEmits<{
 }
 
 .phy-error-state__description {
+  width: min(100%, var(--phy-layout-reading-max-width));
   color: var(--phy-color-text-secondary);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .phy-error-state__retry {
