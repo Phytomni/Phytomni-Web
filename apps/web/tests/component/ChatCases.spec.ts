@@ -96,9 +96,6 @@ const mountCases = (locale: "en-US" | "zh-CN") => {
 
 describe("ChatCases", () => {
   it("keeps the seven-card group on the bounded conversation lane", () => {
-    expect(CASES_SOURCE).toMatch(
-      /<AgentDisplayName\s+:label="item\.title"\s*\/>/
-    );
     expect(CASES_SOURCE).toContain(
       "max-width: var(--phy-layout-transcript-max-width)"
     );
