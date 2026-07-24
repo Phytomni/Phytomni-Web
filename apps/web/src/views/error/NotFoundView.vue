@@ -165,6 +165,7 @@ import PhyErrorState from "@/components/state/PhyErrorState.vue";
 .recovery-footer {
   flex: 0 0 auto;
   width: min(100%, var(--phy-layout-reading-max-width, 760px));
+  margin-inline: auto;
 }
 
 .phy-recovery-code {

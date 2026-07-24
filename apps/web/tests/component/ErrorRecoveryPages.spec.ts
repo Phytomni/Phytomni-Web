@@ -159,6 +159,8 @@ describe("standalone recovery pages", () => {
     expect(NOT_FOUND_SOURCE).toContain('data-scroll-root="recovery"');
     expect(UNAUTHORIZED_SOURCE).toContain("overflow-wrap: anywhere;");
     expect(NOT_FOUND_SOURCE).toContain("overflow-wrap: anywhere;");
+    expect(UNAUTHORIZED_SOURCE).toContain("margin-inline: auto;");
+    expect(NOT_FOUND_SOURCE).toContain("margin-inline: auto;");
     expect(mountUnauthorized().find(".recovery-footer").exists()).toBe(true);
     expect(mountNotFound().find(".recovery-footer").exists()).toBe(true);
   });
