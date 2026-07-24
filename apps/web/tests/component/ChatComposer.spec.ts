@@ -79,8 +79,10 @@ const pickerOptions = [
 const baseProps = () => ({
   modelValue: "hello",
   isSending: false,
-  chatMode: "instant" as const,
+  chatMode: "expert" as const,
+  instantModeEnabled: true,
   expertModeEnabled: true,
+  modeUsable: true,
   showModeSelector: true,
   fileList: [] as UploadFile[],
   rolesLoading: false,
@@ -97,7 +99,7 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
         ChatModeSelector: {
           name: "ChatModeSelector",
           template: '<div class="composer-mode-selector" />',
-          props: ["modelValue", "expertEnabled"],
+          props: ["modelValue", "instantEnabled", "expertEnabled"],
           emits: ["update:modelValue"],
         },
         ChatAgentPicker: {
@@ -237,8 +239,8 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["next"]);
   });
 
-  it("feeds mention suggestions from the same picker options", () => {
-    const wrapper = mountComposer();
+  it("feeds mention suggestions from the same picker options in Expert", () => {
+    const wrapper = mountComposer({ chatMode: "expert" });
     expect(
       wrapper.findComponent({ name: "MentionSender" }).props("options")
     ).toEqual([
@@ -246,33 +248,62 @@ describe("ChatComposer", () => {
       { value: "KnowledgeAgent" },
       { value: "InSilicoResearchAgent" },
     ]);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("triggerStrings")
+    ).toStrictEqual(["@"]);
   });
 
-  it("shows direct selection only for an empty instant chat", () => {
-    const emptyInstant = mountComposer();
+  it("matches the agent-control matrix for empty and populated chats", () => {
+    const emptyInstant = mountComposer({ chatMode: "instant" });
     expect(
       emptyInstant.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(false);
+    expect(
+      emptyInstant.findComponent({ name: "ChatAgentPicker" }).exists()
+    ).toBe(false);
+    expect(
+      emptyInstant.findComponent({ name: "MentionSender" }).props("options")
+    ).toEqual([]);
+    expect(
+      emptyInstant
+        .findComponent({ name: "MentionSender" })
+        .props("triggerStrings")
+    ).toEqual([]);
+
+    const emptyExpert = mountComposer({ chatMode: "expert" });
+    expect(
+      emptyExpert.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(true);
+    expect(
+      emptyExpert.findComponent({ name: "ChatAgentPicker" }).exists()
     ).toBe(true);
 
-    const populated = mountComposer({ hasMessages: true });
+    const populatedInstant = mountComposer({
+      chatMode: "instant",
+      hasMessages: true,
+      showModeSelector: false,
+    });
     expect(
-      populated.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+      populatedInstant.findComponent({ name: "ChatAgentQuickSelect" }).exists()
     ).toBe(false);
+    expect(populatedInstant.find(".el-dropdown").exists()).toBe(false);
 
-    const expert = mountComposer({ chatMode: "expert" });
-    expect(
-      expert.findComponent({ name: "ChatAgentQuickSelect" }).exists()
-    ).toBe(false);
+    const populatedExpert = mountComposer({
+      chatMode: "expert",
+      hasMessages: true,
+      showModeSelector: false,
+    });
+    expect(populatedExpert.find(".el-dropdown").exists()).toBe(true);
   });
 
   it("forwards a quick toggle and uses localized labels in the populated menu", async () => {
-    const empty = mountComposer();
+    const empty = mountComposer({ chatMode: "expert" });
     await empty
       .findComponent({ name: "ChatAgentQuickSelect" })
       .vm.$emit("toggle", "KnowledgeAgent");
     expect(empty.emitted("toggle-agent")?.[0]).toEqual(["KnowledgeAgent"]);
 
-    const populated = mountComposer({ hasMessages: true });
+    const populated = mountComposer({ chatMode: "expert", hasMessages: true });
     expect(populated.find(".el-dropdown").text()).toContain("Chat Agent");
     expect(populated.find(".el-dropdown").text()).toContain("Knowledge Agent");
     const menu = populated.get(".el-dropdown");
@@ -405,8 +436,35 @@ describe("ChatComposer", () => {
     expect(wrapper.find(".file-list-container").exists()).toBe(false);
   });
 
+  it("disables composer controls while permissions are loading or mode is unavailable", () => {
+    const wrapper = mountComposer({ rolesLoading: true, modeUsable: false });
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(true);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("options")
+    ).toEqual([]);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
+    expect(
+      wrapper.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
+    expect(
+      wrapper
+        .findComponent({ name: "ChatModeSelector" })
+        .props("instantEnabled")
+    ).toBe(false);
+    expect(
+      wrapper.findComponent({ name: "ChatModeSelector" }).props("expertEnabled")
+    ).toBe(false);
+    expect(wrapper.findComponent({ name: "ChatAgentPicker" }).exists()).toBe(
+      false
+    );
+  });
+
   it("forwards mention select/search and picker command/clear", async () => {
-    const wrapper = mountComposer();
+    const wrapper = mountComposer({ chatMode: "expert" });
     const mention = wrapper.findComponent({ name: "MentionSender" });
     await mention.vm.$emit("select", { value: "ChatAgent" });
     await mention.vm.$emit("search", "R");
@@ -421,11 +479,14 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("clear-agent")).toHaveLength(1);
   });
 
-  it("hides the agent picker in expert mode", () => {
-    const wrapper = mountComposer({ chatMode: "expert" });
+  it("hides the agent picker and quick controls in instant mode", () => {
+    const wrapper = mountComposer({ chatMode: "instant" });
     expect(wrapper.findComponent({ name: "ChatAgentPicker" }).exists()).toBe(
       false
     );
+    expect(
+      wrapper.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(false);
   });
 
   it("exposes ChatComposerHandle methods consumed by composables", async () => {

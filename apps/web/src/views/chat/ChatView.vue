@@ -350,7 +350,9 @@
                   v-model="displayMessageInput"
                   :is-sending="isSending"
                   v-model:chat-mode="chatMode"
+                  :instant-mode-enabled="instantModeEnabled"
                   :expert-mode-enabled="expertModeEnabled"
+                  :mode-usable="activeModeEnabled"
                   :show-mode-selector="!currentChat?.messages?.length"
                   :file-list="fileList"
                   :roles-loading="rolesLoading"
@@ -664,7 +666,17 @@ const authorizedAgentTools = computed(() =>
   authorizedAgentOptions.value.map((option) => option.tool)
 );
 const pickerOptions = authorizedAgentOptions;
-const expertModeEnabled = computed(() => userStore().expertEnabled);
+const instantModeEnabled = computed(() =>
+  authorizedAgentTools.value.includes("ChatAgent")
+);
+const expertModeEnabled = computed(
+  () => userStore().expertEnabled && authorizedAgentTools.value.length > 0
+);
+const activeModeEnabled = computed(() =>
+  chatMode.value === "instant"
+    ? instantModeEnabled.value
+    : expertModeEnabled.value
+);
 
 const rolesLoading = ref(userStore().roles.length === 0);
 

@@ -28,12 +28,12 @@
             :model-value="modelValue"
             ref="senderRef"
             :loading="isSending"
-            :disabled="isSending"
+            :disabled="composerDisabled"
             variant="updown"
             :auto-size="{ minRows: 1, maxRows: 5 }"
             :placeholder="t('chat.inputPlaceholder', { symbol: '@' })"
-            :options="pickerOptions.map((option) => ({ value: option.tool }))"
-            :trigger-strings="['@']"
+            :options="mentionOptions"
+            :trigger-strings="mentionTriggers"
             trigger-split=","
             :whole="true"
             submit-type="enter"
@@ -56,7 +56,8 @@
             <ChatModeSelector
               v-if="showModeSelector"
               :model-value="chatMode"
-              :expert-enabled="expertModeEnabled"
+              :instant-enabled="instantModeEnabled && !rolesLoading"
+              :expert-enabled="expertModeEnabled && !rolesLoading"
               class="composer-mode-selector"
               @update:model-value="emit('update:chatMode', $event)"
             />
@@ -65,7 +66,7 @@
               :options="pickerOptions"
               :roles-loading="rolesLoading"
               :selected-agent="selectedAgent"
-              :disabled="isSending"
+              :disabled="composerDisabled"
               @select="emit('command', $event)"
               @clear="emit('clear-agent')"
             />
@@ -79,8 +80,8 @@
               :accept="CHAT_ATTACHMENT_ACCEPT"
               :show-file-list="false"
               :auto-upload="false"
-              :disabled="isSending"
-              :on-change="(file) => emit('file-change', file)"
+              :disabled="composerDisabled"
+              :on-change="onUploadChange"
               :on-exceed="onUploadExceed"
               multiple
               action="#"
@@ -90,7 +91,7 @@
                   <el-button
                     circle
                     class="composer-tool-button"
-                    :disabled="isSending"
+                    :disabled="composerDisabled"
                     :aria-label="t('chat.uploadFile')"
                   >
                     <el-icon><Paperclip /></el-icon>
@@ -99,16 +100,18 @@
               </template>
             </el-upload>
             <el-dropdown
-              v-if="hasMessages && pickerOptions.length > 0"
+              v-if="
+                expertControlsEnabled && hasMessages && pickerOptions.length > 0
+              "
               placement="top-start"
               trigger="click"
-              :disabled="isSending"
+              :disabled="composerDisabled"
               @command="emit('command', $event)"
             >
               <el-button
                 circle
                 class="composer-tool-button"
-                :disabled="isSending"
+                :disabled="composerDisabled"
                 :aria-label="t('chat.agentPicker.label')"
               >
                 <el-icon><Menu /></el-icon>
@@ -170,7 +173,7 @@
         :options="pickerOptions"
         :roles-loading="rolesLoading"
         :selected-agent="selectedAgent"
-        :disabled="isSending"
+        :disabled="composerDisabled"
         @toggle="emit('toggle-agent', $event)"
       />
     </div>
@@ -197,7 +200,9 @@ const props = defineProps<{
   modelValue: string;
   isSending: boolean;
   chatMode: "instant" | "expert";
+  instantModeEnabled: boolean;
   expertModeEnabled: boolean;
+  modeUsable: boolean;
   showModeSelector: boolean;
   fileList: UploadFile[];
   rolesLoading: boolean;
@@ -230,12 +235,26 @@ const senderRef = ref<{
 } | null>(null);
 const uploadRef = ref();
 
-const showAgentPicker = computed(() => props.chatMode === "instant");
+const expertControlsEnabled = computed(
+  () => props.chatMode === "expert" && props.modeUsable && !props.rolesLoading
+);
+const mentionOptions = computed(() =>
+  expertControlsEnabled.value
+    ? props.pickerOptions.map((option) => ({ value: option.tool }))
+    : []
+);
+const mentionTriggers = computed(() =>
+  expertControlsEnabled.value ? ["@"] : []
+);
+const composerDisabled = computed(
+  () => props.isSending || props.rolesLoading || !props.modeUsable
+);
+const showAgentPicker = computed(() => expertControlsEnabled.value);
 const showQuickSelect = computed(
-  () => !props.hasMessages && props.chatMode === "instant"
+  () => !props.hasMessages && expertControlsEnabled.value
 );
 const canSubmit = computed(
-  () => Boolean(props.modelValue.trim()) && !props.isSending
+  () => Boolean(props.modelValue.trim()) && !composerDisabled.value
 );
 
 const popoverVisible = computed(() =>
@@ -247,7 +266,7 @@ const onComposerEnterCapture = (e: KeyboardEvent) => {
 };
 
 const onPaste = (event: ClipboardEvent) => {
-  if (props.isSending) return;
+  if (composerDisabled.value) return;
   const files = Array.from(event.clipboardData?.files ?? []);
   if (files.length === 0) return;
   event.preventDefault();
@@ -255,7 +274,13 @@ const onPaste = (event: ClipboardEvent) => {
 };
 
 const onUploadExceed = (files: File[]) => {
+  if (composerDisabled.value) return;
   emit("paste-files", Array.from(files));
+};
+
+const onUploadChange = (file: unknown) => {
+  if (composerDisabled.value) return;
+  emit("file-change", file);
 };
 
 const bindTourInputTarget: VNodeRef = (ref) => {

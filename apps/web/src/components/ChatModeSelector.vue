@@ -2,11 +2,14 @@
   <div class="chat-mode-selector">
     <el-radio-group
       :model-value="modelValue"
-      @update:model-value="(v) => $emit('update:modelValue', v as 'instant' | 'expert')"
+      @update:model-value="onModeUpdate"
     >
-      <el-radio-button value="instant" data-test="chat-mode-instant">{{
-        $t("chat.mode.instant")
-      }}</el-radio-button>
+      <el-radio-button
+        value="instant"
+        :disabled="!instantEnabled"
+        data-test="chat-mode-instant"
+        >{{ $t("chat.mode.instant") }}</el-radio-button
+      >
       <el-tooltip
         v-if="!expertEnabled"
         :content="$t('chat.mode.comingSoon')"
@@ -24,8 +27,21 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ modelValue: "instant" | "expert"; expertEnabled: boolean }>();
-defineEmits<{ (e: "update:modelValue", value: "instant" | "expert"): void }>();
+const props = defineProps<{
+  modelValue: "instant" | "expert";
+  instantEnabled: boolean;
+  expertEnabled: boolean;
+}>();
+const emit = defineEmits<{
+  (e: "update:modelValue", value: "instant" | "expert"): void;
+}>();
+
+const onModeUpdate = (value: unknown) => {
+  if (value !== "instant" && value !== "expert") return;
+  if (value === "instant" && !props.instantEnabled) return;
+  if (value === "expert" && !props.expertEnabled) return;
+  emit("update:modelValue", value);
+};
 </script>
 
 <style scoped>

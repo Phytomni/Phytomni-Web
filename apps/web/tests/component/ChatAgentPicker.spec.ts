@@ -35,7 +35,9 @@ describe("ChatAgentPicker", () => {
     const combobox = wrapper.find('[role="combobox"]');
     expect(combobox.exists()).toBe(true);
     expect(combobox.attributes("aria-expanded")).toBe("false");
-    expect((combobox.element as HTMLInputElement).value).toBe("ChatAgent");
+    expect((combobox.element as HTMLInputElement).value).toContain(
+      "chat.agentPicker.auto"
+    );
 
     await wrapper.find('[data-testid="agent-picker-trigger"]').trigger("click");
     await nextTick();
@@ -71,6 +73,18 @@ describe("ChatAgentPicker", () => {
     expect(wrapper.find(".picker-display-label").exists()).toBe(false);
     expect(input.classes()).not.toContain("has-display-label");
     expect(wrapper.get('[role="option"] em').text()).toBe("In Silico");
+  });
+
+  it("keeps an explicit ChatAgent selection distinct from automatic routing", () => {
+    const automatic = mountPicker({ selectedAgent: "" });
+    expect(
+      (automatic.get('[role="combobox"]').element as HTMLInputElement).value
+    ).toContain("chat.agentPicker.auto");
+
+    const explicit = mountPicker({ selectedAgent: "ChatAgent" });
+    expect(
+      (explicit.get('[role="combobox"]').element as HTMLInputElement).value
+    ).toBe("ChatAgent");
   });
 
   it("shows localized loading state while rolesLoading", () => {
