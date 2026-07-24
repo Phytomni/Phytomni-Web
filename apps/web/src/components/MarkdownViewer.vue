@@ -130,7 +130,7 @@ const handleFinish = () => {
     font-size: 17px;
     line-height: 1.7;
     color: var(--phy-color-text);
-    max-width: 760px;
+    max-width: var(--phy-layout-reading-max-width);
   }
 
   * {

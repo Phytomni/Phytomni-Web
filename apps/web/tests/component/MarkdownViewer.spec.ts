@@ -85,6 +85,13 @@ describe("MarkdownViewer surface classes", () => {
     expect(MARKDOWN_SOURCE).toContain("overflow-wrap: anywhere;");
   });
 
+  it("keeps the legacy reading measure token-owned", () => {
+    expect(MARKDOWN_SOURCE).toContain(
+      "max-width: var(--phy-layout-reading-max-width);"
+    );
+    expect(MARKDOWN_SOURCE).not.toContain("max-width: 760px;");
+  });
+
   it("defaults to legacy surface wrapper classes", () => {
     const w = render("hello");
     const root = w.find(".phy-markdown");
