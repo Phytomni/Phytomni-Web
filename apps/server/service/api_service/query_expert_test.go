@@ -316,17 +316,12 @@ func TestQuery_ExpertAllowsOneRemoteProductGrant(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	seedExpertPermissionUser(t, gdb, "research@example.com", "research-role")
 	seedExpertPermissionTool(t, gdb, "research-role", "InSilicoResearchAgent", 1)
-	effects := &queryPermissionEffects{}
-	var captured rxBot.RouteQueryRequest
-	permissionRouteServer(t, effects, &captured)
+	expertRouteServer(t, `{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`)
 	rxBot.BotConfig.DesignEnabled = false
 	rxBot.BotConfig.NetworkEnabled = false
 
 	if _, err := NewService().Query(context.Background(), "research@example.com", QueryInput{Query: "q", Mode: "expert"}); err != nil {
 		t.Fatalf("Query: %v", err)
-	}
-	if !reflect.DeepEqual(captured.AllowedTools, []string{"InSilicoResearchAgent"}) {
-		t.Fatalf("allowed tools = %#v, want only InSilicoResearchAgent", captured.AllowedTools)
 	}
 }
 
@@ -802,8 +797,8 @@ func TestQuery_ExpertUnknownOrMalformedResolvedSlugFailsClosed(t *testing.T) {
 			expertRouteServer(t, `{"id":"completion-bad","run_id":"run-bad","object":"agent.run","agent":`+string(agentJSON)+`,"status":"running","task_ids":["child-bad"],"result":{}}`)
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
-			if !errors.Is(err, ErrUnknownTool) {
-				t.Fatalf("err=%v, want ErrUnknownTool", err)
+			if !errors.Is(err, ErrExpertRouteContract) {
+				t.Fatalf("err=%v, want ErrExpertRouteContract", err)
 			}
 			if out != nil {
 				t.Fatalf("unknown resolved slug returned output: %+v", out)
@@ -816,6 +811,106 @@ func TestQuery_ExpertUnknownOrMalformedResolvedSlugFailsClosed(t *testing.T) {
 				t.Fatalf("unknown resolved slug wrote %d row(s)", count)
 			}
 		})
+	}
+}
+
+func TestQuery_ExpertResolvedToolContractFailuresHaveNoRows(t *testing.T) {
+	tests := []struct {
+		name     string
+		username string
+		tool     string
+		setup    func(t *testing.T, gdb *gorm.DB)
+		body     string
+	}{
+		{
+			name:     "outside allowlist",
+			username: "outside-allowlist@example.com",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "outside-allowlist@example.com", "outside-allowlist")
+				seedExpertPermissionTool(t, gdb, "outside-allowlist", "DataAgent", 1)
+			},
+			body: `{"id":"run-outside","object":"agent.run","agent":"analyst","status":"running","task_ids":["child-outside"],"result":{}}`,
+		},
+		{
+			name:     "forced mismatch",
+			username: "forced-mismatch@example.com",
+			tool:     "DataAgent",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "forced-mismatch@example.com", "forced-mismatch")
+				seedExpertPermissionTool(t, gdb, "forced-mismatch", "DataAgent", 1)
+				seedExpertPermissionTool(t, gdb, "forced-mismatch", "AnalystAgent", 2)
+			},
+			body: `{"id":"run-mismatch","object":"agent.run","agent":"analyst","status":"running","task_ids":["child-mismatch"],"result":{}}`,
+		},
+		{
+			name:     "unknown agent",
+			username: "alice",
+			body:     `{"id":"run-unknown","object":"agent.run","agent":"missing","status":"running","task_ids":["child-unknown"],"result":{}}`,
+		},
+		{
+			name:     "malformed envelope",
+			username: "alice",
+			body:     `{"id":"run-malformed","object":"agent.run","agent":"data","status":`,
+		},
+		{
+			name:     "invalid projection status",
+			username: "alice",
+			body:     `{"id":"run-invalid-status","object":"agent.run","agent":"data","status":"unknown","task_ids":[],"result":{}}`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			if tc.setup != nil {
+				tc.setup(t, gdb)
+			}
+			expertRouteServer(t, tc.body)
+
+			out, err := NewService().Query(context.Background(), tc.username, QueryInput{
+				Query: "contract check", Mode: "expert", Tool: tc.tool,
+			})
+			if !errors.Is(err, ErrExpertRouteContract) {
+				t.Fatalf("err=%v, want ErrExpertRouteContract", err)
+			}
+			if out != nil {
+				t.Fatalf("contract failure returned output=%+v", out)
+			}
+			var rows int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+				t.Fatalf("count question rows: %v", err)
+			}
+			if rows != 0 {
+				t.Fatalf("contract failure persisted %d question rows", rows)
+			}
+			var projections int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).
+				Where("bot_projection_json IS NOT NULL AND bot_projection_json != ''").Count(&projections).Error; err != nil {
+				t.Fatalf("count projections: %v", err)
+			}
+			if projections != 0 {
+				t.Fatalf("contract failure persisted %d projections", projections)
+			}
+		})
+	}
+}
+
+func TestQuery_ExpertMissingRunIdentityKeepsConflictSentinel(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	expertRouteServer(t, `{"object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`)
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "missing run", Mode: "expert"})
+	if !errors.Is(err, ErrMissingBotRunID) {
+		t.Fatalf("err=%v, want ErrMissingBotRunID", err)
+	}
+	if out != nil {
+		t.Fatalf("missing run identity returned output=%+v", out)
+	}
+	var rows int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+		t.Fatalf("count question rows: %v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("missing run identity persisted %d question rows", rows)
 	}
 }
 
@@ -841,6 +936,9 @@ func TestQuery_ExpertDuplicateRouteKeysFailsBeforePersistence(t *testing.T) {
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 			if err == nil {
 				t.Fatalf("duplicate route response returned output=%+v", out)
+			}
+			if !errors.Is(err, ErrExpertRouteContract) {
+				t.Fatalf("err=%v, want ErrExpertRouteContract", err)
 			}
 			var count int64
 			if err := gdb.Raw(`SELECT COUNT(*) FROM question_agent_logs`).Row().Scan(&count); err != nil {

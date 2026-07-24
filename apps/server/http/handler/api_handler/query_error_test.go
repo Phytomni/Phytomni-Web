@@ -59,7 +59,7 @@ func TestQueryErrorStatus(t *testing.T) {
 		},
 		{
 			name:       "expert route contract -> 502",
-			err:        api_service.ErrExpertRouteContract,
+			err:        fmt.Errorf("expert route: %w", api_service.ErrExpertRouteContract),
 			wantStatus: http.StatusBadGateway,
 			wantMsg:    "upstream routing contract failed",
 		},

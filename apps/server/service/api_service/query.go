@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -317,18 +319,63 @@ func canonicalBotRunID(runID *string) string {
 // a missing/unknown/malformed slug must never fall back to ChatAgent.
 func resolveExpertAgent(resp *rxBot.RouteQueryResponse) (string, string, error) {
 	if resp == nil {
-		return "", "", fmt.Errorf("%w: expert response is missing", ErrUnknownTool)
+		return "", "", fmt.Errorf("%w: missing expert response", ErrExpertRouteContract)
 	}
 	rawSlug := resp.Agent
 	slug := strings.TrimSpace(rawSlug)
 	if slug == "" || rawSlug != slug || strings.ContainsAny(rawSlug, "\r\n\t") {
-		return "", "", fmt.Errorf("%w: expert response has an invalid agent", ErrUnknownTool)
+		return "", "", fmt.Errorf("%w: malformed expert agent", ErrExpertRouteContract)
 	}
 	canonicalTool, ok := rxBot.CanonicalAgentTool[slug]
 	if !ok || slugToToolName[slug] != canonicalTool {
-		return "", "", fmt.Errorf("%w: expert response has an unsupported agent", ErrUnknownTool)
+		return "", "", fmt.Errorf("%w: unsupported expert agent", ErrExpertRouteContract)
 	}
 	return slug, canonicalTool, nil
+}
+
+// validateExpertResolvedTool re-checks the Bot router's selected native slug
+// against the server-owned constraints that accompanied the request. The
+// returned canonical tool is the only tool identity Query may shape or store;
+// no browser value or raw upstream field is trusted past this boundary.
+func validateExpertResolvedTool(resolvedSlug string, allowedTools []string, forcedTool string) (string, error) {
+	resolvedTool, ok := slugToToolName[resolvedSlug]
+	if !ok || !containsAgentTool(allowedTools, resolvedTool) {
+		return "", ErrExpertRouteContract
+	}
+	if forcedTool != "" && resolvedTool != forcedTool {
+		return "", ErrExpertRouteContract
+	}
+	return resolvedTool, nil
+}
+
+func expertRouteContractError() error {
+	return fmt.Errorf("%w: malformed expert response", ErrExpertRouteContract)
+}
+
+func validateExpertSubmissionAgent(resolvedSlug, submissionAgent string) error {
+	if resolvedSlug == "" || submissionAgent != resolvedSlug {
+		return fmt.Errorf("%w: expert agent mismatch", ErrExpertRouteContract)
+	}
+	return nil
+}
+
+func isExpertEnvelopeDecodeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, rxBot.ErrBotTimeout) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var apiErr *rxBot.APIError
+	if errors.As(err, &apiErr) {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return false
+	}
+	var netErr net.Error
+	return !errors.As(err, &netErr)
 }
 
 func responseReportRevision(values ...*int64) int64 {
@@ -549,24 +596,31 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		resp, meta, err := client.RouteQueryWithMeta(ctx, routeRequest)
 		logBotResponseMeta(ctx, meta)
 		if err != nil {
+			if isExpertEnvelopeDecodeError(err) {
+				return nil, expertRouteContractError()
+			}
 			return nil, err
 		}
-		resolvedSlug, resolvedTool, err := resolveExpertAgent(resp)
+		resolvedSlug, _, err := resolveExpertAgent(resp)
+		if err != nil {
+			return nil, err
+		}
+		resolvedTool, err := validateExpertResolvedTool(resolvedSlug, permissions.AllowedTools, in.Tool)
 		if err != nil {
 			return nil, err
 		}
 		submission, err := DecodeAgentRunSubmission(resp)
 		if err != nil {
 			var projectionErr *ProjectionDecodeError
-			if errors.As(err, &projectionErr) && projectionErr.Field == "run_id" {
+			if errors.As(err, &projectionErr) && projectionErr.Field == "run_id" && projectionErr.Reason == "missing umbrella run id" {
 				return nil, ErrMissingBotRunID
 			}
-			// Keep malformed upstream envelopes on the bounded client-error path;
+			// Keep every malformed upstream envelope on the bounded gateway path;
 			// never expose decoder details or fabricate a successful tool.
-			return nil, fmt.Errorf("%w: invalid expert response", ErrUnknownTool)
+			return nil, expertRouteContractError()
 		}
-		if submission.Agent != resolvedSlug {
-			return nil, fmt.Errorf("%w: expert response agent mismatch", ErrUnknownTool)
+		if err := validateExpertSubmissionAgent(resolvedSlug, submission.Agent); err != nil {
+			return nil, err
 		}
 		routeRevision := metadataReportRevision(formattedMetadata(resp.Result.Formatted))
 		submission.ReportRevision = responseReportRevisionOrDefault(-1, resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
