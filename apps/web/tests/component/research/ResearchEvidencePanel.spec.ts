@@ -244,5 +244,6 @@ describe("ResearchEvidencePanel", () => {
     expect(SOURCE).toMatch(/\.research-evidence-panel__item:focus-visible/);
     expect(SOURCE).toMatch(/:deep\(a:focus-visible\)/);
     expect(SOURCE).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(SOURCE).toMatch(/max-width:\s*100%/);
   });
 });

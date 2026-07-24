@@ -38,3 +38,11 @@ withDefaults(
 
 defineEmits<{ finish: [] }>();
 </script>
+
+<style scoped>
+.cited-answer {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+</style>

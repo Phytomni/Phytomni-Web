@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
+
+const CITATION_LIST_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/CitationReferenceList.vue"),
+  "utf8"
+);
 
 const mountList = (props: Record<string, unknown>) =>
   mount(CitationReferenceList, {
@@ -13,6 +20,12 @@ const mountList = (props: Record<string, unknown>) =>
   });
 
 describe("CitationReferenceList", () => {
+  it("keeps long citation titles within the reference-list container", () => {
+    expect(CITATION_LIST_SOURCE).toContain("min-width: 0;");
+    expect(CITATION_LIST_SOURCE).toContain("max-width: 100%;");
+    expect(CITATION_LIST_SOURCE).toContain("overflow-wrap: anywhere;");
+  });
+
   it("renders one safe row per buildDisplayReferences output with namespaced ids", () => {
     const wrapper = mountList({
       references: [{ title: "Doc A" }, { au: "Smith", ti: "T", so: "Nature" }],

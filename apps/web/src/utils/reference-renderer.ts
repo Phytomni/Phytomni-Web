@@ -77,14 +77,18 @@ export const buildDisplayReferences = (
       };
     } else if (normalized.title) {
       return {
-        html: `<div>${refIndex}. ${escapeHtml(normalized.title)}</div>`,
+        html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
+          normalized.title
+        )}</div>`,
         id: refId(refIndex),
       };
     } else {
       // handle plain-string references
       if (typeof doc === "string") {
         return {
-          html: `<div>${refIndex}. ${escapeHtml(doc)}</div>`,
+          html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
+            doc
+          )}</div>`,
           id: refId(refIndex),
         };
       }
@@ -92,7 +96,9 @@ export const buildDisplayReferences = (
       // default case
       const serialized = JSON.stringify(doc) ?? String(doc);
       return {
-        html: `<div>${refIndex}. ${escapeHtml(serialized)}</div>`,
+        html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
+          serialized
+        )}</div>`,
         id: refId(refIndex),
       };
     }

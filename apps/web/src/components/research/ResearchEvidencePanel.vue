@@ -119,8 +119,10 @@ onUnmounted(() => {
 <style scoped>
 .research-evidence-panel {
   min-width: 0;
+  max-width: 100%;
   color: var(--phy-color-text);
   font-family: var(--phy-font-shell);
+  overflow-wrap: anywhere;
 }
 
 .research-evidence-panel__title {

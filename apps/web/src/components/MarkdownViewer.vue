@@ -120,6 +120,11 @@ const handleFinish = () => {
    skins live in styles/markdown.css and must not fight these nested selectors. */
 .markdown-viewer.phy-markdown--legacy {
   all: initial;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+
   &.phy-reading {
     font-family: var(--phy-font-reading);
     font-size: 17px;
@@ -137,6 +142,7 @@ const handleFinish = () => {
     font-size: inherit;
     line-height: inherit;
     word-wrap: break-word;
+    overflow-wrap: anywhere;
     color: #1f2328;
     background-color: transparent;
 
@@ -178,6 +184,7 @@ const handleFinish = () => {
     }
 
     pre {
+      max-width: 100%;
       background-color: var(--el-fill-color-light);
       margin: 12px 0;
       padding: 12px;
@@ -191,11 +198,13 @@ const handleFinish = () => {
       border-radius: 4px;
       font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas,
         Liberation Mono, monospace;
+      overflow-wrap: anywhere;
     }
 
     pre code {
       background-color: transparent;
       padding: 0;
+      overflow-wrap: normal;
     }
 
     a {
@@ -215,8 +224,11 @@ const handleFinish = () => {
     }
 
     table {
+      display: block;
       border-collapse: collapse;
+      max-width: 100%;
       margin: 12px 0;
+      overflow-x: auto;
       width: 100%;
 
       th,
@@ -243,10 +255,12 @@ const handleFinish = () => {
     font-size: inherit;
     line-height: inherit;
     word-wrap: break-word;
+    overflow-wrap: anywhere;
     color: var(--el-text-color-primary);
     background-color: transparent;
 
     pre {
+      max-width: 100%;
       background-color: var(--el-fill-color-light);
       margin: 12px 0;
       padding: 12px;
@@ -260,11 +274,15 @@ const handleFinish = () => {
       border-radius: 4px;
       font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas,
         Liberation Mono, monospace;
+      overflow-wrap: anywhere;
     }
 
     table {
+      display: block;
       border-collapse: collapse;
+      max-width: 100%;
       margin: 12px 0;
+      overflow-x: auto;
       width: 100%;
 
       th,

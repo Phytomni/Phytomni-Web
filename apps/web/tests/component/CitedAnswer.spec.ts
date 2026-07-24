@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 
 // The real vue-element-plus-x barrel eagerly imports aggregated CSS that the test
@@ -11,6 +13,11 @@ vi.mock("vue-element-plus-x", () => ({
 }));
 
 import CitedAnswer from "@/components/CitedAnswer.vue";
+
+const CITED_ANSWER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/CitedAnswer.vue"),
+  "utf8"
+);
 
 // MarkdownViewer is stubbed so these tests isolate CitedAnswer's reference-list wiring
 // (the body renderer and its XSS rules are locked in MarkdownViewer's own specs).
@@ -33,6 +40,12 @@ const mountCited = (props: Record<string, unknown>) =>
   });
 
 describe("CitedAnswer", () => {
+  it("keeps the cited-answer wrapper shrinkable around long cited content", () => {
+    expect(CITED_ANSWER_SOURCE).toContain("min-width: 0;");
+    expect(CITED_ANSWER_SOURCE).toContain("max-width: 100%;");
+    expect(CITED_ANSWER_SOURCE).toContain("overflow-wrap: anywhere;");
+  });
+
   it("renders one reference row per doc with ref-N ids from buildDisplayReferences", () => {
     const wrapper = mountCited({
       content: "body",

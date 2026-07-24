@@ -31,7 +31,10 @@ const displayReferences = computed(() =>
 
 <style lang="scss" scoped>
 .doc-list {
+  min-width: 0;
+  max-width: 100%;
   margin-top: 12px;
+  overflow-wrap: anywhere;
 }
 
 .doc-list-title {
@@ -40,8 +43,10 @@ const displayReferences = computed(() =>
 }
 
 .doc-list-item {
+  min-width: 0;
   margin: 4px 0;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 :deep(.doc-citation) {
@@ -49,6 +54,7 @@ const displayReferences = computed(() =>
 }
 
 :deep(.doc-link-inline) {
+  overflow-wrap: anywhere;
   word-break: break-all;
 }
 

@@ -12,6 +12,10 @@ vi.mock("vue-element-plus-x", () => ({
 
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
 
+const MARKDOWN_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/MarkdownViewer.vue"),
+  "utf8"
+);
 const MARKDOWN_CSS = readFileSync(
   resolve(__dirname, "../../src/styles/markdown.css"),
   "utf8"
@@ -74,6 +78,13 @@ describe("MarkdownViewer — XSS hardening of the v-html render path", () => {
 });
 
 describe("MarkdownViewer surface classes", () => {
+  it("keeps every MarkdownViewer surface bounded when legacy styles reset inherited layout", () => {
+    expect(MARKDOWN_SOURCE).toContain("display: block;");
+    expect(MARKDOWN_SOURCE).toContain("min-width: 0;");
+    expect(MARKDOWN_SOURCE).toContain("max-width: 100%;");
+    expect(MARKDOWN_SOURCE).toContain("overflow-wrap: anywhere;");
+  });
+
   it("defaults to legacy surface wrapper classes", () => {
     const w = render("hello");
     const root = w.find(".phy-markdown");

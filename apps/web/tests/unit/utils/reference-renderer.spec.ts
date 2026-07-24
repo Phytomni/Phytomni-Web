@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
 import { invalidInput } from "../../helpers/invalidInput";
+
+const REFERENCE_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/utils/reference-renderer.ts"),
+  "utf8"
+);
 
 // Direct unit tests for the reference renderer extracted from
 // DeepGenomeResultViewer. references come from the Bot `formatted.references`
@@ -10,6 +17,10 @@ import { invalidInput } from "../../helpers/invalidInput";
 // sanitizeHref scheme-checked.
 
 describe("buildDisplayReferences — XSS invariant", () => {
+  it("keeps URL interpolation routed through the shared href sanitizer", () => {
+    expect(REFERENCE_SOURCE).toContain("sanitizeHref");
+  });
+
   it("returns [] for empty / runtime-invalid nullish input", () => {
     expect(buildDisplayReferences([])).toEqual([]);
     expect(
