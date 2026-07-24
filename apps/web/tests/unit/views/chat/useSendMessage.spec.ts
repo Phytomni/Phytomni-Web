@@ -1750,7 +1750,7 @@ describe("useSendMessage", () => {
     }
   });
 
-  it("clears only the captured forced selection when reconciliation verifies the accepted turn", async () => {
+  it("preserves selection when reconciliation finds a new matching history id", async () => {
     const { isNetworkError } = await import("@/utils/network-error");
     vi.mocked(isNetworkError).mockReturnValue(true);
     vi.useFakeTimers();
@@ -1785,7 +1785,8 @@ describe("useSendMessage", () => {
     errorSpy.mockRestore();
     vi.mocked(isNetworkError).mockReturnValue(false);
     vi.useRealTimers();
-    expect(state.selectedAgent).toBe("");
+    expect(state.selectedAgent).toBe("DataAgent");
+    expect(selectChat).toHaveBeenCalledWith("A");
   });
 
   it("preserves selection when reconciliation finds only a duplicate prior query", async () => {

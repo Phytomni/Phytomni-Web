@@ -998,11 +998,12 @@ export function useSendMessage(opts: {
                   !preRequestHistoryIds.has(historyRow.id)
               )
             ) {
-              clearCapturedSelectionAfterAcceptance(
-                chatState,
-                capturedMode,
-                capturedSelectedAgent
-              );
+              // A new history id with the same query is useful to refresh this
+              // dialogue, but is not request-specific evidence: another
+              // client/session can create the same row while this transport is
+              // uncertain. The local request key only owns an abort controller
+              // and history rows expose no comparable correlation token, so it
+              // must never clear the captured Expert selection here.
               if (isForeground(sendingDialogueId)) {
                 await selectChat(sendingDialogueId);
               }
