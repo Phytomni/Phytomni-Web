@@ -99,6 +99,13 @@ not depend on a document-level overflow side effect. Supplied screenshots are
 regression examples, not the scope boundary: the visual review includes a
 `2560x1440` CSS-pixel viewport as well as the adversarial viewport matrix.
 
+The responsive continuity width matrix is exactly `320`, `390`, `480`, `768`,
+`899`, `900`, `1024`, `1199`, `1279`, `1280`, `1366`, `1920`, and `2560` CSS
+pixels. The `2560x1440` entry is the 4K@150% scaling interpretation: a physical
+4K display inspected at 150% browser/OS scaling still supplies a 2560 CSS-pixel
+viewport to the layout. This matrix supplements, rather than replaces, the
+semantic boundaries at `600px`, `900px`, and `1280px`.
+
 ## Component families and ownership
 
 ### Adaptive chat shell
@@ -160,27 +167,41 @@ scrolls.
 - Legal pages use `.legal-page` as their scroll root; the fixed Footer must not
   cover the final legal lines.
 
-The global `App.vue` does not render a compatibility Footer. A route or shell
-owns the Footer exactly where its scroll root and page composition require it.
+`App.vue` owns only the Element Plus locale provider and transfer overlay. Its
+Element Plus locale is reactive at the App root (`zh-CN` selects `zh-cn`, while
+`en-US` selects `en`), and transfer progress is the only root-level visual
+overlay. The root does not mount a compatibility Footer or choose a route's
+scroll owner; route-owned scroll roots rather than document scrolling contain
+each page. Footer ownership stays with the route or shell exactly where its
+scroll root and page composition require it.
 
 ## Route archetypes
 
 The route inventory test is `apps/web/tests/component/RouteArchetypes.spec.ts`.
 When a route changes, update its owner and behavior test together.
 
-| Archetype         | Representative routes                                                                                                                                                      | Primary owner                                              |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Auth              | `/login`, `/register`, `/forgot-password`, `/change-password`                                                                                                              | `PhyAuthLayout` and auth view                              |
-| Legal/document    | `/terms`, `/privacy`, `/help`                                                                                                                                              | route document shell and local scroll root                 |
-| Recovery          | `/401`, unmatched routes                                                                                                                                                   | recovery page and local scroll root                        |
-| Adaptive chat     | `/chat`                                                                                                                                                                    | `PhyAdaptiveShell`, adaptive sidebar, chat composer        |
-| Static agent demo | `/knowledge-agent`, `/data-agent`, `/analyst-agent`, `/brief-gene-agent`, `/gene-network-agent`, `/deep-genome-agent`, `/digital-design-agent`, `/design`                  | `AgentDemoShell` or the route's documented demo shell      |
-| Workspace/data    | `/history`, `/favorites`, `/profile`, `/cloud-storage`, `/feedback`, `/task-management`, `/log-list`, `/user-list`, `/permi-manage`, `/global-config`, `/admin-management` | `PhyWorkspaceShell` or the route's existing owner          |
-| Dormant dynamic   | `/system/user-auth`                                                                                                                                                        | no active component; do not count as a live visual surface |
+| Archetype                 | Representative routes                                                                                                                                                                  | Route/content owner                                      | Scroll root                                      | Footer owner                         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------- | ------------------------------------ |
+| Auth                      | `/login`, `/register`, `/forgot-password`, `/change-password`                                                                                                                          | `PhyAuthLayout`                                          | `.phy-auth-layout`                              | `PhyAuthLayout`                      |
+| Legal document            | `/terms`, `/privacy`                                                                                                                                                                  | `LegalView`                                               | `.legal-page` (`data-scroll-root="legal"`)     | `LegalView`                          |
+| Help document             | `/help`                                                                                                                                                                              | `HelpView` + `PhyDocLayout`                              | `.help-page` (`data-scroll-root="help"`)       | `HelpView` slot                     |
+| Recovery                  | `/401`, unmatched routes                                                                                                                                                             | `UnauthorizedView`/`NotFoundView`                        | `.phy-recovery-page` (`data-scroll-root="recovery"`) | recovery view                       |
+| Adaptive chat             | `/chat`                                                                                                                                                                              | `PhyAdaptiveShell` + Chat views                          | `chat-content-stack` when empty; `message-container` when populated | none; App transfer overlay only     |
+| Static agent demo         | `/knowledge-agent`, `/data-agent`, `/analyst-agent`, `/brief-gene-agent`, `/cases/gene-network-agent`, `/deep-genome-agent`, `/cases/digital-design-agent`, `/design`               | `AgentDemoShell`                                          | `.agent-demo-shell` (`data-scroll-root="agent-demo"`) | `AgentDemoShell`                    |
+| Workspace/data            | `/gene-display`, `/log-list`, `/user-list`, `/permi-manage`, `/favorites`, `/history`, `/profile`, `/cloud-storage`, `/feedback`, `/task-management`, `/global-config`, `/admin-management` | `PhyWorkspaceShell`                                       | `data-scroll-root="workspace"`                 | outer `LayoutView` Footer           |
+| Gene detail workspace    | `/gene-display/detail`                                                                                                                                                               | `GeneDetailView`                                          | `.gene-detail-route` (`data-scroll-root="gene-detail"`) | outer `LayoutView` Footer           |
+| Capability-gated product | `/research-agent`, `/gene-network-agent`, `/digital-design-agent`                                                                                                                    | guarded product view + `ResearchArtifactShell`            | route-specific `data-scroll-root`               | none                                 |
+| Dormant dynamic           | `/system/user-auth`                                                                                                                                                                  | no active component; hidden dynamic metadata only        | none                                            | none                                 |
 
 `layout: "nolayout"` and `hideSidebar` are route metadata contracts, not
 visual guesses. Public legal pages remain available to authenticated users;
 legal access is not a guest-only rule.
+
+The static Case destinations are intentionally distinct from the capability-
+gated product routes: `/cases/gene-network-agent` and
+`/cases/digital-design-agent` render the static `AgentDemoShell`, while
+`/gene-network-agent`, `/digital-design-agent`, and `/research-agent` remain
+guarded product surfaces. A static Case card is not an authorization boundary.
 
 ### Remote product route ownership and cutover
 
@@ -200,12 +221,24 @@ Expert activation are still pending. Deployment observations, gateway
 telemetry, and the agreed no-legacy-traffic observation window are **External
 Pending** until an authorized environment supplies evidence.
 
+These capability-gated rows are local Web route contracts only. This document
+does not claim Bot deployment, production acceptance, or Expert activation;
+those remain external verification boundaries.
+
 ## State, progress, and feedback
 
 Every async surface exposes one of loading, empty, error, or ready/populated
 states. Loading uses `PhySkeleton`; empty uses `PhyEmptyState`; recoverable
 errors use `PhyErrorState` with an explicit retry action. Keep error copy
 localized and avoid exposing internal request details.
+
+Chat history recovery has four visual fixture states: `history-title-only`,
+`history-loading`, `history-empty`, and `history-error`. The title-only state
+recovers a legacy user question without inventing an assistant answer; loading
+shows the history skeleton; empty shows the explicit history empty state; and
+error shows the retryable error state. These fixture names are visual-state
+contracts, while per-dialogue runtime hydration remains `loading`, `ready`,
+`history-empty`, or `error` in `ChatUIState`.
 
 There is exactly one simulated percentage surface: `SendProgress` for perceived
 agent processing. `progressAt()` is an elapsed-time curve capped at `98%` while
