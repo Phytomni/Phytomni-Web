@@ -6,6 +6,30 @@ import { resolve } from "node:path";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import { parseDeepGenomeMarkdown } from "@/utils/deep-genome-markdown";
+
+const threeDMolMock = vi.hoisted(() => {
+  const viewer = {
+    addModel: vi.fn(),
+    setStyle: vi.fn(),
+    zoomTo: vi.fn(),
+    render: vi.fn(),
+    animate: vi.fn(),
+    resize: vi.fn(),
+    stopAnimate: vi.fn(),
+    clear: vi.fn(),
+  };
+  const createViewer = vi.fn(() => viewer);
+  return {
+    viewer,
+    createViewer,
+    load3DMol: vi.fn(async () => ({ createViewer })),
+  };
+});
+
+vi.mock("@/utils/3dmol", () => ({
+  load3DMol: threeDMolMock.load3DMol,
+}));
 
 // Locks the reference-renderer text fields. doc_list comes from the Bot
 // `formatted.references` reshape (attacker-influenceable via agent output / RAG),
@@ -359,18 +383,35 @@ describe("DeepGenomeResultViewer — scoped responsive media viewers", () => {
     expect(VIEWER_SOURCE).not.toContain("window.$3Dmol");
   });
 
-  it("keeps the responsive CIF canvas positioned inside its report section", () => {
+  it("keeps uncropped scientific figures and the CIF canvas responsive", () => {
     expect(VIEWER_SOURCE).toContain(
       'viewerDiv.className = "deep-genome-cif-viewer"'
     );
     expect(VIEWER_SOURCE).not.toContain('viewerDiv.style.width = "100%"');
     expect(VIEWER_SOURCE).not.toContain('viewerDiv.style.height = "600px"');
     expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-document\s+:deep\(\.deep-genome-cif-viewer\)\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*100%;[\s\S]*height:\s*clamp\([\s\S]*var\(--phy-space-64\)/
+      /\.deep-genome-document\s+:deep\(\.deep-genome-cif-viewer\)\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*100%;[\s\S]*min-height:\s*clamp\(240px,\s*42vh,\s*560px\)/
     );
+    expect(VIEWER_STYLES).toMatch(
+      /\.deep-genome-prose-block\s+:deep\(img\),[\s\S]*\.deep-genome-section-body\s+:deep\(img\),[\s\S]*\.deep-genome-document\s+:deep\(\.clickable-image\)\s*\{[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;[\s\S]*height:\s*auto/
+    );
+    expect(VIEWER_STYLES).not.toContain("object-fit: cover");
   });
 
-  it("keeps the image dialog inside viewport gutters with a CSS-owned height", () => {
+  it("does not let generated figure markup override the responsive media rules", () => {
+    const { contentBlocks } = parseDeepGenomeMarkdown(
+      "# Report\\n![Expression plot](plots/expression.png)"
+    );
+    const generatedFigure = contentBlocks
+      .map((block) => block.content ?? block.body ?? "")
+      .join("\n");
+
+    expect(generatedFigure).toContain("deep-genome-inline-figure");
+    expect(generatedFigure).not.toContain("width: 70%");
+    expect(generatedFigure).not.toContain("object-fit: cover");
+  });
+
+  it("keeps the image dialog inspectable with a bounded scroll surface", () => {
     expect(VIEWER_TEMPLATE).toContain(
       'width="min(800px, calc(100vw - var(--phy-space-32)))"'
     );
@@ -378,8 +419,61 @@ describe("DeepGenomeResultViewer — scoped responsive media viewers", () => {
       /<div\b(?=[^>]*class="image-view-container")[^>]*\bstyle\s*=/
     );
     expect(VIEWER_STYLES).toMatch(
-      /\.image-view-container\s*\{[\s\S]*height:\s*clamp\([\s\S]*var\(--phy-space-64\)[\s\S]*overflow:\s*hidden/
+      /\.image-view-container\s*\{[\s\S]*max-width:\s*100%;[\s\S]*max-height:\s*var\(--phy-layout-scientific-media-max-height\);[\s\S]*overflow:\s*auto/
     );
+  });
+
+  it("resizes CIF renderers with observer support and a window fallback", () => {
+    expect(VIEWER_SOURCE).toContain("new ResizeObserver(");
+    expect(VIEWER_SOURCE).toContain("cifResizeObservers.add(resizeObserver)");
+    expect(VIEWER_SOURCE).toContain(
+      'window.addEventListener("resize", handleCifWindowResize)'
+    );
+    expect(VIEWER_SOURCE).toContain(
+      'window.removeEventListener("resize", handleCifWindowResize)'
+    );
+    expect(VIEWER_SOURCE).toContain("resizeObserver.disconnect()");
+    expect(VIEWER_SOURCE).toMatch(/resize\?\.\(\);[\s\S]*viewer\.render\(\)/);
+  });
+
+  it("resizes an active CIF viewer and disconnects its observer on unmount", async () => {
+    class ResizeObserverMock {
+      static instances: ResizeObserverMock[] = [];
+      readonly observe = vi.fn();
+      readonly disconnect = vi.fn();
+
+      constructor(readonly callback: ResizeObserverCallback) {
+        ResizeObserverMock.instances.push(this);
+      }
+    }
+
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => "data_test",
+      })
+    );
+    threeDMolMock.createViewer.mockClear();
+    threeDMolMock.viewer.render.mockClear();
+    threeDMolMock.viewer.resize.mockClear();
+
+    const wrapper = renderMarkdown("# Report\\n![Structure](structure.cif)");
+    await vi.waitFor(() => {
+      expect(threeDMolMock.createViewer).toHaveBeenCalledTimes(1);
+      expect(ResizeObserverMock.instances).toHaveLength(1);
+    });
+
+    window.dispatchEvent(new Event("resize"));
+    expect(threeDMolMock.viewer.resize).toHaveBeenCalledTimes(1);
+
+    ResizeObserverMock.instances[0].callback([], {} as ResizeObserver);
+    expect(threeDMolMock.viewer.resize).toHaveBeenCalledTimes(2);
+
+    wrapper.unmount();
+    expect(ResizeObserverMock.instances[0].disconnect).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
   });
 });
 

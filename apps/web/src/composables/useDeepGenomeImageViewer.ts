@@ -13,10 +13,7 @@ export function useDeepGenomeImageViewer() {
   const maxScale = 5;
   const dragStart = reactive({ x: 0, y: 0 });
   const imageOffset = reactive({ x: 0, y: 0 });
-  const imageBindings = new Map<
-    HTMLImageElement,
-    { click: EventListener; probe: HTMLImageElement }
-  >();
+  const imageBindings = new Map<HTMLImageElement, { click: EventListener }>();
 
   // dynamic style
   const imageStyle = computed(() => {
@@ -128,40 +125,19 @@ export function useDeepGenomeImageViewer() {
     images.forEach((img) => {
       if (imageBindings.has(img)) return;
 
-      // load the image to get its natural width/height
-      const tempImg = new Image();
-      tempImg.src =
-        (img as HTMLImageElement).getAttribute("data-src") ||
-        (img as HTMLImageElement).src;
-
-      tempImg.onload = () => {
-        // compute the aspect ratio
-        const aspectRatio = tempImg.height / tempImg.width;
-
-        // if the aspect ratio is below 0.5625, set width to 100%
-        if (aspectRatio < 0.5625) {
-          img.style.width = "100%";
-        } else {
-          // otherwise don't set width separately; use the default percentage width
-          img.style.width = "70%";
-        }
-      };
-
       const handleClick = () => {
         const src = img.getAttribute("data-src");
         const alt = img.getAttribute("data-alt");
         openImageViewer(src ?? "", alt ?? "");
       };
       img.addEventListener("click", handleClick);
-      imageBindings.set(img, { click: handleClick, probe: tempImg });
+      imageBindings.set(img, { click: handleClick });
     });
   };
 
   const cleanupImageClickListeners = () => {
-    imageBindings.forEach(({ click, probe }, img) => {
+    imageBindings.forEach(({ click }, img) => {
       img.removeEventListener("click", click);
-      probe.onload = null;
-      probe.onerror = null;
     });
     imageBindings.clear();
   };

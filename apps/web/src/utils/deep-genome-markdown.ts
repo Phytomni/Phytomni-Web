@@ -476,7 +476,7 @@ export function parseDeepGenomeMarkdown(
         if (line.match(/!\[(.*?)\]\((.*\.cif)\)/)) {
           imageHtml = `<div class="cif-container" data-src="${safeSrc}" data-alt="${safeAlt}"></div>`;
         } else {
-          imageHtml = `<div style="text-align: center;width: 100%"><img src="${safeSrc}" alt="${safeAlt}" style="width: 70%; height: auto; cursor: zoom-in;" class="clickable-image" data-src="${safeSrc}" data-alt="${safeAlt}"></div>`;
+          imageHtml = `<div class="deep-genome-inline-figure"><img src="${safeSrc}" alt="${safeAlt}" class="clickable-image" data-src="${safeSrc}" data-alt="${safeAlt}"></div>`;
         }
         // build the image HTML
 

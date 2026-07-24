@@ -188,6 +188,7 @@ const mainContentRef = ref<HTMLElement | null>(null);
 const documentRef = ref<HTMLElement | null>(null);
 const cifAbortControllers = new Set<AbortController>();
 const cifViewers = new Set<ThreeDMolViewer>();
+const cifResizeObservers = new Set<ResizeObserver>();
 let observerSetupTimer: number | null = null;
 let isUnmounted = false;
 
@@ -222,6 +223,15 @@ const renderCifError = (container: Element, message: string) => {
   errorNode.className = "error";
   errorNode.textContent = message;
   container.replaceChildren(errorNode);
+};
+
+const resizeCifViewer = (viewer: ThreeDMolViewer) => {
+  (viewer as ThreeDMolViewer & { resize?: () => void }).resize?.();
+  viewer.render();
+};
+
+const handleCifWindowResize = () => {
+  cifViewers.forEach(resizeCifViewer);
 };
 
 // Process CIF containers
@@ -273,6 +283,13 @@ const processCifContainers = async () => {
             backgroundColor: "#f5f5f5",
           });
           cifViewers.add(viewer);
+          if (typeof ResizeObserver !== "undefined") {
+            const resizeObserver = new ResizeObserver(() => {
+              if (!isUnmounted) resizeCifViewer(viewer);
+            });
+            resizeObserver.observe(viewerDiv);
+            cifResizeObservers.add(resizeObserver);
+          }
 
           // try loading the CIF file
           const loadCifFile = async () => {
@@ -374,6 +391,7 @@ onMounted(async () => {
   await nextTick();
   await processCifContainers();
   setupImageClickListeners(documentRef.value);
+  window.addEventListener("resize", handleCifWindowResize);
 
   // Wait for heading elements to render, then set up the Intersection Observer
   observerSetupTimer = window.setTimeout(() => {
@@ -396,9 +414,12 @@ onBeforeUnmount(() => {
     window.clearTimeout(observerSetupTimer);
     observerSetupTimer = null;
   }
+  window.removeEventListener("resize", handleCifWindowResize);
   cleanupImageClickListeners();
   cifAbortControllers.forEach((controller) => controller.abort());
   cifAbortControllers.clear();
+  cifResizeObservers.forEach((resizeObserver) => resizeObserver.disconnect());
+  cifResizeObservers.clear();
   cifViewers.forEach((viewer) => {
     viewer.stopAnimate?.();
     viewer.clear?.();
@@ -617,9 +638,22 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+.deep-genome-prose-block :deep(img),
+.deep-genome-section-body :deep(img),
 .deep-genome-document :deep(.clickable-image) {
+  display: block;
+  width: 100%;
   max-width: 100%;
   height: auto;
+}
+
+.deep-genome-document :deep(.deep-genome-inline-figure) {
+  width: 100%;
+  text-align: center;
+}
+
+.deep-genome-document :deep(.clickable-image) {
+  cursor: zoom-in;
 }
 
 .deep-genome-document :deep(.cif-container) {
@@ -635,11 +669,7 @@ onBeforeUnmount(() => {
 .deep-genome-document :deep(.deep-genome-cif-viewer) {
   position: relative;
   width: 100%;
-  height: clamp(
-    calc(var(--phy-space-64) * 4),
-    56dvh,
-    calc(var(--phy-space-64) * 9)
-  );
+  min-height: clamp(240px, 42vh, 560px);
 }
 
 .deep-genome-document :deep(figure) {
@@ -707,14 +737,12 @@ onBeforeUnmount(() => {
 .image-view-container {
   box-sizing: border-box;
   display: flex;
-  height: clamp(
-    calc(var(--phy-space-64) * 4),
-    60dvh,
-    calc(var(--phy-space-64) * 9)
-  );
+  width: 100%;
+  max-width: 100%;
+  max-height: var(--phy-layout-scientific-media-max-height);
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow: auto;
   cursor: grab;
   background-color: var(--phy-color-fill-subtle);
 }
@@ -722,7 +750,8 @@ onBeforeUnmount(() => {
 .image-view-image {
   display: block;
   max-width: 100%;
-  max-height: 100%;
+  max-height: var(--phy-layout-scientific-media-max-height);
+  height: auto;
   cursor: v-bind(imageCursor);
   transform: v-bind(imageTransform);
   transform-origin: 0 0;
