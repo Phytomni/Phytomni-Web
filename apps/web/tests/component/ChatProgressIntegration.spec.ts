@@ -43,9 +43,11 @@ describe("Chat progress placement integration", () => {
     );
   });
 
-  it("does not invent stage labels from elapsed time in Chat or SendProgress", () => {
-    // Chat never binds a fabricated stage; only pass stageLabel when a structured event exists.
-    expect(LOADING_BUBBLE).not.toMatch(/:stage-label=/);
+  it("uses a routing-derived stage label without inferring one from elapsed time", () => {
+    expect(LOADING_BUBBLE).toContain(':stage-label="t(progressLabelKey)"');
+    expect(CHAT_SOURCE).toMatch(
+      /const progressLabelKey = computed\(\(\) =>[\s\S]*?chatMode\.value === "expert"[\s\S]*?activeAgentName === ""[\s\S]*?"chat\.progress\.selectingAgent"[\s\S]*?: "chat\.progress\.processing"/
+    );
     expect(SEND_PROGRESS_SOURCE).toContain("stageLabel?: string");
     expect(SEND_PROGRESS_SOURCE).toContain('t("chat.progress.processing")');
     expect(SEND_PROGRESS_SOURCE).not.toMatch(
@@ -57,6 +59,12 @@ describe("Chat progress placement integration", () => {
   it("locks progress locale keys and absence of chat.eta.*", () => {
     expect(getMessage(enUS, "chat.progress.processing")).toBe("Processing");
     expect(getMessage(zhCN, "chat.progress.processing")).toBe("处理中");
+    expect(getMessage(enUS, "chat.progress.selectingAgent")).toBe(
+      "Selecting an agent…"
+    );
+    expect(getMessage(zhCN, "chat.progress.selectingAgent")).toBe(
+      "正在选择智能体…"
+    );
     expect(getMessage(enUS, "chat.progress.valueText")).toBe(
       "Processing, {percent}%"
     );

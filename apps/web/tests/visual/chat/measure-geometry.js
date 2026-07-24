@@ -334,7 +334,7 @@
       );
     }
     const expectedQuickSelectCount =
-      state === "empty" && chatMode === "instant" ? 1 : 0;
+      state === "empty" && chatMode === "expert" ? 1 : 0;
     if (quickSelectNodes.length !== expectedQuickSelectCount) {
       reasons.push(
         `state=${state} mode=${chatMode} requires ${expectedQuickSelectCount} quick selection regions; found ${quickSelectNodes.length}`

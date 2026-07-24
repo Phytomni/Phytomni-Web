@@ -13,6 +13,8 @@ import {
   CHAT_VISUAL_THEMES,
   resolveChatVisualFixture,
   getChatVisualFixture,
+  getChatRoutingFixture,
+  routingFixtures,
 } from "../../../visual/chat/fixture-registry";
 import {
   SYNTHETIC_IDENTITY,
@@ -140,7 +142,8 @@ async function runGeometryHarness(
   const chatMode = options.chatModeOverride ?? options.chatMode ?? "instant";
   const emptyScrollPosition = options.emptyScrollPosition ?? "top";
   const includeCases = options.includeCases ?? state === "empty";
-  const includeQuickSelect = options.includeQuickSelect ?? state === "empty";
+  const includeQuickSelect =
+    options.includeQuickSelect ?? (state === "empty" && chatMode === "expert");
   const makeElement = (bounds: Rect, visible = true) => ({
     __visible: visible,
     getBoundingClientRect: () => bounds,
@@ -386,6 +389,10 @@ function walkFiles(dir: string, acc: string[] = []): string[] {
 describe("Chat visual fixture registry", () => {
   it("contains every exact frame, Phase 3B message-state, and Phase 3C key", () => {
     expect([...CHAT_VISUAL_FIXTURE_KEYS]).toEqual([
+      "instant-empty",
+      "expert-auto-empty",
+      "expert-selected-empty",
+      "expert-selected-populated",
       "empty",
       "empty-cases",
       "populated",
@@ -458,6 +465,54 @@ describe("Chat visual fixture registry", () => {
     expect(buildSyntheticMessages(populated)).toHaveLength(
       populated.messageCount
     );
+  });
+
+  it("registers deterministic Instant and Expert routing snapshots", () => {
+    expect(routingFixtures).toEqual([
+      {
+        id: "instant-empty",
+        mode: "instant",
+        selectedAgent: "",
+        populated: false,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+      {
+        id: "expert-auto-empty",
+        mode: "expert",
+        selectedAgent: "",
+        populated: false,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+      {
+        id: "expert-selected-empty",
+        mode: "expert",
+        selectedAgent: "DataAgent",
+        populated: false,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+      {
+        id: "expert-selected-populated",
+        mode: "expert",
+        selectedAgent: "AnalystAgent",
+        populated: true,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+    ]);
+
+    for (const routingFixture of routingFixtures) {
+      const fixture = getChatVisualFixture(
+        routingFixture.id as typeof CHAT_VISUAL_FIXTURE_KEYS[number]
+      );
+      expect(getChatRoutingFixture(routingFixture.id)).toBe(routingFixture);
+      expect(fixture.chatState).toBe(
+        routingFixture.populated ? "populated" : "empty"
+      );
+      expect(fixture.selectedAgent).toBe(routingFixture.selectedAgent);
+    }
   });
 
   it("keeps closed/open mobile as distinct registry keys", () => {
@@ -766,14 +821,27 @@ describe("Chat visual fixture geometry negative controls", () => {
     expect(result).toMatchObject({ pass: true, composer: { bottom: 880 } });
   });
 
-  it("accepts empty Expert without the Instant quick-select row", async () => {
+  it("accepts empty Instant without an agent quick-select row", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it("rejects empty Expert without the agent quick-select row", async () => {
     const result = await runGeometryHarness({
       state: "empty",
       chatMode: "expert",
       includeCases: true,
       includeQuickSelect: false,
     });
-    expect(result.pass).toBe(true);
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(
+      /mode=expert requires 1 quick selection regions/
+    );
   });
 
   it("rejects an unsupported chat mode with explicit failure context", async () => {
@@ -820,6 +888,9 @@ describe("Chat visual fixture geometry negative controls", () => {
       '@update:chat-mode="fixtureChatMode = $event"'
     );
     expect(APP_SOURCE).toContain(':expert-mode-enabled="true"');
+    expect(APP_SOURCE).toContain("getChatRoutingFixture");
+    expect(APP_SOURCE).toContain("routingPermissionsLoading");
+    expect(APP_SOURCE).toContain("allowedTools.includes(option.tool)");
   });
 
   it("locks the focused computed-style capture contract", () => {
@@ -830,6 +901,7 @@ describe("Chat visual fixture geometry negative controls", () => {
       "chat-header-inner",
       "chat-case-icon img",
       "In Silico",
+      "rendered In Silico label is not semantic",
     ]) {
       expect(REFINEMENT_ASSERT_SOURCE).toContain(needle);
     }
@@ -848,6 +920,7 @@ describe("Chat visual fixture geometry negative controls", () => {
   it("keeps the empty landing at the top with Composer and Cases present", async () => {
     const result = await runGeometryHarness({
       state: "empty",
+      chatMode: "expert",
       emptyScrollPosition: "top",
       includeCases: true,
       includeQuickSelect: true,
@@ -861,6 +934,7 @@ describe("Chat visual fixture geometry negative controls", () => {
   it("accepts the Cases-anchored capture when the final case is visible", async () => {
     const result = await runGeometryHarness({
       state: "empty",
+      chatMode: "expert",
       emptyScrollPosition: "cases",
       includeCases: true,
       includeQuickSelect: true,
@@ -876,6 +950,7 @@ describe("Chat visual fixture geometry negative controls", () => {
   it("allows an open mobile drawer to hide the main Composer", async () => {
     const result = await runGeometryHarness({
       state: "empty",
+      chatMode: "expert",
       width: 390,
       height: 844,
       drawerState: "open",
@@ -971,6 +1046,7 @@ describe("Chat visual fixture geometry negative controls", () => {
 
 type VisualMountOptions = {
   renderA2ui?: boolean;
+  renderRoutingControls?: boolean;
   locale?: "en-US" | "zh-CN";
 };
 
@@ -1038,18 +1114,20 @@ const mountFixtureApp = (
     teleport: true,
   } as Record<string, unknown>;
   if (options.renderA2ui) delete stubs.StreamMessage;
+  if (options.renderRoutingControls) delete stubs.ChatAgentPicker;
 
-  const plugins = options.renderA2ui
-    ? [
-        createI18n({
-          legacy: false,
-          locale: options.locale ?? "en-US",
-          fallbackLocale: "en-US",
-          messages: { "en-US": enUS, "zh-CN": zhCN },
-        }),
-        ElementPlus,
-      ]
-    : [];
+  const plugins =
+    options.renderA2ui || options.renderRoutingControls
+      ? [
+          createI18n({
+            legacy: false,
+            locale: options.locale ?? "en-US",
+            fallbackLocale: "en-US",
+            messages: { "en-US": enUS, "zh-CN": zhCN },
+          }),
+          ElementPlus,
+        ]
+      : [];
 
   return mount(ChatVisualFixtureApp, {
     props: { fixture, errorMessage },
@@ -1114,10 +1192,15 @@ describe("Chat visual fixture rendering (no network)", () => {
   });
 
   it("derives Chinese quick-select labels from the active locale", async () => {
-    const wrapper = mountFixtureApp(getChatVisualFixture("empty"), null, {
-      renderA2ui: true,
-      locale: "zh-CN",
-    });
+    const wrapper = mountFixtureApp(
+      getChatVisualFixture("expert-auto-empty"),
+      null,
+      {
+        renderA2ui: true,
+        renderRoutingControls: true,
+        locale: "zh-CN",
+      }
+    );
     await flushPromises();
     await nextTick();
 
@@ -1127,15 +1210,8 @@ describe("Chat visual fixture rendering (no network)", () => {
         .map((option) => option.text())
     ).toEqual([
       zhCN.chat.agentLabels.chatAgent,
-      zhCN.chat.agentLabels.knowledgeAgent,
       zhCN.chat.agentLabels.dataAgent,
       zhCN.chat.agentLabels.analystAgent,
-      zhCN.chat.agentLabels.reviewAgent,
-      zhCN.chat.agentLabels.inSilicoResearchAgent,
-      zhCN.chat.agentLabels.geneNetworkAgent,
-      zhCN.chat.agentLabels.briefGeneAgent,
-      zhCN.chat.agentLabels.deepGenomeAgent,
-      zhCN.chat.agentLabels.digitalDesignAgent,
     ]);
     wrapper.unmount();
   });
@@ -1165,6 +1241,83 @@ describe("Chat visual fixture rendering (no network)", () => {
         .attributes("data-chat-state")
     ).toBe("populated");
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps Instant routing free of agent controls", async () => {
+    const wrapper = mountFixtureApp(
+      getChatVisualFixture("instant-empty"),
+      null,
+      {
+        renderRoutingControls: true,
+      }
+    );
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="chat-agent-picker"]').exists()).toBe(
+      false
+    );
+    expect(
+      wrapper.find('[data-testid="chat-agent-quick-select"]').exists()
+    ).toBe(false);
+    expect(wrapper.findAll(".composer-tool-button")).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("renders autonomous and selected Expert picker/menu layouts", async () => {
+    const autoEmpty = mountFixtureApp(
+      getChatVisualFixture("expert-auto-empty"),
+      null,
+      { renderRoutingControls: true }
+    );
+    await flushPromises();
+
+    expect(
+      autoEmpty
+        .find('[data-testid="chat-visual-root"]')
+        .attributes("data-chat-mode")
+    ).toBe("expert");
+    expect(autoEmpty.find('[data-testid="chat-agent-picker"]').exists()).toBe(
+      true
+    );
+    expect(
+      autoEmpty.find('[data-testid="agent-picker-trigger"]').exists()
+    ).toBe(true);
+    expect(
+      autoEmpty.findAll('[data-testid="chat-agent-quick-option"]')
+    ).toHaveLength(3);
+
+    const selectedEmpty = mountFixtureApp(
+      getChatVisualFixture("expert-selected-empty"),
+      null,
+      { renderRoutingControls: true }
+    );
+    await flushPromises();
+    expect(
+      selectedEmpty.find('[data-testid="agent-picker-chip"]').exists()
+    ).toBe(true);
+    expect(
+      selectedEmpty
+        .findAll('[data-testid="chat-agent-quick-option"]')
+        .filter((option) => option.classes().includes("is-selected"))
+    ).toHaveLength(1);
+
+    const selectedPopulated = mountFixtureApp(
+      getChatVisualFixture("expert-selected-populated"),
+      null,
+      { renderRoutingControls: true }
+    );
+    await flushPromises();
+    expect(
+      selectedPopulated.find('[data-testid="chat-agent-picker"]').exists()
+    ).toBe(false);
+    expect(
+      selectedPopulated.find('[data-testid="chat-agent-quick-select"]').exists()
+    ).toBe(false);
+    expect(selectedPopulated.findAll(".composer-tool-button")).toHaveLength(1);
+
+    autoEmpty.unmount();
+    selectedEmpty.unmount();
+    selectedPopulated.unmount();
   });
 
   it("adapts message fixtures to the closed mobile drawer below the medium breakpoint", async () => {

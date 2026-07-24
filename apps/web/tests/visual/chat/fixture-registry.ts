@@ -1,6 +1,10 @@
 /** Typed closed registry for the Chat visual fixture harness (test-only). */
 
 export const CHAT_VISUAL_FIXTURE_KEYS = [
+  "instant-empty",
+  "expert-auto-empty",
+  "expert-selected-empty",
+  "expert-selected-populated",
   "empty",
   "empty-cases",
   "populated",
@@ -51,6 +55,57 @@ export type ChatVisualTheme = typeof CHAT_VISUAL_THEMES[number];
 
 export type ChatVisualChatState = "empty" | "populated";
 
+export type ChatRoutingFixtureMode = "instant" | "expert";
+
+export interface ChatRoutingFixture {
+  id: string;
+  mode: ChatRoutingFixtureMode;
+  selectedAgent: string;
+  populated: boolean;
+  permissionsLoading: boolean;
+  allowedTools: readonly string[];
+}
+
+/**
+ * Deterministic routing snapshots for the test-only Chat visual harness.
+ * They model authorization already resolved by the gateway; they do not enable
+ * a production capability or change the authenticated Chat defaults.
+ */
+export const routingFixtures: readonly ChatRoutingFixture[] = [
+  {
+    id: "instant-empty",
+    mode: "instant",
+    selectedAgent: "",
+    populated: false,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+  },
+  {
+    id: "expert-auto-empty",
+    mode: "expert",
+    selectedAgent: "",
+    populated: false,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+  },
+  {
+    id: "expert-selected-empty",
+    mode: "expert",
+    selectedAgent: "DataAgent",
+    populated: false,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+  },
+  {
+    id: "expert-selected-populated",
+    mode: "expert",
+    selectedAgent: "AnalystAgent",
+    populated: true,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+  },
+];
+
 export type ChatVisualFixtureDefinition = {
   key: ChatVisualFixtureKey;
   /** Root `data-chat-state` for geometry measurement. */
@@ -71,6 +126,62 @@ export type ChatVisualFixtureDefinition = {
 };
 
 const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
+  "instant-empty": {
+    key: "instant-empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+  },
+  "expert-auto-empty": {
+    key: "expert-auto-empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+  },
+  "expert-selected-empty": {
+    key: "expert-selected-empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "DataAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+  },
+  "expert-selected-populated": {
+    key: "expert-selected-populated",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "AnalystAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
   empty: {
     key: "empty",
     chatState: "empty",
@@ -669,4 +780,10 @@ export function getChatVisualFixture(
   key: ChatVisualFixtureKey
 ): ChatVisualFixtureDefinition {
   return DEFINITIONS[key];
+}
+
+export function getChatRoutingFixture(
+  id: string | null | undefined
+): ChatRoutingFixture | undefined {
+  return routingFixtures.find((fixture) => fixture.id === id);
 }

@@ -159,10 +159,17 @@
   });
 
   if (chatMode === "instant") {
-    const scientific = [...root.querySelectorAll("em")].find(
-      (node) => node.textContent?.trim() === "In Silico"
+    const renderedInSilico = [...root.querySelectorAll("*")].filter((node) =>
+      node.textContent?.includes("In Silico")
     );
-    if (!scientific) fail("formatted In Silico product label missing");
+    if (renderedInSilico.length > 0) {
+      const scientific = renderedInSilico.some((node) =>
+        [...node.querySelectorAll("em")].some(
+          (em) => em.textContent?.trim() === "In Silico"
+        )
+      );
+      if (!scientific) fail("rendered In Silico label is not semantic");
+    }
   }
 
   if (failures.length) throw new Error(failures.join(" | "));

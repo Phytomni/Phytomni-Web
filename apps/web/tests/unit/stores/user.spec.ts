@@ -148,11 +148,7 @@ describe("userStore.getUserTools $patch end-state", () => {
     const store = userStore();
     await store.getUserTools();
 
-    expect(store.roles).toEqual([
-      "ChatAgent",
-      "KnowledgeAgent",
-      "ReviewAgent",
-    ]);
+    expect(store.roles).toEqual(["ChatAgent", "KnowledgeAgent", "ReviewAgent"]);
   });
 
   it("does not add tools that were absent from the server-issued effective list", async () => {

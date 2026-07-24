@@ -114,6 +114,15 @@ permissions. Explore Agents is likewise a visible discovery entry for every
 user who can open Chat; its destinations are static demos, while live-agent
 execution remains protected by route and server authorization.
 
+Chat routing controls remain owned by `ChatComposer`: the empty landing owns
+the Instant/Expert presentation selector, Expert empty states own the picker
+and quick-select row, and populated Expert states own the compact menu. Their
+availability source is the authenticated gateway's effective permission list,
+projected through `userStore.roles` and the canonical display order; mode and
+tool authorization remain server-enforced. The dedicated product routes own
+their own Instant-only submissions and do not inherit a Chat selection. Expert
+is not enabled by this visual contract.
+
 The empty Chat landing owns vertical scroll at `chat-content-stack` and orders
 Welcome → Composer → Cases. After the first message, that stack stops scrolling,
 Cases unmounts, and `message-container` becomes the transcript scroll root while
@@ -253,6 +262,28 @@ For each route archetype, verify one representative route first, then sample
 the changed routes. Check that the intended element is the only scroll root,
 Footer is visible but does not cover content, text does not clip after locale
 switching, and focus remains visible after every open/close transition.
+
+### Chat routing fixture matrix
+
+`apps/web/tests/visual/chat/fixture-registry.ts` owns four deterministic,
+test-only routing snapshots. Each is captured at `320x568`, `390x844`,
+`480x800`, `768x1024`, `1024x768`, `1366x768`, `1440x900`, `1920x1080`, and
+`2560x1440`, in `en-US` and `zh-CN`, for both light and dark themes. This is
+visual harness evidence only; it does not establish an authenticated
+environment conclusion.
+
+| Fixture                     | Mode    | State     | Expected Chat control                                                    |
+| --------------------------- | ------- | --------- | ------------------------------------------------------------------------ |
+| `instant-empty`             | Instant | empty     | No agent picker, quick-select, or populated-menu control.                |
+| `expert-auto-empty`         | Expert  | empty     | Autonomous picker plus permitted quick-select options.                   |
+| `expert-selected-empty`     | Expert  | empty     | Selected picker chip and matching quick-select state.                    |
+| `expert-selected-populated` | Expert  | populated | Compact permitted-agent menu; no empty-state picker or quick-select row. |
+
+The fixture permission source is the explicit synthetic `allowedTools` list;
+the application source remains the authenticated gateway's effective roles.
+Capture evidence must be stored below
+`.codex/evidence/frontend-v2/instant-expert-routing/`, reviewed PNG by PNG,
+and never staged. It does not assert that Expert is enabled.
 
 ### Evidence tiers
 

@@ -285,7 +285,7 @@
                   :mode-usable="true"
                   :show-mode-selector="fixture.chatState === 'empty'"
                   :file-list="fileList"
-                  :roles-loading="false"
+                  :roles-loading="routingPermissionsLoading"
                   :has-messages="fixture.chatState === 'populated'"
                   :selected-agent="fixture.selectedAgent"
                   :picker-options="pickerOptions"
@@ -360,7 +360,10 @@ import LangSwitch from "@/components/LangSwitch.vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { useAppStore } from "@/stores";
 import type { ChatMessage } from "@/views/chat/types";
-import type { ChatVisualFixtureDefinition } from "./fixture-registry";
+import {
+  getChatRoutingFixture,
+  type ChatVisualFixtureDefinition,
+} from "./fixture-registry";
 import {
   isPhase3BMessageKey,
   isPhase3CFixtureKey,
@@ -537,9 +540,19 @@ const geneNetworkImages = computed(() =>
 const fileList = computed(() =>
   props.fixture ? buildSyntheticFileList(props.fixture) : []
 );
-const pickerOptions = computed(() =>
-  buildSyntheticPickerOptions((key) => t(key))
+const routingFixture = computed(() =>
+  getChatRoutingFixture(props.fixture?.key)
 );
+const routingPermissionsLoading = computed(
+  () => routingFixture.value?.permissionsLoading ?? false
+);
+const pickerOptions = computed(() => {
+  const options = buildSyntheticPickerOptions((key) => t(key));
+  const allowedTools = routingFixture.value?.allowedTools;
+  return allowedTools
+    ? options.filter((option) => allowedTools.includes(option.tool))
+    : options;
+});
 
 const composerIsSending = computed(
   () =>
@@ -555,7 +568,16 @@ const composerValue = ref(
 const lastFixtureAction = ref("");
 const transcriptRef = ref<HTMLElement | null>(null);
 const activeSidebarItem = ref("new-chat");
-const fixtureChatMode = ref<"instant" | "expert">("instant");
+const fixtureChatMode = ref<"instant" | "expert">(
+  routingFixture.value?.mode ?? "instant"
+);
+
+watch(
+  () => props.fixture?.key,
+  (key) => {
+    fixtureChatMode.value = getChatRoutingFixture(key)?.mode ?? "instant";
+  }
+);
 
 const onFixtureAction = (name: string) => {
   lastFixtureAction.value = name;

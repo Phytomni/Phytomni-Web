@@ -16,7 +16,9 @@
         <span class="chat-case-icon" aria-hidden="true">
           <img :src="item.img" alt="" loading="eager" decoding="async" />
         </span>
-        <span class="chat-case-title">{{ item.title }}</span>
+        <span class="chat-case-title">
+          <AgentDisplayName :label="item.title" />
+        </span>
       </RouterLink>
     </div>
   </section>
@@ -26,6 +28,7 @@
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useI18n } from "vue-i18n";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import {
   CANONICAL_AGENT_PAGE_TITLE_KEYS,
   deriveCaseRouteOptions,
