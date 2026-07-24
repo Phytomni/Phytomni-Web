@@ -234,6 +234,7 @@ onBeforeUnmount(() => {
 @media (max-width: 599px) {
   .agent-capability-popover {
     position: fixed;
+    top: auto;
     right: 0;
     bottom: 0;
     left: 0;

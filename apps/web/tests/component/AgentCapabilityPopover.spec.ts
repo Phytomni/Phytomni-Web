@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import AgentCapabilityPopover from "@/components/agent/AgentCapabilityPopover.vue";
 import { CANONICAL_AGENT_PRESENTATIONS } from "@/components/agent";
+
+const AGENT_CAPABILITY_POPOVER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/agent/AgentCapabilityPopover.vue"),
+  "utf8"
+);
 
 const t = vi.hoisted(() => {
   const messages: Record<string, string> = {
@@ -52,6 +59,12 @@ afterEach(() => {
 });
 
 describe("AgentCapabilityPopover", () => {
+  it("resets the desktop top offset for the mobile bottom sheet", () => {
+    expect(AGENT_CAPABILITY_POPOVER_SOURCE).toMatch(
+      /@media \(max-width: 599px\)[\s\S]*?\.agent-capability-popover\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?top:\s*auto;[\s\S]*?right:\s*0;[\s\S]*?bottom:\s*0;/
+    );
+  });
+
   it("opens from keyboard focus and keeps the full flowchart inspectable", async () => {
     const wrapper = mountPopover("DeepGenomeAgent");
     await wrapper.get("button").trigger("focus");
