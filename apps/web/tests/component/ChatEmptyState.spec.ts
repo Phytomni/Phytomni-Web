@@ -55,9 +55,7 @@ describe("Chat empty state", () => {
     expect(CHAT_COMPOSER_SOURCE).not.toContain(
       'class="input-container-warpper"'
     );
-    const emptyStateStart = CHAT_SOURCE.indexOf(
-      '<div v-if="!currentChat?.messages?.length" class="empty-chat">'
-    );
+    const emptyStateStart = CHAT_SOURCE.indexOf('class="empty-chat"');
     const composerStart = CHAT_SOURCE.indexOf("<ChatComposer", emptyStateStart);
     expect(CHAT_SOURCE.slice(emptyStateStart, composerStart)).not.toContain(
       "AgentsViewImg"
@@ -68,7 +66,6 @@ describe("Chat empty state", () => {
     expect(
       TRANSCRIPT_SOURCE.match(/v-if="currentChat\?\.messages\?\.length"/g)
     ).toHaveLength(1);
-    expect(TRANSCRIPT_SOURCE).toContain("currentHistoryHydration === 'new'");
     expect(CHAT_SOURCE).toContain('data-test="chat-transcript-scroll-root"');
     expect(CHAT_SOURCE).toContain('class="transcript-content"');
     expect(CHAT_SOURCE).toContain(
@@ -79,17 +76,6 @@ describe("Chat empty state", () => {
     expect(CHAT_SOURCE).toContain(
       "'is-populated': chatStateAttr === 'populated'"
     );
-  });
-
-  it("keeps selected history hydration out of the welcome landing", () => {
-    expect(CHAT_SOURCE).toContain("currentHistoryHydration === 'loading'");
-    expect(CHAT_SOURCE).toContain('$t("chat.history.loading")');
-    expect(CHAT_SOURCE).toContain(
-      "currentHistoryHydration === 'history-empty'"
-    );
-    expect(CHAT_SOURCE).toContain("$t('chat.history.emptyTitle')");
-    expect(CHAT_SOURCE).toContain("currentHistoryHydration === 'new'");
-    expect(CHAT_SOURCE).toContain(":title=\"$t('chat.welcomeTitle')\"");
   });
 
   it("orders Welcome, Composer, and Cases without starter prompts", () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config, mount, type VueWrapper } from "@vue/test-utils";
+import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { readFileSync } from "node:fs";
@@ -11,6 +11,7 @@ const testState = vi.hoisted(() => ({
   > | null,
   copiedText: vi.fn(),
   downloadFile: vi.fn(),
+  getAnswerCheck: vi.fn(),
 }));
 
 vi.mock("vue-element-plus-x", () => ({
@@ -46,6 +47,7 @@ vi.mock("@/api/chat", async (importOriginal) => {
   return {
     ...actual,
     getHistoryQuestionList: vi.fn(() => new Promise(() => undefined)),
+    getAnswerCheck: testState.getAnswerCheck,
   };
 });
 
@@ -386,6 +388,7 @@ beforeEach(() => {
   testState.chatStates = null;
   testState.copiedText.mockReset();
   testState.downloadFile.mockReset();
+  testState.getAnswerCheck.mockReset();
   localStorage.clear();
   localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "false");
   window.history.replaceState({}, "", "/chat");
@@ -395,6 +398,74 @@ afterEach(() => {
   mountedWrappers.splice(0).forEach((wrapper) => wrapper.unmount());
   localStorage.clear();
   window.history.replaceState({}, "", "/");
+});
+
+describe("Chat history hydration surfaces", () => {
+  it("renders loading, error, empty-history, and new conversation states", async () => {
+    const { wrapper, state } = await mountProductionChat();
+    const selected = state.getChatState("A");
+    selected.renderedChat = null;
+    selected.historyHydration = "loading";
+    await nextTick();
+
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      enUS.chat.history.loading
+    );
+    expect(wrapper.text()).not.toContain(enUS.chat.welcomeTitle);
+
+    selected.historyHydration = "error";
+    selected.historyErrorKind = "request";
+    await nextTick();
+
+    const error = wrapper.get('[data-testid="chat-history-error"]');
+    expect(error.text()).toContain(enUS.chat.history.errorTitle);
+    expect(error.text()).toContain(enUS.chat.history.errorSubtitle);
+    expect(error.get("button").text()).toBe(enUS.chat.history.retry);
+
+    selected.historyHydration = "history-empty";
+    selected.historyErrorKind = null;
+    await nextTick();
+
+    const empty = wrapper.get('[data-testid="chat-history-empty"]');
+    expect(empty.text()).toContain(enUS.chat.history.emptyTitle);
+    expect(empty.text()).toContain(enUS.chat.history.emptySubtitle);
+    expect(wrapper.text()).not.toContain(enUS.chat.welcomeTitle);
+
+    selected.historyHydration = "new";
+    selected.renderedChat = { messages: [] };
+    await nextTick();
+
+    expect(wrapper.text()).toContain(enUS.chat.welcomeTitle);
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="chat-history-error"]').exists()).toBe(
+      false
+    );
+  });
+
+  it("retries the selected dialogue without mutating another dialogue", async () => {
+    const { wrapper, state } = await mountProductionChat();
+    const selected = state.getChatState("A");
+    const background = state.getChatState("B");
+    selected.renderedChat = null;
+    selected.historyHydration = "error";
+    selected.historyErrorKind = "request";
+    background.historyHydration = "history-empty";
+    background.historyErrorKind = null;
+    background.renderedChat = null;
+    testState.getAnswerCheck.mockRejectedValueOnce(new Error("offline"));
+    await nextTick();
+
+    await wrapper
+      .get('[data-testid="chat-history-error"] button')
+      .trigger("click");
+    await flushPromises();
+
+    expect(testState.getAnswerCheck).toHaveBeenCalledWith({ dialogue_id: "A" });
+    expect(state.currentChatId.value).toBe("A");
+    expect(background.historyHydration).toBe("history-empty");
+    expect(background.historyErrorKind).toBeNull();
+    expect(background.renderedChat).toBeNull();
+  });
 });
 
 describe("Chat artifact message ownership", () => {

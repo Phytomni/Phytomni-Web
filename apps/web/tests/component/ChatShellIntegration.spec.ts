@@ -169,7 +169,6 @@ describe("Chat adaptive shell integration", () => {
         'v-if="currentChat?.messages?.length"'
       )
     ).toBe(1);
-    expect(TRANSCRIPT_SOURCE).toContain("currentHistoryHydration === 'new'");
     expect(CHAT_SOURCE).toContain("<PhyEmptyState");
     expect(CHAT_SOURCE).toContain("<ChatCases");
     expect(CHAT_SOURCE).not.toContain("<" + "Prompts");
@@ -177,33 +176,6 @@ describe("Chat adaptive shell integration", () => {
       'v-for="(message, index) in currentChat.messages"'
     );
     expect(CHAT_SOURCE).toContain('target=".message-container"');
-  });
-
-  it("provides localized loading, empty-history, and retryable error surfaces", () => {
-    expect(CHAT_SOURCE).toContain('<PhySkeleton shape="line" :count="4" />');
-    expect(CHAT_SOURCE).toContain('class="sr-only"');
-    expect(CHAT_SOURCE).toContain("$t('chat.history.errorTitle')");
-    expect(CHAT_SOURCE).toContain("$t('chat.history.errorSubtitle')");
-    expect(CHAT_SOURCE).toContain("$t('chat.history.retry')");
-    expect(CHAT_SOURCE).toContain('data-testid="chat-history-error"');
-    expect(CHAT_SOURCE).toContain('data-testid="chat-history-empty"');
-    expect(CHAT_SOURCE).toContain('@retry="retrySelectedChat"');
-    expect(enUS.chat.history).toEqual({
-      loading: expect.any(String),
-      emptyTitle: expect.any(String),
-      emptySubtitle: expect.any(String),
-      errorTitle: expect.any(String),
-      errorSubtitle: expect.any(String),
-      retry: expect.any(String),
-    });
-    expect(zhCN.chat.history).toEqual({
-      loading: expect.any(String),
-      emptyTitle: expect.any(String),
-      emptySubtitle: expect.any(String),
-      errorTitle: expect.any(String),
-      errorSubtitle: expect.any(String),
-      retry: expect.any(String),
-    });
   });
 
   it("keeps overlays and existing message/input regions in the main slot", () => {

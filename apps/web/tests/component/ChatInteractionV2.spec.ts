@@ -192,15 +192,6 @@ function populateFullChatState(
 }
 
 describe("ChatInteractionV2 — behavior matrix", () => {
-  it("retries only the currently selected dialogue and resets new chats", () => {
-    expect(CHAT_SOURCE).toContain("const retrySelectedChat = () => {");
-    expect(CHAT_SOURCE).toContain("const dialogueId = currentChatId.value;");
-    expect(CHAT_SOURCE).toContain("if (!dialogueId) return;");
-    expect(CHAT_SOURCE).toContain("void selectChat(dialogueId);");
-    expect(CHAT_SOURCE).toContain('newChatState.historyHydration = "new";');
-    expect(CHAT_SOURCE).toContain("newChatState.historyErrorKind = null;");
-  });
-
   it("covers Phase 3B message content branches via shared fixtures", () => {
     for (const key of PHASE_3B_MESSAGE_KEYS) {
       expect(MESSAGE_FIXTURES[key]).toBeTruthy();
