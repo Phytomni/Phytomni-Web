@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
 import ElementPlus from "element-plus";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
@@ -40,6 +42,11 @@ const i18n = createI18n({
 
 import AnalystAgent from "@/views/analyst-agent/AnalystAgentView.vue";
 
+const ANALYST_AGENT_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/views/analyst-agent/AnalystAgentView.vue"),
+  "utf8"
+);
+
 function mountDemo() {
   return mount(AnalystAgent, {
     global: {
@@ -50,6 +57,13 @@ function mountDemo() {
 }
 
 describe("Analyst Agent static demonstration", () => {
+  it("wraps long task identifiers within a shrinkable result column", () => {
+    expect(ANALYST_AGENT_SOURCE).toContain("overflow-wrap: anywhere;");
+    expect(ANALYST_AGENT_SOURCE).toContain(
+      "grid-template-columns: minmax(0, 1fr);"
+    );
+  });
+
   it("discloses the sample question, task ID, and result without live status claims", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const wrapper = mountDemo();
@@ -114,7 +128,9 @@ describe("Analyst Agent static demonstration", () => {
       wrapper.findAll(".chat-header, .chat-messages, .message-avatar")
     ).toHaveLength(0);
     expect(wrapper.find("[data-test=analyst-question]").classes()).toEqual([]);
-    expect(wrapper.find("[data-test=analyst-result]").classes()).toEqual([]);
+    expect(wrapper.find("[data-test=analyst-result]").classes()).toContain(
+      "analyst-result"
+    );
     expect(wrapper.findAll(".analyst-message")).toHaveLength(0);
 
     await wrapper.get("[data-test=shell-back]").trigger("click");

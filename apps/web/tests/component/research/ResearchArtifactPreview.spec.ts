@@ -94,4 +94,18 @@ describe("ResearchArtifactPreview", () => {
     expect(source).not.toContain("--phy-color-bubble-assistant");
     expect(source).not.toMatch(/#[\da-f]{3,8}\b/i);
   });
+
+  it("keeps the preview body shrinkable while the open action stays reachable", () => {
+    const source = readFileSync(
+      resolve(
+        __dirname,
+        "../../../src/components/research/ResearchArtifactPreview.vue"
+      ),
+      "utf8"
+    );
+
+    expect(source).toContain("grid-template-columns: minmax(0, 1fr) auto;");
+    expect(source).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(source).toContain("max-width: 100%;");
+  });
 });

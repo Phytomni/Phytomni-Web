@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { config, flushPromises, mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   computed,
   defineComponent,
@@ -23,6 +25,11 @@ vi.mock("@/api/gene-display", () => ({
 }));
 
 import GeneDisplay from "@/views/gene-display/GeneDisplayView.vue";
+
+const GENE_DISPLAY_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/gene-display/GeneDisplayView.vue"),
+  "utf8"
+);
 
 const rows = [
   {
@@ -181,6 +188,18 @@ describe("Gene Display workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getGeneList.mockResolvedValue(successResponse);
+  });
+
+  it("keeps the table width bounded while its frame owns narrow-screen scrolling", () => {
+    const tableStyleStart = GENE_DISPLAY_SOURCE.indexOf(".gene-table {");
+    const tableStyleEnd = GENE_DISPLAY_SOURCE.indexOf("}", tableStyleStart);
+    const tableStyle = GENE_DISPLAY_SOURCE.slice(
+      tableStyleStart,
+      tableStyleEnd + 1
+    );
+
+    expect(tableStyle).toContain("max-width: 100%;");
+    expect(GENE_DISPLAY_SOURCE).toContain("<PhyTableFrame>");
   });
 
   it("loads the first page into the shared workspace and table frame", async () => {

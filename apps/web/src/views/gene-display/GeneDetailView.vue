@@ -244,6 +244,8 @@ onBeforeUnmount(() => {
 
 .gene-detail-artifact {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
 }
 

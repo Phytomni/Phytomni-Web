@@ -7,6 +7,8 @@ import {
 } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
 import { defineComponent, h, nextTick, reactive } from "vue";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
@@ -45,6 +47,11 @@ vi.mock("element-plus", () => ({
 }));
 
 import GeneDetail from "@/views/gene-display/GeneDetailView.vue";
+
+const GENE_DETAIL_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/gene-display/GeneDetailView.vue"),
+  "utf8"
+);
 
 const DeepGenomeArtifactStub = defineComponent({
   name: "DeepGenomeArtifact",
@@ -129,6 +136,23 @@ describe("Gene Detail research artifact", () => {
     mocks.getGeneDetails.mockResolvedValue(successResponse());
     mocks.buildDisplayContent.mockImplementation((content: string) => content);
     mocks.routerPush.mockReset();
+  });
+
+  it("keeps the artifact column bounded without clipping the report surface", () => {
+    const artifactStyleStart = GENE_DETAIL_SOURCE.indexOf(
+      ".gene-detail-artifact {"
+    );
+    const artifactStyleEnd = GENE_DETAIL_SOURCE.indexOf(
+      "}",
+      artifactStyleStart
+    );
+    const artifactStyle = GENE_DETAIL_SOURCE.slice(
+      artifactStyleStart,
+      artifactStyleEnd + 1
+    );
+
+    expect(artifactStyle).toContain("max-width: 100%;");
+    expect(GENE_DETAIL_SOURCE).toContain('data-scroll-root="gene-detail"');
   });
 
   it("mounts the completed report in the shared DeepGenome artifact shell", async () => {

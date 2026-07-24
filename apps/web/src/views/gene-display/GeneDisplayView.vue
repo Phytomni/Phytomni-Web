@@ -277,6 +277,8 @@ onMounted(() => {
 }
 
 .gene-table {
+  width: 100%;
+  max-width: 100%;
   min-width: 720px;
 }
 

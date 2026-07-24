@@ -99,8 +99,11 @@ const rounds = [
 
 .data-agent-question,
 .data-agent-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   box-sizing: border-box;
   min-width: 0;
+  max-width: 100%;
   border-radius: var(--phy-radius-lg);
 }
 
@@ -135,6 +138,7 @@ const rounds = [
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-width: thin;

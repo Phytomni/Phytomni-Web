@@ -191,4 +191,17 @@ describe("ChatAnalystLog", () => {
     expect(styles).not.toMatch(/#[\da-f]{3,8}\b/i);
     expect(styles).not.toContain("background-color: #1e1e1e");
   });
+
+  it("keeps long analyst log content inside its local scroll owner", () => {
+    const logContentStart = ANALYST_LOG_SOURCE.indexOf(".log-content {");
+    const logContentEnd = ANALYST_LOG_SOURCE.indexOf("\n}", logContentStart);
+    const logContentStyles = ANALYST_LOG_SOURCE.slice(
+      logContentStart,
+      logContentEnd + 2
+    );
+
+    expect(logContentStyles).toContain("min-width: 0;");
+    expect(logContentStyles).toContain("overflow-y: auto;");
+    expect(ANALYST_LOG_SOURCE).toContain("white-space: pre-wrap;");
+  });
 });

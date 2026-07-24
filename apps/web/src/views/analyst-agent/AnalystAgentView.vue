@@ -9,7 +9,7 @@
     </template>
 
     <template #result>
-      <div data-test="analyst-result">
+      <div class="analyst-result" data-test="analyst-result">
         <p class="analyst-result-label" data-test="analyst-result-label">
           {{ $t("agents.analyst.sampleResult") }}
         </p>
@@ -66,6 +66,14 @@ const downloadResults = () => {
   margin: 0;
 }
 
+.analyst-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .analyst-result-label {
   color: var(--phy-color-action-text);
   font-size: 0.75rem;
@@ -76,15 +84,19 @@ const downloadResults = () => {
 
 .analyst-task-label {
   margin-top: var(--phy-space-8);
+  overflow-wrap: anywhere;
 }
 
 .analyst-task-label code {
   color: var(--phy-color-text);
   font-family: var(--phy-font-mono);
   font-size: 0.9em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .analyst-download {
   margin-top: var(--phy-space-12);
+  max-width: 100%;
 }
 </style>

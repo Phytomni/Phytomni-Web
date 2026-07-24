@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
@@ -63,7 +65,19 @@ function mountDemo() {
 
 import DataAgent from "@/views/data-agent/DataAgentView.vue";
 
+const DATA_AGENT_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/views/data-agent/DataAgentView.vue"),
+  "utf8"
+);
+
 describe("Data Agent static demonstration", () => {
+  it("keeps result columns shrinkable while table overflow stays local", () => {
+    expect(DATA_AGENT_SOURCE).toContain(
+      "grid-template-columns: minmax(0, 1fr);"
+    );
+    expect(DATA_AGENT_SOURCE).toContain("overflow-x: auto;");
+  });
+
   it("keeps the three sample rounds in their exact order", () => {
     const wrapper = mountDemo();
     const rounds = wrapper.findAll("[data-test=data-agent-round]");
