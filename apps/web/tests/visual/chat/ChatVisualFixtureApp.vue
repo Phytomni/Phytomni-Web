@@ -880,6 +880,7 @@ onUnmounted(() => {
   width: min(100%, var(--phy-layout-transcript-max-width));
   margin: 0 auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
