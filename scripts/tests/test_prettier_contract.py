@@ -52,6 +52,7 @@ def test_prettier_is_exactly_pinned_and_scripts_have_one_write_boundary() -> Non
     assert isinstance(write, str)
     assert isinstance(lint, str)
     assert isinstance(raw_lint, str)
+    assert scripts["build"] == "run-p type-check build-only"
     assert check != write
     assert "--write" not in check
     assert "--fix" not in check

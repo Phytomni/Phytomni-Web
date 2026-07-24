@@ -39,8 +39,14 @@ def test_plugin_factories_preserve_runtime_contracts() -> None:
     auto_import = _read(PLUGIN_ROOT / "auto-import.ts")
     compression = _read(PLUGIN_ROOT / "compression.ts")
 
+    assert package["devDependencies"]["npm-run-all2"] == "9.0.2"
+    assert "npm-run-all" not in package["devDependencies"]
+    assert package["devDependencies"]["unplugin-auto-import"] == "21.0.0"
+    assert package["scripts"]["build"] == "run-p type-check build-only"
     assert 'imports: ["vue", "vue-router", "pinia"]' in auto_import
     assert "dts: false" in auto_import
+    assert "PluginOption" in auto_import
+    assert "as Plugin" not in auto_import
     assert package["devDependencies"]["vite-plugin-compression2"] == "2.5.3"
     assert "vite-plugin-compression" not in package["devDependencies"]
     assert 'import { compression } from "vite-plugin-compression2";' in compression
