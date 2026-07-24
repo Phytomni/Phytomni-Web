@@ -158,6 +158,23 @@ When a route changes, update its owner and behavior test together.
 visual guesses. Public legal pages remain available to authenticated users;
 legal access is not a guest-only rule.
 
+### Remote product route ownership and cutover
+
+Research, Digital Design, and Gene Network product pages own their submissions
+through `POST /api/v1/agent-products/:tool/runs`; their canonical tools are
+`InSilicoResearchAgent`, `DigitalDesignAgent`, and `GeneNetworkAgent`.
+`runAgentProductAbortable` is the only product-page transport. It must not fall
+back to `getQueryAbortable` or add caller-controlled `tool` and `mode` fields;
+the authenticated route owns those values and uses Instant mode.
+
+The cutover order is: deploy the Bot capability support with Expert disabled;
+deploy this Web compatibility build; verify the three product-page staging
+smokes and sanitized gateway telemetry; then obtain reviewer approval before
+removing legacy Chat Instant-plus-tool compatibility. Strict Chat validation
+and Expert activation are still pending. Deployment observations, gateway
+telemetry, and the agreed no-legacy-traffic observation window are **External
+Pending** until an authorized environment supplies evidence.
+
 ## State, progress, and feedback
 
 Every async surface exposes one of loading, empty, error, or ready/populated

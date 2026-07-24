@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ref, type Ref } from "vue";
+import { ref, type Component, type Ref } from "vue";
+import { mount } from "@vue/test-utils";
+import ElementPlus from "element-plus";
+import { createI18n } from "vue-i18n";
 
 const mockQuery = vi.hoisted(() => vi.fn());
+const mockChatQuery = vi.hoisted(() => vi.fn());
+const mockGetAnswerCheck = vi.hoisted(() => vi.fn());
+const mockGetChatdownloadURL = vi.hoisted(() => vi.fn());
 const mockAbortRequest = vi.hoisted(() => vi.fn(() => true));
 const mockTrackerUpdate = vi.hoisted(() => vi.fn());
 const mockTrackerReset = vi.hoisted(() => vi.fn());
@@ -9,6 +15,9 @@ const mockUseBotCapabilities = vi.hoisted(() => vi.fn());
 const mockLoadCapabilities = vi.hoisted(() => vi.fn());
 
 vi.mock("@/api/chat", () => ({
+  getQueryAbortable: mockChatQuery,
+  getAnswerCheck: mockGetAnswerCheck,
+  getChatdownloadURL: mockGetChatdownloadURL,
   runAgentProductAbortable: mockQuery,
 }));
 
@@ -24,14 +33,20 @@ vi.mock("@/utils/transfer-progress", () => ({
   })),
 }));
 
-// Keep the route contract test focused on the lazy boundary. Loading the real
-// Research SFC would pull Element Plus CSS into the Node runner.
-vi.mock("@/views/research-agent/ResearchAgentView.vue", () => ({
-  default: { __file: "/src/views/research-agent/ResearchAgentView.vue" },
-}));
-
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
   useBotCapabilities: mockUseBotCapabilities,
+}));
+
+vi.mock("@/components/research/ResearchArtifactShell.vue", () => ({
+  default: { template: "<section><slot /></section>" },
+}));
+
+vi.mock("@/components/research/BotReportState.vue", () => ({
+  default: { template: "<div />" },
+}));
+
+vi.mock("@/components/research/BotArtifactList.vue", () => ({
+  default: { template: "<div />" },
 }));
 
 import {
@@ -49,7 +64,20 @@ import router, {
   canActivateRemoteAgentRoute,
   remoteAgentRouteGuard,
 } from "@/router";
+import ResearchAgentView from "@/views/research-agent/ResearchAgentView.vue";
+import DigitalDesignAgentView from "@/views/digital-design-agent/DigitalDesignAgentView.vue";
+import GeneNetworkAgentView from "@/views/gene-network-agent/GeneNetworkAgentView.vue";
+import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
+import enUS from "@/locales/langs/en-US";
+import zhCN from "@/locales/langs/zh-CN";
 import { mustGet } from "../../../helpers/mockFactories";
+
+const requestRecorderI18n = createI18n({
+  legacy: false,
+  locale: "en-US",
+  fallbackLocale: "en-US",
+  messages: { "en-US": enUS, "zh-CN": zhCN },
+});
 
 function makeState(): RemoteAgentChatState {
   return {
@@ -97,6 +125,9 @@ function makeCapabilities(
 describe("useBotRemoteAgentRun", () => {
   beforeEach(() => {
     mockQuery.mockReset();
+    mockChatQuery.mockReset();
+    mockGetAnswerCheck.mockReset();
+    mockGetChatdownloadURL.mockReset();
     mockAbortRequest.mockClear();
     mockTrackerUpdate.mockReset();
     mockTrackerReset.mockReset();
@@ -590,6 +621,45 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.phase).toBe("cancelled");
   });
 
+  it.each(remoteTools)(
+    "aborts the %s product-route request without Chat transport",
+    async (tool) => {
+      let resolveRequest: (value: unknown) => void = () => undefined;
+      mockQuery.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRequest = resolve;
+          })
+      );
+      const state = makeState();
+      const run = useBotRemoteAgentRun({
+        tool,
+        dialogueId: `abort-${tool}`,
+        getChatState: () => state,
+        capabilities: makeCapabilities(tool),
+      });
+
+      const pending = run.submit({ query: "cancel this product run" });
+      await Promise.resolve();
+      const requestId = state.activeRequestId;
+      expect(mockQuery.mock.calls[0]?.[0]).toBe(tool);
+      expect(mockChatQuery).not.toHaveBeenCalled();
+      expect(run.cancel()).toBe(true);
+      expect(mockAbortRequest).toHaveBeenCalledWith(requestId);
+
+      resolveRequest({
+        data: {
+          bot_run_id: `run-${tool}`,
+          tool_name: tool,
+          status: "CANCELLED",
+        },
+      });
+      await pending;
+      expect(run.state.value.phase).toBe("cancelled");
+      expect(state.activeRequestId).toBe("");
+    }
+  );
+
   it("does not let a reset old response overwrite a later run", async () => {
     let resolveA: (value: unknown) => void = () => undefined;
     let resolveB: (value: unknown) => void = () => undefined;
@@ -707,5 +777,118 @@ describe("useBotRemoteAgentRun", () => {
     expect(loaded.default?.__file).toContain(
       "views/research-agent/ResearchAgentView.vue"
     );
+  });
+
+  it("submits each product view through the route-owned transport only", async () => {
+    const chatRequestSpy = mockChatQuery;
+    const productRequestSpy = mockQuery;
+    const originalLive = {
+      InSilicoResearchAgent:
+        REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live,
+      DigitalDesignAgent: REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live,
+      GeneNetworkAgent: REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live,
+    };
+    REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
+    REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = true;
+    REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live = true;
+
+    const capabilities = ref<CapabilityMap>({
+      InSilicoResearchAgent: {
+        enabled: true,
+        attachments: true,
+        artifacts: true,
+        execution: "agent_run",
+        resolver: false,
+      },
+      DigitalDesignAgent: {
+        enabled: true,
+        attachments: true,
+        artifacts: true,
+        execution: "agent_run",
+        resolver: true,
+      },
+      GeneNetworkAgent: {
+        enabled: true,
+        attachments: true,
+        artifacts: true,
+        execution: "agent_run",
+        resolver: true,
+      },
+    });
+    mockUseBotCapabilities.mockImplementation(() => ({
+      loaded: ref(true),
+      loading: ref(false),
+      byTool: capabilities,
+      load: mockLoadCapabilities.mockResolvedValue([]),
+    }));
+    mockGetAnswerCheck.mockResolvedValue({ code: 200, data: [] });
+    productRequestSpy.mockImplementation((tool: string) =>
+      Promise.resolve({
+        data: {
+          bot_run_id: `run-${tool}`,
+          tool_name: tool,
+          status: "SUCCEEDED",
+        },
+      })
+    );
+
+    const mountProductView = (component: Component) =>
+      mount(component, {
+        global: {
+          plugins: [requestRecorderI18n, ElementPlus, router],
+          stubs: {
+            ResearchArtifactShell: { template: "<section><slot /></section>" },
+            BotReportState: { template: "<div />" },
+            BotArtifactList: { template: "<div />" },
+          },
+        },
+      });
+
+    try {
+      const research = mountProductView(ResearchAgentView);
+      await research
+        .get('[data-test="research-question"]')
+        .setValue("Summarize a drought study");
+      await research.get("form.research-agent-form").trigger("submit");
+      expect(chatRequestSpy).not.toHaveBeenCalled();
+      expect(productRequestSpy).toHaveBeenCalledTimes(1);
+      expect(productRequestSpy.mock.calls[0]?.[0]).toBe(
+        "InSilicoResearchAgent"
+      );
+      research.unmount();
+
+      productRequestSpy.mockClear();
+      const design = mountProductView(DigitalDesignAgentView);
+      await design
+        .get('[data-test="design-question"]')
+        .setValue("Design a stable protein");
+      await design.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+      await design.get('[data-test="design-species-code"]').setValue("ath");
+      await design.get("form.digital-design-form").trigger("submit");
+      expect(chatRequestSpy).not.toHaveBeenCalled();
+      expect(productRequestSpy).toHaveBeenCalledTimes(1);
+      expect(productRequestSpy.mock.calls[0]?.[0]).toBe("DigitalDesignAgent");
+      design.unmount();
+
+      productRequestSpy.mockClear();
+      const network = mountProductView(GeneNetworkAgentView);
+      await network
+        .get('[data-test="network-question"]')
+        .setValue("Analyze a trait network");
+      await network.get('[data-test="network-trait"]').setValue("TO:0000011");
+      await network.get('[data-test="network-species"]').setValue("ath");
+      await network.get("form.gene-network-form").trigger("submit");
+      expect(chatRequestSpy).not.toHaveBeenCalled();
+      expect(productRequestSpy).toHaveBeenCalledTimes(1);
+      expect(productRequestSpy.mock.calls[0]?.[0]).toBe("GeneNetworkAgent");
+      network.unmount();
+    } finally {
+      REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live =
+        originalLive.InSilicoResearchAgent;
+      REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live =
+        originalLive.DigitalDesignAgent;
+      REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live =
+        originalLive.GeneNetworkAgent;
+    }
   });
 });

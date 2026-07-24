@@ -411,3 +411,42 @@ func TestQueryRemoteProductRejectsNoncanonicalSurfaceBeforeBot(t *testing.T) {
 		t.Fatalf("noncanonical remote input reached Bot %d time(s)", hits)
 	}
 }
+
+// TestQueryLegacyRemoteProductCompatibilityBeforeStrictChatCutover proves that
+// the pre-cutover Chat Instant contract still reaches the existing query
+// service. The controlled upstream failure is intentional: this locks the
+// authorization and dispatch compatibility boundary without inventing Bot
+// success that only a deployed integration can establish.
+func TestQueryLegacyRemoteProductCompatibilityBeforeStrictChatCutover(t *testing.T) {
+	setupExpertTestDB(t)
+	var hit string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = r.URL.Path
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL:         srv.URL,
+		ProxyEnabled:    true,
+		ResearchEnabled: true,
+		DesignEnabled:   true,
+		NetworkEnabled:  true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	legacy := QueryInput{
+		Query:   "legacy product request",
+		Tool:    "InSilicoResearchAgent",
+		Mode:    "instant",
+		Surface: QuerySurfaceChat,
+	}
+	_, err := NewService().Query(context.Background(), "alice", legacy)
+	var upstream *rxBot.APIError
+	if !errors.As(err, &upstream) || upstream.Status != http.StatusServiceUnavailable {
+		t.Fatalf("Query error = %v; want the controlled upstream 503 after compatibility dispatch", err)
+	}
+	if hit != "/v1/agents/research/runs" {
+		t.Fatalf("legacy Chat request reached %q; want the research run endpoint", hit)
+	}
+}

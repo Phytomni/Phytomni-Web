@@ -139,56 +139,68 @@ func newAttachmentTrackingRequest(t *testing.T, tool string) (*gin.Context, *htt
 }
 
 func TestAgentProductRunRejectsBeforeReadingAttachmentOrBot(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		email    string
-		code     string
-		config   *rxBot.Config
-		wantCode int
+	productTools := []struct {
+		tool string
+		name string
 	}{
-		{
-			name:     "disabled",
-			email:    "remote@example.com",
-			code:     "admin",
-			config:   &rxBot.Config{ProxyEnabled: true},
-			wantCode: http.StatusServiceUnavailable,
-		},
-		{
-			name:     "permission denied",
-			email:    "denied@example.com",
-			code:     "ordinary",
-			config:   &rxBot.Config{ProxyEnabled: true, ResearchEnabled: true},
-			wantCode: http.StatusNotFound,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			gdb := setupRemoteProductHandlerDB(t)
-			if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, tc.email, tc.code, 5).Error; err != nil {
-				t.Fatalf("seed user: %v", err)
-			}
-			previousConfig := rxBot.BotConfig
-			hits := 0
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
-			t.Cleanup(srv.Close)
-			tc.config.BaseURL = srv.URL
-			rxBot.BotConfig = tc.config
-			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
-			previousQuota := viper.Get("chatlimit.enforce")
-			viper.Set("chatlimit.enforce", false)
-			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+		{tool: "InSilicoResearchAgent", name: "research"},
+		{tool: "DigitalDesignAgent", name: "design"},
+		{tool: "GeneNetworkAgent", name: "network"},
+	}
+	for _, product := range productTools {
+		t.Run(product.name, func(t *testing.T) {
+			for _, tc := range []struct {
+				name     string
+				email    string
+				code     string
+				config   *rxBot.Config
+				wantCode int
+			}{
+				{
+					name:     "disabled",
+					email:    "remote@example.com",
+					code:     "admin",
+					config:   &rxBot.Config{ProxyEnabled: true},
+					wantCode: http.StatusServiceUnavailable,
+				},
+				{
+					name:     "permission denied",
+					email:    "denied@example.com",
+					code:     "ordinary",
+					config:   &rxBot.Config{ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true},
+					wantCode: http.StatusNotFound,
+				},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					gdb := setupRemoteProductHandlerDB(t)
+					if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, tc.email, tc.code, 5).Error; err != nil {
+						t.Fatalf("seed user: %v", err)
+					}
+					previousConfig := rxBot.BotConfig
+					hits := 0
+					srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
+					t.Cleanup(srv.Close)
+					tc.config.BaseURL = srv.URL
+					rxBot.BotConfig = tc.config
+					t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+					previousQuota := viper.Get("chatlimit.enforce")
+					viper.Set("chatlimit.enforce", false)
+					t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
 
-			c, w, tracked := newAttachmentTrackingRequest(t, "InSilicoResearchAgent")
-			c.Set("username", tc.email)
-			NewHandler().AgentProductRun(c)
+					c, w, tracked := newAttachmentTrackingRequest(t, product.tool)
+					c.Set("username", tc.email)
+					NewHandler().AgentProductRun(c)
 
-			if w.Code != tc.wantCode {
-				t.Fatalf("status = %d, body = %s; want %d", w.Code, w.Body.String(), tc.wantCode)
-			}
-			if tracked.reads != 0 || tracked.bytes != 0 {
-				t.Fatalf("rejected request read %d time(s), %d byte(s); want zero", tracked.reads, tracked.bytes)
-			}
-			if hits != 0 {
-				t.Fatalf("rejected request reached Bot %d time(s)", hits)
+					if w.Code != tc.wantCode {
+						t.Fatalf("status = %d, body = %s; want %d", w.Code, w.Body.String(), tc.wantCode)
+					}
+					if tracked.reads != 0 || tracked.bytes != 0 {
+						t.Fatalf("rejected request read %d time(s), %d byte(s); want zero", tracked.reads, tracked.bytes)
+					}
+					if hits != 0 {
+						t.Fatalf("rejected request reached Bot %d time(s)", hits)
+					}
+				})
 			}
 		})
 	}
@@ -292,14 +304,19 @@ func TestAgentProductRunUnknownToolReturns400BeforeBodyOrBot(t *testing.T) {
 
 func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 	for _, tc := range []struct {
-		tool string
-		slug string
+		tool          string
+		slug          string
+		upstreamCode  int
+		upstreamState string
 	}{
-		{tool: "InSilicoResearchAgent", slug: "research"},
-		{tool: "DigitalDesignAgent", slug: "design"},
-		{tool: "GeneNetworkAgent", slug: "network"},
+		{tool: "InSilicoResearchAgent", slug: "research", upstreamCode: http.StatusOK, upstreamState: "succeeded"},
+		{tool: "InSilicoResearchAgent", slug: "research", upstreamCode: http.StatusAccepted, upstreamState: "running"},
+		{tool: "DigitalDesignAgent", slug: "design", upstreamCode: http.StatusOK, upstreamState: "succeeded"},
+		{tool: "DigitalDesignAgent", slug: "design", upstreamCode: http.StatusAccepted, upstreamState: "running"},
+		{tool: "GeneNetworkAgent", slug: "network", upstreamCode: http.StatusOK, upstreamState: "succeeded"},
+		{tool: "GeneNetworkAgent", slug: "network", upstreamCode: http.StatusAccepted, upstreamState: "running"},
 	} {
-		t.Run(tc.slug, func(t *testing.T) {
+		t.Run(tc.slug+"-"+http.StatusText(tc.upstreamCode), func(t *testing.T) {
 			gdb := setupRemoteProductHandlerDB(t)
 			if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
 				t.Fatalf("seed user: %v", err)
@@ -311,7 +328,8 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotPath = r.URL.Path
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"id":"` + runID + `","object":"agent.run","agent":"` + tc.slug + `","status":"running","task_ids":["` + taskID + `"],"result":{}}`))
+				w.WriteHeader(tc.upstreamCode)
+				_, _ = w.Write([]byte(`{"id":"` + runID + `","object":"agent.run","agent":"` + tc.slug + `","status":"` + tc.upstreamState + `","task_ids":["` + taskID + `"],"result":{}}`))
 			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
@@ -341,15 +359,89 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode response %s: %v", w.Body.String(), err)
 			}
-			if response.Code != http.StatusOK || response.Data.DialogueId == "" || response.Data.BotRunID != runID || response.Data.TaskId != taskID {
+			if response.Code != http.StatusOK || response.Data.DialogueId == "" || response.Data.BotRunID != runID {
 				t.Fatalf("response identity = %#v", response)
 			}
 			var row model.QuestionAgentLog
 			if err := gdb.First(&row).Error; err != nil {
 				t.Fatalf("load persisted row: %v", err)
 			}
-			if row.DialogueId != response.Data.DialogueId || row.BotRunId != runID || row.TaskId != taskID || row.ToolName != tc.tool || row.Mode != "instant" {
+			if row.DialogueId != response.Data.DialogueId || row.BotRunId != runID || row.ToolName != tc.tool || row.Mode != "instant" {
 				t.Fatalf("persisted row = %#v", row)
+			}
+			if tc.upstreamCode == http.StatusAccepted && (response.Data.TaskId != taskID || row.TaskId != taskID) {
+				t.Fatalf("async task identity = response:%q row:%q; want %q", response.Data.TaskId, row.TaskId, taskID)
+			}
+		})
+	}
+}
+
+func TestAgentProductRunRejectsOversizedUploadsBeforeBot(t *testing.T) {
+	for _, tool := range []string{"InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
+		t.Run(tool, func(t *testing.T) {
+			gdb := setupRemoteProductHandlerDB(t)
+			if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
+				t.Fatalf("seed user: %v", err)
+			}
+			previousConfig := rxBot.BotConfig
+			hits := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL:             srv.URL,
+				ProxyEnabled:        true,
+				ResearchEnabled:     true,
+				DesignEnabled:       true,
+				NetworkEnabled:      true,
+				MaxUploadTotalBytes: 1,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+			previousQuota := viper.Get("chatlimit.enforce")
+			viper.Set("chatlimit.enforce", false)
+			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+			c, w, _ := newAttachmentTrackingRequest(t, tool)
+			c.Set("username", "remote@example.com")
+			NewHandler().AgentProductRun(c)
+
+			if w.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("status = %d, body = %s; want 413", w.Code, w.Body.String())
+			}
+			if hits != 0 {
+				t.Fatalf("oversized upload reached Bot %d time(s)", hits)
+			}
+		})
+	}
+}
+
+func TestAgentProductRunUpstreamFailuresStayOpaque(t *testing.T) {
+	for _, tool := range []string{"InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
+		t.Run(tool, func(t *testing.T) {
+			gdb := setupRemoteProductHandlerDB(t)
+			if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
+				t.Fatalf("seed user: %v", err)
+			}
+			previousConfig := rxBot.BotConfig
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte("Bot implementation detail"))
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+			previousQuota := viper.Get("chatlimit.enforce")
+			viper.Set("chatlimit.enforce", false)
+			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+			c, w := newRemoteProductHandlerRequest(t, tool)
+			c.Set("username", "remote@example.com")
+			NewHandler().AgentProductRun(c)
+
+			if w.Code != http.StatusBadGateway {
+				t.Fatalf("status = %d, body = %s; want 502", w.Code, w.Body.String())
+			}
+			if bytes.Contains(w.Body.Bytes(), []byte("Bot implementation detail")) {
+				t.Fatalf("upstream detail leaked: %s", w.Body.String())
 			}
 		})
 	}

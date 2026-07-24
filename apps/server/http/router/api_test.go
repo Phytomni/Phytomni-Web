@@ -297,6 +297,24 @@ func TestAgentProductRunRoute(t *testing.T) {
 	)
 }
 
+func TestAgentProductRunRouteRequiresAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+
+	for _, tool := range []string{"InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
+		t.Run(tool, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-products/"+tool+"/runs", nil)
+			res := httptest.NewRecorder()
+			engine.ServeHTTP(res, req)
+
+			if res.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401 (body=%s)", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
 // TestApiV1AuthLifecycleRoutes pins the Phase 1 logout endpoints. They live on a
 // dedicated group (AuthMiddleware, no LoginStatusMiddleware) so a first-login user
 // can still log out — a regression that drops them or moves them onto the public
