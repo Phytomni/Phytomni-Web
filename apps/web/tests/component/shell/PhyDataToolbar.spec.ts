@@ -45,9 +45,7 @@ describe("PhyDataToolbar", () => {
   });
 
   it("stacks filter and action groups without a hard minimum width", () => {
-    expect(SOURCE).toMatch(
-      /\.phy-data-toolbar\s*\{[\s\S]*flex-wrap:\s*wrap/
-    );
+    expect(SOURCE).toMatch(/\.phy-data-toolbar\s*\{[\s\S]*flex-wrap:\s*wrap/);
     expect(SOURCE).toMatch(
       /@media\s*\(max-width:\s*599px\)[\s\S]*?width:\s*100%/
     );
