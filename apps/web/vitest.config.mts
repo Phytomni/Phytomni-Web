@@ -82,7 +82,6 @@ export default defineConfig({
         statements: 80,
         branches: 75,
       },
-      thresholdAutoUpdate: false,
     },
   },
   resolve: {
