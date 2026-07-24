@@ -294,6 +294,9 @@ describe("ChatComposer", () => {
       showModeSelector: false,
     });
     expect(populatedExpert.find(".el-dropdown").exists()).toBe(true);
+    expect(
+      populatedExpert.findComponent({ name: "ChatAgentPicker" }).exists()
+    ).toBe(false);
   });
 
   it("forwards a quick toggle and uses localized labels in the populated menu", async () => {

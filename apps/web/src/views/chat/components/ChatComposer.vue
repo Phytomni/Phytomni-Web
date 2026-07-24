@@ -249,7 +249,9 @@ const mentionTriggers = computed(() =>
 const composerDisabled = computed(
   () => props.isSending || props.rolesLoading || !props.modeUsable
 );
-const showAgentPicker = computed(() => expertControlsEnabled.value);
+const showAgentPicker = computed(
+  () => expertControlsEnabled.value && !props.hasMessages
+);
 const showQuickSelect = computed(
   () => !props.hasMessages && expertControlsEnabled.value
 );
