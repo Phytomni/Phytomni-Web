@@ -183,13 +183,14 @@ live configuration change is part of this Web reference.
 
 ## Current Web closure record (2026-07-24)
 
-- Commit under test: `802d439` (`release/0.1.4`).
-- `./scripts/validate_web_local.sh` — PASS; 201 frontend test files / 2551
+- Commit under test: `6dd6dc4` (`release/0.1.4`).
+- `GOCACHE=/tmp/phytomni-web-head-gocache GOTMPDIR=/tmp/phytomni-web-head-gotmp ./scripts/validate_web_local.sh` — PASS; 201 frontend test files / 2601
   tests passed with the configured coverage thresholds, Go module/build/vet/
   test checks passed, and G13, G14, G15, G16, and G17 passed.
 - The current record includes Bot identity normalization, pending-chat
-  continuity, and typed upstream error mapping. No Bot or operations code is
-  included in this Web release.
+  continuity, typed upstream error mapping, server-derived Expert permissions,
+  dedicated product runs, and constrained Chat routing. No Bot or operations
+  code is included in this Web release.
 - This is repository-local evidence only. The matrix remains unchanged:
   `RC-WEB-001` through `RC-WEB-007` and `RC-LIVE-001` are still
   **External Pending**, and all capability flags remain dark by default.

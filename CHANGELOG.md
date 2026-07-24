@@ -39,6 +39,11 @@ Bot, operations, staging, or production acceptance.
   until an authoritative Web dialogue id is returned.
 - Typed Bot upstream failures preserve 504 timeouts, map other upstream 5xx
   responses to safe 502 errors, and keep genuine Web failures at 500.
+- Server-derived permissions now constrain Expert routing, while Instant keeps
+  the ChatAgent-only contract and dedicated Research, Design, and Network
+  product runs use their own authenticated endpoint.
+- Expert selection is kept across rejection, abort, timeout, and uncertain
+  transport outcomes, then cleared only after an accepted turn.
 - All eight Bot/Web acceptance rows remain **External Pending** and all new
   capability flags remain default-off.
 
