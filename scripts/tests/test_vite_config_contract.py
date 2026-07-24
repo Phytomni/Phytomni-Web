@@ -13,6 +13,12 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = REPO_ROOT / "apps" / "web"
 PLUGIN_ROOT = WEB_ROOT / "vite" / "plugins"
+CHECKPOINT = (
+    REPO_ROOT
+    / ".codex"
+    / "specs"
+    / "2026-07-24-frontend-toolchain-vite5-checkpoint.md"
+)
 
 
 def _read(path: Path) -> str:
@@ -105,6 +111,16 @@ def test_vite_toolchain_uses_the_checkpoint_versions_and_modern_sass_api() -> No
     for name, version in expected_versions.items():
         assert package["devDependencies"][name] == version
     assert 'api: "modern"' in vite_config
+
+
+def test_vite5_checkpoint_is_explicitly_diagnostic_and_evidence_backed() -> None:
+    checkpoint = _read(CHECKPOINT)
+
+    assert "Diagnostic only — not releasable" in checkpoint
+    assert "Vite | `5.4.21`" in checkpoint
+    assert "205 files passed and 2,709 tests passed" in checkpoint
+    assert "VITE_BUILD_COMPRESS=gzip,brotli npm run build-only" in checkpoint
+    assert "Vite CJS Node API warning | 0" in checkpoint
 
 
 def test_application_typecheck_uses_the_target_esnext_library() -> None:

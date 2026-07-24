@@ -6,6 +6,7 @@ const WEB_ROOT = resolve(__dirname, "../../..");
 const SOURCE_ROOT = resolve(WEB_ROOT, "src");
 const SHELL_EXPORTS = resolve(SOURCE_ROOT, "components/shell/index.ts");
 const MAIN_SOURCE = readFileSync(resolve(SOURCE_ROOT, "main.ts"), "utf8");
+const VITE_SOURCE = readFileSync(resolve(WEB_ROOT, "vite.config.mts"), "utf8");
 const VITEST_SOURCE = readFileSync(
   resolve(WEB_ROOT, "vitest.config.mts"),
   "utf8"
@@ -75,5 +76,9 @@ describe("superseded visual infrastructure", () => {
     expect(MAIN_SOURCE).toMatch(
       /setLanguage\(currentLang\)\.then\([\s\S]*?Failed to initialize the application locale:[\s\S]*?app\.mount\("#app"\)/
     );
+  });
+
+  it("keeps the diagnostic Vite checkpoint on the modern Sass API", () => {
+    expect(VITE_SOURCE).toContain('api: "modern"');
   });
 });
