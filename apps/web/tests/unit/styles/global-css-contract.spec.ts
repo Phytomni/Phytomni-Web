@@ -14,6 +14,10 @@ const TOKENS_CSS = readFileSync(
   resolve(__dirname, "../../../src/styles/tokens.css"),
   "utf8"
 );
+const DESIGN_SYSTEM_SOURCE = readFileSync(
+  resolve(__dirname, "../../../../../docs/frontend-design-system.md"),
+  "utf8"
+);
 
 describe("global CSS contract", () => {
   it("removes Vue starter palette and system-color overrides", () => {
@@ -58,6 +62,12 @@ describe("global CSS contract", () => {
     expect(TOKENS_CSS).toContain("--phy-layout-agent-preview-max-width");
     expect(TOKENS_CSS).toContain("--phy-layout-scientific-media-max-height");
     expect(TOKENS_CSS).not.toMatch(/transition:\s*all/);
+  });
+
+  it("records semantic transitions and scroll ownership in the design-system contract", () => {
+    expect(DESIGN_SYSTEM_SOURCE).toContain("600px`, `900px`, and `1280px");
+    expect(DESIGN_SYSTEM_SOURCE).toContain("scroll root");
+    expect(DESIGN_SYSTEM_SOURCE).toContain("narrow replacement");
   });
 
   it("limits transitions to explicit interactive anchor behavior", () => {

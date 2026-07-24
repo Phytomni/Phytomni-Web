@@ -56,6 +56,10 @@ const CHAT_FIXTURE_SOURCE = readFileSync(
   resolve(__dirname, "../../tests/visual/chat/ChatVisualFixtureApp.vue"),
   "utf8"
 );
+const DESIGN_SYSTEM_SOURCE = readFileSync(
+  resolve(__dirname, "../../../../docs/frontend-design-system.md"),
+  "utf8"
+);
 
 describe("responsive matrix", () => {
   it("contains the agreed widths and boundaries", () => {
@@ -67,6 +71,12 @@ describe("responsive matrix", () => {
       medium: 900,
       large: 1280,
     });
+  });
+
+  it("records continuous responsive geometry in the design-system contract", () => {
+    expect(DESIGN_SYSTEM_SOURCE).toContain("continuous geometry");
+    expect(DESIGN_SYSTEM_SOURCE).toContain("container queries");
+    expect(DESIGN_SYSTEM_SOURCE).toContain("2560x1440");
   });
 });
 

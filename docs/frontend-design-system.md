@@ -84,6 +84,21 @@ classes are `.phy-bubble-user` and `.phy-bubble-assistant`.
   Media queries use the corresponding `599px`, `899px`, and `1279px` max-width
   cutoffs where a boundary is exclusive.
 
+### Continuous responsive geometry
+
+The default is continuous geometry: use `clamp()`, `min()`, `max()`, flex,
+`minmax()`, and container queries so a surface adapts throughout an available
+range instead of only at a viewport threshold. The only semantic breakpoints
+are `600px`, `900px`, and `1280px`; use them for meaningfully different
+information architecture, not routine dimensional adjustment.
+
+Each component declares its scroll root and its narrow replacement. For
+example, a desktop split can become one visible surface, a sidebar can become a
+drawer, and a wide table can expose its own horizontal scroll frame; it must
+not depend on a document-level overflow side effect. Supplied screenshots are
+regression examples, not the scope boundary: the visual review includes a
+`2560x1440` CSS-pixel viewport as well as the adversarial viewport matrix.
+
 ## Component families and ownership
 
 ### Adaptive chat shell
