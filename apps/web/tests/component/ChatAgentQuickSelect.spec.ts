@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
+import AgentCapabilityPopover from "@/components/agent/AgentCapabilityPopover.vue";
 import ChatAgentQuickSelect from "@/views/chat/components/ChatAgentQuickSelect.vue";
 
 const QUICK_SELECT_SOURCE = readFileSync(
@@ -82,6 +83,24 @@ describe("ChatAgentQuickSelect", () => {
     expect(buttons[1].attributes("aria-pressed")).toBe("true");
 
     await buttons[1].trigger("click");
+    expect(wrapper.emitted("toggle")?.[0]).toEqual(["DeepGenomeAgent"]);
+  });
+
+  it("maps each permitted option to its capability preview without changing toggle values", async () => {
+    const wrapper = mountQuickSelect({ selectedAgent: "DeepGenomeAgent" });
+    const previews = wrapper.findAllComponents(AgentCapabilityPopover);
+    expect(previews).toHaveLength(3);
+    expect(
+      previews.map((preview) => preview.props("presentation").tool)
+    ).toEqual(options.map((option) => option.tool));
+
+    const trigger = wrapper
+      .findAll('[data-testid="chat-agent-quick-option"]')
+      .find((button) => button.text() === "Deep Genome Agent");
+    expect(trigger).toBeTruthy();
+    await trigger?.trigger("focus");
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    await trigger?.trigger("click");
     expect(wrapper.emitted("toggle")?.[0]).toEqual(["DeepGenomeAgent"]);
   });
 

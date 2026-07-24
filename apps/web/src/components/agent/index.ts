@@ -14,6 +14,8 @@ import {
   type CanonicalAgentTool,
 } from "@/constants/agents";
 
+export { default as AgentCapabilityPopover } from "./AgentCapabilityPopover.vue";
+
 export interface AgentPresentation {
   readonly tool: CanonicalAgentTool;
   readonly labelKey: string;

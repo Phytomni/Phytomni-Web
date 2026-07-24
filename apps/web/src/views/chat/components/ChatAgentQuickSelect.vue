@@ -17,19 +17,19 @@
       {{ t("chat.agentPicker.empty") }}
     </div>
     <div v-else class="agent-quick-list">
-      <button
+      <AgentCapabilityPopover
         v-for="option in options"
         :key="option.tool"
-        type="button"
-        class="chat-agent-quick-option"
+        :presentation="presentationFor(option.tool)"
+        :disabled="disabled"
+        trigger-class="chat-agent-quick-option"
         data-testid="chat-agent-quick-option"
         :class="{ 'is-selected': selectedAgent === option.tool }"
         :aria-pressed="selectedAgent === option.tool"
-        :disabled="disabled"
-        @click="emit('toggle', option.tool)"
+        @select="emit('toggle', option.tool)"
       >
         <AgentDisplayName :label="option.label" />
-      </button>
+      </AgentCapabilityPopover>
     </div>
   </div>
 </template>
@@ -37,6 +37,11 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import AgentDisplayName from "@/components/AgentDisplayName.vue";
+import {
+  AgentCapabilityPopover,
+  CANONICAL_AGENT_PRESENTATIONS,
+} from "@/components/agent";
+import type { CanonicalAgentTool } from "@/constants/agents";
 import type { ChatAgentPickerOption } from "./ChatAgentPicker.vue";
 
 defineProps<{
@@ -51,6 +56,9 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+const presentationFor = (tool: string) =>
+  CANONICAL_AGENT_PRESENTATIONS[tool as CanonicalAgentTool];
 </script>
 
 <style scoped>
