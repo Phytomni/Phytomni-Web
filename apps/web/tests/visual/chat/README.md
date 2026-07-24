@@ -74,21 +74,21 @@ is already exact `Synthetic user`.
 
 ## Responsive continuity capture matrix
 
-| Category                    | CSS viewport | Review identity                                         |
-| --------------------------- | -----------: | ------------------------------------------------------- |
-| Compact phone               |    `320x568` | iPhone SE / older Android lower bound                   |
-| Modern phone                |    `390x844` | current iPhone / Android                                |
-| Large phone or small tablet |    `480x800` | unfolded phone / small tablet                           |
-| Tablet                      |   `768x1024` | iPad-class portrait                                     |
-| Small desktop boundary below | `899x768` | compact/mobile boundary below 900px                    |
-| Small desktop boundary above | `900x768` | compact desktop boundary                               |
-| Compact laptop               | `1024x768` | compact desktop rail                                    |
-| Large compact boundary below | `1199x768` | fluid compact desktop                                  |
-| Large compact boundary above | `1279x768` | compact desktop boundary below 1280px                  |
-| Expanded desktop boundary    | `1280x768` | expanded desktop rail                                  |
-| Mainstream laptop            | `1366x768` | office notebook                                        |
-| Large desktop                | `1920x1080` | full-HD monitor                                       |
-| 4K at 150% scaling           | `2560x1440` | 4K physical display represented in CSS pixels         |
+| Category                     | CSS viewport | Review identity                               |
+| ---------------------------- | -----------: | --------------------------------------------- |
+| Compact phone                |    `320x568` | iPhone SE / older Android lower bound         |
+| Modern phone                 |    `390x844` | current iPhone / Android                      |
+| Large phone or small tablet  |    `480x800` | unfolded phone / small tablet                 |
+| Tablet                       |   `768x1024` | iPad-class portrait                           |
+| Small desktop boundary below |    `899x768` | compact/mobile boundary below 900px           |
+| Small desktop boundary above |    `900x768` | compact desktop boundary                      |
+| Compact laptop               |   `1024x768` | compact desktop rail                          |
+| Large compact boundary below |   `1199x768` | fluid compact desktop                         |
+| Large compact boundary above |   `1279x768` | compact desktop boundary below 1280px         |
+| Expanded desktop boundary    |   `1280x768` | expanded desktop rail                         |
+| Mainstream laptop            |   `1366x768` | office notebook                               |
+| Large desktop                |  `1920x1080` | full-HD monitor                               |
+| 4K at 150% scaling           |  `2560x1440` | 4K physical display represented in CSS pixels |
 
 The synthetic responsive-continuity matrix is exact and uses only the fixture
 URL above:
@@ -152,6 +152,31 @@ reachability, Agent order/labels, complete flowcharts, no horizontal overflow,
 compact disclosure containment, and each history title-only/loading/empty/error
 state. Use `Needs Verification` for unsupported browser modalities; never claim
 authenticated or production acceptance from synthetic captures.
+
+## Accessibility modality evidence
+
+Task 5.3 records keyboard, zoom, reduced-motion, and forced-colors checks in the
+ignored `modality-review-ledger.md` beside the responsive-continuity captures.
+Use synthetic fixture URLs only; an authenticated row requires the redaction
+protocol above before every snapshot or evaluation. Every row includes the
+fixture, CSS viewport, modality, locale/theme, result (`PASS`, `FAIL`, or
+`Needs Verification`), and an evidence path or exact unsupported boundary.
+
+The focus contract distinguishes keyboard dismissal from pointer dismissal:
+
+- Focusing an Agent preview trigger opens its non-modal dialog. `Escape` and the
+  dialog close button close it and restore focus to that trigger.
+- A pointer outside the trigger and panel closes the preview without stealing
+  focus from the control the user clicked.
+- Opening the mobile drawer moves focus into the drawer. `Escape` or the scrim
+  emits close; once the owner closes the drawer, focus returns to the opener.
+
+For 200% zoom and forced-colors, report `Needs Verification` when the browser
+does not expose a supported zoom or media-emulation API. CSS source inspection
+alone is not a browser pass. Reduced-motion may record a browser `PASS` only
+when the synthetic fixture was loaded with the emulated media preference and
+the capture shows no new layout dependency; otherwise record the boundary as
+`Needs Verification`.
 
 ## Terminal A — fixed Vite (hard stop on strict-port failure)
 

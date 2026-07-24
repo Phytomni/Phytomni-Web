@@ -28,6 +28,8 @@ import FormWidget from "@/views/chat/components/blocks/a2ui/FormWidget.vue";
 import ChoiceWidget from "@/views/chat/components/blocks/a2ui/ChoiceWidget.vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
+import AgentCapabilityPopover from "@/components/agent/AgentCapabilityPopover.vue";
+import { CANONICAL_AGENT_PRESENTATIONS } from "@/components/agent";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import type { A2uiOpenSurface } from "@/views/chat/streaming/a2uiContract";
 import {
@@ -416,6 +418,89 @@ describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
     expect(wrapper.attributes("aria-hidden")).toBeUndefined();
     wrapper.unmount();
   });
+
+  it("closes the mobile drawer from Escape or the scrim and restores opener focus", async () => {
+    const opener = document.createElement("button");
+    opener.type = "button";
+    document.body.append(opener);
+    opener.focus();
+
+    const wrapper = mount(PhyAdaptiveSidebar, {
+      props: { drawerOpen: false },
+      slots: {
+        close: "Close",
+        default: '<button type="button">Navigation item</button>',
+      },
+      attachTo: document.body,
+    });
+
+    await wrapper.setProps({ drawerOpen: true });
+    await nextTick();
+    const close = wrapper.get('[data-testid="sidebar-drawer-close"]');
+    expect(document.activeElement).toBe(close.element);
+
+    await close.trigger("keydown", { key: "Escape" });
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    await wrapper.setProps({ drawerOpen: false });
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+
+    await wrapper.setProps({ drawerOpen: true });
+    await nextTick();
+    await wrapper.get(".phy-adaptive-sidebar__scrim").trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(2);
+    await wrapper.setProps({ drawerOpen: false });
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+
+    wrapper.unmount();
+    opener.remove();
+  });
+
+  it("keeps compact navigation actions in the sequential keyboard order", () => {
+    const wrapper = mount(ChatSidebarNav, {
+      props: {
+        collapsed: true,
+        activeItem: "",
+        userName: "Synthetic user",
+        canExploreAgents: true,
+        canHistory: true,
+        canProfile: true,
+        canCloudStorage: false,
+        canUserManagement: false,
+        canPermissionManagement: false,
+        canSystemMonitor: false,
+        canGlobalConfig: false,
+        canAdminManagement: false,
+        canHelp: true,
+        showAgentsList: false,
+        offCanvas: false,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          ElIcon: true,
+          ElButton: {
+            name: "ElButton",
+            template: '<button type="button"><slot /></button>',
+          },
+          ElDropdown: true,
+          ElDropdownMenu: true,
+          ElDropdownItem: true,
+          LangSwitch: true,
+          ThemeSwitch: true,
+        },
+      },
+    });
+
+    const actionables = wrapper.findAll("button, a");
+    expect(actionables.length).toBeGreaterThan(3);
+    for (const actionable of actionables) {
+      expect(actionable.attributes("disabled")).toBeUndefined();
+      expect(actionable.attributes("tabindex")).not.toBe("-1");
+    }
+    wrapper.unmount();
+  });
 });
 
 describe("ChatAccessibilityV2 — Composer picker keyboard", () => {
@@ -700,5 +785,54 @@ describe("ChatAccessibilityV2 — focus-visible ownership", () => {
     expect(FOLLOW_UP_SOURCE).toMatch(/&:focus-visible\s*\{/);
     expect(SIDEBAR_SOURCE).toMatch(/:focus-visible/);
     expect(GLOBAL_CSS).toContain("a:focus-visible");
+  });
+});
+
+describe("ChatAccessibilityV2 — Agent preview focus recovery", () => {
+  it("keeps outside control focus when the preview closes from a pointer", async () => {
+    const wrapper = mount(AgentCapabilityPopover, {
+      props: {
+        presentation: CANONICAL_AGENT_PRESENTATIONS.ChatAgent,
+      },
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    });
+    const trigger = wrapper.get("button");
+    const outside = document.createElement("button");
+    outside.type = "button";
+    outside.textContent = "Outside";
+    document.body.append(outside);
+
+    await trigger.trigger("focus");
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    outside.focus();
+    outside.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    await nextTick();
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(outside);
+
+    outside.remove();
+    wrapper.unmount();
+  });
+
+  it("restores trigger focus when Escape closes the preview", async () => {
+    const wrapper = mount(AgentCapabilityPopover, {
+      props: {
+        presentation: CANONICAL_AGENT_PRESENTATIONS.ChatAgent,
+      },
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    });
+    const trigger = wrapper.get("button");
+
+    await trigger.trigger("focus");
+    await wrapper.get('[role="dialog"]').trigger("keydown", { key: "Escape" });
+    await nextTick();
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(trigger.element);
+
+    wrapper.unmount();
   });
 });

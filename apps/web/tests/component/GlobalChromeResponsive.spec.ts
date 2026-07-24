@@ -99,6 +99,19 @@ describe("Global application chrome", () => {
     expect(LANG_SOURCE).toMatch(/@media\s*\(max-width:\s*599px\)/);
   });
 
+  it("keeps compact preference controls native and keyboard reachable", () => {
+    expect(THEME_SOURCE).toMatch(
+      /<button[\s\S]*type="button"[\s\S]*aria-label="\$t\('common\.themeSelector'\)"/
+    );
+    expect(LANG_SOURCE).toMatch(
+      /<button[\s\S]*type="button"[\s\S]*aria-label="\$t\('common\.languageSelector'\)"/
+    );
+    expect(THEME_SOURCE).toContain(":focus-visible");
+    expect(LANG_SOURCE).toContain(":focus-visible");
+    expect(THEME_SOURCE).not.toContain('tabindex="-1"');
+    expect(LANG_SOURCE).not.toContain('tabindex="-1"');
+  });
+
   it("keeps bilingual theme and control labels in parity", () => {
     expect(enUS.common.lightTheme).toBe("Light");
     expect(zhCN.common.lightTheme).toBe("浅色");
