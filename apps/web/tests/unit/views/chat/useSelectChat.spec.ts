@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
-import { ref, type Ref } from "vue";
+import { nextTick, ref, type Ref } from "vue";
 import { useSelectChat } from "@/views/chat/composables/useSelectChat";
 import type {
   Chat,
@@ -22,9 +22,15 @@ vi.mock("@/api/chat", () => ({
   getAnswerCheck: vi.fn(),
 }));
 
+vi.mock("@/views/chat/utils/agent-log", () => ({
+  readServerFile: vi.fn(),
+}));
+
 import { getAnswerCheck } from "@/api/chat";
+import { readServerFile } from "@/views/chat/utils/agent-log";
 
 const mockGetAnswerCheck = vi.mocked(getAnswerCheck);
+const mockReadServerFile = vi.mocked(readServerFile);
 
 describe("useSelectChat", () => {
   // Each dialogueId maps to one mutable state record; repeated getChatState(id) returns the same object
@@ -519,6 +525,86 @@ describe("useSelectChat", () => {
     expect(stateFor("d1").historyHydration).toBe("error");
     expect(stateFor("d1").historyErrorKind).toBe("request");
     expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
+  });
+
+  it("updates the still-owned DeepGenome history message after leave and reselect", async () => {
+    const fileRead = deferred<string>();
+    mockReadServerFile.mockReturnValueOnce(fileRead.promise);
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "deep-history",
+          query: "Open Deep Genome",
+          answer: '{"content":"persisted answer"}',
+          tool_name: "DeepGenomeAgent",
+          server_file_path: "history/deep.md",
+        }),
+      ])
+    );
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+    expect(messageAt("d1", 1, "DeepGenome loading").content).toBe(
+      "Loading file content..."
+    );
+
+    currentChatId.value = "d2";
+    await selectChat("d1");
+    fileRead.resolve("resolved file content");
+    await Promise.resolve();
+    await nextTick();
+
+    expect(messageAt("d1", 1, "DeepGenome resolved").content).toBe(
+      "resolved file content"
+    );
+    expect(timestamp.value).toBeGreaterThan(0);
+  });
+
+  it("does not update a DeepGenome file callback after a newer owner replaces it", async () => {
+    const fileRead = deferred<string>();
+    mockReadServerFile.mockReturnValueOnce(fileRead.promise);
+    mockGetAnswerCheck
+      .mockResolvedValueOnce(
+        historyResponse([
+          buildChatHistoryRecord({
+            id: "deep-stale",
+            query: "Old Deep Genome",
+            answer: '{"content":"old persisted answer"}',
+            tool_name: "DeepGenomeAgent",
+            server_file_path: "history/stale.md",
+          }),
+        ])
+      )
+      .mockResolvedValueOnce(
+        historyResponse([
+          buildChatHistoryRecord({
+            id: "new-owner",
+            query: "New question",
+            answer: "New answer",
+            tool_name: "ChatAgent",
+          }),
+        ])
+      );
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+    const state = stateFor("d1");
+    state.renderedChat = null;
+    await selectChat("d1");
+    const updatesAfterReplacement = updateUrlWithChatId.mock.calls.length;
+    const scrollsAfterReplacement = scrollToBottom.mock.calls.length;
+    const timestampAfterReplacement = timestamp.value;
+
+    fileRead.resolve("stale file content");
+    await Promise.resolve();
+    await nextTick();
+
+    expect(messageAt("d1", 0, "replacement owner").content).toBe(
+      "New question"
+    );
+    expect(timestamp.value).toBe(timestampAfterReplacement);
+    expect(updateUrlWithChatId).toHaveBeenCalledTimes(updatesAfterReplacement);
+    expect(scrollToBottom).toHaveBeenCalledTimes(scrollsAfterReplacement);
   });
 
   it("history AnalystAgent hydrates the existing task_id onto the message", async () => {

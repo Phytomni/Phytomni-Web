@@ -1,4 +1,4 @@
-import { nextTick } from "vue";
+import { nextTick, toRaw } from "vue";
 import type { Ref } from "vue";
 import type { Chat, ChatMessage, ChatResponse, ChatUIState } from "../types";
 import { parseMessageWithFiles } from "../utils/message-parse";
@@ -293,6 +293,10 @@ export function useSelectChat(opts: {
                     instantMessage: false,
                     server_file_path: item.server_file_path, // add the server file path
                   };
+                  const ownsDeepGenomeMessage = () =>
+                    chatState.renderedChat?.messages.some(
+                      (message) => toRaw(message) === deepGenomeMessage
+                    ) ?? false;
 
                   // if there is a server file path, read the file content asynchronously
                   if (item.server_file_path) {
@@ -301,7 +305,7 @@ export function useSelectChat(opts: {
 
                     readServerFile(item.server_file_path)
                       .then((fileContent) => {
-                        if (!isCurrentHydration()) return;
+                        if (!ownsDeepGenomeMessage()) return;
                         if (fileContent && fileContent.trim()) {
                           deepGenomeMessage.content = fileContent;
                         } else {
@@ -310,10 +314,10 @@ export function useSelectChat(opts: {
                         }
                         // force a view update; scroll only if still foreground
                         nextTick(() => {
-                          if (!isCurrentHydration()) return;
+                          if (!ownsDeepGenomeMessage()) return;
                           timestamp.value = Date.now();
                           if (
-                            isCurrentHydration() &&
+                            ownsDeepGenomeMessage() &&
                             currentChatId.value === capturedDialogueId
                           ) {
                             scrollToBottom().catch(() => undefined);
@@ -321,7 +325,7 @@ export function useSelectChat(opts: {
                         }).catch(() => undefined);
                       })
                       .catch((error) => {
-                        if (!isCurrentHydration()) return;
+                        if (!ownsDeepGenomeMessage()) return;
                         console.error(
                           "Failed to read DeepGenomeAgent file:",
                           error
@@ -329,10 +333,10 @@ export function useSelectChat(opts: {
                         deepGenomeMessage.content =
                           "Failed to load file, please try again later";
                         nextTick(() => {
-                          if (!isCurrentHydration()) return;
+                          if (!ownsDeepGenomeMessage()) return;
                           timestamp.value = Date.now();
                           if (
-                            isCurrentHydration() &&
+                            ownsDeepGenomeMessage() &&
                             currentChatId.value === capturedDialogueId
                           ) {
                             scrollToBottom().catch(() => undefined);
