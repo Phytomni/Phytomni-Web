@@ -87,24 +87,3 @@ export const formatFileSize = (size: number) => {
     return (size / (1024 * 1024)).toFixed(2) + " MB";
   }
 };
-
-export const extractAtValues = (
-  text: string
-): { matches: string[]; cleanedText: string } => {
-  // match all substrings starting with @ and ending with a comma
-  const regex = /@[^,]+,/g;
-
-  // extract all matches (for the return value)
-  const matches = text.match(regex) || [];
-  const uniqueAgents = [...new Set(matches)];
-  // remove all matches from the original string
-  const cleanedText = text.replace(regex, "");
-
-  return {
-    matches:
-      uniqueAgents.length > 0
-        ? uniqueAgents.map((match) => match.slice(1, -1))
-        : [], // strip the @ and the comma
-    cleanedText: cleanedText,
-  };
-};

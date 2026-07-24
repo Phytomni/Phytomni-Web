@@ -12,7 +12,10 @@ import type {
 import type { AxiosProgressEvent } from "axios";
 import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
 import { deferred, mustGet } from "../../../helpers/mockFactories";
-import { buildChatState } from "../../../helpers/chatBuilders";
+import {
+  buildChatMessage,
+  buildChatState,
+} from "../../../helpers/chatBuilders";
 import { invalidInput } from "../../../helpers/invalidInput";
 
 type StreamResult = {
@@ -1565,5 +1568,219 @@ describe("useSendMessage", () => {
     expect(assistant.id).toBe("9001");
     expect(assistant.task_id).toBeUndefined();
     expect("task_id" in assistant).toBe(false);
+  });
+
+  it.each([
+    {
+      name: "instant",
+      mode: "instant" as const,
+      selectedAgent: "DataAgent",
+      expectedTool: "",
+      expectedActive: "ChatAgent",
+    },
+    {
+      name: "expert autonomous",
+      mode: "expert" as const,
+      selectedAgent: "",
+      expectedTool: "",
+      expectedActive: "",
+    },
+    {
+      name: "expert forced",
+      mode: "expert" as const,
+      selectedAgent: "DataAgent",
+      expectedTool: "DataAgent",
+      expectedActive: "DataAgent",
+    },
+  ])(
+    "derives the exact $name payload and progress identity from captured routing state",
+    async ({ mode, selectedAgent, expectedTool, expectedActive }) => {
+      const state = stateFor("A");
+      state.messageInput = "literal @DataAgent, remains query text";
+      state.mode = mode;
+      state.selectedAgent = selectedAgent;
+      const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+      mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
+
+      const { sendMessage } = makeComposable();
+      const sent = sendMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const [formDataArg] = queryCallAt(0, `${mode} payload`);
+      const formData = formDataArg as FormData;
+      expect(formData.get("mode")).toBe(mode);
+      expect(formData.get("tool")).toBe(expectedTool);
+      expect(formData.get("query")).toBe(
+        "literal @DataAgent, remains query text"
+      );
+      expect(state.activeAgentName).toBe(expectedActive);
+
+      pending.resolve(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: mode === "expert" ? "DataAgent" : "ChatAgent",
+            answer: "accepted",
+            status: mode === "expert" ? "SUCCEEDED" : undefined,
+            id: `${mode}-payload`,
+          },
+        })
+      );
+      await sent;
+    }
+  );
+
+  it("clears an unchanged captured forced Expert selection after synchronous acceptance", async () => {
+    const state = stateFor("A");
+    state.mode = "expert";
+    state.selectedAgent = "DataAgent";
+    currentChat.value = {
+      messages: [buildChatMessage({ role: "assistant", content: "prior" })],
+    };
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "DataAgent",
+          answer: "accepted",
+          status: "SUCCEEDED",
+          id: "accepted-sync",
+        },
+      })
+    );
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(state.selectedAgent).toBe("");
+  });
+
+  it("clears an unchanged captured forced Expert selection after accepted RUNNING response", async () => {
+    const state = stateFor("A");
+    state.mode = "expert";
+    state.selectedAgent = "DataAgent";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "DataAgent",
+          answer: "accepted",
+          status: "RUNNING",
+          bot_run_id: "run-accepted",
+          request_id: "request-accepted",
+          id: "accepted-running",
+        },
+      })
+    );
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(state.selectedAgent).toBe("");
+  });
+
+  it("preserves the forced Expert selection for rejected, aborted, timeout, and unverified network outcomes", async () => {
+    const { isNetworkError } = await import("@/utils/network-error");
+    const outcomes = [
+      () =>
+        mockGetQueryAbortable.mockResolvedValueOnce(
+          invalidInput<ApiEnvelope<DecodedQueryData>>({
+            code: 400,
+            data: { tool_name: "DataAgent", answer: "rejected" },
+          })
+        ),
+      () =>
+        mockGetQueryAbortable.mockRejectedValueOnce({
+          code: "ERR_CANCELED",
+        }),
+      () =>
+        mockGetQueryAbortable.mockRejectedValueOnce({
+          response: { status: 504 },
+        }),
+      () => {
+        vi.mocked(isNetworkError).mockReturnValueOnce(true);
+        mockGetQueryAbortable.mockRejectedValueOnce(new Error("network"));
+      },
+    ];
+
+    for (const configureOutcome of outcomes) {
+      vi.clearAllMocks();
+      const state = stateFor("A");
+      state.messageInput = "retry-safe";
+      state.mode = "expert";
+      state.selectedAgent = "DataAgent";
+      configureOutcome();
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+      const { sendMessage } = makeComposable();
+      if (vi.mocked(isNetworkError).mock.results.at(-1)?.value === true) {
+        vi.useFakeTimers();
+        const sent = sendMessage();
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        await sent;
+        vi.useRealTimers();
+      } else {
+        await sendMessage();
+      }
+      errorSpy.mockRestore();
+      expect(state.selectedAgent).toBe("DataAgent");
+    }
+  });
+
+  it("clears only the captured forced selection when reconciliation verifies the accepted turn", async () => {
+    const { isNetworkError } = await import("@/utils/network-error");
+    vi.mocked(isNetworkError).mockReturnValue(true);
+    vi.useFakeTimers();
+    const state = stateFor("A");
+    state.mode = "expert";
+    state.selectedAgent = "DataAgent";
+    currentChat.value = {
+      messages: [buildChatMessage({ role: "assistant", content: "prior" })],
+    };
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("network"));
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      invalidInput<Awaited<ReturnType<typeof getAnswerCheck>>>({
+        code: 200,
+        data: [{ query: "hi" }],
+      })
+    );
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    const { sendMessage } = makeComposable();
+    const sent = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1000);
+    await sent;
+
+    errorSpy.mockRestore();
+    vi.mocked(isNetworkError).mockReturnValue(false);
+    vi.useRealTimers();
+    expect(state.selectedAgent).toBe("");
+  });
+
+  it("preserves a newer forced selection changed while the captured request is in flight", async () => {
+    const state = stateFor("A");
+    state.mode = "expert";
+    state.selectedAgent = "DataAgent";
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
+
+    const { sendMessage } = makeComposable();
+    const sent = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    state.selectedAgent = "KnowledgeAgent";
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "DataAgent",
+          answer: "accepted",
+          status: "SUCCEEDED",
+          id: "changed-selection",
+        },
+      })
+    );
+    await sent;
+
+    expect(state.selectedAgent).toBe("KnowledgeAgent");
   });
 });

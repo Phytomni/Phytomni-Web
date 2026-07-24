@@ -77,6 +77,9 @@ export function useRefreshMessage(opts: {
     const refreshDialogueId = currentChatId.value;
     const chatState = getChatState(refreshDialogueId);
     const targetMessages = currentChat.value.messages;
+    const capturedMode = chatState.mode;
+    const capturedSelectedAgent =
+      capturedMode === "expert" ? chatState.selectedAgent : "";
 
     // set the refresh state - keyed by both messageIndex and messageId
     const refreshKey = `${messageIndex}_${messageId}`;
@@ -93,12 +96,11 @@ export function useRefreshMessage(opts: {
       queryData.append("query", chatContentToText(userMessage.content));
       queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
       queryData.append("refresh_id", messageId);
-      queryData.append("mode", chatState.mode);
-
-      // add the tool param (if any)
-      if (message.tool_name) {
-        queryData.append("tool", message.tool_name);
-      }
+      queryData.append("mode", capturedMode);
+      queryData.append(
+        "tool",
+        capturedMode === "expert" ? capturedSelectedAgent : ""
+      );
 
       // add the history (if any)
       if (chatState.historyQuestion) {

@@ -282,4 +282,42 @@ describe("useRefreshMessage", () => {
     // The finally history fetch still runs
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    {
+      name: "instant",
+      mode: "instant" as const,
+      selectedAgent: "DataAgent",
+      expectedTool: "",
+    },
+    {
+      name: "expert autonomous",
+      mode: "expert" as const,
+      selectedAgent: "",
+      expectedTool: "",
+    },
+    {
+      name: "expert forced",
+      mode: "expert" as const,
+      selectedAgent: "DataAgent",
+      expectedTool: "DataAgent",
+    },
+  ])(
+    "refresh derives the exact $name routing payload from state instead of the previous response tool",
+    async ({ mode, selectedAgent, expectedTool }) => {
+      const state = stateFor("A");
+      state.mode = mode;
+      state.selectedAgent = selectedAgent;
+      mockGetQuery.mockResolvedValueOnce(queryResponse());
+
+      const { refreshMessage } = makeComposable();
+      await refreshMessage(1);
+
+      const call = mustGet(mockGetQuery.mock.calls[0], `${mode} refresh call`);
+      const formData = call[0] as FormData;
+      expect(formData.get("mode")).toBe(mode);
+      expect(formData.get("tool")).toBe(expectedTool);
+      expect(formData.get("query")).toBe("Original question");
+    }
+  );
 });

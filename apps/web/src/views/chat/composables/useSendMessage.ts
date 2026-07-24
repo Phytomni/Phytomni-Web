@@ -14,7 +14,6 @@ import i18n from "@/locales";
 import {
   decodeCitationDocuments,
   decodeTableDataInput,
-  extractAtValues,
   formatFileSize,
   convertToTableData,
   optionalStringValue,
@@ -52,6 +51,7 @@ const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 type ChatUserStore = {
   FedLogOut: () => Promise<unknown>;
 };
+type ChatMode = ChatUIState["mode"];
 
 function isCanonicalToolName(value: unknown): value is string {
   return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
@@ -61,6 +61,34 @@ function safeWebRequestID(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
   return SAFE_WEB_REQUEST_ID_PATTERN.test(normalized) ? normalized : undefined;
+}
+
+function clearCapturedSelectionAfterAcceptance(
+  chatState: ChatUIState,
+  capturedMode: ChatMode,
+  capturedSelectedAgent: string
+): void {
+  if (
+    capturedMode === "expert" &&
+    capturedSelectedAgent !== "" &&
+    chatState.selectedAgent === capturedSelectedAgent
+  ) {
+    chatState.selectedAgent = "";
+  }
+}
+
+function isAcceptedExpertResponse(
+  expertSucceeded: boolean,
+  projection: ReturnType<typeof parseBotProjection> | undefined
+): boolean {
+  if (expertSucceeded) return true;
+  return (
+    projection?.runId !== null &&
+    (projection?.status === "RUNNING" ||
+      projection?.status === "PENDING" ||
+      projection?.status === "QUEUED" ||
+      projection?.status === "INPUT_REQUIRED")
+  );
 }
 
 function isHistoryMessage(value: unknown): value is ChatMessage {
@@ -286,8 +314,10 @@ export function useSendMessage(opts: {
     )
       return;
 
-    const newMessageValue = extractAtValues(chatState.messageInput);
-    const currentMessage = newMessageValue.cleanedText;
+    const capturedMode = chatState.mode;
+    const capturedSelectedAgent =
+      capturedMode === "expert" ? chatState.selectedAgent : "";
+    const currentMessage = chatState.messageInput;
     if (!currentMessage.trim()) return;
 
     // Capture parent row, files, mode, history, and request key before any await
@@ -297,9 +327,7 @@ export function useSendMessage(opts: {
       chatList.value
     );
     const capturedFiles = [...(chatState.fileList as UploadFile[])];
-    const capturedMode = chatState.mode;
     const capturedHistory = chatState.historyQuestion;
-    const capturedMatches = [...newMessageValue.matches];
     const requestKey = createChatRequestKey();
 
     chatState.isSending = true;
@@ -307,7 +335,7 @@ export function useSendMessage(opts: {
     chatState.activeRequestId = requestKey;
     chatState.sendStartedAt = Date.now();
     chatState.activeAgentName =
-      capturedMatches.length > 0 ? capturedMatches[0] : "ChatAgent";
+      capturedMode === "instant" ? "ChatAgent" : capturedSelectedAgent;
     chatState.completing = false;
     chatState.messageInput = "";
 
@@ -419,11 +447,7 @@ export function useSendMessage(opts: {
       queryData.append("id", parentRowId.toString());
       queryData.append(
         "tool",
-        capturedMode === "expert"
-          ? ""
-          : capturedMatches.length > 0
-          ? capturedMatches.join(",")
-          : ""
+        capturedMode === "expert" ? capturedSelectedAgent : ""
       );
       queryData.append("mode", capturedMode);
       if (capturedHistory) {
@@ -534,6 +558,10 @@ export function useSendMessage(opts: {
           (botProjection === undefined &&
             typeof responseData.status === "string" &&
             responseData.status.trim().toUpperCase() === "SUCCEEDED");
+        const acceptedExpertResponse = isAcceptedExpertResponse(
+          expertSucceeded,
+          botProjection
+        );
         if (
           capturedMode === "expert" &&
           (!isCanonicalToolName(responseData.tool_name) ||
@@ -823,6 +851,13 @@ export function useSendMessage(opts: {
         } else if (assistantMessage) {
           sendingMessages.push(assistantMessage);
           commitSuccessfulTurn(chatState, userMessage, assistantMessage);
+          if (capturedMode !== "expert" || acceptedExpertResponse) {
+            clearCapturedSelectionAfterAcceptance(
+              chatState,
+              capturedMode,
+              capturedSelectedAgent
+            );
+          }
         } else {
           // if assistantMessage was not created, create a default message
           console.warn(
@@ -849,6 +884,13 @@ export function useSendMessage(opts: {
           }
           sendingMessages.push(assistantMessage);
           commitSuccessfulTurn(chatState, userMessage, assistantMessage);
+          if (capturedMode !== "expert" || acceptedExpertResponse) {
+            clearCapturedSelectionAfterAcceptance(
+              chatState,
+              capturedMode,
+              capturedSelectedAgent
+            );
+          }
         }
       } else {
         throw new Error("invalid response envelope");
@@ -939,6 +981,11 @@ export function useSendMessage(opts: {
               // check whether the last message contains the one we just sent
               const lastItem = checkRes.data[checkRes.data.length - 1];
               if (lastItem && lastItem.query === messageContent) {
+                clearCapturedSelectionAfterAcceptance(
+                  chatState,
+                  capturedMode,
+                  capturedSelectedAgent
+                );
                 if (isForeground(sendingDialogueId)) {
                   await selectChat(sendingDialogueId);
                 }
