@@ -12,6 +12,8 @@ type DemoContract = {
   path: string;
   source: string;
   required: string[];
+  shell?: "agent-demo";
+  boundedContent?: string;
 };
 
 const DEMO_CONTRACTS: DemoContract[] = [
@@ -19,11 +21,15 @@ const DEMO_CONTRACTS: DemoContract[] = [
     path: "/knowledge-agent",
     source: "views/knowledge-agent/KnowledgeAgentView.vue",
     required: ["AgentDemoShell", 'ns="kb"', "CitedAnswer", "router.back"],
+    shell: "agent-demo",
+    boundedContent: "agent-demo-result",
   },
   {
     path: "/brief-gene-agent",
     source: "views/brief-gene-agent/BriefGeneAgentView.vue",
     required: ["AgentDemoShell", 'ns="bg"', "CitedAnswer", "router.back"],
+    shell: "agent-demo",
+    boundedContent: "agent-demo-result",
   },
   {
     path: "/data-agent",
@@ -34,16 +40,22 @@ const DEMO_CONTRACTS: DemoContract[] = [
       "MarkdownViewer",
       "router.back",
     ],
+    shell: "agent-demo",
+    boundedContent: "agent-demo-result",
   },
   {
     path: "/analyst-agent",
     source: "views/analyst-agent/AnalystAgentView.vue",
     required: ["AgentDemoShell", "analyst-download", "router.back"],
+    shell: "agent-demo",
+    boundedContent: "agent-demo-result",
   },
   {
     path: "/cases/gene-network-agent",
     source: "views/agent-cases/GeneNetworkCase.vue",
     required: ["AgentDemoShell", "gene-network-download", "router.back"],
+    shell: "agent-demo",
+    boundedContent: "agent-demo-result",
   },
   {
     path: "/gene-network-agent",
@@ -57,12 +69,17 @@ const DEMO_CONTRACTS: DemoContract[] = [
       "BotReportState",
       "BotArtifactList",
       "router.back",
+      'data-scroll-root="gene-network-agent"',
+      'data-test="network-artifact"',
+      "width: min(100%, 1080px);",
     ],
   },
   {
     path: "/cases/digital-design-agent",
     source: "views/agent-cases/DigitalDesignCase.vue",
     required: ["AgentDemoShell", "digital-design-download", "router.back"],
+    shell: "agent-demo",
+    boundedContent: "agent-demo-result",
   },
   {
     path: "/digital-design-agent",
@@ -76,6 +93,9 @@ const DEMO_CONTRACTS: DemoContract[] = [
       "BotReportState",
       "BotArtifactList",
       "router.back",
+      'data-scroll-root="digital-design-agent"',
+      'data-test="design-artifact"',
+      "width: min(100%, 1080px);",
     ],
   },
   {
@@ -87,6 +107,8 @@ const DEMO_CONTRACTS: DemoContract[] = [
       'ns="deep-genome-demo"',
       "router.back",
     ],
+    shell: "agent-demo",
+    boundedContent: "agent-demo-result",
   },
   {
     path: "/design",
@@ -162,11 +184,36 @@ describe("routed agent demonstration inventory", () => {
   it("routes static demonstrations through the shared fluid container shell", () => {
     const shell = readDemoSource("components/demo/AgentDemoShell.vue");
 
+    expect(shell).toContain('data-scroll-root="agent-demo"');
+    expect(shell).toContain('data-test="agent-demo-result"');
     expect(shell).toContain("container-type: inline-size;");
     expect(shell).toContain(
       "width: min(100%, var(--phy-layout-document-max-width));"
     );
     expect(shell).not.toContain("width: min(100%, clamp(1160px");
+  });
+
+  it("keeps every static Agent route attached to the shared scroll and result owner", () => {
+    const shell = readDemoSource("components/demo/AgentDemoShell.vue");
+    const staticContracts = DEMO_CONTRACTS.filter(
+      (contract) => contract.shell === "agent-demo"
+    );
+
+    expect(staticContracts.map((contract) => contract.path)).toEqual([
+      "/knowledge-agent",
+      "/brief-gene-agent",
+      "/data-agent",
+      "/analyst-agent",
+      "/cases/gene-network-agent",
+      "/cases/digital-design-agent",
+      "/deep-genome-agent",
+    ]);
+    expect(shell).toContain('data-scroll-root="agent-demo"');
+
+    for (const contract of staticContracts) {
+      expect(readDemoSource(contract.source)).toContain("AgentDemoShell");
+      expect(shell).toContain(`data-test="${contract.boundedContent}"`);
+    }
   });
 
   it.each(DEMO_CONTRACTS)(

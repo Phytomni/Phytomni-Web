@@ -202,6 +202,9 @@ describe("DigitalDesignAgentView", () => {
 
   it("passes the Digital Design tool to the shared product runner", () => {
     const view = mountView();
+    expect(view.get('[data-scroll-root="digital-design-agent"]').exists()).toBe(
+      true
+    );
     expect(mocks.useBotRemoteAgentRun).toHaveBeenCalledWith(
       expect.objectContaining({ tool: "DigitalDesignAgent" })
     );

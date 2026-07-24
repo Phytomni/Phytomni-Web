@@ -316,6 +316,16 @@ const activeLeafRoutes = flattenLeafRoutes(
   constantRoutes as unknown as RouteRecord[]
 );
 
+const STATIC_AGENT_DEMO_PATHS = [
+  "/knowledge-agent",
+  "/data-agent",
+  "/analyst-agent",
+  "/brief-gene-agent",
+  "/cases/gene-network-agent",
+  "/deep-genome-agent",
+  "/cases/digital-design-agent",
+] as const;
+
 function readSource(relativePath: string): string {
   return readFileSync(resolve(__dirname, "../../src", relativePath), "utf8");
 }
@@ -380,5 +390,26 @@ describe("routed visual archetypes", () => {
       "standalone",
       "demo",
     ]);
+  });
+
+  it("keeps static Agent routes connected to their one scroll and content owner", () => {
+    const shell = readSource("components/demo/AgentDemoShell.vue");
+    const staticDemoRoutes = ROUTE_CONTRACTS.filter((route) =>
+      STATIC_AGENT_DEMO_PATHS.includes(
+        route.path as typeof STATIC_AGENT_DEMO_PATHS[number]
+      )
+    );
+
+    expect(staticDemoRoutes.map((route) => route.path)).toEqual(
+      STATIC_AGENT_DEMO_PATHS
+    );
+    for (const route of staticDemoRoutes) {
+      expect(readSource(route.component)).toContain("AgentDemoShell");
+    }
+    expect(shell).toContain('data-scroll-root="agent-demo"');
+    expect(shell).toContain('data-test="agent-demo-result"');
+    expect(shell).toContain(
+      "width: min(100%, var(--phy-layout-artifact-wide-max-width));"
+    );
   });
 });

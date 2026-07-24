@@ -204,6 +204,9 @@ describe("GeneNetworkAgentView", () => {
 
   it("passes the Gene Network tool to the shared product runner", () => {
     const view = mountView();
+    expect(view.get('[data-scroll-root="gene-network-agent"]').exists()).toBe(
+      true
+    );
     expect(mocks.useBotRemoteAgentRun).toHaveBeenCalledWith(
       expect.objectContaining({ tool: "GeneNetworkAgent" })
     );
