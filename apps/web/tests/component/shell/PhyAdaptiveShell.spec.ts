@@ -124,6 +124,10 @@ describe("PhyAdaptiveShell", () => {
     );
   });
 
+  it("declares a container-safe adaptive shell root", () => {
+    expect(SHELL_SOURCE).toContain("container-type: inline-size;");
+  });
+
   it("owns the only viewport overflow root", () => {
     const wrapper = mount(PhyAdaptiveShell, { slots });
 

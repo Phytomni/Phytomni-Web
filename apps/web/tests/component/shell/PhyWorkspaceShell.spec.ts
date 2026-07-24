@@ -58,6 +58,12 @@ describe("PhyWorkspaceShell", () => {
     expect(SOURCE).toMatch(/@media\s*\(max-width:\s*599px\)/);
   });
 
+  it("uses the shared fluid workspace gutter", () => {
+    expect(SOURCE).toContain(
+      "--phy-workspace-gutter: var(--phy-layout-content-gutter);"
+    );
+  });
+
   it("keeps long bilingual labels in normal-flow regions", () => {
     const wrapper = mount(PhyWorkspaceShell, {
       slots: {

@@ -25,6 +25,8 @@
 <style scoped>
 .phy-doc-layout {
   box-sizing: border-box;
+  container-type: inline-size;
+  min-width: 0;
   background: var(--phy-color-bg-page);
   color: var(--phy-color-text);
   font-family: var(--phy-font-shell);
@@ -47,7 +49,8 @@
   display: grid;
   grid-template-columns: minmax(180px, 220px) minmax(0, 760px);
   gap: 24px;
-  width: min(100%, 1060px);
+  width: min(100%, var(--phy-layout-document-max-width));
+  min-width: 0;
   margin: 0 auto;
   padding: 24px 20px 48px;
   box-sizing: border-box;

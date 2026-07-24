@@ -32,6 +32,12 @@ describe("PhyDocLayout", () => {
     expect(SOURCE).not.toMatch(/\boverflow(?:-x|-y)?\s*:/);
   });
 
+  it("keeps the document content within the shared readable measure", () => {
+    expect(SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-document-max-width));"
+    );
+  });
+
   it("keeps an optional footer in the document scroll flow", () => {
     const wrapper = mount(PhyDocLayout, {
       slots: {

@@ -167,6 +167,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .phy-adaptive-shell {
+  container-type: inline-size;
   display: grid;
   grid-template-columns: var(--phy-layout-sidebar-expanded-width) minmax(0, 1fr);
   width: 100%;

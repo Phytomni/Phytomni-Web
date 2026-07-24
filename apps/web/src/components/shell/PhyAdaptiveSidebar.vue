@@ -176,6 +176,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .phy-adaptive-sidebar {
+  container-type: inline-size;
   position: relative;
   width: var(--phy-layout-sidebar-expanded-width);
   height: 100%;

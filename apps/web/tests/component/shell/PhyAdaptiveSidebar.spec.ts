@@ -175,4 +175,8 @@ describe("PhyAdaptiveSidebar", () => {
   it("contains rejected drawer focus scheduling", () => {
     expect(SIDEBAR_SOURCE).toContain("}).catch(() => undefined);");
   });
+
+  it("keeps the sidebar root shrink-safe", () => {
+    expect(SIDEBAR_SOURCE).toContain("min-width: 0;");
+  });
 });
