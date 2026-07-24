@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 REPO_ROOT="$(cd "${WEB_ROOT}/../.." && pwd)"
-EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/chat-home-restoration/harness"
+EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/responsive-continuity"
 SESSION="phy-chat-home-matrix"
 BASE_URL="http://127.0.0.1:5174/tests/visual/chat/"
 
@@ -26,9 +26,13 @@ viewports=(
     "390 844"
     "480 800"
     "768 1024"
+    "899 768"
+    "900 768"
     "1024 768"
+    "1199 768"
+    "1279 768"
+    "1280 768"
     "1366 768"
-    "1440 900"
     "1920 1080"
     "2560 1440"
 )
@@ -70,6 +74,9 @@ capture_fixture() {
     agent-browser --session "${SESSION}" set media "${theme}"
     agent-browser --session "${SESSION}" open "${BASE_URL}?state=${state}&locale=${locale}&theme=${theme}"
     agent-browser --session "${SESSION}" wait --fn "document.querySelector('[data-testid=chat-visual-root]')?.dataset.fixtureReady === 'true'"
+    if [[ "${state}" == "agent-preview" ]]; then
+        agent-browser --session "${SESSION}" wait --fn "(() => { const dialog = document.querySelector('[data-testid=chat-agent-preview] [role=dialog]'); const media = document.querySelector('[data-testid=chat-agent-preview] .agent-capability-popover__media'); if (!dialog || !media) return false; const dialogRect = dialog.getBoundingClientRect(); const mediaRect = media.getBoundingClientRect(); return dialogRect.width > 0 && dialogRect.height > 0 && mediaRect.width > 0 && mediaRect.height > 0; })()"
+    fi
     agent-browser --session "${SESSION}" eval --stdin <"${SCRIPT_DIR}/measure-geometry.js" | tee "${EVIDENCE_DIR}/${stem}.geometry.json"
     test -s "${EVIDENCE_DIR}/${stem}.geometry.json"
     agent-browser --session "${SESSION}" eval --stdin <"${SCRIPT_DIR}/assert-geometry.js"
@@ -131,10 +138,12 @@ for state in history-title-only history-loading history-empty history-error; do
     done
 done
 
-png_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')
-geometry_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.geometry.json' | wc -l | tr -d ' ')
-test "${png_count}" -eq 200
-test "${geometry_count}" -eq 200
+EXPECTED_PNG_COUNT=232
+EXPECTED_GEOMETRY_COUNT=232
+png_count=$(find "${EVIDENCE_DIR}" -mindepth 1 -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')
+geometry_count=$(find "${EVIDENCE_DIR}" -mindepth 1 -maxdepth 1 -type f -name '*.geometry.json' | wc -l | tr -d ' ')
+test "${png_count}" -eq "${EXPECTED_PNG_COUNT}"
+test "${geometry_count}" -eq "${EXPECTED_GEOMETRY_COUNT}"
 for png in "${EVIDENCE_DIR}"/*.png; do
     test -f "${png%.png}.geometry.json"
 done

@@ -14,7 +14,9 @@ Accepted dimensions:
 
 - `state`: `empty` | `empty-cases` | `populated` | `attachment` | `sending` | `picker-open` |
   `picker-search` | `picker-selected` | `sidebar-expanded` | `sidebar-compact` |
-  `sidebar-mobile-closed` | `sidebar-mobile-open`
+  `sidebar-mobile-closed` | `sidebar-mobile-open` | `agent-preview` |
+  `sidebar-compact-explore-open` | `history-title-only` | `history-loading` |
+  `history-empty` | `history-error`
 - `locale`: `en-US` | `zh-CN`
 - `theme`: `light` | `dark`
 
@@ -70,7 +72,7 @@ For each evidence row record at least: viewport, locale, theme, state key,
 path. Harness rows do not need live identity redaction when the visible identity
 is already exact `Synthetic user`.
 
-## Chat home canonical viewports
+## Responsive continuity capture matrix
 
 | Category                    | CSS viewport | Review identity                                         |
 | --------------------------- | -----------: | ------------------------------------------------------- |
@@ -78,23 +80,43 @@ is already exact `Synthetic user`.
 | Modern phone                |    `390x844` | current iPhone / Android                                |
 | Large phone or small tablet |    `480x800` | unfolded phone / small tablet                           |
 | Tablet                      |   `768x1024` | iPad-class portrait                                     |
-| Small desktop               |   `1024x768` | compact laptop lower bound                              |
-| Mainstream laptop           |   `1366x768` | office notebook                                         |
-| Desktop                     |   `1440x900` | standard external display                               |
-| Large desktop               |  `1920x1080` | full-HD monitor                                         |
-| 4K at 150% scaling          |  `2560x1440` | user's 3840x2160 physical setup expressed in CSS pixels |
+| Small desktop boundary below | `899x768` | compact/mobile boundary below 900px                    |
+| Small desktop boundary above | `900x768` | compact desktop boundary                               |
+| Compact laptop               | `1024x768` | compact desktop rail                                    |
+| Large compact boundary below | `1199x768` | fluid compact desktop                                  |
+| Large compact boundary above | `1279x768` | compact desktop boundary below 1280px                  |
+| Expanded desktop boundary    | `1280x768` | expanded desktop rail                                  |
+| Mainstream laptop            | `1366x768` | office notebook                                        |
+| Large desktop                | `1920x1080` | full-HD monitor                                       |
+| 4K at 150% scaling           | `2560x1440` | 4K physical display represented in CSS pixels         |
 
-The synthetic home matrix is exact:
+The synthetic responsive-continuity matrix is exact and uses only the fixture
+URL above:
 
-- `empty` and `empty-cases`: all 9 viewports × 2 locales × 2 themes = 72 images.
-- `populated`: `320x568`, `768x1024`, `1024x768`, `1440x900`, and `2560x1440` × 2 locales × 2 themes = 20 images.
-- `sidebar-mobile-closed` and `sidebar-mobile-open`: `390x844` × 2 locales × 2 themes = 8 images.
-- Total synthetic review set: 100 PNG files and 100 geometry JSON files.
+- `empty` and `empty-cases`: all 13 listed viewports × 2 locales × 2 themes =
+  104 PNGs and 104 geometry JSON files.
+- `populated`: `320x568`, `768x1024`, `1024x768`, `1440x900`, and `2560x1440`
+  × 2 locales × 2 themes = 20 PNGs and 20 geometry JSON files.
+- `sidebar-mobile-closed` and `sidebar-mobile-open`: `390x844` × 2 locales ×
+  2 themes = 8 PNGs and 8 geometry JSON files.
+- `agent-preview`: `390x844`, `1440x900`, and `2560x1440` × 2 locales × 2
+  themes = 12 PNGs and 12 geometry JSON files.
+- `sidebar-compact-explore-open`: `1024x768` and `1279x768` × 2 locales × 2
+  themes = 8 PNGs and 8 geometry JSON files.
+- `history-title-only`, `history-loading`, `history-empty`, and
+  `history-error`: `390x844`, `768x1024`, `1024x768`, `1920x1080`, and
+  `2560x1440` × 2 locales × 2 themes × 4 states = 80 PNGs and 80 geometry JSON
+  files.
+- Total synthetic review set: exactly 232 PNG files and 232 matching geometry
+  JSON files.
 
-`empty` proves the top composition and visible Composer. `empty-cases` runs the
-same page at the bottom of the empty-state scroll owner and proves the seventh
-case is reachable. A screenshot is invalid unless its geometry JSON passes
-before capture.
+`2560x1440` is the agreed 4K-at-150%-scaling review in CSS pixels; do not
+substitute a `3840x2160` CSS viewport. `empty` proves the top composition and
+visible Composer. `empty-cases` runs the same page at the bottom of the
+empty-state scroll owner and proves the seventh case is reachable. A screenshot
+is invalid unless its geometry JSON passes before capture. The capture script
+cleans the current evidence directory before each run and fails unless both
+exact file counts and every PNG/geometry pair are present.
 
 Evidence filename matrix:
 
@@ -106,24 +128,30 @@ chat__<state>__<W>x<H>__<locale>__<theme>.geometry.json
 Closed and open mobile are different exact states — never infer one from the other
 (`sidebar-mobile-closed` / `sidebar-mobile-open`).
 
-The harness matrix can be captured in one deterministic run:
+The complete matrix can be captured in one deterministic run. Outputs are
+ignored under `.codex/evidence/frontend-v2/responsive-continuity/` and retain
+the evidence label `fixture_source=tests/visual/chat`:
 
 ```bash
 ./tests/visual/chat/capture-home-matrix.sh
 ```
 
-## Chat home visual refinement matrix
+## Focused interaction refinement matrix
 
-After the canonical 100-image home matrix, run the focused capture script in
-tests/visual/chat.
+The focused capture script in tests/visual/chat remains an additional interaction
+refinement set; it is separate from the 232-file responsive-continuity matrix.
 
 The focused set is 390x844, 1440x900, and 2560x1440 × light/dark × Start New
 selected, Explore Agents selected, Instant selected, and Expert selected = 24
 PNGs. Every PNG requires matching passing geometry/refinement JSON first.
 
-Review all 124 PNGs individually: 100 canonical plus 24 focused. Record one
-filename and PASS/FAIL row in the ignored visual-review ledger. Any failed or
-unreviewed row blocks packaging.
+For Task 5.2, inspect all 232 responsive-continuity PNGs individually and record
+one filename/result row in the ignored `visual-review-ledger.md`. Check locale,
+theme, one title/header, controls inside the viewport, Footer clearance, Cases
+reachability, Agent order/labels, complete flowcharts, no horizontal overflow,
+compact disclosure containment, and each history title-only/loading/empty/error
+state. Use `Needs Verification` for unsupported browser modalities; never claim
+authenticated or production acceptance from synthetic captures.
 
 ## Terminal A — fixed Vite (hard stop on strict-port failure)
 
