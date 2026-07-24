@@ -23,7 +23,8 @@ module.exports = {
     {
       // Type-aware rules must see every first-party TypeScript/Vue file while
       // JavaScript and config files keep their existing parser behavior.
-      files: ["**/*.ts", "**/*.tsx", "**/*.vue"],
+      files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.vue"],
+      parser: "@typescript-eslint/parser",
       parserOptions: {
         project: "./tsconfig.eslint.json",
         tsconfigRootDir: __dirname,
@@ -202,8 +203,8 @@ module.exports = {
       files: [
         "vite/**/*.ts",
         "vite/**/*.js",
-        "vite.config.ts",
-        "vitest.config.ts",
+        "vite.config.mts",
+        "vitest.config.mts",
       ],
       env: {
         node: true,

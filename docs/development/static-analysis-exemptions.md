@@ -45,7 +45,7 @@ Temporary records track remediation debt and never grant structural approval.
 
 - Exact entry: [apps/web/tsconfig.json](../../apps/web/tsconfig.json)
 - Rationale: The supported TypeScript 4.7.4/vue-tsc 0.39.5 toolchain emits an exact third-party declaration family with skipLibCheck=false; the reverse probe binds this application setting to the direct 3dmol 2.5.5 dependency.
-- Counterfactual: Removing this exact setting fails the application probe on node_modules declaration errors; the config-project probe remains separate and exposes three first-party vitest.config.ts errors.
+- Counterfactual: Removing this exact setting fails the application probe on node_modules declaration errors; the config-project probe remains separate and exposes three first-party vitest.config.mts errors.
 - Risk: Only apps/web/tsconfig.json compilerOptions.skipLibCheck=true is authorized; project, tool-version, or diagnostic-family drift fails the probe and requires re-adjudication.
 - Linked tests: `scripts/tests/test_typescript_dependency_probe.py::test_skip_lib_check_probe_is_project_and_dependency_bound`, `scripts/tests/test_typescript_dependency_probe.py::test_first_party_canary_is_visible_with_or_without_skip_lib_check`, `scripts/check_static_analysis_exemptions.py --check`
 - Observation: typescript reported skipLibCheck at line ?; raw diagnostic omitted.

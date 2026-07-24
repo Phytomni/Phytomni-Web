@@ -39,7 +39,7 @@ owner = "web-maintainers"
 introduced_on = 2026-07-19
 review_on = 2026-08-31
 rationale = "The supported TypeScript 4.7.4/vue-tsc 0.39.5 toolchain emits an exact third-party declaration family with skipLibCheck=false; the reverse probe binds this application setting to the direct 3dmol 2.5.5 dependency."
-counterfactual = "Removing this exact setting fails the application probe on node_modules declaration errors; the config-project probe remains separate and exposes three first-party vitest.config.ts errors."
+counterfactual = "Removing this exact setting fails the application probe on node_modules declaration errors; the config-project probe remains separate and exposes three first-party vitest.config.mts errors."
 risk = "Only apps/web/tsconfig.json compilerOptions.skipLibCheck=true is authorized; project, tool-version, or diagnostic-family drift fails the probe and requires re-adjudication."
 tests = [
   "scripts/tests/test_typescript_dependency_probe.py::test_skip_lib_check_probe_is_project_and_dependency_bound",

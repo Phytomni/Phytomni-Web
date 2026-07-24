@@ -60,9 +60,24 @@ def test_eslint_project_uses_an_include_only_first_party_scope() -> None:
 def test_parser_project_is_scoped_to_typescript_and_vue_files() -> None:
     text = ESLINT_CONFIG.read_text(encoding="utf-8")
 
-    assert 'files: ["**/*.ts", "**/*.tsx", "**/*.vue"]' in text
+    assert 'files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.vue"]' in text
+    assert 'parser: "@typescript-eslint/parser"' in text
     assert 'project: "./tsconfig.eslint.json"' in text
     assert "tsconfigRootDir: __dirname" in text
+
+
+def test_node_environment_override_covers_esm_tool_configs() -> None:
+    text = ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    assert '''files: [
+        "vite/**/*.ts",
+        "vite/**/*.js",
+        "vite.config.mts",
+        "vitest.config.mts",
+      ],
+      env: {
+        node: true,
+      },''' in text
 
 
 def test_vue_component_names_are_checked_by_the_rule() -> None:
