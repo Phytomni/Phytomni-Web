@@ -173,7 +173,7 @@ def test_skip_lib_check_probe_is_project_and_dependency_bound() -> None:
         "the application structural decision"
     )
     assert Counter(first_party_diagnostics) == Counter(
-        {("vitest.config.ts", "TS2769"): 3}
+        {("vitest.config.mts", "TS2769"): 3}
     ), (
         "config-project first-party diagnostics changed; do not classify them as "
         "third-party declaration debt"

@@ -55,7 +55,7 @@ def test_plugin_factories_preserve_runtime_contracts() -> None:
 
 
 def test_vite_config_keeps_proxy_alias_and_chunk_contracts() -> None:
-    config = _read(WEB_ROOT / "vite.config.ts")
+    config = _read(WEB_ROOT / "vite.config.mts")
 
     assert 'import createVitePlugins from "./vite/plugins";' in config
     assert 'const devProxyApi = env.VITE_DEV_PROXY_API || "http://localhost:8080";' in config

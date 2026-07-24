@@ -7,7 +7,7 @@ const SOURCE_ROOT = resolve(WEB_ROOT, "src");
 const SHELL_EXPORTS = resolve(SOURCE_ROOT, "components/shell/index.ts");
 const MAIN_SOURCE = readFileSync(resolve(SOURCE_ROOT, "main.ts"), "utf8");
 const VITEST_SOURCE = readFileSync(
-  resolve(WEB_ROOT, "vitest.config.ts"),
+  resolve(WEB_ROOT, "vitest.config.mts"),
   "utf8"
 );
 

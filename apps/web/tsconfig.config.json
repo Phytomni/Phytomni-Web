@@ -1,8 +1,8 @@
 {
   "include": [
-    "vite.config.*",
+    "vite.config.mts",
     "vite/**/*.ts",
-    "vitest.config.*",
+    "vitest.config.mts",
     "cypress.config.*"
   ],
   "compilerOptions": {

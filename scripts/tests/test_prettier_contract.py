@@ -62,6 +62,11 @@ def test_prettier_is_exactly_pinned_and_scripts_have_one_write_boundary() -> Non
     assert "eslint" in raw_lint
     assert "--format json" in raw_lint
     assert "--fix" not in raw_lint
+    assert raw_lint == (
+        "eslint src tests vite vite.config.mts vitest.config.mts .eslintrc.cjs "
+        "--ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --max-warnings 0 "
+        "--format json"
+    )
     assert "format:write" not in lint
     assert all(marker in check and marker in write for marker in EXPECTED_SCOPE_MARKERS)
 

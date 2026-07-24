@@ -10,7 +10,7 @@
     "build-only": "vite build --mode production",
     "type-check": "vue-tsc --noEmit",
     "lint": "python3 ../../scripts/check_static_analysis_exemptions.py --check --collector eslint",
-    "lint:raw": "eslint src tests vite.config.ts vitest.config.ts .eslintrc.cjs --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --max-warnings 0 --format json",
+    "lint:raw": "eslint src tests vite vite.config.mts vitest.config.mts .eslintrc.cjs --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --max-warnings 0 --format json",
     "format:check": "prettier --check \"src/**/*.{vue,js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"tests/**/*.{vue,js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"vite/**/*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}\" .eslintrc.cjs .prettierrc.cjs",
     "format:write": "prettier --write \"src/**/*.{vue,js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"tests/**/*.{vue,js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"vite/**/*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}\" .eslintrc.cjs .prettierrc.cjs",
     "test": "vitest",

@@ -43,11 +43,11 @@ def test_eslint_project_covers_every_linted_typescript_file() -> None:
         "tests/**/*.ts",
         "tests/**/*.vue",
         "vite/**/*.ts",
-        "vite.config.ts",
-        "vitest.config.ts",
+        "vite.config.mts",
+        "vitest.config.mts",
     }
     allowed = ("src/", "tests/", "vite/")
-    exact = {"env.d.ts", "vite.config.ts", "vitest.config.ts"}
+    exact = {"env.d.ts", "vite.config.mts", "vitest.config.mts"}
     assert all(path.startswith(allowed) or path in exact for path in _tracked_frontend_type_files())
 
 
