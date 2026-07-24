@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
@@ -39,11 +40,16 @@ test("detects a warning divided between output chunks", () => {
   assert.deepEqual(detector.categories(), ["vue"]);
 });
 
-test("retains bounded diagnostic output while scanning chunk boundaries", () => {
+test("retains UTF-8-byte-bounded output while scanning chunk boundaries", () => {
   const detector = createWarningDetector();
-  detector.write("x".repeat(MAX_RETAINED_OUTPUT_BYTES + 20));
+  detector.write("x".repeat(MAX_RETAINED_OUTPUT_BYTES - 4));
+  detector.write("界界");
+  assert.equal(
+    Buffer.byteLength(detector.output()),
+    MAX_RETAINED_OUTPUT_BYTES - 1
+  );
   detector.write("\n[intlify] late warning");
-  assert.equal(detector.output().length, MAX_RETAINED_OUTPUT_BYTES);
+  assert.ok(Buffer.byteLength(detector.output()) <= MAX_RETAINED_OUTPUT_BYTES);
   assert.deepEqual(detector.categories(), ["intlify"]);
 });
 

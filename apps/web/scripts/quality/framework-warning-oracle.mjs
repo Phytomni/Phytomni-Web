@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import process from "node:process";
 
@@ -21,6 +22,7 @@ export function classifyFrameworkWarnings(text) {
 export function createWarningDetector() {
   const categories = new Set();
   let output = "";
+  let outputBytes = 0;
   let scanTail = "";
 
   return {
@@ -31,7 +33,25 @@ export function createWarningDetector() {
         categories.add(category);
       }
       scanTail = combined.slice(-MAX_SCAN_TAIL_CHARS);
-      output += text.slice(0, MAX_RETAINED_OUTPUT_BYTES - output.length);
+
+      const remainingBytes = MAX_RETAINED_OUTPUT_BYTES - outputBytes;
+      if (remainingBytes <= 0) {
+        return;
+      }
+
+      const retained = [];
+      let retainedBytes = 0;
+      for (const character of text) {
+        const characterBytes = Buffer.byteLength(character);
+        if (retainedBytes + characterBytes > remainingBytes) {
+          break;
+        }
+        retained.push(character);
+        retainedBytes += characterBytes;
+      }
+
+      output += retained.join("");
+      outputBytes += retainedBytes;
     },
     categories() {
       return [...categories];
