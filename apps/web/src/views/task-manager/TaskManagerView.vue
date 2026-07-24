@@ -250,4 +250,23 @@ onMounted(() => {
 .task-query {
   overflow-wrap: anywhere;
 }
+
+.task-manager-workspace {
+  :deep(.phy-table-frame__scroll) {
+    overflow-x: auto;
+  }
+}
+
+@container (max-width: 720px) {
+  .task-manager-workspace {
+    :deep(.task-manager-actions) {
+      flex-basis: 100%;
+      min-width: 0;
+    }
+
+    :deep(.phy-table-frame__pagination) {
+      justify-content: flex-start;
+    }
+  }
+}
 </style>

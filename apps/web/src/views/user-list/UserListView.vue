@@ -1,6 +1,6 @@
 <template>
   <PiiWatermark>
-    <PhyWorkspaceShell class="user-list-workspace">
+    <PhyWorkspaceShell class="user-list-workspace" data-scroll-root="workspace">
       <template #header>
         <PhyPageHeader :title="$t('menu.userList')">
           <template #actions>
@@ -677,6 +677,16 @@ onMounted(() => {
 
   :deep(.el-pagination__jump) {
     display: none;
+  }
+
+  :deep(.phy-table-frame__pagination) {
+    min-width: 0;
+  }
+
+  @container (max-width: 720px) {
+    :deep(.phy-table-frame__pagination) {
+      justify-content: flex-start;
+    }
   }
 }
 

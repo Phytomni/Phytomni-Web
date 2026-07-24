@@ -1,6 +1,15 @@
 <template>
-  <div class="log-list">
+  <PhyWorkspaceShell class="permission-workspace" data-scroll-root="workspace">
     <h1>{{ $t("permission.title") }}</h1>
-  </div>
+  </PhyWorkspaceShell>
 </template>
-<style lang="scss" scoped></style>
+
+<script setup lang="ts">
+import { PhyWorkspaceShell } from "@/components/shell";
+</script>
+
+<style lang="scss" scoped>
+.permission-workspace {
+  min-width: 0;
+}
+</style>

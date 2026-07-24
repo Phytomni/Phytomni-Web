@@ -1,174 +1,191 @@
 <template>
   <PiiWatermark>
-    <div class="admin-management-container">
-      <!-- Top operation bar -->
-      <div class="operation-bar">
-        <div class="no-add-notice">
-          <el-button type="primary" disabled> </el-button>
+    <PhyWorkspaceShell
+      class="admin-management-workspace"
+      data-scroll-root="workspace"
+    >
+      <template #header>
+        <PhyPageHeader :title="$t('user.listTitle')" />
+      </template>
+
+      <div class="admin-management-container">
+        <!-- Top operation bar -->
+        <div class="operation-bar">
+          <div class="no-add-notice">
+            <el-button type="primary" disabled> </el-button>
+          </div>
         </div>
-      </div>
 
-      <!-- User table -->
-      <div class="table-container">
-        <div class="table-title">{{ $t("user.listTitle") }}</div>
-        <el-table
-          :data="tableData"
-          border
-          stripe
-          v-loading="loading"
-          style="width: 100%"
-          header-row-class-name="table-header-row"
-          header-cell-class-name="table-header-cell"
-        >
-          <el-table-column
-            type="index"
-            :label="$t('common.index')"
-            width="80"
-            align="center"
-          />
-          <el-table-column
-            prop="email"
-            :label="$t('user.username')"
-            align="center"
-          />
-          <el-table-column
-            prop="description"
-            :label="$t('user.role')"
-            align="center"
-          />
-          <el-table-column
-            :label="$t('common.operation')"
-            width="180"
-            align="center"
-          >
-            <template #default="scope">
-              <el-space>
-                <el-button
-                  size="small"
-                  type="primary"
-                  @click="handleView(scope.row)"
-                >
-                  {{ $t("common.view") }}
-                </el-button>
-                <el-button
-                  size="small"
-                  type="success"
-                  @click="handleEdit(scope.row)"
-                >
-                  {{ $t("common.edit") }}
-                </el-button>
-              </el-space>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <!-- Pagination -->
-        <div class="pagination-container">
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :page-sizes="[10, 20, 30, 50]"
-            layout="total, sizes, prev, pager, next, jumper"
-            :total="total"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-          />
-        </div>
-      </div>
-
-      <!-- User edit dialog -->
-      <el-dialog
-        v-model="dialogVisible"
-        :title="dialogType === 'add' ? $t('user.add') : $t('user.edit')"
-        width="500px"
-        :close-on-click-modal="false"
-        @closed="resetForm"
-      >
-        <el-form
-          ref="userFormRef"
-          :model="userForm"
-          :rules="formRules"
-          label-width="85px"
-          autocomplete="off"
-        >
-          <el-form-item :label="$t('user.username')" prop="email">
-            <el-input
-              v-model="userForm.email"
-              autocomplete="new-email"
-              :disabled="dialogType === 'edit'"
-            />
-          </el-form-item>
-          <el-form-item
-            :label="$t('user.password')"
-            :prop="dialogType === 'add' ? 'password' : ''"
-            :required="dialogType === 'add'"
-          >
-            <el-input
-              v-model="userForm.password"
-              type="password"
-              autocomplete="new-password"
-              show-password
-              :placeholder="
-                dialogType === 'edit' ? $t('user.passwordEditPlaceholder') : ''
-              "
-            />
-          </el-form-item>
-          <el-form-item :label="$t('user.role')" prop="code">
-            <el-select
-              v-model="userForm.code"
-              :placeholder="$t('user.roleSelect')"
+        <!-- User table -->
+        <div class="table-container">
+          <PhyTableFrame>
+            <el-table
+              :data="tableData"
+              border
+              stripe
+              v-loading="loading"
+              class="admin-management-table"
               style="width: 100%"
+              header-row-class-name="table-header-row"
+              header-cell-class-name="table-header-cell"
             >
-              <el-option label="super_admin" value="super_admin" />
-              <el-option label="admin" value="admin" />
-              <el-option label="user" value="user" />
-              <el-option label="vip_user" value="vip_user" />
-            </el-select>
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <span class="dialog-footer">
-            <el-space>
-              <el-button @click="closeDialog">{{
-                $t("common.cancel")
-              }}</el-button>
-              <el-button type="primary" @click="handleSubmit">{{
-                $t("common.confirm")
-              }}</el-button>
-            </el-space>
-          </span>
-        </template>
-      </el-dialog>
+              <el-table-column
+                type="index"
+                :label="$t('common.index')"
+                width="80"
+                align="center"
+              />
+              <el-table-column
+                prop="email"
+                :label="$t('user.username')"
+                min-width="220"
+                align="center"
+              />
+              <el-table-column
+                prop="description"
+                :label="$t('user.role')"
+                min-width="160"
+                align="center"
+              />
+              <el-table-column
+                :label="$t('common.operation')"
+                width="180"
+                align="center"
+              >
+                <template #default="scope">
+                  <el-space>
+                    <el-button
+                      size="small"
+                      type="primary"
+                      @click="handleView(scope.row)"
+                    >
+                      {{ $t("common.view") }}
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="success"
+                      @click="handleEdit(scope.row)"
+                    >
+                      {{ $t("common.edit") }}
+                    </el-button>
+                  </el-space>
+                </template>
+              </el-table-column>
+            </el-table>
 
-      <!-- User view dialog -->
-      <el-dialog
-        v-model="viewDialogVisible"
-        :title="$t('user.detail')"
-        width="500px"
-      >
-        <div class="view-info" v-if="currentUser">
-          <div class="info-item">
-            <span class="label">{{ $t("user.username") }}：</span>
-            <span class="value">{{ currentUser.email }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">{{ $t("user.role") }}：</span>
-            <span class="value">{{
-              getRoleName(currentUser.description || currentUser.code)
-            }}</span>
-          </div>
+            <!-- Pagination -->
+            <template #pagination>
+              <div class="pagination-container">
+                <el-pagination
+                  v-model:current-page="currentPage"
+                  v-model:page-size="pageSize"
+                  :page-sizes="[10, 20, 30, 50]"
+                  layout="total, sizes, prev, pager, next, jumper"
+                  :total="total"
+                  @size-change="handleSizeChange"
+                  @current-change="handleCurrentChange"
+                />
+              </div>
+            </template>
+          </PhyTableFrame>
         </div>
-        <template #footer>
-          <span class="dialog-footer">
-            <el-space>
-              <el-button @click="viewDialogVisible = false">{{
-                $t("common.close")
-              }}</el-button>
-            </el-space>
-          </span>
-        </template>
-      </el-dialog>
-    </div>
+
+        <!-- User edit dialog -->
+        <el-dialog
+          v-model="dialogVisible"
+          :title="dialogType === 'add' ? $t('user.add') : $t('user.edit')"
+          width="500px"
+          :close-on-click-modal="false"
+          @closed="resetForm"
+        >
+          <el-form
+            ref="userFormRef"
+            :model="userForm"
+            :rules="formRules"
+            label-width="85px"
+            autocomplete="off"
+          >
+            <el-form-item :label="$t('user.username')" prop="email">
+              <el-input
+                v-model="userForm.email"
+                autocomplete="new-email"
+                :disabled="dialogType === 'edit'"
+              />
+            </el-form-item>
+            <el-form-item
+              :label="$t('user.password')"
+              :prop="dialogType === 'add' ? 'password' : ''"
+              :required="dialogType === 'add'"
+            >
+              <el-input
+                v-model="userForm.password"
+                type="password"
+                autocomplete="new-password"
+                show-password
+                :placeholder="
+                  dialogType === 'edit'
+                    ? $t('user.passwordEditPlaceholder')
+                    : ''
+                "
+              />
+            </el-form-item>
+            <el-form-item :label="$t('user.role')" prop="code">
+              <el-select
+                v-model="userForm.code"
+                :placeholder="$t('user.roleSelect')"
+                style="width: 100%"
+              >
+                <el-option label="super_admin" value="super_admin" />
+                <el-option label="admin" value="admin" />
+                <el-option label="user" value="user" />
+                <el-option label="vip_user" value="vip_user" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <span class="dialog-footer">
+              <el-space>
+                <el-button @click="closeDialog">{{
+                  $t("common.cancel")
+                }}</el-button>
+                <el-button type="primary" @click="handleSubmit">{{
+                  $t("common.confirm")
+                }}</el-button>
+              </el-space>
+            </span>
+          </template>
+        </el-dialog>
+
+        <!-- User view dialog -->
+        <el-dialog
+          v-model="viewDialogVisible"
+          :title="$t('user.detail')"
+          width="500px"
+        >
+          <div class="view-info" v-if="currentUser">
+            <div class="info-item">
+              <span class="label">{{ $t("user.username") }}：</span>
+              <span class="value">{{ currentUser.email }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">{{ $t("user.role") }}：</span>
+              <span class="value">{{
+                getRoleName(currentUser.description || currentUser.code)
+              }}</span>
+            </div>
+          </div>
+          <template #footer>
+            <span class="dialog-footer">
+              <el-space>
+                <el-button @click="viewDialogVisible = false">{{
+                  $t("common.close")
+                }}</el-button>
+              </el-space>
+            </span>
+          </template>
+        </el-dialog>
+      </div>
+    </PhyWorkspaceShell>
   </PiiWatermark>
 </template>
 
@@ -183,6 +200,11 @@ import {
 import { getUserList, addUser, changePermission } from "@/api/auth";
 import type { UserSummary } from "@/api/types";
 import { useI18n } from "vue-i18n";
+import {
+  PhyPageHeader,
+  PhyTableFrame,
+  PhyWorkspaceShell,
+} from "@/components/shell";
 
 const { t } = useI18n();
 
@@ -404,9 +426,8 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .admin-management-container {
-  height: auto;
-  min-height: 100%;
-  padding: 20px;
+  width: 100%;
+  min-width: 0;
 
   .operation-bar {
     margin-bottom: 20px;
@@ -427,17 +448,10 @@ onMounted(() => {
   }
 
   .table-container {
+    min-width: 0;
     margin-bottom: 20px;
-    padding: 20px;
     border-radius: 4px;
     box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-
-    .table-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #333;
-      margin-bottom: 8px;
-    }
 
     .table-subtitle {
       font-size: 14px;
@@ -445,14 +459,14 @@ onMounted(() => {
       margin-bottom: 20px;
     }
 
-    .el-table {
-      width: 100%;
+    .admin-management-table {
+      min-width: 520px;
     }
   }
 
   .pagination-container {
-    margin-top: 20px;
     display: flex;
+    min-width: 0;
     justify-content: flex-end;
   }
 
@@ -472,6 +486,22 @@ onMounted(() => {
         flex: 1;
         color: #303133;
       }
+    }
+  }
+}
+
+.admin-management-workspace {
+  min-width: 0;
+}
+
+@container (max-width: 720px) {
+  .admin-management-workspace {
+    :deep(.pagination-container) {
+      justify-content: flex-start;
+    }
+
+    :deep(.el-pagination__jump) {
+      display: none;
     }
   }
 }

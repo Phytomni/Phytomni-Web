@@ -21,6 +21,8 @@ const adminSources = {
   adminManagement: source("admin-management/AdminManagementView.vue"),
   globalConfig: source("global-config/GlobalConfigView.vue"),
   help: source("help/HelpView.vue"),
+  logList: source("log-list/LogListView.vue"),
+  permiManage: source("permi-manage/PermiManageView.vue"),
   userList: source("user-list/UserListView.vue"),
 };
 
@@ -63,5 +65,21 @@ describe("data and admin async-owner contracts", () => {
     expect(adminSources.help).toMatch(
       /Promise\.resolve\(router\.push\("\/"\)\)\.catch/
     );
+  });
+
+  it("keeps compact management surfaces inside their local workspace owners", () => {
+    expect(adminSources.userList).toContain('data-scroll-root="workspace"');
+    expect(adminSources.userList).toContain("PhyTableFrame");
+    expect(adminSources.userList).toContain("el-pagination");
+    expect(adminSources.userList).not.toContain("deepGenome");
+
+    expect(adminSources.adminManagement).toContain("PhyWorkspaceShell");
+    expect(adminSources.adminManagement).toContain("PhyTableFrame");
+    expect(adminSources.adminManagement).toContain("el-pagination");
+    expect(adminSources.globalConfig).toContain("PhyWorkspaceShell");
+    expect(adminSources.globalConfig).toContain("PhyTableFrame");
+    expect(adminSources.logList).toContain("PhyWorkspaceShell");
+    expect(adminSources.permiManage).toContain("PhyWorkspaceShell");
+    expect(adminSources.adminManagement).not.toContain("deepGenome");
   });
 });

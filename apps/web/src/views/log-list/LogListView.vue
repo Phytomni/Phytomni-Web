@@ -5,8 +5,17 @@
   It stays a placeholder until then.
 -->
 <template>
-  <div class="log-list">
+  <PhyWorkspaceShell class="log-list-workspace" data-scroll-root="workspace">
     <h1>{{ $t("log.list") }}</h1>
-  </div>
+  </PhyWorkspaceShell>
 </template>
-<style lang="scss" scoped></style>
+
+<script setup lang="ts">
+import { PhyWorkspaceShell } from "@/components/shell";
+</script>
+
+<style lang="scss" scoped>
+.log-list-workspace {
+  min-width: 0;
+}
+</style>

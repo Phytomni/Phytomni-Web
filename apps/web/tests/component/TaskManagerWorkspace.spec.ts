@@ -297,5 +297,7 @@ describe("Task Manager workspace", () => {
     expect(source).not.toMatch(
       /console\.error\([^\n]*(?:download_path|f_dialogue_id|dialogue_id|query)/
     );
+    expect(source).toContain("overflow-x: auto");
+    expect(source).toContain("@container (max-width: 720px)");
   });
 });
