@@ -27,6 +27,14 @@ func queryErrorStatus(err error) (int, string) {
 	switch {
 	case errors.Is(err, api_service.ErrGatewayDisabled):
 		return http.StatusServiceUnavailable, "service temporarily unavailable"
+	case errors.Is(err, api_service.ErrInvalidChatRouting):
+		return http.StatusBadRequest, "invalid chat routing"
+	case errors.Is(err, api_service.ErrAgentToolForbidden):
+		return http.StatusNotFound, "agent tool not found"
+	case errors.Is(err, api_service.ErrNoExecutableAgentTools):
+		return http.StatusNotFound, "no executable agent tools"
+	case errors.Is(err, api_service.ErrExpertRouteContract):
+		return http.StatusBadGateway, "upstream routing contract failed"
 	case errors.Is(err, api_service.ErrUnknownTool):
 		return http.StatusBadRequest, "unknown tool type"
 	case errors.Is(err, api_service.ErrExpertDisabled):
@@ -186,6 +194,16 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	}
 
 	in := queryInputForSurface(ctx, surface, routeTool)
+	if surface == api_service.QuerySurfaceChat {
+		decision, err := api_service.ValidateChatRouting(in.Mode, in.Tool)
+		if err != nil {
+			status, message := queryErrorStatus(err)
+			writeQueryError(ctx, status, message)
+			return
+		}
+		in.Mode = decision.Mode
+		in.Tool = decision.ForcedTool
+	}
 	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
 	// Bound this caller-controlled label before it can reach service errors or
 	// request logs. The only accepted values remain off|auto|required; an

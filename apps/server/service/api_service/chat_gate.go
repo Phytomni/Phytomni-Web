@@ -13,6 +13,48 @@ import (
 // ErrChatQuotaExhausted indicates insufficient/inactive account quota (handler maps to 403).
 var ErrChatQuotaExhausted = errors.New("account has no chat quota; contact an administrator")
 
+var ErrInvalidChatRouting = errors.New("invalid chat routing")
+
+var ErrAgentToolForbidden = errors.New("agent tool forbidden")
+
+var ErrNoExecutableAgentTools = errors.New("no executable agent tools")
+
+var ErrExpertRouteContract = errors.New("expert route contract failed")
+
+// ChatRoutingDecision is the normalized Chat routing contract. Task 13 owns
+// server-derived allowed-tools wiring; this decision only captures the exact
+// client-supplied mode and optional canonical forced tool.
+type ChatRoutingDecision struct {
+	Mode       string
+	ForcedTool string
+}
+
+// ValidateChatRouting enforces the Chat mode/tool contract without inspecting
+// configuration or permissions. Non-empty inputs are intentionally not
+// normalized: whitespace and joined values are invalid client routing.
+func ValidateChatRouting(mode string, tool string) (ChatRoutingDecision, error) {
+	if mode == "" {
+		mode = "instant"
+	}
+	switch mode {
+	case "instant":
+		if tool != "" {
+			return ChatRoutingDecision{}, ErrInvalidChatRouting
+		}
+		return ChatRoutingDecision{Mode: mode}, nil
+	case "expert":
+		if tool == "" {
+			return ChatRoutingDecision{Mode: mode}, nil
+		}
+		if _, ok := rxBot.SlugFor(tool); !ok {
+			return ChatRoutingDecision{}, ErrInvalidChatRouting
+		}
+		return ChatRoutingDecision{Mode: mode, ForcedTool: tool}, nil
+	default:
+		return ChatRoutingDecision{}, ErrInvalidChatRouting
+	}
+}
+
 // ErrRemoteProductDisabled means the requested remote product is deliberately
 // dark in Web configuration. It is mapped to a safe 503 by the HTTP layer and
 // must be returned before any request is sent to Bot.

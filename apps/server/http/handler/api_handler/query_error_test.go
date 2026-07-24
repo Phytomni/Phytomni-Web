@@ -34,6 +34,30 @@ func TestQueryErrorStatus(t *testing.T) {
 			wantMsg:    "unknown tool type",
 		},
 		{
+			name:       "invalid chat routing -> 400",
+			err:        api_service.ErrInvalidChatRouting,
+			wantStatus: http.StatusBadRequest,
+			wantMsg:    "invalid chat routing",
+		},
+		{
+			name:       "agent tool forbidden -> 404",
+			err:        api_service.ErrAgentToolForbidden,
+			wantStatus: http.StatusNotFound,
+			wantMsg:    "agent tool not found",
+		},
+		{
+			name:       "no executable agent tools -> 404",
+			err:        api_service.ErrNoExecutableAgentTools,
+			wantStatus: http.StatusNotFound,
+			wantMsg:    "no executable agent tools",
+		},
+		{
+			name:       "expert route contract -> 502",
+			err:        api_service.ErrExpertRouteContract,
+			wantStatus: http.StatusBadGateway,
+			wantMsg:    "upstream routing contract failed",
+		},
+		{
 			name:       "surfaceable bot 4xx -> 400 with bot message",
 			err:        &rxBot.APIError{Status: 400, Message: "cannot parse gene"},
 			wantStatus: http.StatusBadRequest,

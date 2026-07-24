@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	api_service "phytomni-server/service/api_service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 )
 
 // newQueryRequest builds a /query multipart POST carrying just a query field,
@@ -104,6 +106,93 @@ func TestApiQueryRejectsOverlongInteropModeBeforeServiceDispatch(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), strings.Repeat("x", rxBot.MaxInteropModeLength)) {
 		t.Fatalf("overlong mode echoed in response: %s", w.Body.String())
+	}
+}
+
+// TestQueryRejectsInvalidChatRouting proves malformed Chat routing fails before
+// the handler opens attachment data, dispatches to Bot, or persists a row.
+func TestQueryRejectsInvalidChatRouting(t *testing.T) {
+	invalid := []struct {
+		name string
+		mode string
+		tool string
+	}{
+		{name: "instant direct tool", mode: "instant", tool: "DataAgent"},
+		{name: "unknown mode", mode: "fast", tool: ""},
+		{name: "unknown expert tool", mode: "expert", tool: "MissingAgent"},
+		{name: "padded expert tool", mode: "expert", tool: " DataAgent"},
+		{name: "joined expert tools", mode: "expert", tool: "DataAgent,AnalystAgent"},
+	}
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupRemoteProductHandlerDB(t)
+			previousConfig := rxBot.BotConfig
+			hits := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				hits++
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+			previousQuota := viper.Get("chatlimit.enforce")
+			viper.Set("chatlimit.enforce", false)
+			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+			gin.SetMode(gin.TestMode)
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			tracked := &trackingReadCloser{reader: strings.NewReader("must not be read")}
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
+			c.Request.Body = tracked
+			c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=already-parsed")
+			c.Request.PostForm = url.Values{
+				"query": {"route safely"},
+				"mode":  {tc.mode},
+				"tool":  {tc.tool},
+			}
+			c.Request.MultipartForm = &multipart.Form{
+				Value: map[string][]string{
+					"query": {"route safely"},
+					"mode":  {tc.mode},
+					"tool":  {tc.tool},
+				},
+				File: map[string][]*multipart.FileHeader{
+					"files": {{Filename: "unreadable.txt"}},
+				},
+			}
+			c.Params = gin.Params{{Key: "id", Value: "0"}}
+			c.Set("username", "alice@example.com")
+			i18n.Localize()(c)
+
+			NewHandler().Query(c)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, body=%s; want 400", w.Code, w.Body.String())
+			}
+			var body struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.Code != http.StatusBadRequest || body.Message != "invalid chat routing" {
+				t.Fatalf("response = %#v, want 400 invalid chat routing", body)
+			}
+			if tracked.reads != 0 || tracked.bytes != 0 {
+				t.Fatalf("invalid Chat routing read attachment body %d time(s), %d byte(s)", tracked.reads, tracked.bytes)
+			}
+			if hits != 0 {
+				t.Fatalf("invalid Chat routing reached Bot %d time(s)", hits)
+			}
+			var rows int64
+			if err := gdb.Table("question_agent_logs").Count(&rows).Error; err != nil {
+				t.Fatalf("count rows: %v", err)
+			}
+			if rows != 0 {
+				t.Fatalf("invalid Chat routing persisted %d row(s)", rows)
+			}
+		})
 	}
 }
 

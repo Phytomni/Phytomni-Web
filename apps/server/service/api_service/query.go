@@ -414,14 +414,20 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 // So Id=0 starts a new conversation (fresh dialogue_id), Id=N appends a child
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
 func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
-	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
-		return nil, ErrGatewayDisabled
-	}
 	// QuerySurface is exported, so no non-Chat caller may select an arbitrary
 	// tool. The only non-Chat surface is the route-owned dedicated product run.
-	if in.Surface != QuerySurfaceChat &&
-		(in.Surface != QuerySurfaceAgentProduct || !IsDedicatedAgentProductTool(in.Tool)) {
+	if in.Surface == QuerySurfaceChat {
+		decision, err := ValidateChatRouting(in.Mode, in.Tool)
+		if err != nil {
+			return nil, err
+		}
+		in.Mode = decision.Mode
+		in.Tool = decision.ForcedTool
+	} else if in.Surface != QuerySurfaceAgentProduct || !IsDedicatedAgentProductTool(in.Tool) {
 		return nil, ErrRemoteProductForbidden
+	}
+	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
+		return nil, ErrGatewayDisabled
 	}
 	// Expert mode is dark-launched: refuse early (no Bot call) when disabled.
 	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {

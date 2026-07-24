@@ -317,7 +317,7 @@ func TestCheckExpertRemoteProductsAllowedRequiresEveryGrant(t *testing.T) {
 	}
 }
 
-func TestQueryRemoteProductFlagOffStopsBeforeBot(t *testing.T) {
+func TestQueryInstantRemoteProductRejectsBeforeFeatureGate(t *testing.T) {
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, BaseURL: "http://127.0.0.1:1"}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -327,12 +327,12 @@ func TestQueryRemoteProductFlagOffStopsBeforeBot(t *testing.T) {
 		Tool:  "GeneNetworkAgent",
 		Mode:  "instant",
 	})
-	if !errors.Is(err, ErrRemoteProductDisabled) {
-		t.Fatalf("flag-off Query error = %v, want ErrRemoteProductDisabled", err)
+	if !errors.Is(err, ErrInvalidChatRouting) {
+		t.Fatalf("instant Chat Query error = %v, want ErrInvalidChatRouting", err)
 	}
 }
 
-func TestQueryRemoteProductRoleDeniedStopsBeforeBot(t *testing.T) {
+func TestQueryInstantRemoteProductRejectsBeforePermissionCheck(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
 	previous := rxBot.BotConfig
@@ -344,30 +344,35 @@ func TestQueryRemoteProductRoleDeniedStopsBeforeBot(t *testing.T) {
 		Tool:  "GeneNetworkAgent",
 		Mode:  "instant",
 	})
-	if !errors.Is(err, ErrRemoteProductForbidden) {
-		t.Fatalf("role-denied Query error = %v, want ErrRemoteProductForbidden", err)
+	if !errors.Is(err, ErrInvalidChatRouting) {
+		t.Fatalf("instant Chat Query error = %v, want ErrInvalidChatRouting", err)
 	}
 }
 
-func TestQueryRemoteProductEmptyModeStillChecksPermission(t *testing.T) {
+func TestQueryRemoteProductEmptyModeRejectsBeforePermissionCheck(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
 	previous := rxBot.BotConfig
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		hits++
+	}))
+	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled:   true,
-		NetworkEnabled: true,
-		BaseURL:        "http://127.0.0.1:1",
+		ProxyEnabled: true,
+		BaseURL:      srv.URL,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	_, err := NewService().Query(context.Background(), "network@example.com", QueryInput{
 		Query: "network",
 		Tool:  "GeneNetworkAgent",
-		// Mode intentionally omitted: direct service calls must still enforce
-		// the explicit remote tool boundary.
 	})
-	if !errors.Is(err, ErrRemoteProductForbidden) {
-		t.Fatalf("empty-mode role-denied Query error = %v, want ErrRemoteProductForbidden", err)
+	if !errors.Is(err, ErrInvalidChatRouting) {
+		t.Fatalf("empty-mode Chat Query error = %v, want ErrInvalidChatRouting", err)
+	}
+	if hits != 0 {
+		t.Fatalf("empty-mode Chat request reached Bot %d time(s)", hits)
 	}
 }
 
@@ -412,41 +417,65 @@ func TestQueryRemoteProductRejectsNoncanonicalSurfaceBeforeBot(t *testing.T) {
 	}
 }
 
-// TestQueryLegacyRemoteProductCompatibilityBeforeStrictChatCutover proves that
-// the pre-cutover Chat Instant contract still reaches the existing query
-// service. The controlled upstream failure is intentional: this locks the
-// authorization and dispatch compatibility boundary without inventing Bot
-// success that only a deployed integration can establish.
-func TestQueryLegacyRemoteProductCompatibilityBeforeStrictChatCutover(t *testing.T) {
-	setupExpertTestDB(t)
-	var hit string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hit = r.URL.Path
-		w.WriteHeader(http.StatusServiceUnavailable)
+func TestValidateChatRouting(t *testing.T) {
+	tests := []struct {
+		name       string
+		mode       string
+		tool       string
+		wantMode   string
+		wantForced string
+		wantErr    bool
+	}{
+		{"missing defaults to instant", "", "", "instant", "", false},
+		{"instant chat", "instant", "", "instant", "", false},
+		{"instant tool rejected", "instant", "DataAgent", "", "", true},
+		{"expert autonomous", "expert", "", "expert", "", false},
+		{"expert forced", "expert", "DataAgent", "expert", "DataAgent", false},
+		{"unknown mode", "fast", "", "", "", true},
+		{"unknown tool", "expert", "MissingAgent", "", "", true},
+		{"padded mode", " expert", "", "", "", true},
+		{"padded tool", "expert", " DataAgent", "", "", true},
+		{"joined tools", "expert", "DataAgent,AnalystAgent", "", "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ValidateChatRouting(tc.mode, tc.tool)
+			if tc.wantErr {
+				if !errors.Is(err, ErrInvalidChatRouting) {
+					t.Fatalf("ValidateChatRouting(%q, %q) error = %v, want ErrInvalidChatRouting", tc.mode, tc.tool, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidateChatRouting(%q, %q): %v", tc.mode, tc.tool, err)
+			}
+			if got.Mode != tc.wantMode || got.ForcedTool != tc.wantForced {
+				t.Fatalf("decision = %#v, want mode=%q forced_tool=%q", got, tc.wantMode, tc.wantForced)
+			}
+		})
+	}
+}
+
+func TestQueryRejectsLegacyRemoteProductOnChatSurface(t *testing.T) {
+	previous := rxBot.BotConfig
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		hits++
 	}))
 	t.Cleanup(srv.Close)
-	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{
-		BaseURL:         srv.URL,
-		ProxyEnabled:    true,
-		ResearchEnabled: true,
-		DesignEnabled:   true,
-		NetworkEnabled:  true,
-	}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
-	legacy := QueryInput{
+	_, err := NewService().Query(context.Background(), "alice", QueryInput{
 		Query:   "legacy product request",
 		Tool:    "InSilicoResearchAgent",
 		Mode:    "instant",
 		Surface: QuerySurfaceChat,
+	})
+	if !errors.Is(err, ErrInvalidChatRouting) {
+		t.Fatalf("Query error = %v, want ErrInvalidChatRouting", err)
 	}
-	_, err := NewService().Query(context.Background(), "alice", legacy)
-	var upstream *rxBot.APIError
-	if !errors.As(err, &upstream) || upstream.Status != http.StatusServiceUnavailable {
-		t.Fatalf("Query error = %v; want the controlled upstream 503 after compatibility dispatch", err)
-	}
-	if hit != "/v1/agents/research/runs" {
-		t.Fatalf("legacy Chat request reached %q; want the research run endpoint", hit)
+	if hits != 0 {
+		t.Fatalf("legacy Chat request reached Bot %d time(s)", hits)
 	}
 }
