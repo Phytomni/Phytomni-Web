@@ -82,12 +82,16 @@ function isAcceptedExpertResponse(
   projection: ReturnType<typeof parseBotProjection> | undefined
 ): boolean {
   if (expertSucceeded) return true;
-  return (
-    projection?.runId !== null &&
-    (projection?.status === "RUNNING" ||
-      projection?.status === "PENDING" ||
-      projection?.status === "QUEUED" ||
-      projection?.status === "INPUT_REQUIRED")
+  return projection?.runId !== null && projection?.status === "RUNNING";
+}
+
+function persistedMessageIds(messages: readonly ChatMessage[]): Set<string> {
+  return new Set(
+    messages.flatMap((message) =>
+      typeof message.id === "string" && message.id.trim() !== ""
+        ? [message.id]
+        : []
+    )
   );
 }
 
@@ -358,6 +362,9 @@ export function useSendMessage(opts: {
     if (currentChatId.value === sendingDialogueId) {
       currentChat.value = chatState.renderedChat;
     }
+    const preRequestHistoryIds = persistedMessageIds(
+      chatState.renderedChat.messages
+    );
 
     // build the user message, including attached file info
     const userMessage = {
@@ -964,33 +971,42 @@ export function useSendMessage(opts: {
           // wait a short while to give the server time to process the request
           await new Promise((resolve) => setTimeout(resolve, 1000));
 
-          // A new temporary chat has no persisted request correlation key, so
-          // neither chatList[0] nor a same-title history row can prove which
-          // server dialogue accepted a transport-uncertain send. Retain the
-          // temporary chat and surface retryable failure instead of guessing.
-          if (!isNewChat) {
-            // for an existing chat, check the captured sending dialogue directly
+          const ownsActiveRequest = () =>
+            chatState.activeRequestId === requestKey &&
+            !chatState.generationStopped;
+          if (!ownsActiveRequest()) return;
+
+          // A new temporary chat, or an existing chat without a persisted
+          // pre-request message identity, cannot prove which server turn
+          // accepted a transport-uncertain send. Retain the selection instead
+          // of guessing from duplicate query text.
+          if (!isNewChat && preRequestHistoryIds.size > 0) {
+            // Check the captured dialogue directly and accept only a matching
+            // row whose persisted identity did not exist before this request.
             const checkRes = await getAnswerCheck({
               dialogue_id: sendingDialogueId,
             });
+            if (!ownsActiveRequest()) return;
             if (
               checkRes.code === 200 &&
               checkRes.data &&
-              checkRes.data.length > 0
+              checkRes.data.some(
+                (historyRow) =>
+                  historyRow.query === messageContent &&
+                  typeof historyRow.id === "string" &&
+                  historyRow.id.trim() !== "" &&
+                  !preRequestHistoryIds.has(historyRow.id)
+              )
             ) {
-              // check whether the last message contains the one we just sent
-              const lastItem = checkRes.data[checkRes.data.length - 1];
-              if (lastItem && lastItem.query === messageContent) {
-                clearCapturedSelectionAfterAcceptance(
-                  chatState,
-                  capturedMode,
-                  capturedSelectedAgent
-                );
-                if (isForeground(sendingDialogueId)) {
-                  await selectChat(sendingDialogueId);
-                }
-                return;
+              clearCapturedSelectionAfterAcceptance(
+                chatState,
+                capturedMode,
+                capturedSelectedAgent
+              );
+              if (isForeground(sendingDialogueId)) {
+                await selectChat(sendingDialogueId);
               }
+              return;
             }
           }
         } catch (verifyError) {

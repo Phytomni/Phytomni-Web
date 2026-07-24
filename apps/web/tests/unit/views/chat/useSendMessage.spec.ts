@@ -1677,6 +1677,31 @@ describe("useSendMessage", () => {
     expect(state.selectedAgent).toBe("");
   });
 
+  it.each(["PENDING", "QUEUED", "INPUT_REQUIRED"] as const)(
+    "preserves an unchanged forced Expert selection for %s responses",
+    async (status) => {
+      const state = stateFor("A");
+      state.mode = "expert";
+      state.selectedAgent = "DataAgent";
+      mockGetQueryAbortable.mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: "DataAgent",
+            answer: "not yet accepted",
+            status,
+            bot_run_id: `run-${status.toLowerCase()}`,
+            id: `selection-${status.toLowerCase()}`,
+          },
+        })
+      );
+
+      const { sendMessage } = makeComposable();
+      await sendMessage();
+
+      expect(state.selectedAgent).toBe("DataAgent");
+    }
+  );
+
   it("preserves the forced Expert selection for rejected, aborted, timeout, and unverified network outcomes", async () => {
     const { isNetworkError } = await import("@/utils/network-error");
     const outcomes = [
@@ -1733,13 +1758,19 @@ describe("useSendMessage", () => {
     state.mode = "expert";
     state.selectedAgent = "DataAgent";
     currentChat.value = {
-      messages: [buildChatMessage({ role: "assistant", content: "prior" })],
+      messages: [
+        buildChatMessage({
+          id: "history-before-request",
+          role: "assistant",
+          content: "prior",
+        }),
+      ],
     };
     mockGetQueryAbortable.mockRejectedValueOnce(new Error("network"));
     mockGetAnswerCheck.mockResolvedValueOnce(
       invalidInput<Awaited<ReturnType<typeof getAnswerCheck>>>({
         code: 200,
-        data: [{ query: "hi" }],
+        data: [{ id: "history-accepted-request", query: "hi" }],
       })
     );
     const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
@@ -1756,6 +1787,101 @@ describe("useSendMessage", () => {
     vi.useRealTimers();
     expect(state.selectedAgent).toBe("");
   });
+
+  it("preserves selection when reconciliation finds only a duplicate prior query", async () => {
+    const { isNetworkError } = await import("@/utils/network-error");
+    vi.mocked(isNetworkError).mockReturnValue(true);
+    vi.useFakeTimers();
+    const state = stateFor("A");
+    state.mode = "expert";
+    state.selectedAgent = "DataAgent";
+    currentChat.value = {
+      messages: [
+        buildChatMessage({
+          id: "history-duplicate-query",
+          role: "assistant",
+          content: "prior duplicate",
+        }),
+      ],
+    };
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("network"));
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      invalidInput<Awaited<ReturnType<typeof getAnswerCheck>>>({
+        code: 200,
+        data: [{ id: "history-duplicate-query", query: "hi" }],
+      })
+    );
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      const { sendMessage } = makeComposable();
+      const sent = sendMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1000);
+      await sent;
+
+      expect(state.selectedAgent).toBe("DataAgent");
+      expect(selectChat).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      vi.mocked(isNetworkError).mockReturnValue(false);
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["stopped", "stale"] as const)(
+    "preserves selection when reconciliation becomes %s before history returns",
+    async (lifecycle) => {
+      const { isNetworkError } = await import("@/utils/network-error");
+      vi.mocked(isNetworkError).mockReturnValue(true);
+      vi.useFakeTimers();
+      const state = stateFor("A");
+      state.mode = "expert";
+      state.selectedAgent = "DataAgent";
+      currentChat.value = {
+        messages: [
+          buildChatMessage({
+            id: "history-before-request",
+            role: "assistant",
+            content: "prior",
+          }),
+        ],
+      };
+      mockGetQueryAbortable.mockRejectedValueOnce(new Error("network"));
+      const history = deferred<Awaited<ReturnType<typeof getAnswerCheck>>>();
+      mockGetAnswerCheck.mockReturnValueOnce(history.promise);
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+      try {
+        const { sendMessage } = makeComposable();
+        const sent = sendMessage();
+        await Promise.resolve();
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        await Promise.resolve();
+        if (lifecycle === "stopped") {
+          state.generationStopped = true;
+        } else {
+          state.activeRequestId = "newer-request";
+        }
+        history.resolve(
+          invalidInput<Awaited<ReturnType<typeof getAnswerCheck>>>({
+            code: 200,
+            data: [{ id: "history-accepted-request", query: "hi" }],
+          })
+        );
+        await sent;
+
+        expect(state.selectedAgent).toBe("DataAgent");
+        expect(selectChat).not.toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+        vi.mocked(isNetworkError).mockReturnValue(false);
+        vi.useRealTimers();
+      }
+    }
+  );
 
   it("preserves a newer forced selection changed while the captured request is in flight", async () => {
     const state = stateFor("A");
