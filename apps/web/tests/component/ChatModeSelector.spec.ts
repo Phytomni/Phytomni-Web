@@ -74,6 +74,18 @@ describe("ChatModeSelector.vue", () => {
     expect(wrapper.emitted("update:modelValue")).toBeUndefined();
   });
 
+  it("disables both mode controls while permissions are unavailable", () => {
+    const wrapper = mount(ChatModeSelector, {
+      props: {
+        modelValue: "instant",
+        instantEnabled: false,
+        expertEnabled: false,
+      },
+    });
+    const radios = wrapper.findAllComponents({ name: "ElRadioButton" });
+    expect(radios.every((radio) => radio.props("disabled"))).toBe(true);
+  });
+
   it("owns the final pale checked colors instead of Element primary", () => {
     expect(SOURCE).toContain("var(--phy-control-height-compact)");
     expect(SOURCE).toContain("var(--phy-radius-pill)");

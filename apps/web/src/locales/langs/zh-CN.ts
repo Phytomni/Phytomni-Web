@@ -348,6 +348,7 @@ export default {
     abortAriaLabel: "中止回答",
     progress: {
       processing: "处理中",
+      selectingAgent: "正在选择智能体…",
       valueText: "处理中，{percent}%",
     },
     botReport: {
@@ -498,6 +499,7 @@ export default {
     agentPicker: {
       loading: "加载智能体权限中……",
       empty: "当前账号暂无可用智能体",
+      noAvailableAgents: "当前账号暂无可用智能体。",
       auto: "自动选择",
       label: "选择智能体",
       searchPlaceholder: "搜索智能体……",

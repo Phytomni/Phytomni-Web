@@ -3,6 +3,14 @@
     <div :ref="bindTourInputTarget" class="chat-composer-surface">
       <div class="phy-composer-frame">
         <div
+          v-if="permissionUnavailable"
+          class="composer-permission-status"
+          data-testid="chat-permission-status"
+          role="status"
+        >
+          {{ t("chat.agentPicker.noAvailableAgents") }}
+        </div>
+        <div
           v-if="fileList.length > 0 && !isSending"
           class="phy-composer-frame__attachments composer-attachments file-list-container"
         >
@@ -249,6 +257,9 @@ const mentionTriggers = computed(() =>
 const composerDisabled = computed(
   () => props.isSending || props.rolesLoading || !props.modeUsable
 );
+const permissionUnavailable = computed(
+  () => !props.rolesLoading && !props.modeUsable
+);
 const showAgentPicker = computed(
   () => expertControlsEnabled.value && !props.hasMessages
 );
@@ -311,6 +322,13 @@ defineExpose<ChatComposerHandle>({
 .chat-composer-surface {
   position: relative;
   min-height: var(--phy-control-height-primary);
+}
+
+.composer-permission-status {
+  padding: var(--phy-space-8) var(--phy-space-12) 0;
+  color: var(--phy-color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
 }
 
 .phy-composer-frame {

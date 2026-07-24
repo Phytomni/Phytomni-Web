@@ -331,6 +331,7 @@
                           getChatState(currentChatId).activeAgentName
                         "
                         :completing="getChatState(currentChatId).completing"
+                        :stage-label="t(progressLabelKey)"
                       />
                     </div>
                   </ChatMessageRow>
@@ -655,7 +656,7 @@ const showAgentsView = () => {
 // Chat list
 const chatList = ref<Chat[]>([]);
 
-const authorizedAgentOptions = computed(() =>
+const allowedAgentOptions = computed(() =>
   derivePickerOptions(userStore().roles).map((option) => ({
     tool: option.tool,
     labelKey: option.labelKey,
@@ -663,9 +664,9 @@ const authorizedAgentOptions = computed(() =>
   }))
 );
 const authorizedAgentTools = computed(() =>
-  authorizedAgentOptions.value.map((option) => option.tool)
+  allowedAgentOptions.value.map((option) => option.tool)
 );
-const pickerOptions = authorizedAgentOptions;
+const pickerOptions = allowedAgentOptions;
 const instantModeEnabled = computed(() =>
   authorizedAgentTools.value.includes("ChatAgent")
 );
@@ -678,7 +679,13 @@ const activeModeEnabled = computed(() =>
     : expertModeEnabled.value
 );
 
-const rolesLoading = ref(userStore().roles.length === 0);
+const rolesLoading = computed(() => userStore().rolesLoading);
+const progressLabelKey = computed(() =>
+  chatMode.value === "expert" &&
+  getChatState(currentChatId.value).activeAgentName === ""
+    ? "chat.progress.selectingAgent"
+    : "chat.progress.processing"
+);
 
 const chatHeaderTitle = computed(() => {
   const currentTitle =
@@ -708,13 +715,10 @@ const toggleSidebarFromHeader = async () => {
 // Optimize the permission loading logic
 const loadUserTools = async () => {
   if (!userStore().roles.length) {
-    rolesLoading.value = true;
     try {
       await userStore().getUserTools();
     } catch (error) {
       console.error("Failed to load user permissions:", error);
-    } finally {
-      rolesLoading.value = false;
     }
   }
 };
@@ -806,6 +810,20 @@ const {
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
+
+watch(
+  [
+    instantModeEnabled,
+    expertModeEnabled,
+    () => currentChatId.value,
+    () => currentChat.value?.messages?.length ?? 0,
+  ],
+  ([instantEnabled, expertEnabled, , messageCount]) => {
+    if (messageCount > 0 || instantEnabled === expertEnabled) return;
+    chatMode.value = instantEnabled ? "instant" : "expert";
+  },
+  { immediate: true }
+);
 
 const {
   artifactOpen,

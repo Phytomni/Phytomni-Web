@@ -126,6 +126,18 @@ describe("SendProgress.vue", () => {
     expect(wrapper.text()).not.toMatch(/Usually|预计|chat\.eta/);
   });
 
+  it("shows the parent-supplied neutral agent-selection label", () => {
+    const { wrapper } = mountProgress({
+      startedAt: Date.now(),
+      agentName: "",
+      completing: false,
+      stageLabel: "Selecting an agent…",
+    });
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Selecting an agent…"
+    );
+  });
+
   it("announces only the stage label in a polite live region", () => {
     const { wrapper } = mountProgress({
       startedAt: Date.now(),

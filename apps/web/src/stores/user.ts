@@ -2,7 +2,10 @@
 import { defineStore } from "pinia";
 import { getToken, removeToken, removeExpiresIn } from "@/utils/auth";
 import { getUserTool } from "@/api/chat";
-import type { RemoteAgentTool } from "@/constants/agents";
+import {
+  CANONICAL_AGENT_DISPLAY_ORDER,
+  type RemoteAgentTool,
+} from "@/constants/agents";
 import Cookies from "js-cookie";
 interface UserToolResponse {
   code: number;
@@ -27,6 +30,14 @@ interface IState {
   login_status: string; // login status field
   seen_tutorial: string; // UX-only flag, decoupled from password state
   expertEnabled: boolean; // Expert routing dark-launch flag (server-delivered)
+  rolesLoading: boolean;
+  rolesLoadFailed: boolean;
+}
+
+function effectiveToolList(toolList: readonly string[]): string[] {
+  return CANONICAL_AGENT_DISPLAY_ORDER.filter((tool) =>
+    toolList.includes(tool)
+  );
 }
 
 export default defineStore({
@@ -49,6 +60,8 @@ export default defineStore({
     // (replay path for returning users).
     seen_tutorial: localStorage.getItem("seenTutorial") || "1",
     expertEnabled: false,
+    rolesLoading: true,
+    rolesLoadFailed: false,
   }),
   getters: {
     isFirstLogin: (state): boolean => state.login_status === "0",
@@ -58,26 +71,27 @@ export default defineStore({
         state.roles.includes(tool),
   },
   actions: {
-    getUserTools() {
-      return new Promise((resolve, reject) => {
-        getUserTool()
-          .then((res: UserToolResponse) => {
-            if (res.code === 200) {
-              this.$patch({
-                permission: res.data.permission,
-                roles: res.data.tool_list,
-                permission_list: res.data.permission_list || [],
-                expertEnabled: res.data.expert_enabled ?? false,
-              });
-              resolve(true);
-            } else {
-              reject(new Error("Failed to get user tools"));
-            }
-          })
-          .catch((error: unknown) => {
-            reject(error);
-          });
-      });
+    async getUserTools() {
+      this.$patch({ rolesLoading: true, rolesLoadFailed: false });
+      try {
+        const res = (await getUserTool()) as UserToolResponse;
+        if (res.code !== 200) {
+          throw new Error("Failed to get user tools");
+        }
+        this.$patch({
+          permission: res.data.permission,
+          roles: effectiveToolList(res.data.tool_list),
+          permission_list: res.data.permission_list || [],
+          expertEnabled: res.data.expert_enabled ?? false,
+          rolesLoadFailed: false,
+        });
+        return true;
+      } catch (error) {
+        this.$patch({ roles: [], rolesLoadFailed: true });
+        throw error;
+      } finally {
+        this.rolesLoading = false;
+      }
     },
     // frontend logout
     FedLogOut() {

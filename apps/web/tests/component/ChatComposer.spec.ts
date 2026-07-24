@@ -253,6 +253,41 @@ describe("ChatComposer", () => {
     ).toStrictEqual(["@"]);
   });
 
+  it("disables mode controls, input, attachment upload, mention routing, and send while permissions load", () => {
+    const wrapper = mountComposer({ rolesLoading: true });
+
+    const modeSelector = wrapper.findComponent({ name: "ChatModeSelector" });
+    expect(modeSelector.props("instantEnabled")).toBe(false);
+    expect(modeSelector.props("expertEnabled")).toBe(false);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(true);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("options")
+    ).toEqual([]);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("triggerStrings")
+    ).toEqual([]);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
+    expect(
+      wrapper.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
+  });
+
+  it("shows the safe permission message when no mode is usable", () => {
+    const wrapper = mountComposer({
+      modeUsable: false,
+      instantModeEnabled: false,
+      expertModeEnabled: false,
+    });
+
+    expect(wrapper.get('[data-testid="chat-permission-status"]').text()).toBe(
+      "chat.agentPicker.noAvailableAgents"
+    );
+  });
+
   it("matches the agent-control matrix for empty and populated chats", () => {
     const emptyInstant = mountComposer({ chatMode: "instant" });
     expect(

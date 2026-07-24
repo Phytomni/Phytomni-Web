@@ -130,4 +130,96 @@ describe("userStore.getUserTools $patch end-state", () => {
     expect(store.permission_list).toEqual(["p1"]);
     expect(store.expertEnabled).toBe(true);
   });
+
+  it("orders the server-issued effective list and drops unknown tool names", async () => {
+    mockGetUserTool.mockResolvedValue({
+      code: 200,
+      data: {
+        permission: "user",
+        tool_list: [
+          "ReviewAgent",
+          "UnknownAgent",
+          "ChatAgent",
+          "KnowledgeAgent",
+        ],
+      },
+    });
+
+    const store = userStore();
+    await store.getUserTools();
+
+    expect(store.roles).toEqual([
+      "ChatAgent",
+      "KnowledgeAgent",
+      "ReviewAgent",
+    ]);
+  });
+
+  it("does not add tools that were absent from the server-issued effective list", async () => {
+    mockGetUserTool.mockResolvedValue({
+      code: 200,
+      data: {
+        permission: "user",
+        tool_list: ["KnowledgeAgent"],
+      },
+    });
+
+    const store = userStore();
+    await store.getUserTools();
+
+    expect(store.roles).toEqual(["KnowledgeAgent"]);
+    expect(store.roles).not.toContain("ChatAgent");
+  });
+
+  it("keeps an empty effective list empty after permissions finish loading", async () => {
+    mockGetUserTool.mockResolvedValue({
+      code: 200,
+      data: {
+        permission: "user",
+        tool_list: [],
+      },
+    });
+
+    const store = userStore();
+    await store.getUserTools();
+
+    expect(store.roles).toEqual([]);
+    expect(store.rolesLoading).toBe(false);
+    expect(store.rolesLoadFailed).toBe(false);
+  });
+
+  it("exposes loading and failure states when permission retrieval rejects", async () => {
+    let rejectRequest: (error: Error) => void = () => undefined;
+    mockGetUserTool.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectRequest = reject;
+      }) as ReturnType<typeof getUserTool>
+    );
+    const store = userStore();
+    const request = store.getUserTools();
+
+    expect(store.rolesLoading).toBe(true);
+    expect(store.rolesLoadFailed).toBe(false);
+
+    rejectRequest(new Error("offline"));
+    await expect(request).rejects.toThrow("offline");
+
+    expect(store.rolesLoading).toBe(false);
+    expect(store.rolesLoadFailed).toBe(true);
+  });
+
+  it("keeps a server-authorized remote product visible without Bot capability state", async () => {
+    mockGetUserTool.mockResolvedValue({
+      code: 200,
+      data: {
+        permission: "user",
+        tool_list: ["InSilicoResearchAgent"],
+      },
+    });
+
+    const store = userStore();
+    await store.getUserTools();
+
+    expect(store.roles).toEqual(["InSilicoResearchAgent"]);
+  });
 });

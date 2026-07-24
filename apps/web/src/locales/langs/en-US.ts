@@ -348,6 +348,7 @@ export default {
     abortAriaLabel: "Stop answering",
     progress: {
       processing: "Processing",
+      selectingAgent: "Selecting an agent…",
       valueText: "Processing, {percent}%",
     },
     botReport: {
@@ -505,6 +506,7 @@ export default {
     agentPicker: {
       loading: "Loading agent permissions...",
       empty: "No agents available for your account",
+      noAvailableAgents: "No agents are available for this account.",
       auto: "Auto",
       label: "Choose an agent",
       searchPlaceholder: "Search agents…",
