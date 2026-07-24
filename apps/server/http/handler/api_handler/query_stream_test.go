@@ -37,6 +37,18 @@ func setupStreamHandlerTestDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("create question_agent_logs: %v", err)
 	}
+	if err := gdb.Exec(`CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT,
+		code TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO users (email, code) VALUES
+		('alice@example.com', 'admin'),
+		('headers@example.com', 'admin')`).Error; err != nil {
+		t.Fatalf("seed stream users: %v", err)
+	}
 	db.Set("phytomni-server", gdb)
 	return gdb
 }
@@ -62,6 +74,7 @@ func newStreamTestRequest(t *testing.T, mode string) *http.Request {
 
 func TestQuery_FlagOffSkipsStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	setupStreamHandlerTestDB(t)
 	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, StreamEnabled: false}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
