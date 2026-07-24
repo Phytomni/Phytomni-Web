@@ -159,6 +159,16 @@ describe("routed agent demonstration inventory", () => {
     );
   });
 
+  it("routes static demonstrations through the shared fluid container shell", () => {
+    const shell = readDemoSource("components/demo/AgentDemoShell.vue");
+
+    expect(shell).toContain("container-type: inline-size;");
+    expect(shell).toContain(
+      "width: min(100%, var(--phy-layout-document-max-width));"
+    );
+    expect(shell).not.toContain("width: min(100%, clamp(1160px");
+  });
+
   it.each(DEMO_CONTRACTS)(
     "locks the $path shell, state, and behavior contract",
     (contract) => {

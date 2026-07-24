@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
@@ -22,6 +24,11 @@ const i18n = createI18n({
   locale: "en-US",
   messages: { "en-US": enUS, "zh-CN": zhCN },
 });
+
+const AGENT_DEMO_SHELL_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/demo/AgentDemoShell.vue"),
+  "utf8"
+);
 
 function mountDemo(component: typeof KnowledgeAgent | typeof BriefGeneAgent) {
   return mount(component, {
@@ -56,6 +63,15 @@ function mountDemo(component: typeof KnowledgeAgent | typeof BriefGeneAgent) {
 }
 
 describe("cited agent demonstrations", () => {
+  it("keeps cited reports inside the shared fluid artifact measure", () => {
+    expect(AGENT_DEMO_SHELL_SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-artifact-wide-max-width));"
+    );
+    expect(AGENT_DEMO_SHELL_SOURCE).not.toContain(
+      "width: min(100%, clamp(1040px"
+    );
+  });
+
   it.each([
     [KnowledgeAgent, "kb", "20", "epigenetic modifications"],
     [BriefGeneAgent, "bg", "17", "single-cell RNA sequencing"],

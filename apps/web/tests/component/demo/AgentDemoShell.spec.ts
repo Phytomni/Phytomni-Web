@@ -62,4 +62,16 @@ describe("AgentDemoShell", () => {
     expect(SOURCE).not.toContain("color-mix(");
     expect(SOURCE).toContain("overflow-x: hidden");
   });
+
+  it("uses the shared fluid document and artifact measures without desktop lower bounds", () => {
+    expect(SOURCE).toContain("container-type: inline-size;");
+    expect(SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-document-max-width));"
+    );
+    expect(SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-artifact-wide-max-width));"
+    );
+    expect(SOURCE).not.toContain("width: min(100%, clamp(1160px");
+    expect(SOURCE).not.toContain("width: min(100%, clamp(1040px");
+  });
 });

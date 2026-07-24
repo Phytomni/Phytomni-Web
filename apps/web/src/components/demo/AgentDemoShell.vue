@@ -116,7 +116,9 @@ const staticNoticeId = `agent-demo-static-example-${
   grid-template-columns: minmax(96px, 1fr) minmax(0, 760px) minmax(96px, 1fr);
   align-items: center;
   gap: var(--phy-space-16);
-  width: min(100%, clamp(1160px, 78vw, 2000px));
+  width: min(100%, var(--phy-layout-document-max-width));
+  min-width: 0;
+  container-type: inline-size;
   min-height: 76px;
   margin: 0 auto;
   padding: var(--phy-space-12) var(--phy-space-20);
@@ -154,8 +156,9 @@ const staticNoticeId = `agent-demo-static-example-${
   flex: 1 0 auto;
   flex-direction: column;
   gap: var(--phy-space-16);
-  width: min(100%, clamp(1160px, 78vw, 2000px));
+  width: min(100%, var(--phy-layout-document-max-width));
   min-width: 0;
+  container-type: inline-size;
   margin: 0 auto;
   padding: var(--phy-space-24) var(--phy-space-20) var(--phy-space-40);
   box-sizing: border-box;
@@ -212,7 +215,7 @@ const staticNoticeId = `agent-demo-static-example-${
 }
 
 .agent-demo-shell__result {
-  width: min(100%, clamp(1040px, 74vw, 1800px));
+  width: min(100%, var(--phy-layout-artifact-wide-max-width));
   min-width: 0;
   margin-right: auto;
   padding: var(--phy-space-24) var(--phy-space-24) var(--phy-space-20);
@@ -240,7 +243,8 @@ const staticNoticeId = `agent-demo-static-example-${
 }
 
 .agent-demo-shell__note {
-  width: min(100%, clamp(1040px, 74vw, 1800px));
+  width: min(100%, var(--phy-layout-artifact-wide-max-width));
+  min-width: 0;
   margin-right: auto;
   color: var(--phy-color-text-muted);
   font-size: 0.75rem;
