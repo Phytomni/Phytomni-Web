@@ -17,7 +17,7 @@ import (
 
 const validA2uiActionBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"accepted":true}}`
 
-func TestQueryReviewReturnsInputRequiredSurface(t *testing.T) {
+func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 	setupExpertTestDB(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
@@ -25,13 +25,13 @@ func TestQueryReviewReturnsInputRequiredSurface(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"run-review-1","run_id":"run-review-1","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"draft":"summary","a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}}},"task_ids":[],"result":{}}`))
+		_, _ = w.Write([]byte(`{"id":"run-review-1","run_id":"run-review-1","object":"agent.run","agent":"chat","status":"input_required","interrupt":{"draft":{"draft":"summary","a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}}},"task_ids":[],"result":{}}`))
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	out, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{Query: "review", Tool: "ReviewAgent"})
+	out, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{Query: "review"})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -82,18 +82,18 @@ func TestDecodeA2uiSurfaceStrictBounds(t *testing.T) {
 	}
 }
 
-func TestQueryReviewRejectsInvalidPauseWithoutPersisting(t *testing.T) {
+func TestQueryChatRejectsInvalidPauseWithoutPersisting(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
 	}{
 		{
 			name: "missing run",
-			body: `{"id":"completion-review","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}}},"task_ids":[],"result":{}}`,
+			body: `{"id":"completion-review","object":"agent.run","agent":"chat","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}}},"task_ids":[],"result":{}}`,
 		},
 		{
 			name: "invalid surface",
-			body: `{"id":"run-review-2","run_id":"run-review-2","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"button","props":{}}}},"task_ids":[],"result":{}}`,
+			body: `{"id":"run-review-2","run_id":"run-review-2","object":"agent.run","agent":"chat","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"button","props":{}}}},"task_ids":[],"result":{}}`,
 		},
 	}
 	for _, tt := range tests {
@@ -107,7 +107,7 @@ func TestQueryReviewRejectsInvalidPauseWithoutPersisting(t *testing.T) {
 			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
-			_, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{Query: "review", Tool: "ReviewAgent"})
+			_, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{Query: "review"})
 			if !errors.Is(err, ErrInvalidA2uiSurface) && !errors.Is(err, ErrMissingBotRunID) {
 				t.Fatalf("Query error = %v", err)
 			}

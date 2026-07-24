@@ -6,7 +6,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -109,6 +108,51 @@ func TestApiQueryRejectsOverlongInteropModeBeforeServiceDispatch(t *testing.T) {
 	}
 }
 
+// unreadablePreparsedMultipartForm leaves a real disk-backed FileHeader in an
+// already-parsed form, then removes its backing file. The handler must reject
+// invalid routing before it can open or read this attachment.
+func unreadablePreparsedMultipartForm(t *testing.T, mode, tool string) *multipart.Form {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range map[string]string{
+		"query": "route safely",
+		"mode":  mode,
+		"tool":  tool,
+	} {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatalf("write %s: %v", key, err)
+		}
+	}
+	file, err := writer.CreateFormFile("files", "must-not-open.txt")
+	if err != nil {
+		t.Fatalf("create attachment: %v", err)
+	}
+	if _, err := file.Write([]byte("attachment content must remain unread")); err != nil {
+		t.Fatalf("write attachment: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+	form, err := multipart.NewReader(bytes.NewReader(body.Bytes()), writer.Boundary()).ReadForm(0)
+	if err != nil {
+		t.Fatalf("pre-parse multipart form: %v", err)
+	}
+	files := form.File["files"]
+	if len(files) != 1 || files[0].Size == 0 {
+		t.Fatalf("pre-parsed attachment = %#v, want one non-empty file", files)
+	}
+	if err := form.RemoveAll(); err != nil {
+		t.Fatalf("remove attachment backing file: %v", err)
+	}
+	opened, err := files[0].Open()
+	if err == nil {
+		_ = opened.Close()
+		t.Fatal("removed attachment backing file remained readable")
+	}
+	return form
+}
+
 // TestQueryRejectsInvalidChatRouting proves malformed Chat routing fails before
 // the handler opens attachment data, dispatches to Bot, or persists a row.
 func TestQueryRejectsInvalidChatRouting(t *testing.T) {
@@ -142,24 +186,12 @@ func TestQueryRejectsInvalidChatRouting(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
 			tracked := &trackingReadCloser{reader: strings.NewReader("must not be read")}
+			form := unreadablePreparsedMultipartForm(t, tc.mode, tc.tool)
 			c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
 			c.Request.Body = tracked
 			c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=already-parsed")
-			c.Request.PostForm = url.Values{
-				"query": {"route safely"},
-				"mode":  {tc.mode},
-				"tool":  {tc.tool},
-			}
-			c.Request.MultipartForm = &multipart.Form{
-				Value: map[string][]string{
-					"query": {"route safely"},
-					"mode":  {tc.mode},
-					"tool":  {tc.tool},
-				},
-				File: map[string][]*multipart.FileHeader{
-					"files": {{Filename: "unreadable.txt"}},
-				},
-			}
+			c.Request.PostForm = form.Value
+			c.Request.MultipartForm = form
 			c.Params = gin.Params{{Key: "id", Value: "0"}}
 			c.Set("username", "alice@example.com")
 			i18n.Localize()(c)

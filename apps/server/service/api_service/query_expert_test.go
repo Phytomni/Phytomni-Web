@@ -150,8 +150,10 @@ func TestQuery_ExpertRemotePolicyRejectsBeforeRoute(t *testing.T) {
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
+	// This locks the current pre-allowlist Expert policy: every remote product
+	// must be enabled before Bot routing, regardless of the canonical hint.
 	_, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "q", Tool: "StaleAgent", Mode: "expert",
+		Query: "q", Tool: "InSilicoResearchAgent", Mode: "expert",
 	})
 	if !errors.Is(err, ErrRemoteProductDisabled) {
 		t.Fatalf("Expert remote policy error = %v, want ErrRemoteProductDisabled", err)
@@ -288,7 +290,7 @@ func TestQuery_ExpertResolvedRemoteUsesCanonicalProjection(t *testing.T) {
 
 	ctx := utils.WithRequestID(context.Background(), "web-request-1")
 	out, err := NewService().Query(ctx, "alice", QueryInput{
-		Query: "find a candidate gene", Tool: "StaleAgent", Mode: "expert",
+		Query: "find a candidate gene", Tool: "InSilicoResearchAgent", Mode: "expert",
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)

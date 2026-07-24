@@ -557,7 +557,7 @@ func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 
 	ctx := utils.WithRequestID(context.Background(), "web-request-task27")
 	out, err := (&Service{}).Query(ctx, "task27-expert@example.com", QueryInput{
-		Query: "synthetic", Tool: "StaleAgent", Mode: "expert",
+		Query: "synthetic", Tool: "InSilicoResearchAgent", Mode: "expert",
 	})
 	if err != nil {
 		t.Fatalf("Expert Query error: %v", err)

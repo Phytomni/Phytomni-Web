@@ -35,7 +35,7 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "paper", Tool: "InSilicoResearchAgent",
+		Query: "paper", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -106,7 +106,9 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 			}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
-			if _, err := NewService().Query(context.Background(), "alice", QueryInput{Query: tt.name, Tool: tt.tool}); err != nil {
+			if _, err := NewService().Query(context.Background(), "alice", QueryInput{
+				Query: tt.name, Tool: tt.tool, Mode: "instant", Surface: QuerySurfaceAgentProduct,
+			}); err != nil {
 				t.Fatalf("Query: %v", err)
 			}
 			if !reflect.DeepEqual(gotArgs, tt.want) {

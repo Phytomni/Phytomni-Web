@@ -441,9 +441,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, err
 		}
 	}
-	// Remote products are accepted only on their authenticated HTTP surfaces.
-	// The Chat branch is temporary compatibility for existing product pages and
-	// is removed in Task 12 after their migration is verified.
+	// Dedicated products are checked through their route-owned product surface.
+	// Expert may carry one exact canonical forced tool (validated above), while
+	// Bot remains authoritative for the resolved agent. The same remote-product
+	// permission check therefore applies to either valid boundary.
 	if isRemoteProductTool(in.Tool) {
 		if err := ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
 			return nil, err

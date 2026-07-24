@@ -738,21 +738,21 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	}
 }
 
-// TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope closes the remote
-// DeepGenome compatibility path in one fixture: the Web submits one umbrella
+// TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope follows the supported
+// Expert route for a Bot-resolved DeepGenome run: the Web submits one umbrella
 // run, reconciles two intermediate revisions and a final report, then reads
 // history through AnswerCheck. A foreign row carrying the same run id must not
 // appear in the owner's history response.
 func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
-	gdb := setupTestDB(t)
+	gdb := setupExpertTestDB(t)
 	const runID = "run-deep-genome-e2e"
 	var submittedDialogue string
 	var poll atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents/deep_genome/runs":
-			var req rxBot.AgentRunRequest
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/query/route":
+			var req rxBot.RouteQueryRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Errorf("decode submit request: %v", err)
 			}
@@ -782,11 +782,14 @@ func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "inspect the gene", Tool: "DeepGenomeAgent", Id: 0,
+		Query: "inspect the gene", Tool: "DeepGenomeAgent", Mode: "expert", Id: 0,
 	})
 	if err != nil {
 		t.Fatalf("submit DeepGenome query: %v", err)

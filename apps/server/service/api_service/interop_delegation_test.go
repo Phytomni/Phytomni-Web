@@ -95,7 +95,8 @@ func TestResearchInteropOffSkipsDiscoveryAndForwardsNoTargets(t *testing.T) {
 	h.configure(t)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "research", Tool: "InSilicoResearchAgent", InteropMode: "off", InteropTargets: []string{"mcp-peer"},
+		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
+		InteropMode: "off", InteropTargets: []string{"mcp-peer"},
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -124,7 +125,8 @@ func TestResearchInteropAutoFallsBackWithoutPseudoSuccess(t *testing.T) {
 	h.configure(t)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "research", Tool: "InSilicoResearchAgent", InteropMode: "auto", InteropTargets: []string{"mcp-peer"},
+		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
+		InteropMode: "auto", InteropTargets: []string{"mcp-peer"},
 	})
 	if err != nil {
 		t.Fatalf("auto fallback Query: %v", err)
@@ -157,7 +159,8 @@ func TestResearchInteropAutoDelegatesOnlyDiscoveredTarget(t *testing.T) {
 	h.configure(t)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "research", Tool: "InSilicoResearchAgent", InteropMode: "auto", InteropTargets: []string{"mcp-peer"},
+		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
+		InteropMode: "auto", InteropTargets: []string{"mcp-peer"},
 	})
 	if err != nil {
 		t.Fatalf("delegated Query: %v", err)
@@ -195,7 +198,8 @@ func TestDesignInteropDelegationPreservesControls(t *testing.T) {
 	h.configure(t)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "design", Tool: "DigitalDesignAgent", InteropMode: "required", InteropTargets: []string{"a2a-peer"},
+		Query: "design", Tool: "DigitalDesignAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
+		InteropMode: "required", InteropTargets: []string{"a2a-peer"},
 	})
 	if err != nil {
 		t.Fatalf("design Query: %v", err)
@@ -218,7 +222,8 @@ func TestRequiredInteropFailsBeforeAgentSubmission(t *testing.T) {
 	h.configure(t)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "research", Tool: "InSilicoResearchAgent", InteropMode: "required", InteropTargets: []string{"mcp-peer"},
+		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
+		InteropMode: "required", InteropTargets: []string{"mcp-peer"},
 	})
 	if !errors.Is(err, ErrInteropRequired) {
 		t.Fatalf("error=%v, want ErrInteropRequired", err)
@@ -237,7 +242,8 @@ func TestRequiredInteropRuntimeFailureDoesNotPersistRunning(t *testing.T) {
 	h.configure(t)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "research", Tool: "InSilicoResearchAgent", InteropMode: "required", InteropTargets: []string{"mcp-peer"},
+		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
+		InteropMode: "required", InteropTargets: []string{"mcp-peer"},
 	})
 	if err != nil {
 		t.Fatalf("runtime failed Query: %v", err)
@@ -276,7 +282,8 @@ func TestInteropUnknownTargetFailsBeforeAgentSubmission(t *testing.T) {
 	h.configure(t)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "research", Tool: "InSilicoResearchAgent", InteropMode: "auto", InteropTargets: []string{"unknown-peer"},
+		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
+		InteropMode: "auto", InteropTargets: []string{"unknown-peer"},
 	})
 	if !errors.Is(err, ErrInteropTargetForbidden) {
 		t.Fatalf("error=%v, want ErrInteropTargetForbidden", err)

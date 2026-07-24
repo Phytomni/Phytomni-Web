@@ -89,61 +89,93 @@ func TestQueryChatDoesNotEmitInteropProvenance(t *testing.T) {
 	}
 }
 
-func TestQueryNativeAgentUsesNativeIDAcrossDirectAgentRunMatrix(t *testing.T) {
-	tests := []struct {
-		tool       string
-		slug       string
-		status     string
-		httpStatus int
+// TestQueryRejectsLegacyInstantAgentToolOnChatSurface locks the strict Chat
+// boundary. Native run identity for these tools remains covered through the
+// supported Expert route in TestQueryExpertUsesNativeIDAcrossResolvedAgentMatrix.
+func TestQueryRejectsLegacyInstantAgentToolOnChatSurface(t *testing.T) {
+	for _, tt := range []struct {
+		tool string
+		slug string
 	}{
-		{tool: "DataAgent", slug: "data", status: "succeeded", httpStatus: http.StatusOK},
-		{tool: "BriefGeneAgent", slug: "brief_gene", status: "succeeded", httpStatus: http.StatusOK},
-		{tool: "AnalystAgent", slug: "analyst", status: "running", httpStatus: http.StatusAccepted},
-		{tool: "DeepGenomeAgent", slug: "deep_genome", status: "running", httpStatus: http.StatusAccepted},
-		{tool: "InSilicoResearchAgent", slug: "research", status: "running", httpStatus: http.StatusAccepted},
-		{tool: "GeneNetworkAgent", slug: "network", status: "running", httpStatus: http.StatusAccepted},
-		{tool: "DigitalDesignAgent", slug: "design", status: "running", httpStatus: http.StatusAccepted},
+		{tool: "DataAgent", slug: "data"},
+		{tool: "BriefGeneAgent", slug: "brief_gene"},
+		{tool: "AnalystAgent", slug: "analyst"},
+		{tool: "DeepGenomeAgent", slug: "deep_genome"},
+	} {
+		t.Run(tt.slug, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			hits := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				hits++
+			}))
+			t.Cleanup(srv.Close)
+			previousConfig := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+			_, err := NewService().Query(context.Background(), "alice", QueryInput{
+				Query: "q", Tool: tt.tool, Mode: "instant", Surface: QuerySurfaceChat,
+			})
+			if !errors.Is(err, ErrInvalidChatRouting) {
+				t.Fatalf("Query error = %v, want ErrInvalidChatRouting", err)
+			}
+			if hits != 0 {
+				t.Fatalf("legacy instant Chat tool reached Bot %d time(s)", hits)
+			}
+			var rows int64
+			if err := gdb.Table("question_agent_logs").Count(&rows).Error; err != nil {
+				t.Fatalf("count rows: %v", err)
+			}
+			if rows != 0 {
+				t.Fatalf("legacy instant Chat tool persisted %d row(s)", rows)
+			}
+		})
+	}
+}
+
+func TestQueryDedicatedProductUsesNativeIDAcrossRouteOwnedRunMatrix(t *testing.T) {
+	tests := []struct {
+		tool string
+		slug string
+	}{
+		{tool: "InSilicoResearchAgent", slug: "research"},
+		{tool: "GeneNetworkAgent", slug: "network"},
+		{tool: "DigitalDesignAgent", slug: "design"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.slug, func(t *testing.T) {
 			gdb := setupExpertTestDB(t)
-			runID := "run-direct-" + tt.slug
-			taskID := "task-direct-" + tt.slug
+			runID := "run-product-" + tt.slug
+			taskID := "task-product-" + tt.slug
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				if r.URL.Path != "/v1/agents/"+tt.slug+"/runs" {
 					w.WriteHeader(http.StatusNotFound)
 					return
 				}
-				result := map[string]interface{}{}
-				taskIDs := []string{taskID}
-				if tt.status == "succeeded" {
-					result["formatted"] = map[string]interface{}{"answer": "sync answer"}
-					taskIDs = []string{}
-				}
-				w.WriteHeader(tt.httpStatus)
+				w.WriteHeader(http.StatusAccepted)
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"id": runID, "object": "agent.run", "agent": tt.slug,
-					"status": tt.status, "task_ids": taskIDs, "result": result,
+					"status": "running", "task_ids": []string{taskID}, "result": map[string]interface{}{},
 				})
 			}))
 			t.Cleanup(srv.Close)
+			previousConfig := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+				BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 				ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
 			}
-			t.Cleanup(func() { rxBot.BotConfig = nil })
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{
-				Query: "q", Tool: tt.tool, Mode: "instant",
+				Query: "q", Tool: tt.tool, Mode: "instant", Surface: QuerySurfaceAgentProduct,
 			})
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			wantStatus := strings.ToUpper(tt.status)
-			if out.BotRunID != runID || out.Status != wantStatus {
-				t.Fatalf("native response identity/status = %#v, want run=%q status=%q", out, runID, wantStatus)
+			if out.BotRunID != runID || out.Status != "RUNNING" {
+				t.Fatalf("native response identity/status = %#v, want run=%q status=RUNNING", out, runID)
 			}
 			var persistedRunID string
 			if err := gdb.Raw(`SELECT COALESCE(bot_run_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&persistedRunID); err != nil {
