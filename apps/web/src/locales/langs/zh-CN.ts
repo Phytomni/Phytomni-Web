@@ -363,6 +363,14 @@ export default {
     generationStopped: "已停止生成",
     relatedDocuments: "参考资料",
     welcomeTitle: "今天想探索什么？",
+    history: {
+      loading: "正在加载对话历史",
+      emptyTitle: "此对话暂时没有消息",
+      emptySubtitle: "从一个问题开始，继续这段对话。",
+      errorTitle: "无法加载对话历史",
+      errorSubtitle: "请重试，其他对话不会受到影响。",
+      retry: "重试",
+    },
     mode: {
       instant: "快速模式",
       expert: "专家模式",

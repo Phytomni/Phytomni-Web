@@ -116,7 +116,37 @@
                 ref="messageContainer"
                 :key="timestamp"
               >
-                <div v-if="!currentChat?.messages?.length" class="empty-chat">
+                <div
+                  v-if="currentHistoryHydration === 'loading'"
+                  class="chat-history-state"
+                  role="status"
+                >
+                  <PhySkeleton shape="line" :count="4" />
+                  <span class="sr-only">{{ $t("chat.history.loading") }}</span>
+                </div>
+                <PhyErrorState
+                  v-else-if="currentHistoryHydration === 'error'"
+                  data-testid="chat-history-error"
+                  class="chat-history-state"
+                  :title="$t('chat.history.errorTitle')"
+                  :description="$t('chat.history.errorSubtitle')"
+                  :retry-label="$t('chat.history.retry')"
+                  @retry="retrySelectedChat"
+                />
+                <PhyEmptyState
+                  v-else-if="currentHistoryHydration === 'history-empty'"
+                  data-testid="chat-history-empty"
+                  class="chat-history-state"
+                  :title="$t('chat.history.emptyTitle')"
+                  :subtitle="$t('chat.history.emptySubtitle')"
+                />
+                <div
+                  v-else-if="
+                    currentHistoryHydration === 'new' &&
+                    !currentChat?.messages?.length
+                  "
+                  class="empty-chat"
+                >
                   <PhyEmptyState
                     :title="$t('chat.welcomeTitle')"
                     :subtitle="$t('chat.welcomeSubtitle')"
@@ -524,6 +554,7 @@ import ChatActivity from "./components/ChatActivity.vue";
 import ChatAnalystLog from "./components/ChatAnalystLog.vue";
 import type { DirectDownloadItem } from "./components/ChatMessageActions.vue";
 import { PhyAdaptiveShell, PhyEmptyState } from "@/components/shell";
+import { PhyErrorState, PhySkeleton } from "@/components/state";
 import {
   DeepGenomeArtifact,
   ResearchArtifactShell,
@@ -810,6 +841,11 @@ const {
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
+
+const currentHistoryHydration = computed(() => {
+  if (!currentChatId.value) return "new";
+  return getChatState(currentChatId.value).historyHydration;
+});
 
 watch(
   [
@@ -1222,7 +1258,9 @@ const {
 const startNewChat = () => {
   // Create the state for a new chat
   const newDialogueId = "new_" + Date.now();
-  getChatState(newDialogueId);
+  const newChatState = getChatState(newDialogueId);
+  newChatState.historyHydration = "new";
+  newChatState.historyErrorKind = null;
 
   // Set the current chat ID to the newly created ID
   currentChatId.value = newDialogueId;
@@ -1565,6 +1603,12 @@ const { selectChat } = useSelectChat({
   chatList,
   timestamp,
 });
+
+const retrySelectedChat = () => {
+  const dialogueId = currentChatId.value;
+  if (!dialogueId) return;
+  void selectChat(dialogueId);
+};
 
 // Read the chat ID from the URL
 const getChatIdFromUrl = () => {
@@ -1972,6 +2016,16 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
     height: 40px;
     object-fit: contain;
   }
+}
+
+.chat-history-state {
+  flex: 1;
+  min-height: 0;
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
+  padding: var(--phy-space-16);
+  box-sizing: border-box;
+  justify-content: center;
 }
 
 .chat-cases-region {

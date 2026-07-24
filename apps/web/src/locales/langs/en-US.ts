@@ -363,6 +363,15 @@ export default {
     generationStopped: "Generation stopped",
     relatedDocuments: "Reference Material",
     welcomeTitle: "What would you like to explore?",
+    history: {
+      loading: "Loading conversation history",
+      emptyTitle: "This conversation has no messages yet",
+      emptySubtitle: "Start with a question to continue this conversation.",
+      errorTitle: "Conversation history could not be loaded",
+      errorSubtitle:
+        "Please try again. Your other conversations are unchanged.",
+      retry: "Try again",
+    },
     mode: {
       instant: "Instant",
       expert: "Expert",
