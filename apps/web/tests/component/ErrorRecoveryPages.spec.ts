@@ -30,6 +30,16 @@ const APP_SOURCE = readFileSync(
   "utf8"
 );
 
+const UNAUTHORIZED_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/error/UnauthorizedView.vue"),
+  "utf8"
+);
+
+const NOT_FOUND_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/error/NotFoundView.vue"),
+  "utf8"
+);
+
 const routerLinkStub = {
   props: { to: { type: [String, Object], required: true } },
   template: "<a :href=\"typeof to === 'string' ? to : to.path\"><slot /></a>",
@@ -101,7 +111,7 @@ describe("standalone recovery pages", () => {
 
   it("keeps a separate Home action after Back on 401", () => {
     const wrapper = mountUnauthorized();
-    const actions = wrapper.findAll("button, a");
+    const actions = wrapper.find(".phy-recovery-actions").findAll("button, a");
 
     expect(actions).toHaveLength(2);
     expect(actions[0].attributes("data-action")).toBe("back");
@@ -124,7 +134,10 @@ describe("standalone recovery pages", () => {
     const zhNotFound = mountNotFound("zh-CN");
 
     expect(
-      enUnauthorized.findAll("button, a").map((node) => node.element.tagName)
+      enUnauthorized
+        .find(".phy-recovery-actions")
+        .findAll("button, a")
+        .map((node) => node.element.tagName)
     ).toEqual(["BUTTON", "A"]);
     expect(zhUnauthorized.text()).toContain(zhCN.errorPage.e401Title);
     expect(enNotFound.text()).toContain(enUS.errorPage.e404Title);
@@ -137,17 +150,16 @@ describe("standalone recovery pages", () => {
   it("keeps recovery surfaces free of global fixed-footer ownership", () => {
     expect(APP_SOURCE).not.toContain("app-footer");
     expect(APP_SOURCE).not.toContain("showFooter");
-    expect(
-      readFileSync(
-        resolve(__dirname, "../../src/views/error/UnauthorizedView.vue"),
-        "utf8"
-      )
-    ).not.toMatch(/<img\b|401_images/);
-    expect(
-      readFileSync(
-        resolve(__dirname, "../../src/views/error/NotFoundView.vue"),
-        "utf8"
-      )
-    ).not.toMatch(/<img\b|404_images/);
+    expect(UNAUTHORIZED_SOURCE).not.toMatch(/<img\b|401_images/);
+    expect(NOT_FOUND_SOURCE).not.toMatch(/<img\b|404_images/);
+  });
+
+  it("gives each recovery route a local scroll root and in-flow footer", () => {
+    expect(UNAUTHORIZED_SOURCE).toContain('data-scroll-root="recovery"');
+    expect(NOT_FOUND_SOURCE).toContain('data-scroll-root="recovery"');
+    expect(UNAUTHORIZED_SOURCE).toContain("overflow-wrap: anywhere;");
+    expect(NOT_FOUND_SOURCE).toContain("overflow-wrap: anywhere;");
+    expect(mountUnauthorized().find(".recovery-footer").exists()).toBe(true);
+    expect(mountNotFound().find(".recovery-footer").exists()).toBe(true);
   });
 });

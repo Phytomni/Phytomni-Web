@@ -58,7 +58,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     productLayout: "standalone",
     migrationTask: "recovery surface",
     behaviorTest: "tests/component/ErrorRecoveryPages.spec.ts",
-    sourceMarkers: ["phy-recovery"],
+    sourceMarkers: ['data-scroll-root="recovery"', "phy-recovery"],
   },
   {
     path: "/terms",
@@ -82,7 +82,7 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     productLayout: "standalone",
     migrationTask: "recovery surface",
     behaviorTest: "tests/component/ErrorRecoveryPages.spec.ts",
-    sourceMarkers: ["phy-recovery"],
+    sourceMarkers: ['data-scroll-root="recovery"', "phy-recovery"],
   },
   {
     path: "/gene-display",
