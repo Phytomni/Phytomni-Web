@@ -17,6 +17,12 @@ export const CHAT_VISUAL_FIXTURE_KEYS = [
   "sidebar-compact",
   "sidebar-mobile-closed",
   "sidebar-mobile-open",
+  "agent-preview",
+  "sidebar-compact-explore-open",
+  "history-title-only",
+  "history-loading",
+  "history-empty",
+  "history-error",
   // Phase 3B message-content states (shared fixtures → ChatMessageContent path)
   "short-generic",
   "long-generic",
@@ -54,6 +60,12 @@ export const CHAT_VISUAL_THEMES = ["light", "dark"] as const;
 export type ChatVisualTheme = typeof CHAT_VISUAL_THEMES[number];
 
 export type ChatVisualChatState = "empty" | "populated";
+
+export type ChatVisualHistoryState =
+  | "title-only"
+  | "loading"
+  | "empty"
+  | "error";
 
 export type ChatRoutingFixtureMode = "instant" | "expert";
 
@@ -123,6 +135,12 @@ export type ChatVisualFixtureDefinition = {
   pickerSearchQuery: string;
   /** Real rendered `chat-message-row` count (empty ⇒ 0, no hidden fakes). */
   messageCount: number;
+  /** Test-only Agent capability preview state. */
+  agentPreview?: boolean;
+  /** Test-only compact Explore Agents disclosure state. */
+  compactExploreOpen?: boolean;
+  /** Explicit persisted-history recovery state, when applicable. */
+  historyState?: ChatVisualHistoryState;
 };
 
 const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
@@ -349,6 +367,96 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
     pickerOpen: false,
     pickerSearchQuery: "",
     messageCount: 0,
+  },
+  "agent-preview": {
+    key: "agent-preview",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    agentPreview: true,
+  },
+  "sidebar-compact-explore-open": {
+    key: "sidebar-compact-explore-open",
+    chatState: "empty",
+    sidebarCollapsed: true,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    compactExploreOpen: true,
+  },
+  "history-title-only": {
+    key: "history-title-only",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 1,
+    historyState: "title-only",
+  },
+  "history-loading": {
+    key: "history-loading",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    historyState: "loading",
+  },
+  "history-empty": {
+    key: "history-empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    historyState: "empty",
+  },
+  "history-error": {
+    key: "history-error",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    historyState: "error",
   },
   "short-generic": {
     key: "short-generic",

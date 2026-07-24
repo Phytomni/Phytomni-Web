@@ -39,6 +39,22 @@ representative_populated=(
     "1440 900"
     "2560 1440"
 )
+recovery_agent_preview=(
+    "390 844"
+    "1440 900"
+    "2560 1440"
+)
+recovery_compact_disclosure=(
+    "1024 768"
+    "1279 768"
+)
+recovery_history=(
+    "390 844"
+    "768 1024"
+    "1024 768"
+    "1920 1080"
+    "2560 1440"
+)
 locales=("en-US" "zh-CN")
 themes=("light" "dark")
 
@@ -86,10 +102,39 @@ for locale in "${locales[@]}"; do
     done
 done
 
+for viewport in "${recovery_agent_preview[@]}"; do
+    read -r width height <<<"${viewport}"
+    for locale in "${locales[@]}"; do
+        for theme in "${themes[@]}"; do
+            capture_fixture "agent-preview" "${width}" "${height}" "${locale}" "${theme}"
+        done
+    done
+done
+
+for viewport in "${recovery_compact_disclosure[@]}"; do
+    read -r width height <<<"${viewport}"
+    for locale in "${locales[@]}"; do
+        for theme in "${themes[@]}"; do
+            capture_fixture "sidebar-compact-explore-open" "${width}" "${height}" "${locale}" "${theme}"
+        done
+    done
+done
+
+for state in history-title-only history-loading history-empty history-error; do
+    for viewport in "${recovery_history[@]}"; do
+        read -r width height <<<"${viewport}"
+        for locale in "${locales[@]}"; do
+            for theme in "${themes[@]}"; do
+                capture_fixture "${state}" "${width}" "${height}" "${locale}" "${theme}"
+            done
+        done
+    done
+done
+
 png_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')
 geometry_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.geometry.json' | wc -l | tr -d ' ')
-test "${png_count}" -eq 100
-test "${geometry_count}" -eq 100
+test "${png_count}" -eq 200
+test "${geometry_count}" -eq 200
 for png in "${EVIDENCE_DIR}"/*.png; do
     test -f "${png%.png}.geometry.json"
 done

@@ -11,8 +11,16 @@
 
     <div
       v-else
+      ref="fixtureRootRef"
       data-testid="chat-visual-root"
+      :data-fixture-ready="fixtureReady ? 'true' : undefined"
       :data-chat-state="fixture.chatState"
+      :data-history-state="historyStateAttr"
+      :data-agent-preview="isAgentPreview ? 'true' : undefined"
+      :data-compact-explore-open="compactExploreOpen ? 'true' : undefined"
+      :data-sidebar-collapsed-preference="
+        fixture.sidebarCollapsed ? 'true' : 'false'
+      "
       :data-empty-scroll-position="
         fixture.key === 'empty-cases' ? 'cases' : 'top'
       "
@@ -23,14 +31,14 @@
       class="chat-visual-fixture-root"
     >
       <PhyAdaptiveShell
-        :sidebar-collapsed="fixture.sidebarCollapsed"
+        :sidebar-collapsed="effectiveSidebarCollapsed"
         :artifact-open="false"
         :artifact-fullscreen="false"
         :main-inert="fixture.drawerOpen"
       >
         <template #sidebar>
           <PhyAdaptiveSidebar
-            :collapsed="fixture.sidebarCollapsed"
+            :collapsed="effectiveSidebarCollapsed"
             :drawer-open="fixture.drawerOpen"
             :off-canvas="fixture.offCanvas"
             :close-label="$t('common.close')"
@@ -43,7 +51,7 @@
               </el-icon>
             </template>
             <ChatSidebarNav
-              :collapsed="fixture.sidebarCollapsed"
+              :collapsed="effectiveSidebarCollapsed"
               :active-item="activeSidebarItem"
               :user-name="SYNTHETIC_IDENTITY"
               :can-explore-agents="true"
@@ -57,7 +65,7 @@
               :can-admin-management="false"
               :can-help="false"
               :show-agents-list="
-                !fixture.sidebarCollapsed &&
+                !effectiveSidebarCollapsed &&
                 activeSidebarItem === 'explore-agent'
               "
               :off-canvas="fixture.offCanvas"
@@ -133,8 +141,29 @@
                   data-testid="chat-transcript"
                   ref="transcriptRef"
                 >
-                  <div v-if="fixture.chatState === 'empty'" class="empty-chat">
+                  <div
+                    v-if="fixture.chatState === 'empty' && !isHistoryFixture"
+                    class="empty-chat"
+                  >
+                    <div
+                      v-if="isAgentPreview"
+                      class="chat-agent-preview-fixture"
+                      data-testid="chat-agent-preview"
+                    >
+                      <!-- Uses the production agent-capability-popover path. -->
+                      <AgentCapabilityPopover
+                        :presentation="agentPreviewPresentation"
+                        trigger-class="chat-agent-preview-trigger"
+                        data-testid="chat-agent-preview-trigger"
+                        aria-label="Synthetic Deep Genome Agent preview"
+                      >
+                        <AgentDisplayName
+                          :label="t(agentPreviewPresentation.labelKey)"
+                        />
+                      </AgentCapabilityPopover>
+                    </div>
                     <PhyEmptyState
+                      data-testid="chat-welcome"
                       :title="$t('chat.welcomeTitle')"
                       :subtitle="$t('chat.welcomeSubtitle')"
                     >
@@ -147,6 +176,58 @@
                       </template>
                     </PhyEmptyState>
                   </div>
+
+                  <div
+                    v-if="historyState === 'loading'"
+                    class="chat-history-state"
+                    data-testid="chat-history-loading"
+                    data-history-state="loading"
+                    role="status"
+                  >
+                    <PhySkeleton shape="line" :count="4" />
+                    <span class="sr-only">{{
+                      $t("chat.history.loading")
+                    }}</span>
+                  </div>
+                  <PhyEmptyState
+                    v-else-if="historyState === 'empty'"
+                    data-testid="chat-history-empty"
+                    class="chat-history-state"
+                    data-history-state="empty"
+                    :title="$t('chat.history.emptyTitle')"
+                    :subtitle="$t('chat.history.emptySubtitle')"
+                  />
+                  <div
+                    v-else-if="historyState === 'error'"
+                    class="chat-history-state phy-error-state"
+                    data-testid="chat-history-error"
+                    data-history-state="error"
+                    role="alert"
+                  >
+                    <h2 class="phy-error-state__title">
+                      {{ $t("chat.history.errorTitle") }}
+                    </h2>
+                    <p class="phy-error-state__description">
+                      {{ $t("chat.history.errorSubtitle") }}
+                    </p>
+                    <button
+                      type="button"
+                      class="phy-error-state__retry"
+                      data-testid="chat-history-retry"
+                      @click="onFixtureAction('history-retry')"
+                    >
+                      {{ $t("chat.history.retry") }}
+                    </button>
+                  </div>
+
+                  <span
+                    v-if="historyState === 'title-only'"
+                    class="sr-only"
+                    data-testid="chat-history-title-only"
+                    data-history-state="title-only"
+                  >
+                    {{ $t("chat.untitledConversation") }}
+                  </span>
 
                   <div class="transcript-content">
                     <!-- Phase 3B: production row + content renderer, shared fixtures -->
@@ -302,7 +383,7 @@
                   @toggle-agent="onFixtureAction('composer-toggle-agent')"
                 />
                 <div
-                  v-if="fixture.chatState === 'empty'"
+                  v-if="fixture.chatState === 'empty' && !isHistoryFixture"
                   class="chat-cases-region"
                 >
                   <ChatCases />
@@ -344,6 +425,11 @@ import {
   PhyAdaptiveSidebar,
   PhyEmptyState,
 } from "@/components/shell";
+import PhySkeleton from "@/components/state/PhySkeleton.vue";
+import {
+  AgentCapabilityPopover,
+  CANONICAL_AGENT_PRESENTATIONS,
+} from "@/components/agent";
 import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import ChatSidebarNav, {
   CHAT_SIDEBAR_DRAWER_OPEN_KEY,
@@ -390,6 +476,7 @@ import { isA2uiLifecycleFixtureKey } from "./fixture-registry";
 const EMPTY_IMAGES = {} as Record<string, string[]>;
 const EMPTY_LOADING = {} as Record<string, boolean>;
 const presetAgents = deriveCaseRouteOptions();
+const agentPreviewPresentation = CANONICAL_AGENT_PRESENTATIONS.DeepGenomeAgent;
 
 const props = defineProps<{
   fixture: ChatVisualFixtureDefinition | null;
@@ -400,10 +487,24 @@ const appStore = useAppStore();
 const { t } = useI18n();
 const epLocale = computed(() => (appStore.language === "zh-CN" ? zhCn : en));
 
+const fixtureRootRef = ref<HTMLElement | null>(null);
+const fixtureReady = ref(false);
+
 const viewportWidth = ref(
   typeof window === "undefined" ? 1440 : window.innerWidth
 );
 const isMobileViewport = computed(() => viewportWidth.value < 900);
+
+const historyState = computed(() => props.fixture?.historyState ?? null);
+const historyStateAttr = computed(() => historyState.value ?? undefined);
+const isHistoryFixture = computed(() => historyState.value !== null);
+const isAgentPreview = computed(() => props.fixture?.agentPreview === true);
+const compactExploreOpen = computed(
+  () =>
+    props.fixture?.compactExploreOpen === true &&
+    !isMobileViewport.value &&
+    viewportWidth.value < 1280
+);
 
 const fixture = computed(() => {
   if (!props.fixture) {
@@ -423,6 +524,9 @@ const fixture = computed(() => {
     offCanvas: true,
   };
 });
+const effectiveSidebarCollapsed = computed(
+  () => fixture.value.sidebarCollapsed && !compactExploreOpen.value
+);
 const drawerOpenRef = ref(props.fixture?.drawerOpen ?? false);
 provide(CHAT_SIDEBAR_DRAWER_OPEN_KEY, drawerOpenRef);
 
@@ -567,7 +671,11 @@ const composerValue = ref(
 
 const lastFixtureAction = ref("");
 const transcriptRef = ref<HTMLElement | null>(null);
-const activeSidebarItem = ref("new-chat");
+const activeSidebarItem = ref(
+  props.fixture?.key === "sidebar-compact-explore-open"
+    ? "explore-agent"
+    : "new-chat"
+);
 const fixtureChatMode = ref<"instant" | "expert">(
   routingFixture.value?.mode ?? "instant"
 );
@@ -613,6 +721,24 @@ async function applyPickerFixtureState() {
   }
 }
 
+async function openAgentPreviewFixture() {
+  if (!isAgentPreview.value) return;
+  await nextTick();
+  const trigger = fixtureRootRef.value?.querySelector<HTMLElement>(
+    '[data-testid="chat-agent-preview-trigger"]'
+  );
+  if (!trigger) return;
+  trigger.focus();
+  trigger.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
+}
+
+async function markFixtureReady() {
+  if (typeof document !== "undefined" && document.fonts?.ready) {
+    await document.fonts.ready;
+  }
+  fixtureReady.value = true;
+}
+
 const updateViewportWidth = () => {
   viewportWidth.value = window.innerWidth;
 };
@@ -621,6 +747,8 @@ onMounted(() => {
   updateViewportWidth();
   window.addEventListener("resize", updateViewportWidth);
   void applyPickerFixtureState();
+  void openAgentPreviewFixture();
+  void markFixtureReady();
 });
 
 onUnmounted(() => {
@@ -756,6 +884,40 @@ onUnmounted(() => {
   justify-content: center;
   box-sizing: border-box;
   padding: var(--phy-space-16);
+}
+
+.chat-agent-preview-fixture {
+  align-self: flex-start;
+  min-width: 0;
+  margin-bottom: var(--phy-space-12);
+}
+
+.chat-agent-preview-trigger {
+  min-height: var(--phy-control-height-default);
+  padding: var(--phy-space-8) var(--phy-space-12);
+  border: 1px solid var(--phy-color-border-control);
+  border-radius: var(--phy-radius-pill);
+  background: var(--phy-color-bg-elevated);
+  color: var(--phy-color-action-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chat-agent-preview-trigger:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+.chat-history-state {
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: var(--phy-space-24) var(--phy-space-16);
+}
+
+.chat-history-state.phy-error-state {
+  align-items: flex-start;
+  text-align: left;
 }
 
 .empty-chat-mark {

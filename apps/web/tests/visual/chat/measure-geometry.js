@@ -12,6 +12,7 @@
   const MOBILE_BREAKPOINT = 900;
   const MOBILE_HEADER_MAX_HEIGHT = 96;
   const EDGE_TOLERANCE = 0.5;
+  const HISTORY_STATES = new Set(["title-only", "loading", "empty", "error"]);
 
   function measureRect(el) {
     if (!el) {
@@ -86,6 +87,17 @@
       caseLinkCount: 0,
       lastCase: { present: false },
       lastMessage: { present: false },
+      historyState: null,
+      welcomePresent: false,
+      agentPreview: {
+        dialog: { present: false },
+        media: { present: false },
+      },
+      compactDisclosure: {
+        open: false,
+        sidebar: { present: false },
+        optionCount: 0,
+      },
       state: null,
       chatMode: null,
       pass: false,
@@ -114,6 +126,15 @@
       `Root data-chat-state must be empty|populated; got "${String(state)}"`
     );
   }
+  const historyState = root.getAttribute("data-history-state");
+  if (historyState !== null && !HISTORY_STATES.has(historyState)) {
+    return persistFailure(
+      { root: measureRect(root), state, historyState },
+      `Root data-history-state must be title-only|loading|empty|error; got "${String(
+        historyState
+      )}"`
+    );
+  }
   const chatMode = root.getAttribute("data-chat-mode") || "instant";
   if (chatMode !== "instant" && chatMode !== "expert") {
     return persistFailure(
@@ -129,6 +150,7 @@
         root: measureRect(root),
         transcript: { present: false, count: transcripts.length },
         state,
+        historyState,
         chatMode,
       },
       `Expected exactly one chat-transcript; found ${transcripts.length}`
@@ -145,6 +167,7 @@
         root: measureRect(root),
         contentStack: { present: false, count: contentStacks.length },
         state,
+        historyState,
         chatMode,
       },
       `Expected exactly one chat-content-stack; found ${contentStacks.length}`
@@ -256,6 +279,42 @@
   const rootRect = measureRect(root);
   const transcriptRect = measureRect(transcriptEl);
 
+  const welcomeNodes = root.querySelectorAll('[data-testid="chat-welcome"]');
+  const historyLoadingNodes = root.querySelectorAll(
+    '[data-testid="chat-history-loading"]'
+  );
+  const historyEmptyNodes = root.querySelectorAll(
+    '[data-testid="chat-history-empty"]'
+  );
+  const historyErrorNodes = root.querySelectorAll(
+    '[data-testid="chat-history-error"]'
+  );
+  const historyRetryNodes = root.querySelectorAll(
+    '[data-testid="chat-history-retry"]'
+  );
+  const previewDialogNodes = root.querySelectorAll(
+    '[data-testid="chat-agent-preview"] [role="dialog"]'
+  );
+  const previewMediaNodes = root.querySelectorAll(
+    '[data-testid="chat-agent-preview"] .agent-capability-popover__media'
+  );
+  const sidebarSurface = root.querySelector?.(".phy-adaptive-sidebar__surface");
+  const compactOptionNodes = root.querySelectorAll(".agent-option");
+  const compactDisclosureOpen =
+    root.getAttribute("data-compact-explore-open") === "true";
+  const previewDialog =
+    previewDialogNodes.length === 1
+      ? measureRect(previewDialogNodes[0])
+      : { ...measureRect(null), count: previewDialogNodes.length };
+  const previewMedia =
+    previewMediaNodes.length === 1
+      ? measureRect(previewMediaNodes[0])
+      : { ...measureRect(null), count: previewMediaNodes.length };
+  const sidebarRect = measureRect(sidebarSurface);
+  const compactOptions = Array.from(compactOptionNodes).map((option) =>
+    measureRect(option)
+  );
+
   const drawerState = root.getAttribute("data-sidebar-drawer-state");
   const isMobileViewport = innerWidth < MOBILE_BREAKPOINT;
   const closedMobile = drawerState === "closed";
@@ -271,6 +330,82 @@
   const docScrollWidth = document.documentElement.scrollWidth;
   const docClientWidth = document.documentElement.clientWidth;
   const reasons = [];
+
+  if (historyState === "loading") {
+    if (historyLoadingNodes.length !== 1) {
+      reasons.push(
+        `history loading state requires one node; found ${historyLoadingNodes.length}`
+      );
+    }
+  }
+  if (historyState === "empty") {
+    if (historyEmptyNodes.length !== 1) {
+      reasons.push(
+        `history empty state requires one node; found ${historyEmptyNodes.length}`
+      );
+    }
+  }
+  if (historyState === "error") {
+    if (historyErrorNodes.length !== 1 || historyRetryNodes.length !== 1) {
+      reasons.push(
+        `history error state requires one error and retry node; found error=${historyErrorNodes.length} retry=${historyRetryNodes.length}`
+      );
+    }
+  }
+  if (
+    (historyState === "loading" ||
+      historyState === "empty" ||
+      historyState === "error") &&
+    welcomeNodes.length !== 0
+  ) {
+    reasons.push(
+      `history ${historyState} state must not render the welcome title`
+    );
+  }
+  if (compactDisclosureOpen) {
+    if (!sidebarSurface || !sidebarRect.present) {
+      reasons.push("compact Explore Agents state requires a sidebar surface");
+    }
+    if (compactOptionNodes.length < 1) {
+      reasons.push(
+        "compact Explore Agents state requires visible agent options"
+      );
+    }
+    compactOptions.forEach((optionRect, index) => {
+      const insideSidebar =
+        sidebarRect.present &&
+        optionRect.present &&
+        optionRect.left >= sidebarRect.left - EDGE_TOLERANCE &&
+        optionRect.right <= sidebarRect.right + EDGE_TOLERANCE &&
+        optionRect.top >= sidebarRect.top - EDGE_TOLERANCE &&
+        optionRect.bottom <= sidebarRect.bottom + EDGE_TOLERANCE;
+      if (!insideSidebar) {
+        reasons.push(`compact agent option ${index} escapes sidebar surface`);
+      }
+      if (
+        typeof sidebarSurface?.contains === "function" &&
+        !sidebarSurface.contains(compactOptionNodes[index])
+      ) {
+        reasons.push(`compact agent option ${index} is outside sidebar DOM`);
+      }
+    });
+  }
+  if (
+    root.getAttribute("data-agent-preview") === "true" ||
+    previewDialogNodes.length > 0
+  ) {
+    if (previewDialogNodes.length !== 1 || !isInsideViewport(previewDialog)) {
+      reasons.push("Agent preview requires one dialog inside the viewport");
+    }
+    if (
+      previewMediaNodes.length !== 1 ||
+      !isInsideViewport(previewMedia) ||
+      previewMedia.width <= 0 ||
+      previewMedia.height <= 0
+    ) {
+      reasons.push("Agent preview requires one positive bounded media rect");
+    }
+  }
 
   if (docScrollWidth > docClientWidth) {
     reasons.push(
@@ -327,7 +462,12 @@
     );
   }
 
-  if (state === "empty") {
+  const historyRecoveryState =
+    historyState === "loading" ||
+    historyState === "empty" ||
+    historyState === "error";
+
+  if (state === "empty" && !historyRecoveryState) {
     if (caseRegions.length !== 1 || caseLinks.length !== 7) {
       reasons.push(
         `empty state requires one Cases region with seven links; found regions=${caseRegions.length} links=${caseLinks.length}`
@@ -343,12 +483,20 @@
     if (emptyScrollPosition === "cases" && !isVisibleInViewport(lastCaseRect)) {
       reasons.push("empty Cases fixture final case is not visible");
     }
-  } else {
+  } else if (state === "populated" || historyRecoveryState) {
     if (caseRegions.length !== 0 || caseLinks.length !== 0) {
-      reasons.push("populated state must not render Cases");
+      reasons.push(
+        historyRecoveryState
+          ? "history recovery state must not render Cases"
+          : "populated state must not render Cases"
+      );
     }
     if (quickSelectNodes.length !== 0) {
-      reasons.push("populated state must not render quick selection");
+      reasons.push(
+        historyRecoveryState
+          ? "history recovery state must not render quick selection"
+          : "populated state must not render quick selection"
+      );
     }
   }
 
@@ -450,6 +598,24 @@
     drawerSurface: measureRect(drawerSurface),
     drawerScrim: measureRect(drawerScrim),
     lastMessage,
+    historyState,
+    welcomePresent: welcomeNodes.length > 0,
+    historyNodes: {
+      loading: historyLoadingNodes.length,
+      empty: historyEmptyNodes.length,
+      error: historyErrorNodes.length,
+      retry: historyRetryNodes.length,
+    },
+    agentPreview: {
+      dialog: previewDialog,
+      media: previewMedia,
+    },
+    compactDisclosure: {
+      open: compactDisclosureOpen,
+      sidebar: sidebarRect,
+      optionCount: compactOptionNodes.length,
+      options: compactOptions,
+    },
     state,
     chatMode,
     drawerState,

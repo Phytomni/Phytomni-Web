@@ -113,6 +113,8 @@ type GeometryHarnessOptions = {
   includeTranscript?: boolean;
   includeContentStack?: boolean;
   includeTrigger?: boolean;
+  includePrimary?: boolean;
+  includeComposer?: boolean;
   triggerVisible?: boolean;
   primaryVisible?: boolean;
   composerVisible?: boolean;
@@ -299,11 +301,15 @@ async function runGeometryHarness(
       ) {
         return [root];
       }
-      if (selector === '[data-testid="chat-primary-action"]') return [primary];
+      if (selector === '[data-testid="chat-primary-action"]') {
+        return options.includePrimary === false ? [] : [primary];
+      }
       if (selector === '[data-testid="chat-sidebar-trigger"]') {
         return includeTrigger ? [trigger] : [];
       }
-      if (selector === '[data-testid="chat-composer"]') return [composer];
+      if (selector === '[data-testid="chat-composer"]') {
+        return options.includeComposer === false ? [] : [composer];
+      }
       if (selector === '[data-testid="chat-header-preferences"]') {
         return [headerPreferences];
       }
@@ -405,6 +411,12 @@ describe("Chat visual fixture registry", () => {
       "sidebar-compact",
       "sidebar-mobile-closed",
       "sidebar-mobile-open",
+      "agent-preview",
+      "sidebar-compact-explore-open",
+      "history-title-only",
+      "history-loading",
+      "history-empty",
+      "history-error",
       "short-generic",
       "long-generic",
       "cited",
@@ -524,6 +536,34 @@ describe("Chat visual fixture registry", () => {
     expect(closed.drawerOpen).toBe(false);
     expect(open.drawerOpen).toBe(true);
     expect(open.showSidebarTrigger).toBe(false);
+  });
+
+  it("registers deterministic Chat recovery fixtures", () => {
+    const recoveryKeys = [
+      "agent-preview",
+      "sidebar-compact-explore-open",
+      "history-title-only",
+      "history-loading",
+      "history-empty",
+      "history-error",
+    ] as const;
+
+    for (const key of recoveryKeys) {
+      expect(CHAT_VISUAL_FIXTURE_KEYS).toContain(key);
+      const fixture = getChatVisualFixture(
+        key as typeof CHAT_VISUAL_FIXTURE_KEYS[number]
+      );
+      expect(fixture.key).toBe(key);
+    }
+
+    const titleOnly = getChatVisualFixture("history-title-only" as never);
+    expect(titleOnly.messageCount).toBe(1);
+    expect(buildSyntheticMessages(titleOnly)).toEqual([
+      expect.objectContaining({ role: "user" }),
+    ]);
+    expect(buildSyntheticMessages(titleOnly)).not.toEqual([
+      expect.objectContaining({ role: "assistant" }),
+    ]);
   });
 
   it("registers every Phase 3B message key with shared fixture objects", () => {
@@ -692,6 +732,18 @@ describe("Chat visual fixture source contracts", () => {
       /<template #explore-agents>[\s\S]*?v-for="agent in presetAgents"/
     );
   });
+
+  it("exposes preview, compact disclosure, and history state contracts", () => {
+    expect(APP_SOURCE).toContain('data-history-state="');
+    expect(APP_SOURCE).toContain("agent-capability-popover");
+    expect(APP_SOURCE).toContain('data-testid="chat-history-retry"');
+    expect(APP_SOURCE).toContain('data-testid="chat-agent-preview"');
+    expect(APP_SOURCE).toContain('data-testid="chat-welcome"');
+    expect(APP_SOURCE).toContain("compactExploreOpen");
+    expect(MEASURE_SOURCE).toContain("agent-capability-popover__media");
+    expect(MEASURE_SOURCE).toContain("history-state");
+    expect(MEASURE_SOURCE).toContain("agent-option");
+  });
 });
 
 describe("Chat visual fixture boot contracts", () => {
@@ -805,6 +857,26 @@ describe("Chat visual fixture geometry negative controls", () => {
     const result = await runGeometryHarness();
     expect(result).toMatchObject({ pass: true });
   });
+
+  it.each([
+    {
+      label: "missing primary action",
+      options: { includePrimary: false },
+      reason: /visible unique primary action/,
+    },
+    {
+      label: "missing composer",
+      options: { includeComposer: false },
+      reason: /composer missing or not visible/,
+    },
+  ])(
+    "fails closed when the required $label node is missing",
+    async ({ options, reason }) => {
+      const result = await runGeometryHarness(options);
+      expect(result.pass).toBe(false);
+      expect(result.reasons?.join("; ")).toMatch(reason);
+    }
+  );
 
   it("measures the visible composer surface when the wrapper provides one", async () => {
     const result = await runGeometryHarness({
@@ -1363,6 +1435,117 @@ describe("Chat visual fixture rendering (no network)", () => {
     );
     expect(open.findAll('[data-testid="chat-primary-action"]')).toHaveLength(1);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("marks every mounted fixture root ready and renders explicit history recovery states", async () => {
+    for (const key of [
+      "history-title-only",
+      "history-loading",
+      "history-empty",
+      "history-error",
+    ] as const) {
+      const fixture = getChatVisualFixture(key);
+      const wrapper = mountFixtureApp(fixture, null, {
+        renderRoutingControls: true,
+      });
+      await flushPromises();
+      await nextTick();
+
+      const root = wrapper.get('[data-testid="chat-visual-root"]');
+      expect(root.attributes("data-fixture-ready")).toBe("true");
+      expect(root.attributes("data-history-state")).toBe(fixture.historyState);
+      expect(wrapper.find('[data-testid="chat-welcome"]').exists()).toBe(false);
+      if (key === "history-title-only") {
+        expect(
+          wrapper.findAll('[data-testid="chat-message-row"]')
+        ).toHaveLength(1);
+        expect(
+          wrapper
+            .get('[data-testid="chat-message-row"]')
+            .attributes("data-message-role")
+        ).toBe("user");
+      } else {
+        expect(
+          wrapper.findAll('[data-testid="chat-message-row"]')
+        ).toHaveLength(0);
+      }
+      if (key === "history-loading") {
+        expect(
+          wrapper.find('[data-testid="chat-history-loading"]').exists()
+        ).toBe(true);
+      }
+      if (key === "history-empty") {
+        expect(
+          wrapper.find('[data-testid="chat-history-empty"]').exists()
+        ).toBe(true);
+      }
+      if (key === "history-error") {
+        const retry = wrapper.get('[data-testid="chat-history-retry"]');
+        await retry.trigger("click");
+        expect(
+          wrapper.get('[data-testid="chat-fixture-action"]').text()
+        ).toContain("history-retry");
+      }
+      wrapper.unmount();
+    }
+  });
+
+  it("opens one canonical full Agent capability preview without cropped media", async () => {
+    const wrapper = mountFixtureApp(
+      getChatVisualFixture("agent-preview"),
+      null,
+      { renderRoutingControls: true }
+    );
+    await flushPromises();
+    await nextTick();
+
+    expect(
+      wrapper
+        .find('[data-testid="chat-visual-root"]')
+        .attributes("data-fixture-ready")
+    ).toBe("true");
+    expect(wrapper.findAll('[data-testid="chat-agent-preview"]').length).toBe(
+      1
+    );
+    expect(wrapper.findAll('[role="dialog"]')).toHaveLength(1);
+    expect(wrapper.findAll(".agent-capability-popover__media")).toHaveLength(1);
+    expect(
+      wrapper.get(".agent-capability-popover__media img").attributes("src")
+    ).toContain("DeepGenomeAgent.png");
+    expect(
+      wrapper
+        .find(".agent-capability-popover__media img")
+        .attributes("style") ?? ""
+    ).not.toContain("object-fit: cover");
+    wrapper.unmount();
+  });
+
+  it("keeps compact Explore Agents options inside the sidebar without changing preference", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+    const wrapper = mountFixtureApp(
+      getChatVisualFixture("sidebar-compact-explore-open")
+    );
+    await nextTick();
+
+    const root = wrapper.get('[data-testid="chat-visual-root"]');
+    const sidebar = wrapper.get(".phy-adaptive-sidebar__surface");
+    const options = wrapper.findAll(".agent-option");
+    expect(root.attributes("data-compact-explore-open")).toBe("true");
+    expect(root.attributes("data-sidebar-collapsed-preference")).toBe("true");
+    expect(options.length).toBeGreaterThan(0);
+    for (const option of options) {
+      expect(sidebar.element.contains(option.element)).toBe(true);
+    }
+
+    wrapper.unmount();
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: previousWidth,
+    });
   });
 
   it("surfaces a clear error for invalid dimensions", () => {
