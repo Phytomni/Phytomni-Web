@@ -170,33 +170,6 @@ func (ps *Service) GetUpdateUserRegisterPermission(ctx context.Context, email st
 	return false, ""
 }
 
-func (ps *Service) GetUserToolPermission(ctx context.Context, email string) ([]string, []string, string) {
-	var user *model.User
-	model.DB(ctx).Model(&model.User{}).Debug().Where("email =?", email).First(&user)
-
-	var UserToolName []*model.UserToolName
-	// Order by tool_id so tool_list / permission_list follow tool_names.id
-	// (the canonical agent order), not the grant-row insertion order.
-	model.DB(ctx).Model(&model.UserToolName{}).Debug().Where("code =?", user.Code).Order("tool_id").Find(&UserToolName)
-
-	var ToolList []string
-	var permissionList []string
-	for _, v := range UserToolName {
-		var ToolName *model.ToolName
-		db := model.DB(ctx).Model(&model.ToolName{}).Debug().Where("id =?", v.ToolId)
-		db.First(&ToolName)
-		// ids 1-10 are the chat agents (see tool_names seed); 11+ are UI/menu
-		// permission keys.
-		if ToolName.Id <= 10 {
-			ToolList = append(ToolList, ToolName.ToolName)
-		} else {
-			permissionList = append(permissionList, ToolName.ToolName)
-		}
-	}
-
-	return ToolList, permissionList, user.Code
-}
-
 func (ps *Service) GetUserList(ctx *gin.Context, current, size int, code string) ([]*common.UserLostData, int64, int, error) {
 	var users []*common.UserLostData
 	var total int64
