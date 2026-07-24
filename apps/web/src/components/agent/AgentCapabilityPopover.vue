@@ -1,5 +1,10 @@
 <template>
-  <span ref="rootRef" class="agent-capability-preview" @focusout="onFocusOut">
+  <span
+    ref="rootRef"
+    class="agent-capability-preview"
+    @focusout="onFocusOut"
+    @keydown="onKeydown"
+  >
     <button
       ref="triggerRef"
       v-bind="attrs"
@@ -11,7 +16,6 @@
       :aria-controls="panelId"
       @click="select"
       @focus="show"
-      @keydown="onKeydown"
       @pointerenter="show"
       @pointerleave="scheduleClose"
     >

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import AgentCapabilityPopover from "@/components/agent/AgentCapabilityPopover.vue";
@@ -26,13 +26,30 @@ vi.mock("vue-i18n", () => ({
 const presentationFor = (tool: keyof typeof CANONICAL_AGENT_PRESENTATIONS) =>
   CANONICAL_AGENT_PRESENTATIONS[tool];
 
+const mountedPopovers: Array<{
+  unmount: () => void;
+  host: HTMLElement;
+}> = [];
+
 const mountPopover = (
   tool: keyof typeof CANONICAL_AGENT_PRESENTATIONS = "ChatAgent"
-) =>
-  mount(AgentCapabilityPopover, {
+) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const wrapper = mount(AgentCapabilityPopover, {
     props: { presentation: presentationFor(tool) },
-    attachTo: document.body,
+    attachTo: host,
   });
+  mountedPopovers.push({ unmount: () => wrapper.unmount(), host });
+  return wrapper;
+};
+
+afterEach(() => {
+  for (const mounted of mountedPopovers.splice(0)) {
+    mounted.unmount();
+    mounted.host.remove();
+  }
+});
 
 describe("AgentCapabilityPopover", () => {
   it("opens from keyboard focus and keeps the full flowchart inspectable", async () => {
@@ -68,6 +85,19 @@ describe("AgentCapabilityPopover", () => {
     const trigger = wrapper.get("button");
     await trigger.trigger("focus");
     await trigger.trigger("keydown", { key: "Escape" });
+    await nextTick();
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(trigger.element);
+  });
+
+  it("closes on Escape from dialog content and restores focus to the trigger", async () => {
+    const wrapper = mountPopover();
+    const trigger = wrapper.get("button");
+    await trigger.trigger("focus");
+    const closeButton = wrapper.get(".agent-capability-popover__close");
+    await closeButton.trigger("focus");
+    await closeButton.trigger("keydown", { key: "Escape" });
     await nextTick();
 
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
