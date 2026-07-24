@@ -52,6 +52,14 @@ describe("global CSS contract", () => {
     expect(TOKENS_CSS).toContain("--phy-motion-normal: 0ms;");
   });
 
+  it("keeps fluid layout measures in the semantic token owner", () => {
+    expect(TOKENS_CSS).toContain("--phy-layout-content-gutter");
+    expect(TOKENS_CSS).toContain("--phy-layout-overlay-gutter");
+    expect(TOKENS_CSS).toContain("--phy-layout-agent-preview-max-width");
+    expect(TOKENS_CSS).toContain("--phy-layout-scientific-media-max-height");
+    expect(TOKENS_CSS).not.toMatch(/transition:\s*all/);
+  });
+
   it("limits transitions to explicit interactive anchor behavior", () => {
     expect(CSS["base.css"]).not.toMatch(/\btransition\s*:/);
     expect(CSS["main.css"]).toMatch(
