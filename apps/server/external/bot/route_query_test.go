@@ -36,6 +36,29 @@ func TestRouteQuery_PostsToRouteEndpoint(t *testing.T) {
 	}
 }
 
+func TestRouteQuery_LegacyPayloadOmitsZeroValues(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		assertJSONEqual(t, `{
+			"user_query": "Compare drought candidates",
+			"forced_tool": null
+		}`, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-1","agent":"data","status":"succeeded","task_ids":[],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery: "Compare drought candidates",
+	})
+	if err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+}
+
 func TestRouteQuery_PostsOrderedToolConstraints(t *testing.T) {
 	forcedTool := "DataAgent"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +68,8 @@ func TestRouteQuery_PostsOrderedToolConstraints(t *testing.T) {
 		}
 		assertJSONEqual(t, `{
 			"user_query": "Compare drought candidates",
-			"history": [],
-			"obs_file_list": [],
+			"history": [{"role": "user", "content": "Earlier drought evidence"}],
+			"obs_file_list": ["obs://bucket/drought.csv"],
 			"dialogue_id": "dialogue-1",
 			"allowed_tools": ["ChatAgent", "DataAgent", "AnalystAgent"],
 			"forced_tool": "DataAgent"
@@ -58,8 +81,8 @@ func TestRouteQuery_PostsOrderedToolConstraints(t *testing.T) {
 
 	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
 		UserQuery:    "Compare drought candidates",
-		History:      []ChatMessage{},
-		OBSFileList:  []string{},
+		History:      []ChatMessage{{Role: "user", Content: "Earlier drought evidence"}},
+		OBSFileList:  []string{"obs://bucket/drought.csv"},
 		DialogueID:   "dialogue-1",
 		AllowedTools: []string{"ChatAgent", "DataAgent", "AnalystAgent"},
 		ForcedTool:   &forcedTool,
@@ -77,10 +100,8 @@ func TestRouteQuery_AutonomousToolConstraintsSerializeNullForcedTool(t *testing.
 		}
 		assertJSONEqual(t, `{
 			"user_query": "Compare drought candidates",
-			"history": [],
-			"obs_file_list": [],
 			"dialogue_id": "dialogue-1",
-			"allowed_tools": [],
+			"allowed_tools": ["ChatAgent", "DataAgent", "AnalystAgent"],
 			"forced_tool": null
 		}`, body)
 		w.Header().Set("Content-Type", "application/json")
@@ -93,7 +114,7 @@ func TestRouteQuery_AutonomousToolConstraintsSerializeNullForcedTool(t *testing.
 		History:      []ChatMessage{},
 		OBSFileList:  []string{},
 		DialogueID:   "dialogue-1",
-		AllowedTools: []string{},
+		AllowedTools: []string{"ChatAgent", "DataAgent", "AnalystAgent"},
 	})
 	if err != nil {
 		t.Fatalf("RouteQuery: %v", err)
