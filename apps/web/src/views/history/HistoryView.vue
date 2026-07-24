@@ -109,7 +109,8 @@
   <el-dialog
     v-model="renameDialogVisible"
     :title="$t('chat.actions.rename')"
-    width="400px"
+    class="history-rename-dialog"
+    width="min(640px, calc(100vw - 24px))"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     @close="handleRenameDialogClose"
@@ -140,7 +141,8 @@
   <el-dialog
     v-model="deleteDialogVisible"
     :title="$t('chat.actions.deleteConfirm')"
-    width="400px"
+    class="history-delete-dialog"
+    width="min(640px, calc(100vw - 24px))"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
   >
@@ -351,6 +353,10 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.history-workspace {
+  min-width: 0;
+}
+
 .history-count {
   margin: 0;
   color: var(--phy-color-text);
@@ -361,6 +367,7 @@ onMounted(() => {
 .history-list {
   display: grid;
   gap: var(--phy-space-12);
+  min-width: 0;
 }
 
 .history-row {
@@ -431,8 +438,15 @@ onMounted(() => {
 
 .dialog-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--phy-space-12);
+}
+
+.history-rename-dialog,
+.history-delete-dialog {
+  max-height: min(720px, calc(100dvh - 32px));
+  overflow: auto;
 }
 
 .delete-confirm-content {

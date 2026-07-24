@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { config, flushPromises, mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
 import { defineComponent, h } from "vue";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import { datetimeFormats } from "@/locales/datetime-formats";
@@ -26,6 +28,11 @@ vi.mock("element-plus", () => ({
 }));
 
 import HistoryWorkspace from "@/views/history/HistoryView.vue";
+
+const HISTORY_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/history/HistoryView.vue"),
+  "utf8"
+);
 
 const historyRows = [
   {
@@ -191,6 +198,16 @@ describe("History workspace", () => {
     });
     mocks.renameHistory.mockResolvedValue({ code: 200 });
     mocks.deleteHistory.mockResolvedValue({ code: 200 });
+  });
+
+  it("keeps the route shell and rename/delete dialogs fluid", () => {
+    expect(HISTORY_SOURCE).toContain("PhyWorkspaceShell");
+    expect(HISTORY_SOURCE).toContain("min-width: 0;");
+    expect(HISTORY_SOURCE).toContain('width="min(640px, calc(100vw - 24px))"');
+    expect(HISTORY_SOURCE).toContain(
+      "max-height: min(720px, calc(100dvh - 32px));"
+    );
+    expect(HISTORY_SOURCE).toContain("overflow: auto;");
   });
 
   it("loads the unchanged history request into the shared workspace and targets its scroll root", async () => {

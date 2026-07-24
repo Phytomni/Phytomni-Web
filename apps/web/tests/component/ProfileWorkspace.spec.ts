@@ -50,6 +50,11 @@ vi.mock("element-plus", () => ({
 
 import ProfileWorkspace from "@/views/profile/ProfileView.vue";
 
+const PROFILE_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/profile/ProfileView.vue"),
+  "utf8"
+);
+
 type Rule = {
   required?: boolean;
   message?: string | (() => string);
@@ -269,6 +274,17 @@ describe("Profile workspace", () => {
     mocks.getUserProfile.mockResolvedValue({ code: 200, data: { ...profile } });
     mocks.changePassword.mockResolvedValue({ code: 200 });
     mocks.FedLogOut.mockResolvedValue(undefined);
+  });
+
+  it("keeps the route shell, raw dates, and password dialog fluid", () => {
+    expect(PROFILE_SOURCE).toContain("PhyWorkspaceShell");
+    expect(PROFILE_SOURCE).toContain("min-width: 0;");
+    expect(PROFILE_SOURCE).not.toContain("toLocaleDateString");
+    expect(PROFILE_SOURCE).toContain('width="min(640px, calc(100vw - 24px))"');
+    expect(PROFILE_SOURCE).toContain(
+      "max-height: min(720px, calc(100dvh - 32px));"
+    );
+    expect(PROFILE_SOURCE).toContain("overflow: auto;");
   });
 
   afterEach(() => {

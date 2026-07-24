@@ -121,15 +121,19 @@ const submitFeedback = async () => {
 .feedback-form-section {
   width: 100%;
   max-width: 720px;
+  min-width: 0;
   margin: 0 auto;
 }
 
 .feedback-form {
   width: 100%;
+  min-width: 0;
 }
 
 .form-actions {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: var(--phy-space-12);
 }
 

@@ -6,6 +6,10 @@ const SOURCE = readFileSync(
   resolve(__dirname, "../../src/layout/LayoutView.vue"),
   "utf8"
 );
+const CLOUD_STORAGE_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/cloud-storage/CloudStorageView.vue"),
+  "utf8"
+);
 
 describe("Workspace navigation keyboard contract", () => {
   it("keeps the monolithic workspace navigation on semantic controls", () => {
@@ -25,5 +29,12 @@ describe("Workspace navigation keyboard contract", () => {
 
   it("handles a rejected Back-to-Chat navigation", () => {
     expect(SOURCE).toContain('router.push("/chat").catch(() => undefined)');
+  });
+
+  it("keeps cloud storage inside the shared workspace owner", () => {
+    expect(CLOUD_STORAGE_SOURCE).toContain("PhyWorkspaceShell");
+    expect(CLOUD_STORAGE_SOURCE).toContain("PhyEmptyState");
+    expect(CLOUD_STORAGE_SOURCE).toContain("themeClass");
+    expect(CLOUD_STORAGE_SOURCE).toContain("min-width: 0;");
   });
 });

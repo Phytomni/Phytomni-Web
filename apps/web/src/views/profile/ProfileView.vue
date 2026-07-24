@@ -129,7 +129,8 @@
   <el-dialog
     v-model="passwordDialogVisible"
     :title="$t('profile.security.changePassword')"
-    width="500px"
+    class="profile-password-dialog"
+    width="min(640px, calc(100vw - 24px))"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     :teleported="true"
@@ -419,6 +420,10 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.profile-workspace {
+  min-width: 0;
+}
+
 .profile-page-title p,
 .profile-section__heading p,
 .profile-identity__summary p,
@@ -437,6 +442,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--phy-space-16);
+  min-width: 0;
   padding: 0 0 var(--phy-space-24);
 }
 
@@ -489,6 +495,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: var(--phy-space-24);
+  min-width: 0;
 }
 
 .profile-readonly-field {
@@ -533,6 +540,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--phy-space-16);
+  min-width: 0;
 }
 
 .profile-account__consequence {
@@ -541,8 +549,14 @@ onMounted(() => {
 
 .dialog-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--phy-space-8);
+}
+
+.profile-password-dialog {
+  max-height: min(720px, calc(100dvh - 32px));
+  overflow: auto;
 }
 
 .profile-password-form :deep(.el-input__wrapper) {

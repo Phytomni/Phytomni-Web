@@ -32,6 +32,11 @@ vi.mock("element-plus", () => ({
 
 import FeedbackWorkspace from "@/views/feedback/FeedbackView.vue";
 
+const FEEDBACK_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/feedback/FeedbackView.vue"),
+  "utf8"
+);
+
 config.global.plugins = [];
 
 type Rule = {
@@ -180,6 +185,12 @@ describe("Feedback workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.feedback.mockResolvedValue({ code: 200 });
+  });
+
+  it("keeps the form and action row fluid inside the workspace shell", () => {
+    expect(FEEDBACK_SOURCE).toContain("PhyWorkspaceShell");
+    expect(FEEDBACK_SOURCE).toContain("min-width: 0;");
+    expect(FEEDBACK_SOURCE).toContain("flex-wrap: wrap;");
   });
 
   afterEach(() => {

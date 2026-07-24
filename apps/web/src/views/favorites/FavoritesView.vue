@@ -108,7 +108,8 @@
   <el-dialog
     v-model="renameDialogVisible"
     :title="$t('chat.actions.rename')"
-    width="400px"
+    class="favorites-rename-dialog"
+    width="min(640px, calc(100vw - 24px))"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     @close="handleRenameDialogClose"
@@ -323,6 +324,10 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.favorites-workspace {
+  min-width: 0;
+}
+
 .favorites-count {
   margin: 0;
   color: var(--phy-color-text);
@@ -333,6 +338,7 @@ onMounted(() => {
 .favorites-list {
   display: grid;
   gap: var(--phy-space-12);
+  min-width: 0;
 }
 
 .favorite-row {
@@ -403,8 +409,14 @@ onMounted(() => {
 
 .dialog-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--phy-space-12);
+}
+
+.favorites-rename-dialog {
+  max-height: min(720px, calc(100dvh - 32px));
+  overflow: auto;
 }
 
 @media (max-width: 599px) {
