@@ -145,4 +145,111 @@ describe("AgentCapabilityPopover", () => {
       vi.useRealTimers();
     }
   });
+
+  it("keeps a desktop preview inside the viewport near the right edge", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+
+    try {
+      const wrapper = mountPopover("DeepGenomeAgent");
+      const root = wrapper.get(".agent-capability-preview").element;
+      vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
+        left: 920,
+        top: 0,
+        right: 980,
+        bottom: 32,
+        width: 60,
+        height: 32,
+        x: 920,
+        y: 0,
+        toJSON: () => ({}),
+      });
+
+      await wrapper.get("button").trigger("focus");
+      await nextTick();
+
+      const panel = wrapper.get('[role="dialog"]').element;
+      vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({
+        left: 920,
+        top: 40,
+        right: 1360,
+        bottom: 480,
+        width: 440,
+        height: 440,
+        x: 920,
+        y: 40,
+        toJSON: () => ({}),
+      });
+      window.dispatchEvent(new Event("resize"));
+      await nextTick();
+
+      expect(panel.style.left).toBe("-352px");
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: previousWidth,
+      });
+    }
+  });
+
+  it("keeps a desktop preview inside the viewport near the bottom edge", async () => {
+    const previousWidth = window.innerWidth;
+    const previousHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 900,
+    });
+
+    try {
+      const wrapper = mountPopover("DeepGenomeAgent");
+      const root = wrapper.get(".agent-capability-preview").element;
+      vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
+        left: 120,
+        top: 820,
+        right: 180,
+        bottom: 852,
+        width: 60,
+        height: 32,
+        x: 120,
+        y: 820,
+        toJSON: () => ({}),
+      });
+
+      await wrapper.get("button").trigger("focus");
+      await nextTick();
+
+      const panel = wrapper.get('[role="dialog"]').element;
+      vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({
+        left: 120,
+        top: 860,
+        right: 560,
+        bottom: 1300,
+        width: 440,
+        height: 440,
+        x: 120,
+        y: 860,
+        toJSON: () => ({}),
+      });
+      window.dispatchEvent(new Event("resize"));
+      await nextTick();
+
+      expect(panel.style.top).toBe("-376px");
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: previousWidth,
+      });
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: previousHeight,
+      });
+    }
+  });
 });

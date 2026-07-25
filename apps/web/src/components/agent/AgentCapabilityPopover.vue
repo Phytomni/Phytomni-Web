@@ -24,11 +24,13 @@
 
     <section
       v-if="open"
+      ref="panelRef"
       :id="panelId"
       class="agent-capability-popover"
       role="dialog"
       aria-modal="false"
       :aria-labelledby="headingId"
+      :style="panelStyle"
       @pointerenter="cancelScheduledClose"
       @pointerleave="scheduleClose"
     >
@@ -66,7 +68,14 @@ export default {
 </script>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
+import {
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  useAttrs,
+  type CSSProperties,
+} from "vue";
 import { useI18n } from "vue-i18n";
 import type { AgentPresentation } from "./index";
 
@@ -86,6 +95,8 @@ const attrs = useAttrs();
 const open = ref(false);
 const rootRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLButtonElement | null>(null);
+const panelRef = ref<HTMLElement | null>(null);
+const panelStyle = ref<CSSProperties>({});
 const instanceId = Math.random().toString(36).slice(2);
 const panelId = `agent-capability-popover-${instanceId}`;
 const headingId = `${panelId}-heading`;
@@ -96,12 +107,14 @@ function show() {
   if (props.disabled || restoringFocus) return;
   cancelScheduledClose();
   open.value = true;
+  void nextTick(positionPanel);
 }
 
 function close({ restoreFocus = false } = {}) {
   cancelScheduledClose();
   if (!open.value) return;
   open.value = false;
+  panelStyle.value = {};
   emit("close");
   if (restoreFocus) {
     void nextTick(() => {
@@ -121,6 +134,39 @@ function cancelScheduledClose() {
   if (closeTimer === undefined) return;
   window.clearTimeout(closeTimer);
   closeTimer = undefined;
+}
+
+function positionPanel() {
+  const root = rootRef.value;
+  const panel = panelRef.value;
+  if (!root || !panel || window.innerWidth < 600) {
+    panelStyle.value = {};
+    return;
+  }
+
+  const rootRect = root.getBoundingClientRect();
+  const panelRect = panel.getBoundingClientRect();
+  const panelWidth = panelRect.width || panel.offsetWidth;
+  const panelHeight = panelRect.height || panel.offsetHeight;
+  if (!panelWidth || !panelHeight) return;
+
+  const viewportPadding = 16;
+  const panelGap = 8;
+  const rightSafeLeft =
+    window.innerWidth - viewportPadding - panelWidth - rootRect.left;
+  const leftSafeLeft = viewportPadding - rootRect.left;
+  const desiredTop = rootRect.height + panelGap;
+  const topSafeTop = viewportPadding - rootRect.top;
+  const bottomSafeTop =
+    window.innerHeight - viewportPadding - panelHeight - rootRect.top;
+  panelStyle.value = {
+    left: `${Math.max(leftSafeLeft, Math.min(0, rightSafeLeft))}px`,
+    top: `${Math.max(topSafeTop, Math.min(desiredTop, bottomSafeTop))}px`,
+  };
+}
+
+function handleViewportResize() {
+  if (open.value) positionPanel();
 }
 
 function select() {
@@ -149,11 +195,13 @@ function onDocumentPointerDown(event: PointerEvent) {
 
 onMounted(() => {
   document.addEventListener("pointerdown", onDocumentPointerDown);
+  window.addEventListener("resize", handleViewportResize);
 });
 
 onBeforeUnmount(() => {
   cancelScheduledClose();
   document.removeEventListener("pointerdown", onDocumentPointerDown);
+  window.removeEventListener("resize", handleViewportResize);
 });
 </script>
 
