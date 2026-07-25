@@ -281,6 +281,8 @@ async function mountProductionChat(
     global: {
       plugins: [pinia],
       stubs: {
+        // Element Plus 2.14 dropdown poppers require the native Teleport
+        // lifecycle; replacing it with a boolean stub causes recursive updates.
         RouterLink: {
           name: "RouterLink",
           props: ["to"],
@@ -341,7 +343,6 @@ async function mountProductionChat(
         ElButton: {
           template: '<button type="button"><slot /></button>',
         },
-        teleport: true,
       },
     },
   });

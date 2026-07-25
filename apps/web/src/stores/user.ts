@@ -40,8 +40,7 @@ function effectiveToolList(toolList: readonly string[]): string[] {
   );
 }
 
-export default defineStore({
-  id: "user",
+export default defineStore("user", {
   state: (): IState => ({
     name: localStorage.getItem("userName") || "",
     avatar: "",

@@ -14,8 +14,9 @@
         v-else-if="f.type === 'number'"
         :id="fieldId(f.name)"
         :aria-label="f.label"
-        v-model="model[f.name]"
+        :model-value="numberValue(f.name)"
         :disabled="disabled"
+        @update:model-value="setNumberValue(f.name, $event)"
       />
       <el-select
         v-else-if="f.type === 'select'"
@@ -75,6 +76,16 @@ const { t } = useI18n();
 const title = computed(() => props.surface.title);
 const fields = computed(() => props.surface.fields);
 const model = reactive<Record<string, A2uiScalar>>({});
+
+function numberValue(name: string): number | undefined {
+  const value = model[name];
+  return typeof value === "number" ? value : undefined;
+}
+
+function setNumberValue(name: string, value: number | undefined) {
+  if (value === undefined) delete model[name];
+  else model[name] = value;
+}
 
 function onSubmit() {
   if (props.disabled) return;

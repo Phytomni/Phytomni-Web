@@ -166,7 +166,10 @@
             />
             <el-table-column :label="$t('common.operation')" width="120">
               <template #default="scope">
-                <el-button type="text" @click="handleViewHistory(scope.row)">
+                <el-button
+                  type="text"
+                  @click="handleViewHistory(asConfigHistoryRecord(scope.row))"
+                >
                   {{ $t("common.view") }}
                 </el-button>
               </template>
@@ -192,6 +195,12 @@ interface ConfigHistoryRecord {
   operator: string;
   changes: string;
 }
+
+// Element Plus 2.14 exposes table slot rows as DefaultRow. The table data is
+// still ConfigHistoryRecord at this boundary, so keep the handler contract
+// explicit.
+const asConfigHistoryRecord = (row: unknown): ConfigHistoryRecord =>
+  row as ConfigHistoryRecord;
 
 // Configuration form data
 const configForm = reactive({

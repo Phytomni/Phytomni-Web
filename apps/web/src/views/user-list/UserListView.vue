@@ -108,14 +108,14 @@
                 <el-button
                   size="small"
                   type="primary"
-                  @click="handleView(scope.row)"
+                  @click="handleView(asUserData(scope.row))"
                 >
                   {{ $t("common.view") }}
                 </el-button>
                 <el-button
                   size="small"
                   type="success"
-                  @click="handleEdit(scope.row)"
+                  @click="handleEdit(asUserData(scope.row))"
                 >
                   {{ $t("common.edit") }}
                 </el-button>
@@ -123,7 +123,7 @@
                   v-if="scope.row.locked_until"
                   size="small"
                   type="warning"
-                  @click="handleUnlock(scope.row)"
+                  @click="handleUnlock(asUserData(scope.row))"
                 >
                   <el-icon><Unlock /></el-icon>
                   {{ $t("user.unlock") }}
@@ -314,6 +314,11 @@ import {
 const { t } = useI18n();
 
 type UserData = UserSummary;
+
+// Element Plus 2.14 exposes untyped table slot rows as DefaultRow. The data
+// source is still validated as UserSummary by the API decoder, so narrow the
+// slot boundary once instead of weakening the table data or handlers.
+const asUserData = (row: unknown): UserData => row as UserData;
 
 // Table-related
 const loading = ref(false);

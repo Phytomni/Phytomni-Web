@@ -94,7 +94,7 @@
                 <button
                   type="button"
                   class="gene-primary-action gene-code"
-                  @click="handleGeneClick(row)"
+                  @click="handleGeneClick(asGeneData(row))"
                 >
                   {{ row.gene_id }}
                 </button>
@@ -154,6 +154,10 @@ interface GeneData {
   gene_id: string;
   file_name: string;
 }
+
+// Element Plus 2.14 exposes table slot rows as DefaultRow. The table data is
+// still GeneData at this boundary, so keep the handler contract explicit.
+const asGeneData = (row: unknown): GeneData => row as GeneData;
 
 const { t } = useI18n();
 const searchQuery = ref("");
