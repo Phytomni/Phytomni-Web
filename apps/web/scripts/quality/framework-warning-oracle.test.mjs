@@ -37,6 +37,8 @@ test("limits warning-oracle modes to the approved local commands", () => {
   ]);
   assert.equal(command.cwd, resolve(scriptDir, "../.."));
   assert.equal(resolveCommand("unknown", []), undefined);
+  assert.equal(resolveCommand("toString", []), undefined);
+  assert.equal(resolveCommand("constructor", []), undefined);
 });
 
 test("rejects an unknown warning-oracle mode with EX_USAGE", async () => {

@@ -14,8 +14,8 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(scriptDir, "../..");
 
 export function resolveCommand(mode, forwardedArgs) {
+  if (!Object.hasOwn(COMMANDS, mode)) return undefined;
   const command = COMMANDS[mode];
-  if (!command) return undefined;
 
   const [name, args] = command;
   return {

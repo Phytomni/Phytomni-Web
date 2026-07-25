@@ -39,9 +39,8 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ back: mocks.back, replace: mocks.replace }),
 }));
 vi.mock("element-plus", async () => {
-  const actual = await vi.importActual<typeof import("element-plus")>(
-    "element-plus"
-  );
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
   return {
     ...actual,
     ElMessage: {
@@ -136,7 +135,7 @@ const ElFormItemStub = defineComponent({
   setup(props, { slots }) {
     const errors = inject(
       formErrorsKey,
-      computed(() => ({} as Record<string, string>))
+      computed(() => ({}) as Record<string, string>)
     );
     return () =>
       h("section", { class: "el-form-item", "data-prop": props.prop }, [
@@ -247,7 +246,9 @@ describe("Change Password surface", () => {
     expect(wrapper.findAll('img[src="/logo.png"]')).toHaveLength(1);
     expect(wrapper.find(".phy-auth-brand").text()).toContain("Phytomni");
     expect(wrapper.findAll("h1")).toHaveLength(1);
-    expect(wrapper.get(".change-password-title").text()).toBe("Change Password");
+    expect(wrapper.get(".change-password-title").text()).toBe(
+      "Change Password"
+    );
     expect(wrapper.find(".change-password-page").exists()).toBe(false);
     expect(wrapper.find(".change-password-back").exists()).toBe(false);
     expect(wrapper.find(".change-password-form").exists()).toBe(true);

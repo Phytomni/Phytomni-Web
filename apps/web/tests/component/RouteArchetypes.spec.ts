@@ -16,12 +16,7 @@ type RouteRecord = {
 };
 
 type ProductLayout =
-  | "auth"
-  | "conversation"
-  | "demo"
-  | "document"
-  | "standalone"
-  | "workspace";
+  "auth" | "conversation" | "demo" | "document" | "standalone" | "workspace";
 
 type RouteContract = {
   path: string;
@@ -312,8 +307,8 @@ function flattenLeafRoutes(records: RouteRecord[]): RouteRecord[] {
     record.children?.length
       ? flattenLeafRoutes(record.children)
       : record.component
-      ? [record]
-      : []
+        ? [record]
+        : []
   );
 }
 
@@ -517,7 +512,7 @@ describe("routed visual archetypes", () => {
     const shell = readSource("components/demo/AgentDemoShell.vue");
     const staticDemoRoutes = ROUTE_CONTRACTS.filter((route) =>
       STATIC_AGENT_DEMO_PATHS.includes(
-        route.path as typeof STATIC_AGENT_DEMO_PATHS[number]
+        route.path as (typeof STATIC_AGENT_DEMO_PATHS)[number]
       )
     );
 
@@ -605,7 +600,7 @@ describe("routed visual archetypes", () => {
       "history-empty",
       "history-error",
     ]) {
-      expect(VISUAL_FIXTURE_REGISTRY_SOURCE).toContain(`\"${state}\"`);
+      expect(VISUAL_FIXTURE_REGISTRY_SOURCE).toContain(`"${state}"`);
       expect(DESIGN_SYSTEM_SOURCE).toContain(state);
     }
 
@@ -637,10 +632,10 @@ describe("routed visual archetypes", () => {
     ];
 
     expect(STATIC_AGENT_DEMO_PATHS).not.toContain(
-      "/gene-network-agent" as typeof STATIC_AGENT_DEMO_PATHS[number]
+      "/gene-network-agent" as (typeof STATIC_AGENT_DEMO_PATHS)[number]
     );
     expect(STATIC_AGENT_DEMO_PATHS).not.toContain(
-      "/digital-design-agent" as typeof STATIC_AGENT_DEMO_PATHS[number]
+      "/digital-design-agent" as (typeof STATIC_AGENT_DEMO_PATHS)[number]
     );
     expect(
       Object.values(REMOTE_AGENT_PRODUCT_REGISTRY).every(

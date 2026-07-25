@@ -454,8 +454,7 @@ export default {
       dataAgentAlt: "Data Agent workflow flowchart",
       analystAgentAlt: "Analyst Agent workflow flowchart",
       reviewAgentAlt: "Review Agent workflow flowchart",
-      inSilicoResearchAgentAlt:
-        "In Silico Research Agent workflow flowchart",
+      inSilicoResearchAgentAlt: "In Silico Research Agent workflow flowchart",
       geneNetworkAgentAlt: "Gene Network Agent workflow flowchart",
       briefGeneAgentAlt: "Brief Gene Agent workflow flowchart",
       deepGenomeAgentAlt: "Deep Genome Agent workflow flowchart",

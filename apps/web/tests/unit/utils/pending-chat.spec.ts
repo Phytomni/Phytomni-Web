@@ -429,8 +429,8 @@ describe("writePendingChat", () => {
 
 describe("clearPendingChat", () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   it("removes key when present", () => {

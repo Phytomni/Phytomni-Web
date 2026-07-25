@@ -40,9 +40,8 @@ vi.mock("@/utils/auth-redirect", () => ({
 }));
 vi.mock("@/stores", () => ({ userStore: () => mocks.store }));
 vi.mock("element-plus", async () => {
-  const actual = await vi.importActual<typeof import("element-plus")>(
-    "element-plus"
-  );
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
   return {
     ...actual,
     ElMessage: {
@@ -216,9 +215,9 @@ describe("Login auth surface", () => {
     expect(wrapper.findAll(".el-form")).toHaveLength(1);
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
     expect(wrapper.find(".login-button").attributes("type")).toBe("button");
-    expect(wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')).toHaveLength(
-      1
-    );
+    expect(
+      wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')
+    ).toHaveLength(1);
     expect(wrapper.findAll("h1")).toHaveLength(1);
     expect(wrapper.get(".login-title").text()).toBe("Sign in");
     expect(wrapper.get(".login-subtitle").text()).toBe(

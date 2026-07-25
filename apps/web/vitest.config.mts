@@ -58,7 +58,6 @@ export default defineConfig({
         "src/utils/sanitizer-diff.ts",
         "src/utils/reference-renderer.ts",
         "src/views/chat/utils/message-parse.ts",
-        "src/views/chat/utils/starterPrompts.ts",
         "src/views/chat/composables/useChatHistoryGroups.ts",
         "src/views/chat/composables/useSidebarResponsive.ts",
         "src/views/chat/composables/useReactions.ts",

@@ -125,14 +125,25 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
+  function spyOnPrint() {
+    if (typeof window.print !== "function") {
+      Object.defineProperty(window, "print", {
+        configurable: true,
+        writable: true,
+        value: () => undefined,
+      });
+    }
+    return vi.spyOn(window, "print");
+  }
+
   it("does not wait for the synchronous native print call before cleanup", async () => {
     const fakeEl = document.createElement("div");
     fakeEl.appendChild(document.createElement("p"));
     const mainContentRef = ref({ $el: fakeEl });
     const printPromise = new Promise<void>(() => undefined);
-    const printSpy = vi
-      .spyOn(window, "print")
-      .mockReturnValue(printPromise as unknown as void);
+    const printSpy = spyOnPrint().mockReturnValue(
+      printPromise as unknown as void
+    );
 
     const { downloadPDF } = useDeepGenomeDownloads({
       props: { markdown: "# PDF test", filename: "report.md" },
@@ -156,7 +167,7 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
     const mainContentRef = ref({ $el: fakeEl });
 
     let toolbarWasCloned = true;
-    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {
+    const printSpy = spyOnPrint().mockImplementation(() => {
       toolbarWasCloned = Boolean(
         document
           .querySelector("#print-container")
@@ -182,7 +193,7 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
     const mainContentRef = ref({ $el: fakeEl });
 
     // mock window.print to avoid a real print
-    const printSpy = vi.spyOn(window, "print").mockResolvedValue(undefined);
+    const printSpy = spyOnPrint().mockResolvedValue(undefined);
 
     const opts = {
       props: { markdown: "# PDF test", filename: "report.md" },
@@ -201,7 +212,7 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
     const nativeMain = document.createElement("main");
     nativeMain.appendChild(document.createElement("p"));
     const mainContentRef = ref<HTMLElement | null>(nativeMain);
-    const printSpy = vi.spyOn(window, "print").mockResolvedValue(undefined);
+    const printSpy = spyOnPrint().mockResolvedValue(undefined);
 
     const { downloadPDF } = useDeepGenomeDownloads({
       props: { markdown: "# Embedded PDF", filename: "embedded.md" },
@@ -216,7 +227,7 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
   });
 
   it("skips printing when the main content ref has no DOM element", async () => {
-    const printSpy = vi.spyOn(window, "print").mockResolvedValue(undefined);
+    const printSpy = spyOnPrint().mockResolvedValue(undefined);
 
     const { downloadPDF } = useDeepGenomeDownloads({
       props: { markdown: "# Missing content", filename: "missing.md" },

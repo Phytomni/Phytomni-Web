@@ -64,9 +64,7 @@ describe("ChatFrameV2 — production capture hooks", () => {
       countOccurrences(CHAT_SOURCE, 'data-test="chat-transcript-scroll-root"')
     ).toBe(1);
     expect(countOccurrences(CHAT_SOURCE, 'ref="messageContainer"')).toBe(1);
-    expect(TRANSCRIPT_SOURCE).toContain(
-      'v-if="!currentChat?.messages?.length"'
-    );
+    expect(CHAT_SOURCE).toContain('v-if="!currentChat?.messages?.length"');
     expect(TRANSCRIPT_SOURCE).toContain('v-if="currentChat?.messages?.length"');
   });
 

@@ -30,9 +30,8 @@ vi.mock("@/utils/auth-redirect", () => ({
   redirectIfAuthed: mocks.redirectIfAuthed,
 }));
 vi.mock("element-plus", async () => {
-  const actual = await vi.importActual<typeof import("element-plus")>(
-    "element-plus"
-  );
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
   return {
     ...actual,
     ElMessage: {
@@ -236,9 +235,9 @@ describe("Registration auth surface", () => {
     );
     expect(wrapper.find(".register-title").element.tagName).toBe("H1");
     expect(wrapper.find(".register-subtitle").element.tagName).toBe("P");
-    expect(wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')).toHaveLength(
-      1
-    );
+    expect(
+      wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')
+    ).toHaveLength(1);
     expect(wrapper.findAll("h1")).toHaveLength(1);
     expect(wrapper.get(".register-title").text()).toBe("Create Account");
     expect(wrapper.get(".register-subtitle").text()).toBe(

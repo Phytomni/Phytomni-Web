@@ -116,6 +116,10 @@ def test_vite8_toolchain_keeps_supported_versions_without_legacy_sass_api() -> N
 
     expected_versions = {
         "vite": "8.1.5",
+        "vitest": "4.1.10",
+        "@vitest/coverage-v8": "4.1.10",
+        "@vue/test-utils": "2.4.11",
+        "happy-dom": "20.11.1",
         "@vitejs/plugin-vue": "6.0.8",
         "@vitejs/plugin-vue-jsx": "5.1.6",
         "sass": "1.101.7",
@@ -126,11 +130,58 @@ def test_vite8_toolchain_keeps_supported_versions_without_legacy_sass_api() -> N
     assert 'api: "modern"' not in vite_config
 
 
-def test_vitest_coverage_auto_update_uses_supported_nested_option() -> None:
+def test_vitest_coverage_contract_is_explicit_and_thresholds_are_stable() -> None:
     config = _read(WEB_ROOT / "vitest.config.mts")
+    coverage = config[config.index("coverage: {") : config.index("thresholds:")]
+    thresholds_start = config.index("thresholds: {")
+    thresholds_end = config.index("\n      },", thresholds_start)
+    thresholds = config[thresholds_start:thresholds_end]
 
+    expected_include = {
+        "src/utils/auth-redirect.ts",
+        "src/utils/auth.ts",
+        "src/utils/pending-chat.ts",
+        "src/utils/network-error.ts",
+        "src/utils/sanitize-markup.ts",
+        "src/utils/image-viewer.ts",
+        "src/locales/lazy.ts",
+        "src/locales/datetime-formats.ts",
+        "src/locales/format-display-date.ts",
+        "src/components/LangSwitch.vue",
+        "src/components/PiiWatermark.vue",
+        "src/components/ChatModeSelector.vue",
+        "src/permission.ts",
+        "src/views/forgot-password/ForgotPasswordView.vue",
+        "src/utils/citation.ts",
+        "src/utils/markdown-inline.ts",
+        "src/utils/sanitizer-diff.ts",
+        "src/utils/reference-renderer.ts",
+        "src/views/chat/utils/message-parse.ts",
+        "src/views/chat/composables/useChatHistoryGroups.ts",
+        "src/views/chat/composables/useSidebarResponsive.ts",
+        "src/views/chat/composables/useReactions.ts",
+        "src/views/chat/composables/useAgentImages.ts",
+        "src/views/chat/composables/useComposer.ts",
+        "src/views/chat/utils/agentProgress.ts",
+        "src/views/chat/streaming/aguiEvents.ts",
+        "src/views/chat/streaming/eventReducer.ts",
+        "src/views/chat/streaming/incrementalMarkdown.ts",
+        "src/views/chat/streaming/blockRegistry.ts",
+        "src/views/chat/streaming/a2uiParse.ts",
+        "src/views/chat/streaming/a2uiAction.ts",
+        "src/views/chat/streaming/sendBranch.ts",
+        "src/views/chat/composables/useStreamMessage.ts",
+        "src/stores/actionObserver.ts",
+        "src/styles/tokens.ts",
+    }
+    configured = set(re.findall(r'"(src/[^"\n]+)"', coverage))
+    assert configured == expected_include
     assert "thresholdAutoUpdate" not in config
-    assert "autoUpdate: false" in config
+    assert "autoUpdate: false" in thresholds
+    assert "lines: 80" in config
+    assert "functions: 80" in config
+    assert "statements: 80" in config
+    assert "branches: 75" in config
 
 
 def test_compiler_projects_use_bundler_resolution_without_suppression() -> None:

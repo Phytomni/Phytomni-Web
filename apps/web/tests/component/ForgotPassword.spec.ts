@@ -60,9 +60,9 @@ describe("ForgotPassword view", () => {
     expect(SOURCE).toContain("PhyAuthBrand");
     expect(SOURCE.match(/<PhyAuthBrand/g)).toHaveLength(1);
     expect(SOURCE.match(/<h1/g)).toHaveLength(1);
-    expect(wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')).toHaveLength(
-      1
-    );
+    expect(
+      wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')
+    ).toHaveLength(1);
     expect(wrapper.findAll("h1")).toHaveLength(1);
     expect(wrapper.get(".forgot-password-title").text()).toBe("忘记密码");
     expect(SOURCE).toContain("var(--el-color-warning)");

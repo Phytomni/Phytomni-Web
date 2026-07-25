@@ -193,6 +193,7 @@ import { computed, ref, unref } from "vue";
 import type { VNodeRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { MentionSender, FilesCard } from "vue-element-plus-x";
+import type { MentionOption } from "vue-element-plus-x/types/MentionSender";
 import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
 import ChatAgentPicker, {
@@ -225,7 +226,7 @@ const emit = defineEmits<{
   "update:chatMode": [mode: "instant" | "expert"];
   submit: [];
   stop: [];
-  select: [option: unknown];
+  select: [option: MentionOption];
   search: [query: string];
   command: [cmd: string];
   "file-change": [file: unknown];
@@ -337,13 +338,16 @@ defineExpose<ChatComposerHandle>({
   background: var(--phy-color-bg-elevated);
   box-shadow: var(--phy-shadow-soft);
   padding: 10px 12px;
-  transition: border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+  transition:
+    border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
     box-shadow var(--phy-motion-fast) var(--phy-motion-ease-out);
 }
 
 .phy-composer-frame:focus-within {
   border-color: var(--phy-color-focus);
-  box-shadow: var(--phy-shadow-soft), 0 0 0 2px var(--phy-color-focus);
+  box-shadow:
+    var(--phy-shadow-soft),
+    0 0 0 2px var(--phy-color-focus);
 }
 
 .phy-composer-frame__attachments {
