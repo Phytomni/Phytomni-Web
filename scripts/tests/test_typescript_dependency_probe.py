@@ -32,20 +32,18 @@ EXPECTED_APPLICATION_DIAGNOSTIC_CODES = frozenset(
     {
         "TS1039",
         "TS2304",
-        "TS2305",
         "TS2307",
+        "TS2339",
         "TS2344",
         "TS2411",
-        "TS2428",
         "TS2502",
         "TS2536",
         "TS2694",
-        "TS2749",
         "TS2590",
         "TS2552",
+        "TS2724",
         "TS2846",
         "TS7010",
-        "TS7016",
     }
 )
 PROJECTS = {

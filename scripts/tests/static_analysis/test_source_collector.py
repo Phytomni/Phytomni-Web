@@ -14,12 +14,18 @@ pytestmark = pytest.mark.unit
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "source"
 
 
+def _fixture_files() -> tuple[Path, ...]:
+    """Return only source fixtures, ignoring interpreter cache directories."""
+
+    return tuple(sorted(path for path in FIXTURE_DIR.iterdir() if path.is_file()))
+
+
 def test_collects_supported_source_directives_with_exact_context(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "source"
     root.mkdir()
-    for path in FIXTURE_DIR.iterdir():
+    for path in _fixture_files():
         (root / path.name).write_text(
             path.read_text(encoding="utf-8"), encoding="utf-8"
         )
@@ -103,7 +109,7 @@ def test_source_findings_are_deterministically_sorted_and_descriptions_are_ignor
 ) -> None:
     root = tmp_path / "source"
     root.mkdir()
-    for path in FIXTURE_DIR.iterdir():
+    for path in _fixture_files():
         (root / path.name).write_text(
             path.read_text(encoding="utf-8"), encoding="utf-8"
         )
