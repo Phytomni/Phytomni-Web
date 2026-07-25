@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import type { BotArtifact } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import BotReportState from "@/components/research/BotReportState.vue";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
-import { datetimeFormats } from "@/locales/datetime-formats";
+import enUS from "@/locales/langs/en-US";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 vi.mock("@/components/MarkdownViewer.vue", () => ({
   default: {
@@ -34,7 +36,7 @@ function lifecycle(
 }
 
 function mountReport(state: BotLifecycleState & { reportStage?: ReportStage }) {
-  return mount(BotReportState, {
+  return mountWithApp(BotReportState, {
     props: { state },
     global: {
       stubs: {
@@ -90,33 +92,29 @@ describe("BotReportState", () => {
   });
 
   it("formats report timestamps through the locale-aware datetime preset", () => {
-    const i18n = createI18n({
-      legacy: false,
-      locale: "en-US",
-      datetimeFormats,
-      messages: { "en-US": {}, "zh-CN": {} },
-    });
     const updatedAt = "2026-07-16T08:30:00";
-    const wrapper = mount(BotReportState, {
-      props: {
-        state: lifecycle({
-          status: "SUCCEEDED",
-          visibleReport: "# Final report",
-          finalReport: "# Final report",
-        }),
-        updatedAt,
-      },
-      global: {
-        plugins: [i18n],
-        stubs: {
-          MarkdownViewer: {
-            props: ["content"],
-            template:
-              '<article data-test="report-markdown">{{ content }}</article>',
+    const wrapper = createTestAppContext({ locale: "en-US" }).mount(
+      BotReportState,
+      {
+        props: {
+          state: lifecycle({
+            status: "SUCCEEDED",
+            visibleReport: "# Final report",
+            finalReport: "# Final report",
+          }),
+          updatedAt,
+        },
+        global: {
+          stubs: {
+            MarkdownViewer: {
+              props: ["content"],
+              template:
+                '<article data-test="report-markdown">{{ content }}</article>',
+            },
           },
         },
-      },
-    });
+      }
+    );
 
     expect(wrapper.get('[data-test="bot-report-updated-at"]').text()).toBe(
       "7/16/2026, 8:30 AM"
@@ -127,7 +125,7 @@ describe("BotReportState", () => {
     const wrapper = mountReport(lifecycle({ status: "FAILED" }));
 
     expect(wrapper.get('[data-test="bot-report-empty"]').text()).toBe(
-      "common.failed"
+      enUS.common.failed
     );
     expect(wrapper.get('[data-test="bot-report-empty"]').text()).not.toBe(
       "common.loading"
@@ -149,7 +147,7 @@ describe("BotArtifactList", () => {
       },
       { outputDir: "/obs/bucket/run-1", paths: [] },
     ];
-    const wrapper = mount(BotArtifactList, {
+    const wrapper = mountWithApp(BotArtifactList, {
       props: { artifacts, download, emptyLabel: "Warning" },
     });
 

@@ -6,10 +6,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount, flushPromises } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import {
@@ -38,6 +36,16 @@ import {
   buildA2uiLifecycleMessages,
 } from "../visual/chat/fixture-data";
 import { mustGet } from "../helpers/mockFactories";
+import {
+  createTestAppContext,
+  type TestAppContext,
+} from "../helpers/test-app-context";
+
+const mount: TestAppContext["mount"] = ((component, mountOptions) =>
+  createTestAppContext().mount(
+    component,
+    mountOptions
+  )) as TestAppContext["mount"];
 
 const ACTIONS_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageActions.vue"),
@@ -82,12 +90,6 @@ const A2UI_LIFECYCLE_KEYS = [
   "refreshRequired",
 ] as const;
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS },
-});
-
 describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
   it("keeps lifecycle copy bilingual and free of upstream error details", () => {
     const english = enUS.chat.a2ui as Record<string, string>;
@@ -111,7 +113,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     };
     const wrapper = mount(AgentSurfaceBlock, {
       props: { block },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
 
     expect(wrapper.find(".a2ui-status").text()).toBe(english.unknown);
@@ -130,7 +132,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     };
     const wrapper = mount(AgentSurfaceBlock, {
       props: { block: roundTwo },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
       attachTo: document.body,
     });
     await flushPromises();
@@ -180,7 +182,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     const roundOne = structuredClone(FIXTURE_A2UI_REQUIRED_BLOCK);
     const wrapper = mount(AgentSurfaceBlock, {
       props: { block: roundOne },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(document.activeElement).not.toBe(
       wrapper.find(".agent-surface-block").element
@@ -205,7 +207,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     };
     const form = mount(FormWidget, {
       props: { surface: formSurface, disabled: false },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(form.find("label[for='a2ui-field-species']").text()).toBe("Species");
     expect(form.find("input").attributes("aria-label")).toBe("Species");
@@ -226,7 +228,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
         },
         disabled: false,
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(
       choice.find('[data-test="a2ui-choice-submit"]').attributes("aria-label")
@@ -243,15 +245,10 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     expect(A2UI_LIFECYCLE_LONG_LABEL).toHaveLength(256);
 
     for (const locale of ["en-US", "zh-CN"] as const) {
-      const localeI18n = createI18n({
-        legacy: false,
-        locale,
-        fallbackLocale: "en-US",
-        messages: { "en-US": enUS, "zh-CN": zhCN },
-      });
-      const wrapper = mount(StreamMessage, {
+      const localeContext = createTestAppContext({ locale });
+      const wrapper = localeContext.mount(StreamMessage, {
         props: { blocks: structuredClone(blocks) },
-        global: { plugins: [localeI18n, ElementPlus] },
+        global: {},
       });
 
       expect(wrapper.findAll(".agent-surface-block")).toHaveLength(7);
@@ -328,7 +325,6 @@ describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
         offCanvas: false,
       },
       global: {
-        plugins: [i18n],
         stubs: {
           ElIcon: true,
           ElButton: {
@@ -477,7 +473,6 @@ describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
         offCanvas: false,
       },
       global: {
-        plugins: [i18n],
         stubs: {
           ElIcon: true,
           ElButton: {
@@ -556,7 +551,7 @@ describe("ChatAccessibilityV2 — Composer picker keyboard", () => {
       },
       global: { mocks: { $t: (key: string) => key } },
     });
-    expect(loading.text()).toContain("chat.agentPicker.loading");
+    expect(loading.text()).toContain(enUS.chat.agentPicker.loading);
     expect(loading.find('[role="combobox"]').exists()).toBe(false);
 
     const disabled = mount(ChatAgentPicker, {
@@ -585,7 +580,7 @@ describe("ChatAccessibilityV2 — Activity disclosure linkage", () => {
         expanded: false,
         streaming: true,
       },
-      global: { plugins: [i18n] },
+      global: {},
       attachTo: document.body,
     });
 
@@ -623,7 +618,7 @@ describe("ChatAccessibilityV2 — message actions and downloads", () => {
         directDownloads: [{ kind: "file", path: "/synthetic-path" }],
         generatedFormats: ["PDF"],
       },
-      global: { plugins: [i18n], stubs: actionStubs },
+      global: { stubs: actionStubs },
       attachTo: document.body,
     });
 
@@ -678,7 +673,7 @@ describe("ChatAccessibilityV2 — message actions and downloads", () => {
         canRefresh: true,
         refreshBusy: true,
       },
-      global: { plugins: [i18n], stubs: actionStubs },
+      global: { stubs: actionStubs },
     });
     const refresh = wrapper.find('[data-testid="action-refresh"]');
     expect(refresh.attributes("aria-busy")).toBe("true");
@@ -693,7 +688,7 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
       props: {
         block: FIXTURE_A2UI_REQUIRED_BLOCK,
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
       attachTo: document.body,
     });
 
@@ -732,7 +727,7 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
       props: {
         block,
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(wrapper.text()).toContain(enUS.chat.a2ui.expired);
     expect(wrapper.find(".a2ui-status").attributes("role")).toBe("status");
@@ -752,7 +747,7 @@ describe("ChatAccessibilityV2 — progressbar and live-region restraint", () => 
         completing: false,
         stageLabel: "Retrieving",
       },
-      global: { plugins: [i18n] },
+      global: {},
     });
     vi.advanceTimersByTime(7500);
     await nextTick();
@@ -794,7 +789,7 @@ describe("ChatAccessibilityV2 — Agent preview focus recovery", () => {
       props: {
         presentation: CANONICAL_AGENT_PRESENTATIONS.ChatAgent,
       },
-      global: { plugins: [i18n] },
+      global: {},
       attachTo: document.body,
     });
     const trigger = wrapper.get("button");
@@ -821,7 +816,7 @@ describe("ChatAccessibilityV2 — Agent preview focus recovery", () => {
       props: {
         presentation: CANONICAL_AGENT_PRESENTATIONS.ChatAgent,
       },
-      global: { plugins: [i18n] },
+      global: {},
       attachTo: document.body,
     });
     const trigger = wrapper.get("button");

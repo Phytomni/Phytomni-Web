@@ -1,15 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import DigitalDesignAgentView from "@/views/digital-design-agent/DigitalDesignAgentView.vue";
 import GeneNetworkAgentView from "@/views/gene-network-agent/GeneNetworkAgentView.vue";
 import ResearchAgentView from "@/views/research-agent/ResearchAgentView.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
-import { datetimeFormats } from "@/locales/datetime-formats";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
 import {
   parseBotProjection,
   type BotRunProjection,
@@ -20,6 +15,7 @@ import {
   reduceBotProjection,
 } from "@/views/chat/streaming/botLifecycleReducer";
 import { mustGet } from "../helpers/mockFactories";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => {
   const state = {
@@ -130,14 +126,6 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ back: mocks.routerBack }),
   useRoute: () => ({ query: {} }),
 }));
-
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  datetimeFormats,
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
 
 const surfaces = {
   research: ResearchAgentView,
@@ -340,10 +328,9 @@ function mountSurface(
   surface: keyof typeof surfaces,
   state: BotRemoteAgentRunState = syntheticDegradedState()
 ) {
-  return mount(surfaces[surface], {
+  return createTestAppContext().mount(surfaces[surface], {
     props: { state },
     global: {
-      plugins: [i18n],
       stubs: {
         MarkdownViewer: {
           props: ["content"],
@@ -471,9 +458,8 @@ describe("Bot remote-agent surface matrix", () => {
   );
 
   it("retains research input after a retryable submit failure", async () => {
-    const wrapper = mount(ResearchAgentView, {
+    const wrapper = createTestAppContext().mount(ResearchAgentView, {
       global: {
-        plugins: [i18n],
         stubs: {
           MarkdownViewer: {
             props: ["content"],

@@ -5,11 +5,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount, flushPromises } from "@vue/test-utils";
-import { defineComponent, h, nextTick, reactive, ref } from "vue";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
+import { defineComponent, h, nextTick, reactive } from "vue";
 import { createPinia, setActivePinia } from "pinia";
-import ElementPlus from "element-plus";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { useA2uiInteraction } from "@/views/chat/composables/useA2uiInteraction";
 import type { ChatMessage, ChatUIState, UploadFile } from "@/views/chat/types";
@@ -52,6 +50,18 @@ import {
   SYNTHETIC_IDENTITY,
 } from "../visual/chat/fixture-data";
 import { mustGet } from "../helpers/mockFactories";
+import {
+  createTestAppContext,
+  type TestAppContext,
+} from "../helpers/test-app-context";
+
+const mount: TestAppContext["mount"] = ((component, mountOptions) =>
+  createTestAppContext().mount(
+    component,
+    mountOptions
+  )) as TestAppContext["mount"];
+
+beforeEach(() => setActivePinia(createPinia()));
 
 vi.mock("vue-element-plus-x", () => ({
   MentionSender: {
@@ -284,14 +294,8 @@ describe("ChatInteractionV2 — behavior matrix", () => {
           });
       },
     });
-    const i18n = createI18n({
-      legacy: false,
-      locale: "en-US",
-      messages: { "en-US": enUS, "zh-CN": zhCN },
-    });
     const wrapper = mount(Harness, {
       global: {
-        plugins: [i18n, ElementPlus],
         stubs: {
           MarkdownViewer: true,
           CitedAnswer: true,
@@ -368,14 +372,9 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     expect(assistant.text()).toContain("follow-up");
     expect(assistant.text()).toContain("actions");
 
-    const i18n = createI18n({
-      legacy: false,
-      locale: "en-US",
-      messages: { "en-US": enUS },
-    });
     const followUps = mount(FollowUpQuestions, {
       props: { questions: MESSAGE_FOLLOW_UPS.followUpQuestions },
-      global: { plugins: [i18n] },
+      global: {},
     });
     expect(followUps.text()).toContain("allele frequency");
 
@@ -390,7 +389,6 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         copied: false,
       },
       global: {
-        plugins: [i18n],
         stubs: {
           ElIcon: true,
           ElTooltip: {
@@ -418,12 +416,6 @@ describe("ChatInteractionV2 — behavior matrix", () => {
   });
 
   it("mounts Activity, analyst log, A2UI, simulated progress, and real transfer", async () => {
-    const i18n = createI18n({
-      legacy: false,
-      locale: "en-US",
-      messages: { "en-US": enUS, "zh-CN": zhCN },
-    });
-
     const closed = mount(ChatActivity, {
       props: {
         blocks: FIXTURE_ACTIVITY_BLOCKS,
@@ -431,7 +423,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         expanded: false,
         streaming: true,
       },
-      global: { plugins: [i18n] },
+      global: {},
     });
     expect(closed.find("button").attributes("aria-expanded")).toBe("false");
     expect(closed.find(".tool-block").exists()).toBe(false);
@@ -443,7 +435,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         expanded: true,
         streaming: false,
       },
-      global: { plugins: [i18n] },
+      global: {},
     });
     expect(open.find(".tool-block").exists()).toBe(true);
 
@@ -453,7 +445,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         taskId: MESSAGE_ANALYST_LOG.task_id,
         logData: "Synthetic log",
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(log.find("[data-testid='chat-analyst-log']").exists()).toBe(true);
 
@@ -463,14 +455,13 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         agentName: "ChatAgent",
         completing: false,
       },
-      global: { plugins: [i18n] },
+      global: {},
     });
     expect(progress.find('[data-test="send-progress"]').exists()).toBe(true);
 
     const transfer = mount(TransferProgress, {
       props: { snapshot: FIXTURE_UPLOAD_TRANSFER },
       global: {
-        plugins: [i18n],
         stubs: { "el-progress": true },
       },
     });
@@ -482,7 +473,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       props: {
         block: FIXTURE_A2UI_REQUIRED_BLOCK,
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(a2ui.find(".a2ui-form").exists()).toBe(true);
     expect(a2ui.text()).toContain("Species");
@@ -596,24 +587,18 @@ describe("ChatInteractionV2 — per-dialogue isolation", () => {
     state.logErrorKinds["42"] = "fetch";
     const kindsBefore = { ...state.logErrorKinds };
 
-    const locale = ref<"en-US" | "zh-CN">("en-US");
-    const i18n = createI18n({
-      legacy: false,
-      locale: locale.value,
-      messages: { "en-US": enUS, "zh-CN": zhCN },
-    });
-    const w = mount(ChatAnalystLog, {
+    const context = createTestAppContext({ locale: "en-US" });
+    const w = context.mount(ChatAnalystLog, {
       props: {
         rowId: "42",
         taskId: "t",
         errorKind: state.logErrorKinds["42"],
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(w.text()).toContain(enUS.chat.log.fetchError);
 
-    locale.value = "zh-CN";
-    i18n.global.locale.value = "zh-CN";
+    context.i18n.global.locale.value = "zh-CN";
     await nextTick();
     expect(w.text()).toContain(zhCN.chat.log.fetchError);
     expect(state.logErrorKinds).toEqual(kindsBefore);
@@ -785,10 +770,9 @@ describe("ChatInteractionV2 — Phase 3C harness registry", () => {
 
     for (const key of sampleKeys) {
       const fixture = getChatVisualFixture(key);
-      const wrapper = mount(ChatVisualFixtureApp, {
+      const wrapper = createTestAppContext().mount(ChatVisualFixtureApp, {
         props: { fixture, errorMessage: null },
         global: {
-          plugins: [createPinia()],
           mocks: { $t: (k: string) => k },
           stubs: {
             ChatModeSelector: true,

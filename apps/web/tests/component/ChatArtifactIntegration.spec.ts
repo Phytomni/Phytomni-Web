@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils";
+import { flushPromises, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { createPinia, setActivePinia } from "pinia";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -64,11 +63,11 @@ import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatIndex from "@/views/chat/ChatView.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
 import { SIDEBAR_COLLAPSED_PREFERENCE_KEY } from "@/views/chat/composables/useSidebarResponsive";
 import type { ChatMessage } from "@/views/chat/types";
 import type { BotRunProjection } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -208,12 +207,13 @@ const preview = {
 
 const EMPTY_IMAGES = {} as Record<string, string[]>;
 const EMPTY_LOADING = {} as Record<string, boolean>;
+let appContext: ReturnType<typeof createTestAppContext>;
 
 function mountContent(
   message: ChatMessage,
   artifactPreview: typeof preview | null = null
 ) {
-  return mount(ChatMessageContent, {
+  return appContext.mount(ChatMessageContent, {
     props: {
       message,
       index: 2,
@@ -249,16 +249,6 @@ function mountContent(
 }
 
 const mountedWrappers: VueWrapper[] = [];
-const globalI18n = config.global.plugins[0] as {
-  global: {
-    locale: { value: string };
-    setLocaleMessage: (
-      locale: string,
-      messages: Record<string, unknown>
-    ) => void;
-  };
-};
-
 function setViewportWidth(width: number) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -276,11 +266,8 @@ async function mountProductionChat(
   } = {}
 ) {
   setViewportWidth(width);
-  const pinia = createPinia();
-  setActivePinia(pinia);
-  const wrapper = mount(ChatIndex, {
+  const wrapper = appContext.mount(ChatIndex, {
     global: {
-      plugins: [pinia],
       stubs: {
         // Element Plus 2.14 dropdown poppers require the native Teleport
         // lifecycle; replacing it with a boolean stub causes recursive updates.
@@ -383,10 +370,7 @@ async function settleResponsiveLayout() {
 }
 
 beforeEach(() => {
-  setActivePinia(createPinia());
-  globalI18n.global.setLocaleMessage("en-US", enUS);
-  globalI18n.global.setLocaleMessage("zh-CN", zhCN);
-  globalI18n.global.locale.value = "en-US";
+  appContext = createTestAppContext({ locale: "en-US" });
   testState.chatStates = null;
   testState.copiedText.mockReset();
   testState.downloadFile.mockReset();

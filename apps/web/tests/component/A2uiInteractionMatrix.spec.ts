@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { describe, expect, it } from "vitest";
+import { flushPromises } from "@vue/test-utils";
 import { defineComponent, h, reactive } from "vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import { useA2uiInteraction } from "@/views/chat/composables/useA2uiInteraction";
@@ -8,6 +7,7 @@ import { A2uiTransportError } from "@/views/chat/streaming/a2uiAction";
 import type { A2uiSurfaceActionEvent } from "@/views/chat/composables/useA2uiInteraction";
 import type { ChatMessage } from "@/views/chat/types";
 import { buildA2uiScenario, type A2uiScenario } from "../helpers/a2uiScenario";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 function mountScenario(scenario: A2uiScenario) {
   const message = reactive(scenario.message) as ChatMessage;
@@ -27,7 +27,7 @@ function mountScenario(scenario: A2uiScenario) {
         });
     },
   });
-  const wrapper = mount(Harness, {
+  const wrapper = createTestAppContext().mount(Harness, {
     global: {
       stubs: { ChatActivity: true, CitationReferenceList: true },
     },
@@ -47,8 +47,6 @@ function latestEnvelope(scenario: A2uiScenario) {
 }
 
 describe("A2UI interaction matrix", () => {
-  beforeEach(() => setActivePinia(createPinia()));
-
   it.each([
     ["confirm accept", "confirm", true],
     ["confirm reject", "confirm", false],

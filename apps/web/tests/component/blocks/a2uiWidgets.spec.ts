@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
 import ConfirmWidget from "@/views/chat/components/blocks/a2ui/ConfirmWidget.vue";
 import FormWidget from "@/views/chat/components/blocks/a2ui/FormWidget.vue";
 import ChoiceWidget from "@/views/chat/components/blocks/a2ui/ChoiceWidget.vue";
 import type { A2uiOpenSurface } from "@/views/chat/streaming/a2uiContract";
+import { mountWithApp } from "../../helpers/test-app-context";
 
 describe("ConfirmWidget", () => {
   const surface: Extract<A2uiOpenSurface, { widget: "confirm" }> = {
@@ -18,7 +18,7 @@ describe("ConfirmWidget", () => {
   };
 
   it("emits typed accepted true and false intents", async () => {
-    const w = mount(ConfirmWidget, {
+    const w = mountWithApp(ConfirmWidget, {
       props: { surface: surface.props, disabled: false },
     });
     const buttons = w.findAll("button");
@@ -31,7 +31,7 @@ describe("ConfirmWidget", () => {
   });
 
   it("does not emit when disabled", async () => {
-    const w = mount(ConfirmWidget, {
+    const w = mountWithApp(ConfirmWidget, {
       props: { surface: surface.props, disabled: true },
     });
     const buttons = w.findAll("button");
@@ -55,7 +55,7 @@ describe("FormWidget", () => {
   };
 
   it("emits a typed form intent on submit", async () => {
-    const w = mount(FormWidget, {
+    const w = mountWithApp(FormWidget, {
       props: {
         surface: surface.props,
         disabled: false,
@@ -70,7 +70,7 @@ describe("FormWidget", () => {
   });
 
   it("renders a cancel button and emits cancellation without required fields", async () => {
-    const w = mount(FormWidget, {
+    const w = mountWithApp(FormWidget, {
       props: { surface: surface.props, disabled: false },
     });
 
@@ -86,7 +86,7 @@ describe("FormWidget", () => {
   });
 
   it("does not emit submit or cancel when disabled", async () => {
-    const w = mount(FormWidget, {
+    const w = mountWithApp(FormWidget, {
       props: { surface: surface.props, disabled: true },
     });
 
@@ -112,7 +112,7 @@ describe("ChoiceWidget", () => {
   };
 
   it("emits selected id for single choice", async () => {
-    const w = mount(ChoiceWidget, {
+    const w = mountWithApp(ChoiceWidget, {
       props: {
         surface: surface.props,
         disabled: false,
@@ -132,7 +132,7 @@ describe("ChoiceWidget", () => {
       ...surface,
       props: { ...surface.props, multiple: true },
     };
-    const w = mount(ChoiceWidget, {
+    const w = mountWithApp(ChoiceWidget, {
       props: { surface: multipleSurface.props, disabled: false },
     });
     const selected = ["a", "b"];
@@ -148,7 +148,7 @@ describe("ChoiceWidget", () => {
   });
 
   it("emits cancellation without requiring a selection", async () => {
-    const w = mount(ChoiceWidget, {
+    const w = mountWithApp(ChoiceWidget, {
       props: { surface: surface.props, disabled: false },
     });
     await w.find('[data-test="a2ui-choice-cancel"]').trigger("click");
@@ -158,7 +158,7 @@ describe("ChoiceWidget", () => {
   });
 
   it("does not submit or cancel when disabled", async () => {
-    const w = mount(ChoiceWidget, {
+    const w = mountWithApp(ChoiceWidget, {
       props: { surface: surface.props, disabled: true },
     });
     const radioGroup = w.findComponent({ name: "ElRadioGroup" });
@@ -169,7 +169,7 @@ describe("ChoiceWidget", () => {
   });
 
   it("disables submit for zero selection but leaves cancel enabled", () => {
-    const w = mount(ChoiceWidget, {
+    const w = mountWithApp(ChoiceWidget, {
       props: { surface: surface.props, disabled: false },
     });
     const submit = w.find("[data-test=a2ui-choice-submit]");
@@ -179,7 +179,7 @@ describe("ChoiceWidget", () => {
   });
 
   it("passes option ids as control values instead of labels", () => {
-    const single = mount(ChoiceWidget, {
+    const single = mountWithApp(ChoiceWidget, {
       props: { surface: surface.props, disabled: false },
     });
     const radios = single.findAllComponents({ name: "ElRadio" });
@@ -192,7 +192,7 @@ describe("ChoiceWidget", () => {
       ...surface,
       props: { ...surface.props, multiple: true },
     };
-    const multiple = mount(ChoiceWidget, {
+    const multiple = mountWithApp(ChoiceWidget, {
       props: { surface: multipleSurface.props, disabled: false },
     });
     const checkboxes = multiple.findAllComponents({ name: "ElCheckbox" });
