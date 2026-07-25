@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(() => Promise.resolve()),
@@ -19,11 +18,6 @@ vi.mock("vue-router", () => ({
 
 import Unauthorized from "@/views/error/UnauthorizedView.vue";
 import NotFound from "@/views/error/NotFoundView.vue";
-
-// Each mount installs a locale with the requested language. Remove the empty
-// global i18n plugin from tests/setup.ts so this focused suite does not stack
-// two vue-i18n instances on the same app.
-config.global.plugins = [];
 
 const APP_SOURCE = readFileSync(
   resolve(__dirname, "../../src/App.vue"),
@@ -45,26 +39,16 @@ const routerLinkStub = {
   template: "<a :href=\"typeof to === 'string' ? to : to.path\"><slot /></a>",
 };
 
-const makeI18n = (locale: "en-US" | "zh-CN") =>
-  createI18n({
-    legacy: false,
-    locale,
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-  });
-
 const mountUnauthorized = (locale: "en-US" | "zh-CN" = "en-US") =>
-  mount(Unauthorized, {
+  createTestAppContext({ locale }).mount(Unauthorized, {
     global: {
-      plugins: [makeI18n(locale)],
       stubs: { RouterLink: routerLinkStub },
     },
   });
 
 const mountNotFound = (locale: "en-US" | "zh-CN" = "en-US") =>
-  mount(NotFound, {
+  createTestAppContext({ locale }).mount(NotFound, {
     global: {
-      plugins: [makeI18n(locale)],
       stubs: { RouterLink: routerLinkStub },
     },
   });

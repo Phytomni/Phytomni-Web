@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
-import enUS from "@/locales/langs/en-US";
 import ResearchAgentView from "@/views/research-agent/ResearchAgentView.vue";
 import type { BotRunProjection } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
@@ -11,6 +7,7 @@ import type {
   BotRemoteAgentRunState,
   RemoteAgentRunIdentity,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => {
   const state: { value: BotRemoteAgentRunState } = {
@@ -82,14 +79,6 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-const testI18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS },
-});
-config.global.plugins = [testI18n, ElementPlus];
-
 vi.mock("@/api/chat", () => ({
   getAnswerCheck: mocks.getAnswerCheck,
   getChatdownloadURL: vi.fn(),
@@ -158,7 +147,7 @@ vi.mock("@/components/research/BotArtifactList.vue", () => ({
 }));
 
 function mountView(options: { state?: BotLifecycleState } = {}) {
-  return mount(ResearchAgentView, {
+  return createTestAppContext().mount(ResearchAgentView, {
     props: options.state ? { state: options.state } : undefined,
     global: {
       stubs: {

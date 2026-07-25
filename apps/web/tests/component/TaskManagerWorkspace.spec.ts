@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
 import {
   computed,
   defineComponent,
@@ -12,9 +11,7 @@ import {
 } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
-import { datetimeFormats } from "@/locales/datetime-formats";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getTaskList: vi.fn(),
@@ -24,7 +21,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/api/task", () => ({ getTaskList: mocks.getTaskList }));
 vi.mock("@/api/chat", () => ({ getChatdownloadURL: mocks.getChatdownloadURL }));
-vi.mock("element-plus", () => ({ ElMessage: { error: mocks.error } }));
+vi.mock("element-plus", async () => {
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
+  return { ...actual, ElMessage: { error: mocks.error } };
+});
 
 import TaskManager from "@/views/task-manager/TaskManagerView.vue";
 
@@ -132,8 +133,6 @@ const stubs = {
   ElSpace: { template: "<div><slot /></div>" },
 };
 
-config.global.plugins = [];
-
 const rows = [
   {
     query: "Build a rice callpeak workflow",
@@ -163,24 +162,13 @@ const successResponse = {
   data: { gene_list: rows, total: 31 },
 };
 
-const makeI18n = () =>
-  createI18n({
-    legacy: false,
-    locale: "en-US",
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-    datetimeFormats,
-  });
-
 const mountView = () => {
-  const i18n = makeI18n();
+  const context = createTestAppContext();
   return {
-    i18n,
-    wrapper: mount(TaskManager, {
+    i18n: context.i18n,
+    wrapper: context.mount(TaskManager, {
       global: {
-        plugins: [i18n],
         stubs,
-        directives: { loading: () => undefined },
       },
     }),
   };

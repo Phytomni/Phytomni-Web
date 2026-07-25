@@ -1,12 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
-import { datetimeFormats } from "@/locales/datetime-formats";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getHistoryQuestionList: vi.fn(),
@@ -23,9 +20,14 @@ vi.mock("@/api/chat", () => ({
   deleteHistory: mocks.deleteHistory,
 }));
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: mocks.push }) }));
-vi.mock("element-plus", () => ({
-  ElMessage: { success: mocks.success, error: mocks.error },
-}));
+vi.mock("element-plus", async () => {
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
+  return {
+    ...actual,
+    ElMessage: { success: mocks.success, error: mocks.error },
+  };
+});
 
 import HistoryWorkspace from "@/views/history/HistoryView.vue";
 
@@ -165,22 +167,11 @@ const stubs = {
   ElIcon: { template: "<span><slot /></span>" },
 };
 
-config.global.plugins = [];
-
-const makeI18n = () =>
-  createI18n({
-    legacy: false,
-    locale: "en-US",
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-    datetimeFormats,
-  });
-
 const mountView = () => {
-  const i18n = makeI18n();
+  const context = createTestAppContext();
   return {
-    i18n,
-    wrapper: mount(HistoryWorkspace, { global: { plugins: [i18n], stubs } }),
+    i18n: context.i18n,
+    wrapper: context.mount(HistoryWorkspace, { global: { stubs } }),
   };
 };
 

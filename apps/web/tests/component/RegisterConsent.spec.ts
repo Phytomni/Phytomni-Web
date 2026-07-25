@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mount, config } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const { push, redirectIfAuthed } = vi.hoisted(() => ({
   push: vi.fn(),
@@ -19,20 +15,15 @@ vi.mock("@/api/auth", () => ({ register: vi.fn() }));
 import Register from "@/views/register/RegisterView.vue";
 import { register } from "@/api/auth";
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-config.global.plugins = [i18n, ElementPlus];
+let context: ReturnType<typeof createTestAppContext>;
 
 function mountView() {
-  return mount(Register, { global: { stubs: { LangSwitch: true } } });
+  return context.mount(Register, { global: { stubs: { LangSwitch: true } } });
 }
 
 describe("Register consent", () => {
   beforeEach(() => {
+    context = createTestAppContext();
     vi.clearAllMocks();
   });
 

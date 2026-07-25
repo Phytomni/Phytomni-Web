@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -13,8 +12,7 @@ import {
   type ComputedRef,
   type InjectionKey,
 } from "vue";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getGeneList: vi.fn(),
@@ -55,15 +53,6 @@ const successResponse = {
     total_pages: 1,
   },
 };
-
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-config.global.plugins = [i18n];
 
 type Row = Record<string, unknown>;
 const tableDataKey: InjectionKey<ComputedRef<Row[]>> = Symbol("table-data");
@@ -173,7 +162,7 @@ const ElPaginationStub = defineComponent({
 });
 
 const mountView = () =>
-  mount(GeneDisplay, {
+  mountWithApp(GeneDisplay, {
     global: {
       stubs: {
         ElInput: ElInputStub,
@@ -182,7 +171,6 @@ const mountView = () =>
         ElTableColumn: ElTableColumnStub,
         ElPagination: ElPaginationStub,
       },
-      directives: { loading: () => undefined },
     },
   });
 

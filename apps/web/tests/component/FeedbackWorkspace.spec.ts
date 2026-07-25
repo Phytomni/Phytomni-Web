@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
 import {
   computed,
   defineComponent,
@@ -13,8 +12,10 @@ import {
 } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   feedback: vi.fn(),
@@ -25,10 +26,15 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/api/feedback", () => ({ feedback: mocks.feedback }));
 vi.mock("vue-router", () => ({ useRouter: () => ({ go: mocks.go }) }));
-vi.mock("element-plus", () => ({
-  ElMessage: { success: mocks.success, error: mocks.error },
-  ElMessageBox: {},
-}));
+vi.mock("element-plus", async () => {
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
+  return {
+    ...actual,
+    ElMessage: { success: mocks.success, error: mocks.error },
+    ElMessageBox: {},
+  };
+});
 
 import FeedbackWorkspace from "@/views/feedback/FeedbackView.vue";
 
@@ -36,8 +42,6 @@ const FEEDBACK_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/feedback/FeedbackView.vue"),
   "utf8"
 );
-
-config.global.plugins = [];
 
 type Rule = {
   required?: boolean;
@@ -156,27 +160,19 @@ const stubs = {
   ElButton: ElButtonStub,
 };
 
-const makeI18n = (locale = "en-US") =>
-  createI18n({
-    legacy: false,
-    locale,
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-  });
-
 const mountView = (locale?: "en-US" | "zh-CN") =>
-  mount(FeedbackWorkspace, {
-    global: { plugins: [makeI18n(locale)], stubs },
+  createTestAppContext({ locale }).mount(FeedbackWorkspace, {
+    global: { stubs },
   });
 
 const setContent = async (
-  wrapper: ReturnType<typeof mount>,
+  wrapper: ReturnType<typeof mountWithApp>,
   content: string
 ) => {
   await wrapper.get("textarea").setValue(content);
 };
 
-const submit = async (wrapper: ReturnType<typeof mount>) => {
+const submit = async (wrapper: ReturnType<typeof mountWithApp>) => {
   await wrapper.get(".feedback-submit").trigger("click");
   await flushPromises();
 };

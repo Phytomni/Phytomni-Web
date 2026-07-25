@@ -1,18 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
 import GeneNetworkAgentView from "@/views/gene-network-agent/GeneNetworkAgentView.vue";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
-
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => {
   const state = {
@@ -114,10 +104,9 @@ vi.mock("vue-router", () => ({
 }));
 
 function mountView(options: { state?: BotLifecycleState } = {}) {
-  return mount(GeneNetworkAgentView, {
+  return createTestAppContext().mount(GeneNetworkAgentView, {
     props: options.state ? { state: options.state } : undefined,
     global: {
-      plugins: [i18n],
       stubs: {
         ResearchArtifactShell: {
           template:

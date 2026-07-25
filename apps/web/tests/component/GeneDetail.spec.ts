@@ -1,16 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  config,
-  enableAutoUnmount,
-  flushPromises,
-  mount,
-} from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { enableAutoUnmount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, reactive } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getGeneDetails: vi.fn(),
@@ -39,12 +32,17 @@ vi.mock("@/views/gene-display/gene-markdown", () => ({
   buildDisplayContent: mocks.buildDisplayContent,
 }));
 
-vi.mock("element-plus", () => ({
-  ElMessage: {
-    error: mocks.messageError,
-    warning: mocks.messageWarning,
-  },
-}));
+vi.mock("element-plus", async () => {
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
+  return {
+    ...actual,
+    ElMessage: {
+      error: mocks.messageError,
+      warning: mocks.messageWarning,
+    },
+  };
+});
 
 import GeneDetail from "@/views/gene-display/GeneDetailView.vue";
 
@@ -100,14 +98,6 @@ const DeepGenomeArtifactStub = defineComponent({
   },
 });
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-config.global.plugins = [i18n];
 enableAutoUnmount(afterEach);
 
 const successResponse = (overrides: Record<string, unknown> = {}) => ({
@@ -121,7 +111,7 @@ const successResponse = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const mountView = () =>
-  mount(GeneDetail, {
+  createTestAppContext().mount(GeneDetail, {
     global: {
       stubs: {
         DeepGenomeArtifact: DeepGenomeArtifactStub,

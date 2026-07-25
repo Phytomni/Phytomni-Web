@@ -1,24 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia, type Pinia } from "pinia";
-import { createI18n } from "vue-i18n";
 import LangSwitch from "@/components/LangSwitch.vue";
 import { useAppStore } from "@/stores";
 import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 // Each test holds one pinia: setActivePinia uses it for direct useAppStore() reads,
 // and it is also passed to the component as mount()'s global plugin — both sides
 // share the same store.
-let pinia: Pinia;
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
+let context: ReturnType<typeof createTestAppContext>;
 
-const mountSwitch = () =>
-  mount(LangSwitch, { global: { plugins: [pinia, i18n] } });
+const mountSwitch = () => context.mount(LangSwitch);
 
 vi.mock("@/locales", async () => {
   const actual = await vi.importActual<typeof import("@/locales")>("@/locales");
@@ -31,8 +22,7 @@ import { setLanguage } from "@/locales";
 
 describe("LangSwitch.vue", () => {
   beforeEach(() => {
-    pinia = createPinia();
-    setActivePinia(pinia);
+    context = createTestAppContext();
     vi.clearAllMocks();
   });
 

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
 import {
   computed,
   defineComponent,
@@ -13,9 +12,10 @@ import {
 } from "vue";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
-import { datetimeFormats } from "@/locales/datetime-formats";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getUserProfile: vi.fn(),
@@ -40,13 +40,18 @@ vi.mock("@/stores", () => ({ userStore: () => mocks.store }));
 vi.mock("vue-router", () => ({
   useRouter: () => ({ replace: mocks.replace }),
 }));
-vi.mock("element-plus", () => ({
-  ElMessage: {
-    success: mocks.success,
-    error: mocks.error,
-    warning: mocks.warning,
-  },
-}));
+vi.mock("element-plus", async () => {
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
+  return {
+    ...actual,
+    ElMessage: {
+      success: mocks.success,
+      error: mocks.error,
+      warning: mocks.warning,
+    },
+  };
+});
 
 import ProfileWorkspace from "@/views/profile/ProfileView.vue";
 
@@ -206,8 +211,6 @@ const stubs = {
   ElIcon: { template: "<span><slot /></span>" },
 };
 
-config.global.plugins = [];
-
 const profile = {
   email: "researcher@example.test",
   phone: "010-5555-0101",
@@ -217,29 +220,20 @@ const profile = {
   last_login_at: "2026-07-12T08:30:45",
 };
 
-const makeI18n = () =>
-  createI18n({
-    legacy: false,
-    locale: "en-US",
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-    datetimeFormats,
-  });
-
 const mountView = () => {
-  const i18n = makeI18n();
+  const context = createTestAppContext();
   return {
-    i18n,
-    wrapper: mount(ProfileWorkspace, { global: { plugins: [i18n], stubs } }),
+    i18n: context.i18n,
+    wrapper: context.mount(ProfileWorkspace, { global: { stubs } }),
   };
 };
 
-const openPasswordDialog = async (wrapper: ReturnType<typeof mount>) => {
+const openPasswordDialog = async (wrapper: ReturnType<typeof mountWithApp>) => {
   await wrapper.get(".profile-password-action").trigger("click");
 };
 
 const setPassword = async (
-  wrapper: ReturnType<typeof mount>,
+  wrapper: ReturnType<typeof mountWithApp>,
   oldPassword: string,
   newPassword: string,
   confirmPassword = newPassword
@@ -250,7 +244,7 @@ const setPassword = async (
   await fields[2].setValue(confirmPassword);
 };
 
-const submitPassword = async (wrapper: ReturnType<typeof mount>) => {
+const submitPassword = async (wrapper: ReturnType<typeof mountWithApp>) => {
   await wrapper.get(".profile-password-submit").trigger("click");
   await flushPromises();
 };

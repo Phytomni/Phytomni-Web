@@ -1,24 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
 import Footer from "@/components/AppFooter.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/AppFooter.vue"),
   "utf8"
 );
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-const mountFooter = () => mount(Footer, { global: { plugins: [i18n] } });
+const mountFooter = () => mountWithApp(Footer);
 
 describe("Footer legal links", () => {
   it("keeps the ICP filing id and links Terms/Privacy", () => {

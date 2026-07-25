@@ -53,6 +53,7 @@ export function createTestAppContext(
 ): TestAppContext {
   const pinia = options.pinia ?? createPinia();
   const i18n = createTestI18n(options.locale);
+  setActivePinia(pinia);
   const plugins: Plugin[] = [pinia, i18n];
 
   if (options.elementPlus !== false) plugins.push(ElementPlus);

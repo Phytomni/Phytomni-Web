@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import TransferProgressList from "@/components/TransferProgressList.vue";
-import enUS from "@/locales/langs/en-US";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import {
   upsertDownloadTransfer,
@@ -14,6 +11,7 @@ vi.mock("@/utils/request", () => ({
 }));
 
 import { abortRequest } from "@/utils/request";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const snap: TransferSnapshot = {
   loaded: 512 * 1024,
@@ -25,12 +23,6 @@ const snap: TransferSnapshot = {
   requestId: "dl-req-1",
 };
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS },
-});
-
 describe("TransferProgressList.vue", () => {
   afterEach(() => {
     clearDownloadTransfers();
@@ -40,9 +32,8 @@ describe("TransferProgressList.vue", () => {
     clearDownloadTransfers();
     upsertDownloadTransfer(snap);
 
-    const wrapper = mount(TransferProgressList, {
+    const wrapper = mountWithApp(TransferProgressList, {
       global: {
-        plugins: [i18n],
         stubs: {
           "el-progress": true,
         },

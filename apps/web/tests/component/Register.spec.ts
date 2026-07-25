@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   register: vi.fn(),
@@ -193,14 +193,7 @@ const ElButtonStub = defineComponent({
   },
 });
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-config.global.plugins = [i18n, ElementPlus];
+let context: ReturnType<typeof createTestAppContext>;
 
 const stubs = {
   ElForm: ElFormStub,
@@ -211,10 +204,10 @@ const stubs = {
   LangSwitch: { template: "<div data-test=lang-switch />" },
 };
 
-const mountView = () => mount(Register, { global: { stubs } });
+const mountView = () => context.mount(Register, { global: { stubs } });
 
 const fillRegistration = async (
-  wrapper: ReturnType<typeof mount>,
+  wrapper: ReturnType<typeof mountWithApp>,
   email = "researcher@example.test",
   password = "Secure1!"
 ) => {
@@ -227,7 +220,7 @@ const fillRegistration = async (
 describe("Registration auth surface", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    i18n.global.locale.value = "en-US";
+    context = createTestAppContext({ locale: "en-US" });
     mocks.route.query = {};
     mocks.formValidateReject = false;
     mocks.validateFieldReject = false;
@@ -318,14 +311,14 @@ describe("Registration auth surface", () => {
       "Terms of Service",
       "Privacy Policy"
     );
-    i18n.global.locale.value = "zh-CN";
+    context.i18n.global.locale.value = "zh-CN";
     await nextTick();
     assertConsent("我已阅读并同意以下法律文件", "服务条款", "隐私政策");
   });
 
   it("uses the active locale for registration presentation copy", async () => {
     const wrapper = mountView();
-    i18n.global.locale.value = "zh-CN";
+    context.i18n.global.locale.value = "zh-CN";
     await nextTick();
 
     expect(wrapper.get(".register-title").text()).toBe("注册账户");

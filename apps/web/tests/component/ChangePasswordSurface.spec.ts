@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import {
   computed,
   defineComponent,
@@ -9,12 +9,12 @@ import {
   inject,
   provide,
 } from "vue";
-import { createI18n } from "vue-i18n";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import ElementPlus from "element-plus";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   changePassword: vi.fn(),
@@ -215,19 +215,11 @@ const makeStore = (loginStatus = "0") => {
 const mountView = (loginStatus = "0") => {
   const store = makeStore(loginStatus);
   mocks.store = store;
-  const i18n = createI18n({
-    legacy: false,
-    locale: "en-US",
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-  });
-  return mount(ChangePassword, {
-    global: { plugins: [i18n, ElementPlus], stubs },
-  });
+  return createTestAppContext().mount(ChangePassword, { global: { stubs } });
 };
 
 const fillForm = async (
-  wrapper: ReturnType<typeof mount>,
+  wrapper: ReturnType<typeof mountWithApp>,
   oldPassword = "Current1!",
   newPassword = "Secure1!",
   confirmPassword = newPassword

@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config, enableAutoUnmount, mount } from "@vue/test-utils";
+import { enableAutoUnmount } from "@vue/test-utils";
 import { defineComponent, nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   back: vi.fn(),
@@ -34,13 +33,6 @@ const SOURCE = readFileSync(
   "utf8"
 );
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
 const MarkdownStub = defineComponent({
   name: "MarkdownViewer",
   props: {
@@ -51,11 +43,12 @@ const MarkdownStub = defineComponent({
     '<div class="markdown-test" :data-surface="surface">{{ content }}</div>',
 });
 
-config.global.plugins = [i18n, ElementPlus];
 enableAutoUnmount(afterEach);
 
+let context: ReturnType<typeof createTestAppContext>;
+
 const mountHelp = () =>
-  mount(HelpPage, {
+  context.mount(HelpPage, {
     attachTo: document.body,
     global: {
       stubs: {
@@ -72,7 +65,7 @@ const mountHelp = () =>
 describe("Help product document", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    i18n.global.locale.value = "en-US";
+    context = createTestAppContext({ locale: "en-US" });
     mocks.getToken.mockReturnValue("token");
   });
 
@@ -130,7 +123,7 @@ describe("Help product document", () => {
 
   it("updates the TOC and document bodies on an in-place locale switch", async () => {
     const wrapper = mountHelp();
-    i18n.global.locale.value = "zh-CN";
+    context.i18n.global.locale.value = "zh-CN";
     await nextTick();
 
     expect(wrapper.find(".toc-title").text()).toBe("目录");

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   login: vi.fn(),
@@ -161,14 +161,7 @@ const ElButtonStub = defineComponent({
   },
 });
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-config.global.plugins = [i18n, ElementPlus];
+let context: ReturnType<typeof createTestAppContext>;
 
 const stubs = {
   ElForm: ElFormStub,
@@ -180,11 +173,11 @@ const stubs = {
 
 const mountView = (query: Record<string, unknown> = {}) => {
   mocks.route.query = query;
-  return mount(Login, { global: { stubs } });
+  return context.mount(Login, { global: { stubs } });
 };
 
 const fillCredentials = async (
-  wrapper: ReturnType<typeof mount>,
+  wrapper: ReturnType<typeof mountWithApp>,
   email = "researcher@example.test",
   password = "Secure1!"
 ) => {
@@ -196,7 +189,7 @@ const fillCredentials = async (
 describe("Login auth surface", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    i18n.global.locale.value = "en-US";
+    context = createTestAppContext({ locale: "en-US" });
     mocks.route.query = {};
     mocks.formValidateReject = false;
     mocks.safeRedirect.mockReturnValue("/chat");
@@ -235,7 +228,7 @@ describe("Login auth surface", () => {
 
   it("uses the active locale for the login title and description", async () => {
     const wrapper = mountView();
-    i18n.global.locale.value = "zh-CN";
+    context.i18n.global.locale.value = "zh-CN";
     await nextTick();
 
     expect(wrapper.get(".login-title").text()).toBe("登录");
@@ -264,7 +257,7 @@ describe("Login auth surface", () => {
     expect(privacy.attributes("rel")).toBe("noopener noreferrer");
     expect(terms.text()).toBe("Terms of Service");
 
-    i18n.global.locale.value = "zh-CN";
+    context.i18n.global.locale.value = "zh-CN";
     await nextTick();
     expect(wrapper.get('a[href="/terms"]').text()).toBe("服务条款");
 

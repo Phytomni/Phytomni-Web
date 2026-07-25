@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
-import { createPinia, setActivePinia } from "pinia";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 vi.mock("vue-router", () => ({
   useRouter: () => ({
@@ -24,20 +19,15 @@ vi.mock("vue-element-plus-x", () => ({
 
 import HelpView from "@/views/help/HelpView.vue";
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-config.global.plugins = [i18n, ElementPlus];
+let context: ReturnType<typeof createTestAppContext>;
 
 describe("HelpView", () => {
   beforeEach(() => {
-    setActivePinia(createPinia());
+    context = createTestAppContext();
   });
 
   it("renders real section anchors instead of leaking HTML wrappers into markdown", () => {
-    const wrapper = mount(HelpView, {
+    const wrapper = context.mount(HelpView, {
       global: { stubs: { Typewriter: true } },
     });
 
