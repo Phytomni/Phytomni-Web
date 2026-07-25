@@ -16,7 +16,8 @@ tasks.
 
 ### apps/web (frontend)
 
-- Node 26+ and npm
+- Node 26.x and npm 11.x
+- Vite 8 browser floor: Chrome/Edge 111, Firefox 114, or Safari 16.4+
 
 ## Installation & Setup
 
@@ -43,6 +44,10 @@ npm install
 npm run dev             # Vite dev server (uses .env.dev)
 ```
 
+For a reproducible checkout, use `npm ci` before running the quality commands.
+The production build is owned by Vite 8 and targets Chrome/Edge 111, Firefox
+114, and Safari 16.4 or newer.
+
 The dev server proxies `/query`, `/v1`, and the base API to the Go gateway
 (`http://localhost:8080` by default); override per-engineer via
 `VITE_DEV_PROXY_API` / `VITE_DEV_PROXY_QUERY` in `apps/web/.env.dev`.
@@ -59,6 +64,16 @@ The dev server proxies `/query`, `/v1`, and the base API to the Go gateway
 - Go code follows standard Go formatting (`gofmt`); validate with
   `gofmt -l .`, `go vet ./...`, `go build`, `go test ./...`.
 - Frontend: `npm run type-check` && `npm run build` && `npm run lint`.
+
+The guarded frontend commands are the accepted evidence paths:
+`npm run build`, `npm run test:run`, and `npm run coverage`. They fail when
+Vue, intlify, Sass, or Vite infrastructure warnings escape the warning oracle.
+The matching `build-only:raw`, `test:run:raw`, and `coverage:raw` scripts are
+diagnostic-only and are not valid pre-push evidence. `./scripts/validate_web_local.sh`
+remains the canonical repository gate. TypeScript is pinned to 6.0.3 because
+the current stable TypeScript 7 graph is invalid against the repository's
+typescript-eslint peer range; retry only after a stable peer release supports
+TypeScript 7 and the complete gate passes.
 
 ### Local pre-commit hooks (recommended)
 

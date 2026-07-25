@@ -1,6 +1,6 @@
 # Frontend Toolchain Modernization and Warning Elimination Design
 
-Status: **Approved design; implementation pending**
+Status: **Approved design; source-owned implementation through D6 complete; browser and remote acceptance pending** (2026-07-25)
 
 Date: 2026-07-24
 
@@ -21,9 +21,36 @@ current-stable versions.
 The work must not silence warnings, lower quality gates, retain compatibility
 shims, or change application behavior merely to complete the upgrade.
 
+## Verified final implementation state
+
+The source-owned migration through the warning-oracle/runtime gate is complete
+on `release/0.1.4`. The supported frontend graph is Vite `8.1.5`, Vitest
+`4.1.10`, TypeScript `6.0.3`, vue-tsc `3.3.8`, ESLint `10.7.0`, and Prettier
+`3.9.6`, installed with Node `v26.5.0`/npm `11.17.0`. Vite explicitly targets
+Chrome/Edge 111, Firefox 114, and Safari 16.4.
+
+`npm ci`, `npm ls --all --json`, guarded build/test/coverage, and the complete
+repository gate pass locally. The final Vite build keeps the lazy application
+`zh-CN` locale entry and a separate `vue-i18n` chunk. The remaining direct-eval
+and large-chunk messages are ordinary third-party/build diagnostics; they are
+visible and are not warning-oracle exemptions. G12 coverage remains
+90.06% statements, 85.98% branches, 92.21% functions, and 94.13% lines.
+
+TypeScript `7.0.2` is a dependency-specific hard blocker, not a reason to hold
+back independent upgrades: the current stable typescript-eslint peer range
+rejects it in a clean graph. Retry only after a stable typescript-eslint release
+officially supports TypeScript 7 and the complete repository gate passes.
+Browser self-review, remote CI, Bot-owner acceptance, staging/live smoke, and
+operations sign-off remain separate evidence boundaries; this document does
+not claim them complete. A concurrent unstaged `vitest.config.mts`
+`thresholdAutoUpdate` edit remains outside this source-owned change and must be
+reconciled by its owner before standalone config-project type checking is
+declared green.
+
 ## Context and observed baseline
 
-The warning stream is not one defect. It exposes several independent
+The following warning stream describes the pre-migration baseline; it is not a
+claim about the current final graph. It exposed several independent
 toolchain and test-runtime problems:
 
 1. The root frontend build still resolves Vite 3, while the installed Vitest 2
@@ -46,9 +73,9 @@ A representative Vitest run passes its assertions while emitting all four
 warning families. Therefore a green test result is currently insufficient
 evidence of a clean or internally consistent frontend toolchain.
 
-The repository already uses Node 26 locally and in CI. The existing quality
-approval packet also records Prettier 2.7.1 as the approved formatter
-baseline. That record must be updated when the formatter is upgraded.
+At the pre-migration baseline the repository already used Node 26 locally and
+in CI, while the quality approval packet still recorded Prettier 2.7.1. The
+final approval packet now records Prettier 3.9.6 and the Vite 8 matrix above.
 
 ## Goals
 

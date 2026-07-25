@@ -38,6 +38,9 @@ choosing this addendum.
   responses to safe 502 errors, and keep Web failures at 500.
 - The local quality gate and static-analysis closure are refreshed for the
   release candidate. The human-reviewed visual package is local evidence only.
+- The frontend build uses Vite `8.1.5` and targets Chrome/Edge 111, Firefox 114,
+  and Safari 16.4 or newer. Hashed frontend filenames may change even though
+  no Go configuration, database schema, Bot code, or operations code changes.
 
 ## Configuration and flags
 
@@ -62,15 +65,18 @@ authorization.
 ## Deploy and smoke
 
 1. Build or copy the Web Go binary and matching frontend `dist/` from the
-   reviewed `0.1.4` SHA.
-2. Preserve the production port, database/registry key, Bot URL, and existing
+   reviewed `0.1.4` SHA. If building the frontend from source, use Node 26.x
+   and npm 11.x, run `npm ci` in `apps/web`, then run `npm run build`.
+2. Publish the complete new `dist/` directory atomically; do not mix old HTML
+   with new hashed assets or publish only changed files.
+3. Preserve the production port, database/registry key, Bot URL, and existing
    secret delivery. Restart using the approved operations procedure.
-3. Check `/readyz` and service logs for startup, configuration, or Bot relay
+4. Check `/readyz` and service logs for startup, configuration, or Bot relay
    errors.
-4. With a non-production test account, verify login, blocking chat, same-title
+5. With a non-production test account, verify login, blocking chat, same-title
    new-chat failure recovery, Bot timeout/5xx error mapping, history replay,
    owner isolation, and existing artifact behavior.
-5. Keep all Bot-facing capabilities disabled and record the smoke result with
+6. Keep all Bot-facing capabilities disabled and record the smoke result with
    the deployed SHA. Local G13–G17 output does not replace Bot, CI, staging,
    live, or operations acceptance.
 
@@ -89,7 +95,8 @@ If readiness, smoke, or data correctness fails:
 
 ## Repository-local evidence
 
-The current Web closure record is `802d439` on `release/0.1.4`.
+The current Web closure record is the reviewed `release/0.1.4` commit selected
+for deployment; operators must record its exact SHA in the deployment evidence.
 `./scripts/validate_web_local.sh` passes locally, including G13–G17. This is
 repository evidence only; no production deployment or external acceptance is
 claimed by this addendum.

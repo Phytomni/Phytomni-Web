@@ -22,6 +22,10 @@ grant permission to change Phytomni-Bot or production operations code.
 > assume an intermediate schema or deployment state; verify the running SHA and
 > required projection columns before selecting a procedure.
 
+The `0.1.4` frontend rebuild prerequisite is Node 26.x/npm 11.x with a clean
+`npm ci` in `apps/web`; publish the resulting complete `dist/` atomically so
+the new HTML and hashed assets cannot be mixed with an older release.
+
 ## 0. Conventions and contents
 
 - Secrets are placeholders (`<JWT_SECRET>`, `<REDIS_PASSWORD>`, …). Substitute

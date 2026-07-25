@@ -30,6 +30,13 @@ Bot, operations, staging, or production acceptance.
   compatibility, and G17 activation evidence.
 - Node 26, Python 3.12, and the repository quality runners are aligned without
   changing application coverage behavior; coverage G12 is unchanged, and Bot, operations, and deployment code remain outside this scope.
+- The frontend now uses the direct Vite `8.1.5` toolchain with Vitest `4.1.10`,
+  TypeScript `6.0.3`, vue-tsc `3.3.8`, ESLint `10.7.0`, and Prettier `3.9.6`.
+  The explicit browser floor is Chrome/Edge 111, Firefox 114, and Safari 16.4.
+- Build, test, and coverage release evidence runs through the warning oracle;
+  raw frontend commands remain diagnostic-only. TypeScript 7 remains a
+  documented compatibility boundary until a stable typescript-eslint peer
+  release supports it and the complete gate passes.
 
 ### 🔗 Bot compatibility and chat continuity
 

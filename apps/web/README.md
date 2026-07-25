@@ -1,6 +1,9 @@
-# vue3
+# Phytomni Web frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+This is the Vue 3 frontend for Phytomni Web. The supported build and test
+toolchain is Node 26.x/npm 11.x with Vite 8, Vitest 4, TypeScript 6.0.3, and
+vue-tsc 3.3.8. Production assets target Chrome/Edge 111, Firefox 114, and
+Safari 16.4 or newer.
 
 ## Recommended IDE Setup
 
@@ -27,6 +30,9 @@ See [Vite Configuration Reference](https://vitejs.dev/config/).
 npm install
 ```
 
+Use `npm ci` in a clean checkout or release build so the lockfile remains the
+source of truth.
+
 ### Compile and Hot-Reload for Development
 
 ```sh
@@ -37,6 +43,23 @@ npm run dev
 
 ```sh
 npm run build
+```
+
+`npm run build` runs type-checking and the guarded Vite production build.
+Guarded test evidence uses:
+
+```sh
+npm run test:run
+npm run coverage
+```
+
+These commands fail on unexpected Vue, intlify, Sass, or Vite infrastructure
+warnings. The corresponding `build-only:raw`, `test:run:raw`, and
+`coverage:raw` commands are diagnostic-only and must not be used as release or
+pre-push evidence. The repository-wide gate is run from the repository root:
+
+```sh
+./scripts/validate_web_local.sh
 ```
 
 ### Lint with [ESLint](https://eslint.org/)
