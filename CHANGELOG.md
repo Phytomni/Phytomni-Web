@@ -13,7 +13,11 @@ Newest first.
 
 ## [Unreleased]
 
-No post-0.1.4 changes are recorded yet.
+### 🧪 Frontend toolchain contract reconciliation
+
+- Keep Vitest 4 coverage auto-update disabled through its supported
+  `coverage.thresholds.autoUpdate` option, align the Vite 8 checkpoint evidence,
+  and make TypeScript reverse probes independent of incremental build state.
 
 ## [0.1.4] — 2026-07-24 (release candidate)
 

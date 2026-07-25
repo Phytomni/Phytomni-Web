@@ -1,6 +1,6 @@
 # Frontend Toolchain Modernization and Warning Elimination Design
 
-Status: **Approved design; source-owned implementation through D6 complete; browser and remote acceptance pending** (2026-07-25)
+Status: **Approved design; source-owned implementation through D8 complete; remote and production acceptance pending** (2026-07-26)
 
 Date: 2026-07-24
 
@@ -42,10 +42,10 @@ rejects it in a clean graph. Retry only after a stable typescript-eslint release
 officially supports TypeScript 7 and the complete repository gate passes.
 Browser self-review, remote CI, Bot-owner acceptance, staging/live smoke, and
 operations sign-off remain separate evidence boundaries; this document does
-not claim them complete. A concurrent unstaged `vitest.config.mts`
-`thresholdAutoUpdate` edit remains outside this source-owned change and must be
-reconciled by its owner before standalone config-project type checking is
-declared green.
+not claim them complete. The Vitest coverage configuration is now reconciled
+with the supported Vitest 4 schema: `autoUpdate: false` is nested under
+`coverage.thresholds`, the standalone config project is type-clean, and the
+full Python contract suite passes without a bypass.
 
 ## Context and observed baseline
 

@@ -2,7 +2,7 @@
 
 Status: **Local upgrade evidence; not a deployment or remote-CI authorization**
 
-Date recorded: 2026-07-25
+Date recorded: 2026-07-26
 
 Branch: `release/0.1.4`
 
@@ -17,8 +17,8 @@ The checkpoint was run from `apps/web/` after a clean lockfile install:
 | Item | Version / result |
 | --- | --- |
 | Node / npm | `v26.5.0` / `11.17.0` |
-| Install | `npm ci`, exit `0` (617 packages added) |
-| Vite | `7.3.6` |
+| Install | `npm ci`, exit `0` |
+| Vite | `8.1.5` |
 | `@vitejs/plugin-vue` / JSX | `6.0.8` / `5.1.6` |
 | Vitest / coverage-v8 | `4.1.10` / `4.1.10` |
 | Sass | `1.101.7` |
@@ -43,18 +43,18 @@ intlify, Sass, or Vite runtime warnings.
 ```text
 phytomni-web@0.0.0
 ├─┬ @vitejs/plugin-vue-jsx@5.1.6
-│ └── vite@7.3.6 deduped
+│ └── vite@8.1.5 deduped
 ├─┬ @vitejs/plugin-vue@6.0.8
-│ └── vite@7.3.6 deduped
-├── vite@7.3.6
+│ └── vite@8.1.5 deduped
+├── vite@8.1.5
 ├─┬ vitest@4.1.10
 │ ├─┬ @vitest/mocker@4.1.10
-│ │ └── vite@7.3.6 deduped
-│ └── vite@7.3.6 deduped
+│ │ └── vite@8.1.5 deduped
+│ └── vite@8.1.5 deduped
 └─┬ vue-router@5.2.0
   ├─┬ unplugin@3.3.0
-  │ └── vite@7.3.6 deduped
-  └── vite@7.3.6 deduped
+  │ └── vite@8.1.5 deduped
+  └── vite@8.1.5 deduped
 ```
 
 The production build remains behind the shell-free warning oracle; the raw
@@ -83,12 +83,19 @@ Results:
   Prettier format check: PASS.
 - Warning-oracle tests: PASS. The fixture still proves unknown-mode and
   prohibited-warning handling; it does not claim a warning-free test runtime.
-- Full Vitest run: **205 files, 2,713 tests passed**.
+- Full Vitest run: **207 files, 2,724 tests passed**.
 - Coverage: **90.06% statements, 85.98% branches, 92.21% functions, 94.13%
-  lines** (205 files, 2,713 tests).
+  lines** (207 files, 2,724 tests).
 - `npm run build`: PASS. The wrapper runs type-check and the warning-oracle
   production build.
-- `build-only:raw`: PASS; Vite 7.3.6 transformed 2,435 modules in 9.51s.
+- `build-only:raw`: PASS; Vite 8.1.5 transformed 2,410 modules in 5.65s.
+
+The Vite 8 artifact keeps the important split boundaries: the deferred
+`src/locales/langs/zh-CN.ts` entry is emitted as `zh-CN-CkE1-YE3.js`, and the
+`vue-i18n` vendor group is emitted as `vue-i18n-BNuKuLQB.js`. The raw build
+still reports the known third-party `3dmol` direct-`eval` diagnostic and the
+large-chunk advisory; both remain visible and are not treated as framework
+warning failures.
 
 The raw build retains non-blocking third-party diagnostics: two misplaced
 `@vueuse/core` `/* #__PURE__ */` annotations, the existing `3dmol` `eval`
@@ -158,9 +165,9 @@ Against the historical Vite 5 artifact baseline (65 JavaScript files,
 the Rolldown output has materially more JavaScript split points and a larger
 uncompressed JavaScript total. This is not treated as an unexplained release
 regression yet: the comparison crosses the already-upgraded Vue/Vitest/product
-graph, and the manifest proves the important lazy-locale invariant. Vite 8
-must repeat the same measurement and explain or reduce any material delta
-before release adoption.
+graph, and the Vite 8 manifest repeats the important lazy-locale invariant.
+The larger split graph is therefore recorded as an observed toolchain result,
+not hidden by a warning suppression or a relaxed build gate.
 
 Rolldown still reports the existing third-party `3dmol` direct-`eval` warning,
 the dynamic/static import notices for the shared store and Element Plus
@@ -171,22 +178,14 @@ or remote-CI acceptance.
 
 ## Cross-language verification boundary
 
-`PYTHONPATH=. uv run pytest -q scripts/tests` was run after the clean install.
-The suite exposed two fixture-copy tests that iterated a generated
-`__pycache__`, plus a TypeScript 6 diagnostic-family change and a separate
-configuration-project failure caused by the concurrent unstaged
-`apps/web/vitest.config.mts` `thresholdAutoUpdate` edit. The fixture tests now
-ignore directories, and the TypeScript 6 expected declaration family has been
-re-recorded. The remaining configuration-project failure is intentionally not
-changed here because that file is concurrent work and is not ours to commit.
-
-The final cross-language gate therefore remains **pending that concurrent
-configuration edit**; no bypass or `--no-verify` path is acceptable.
+`PYTHONPATH=. uv run pytest -q scripts/tests` was re-run after the Vite 8 and
+Vitest coverage configuration were reconciled. The suite passed, including the
+configuration-project reverse probe and the Vite 8 checkpoint contract. No
+test was skipped, weakened, or bypassed: **474 passed, 37 subtests passed**.
 
 ## Boundary and follow-up
 
-This record establishes a coherent local Vite 7/Vitest 4 baseline plus a
-separate Rolldown compatibility result. It does not claim Vite 8, warning-free
-tests, remote CI, Bot/operations activation, Expert activation, or production
-deployment. Re-run the Python suite and the full repository gate after the
-concurrent Vitest configuration change is resolved.
+This record establishes the supported local Vite 8/Vitest 4 baseline plus a
+separate Rolldown compatibility result. It does not claim remote CI,
+Bot/operations activation, Expert activation, or production deployment. The
+repository gate and remote CI remain separate acceptance boundaries.
