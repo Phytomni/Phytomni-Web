@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import PhyDocLayout from "@/components/shell/PhyDocLayout.vue";
@@ -11,7 +11,7 @@ const SOURCE = readFileSync(
 
 describe("PhyDocLayout", () => {
   it("wraps body with phy-reading and optional toc slot", () => {
-    const wrapper = mount(PhyDocLayout, {
+    const wrapper = mountWithApp(PhyDocLayout, {
       slots: {
         header: '<div data-test="header">H</div>',
         toc: '<nav data-test="toc">TOC</nav>',
@@ -41,7 +41,7 @@ describe("PhyDocLayout", () => {
   });
 
   it("keeps an optional footer in the document scroll flow", () => {
-    const wrapper = mount(PhyDocLayout, {
+    const wrapper = mountWithApp(PhyDocLayout, {
       slots: {
         footer: '<div data-test="footer">Footer</div>',
       },

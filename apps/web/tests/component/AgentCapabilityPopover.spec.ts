@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../helpers/test-app-context";
 import { nextTick } from "vue";
 import AgentCapabilityPopover from "@/components/agent/AgentCapabilityPopover.vue";
 import { CANONICAL_AGENT_PRESENTATIONS } from "@/components/agent";
@@ -26,9 +26,13 @@ const t = vi.hoisted(() => {
   return (key: string) => messages[key] ?? key;
 });
 
-vi.mock("vue-i18n", () => ({
-  useI18n: () => ({ t }),
-}));
+vi.mock("vue-i18n", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("vue-i18n")>();
+  return {
+    ...actual,
+    useI18n: () => ({ t }),
+  };
+});
 
 const presentationFor = (tool: keyof typeof CANONICAL_AGENT_PRESENTATIONS) =>
   CANONICAL_AGENT_PRESENTATIONS[tool];
@@ -43,7 +47,7 @@ const mountPopover = (
 ) => {
   const host = document.createElement("div");
   document.body.append(host);
-  const wrapper = mount(AgentCapabilityPopover, {
+  const wrapper = mountWithApp(AgentCapabilityPopover, {
     props: { presentation: presentationFor(tool) },
     attachTo: host,
   });

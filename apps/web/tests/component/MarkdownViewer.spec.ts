@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../helpers/test-app-context";
 
 // The real vue-element-plus-x barrel eagerly imports aggregated CSS that the
 // test transform can't load; the v-else path under test never renders
@@ -45,7 +45,7 @@ function cssRuleBody(selector: string): string {
 // is sanitized upstream and not exercised here.) Assertions read the REAL
 // parsed DOM: if a breakout succeeded, jsdom would surface a live attribute.
 function render(content: string, ns = "m0") {
-  return mount(MarkdownViewer, {
+  return mountWithApp(MarkdownViewer, {
     props: { content, instantMessage: false, ns },
     global: { stubs: { Typewriter: true } },
   });
@@ -101,7 +101,7 @@ describe("MarkdownViewer surface classes", () => {
   });
 
   it("applies explicit chat surface classes without a renderer handoff", () => {
-    const w = mount(MarkdownViewer, {
+    const w = mountWithApp(MarkdownViewer, {
       props: { content: "hello", instantMessage: false, surface: "chat" },
       global: { stubs: { Typewriter: true } },
     });
@@ -111,7 +111,7 @@ describe("MarkdownViewer surface classes", () => {
   });
 
   it("applies the artifact skin to a 740px serif narrative while exclusions stay sans or mono", () => {
-    const w = mount(MarkdownViewer, {
+    const w = mountWithApp(MarkdownViewer, {
       props: { content: "Research narrative", surface: "artifact" },
       global: { stubs: { Typewriter: true } },
     });
@@ -143,7 +143,7 @@ describe("MarkdownViewer surface classes", () => {
     style.textContent = `${TOKENS_CSS}\n${MARKDOWN_CSS}`;
     document.head.append(style);
 
-    const fixture = mount(
+    const fixture = mountWithApp(
       {
         template: `
           <div class="phy-markdown phy-markdown--artifact">
@@ -187,7 +187,7 @@ describe("MarkdownViewer surface classes", () => {
   });
 
   it("applies the document fixture class while keeping its body sans", () => {
-    const w = mount(MarkdownViewer, {
+    const w = mountWithApp(MarkdownViewer, {
       props: { content: "Document narrative", surface: "document" },
       global: { stubs: { Typewriter: true } },
     });
@@ -226,7 +226,7 @@ describe("MarkdownViewer surface classes", () => {
   });
 
   it("keeps Typewriter on the chat surface without phy-reading", () => {
-    const w = mount(MarkdownViewer, {
+    const w = mountWithApp(MarkdownViewer, {
       props: { content: "hello", instantMessage: true, surface: "chat" },
       global: { stubs: { Typewriter: true } },
     });
@@ -255,7 +255,7 @@ describe("MarkdownViewer surface classes", () => {
       "",
       "![wide](https://example.org/p.png)",
     ].join("\n");
-    const w = mount(MarkdownViewer, {
+    const w = mountWithApp(MarkdownViewer, {
       props: {
         content: fixture,
         instantMessage: false,
@@ -357,7 +357,7 @@ describe("MarkdownViewer citation linkification", () => {
   });
 
   it("does NOT linkify when no ns is supplied (scope gate)", () => {
-    const html = mount(MarkdownViewer, {
+    const html = mountWithApp(MarkdownViewer, {
       props: { content: "See [1].", instantMessage: false },
       global: { stubs: { Typewriter: true } },
     }).html();

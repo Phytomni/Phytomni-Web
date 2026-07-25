@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../helpers/test-app-context";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
 
 const CITATION_LIST_SOURCE = readFileSync(
@@ -10,7 +10,7 @@ const CITATION_LIST_SOURCE = readFileSync(
 );
 
 const mountList = (props: Record<string, unknown>) =>
-  mount(CitationReferenceList, {
+  mountWithApp(CitationReferenceList, {
     props,
     global: {
       mocks: {

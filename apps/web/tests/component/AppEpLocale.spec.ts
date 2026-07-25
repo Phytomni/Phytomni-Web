@@ -1,13 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
 import App from "@/App.vue";
 import { useAppStore } from "@/stores";
 import en from "element-plus/es/locale/lang/en";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
+import {
+  createTestAppContext,
+  type TestAppContext,
+} from "../helpers/test-app-context";
 
 const APP_SOURCE = readFileSync(
   resolve(__dirname, "../../src/App.vue"),
@@ -18,25 +20,22 @@ const DESIGN_SYSTEM_SOURCE = readFileSync(
   "utf8"
 );
 
-let pinia: Pinia;
+let context: TestAppContext;
 
 function mountApp() {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: "/", component: { template: "<div />" } }],
   });
-  return mount(App, {
-    global: {
-      plugins: [pinia, router],
-      stubs: { Footer: true },
-    },
+  context = createTestAppContext({ pinia: context.pinia, router });
+  return context.mount(App, {
+    global: { stubs: { Footer: true } },
   });
 }
 
 describe("App.vue Element Plus locale provider", () => {
   beforeEach(() => {
-    pinia = createPinia();
-    setActivePinia(pinia);
+    context = createTestAppContext({ elementPlus: true });
   });
 
   it("binds zh-cn locale when store language is zh-CN", async () => {

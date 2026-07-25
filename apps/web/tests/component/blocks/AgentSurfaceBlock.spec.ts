@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../../helpers/test-app-context";
 import { nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
 import type { ContentBlock } from "@/views/chat/types";
-import enUS from "@/locales/langs/en-US";
 import type {
   A2uiOpenSurface,
   A2uiSurfaceState,
@@ -26,31 +26,24 @@ const lifecycleCopy = {
 };
 
 function createLifecycleI18n() {
-  return createI18n({
-    legacy: false,
-    locale: "en-US",
-    messages: {
-      "en-US": {
-        ...enUS,
-        chat: {
-          ...enUS.chat,
-          a2ui: {
-            ...enUS.chat.a2ui,
-            submitting: lifecycleCopy.submitting,
-            submitted: lifecycleCopy.submitted,
-            cancelled: lifecycleCopy.cancelled,
-            rejected: lifecycleCopy.rejected,
-            advanced: lifecycleCopy.advanced,
-            temporarilyRejected: lifecycleCopy.temporarilyRejected,
-            expired: lifecycleCopy.expired,
-            unknown: lifecycleCopy.unknown,
-            protocolError: lifecycleCopy.protocolError,
-            retry: "Retry action",
-          },
-        },
+  const context = createTestAppContext();
+  context.i18n.global.mergeLocaleMessage("en-US", {
+    chat: {
+      a2ui: {
+        submitting: lifecycleCopy.submitting,
+        submitted: lifecycleCopy.submitted,
+        cancelled: lifecycleCopy.cancelled,
+        rejected: lifecycleCopy.rejected,
+        advanced: lifecycleCopy.advanced,
+        temporarilyRejected: lifecycleCopy.temporarilyRejected,
+        expired: lifecycleCopy.expired,
+        unknown: lifecycleCopy.unknown,
+        protocolError: lifecycleCopy.protocolError,
+        retry: "Retry action",
       },
     },
   });
+  return context;
 }
 
 const openConfirmSurface: A2uiOpenSurface = {
@@ -179,9 +172,8 @@ describe("AgentSurfaceBlock", () => {
   it.each(lifecycleCases)(
     "renders the $name lifecycle state with safe controls",
     ({ name, state, copyKey, retry }) => {
-      const w = mount(AgentSurfaceBlock, {
+      const w = createLifecycleI18n().mount(AgentSurfaceBlock, {
         props: { block: lifecycleBlock(state) },
-        global: { plugins: [createLifecycleI18n(), ElementPlus] },
       });
 
       const widgetButtons = w.findAll(".a2ui-confirm button");
@@ -218,9 +210,8 @@ describe("AgentSurfaceBlock", () => {
       code: "a2ui_gateway_disabled",
     };
     const block = lifecycleBlock(state);
-    const w = mount(AgentSurfaceBlock, {
+    const w = createLifecycleI18n().mount(AgentSurfaceBlock, {
       props: { block },
-      global: { plugins: [createLifecycleI18n(), ElementPlus] },
     });
 
     const retryButton = w.find('[data-test="a2ui-retry"]');
@@ -245,9 +236,9 @@ describe("AgentSurfaceBlock", () => {
       actionId: "action-submitted",
       resolution: "submitted",
     };
-    const w = mount(AgentSurfaceBlock, {
+    const context = createLifecycleI18n();
+    const w = context.mount(AgentSurfaceBlock, {
       props: { block: lifecycleBlock(state) },
-      global: { plugins: [createLifecycleI18n(), ElementPlus] },
     });
 
     expect(
@@ -257,9 +248,8 @@ describe("AgentSurfaceBlock", () => {
     ).toBe(true);
     w.unmount();
 
-    const remounted = mount(AgentSurfaceBlock, {
+    const remounted = context.mount(AgentSurfaceBlock, {
       props: { block: lifecycleBlock(state) },
-      global: { plugins: [createLifecycleI18n(), ElementPlus] },
     });
     expect(
       remounted
@@ -271,9 +261,8 @@ describe("AgentSurfaceBlock", () => {
   it("keeps a ready surface disabled when the block is marked non-interactive", () => {
     const block = lifecycleBlock({ status: "ready", round: 1 });
     block.interactive = false;
-    const w = mount(AgentSurfaceBlock, {
+    const w = createLifecycleI18n().mount(AgentSurfaceBlock, {
       props: { block },
-      global: { plugins: [createLifecycleI18n(), ElementPlus] },
     });
 
     expect(
@@ -285,7 +274,7 @@ describe("AgentSurfaceBlock", () => {
   });
 
   it("marks lifecycle announcements as atomic polite live regions", () => {
-    const w = mount(AgentSurfaceBlock, {
+    const w = createLifecycleI18n().mount(AgentSurfaceBlock, {
       props: {
         block: lifecycleBlock({
           status: "submitting",
@@ -293,7 +282,6 @@ describe("AgentSurfaceBlock", () => {
           envelope: submittingEnvelope,
         }),
       },
-      global: { plugins: [createLifecycleI18n(), ElementPlus] },
     });
 
     expect(w.find('[role="status"]').attributes("aria-live")).toBe("polite");
@@ -303,9 +291,8 @@ describe("AgentSurfaceBlock", () => {
   it("focuses a fresh round-2 root once without scrolling", async () => {
     const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
     const block = lifecycleBlock({ status: "ready", round: 2 });
-    const w = mount(AgentSurfaceBlock, {
+    const w = mountWithApp(AgentSurfaceBlock, {
       props: { block },
-      global: { plugins: [createLifecycleI18n(), ElementPlus] },
       attachTo: document.body,
     });
     await nextTick();
@@ -370,7 +357,7 @@ describe("AgentSurfaceBlock", () => {
         state: { status: "ready", round: 1 },
       },
     };
-    const w = mount(AgentSurfaceBlock, { props: { block } });
+    const w = mountWithApp(AgentSurfaceBlock, { props: { block } });
     const buttons = w.findAll("button");
     await buttons[buttons.length - 1].trigger("click");
     expect(w.emitted("action")).toEqual([
@@ -399,7 +386,7 @@ describe("AgentSurfaceBlock", () => {
         state: { status: "ready", round: 1 },
       },
     };
-    const w = mount(AgentSurfaceBlock, { props: { block } });
+    const w = mountWithApp(AgentSurfaceBlock, { props: { block } });
     expect(w.find(".a2ui-title").text()).toBe("Decoded title");
     const radioGroup = w.findComponent({ name: "ElRadioGroup" });
     await radioGroup.vm.$emit("update:modelValue", "decoded");

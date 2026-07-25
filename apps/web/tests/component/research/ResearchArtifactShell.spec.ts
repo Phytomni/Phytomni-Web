@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
 
 const SHELL_SOURCE = readFileSync(
@@ -23,7 +23,7 @@ function mountShell(
   tab: keyof typeof tabs = "content",
   contentLayout: "reading" | "wide" = "reading"
 ) {
-  return mount(ResearchArtifactShell, {
+  return mountWithApp(ResearchArtifactShell, {
     attachTo: document.body,
     props: {
       title: "Os01g0177400 functional analysis",
@@ -80,7 +80,7 @@ describe("ResearchArtifactShell", () => {
   });
 
   it("exposes a header slot in place of the default header", () => {
-    const wrapper = mount(ResearchArtifactShell, {
+    const wrapper = mountWithApp(ResearchArtifactShell, {
       props: {
         title: "Report",
         tab: "content",
@@ -97,7 +97,7 @@ describe("ResearchArtifactShell", () => {
   });
 
   it("forwards scientific agent formatting to the default header", () => {
-    const wrapper = mount(ResearchArtifactShell, {
+    const wrapper = mountWithApp(ResearchArtifactShell, {
       props: {
         title: "Report",
         metadata: "In Silico Research Agent",

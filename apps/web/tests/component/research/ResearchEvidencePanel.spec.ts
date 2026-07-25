@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import { defineComponent, nextTick, ref } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -26,7 +26,7 @@ const global = {
 };
 
 function mountPanel(references: unknown[] = [], ns = "artifact-a") {
-  return mount(ResearchEvidencePanel, {
+  return mountWithApp(ResearchEvidencePanel, {
     props: { references, ns },
     global,
   });
@@ -87,7 +87,7 @@ function mountArtifactHarness() {
     `,
   });
 
-  return { wrapper: mount(Harness, { global }), tab, order };
+  return { wrapper: mountWithApp(Harness, { global }), tab, order };
 }
 
 describe("ResearchEvidencePanel", () => {
@@ -110,7 +110,7 @@ describe("ResearchEvidencePanel", () => {
   });
 
   it("keeps equal reference numbers disjoint across two mounted artifacts", () => {
-    const wrapper = mount(
+    const wrapper = mountWithApp(
       {
         components: { ResearchEvidencePanel },
         data: () => ({ references: [{ title: "Shared numeric reference" }] }),

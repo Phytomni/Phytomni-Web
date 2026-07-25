@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import PhyWorkspaceShell from "@/components/shell/PhyWorkspaceShell.vue";
 
 const SOURCE = readFileSync(
@@ -15,7 +15,7 @@ const HEADER_SOURCE = readFileSync(
 
 describe("PhyWorkspaceShell", () => {
   it("renders the named page regions and default content", () => {
-    const wrapper = mount(PhyWorkspaceShell, {
+    const wrapper = mountWithApp(PhyWorkspaceShell, {
       slots: {
         header: '<h1 data-test="header">Users</h1>',
         filters: '<div data-test="filters">Filters</div>',
@@ -31,7 +31,7 @@ describe("PhyWorkspaceShell", () => {
   });
 
   it("owns exactly one vertical scroll root", () => {
-    const wrapper = mount(PhyWorkspaceShell, {
+    const wrapper = mountWithApp(PhyWorkspaceShell, {
       slots: { default: "<p>Content</p>" },
     });
 
@@ -43,7 +43,7 @@ describe("PhyWorkspaceShell", () => {
   });
 
   it("does not render empty optional regions", () => {
-    const wrapper = mount(PhyWorkspaceShell, {
+    const wrapper = mountWithApp(PhyWorkspaceShell, {
       slots: { default: "<p>Content</p>" },
     });
 
@@ -69,7 +69,7 @@ describe("PhyWorkspaceShell", () => {
   });
 
   it("keeps long bilingual labels in normal-flow regions", () => {
-    const wrapper = mount(PhyWorkspaceShell, {
+    const wrapper = mountWithApp(PhyWorkspaceShell, {
       slots: {
         header: "<h1>超长的工作区标题和操作标签 Long workspace title</h1>",
         filters: "<label>超长筛选条件 Long filter label</label>",

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import PhyAdaptiveShell from "@/components/shell/PhyAdaptiveShell.vue";
 
 describe("adaptive shell replacement contract", () => {
   it("renders sidebar, main, and optional artifact slots", () => {
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       slots: {
         sidebar: '<aside data-test="left">L</aside>',
         main: '<main data-test="main">M</main>',

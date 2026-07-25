@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import { nextTick } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -18,7 +18,7 @@ describe("PhyAdaptiveShell", () => {
   };
 
   it("renders the normal state with sidebar and conversation slots", () => {
-    const wrapper = mount(PhyAdaptiveShell, { slots });
+    const wrapper = mountWithApp(PhyAdaptiveShell, { slots });
 
     expect(wrapper.classes()).toContain("phy-adaptive-shell--normal");
     expect(wrapper.find("[data-test=sidebar]").exists()).toBe(true);
@@ -27,7 +27,7 @@ describe("PhyAdaptiveShell", () => {
   });
 
   it("renders the artifact split modifier and artifact slot", () => {
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       props: { sidebarCollapsed: true, artifactOpen: true },
       slots,
     });
@@ -40,7 +40,7 @@ describe("PhyAdaptiveShell", () => {
   });
 
   it("renders the artifact fullscreen modifier without remounting the slots", () => {
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       props: { artifactFullscreen: true },
       slots,
     });
@@ -57,7 +57,7 @@ describe("PhyAdaptiveShell", () => {
     document.body.appendChild(opener);
     opener.focus();
 
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       attachTo: document.body,
       props: { artifactFullscreen: true },
       slots: {
@@ -129,7 +129,7 @@ describe("PhyAdaptiveShell", () => {
   });
 
   it("owns the only viewport overflow root", () => {
-    const wrapper = mount(PhyAdaptiveShell, { slots });
+    const wrapper = mountWithApp(PhyAdaptiveShell, { slots });
 
     expect(wrapper.attributes("data-scroll-root")).toBe("adaptive");
     expect(wrapper.findAll("[data-scroll-root]")).toHaveLength(1);

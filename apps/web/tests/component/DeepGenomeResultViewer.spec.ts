@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect } from "vitest";
 import { nextTick } from "vue";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../helpers/test-app-context";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
@@ -98,7 +98,7 @@ function render(
   references: unknown[],
   extraProps: Record<string, unknown> = {}
 ) {
-  const wrapper = mount(DeepGenomeResultViewer, {
+  const wrapper = mountWithApp(DeepGenomeResultViewer, {
     props: { markdown: "", references, ...extraProps },
     global: { stubs, mocks: { $t: (key: string) => key } },
   });
@@ -107,7 +107,7 @@ function render(
 }
 
 function renderMarkdown(markdown: string) {
-  const wrapper = mount(DeepGenomeResultViewer, {
+  const wrapper = mountWithApp(DeepGenomeResultViewer, {
     props: { markdown, references: [] },
     global: { stubs, mocks: { $t: (key: string) => key } },
   });

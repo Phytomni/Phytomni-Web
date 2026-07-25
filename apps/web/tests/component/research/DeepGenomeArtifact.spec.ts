@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineComponent, nextTick } from "vue";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import DeepGenomeArtifact from "@/components/research/DeepGenomeArtifact.vue";
 
 const download = vi.fn<(format: "pdf" | "markdown") => Promise<void>>(
@@ -32,7 +32,7 @@ const referenceList = [
 ];
 
 function mountArtifact() {
-  return mount(DeepGenomeArtifact, {
+  return mountWithApp(DeepGenomeArtifact, {
     props: {
       markdown: "# Full report\\nEvidence [1].",
       references: referenceList,

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../helpers/test-app-context";
 
 // The real vue-element-plus-x barrel eagerly imports aggregated CSS that the test
 // transform can't load. CitedAnswer imports the real MarkdownViewer module (even
@@ -23,7 +23,7 @@ const CITED_ANSWER_SOURCE = readFileSync(
 // (the body renderer and its XSS rules are locked in MarkdownViewer's own specs).
 // CitationReferenceList is real so CitedAnswer→list parity stays locked.
 const mountCited = (props: Record<string, unknown>) =>
-  mount(CitedAnswer, {
+  mountWithApp(CitedAnswer, {
     props,
     global: {
       stubs: {

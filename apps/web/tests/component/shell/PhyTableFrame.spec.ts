@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import PhyTableFrame from "@/components/shell/PhyTableFrame.vue";
 
 const SOURCE = readFileSync(
@@ -11,7 +11,7 @@ const SOURCE = readFileSync(
 
 describe("PhyTableFrame", () => {
   it("renders the table slot inside its horizontal overflow container", () => {
-    const wrapper = mount(PhyTableFrame, {
+    const wrapper = mountWithApp(PhyTableFrame, {
       slots: { default: '<table data-test="table"><tbody /></table>' },
     });
 
@@ -25,7 +25,7 @@ describe("PhyTableFrame", () => {
   });
 
   it("renders an optional pagination slot below the table surface", () => {
-    const wrapper = mount(PhyTableFrame, {
+    const wrapper = mountWithApp(PhyTableFrame, {
       slots: {
         default: '<div data-test="table">Rows</div>',
         pagination: '<nav data-test="pagination">Pages</nav>',

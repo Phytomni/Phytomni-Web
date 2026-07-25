@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import PhyAuthLayout from "@/components/shell/PhyAuthLayout.vue";
@@ -11,7 +11,7 @@ const SOURCE = readFileSync(
 
 describe("PhyAuthLayout", () => {
   it("renders brand and form slots inside a centered card", () => {
-    const wrapper = mount(PhyAuthLayout, {
+    const wrapper = mountWithApp(PhyAuthLayout, {
       slots: {
         brand: '<div data-test="brand">Brand</div>',
         title: '<h1 data-test="title">Title</h1>',
@@ -36,19 +36,19 @@ describe("PhyAuthLayout", () => {
   });
 
   it("uses a neutral background by default and opts into the horizon explicitly", () => {
-    const neutral = mount(PhyAuthLayout);
+    const neutral = mountWithApp(PhyAuthLayout);
     expect(neutral.find(".phy-auth-layout").classes()).not.toContain(
       "phy-auth-layout--horizon"
     );
 
-    const horizon = mount(PhyAuthLayout, { props: { horizon: true } });
+    const horizon = mountWithApp(PhyAuthLayout, { props: { horizon: true } });
     expect(horizon.find(".phy-auth-layout").classes()).toContain(
       "phy-auth-layout--horizon"
     );
   });
 
   it("uses the production logo in the fallback brand", () => {
-    const wrapper = mount(PhyAuthLayout);
+    const wrapper = mountWithApp(PhyAuthLayout);
     expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(
       true
     );

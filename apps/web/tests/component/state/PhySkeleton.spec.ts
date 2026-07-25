@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import PhySkeleton from "@/components/state/PhySkeleton.vue";
@@ -16,7 +16,7 @@ describe("PhySkeleton", () => {
     ["table-row", ".phy-skeleton__table-row"],
   ] as const)("renders the %s shape", (shape, selector) => {
     expect(SKELETON_SOURCE).toContain("minmax(0, 1fr)");
-    const wrapper = mount(PhySkeleton, { props: { shape } });
+    const wrapper = mountWithApp(PhySkeleton, { props: { shape } });
 
     expect(wrapper.find(".phy-skeleton").attributes("aria-hidden")).toBe(
       "true"
@@ -26,7 +26,7 @@ describe("PhySkeleton", () => {
   });
 
   it("renders the requested number of repeated items", () => {
-    const wrapper = mount(PhySkeleton, {
+    const wrapper = mountWithApp(PhySkeleton, {
       props: { shape: "line", count: 3 },
     });
 
@@ -34,7 +34,7 @@ describe("PhySkeleton", () => {
   });
 
   it("exposes a reduced-motion state without making the decoration accessible", () => {
-    const wrapper = mount(PhySkeleton, {
+    const wrapper = mountWithApp(PhySkeleton, {
       props: { shape: "card", reducedMotion: true },
     });
 

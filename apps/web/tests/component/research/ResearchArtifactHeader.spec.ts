@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import ResearchArtifactHeader from "@/components/research/ResearchArtifactHeader.vue";
 
 describe("ResearchArtifactHeader", () => {
@@ -9,7 +9,7 @@ describe("ResearchArtifactHeader", () => {
     "A comparative functional and structural assessment of Os01g0177400 across cultivated rice accessions";
 
   it("renders title, metadata, and status with a long-title truncation hook", () => {
-    const wrapper = mount(ResearchArtifactHeader, {
+    const wrapper = mountWithApp(ResearchArtifactHeader, {
       props: {
         title: longTitle,
         metadata: ["Deep Genome Agent", "Oryza sativa", "Os01g0177400"],
@@ -34,7 +34,7 @@ describe("ResearchArtifactHeader", () => {
   });
 
   it("keeps slotted and built-in actions inside the overflow owner", () => {
-    const wrapper = mount(ResearchArtifactHeader, {
+    const wrapper = mountWithApp(ResearchArtifactHeader, {
       props: {
         title: "Report",
         backLabel: "Back",
@@ -54,7 +54,7 @@ describe("ResearchArtifactHeader", () => {
   });
 
   it("emits back, action, and close from labelled controls", async () => {
-    const wrapper = mount(ResearchArtifactHeader, {
+    const wrapper = mountWithApp(ResearchArtifactHeader, {
       props: {
         title: "Report",
         backLabel: "Back to conversation",
@@ -87,10 +87,10 @@ describe("ResearchArtifactHeader", () => {
       actionLabel: "Actions",
     };
     expect(
-      mount(ResearchArtifactHeader, { props: base }).find("em").exists()
+      mountWithApp(ResearchArtifactHeader, { props: base }).find("em").exists()
     ).toBe(false);
 
-    const formatted = mount(ResearchArtifactHeader, {
+    const formatted = mountWithApp(ResearchArtifactHeader, {
       props: { ...base, formatScientificAgentName: true },
     });
     expect(
@@ -99,7 +99,7 @@ describe("ResearchArtifactHeader", () => {
   });
 
   it("marks Back as mobile-only and Close as desktop-only", () => {
-    const wrapper = mount(ResearchArtifactHeader, {
+    const wrapper = mountWithApp(ResearchArtifactHeader, {
       props: {
         title: "Report",
         backLabel: "Back",

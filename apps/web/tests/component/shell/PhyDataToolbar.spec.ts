@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import PhyDataToolbar from "@/components/shell/PhyDataToolbar.vue";
 
 const SOURCE = readFileSync(
@@ -11,7 +11,7 @@ const SOURCE = readFileSync(
 
 describe("PhyDataToolbar", () => {
   it("keeps filters and actions in separate groups", () => {
-    const wrapper = mount(PhyDataToolbar, {
+    const wrapper = mountWithApp(PhyDataToolbar, {
       slots: {
         filters: '<label data-test="filter">Search</label>',
         actions: '<button data-test="action">Add</button>',
@@ -27,7 +27,7 @@ describe("PhyDataToolbar", () => {
   });
 
   it("uses the default slot as the filter group", () => {
-    const wrapper = mount(PhyDataToolbar, {
+    const wrapper = mountWithApp(PhyDataToolbar, {
       slots: { default: '<input data-test="filter" />' },
     });
 
@@ -38,7 +38,7 @@ describe("PhyDataToolbar", () => {
   });
 
   it("marks the toolbar as wrappable for narrow layouts", () => {
-    const wrapper = mount(PhyDataToolbar);
+    const wrapper = mountWithApp(PhyDataToolbar);
 
     expect(wrapper.classes()).toContain("is-wrappable");
     expect(wrapper.classes()).toContain("phy-data-toolbar--wrap");

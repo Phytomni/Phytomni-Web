@@ -1,22 +1,22 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia, type Pinia } from "pinia";
+import {
+  createTestAppContext,
+  type TestAppContext,
+} from "../helpers/test-app-context";
 import PiiWatermark from "@/components/PiiWatermark.vue";
 import userStore from "@/stores/user";
 
-let pinia: Pinia;
+let context: TestAppContext;
 
 describe("PiiWatermark.vue", () => {
   beforeEach(() => {
-    pinia = createPinia();
-    setActivePinia(pinia);
+    context = createTestAppContext();
   });
 
   it("renders an el-watermark carrying the username when logged in", () => {
     const user = userStore();
     user.name = "alice";
-    const wrapper = mount(PiiWatermark, {
-      global: { plugins: [pinia] },
+    const wrapper = context.mount(PiiWatermark, {
       slots: { default: "<div class='payload'>content</div>" },
     });
     const wm = wrapper.findComponent({ name: "ElWatermark" });
@@ -29,8 +29,7 @@ describe("PiiWatermark.vue", () => {
   it("renders the slot without a watermark when username is empty", () => {
     const user = userStore();
     user.name = "";
-    const wrapper = mount(PiiWatermark, {
-      global: { plugins: [pinia] },
+    const wrapper = context.mount(PiiWatermark, {
       slots: { default: "<div class='payload'>content</div>" },
     });
     expect(wrapper.findComponent({ name: "ElWatermark" }).exists()).toBe(false);

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
 
 describe("ResearchArtifactPreview", () => {
@@ -9,7 +9,7 @@ describe("ResearchArtifactPreview", () => {
     "A long scientific title that remains available when its visible line is truncated";
 
   it("renders a neutral launch card with title, kind, and summary", () => {
-    const wrapper = mount(ResearchArtifactPreview, {
+    const wrapper = mountWithApp(ResearchArtifactPreview, {
       props: {
         title: longTitle,
         kind: "Research report",
@@ -40,7 +40,7 @@ describe("ResearchArtifactPreview", () => {
   });
 
   it("emits open from its labelled action", async () => {
-    const wrapper = mount(ResearchArtifactPreview, {
+    const wrapper = mountWithApp(ResearchArtifactPreview, {
       props: {
         title: "Os01g0177400 analysis",
         kind: "Research report",
@@ -64,10 +64,10 @@ describe("ResearchArtifactPreview", () => {
       summary: "Research report",
       openLabel: "Open report",
     };
-    const plain = mount(ResearchArtifactPreview, { props });
+    const plain = mountWithApp(ResearchArtifactPreview, { props });
     expect(plain.find("em").exists()).toBe(false);
 
-    const formatted = mount(ResearchArtifactPreview, {
+    const formatted = mountWithApp(ResearchArtifactPreview, {
       props: { ...props, formatScientificAgentName: true },
     });
     expect(formatted.get(".research-artifact-preview__kind").text()).toBe(
