@@ -227,6 +227,28 @@ describe("ChatSidebarNav", () => {
     wrapper.unmount();
   });
 
+  it("expands a collapsed desktop rail while Explore Agents is open", async () => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "true");
+    setViewport(1280, 768);
+    const wrapper = mountChatSidebarWithExistingStubs();
+    await nextTick();
+
+    await wrapper
+      .get('[data-test="sidebar-nav-explore-agent"]')
+      .trigger("click");
+
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).not.toContain(
+      "is-collapsed"
+    );
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe("true");
+
+    await wrapper.get('[data-test="sidebar-close"]').trigger("click");
+    expect(wrapper.get(".phy-adaptive-sidebar").classes()).toContain(
+      "is-collapsed"
+    );
+    wrapper.unmount();
+  });
+
   it("renders expanded labels and compactly hides them", () => {
     const expanded = mountNav();
     expect(expanded.text()).toContain("t:chat.newChat");

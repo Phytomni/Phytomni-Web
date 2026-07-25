@@ -308,7 +308,7 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
     );
   });
 
-  it("keeps temporary Explore Agents disclosure inside the compact sidebar", () => {
+  it("keeps temporary Explore Agents disclosure inside a collapsed desktop sidebar", () => {
     expect(SIDEBAR_SOURCE).toContain("compactDisclosureExpanded");
     expect(SIDEBAR_SOURCE).toContain(
       "window.innerWidth >= SIDEBAR_MOBILE_BREAKPOINT"
