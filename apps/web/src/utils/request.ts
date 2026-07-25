@@ -324,20 +324,24 @@ responseInterceptors.use(
     if (detailCode === 403) {
       isRelogin.show = false;
       const UserStore = userStore();
-      UserStore.FedLogOut().finally(() => {
-        // clear all caches and cookies
-        localStorage.clear();
-        sessionStorage.clear();
-        document.cookie.split(";").forEach(function (c) {
-          document.cookie = c
-            .replace(/^ +/, "")
-            .replace(
-              /=.*/,
-              "=;expires=" + new Date().toUTCString() + ";path=/"
-            );
+      UserStore.FedLogOut()
+        .finally(() => {
+          // clear all caches and cookies
+          localStorage.clear();
+          sessionStorage.clear();
+          document.cookie.split(";").forEach(function (c) {
+            document.cookie = c
+              .replace(/^ +/, "")
+              .replace(
+                /=.*/,
+                "=;expires=" + new Date().toUTCString() + ";path=/"
+              );
+          });
+          location.href = "/login";
+        })
+        .catch(() => {
+          // The redirect in finally is the authoritative logout fallback.
         });
-        location.href = "/login";
-      });
     }
 
     if (message === "Data is being processed, please do not resubmit") return;

@@ -944,20 +944,24 @@ export function useSendMessage(opts: {
               type: "warning",
               callback: () => {
                 const UserStore = userStore();
-                UserStore.FedLogOut().finally(() => {
-                  // clear all caches and cookies
-                  localStorage.clear();
-                  sessionStorage.clear();
-                  document.cookie.split(";").forEach(function (c) {
-                    document.cookie = c
-                      .replace(/^ +/, "")
-                      .replace(
-                        /=.*/,
-                        "=;expires=" + new Date().toUTCString() + ";path=/"
-                      );
+                UserStore.FedLogOut()
+                  .finally(() => {
+                    // clear all caches and cookies
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    document.cookie.split(";").forEach(function (c) {
+                      document.cookie = c
+                        .replace(/^ +/, "")
+                        .replace(
+                          /=.*/,
+                          "=;expires=" + new Date().toUTCString() + ";path=/"
+                        );
+                    });
+                    location.href = "/login";
+                  })
+                  .catch(() => {
+                    // The redirect in finally is the authoritative logout fallback.
                   });
-                  location.href = "/login";
-                });
               },
             }
           ).catch(() => undefined);

@@ -249,7 +249,7 @@ const handleSave = async () => {
       operator: "admin",
       changes: "Saved global policy config",
     });
-  } catch (error) {
+  } catch {
     ElMessage.error(t("globalConfig.saveFailed"));
   } finally {
     saving.value = false;

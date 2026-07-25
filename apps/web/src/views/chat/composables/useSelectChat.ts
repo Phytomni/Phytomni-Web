@@ -372,7 +372,7 @@ export function useSelectChat(opts: {
                   });
                 }
               }
-            } catch (e) {
+            } catch {
               messages.push({
                 role: "assistant",
                 content: item.answer,

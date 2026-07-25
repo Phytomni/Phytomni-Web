@@ -27,7 +27,7 @@ export default function hasPermi(
     });
 
     if (!hasPermissions) {
-      el.parentNode && el.parentNode.removeChild(el);
+      if (el.parentNode) el.parentNode.removeChild(el);
     }
   } else {
     throw new Error("Please set the operation permission tag value");

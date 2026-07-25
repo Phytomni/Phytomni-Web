@@ -62,7 +62,7 @@ export async function blobValidate(data: Blob): Promise<boolean> {
     const text = await data.text();
     JSON.parse(text);
     return false;
-  } catch (error) {
+  } catch {
     return true;
   }
 }
