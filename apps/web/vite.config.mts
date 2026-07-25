@@ -89,13 +89,19 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
     build: {
       outDir: "dist",
       assetsInlineLimit: 4096,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            "vue-i18n": ["vue-i18n"],
-            locales: ["./src/locales"],
+      advancedChunks: {
+        groups: [
+          {
+            name: "vue-i18n",
+            test: /node_modules[/\\]vue-i18n[/\\]/,
+            priority: 20,
           },
-        },
+          {
+            name: "locales",
+            test: /[/\\]src[/\\]locales[/\\]/,
+            priority: 10,
+          },
+        ],
       },
     },
   };

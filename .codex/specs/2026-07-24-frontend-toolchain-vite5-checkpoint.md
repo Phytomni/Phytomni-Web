@@ -105,6 +105,70 @@ eliminated. The current warning-oracle contract checks its fixtures and the
 production build boundary; test-runtime warning cleanup remains separately
 auditable.
 
+## Rolldown compatibility checkpoint
+
+Status: **Diagnostic only — not releasable**
+
+The direct Vite dependency was temporarily aliased to the official migration
+package for a compatibility exercise:
+
+| Item | Result |
+| --- | --- |
+| Direct dependency | `vite: npm:rolldown-vite@7.3.1` |
+| Lockfile package | `rolldown-vite@7.3.1`, MIT, official npm tarball and integrity recorded |
+| Clean install | `npm ci --registry=https://registry.npmjs.org`, exit `0`; 621 packages added |
+| Vite graph | `npm ls vite --all --json`, exit `0`; one resolved `vite@7.3.1` core for Vue plugins, Vitest, and Vue Router |
+| Bundler | `rolldown-vite v7.3.1` |
+| Manual chunk contract | `build.advancedChunks.groups` for `vue-i18n` and `src/locales`; no `manualChunks` remains |
+
+The configuration was exercised with the following commands from `apps/web/`:
+
+```bash
+npm ci --registry=https://registry.npmjs.org
+npm ls vite --all --json
+npm run type-check
+VITE_BUILD_COMPRESS=gzip,brotli npm run build
+npx vite build --mode production --manifest=rolldown-manifest.json
+npm run test:run
+npm run coverage
+```
+
+Results:
+
+- Type-check, guarded test, guarded coverage, and both production builds:
+  PASS. The direct manifest build transformed 2,409 modules and emitted no
+  Rolldown option-validation warning.
+- The manifest contains 177 entries. `src/locales/langs/zh-CN.ts` remains a
+  dynamic entry at `assets/zh-CN-DZM_iF21.js`; the locale was not made eager.
+  Rolldown did not emit a separate file whose name identifies `vue-i18n`, so
+  the configured vendor grouping is retained as a compatibility contract, not
+  as a filename promise.
+- The raw Vitest run was 207 files and 2,724 tests. Coverage remained at
+  **90.06% statements, 85.98% branches, 92.21% functions, and 94.13% lines**;
+  all 35 configured coverage files were reported with no missing or extra
+  entries.
+- The default Rolldown build produced 245 files: 123 JavaScript files
+  (6,012,784 bytes), 46 CSS files (655,633 bytes), and one HTML file (5,435
+  bytes). The explicit compression build produced 165 `.gz` files
+  (1,884,955 bytes) and 167 `.br` files (1,581,025 bytes), in addition to the
+  uncompressed assets.
+
+Against the historical Vite 5 artifact baseline (65 JavaScript files,
+2,720,873 bytes; 44 CSS files, 596,703 bytes; one HTML file, 5,588 bytes),
+the Rolldown output has materially more JavaScript split points and a larger
+uncompressed JavaScript total. This is not treated as an unexplained release
+regression yet: the comparison crosses the already-upgraded Vue/Vitest/product
+graph, and the manifest proves the important lazy-locale invariant. Vite 8
+must repeat the same measurement and explain or reduce any material delta
+before release adoption.
+
+Rolldown still reports the existing third-party `3dmol` direct-`eval` warning,
+the dynamic/static import notices for the shared store and Element Plus
+Chinese locale, and the large-chunk advisory. These diagnostics remain
+visible; none is suppressed by this checkpoint. The alias and
+`advancedChunks` configuration are temporary and must not authorize deployment
+or remote-CI acceptance.
+
 ## Cross-language verification boundary
 
 `PYTHONPATH=. uv run pytest -q scripts/tests` was run after the clean install.
@@ -121,8 +185,8 @@ configuration edit**; no bypass or `--no-verify` path is acceptable.
 
 ## Boundary and follow-up
 
-This record establishes a coherent local Vite 7.3.6/Vitest 4.1.10 toolchain and
-green frontend type/lint/format/test/coverage/build evidence. It does not claim
-Vite 8, warning-free tests, remote CI, Bot/operations activation, Expert
-activation, or production deployment. Re-run the Python suite and the full
-repository gate after the concurrent Vitest configuration change is resolved.
+This record establishes a coherent local Vite 7/Vitest 4 baseline plus a
+separate Rolldown compatibility result. It does not claim Vite 8, warning-free
+tests, remote CI, Bot/operations activation, Expert activation, or production
+deployment. Re-run the Python suite and the full repository gate after the
+concurrent Vitest configuration change is resolved.

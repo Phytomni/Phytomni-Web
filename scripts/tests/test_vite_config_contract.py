@@ -172,3 +172,19 @@ def test_application_typecheck_uses_the_target_esnext_library() -> None:
     assert "ESNext" in config["compilerOptions"]["lib"]
     assert "vite" not in config["include"]
     assert "vite/**/*.ts" in config_project["include"]
+
+
+def test_rolldown_checkpoint_uses_a_direct_vite_alias_and_advanced_chunks() -> None:
+    package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
+    lock = json.loads((WEB_ROOT / "package-lock.json").read_text(encoding="utf-8"))
+    config = _read(WEB_ROOT / "vite.config.mts")
+
+    assert package["devDependencies"]["vite"] == "npm:rolldown-vite@7.3.1"
+    assert "overrides" not in package
+    vite_lock = lock["packages"]["node_modules/vite"]
+    assert vite_lock["name"] == "rolldown-vite"
+    assert vite_lock["version"] == "7.3.1"
+    assert "advancedChunks:" in config
+    assert "manualChunks" not in config
+    assert 'name: "vue-i18n"' in config
+    assert 'name: "locales"' in config
