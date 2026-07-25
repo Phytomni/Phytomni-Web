@@ -40,7 +40,6 @@ EXPECTED_APPLICATION_DIAGNOSTIC_CODES = frozenset(
         "TS2536",
         "TS2694",
         "TS2590",
-        "TS2552",
         "TS2724",
         "TS2846",
         "TS7010",
@@ -50,7 +49,6 @@ PROJECTS = {
     "application": WEB_ROOT / "tsconfig.json",
     "config": WEB_ROOT / "tsconfig.config.json",
 }
-PROBE_BUILD_INFO = Path("/tmp/phytomni-typescript-probe.tsbuildinfo")
 DIAGNOSTIC = re.compile(
     r"^(?P<path>.+?)(?:\(\d+,\d+\))?: error (?P<code>TS\d+):"
 )
@@ -86,26 +84,35 @@ def _resolved_output_path(raw_path: str) -> Path:
 def _run_probe(
     project: Path, *, skip_lib_check: bool
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            str(VUE_TSC),
-            "--noEmit",
-            "--skipLibCheck",
-            str(skip_lib_check).lower(),
-            "--tsBuildInfoFile",
-            str(PROBE_BUILD_INFO),
-            "--incremental",
-            "true",
-            "--pretty",
-            "false",
-            "--project",
-            str(project),
-        ],
-        cwd=WEB_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    with NamedTemporaryFile(
+        prefix="phytomni-ts-probe-",
+        suffix=".tsbuildinfo",
+        delete=False,
+    ) as handle:
+        build_info = Path(handle.name)
+    try:
+        return subprocess.run(
+            [
+                str(VUE_TSC),
+                "--noEmit",
+                "--skipLibCheck",
+                str(skip_lib_check).lower(),
+                "--tsBuildInfoFile",
+                str(build_info),
+                "--incremental",
+                "true",
+                "--pretty",
+                "false",
+                "--project",
+                str(project),
+            ],
+            cwd=WEB_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        build_info.unlink(missing_ok=True)
 
 
 def _diagnostics(result: subprocess.CompletedProcess[str]) -> list[tuple[str, str]]:

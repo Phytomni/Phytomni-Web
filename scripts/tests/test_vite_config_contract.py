@@ -110,19 +110,27 @@ def test_vite_config_keeps_proxy_alias_and_chunk_contracts() -> None:
     assert 'name: "vue-i18n"' in config
 
 
-def test_vite_toolchain_keeps_checkpoint_versions_and_modern_sass_api() -> None:
+def test_vite8_toolchain_keeps_supported_versions_without_legacy_sass_api() -> None:
     package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
     vite_config = _read(WEB_ROOT / "vite.config.mts")
 
     expected_versions = {
-        "vite": "5.4.21",
+        "vite": "8.1.5",
         "@vitejs/plugin-vue": "6.0.8",
         "@vitejs/plugin-vue-jsx": "5.1.6",
         "sass": "1.101.7",
     }
     for name, version in expected_versions.items():
         assert package["devDependencies"][name] == version
-    assert 'api: "modern"' in vite_config
+    assert "preprocessorOptions" not in vite_config
+    assert 'api: "modern"' not in vite_config
+
+
+def test_vitest_coverage_auto_update_uses_supported_nested_option() -> None:
+    config = _read(WEB_ROOT / "vitest.config.mts")
+
+    assert "thresholdAutoUpdate" not in config
+    assert "autoUpdate: false" in config
 
 
 def test_compiler_projects_use_bundler_resolution_without_suppression() -> None:
@@ -152,14 +160,15 @@ def test_compiler_projects_use_bundler_resolution_without_suppression() -> None:
     assert config["compilerOptions"]["incremental"] is True
 
 
-def test_vite5_checkpoint_is_explicitly_diagnostic_and_evidence_backed() -> None:
+def test_vite8_checkpoint_is_explicitly_diagnostic_and_evidence_backed() -> None:
     checkpoint = _read(CHECKPOINT)
 
     assert "Diagnostic only — not releasable" in checkpoint
-    assert "Vite | `5.4.21`" in checkpoint
-    assert "205 files passed and 2,709 tests passed" in checkpoint
-    assert "VITE_BUILD_COMPRESS=gzip,brotli npm run build-only" in checkpoint
-    assert "Vite CJS Node API warning | 0" in checkpoint
+    assert "Vite | `8.1.5`" in checkpoint
+    assert "Vite 8.1.5 transformed 2,410 modules" in checkpoint
+    assert "all 35 configured coverage files" in checkpoint
+    assert "VITE_BUILD_COMPRESS=gzip,brotli npm run build" in checkpoint
+    assert "3dmol" in checkpoint
 
 
 def test_application_typecheck_uses_the_target_esnext_library() -> None:

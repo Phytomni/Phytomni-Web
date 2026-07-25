@@ -77,6 +77,7 @@ export default defineConfig({
         "src/styles/tokens.ts",
       ],
       thresholds: {
+        autoUpdate: false,
         lines: 80,
         functions: 80,
         statements: 80,
