@@ -15,10 +15,12 @@
     "format:check": "prettier --check \"src/**/*.{vue,js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"tests/**/*.{vue,js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"vite/**/*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}\" eslint.config.mjs .prettierrc.cjs",
     "format:write": "prettier --write \"src/**/*.{vue,js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"tests/**/*.{vue,js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"vite/**/*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}\" \"*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}\" eslint.config.mjs .prettierrc.cjs",
     "test": "vitest",
-    "test:run": "vitest run",
+    "test:run:raw": "vitest run",
+    "test:run": "npm run test:warning-oracle && node scripts/quality/run-with-warning-oracle.mjs test",
     "test:warning-oracle": "node --test --test-isolation=none scripts/quality/framework-warning-oracle.test.mjs",
     "test:ui": "vitest --ui",
-    "coverage": "vitest run --coverage"
+    "coverage:raw": "vitest run --coverage",
+    "coverage": "npm run test:warning-oracle && node scripts/quality/run-with-warning-oracle.mjs coverage"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",

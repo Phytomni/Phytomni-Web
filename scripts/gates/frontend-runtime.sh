@@ -15,5 +15,5 @@ run_static_analysis_check - \
 step "G3 apps/web: vite build"
 (cd apps/web && npm run --silent build)
 
-step "G12 apps/web: vitest run + coverage threshold"
+step "G12 apps/web: guarded Vitest run + coverage threshold"
 (cd apps/web && npm run coverage)

@@ -54,8 +54,16 @@ def test_plugin_factories_preserve_runtime_contracts() -> None:
         package["scripts"]["build-only"]
         == "node scripts/quality/run-with-warning-oracle.mjs build"
     )
-    assert package["scripts"]["test:run"] == "vitest run"
-    assert package["scripts"]["coverage"] == "vitest run --coverage"
+    assert package["scripts"]["test:run:raw"] == "vitest run"
+    assert (
+        package["scripts"]["test:run"]
+        == "npm run test:warning-oracle && node scripts/quality/run-with-warning-oracle.mjs test"
+    )
+    assert package["scripts"]["coverage:raw"] == "vitest run --coverage"
+    assert (
+        package["scripts"]["coverage"]
+        == "npm run test:warning-oracle && node scripts/quality/run-with-warning-oracle.mjs coverage"
+    )
     assert (
         package["scripts"]["test:warning-oracle"]
         == "node --test --test-isolation=none scripts/quality/framework-warning-oracle.test.mjs"

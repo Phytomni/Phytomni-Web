@@ -98,3 +98,19 @@ test("returns 86 after a successful child emits a prohibited warning", async () 
   });
   assert.equal(code, 86);
 });
+
+for (const [category, warning] of [
+  ["vue", "[Vue warn] emitted by fixture"],
+  ["intlify", "[intlify] emitted by fixture"],
+  ["sass", "DEPRECATION WARNING [legacy-js-api]: emitted by fixture"],
+  ["vite", "The CJS build of Vite's Node API is deprecated"],
+]) {
+  test(`returns 86 for a successful child emitting a ${category} warning`, async () => {
+    const code = await runCheckedProcess({
+      executable: process.execPath,
+      args: [fixture, "--stderr", warning],
+      cwd: scriptDir,
+    });
+    assert.equal(code, 86);
+  });
+}

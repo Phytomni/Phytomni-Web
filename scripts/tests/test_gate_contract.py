@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -245,6 +246,28 @@ def test_gate_groups_own_enhanced_repository_tools() -> None:
     assert "go test ./..." in server_runtime
     assert "go test -race ./..." in server_runtime
     assert "scripts/actionlint_runner.sh" in contracts
+
+
+def test_frontend_runtime_uses_guarded_test_and_coverage_scripts() -> None:
+    package = json.loads(
+        (ROOT / "apps" / "web" / "package.json").read_text(encoding="utf-8")
+    )
+    scripts = package["scripts"]
+    assert scripts["test:run:raw"] == "vitest run"
+    assert (
+        scripts["test:run"]
+        == "npm run test:warning-oracle && node scripts/quality/run-with-warning-oracle.mjs test"
+    )
+    assert scripts["coverage:raw"] == "vitest run --coverage"
+    assert (
+        scripts["coverage"]
+        == "npm run test:warning-oracle && node scripts/quality/run-with-warning-oracle.mjs coverage"
+    )
+
+    runtime = (GATES / "frontend-runtime.sh").read_text(encoding="utf-8")
+    assert "npm run coverage" in runtime
+    assert "coverage:raw" not in runtime
+    assert "test:run:raw" not in runtime
 
 
 def test_every_gate_reaches_the_fail_closed_checker_through_one_helper() -> None:
