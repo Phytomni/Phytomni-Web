@@ -137,9 +137,16 @@ describe("Data Agent static demonstration", () => {
     await wrapper.get("[data-test=shell-back]").trigger("click");
     expect(routerBack).toHaveBeenCalledTimes(1);
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(
-      wrapper.findAll("[data-test*=progress], [aria-label*=progress i]")
-    ).toHaveLength(0);
+    const progressNodes = wrapper
+      .findAll("[data-test], [aria-label]")
+      .filter((node) =>
+        /progress/i.test(
+          `${node.attributes("data-test") ?? ""} ${
+            node.attributes("aria-label") ?? ""
+          }`
+        )
+      );
+    expect(progressNodes).toHaveLength(0);
     expect(wrapper.findAll("button")).toHaveLength(1);
     expect(wrapper.text()).not.toMatch(/export|download|loading/i);
 

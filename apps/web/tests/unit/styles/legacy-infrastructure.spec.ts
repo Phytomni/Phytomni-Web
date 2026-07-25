@@ -78,7 +78,8 @@ describe("superseded visual infrastructure", () => {
     );
   });
 
-  it("keeps the diagnostic Vite checkpoint on the modern Sass API", () => {
-    expect(VITE_SOURCE).toContain('api: "modern"');
+  it("does not configure the removed Sass JavaScript API", () => {
+    expect(VITE_SOURCE).not.toContain("preprocessorOptions");
+    expect(VITE_SOURCE).not.toContain('api: "modern"');
   });
 });

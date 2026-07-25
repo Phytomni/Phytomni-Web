@@ -86,9 +86,16 @@ describe("Analyst Agent static demonstration", () => {
     expect(wrapper.text()).not.toMatch(
       /created successfully|completed|progress|loading/i
     );
-    expect(
-      wrapper.findAll("[data-test*=progress], [aria-label*=progress i]")
-    ).toHaveLength(0);
+    const progressNodes = wrapper
+      .findAll("[data-test], [aria-label]")
+      .filter((node) =>
+        /progress/i.test(
+          `${node.attributes("data-test") ?? ""} ${
+            node.attributes("aria-label") ?? ""
+          }`
+        )
+      );
+    expect(progressNodes).toHaveLength(0);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });
