@@ -197,7 +197,7 @@ async function runGeometryHarness(
   const caseLinks = Array.from({ length: 7 }, (_value, index) =>
     makeElement(
       index === 6
-        ? options.lastCaseRect ?? rect(280, 720, width - 40, 800)
+        ? (options.lastCaseRect ?? rect(280, 720, width - 40, 800))
         : rect(280, 560 + index * 20, width - 40, 600 + index * 20)
     )
   );
@@ -517,7 +517,7 @@ describe("Chat visual fixture registry", () => {
 
     for (const routingFixture of routingFixtures) {
       const fixture = getChatVisualFixture(
-        routingFixture.id as typeof CHAT_VISUAL_FIXTURE_KEYS[number]
+        routingFixture.id as (typeof CHAT_VISUAL_FIXTURE_KEYS)[number]
       );
       expect(getChatRoutingFixture(routingFixture.id)).toBe(routingFixture);
       expect(fixture.chatState).toBe(
@@ -551,7 +551,7 @@ describe("Chat visual fixture registry", () => {
     for (const key of recoveryKeys) {
       expect(CHAT_VISUAL_FIXTURE_KEYS).toContain(key);
       const fixture = getChatVisualFixture(
-        key as typeof CHAT_VISUAL_FIXTURE_KEYS[number]
+        key as (typeof CHAT_VISUAL_FIXTURE_KEYS)[number]
       );
       expect(fixture.key).toBe(key);
     }
@@ -1570,7 +1570,7 @@ describe("Chat visual fixture rendering (no network)", () => {
 
     for (const [key, expectBranch] of Object.entries(expectations)) {
       const fixture = getChatVisualFixture(
-        key as typeof CHAT_VISUAL_FIXTURE_KEYS[number]
+        key as (typeof CHAT_VISUAL_FIXTURE_KEYS)[number]
       );
       const wrapper = mountFixtureApp(fixture);
       await flushPromises();

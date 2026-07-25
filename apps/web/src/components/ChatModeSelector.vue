@@ -85,8 +85,9 @@ const onModeUpdate = (value: unknown) => {
 }
 
 .chat-mode-selector
-  :deep(.el-radio-button__original-radio:focus-visible
-    + .el-radio-button__inner) {
+  :deep(
+    .el-radio-button__original-radio:focus-visible + .el-radio-button__inner
+  ) {
   outline: 2px solid var(--phy-color-focus);
   outline-offset: 1px;
 }

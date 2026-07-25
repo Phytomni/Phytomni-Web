@@ -61,8 +61,8 @@ describe("BotReportState", () => {
         expected === "failed"
           ? "FAILED"
           : expected === "complete"
-          ? "SUCCEEDED"
-          : "RUNNING",
+            ? "SUCCEEDED"
+            : "RUNNING",
       visibleReport: expected === "complete" ? "# Final report" : "",
       finalReport: expected === "complete" ? "# Final report" : "",
     });

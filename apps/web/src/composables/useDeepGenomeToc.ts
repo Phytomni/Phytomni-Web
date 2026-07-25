@@ -8,9 +8,7 @@ export interface DeepGenomeTocHeading {
 }
 
 export type DeepGenomeTocMainContentValue =
-  | HTMLElement
-  | { $el?: Element | null }
-  | null;
+  HTMLElement | { $el?: Element | null } | null;
 
 export interface DeepGenomeTocOpts {
   headings: Ref<Array<{ id: string; [key: string]: unknown }>>;

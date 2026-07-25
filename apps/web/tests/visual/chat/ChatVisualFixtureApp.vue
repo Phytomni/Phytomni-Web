@@ -666,7 +666,7 @@ const composerIsSending = computed(
 );
 
 const composerValue = ref(
-  props.fixture ? COMPOSER_MODEL_VALUE_BY_KEY[props.fixture.key] ?? "" : ""
+  props.fixture ? (COMPOSER_MODEL_VALUE_BY_KEY[props.fixture.key] ?? "") : ""
 );
 
 const lastFixtureAction = ref("");

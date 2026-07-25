@@ -8,9 +8,7 @@ import { processInlineMarkdown } from "@/utils/markdown-inline";
 // would weaken the v-html boundary. Detection is structural: strip to the set of
 // live tags each side emits and compare.
 export type DiffVerdict =
-  | "identical"
-  | "candidate-stricter"
-  | "candidate-looser";
+  "identical" | "candidate-stricter" | "candidate-looser";
 
 export interface SanitizerDiff {
   payload: string;

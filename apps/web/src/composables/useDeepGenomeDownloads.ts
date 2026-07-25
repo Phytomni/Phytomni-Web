@@ -7,9 +7,7 @@ import { convertFilePath } from "@/utils/markdown-inline";
 import type { DisplayReference } from "@/utils/reference-renderer";
 
 export type DeepGenomeMainContentValue =
-  | HTMLElement
-  | { $el?: Element | null }
-  | null;
+  HTMLElement | { $el?: Element | null } | null;
 
 export interface DeepGenomeDownloadsOpts {
   props: {

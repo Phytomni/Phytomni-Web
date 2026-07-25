@@ -434,7 +434,7 @@ function isAllowedFile(file: File): boolean {
     file.size > 0 &&
     file.size <= MAX_RESEARCH_FILE_BYTES &&
     RESEARCH_FILE_EXTENSIONS.includes(
-      extensionFor(file.name) as typeof RESEARCH_FILE_EXTENSIONS[number]
+      extensionFor(file.name) as (typeof RESEARCH_FILE_EXTENSIONS)[number]
     )
   );
 }
@@ -448,8 +448,8 @@ function handleFiles(event: Event): void {
     accepted.length !== incoming.length
       ? t("agents.research.fileValidation")
       : incoming.length > MAX_RESEARCH_FILES
-      ? t("agents.research.fileCountValidation")
-      : "";
+        ? t("agents.research.fileCountValidation")
+        : "";
   input.value = "";
 }
 
@@ -541,8 +541,8 @@ function safeHistoryIdentity(value: unknown, pattern: RegExp): string | null {
     typeof value === "number" && Number.isSafeInteger(value)
       ? String(value)
       : typeof value === "string"
-      ? value.trim()
-      : "";
+        ? value.trim()
+        : "";
   return normalized && pattern.test(normalized) ? normalized : null;
 }
 

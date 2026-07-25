@@ -234,7 +234,8 @@ function back() {
   line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
-  transition: background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+  transition:
+    background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
     border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
     color var(--phy-motion-fast) var(--phy-motion-ease-out);
 }

@@ -535,7 +535,8 @@ const handleHelpCommand = (command: string | number | object) => {
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background-color var(--phy-motion-fast) ease,
+  transition:
+    background-color var(--phy-motion-fast) ease,
     color var(--phy-motion-fast) ease;
 
   .el-icon {

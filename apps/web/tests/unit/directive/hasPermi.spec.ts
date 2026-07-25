@@ -11,7 +11,7 @@ vi.mock("@/stores", () => ({
 }));
 
 const binding = (value: PermissionValue): DirectiveBinding<PermissionValue> =>
-  ({ value } as DirectiveBinding<PermissionValue>);
+  ({ value }) as DirectiveBinding<PermissionValue>;
 
 describe("v-hasPermi", () => {
   it("keeps an element when a listed permission is present", () => {

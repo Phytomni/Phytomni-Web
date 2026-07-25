@@ -466,7 +466,7 @@ function isAllowedFile(file: File): boolean {
     file.size > 0 &&
     file.size <= MAX_DESIGN_FILE_BYTES &&
     DESIGN_FILE_EXTENSIONS.includes(
-      extensionFor(file.name) as typeof DESIGN_FILE_EXTENSIONS[number]
+      extensionFor(file.name) as (typeof DESIGN_FILE_EXTENSIONS)[number]
     )
   );
 }
@@ -480,8 +480,8 @@ function handleFiles(event: Event): void {
     accepted.length !== incoming.length
       ? t("agents.digitalDesign.fileValidation")
       : incoming.length > MAX_DESIGN_FILES
-      ? t("agents.digitalDesign.fileCountValidation")
-      : "";
+        ? t("agents.digitalDesign.fileCountValidation")
+        : "";
   input.value = "";
 }
 

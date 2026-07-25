@@ -2,9 +2,7 @@
 export type JsonPrimitive = string | number | boolean | null;
 
 export type JsonValue =
-  | JsonPrimitive
-  | { [key: string]: JsonValue }
-  | JsonValue[];
+  JsonPrimitive | { [key: string]: JsonValue } | JsonValue[];
 
 export type Decoder<T> = (value: unknown) => T;
 

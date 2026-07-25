@@ -130,11 +130,7 @@ export interface ChatResponse {
 }
 
 export type ChatHistoryHydrationStatus =
-  | "new"
-  | "loading"
-  | "ready"
-  | "history-empty"
-  | "error";
+  "new" | "loading" | "ready" | "history-empty" | "error";
 
 export type ChatHistoryErrorKind = "request" | "decode";
 

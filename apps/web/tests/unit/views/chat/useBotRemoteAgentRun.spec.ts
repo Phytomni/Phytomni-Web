@@ -505,7 +505,7 @@ describe("useBotRemoteAgentRun", () => {
       [
         string,
         TestCapabilitySource,
-        { files?: File[]; resolver?: { geneId: string; speciesCode: string } }
+        { files?: File[]; resolver?: { geneId: string; speciesCode: string } },
       ]
     > = [
       [
@@ -557,10 +557,10 @@ describe("useBotRemoteAgentRun", () => {
           name === "missing resolver authorization"
             ? "resolver_disabled"
             : name === "missing attachment authorization"
-            ? "attachments_disabled"
-            : name === "missing artifact authorization"
-            ? "artifacts_disabled"
-            : "capability_disabled",
+              ? "attachments_disabled"
+              : name === "missing artifact authorization"
+                ? "artifacts_disabled"
+                : "capability_disabled",
       });
     }
     expect(load).toHaveBeenCalledTimes(cases.length);

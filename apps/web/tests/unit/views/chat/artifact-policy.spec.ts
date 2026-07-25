@@ -13,7 +13,7 @@ const ELIGIBLE_MESSAGE: ChatMessage = {
 };
 
 const artifactByTool: Record<
-  typeof CANONICAL_AGENT_TOOLS[number],
+  (typeof CANONICAL_AGENT_TOOLS)[number],
   ArtifactKind
 > = {
   ChatAgent: null,
@@ -28,18 +28,19 @@ const artifactByTool: Record<
   DigitalDesignAgent: null,
 };
 
-const autoOpenByTool: Record<typeof CANONICAL_AGENT_TOOLS[number], boolean> = {
-  ChatAgent: false,
-  KnowledgeAgent: false,
-  DataAgent: false,
-  ReviewAgent: false,
-  BriefGeneAgent: false,
-  AnalystAgent: false,
-  DeepGenomeAgent: true,
-  InSilicoResearchAgent: true,
-  GeneNetworkAgent: false,
-  DigitalDesignAgent: false,
-};
+const autoOpenByTool: Record<(typeof CANONICAL_AGENT_TOOLS)[number], boolean> =
+  {
+    ChatAgent: false,
+    KnowledgeAgent: false,
+    DataAgent: false,
+    ReviewAgent: false,
+    BriefGeneAgent: false,
+    AnalystAgent: false,
+    DeepGenomeAgent: true,
+    InSilicoResearchAgent: true,
+    GeneNetworkAgent: false,
+    DigitalDesignAgent: false,
+  };
 
 describe("artifact policy", () => {
   it.each(CANONICAL_AGENT_TOOLS)(

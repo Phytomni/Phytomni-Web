@@ -196,8 +196,14 @@ const handleFinish = () => {
       background-color: var(--el-fill-color);
       padding: 0.2em 0.4em;
       border-radius: 4px;
-      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas,
-        Liberation Mono, monospace;
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        SF Mono,
+        Menlo,
+        Consolas,
+        Liberation Mono,
+        monospace;
       overflow-wrap: anywhere;
     }
 
@@ -272,8 +278,14 @@ const handleFinish = () => {
       background-color: var(--el-fill-color);
       padding: 0.2em 0.4em;
       border-radius: 4px;
-      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas,
-        Liberation Mono, monospace;
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        SF Mono,
+        Menlo,
+        Consolas,
+        Liberation Mono,
+        monospace;
       overflow-wrap: anywhere;
     }
 

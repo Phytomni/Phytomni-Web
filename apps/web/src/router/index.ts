@@ -53,8 +53,7 @@ export function remoteAgentRouteGuard(tool: RemoteAgentTool) {
     to: RouteLocationNormalized
   ): Promise<true | RouteLocationRaw> => {
     const metadataAccess = to.meta.remoteAccess as
-      | RemoteAgentRouteAccess
-      | undefined;
+      RemoteAgentRouteAccess | undefined;
     if (metadataAccess) {
       return canActivateRemoteAgentRoute(tool, metadataAccess)
         ? true

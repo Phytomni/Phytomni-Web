@@ -281,7 +281,8 @@ const onGeneratedFormat = (format: string | number) => {
   background: transparent;
   color: inherit;
   cursor: pointer;
-  transition: background-color var(--phy-motion-fast) ease,
+  transition:
+    background-color var(--phy-motion-fast) ease,
     color var(--phy-motion-fast) ease;
 
   &:hover {

@@ -46,7 +46,7 @@ export function artifactKindForMessage(
   }
 
   return message.tool_name
-    ? ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.kind ?? null
+    ? (ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.kind ?? null)
     : null;
 }
 

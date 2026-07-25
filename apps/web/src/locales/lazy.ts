@@ -25,7 +25,7 @@ export async function loadLocaleMessages<
   Messages extends Record<string, unknown>,
   DateTimeFormats extends Record<string, unknown>,
   NumberFormats extends Record<string, unknown>,
-  OptionLocale extends string
+  OptionLocale extends string,
 >(
   i18n: I18n<Messages, DateTimeFormats, NumberFormats, OptionLocale, false>,
   lang: SupportedLocales,

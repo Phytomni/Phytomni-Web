@@ -44,18 +44,18 @@ const mocks = vi.hoisted(() => {
           projection.status === "SUCCEEDED"
             ? "succeeded"
             : projection.status === "FAILED" ||
-              projection.status === "CANCELLED"
-            ? "failed"
-            : "running",
+                projection.status === "CANCELLED"
+              ? "failed"
+              : "running",
         projection,
         runId: projection.runId,
         status:
           projection.status === "SUCCEEDED"
             ? "SUCCEEDED"
             : projection.status === "FAILED" ||
-              projection.status === "CANCELLED"
-            ? "FAILED"
-            : "RUNNING",
+                projection.status === "CANCELLED"
+              ? "FAILED"
+              : "RUNNING",
         visibleReport: projection.finalReport || projection.intermediateReport,
         finalReport: projection.finalReport,
         intermediateReport: projection.intermediateReport,

@@ -52,8 +52,8 @@
               isMobileViewport
                 ? '272px'
                 : isCollapse || isCompactViewport
-                ? '64px'
-                : '200px'
+                  ? '64px'
+                  : '200px'
             "
             :class="['sidebar', { 'is-mobile-drawer': isMobileViewport }]"
           >

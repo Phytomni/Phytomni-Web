@@ -11,10 +11,7 @@ import type {
 } from "../botProjection";
 
 export type BotLifecycleStatus =
-  | "RUNNING"
-  | "INPUT_REQUIRED"
-  | "SUCCEEDED"
-  | "FAILED";
+  "RUNNING" | "INPUT_REQUIRED" | "SUCCEEDED" | "FAILED";
 
 export interface BotLifecycleState {
   runId: string | null;

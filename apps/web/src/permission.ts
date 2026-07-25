@@ -96,9 +96,8 @@ export async function canEnterRemoteAgentRoute(
   if (!roleAllowed || contract.live !== true) return false;
 
   try {
-    const { useBotCapabilities } = await import(
-      "@/views/chat/composables/useBotCapabilities"
-    );
+    const { useBotCapabilities } =
+      await import("@/views/chat/composables/useBotCapabilities");
     const capabilities = useBotCapabilities(`route:${tool}`);
     await capabilities.load();
     const capability = capabilities.byTool.value[tool];

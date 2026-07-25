@@ -19,7 +19,7 @@ export const PHASE_3B_MESSAGE_KEYS = [
   "interleaved-streaming",
 ] as const;
 
-export type Phase3BMessageKey = typeof PHASE_3B_MESSAGE_KEYS[number];
+export type Phase3BMessageKey = (typeof PHASE_3B_MESSAGE_KEYS)[number];
 
 export function isPhase3BMessageKey(
   value: string | null | undefined

@@ -40,12 +40,10 @@ type FormIdPayload = { id: string | number };
 
 function getId(data: FormIdPayload | FormData, label: string): string | number {
   const id = data instanceof FormData ? data.get("id") : data.id;
-  if (
-    !(
-      (typeof id === "number" && Number.isFinite(id)) ||
-      (typeof id === "string" && id.length > 0)
-    )
-  ) {
+  if (!(
+    (typeof id === "number" && Number.isFinite(id)) ||
+    (typeof id === "string" && id.length > 0)
+  )) {
     throw new TypeError(`Invalid ${label}`);
   }
   return id;
@@ -68,7 +66,8 @@ export const getQuery = (
   data: QueryRequest | FormData,
   opts?: QueryProgressOpts
 ): Promise<ApiEnvelope<DecodedQueryData>> => {
-  const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
+  const id =
+    data instanceof FormData ? (data.get("id") ?? "0") : (data.id ?? 0);
   return requestApi(
     {
       url: `/api/v1/conversations/${id}/messages`,
@@ -86,7 +85,8 @@ export const getQueryAbortable = (
   requestId?: string,
   opts?: QueryProgressOpts
 ): Promise<ApiEnvelope<DecodedQueryData>> => {
-  const id = data instanceof FormData ? data.get("id") ?? "0" : data.id ?? 0;
+  const id =
+    data instanceof FormData ? (data.get("id") ?? "0") : (data.id ?? 0);
   return requestAbortableApi(
     {
       url: `/api/v1/conversations/${id}/messages`,

@@ -26,7 +26,7 @@ export const PHASE_3C_FIXTURE_KEYS = [
   "parallel-b",
 ] as const;
 
-export type Phase3CFixtureKey = typeof PHASE_3C_FIXTURE_KEYS[number];
+export type Phase3CFixtureKey = (typeof PHASE_3C_FIXTURE_KEYS)[number];
 
 export function isPhase3CFixtureKey(
   value: string | null | undefined

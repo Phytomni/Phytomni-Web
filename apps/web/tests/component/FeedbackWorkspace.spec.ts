@@ -53,7 +53,7 @@ const formErrorsKey: InjectionKey<Ref<Record<string, string>>> =
 const messageFor = (rule: Rule) =>
   typeof rule.message === "function"
     ? rule.message()
-    : rule.message ?? "Invalid";
+    : (rule.message ?? "Invalid");
 
 const ElFormStub = defineComponent({
   name: "ElForm",

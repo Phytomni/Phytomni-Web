@@ -5,10 +5,7 @@ import { describe, expect, it } from "vitest";
 
 type FixtureClass = "upstream-projection" | "web-http-synthetic";
 type ContractKind =
-  | "open_surface"
-  | "terminal_projection"
-  | "action_response"
-  | "error_response";
+  "open_surface" | "terminal_projection" | "action_response" | "error_response";
 
 interface FixtureEntry {
   id: string;

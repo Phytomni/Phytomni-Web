@@ -22,8 +22,7 @@ export type A2uiDecodeReason =
   | "status_unsupported";
 
 export type A2uiDecodeResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; reason: A2uiDecodeReason };
+  { ok: true; value: T } | { ok: false; reason: A2uiDecodeReason };
 
 /** Compatibility name for callers that only consume open custom surfaces. */
 export type A2uiSurfaceValue = A2uiOpenSurface;

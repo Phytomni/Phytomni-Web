@@ -24,10 +24,7 @@ const TRANSPORT_ERROR_CODE = "a2ui_transport_error";
 const REJECTED_HTTP_STATUSES = new Set([400, 401, 403, 413, 415, 422]);
 
 export type A2uiTransportErrorKind =
-  | "rejected"
-  | "temporarily_rejected"
-  | "expired"
-  | "unknown";
+  "rejected" | "temporarily_rejected" | "expired" | "unknown";
 
 export class A2uiTransportError extends Error {
   readonly name = "A2uiTransportError";

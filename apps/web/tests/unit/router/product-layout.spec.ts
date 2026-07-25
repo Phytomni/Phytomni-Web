@@ -18,8 +18,8 @@ function flattenLeafRoutes(records: RouteRecord[]): RouteRecord[] {
     record.children?.length
       ? flattenLeafRoutes(record.children)
       : record.component
-      ? [record]
-      : []
+        ? [record]
+        : []
   );
 }
 

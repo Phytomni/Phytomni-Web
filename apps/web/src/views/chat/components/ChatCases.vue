@@ -80,7 +80,8 @@ const caseOptions = computed(() =>
   color: var(--phy-color-text);
   text-decoration: none;
   box-shadow: none;
-  transition: border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+  transition:
+    border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
     background-color var(--phy-motion-fast) var(--phy-motion-ease-out);
 }
 

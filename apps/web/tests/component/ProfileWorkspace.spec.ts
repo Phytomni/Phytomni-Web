@@ -125,7 +125,7 @@ const ElFormStub = defineComponent({
             nextErrors[field] =
               typeof rule.message === "function"
                 ? rule.message()
-                : rule.message ?? "Required";
+                : (rule.message ?? "Required");
             break;
           }
           if (rule.validator) {

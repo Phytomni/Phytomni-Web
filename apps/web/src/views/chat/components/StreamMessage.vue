@@ -80,7 +80,7 @@ const emit = defineEmits<{
 // reference list) unless real reference rows exist — avoids dead #mN-ref-K
 // anchors when a caller supplies ns without references.
 const citationNs = computed(() =>
-  props.references && props.references.length ? props.ns ?? "" : ""
+  props.references && props.references.length ? (props.ns ?? "") : ""
 );
 
 const messageKey = computed(() =>

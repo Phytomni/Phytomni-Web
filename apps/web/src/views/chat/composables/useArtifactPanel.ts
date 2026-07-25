@@ -24,11 +24,10 @@ export function useArtifactPanel(opts: {
       ? getChatState(currentChatId.value).activeArtifactMessageId
       : null
   );
-  const artifactTab = computed(
-    (): ArtifactTab =>
-      currentChatId.value
-        ? getChatState(currentChatId.value).artifactTab
-        : "content"
+  const artifactTab = computed((): ArtifactTab =>
+    currentChatId.value
+      ? getChatState(currentChatId.value).artifactTab
+      : "content"
   );
 
   const findEligibleMessage = (messageId: string): ChatMessage | null => {

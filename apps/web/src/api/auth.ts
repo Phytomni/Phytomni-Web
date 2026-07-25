@@ -23,12 +23,10 @@ export interface UserListQuery {
 
 function getUserId(data: ChangePermissionRequest | FormData): string | number {
   const id = data instanceof FormData ? data.get("id") : data.id;
-  if (
-    !(
-      (typeof id === "number" && Number.isFinite(id)) ||
-      (typeof id === "string" && id.length > 0)
-    )
-  ) {
+  if (!(
+    (typeof id === "number" && Number.isFinite(id)) ||
+    (typeof id === "string" && id.length > 0)
+  )) {
     throw new TypeError("Invalid user id");
   }
   return id;

@@ -15,7 +15,7 @@ export const CANONICAL_AGENT_TOOLS = [
   "GeneNetworkAgent",
 ] as const;
 
-export type CanonicalAgentTool = typeof CANONICAL_AGENT_TOOLS[number];
+export type CanonicalAgentTool = (typeof CANONICAL_AGENT_TOOLS)[number];
 
 /**
  * Stable product order for every user-facing Chat agent selector.

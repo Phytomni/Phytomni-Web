@@ -373,7 +373,8 @@ defineExpose({ trySelect });
   border: 1px solid var(--phy-color-border-subtle);
   border-radius: var(--phy-radius-pill);
   background: var(--phy-color-fill-subtle);
-  transition: border-color var(--phy-motion-fast) ease,
+  transition:
+    border-color var(--phy-motion-fast) ease,
     background-color var(--phy-motion-fast) ease;
 }
 

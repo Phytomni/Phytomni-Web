@@ -408,8 +408,8 @@ describe("Bot remote-agent surface matrix", () => {
         surface === "design"
           ? "digital-design"
           : surface === "network"
-          ? "gene-network"
-          : "research";
+            ? "gene-network"
+            : "research";
       expect(wrapper.attributes("data-scroll-root")).toBe(
         `${scrollRoot}-agent`
       );

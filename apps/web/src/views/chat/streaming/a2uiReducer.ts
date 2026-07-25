@@ -239,27 +239,27 @@ export function reduceA2uiFailure(
           code: error.code,
         }
       : error.kind === "temporarily_rejected" &&
-        error.forwarded === false &&
-        error.retryable === true
-      ? {
-          status: "temporarily_rejected",
-          round: submitting.round,
-          envelope: submitting.envelope,
-          code: error.code,
-        }
-      : error.kind === "expired"
-      ? {
-          status: "expired",
-          round: submitting.round,
-          actionId,
-          code: error.code,
-        }
-      : {
-          status: "unknown",
-          round: submitting.round,
-          actionId,
-          code: error.code,
-        };
+          error.forwarded === false &&
+          error.retryable === true
+        ? {
+            status: "temporarily_rejected",
+            round: submitting.round,
+            envelope: submitting.envelope,
+            code: error.code,
+          }
+        : error.kind === "expired"
+          ? {
+              status: "expired",
+              round: submitting.round,
+              actionId,
+              code: error.code,
+            }
+          : {
+              status: "unknown",
+              round: submitting.round,
+              actionId,
+              code: error.code,
+            };
 
   const nextBlocks = blocks.slice();
   nextBlocks[targetIndex] = {

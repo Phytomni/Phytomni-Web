@@ -93,16 +93,16 @@ function reportLabels(pack: LocalePack, state: ReturnType<typeof lifecycle>) {
     state.status === "FAILED"
       ? botReport.failed
       : state.status === "INPUT_REQUIRED"
-      ? botReport.inputRequired
-      : stage === "waiting_for_brief_gene"
-      ? botReport.waiting
-      : state.degraded
-      ? botReport.degraded
-      : stage === "intermediate"
-      ? botReport.partial
-      : state.status === "RUNNING"
-      ? botReport.waiting
-      : botReport.complete;
+        ? botReport.inputRequired
+        : stage === "waiting_for_brief_gene"
+          ? botReport.waiting
+          : state.degraded
+            ? botReport.degraded
+            : stage === "intermediate"
+              ? botReport.partial
+              : state.status === "RUNNING"
+                ? botReport.waiting
+                : botReport.complete;
 
   return {
     loading: lifecycleLabel,

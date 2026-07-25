@@ -68,9 +68,7 @@ type A2uiOpenChoiceSurface = A2uiSurfaceIdentity & {
 };
 
 export type A2uiOpenSurface =
-  | A2uiOpenConfirmSurface
-  | A2uiOpenFormSurface
-  | A2uiOpenChoiceSurface;
+  A2uiOpenConfirmSurface | A2uiOpenFormSurface | A2uiOpenChoiceSurface;
 
 type A2uiSubmitted = {
   status: "submitted";
@@ -152,10 +150,7 @@ export type A2uiActionIntent =
     };
 
 export type A2uiResolution =
-  | "submitted"
-  | "cancelled"
-  | "rejected"
-  | "advanced";
+  "submitted" | "cancelled" | "rejected" | "advanced";
 
 export type A2uiSurfaceState =
   | { status: "ready"; round: A2uiRound; lastError?: "not_sent" }

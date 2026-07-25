@@ -95,10 +95,7 @@ type ResearchArtifactTab = "content" | "evidence" | "activity" | "downloads";
 type ResearchArtifactTabLabels = Partial<Record<ResearchArtifactTab, string>>;
 type ResearchArtifactContentLayout = "reading" | "wide";
 type ResearchArtifactReportStatus =
-  | "loading"
-  | "degraded"
-  | "complete"
-  | "failed";
+  "loading" | "degraded" | "complete" | "failed";
 
 const DEFAULT_TAB_LABELS: Record<ResearchArtifactTab, string> = {
   content: "Report",

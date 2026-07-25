@@ -107,7 +107,7 @@ const SECTIONS = [
   "limitations",
 ] as const;
 
-const SECTION_IDS: Record<typeof SECTIONS[number], string> = {
+const SECTION_IDS: Record<(typeof SECTIONS)[number], string> = {
   whatIs: "what-is-phytomni",
   gettingStarted: "getting-started",
   howItWorks: "how-it-works",

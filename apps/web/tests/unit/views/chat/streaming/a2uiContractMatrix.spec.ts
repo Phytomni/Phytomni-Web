@@ -9,10 +9,7 @@ import {
 } from "@/views/chat/streaming/a2uiParse";
 
 type ContractKind =
-  | "open_surface"
-  | "terminal_projection"
-  | "action_response"
-  | "error_response";
+  "open_surface" | "terminal_projection" | "action_response" | "error_response";
 
 interface FixtureEntry {
   id: string;

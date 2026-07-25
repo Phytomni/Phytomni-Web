@@ -221,11 +221,7 @@ import { userStore } from "@/stores";
 
 type AsyncState = "loading" | "error" | "ready";
 type ProfileFieldKey =
-  | "username"
-  | "email"
-  | "phone"
-  | "organization"
-  | "position";
+  "username" | "email" | "phone" | "organization" | "position";
 
 const { t, d } = useI18n();
 const router = useRouter();

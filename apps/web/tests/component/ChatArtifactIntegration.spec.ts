@@ -21,9 +21,10 @@ vi.mock("vue-element-plus-x", () => ({
 }));
 
 vi.mock("@/views/chat/composables/useChatStates", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("@/views/chat/composables/useChatStates")
-  >();
+  const actual =
+    await importOriginal<
+      typeof import("@/views/chat/composables/useChatStates")
+    >();
   return {
     ...actual,
     useChatStates: () => {

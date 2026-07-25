@@ -1214,10 +1214,10 @@ describe("lockUnverifiedHistoryA2ui", () => {
             resolution: "submitted" as const,
           }
         : status === "expired"
-        ? { status, round: 1 as const, actionId: "action", code: "old" }
-        : status === "protocol_error"
-        ? { status, round: 1 as const, actionId: "action", code: "old" }
-        : { status, round: 1 as const, actionId: "action", code: "old" };
+          ? { status, round: 1 as const, actionId: "action", code: "old" }
+          : status === "protocol_error"
+            ? { status, round: 1 as const, actionId: "action", code: "old" }
+            : { status, round: 1 as const, actionId: "action", code: "old" };
     const message = historyMessage(state, false);
     const messages = [message];
 

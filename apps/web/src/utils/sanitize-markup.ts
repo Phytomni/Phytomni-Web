@@ -153,7 +153,7 @@ export function sanitizeAnchorAttributes(attributes: string): string {
     if (!ALLOWED_ATTRS.has(name)) continue;
 
     if (name === "href") {
-      const href = isSafeHref(attr.value ?? "") ? attr.value ?? "" : "#";
+      const href = isSafeHref(attr.value ?? "") ? (attr.value ?? "") : "#";
       kept.push(`href="${escapeAttrValue(href)}"`);
     } else if (attr.value === null) {
       kept.push(name); // boolean attribute, e.g. download

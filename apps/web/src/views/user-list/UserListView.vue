@@ -93,7 +93,7 @@
             <template #default="scope">
               {{
                 scope.row.code === "guest"
-                  ? scope.row.chat_limit ?? "-"
+                  ? (scope.row.chat_limit ?? "-")
                   : $t("user.unlimited")
               }}
             </template>

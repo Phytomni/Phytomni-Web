@@ -250,15 +250,13 @@ let wasCompactDisclosureViewport = isCompactDisclosureViewport();
 
 const renderedSidebarCollapsed = computed(() => {
   const base = props.effectiveCollapsed ?? sidebarCollapsed.value;
-  const compactRail =
-    !isMobile.value && sidebarCollapsed.value && isCompactDisclosureViewport();
-  return base && !(compactRail && compactDisclosureExpanded.value);
+  const disclosureRail = !isMobile.value && base;
+  return base && !(disclosureRail && compactDisclosureExpanded.value);
 });
 
 const exploreAgent = () => {
   showAgentsList.value = !showAgentsList.value;
-  compactDisclosureExpanded.value =
-    showAgentsList.value && isCompactDisclosureViewport();
+  compactDisclosureExpanded.value = showAgentsList.value && !isMobile.value;
 };
 
 const closeAgentDisclosure = () => {

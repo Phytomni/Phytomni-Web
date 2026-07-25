@@ -141,7 +141,9 @@ const ElTableColumnStub = defineComponent({
             { class: "el-table-cell" },
             slots.default?.({ row, $index: index }) ??
               String(
-                props.type === "index" ? index + 1 : row[props.prop ?? ""] ?? ""
+                props.type === "index"
+                  ? index + 1
+                  : (row[props.prop ?? ""] ?? "")
               )
           )
         ),

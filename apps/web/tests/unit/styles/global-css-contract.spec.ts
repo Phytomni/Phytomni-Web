@@ -8,7 +8,7 @@ const CSS = Object.fromEntries(
     filename,
     readFileSync(resolve(__dirname, `../../../src/assets/${filename}`), "utf8"),
   ])
-) as Record<typeof CSS_PATHS[number], string>;
+) as Record<(typeof CSS_PATHS)[number], string>;
 const GLOBAL_CSS = Object.values(CSS).join("\n");
 const TOKENS_CSS = readFileSync(
   resolve(__dirname, "../../../src/styles/tokens.css"),

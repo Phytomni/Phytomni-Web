@@ -501,12 +501,10 @@ function decodeInterop(value: unknown): BotInteropPayload | null {
 export function decodeQueryData(value: unknown): DecodedQueryData {
   if (!isRecord(value)) invalid("chat response");
   const rawId = value.id;
-  if (
-    !(
-      (typeof rawId === "number" && Number.isFinite(rawId)) ||
-      (typeof rawId === "string" && rawId.length > 0)
-    )
-  ) {
+  if (!(
+    (typeof rawId === "number" && Number.isFinite(rawId)) ||
+    (typeof rawId === "string" && rawId.length > 0)
+  )) {
     invalid("chat response");
   }
   const id = String(rawId);

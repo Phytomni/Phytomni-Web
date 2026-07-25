@@ -70,10 +70,7 @@ export interface BotInteropPayload {
 }
 
 export type BotReportStage =
-  | "waiting_for_brief_gene"
-  | "intermediate"
-  | "final"
-  | null;
+  "waiting_for_brief_gene" | "intermediate" | "final" | null;
 
 export type BotReportCompleteness = "none" | "partial" | "complete" | null;
 
@@ -703,8 +700,8 @@ export function parseBotProjection(input: unknown): BotRunProjection {
   const finalReport = hasExplicitReport
     ? finalValue
     : status === "SUCCEEDED"
-    ? answer
-    : finalValue;
+      ? answer
+      : finalValue;
   const interopEnabled = INTEROP_AGENT_NAMES.has(agentValue ?? "");
 
   return {

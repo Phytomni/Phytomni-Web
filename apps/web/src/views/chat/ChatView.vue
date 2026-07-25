@@ -1228,8 +1228,8 @@ const restorePendingChats = (
       typeof pendingChatData.title === "string"
         ? pendingChatData.title
         : typeof firstUserMessage?.content === "string"
-        ? firstUserMessage.content
-        : "";
+          ? firstUserMessage.content
+          : "";
     upsertPendingChatListEntry(knownChats, tempChatId, pendingTitle, {
       date:
         typeof pendingChatData.date === "string"
@@ -2259,7 +2259,8 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   margin-left: 8px;
 
   .reaction-btn {
-    transition: color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    transition:
+      color var(--phy-motion-fast) var(--phy-motion-ease-out),
       background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
       transform var(--phy-motion-fast) var(--phy-motion-ease-out);
 

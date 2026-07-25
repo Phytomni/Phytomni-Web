@@ -58,8 +58,8 @@ const ariaLabel = computed(() =>
   props.loading
     ? "assistant loading"
     : props.streaming
-    ? "assistant streaming"
-    : props.role
+      ? "assistant streaming"
+      : props.role
 );
 </script>
 

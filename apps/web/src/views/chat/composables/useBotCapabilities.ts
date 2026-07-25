@@ -115,8 +115,8 @@ function parseCapabilityResponse(payload: unknown): BotCapability[] {
   const records = Array.isArray(data)
     ? data
     : isRecord(data) && Array.isArray(data.capabilities)
-    ? data.capabilities
-    : null;
+      ? data.capabilities
+      : null;
   if (!records || records.length > MAX_BOT_CAPABILITIES) {
     return disabledBotCapabilities();
   }

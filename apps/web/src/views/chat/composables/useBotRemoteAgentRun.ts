@@ -102,10 +102,7 @@ export interface BotRemoteAgentRunState extends BotLifecycleState {
   dialogueId: string | null;
   messageId: string | null;
   error:
-    | BotRemoteAgentRunErrorCode
-    | "request_failed"
-    | "projection_invalid"
-    | null;
+    BotRemoteAgentRunErrorCode | "request_failed" | "projection_invalid" | null;
 }
 
 export type UseBotRemoteAgentRunOptions = {
@@ -157,10 +154,10 @@ function capabilityFor(
     "byTool" in unwrappedSource
       ? (unwrappedSource as { byTool: unknown }).byTool
       : unwrappedSource &&
-        typeof unwrappedSource === "object" &&
-        "capabilities" in unwrappedSource
-      ? (unwrappedSource as { capabilities: unknown }).capabilities
-      : unwrappedSource;
+          typeof unwrappedSource === "object" &&
+          "capabilities" in unwrappedSource
+        ? (unwrappedSource as { capabilities: unknown }).capabilities
+        : unwrappedSource;
   const byTool = isRefLike(raw) ? raw.value : raw;
   if (Array.isArray(byTool)) {
     return byTool.find(
@@ -315,8 +312,8 @@ function safeIdentity(value: unknown, pattern: RegExp): string | null {
     typeof value === "number" && Number.isSafeInteger(value)
       ? String(value)
       : typeof value === "string"
-      ? value.trim()
-      : "";
+        ? value.trim()
+        : "";
   return normalized && pattern.test(normalized) ? normalized : null;
 }
 

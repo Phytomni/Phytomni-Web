@@ -51,21 +51,18 @@ export const CHAT_VISUAL_FIXTURE_KEYS = [
   "parallel-b",
 ] as const;
 
-export type ChatVisualFixtureKey = typeof CHAT_VISUAL_FIXTURE_KEYS[number];
+export type ChatVisualFixtureKey = (typeof CHAT_VISUAL_FIXTURE_KEYS)[number];
 
 export const CHAT_VISUAL_LOCALES = ["en-US", "zh-CN"] as const;
-export type ChatVisualLocale = typeof CHAT_VISUAL_LOCALES[number];
+export type ChatVisualLocale = (typeof CHAT_VISUAL_LOCALES)[number];
 
 export const CHAT_VISUAL_THEMES = ["light", "dark"] as const;
-export type ChatVisualTheme = typeof CHAT_VISUAL_THEMES[number];
+export type ChatVisualTheme = (typeof CHAT_VISUAL_THEMES)[number];
 
 export type ChatVisualChatState = "empty" | "populated";
 
 export type ChatVisualHistoryState =
-  | "title-only"
-  | "loading"
-  | "empty"
-  | "error";
+  "title-only" | "loading" | "empty" | "error";
 
 export type ChatRoutingFixtureMode = "instant" | "expert";
 
@@ -810,8 +807,7 @@ export type ResolveChatVisualFixtureErr = {
 };
 
 export type ResolveChatVisualFixtureResult =
-  | ResolveChatVisualFixtureOk
-  | ResolveChatVisualFixtureErr;
+  ResolveChatVisualFixtureOk | ResolveChatVisualFixtureErr;
 
 export function isChatVisualFixtureKey(
   value: string | null | undefined
