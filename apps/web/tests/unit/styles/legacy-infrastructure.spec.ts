@@ -82,4 +82,18 @@ describe("superseded visual infrastructure", () => {
     expect(VITE_SOURCE).not.toContain("preprocessorOptions");
     expect(VITE_SOURCE).not.toContain('api: "modern"');
   });
+
+  it("keeps the standalone Vitest config on supported APIs", () => {
+    expect(VITEST_SOURCE).not.toMatch(/\bpoolMatchGlobs\b/);
+    expect(VITEST_SOURCE).not.toMatch(/\benvironmentMatchGlobs\b/);
+    expect(VITEST_SOURCE).not.toMatch(
+      /\bdeps\s*:\s*\{\s*(?:inline|external)\b/
+    );
+    expect(VITEST_SOURCE).toContain("plugins: [vue(), vueJsx()]");
+    expect(VITEST_SOURCE).toContain('environment: "happy-dom"');
+    expect(VITEST_SOURCE).toContain('setupFiles: ["./tests/setup.ts"]');
+    expect(VITEST_SOURCE).toContain(
+      '"@": fileURLToPath(new URL("./src", import.meta.url))'
+    );
+  });
 });
