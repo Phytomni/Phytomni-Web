@@ -1,4 +1,4 @@
-import { config, mount } from "@vue/test-utils";
+import { mount } from "@vue/test-utils";
 import type { Plugin } from "vue";
 import { createI18n } from "vue-i18n";
 import { createPinia, setActivePinia } from "pinia";
@@ -71,21 +71,15 @@ export function createTestAppContext(
       );
     }
 
-    const previousGlobalPlugins = config.global.plugins;
-    config.global.plugins = [];
     setActivePinia(pinia);
 
-    try {
-      return mount(component, {
-        ...mountOptions,
-        global: {
-          ...globalOptions,
-          plugins: uniquePlugins(plugins),
-        },
-      });
-    } finally {
-      config.global.plugins = previousGlobalPlugins;
-    }
+    return mount(component, {
+      ...mountOptions,
+      global: {
+        ...globalOptions,
+        plugins: uniquePlugins(plugins),
+      },
+    });
   }) as typeof mount;
 
   return { pinia, i18n, router: options.router, mount: contextMount };

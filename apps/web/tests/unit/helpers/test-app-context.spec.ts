@@ -100,7 +100,7 @@ describe("test application context", () => {
     expect(wrapper.text()).toContain("slotted");
   });
 
-  it("does not inherit the temporary global plugin fallback", () => {
+  it("uses the context-owned translation pack", () => {
     const wrapper = createTestAppContext({ elementPlus: false }).mount(
       TranslationProbe
     );
