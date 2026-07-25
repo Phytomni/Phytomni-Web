@@ -312,6 +312,42 @@ describe("useSelectChat", () => {
     ]);
   });
 
+  it("uses the sidebar title only for the parent row, not every child answer", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        invalidInput<ChatHistoryRecord>({
+          id: "legacy-parent",
+          query: undefined,
+          title_query: "Legacy conversation title",
+          answer: "",
+          tool_name: "ChatAgent",
+        }),
+        invalidInput<ChatHistoryRecord>({
+          id: "legacy-child",
+          query: undefined,
+          title_query: undefined,
+          answer: "Child answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    expect(renderedFor("d1", "legacy parent and child").messages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "Legacy conversation title",
+      }),
+      expect.objectContaining({ role: "assistant", content: "Child answer" }),
+    ]);
+    expect(stateFor("d1").historyQuestion).toEqual([
+      { role: "user", content: "Legacy conversation title" },
+      { role: "assistant", content: "Child answer" },
+    ]);
+  });
+
   it("records an empty successful history without rendering fabricated rows", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce(historyResponse([]));
 

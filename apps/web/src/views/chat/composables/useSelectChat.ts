@@ -115,7 +115,7 @@ export function useSelectChat(opts: {
 
       // iterate the returned array and convert to message format
       if (historyRows.length > 0) {
-        historyRows.forEach((row) => {
+        historyRows.forEach((row, rowIndex) => {
           const item: Partial<ChatResponse> = row;
           // sync the reaction state returned by the server
           if (item.id && item.reaction_type) {
@@ -124,8 +124,14 @@ export function useSelectChat(opts: {
             );
           }
 
-          // add the user message, including legacy title-only history rows
-          const question = resolveHistoryQuestion(row, chat?.title || "");
+          // Add the user message, including a legacy title-only parent row.
+          // Child rows must not inherit the sidebar title when their own query
+          // is absent, or one historical question would be duplicated before
+          // every child answer.
+          const question = resolveHistoryQuestion(
+            row,
+            rowIndex === 0 ? chat?.title || "" : ""
+          );
           if (question) {
             // parse the message content and extract file info
             const { content, attachedFiles } = parseMessageWithFiles(question);
