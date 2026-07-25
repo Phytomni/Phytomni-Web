@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { mountWithApp } from "../../helpers/test-app-context";
 
 const routerBack = vi.hoisted(() => vi.fn());
 
@@ -19,21 +16,14 @@ vi.mock("vue-element-plus-x", () => ({
 import KnowledgeAgent from "@/views/knowledge-agent/KnowledgeAgentView.vue";
 import BriefGeneAgent from "@/views/brief-gene-agent/BriefGeneAgentView.vue";
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
 const AGENT_DEMO_SHELL_SOURCE = readFileSync(
   resolve(__dirname, "../../../src/components/demo/AgentDemoShell.vue"),
   "utf8"
 );
 
 function mountDemo(component: typeof KnowledgeAgent | typeof BriefGeneAgent) {
-  return mount(component, {
+  return mountWithApp(component, {
     global: {
-      plugins: [i18n],
       stubs: {
         AgentDemoShell: {
           emits: ["back"],

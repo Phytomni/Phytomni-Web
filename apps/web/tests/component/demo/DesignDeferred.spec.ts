@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { mountWithApp } from "../../helpers/test-app-context";
 
 const routerBack = vi.hoisted(() => vi.fn());
 
@@ -28,18 +25,11 @@ const AgentDemoShellStub = {
   `,
 };
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
 import Design from "@/views/design/DesignView.vue";
 
 function mountDesign() {
-  return mount(Design, {
+  return mountWithApp(Design, {
     global: {
-      plugins: [i18n],
       stubs: { AgentDemoShell: AgentDemoShellStub },
     },
   });

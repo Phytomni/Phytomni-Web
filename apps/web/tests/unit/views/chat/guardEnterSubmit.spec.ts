@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { mount } from "@vue/test-utils";
 import { ref } from "vue";
 import { guardEnterSubmit } from "@/views/chat/utils/guardEnterSubmit";
+import { mountWithApp } from "../../../helpers/test-app-context";
 
 const mentionExpose = {
   openHeader: vi.fn(),
@@ -52,7 +52,7 @@ const baseProps = () => ({
 describe("guardEnterSubmit at ChatComposer boundary", () => {
   it("swallows Enter in capture phase while mention dropdown is open", async () => {
     mentionExpose.popoverVisible.value = true;
-    const wrapper = mount(ChatComposer, {
+    const wrapper = mountWithApp(ChatComposer, {
       props: baseProps(),
       global: {
         stubs: {

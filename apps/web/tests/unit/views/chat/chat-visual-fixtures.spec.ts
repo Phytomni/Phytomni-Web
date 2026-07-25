@@ -2,11 +2,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { mount, flushPromises } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import {
   CHAT_VISUAL_FIXTURE_KEYS,
   CHAT_VISUAL_LOCALES,
@@ -33,8 +30,8 @@ import {
   isPhase3CFixtureKey,
   getPhase3COverlay,
 } from "../../../fixtures/chat";
-import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../../../helpers/test-app-context";
 
 const WEB_ROOT = resolve(__dirname, "../../../..");
 const SRC_ROOT = resolve(WEB_ROOT, "src");
@@ -1188,29 +1185,18 @@ const mountFixtureApp = (
   if (options.renderA2ui) delete stubs.StreamMessage;
   if (options.renderRoutingControls) delete stubs.ChatAgentPicker;
 
-  const plugins =
-    options.renderA2ui || options.renderRoutingControls
-      ? [
-          createI18n({
-            legacy: false,
-            locale: options.locale ?? "en-US",
-            fallbackLocale: "en-US",
-            messages: { "en-US": enUS, "zh-CN": zhCN },
-          }),
-          ElementPlus,
-        ]
-      : [];
-
-  return mount(ChatVisualFixtureApp, {
-    props: { fixture, errorMessage },
-    global: {
-      plugins,
-      mocks: {
-        $t: (key: string) => key,
+  return createTestAppContext({ locale: options.locale ?? "en-US" }).mount(
+    ChatVisualFixtureApp,
+    {
+      props: { fixture, errorMessage },
+      global: {
+        mocks: {
+          $t: (key: string) => key,
+        },
+        stubs,
       },
-      stubs,
-    },
-  });
+    }
+  );
 };
 
 describe("Chat visual fixture rendering (no network)", () => {
@@ -1218,7 +1204,6 @@ describe("Chat visual fixture rendering (no network)", () => {
   let xhrOpenSpy: ReturnType<typeof vi.spyOn> | undefined;
 
   beforeEach(() => {
-    setActivePinia(createPinia());
     fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("{}", { status: 200 }));

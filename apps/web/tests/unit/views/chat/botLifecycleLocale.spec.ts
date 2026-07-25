@@ -1,15 +1,16 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createI18n } from "vue-i18n";
-import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
-import { datetimeFormats } from "@/locales/datetime-formats";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../../../helpers/test-app-context";
 
 vi.mock("@/components/MarkdownViewer.vue", () => ({
   default: {
@@ -57,16 +58,6 @@ const valueAt = (pack: LocalePack, path: string): unknown =>
 
 function localePack(locale: SupportedLocale): LocalePack {
   return locale === "zh-CN" ? zhCN : enUS;
-}
-
-function makeI18n(locale: SupportedLocale) {
-  return createI18n({
-    legacy: false,
-    locale,
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-    datetimeFormats,
-  });
 }
 
 function lifecycle(
@@ -117,14 +108,13 @@ function mountReport(
   state: ReturnType<typeof lifecycle>
 ) {
   const pack = localePack(locale);
-  return mount(BotReportState, {
+  return createTestAppContext({ locale }).mount(BotReportState, {
     props: {
       state,
       labels: reportLabels(pack, state),
       emptyReportLabel: reportLabels(pack, state).loading,
     },
     global: {
-      plugins: [makeI18n(locale)],
       stubs: {
         MarkdownViewer: {
           props: ["content"],
@@ -205,25 +195,23 @@ describe("Bot lifecycle locale contract", () => {
   it("localizes empty artifacts and keeps the retry control keyboard reachable", () => {
     const locale: SupportedLocale = "en-US";
     const pack = localePack(locale);
-    const artifacts = mount(BotArtifactList, {
+    const artifacts = mountWithApp(BotArtifactList, {
       props: {
         artifacts: [],
         emptyLabel: pack.chat.botReport.emptyArtifacts,
       },
-      global: { plugins: [makeI18n(locale)] },
     });
     expect(artifacts.get('[data-test="bot-artifact-warning"]').text()).toBe(
       pack.chat.botReport.emptyArtifacts
     );
 
-    const actions = mount(ChatMessageActions, {
+    const actions = mountWithApp(ChatMessageActions, {
       props: {
         role: "assistant",
         canRefresh: true,
         canReact: false,
       },
       global: {
-        plugins: [makeI18n(locale)],
         stubs: ACTION_STUBS,
       },
     });

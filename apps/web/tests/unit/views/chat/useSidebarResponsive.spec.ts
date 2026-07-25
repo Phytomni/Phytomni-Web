@@ -1,11 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick, ref } from "vue";
 import {
   SIDEBAR_COLLAPSED_PREFERENCE_KEY,
   SIDEBAR_LEGACY_AUTO_EXPAND_KEY,
   useSidebarResponsive,
 } from "@/views/chat/composables/useSidebarResponsive";
+import {
+  createTestAppContext,
+  type TestAppContext,
+} from "../../../helpers/test-app-context";
+
+const mount: TestAppContext["mount"] = ((component, mountOptions) =>
+  createTestAppContext({ elementPlus: false }).mount(
+    component,
+    mountOptions
+  )) as TestAppContext["mount"];
 
 function setInnerWidth(width: number) {
   Object.defineProperty(window, "innerWidth", {

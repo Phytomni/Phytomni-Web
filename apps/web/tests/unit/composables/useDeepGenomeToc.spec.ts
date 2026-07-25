@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick, ref } from "vue";
 import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 import { invalidInput } from "../../helpers/invalidInput";
+import { createTestAppContext } from "../../helpers/test-app-context";
 
 const TOC_SOURCE = readFileSync(
   resolve(__dirname, "../../../src/composables/useDeepGenomeToc.ts"),
@@ -84,7 +84,7 @@ class MockIntersectionObserver {
 describe("useDeepGenomeToc — initial state", () => {
   it("activeHeadingId is initially an empty string", () => {
     const { Harness } = makeHarness();
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
     // vue-test-utils auto-unwraps refs returned from setup(), so we access .activeHeadingId directly
     expect(wrapper.vm.activeHeadingId).toBe("");
     wrapper.unmount();
@@ -93,7 +93,7 @@ describe("useDeepGenomeToc — initial state", () => {
   it("return surface includes activeHeadingId / handleNavSelect / setupIntersectionObserver", () => {
     // Mounting through makeHarness provides the setup context required by onUnmounted.
     const { Harness } = makeHarness();
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
     const result = wrapper.vm as Record<string, unknown>;
     expect(result).toHaveProperty("activeHeadingId");
     expect(result).toHaveProperty("handleNavSelect");
@@ -125,7 +125,7 @@ describe("useDeepGenomeToc — handleNavSelect", () => {
     document.body.appendChild(el);
 
     const { Harness } = makeHarness({ headingIds: [id] });
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
 
     wrapper.vm.handleNavSelect(id);
     await nextTick();
@@ -140,7 +140,7 @@ describe("useDeepGenomeToc — handleNavSelect", () => {
 
   it("does not call scrollIntoView when the target element does not exist", async () => {
     const { Harness } = makeHarness();
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
 
     // id does not exist in the DOM
     const scrollSpy = vi.fn();
@@ -186,7 +186,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
     });
 
     const { Harness } = makeHarness({ headingIds: ids });
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
 
     wrapper.vm.setupIntersectionObserver();
 
@@ -201,7 +201,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
 
   it("does not call observe when a headings id is not present in the DOM", () => {
     const { Harness } = makeHarness({ headingIds: ["ghost-id-not-in-dom"] });
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
 
     wrapper.vm.setupIntersectionObserver();
 
@@ -215,7 +215,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
 
   it("ignores observer batches with no visible headings", () => {
     const { Harness } = makeHarness({ headingIds: ["hidden-heading"] });
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
 
     wrapper.vm.setupIntersectionObserver();
     MockIntersectionObserver.lastInstance?.trigger([]);
@@ -232,7 +232,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
     document.body.appendChild(el);
 
     const { Harness } = makeHarness({ headingIds: [id] });
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
 
     wrapper.vm.setupIntersectionObserver();
     const io = MockIntersectionObserver.lastInstance;
@@ -273,7 +273,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
       headingIds: [heading.id],
     });
     mainContentRef.value = main;
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
 
     wrapper.vm.setupIntersectionObserver();
 
@@ -296,7 +296,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
       headingIds: [heading.id],
     });
     mainContentRef.value = main;
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
 
     wrapper.vm.setupIntersectionObserver();
 
@@ -344,7 +344,7 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
       ],
     });
     mainContentRef.value = owned.main;
-    const wrapper = mount(Harness);
+    const wrapper = createTestAppContext({ elementPlus: false }).mount(Harness);
     wrapper.vm.setupIntersectionObserver();
 
     MockIntersectionObserver.lastInstance?.trigger([

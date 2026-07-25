@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref, type Component, type Ref } from "vue";
-import { mount } from "@vue/test-utils";
-import ElementPlus from "element-plus";
-import { createI18n } from "vue-i18n";
 
 const mockQuery = vi.hoisted(() => vi.fn());
 const mockChatQuery = vi.hoisted(() => vi.fn());
@@ -68,16 +65,8 @@ import ResearchAgentView from "@/views/research-agent/ResearchAgentView.vue";
 import DigitalDesignAgentView from "@/views/digital-design-agent/DigitalDesignAgentView.vue";
 import GeneNetworkAgentView from "@/views/gene-network-agent/GeneNetworkAgentView.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
 import { mustGet } from "../../../helpers/mockFactories";
-
-const requestRecorderI18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
+import { createTestAppContext } from "../../../helpers/test-app-context";
 
 function makeState(): RemoteAgentChatState {
   return {
@@ -833,9 +822,8 @@ describe("useBotRemoteAgentRun", () => {
     );
 
     const mountProductView = (component: Component) =>
-      mount(component, {
+      createTestAppContext({ router }).mount(component, {
         global: {
-          plugins: [requestRecorderI18n, ElementPlus, router],
           stubs: {
             ResearchArtifactShell: { template: "<section><slot /></section>" },
             BotReportState: { template: "<div />" },

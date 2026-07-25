@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { mountWithApp } from "../../helpers/test-app-context";
 
 const routerBack = vi.hoisted(() => vi.fn());
 
@@ -45,16 +42,9 @@ const AgentDemoShellStub = {
   `,
 };
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
 function mountDemo() {
-  return mount(DataAgent, {
+  return mountWithApp(DataAgent, {
     global: {
-      plugins: [i18n],
       stubs: {
         AgentDemoShell: AgentDemoShellStub,
         MarkdownViewer: MarkdownViewerStub,
