@@ -34,7 +34,7 @@
         <el-button
           v-if="!collapsed"
           data-test="sidebar-nav-collapse"
-          type="text"
+          link
           class="collapse-btn"
           :aria-label="$t('chat.collapseNavigation')"
           @click="emit('toggle-collapse')"
