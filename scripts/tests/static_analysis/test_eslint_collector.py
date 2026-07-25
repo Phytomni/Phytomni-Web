@@ -44,7 +44,7 @@ def test_bridge_help_exits_zero() -> None:
 def test_bridge_emits_deterministic_ast_bound_findings(tmp_path: Path) -> None:
     runtime_root = tmp_path / "eslint-project"
     runtime_root.mkdir()
-    for fixture in (".eslintrc.cjs", "Sample.vue"):
+    for fixture in ("eslint.config.mjs", "Sample.vue"):
         source = FIXTURE_ROOT / fixture
         (runtime_root / fixture).write_text(
             source.read_text(encoding="utf-8"), encoding="utf-8"
@@ -72,7 +72,7 @@ def test_bridge_emits_deterministic_ast_bound_findings(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     document = json.loads(result.stdout)
     assert document["schemaVersion"] == 1
-    assert document["toolVersion"] == "8.22.0"
+    assert document["toolVersion"] == "10.7.0"
     assert document["filesScanned"] == 2
     assert document["findings"] == sorted(
         document["findings"],
@@ -93,19 +93,20 @@ def test_bridge_emits_deterministic_ast_bound_findings(tmp_path: Path) -> None:
 def test_bridge_rejects_unknown_rules_and_parser_crashes(tmp_path: Path) -> None:
     unknown_root = tmp_path / "unknown-rule"
     unknown_root.mkdir()
-    (unknown_root / ".eslintrc.cjs").write_text(
-        "module.exports = { root: true, rules: { 'unknown-rule-id': 'error' } };\n",
+    (unknown_root / "eslint.config.mjs").write_text(
+        "export default [{ rules: { 'unknown-rule-id': 'error' } }];\n",
         encoding="utf-8",
     )
     (unknown_root / "sample.js").write_text("var value = 1;\n", encoding="utf-8")
     unknown = _run_bridge("--root", str(unknown_root), "--file", "sample.js")
-    assert unknown.returncode == 0, unknown.stderr
-    unknown_document = json.loads(unknown.stdout)
-    assert unknown_document["findings"][0]["rule"] == "unknown-rule-id"
-    assert "Definition for rule" in unknown_document["findings"][0]["message"]
+    assert unknown.returncode != 0
+    assert "unknown-rule-id" in unknown.stderr
 
     broken_root = tmp_path / "parser-crash"
     broken_root.mkdir()
+    (broken_root / "eslint.config.mjs").write_text(
+        "export default [];\n", encoding="utf-8"
+    )
     (broken_root / "broken.js").write_text("const = ;\n", encoding="utf-8")
     broken = _run_bridge("--root", str(broken_root), "--file", "broken.js")
     assert broken.returncode != 0
@@ -116,12 +117,12 @@ def test_parser_converts_target_identity_and_sorts_findings() -> None:
     text = json.dumps(
         {
             "schemaVersion": 1,
-            "toolVersion": "8.22.0",
+            "toolVersion": "10.7.0",
             "filesScanned": 1,
             "findings": [
                 {
                     "tool": "eslint",
-                    "toolVersion": "8.22.0",
+                    "toolVersion": "10.7.0",
                     "rule": "z/rule",
                     "path": "src/z.ts",
                     "message": "z",
@@ -135,7 +136,7 @@ def test_parser_converts_target_identity_and_sorts_findings() -> None:
                 },
                 {
                     "tool": "eslint",
-                    "toolVersion": "8.22.0",
+                    "toolVersion": "10.7.0",
                     "rule": "a/rule",
                     "path": "src/a.ts",
                     "message": "a",
@@ -179,7 +180,7 @@ def test_validation_rejects_failed_empty_or_malformed_invocations(
 def test_parser_rejects_version_mismatch_and_unknown_schema() -> None:
     base = {
         "schemaVersion": 1,
-        "toolVersion": "8.22.0",
+        "toolVersion": "10.7.0",
         "filesScanned": 0,
         "findings": [],
     }
@@ -197,7 +198,7 @@ def test_zero_tracked_inputs_are_a_valid_empty_inventory() -> None:
     text = json.dumps(
         {
             "schemaVersion": 1,
-            "toolVersion": "8.22.0",
+        "toolVersion": "10.7.0",
             "filesScanned": 0,
             "findings": [],
         }

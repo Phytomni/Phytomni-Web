@@ -27,6 +27,13 @@ def _runtime_fixture_root(tmp_path: Path) -> Path:
         "};\n",
         encoding="utf-8",
     )
+    (root / "eslint.config.mjs").write_text(
+        "export default [\n"
+        '  { files: ["src/**/*.ts"], ignores: ["generated/**"] },\n'
+        '  { rules: { "no-alert": 0 } },\n'
+        "];\n",
+        encoding="utf-8",
+    )
     (root / ".prettierignore").write_text(
         "# generated output is intentionally excluded\n"
         "generated/**\n"
@@ -53,6 +60,7 @@ def test_collects_eslint_typescript_and_prettier_configuration(
 
     assert ("eslint", "ignore-pattern", "public/") in identities
     assert ("eslint", "no-console", "no-console") in identities
+    assert ("eslint", "ignore-pattern", "generated/**") in identities
     assert ("typescript", "skipLibCheck", "compilerOptions.skipLibCheck") in identities
     assert ("typescript", "exclude", "exclude.generated/**") in identities
     assert ("prettier", "ignore", "generated/**") in identities
@@ -81,6 +89,17 @@ def test_config_findings_include_unbounded_patterns_for_later_policy_rejection(
     )
 
 
+def test_flat_config_files_globs_are_not_misclassified_as_ignores(
+    tmp_path: Path,
+) -> None:
+    findings = collect_config_suppressions(_runtime_fixture_root(tmp_path))
+
+    assert not any(
+        finding.rule == "ignore-pattern" and finding.target == "src/**/*.ts"
+        for finding in findings
+    )
+
+
 def test_web_configuration_names_only_exact_owned_boundaries() -> None:
     findings = collect_config_suppressions(WEB_ROOT.parents[1])
     legacy_model_root = "public/" + "modle"
@@ -89,6 +108,7 @@ def test_web_configuration_names_only_exact_owned_boundaries() -> None:
         for finding in findings
         if finding.path in {
             "apps/web/.eslintrc.cjs",
+            "apps/web/eslint.config.mjs",
             "apps/web/.prettierignore",
             "apps/web/tsconfig.json",
         }

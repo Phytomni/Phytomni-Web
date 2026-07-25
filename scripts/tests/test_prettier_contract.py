@@ -18,7 +18,7 @@ EXPECTED_SCOPE_MARKERS = (
     "tests/**/*.",
     "vite/**/*.",
     "*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}",
-    ".eslintrc.cjs",
+    "eslint.config.mjs",
     ".prettierrc.cjs",
 )
 EXPECTED_IGNORES: set[str] = set()
@@ -42,7 +42,7 @@ def test_prettier_is_exactly_pinned_and_scripts_have_one_write_boundary() -> Non
     scripts = package["scripts"]
 
     assert isinstance(dev_dependencies, dict)
-    assert dev_dependencies["prettier"] == "2.7.1"
+    assert dev_dependencies["prettier"] == "3.9.6"
     assert isinstance(scripts, dict)
     check = scripts["format:check"]
     write = scripts["format:write"]
@@ -64,8 +64,8 @@ def test_prettier_is_exactly_pinned_and_scripts_have_one_write_boundary() -> Non
     assert "--format json" in raw_lint
     assert "--fix" not in raw_lint
     assert raw_lint == (
-        "eslint src tests vite vite.config.mts vitest.config.mts .eslintrc.cjs "
-        "--ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --max-warnings 0 "
+        "eslint src tests vite vite.config.mts vitest.config.mts eslint.config.mjs "
+        "--max-warnings 0 "
         "--format json"
     )
     assert "format:write" not in lint
@@ -100,9 +100,9 @@ def test_frontend_static_group_runs_standalone_format_check_before_exact_eslint(
 
 
 def test_eslint_delegates_formatting_to_standalone_prettier() -> None:
-    config = (WEB_ROOT / ".eslintrc.cjs").read_text(encoding="utf-8")
+    config = (WEB_ROOT / "eslint.config.mjs").read_text(encoding="utf-8")
 
-    assert '"@vue/eslint-config-prettier"' in config
+    assert '"@vue/eslint-config-prettier/skip-formatting"' in config
     assert '"prettier/prettier"' not in config
 
 

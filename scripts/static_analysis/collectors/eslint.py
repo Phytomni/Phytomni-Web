@@ -13,7 +13,7 @@ from ..model import Finding, Mechanism, TargetKind
 from .errors import CollectionError
 
 
-EXPECTED_ESLINT_VERSION = "8.22.0"
+EXPECTED_ESLINT_VERSION = "10.7.0"
 _SCHEMA_VERSION = 1
 _FINDING_KEYS = frozenset(
     {
@@ -228,9 +228,14 @@ def collect_eslint(root: Path, files: Sequence[Path]) -> tuple[Finding, ...]:
     selected: list[str] = []
     for path in files:
         try:
-            selected.append(path.resolve().relative_to(web_root.resolve()).as_posix())
+            relative = path.resolve().relative_to(web_root.resolve()).as_posix()
         except ValueError:
             continue
+        # Legacy eslintrc files are not part of the flat-config lint scope and
+        # ESLint 10 rejects their historical eslint-env comments.
+        if Path(relative).name.startswith(".eslintrc"):
+            continue
+        selected.append(relative)
     selected = sorted(set(selected))
     if not selected:
         return ()

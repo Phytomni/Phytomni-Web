@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
-
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
@@ -61,7 +59,8 @@ function parseRuleOverlay(raw) {
     throw new Error(
       `--rule options-json is invalid: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
+      { cause: error }
     );
   }
   return { rule, value: [severity, options] };
@@ -224,18 +223,21 @@ async function inventory({ root, files, rules }) {
   const eslint = new ESLint({
     cwd: root,
     errorOnUnmatchedPattern: true,
-    reportUnusedDisableDirectives: "error",
-    resolvePluginsRelativeTo: webRoot,
-    useEslintrc: true,
-    ...(rules.length > 0
-      ? {
-          overrideConfig: {
-            rules: Object.fromEntries(
-              rules.map(({ rule, value }) => [rule, value])
-            ),
-          },
-        }
-      : {}),
+    overrideConfig: [
+      {
+        name: "phytomni/inventory-overlay",
+        linterOptions: {
+          reportUnusedDisableDirectives: "error",
+        },
+        ...(rules.length > 0
+          ? {
+              rules: Object.fromEntries(
+                rules.map(({ rule, value }) => [rule, value])
+              ),
+            }
+          : {}),
+      },
+    ],
   });
   const lintableFiles = [];
   for (const file of resolvedFiles) {
@@ -257,7 +259,12 @@ async function inventory({ root, files, rules }) {
     try {
       ast = parseAst(source, result.filePath);
     } catch (error) {
-      throw new Error(`parser failed for ${result.filePath}: ${error.message}`);
+      throw new Error(
+        `parser failed for ${result.filePath}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error }
+      );
     }
     for (const message of result.messages) {
       if (message.fatal) {

@@ -17,6 +17,10 @@ _ESLINT_IGNORE_RE = re.compile(
     r"ignorePatterns\s*:\s*(?:\[(?P<array>[^]]*)\]|(?P<single>[\"'][^\"']+[\"']))",
     re.DOTALL,
 )
+_ESLINT_FLAT_IGNORE_RE = re.compile(
+    r"\bignores\s*:\s*(?:\[(?P<array>[^]]*)\]|(?P<single>[\"'][^\"']+[\"']))",
+    re.DOTALL,
+)
 _ESLINT_OFF_RE = re.compile(
     r"[\"'](?P<rule>[^\"']+)[\"']\s*:\s*(?:[\"']off[\"']|0)"
 )
@@ -52,6 +56,12 @@ def _config_candidates(root: Path) -> tuple[Path, ...]:
         ".eslintrc.cjs",
         ".eslintrc.js",
         ".eslintrc.json",
+        "eslint.config.js",
+        "eslint.config.mjs",
+        "eslint.config.cjs",
+        "eslint.config.ts",
+        "eslint.config.mts",
+        "eslint.config.cts",
         ".prettierignore",
     }
     candidates: list[Path] = []
@@ -79,7 +89,9 @@ def _config_candidates(root: Path) -> tuple[Path, ...]:
 
 def _collect_eslint(root: Path, path: Path) -> Iterable[Finding]:
     text = path.read_text(encoding="utf-8")
-    for match in _ESLINT_IGNORE_RE.finditer(text):
+    ignore_matches = _ESLINT_IGNORE_RE.finditer(text)
+    flat_ignore_matches = _ESLINT_FLAT_IGNORE_RE.finditer(text)
+    for match in (*ignore_matches, *flat_ignore_matches):
         raw = match.group("array") or match.group("single") or ""
         for pattern in _QUOTED_RE.findall(raw):
             yield _finding(
@@ -164,7 +176,7 @@ def collect_config_suppressions(root: Path) -> tuple[Finding, ...]:
 
     findings: list[Finding] = []
     for path in _config_candidates(root):
-        if path.name.startswith(".eslintrc"):
+        if path.name.startswith(".eslintrc") or path.name.startswith("eslint.config."):
             findings.extend(_collect_eslint(root, path))
         elif path.name in {".eslintignore", ".prettierignore"}:
             findings.extend(_collect_ignore_file(root, path))
