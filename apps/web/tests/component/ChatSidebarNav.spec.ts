@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { nextTick } from "vue";
 import ChatSidebarNav from "@/views/chat/components/ChatSidebarNav.vue";
 import ChatSidebar from "@/views/chat/ChatSidebar.vue";
 import { setViewport } from "../helpers/responsiveMatrix";
 import { SIDEBAR_COLLAPSED_PREFERENCE_KEY } from "@/views/chat/composables/useSidebarResponsive";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const NAV_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatSidebarNav.vue"),
@@ -33,7 +32,7 @@ const baseProps = {
 };
 
 const mountNav = (props: Record<string, unknown> = {}, slots = {}) =>
-  mount(ChatSidebarNav, {
+  createTestAppContext().mount(ChatSidebarNav, {
     props: { ...baseProps, ...props },
     slots,
     global: {
@@ -81,10 +80,9 @@ const mountChatSidebarWithExistingStubs = () => {
     routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
   });
 
-  return mount(ChatSidebar, {
+  return createTestAppContext({ router }).mount(ChatSidebar, {
     props: { chatList: [] },
     global: {
-      plugins: [createPinia(), router],
       mocks: {
         $t: (key: string) => `t:${key}`,
       },
@@ -127,7 +125,6 @@ describe("ChatSidebarNav", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     localStorage.clear();
-    setActivePinia(createPinia());
   });
 
   afterEach(() => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import FollowUpQuestions from "@/views/chat/FollowUpQuestions.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/FollowUpQuestions.vue"),
@@ -15,7 +15,7 @@ const styleBlocks = (source: string) =>
 const mountFollowUps = (
   questions = ["What is GA3ox?", "How is it regulated?"]
 ) =>
-  mount(FollowUpQuestions, {
+  mountWithApp(FollowUpQuestions, {
     props: { questions },
   });
 
@@ -60,7 +60,7 @@ describe("FollowUpQuestions", () => {
 
   it("keeps the follow-up heading and compact wrapping layout", () => {
     const wrapper = mountFollowUps();
-    expect(wrapper.text()).toContain("chat.followUpQuestions");
+    expect(wrapper.text()).toContain("Question Suggestions:");
     const css = styleBlocks(SOURCE).join("\n");
     expect(css).toMatch(/flex-wrap:\s*wrap/);
     expect(css).toMatch(/max-width:\s*100%/);

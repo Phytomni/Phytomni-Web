@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import PhyEmptyState from "@/components/shell/PhyEmptyState.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -26,7 +26,7 @@ const TRANSCRIPT_SOURCE = CHAT_SOURCE.slice(transcriptStart, transcriptEnd);
 
 describe("Chat empty state", () => {
   it("provides a stable mark/title/subtitle surface and tour anchors", () => {
-    const wrapper = mount(PhyEmptyState, {
+    const wrapper = mountWithApp(PhyEmptyState, {
       props: {
         title: "Welcome",
         subtitle: "One line of explanation",

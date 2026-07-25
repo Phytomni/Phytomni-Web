@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
 import { messageActionCapabilities } from "@/views/chat/utils/message-action-capabilities";
 import type { ChatMessage } from "@/views/chat/types";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const ACTIONS_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageActions.vue"),
@@ -23,7 +23,7 @@ const styleBlocks = (source: string) =>
   [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
 
 const mountActions = (props: Record<string, unknown> = {}) =>
-  mount(ChatMessageActions, {
+  mountWithApp(ChatMessageActions, {
     props: {
       role: "assistant",
       copied: false,
@@ -138,10 +138,10 @@ describe("ChatMessageActions", () => {
     const idle = mountActions({ reactionActive: 0 });
     expect(
       idle.find('[data-testid="action-like"]').attributes("aria-label")
-    ).toBe("chat.actions.like");
+    ).toBe("Like");
     expect(
       idle.find('[data-testid="action-dislike"]').attributes("aria-label")
-    ).toBe("chat.actions.dislike");
+    ).toBe("Dislike");
     expect(
       idle.find('[data-testid="action-like"]').attributes("aria-pressed")
     ).toBe("false");
@@ -152,7 +152,7 @@ describe("ChatMessageActions", () => {
     );
     expect(
       liked.find('[data-testid="action-like"]').attributes("aria-label")
-    ).toBe("chat.actions.undoLike");
+    ).toBe("Undo like");
     expect(
       liked.find('[data-testid="action-like"]').attributes("aria-pressed")
     ).toBe("true");
@@ -163,7 +163,7 @@ describe("ChatMessageActions", () => {
     );
     expect(
       disliked.find('[data-testid="action-dislike"]').attributes("aria-label")
-    ).toBe("chat.actions.undoDislike");
+    ).toBe("Undo dislike");
     expect(
       disliked.find('[data-testid="action-dislike"]').attributes("aria-pressed")
     ).toBe("true");
@@ -199,12 +199,8 @@ describe("ChatMessageActions", () => {
     });
     const direct = wrapper.find('[data-testid="action-direct-downloads"]');
     const generated = wrapper.find('[data-testid="action-generated-download"]');
-    expect(direct.attributes("aria-label")).toBe(
-      "chat.actions.downloadAttachments"
-    );
-    expect(generated.attributes("aria-label")).toBe(
-      "chat.actions.downloadFormats"
-    );
+    expect(direct.attributes("aria-label")).toBe("Download attachments");
+    expect(generated.attributes("aria-label")).toBe("Download as format");
     expect(direct.attributes("aria-label")).not.toBe(
       generated.attributes("aria-label")
     );

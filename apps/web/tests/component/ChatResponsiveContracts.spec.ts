@@ -7,7 +7,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick } from "vue";
 import { setViewport } from "../helpers/responsiveMatrix";
 import {
@@ -17,6 +16,7 @@ import {
 } from "@/views/chat/composables/useSidebarResponsive";
 import PhyAdaptiveShell from "@/components/shell/PhyAdaptiveShell.vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -126,7 +126,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
     "maps $label ($width CSS px) without geometry claims",
     async ({ width, isMobile, sidebarCollapsed }) => {
       setViewport(width, 768);
-      const wrapper = mount(makeHarness());
+      const wrapper = mountWithApp(makeHarness());
       await nextTick();
 
       expect(wrapper.vm.isMobile).toBe(isMobile);
@@ -139,7 +139,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
   it("opens and closes the mobile drawer only below the mobile breakpoint", async () => {
     setViewport(899, 768);
     const onDrawer = vi.fn();
-    const wrapper = mount(makeHarness({ onDrawerOpenChange: onDrawer }));
+    const wrapper = mountWithApp(makeHarness({ onDrawerOpenChange: onDrawer }));
 
     expect(wrapper.vm.isMobile).toBe(true);
     wrapper.vm.openDrawer();
@@ -163,7 +163,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
 
 describe("ChatResponsiveContracts — shell class and drawer presentation", () => {
   it("applies collapsed and drawer-open classes from props", () => {
-    const expanded = mount(PhyAdaptiveShell, {
+    const expanded = mountWithApp(PhyAdaptiveShell, {
       props: { sidebarCollapsed: false },
       slots: { sidebar: "<nav />", main: "<main />" },
     });
@@ -171,13 +171,13 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
     expect(expanded.classes()).not.toContain("is-sidebar-collapsed");
     expect(expanded.attributes("data-scroll-root")).toBe("adaptive");
 
-    const collapsed = mount(PhyAdaptiveShell, {
+    const collapsed = mountWithApp(PhyAdaptiveShell, {
       props: { sidebarCollapsed: true },
       slots: { sidebar: "<nav />", main: "<main />" },
     });
     expect(collapsed.classes()).toContain("is-sidebar-collapsed");
 
-    const drawer = mount(PhyAdaptiveSidebar, {
+    const drawer = mountWithApp(PhyAdaptiveSidebar, {
       props: { collapsed: false, drawerOpen: true },
       slots: { default: "<nav />" },
     });
@@ -185,7 +185,7 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
   });
 
   it("makes the main surface inert while the mobile drawer owns focus", async () => {
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       props: { sidebarCollapsed: false, mainInert: true },
       slots: {
         sidebar: "<nav />",

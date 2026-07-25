@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ChatAgentPicker from "@/views/chat/components/ChatAgentPicker.vue";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const allTools = [...CANONICAL_AGENT_TOOLS];
 
@@ -14,18 +15,13 @@ const makeOptions = (tools: string[]) =>
   }));
 
 const mountPicker = (props: Record<string, unknown> = {}) =>
-  mount(ChatAgentPicker, {
+  mountWithApp(ChatAgentPicker, {
     props: {
       options: makeOptions(allTools),
       rolesLoading: false,
       selectedAgent: "",
       disabled: false,
       ...props,
-    },
-    global: {
-      mocks: {
-        $t: (key: string) => `t:${key}`,
-      },
     },
   });
 
@@ -35,9 +31,7 @@ describe("ChatAgentPicker", () => {
     const combobox = wrapper.find('[role="combobox"]');
     expect(combobox.exists()).toBe(true);
     expect(combobox.attributes("aria-expanded")).toBe("false");
-    expect((combobox.element as HTMLInputElement).value).toContain(
-      "chat.agentPicker.auto"
-    );
+    expect((combobox.element as HTMLInputElement).value).toContain("Auto");
 
     await wrapper.find('[data-testid="agent-picker-trigger"]').trigger("click");
     await nextTick();
@@ -79,7 +73,7 @@ describe("ChatAgentPicker", () => {
     const automatic = mountPicker({ selectedAgent: "" });
     expect(
       (automatic.get('[role="combobox"]').element as HTMLInputElement).value
-    ).toContain("chat.agentPicker.auto");
+    ).toContain("Auto");
 
     const explicit = mountPicker({ selectedAgent: "ChatAgent" });
     expect(
@@ -89,13 +83,13 @@ describe("ChatAgentPicker", () => {
 
   it("shows localized loading state while rolesLoading", () => {
     const wrapper = mountPicker({ rolesLoading: true, options: [] });
-    expect(wrapper.text()).toContain("chat.agentPicker.loading");
+    expect(wrapper.text()).toContain("Loading agent permissions...");
     expect(wrapper.find('[role="combobox"]').exists()).toBe(false);
   });
 
   it("shows localized empty state when the permitted intersection is empty", () => {
     const wrapper = mountPicker({ options: [] });
-    expect(wrapper.text()).toContain("chat.agentPicker.empty");
+    expect(wrapper.text()).toContain("No agents available for your account");
     expect(wrapper.find('[role="combobox"]').exists()).toBe(false);
   });
 
@@ -191,7 +185,7 @@ describe("ChatAgentPicker", () => {
 
     expect(combobox.attributes("aria-expanded")).toBe("true");
     expect(wrapper.findAll('[role="option"]')).toHaveLength(0);
-    expect(wrapper.text()).toContain("chat.agentPicker.noResults");
+    expect(wrapper.text()).toContain("No matching agents");
   });
 
   it("closes the listbox on blur", async () => {

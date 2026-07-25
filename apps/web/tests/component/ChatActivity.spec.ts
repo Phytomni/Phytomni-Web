@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../helpers/test-app-context";
 import { nextTick, reactive } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createI18n } from "vue-i18n";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
 import { activityDisclosureStateKey } from "@/views/chat/streaming/presentation";
@@ -12,28 +11,6 @@ const ACTIVITY_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatActivity.vue"),
   "utf8"
 );
-
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: {
-    "en-US": {
-      chat: {
-        activity: {
-          label: "Activity",
-          count: "{count}",
-          status: { running: "In progress", done: "Done" },
-        },
-        tools: {
-          knowledge_search: "Searching literature",
-          generic: "Calling a tool",
-        },
-        steps: { retrieving: "Retrieving" },
-        reasoning: { show: "Show reasoning", hide: "Hide reasoning" },
-      },
-    },
-  },
-});
 
 type ChatActivityProps = {
   blocks?: ContentBlock[];
@@ -46,11 +23,8 @@ type ChatActivityProps = {
 };
 
 function mountActivity(props: ChatActivityProps) {
-  return mount(ChatActivity, {
+  return mountWithApp(ChatActivity, {
     props,
-    global: {
-      plugins: [i18n],
-    },
   });
 }
 
@@ -164,7 +138,7 @@ describe("ChatActivity", () => {
   });
 
   it("supports label override, hideCount, and default slot body content", async () => {
-    const w = mount(ChatActivity, {
+    const w = mountWithApp(ChatActivity, {
       props: {
         blocks: [],
         stateKey: "log:42",
@@ -173,7 +147,6 @@ describe("ChatActivity", () => {
         hideCount: true,
       },
       slots: { default: '<div data-testid="slot-body">analyst body</div>' },
-      global: { plugins: [i18n] },
     });
     expect(w.text()).toContain("Execution log");
     expect(w.text()).not.toMatch(/\b0\b/);

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -32,7 +32,7 @@ const mountRow = (
   props: Record<string, unknown> = {},
   slots: Record<string, unknown> = {}
 ) =>
-  mount(ChatMessageRow, {
+  mountWithApp(ChatMessageRow, {
     props: {
       role: "assistant",
       ...props,

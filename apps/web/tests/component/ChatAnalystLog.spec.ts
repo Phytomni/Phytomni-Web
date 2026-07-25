@@ -1,12 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
-import { nextTick, ref } from "vue";
+import { flushPromises } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
 import type { LogErrorKind } from "@/views/chat/composables/useLogView";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const ANALYST_LOG_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatAnalystLog.vue"),
@@ -55,15 +54,19 @@ type ChatAnalystLogProps = {
   errorKind?: LogErrorKind;
 };
 
-function mountLog(props: ChatAnalystLogProps, locale = "en-US") {
-  const i18n = createI18n({
-    legacy: false,
-    locale,
-    messages,
-  });
-  return mount(ChatAnalystLog, {
+function makeAnalystContext(locale: "en-US" | "zh-CN" = "en-US") {
+  const context = createTestAppContext({ locale });
+  context.i18n.global.mergeLocaleMessage("en-US", messages["en-US"]);
+  context.i18n.global.mergeLocaleMessage("zh-CN", messages["zh-CN"]);
+  return context;
+}
+
+function mountLog(
+  props: ChatAnalystLogProps,
+  locale: "en-US" | "zh-CN" = "en-US"
+) {
+  return makeAnalystContext(locale).mount(ChatAnalystLog, {
     props,
-    global: { plugins: [i18n, ElementPlus] },
   });
 }
 
@@ -93,19 +96,13 @@ describe("ChatAnalystLog", () => {
     expect(stringW.find("pre.log-pre").exists()).toBe(true);
     expect(stringW.find("pre.log-pre").text()).toContain("line1");
 
-    const i18n = createI18n({
-      legacy: false,
-      locale: "en-US",
-      messages,
-    });
-    const arrayW = mount(ChatAnalystLog, {
+    const arrayW = makeAnalystContext().mount(ChatAnalystLog, {
       props: {
         rowId: "1",
         taskId: "t",
         logData: [{ content: "row-a" }],
       },
       global: {
-        plugins: [i18n, ElementPlus],
         // happy-dom cannot host Element Plus table's MutationObserver
         stubs: {
           "el-table": {
@@ -138,19 +135,13 @@ describe("ChatAnalystLog", () => {
   });
 
   it("renders fetch/update errors with retry and translates from stored enum on locale switch", async () => {
-    const locale = ref("en-US");
-    const i18n = createI18n({
-      legacy: false,
-      locale: locale.value,
-      messages,
-    });
-    const w = mount(ChatAnalystLog, {
+    const context = makeAnalystContext();
+    const w = context.mount(ChatAnalystLog, {
       props: {
         rowId: "9",
         taskId: "task-9",
         errorKind: "fetch",
       },
-      global: { plugins: [i18n, ElementPlus] },
     });
     expect(w.text()).toContain("Failed to load log");
     expect(w.find("[data-testid='analyst-log-retry']").exists()).toBe(true);
@@ -161,8 +152,7 @@ describe("ChatAnalystLog", () => {
     await w.setProps({ errorKind: "update" });
     expect(w.text()).toContain("Failed to update log");
 
-    locale.value = "zh-CN";
-    i18n.global.locale.value = "zh-CN";
+    context.i18n.global.locale.value = "zh-CN";
     await nextTick();
     expect(w.text()).toContain("更新日志失败");
 

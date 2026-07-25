@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { ref } from "vue";
 import type { UploadFile } from "@/views/chat/types";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const mentionExpose = {
   openHeader: vi.fn(),
@@ -92,7 +93,7 @@ const baseProps = () => ({
 });
 
 const mountComposer = (overrides: Record<string, unknown> = {}) =>
-  mount(ChatComposer, {
+  mountWithApp(ChatComposer, {
     props: { ...baseProps(), ...overrides },
     global: {
       stubs: {
@@ -284,7 +285,7 @@ describe("ChatComposer", () => {
     });
 
     expect(wrapper.get('[data-testid="chat-permission-status"]').text()).toBe(
-      "chat.agentPicker.noAvailableAgents"
+      "No agents are available for this account."
     );
   });
 

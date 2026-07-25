@@ -1,16 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
+import { mountWithApp } from "../helpers/test-app-context";
 
 describe("StreamMessage", () => {
   it("renders a markdown block's text through v-html", () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "**hi**" },
     ];
-    const w = mount(StreamMessage, { props: { blocks } });
+    const w = mountWithApp(StreamMessage, { props: { blocks } });
     expect(w.html()).toContain("<strong>hi</strong>");
   });
 
@@ -18,7 +18,7 @@ describe("StreamMessage", () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "**hi**" },
     ];
-    const w = mount(StreamMessage, { props: { blocks } });
+    const w = mountWithApp(StreamMessage, { props: { blocks } });
     const md = w.find(".md-block.phy-markdown.phy-markdown--chat");
     expect(md.exists()).toBe(true);
     expect(md.html()).toContain("<strong>hi</strong>");
@@ -28,7 +28,7 @@ describe("StreamMessage", () => {
 
   it("skips an unregistered block type without throwing", () => {
     const blocks: ContentBlock[] = [{ type: "mol3d", authority: "web" }];
-    const w = mount(StreamMessage, { props: { blocks } });
+    const w = mountWithApp(StreamMessage, { props: { blocks } });
     expect(w.html()).not.toContain("mol3d");
   });
 
@@ -49,7 +49,7 @@ describe("StreamMessage", () => {
         },
       },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: { blocks },
     });
     await w
@@ -79,7 +79,7 @@ describe("StreamMessage", () => {
         text: "See [1] for the claim.",
       },
     ];
-    const w = mount(StreamMessage, { props: { blocks } });
+    const w = mountWithApp(StreamMessage, { props: { blocks } });
     // Scope gate: without ns / references, renderStreamingMarkdown keeps [N] literal.
     expect(w.html()).toContain("[1]");
     expect(w.html()).not.toContain('href="#');
@@ -95,7 +95,7 @@ describe("StreamMessage", () => {
       },
     ];
     for (const references of [undefined, [] as unknown[]]) {
-      const w = mount(StreamMessage, {
+      const w = mountWithApp(StreamMessage, {
         props: { blocks, ns: "m0", references },
         global: { mocks: { $t: (k: string) => k } },
       });
@@ -114,7 +114,7 @@ describe("StreamMessage", () => {
         text: "See [1] for the claim.",
       },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         ns: "",
@@ -151,15 +151,15 @@ describe("StreamMessage", () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "Claim [1]." },
     ];
-    const a = mount(StreamMessage, {
+    const a = mountWithApp(StreamMessage, {
       props: { blocks, ns: "m0", references: [{ title: "A" }] },
       global: { mocks: { $t: (k: string) => k } },
     });
-    const b = mount(StreamMessage, {
+    const b = mountWithApp(StreamMessage, {
       props: { blocks, ns: "m1", references: [{ title: "B" }] },
       global: { mocks: { $t: (k: string) => k } },
     });
-    const none = mount(StreamMessage, {
+    const none = mountWithApp(StreamMessage, {
       props: { blocks, ns: undefined, references: [] },
       global: { mocks: { $t: (k: string) => k } },
     });
@@ -194,7 +194,7 @@ describe("StreamMessage", () => {
       },
       { type: "markdown", authority: "web", text: "See [1]." },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         ns: "",
@@ -246,7 +246,7 @@ describe("StreamMessage", () => {
       { type: "tool", authority: "web", toolName: "after" },
       { type: "markdown", authority: "web", text: "outro" },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         streamPresentationKey: "req-act",
@@ -273,7 +273,7 @@ describe("StreamMessage", () => {
       { type: "tool", authority: "web", toolName: "knowledge_search" },
       { type: "reasoning", authority: "web", text: "plan" },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: { blocks },
       global: { mocks: { $t: (k: string) => k } },
     });
@@ -306,7 +306,7 @@ describe("StreamMessage", () => {
         },
       },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         streamPresentationKey: "req-a2ui",
@@ -334,7 +334,7 @@ describe("StreamMessage", () => {
     const blocks: ContentBlock[] = [
       { type: "tool", authority: "web", toolName: "knowledge_search" },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         streamPresentationKey: "req-toggle",

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount, type VueWrapper } from "@vue/test-utils";
+import { type VueWrapper } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -32,6 +32,7 @@ import {
   FIXTURE_REFERENCE_DOC,
 } from "../fixtures/chat";
 import { getSharedMessageFixture } from "../visual/chat/fixture-data";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -127,7 +128,7 @@ const mountContent = (
   message: ChatMessage,
   overrides: Record<string, unknown> = {}
 ) =>
-  mount(ChatMessageContent, {
+  mountWithApp(ChatMessageContent, {
     props: {
       message,
       index: 0,

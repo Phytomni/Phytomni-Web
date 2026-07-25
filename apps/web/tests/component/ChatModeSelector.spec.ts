@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/ChatModeSelector.vue"),
@@ -11,7 +11,7 @@ const SOURCE = readFileSync(
 
 describe("ChatModeSelector.vue", () => {
   it("renders instant + expert radios; disables expert when expertEnabled=false", () => {
-    const wrapper = mount(ChatModeSelector, {
+    const wrapper = mountWithApp(ChatModeSelector, {
       props: {
         modelValue: "instant",
         instantEnabled: true,
@@ -28,7 +28,7 @@ describe("ChatModeSelector.vue", () => {
   });
 
   it("enables expert when expertEnabled=true", () => {
-    const wrapper = mount(ChatModeSelector, {
+    const wrapper = mountWithApp(ChatModeSelector, {
       props: {
         modelValue: "instant",
         instantEnabled: true,
@@ -42,7 +42,7 @@ describe("ChatModeSelector.vue", () => {
   });
 
   it("emits update:modelValue when the group changes", async () => {
-    const wrapper = mount(ChatModeSelector, {
+    const wrapper = mountWithApp(ChatModeSelector, {
       props: {
         modelValue: "instant",
         instantEnabled: true,
@@ -56,7 +56,7 @@ describe("ChatModeSelector.vue", () => {
   });
 
   it("disables Instant and ignores disabled-mode updates", async () => {
-    const wrapper = mount(ChatModeSelector, {
+    const wrapper = mountWithApp(ChatModeSelector, {
       props: {
         modelValue: "expert",
         instantEnabled: false,
@@ -75,7 +75,7 @@ describe("ChatModeSelector.vue", () => {
   });
 
   it("disables both mode controls while permissions are unavailable", () => {
-    const wrapper = mount(ChatModeSelector, {
+    const wrapper = mountWithApp(ChatModeSelector, {
       props: {
         modelValue: "instant",
         instantEnabled: false,

@@ -1,13 +1,10 @@
 import { defineComponent } from "vue";
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatCases from "@/views/chat/components/ChatCases.vue";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const CASES_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatCases.vue"),
@@ -80,15 +77,8 @@ const RouterLinkStub = defineComponent({
 });
 
 const mountCases = (locale: "en-US" | "zh-CN") => {
-  const i18n = createI18n({
-    legacy: false,
-    locale,
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-  });
-  return mount(ChatCases, {
+  return createTestAppContext({ locale }).mount(ChatCases, {
     global: {
-      plugins: [i18n],
       stubs: { RouterLink: RouterLinkStub },
     },
   });

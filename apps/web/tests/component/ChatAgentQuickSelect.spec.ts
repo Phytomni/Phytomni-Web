@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
 import AgentCapabilityPopover from "@/components/agent/AgentCapabilityPopover.vue";
 import ChatAgentQuickSelect from "@/views/chat/components/ChatAgentQuickSelect.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const QUICK_SELECT_SOURCE = readFileSync(
   resolve(
@@ -32,16 +32,13 @@ const options = [
 ];
 
 const mountQuickSelect = (props: Record<string, unknown> = {}) =>
-  mount(ChatAgentQuickSelect, {
+  mountWithApp(ChatAgentQuickSelect, {
     props: {
       options,
       rolesLoading: false,
       selectedAgent: "",
       disabled: false,
       ...props,
-    },
-    global: {
-      mocks: { $t: (key: string) => key },
     },
   });
 
@@ -107,7 +104,7 @@ describe("ChatAgentQuickSelect", () => {
   it("shows loading without leaking option names", () => {
     const wrapper = mountQuickSelect({ rolesLoading: true });
     expect(wrapper.find('[role="status"]').text()).toContain(
-      "chat.agentPicker.loading"
+      "Loading agent permissions..."
     );
     expect(
       wrapper.findAll('[data-testid="chat-agent-quick-option"]')
@@ -118,7 +115,7 @@ describe("ChatAgentQuickSelect", () => {
   it("shows the localized empty state when no agent is granted", () => {
     const wrapper = mountQuickSelect({ options: [] });
     expect(wrapper.find('[role="status"]').text()).toContain(
-      "chat.agentPicker.empty"
+      "No agents available for your account"
     );
   });
 

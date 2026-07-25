@@ -1,12 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createI18n } from "vue-i18n";
 import SendProgress from "@/views/chat/components/SendProgress.vue";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const PROGRESS_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/SendProgress.vue"),
@@ -24,20 +21,12 @@ function mountProgress(
   props: SendProgressProps,
   locale: "en-US" | "zh-CN" = "en-US"
 ) {
-  const i18n = createI18n({
-    legacy: false,
-    locale,
-    messages: {
-      "en-US": enUS,
-      "zh-CN": zhCN,
-    },
-  });
+  const context = createTestAppContext({ locale });
   return {
-    wrapper: mount(SendProgress, {
+    wrapper: context.mount(SendProgress, {
       props,
-      global: { plugins: [i18n] },
     }),
-    i18n,
+    i18n: context.i18n,
   };
 }
 
