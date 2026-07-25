@@ -31,7 +31,8 @@ if (typeof window.print !== "function") {
   });
 }
 
-// Global i18n stub — needed when mounting components like LangSwitch
+// Global i18n stub for unmigrated specs. The isolated test-app context
+// snapshots and clears this fallback while owning a migrated mount.
 const i18n = createI18n({
   legacy: false,
   locale: "zh-CN",
