@@ -89,19 +89,19 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
     build: {
       outDir: "dist",
       assetsInlineLimit: 4096,
-      advancedChunks: {
-        groups: [
-          {
-            name: "vue-i18n",
-            test: /node_modules[/\\]vue-i18n[/\\]/,
-            priority: 20,
+      target: ["chrome111", "edge111", "firefox114", "safari16.4"],
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: "vue-i18n",
+                test: /node_modules[/\\]vue-i18n[/\\]/,
+                priority: 20,
+              },
+            ],
           },
-          {
-            name: "locales",
-            test: /[/\\]src[/\\]locales[/\\]/,
-            priority: 10,
-          },
-        ],
+        },
       },
     },
   };

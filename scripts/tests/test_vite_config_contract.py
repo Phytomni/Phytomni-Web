@@ -105,8 +105,9 @@ def test_vite_config_keeps_proxy_alias_and_chunk_contracts() -> None:
     assert 'includes("text/event-stream")' in config
     assert "setNoDelay" in config
     assert '"@": fileURLToPath(new URL("./src", import.meta.url))' in config
-    assert '"vue-i18n": ["vue-i18n"]' in config
-    assert 'locales: ["./src/locales"]' in config
+    assert "rolldownOptions:" in config
+    assert "codeSplitting:" in config
+    assert 'name: "vue-i18n"' in config
 
 
 def test_vite_toolchain_keeps_checkpoint_versions_and_modern_sass_api() -> None:
@@ -174,17 +175,23 @@ def test_application_typecheck_uses_the_target_esnext_library() -> None:
     assert "vite/**/*.ts" in config_project["include"]
 
 
-def test_rolldown_checkpoint_uses_a_direct_vite_alias_and_advanced_chunks() -> None:
+def test_vite8_config_uses_direct_vite_and_supported_code_splitting() -> None:
     package = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((WEB_ROOT / "package-lock.json").read_text(encoding="utf-8"))
     config = _read(WEB_ROOT / "vite.config.mts")
 
-    assert package["devDependencies"]["vite"] == "npm:rolldown-vite@7.3.1"
+    assert package["devDependencies"]["vite"] == "8.1.5"
     assert "overrides" not in package
     vite_lock = lock["packages"]["node_modules/vite"]
-    assert vite_lock["name"] == "rolldown-vite"
-    assert vite_lock["version"] == "7.3.1"
-    assert "advancedChunks:" in config
+    assert vite_lock.get("name", "vite") == "vite"
+    assert vite_lock["version"] == "8.1.5"
+    assert "node_modules/rolldown-vite" not in lock["packages"]
+    assert 'target: ["chrome111", "edge111", "firefox114", "safari16.4"]' in config
+    assert "rolldownOptions:" in config
+    assert "codeSplitting:" in config
+    assert "advancedChunks" not in config
     assert "manualChunks" not in config
+    assert "rollupOptions" not in config
     assert 'name: "vue-i18n"' in config
-    assert 'name: "locales"' in config
+    assert "preprocessorOptions" not in config
+    assert 'api: "modern"' not in config
