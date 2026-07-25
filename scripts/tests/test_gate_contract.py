@@ -270,6 +270,30 @@ def test_frontend_runtime_uses_guarded_test_and_coverage_scripts() -> None:
     assert "test:run:raw" not in runtime
 
 
+def test_frontend_runtime_entrypoints_do_not_call_raw_commands() -> None:
+    package = json.loads(
+        (ROOT / "apps" / "web" / "package.json").read_text(encoding="utf-8")
+    )
+    scripts = package["scripts"]
+    assert scripts["build-only"] == (
+        "node scripts/quality/run-with-warning-oracle.mjs build"
+    )
+    assert scripts["build"] == "run-p type-check build-only"
+
+    active_entrypoints = [
+        *(GATES / f"{group}.sh" for group in GROUP_ORDER),
+        ROOT / "scripts" / "validate_web_local.sh",
+        WORKFLOW,
+    ]
+    text = "\n".join(path.read_text(encoding="utf-8") for path in active_entrypoints)
+    for raw_script in ("build-only:raw", "test:run:raw", "coverage:raw"):
+        assert raw_script not in text
+
+    assert "npm run build-only:raw" not in text
+    assert "npm run test:run:raw" not in text
+    assert "npm run coverage:raw" not in text
+
+
 def test_every_gate_reaches_the_fail_closed_checker_through_one_helper() -> None:
     gate_text = {
         group: (GATES / f"{group}.sh").read_text(encoding="utf-8")

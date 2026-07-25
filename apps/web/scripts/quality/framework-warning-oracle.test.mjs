@@ -99,6 +99,15 @@ test("returns 86 after a successful child emits a prohibited warning", async () 
   assert.equal(code, 86);
 });
 
+test("keeps ordinary business warnings non-blocking", async () => {
+  const code = await runCheckedProcess({
+    executable: process.execPath,
+    args: [fixture, "--stderr", "business warning: emitted by fixture"],
+    cwd: scriptDir,
+  });
+  assert.equal(code, 0);
+});
+
 for (const [category, warning] of [
   ["vue", "[Vue warn] emitted by fixture"],
   ["intlify", "[intlify] emitted by fixture"],

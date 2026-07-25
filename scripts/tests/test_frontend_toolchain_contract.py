@@ -172,3 +172,23 @@ def test_vite_plugins_keep_only_supported_first_party_build_owners() -> None:
     assert "vite-plugin-svg-icons" not in direct
     assert "vite-plugin-compression2" in direct
     assert "vite-plugin-compression" not in direct
+
+
+def test_frontend_runtime_scripts_keep_raw_commands_diagnostic_only() -> None:
+    scripts = _package_json()["scripts"]
+
+    assert scripts["build"] == "run-p type-check build-only"
+    assert scripts["build-only"] == (
+        "node scripts/quality/run-with-warning-oracle.mjs build"
+    )
+    assert scripts["test:run"] == (
+        "npm run test:warning-oracle && "
+        "node scripts/quality/run-with-warning-oracle.mjs test"
+    )
+    assert scripts["coverage"] == (
+        "npm run test:warning-oracle && "
+        "node scripts/quality/run-with-warning-oracle.mjs coverage"
+    )
+
+    for name in ("build-only:raw", "test:run:raw", "coverage:raw"):
+        assert name in scripts
