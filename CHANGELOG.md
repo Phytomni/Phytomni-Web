@@ -59,8 +59,10 @@ Bot, operations, staging, or production acceptance.
 - Chat visual refinement and the current release candidate were captured with
   the deterministic fixture harness; the human-reviewed package covers desktop
   light/dark, mobile drawer states, and wide desktop geometry.
-- Remaining 200% zoom, forced-colors, authenticated Chat, and public legal-page
-  evidence remain explicitly `Needs Verification` or `Not Captured`.
+- Local production-preview self-review now covers login, public legal pages,
+  lazy Chinese locale loading, light/dark Chat fixture shells, and the mobile
+  drawer. Real authenticated Chat, 200% zoom, and forced-colors remain
+  explicitly `Needs Verification` pending owner-provided evidence.
 
 ---
 
