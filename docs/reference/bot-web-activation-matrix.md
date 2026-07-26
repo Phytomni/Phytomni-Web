@@ -184,14 +184,16 @@ above passed from local evidence alone.
   it does not change the matrix JSON, external acceptance rows, or
   dark-launch defaults.
 
-## Current Web closure record (2026-07-24)
+## Current Web closure record (2026-07-26)
 
-- Commit under test: `6dd6dc4` (`release/0.1.4`).
-- `GOCACHE=/tmp/phytomni-web-head-gocache GOTMPDIR=/tmp/phytomni-web-head-gotmp ./scripts/validate_web_local.sh` — PASS; 201 frontend test files / 2601
+- Commit under test: `1e210119` (`release/0.1.4`).
+- `./scripts/validate_web_local.sh` — PASS; 207 frontend test files / 2724
   tests passed with the configured coverage thresholds, Go module/build/vet/
   test checks passed, and G13, G14, G15, G16, and G17 passed.
 - The closure includes server-derived Expert permissions, dedicated product
   runs, constrained Chat routing, turn-scoped selection recovery, and the
-  reviewed Chat routing fixture matrix.
+  reviewed Chat routing fixture matrix. It also includes the final Vite 8 /
+  Vitest 4 quality-contract reconciliation; no Go, Bot, or operations code is
+  included in this Web release.
 - This is Web-owned local evidence only. It does not alter the machine-readable
   matrix, external acceptance rows, or dark-launch defaults.

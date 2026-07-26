@@ -18,6 +18,9 @@ Newest first.
 - Keep Vitest 4 coverage auto-update disabled through its supported
   `coverage.thresholds.autoUpdate` option, align the Vite 8 checkpoint evidence,
   and make TypeScript reverse probes independent of incremental build state.
+- Close the final Vite 8 contract gaps by removing the transitional Sass option,
+  reconciling the exact coverage inventory, hardening warning-oracle mode lookup,
+  and stabilizing upgraded Vue test fixtures without changing thresholds.
 
 ## [0.1.4] — 2026-07-24 (release candidate)
 

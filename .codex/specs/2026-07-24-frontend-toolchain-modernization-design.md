@@ -47,6 +47,10 @@ with the supported Vitest 4 schema: `autoUpdate: false` is nested under
 `coverage.thresholds`, the standalone config project is type-clean, and the
 full Python contract suite passes without a bypass.
 
+The latest verified local closure commit is `1e210119`; remote CI,
+Bot/operations acceptance, staging/live smoke, and production deployment remain
+separate evidence boundaries.
+
 ## Context and observed baseline
 
 The following warning stream describes the pre-migration baseline; it is not a

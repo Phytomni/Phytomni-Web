@@ -95,8 +95,9 @@ If readiness, smoke, or data correctness fails:
 
 ## Repository-local evidence
 
-The current Web closure record is the reviewed `release/0.1.4` commit selected
-for deployment; operators must record its exact SHA in the deployment evidence.
-`./scripts/validate_web_local.sh` passes locally, including G13–G17. This is
-repository evidence only; no production deployment or external acceptance is
-claimed by this addendum.
+The current Web closure record is `1e210119` on `release/0.1.4`; operators must
+record the exact selected SHA in deployment evidence rather than relying on a
+branch name. `./scripts/validate_web_local.sh` passes locally, including
+G13–G17, with 207 frontend test files and 2724 tests. This is repository
+evidence only; no production deployment or external acceptance is claimed by
+this addendum.

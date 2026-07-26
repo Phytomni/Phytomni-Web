@@ -208,16 +208,17 @@ default (`expert_enabled`, `stream_enabled`, `a2ui_actions_enabled`,
 `history_dual_read` are false/off), and no Bot, operations, deployment, or
 live configuration change is part of this Web reference.
 
-## Current Web closure record (2026-07-24)
+## Current Web closure record (2026-07-26)
 
-- Commit under test: `6dd6dc4` (`release/0.1.4`).
-- `GOCACHE=/tmp/phytomni-web-head-gocache GOTMPDIR=/tmp/phytomni-web-head-gotmp ./scripts/validate_web_local.sh` — PASS; 201 frontend test files / 2601
+- Commit under test: `1e210119` (`release/0.1.4`).
+- `./scripts/validate_web_local.sh` — PASS; 207 frontend test files / 2724
   tests passed with the configured coverage thresholds, Go module/build/vet/
   test checks passed, and G13, G14, G15, G16, and G17 passed.
 - The current record includes Bot identity normalization, pending-chat
   continuity, typed upstream error mapping, server-derived Expert permissions,
-  dedicated product runs, and constrained Chat routing. No Bot or operations
-  code is included in this Web release.
+  dedicated product runs, and constrained Chat routing. It also includes the
+  final Vite 8 / Vitest 4 quality-contract reconciliation. No Bot or
+  operations code is included in this Web release.
 - This is repository-local evidence only. The matrix remains unchanged:
   `RC-WEB-001` through `RC-WEB-007` and `RC-LIVE-001` are still
   **External Pending**, and all capability flags remain dark by default.
