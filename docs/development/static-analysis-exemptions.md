@@ -19,7 +19,6 @@ Structural records are exact reviewed identities; they do not authorize broader 
 
 | ID | Tool | Rule | Exact entry | Target | Owner | Review on |
 | --- | --- | --- | --- | --- | --- | --- |
-| `web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977` | `typescript` | `exclude` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `pattern-sha256:96ea33564ac2dd7567a9acf7419bc01fdc10cf25f9d47f3cc28e818fda5e0147` | `web-maintainers` | `2026-08-31` |
 | `web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69` | `typescript` | `skipLibCheck` | [apps/web/tsconfig.json](../../apps/web/tsconfig.json) | `compilerOptions.skipLibCheck` | `web-maintainers` | `2026-08-31` |
 
 ## Temporary debt
@@ -32,20 +31,11 @@ Temporary records track remediation debt and never grant structural approval.
 
 ## Risk and linked tests
 
-### `web-sa-70d410ce18beeb34b8a511f4fde3e7eeb8a56a4d21616cb4dec711830b0c5977`
-
-- Exact entry: [apps/web/tsconfig.json](../../apps/web/tsconfig.json)
-- Rationale: The application include glob reaches repository-owned agent Markdown that contains Vue examples; removing the exact exclusion makes vue-tsc parse that data as source and fails with four TS2339 diagnostics in the Markdown payloads.
-- Counterfactual: A same-directory reverse probe with this one exclude removed must remain non-clean and must report only the agent-example Markdown payload family; if the data is converted to non-source assets, remove this structural record.
-- Risk: Only the hashed src/assets/**/*.md exclusion in apps/web/tsconfig.json is authorized; a path, pattern, or diagnostic-family change is a stale identity and fails reconciliation.
-- Linked tests: `scripts/tests/test_typescript_dependency_probe.py::test_application_exclude_keeps_markdown_data_out_of_program`, `scripts/check_static_analysis_exemptions.py --check`
-- Observation: typescript reported exclude at line ?; raw diagnostic omitted.
-
 ### `web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69`
 
 - Exact entry: [apps/web/tsconfig.json](../../apps/web/tsconfig.json)
-- Rationale: The supported TypeScript 4.7.4/vue-tsc 0.39.5 toolchain emits an exact third-party declaration family with skipLibCheck=false; the reverse probe binds this application setting to the direct 3dmol 2.5.5 dependency.
-- Counterfactual: Removing this exact setting fails the application probe on node_modules declaration errors; the config-project probe remains separate and exposes three first-party vitest.config.mts errors.
+- Rationale: The supported TypeScript 6.0.3/vue-tsc 3.3.8 toolchain still emits an exact third-party declaration family with skipLibCheck=false across the pinned 3dmol, Element Plus, Pinia, chatarea, vue-element-plus-x, and transitive declaration graph; the config project is clean independently.
+- Counterfactual: Removing this exact setting fails the application probe only on node_modules declarations; the config-project probe remains clean with skipLibCheck=false.
 - Risk: Only apps/web/tsconfig.json compilerOptions.skipLibCheck=true is authorized; project, tool-version, or diagnostic-family drift fails the probe and requires re-adjudication.
 - Linked tests: `scripts/tests/test_typescript_dependency_probe.py::test_skip_lib_check_probe_is_project_and_dependency_bound`, `scripts/tests/test_typescript_dependency_probe.py::test_first_party_canary_is_visible_with_or_without_skip_lib_check`, `scripts/check_static_analysis_exemptions.py --check`
 - Observation: typescript reported skipLibCheck at line ?; raw diagnostic omitted.
@@ -58,8 +48,8 @@ Temporary records track remediation debt and never grant structural approval.
 ## Reconciliation summary
 
 - Exact check: `PASS`
-- Findings: `2`
-- Matched: `2`
+- Findings: `1`
+- Matched: `1`
 - Unregistered: `0`
 - Stale: `0`
 - Duplicate identities: `0`
