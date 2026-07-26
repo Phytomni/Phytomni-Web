@@ -108,8 +108,6 @@ func RegContent(matchContent string, sensitiveWords []string) string {
 	banWords := make([]string, 0)
 	regStr := strings.Join(sensitiveWords, "|")
 	wordReg := regexp.MustCompile(regStr)
-	//println("regStr -> ", regStr)
-
 	textBytes := wordReg.ReplaceAllFunc([]byte(matchContent), func(bytes []byte) []byte {
 		banWords = append(banWords, string(bytes))
 		textRunes := []rune(string(bytes))
