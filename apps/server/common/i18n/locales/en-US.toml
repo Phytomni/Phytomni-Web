@@ -7,6 +7,7 @@ account_locked_threshold = "Too many failed login attempts. Account locked for 1
 missing_context = "missing authentication context"
 user_lookup_failed = "user lookup failed"
 first_login_must_change_password = "first-login users must change their initial password before accessing other endpoints"
+registration_disabled = "Registration is currently unavailable"
 
 [register]
 email_required = "Email is required"

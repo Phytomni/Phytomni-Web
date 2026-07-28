@@ -7,6 +7,7 @@ account_locked_threshold = "登录失败次数过多，账户已锁定15分钟"
 missing_context = "缺少认证上下文"
 user_lookup_failed = "用户查询失败"
 first_login_must_change_password = "首次登录用户必须先修改初始密码才能访问其他接口"
+registration_disabled = "当前暂未开放注册"
 
 [register]
 email_required = "邮箱不能为空"
