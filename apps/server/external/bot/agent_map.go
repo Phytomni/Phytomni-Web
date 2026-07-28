@@ -55,6 +55,24 @@ func CanonicalAgentDisplayTools() []string {
 
 const maxBotAgentDescriptors = 32
 
+func supportsProtocol(resp *AgentsListResponse, protocol string, version int) bool {
+	if resp == nil || version < 1 {
+		return false
+	}
+	for _, advertised := range resp.Protocols[protocol] {
+		if advertised == version {
+			return true
+		}
+	}
+	return false
+}
+
+// SupportsProtocol reports whether the authenticated Bot catalog advertises a
+// specific server-to-server protocol version.
+func SupportsProtocol(resp *AgentsListResponse, protocol string, version int) bool {
+	return supportsProtocol(resp, protocol, version)
+}
+
 // ValidateWebAgentDescriptors validates only the public shape needed by the
 // Web capability manifest. It returns presence by canonical slug and never
 // returns the original descriptor, legacy aliases, or any other Bot metadata.

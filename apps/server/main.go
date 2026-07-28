@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	rxRedis "phytomni-server/cache"
 	"phytomni-server/commands"
@@ -93,6 +95,15 @@ func initConfig(*cli.Context) error {
 	if rxBot.BotConfig.ProxyEnabled {
 		if err := rxBot.ValidateAgents(context.Background(), rxBot.NewClient()); err != nil {
 			rxLog.Sugar().Fatalf("bot agent slug validation failed: %v", err)
+		}
+	}
+	if rxBot.BotConfig.MultiturnV1Enabled {
+		resp, err := rxBot.NewClient().GetAgents(context.Background())
+		if err != nil {
+			return fmt.Errorf("bot capability negotiation failed: %w", err)
+		}
+		if !rxBot.SupportsProtocol(resp, "conversation_context", 1) {
+			return errors.New("bot does not advertise conversation_context v1")
 		}
 	}
 	return nil

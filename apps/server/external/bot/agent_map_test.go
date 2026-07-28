@@ -19,3 +19,21 @@ func TestAliasMapContainsEveryCanonicalTool(t *testing.T) {
 		}
 	}
 }
+
+func TestSupportsProtocol(t *testing.T) {
+	resp := &AgentsListResponse{
+		Protocols: map[string][]int{"conversation_context": {1, 2}},
+	}
+	if !SupportsProtocol(resp, "conversation_context", 1) {
+		t.Fatal("conversation_context v1 should be supported")
+	}
+	if SupportsProtocol(resp, "conversation_context", 3) {
+		t.Fatal("unsupported protocol version was accepted")
+	}
+	if SupportsProtocol(&AgentsListResponse{}, "conversation_context", 1) {
+		t.Fatal("missing protocol advertisement was accepted")
+	}
+	if SupportsProtocol(nil, "conversation_context", 1) {
+		t.Fatal("nil agent response was accepted")
+	}
+}

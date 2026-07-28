@@ -103,7 +103,10 @@ type APIError struct {
 	Method    string
 	Path      string
 	Status    int
+	Code      string
 	Message   string
+	Stage     string
+	Retryable bool
 	RequestID string
 	body      string
 }
@@ -136,6 +139,23 @@ func truncateForLog(s string) string {
 // uniform Bot error envelope and falling back to the raw body (logs only).
 func botError(method, path string, status int, raw []byte) error {
 	e := &APIError{Method: method, Path: path, Status: status, body: string(raw)}
+	var safe struct {
+		Error struct {
+			Code      string `json:"code"`
+			Message   string `json:"message"`
+			RequestID string `json:"request_id"`
+			Stage     string `json:"stage"`
+			Retryable bool   `json:"retryable"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(raw, &safe) == nil && safe.Error.Code != "" {
+		e.Code = safe.Error.Code
+		e.Message = safe.Error.Message
+		e.RequestID = safe.Error.RequestID
+		e.Stage = safe.Error.Stage
+		e.Retryable = safe.Error.Retryable
+		return e
+	}
 	var be BotError
 	if json.Unmarshal(raw, &be) == nil && be.Error.Message != "" {
 		e.Message = be.Error.Message
@@ -310,6 +330,9 @@ func (c *Client) ChatCompletionWithMeta(ctx context.Context, req ChatCompletionR
 	req.Stream = false
 	var out ChatCompletionResponse
 	meta, err := c.doJSONWithMeta(ctx, http.MethodPost, "/v1/chat/completions", req, &out)
+	if err == nil && req.Conversation != nil {
+		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
+	}
 	return &out, meta, err
 }
 
@@ -384,6 +407,9 @@ func (c *Client) RouteQuery(ctx context.Context, req RouteQueryRequest) (*RouteQ
 func (c *Client) RouteQueryWithMeta(ctx context.Context, req RouteQueryRequest) (*RouteQueryResponse, ResponseMeta, error) {
 	var out RouteQueryResponse
 	meta, err := c.doJSONWithMetaOptions(ctx, http.MethodPost, "/v1/query/route", req, &out, true)
+	if err == nil && req.Conversation != nil {
+		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
+	}
 	return &out, meta, err
 }
 

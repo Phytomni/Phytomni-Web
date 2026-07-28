@@ -60,6 +60,22 @@ func TestDoJSONDecodesErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestChatCompletionRejectsMismatchedContextTurn(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"conversation_context":{"schema_version":1,"turn_id":"8","selected_agent_id":"ChatAgent","route_source":"instant_lock","route_reason_code":"INSTANT_LOCK","base_business_context_version":0,"proposed_business_context_version":1,"last_applied_ledger_cursor":6,"context_truncated":false,"context_rebuilt":false,"context_degraded":false}}`))
+	}))
+	defer srv.Close()
+	envelope := validConversationEnvelope()
+	envelope.Mode = "instant"
+	envelope.RequestedAgentID = nil
+	envelope.AllowedAgentIDs = []string{"ChatAgent"}
+	_, err := newTestClient(srv.URL).ChatCompletion(context.Background(), ChatCompletionRequest{Model: "phyto-chat", Conversation: &envelope})
+	if err == nil || !contains(err.Error(), "turn_id") {
+		t.Fatalf("mismatched response turn was accepted: %v", err)
+	}
+}
+
 func TestInvokeAgentDedupHit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

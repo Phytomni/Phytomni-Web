@@ -55,6 +55,29 @@ func TestInitFromViper_StreamEnabled(t *testing.T) {
 	BotConfig = nil
 }
 
+func TestInitFromViper_MultiturnV1Enabled(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(func() {
+		viper.Reset()
+		BotConfig = nil
+	})
+
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper defaults: %v", err)
+	}
+	if BotConfig.MultiturnV1Enabled {
+		t.Fatal("MultiturnV1Enabled must default false")
+	}
+
+	viper.Set("bot.multiturn_v1_enabled", true)
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper explicit flag: %v", err)
+	}
+	if !BotConfig.MultiturnV1Enabled {
+		t.Fatal("MultiturnV1Enabled must be true when bot.multiturn_v1_enabled=true")
+	}
+}
+
 func TestA2uiActionsEnabledDefaultsFalse(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)

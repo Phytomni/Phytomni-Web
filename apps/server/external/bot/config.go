@@ -68,6 +68,9 @@ type Config struct {
 	// /v1/interop/capabilities discovery call. It deliberately defaults false:
 	// a missing key must never expose Bot registry metadata to the browser.
 	InteropEnabled bool `json:"interop_enabled" yaml:"interop_enabled" mapstructure:"interop_enabled"`
+	// MultiturnV1Enabled enables the server-to-server conversation-context
+	// envelope. It stays false unless Bot capability negotiation succeeds.
+	MultiturnV1Enabled bool `json:"multiturn_v1_enabled" yaml:"multiturn_v1_enabled" mapstructure:"multiturn_v1_enabled"`
 	// ResearchEnabled, DesignEnabled, and NetworkEnabled are independent
 	// product gates for the remote agent surfaces. They intentionally default
 	// false so a missing config key cannot activate a Bot-backed product.
