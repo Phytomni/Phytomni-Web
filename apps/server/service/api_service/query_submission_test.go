@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
@@ -196,6 +197,90 @@ func TestQuerySubmissionUploadFailureSettlesFailed(t *testing.T) {
 	}
 	if row.Status != "FAILED" {
 		t.Fatalf("status = %q, want FAILED", row.Status)
+	}
+}
+
+func TestQuerySubmissionDefiniteBotFailuresSettleFailed(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     string
+		path     string
+		status   int
+		response string
+		wantErr  error
+	}{
+		{
+			name:     "chat API rejection",
+			mode:     "instant",
+			path:     "/v1/chat/completions",
+			status:   http.StatusBadRequest,
+			response: `{"error":{"code":"invalid_request","message":"bad request"}}`,
+		},
+		{
+			name:     "chat malformed response",
+			mode:     "instant",
+			path:     "/v1/chat/completions",
+			status:   http.StatusOK,
+			response: `{"id":`,
+		},
+		{
+			name:     "expert malformed response",
+			mode:     "expert",
+			path:     "/v1/query/route",
+			status:   http.StatusOK,
+			response: `{"id":"run-bad","agent":`,
+			wantErr:  ErrExpertRouteContract,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tc.path {
+					t.Errorf("Bot path = %s, want %s", r.URL.Path, tc.path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.response))
+			})
+
+			_, err := NewService().Query(context.Background(), "alice", QueryInput{
+				Query:        "definite failure",
+				Mode:         tc.mode,
+				ClientTurnID: "definite-" + strings.ReplaceAll(tc.name, " ", "-"),
+			})
+			if err == nil {
+				t.Fatal("expected Bot failure")
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tc.wantErr)
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.First(&row).Error; err != nil {
+				t.Fatal(err)
+			}
+			if row.Status != "FAILED" {
+				t.Fatalf("status = %q, want FAILED", row.Status)
+			}
+		})
+	}
+}
+
+func TestMySQLTurnWaitSecondsUsesBoundedAllocationBudget(t *testing.T) {
+	tests := []struct {
+		timeout time.Duration
+		want    int
+	}{
+		{timeout: 0, want: 1},
+		{timeout: 500 * time.Millisecond, want: 1},
+		{timeout: time.Second, want: 1},
+		{timeout: 31 * time.Second, want: maxMySQLTurnWaitSeconds},
+	}
+	for _, tc := range tests {
+		if got := mysqlTurnWaitSeconds(tc.timeout); got != tc.want {
+			t.Fatalf("mysqlTurnWaitSeconds(%s) = %d, want %d", tc.timeout, got, tc.want)
+		}
 	}
 }
 

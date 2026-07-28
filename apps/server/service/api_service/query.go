@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -70,6 +71,7 @@ var serviceClientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]
 const (
 	recentClientTurnLookupLimit = 200
 	turnAllocationTimeout       = time.Second
+	maxMySQLTurnWaitSeconds     = 30
 )
 
 var sqliteTurnAllocationLocks sync.Map
@@ -291,7 +293,12 @@ func withMySQLTurnAllocationLock(
 	defer conn.Close()
 
 	var acquired int
-	if err := conn.QueryRowContext(lockCtx, "SELECT GET_LOCK(?, 0)", key).Scan(&acquired); err != nil {
+	if err := conn.QueryRowContext(
+		lockCtx,
+		"SELECT GET_LOCK(?, ?)",
+		key,
+		mysqlTurnWaitSeconds(turnAllocationTimeout),
+	).Scan(&acquired); err != nil {
 		return err
 	}
 	if acquired != 1 {
@@ -319,6 +326,20 @@ func withTurnAllocationLock(
 		return withMySQLTurnAllocationLock(ctx, key, fn)
 	}
 	return withProcessTurnAllocationLock(ctx, key, fn)
+}
+
+func mysqlTurnWaitSeconds(timeout time.Duration) int {
+	seconds := int(timeout / time.Second)
+	if timeout%time.Second != 0 {
+		seconds++
+	}
+	if seconds < 1 {
+		return 1
+	}
+	if seconds > maxMySQLTurnWaitSeconds {
+		return maxMySQLTurnWaitSeconds
+	}
+	return seconds
 }
 
 func storedSubmissionOperation(
@@ -584,6 +605,9 @@ func (ps *Service) allocateV1Submission(
 		ArtifactRefs:               append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
 	}
 	if err := envelope.Validate(); err != nil {
+		if settleErr := failV1Submission(context.WithoutCancel(ctx), username, allocated.Id); settleErr != nil {
+			return nil, fmt.Errorf("validate conversation envelope: %v; settle submission: %w", err, settleErr)
+		}
 		return nil, err
 	}
 	return &v1Submission{row: allocated, envelope: envelope}, nil
@@ -612,6 +636,48 @@ func failV1Submission(
 		return fmt.Errorf("submitting row %d not found", rowID)
 	}
 	return nil
+}
+
+// isV1DefiniteFailure distinguishes a completed Bot rejection or malformed
+// response from a transport outcome whose request may already have reached
+// Bot. Only the former is safe to terminally settle before a retry.
+func isV1DefiniteFailure(err error) bool {
+	if err == nil || errors.Is(err, rxBot.ErrBotTimeout) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, io.ErrUnexpectedEOF) {
+		return false
+	}
+	var apiErr *rxBot.APIError
+	if errors.As(err, &apiErr) {
+		if apiErr.Retryable || apiErr.Status == 408 || apiErr.Status == 425 || apiErr.Status == 429 {
+			return false
+		}
+		return apiErr.Status >= 400 && apiErr.Status < 500
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return false
+	}
+	return true
+}
+
+func v1SubmissionError(
+	ctx context.Context,
+	username string,
+	submission *v1Submission,
+	err error,
+) error {
+	if submission == nil || !isV1DefiniteFailure(err) {
+		return err
+	}
+	if settleErr := failV1Submission(context.WithoutCancel(ctx), username, submission.row.Id); settleErr != nil {
+		return fmt.Errorf("%v; settle submission: %w", err, settleErr)
+	}
+	return err
 }
 
 func updateV1SubmissionUploads(
@@ -1132,16 +1198,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	for _, f := range in.Files {
 		up, err := uploadClient.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
 		if err != nil {
-			if v1 {
-				if settleErr := failV1Submission(
-					context.WithoutCancel(ctx),
-					username,
-					submission.row.Id,
-				); settleErr != nil {
-					return nil, fmt.Errorf("upload failed: %v; settle submission: %w", err, settleErr)
-				}
-			}
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		obsPaths = append(obsPaths, up.Path)
 		fileNames = append(fileNames, f.Filename)
@@ -1218,56 +1275,66 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		logBotResponseMeta(ctx, meta)
 		if err != nil {
 			if isExpertEnvelopeDecodeError(err) {
-				return nil, expertRouteContractError()
+				return nil, v1SubmissionError(
+					ctx,
+					username,
+					submission,
+					expertRouteContractError(),
+				)
 			}
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		resolvedSlug, _, err := resolveExpertAgent(resp)
 		if err != nil {
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		resolvedTool, err := validateExpertResolvedTool(resolvedSlug, permissions.AllowedTools, in.Tool)
 		if err != nil {
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
-		submission, err := DecodeAgentRunSubmission(resp)
+		botSubmission, err := DecodeAgentRunSubmission(resp)
 		if err != nil {
 			var projectionErr *ProjectionDecodeError
 			if errors.As(err, &projectionErr) && projectionErr.Field == "run_id" && projectionErr.Reason == "missing umbrella run id" {
-				return nil, ErrMissingBotRunID
+				return nil, v1SubmissionError(ctx, username, submission, ErrMissingBotRunID)
 			}
 			// Keep every malformed upstream envelope on the bounded gateway path;
 			// never expose decoder details or fabricate a successful tool.
-			return nil, expertRouteContractError()
+			return nil, v1SubmissionError(
+				ctx,
+				username,
+				submission,
+				expertRouteContractError(),
+			)
 		}
-		if err := validateExpertSubmissionAgent(resolvedSlug, submission.Agent); err != nil {
-			return nil, err
+		if err := validateExpertSubmissionAgent(resolvedSlug, botSubmission.Agent); err != nil {
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		routeRevision := metadataReportRevision(formattedMetadata(resp.Result.Formatted))
-		submission.ReportRevision = responseReportRevisionOrDefault(-1, resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
-		submission.TrackingDegraded = resp.DegradedTracking
-		expertProjection = &submission
+		botSubmission.ReportRevision = responseReportRevisionOrDefault(-1, resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
+		botSubmission.TrackingDegraded = resp.DegradedTracking
+		expertProjection = &botSubmission
 		slug = resolvedSlug
 		out.ToolName = resolvedTool
-		botRunID = submission.RunID
+		botRunID = botSubmission.RunID
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
-		if submission.InterOp != nil {
-			if strings.TrimSpace(submission.InterOp.Mode) == "" {
-				submission.InterOp.Mode = "off"
+		if botSubmission.InterOp != nil {
+			if strings.TrimSpace(botSubmission.InterOp.Mode) == "" {
+				botSubmission.InterOp.Mode = "off"
 			}
-			out.InterOp = interopProvenancePtr(*submission.InterOp)
+			out.InterOp = interopProvenancePtr(*botSubmission.InterOp)
 		}
-		out.DegradedInterop = out.DegradedInterop || submission.DegradedInterop
+		out.DegradedInterop = out.DegradedInterop || botSubmission.DegradedInterop
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
 		// Reshape by the slug Bot's router CHOSE (never "expert"), so cited/table
 		// formatting survives and SyncBotRuns reconciles async runs by agent slug.
-		if submission.Status == "SUCCEEDED" {
+		if botSubmission.Status == "SUCCEEDED" {
 			if resp.Result.Formatted != nil {
 				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
-		} else if submission.Status == "FAILED" {
+		} else if botSubmission.Status == "FAILED" {
 			// A required interop failure may arrive as status=running with
 			// formatted.metadata.status=FAILED and no task ids. The projection
 			// decoder has already normalized that nested outcome; keep the row
@@ -1278,7 +1345,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 		} else {
-			out.Status = submission.Status
+			out.Status = botSubmission.Status
 			logStatus = "sync_running"
 			if resp.Result.DedupHit {
 				taskID = resp.Result.TaskID
@@ -1304,7 +1371,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		resp, meta, err := executionClient.ChatCompletionWithMeta(ctx, req)
 		logBotResponseMeta(ctx, meta)
 		if err != nil {
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		botRunID = canonicalBotRunID(resp.RunID)
 		out.BotRunID = botRunID
@@ -1316,10 +1383,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			// assume choices[0] exists for this shape.
 			surface, surfaceErr := decodeInputRequiredSurface(resp.Interrupt)
 			if surfaceErr != nil {
-				return nil, surfaceErr
+				return nil, v1SubmissionError(ctx, username, submission, surfaceErr)
 			}
 			if botRunID == "" {
-				return nil, ErrMissingBotRunID
+				return nil, v1SubmissionError(ctx, username, submission, ErrMissingBotRunID)
 			}
 			out.Status = "INPUT_REQUIRED"
 			out.A2UI = surface
@@ -1352,7 +1419,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 		args, err := rxBot.BuildAgentArguments(slug, argumentInput)
 		if err != nil {
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		resp, meta, err := executionClient.InvokeAgentWithMeta(ctx, slug, rxBot.AgentRunRequest{
 			Arguments:  args,
@@ -1360,11 +1427,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		})
 		logBotResponseMeta(ctx, meta)
 		if err != nil {
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		botRunID, err = normalizeAgentRunResponseID(*resp)
 		if err != nil {
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
@@ -1376,7 +1443,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if interopAgent(slug) {
 			interopMetadata, metadataErr = decodeFormattedInteropMetadata(formattedMetadata(resp.Result.Formatted))
 			if metadataErr != nil {
-				return nil, metadataErr
+				return nil, v1SubmissionError(ctx, username, submission, metadataErr)
 			}
 		}
 		if interopAgent(slug) {
@@ -1431,7 +1498,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if (out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED") && botRunID == "" {
 		// A child task id cannot be used as the Bot run join key. Refuse to
 		// persist an unpollable row even when a legacy response has task_ids.
-		return nil, ErrMissingBotRunID
+		return nil, v1SubmissionError(ctx, username, submission, ErrMissingBotRunID)
 	}
 	out.TaskId = taskID
 
@@ -1931,16 +1998,7 @@ func (ps *Service) QueryStream(
 	for _, f := range in.Files {
 		up, err := uploadClient.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
 		if err != nil {
-			if v1 {
-				if settleErr := failV1Submission(
-					context.WithoutCancel(ctx),
-					username,
-					submission.row.Id,
-				); settleErr != nil {
-					return nil, fmt.Errorf("upload failed: %v; settle submission: %w", err, settleErr)
-				}
-			}
-			return nil, err
+			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		obsPaths = append(obsPaths, up.Path)
 		fileNames = append(fileNames, f.Filename)
@@ -1989,7 +2047,7 @@ func (ps *Service) QueryStream(
 	if err != nil {
 		// Pre-first-byte failure (auth / unsupported) surfaces as a normal
 		// error so the handler can still return a non-SSE status.
-		return nil, err
+		return nil, v1SubmissionError(ctx, username, submission, err)
 	}
 	defer rc.Close()
 
@@ -2089,7 +2147,7 @@ func (ps *Service) QueryStream(
 	if acc.Err() != nil {
 		streamErr = nil
 	}
-	retainSubmitting := v1 && streamErr != nil && acc.Err() == nil
+	retainSubmitting := v1 && streamErr != nil && acc.Err() == nil && !isV1DefiniteFailure(streamErr)
 
 	// Finalize the row opened above. WithoutCancel preserves request-scoped DB
 	// values while ensuring a browser abort or upstream disconnect cannot leave
