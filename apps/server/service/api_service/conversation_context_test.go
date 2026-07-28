@@ -151,6 +151,28 @@ func TestSaveAndLoadBotConversationContextIsOwnerScoped(t *testing.T) {
 	}
 }
 
+func TestSaveBotConversationContextIsIdempotent(t *testing.T) {
+	setupTestDB(t)
+	if err := setupProjectionRow(33, "alice@example.com", 5, `{"run_id":"run-33","status":"SUCCEEDED"}`); err != nil {
+		t.Fatal(err)
+	}
+	want := validPersistedConversationContext()
+	if err := SaveBotConversationContext(context.Background(), "alice@example.com", 33, want); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveBotConversationContext(context.Background(), "alice@example.com", 33, want); err != nil {
+		t.Fatalf("identical context save error=%v", err)
+	}
+
+	got, err := LoadBotConversationContext(context.Background(), "alice@example.com", 33)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ClientTurnID != want.ClientTurnID || got.SettlementState != want.SettlementState || len(got.ArtifactRefs) != 1 {
+		t.Fatalf("idempotent save changed context=%#v, want %#v", got, want)
+	}
+}
+
 func TestLoadBotConversationContextReturnsZeroForLegacyProjection(t *testing.T) {
 	setupTestDB(t)
 	if err := setupProjectionRow(32, "alice@example.com", 2, `{"run_id":"run-32"}`); err != nil {

@@ -176,6 +176,9 @@ func SaveBotConversationContext(ctx context.Context, username string, rowID int6
 		if err != nil {
 			return err
 		}
+		if encoded == currentRaw {
+			return nil
+		}
 		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 			Where("id = ? AND user_name = ? AND bot_report_revision = ? AND COALESCE(bot_projection_json, '') = ?", rowID, username, currentRevision, currentRaw).
 			Updates(map[string]interface{}{"bot_projection_json": encoded})
