@@ -1,5 +1,5 @@
 import { nextTick } from "vue";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useArtifactPanel } from "@/views/chat/composables/useArtifactPanel";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import type { ChatMessage } from "@/views/chat/types";
@@ -40,6 +40,40 @@ describe("useArtifactPanel", () => {
     expect(panel.currentArtifactMessage.value).toBe(
       states.getChatState("A").renderedChat?.messages[0]
     );
+  });
+
+  it("downloads only a signed link owned by the selected message", () => {
+    const { states, panel } = makePanel();
+    const artifact = {
+      id: "artifact-1",
+      name: "report.pdf",
+      kind: "report" as const,
+      download_url:
+        "/api/v1/downloads/relay-file?token=signed-token&t=signed-token",
+    };
+    states.currentChatId.value = "A";
+    states.currentChat.value = {
+      dialogue_id: "A",
+      messages: [eligibleMessage("42", { artifacts: [artifact] })],
+    };
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    panel.openArtifact("42");
+    panel.downloadArtifact({
+      ...artifact,
+      download_url: "https://evil.invalid",
+    });
+
+    expect(panel.currentArtifactLinks.value).toEqual([artifact]);
+    expect(open).toHaveBeenCalledWith(
+      artifact.download_url,
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    panel.downloadArtifact({ ...artifact, id: "foreign-artifact" });
+    expect(open).toHaveBeenCalledTimes(1);
+    open.mockRestore();
   });
 
   it.each([

@@ -22,6 +22,10 @@ type StreamResult = {
   dialogueId?: string;
   messageId?: string;
   completed?: boolean;
+  contextNotice?: {
+    context_rebuilt?: boolean;
+    context_degraded?: boolean;
+  };
 };
 type StreamInput = {
   placeholder: ChatMessage;
@@ -236,6 +240,226 @@ describe("useSendMessage", () => {
     );
     expect(stateA.pendingTurnId).toBeNull();
     expect(stateA.pendingTurnFingerprint).toBeNull();
+  });
+
+  it("keeps a blocking answer with authorized artifacts when context is degraded", async () => {
+    stateFor("A").messageInput = "Build report";
+    const relayURL =
+      "/api/v1/downloads/relay-file?token=signed-token&t=signed-token";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "The report is ready.",
+          id: "msg-artifact",
+          context_rebuilt: true,
+          context_degraded: true,
+          artifacts: [
+            {
+              id: "artifact-1",
+              name: "report.pdf",
+              kind: "report",
+              download_url: relayURL,
+            },
+          ],
+        },
+      })
+    );
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const assistant = lastMessageFor(stateFor("A"), "artifact response");
+    expect(assistant.content).toBe("The report is ready.");
+    expect(assistant.artifacts).toEqual([
+      {
+        id: "artifact-1",
+        name: "report.pdf",
+        kind: "report",
+        download_url: relayURL,
+      },
+    ]);
+    expect(assistant.download_path).toBe(relayURL);
+    expect(assistant.contextNotice).toEqual({
+      rebuilt: true,
+      degraded: true,
+    });
+    expect(ElMessage.warning).toHaveBeenCalledWith("chat.contextDegraded");
+  });
+
+  it("reuses a client turn id across a same-draft network retry while request keys change", async () => {
+    const { isNetworkError } = await import("@/utils/network-error");
+    vi.mocked(isNetworkError).mockReturnValueOnce(true);
+    vi.useFakeTimers();
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("network"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+    const { sendMessage } = makeComposable();
+
+    let firstTurnId: FormDataEntryValue | null = null;
+    let firstRequestId: string | undefined;
+    try {
+      const firstSend = sendMessage();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1000);
+      await firstSend;
+      const firstCall = queryCallAt(0, "first uncertain attempt");
+      firstTurnId = (firstCall[0] as FormData).get("client_turn_id");
+      firstRequestId = firstCall[1];
+      expect(stateFor("A").pendingTurnId).toBe(firstTurnId);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    stateFor("A").messageInput = "hi";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: { tool_name: "ChatAgent", answer: "accepted", id: "msg-retry" },
+      })
+    );
+    await sendMessage();
+
+    const secondCall = queryCallAt(1, "second accepted attempt");
+    expect((secondCall[0] as FormData).get("client_turn_id")).toBe(firstTurnId);
+    expect(secondCall[1]).not.toBe(firstRequestId);
+    expect(stateFor("A").pendingTurnId).toBeNull();
+    consoleError.mockRestore();
+  });
+
+  it("uses a new client turn id when the retry draft is edited", async () => {
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("first failure"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const firstTurnId = (queryCallAt(0, "first draft")[0] as FormData).get(
+      "client_turn_id"
+    );
+    stateFor("A").messageInput = "edited";
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("second failure"));
+    await sendMessage();
+
+    const secondTurnId = (queryCallAt(1, "edited draft")[0] as FormData).get(
+      "client_turn_id"
+    );
+    expect(secondTurnId).toMatch(/^turn-/);
+    expect(secondTurnId).not.toBe(firstTurnId);
+    consoleError.mockRestore();
+  });
+
+  it("uses distinct client turn ids for consecutive accepted sends", async () => {
+    mockGetQueryAbortable
+      .mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: { tool_name: "ChatAgent", answer: "first", id: "msg-first" },
+        })
+      )
+      .mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: { tool_name: "ChatAgent", answer: "second", id: "msg-second" },
+        })
+      );
+    const { sendMessage } = makeComposable();
+
+    await sendMessage();
+    stateFor("A").messageInput = "next intentional turn";
+    await sendMessage();
+
+    const firstTurnId = (
+      queryCallAt(0, "first accepted send")[0] as FormData
+    ).get("client_turn_id");
+    const secondTurnId = (
+      queryCallAt(1, "second accepted send")[0] as FormData
+    ).get("client_turn_id");
+    expect(firstTurnId).toMatch(/^turn-/);
+    expect(secondTurnId).toMatch(/^turn-/);
+    expect(secondTurnId).not.toBe(firstTurnId);
+  });
+
+  it("clears only definite 4xx turn identity and preserves uncertain 5xx identity", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+    const { sendMessage } = makeComposable();
+    mockGetQueryAbortable.mockRejectedValueOnce({
+      response: { status: 422, data: { pre_dispatch: true } },
+    });
+
+    await sendMessage();
+    expect(stateFor("A").pendingTurnId).toBeNull();
+
+    stateFor("A").messageInput = "server uncertainty";
+    mockGetQueryAbortable.mockRejectedValueOnce({ response: { status: 503 } });
+    await sendMessage();
+
+    expect(stateFor("A").pendingTurnId).toMatch(/^turn-/);
+    consoleError.mockRestore();
+  });
+
+  it("reuses a client turn id when an unchanged retry switches from blocking to stream", async () => {
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("blocking failure"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+    const firstCall = queryCallAt(0, "blocking attempt");
+    const firstTurnId = (firstCall[0] as FormData).get("client_turn_id");
+    const firstRequestId = firstCall[1];
+
+    stateFor("A").messageInput = "hi";
+    vi.stubEnv("VITE_STREAM_ENABLED", "true");
+    streamHarness.streamMessage.mockResolvedValueOnce({
+      messageId: "22",
+      completed: true,
+    });
+    await sendMessage();
+
+    const streamCall = mustGet(
+      streamHarness.streamMessage.mock.calls[0],
+      "stream retry"
+    )[0];
+    expect(streamCall.clientTurnId).toBe(firstTurnId);
+    expect(streamCall.formData.get("client_turn_id")).toBe(firstTurnId);
+    expect(streamCall.requestId).not.toBe(firstRequestId);
+    expect(stateFor("A").pendingTurnId).toBeNull();
+    consoleError.mockRestore();
+  });
+
+  it("keeps client turn identities isolated between dialogues", async () => {
+    const pendingA = deferred<ApiEnvelope<DecodedQueryData>>();
+    const pendingB = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable
+      .mockReturnValueOnce(pendingA.promise)
+      .mockReturnValueOnce(pendingB.promise);
+    const { sendMessage } = makeComposable();
+
+    const sentA = sendMessage();
+    await Promise.resolve();
+    currentChatId.value = "B";
+    currentChat.value = { messages: [] };
+    stateFor("B").messageInput = "question B";
+    const sentB = sendMessage();
+    await Promise.resolve();
+
+    const turnA = (queryCallAt(0, "dialogue A")[0] as FormData).get(
+      "client_turn_id"
+    );
+    const turnB = (queryCallAt(1, "dialogue B")[0] as FormData).get(
+      "client_turn_id"
+    );
+    expect(turnA).toMatch(/^turn-/);
+    expect(turnB).toMatch(/^turn-/);
+    expect(turnB).not.toBe(turnA);
+    expect(stateFor("A").pendingTurnId).toBe(turnA);
+    expect(stateFor("B").pendingTurnId).toBe(turnB);
+
+    pendingA.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: { tool_name: "ChatAgent", answer: "A", id: "msg-a" },
+      })
+    );
+    pendingB.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: { tool_name: "ChatAgent", answer: "B", id: "msg-b" },
+      })
+    );
+    await Promise.all([sentA, sentB]);
   });
 
   it("commits each successful turn so the next request carries current multi-turn history", async () => {
@@ -1457,6 +1681,33 @@ describe("useSendMessage", () => {
     );
     expect(assistant.streamPresentationKey).toBe(capturedRequestId);
     expect(assistant.id).toBeUndefined();
+  });
+
+  it("keeps a streamed answer when context staging degrades", async () => {
+    vi.stubEnv("VITE_STREAM_ENABLED", "true");
+    const state = stateFor("A");
+    state.messageInput = "stream with context";
+    state.activeAgentName = "ChatAgent";
+    state.mode = "instant";
+    streamHarness.streamMessage.mockImplementationOnce(
+      async ({ placeholder }) => {
+        placeholder.content = "Streamed answer survives.";
+        placeholder.status = "SUCCEEDED";
+        placeholder.streaming = false;
+        return {
+          completed: true,
+          messageId: "stream-message-1",
+          contextNotice: { context_degraded: true },
+        };
+      }
+    );
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const assistant = lastMessageFor(state, "degraded stream response");
+    expect(assistant.content).toBe("Streamed answer survives.");
+    expect(ElMessage.warning).toHaveBeenCalledWith("chat.contextDegraded");
   });
 
   it("Stop then late 200 does not append a second assistant row; peer dialogue stays sending", async () => {

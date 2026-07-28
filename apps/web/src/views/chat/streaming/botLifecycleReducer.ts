@@ -9,6 +9,8 @@ import type {
   BotRunProjection,
   BotRunStatus,
 } from "../botProjection";
+import type { ConversationContextNotice } from "@/api/types";
+import type { AguiEvent } from "./aguiEvents";
 
 export type BotLifecycleStatus =
   "RUNNING" | "INPUT_REQUIRED" | "SUCCEEDED" | "FAILED";
@@ -28,6 +30,39 @@ export interface BotLifecycleState {
 }
 
 const TERMINAL_STATUSES = new Set<BotLifecycleStatus>(["SUCCEEDED", "FAILED"]);
+
+export function reduceContextStagedNotice(
+  current: ConversationContextNotice,
+  event: AguiEvent
+): ConversationContextNotice {
+  if (
+    event.type !== "Custom" ||
+    event.data.name !== "phyto.context_staged" ||
+    typeof event.data.value !== "object" ||
+    event.data.value === null ||
+    Array.isArray(event.data.value)
+  ) {
+    return current;
+  }
+  const value = event.data.value as Record<string, unknown>;
+  const rebuilt =
+    typeof value.context_rebuilt === "boolean"
+      ? value.context_rebuilt
+      : undefined;
+  const degraded =
+    typeof value.context_degraded === "boolean"
+      ? value.context_degraded
+      : undefined;
+  if (rebuilt === undefined && degraded === undefined) return current;
+  return {
+    ...(current.context_rebuilt === true || rebuilt === true
+      ? { context_rebuilt: true }
+      : {}),
+    ...(current.context_degraded === true || degraded === true
+      ? { context_degraded: true }
+      : {}),
+  };
+}
 
 const SAFE_FAILURE_MESSAGES: Record<string, string> = {
   failed: "analysis task failed",

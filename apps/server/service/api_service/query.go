@@ -425,8 +425,12 @@ func validateDuplicateSubmission(
 	return nil
 }
 
-func queryDataFromStoredRow(row model.QuestionAgentLog) *QueryData {
-	return &QueryData{
+func (ps *Service) queryDataFromStoredRow(
+	ctx context.Context,
+	username string,
+	row model.QuestionAgentLog,
+) (*QueryData, error) {
+	out := &QueryData{
 		Id:                row.Id,
 		ToolName:          row.ToolName,
 		Answer:            row.Answer,
@@ -442,6 +446,12 @@ func queryDataFromStoredRow(row model.QuestionAgentLog) *QueryData {
 		TaskId:            row.TaskId,
 		ReportRevision:    row.BotReportRevision,
 	}
+	if row.Status == statusSucceeded {
+		if err := ps.decorateConversationQueryData(ctx, username, out); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func requestedAgentForV1(in QueryInput) *string {
@@ -692,7 +702,10 @@ func (ps *Service) allocateV1Submission(
 			if existing.Status != "SUBMITTING" ||
 				(!existing.UpdatedAt.IsZero() &&
 					time.Since(existing.UpdatedAt) < turnSubmissionLease) {
-				duplicate = queryDataFromStoredRow(*existing)
+				duplicate, err = ps.queryDataFromStoredRow(ctx, username, *existing)
+				if err != nil {
+					return err
+				}
 			}
 			return nil
 		}
@@ -1096,25 +1109,55 @@ func IsDedicatedAgentProductTool(tool string) bool {
 // QueryData is the response payload the Web app reads off response.data. The
 // content fields are relayed from Bot; id/reaction are Web-owned.
 type QueryData struct {
-	Id                int64              `json:"id"`
-	ToolName          string             `json:"tool_name"`
-	Answer            string             `json:"answer"`
-	FollowUpQuestions string             `json:"follow_up_questions"`
-	Status            string             `json:"status"`
-	UploadPath        string             `json:"upload_path"`
-	DownloadPath      string             `json:"download_path"`
-	ServerFilePath    string             `json:"server_file_path"`
-	ComputeResource   string             `json:"compute_resource"`
-	ReactionType      string             `json:"reaction_type"`
-	DialogueId        string             `json:"dialogue_id"`
-	BotRunID          string             `json:"bot_run_id,omitempty"`
-	TaskId            string             `json:"task_id,omitempty"`
-	TrackingDegraded  bool               `json:"tracking_degraded,omitempty"`
-	ReportRevision    int64              `json:"report_revision,omitempty"`
-	RequestID         string             `json:"request_id,omitempty"`
-	A2UI              *A2uiSurfaceDTO    `json:"a2ui,omitempty"`
-	DegradedInterop   bool               `json:"degraded_interop,omitempty"`
-	InterOp           *InteropProvenance `json:"interop,omitempty"`
+	Id                int64                      `json:"id"`
+	ToolName          string                     `json:"tool_name"`
+	Answer            string                     `json:"answer"`
+	FollowUpQuestions string                     `json:"follow_up_questions"`
+	Status            string                     `json:"status"`
+	UploadPath        string                     `json:"upload_path"`
+	DownloadPath      string                     `json:"download_path"`
+	ServerFilePath    string                     `json:"server_file_path"`
+	ComputeResource   string                     `json:"compute_resource"`
+	ReactionType      string                     `json:"reaction_type"`
+	DialogueId        string                     `json:"dialogue_id"`
+	BotRunID          string                     `json:"bot_run_id,omitempty"`
+	TaskId            string                     `json:"task_id,omitempty"`
+	TrackingDegraded  bool                       `json:"tracking_degraded,omitempty"`
+	ReportRevision    int64                      `json:"report_revision,omitempty"`
+	RequestID         string                     `json:"request_id,omitempty"`
+	A2UI              *A2uiSurfaceDTO            `json:"a2ui,omitempty"`
+	DegradedInterop   bool                       `json:"degraded_interop,omitempty"`
+	InterOp           *InteropProvenance         `json:"interop,omitempty"`
+	Artifacts         []ConversationArtifactLink `json:"artifacts,omitempty"`
+	ContextRebuilt    bool                       `json:"context_rebuilt,omitempty"`
+	ContextDegraded   bool                       `json:"context_degraded,omitempty"`
+}
+
+func (ps *Service) decorateConversationQueryData(
+	ctx context.Context,
+	username string,
+	out *QueryData,
+) error {
+	if out == nil || out.Id <= 0 || out.DialogueId == "" {
+		return nil
+	}
+	links, err := ps.conversationArtifactLinks(ctx, username, out.DialogueId, out.Id)
+	if err != nil {
+		return err
+	}
+	out.Artifacts = links
+	private, err := LoadBotConversationContext(ctx, username, out.Id)
+	if err != nil {
+		return err
+	}
+	if private.Stage != nil {
+		out.ContextRebuilt = private.Stage.ContextRebuilt
+		out.ContextDegraded = private.Stage.ContextDegraded
+	}
+	if private.SettlementState == conversationSettlementRebuildRequired {
+		out.ContextDegraded = true
+	}
+	return nil
 }
 
 // StreamIdentity is the Web-owned identity of a streamed assistant message.
@@ -1984,6 +2027,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				contextStage,
 			)
 		}
+		if err := ps.decorateConversationQueryData(ctx, username, out); err != nil {
+			return nil, err
+		}
 		return out, nil
 	}
 
@@ -2794,6 +2840,9 @@ func (ps *Service) QueryStream(
 				ledgerVersion,
 				stage,
 			)
+		}
+		if err := ps.decorateConversationQueryData(finalizeCtx, username, out); err != nil {
+			return nil, err
 		}
 		return out, nil
 	}

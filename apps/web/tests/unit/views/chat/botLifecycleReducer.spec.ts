@@ -8,6 +8,7 @@ import {
 import type { BotArtifact, BotRunProjection } from "@/views/chat/botProjection";
 import {
   initBotLifecycleState,
+  reduceContextStagedNotice,
   reduceBotFailure,
   reduceBotProjection,
 } from "@/views/chat/streaming/botLifecycleReducer";
@@ -48,6 +49,54 @@ function artifact(outputDir: string, paths: string[] = []): BotArtifact {
 }
 
 describe("bot lifecycle reducer", () => {
+  it("retains only public context booleans from context-staged events", () => {
+    const notice = reduceContextStagedNotice(
+      {},
+      {
+        type: "Custom",
+        data: {
+          name: "phyto.context_staged",
+          value: {
+            context_rebuilt: true,
+            context_degraded: true,
+            context_version: 8,
+            context_hash: "private-hash",
+            assistant_summary: "private summary",
+          },
+        },
+      }
+    );
+
+    expect(notice).toEqual({
+      context_rebuilt: true,
+      context_degraded: true,
+    });
+    expect(JSON.stringify(notice)).not.toContain("private");
+  });
+
+  it("ignores unknown and malformed custom context events", () => {
+    const current = { context_rebuilt: true };
+
+    expect(
+      reduceContextStagedNotice(current, {
+        type: "Custom",
+        data: {
+          name: "phyto.other",
+          value: { context_degraded: true },
+        },
+      })
+    ).toBe(current);
+    expect(
+      reduceContextStagedNotice(current, {
+        type: "Custom",
+        data: {
+          name: "phyto.context_staged",
+          value: { context_degraded: "true" },
+        },
+      })
+    ).toBe(current);
+  });
+
   it("accepts a newer revision while status stays RUNNING", () => {
     const state = reduceBotProjection(
       initBotLifecycleState(),

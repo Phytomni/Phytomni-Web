@@ -3,10 +3,13 @@ package api_service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/middleware"
@@ -20,6 +23,130 @@ func TestParseProjectionArtifactsRejectsPathOutsideOutputDirectory(t *testing.T)
 		if _, err := rxBot.ParseRunProjectionArtifacts(json.RawMessage(raw)); err == nil {
 			t.Fatalf("expected artifact path containment error for %s", raw)
 		}
+	}
+}
+
+func TestConversationArtifactLinksRequireOwnerDialogueAndMessageRow(t *testing.T) {
+	gdb := setupTestDB(t)
+	raw, err := marshalPersistedProjection(BotRunProjection{
+		ReportRevision: 1,
+		Artifacts: ProjectionArtifacts{
+			Directories: []string{"obs://bucket/alice/run-1"},
+			Paths:       []string{"obs://bucket/alice/run-1/report.pdf"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, status, bot_projection_json, bot_report_revision, created_at)
+		VALUES (120, 'dlg-artifact', 0, 'alice', 'SUCCEEDED', ?, 1, '2026-01-01 00:00:00')`, raw).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService()
+	links, err := service.conversationArtifactLinks(
+		context.Background(), "alice", "dlg-artifact", 120,
+	)
+	if err != nil || len(links) != 1 {
+		t.Fatalf("links=%#v err=%v", links, err)
+	}
+	if links[0].Name != "report.pdf" || links[0].Kind != "report" {
+		t.Fatalf("link=%#v", links[0])
+	}
+	parsed, err := url.Parse(links[0].DownloadURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := parsed.Query().Get("token")
+	if token == "" || parsed.Query().Get("t") != token {
+		t.Fatalf("download URL missing compatible signed token: %q", links[0].DownloadURL)
+	}
+	if key, err := middleware.ParseDownloadToken(token); err != nil ||
+		key != "obs://bucket/alice/run-1/report.pdf" {
+		t.Fatalf("signed key=%q err=%v", key, err)
+	}
+	encoded, err := json.Marshal(links)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "obs://") ||
+		strings.Contains(string(encoded), "bucket") {
+		t.Fatalf("browser DTO leaked storage path: %s", encoded)
+	}
+
+	for _, attempt := range []struct {
+		user, dialogue string
+		row            int64
+	}{
+		{user: "bob", dialogue: "dlg-artifact", row: 120},
+		{user: "alice", dialogue: "dlg-other", row: 120},
+		{user: "alice", dialogue: "dlg-artifact", row: 121},
+	} {
+		if _, err := service.conversationArtifactLinks(
+			context.Background(), attempt.user, attempt.dialogue, attempt.row,
+		); !errors.Is(err, ErrConversationArtifactOwnership) {
+			t.Fatalf("attempt=%#v err=%v", attempt, err)
+		}
+	}
+}
+
+func TestConversationArtifactLinksRegenerateAndExpiredTokensFail(t *testing.T) {
+	gdb := setupTestDB(t)
+	raw, err := marshalPersistedProjection(BotRunProjection{
+		ReportRevision: 1,
+		Artifacts: ProjectionArtifacts{
+			Directories: []string{"/obs/bucket/alice/run-2"},
+			Paths:       []string{"/obs/bucket/alice/run-2/table.csv"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, status, bot_projection_json, bot_report_revision, created_at)
+		VALUES (121, 'dlg-regenerate', 0, 'alice', 'SUCCEEDED', ?, 1, '2026-01-01 00:00:00')`, raw).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewService()
+	first, err := service.conversationArtifactLinks(
+		context.Background(), "alice", "dlg-regenerate", 121,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	second, err := service.conversationArtifactLinks(
+		context.Background(), "alice", "dlg-regenerate", 121,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[0].DownloadURL == second[0].DownloadURL ||
+		first[0].ID != second[0].ID {
+		t.Fatalf("links were not freshly signed with stable identity: %#v %#v", first, second)
+	}
+	var persistedProjection string
+	if err := gdb.Raw(
+		`SELECT bot_projection_json FROM question_agent_logs WHERE id = ?`,
+		121,
+	).Scan(&persistedProjection).Error; err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(persistedProjection, "relay-file") ||
+		strings.Contains(persistedProjection, first[0].DownloadURL) {
+		t.Fatalf("signed URL became durable message data: %s", persistedProjection)
+	}
+
+	expired, err := middleware.GenerateDownloadToken(
+		"/obs/bucket/alice/run-2/table.csv",
+		-time.Minute,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := middleware.ParseDownloadToken(expired); err == nil {
+		t.Fatal("expired artifact token must fail")
 	}
 }
 

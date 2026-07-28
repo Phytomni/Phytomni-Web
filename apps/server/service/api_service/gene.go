@@ -2,13 +2,16 @@ package api_service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 
 	"phytomni-server/common/document_format"
 	rxBot "phytomni-server/external/bot"
@@ -19,13 +22,25 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"gorm.io/gorm"
 )
 
 // gene-example OBS/obsfs layout: md/<GENE>_result.md and img/<GENE>/<file>.
 const (
 	geneObsSubMd  = "md/"
 	geneRelayRoot = "gene-examples/"
+
+	maxConversationArtifactLinks     = 50
+	maxConversationArtifactNameBytes = 255
+	maxConversationArtifactURLBytes  = 2 << 10
 )
+
+type ConversationArtifactLink struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	DownloadURL string `json:"download_url"`
+}
 
 // geneObsfsDir returns the configured obsfs mount root if it is a readable
 // directory, else "" (→ caller uses the relay fallback).
@@ -338,7 +353,95 @@ func relayDownloadURL(obsKey string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "/api/v1/downloads/relay-file?t=" + url.QueryEscape(token), nil
+	escaped := url.QueryEscape(token)
+	// token is the canonical browser contract. Keep t as the relay handler's
+	// compatibility alias until that public endpoint is versioned separately.
+	return "/api/v1/downloads/relay-file?token=" + escaped + "&t=" + escaped, nil
+}
+
+func conversationArtifactKind(name string) string {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".pdf", ".md", ".doc", ".docx", ".html", ".htm":
+		return "report"
+	case ".csv", ".tsv", ".xls", ".xlsx", ".parquet":
+		return "table"
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp":
+		return "image"
+	case ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz":
+		return "archive"
+	default:
+		return "file"
+	}
+}
+
+func conversationArtifactID(rowID int64, artifactPath string) string {
+	sum := sha256.Sum256([]byte(strconv.FormatInt(rowID, 10) + "\x00" + artifactPath))
+	return fmt.Sprintf("%x", sum[:])
+}
+
+// conversationArtifactLinks signs only paths stored on the authenticated,
+// successful message row. The returned DTO never contains the OBS reference.
+func (ps *Service) conversationArtifactLinks(
+	ctx context.Context,
+	username string,
+	dialogueID string,
+	rowID int64,
+) ([]ConversationArtifactLink, error) {
+	var row model.QuestionAgentLog
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Select("id, user_name, dialogue_id, status, bot_projection_json, bot_report_revision").
+		Where(
+			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND UPPER(status) = ?",
+			rowID,
+			username,
+			dialogueID,
+			statusSucceeded,
+		).
+		Take(&row)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
+		return nil, ErrConversationArtifactOwnership
+	}
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	projection, err := LoadBotRunProjection(ctx, username, rowID)
+	if err != nil {
+		return nil, err
+	}
+	links := make([]ConversationArtifactLink, 0)
+	seen := make(map[string]struct{})
+	for _, artifactPath := range projection.Artifacts.Paths {
+		if len(links) == maxConversationArtifactLinks {
+			break
+		}
+		if _, duplicate := seen[artifactPath]; duplicate {
+			continue
+		}
+		if rxBot.ValidateProjectionOBSPath(artifactPath) != nil {
+			return nil, ErrConversationArtifactOwnership
+		}
+		name := path.Base(artifactPath)
+		if name == "." || name == "/" || name == "" ||
+			len([]byte(name)) > maxConversationArtifactNameBytes {
+			return nil, ErrConversationArtifactOwnership
+		}
+		downloadURL, err := relayDownloadURL(artifactPath)
+		if err != nil {
+			return nil, err
+		}
+		if len([]byte(downloadURL)) > maxConversationArtifactURLBytes {
+			return nil, ErrConversationArtifactOwnership
+		}
+		links = append(links, ConversationArtifactLink{
+			ID:          conversationArtifactID(rowID, artifactPath),
+			Name:        name,
+			Kind:        conversationArtifactKind(name),
+			DownloadURL: downloadURL,
+		})
+		seen[artifactPath] = struct{}{}
+	}
+	return links, nil
 }
 
 func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {

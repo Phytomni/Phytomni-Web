@@ -111,7 +111,22 @@ export interface QueryRequest {
   interop_targets?: string[];
 }
 
-export interface QueryData {
+export interface ConversationContextNotice {
+  context_rebuilt?: boolean;
+  context_degraded?: boolean;
+}
+
+export type ConversationArtifactKind =
+  "file" | "report" | "table" | "image" | "archive";
+
+export interface ConversationArtifactLink {
+  id: string;
+  name: string;
+  kind: ConversationArtifactKind;
+  download_url: string;
+}
+
+export interface QueryData extends ConversationContextNotice {
   /** Backend QuestionAgentLog IDs are JSON numbers; legacy adapters may use strings. */
   id?: number | string;
   final_answer?: string;
@@ -136,16 +151,9 @@ export interface QueryData {
   mode?: "instant" | "expert";
   query?: string;
   steps?: unknown[];
-  /** Bounded semantic-context outcome; malformed values are ignored by the decoder. */
-  context_rebuilt?: boolean;
-  context_degraded?: boolean;
   /** The A2UI parser owns the nested surface contract. */
   a2ui?: unknown;
-}
-
-export interface ConversationContextNotice {
-  context_rebuilt?: boolean;
-  context_degraded?: boolean;
+  artifacts?: ConversationArtifactLink[];
 }
 
 export interface ConversationSummary {
@@ -314,6 +322,84 @@ function optionalBooleanField(
   }
   if (typeof value[key] !== "boolean") invalid(label);
   return value[key] as boolean;
+}
+
+const MAX_CONVERSATION_ARTIFACTS = 50;
+const MAX_CONVERSATION_ARTIFACT_ID_BYTES = 128;
+const MAX_CONVERSATION_ARTIFACT_NAME_BYTES = 255;
+const MAX_CONVERSATION_ARTIFACT_URL_BYTES = 2 << 10;
+const CONVERSATION_ARTIFACT_KINDS = new Set<ConversationArtifactKind>([
+  "file",
+  "report",
+  "table",
+  "image",
+  "archive",
+]);
+const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+const utf8Length = (value: string): number =>
+  new TextEncoder().encode(value).length;
+
+export function isConversationArtifactDownloadURL(
+  value: unknown
+): value is string {
+  if (
+    typeof value !== "string" ||
+    utf8Length(value) > MAX_CONVERSATION_ARTIFACT_URL_BYTES ||
+    !value.startsWith("/api/v1/downloads/relay-file?token=") ||
+    value.includes("#")
+  ) {
+    return false;
+  }
+  const params = new URLSearchParams(value.slice(value.indexOf("?") + 1));
+  const keys = [...params.keys()];
+  if (
+    keys.some((key) => key !== "token" && key !== "t") ||
+    params.getAll("token").length !== 1 ||
+    params.getAll("t").length > 1
+  ) {
+    return false;
+  }
+  const token = params.get("token");
+  const relayAlias = params.get("t");
+  return (
+    typeof token === "string" &&
+    token.length > 0 &&
+    !/[\s\u0000]/u.test(token) &&
+    (relayAlias === null || relayAlias === token)
+  );
+}
+
+function decodeConversationArtifacts(
+  value: unknown
+): ConversationArtifactLink[] {
+  if (!Array.isArray(value) || value.length > MAX_CONVERSATION_ARTIFACTS) {
+    invalid("chat response");
+  }
+  const seen = new Set<string>();
+  return value.map((item) => {
+    if (!isRecord(item)) invalid("chat response");
+    const id = requiredString(item, "id", "chat response");
+    const name = requiredString(item, "name", "chat response");
+    const kind = requiredString(item, "kind", "chat response");
+    const downloadURL = requiredString(item, "download_url", "chat response");
+    if (
+      utf8Length(id) > MAX_CONVERSATION_ARTIFACT_ID_BYTES ||
+      !ARTIFACT_ID_PATTERN.test(id) ||
+      seen.has(id) ||
+      utf8Length(name) > MAX_CONVERSATION_ARTIFACT_NAME_BYTES ||
+      !CONVERSATION_ARTIFACT_KINDS.has(kind as ConversationArtifactKind) ||
+      !isConversationArtifactDownloadURL(downloadURL)
+    ) {
+      invalid("chat response");
+    }
+    seen.add(id);
+    return {
+      id,
+      name,
+      kind: kind as ConversationArtifactKind,
+      download_url: downloadURL,
+    };
+  });
 }
 
 function decodeDetail(value: unknown): ApiDetail {
@@ -595,6 +681,12 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
   }
   if (hasOwn(value, "interop")) result.interop = decodeInterop(value.interop);
   if (hasOwn(value, "a2ui")) result.a2ui = value.a2ui;
+  if (hasOwn(value, "artifacts")) {
+    result.artifacts = decodeConversationArtifacts(value.artifacts);
+    if (!result.download_path && result.artifacts.length > 0) {
+      result.download_path = result.artifacts[0].download_url;
+    }
+  }
   const contextNotice = decodeConversationContextNotice(value);
   if (contextNotice) {
     if (contextNotice.context_rebuilt !== undefined) {

@@ -1,6 +1,7 @@
 import { computed, watch } from "vue";
 import type { Ref } from "vue";
 import type { ArtifactTab, ChatMessage, ChatUIState, ChatView } from "../types";
+import type { ConversationArtifactLink } from "@/api/types";
 import { artifactKindForMessage } from "../utils/artifact-policy";
 
 function normalizeServerMessageId(id: unknown): string | null {
@@ -44,6 +45,18 @@ export function useArtifactPanel(opts: {
     }
     return findEligibleMessage(activeArtifactMessageId.value);
   });
+  const currentArtifactLinks = computed(
+    (): readonly ConversationArtifactLink[] =>
+      currentArtifactMessage.value?.artifacts ?? []
+  );
+
+  const downloadArtifact = (artifact: ConversationArtifactLink) => {
+    const selected = currentArtifactLinks.value.find(
+      (item) => item.id === artifact.id
+    );
+    if (!selected) return;
+    window.open(selected.download_url, "_blank", "noopener,noreferrer");
+  };
 
   const resetArtifact = (state: ChatUIState) => {
     state.artifactOpen = false;
@@ -121,6 +134,8 @@ export function useArtifactPanel(opts: {
     activeArtifactMessageId,
     artifactTab,
     currentArtifactMessage,
+    currentArtifactLinks,
+    downloadArtifact,
     openArtifact,
     closeArtifact,
     selectArtifactTab,

@@ -3,6 +3,10 @@ import type { BotInteropPayload, BotRunProjection } from "./botProjection";
 import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import type {
+  ConversationArtifactLink,
+  ConversationContextNotice,
+} from "@/api/types";
+import type {
   AgentStep,
   ChatContent,
   CitationDocument,
@@ -97,6 +101,7 @@ export interface ChatMessage {
   botProjection?: BotRunProjection;
   /** Monotonic report state derived from the sanitized Bot projection. */
   botLifecycle?: BotLifecycleState;
+  artifacts?: readonly ConversationArtifactLink[];
   /** Bounded, localized semantic-context status from the gateway. */
   contextNotice?: ChatContextNotice;
 }
@@ -139,7 +144,7 @@ export function normalizeChatContextNotice(
 /** Backward-compatible name for the bounded stream-block union. */
 export type ContentBlock = StreamContentBlock;
 
-export interface ChatResponse {
+export interface ChatResponse extends ConversationContextNotice {
   query: string;
   answer: string;
   id?: string;
@@ -166,6 +171,7 @@ export interface ChatResponse {
   context_degraded?: boolean;
   /** Bounded input-required surface from the Web Go gateway. */
   a2ui?: unknown;
+  artifacts?: ConversationArtifactLink[];
 }
 
 export type ChatHistoryHydrationStatus =

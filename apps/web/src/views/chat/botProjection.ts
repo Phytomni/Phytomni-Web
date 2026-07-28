@@ -678,7 +678,21 @@ function parseGoArtifactObject(value: JsonRecord): BotArtifact[] {
 
 function parseArtifacts(value: unknown): BotArtifact[] {
   if (value === undefined || value === null) return [];
-  if (Array.isArray(value)) return parseRawArtifactArray(value);
+  if (Array.isArray(value)) {
+    if (
+      value.every(
+        (item) =>
+          isJsonRecord(item) &&
+          typeof item.id === "string" &&
+          typeof item.name === "string" &&
+          typeof item.kind === "string" &&
+          typeof item.download_url === "string"
+      )
+    ) {
+      return [];
+    }
+    return parseRawArtifactArray(value);
+  }
   if (!isJsonRecord(value)) error("artifacts", "must be an array or object");
   if (own(value, "artifacts")) return parseArtifacts(value.artifacts);
   return parseGoArtifactObject(value);

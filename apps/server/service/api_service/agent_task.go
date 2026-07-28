@@ -159,12 +159,51 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 	return QADataList, nil
 }
 
-func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) (QuestionAgentLogList []*model.QuestionAgentLog, err error) {
+type ConversationHistoryRow struct {
+	*model.QuestionAgentLog
+	Artifacts       []ConversationArtifactLink `json:"artifacts,omitempty"`
+	ContextRebuilt  bool                       `json:"context_rebuilt,omitempty"`
+	ContextDegraded bool                       `json:"context_degraded,omitempty"`
+}
+
+func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) ([]*ConversationHistoryRow, error) {
 	result, err := ps.AnswerCheckWithMode(ctx, username, dialogueId, HistoryReadModeFromConfig())
 	if err != nil {
 		return nil, err
 	}
-	return result.Rows, nil
+	rows := make([]*ConversationHistoryRow, 0, len(result.Rows))
+	for _, row := range result.Rows {
+		if row == nil {
+			continue
+		}
+		historyRow := &ConversationHistoryRow{QuestionAgentLog: row}
+		if row.Status == statusSucceeded {
+			projection, _, projectionErr := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
+			if projectionErr != nil {
+				return nil, projectionErr
+			}
+			if len(projection.Artifacts.Paths) > 0 {
+				links, linkErr := ps.conversationArtifactLinks(ctx, username, dialogueId, row.Id)
+				if linkErr != nil {
+					return nil, linkErr
+				}
+				historyRow.Artifacts = links
+			}
+			private, contextErr := LoadBotConversationContext(ctx, username, row.Id)
+			if contextErr != nil {
+				return nil, contextErr
+			}
+			if private.Stage != nil {
+				historyRow.ContextRebuilt = private.Stage.ContextRebuilt
+				historyRow.ContextDegraded = private.Stage.ContextDegraded
+			}
+			if private.SettlementState == conversationSettlementRebuildRequired {
+				historyRow.ContextDegraded = true
+			}
+		}
+		rows = append(rows, historyRow)
+	}
+	return rows, nil
 }
 
 // AnswerCheckWithMode exposes the reversible history source boundary to Web

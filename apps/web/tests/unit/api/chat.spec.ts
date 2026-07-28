@@ -16,6 +16,7 @@ vi.mock("@/utils/request", () => ({
 import request from "@/utils/request";
 import {
   decodeQueryData,
+  getChatdownloadURL,
   getReactionType,
   getUserTool,
   type QueryData,
@@ -135,6 +136,96 @@ describe("QueryData — interop wire contract", () => {
     expect(result.context_degraded).toBeUndefined();
     expect("context_version" in result).toBe(false);
     expect("context_summary" in result).toBe(false);
+  });
+});
+
+describe("QueryData — conversation artifact contract", () => {
+  const relayURL =
+    "/api/v1/downloads/relay-file?token=signed-token&t=signed-token";
+  const artifact = {
+    id: "artifact-1",
+    name: "report.pdf",
+    kind: "report",
+    download_url: relayURL,
+  };
+
+  beforeEach(() => {
+    mockRequest.mockReset();
+  });
+
+  it("accepts bounded relay links and exposes only public context booleans", () => {
+    const result = decodeQueryData({
+      id: 7,
+      answer: "saved",
+      artifacts: [artifact],
+      context_rebuilt: true,
+      context_degraded: true,
+      context_version: 8,
+      context_hash: "private-hash",
+      assistant_summary: "private summary",
+      permissions: ["private"],
+      route_reasoning: "private",
+    });
+
+    expect(result.artifacts).toEqual([artifact]);
+    expect(result.download_path).toBe(relayURL);
+    expect(result.context_rebuilt).toBe(true);
+    expect(result.context_degraded).toBe(true);
+    for (const key of [
+      "context_version",
+      "context_hash",
+      "assistant_summary",
+      "permissions",
+      "route_reasoning",
+    ]) {
+      expect(result).not.toHaveProperty(key);
+    }
+  });
+
+  it.each([
+    {
+      name: "absolute URL",
+      artifacts: [{ ...artifact, download_url: "https://evil.invalid/file" }],
+    },
+    {
+      name: "legacy relay URL without canonical token",
+      artifacts: [
+        {
+          ...artifact,
+          download_url: "/api/v1/downloads/relay-file?t=signed-token",
+        },
+      ],
+    },
+    {
+      name: "duplicate id",
+      artifacts: [artifact, { ...artifact }],
+    },
+    {
+      name: "unknown kind",
+      artifacts: [{ ...artifact, kind: "dataset" }],
+    },
+    {
+      name: "oversized name",
+      artifacts: [{ ...artifact, name: "x".repeat(256) }],
+    },
+    {
+      name: "oversized count",
+      artifacts: Array.from({ length: 51 }, (_, index) => ({
+        ...artifact,
+        id: `artifact-${index}`,
+      })),
+    },
+  ])("rejects $name", ({ artifacts }) => {
+    expect(() => decodeQueryData({ id: 8, artifacts })).toThrow(
+      "Invalid chat response"
+    );
+  });
+
+  it("passes an already signed relay link through without calling email download", async () => {
+    const result = await getChatdownloadURL({ obs_path: relayURL });
+
+    expect(result).toEqual({ code: 200, data: relayURL });
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 });
 

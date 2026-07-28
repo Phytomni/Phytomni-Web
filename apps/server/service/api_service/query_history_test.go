@@ -251,3 +251,61 @@ func TestHistoryRootDeleteBlocksResolveDialogueAndRefresh(t *testing.T) {
 		}
 	}
 }
+
+func TestHistoryReturnsAuthorizedArtifactLinksWithoutPrivateContext(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	dialogueID := "33333333-3333-4333-8333-333333333333"
+	stage := validContextStageMetadata()
+	stage.ContextRebuilt = true
+	private := persistedConversationContext{
+		Stage:                stage,
+		SettlementState:      conversationSettlementAcked,
+		AssistantSummary:     "private summary",
+		SettlementLedgerHash: strings.Repeat("a", 64),
+	}
+	raw, err := marshalPersistedProjectionWithContext(BotRunProjection{
+		ReportRevision: 1,
+		Artifacts: ProjectionArtifacts{
+			Directories: []string{"obs://bucket/alice/run-history"},
+			Paths:       []string{"obs://bucket/alice/run-history/result.zip"},
+		},
+	}, &private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := model.QuestionAgentLog{
+		DialogueId: dialogueID, UserName: "alice", Query: "question",
+		Answer: "answer", Status: statusSucceeded, Mode: "instant",
+		ToolName: "ChatAgent", BotProjectionJSON: raw, BotReportRevision: 1,
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	history, err := NewService().AnswerCheck(
+		context.Background(), "alice", dialogueID,
+	)
+	if err != nil || len(history) != 1 || len(history[0].Artifacts) != 1 {
+		t.Fatalf("history=%#v err=%v", history, err)
+	}
+	if !history[0].ContextRebuilt || history[0].ContextDegraded {
+		t.Fatalf("context notice=%#v", history[0])
+	}
+	encoded, err := json.Marshal(history)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{
+		"obs://", "private summary", "settlement_ledger_hash",
+		"business_context_version", "allowed_agent_ids",
+	} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("history leaked %q: %s", forbidden, encoded)
+		}
+	}
+	other, err := NewService().AnswerCheck(
+		context.Background(), "bob", dialogueID,
+	)
+	if err != nil || len(other) != 0 {
+		t.Fatalf("cross-owner history=%#v err=%v", other, err)
+	}
+}

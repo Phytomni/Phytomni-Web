@@ -254,6 +254,12 @@ function attachBlockingLegacyFields(
   ) {
     message.download_path = data.download_path;
   }
+  if (Array.isArray(data.artifacts)) {
+    message.artifacts = data.artifacts.map((artifact) => ({ ...artifact }));
+    if (data.artifacts[0]) {
+      message.download_path = data.artifacts[0].download_url;
+    }
+  }
 }
 
 function attachBlockingA2ui(
@@ -595,6 +601,12 @@ export function useSendMessage(opts: {
           streamResult.dialogueId
         ) {
           blockingDialogueId = streamResult.dialogueId;
+        }
+        if (
+          chatState.activeRequestId === requestKey &&
+          streamResult.contextNotice?.context_degraded === true
+        ) {
+          ElMessage.warning(t("chat.contextDegraded"));
         }
         if (
           chatState.activeRequestId === requestKey &&
@@ -963,6 +975,9 @@ export function useSendMessage(opts: {
         } else if (assistantMessage) {
           sendingMessages.push(assistantMessage);
           commitSuccessfulTurn(chatState, userMessage, assistantMessage);
+          if (responseData.context_degraded === true) {
+            ElMessage.warning(t("chat.contextDegraded"));
+          }
           settleAcceptedTurn(assistantMessage, acceptedExpertResponse);
         } else {
           // if assistantMessage was not created, create a default message

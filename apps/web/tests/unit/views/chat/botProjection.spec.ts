@@ -190,6 +190,25 @@ describe("parseBotProjection", () => {
     ).toThrow(/artifact/);
   });
 
+  it("keeps browser-authorized links out of the legacy OBS projection", () => {
+    const projection = parseBotProjection({
+      status: "SUCCEEDED",
+      answer: "saved",
+      artifacts: [
+        {
+          id: "artifact-1",
+          name: "report.pdf",
+          kind: "report",
+          download_url:
+            "/api/v1/downloads/relay-file?token=signed-token&t=signed-token",
+        },
+      ],
+    });
+
+    expect(projection.artifacts).toEqual([]);
+    expect(JSON.stringify(projection)).not.toContain("signed-token");
+  });
+
   it("rejects non-objects and oversized bounded values", () => {
     expect(() => parseBotProjection(null)).toThrow(/object/);
     expect(() => parseBotProjection([])).toThrow(/object/);

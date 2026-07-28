@@ -12,7 +12,13 @@ import {
 import { initReducerState, reduceAGUIEvent } from "../streaming/eventReducer";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { isDefinitePreDispatch4xx } from "../utils/client-turn-id";
-import type { ChatMessage, ChatUIState } from "../types";
+import {
+  normalizeChatContextNotice,
+  type ChatMessage,
+  type ChatUIState,
+} from "../types";
+import type { ConversationContextNotice } from "@/api/types";
+import { reduceContextStagedNotice } from "../streaming/botLifecycleReducer";
 
 export interface StreamInput {
   dialogueId: string;
@@ -36,6 +42,7 @@ export interface StreamResult {
   completed?: boolean;
   /** True when the gateway rejected the request before dispatching a turn. */
   preDispatch4xx?: boolean;
+  contextNotice?: ConversationContextNotice;
 }
 
 const UUID_PATTERN =
@@ -117,6 +124,7 @@ export function useStreamMessage(opts: {
     chatState.streamingMessageId = requestId;
 
     let state = initReducerState();
+    let contextNotice: ConversationContextNotice = {};
     let result: StreamResult = {};
     const applyTerminalState = () => {
       placeholder.followUpQuestions = state.followUp;
@@ -207,6 +215,15 @@ export function useStreamMessage(opts: {
         const ev = parseAGUIFrame(frame);
         if (!ev) return;
         if (!BOUNDED_AGUI_EVENTS.has(ev.type)) return;
+        contextNotice = reduceContextStagedNotice(contextNotice, ev);
+        if (
+          contextNotice.context_rebuilt === true ||
+          contextNotice.context_degraded === true
+        ) {
+          const normalizedNotice = normalizeChatContextNotice(contextNotice);
+          if (normalizedNotice) placeholder.contextNotice = normalizedNotice;
+          result.contextNotice = { ...contextNotice };
+        }
         state = reduceAGUIEvent(state, ev);
         if (state.runId && placeholder.a2uiRuntime) {
           placeholder.a2uiRuntime = {

@@ -37,4 +37,10 @@ func TestGetDownloadObsFileDisabled(t *testing.T) {
 	if !strings.Contains(parsed.Message, "email download links are currently unavailable") {
 		t.Fatalf("message = %q", parsed.Message)
 	}
+	if w.Header().Get("Location") != "" ||
+		strings.Contains(w.Body.String(), "/obs/") ||
+		strings.Contains(w.Body.String(), "relay-file") ||
+		strings.Contains(w.Body.String(), "alice") {
+		t.Fatalf("disabled email route returned authenticated download data: %s", w.Body.String())
+	}
 }

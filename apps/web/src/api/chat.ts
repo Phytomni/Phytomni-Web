@@ -17,6 +17,7 @@ import {
   decodeQueryData,
   decodeString,
   decodeUserToolResponse,
+  isConversationArtifactDownloadURL,
   requestAbortableApi,
   requestApi,
   type ChatHistoryRecord,
@@ -142,8 +143,11 @@ export const getUserTool = (): Promise<ApiEnvelope<UserToolResponse>> =>
 // Get conversation download URL (analyst-agent OBS file)
 export const getChatdownloadURL = (data: {
   obs_path: string;
-}): Promise<ApiEnvelope<string>> =>
-  requestApi(
+}): Promise<ApiEnvelope<string>> => {
+  if (isConversationArtifactDownloadURL(data.obs_path)) {
+    return Promise.resolve({ code: 200, data: data.obs_path });
+  }
+  return requestApi(
     {
       url: "/api/v1/downloads/analyst-agent/obs-file",
       method: "get",
@@ -151,6 +155,7 @@ export const getChatdownloadURL = (data: {
     },
     decodeString
   );
+};
 
 // Get rendering-file download URL
 export const getFileDownUrlApi = (
