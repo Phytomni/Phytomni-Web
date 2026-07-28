@@ -36,6 +36,10 @@ export interface LoginResponse {
   locked?: boolean;
 }
 
+export interface AuthCapabilitiesResponse {
+  registration_enabled: boolean;
+}
+
 export interface RegistrationRequest {
   email: string;
   password: string;
@@ -383,6 +387,19 @@ function decodeMutationData(value: unknown): MutationData {
 }
 
 export { decodeMutationData };
+
+export function decodeAuthCapabilities(
+  value: unknown
+): AuthCapabilitiesResponse {
+  if (!isRecord(value)) invalid("auth capabilities response");
+  const registrationEnabled = optionalBooleanField(
+    value,
+    "registration_enabled",
+    "auth capabilities response"
+  );
+  if (registrationEnabled === undefined) invalid("auth capabilities response");
+  return { registration_enabled: registrationEnabled };
+}
 
 export function decodeLoginResponse(value: unknown): LoginResponse {
   if (!isRecord(value)) invalid("login response");

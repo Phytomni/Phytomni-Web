@@ -1,4 +1,5 @@
 import type {
+  AuthCapabilitiesResponse,
   ApiEnvelope,
   ChangePasswordRequest,
   ChangePermissionRequest,
@@ -9,6 +10,7 @@ import type {
   UserProfileResponse,
 } from "@/api/types";
 import {
+  decodeAuthCapabilities,
   decodeMutationData,
   decodeString,
   decodeUserListResponse,
@@ -20,6 +22,17 @@ export interface UserListQuery {
   current: string | number;
   size: string | number;
 }
+
+export const getAuthCapabilities = (): Promise<
+  ApiEnvelope<AuthCapabilitiesResponse>
+> =>
+  requestApi(
+    {
+      url: "/api/v1/auth/capabilities",
+      method: "get",
+    },
+    decodeAuthCapabilities
+  );
 
 function getUserId(data: ChangePermissionRequest | FormData): string | number {
   const id = data instanceof FormData ? data.get("id") : data.id;

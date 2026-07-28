@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   decodeApiEnvelope,
+  decodeAuthCapabilities,
   decodeLoginResponse,
   decodeUserListResponse,
   decodeUserProfileResponse,
@@ -9,6 +10,18 @@ import {
 } from "@/api/types";
 
 describe("auth API decoders", () => {
+  it("accepts the boolean registration capability", () => {
+    expect(decodeAuthCapabilities({ registration_enabled: false })).toEqual({
+      registration_enabled: false,
+    });
+  });
+
+  it("rejects a non-boolean registration capability", () => {
+    expect(() =>
+      decodeAuthCapabilities({ registration_enabled: "false" })
+    ).toThrow("Invalid auth capabilities response");
+  });
+
   it("accepts a login token only when the wire type is a string", () => {
     expect(
       decodeLoginResponse({
