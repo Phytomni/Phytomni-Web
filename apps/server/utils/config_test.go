@@ -89,3 +89,31 @@ func TestLoadConfigInFile_JWTSecret_EmptyEnvKeepsFileValue(t *testing.T) {
 		t.Fatalf("jwt.secret_key = %q, want %q (empty env must not clobber file)", got, "file-secret-value")
 	}
 }
+
+func TestRegistrationEnabled_MissingKeyDefaultsToTrue(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	if !RegistrationEnabled() {
+		t.Fatal("missing auth.registration_enabled must preserve public registration")
+	}
+}
+
+func TestRegistrationEnabled_UsesExplicitValue(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value bool
+		want  bool
+	}{
+		{name: "on", value: true, want: true},
+		{name: "off", value: false, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+			viper.Set(RegistrationEnabledKey, tc.value)
+			if got := RegistrationEnabled(); got != tc.want {
+				t.Fatalf("RegistrationEnabled() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

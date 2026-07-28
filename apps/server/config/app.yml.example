@@ -121,6 +121,12 @@ http:
 cron:
   switch: true
 
+# Public self-registration. The default is ON for compatibility.
+# Set false to close POST /api/v1/auth/registrations; administrator-token
+# POST /api/v1/users remains available. Restart the Go service after changes.
+auth:
+  registration_enabled: true
+
 # ---------------------------------------------------------------------
 # Gene example obsfs mount root. When set to a readable directory, the
 # gene list/detail and image endpoints read <root>/md/ and <root>/img/
