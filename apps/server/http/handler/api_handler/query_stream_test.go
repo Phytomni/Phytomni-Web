@@ -2,6 +2,7 @@ package api_handler
 
 import (
 	"bytes"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -58,12 +59,23 @@ func setupStreamHandlerTestDB(t *testing.T) *gorm.DB {
 // SSE branch point, so an empty body could never discriminate the flag/mode
 // gates (mutation-weak). mode="" omits the field (handler defaults instant).
 func newStreamTestRequest(t *testing.T, mode string) *http.Request {
+	return newStreamTestRequestWithTurn(t, mode, "")
+}
+
+func newStreamTestRequestWithTurn(
+	t *testing.T,
+	mode string,
+	clientTurnID string,
+) *http.Request {
 	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	_ = mw.WriteField("query", "hello")
 	if mode != "" {
 		_ = mw.WriteField("mode", mode)
+	}
+	if clientTurnID != "" {
+		_ = mw.WriteField("client_turn_id", clientTurnID)
 	}
 	_ = mw.Close()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &buf)
@@ -201,5 +213,100 @@ func TestQuery_StreamExposesDurableIdentityHeaders(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "TextMessageContent") {
 		t.Fatalf("stream body missing content frame: %q", w.Body.String())
+	}
+}
+
+func TestQuery_StreamV1ForwardsTypedContextFrameAndIdentity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	const answer = "typed stream answer"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			var request rxBot.ChatCompletionRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode stream request: %v", err)
+				return
+			}
+			if request.Conversation == nil {
+				t.Error("missing V1 envelope")
+				return
+			}
+			stage := rxBot.ContextStageMetadata{
+				SchemaVersion:   1,
+				TurnID:          request.Conversation.TurnID,
+				SelectedAgentID: "ChatAgent",
+				RouteSource:     "instant_lock",
+				RouteReasonCode: "INSTANT_LOCK",
+				BaseBusinessContextVersion: request.Conversation.
+					BaseBusinessContextVersion,
+				ProposedBusinessContextVersion: request.Conversation.
+					BaseBusinessContextVersion + 1,
+				LastAppliedLedgerCursor: request.Conversation.LedgerCursor,
+			}
+			encoded, err := json.Marshal(stage)
+			if err != nil {
+				t.Errorf("marshal context stage: %v", err)
+				return
+			}
+			body := strings.Join([]string{
+				`event: RunStarted` + "\n" +
+					`data: {"type":"RunStarted","run_id":"run-v1-handler"}` +
+					"\n",
+				`event: TextMessageContent` + "\n" +
+					`data: {"type":"TextMessageContent","delta":"` + answer +
+					`"}` + "\n",
+				`event: Custom` + "\n" +
+					`data: {"type":"Custom","name":"phyto.context_staged","value":` +
+					string(encoded) + "}" + "\n",
+				`event: RunFinished` + "\n" +
+					`data: {"type":"RunFinished","run_id":"run-v1-handler"}` +
+					"\n",
+			}, "\n")
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(body))
+		case "/v1/conversation-context/settle":
+			_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+				SchemaVersion:  1,
+				State:          "committed",
+				ContextVersion: 1,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set("username", "headers@example.com")
+	c.Request = newStreamTestRequestWithTurn(t, "instant", "handler-stream-v1")
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+
+	NewHandler().Query(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("stream status = %d, body = %q", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"name":"phyto.context_staged"`) {
+		t.Fatalf("typed context frame missing from raw stream: %q", w.Body.String())
+	}
+	messageID := w.Header().Get("X-Phyto-Message-Id")
+	dialogueID := w.Header().Get("X-Phyto-Dialogue-Id")
+	if messageID == "" || dialogueID == "" {
+		t.Fatalf("missing identity headers: message=%q dialogue=%q", messageID, dialogueID)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.Where("id = ?", messageID).First(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.DialogueId != dialogueID || row.Status != "SUCCEEDED" ||
+		row.Answer != answer {
+		t.Fatalf("persisted V1 stream row = %#v", row)
 	}
 }

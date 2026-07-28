@@ -3,6 +3,7 @@ package bot
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 )
 
@@ -19,6 +20,13 @@ type AGUIRunError struct {
 	Code    string
 	Message string
 }
+
+var (
+	ErrAGUIContextStageMalformed     = errors.New("malformed AG-UI context stage")
+	ErrAGUIContextStageTurnMismatch  = errors.New("AG-UI context stage turn mismatch")
+	ErrAGUIContextStageConflict      = errors.New("conflicting AG-UI context stage")
+	ErrAGUIContextStageAfterFinished = errors.New("AG-UI context stage after RunFinished")
+)
 
 // ParseAGUIFrame decodes one SSE frame (the bytes between blank-line
 // separators) into an AGUIEvent. It returns ok=false for blank frames,
@@ -65,10 +73,20 @@ func ParseAGUIFrame(frame []byte) (AGUIEvent, bool) {
 // it accumulates the fields the Web row needs at stream end (answer text, the
 // Bot run id, follow-up questions JSON, and any RunError).
 type AGUIAccumulator struct {
-	answer   strings.Builder
-	runID    string
-	followUp string
-	runErr   *AGUIRunError
+	answer         strings.Builder
+	runID          string
+	followUp       string
+	expectedTurnID string
+	contextStage   *ContextStageMetadata
+	protocolErr    error
+	runErr         *AGUIRunError
+	runFinished    bool
+}
+
+// NewAGUIAccumulator creates an accumulator that validates staged context
+// metadata against the expected V1 turn. An empty turn preserves V0 behavior.
+func NewAGUIAccumulator(expectedTurnID string) *AGUIAccumulator {
+	return &AGUIAccumulator{expectedTurnID: expectedTurnID}
 }
 
 // Observe folds one event into the accumulator.
@@ -90,19 +108,59 @@ func (a *AGUIAccumulator) Observe(ev AGUIEvent) {
 			Code:    stringField(ev.Data, "code"),
 			Message: stringField(ev.Data, "message"),
 		}
+	case "RunFinished":
+		a.runFinished = true
 	case "Custom":
-		if stringField(ev.Data, "name") == "phyto.follow_up" {
+		switch stringField(ev.Data, "name") {
+		case "phyto.follow_up":
 			if v, ok := ev.Data["value"]; ok {
 				a.followUp = string(v)
 			}
+		case "phyto.context_staged":
+			a.observeContextStage(ev.Data["value"])
 		}
+	}
+}
+
+func (a *AGUIAccumulator) observeContextStage(raw json.RawMessage) {
+	if a.protocolErr != nil {
+		return
+	}
+	if a.runFinished {
+		a.protocolErr = ErrAGUIContextStageAfterFinished
+		return
+	}
+	var stage ContextStageMetadata
+	if len(raw) == 0 || json.Unmarshal(raw, &stage) != nil {
+		a.protocolErr = ErrAGUIContextStageMalformed
+		return
+	}
+	if a.expectedTurnID != "" && stage.TurnID != a.expectedTurnID {
+		a.protocolErr = ErrAGUIContextStageTurnMismatch
+		return
+	}
+	if a.contextStage == nil {
+		a.contextStage = &stage
+		return
+	}
+	if *a.contextStage != stage {
+		a.protocolErr = ErrAGUIContextStageConflict
 	}
 }
 
 func (a *AGUIAccumulator) AnswerText() string   { return a.answer.String() }
 func (a *AGUIAccumulator) RunID() string        { return a.runID }
 func (a *AGUIAccumulator) FollowUpJSON() string { return a.followUp }
-func (a *AGUIAccumulator) Err() *AGUIRunError   { return a.runErr }
+func (a *AGUIAccumulator) ContextStage() *ContextStageMetadata {
+	if a.contextStage == nil {
+		return nil
+	}
+	stage := *a.contextStage
+	return &stage
+}
+func (a *AGUIAccumulator) ProtocolErr() error { return a.protocolErr }
+func (a *AGUIAccumulator) Finished() bool     { return a.runFinished }
+func (a *AGUIAccumulator) Err() *AGUIRunError { return a.runErr }
 
 // stringField pulls a string value out of a decoded data object, tolerating
 // absence and non-string JSON (returns "").

@@ -1,6 +1,11 @@
 package bot
 
-import "testing"
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+)
 
 func TestParseAGUIFrame_TextContent(t *testing.T) {
 	frame := []byte("event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"message_id\":\"m1\",\"delta\":\"photosynthesis\"}")
@@ -130,6 +135,128 @@ func TestAccumulator_EmptyDeltaIsNoOp(t *testing.T) {
 	a.Observe(ev)
 	if a.AnswerText() != "" {
 		t.Fatalf("empty delta appended %q, want empty", a.AnswerText())
+	}
+}
+
+func validAGUIContextStage(turnID string) ContextStageMetadata {
+	return ContextStageMetadata{
+		SchemaVersion:                  1,
+		TurnID:                         turnID,
+		SelectedAgentID:                "ChatAgent",
+		RouteSource:                    "instant_lock",
+		RouteReasonCode:                "INSTANT_LOCK",
+		BaseBusinessContextVersion:     0,
+		ProposedBusinessContextVersion: 1,
+		LastAppliedLedgerCursor:        1,
+	}
+}
+
+func contextStageFrame(t *testing.T, stage ContextStageMetadata) AGUIEvent {
+	t.Helper()
+	raw, err := json.Marshal(stage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := []byte(
+		"event: Custom\n" +
+			`data: {"type":"Custom","name":"phyto.context_staged","value":` +
+			string(raw) + "}",
+	)
+	event, ok := ParseAGUIFrame(frame)
+	if !ok {
+		t.Fatal("context stage frame did not parse")
+	}
+	return event
+}
+
+func TestAGUIAccumulatorContextAcceptsOneValidEventAndIdenticalDuplicate(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	stage := validAGUIContextStage("17")
+
+	acc.Observe(contextStageFrame(t, stage))
+	acc.Observe(contextStageFrame(t, stage))
+
+	if err := acc.ProtocolErr(); err != nil {
+		t.Fatalf("identical context stage duplicate failed: %v", err)
+	}
+	if got := acc.ContextStage(); got == nil || *got != stage {
+		t.Fatalf("context stage = %#v, want %#v", got, stage)
+	}
+}
+
+func TestAGUIAccumulatorContextRejectsConflictingDuplicate(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	first := validAGUIContextStage("17")
+	conflict := first
+	conflict.ContextDegraded = true
+
+	acc.Observe(contextStageFrame(t, first))
+	acc.Observe(contextStageFrame(t, conflict))
+
+	if !errors.Is(acc.ProtocolErr(), ErrAGUIContextStageConflict) {
+		t.Fatalf("protocol error = %v, want context stage conflict", acc.ProtocolErr())
+	}
+}
+
+func TestAGUIAccumulatorContextRejectsEventAfterRunFinished(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	finished, ok := ParseAGUIFrame([]byte(
+		`event: RunFinished` + "\n" +
+			`data: {"type":"RunFinished","run_id":"run-17"}`,
+	))
+	if !ok {
+		t.Fatal("RunFinished frame did not parse")
+	}
+	acc.Observe(finished)
+	acc.Observe(contextStageFrame(t, validAGUIContextStage("17")))
+
+	if !errors.Is(acc.ProtocolErr(), ErrAGUIContextStageAfterFinished) {
+		t.Fatalf("protocol error = %v, want context stage after finish", acc.ProtocolErr())
+	}
+}
+
+func TestAGUIAccumulatorContextRejectsMalformedValue(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	event, ok := ParseAGUIFrame([]byte(
+		`event: Custom` + "\n" +
+			`data: {"type":"Custom","name":"phyto.context_staged","value":{"turn_id":"17","secret":"raw-payload-marker"}}`,
+	))
+	if !ok {
+		t.Fatal("malformed context frame must still parse as an AG-UI event")
+	}
+	acc.Observe(event)
+
+	if !errors.Is(acc.ProtocolErr(), ErrAGUIContextStageMalformed) {
+		t.Fatalf("protocol error = %v, want malformed context stage", acc.ProtocolErr())
+	}
+	if strings.Contains(acc.ProtocolErr().Error(), "raw-payload-marker") {
+		t.Fatalf("protocol error exposed raw payload: %v", acc.ProtocolErr())
+	}
+}
+
+func TestAGUIAccumulatorContextRejectsMismatchedTurn(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	acc.Observe(contextStageFrame(t, validAGUIContextStage("18")))
+
+	if !errors.Is(acc.ProtocolErr(), ErrAGUIContextStageTurnMismatch) {
+		t.Fatalf("protocol error = %v, want turn mismatch", acc.ProtocolErr())
+	}
+}
+
+func TestAGUIAccumulatorContextIgnoresUnknownCustomEvent(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	event, ok := ParseAGUIFrame([]byte(
+		`event: Custom` + "\n" +
+			`data: {"type":"Custom","name":"future.context","value":{"secret":"must-not-be-read"}}`,
+	))
+	if !ok {
+		t.Fatal("unknown custom frame did not parse")
+	}
+	acc.Observe(event)
+
+	if acc.ContextStage() != nil || acc.ProtocolErr() != nil {
+		t.Fatalf("unknown custom event changed context state: stage=%#v err=%v",
+			acc.ContextStage(), acc.ProtocolErr())
 	}
 }
 

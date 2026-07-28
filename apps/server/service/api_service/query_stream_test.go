@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -46,6 +48,528 @@ func setupStreamTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb := setupExpertTestDB(t)
 	return gdb
+}
+
+func v1ContextStream(stage rxBot.ContextStageMetadata, answer string) string {
+	encoded, _ := json.Marshal(stage)
+	return strings.Join([]string{
+		`event: RunStarted` + "\n" +
+			`data: {"type":"RunStarted","run_id":"run-context"}` + "\n",
+		`event: TextMessageContent` + "\n" +
+			`data: {"type":"TextMessageContent","delta":` +
+			strconv.Quote(answer) + "}" + "\n",
+		`event: Custom` + "\n" +
+			`data: {"type":"Custom","name":"phyto.context_staged","value":` +
+			string(encoded) + "}" + "\n",
+		`event: RunFinished` + "\n" +
+			`data: {"type":"RunFinished","run_id":"run-context"}` + "\n",
+	}, "\n")
+}
+
+func contextStageForStream(request rxBot.ChatCompletionRequest) rxBot.ContextStageMetadata {
+	envelope := request.Conversation
+	return rxBot.ContextStageMetadata{
+		SchemaVersion:                  1,
+		TurnID:                         envelope.TurnID,
+		SelectedAgentID:                "ChatAgent",
+		RouteSource:                    "instant_lock",
+		RouteReasonCode:                "INSTANT_LOCK",
+		BaseBusinessContextVersion:     envelope.BaseBusinessContextVersion,
+		ProposedBusinessContextVersion: envelope.BaseBusinessContextVersion + 1,
+		LastAppliedLedgerCursor:        envelope.LedgerCursor,
+	}
+}
+
+func TestQueryStreamContextSettlementPersistsBeforeAcknowledgment(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	var chatCalls, settleCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			chatCalls++
+			var request rxBot.ChatCompletionRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode stream request: %v", err)
+				return
+			}
+			if request.Conversation == nil {
+				t.Error("missing V1 conversation envelope")
+				return
+			}
+			if len(request.Messages) != 1 ||
+				request.Messages[0].Content != "current stream question" {
+				t.Errorf("stream messages = %#v, want current Go-owned message", request.Messages)
+			}
+			var status string
+			if err := gdb.Raw(
+				`SELECT COALESCE(status,'') FROM question_agent_logs WHERE id=?`,
+				request.Conversation.TurnID,
+			).Scan(&status).Error; err != nil {
+				t.Errorf("read allocated row: %v", err)
+			}
+			if status != "SUBMITTING" {
+				t.Errorf("row status before stream = %q, want SUBMITTING", status)
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(v1ContextStream(
+				contextStageForStream(request),
+				"settled stream answer",
+			)))
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			var request rxBot.ContextSettlementRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode settlement: %v", err)
+				return
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.First(&row, request.TurnID).Error; err != nil {
+				t.Errorf("load row before acknowledgment: %v", err)
+				return
+			}
+			if row.Status != "SUCCEEDED" ||
+				row.Answer != "settled stream answer" {
+				t.Errorf("visible row before acknowledgment = %#v", row)
+			}
+			private, err := LoadBotConversationContext(
+				context.Background(),
+				"stream-context@example.com",
+				row.Id,
+			)
+			if err != nil {
+				t.Errorf("load private context before acknowledgment: %v", err)
+				return
+			}
+			if private.SettlementState != conversationSettlementAckPending ||
+				private.SettlementLedgerHash != request.LedgerVersion {
+				t.Errorf("private context before acknowledgment = %#v", private)
+			}
+			_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+				SchemaVersion:  1,
+				State:          "committed",
+				ContextVersion: 1,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	if err := gdb.Exec(
+		`INSERT INTO users (email, code) VALUES (?, 'admin')`,
+		"stream-context@example.com",
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	var forwarded strings.Builder
+	out, err := NewService().QueryStream(
+		context.Background(),
+		"stream-context@example.com",
+		QueryInput{
+			Query:        "current stream question",
+			History:      `[{"role":"user","content":"browser poison"}]`,
+			Mode:         "instant",
+			ClientTurnID: "stream-context-1",
+		},
+		nil,
+		func(frame []byte) error {
+			_, _ = forwarded.Write(frame)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("QueryStream: %v", err)
+	}
+	if out.Status != "SUCCEEDED" || out.Answer != "settled stream answer" {
+		t.Fatalf("stream result = %#v", out)
+	}
+	if !strings.Contains(forwarded.String(), `"name":"phyto.context_staged"`) {
+		t.Fatalf("typed context frame was not forwarded unchanged: %q", forwarded.String())
+	}
+	private, err := LoadBotConversationContext(
+		context.Background(),
+		"stream-context@example.com",
+		out.Id,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if private.SettlementState != conversationSettlementAcked ||
+		private.AssistantSummary != "settled stream answer" {
+		t.Fatalf("settled private context = %#v", private)
+	}
+	if chatCalls != 1 || settleCalls != 1 {
+		t.Fatalf("calls chat=%d settle=%d, want 1/1", chatCalls, settleCalls)
+	}
+}
+
+func TestQueryStreamSettlementAckFailureLeavesVisibleSuccess(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	var settleCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			var request rxBot.ChatCompletionRequest
+			_ = json.NewDecoder(r.Body).Decode(&request)
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(v1ContextStream(
+				contextStageForStream(request),
+				"visible despite ack failure",
+			)))
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			http.Error(w, `{"error":{"code":"temporary","message":"retry"}}`,
+				http.StatusServiceUnavailable)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	if err := gdb.Exec(
+		`INSERT INTO users (email, code) VALUES (?, 'admin')`,
+		"stream-ack@example.com",
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := NewService().QueryStream(
+		context.Background(),
+		"stream-ack@example.com",
+		QueryInput{
+			Query: "ack failure", Mode: "instant",
+			ClientTurnID: "stream-ack-1",
+		},
+		nil,
+		nil,
+	)
+	if err != nil || out == nil || out.Status != "SUCCEEDED" {
+		t.Fatalf("result=%#v err=%v", out, err)
+	}
+	status, answer := readStatusAnswer(t, gdb, out.Id)
+	if status != "SUCCEEDED" || answer != "visible despite ack failure" {
+		t.Fatalf("persisted visible row = %q/%q", status, answer)
+	}
+	private, err := LoadBotConversationContext(
+		context.Background(),
+		"stream-ack@example.com",
+		out.Id,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if private.SettlementState != conversationSettlementAckPending ||
+		settleCalls != 1 {
+		t.Fatalf("private=%#v settleCalls=%d", private, settleCalls)
+	}
+}
+
+func TestQueryStreamContextDegradedForcesRebuildWithoutAck(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	var settleCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			var request rxBot.ChatCompletionRequest
+			_ = json.NewDecoder(r.Body).Decode(&request)
+			stage := contextStageForStream(request)
+			stage.ContextDegraded = true
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(v1ContextStream(stage, "degraded stream answer")))
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			http.Error(w, "unexpected", http.StatusInternalServerError)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	if err := gdb.Exec(
+		`INSERT INTO users (email, code) VALUES (?, 'admin')`,
+		"stream-degraded@example.com",
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := NewService().QueryStream(
+		context.Background(),
+		"stream-degraded@example.com",
+		QueryInput{
+			Query: "degraded", Mode: "instant",
+			ClientTurnID: "stream-degraded-1",
+		},
+		nil,
+		nil,
+	)
+	if err != nil || out == nil || out.Answer != "degraded stream answer" {
+		t.Fatalf("result=%#v err=%v", out, err)
+	}
+	private, err := LoadBotConversationContext(
+		context.Background(),
+		"stream-degraded@example.com",
+		out.Id,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settleCalls != 0 ||
+		private.SettlementState != conversationSettlementRebuildRequired ||
+		private.Stage == nil || !private.Stage.ContextDegraded {
+		t.Fatalf("settles=%d private=%#v", settleCalls, private)
+	}
+}
+
+func TestQueryStreamContextFailuresNeverCommitAssistantSummary(t *testing.T) {
+	tests := []struct {
+		name       string
+		streamBody func(rxBot.ChatCompletionRequest) string
+		wantErr    bool
+		wantStatus string
+	}{
+		{
+			name: "missing context event",
+			streamBody: func(rxBot.ChatCompletionRequest) string {
+				return strings.Join([]string{
+					`event: RunStarted` + "\n" +
+						`data: {"type":"RunStarted","run_id":"run-missing"}` + "\n",
+					`event: TextMessageContent` + "\n" +
+						`data: {"type":"TextMessageContent","delta":"must not commit"}` + "\n",
+					`event: RunFinished` + "\n" +
+						`data: {"type":"RunFinished","run_id":"run-missing"}` + "\n",
+				}, "\n")
+			},
+			wantErr:    true,
+			wantStatus: "FAILED",
+		},
+		{
+			name: "RunError",
+			streamBody: func(request rxBot.ChatCompletionRequest) string {
+				return strings.Join([]string{
+					`event: RunStarted` + "\n" +
+						`data: {"type":"RunStarted","run_id":"run-error"}` + "\n",
+					`event: TextMessageContent` + "\n" +
+						`data: {"type":"TextMessageContent","delta":"partial"}` + "\n",
+					`event: RunError` + "\n" +
+						`data: {"type":"RunError","code":"failed","message":"nope"}` + "\n",
+				}, "\n")
+			},
+			wantStatus: "FAILED",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			email := "stream-failure-" + strings.ReplaceAll(test.name, " ", "-") +
+				"@example.com"
+			if err := gdb.Exec(
+				`INSERT INTO users (email, code) VALUES (?, 'admin')`,
+				email,
+			).Error; err != nil {
+				t.Fatal(err)
+			}
+			server := httptest.NewServer(http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					var request rxBot.ChatCompletionRequest
+					_ = json.NewDecoder(r.Body).Decode(&request)
+					w.Header().Set("Content-Type", "text/event-stream")
+					_, _ = w.Write([]byte(test.streamBody(request)))
+				},
+			))
+			t.Cleanup(server.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+				MultiturnV1Enabled: true, TimeoutSeconds: 2,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			out, err := NewService().QueryStream(
+				context.Background(),
+				email,
+				QueryInput{
+					Query: "failure", Mode: "instant",
+					ClientTurnID: "stream-failure-" +
+						strings.ReplaceAll(test.name, " ", "-"),
+				},
+				nil,
+				nil,
+			)
+			if test.wantErr != (err != nil) {
+				t.Fatalf("error=%v wantErr=%v", err, test.wantErr)
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.First(&row).Error; err != nil {
+				t.Fatal(err)
+			}
+			if row.Status != test.wantStatus || row.Answer != "" {
+				t.Fatalf("failed row status/answer = %q/%q", row.Status, row.Answer)
+			}
+			if out != nil && out.Answer != "" {
+				t.Fatalf("failed output exposed committed answer: %#v", out)
+			}
+		})
+	}
+}
+
+func TestQueryStreamContextCancellationRetainsSubmittingWithoutSummary(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	email := "stream-cancel-v1@example.com"
+	if err := gdb.Exec(
+		`INSERT INTO users (email, code) VALUES (?, 'admin')`,
+		email,
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(
+			`event: RunStarted` + "\n" +
+				`data: {"type":"RunStarted","run_id":"run-cancel-v1"}` +
+				"\n\n" +
+				`event: TextMessageContent` + "\n" +
+				`data: {"type":"TextMessageContent","delta":"partial secret"}` +
+				"\n\n",
+		))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	out, err := NewService().QueryStream(
+		ctx,
+		email,
+		QueryInput{
+			Query: "cancel", Mode: "instant",
+			ClientTurnID: "stream-cancel-v1",
+		},
+		nil,
+		func(frame []byte) error {
+			if strings.Contains(string(frame), "TextMessageContent") {
+				cancel()
+				return context.Canceled
+			}
+			return nil
+		},
+	)
+	if err == nil {
+		t.Fatal("canceled V1 stream must return its transport error")
+	}
+	if out == nil || out.Status != "SUBMITTING" || out.Answer != "" {
+		t.Fatalf("canceled result = %#v, want empty SUBMITTING row", out)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "SUBMITTING" || row.Answer != "" {
+		t.Fatalf("canceled row status/answer = %q/%q", row.Status, row.Answer)
+	}
+	private, err := LoadBotConversationContext(context.Background(), email, out.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if private.AssistantSummary != "" || private.Stage != nil {
+		t.Fatalf("canceled private context committed summary: %#v", private)
+	}
+}
+
+func TestQueryStreamSubmittingPreFirstByteFailureCertainty(t *testing.T) {
+	tests := []struct {
+		name       string
+		handler    http.HandlerFunc
+		closeFirst bool
+		wantStatus string
+	}{
+		{
+			name: "definite rejection",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w,
+					`{"error":{"code":"invalid_request","message":"bad stream"}}`,
+					http.StatusBadRequest,
+				)
+			},
+			wantStatus: "FAILED",
+		},
+		{
+			name:       "uncertain transport",
+			handler:    func(http.ResponseWriter, *http.Request) {},
+			closeFirst: true,
+			wantStatus: "SUBMITTING",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			email := fmt.Sprintf("prefirst-%s@example.com",
+				strings.ReplaceAll(test.name, " ", "-"))
+			if err := gdb.Exec(
+				`INSERT INTO users (email, code) VALUES (?, 'admin')`,
+				email,
+			).Error; err != nil {
+				t.Fatal(err)
+			}
+			server := httptest.NewServer(test.handler)
+			if test.closeFirst {
+				server.Close()
+			} else {
+				t.Cleanup(server.Close)
+			}
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+				MultiturnV1Enabled: true, TimeoutSeconds: 2,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			_, err := NewService().QueryStream(
+				context.Background(),
+				email,
+				QueryInput{
+					Query: "prefirst", Mode: "instant",
+					ClientTurnID: "prefirst-" +
+						strings.ReplaceAll(test.name, " ", "-"),
+				},
+				nil,
+				nil,
+			)
+			if err == nil {
+				t.Fatal("expected pre-first-byte failure")
+			}
+			var status string
+			if err := gdb.Raw(
+				`SELECT COALESCE(status,'') FROM question_agent_logs LIMIT 1`,
+			).Scan(&status).Error; err != nil {
+				t.Fatal(err)
+			}
+			if status != test.wantStatus {
+				t.Fatalf("status=%q, want %q", status, test.wantStatus)
+			}
+		})
+	}
 }
 
 func TestQueryStream_PersistsAndForwards(t *testing.T) {

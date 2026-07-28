@@ -1315,6 +1315,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	}
 	uploadClient := rxBot.NewClient()
+	contextClient := rxBot.NewClient()
 
 	// 2. Upload attachments to Bot OBS; keep names/paths for the Web row and
 	//    the structured obs_file_list passed to capable chat models. This runs
@@ -1681,7 +1682,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			// retried before the next envelope and must not hide this success.
 			_ = acknowledgeConversationContext(
 				ctx,
-				client,
+				contextClient,
 				username,
 				dialogueID,
 				submission.row.Id,
@@ -2084,13 +2085,13 @@ func (ps *Service) persistQuestionLog(ctx context.Context, username string, refr
 	return row.Id, nil
 }
 
-// QueryStream is the SSE variant of Query for chat-family slugs. It opens the
-// Bot AG-UI stream, persists a RUNNING Web row, publishes that row's canonical
-// identity through onReady, then forwards each frame via forward() while teeing
-// it into an accumulator. RunStarted is persisted before it is forwarded, so
-// the existing A2UI dialogue + user + run authorization boundary is live by the
-// time an interactive frame can reach the browser. A forward() error (browser
-// disconnect) stops forwarding but never aborts the Bot read or finalization.
+// QueryStream is the SSE variant of Query for chat-family slugs. V1 allocates a
+// SUBMITTING row before opening Bot; V0 retains its RUNNING-row flow. Both
+// publish the durable identity through onReady, then forward each raw frame
+// while teeing it into an accumulator. RunStarted is persisted before it is
+// forwarded, so the A2UI dialogue + user + run authorization boundary is live
+// before an interactive frame reaches the browser. A forward() error stops
+// forwarding but never aborts the Bot read or durable finalization.
 func (ps *Service) QueryStream(
 	ctx context.Context,
 	username string,
@@ -2166,7 +2167,7 @@ func (ps *Service) QueryStream(
 
 	var submission *v1Submission
 	if v1 {
-		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions, false)
+		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions, true)
 		if err != nil {
 			return nil, err
 		}
@@ -2181,6 +2182,7 @@ func (ps *Service) QueryStream(
 		}
 	}
 	uploadClient := rxBot.NewClient()
+	contextClient := rxBot.NewClient()
 
 	// Upload attachments before opening the stream so upload errors still
 	// surface as a normal (non-SSE) error to the handler.
@@ -2231,9 +2233,11 @@ func (ps *Service) QueryStream(
 		req.OBSFileList = obsPaths
 	}
 	if v1 {
+		req.Messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
 		req.Conversation = submission.envelope
 	}
-	rc, err := streamClient.ChatCompletionStream(ctx, req)
+	rc, meta, err := streamClient.ChatCompletionStreamWithMeta(ctx, req)
+	logBotResponseMeta(ctx, meta)
 	if err != nil {
 		// Pre-first-byte failure (auth / unsupported) surfaces as a normal
 		// error so the handler can still return a non-SSE status.
@@ -2281,7 +2285,11 @@ func (ps *Service) QueryStream(
 	// Forward + tee, splitting the SSE body on blank-line frame separators. The
 	// split token includes its original separator so the bytes reaching Web are
 	// exactly the bytes Bot sent; only the accumulator parses a copy.
-	acc := &rxBot.AGUIAccumulator{}
+	expectedTurnID := ""
+	if v1 {
+		expectedTurnID = submission.envelope.TurnID
+	}
+	acc := rxBot.NewAGUIAccumulator(expectedTurnID)
 	scanner := bufio.NewScanner(rc)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	scanner.Split(splitSSEFrames)
@@ -2292,6 +2300,13 @@ func (ps *Service) QueryStream(
 		frame := scanner.Bytes()
 		if ev, ok := rxBot.ParseAGUIFrame(frame); ok {
 			acc.Observe(ev)
+			if acc.ProtocolErr() != nil && streamErr == nil {
+				streamErr = fmt.Errorf(
+					"%w: %v",
+					ErrInvalidConversationStage,
+					acc.ProtocolErr(),
+				)
+			}
 			if ev.Type == "RunStarted" && acc.RunID() == "" {
 				streamErr = errors.New("RunStarted event is missing run_id")
 				break
@@ -2322,14 +2337,45 @@ func (ps *Service) QueryStream(
 	// is partial/failed. A blank status would strand the row out of the GA
 	// cron's WHERE status='RUNNING' poll set, so use "FAILED" (a terminal
 	// non-RUNNING state) rather than "" for these paths.
-	status := "SUCCEEDED"
-	if streamErr != nil {
+	status := statusSucceeded
+	if scanErr := scanner.Err(); scanErr != nil {
 		status = "FAILED"
-	} else if err := scanner.Err(); err != nil {
+		if streamErr == nil {
+			streamErr = scanErr
+		}
+	} else if streamErr != nil || acc.Err() != nil {
 		status = "FAILED"
-		streamErr = err
-	} else if acc.Err() != nil {
-		status = "FAILED"
+	}
+	if v1 && status == statusSucceeded {
+		switch {
+		case !acc.Finished():
+			status = "FAILED"
+			streamErr = fmt.Errorf(
+				"%w: missing RunFinished",
+				ErrInvalidConversationStage,
+			)
+		case acc.RunID() == "":
+			status = "FAILED"
+			streamErr = fmt.Errorf(
+				"%w: missing run identity",
+				ErrInvalidConversationStage,
+			)
+		case acc.ContextStage() == nil:
+			status = "FAILED"
+			streamErr = fmt.Errorf(
+				"%w: missing phyto.context_staged",
+				ErrInvalidConversationStage,
+			)
+		default:
+			if err := validateV1ContextStage(
+				submission.envelope,
+				acc.ContextStage(),
+				"ChatAgent",
+			); err != nil {
+				status = "FAILED"
+				streamErr = err
+			}
+		}
 	}
 	// A Bot RunError is already terminal on the wire. Suppress any synthetic
 	// handler error even if the transport reports a late read error after that
@@ -2340,17 +2386,20 @@ func (ps *Service) QueryStream(
 	retainSubmitting := v1 && streamErr != nil && acc.Err() == nil && !isV1DefiniteFailure(streamErr)
 
 	// Finalize the row opened above. WithoutCancel preserves request-scoped DB
-	// values while ensuring a browser abort or upstream disconnect cannot leave
-	// the durable row stuck in RUNNING merely because the request context ended.
+	// values while ensuring request cancellation cannot interrupt a terminal
+	// settlement already proven by the complete Bot stream.
 	out := &QueryData{
 		Id:           id,
 		ToolName:     slugToToolName[slug],
 		ReactionType: "0",
 		DialogueId:   dialogueID,
 		Status:       status,
+		BotRunID:     acc.RunID(),
 	}
-	out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
-	out.FollowUpQuestions = acc.FollowUpJSON()
+	if !v1 || status == statusSucceeded {
+		out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
+		out.FollowUpQuestions = acc.FollowUpJSON()
+	}
 	if retainSubmitting {
 		out.Status = "SUBMITTING"
 		out.UploadPath = strings.Join(obsPaths, ",")
@@ -2358,6 +2407,53 @@ func (ps *Service) QueryStream(
 	}
 	finalizeCtx, cancelFinalize := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancelFinalize()
+	if v1 {
+		if status != statusSucceeded {
+			if err := failV1Submission(finalizeCtx, username, id); err != nil {
+				return nil, err
+			}
+			out.UploadPath = strings.Join(obsPaths, ",")
+			return out, streamErr
+		}
+		stage := acc.ContextStage()
+		settlementState := conversationSettlementAckPending
+		if stage.ContextDegraded {
+			settlementState = conversationSettlementRebuildRequired
+		}
+		private := persistedConversationContext{
+			ClientTurnID:     in.ClientTurnID,
+			Stage:            stage,
+			SettlementState:  settlementState,
+			AssistantSummary: boundedAssistantSummary(acc.AnswerText()),
+			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+		}
+		ledgerVersion, err := settleBlockingConversationContext(
+			finalizeCtx,
+			username,
+			dialogueID,
+			id,
+			out,
+			in.Mode,
+			nil,
+			private,
+		)
+		if err != nil {
+			return nil, err
+		}
+		out.UploadPath = strings.Join(obsPaths, ",")
+		if settlementState == conversationSettlementAckPending {
+			_ = acknowledgeConversationContext(
+				ctx,
+				contextClient,
+				username,
+				dialogueID,
+				id,
+				ledgerVersion,
+				stage,
+			)
+		}
+		return out, nil
+	}
 	if err := ps.finalizeQuestionStream(finalizeCtx, username, identity, acc.RunID(), out); err != nil {
 		return nil, err
 	}
