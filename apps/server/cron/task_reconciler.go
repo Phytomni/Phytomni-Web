@@ -1,12 +1,16 @@
 package cron
 
 import (
-	"fmt"
+	"context"
 	rxCron "phytomni-server/cron/base"
+	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
 	"phytomni-server/model"
 	"phytomni-server/service/api_service"
+	"time"
 )
+
+const conversationCleanupBatchLimit = 100
 
 type TaskReconciler struct {
 }
@@ -20,11 +24,13 @@ func (r *TaskReconciler) Spec() string {
 }
 
 func (r *TaskReconciler) Run() {
-	fmt.Println("polling analysis results every 10 minutes")
+	rxLog.Sugar().Infow("running task reconciliation")
 	var questionAgentList []model.QuestionAgentLog
-	err := model.Default().Model(&model.QuestionAgentLog{}).Debug().Where("status = ?", "RUNNING").Find(&questionAgentList).Error
+	err := model.Default().Model(&model.QuestionAgentLog{}).
+		Where("status = ?", "RUNNING").
+		Find(&questionAgentList).Error
 	if err != nil {
-		rxLog.Sugar().Error(err)
+		rxLog.Sugar().Errorw("task reconciliation query failed", "reason", "database_query_failed")
 		return
 	}
 
@@ -34,4 +40,31 @@ func (r *TaskReconciler) Run() {
 	// skipped inside SyncBotRuns). The retired EIHealth product's direct IAM poll
 	// has been removed.
 	api_service.SyncBotRuns(questionAgentList)
+
+	ctx := context.Background()
+	service := api_service.NewService()
+	tombstones := service.DrainPendingConversationTombstones(ctx, conversationCleanupBatchLimit)
+	if tombstones.Error != nil {
+		rxLog.Sugar().Errorw(
+			"conversation tombstone cleanup query failed",
+			"reason", "database_query_failed",
+		)
+	}
+
+	timeoutSeconds := 60
+	if rxBot.BotConfig != nil && rxBot.BotConfig.TimeoutSeconds > 0 {
+		timeoutSeconds = rxBot.BotConfig.TimeoutSeconds
+	}
+	staleBefore := time.Now().Add(-2 * time.Duration(timeoutSeconds) * time.Second)
+	stale := service.FailStaleConversationSubmissions(
+		ctx,
+		staleBefore,
+		conversationCleanupBatchLimit,
+	)
+	if stale.Error != nil {
+		rxLog.Sugar().Errorw(
+			"stale conversation submission cleanup query failed",
+			"reason", "database_query_failed",
+		)
+	}
 }

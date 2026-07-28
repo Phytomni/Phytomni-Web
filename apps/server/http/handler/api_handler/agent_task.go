@@ -1,10 +1,12 @@
 package api_handler
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"phytomni-server/common"
 	"phytomni-server/common/i18n"
+	"phytomni-server/service/api_service"
 	"phytomni-server/utils/errs"
 	"strconv"
 )
@@ -80,6 +82,13 @@ func (ph *Handler) QueryListDelete(ctx *gin.Context) {
 
 	queryId, err := ph.service.QueryListDelete(ctx, name.(string), id)
 	if err != nil {
+		if errors.Is(err, api_service.ErrConversationDeleteNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{
+				"code":    http.StatusNotFound,
+				"message": i18n.TMaybe(ctx, err.Error()),
+			})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"phytomni-server/common"
 	rxBot "phytomni-server/external/bot"
@@ -221,7 +222,9 @@ func (ps *Service) loadHistoryRows(ctx context.Context, username string, dialogu
 	// parent-row sentinel) would match every root row across all dialogues.
 	// Defensive guard: treat RecordNotFound as a new/empty dialogue and return nil;
 	// propagate all other errors.
-	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("user_name = ? and dialogue_id = ?", username, dialogueId).First(&QuestionAgentLog).Error; err != nil {
+	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("user_name = ? AND dialogue_id = ? AND f_id = ? AND delete_at IS NULL", username, dialogueId, 0).
+		First(&QuestionAgentLog).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -231,7 +234,9 @@ func (ps *Service) loadHistoryRows(ctx context.Context, username string, dialogu
 	// rows are written under the dialogue owner, so a row with a different
 	// user_name attached to an owned parent (via a write bug or DB corruption)
 	// must never surface through history.
-	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("user_name = ? and f_id = ? and delete_at IS NULL", username, QuestionAgentLog.Id).Find(&QuestionAgentLogList).Error; err != nil {
+	if err = model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("user_name = ? AND f_id = ? AND delete_at IS NULL", username, QuestionAgentLog.Id).
+		Find(&QuestionAgentLogList).Error; err != nil {
 		return nil, err
 	}
 	newList := make([]*model.QuestionAgentLog, 0, len(QuestionAgentLogList)+1)
@@ -506,16 +511,59 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 }
 
 func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (int, error) {
-	db := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug()
+	var root model.QuestionAgentLog
+	needsTombstone := false
+	err := model.DB(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_name = ? AND id = ? AND f_id = ?", name, id, 0).
+			First(&root).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrConversationDeleteNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if root.DeleteAt != nil && root.LogStatus == conversationDeleteAcked {
+			return nil
+		}
+		if root.DeleteAt != nil && root.LogStatus == conversationDeletePending {
+			needsTombstone = true
+			return nil
+		}
 
-	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("delete_at", time.Now())
-	if result.Error != nil {
-		return 0, errors.New("failed to delete Q&A record")
+		now := time.Now()
+		updates := map[string]any{"log_status": conversationDeletePending}
+		if root.DeleteAt == nil {
+			updates["delete_at"] = now
+		}
+		result := tx.Model(&model.QuestionAgentLog{}).
+			Where("user_name = ? AND id = ? AND f_id = ?", name, id, 0).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrConversationDeleteNotFound
+		}
+		needsTombstone = true
+		return nil
+	})
+	if errors.Is(err, ErrConversationDeleteNotFound) {
+		return 0, ErrConversationDeleteNotFound
 	}
-	if result.RowsAffected == 0 {
-		return 0, errors.New("no matching record found")
+	if err != nil {
+		return 0, errors.New("failed to delete conversation")
 	}
-
+	if !needsTombstone {
+		return id, nil
+	}
+	if err := ps.tombstoneDeletedConversation(context.WithoutCancel(ctx), root); err != nil {
+		rxLog.SugarContext(ctx).Warnw(
+			"conversation context tombstone deferred",
+			"conversation_row_id", id,
+			"reason", "bot_tombstone_failed",
+		)
+	}
 	return id, nil
 }
 

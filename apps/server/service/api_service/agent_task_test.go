@@ -3,11 +3,13 @@ package api_service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/spf13/viper"
@@ -931,5 +933,140 @@ func TestAnalystAgentGetLog_PreservesOwnerMismatchBehavior(t *testing.T) {
 	}
 	if got != "" {
 		t.Fatalf("owner mismatch log = %q, want empty result", got)
+	}
+}
+
+func TestQueryListDelete_HidesOwnerConversationBeforeBotTombstone(t *testing.T) {
+	gdb := setupTestDB(t)
+	const dialogueID = "11111111-1111-4111-8111-111111111111"
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, log_status, status, created_at) VALUES
+		(100, ?, 0, 'alice', 'root', 'answer', '', 'SUCCEEDED', CURRENT_TIMESTAMP),
+		(101, ?, 100, 'alice', 'child', 'answer', '', 'SUCCEEDED', CURRENT_TIMESTAMP)`,
+		dialogueID, dialogueID).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var deleteAt *string
+		var logStatus string
+		if err := gdb.Raw(
+			`SELECT delete_at, COALESCE(log_status, '') FROM question_agent_logs WHERE id = 100`,
+		).Row().Scan(&deleteAt, &logStatus); err != nil {
+			t.Fatalf("read committed delete state: %v", err)
+		}
+		if deleteAt == nil || logStatus != conversationDeletePending {
+			t.Fatalf("Bot called before durable delete: delete_at=%v log_status=%q", deleteAt, logStatus)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"schema_version":1,"state":"tombstoned","context_version":0}`))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	gotID, err := NewService().QueryListDelete(context.Background(), "alice", 100)
+	if err != nil || gotID != 100 {
+		t.Fatalf("QueryListDelete = %d, %v; want 100, nil", gotID, err)
+	}
+	history, err := NewService().AnswerCheck(context.Background(), "alice", dialogueID)
+	if err != nil || len(history) != 0 {
+		t.Fatalf("deleted history = %+v, %v; want empty", history, err)
+	}
+	var logStatus string
+	if err := gdb.Raw(`SELECT COALESCE(log_status, '') FROM question_agent_logs WHERE id = 100`).
+		Scan(&logStatus).Error; err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if logStatus != conversationDeleteAcked {
+		t.Fatalf("log_status=%q, want %q", logStatus, conversationDeleteAcked)
+	}
+	var firstDeleteAt time.Time
+	if err := gdb.Raw(`SELECT delete_at FROM question_agent_logs WHERE id = 100`).
+		Scan(&firstDeleteAt).Error; err != nil {
+		t.Fatalf("read first delete time: %v", err)
+	}
+
+	if _, err := NewService().QueryListDelete(context.Background(), "alice", 100); err != nil {
+		t.Fatalf("repeat delete: %v", err)
+	}
+	var repeatedDeleteAt time.Time
+	if err := gdb.Raw(`SELECT delete_at FROM question_agent_logs WHERE id = 100`).
+		Scan(&repeatedDeleteAt).Error; err != nil {
+		t.Fatalf("read repeated delete time: %v", err)
+	}
+	if !repeatedDeleteAt.Equal(firstDeleteAt) {
+		t.Fatalf("repeat delete changed delete_at: first=%v repeat=%v", firstDeleteAt, repeatedDeleteAt)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("tombstone calls=%d, want one idempotent call", calls.Load())
+	}
+}
+
+func TestQueryListDelete_BotFailureLeavesPendingAndReturnsSuccess(t *testing.T) {
+	gdb := setupTestDB(t)
+	const dialogueID = "22222222-2222-4222-8222-222222222222"
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, status, created_at) VALUES
+		(110, ?, 0, 'alice', 'root', 'answer', 'SUCCEEDED', CURRENT_TIMESTAMP),
+		(111, ?, 110, 'alice', 'child', 'answer', 'SUCCEEDED', CURRENT_TIMESTAMP)`,
+		dialogueID, dialogueID).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 1,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	if got, err := NewService().QueryListDelete(context.Background(), "alice", 110); err != nil || got != 110 {
+		t.Fatalf("delete during Bot outage = %d, %v; want success", got, err)
+	}
+	var logStatus string
+	var deleteAt *time.Time
+	if err := gdb.Raw(
+		`SELECT COALESCE(log_status, ''), delete_at FROM question_agent_logs WHERE id = 110`,
+	).Row().Scan(&logStatus, &deleteAt); err != nil {
+		t.Fatalf("read deleted row: %v", err)
+	}
+	if deleteAt == nil || logStatus != conversationDeletePending {
+		t.Fatalf("delete state: delete_at=%v log_status=%q", deleteAt, logStatus)
+	}
+	history, err := NewService().AnswerCheck(context.Background(), "alice", dialogueID)
+	if err != nil || len(history) != 0 {
+		t.Fatalf("history after failed tombstone = %+v, %v; want empty", history, err)
+	}
+}
+
+func TestQueryListDelete_CrossOwnerIsSafeNotFound(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, status, created_at) VALUES
+		(120, '33333333-3333-4333-8333-333333333333', 0, 'alice', 'SUCCEEDED', CURRENT_TIMESTAMP)`).
+		Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	_, err := NewService().QueryListDelete(context.Background(), "bob", 120)
+	if !errors.Is(err, ErrConversationDeleteNotFound) {
+		t.Fatalf("cross-owner error=%v, want safe not found", err)
+	}
+	var count int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND delete_at IS NULL", 120).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count owner row: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("owner row changed after cross-owner delete, count=%d", count)
 	}
 }
