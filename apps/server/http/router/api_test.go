@@ -58,6 +58,7 @@ func TestApiV1AuthUserRoutes(t *testing.T) {
 	assertRoutes(t, routes,
 		[]string{
 			"GET /api/v1/bot/capabilities",
+			"GET /api/v1/auth/capabilities",
 			"POST /api/v1/auth/sessions",
 			"POST /api/v1/auth/registrations",
 			"POST /api/v1/users",

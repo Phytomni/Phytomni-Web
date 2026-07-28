@@ -17,6 +17,7 @@ func Api(r *gin.RouterGroup) {
 	{
 		apiAuthRouter.POST("/sessions", middleware.PerIPRateLimit("login"), authHandler.Login)                // login (create session, per-IP rate limited)
 		apiAuthRouter.POST("/registrations", middleware.PerIPRateLimit("register"), authHandler.UserRegister) // self-registration (per-IP rate limited)
+		apiAuthRouter.GET("/capabilities", authHandler.AuthCapabilities)
 	}
 
 	// /api/v1/downloads keeps the disabled legacy email-link route visible. It
