@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -232,6 +233,46 @@ func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
 	gdb.Raw(`SELECT COALESCE(mode,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&mode)
 	if mode != "expert" {
 		t.Errorf("expected persisted mode=expert, got %q", mode)
+	}
+}
+
+func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var captured rxBot.RouteQueryRequest
+	effects := &queryPermissionEffects{}
+	permissionRouteServer(t, effects, &captured)
+	rxBot.BotConfig.MultiturnV1Enabled = true
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query:        "compare datasets",
+		Mode:         "expert",
+		Tool:         "DataAgent",
+		ClientTurnID: "expert-turn-1",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if captured.ForcedTool == nil || *captured.ForcedTool != "DataAgent" {
+		t.Fatalf("forced tool = %#v, want DataAgent", captured.ForcedTool)
+	}
+	if captured.Conversation == nil || captured.Conversation.RequestedAgentID == nil ||
+		*captured.Conversation.RequestedAgentID != "DataAgent" {
+		t.Fatalf("conversation requested agent = %#v", captured.Conversation)
+	}
+	if captured.Conversation.TurnID != fmt.Sprint(out.Id) ||
+		captured.Conversation.LedgerCursor != out.Id {
+		t.Fatalf("turn identity = %q/%d, row id = %d",
+			captured.Conversation.TurnID,
+			captured.Conversation.LedgerCursor,
+			out.Id,
+		)
+	}
+	var rows int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("row count = %d, want 1", rows)
 	}
 }
 

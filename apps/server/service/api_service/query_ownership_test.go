@@ -2,12 +2,15 @@ package api_service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
 	"phytomni-server/db"
+	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 )
 
 // setupQueryTestDB opens an in-memory SQLite with a question_agent_logs table
@@ -29,6 +32,37 @@ func setupQueryTestDB(t *testing.T) *gorm.DB {
 	}
 	db.Set("phytomni-server", gdb)
 	return gdb
+}
+
+func TestQueryModeLockRejectsConflictingOwnerTurnBeforeAllocation(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, mode, status)
+		VALUES (91, ?, 0, 'alice', 'root', 'instant', 'SUCCEEDED')`,
+		ledgerTestDialogueID,
+	).Error; err != nil {
+		t.Fatalf("seed root: %v", err)
+	}
+
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ProxyEnabled: true, ExpertEnabled: true, MultiturnV1Enabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	_, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "continue", Id: 91, Mode: "expert", ClientTurnID: "mode-lock-1",
+	})
+	if !errors.Is(err, ErrConversationModeConflict) {
+		t.Fatalf("Query() error = %v, want mode conflict", err)
+	}
+	var count int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("row count = %d, want root only", count)
+	}
 }
 
 // TestResolveDialogue_RefreshScopedToOwner pins refresh ownership isolation:

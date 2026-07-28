@@ -4,13 +4,19 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -18,6 +24,7 @@ import (
 	"phytomni-server/utils"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // ErrGatewayDisabled is returned when the Bot proxy is turned off in config.
@@ -49,6 +56,23 @@ var ErrInvalidA2uiSurface = errors.New("invalid a2ui input-required surface")
 // handler maps it to 400; expert traffic normally never reaches it because the
 // handler's stream gate already excludes mode=expert (defense in depth).
 var ErrStreamUnsupported = errors.New("streaming not supported for this request")
+
+var (
+	ErrInvalidClientTurnID      = errors.New("invalid client turn id")
+	ErrConversationModeConflict = errors.New("conversation mode conflict")
+	ErrDuplicateClientTurn      = errors.New("duplicate client turn conflict")
+	ErrInvalidQueryFile         = errors.New("invalid query file")
+	ErrQueryAuthentication      = errors.New("query authentication required")
+)
+
+var serviceClientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+
+const (
+	recentClientTurnLookupLimit = 200
+	turnAllocationTimeout       = time.Second
+)
+
+var sqliteTurnAllocationLocks sync.Map
 
 // ErrInteropRequired means an explicit required delegation could not be
 // proven from the authenticated, sanitized discovery snapshot. It is returned
@@ -86,7 +110,533 @@ type QueryInput struct {
 	Files          []QueryFile
 	InteropMode    string
 	InteropTargets []string
+	ClientTurnID   string
+	ArtifactIDs    []string
 	Surface        QuerySurface
+}
+
+type v1SubmissionTarget struct {
+	dialogueID string
+	parentID   int64
+	mode       string
+	operation  string
+	artifacts  []rxBot.ArtifactRefV1
+}
+
+type v1Submission struct {
+	row       model.QuestionAgentLog
+	envelope  *rxBot.ConversationEnvelopeV1
+	duplicate *QueryData
+}
+
+func multiturnV1Enabled(in QueryInput) bool {
+	return in.Surface == QuerySurfaceChat &&
+		rxBot.BotConfig != nil &&
+		rxBot.BotConfig.MultiturnV1Enabled
+}
+
+func normalizeV1ChatRouting(in *QueryInput) error {
+	in.Mode = strings.ToLower(strings.TrimSpace(in.Mode))
+	if in.Mode == "" {
+		in.Mode = "instant"
+	}
+	switch in.Mode {
+	case "instant":
+		in.Tool = "ChatAgent"
+		return nil
+	case "expert":
+		in.Tool = strings.TrimSpace(in.Tool)
+		if in.Tool == "" {
+			return nil
+		}
+		if _, ok := rxBot.SlugFor(in.Tool); !ok {
+			return ErrInvalidChatRouting
+		}
+		return nil
+	default:
+		return ErrInvalidChatRouting
+	}
+}
+
+func validateV1ClientTurnID(value string) error {
+	if !serviceClientTurnIDPattern.MatchString(strings.TrimSpace(value)) {
+		return ErrInvalidClientTurnID
+	}
+	return nil
+}
+
+func validateV1CurrentMessage(value string) error {
+	if strings.TrimSpace(value) == "" || utf8.RuneCountInString(value) > 32_768 {
+		return ErrInvalidChatRouting
+	}
+	return nil
+}
+
+var allowedQueryFileExtensions = map[string]struct{}{
+	".csv": {}, ".doc": {}, ".docx": {}, ".json": {}, ".pdf": {},
+	".png": {}, ".ppt": {}, ".pptx": {}, ".tsv": {}, ".txt": {},
+	".xls": {}, ".xlsx": {},
+}
+
+func validateQueryFiles(files []QueryFile) error {
+	sizes := make([]int64, len(files))
+	for index, file := range files {
+		name := strings.TrimSpace(file.Filename)
+		if name == "" || len(name) > 255 || filepath.Base(name) != name ||
+			strings.ContainsAny(name, `/\`) || len(file.Data) == 0 {
+			return ErrInvalidQueryFile
+		}
+		if _, allowed := allowedQueryFileExtensions[strings.ToLower(filepath.Ext(name))]; !allowed {
+			return ErrInvalidQueryFile
+		}
+		sizes[index] = int64(len(file.Data))
+	}
+	if err := rxBot.CheckFiles(sizes); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidQueryFile, err)
+	}
+	return nil
+}
+
+func queryOperation(in QueryInput) string {
+	if in.RefreshId != 0 {
+		return "replace"
+	}
+	return "append"
+}
+
+func (ps *Service) resolveV1SubmissionTarget(
+	ctx context.Context,
+	username string,
+	in QueryInput,
+) (v1SubmissionTarget, error) {
+	if strings.TrimSpace(username) == "" {
+		return v1SubmissionTarget{}, ErrQueryAuthentication
+	}
+	target := v1SubmissionTarget{
+		mode:      in.Mode,
+		operation: queryOperation(in),
+	}
+	if in.Id == 0 && in.RefreshId == 0 {
+		target.dialogueID = uuid.NewString()
+		if len(in.ArtifactIDs) != 0 {
+			return v1SubmissionTarget{}, ErrConversationArtifactOwnership
+		}
+		return target, nil
+	}
+
+	dialogueID, parentID, err := ps.resolveDialogue(ctx, username, in)
+	if err != nil {
+		return v1SubmissionTarget{}, err
+	}
+	ledger, err := BuildConversationLedger(ctx, username, dialogueID)
+	if err != nil {
+		return v1SubmissionTarget{}, err
+	}
+	lockedMode := strings.ToLower(strings.TrimSpace(ledger.Mode))
+	if lockedMode == "" {
+		lockedMode = "instant"
+	}
+	if lockedMode != in.Mode {
+		return v1SubmissionTarget{}, ErrConversationModeConflict
+	}
+	artifacts, err := ledger.AuthorizeArtifactIDs(in.ArtifactIDs)
+	if err != nil {
+		return v1SubmissionTarget{}, err
+	}
+	target.dialogueID = dialogueID
+	target.parentID = parentID
+	target.mode = lockedMode
+	target.artifacts = artifacts
+	return target, nil
+}
+
+func turnAllocationKey(username, clientTurnID string) string {
+	sum := sha256.Sum256([]byte(username + "\x00" + clientTurnID))
+	return fmt.Sprintf("phyto-turn-%x", sum[:20])
+}
+
+func withProcessTurnAllocationLock(
+	ctx context.Context,
+	key string,
+	fn func() error,
+) error {
+	lockValue, _ := sqliteTurnAllocationLocks.LoadOrStore(key, make(chan struct{}, 1))
+	lock := lockValue.(chan struct{})
+	lockCtx, cancel := context.WithTimeout(ctx, turnAllocationTimeout)
+	defer cancel()
+	select {
+	case lock <- struct{}{}:
+		defer func() { <-lock }()
+		return fn()
+	case <-lockCtx.Done():
+		return fmt.Errorf("turn allocation lock: %w", lockCtx.Err())
+	}
+}
+
+func withMySQLTurnAllocationLock(
+	ctx context.Context,
+	key string,
+	fn func() error,
+) error {
+	sqlDB, err := model.DB(ctx).DB()
+	if err != nil {
+		return err
+	}
+	lockCtx, cancel := context.WithTimeout(ctx, turnAllocationTimeout)
+	defer cancel()
+	conn, err := sqlDB.Conn(lockCtx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	var acquired int
+	if err := conn.QueryRowContext(lockCtx, "SELECT GET_LOCK(?, 0)", key).Scan(&acquired); err != nil {
+		return err
+	}
+	if acquired != 1 {
+		return errors.New("turn allocation lock unavailable")
+	}
+	defer func() {
+		releaseCtx, releaseCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			turnAllocationTimeout,
+		)
+		defer releaseCancel()
+		_, _ = conn.ExecContext(releaseCtx, "SELECT RELEASE_LOCK(?)", key)
+	}()
+	return fn()
+}
+
+func withTurnAllocationLock(
+	ctx context.Context,
+	username string,
+	clientTurnID string,
+	fn func() error,
+) error {
+	key := turnAllocationKey(username, clientTurnID)
+	if model.DB(ctx).Dialector.Name() == "mysql" {
+		return withMySQLTurnAllocationLock(ctx, key, fn)
+	}
+	return withProcessTurnAllocationLock(ctx, key, fn)
+}
+
+func storedSubmissionOperation(
+	row model.QuestionAgentLog,
+	private *persistedConversationContext,
+) string {
+	if private != nil && private.SettlementState == "submission_replace" {
+		return "replace"
+	}
+	return "append"
+}
+
+func findRecentClientTurn(
+	ctx context.Context,
+	username string,
+	clientTurnID string,
+) (*model.QuestionAgentLog, *persistedConversationContext, error) {
+	var rows []model.QuestionAgentLog
+	if err := model.DB(ctx).
+		Where("user_name = ? AND delete_at IS NULL", username).
+		Order("id DESC").
+		Limit(recentClientTurnLookupLimit).
+		Find(&rows).Error; err != nil {
+		return nil, nil, err
+	}
+	for index := range rows {
+		_, private, err := unmarshalPersistedProjectionWithContext(rows[index].BotProjectionJSON)
+		if err != nil {
+			return nil, nil, err
+		}
+		if private != nil && private.ClientTurnID == clientTurnID {
+			return &rows[index], private, nil
+		}
+	}
+	return nil, nil, nil
+}
+
+func validateDuplicateSubmission(
+	row model.QuestionAgentLog,
+	private *persistedConversationContext,
+	in QueryInput,
+	target v1SubmissionTarget,
+) error {
+	if in.Id != 0 || in.RefreshId != 0 {
+		if row.DialogueId != target.dialogueID {
+			return ErrDuplicateClientTurn
+		}
+	}
+	if normalizedConversationLedgerMode(row.Mode) != target.mode ||
+		sha256Hex([]byte(row.Query)) != sha256Hex([]byte(in.Query)) ||
+		storedSubmissionOperation(row, private) != target.operation {
+		return ErrDuplicateClientTurn
+	}
+	if target.operation == "replace" && row.Id != in.RefreshId {
+		return ErrDuplicateClientTurn
+	}
+	if target.operation == "append" && in.Id != 0 && row.FId != in.Id {
+		return ErrDuplicateClientTurn
+	}
+	return nil
+}
+
+func queryDataFromStoredRow(row model.QuestionAgentLog) *QueryData {
+	return &QueryData{
+		Id:                row.Id,
+		ToolName:          row.ToolName,
+		Answer:            row.Answer,
+		FollowUpQuestions: row.FollowUpQuestions,
+		Status:            row.Status,
+		UploadPath:        row.UploadPath,
+		DownloadPath:      row.DownloadPath,
+		ServerFilePath:    row.ServerFilePath,
+		ComputeResource:   row.ComputeResource,
+		ReactionType:      row.ReactionType,
+		DialogueId:        row.DialogueId,
+		BotRunID:          row.BotRunId,
+		TaskId:            row.TaskId,
+		ReportRevision:    row.BotReportRevision,
+	}
+}
+
+func requestedAgentForV1(in QueryInput) *string {
+	if in.Mode == "instant" {
+		tool := "ChatAgent"
+		return &tool
+	}
+	if in.Tool == "" {
+		return nil
+	}
+	tool := in.Tool
+	return &tool
+}
+
+func baseBusinessContextVersion(ledger ConversationLedger, currentRowID int64) int64 {
+	var version int64
+	for _, row := range ledger.rows {
+		if row.ID >= currentRowID || row.Context == nil || row.Context.Stage == nil {
+			continue
+		}
+		if row.Context.Stage.ProposedBusinessContextVersion > version {
+			version = row.Context.Stage.ProposedBusinessContextVersion
+		}
+	}
+	return version
+}
+
+func (ps *Service) allocateV1Submission(
+	ctx context.Context,
+	username string,
+	in QueryInput,
+	target v1SubmissionTarget,
+	permissions AgentPermissionResolution,
+) (*v1Submission, error) {
+	var allocated model.QuestionAgentLog
+	var duplicate *QueryData
+	err := withTurnAllocationLock(ctx, username, in.ClientTurnID, func() error {
+		existing, private, err := findRecentClientTurn(ctx, username, in.ClientTurnID)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			if err := validateDuplicateSubmission(*existing, private, in, target); err != nil {
+				return err
+			}
+			allocated = *existing
+			if existing.Status != "SUBMITTING" {
+				duplicate = queryDataFromStoredRow(*existing)
+			}
+			return nil
+		}
+
+		privateState := "submission_append"
+		if target.operation == "replace" {
+			privateState = "submission_replace"
+		}
+		privateContext := &persistedConversationContext{
+			ClientTurnID:    in.ClientTurnID,
+			SettlementState: privateState,
+		}
+
+		toolName := in.Tool
+		if in.Mode == "instant" {
+			toolName = "ChatAgent"
+		}
+		titleQuery := ""
+		if target.parentID == 0 && in.RefreshId == 0 {
+			titleQuery = in.Query
+		}
+		if target.operation == "replace" {
+			var current model.QuestionAgentLog
+			if err := model.DB(ctx).
+				Where("id = ? AND user_name = ? AND dialogue_id = ?",
+					in.RefreshId,
+					username,
+					target.dialogueID,
+				).
+				First(&current).Error; err != nil {
+				return err
+			}
+			projection, _, err := unmarshalPersistedProjectionWithContext(
+				current.BotProjectionJSON,
+			)
+			if err != nil {
+				return err
+			}
+			raw, err := marshalPersistedProjectionWithContext(projection, privateContext)
+			if err != nil {
+				return err
+			}
+			updates := map[string]interface{}{
+				"answer":              "",
+				"bot_projection_json": raw,
+				"bot_run_id":          "",
+				"file_name":           fileNamesForInput(in.Files),
+				"follow_up_questions": "",
+				"log_status":          "",
+				"mode":                target.mode,
+				"query":               in.Query,
+				"server_file_path":    "",
+				"server_id":           "",
+				"status":              "SUBMITTING",
+				"task_id":             "",
+				"tool_name":           toolName,
+				"upload_path":         "",
+			}
+			result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+				Where("id = ? AND user_name = ? AND dialogue_id = ?",
+					in.RefreshId,
+					username,
+					target.dialogueID,
+				).
+				Updates(updates)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return gorm.ErrRecordNotFound
+			}
+			if err := model.DB(ctx).First(&allocated, in.RefreshId).Error; err != nil {
+				return err
+			}
+			return nil
+		}
+
+		raw, err := marshalPersistedProjectionWithContext(
+			BotRunProjection{ReportRevision: -1},
+			privateContext,
+		)
+		if err != nil {
+			return err
+		}
+		allocated = model.QuestionAgentLog{
+			DialogueId:        target.dialogueID,
+			FId:               target.parentID,
+			BotProjectionJSON: raw,
+			BotReportRevision: -1,
+			UserName:          username,
+			Query:             in.Query,
+			TitleQuery:        titleQuery,
+			FileName:          fileNamesForInput(in.Files),
+			ToolName:          toolName,
+			Status:            "SUBMITTING",
+			Mode:              target.mode,
+			ReactionType:      "0",
+			CollectType:       "0",
+		}
+		return model.DB(ctx).Create(&allocated).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	if duplicate != nil {
+		return &v1Submission{row: allocated, duplicate: duplicate}, nil
+	}
+
+	ledger, err := BuildConversationLedger(ctx, username, allocated.DialogueId)
+	if err != nil {
+		return nil, err
+	}
+	requestID := requestIDFromContext(ctx)
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	allowedAgents := append([]string(nil), permissions.AllowedTools...)
+	if in.Mode == "instant" {
+		allowedAgents = []string{"ChatAgent"}
+	}
+	envelope := &rxBot.ConversationEnvelopeV1{
+		SchemaVersion:              1,
+		ConversationKey:            ledger.ConversationKey,
+		DialogueID:                 allocated.DialogueId,
+		TurnID:                     strconv.FormatInt(allocated.Id, 10),
+		RequestID:                  requestID,
+		Operation:                  target.operation,
+		Mode:                       target.mode,
+		CurrentMessage:             rxBot.CurrentMessageV1{Content: in.Query, Locale: "en-US"},
+		RequestedAgentID:           requestedAgentForV1(in),
+		AllowedAgentIDs:            allowedAgents,
+		LedgerCursor:               allocated.Id,
+		LedgerVersion:              ledger.Version,
+		BaseBusinessContextVersion: baseBusinessContextVersion(ledger, allocated.Id),
+		HistoryDelta:               ledger.HistoryBefore(allocated.Id),
+		ArtifactRefs:               append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+	}
+	if err := envelope.Validate(); err != nil {
+		return nil, err
+	}
+	return &v1Submission{row: allocated, envelope: envelope}, nil
+}
+
+func fileNamesForInput(files []QueryFile) string {
+	names := make([]string, 0, len(files))
+	for _, file := range files {
+		names = append(names, file.Filename)
+	}
+	return strings.Join(names, ",")
+}
+
+func failV1Submission(
+	ctx context.Context,
+	username string,
+	rowID int64,
+) error {
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND user_name = ? AND status = ?", rowID, username, "SUBMITTING").
+		Update("status", "FAILED")
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("submitting row %d not found", rowID)
+	}
+	return nil
+}
+
+func updateV1SubmissionUploads(
+	ctx context.Context,
+	username string,
+	rowID int64,
+	fileNames []string,
+	obsPaths []string,
+) error {
+	if len(fileNames) == 0 && len(obsPaths) == 0 {
+		return nil
+	}
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND user_name = ? AND status = ?", rowID, username, "SUBMITTING").
+		Updates(map[string]interface{}{
+			"file_name":   strings.Join(fileNames, ","),
+			"upload_path": strings.Join(obsPaths, ","),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("submitting row %d not found", rowID)
+	}
+	return nil
 }
 
 // IsDedicatedAgentProductTool reports whether tool has its own route-owned
@@ -461,15 +1011,32 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 // So Id=0 starts a new conversation (fresh dialogue_id), Id=N appends a child
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
 func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
+	v1 := multiturnV1Enabled(in)
 	// QuerySurface is exported, so no non-Chat caller may select an arbitrary
 	// tool. The only non-Chat surface is the route-owned dedicated product run.
 	if in.Surface == QuerySurfaceChat {
-		decision, err := ValidateChatRouting(in.Mode, in.Tool)
-		if err != nil {
-			return nil, err
+		if v1 {
+			if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
+				return nil, err
+			}
+			if err := validateV1CurrentMessage(in.Query); err != nil {
+				return nil, err
+			}
+			in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
+			if err := normalizeV1ChatRouting(&in); err != nil {
+				return nil, err
+			}
+			if err := validateQueryFiles(in.Files); err != nil {
+				return nil, err
+			}
+		} else {
+			decision, err := ValidateChatRouting(in.Mode, in.Tool)
+			if err != nil {
+				return nil, err
+			}
+			in.Mode = decision.Mode
+			in.Tool = decision.ForcedTool
 		}
-		in.Mode = decision.Mode
-		in.Tool = decision.ForcedTool
 	} else if in.Surface != QuerySurfaceAgentProduct || !IsDedicatedAgentProductTool(in.Tool) {
 		return nil, ErrRemoteProductForbidden
 	}
@@ -479,6 +1046,15 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// Expert mode is dark-launched: refuse early (no Bot call) when disabled.
 	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
 		return nil, ErrExpertDisabled
+	}
+	var target v1SubmissionTarget
+	if v1 {
+		var err error
+		target, err = ps.resolveV1SubmissionTarget(ctx, username, in)
+		if err != nil {
+			return nil, err
+		}
+		in.Mode = target.mode
 	}
 	var (
 		permissions AgentPermissionResolution
@@ -537,6 +1113,16 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		in.InteropTargets = append([]string(nil), interop.Targets...)
 	}
 
+	var submission *v1Submission
+	if v1 {
+		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions)
+		if err != nil {
+			return nil, err
+		}
+		if submission.duplicate != nil {
+			return submission.duplicate, nil
+		}
+	}
 	uploadClient := rxBot.NewClient()
 
 	// 2. Upload attachments to Bot OBS; keep names/paths for the Web row and
@@ -546,6 +1132,15 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	for _, f := range in.Files {
 		up, err := uploadClient.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
 		if err != nil {
+			if v1 {
+				if settleErr := failV1Submission(
+					context.WithoutCancel(ctx),
+					username,
+					submission.row.Id,
+				); settleErr != nil {
+					return nil, fmt.Errorf("upload failed: %v; settle submission: %w", err, settleErr)
+				}
+			}
 			return nil, err
 		}
 		obsPaths = append(obsPaths, up.Path)
@@ -555,9 +1150,25 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// 3. Resolve dialogue_id + f_id from the threading model above. Ownership
 	//    is enforced by user_name so a caller cannot thread onto, or overwrite,
 	//    another user's conversation (real-user isolation lives in Web Go).
-	dialogueID, fID, err := ps.resolveDialogue(ctx, username, in)
-	if err != nil {
-		return nil, err
+	var dialogueID string
+	var fID int64
+	if v1 {
+		dialogueID = submission.row.DialogueId
+		fID = submission.row.FId
+		if err := updateV1SubmissionUploads(
+			ctx,
+			username,
+			submission.row.Id,
+			fileNames,
+			obsPaths,
+		); err != nil {
+			return nil, err
+		}
+	} else {
+		dialogueID, fID, err = ps.resolveDialogue(ctx, username, in)
+		if err != nil {
+			return nil, err
+		}
 	}
 	executionClient := newExecutionBotClient(
 		rxBot.BotConfig,
@@ -599,6 +1210,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				permissions.AllowedTools...,
 			),
 			ForcedTool: forcedTool,
+		}
+		if v1 {
+			routeRequest.Conversation = submission.envelope
 		}
 		resp, meta, err := executionClient.RouteQueryWithMeta(ctx, routeRequest)
 		logBotResponseMeta(ctx, meta)
@@ -680,6 +1294,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			Model:      chatModel,
 			Messages:   chatMessagesForRequest(in.History, in.Query),
 			DialogueID: dialogueID,
+		}
+		if v1 {
+			req.Conversation = submission.envelope
 		}
 		if len(obsPaths) > 0 {
 			req.OBSFileList = obsPaths
@@ -848,7 +1465,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		CollectType:       "0",
 	}
 
-	id, err := ps.persistQuestionLog(ctx, username, in.RefreshId, &row)
+	persistID := in.RefreshId
+	if v1 {
+		persistID = submission.row.Id
+	}
+	id, err := ps.persistQuestionLog(ctx, username, persistID, &row)
 	if err != nil {
 		return nil, err
 	}
@@ -1220,12 +1841,29 @@ func (ps *Service) QueryStream(
 	onReady func(StreamIdentity),
 	forward func(frame []byte) error,
 ) (*QueryData, error) {
-	decision, err := ValidateChatRouting(in.Mode, in.Tool)
-	if err != nil {
-		return nil, err
+	v1 := multiturnV1Enabled(in)
+	if v1 {
+		if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
+			return nil, err
+		}
+		if err := validateV1CurrentMessage(in.Query); err != nil {
+			return nil, err
+		}
+		in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
+		if err := normalizeV1ChatRouting(&in); err != nil {
+			return nil, err
+		}
+		if err := validateQueryFiles(in.Files); err != nil {
+			return nil, err
+		}
+	} else {
+		decision, err := ValidateChatRouting(in.Mode, in.Tool)
+		if err != nil {
+			return nil, err
+		}
+		in.Mode = decision.Mode
+		in.Tool = decision.ForcedTool
 	}
-	in.Mode = decision.Mode
-	in.Tool = decision.ForcedTool
 	if in.Mode == "expert" {
 		// Expert routes via RouteQuery (POST /v1/query/route, no streaming
 		// primitive). Reject it at this direct service boundary before any
@@ -1237,6 +1875,15 @@ func (ps *Service) QueryStream(
 	}
 	if !rxBot.BotConfig.StreamEnabled {
 		return nil, fmt.Errorf("%w: stream gate is off", ErrStreamUnsupported)
+	}
+	var target v1SubmissionTarget
+	if v1 {
+		var err error
+		target, err = ps.resolveV1SubmissionTarget(ctx, username, in)
+		if err != nil {
+			return nil, err
+		}
+		in.Mode = target.mode
 	}
 	// SSE is an Instant Chat surface, so it must enforce the same effective
 	// ChatAgent permission before any upload, dialogue lookup, or Bot stream.
@@ -1260,6 +1907,22 @@ func (ps *Service) QueryStream(
 		return nil, fmt.Errorf("%w: tool %q has no Bot streaming primitive (handoff P1)", ErrStreamUnsupported, in.Tool)
 	}
 
+	var submission *v1Submission
+	if v1 {
+		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions)
+		if err != nil {
+			return nil, err
+		}
+		if submission.duplicate != nil {
+			if onReady != nil {
+				onReady(StreamIdentity{
+					DialogueID: submission.row.DialogueId,
+					MessageID:  submission.row.Id,
+				})
+			}
+			return submission.duplicate, nil
+		}
+	}
 	uploadClient := rxBot.NewClient()
 
 	// Upload attachments before opening the stream so upload errors still
@@ -1268,15 +1931,40 @@ func (ps *Service) QueryStream(
 	for _, f := range in.Files {
 		up, err := uploadClient.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
 		if err != nil {
+			if v1 {
+				if settleErr := failV1Submission(
+					context.WithoutCancel(ctx),
+					username,
+					submission.row.Id,
+				); settleErr != nil {
+					return nil, fmt.Errorf("upload failed: %v; settle submission: %w", err, settleErr)
+				}
+			}
 			return nil, err
 		}
 		obsPaths = append(obsPaths, up.Path)
 		fileNames = append(fileNames, f.Filename)
 	}
 
-	dialogueID, fID, err := ps.resolveDialogue(ctx, username, in)
-	if err != nil {
-		return nil, err
+	var dialogueID string
+	var fID int64
+	if v1 {
+		dialogueID = submission.row.DialogueId
+		fID = submission.row.FId
+		if err := updateV1SubmissionUploads(
+			ctx,
+			username,
+			submission.row.Id,
+			fileNames,
+			obsPaths,
+		); err != nil {
+			return nil, err
+		}
+	} else {
+		dialogueID, fID, err = ps.resolveDialogue(ctx, username, in)
+		if err != nil {
+			return nil, err
+		}
 	}
 	streamClient := newExecutionBotClient(
 		rxBot.BotConfig,
@@ -1294,6 +1982,9 @@ func (ps *Service) QueryStream(
 	if len(obsPaths) > 0 {
 		req.OBSFileList = obsPaths
 	}
+	if v1 {
+		req.Conversation = submission.envelope
+	}
 	rc, err := streamClient.ChatCompletionStream(ctx, req)
 	if err != nil {
 		// Pre-first-byte failure (auth / unsupported) surfaces as a normal
@@ -1305,29 +1996,34 @@ func (ps *Service) QueryStream(
 	// The row must exist before any Bot frame is forwarded. Besides making the
 	// response identity authoritative, this closes the former A2UI window where
 	// a widget was visible while its authorization tuple did not exist yet.
-	titleQuery := ""
-	if fID == 0 && in.RefreshId == 0 {
-		titleQuery = in.Query
-	}
-	row := model.QuestionAgentLog{
-		DialogueId:        dialogueID,
-		FId:               fID,
-		UserName:          username,
-		Query:             in.Query,
-		TitleQuery:        titleQuery,
-		Answer:            "",
-		FollowUpQuestions: "",
-		FileName:          strings.Join(fileNames, ","),
-		UploadPath:        strings.Join(obsPaths, ","),
-		ToolName:          slugToToolName[slug],
-		Status:            "RUNNING",
-		Mode:              in.Mode,
-		ReactionType:      "0",
-		CollectType:       "0",
-	}
-	id, err := ps.beginQuestionStream(ctx, username, in.RefreshId, &row)
-	if err != nil {
-		return nil, err
+	var id int64
+	if v1 {
+		id = submission.row.Id
+	} else {
+		titleQuery := ""
+		if fID == 0 && in.RefreshId == 0 {
+			titleQuery = in.Query
+		}
+		row := model.QuestionAgentLog{
+			DialogueId:        dialogueID,
+			FId:               fID,
+			UserName:          username,
+			Query:             in.Query,
+			TitleQuery:        titleQuery,
+			Answer:            "",
+			FollowUpQuestions: "",
+			FileName:          strings.Join(fileNames, ","),
+			UploadPath:        strings.Join(obsPaths, ","),
+			ToolName:          slugToToolName[slug],
+			Status:            "RUNNING",
+			Mode:              in.Mode,
+			ReactionType:      "0",
+			CollectType:       "0",
+		}
+		id, err = ps.beginQuestionStream(ctx, username, in.RefreshId, &row)
+		if err != nil {
+			return nil, err
+		}
 	}
 	identity := StreamIdentity{DialogueID: dialogueID, MessageID: id}
 	if onReady != nil {
@@ -1393,6 +2089,7 @@ func (ps *Service) QueryStream(
 	if acc.Err() != nil {
 		streamErr = nil
 	}
+	retainSubmitting := v1 && streamErr != nil && acc.Err() == nil
 
 	// Finalize the row opened above. WithoutCancel preserves request-scoped DB
 	// values while ensuring a browser abort or upstream disconnect cannot leave
@@ -1406,6 +2103,11 @@ func (ps *Service) QueryStream(
 	}
 	out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
 	out.FollowUpQuestions = acc.FollowUpJSON()
+	if retainSubmitting {
+		out.Status = "SUBMITTING"
+		out.UploadPath = strings.Join(obsPaths, ",")
+		return out, streamErr
+	}
 	finalizeCtx, cancelFinalize := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancelFinalize()
 	if err := ps.finalizeQuestionStream(finalizeCtx, username, identity, acc.RunID(), out); err != nil {

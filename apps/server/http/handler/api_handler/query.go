@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,14 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusServiceUnavailable, "service temporarily unavailable"
 	case errors.Is(err, api_service.ErrInvalidChatRouting):
 		return http.StatusBadRequest, "invalid chat routing"
+	case errors.Is(err, api_service.ErrInvalidClientTurnID):
+		return http.StatusBadRequest, "invalid client turn id"
+	case errors.Is(err, api_service.ErrConversationModeConflict):
+		return http.StatusBadRequest, "conversation mode cannot be changed"
+	case errors.Is(err, api_service.ErrDuplicateClientTurn):
+		return http.StatusConflict, "client turn id conflicts with an existing turn"
+	case errors.Is(err, api_service.ErrInvalidQueryFile):
+		return http.StatusBadRequest, "invalid query file"
 	case errors.Is(err, api_service.ErrAgentToolForbidden):
 		return http.StatusNotFound, "agent tool not found"
 	case errors.Is(err, api_service.ErrNoExecutableAgentTools):
@@ -110,6 +119,42 @@ func parseInteropTargets(raw string) ([]string, bool) {
 	return targets, true
 }
 
+func parseArtifactIDs(raw string) ([]string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, true
+	}
+	if len(raw) > 8192 || raw[0] != '[' || raw[len(raw)-1] != ']' {
+		return nil, false
+	}
+	var artifactIDs []string
+	if err := json.Unmarshal([]byte(raw), &artifactIDs); err != nil ||
+		artifactIDs == nil ||
+		len(artifactIDs) > 50 {
+		return nil, false
+	}
+	for _, artifactID := range artifactIDs {
+		if !artifactIDPattern.MatchString(artifactID) {
+			return nil, false
+		}
+	}
+	return artifactIDs, true
+}
+
+var clientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+var artifactIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+func validateQueryClientTurn(in api_service.QueryInput) error {
+	if rxBot.BotConfig == nil || !rxBot.BotConfig.MultiturnV1Enabled ||
+		in.Surface != api_service.QuerySurfaceChat {
+		return nil
+	}
+	if !clientTurnIDPattern.MatchString(in.ClientTurnID) {
+		return api_service.ErrInvalidClientTurnID
+	}
+	return nil
+}
+
 // streamEnabled reports whether the AG-UI streaming dark-launch flag is on.
 func streamEnabled() bool {
 	return rxBot.BotConfig != nil && rxBot.BotConfig.StreamEnabled
@@ -141,11 +186,12 @@ func (ph *Handler) AgentProductRun(ctx *gin.Context) {
 // testable without exposing a caller-controlled service surface.
 func queryInputForSurface(ctx *gin.Context, surface api_service.QuerySurface, routeTool string) api_service.QueryInput {
 	in := api_service.QueryInput{
-		Query:   ctx.PostForm("query"),
-		Tool:    ctx.PostForm("tool"),
-		History: ctx.DefaultPostForm("history", "[]"),
-		Mode:    ctx.DefaultPostForm("mode", "instant"),
-		Surface: surface,
+		Query:        ctx.PostForm("query"),
+		Tool:         ctx.PostForm("tool"),
+		History:      ctx.DefaultPostForm("history", "[]"),
+		Mode:         ctx.DefaultPostForm("mode", "instant"),
+		ClientTurnID: strings.TrimSpace(ctx.PostForm("client_turn_id")),
+		Surface:      surface,
 	}
 	if surface == api_service.QuerySurfaceAgentProduct {
 		in.Tool = routeTool
@@ -196,8 +242,18 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	}
 
 	in := queryInputForSurface(ctx, surface, routeTool)
+	if err := validateQueryClientTurn(in); err != nil {
+		status, message := queryErrorStatus(err)
+		writeQueryError(ctx, status, message)
+		return
+	}
 	if surface == api_service.QuerySurfaceChat {
-		decision, err := api_service.ValidateChatRouting(in.Mode, in.Tool)
+		routingTool := in.Tool
+		if rxBot.BotConfig != nil && rxBot.BotConfig.MultiturnV1Enabled &&
+			strings.TrimSpace(in.Mode) == "instant" {
+			routingTool = ""
+		}
+		decision, err := api_service.ValidateChatRouting(in.Mode, routingTool)
 		if err != nil {
 			status, message := queryErrorStatus(err)
 			writeQueryError(ctx, status, message)
@@ -205,6 +261,10 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 		in.Mode = decision.Mode
 		in.Tool = decision.ForcedTool
+		if rxBot.BotConfig != nil && rxBot.BotConfig.MultiturnV1Enabled &&
+			in.Mode == "instant" {
+			in.Tool = "ChatAgent"
+		}
 	}
 	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
 	// Bound this caller-controlled label before it can reach service errors or
@@ -221,6 +281,15 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		return
 	}
 	in.InteropTargets = interopTargets
+	artifactIDs, ok := parseArtifactIDs(ctx.PostForm("artifact_ids"))
+	if !ok {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": i18n.T(ctx, "query.invalid_artifact_ids"),
+		})
+		return
+	}
+	in.ArtifactIDs = artifactIDs
 	if strings.TrimSpace(in.Query) == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.query_empty")})
 		return

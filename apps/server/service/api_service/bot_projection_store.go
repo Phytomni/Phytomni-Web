@@ -372,11 +372,6 @@ func marshalPersistedProjectionWithContext(projection BotRunProjection, privateC
 	return string(encoded), nil
 }
 
-func unmarshalPersistedProjection(raw string) (BotRunProjection, error) {
-	projection, _, err := unmarshalPersistedProjectionWithContext(raw)
-	return projection, err
-}
-
 func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *persistedConversationContext, error) {
 	if strings.TrimSpace(raw) == "" || strings.TrimSpace(raw) == "null" {
 		return BotRunProjection{}, nil, nil
