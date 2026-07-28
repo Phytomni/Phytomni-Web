@@ -348,10 +348,20 @@ func storedSubmissionOperation(
 	row model.QuestionAgentLog,
 	private *persistedConversationContext,
 ) string {
-	if private != nil && private.SettlementState == "submission_replace" {
+	if private != nil && private.Replacement != nil {
 		return "replace"
 	}
 	return "append"
+}
+
+func persistedClientTurnID(private *persistedConversationContext) string {
+	if private == nil {
+		return ""
+	}
+	if private.Replacement != nil {
+		return private.Replacement.ClientTurnID
+	}
+	return private.ClientTurnID
 }
 
 func findRecentClientTurn(
@@ -372,7 +382,7 @@ func findRecentClientTurn(
 		if err != nil {
 			return nil, nil, err
 		}
-		if private != nil && private.ClientTurnID == clientTurnID {
+		if persistedClientTurnID(private) == clientTurnID {
 			return &rows[index], private, nil
 		}
 	}
@@ -390,9 +400,20 @@ func validateDuplicateSubmission(
 			return ErrDuplicateClientTurn
 		}
 	}
-	if normalizedConversationLedgerMode(row.Mode) != target.mode ||
-		sha256Hex([]byte(row.Query)) != sha256Hex([]byte(in.Query)) ||
-		storedSubmissionOperation(row, private) != target.operation {
+	storedMode := normalizedConversationLedgerMode(row.Mode)
+	storedQuery := row.Query
+	if private != nil && private.Replacement != nil {
+		storedMode = private.Replacement.Mode
+		storedQuery = private.Replacement.Query
+	}
+	storedOperation := storedSubmissionOperation(row, private)
+	if target.operation == "replace" && row.Id == in.RefreshId &&
+		private != nil && private.ClientTurnID == in.ClientTurnID {
+		storedOperation = "replace"
+	}
+	if storedMode != target.mode ||
+		sha256Hex([]byte(storedQuery)) != sha256Hex([]byte(in.Query)) ||
+		storedOperation != target.operation {
 		return ErrDuplicateClientTurn
 	}
 	if target.operation == "replace" && row.Id != in.RefreshId {
@@ -438,7 +459,11 @@ func requestedAgentForV1(in QueryInput) *string {
 func baseBusinessContextVersion(ledger ConversationLedger, currentRowID int64) int64 {
 	var version int64
 	for _, row := range ledger.rows {
-		if row.ID >= currentRowID || row.Context == nil || row.Context.Stage == nil ||
+		currentReplacement := row.ID == currentRowID &&
+			row.Context != nil && row.Context.Replacement != nil
+		if row.ID > currentRowID ||
+			(row.ID == currentRowID && !currentReplacement) ||
+			row.Context == nil || row.Context.Stage == nil ||
 			row.Context.SettlementState != conversationSettlementAcked {
 			continue
 		}
@@ -528,15 +553,25 @@ func finalizePendingConversationAcknowledgments(
 	username string,
 	ledger ConversationLedger,
 	currentRowID int64,
-) error {
+) (bool, error) {
+	rebuildRequired := false
 	for _, row := range ledger.rows {
-		if row.ID >= currentRowID || row.Status != statusSucceeded ||
-			row.Context == nil ||
-			row.Context.SettlementState != conversationSettlementAckPending {
+		currentReplacement := row.ID == currentRowID &&
+			row.Context != nil && row.Context.Replacement != nil
+		if row.ID > currentRowID ||
+			(row.ID == currentRowID && !currentReplacement) ||
+			row.Status != statusSucceeded || row.Context == nil {
+			continue
+		}
+		if row.Context.SettlementState == conversationSettlementRebuildRequired {
+			rebuildRequired = true
+			continue
+		}
+		if row.Context.SettlementState != conversationSettlementAckPending {
 			continue
 		}
 		if row.Context.Stage == nil || row.Context.SettlementLedgerHash == "" {
-			return ErrInvalidBotConversationContext
+			return false, ErrInvalidBotConversationContext
 		}
 		if err := acknowledgeConversationContext(
 			ctx,
@@ -547,9 +582,90 @@ func finalizePendingConversationAcknowledgments(
 			row.Context.SettlementLedgerHash,
 			row.Context.Stage,
 		); err != nil {
-			return err
+			if rxBot.IsConversationContextRebuildRequired(err) ||
+				errors.Is(err, ErrInvalidConversationStage) {
+				if updateErr := updateConversationSettlementState(
+					context.WithoutCancel(ctx),
+					username,
+					row.ID,
+					row.Context.SettlementLedgerHash,
+					conversationSettlementAckPending,
+					conversationSettlementRebuildRequired,
+				); updateErr != nil {
+					return false, updateErr
+				}
+				rebuildRequired = true
+				continue
+			}
+			return false, err
 		}
 	}
+	return rebuildRequired, nil
+}
+
+func mergeConversationArtifactRefs(
+	first []rxBot.ArtifactRefV1,
+	second []rxBot.ArtifactRefV1,
+) ([]rxBot.ArtifactRefV1, error) {
+	merged := make([]rxBot.ArtifactRefV1, 0, len(first)+len(second))
+	seen := make(map[string]rxBot.ArtifactRefV1, len(first)+len(second))
+	for _, refs := range [][]rxBot.ArtifactRefV1{first, second} {
+		for _, ref := range refs {
+			if existing, ok := seen[ref.ArtifactID]; ok {
+				if existing.DisplayName != ref.DisplayName {
+					return nil, ErrConversationArtifactOwnership
+				}
+				continue
+			}
+			if len(merged) >= maxPersistedArtifactRefs {
+				return nil, ErrConversationArtifactOwnership
+			}
+			seen[ref.ArtifactID] = ref
+			merged = append(merged, ref)
+		}
+	}
+	return merged, nil
+}
+
+func applyConversationRebuildEnvelope(
+	ctx context.Context,
+	username string,
+	submission *v1Submission,
+	target v1SubmissionTarget,
+) error {
+	if submission == nil || submission.envelope == nil {
+		return ErrInvalidBotConversationContext
+	}
+	ledger, err := BuildConversationLedger(
+		ctx,
+		username,
+		submission.row.DialogueId,
+	)
+	if err != nil {
+		return err
+	}
+	rebuild, err := ledger.RebuildBefore(submission.row.Id)
+	if err != nil {
+		return err
+	}
+	artifacts, err := mergeConversationArtifactRefs(
+		rebuild.ArtifactRefs,
+		target.artifacts,
+	)
+	if err != nil {
+		return err
+	}
+	envelope := *submission.envelope
+	envelope.Operation = "rebuild"
+	envelope.LedgerCursor = rebuild.Cursor
+	envelope.LedgerVersion = rebuild.Version
+	envelope.BaseBusinessContextVersion = 0
+	envelope.HistoryDelta = append([]rxBot.LedgerEntryV1(nil), rebuild.History...)
+	envelope.ArtifactRefs = artifacts
+	if err := envelope.Validate(); err != nil {
+		return err
+	}
+	submission.envelope = &envelope
 	return nil
 }
 
@@ -581,13 +697,9 @@ func (ps *Service) allocateV1Submission(
 			return nil
 		}
 
-		privateState := "submission_append"
-		if target.operation == "replace" {
-			privateState = "submission_replace"
-		}
 		privateContext := &persistedConversationContext{
 			ClientTurnID:    in.ClientTurnID,
-			SettlementState: privateState,
+			SettlementState: "submission_append",
 		}
 
 		toolName := in.Tool
@@ -601,56 +713,56 @@ func (ps *Service) allocateV1Submission(
 		if target.operation == "replace" {
 			var current model.QuestionAgentLog
 			if err := model.DB(ctx).
-				Where("id = ? AND user_name = ? AND dialogue_id = ?",
+				Where("id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND status = ?",
 					in.RefreshId,
 					username,
 					target.dialogueID,
+					statusSucceeded,
 				).
 				First(&current).Error; err != nil {
 				return err
 			}
-			projection, _, err := unmarshalPersistedProjectionWithContext(
+			projection, currentPrivate, err := unmarshalPersistedProjectionWithContext(
 				current.BotProjectionJSON,
 			)
 			if err != nil {
 				return err
 			}
-			raw, err := marshalPersistedProjectionWithContext(projection, privateContext)
+			if currentPrivate == nil {
+				currentPrivate = &persistedConversationContext{}
+			}
+			if currentPrivate.Replacement != nil {
+				return ErrDuplicateClientTurn
+			}
+			nextPrivate := currentPrivate.clone()
+			nextPrivate.Replacement = &persistedConversationReplacement{
+				ClientTurnID: in.ClientTurnID,
+				Query:        in.Query,
+				ToolName:     toolName,
+				Mode:         target.mode,
+				FileName:     fileNamesForInput(in.Files),
+			}
+			raw, err := marshalPersistedProjectionWithContext(projection, &nextPrivate)
 			if err != nil {
 				return err
 			}
-			updates := map[string]interface{}{
-				"answer":              "",
-				"bot_projection_json": raw,
-				"bot_run_id":          "",
-				"file_name":           fileNamesForInput(in.Files),
-				"follow_up_questions": "",
-				"log_status":          "",
-				"mode":                target.mode,
-				"query":               in.Query,
-				"server_file_path":    "",
-				"server_id":           "",
-				"status":              "SUBMITTING",
-				"task_id":             "",
-				"tool_name":           toolName,
-				"upload_path":         "",
-			}
 			result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-				Where("id = ? AND user_name = ? AND dialogue_id = ?",
+				Where(
+					"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND bot_projection_json = ?",
 					in.RefreshId,
 					username,
 					target.dialogueID,
+					current.BotProjectionJSON,
 				).
-				Updates(updates)
+				UpdateColumn("bot_projection_json", raw)
 			if result.Error != nil {
 				return result.Error
 			}
 			if result.RowsAffected != 1 {
 				return gorm.ErrRecordNotFound
 			}
-			if err := model.DB(ctx).First(&allocated, in.RefreshId).Error; err != nil {
-				return err
-			}
+			allocated = current
+			allocated.BotProjectionJSON = raw
 			return nil
 		}
 
@@ -689,14 +801,16 @@ func (ps *Service) allocateV1Submission(
 	if err != nil {
 		return nil, err
 	}
+	rebuildRequired := false
 	if finalizePending {
-		if err := finalizePendingConversationAcknowledgments(
+		rebuildRequired, err = finalizePendingConversationAcknowledgments(
 			ctx,
 			rxBot.NewClient(),
 			username,
 			ledger,
 			allocated.Id,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, err
 		}
 		ledger, err = BuildConversationLedger(ctx, username, allocated.DialogueId)
@@ -735,7 +849,29 @@ func (ps *Service) allocateV1Submission(
 		}
 		return nil, err
 	}
-	return &v1Submission{row: allocated, envelope: envelope}, nil
+	submission := &v1Submission{row: allocated, envelope: envelope}
+	if rebuildRequired {
+		if err := applyConversationRebuildEnvelope(
+			ctx,
+			username,
+			submission,
+			target,
+		); err != nil {
+			if settleErr := failV1Submission(
+				context.WithoutCancel(ctx),
+				username,
+				allocated.Id,
+			); settleErr != nil {
+				return nil, fmt.Errorf(
+					"build conversation rebuild envelope: %v; settle submission: %w",
+					err,
+					settleErr,
+				)
+			}
+			return nil, err
+		}
+	}
+	return submission, nil
 }
 
 func fileNamesForInput(files []QueryFile) string {
@@ -751,6 +887,41 @@ func failV1Submission(
 	username string,
 	rowID int64,
 ) error {
+	replacementConflict := false
+	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
+		projection, private, currentRaw, revision, err := loadPersistedBotProjectionRow(
+			ctx,
+			username,
+			rowID,
+		)
+		if err != nil {
+			return err
+		}
+		if private != nil && private.Replacement != nil {
+			replacementConflict = true
+			next := private.clone()
+			next.Replacement = nil
+			encoded, err := marshalPersistedProjectionWithContext(projection, &next)
+			if err != nil {
+				return err
+			}
+			result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+				Where(botProjectionCASPredicate, rowID, username, revision, currentRaw).
+				UpdateColumn("bot_projection_json", encoded)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 1 {
+				return nil
+			}
+			continue
+		}
+		replacementConflict = false
+		break
+	}
+	if replacementConflict {
+		return ErrBotProjectionConflict
+	}
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("id = ? AND user_name = ? AND status = ?", rowID, username, "SUBMITTING").
 		Update("status", "FAILED")
@@ -805,6 +976,52 @@ func v1SubmissionError(
 	return err
 }
 
+func prepareV1ConversationRebuildRetry(
+	ctx context.Context,
+	username string,
+	submission *v1Submission,
+	target v1SubmissionTarget,
+	err error,
+) (bool, error) {
+	if submission == nil || !rxBot.IsConversationContextRebuildRequired(err) {
+		return false, nil
+	}
+	if submission.envelope == nil || submission.envelope.Operation == "rebuild" {
+		if settleErr := failV1Submission(
+			context.WithoutCancel(ctx),
+			username,
+			submission.row.Id,
+		); settleErr != nil {
+			return false, fmt.Errorf(
+				"%v; settle failed rebuild: %w",
+				err,
+				settleErr,
+			)
+		}
+		return false, err
+	}
+	if rebuildErr := applyConversationRebuildEnvelope(
+		ctx,
+		username,
+		submission,
+		target,
+	); rebuildErr != nil {
+		if settleErr := failV1Submission(
+			context.WithoutCancel(ctx),
+			username,
+			submission.row.Id,
+		); settleErr != nil {
+			return false, fmt.Errorf(
+				"build rebuild envelope: %v; settle submission: %w",
+				rebuildErr,
+				settleErr,
+			)
+		}
+		return false, rebuildErr
+	}
+	return true, nil
+}
+
 func updateV1SubmissionUploads(
 	ctx context.Context,
 	username string,
@@ -814,6 +1031,41 @@ func updateV1SubmissionUploads(
 ) error {
 	if len(fileNames) == 0 && len(obsPaths) == 0 {
 		return nil
+	}
+	replacementConflict := false
+	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
+		projection, private, currentRaw, revision, err := loadPersistedBotProjectionRow(
+			ctx,
+			username,
+			rowID,
+		)
+		if err != nil {
+			return err
+		}
+		if private == nil || private.Replacement == nil {
+			replacementConflict = false
+			break
+		}
+		replacementConflict = true
+		next := private.clone()
+		next.Replacement.FileName = strings.Join(fileNames, ",")
+		next.Replacement.UploadPath = strings.Join(obsPaths, ",")
+		encoded, err := marshalPersistedProjectionWithContext(projection, &next)
+		if err != nil {
+			return err
+		}
+		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where(botProjectionCASPredicate, rowID, username, revision, currentRaw).
+			UpdateColumn("bot_projection_json", encoded)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 1 {
+			return nil
+		}
+	}
+	if replacementConflict {
+		return ErrBotProjectionConflict
 	}
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("id = ? AND user_name = ? AND status = ?", rowID, username, "SUBMITTING").
@@ -1401,9 +1653,28 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if v1 {
 			routeRequest.Conversation = submission.envelope
 		}
-		resp, meta, err := executionClient.RouteQueryWithMeta(ctx, routeRequest)
-		logBotResponseMeta(ctx, meta)
-		if err != nil {
+		var resp *rxBot.RouteQueryResponse
+		for {
+			var meta rxBot.ResponseMeta
+			resp, meta, err = executionClient.RouteQueryWithMeta(ctx, routeRequest)
+			logBotResponseMeta(ctx, meta)
+			if err == nil {
+				break
+			}
+			retry, retryErr := prepareV1ConversationRebuildRetry(
+				ctx,
+				username,
+				submission,
+				target,
+				err,
+			)
+			if retryErr != nil {
+				return nil, retryErr
+			}
+			if retry {
+				routeRequest.Conversation = submission.envelope
+				continue
+			}
 			if isExpertEnvelopeDecodeError(err) {
 				return nil, v1SubmissionError(
 					ctx,
@@ -1504,9 +1775,28 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if len(obsPaths) > 0 {
 			req.OBSFileList = obsPaths
 		}
-		resp, meta, err := executionClient.ChatCompletionWithMeta(ctx, req)
-		logBotResponseMeta(ctx, meta)
-		if err != nil {
+		var resp *rxBot.ChatCompletionResponse
+		for {
+			var meta rxBot.ResponseMeta
+			resp, meta, err = executionClient.ChatCompletionWithMeta(ctx, req)
+			logBotResponseMeta(ctx, meta)
+			if err == nil {
+				break
+			}
+			retry, retryErr := prepareV1ConversationRebuildRetry(
+				ctx,
+				username,
+				submission,
+				target,
+				err,
+			)
+			if retryErr != nil {
+				return nil, retryErr
+			}
+			if retry {
+				req.Conversation = submission.envelope
+				continue
+			}
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		botRunID = canonicalBotRunID(resp.RunID)
@@ -1662,6 +1952,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			AssistantSummary: boundedAssistantSummary(assistantSummary),
 			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
 		}
+		if submission.envelope.Operation == "rebuild" {
+			private.RebuildLedgerVersion = submission.envelope.LedgerVersion
+			private.RebuildLedgerCursor = submission.envelope.LedgerCursor
+		}
 		out.Id = submission.row.Id
 		out.UploadPath = strings.Join(obsPaths, ",")
 		ledgerVersion, err := settleBlockingConversationContext(
@@ -1763,7 +2057,20 @@ func (ps *Service) resolveDialogue(ctx context.Context, username string, in Quer
 	if in.RefreshId != 0 {
 		var row model.QuestionAgentLog
 		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ?", in.RefreshId, username).First(&row).Error; err != nil {
+			Where(
+				"id = ? AND user_name = ? AND delete_at IS NULL",
+				in.RefreshId,
+				username,
+			).First(&row).Error; err != nil {
+			return "", 0, err
+		}
+		var root model.QuestionAgentLog
+		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where(
+				"dialogue_id = ? AND f_id = 0 AND user_name = ? AND delete_at IS NULL",
+				row.DialogueId,
+				username,
+			).First(&root).Error; err != nil {
 			return "", 0, err
 		}
 		return row.DialogueId, row.FId, nil
@@ -1773,7 +2080,20 @@ func (ps *Service) resolveDialogue(ctx context.Context, username string, in Quer
 	}
 	var parent model.QuestionAgentLog
 	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-		Where("id = ? AND user_name = ?", in.Id, username).First(&parent).Error; err != nil {
+		Where(
+			"id = ? AND user_name = ? AND delete_at IS NULL",
+			in.Id,
+			username,
+		).First(&parent).Error; err != nil {
+		return "", 0, err
+	}
+	var root model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where(
+			"dialogue_id = ? AND f_id = 0 AND user_name = ? AND delete_at IS NULL",
+			parent.DialogueId,
+			username,
+		).First(&root).Error; err != nil {
 		return "", 0, err
 	}
 	return parent.DialogueId, in.Id, nil
@@ -2236,9 +2556,28 @@ func (ps *Service) QueryStream(
 		req.Messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
 		req.Conversation = submission.envelope
 	}
-	rc, meta, err := streamClient.ChatCompletionStreamWithMeta(ctx, req)
-	logBotResponseMeta(ctx, meta)
-	if err != nil {
+	var rc io.ReadCloser
+	for {
+		var meta rxBot.ResponseMeta
+		rc, meta, err = streamClient.ChatCompletionStreamWithMeta(ctx, req)
+		logBotResponseMeta(ctx, meta)
+		if err == nil {
+			break
+		}
+		retry, retryErr := prepareV1ConversationRebuildRetry(
+			ctx,
+			username,
+			submission,
+			target,
+			err,
+		)
+		if retryErr != nil {
+			return nil, retryErr
+		}
+		if retry {
+			req.Conversation = submission.envelope
+			continue
+		}
 		// Pre-first-byte failure (auth / unsupported) surfaces as a normal
 		// error so the handler can still return a non-SSE status.
 		return nil, v1SubmissionError(ctx, username, submission, err)
@@ -2426,6 +2765,10 @@ func (ps *Service) QueryStream(
 			SettlementState:  settlementState,
 			AssistantSummary: boundedAssistantSummary(acc.AnswerText()),
 			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+		}
+		if submission.envelope.Operation == "rebuild" {
+			private.RebuildLedgerVersion = submission.envelope.LedgerVersion
+			private.RebuildLedgerCursor = submission.envelope.LedgerCursor
 		}
 		ledgerVersion, err := settleBlockingConversationContext(
 			finalizeCtx,

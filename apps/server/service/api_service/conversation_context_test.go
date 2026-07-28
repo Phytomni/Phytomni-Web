@@ -254,3 +254,38 @@ func TestConversationSettlementStateIsIdempotentWithoutLedgerMutation(t *testing
 		t.Fatalf("ledger version changed after ACK: got %s want %s", ledger.Version, version)
 	}
 }
+
+func TestPersistedConversationContextBoundsRebuildAndReplacementState(t *testing.T) {
+	value := validPersistedConversationContext()
+	value.RebuildLedgerVersion = strings.Repeat("b", 64)
+	value.RebuildLedgerCursor = 17
+	value.Replacement = &persistedConversationReplacement{
+		ClientTurnID: "refresh-turn-1",
+		Query:        "replace the prior answer",
+		ToolName:     "ChatAgent",
+		Mode:         "instant",
+		FileName:     "notes.txt",
+		UploadPath:   "private-upload-reference",
+	}
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded persistedConversationContext
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.RebuildLedgerVersion != value.RebuildLedgerVersion ||
+		decoded.RebuildLedgerCursor != 17 ||
+		decoded.Replacement == nil ||
+		decoded.Replacement.ClientTurnID != "refresh-turn-1" ||
+		decoded.Replacement.Query != "replace the prior answer" {
+		t.Fatalf("decoded context = %#v", decoded)
+	}
+
+	value.Replacement.Query = strings.Repeat("x", maxPersistedReplacementQueryBytes+1)
+	if _, err := json.Marshal(value); !errors.Is(err, ErrInvalidBotConversationContext) {
+		t.Fatalf("oversized replacement query error = %v", err)
+	}
+}

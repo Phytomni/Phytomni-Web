@@ -26,10 +26,14 @@ const (
 	maxPersistedSettlementStateBytes  = 32
 	maxPersistedLedgerHashBytes       = 128
 	maxPersistedConversationBytes     = 64 << 10
+	maxPersistedReplacementQueryBytes = 32 << 10
+	maxPersistedReplacementFileBytes  = 4 << 10
+	maxPersistedReplacementPathBytes  = 8 << 10
 )
 
 var (
 	persistedArtifactIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	persistedLedgerHashPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 	persistedTokenPattern      = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]*$`)
 	persistedURISchemePattern  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:`)
 )
@@ -46,12 +50,24 @@ const (
 // stored alongside the public Bot projection. It is deliberately absent from
 // BotRunProjection so response metadata cannot leak through public APIs.
 type persistedConversationContext struct {
-	ClientTurnID         string                      `json:"client_turn_id,omitempty"`
-	Stage                *rxBot.ContextStageMetadata `json:"stage,omitempty"`
-	SettlementState      string                      `json:"settlement_state,omitempty"`
-	SettlementLedgerHash string                      `json:"settlement_ledger_hash,omitempty"`
-	AssistantSummary     string                      `json:"assistant_summary,omitempty"`
-	ArtifactRefs         []rxBot.ArtifactRefV1       `json:"artifact_refs,omitempty"`
+	ClientTurnID         string                            `json:"client_turn_id,omitempty"`
+	Stage                *rxBot.ContextStageMetadata       `json:"stage,omitempty"`
+	SettlementState      string                            `json:"settlement_state,omitempty"`
+	SettlementLedgerHash string                            `json:"settlement_ledger_hash,omitempty"`
+	RebuildLedgerVersion string                            `json:"rebuild_ledger_version,omitempty"`
+	RebuildLedgerCursor  int64                             `json:"rebuild_ledger_cursor,omitempty"`
+	AssistantSummary     string                            `json:"assistant_summary,omitempty"`
+	ArtifactRefs         []rxBot.ArtifactRefV1             `json:"artifact_refs,omitempty"`
+	Replacement          *persistedConversationReplacement `json:"replacement,omitempty"`
+}
+
+type persistedConversationReplacement struct {
+	ClientTurnID string `json:"client_turn_id"`
+	Query        string `json:"query"`
+	ToolName     string `json:"tool_name"`
+	Mode         string `json:"mode"`
+	FileName     string `json:"file_name,omitempty"`
+	UploadPath   string `json:"upload_path,omitempty"`
 }
 
 func (value persistedConversationContext) clone() persistedConversationContext {
@@ -61,6 +77,10 @@ func (value persistedConversationContext) clone() persistedConversationContext {
 		copyValue.Stage = &stage
 	}
 	copyValue.ArtifactRefs = append([]rxBot.ArtifactRefV1(nil), value.ArtifactRefs...)
+	if value.Replacement != nil {
+		replacement := *value.Replacement
+		copyValue.Replacement = &replacement
+	}
 	return copyValue
 }
 
@@ -76,6 +96,14 @@ func (value persistedConversationContext) validate() error {
 	}
 	if err := validatePersistedASCII("settlement_ledger_hash", value.SettlementLedgerHash, maxPersistedLedgerHashBytes); err != nil {
 		return err
+	}
+	if value.RebuildLedgerVersion != "" &&
+		(len(value.RebuildLedgerVersion) != 64 ||
+			!persistedLedgerHashPattern.MatchString(value.RebuildLedgerVersion)) {
+		return persistedContextError("rebuild_ledger_version is invalid")
+	}
+	if value.RebuildLedgerCursor < 0 {
+		return persistedContextError("rebuild_ledger_cursor is invalid")
 	}
 	if value.Stage != nil {
 		if err := value.Stage.Validate(); err != nil {
@@ -96,7 +124,56 @@ func (value persistedConversationContext) validate() error {
 			return persistedContextError(fmt.Sprintf("artifact_refs[%d].display_name is invalid", index))
 		}
 	}
+	if value.Replacement != nil {
+		if err := value.Replacement.validate(); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (value persistedConversationReplacement) validate() error {
+	if err := validatePersistedASCII(
+		"replacement.client_turn_id",
+		value.ClientTurnID,
+		maxPersistedClientTurnIDBytes,
+	); err != nil {
+		return err
+	}
+	if value.ClientTurnID == "" {
+		return persistedContextError("replacement.client_turn_id is required")
+	}
+	if err := validatePersistedUTF8(
+		"replacement.query",
+		value.Query,
+		maxPersistedReplacementQueryBytes,
+	); err != nil {
+		return err
+	}
+	if strings.TrimSpace(value.Query) == "" {
+		return persistedContextError("replacement.query is required")
+	}
+	if err := validatePersistedToken("replacement.tool_name", value.ToolName, 64); err != nil {
+		return err
+	}
+	if err := validatePersistedToken("replacement.mode", value.Mode, 16); err != nil {
+		return err
+	}
+	if value.Mode != "instant" && value.Mode != "expert" {
+		return persistedContextError("replacement.mode is invalid")
+	}
+	if err := validatePersistedUTF8(
+		"replacement.file_name",
+		value.FileName,
+		maxPersistedReplacementFileBytes,
+	); err != nil {
+		return err
+	}
+	return validatePersistedUTF8(
+		"replacement.upload_path",
+		value.UploadPath,
+		maxPersistedReplacementPathBytes,
+	)
 }
 
 func validatePersistedASCII(field, value string, limit int) error {
@@ -117,6 +194,13 @@ func validatePersistedToken(field, value string, limit int) error {
 	}
 	if len([]byte(value)) > limit || !persistedTokenPattern.MatchString(value) {
 		return persistedContextError(fmt.Sprintf("%s is invalid", field))
+	}
+	return nil
+}
+
+func validatePersistedUTF8(field, value string, limit int) error {
+	if !utf8.ValidString(value) || len([]byte(value)) > limit {
+		return persistedContextError(fmt.Sprintf("%s exceeds bounds", field))
 	}
 	return nil
 }
@@ -186,16 +270,19 @@ func settleBlockingConversationContext(
 ) (string, error) {
 	var ledgerVersion string
 	err := model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var stored botProjectionRow
+		var stored struct {
+			BotProjectionJSON string `gorm:"column:bot_projection_json"`
+			BotReportRevision int64  `gorm:"column:bot_report_revision"`
+			Status            string `gorm:"column:status"`
+		}
 		result := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Model(&model.QuestionAgentLog{}).
-			Select("bot_projection_json, bot_report_revision").
+			Select("bot_projection_json, bot_report_revision, status").
 			Where(
-				"id = ? AND user_name = ? AND dialogue_id = ? AND status = ?",
+				"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL",
 				rowID,
 				username,
 				dialogueID,
-				"SUBMITTING",
 			).
 			First(&stored)
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
@@ -211,10 +298,25 @@ func settleBlockingConversationContext(
 		if err != nil {
 			return err
 		}
-		if currentPrivate != nil && private.ClientTurnID == "" {
-			private.ClientTurnID = currentPrivate.ClientTurnID
+		replacement := currentPrivate != nil && currentPrivate.Replacement != nil
+		if replacement {
+			if stored.Status != statusSucceeded ||
+				currentPrivate.Replacement.ClientTurnID != private.ClientTurnID {
+				return ErrBotProjectionConflict
+			}
+		} else {
+			if stored.Status != "SUBMITTING" {
+				return ErrBotProjectionConflict
+			}
+			if currentPrivate != nil && private.ClientTurnID == "" {
+				private.ClientTurnID = currentPrivate.ClientTurnID
+			}
 		}
-		current.ReportRevision = stored.BotReportRevision
+		if replacement {
+			current = BotRunProjection{ReportRevision: -1}
+		} else {
+			current.ReportRevision = stored.BotReportRevision
+		}
 		if projection != nil {
 			current, _, err = MergeBotRunProjection(current, *projection)
 			if err != nil {
@@ -238,13 +340,25 @@ func settleBlockingConversationContext(
 			"task_id":             out.TaskId,
 			"tool_name":           out.ToolName,
 		}
+		if replacement {
+			updates["query"] = currentPrivate.Replacement.Query
+			updates["file_name"] = currentPrivate.Replacement.FileName
+			updates["upload_path"] = currentPrivate.Replacement.UploadPath
+			updates["server_id"] = ""
+			updates["server_file_path"] = ""
+			updates["download_path"] = ""
+		}
+		expectedStatus := "SUBMITTING"
+		if replacement {
+			expectedStatus = statusSucceeded
+		}
 		settled := tx.Model(&model.QuestionAgentLog{}).
 			Where(
 				"id = ? AND user_name = ? AND dialogue_id = ? AND status = ?",
 				rowID,
 				username,
 				dialogueID,
-				"SUBMITTING",
+				expectedStatus,
 			).
 			Updates(updates)
 		if settled.Error != nil {
@@ -252,6 +366,17 @@ func settleBlockingConversationContext(
 		}
 		if settled.RowsAffected != 1 {
 			return ErrBotProjectionConflict
+		}
+		if replacement {
+			if err := invalidateConversationContextsAfter(
+				ctx,
+				tx,
+				username,
+				dialogueID,
+				rowID,
+			); err != nil {
+				return err
+			}
 		}
 
 		ledger, err := buildConversationLedgerWithDB(
@@ -284,6 +409,68 @@ func settleBlockingConversationContext(
 		return "", err
 	}
 	return ledgerVersion, nil
+}
+
+func invalidateConversationContextsAfter(
+	ctx context.Context,
+	tx *gorm.DB,
+	username string,
+	dialogueID string,
+	rowID int64,
+) error {
+	var rows []struct {
+		ID                int64  `gorm:"column:id"`
+		BotProjectionJSON string `gorm:"column:bot_projection_json"`
+		BotReportRevision int64  `gorm:"column:bot_report_revision"`
+	}
+	if err := tx.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Model(&model.QuestionAgentLog{}).
+		Select("id, bot_projection_json, bot_report_revision").
+		Where(
+			"user_name = ? AND dialogue_id = ? AND id > ? AND delete_at IS NULL AND status = ?",
+			username,
+			dialogueID,
+			rowID,
+			statusSucceeded,
+		).
+		Order("id ASC").
+		Find(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		projection, private, err := unmarshalPersistedProjectionWithContext(
+			row.BotProjectionJSON,
+		)
+		if err != nil {
+			return err
+		}
+		if private == nil {
+			continue
+		}
+		next := private.clone()
+		next.Stage = nil
+		next.SettlementState = conversationSettlementRebuildRequired
+		next.SettlementLedgerHash = ""
+		next.RebuildLedgerVersion = ""
+		next.RebuildLedgerCursor = 0
+		next.AssistantSummary = ""
+		next.Replacement = nil
+		encoded, err := marshalPersistedProjectionWithContext(projection, &next)
+		if err != nil {
+			return err
+		}
+		result := tx.Model(&model.QuestionAgentLog{}).
+			Where(botProjectionCASPredicate, row.ID, username, row.BotReportRevision, row.BotProjectionJSON).
+			UpdateColumn("bot_projection_json", encoded)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrBotProjectionConflict
+		}
+	}
+	return nil
 }
 
 func updateConversationSettlementState(

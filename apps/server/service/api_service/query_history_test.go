@@ -3,6 +3,7 @@ package api_service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,9 @@ import (
 	"testing"
 
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
+
+	"gorm.io/gorm"
 )
 
 func TestParseHistoryRejectsMalformedJSON(t *testing.T) {
@@ -125,5 +129,125 @@ func TestQueryStreamForwardsHistoryBeforeCurrentTurn(t *testing.T) {
 	}
 	if len(captured.Messages) != 2 || captured.Messages[0].Content != "prior" || captured.Messages[1].Content != "follow up" {
 		t.Fatalf("stream messages = %#v", captured.Messages)
+	}
+}
+
+func TestContextRebuildUsesAcceptedOwnerScopedSummariesOnly(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	dialogueID := "11111111-1111-4111-8111-111111111111"
+	stage := validContextStageMetadata()
+	stage.TurnID = "1"
+	stage.BaseBusinessContextVersion = 0
+	stage.ProposedBusinessContextVersion = 1
+	stage.LastAppliedLedgerCursor = 1
+	rootContext := persistedConversationContext{
+		ClientTurnID:     "root-turn",
+		Stage:            stage,
+		SettlementState:  conversationSettlementAcked,
+		AssistantSummary: "Bot summary only",
+		ArtifactRefs: []rxBot.ArtifactRefV1{{
+			ArtifactID: "artifact-root", DisplayName: "root.csv",
+		}},
+	}
+	rootRaw, err := marshalPersistedProjectionWithContext(
+		BotRunProjection{ReportRevision: -1}, &rootContext,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := []model.QuestionAgentLog{
+		{
+			Id: 1, DialogueId: dialogueID, UserName: "alice",
+			Query: "root question", Answer: "raw private root answer",
+			Status: statusSucceeded, Mode: "instant", ToolName: "ChatAgent",
+			BotProjectionJSON: rootRaw, BotReportRevision: -1,
+		},
+		{
+			Id: 2, DialogueId: dialogueID, FId: 1, UserName: "alice",
+			Query: "failed question", Answer: "failed answer",
+			Status: "FAILED", Mode: "instant", ToolName: "ChatAgent",
+			BotReportRevision: -1,
+		},
+		{
+			Id: 3, DialogueId: dialogueID, FId: 1, UserName: "alice",
+			Query: "current pre-dispatch", Answer: "must be excluded",
+			Status: "SUBMITTING", Mode: "instant", ToolName: "ChatAgent",
+			BotReportRevision: -1,
+		},
+	}
+	for index := range rows {
+		if err := gdb.Create(&rows[index]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ledger, err := BuildConversationLedger(context.Background(), "alice", dialogueID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebuild, err := ledger.RebuildBefore(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rebuild.Cursor != 1 || len(rebuild.History) != 2 ||
+		rebuild.History[0].Content != "root question" ||
+		rebuild.History[1].Summary != "Bot summary only" ||
+		len(rebuild.ArtifactRefs) != 1 ||
+		rebuild.ArtifactRefs[0].ArtifactID != "artifact-root" {
+		t.Fatalf("rebuild snapshot = %#v", rebuild)
+	}
+	encoded, err := json.Marshal(rebuild)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{
+		"raw private root answer", "failed question", "failed answer",
+		"current pre-dispatch", "must be excluded",
+	} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("rebuild contains %q: %s", forbidden, encoded)
+		}
+	}
+	if _, err := ledger.AuthorizeArtifactIDs([]string{"artifact-other"}); !errors.Is(err, ErrConversationArtifactOwnership) {
+		t.Fatalf("unauthorized artifact error = %v", err)
+	}
+	if _, err := BuildConversationLedger(context.Background(), "bob", dialogueID); !errors.Is(err, ErrConversationLedgerNotFound) {
+		t.Fatalf("cross-owner rebuild error = %v", err)
+	}
+}
+
+func TestHistoryRootDeleteBlocksResolveDialogueAndRefresh(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	dialogueID := "22222222-2222-4222-8222-222222222222"
+	root := model.QuestionAgentLog{
+		DialogueId: dialogueID, UserName: "alice", Query: "deleted root",
+		Status: statusSucceeded, Mode: "instant", ToolName: "ChatAgent",
+		BotReportRevision: -1,
+	}
+	if err := gdb.Create(&root).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Model(&model.QuestionAgentLog{}).
+		Where("id = ?", root.Id).
+		Update("delete_at", "2026-07-29 00:00:00").Error; err != nil {
+		t.Fatal(err)
+	}
+	child := model.QuestionAgentLog{
+		DialogueId: dialogueID, FId: root.Id, UserName: "alice",
+		Query: "live child", Status: statusSucceeded, Mode: "instant",
+		ToolName: "ChatAgent", BotReportRevision: -1,
+	}
+	if err := gdb.Create(&child).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService()
+	for _, input := range []QueryInput{
+		{Id: root.Id},
+		{RefreshId: child.Id},
+	} {
+		if _, _, err := service.resolveDialogue(context.Background(), "alice", input); !errors.Is(err, gorm.ErrRecordNotFound) {
+			t.Fatalf("resolve deleted root input=%#v error=%v", input, err)
+		}
 	}
 }

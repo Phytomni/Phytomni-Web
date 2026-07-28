@@ -26,7 +26,8 @@ func setupQueryTestDB(t *testing.T) *gorm.DB {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		dialogue_id TEXT,
 		f_id INTEGER DEFAULT 0,
-		user_name TEXT
+		user_name TEXT,
+		delete_at DATETIME
 	)`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}

@@ -43,6 +43,13 @@ type ConversationLedger struct {
 	artifacts map[string]rxBot.ArtifactRefV1
 }
 
+type ConversationRebuildSnapshot struct {
+	Cursor       int64
+	Version      string
+	History      []rxBot.LedgerEntryV1
+	ArtifactRefs []rxBot.ArtifactRefV1
+}
+
 type conversationLedgerRow struct {
 	ID      int64
 	Status  string
@@ -197,6 +204,50 @@ func (ledger ConversationLedger) HistoryBefore(currentRowID int64) []rxBot.Ledge
 		history = history[len(history)-maxConversationLedgerHistoryEntries:]
 	}
 	return history
+}
+
+// RebuildBefore derives a deterministic Bot recovery snapshot from accepted
+// owner-scoped rows preceding the current durable turn. It never includes raw
+// assistant answers or the pre-dispatch row itself.
+func (ledger ConversationLedger) RebuildBefore(
+	currentRowID int64,
+) (ConversationRebuildSnapshot, error) {
+	fingerprintRows := make([]ledgerFingerprintRow, 0, len(ledger.rows))
+	artifactRefs := make([]rxBot.ArtifactRefV1, 0)
+	seenArtifacts := make(map[string]struct{})
+	var cursor int64
+	for _, row := range ledger.rows {
+		if row.ID >= currentRowID || row.Status != statusSucceeded {
+			continue
+		}
+		fingerprintRows = append(fingerprintRows, row.fingerprint)
+		if row.ID > cursor {
+			cursor = row.ID
+		}
+		if row.Context == nil {
+			continue
+		}
+		for _, ref := range row.Context.ArtifactRefs {
+			if _, exists := seenArtifacts[ref.ArtifactID]; exists {
+				continue
+			}
+			if len(artifactRefs) >= maxPersistedArtifactRefs {
+				return ConversationRebuildSnapshot{}, ErrConversationArtifactOwnership
+			}
+			seenArtifacts[ref.ArtifactID] = struct{}{}
+			artifactRefs = append(artifactRefs, ref)
+		}
+	}
+	version, err := fingerprintConversationLedger(fingerprintRows)
+	if err != nil {
+		return ConversationRebuildSnapshot{}, err
+	}
+	return ConversationRebuildSnapshot{
+		Cursor:       cursor,
+		Version:      version,
+		History:      ledger.HistoryBefore(currentRowID),
+		ArtifactRefs: artifactRefs,
+	}, nil
 }
 
 // AuthorizeArtifactIDs resolves requested opaque IDs only from accepted rows
