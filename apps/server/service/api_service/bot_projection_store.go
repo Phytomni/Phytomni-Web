@@ -19,7 +19,10 @@ var (
 	ErrBotProjectionConflict = errors.New("bot projection compare-and-swap conflict")
 )
 
-const botProjectionCASAttempts = 3
+const (
+	botProjectionCASAttempts  = 3
+	botProjectionCASPredicate = "id = ? AND user_name = ? AND bot_report_revision = ? AND CAST(COALESCE(bot_projection_json, '') AS CHAR) = ?"
+)
 
 // persistedProjection is the deliberately narrow JSON representation kept in
 // question_agent_logs. RequestID and RawPayload are transport/provider
@@ -138,7 +141,7 @@ func SaveBotRunProjection(ctx context.Context, username string, rowID int64, inc
 			return err
 		}
 		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ? AND bot_report_revision = ? AND COALESCE(bot_projection_json, '') = ?", rowID, username, currentRevision, currentRaw).
+			Where(botProjectionCASPredicate, rowID, username, currentRevision, currentRaw).
 			Updates(map[string]interface{}{
 				"bot_projection_json": encoded,
 				"bot_report_revision": merged.ReportRevision,
@@ -180,7 +183,7 @@ func SaveBotConversationContext(ctx context.Context, username string, rowID int6
 			return nil
 		}
 		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ? AND bot_report_revision = ? AND COALESCE(bot_projection_json, '') = ?", rowID, username, currentRevision, currentRaw).
+			Where(botProjectionCASPredicate, rowID, username, currentRevision, currentRaw).
 			Updates(map[string]interface{}{"bot_projection_json": encoded})
 		if result.Error != nil {
 			return result.Error
