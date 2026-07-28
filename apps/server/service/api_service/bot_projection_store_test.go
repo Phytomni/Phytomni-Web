@@ -202,6 +202,40 @@ func TestSaveBotRunProjectionConcurrentUpdatesDoNotClobberNewest(t *testing.T) {
 	}
 }
 
+func TestSaveBotRunProjectionPreservesPrivateConversationContext(t *testing.T) {
+	setupTestDB(t)
+	if err := setupProjectionRow(14, "alice@example.com", 1, `{"run_id":"run-14","status":"RUNNING"}`); err != nil {
+		t.Fatal(err)
+	}
+	privateContext := validPersistedConversationContext()
+	if err := SaveBotConversationContext(context.Background(), "alice@example.com", 14, privateContext); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveBotRunProjection(context.Background(), "alice@example.com", 14, BotRunProjection{
+		RunID:          "run-14",
+		Status:         "SUCCEEDED",
+		ReportRevision: 2,
+		FinalReport:    "final answer",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	gotContext, err := LoadBotConversationContext(context.Background(), "alice@example.com", 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotContext.ClientTurnID != privateContext.ClientTurnID || gotContext.SettlementState != privateContext.SettlementState || len(gotContext.ArtifactRefs) != 1 {
+		t.Fatalf("public projection save clobbered context=%#v", gotContext)
+	}
+	gotProjection, err := LoadBotRunProjection(context.Background(), "alice@example.com", 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotProjection.ReportRevision != 2 || gotProjection.VisibleReport() != "final answer" {
+		t.Fatalf("public projection=%#v", gotProjection)
+	}
+}
+
 func setupProjectionRow(id int64, owner string, revision int64, projectionJSON string) error {
 	return model.Default().Exec("INSERT INTO question_agent_logs (id, user_name, bot_report_revision, bot_projection_json) VALUES (?, ?, ?, ?)", id, owner, revision, projectionJSON).Error
 }

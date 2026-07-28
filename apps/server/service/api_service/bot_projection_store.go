@@ -25,23 +25,24 @@ const botProjectionCASAttempts = 3
 // question_agent_logs. RequestID and RawPayload are transport/provider
 // metadata and must never cross this persistence boundary.
 type persistedProjection struct {
-	RunID              string                       `json:"run_id,omitempty"`
-	Agent              string                       `json:"agent,omitempty"`
-	Status             string                       `json:"status,omitempty"`
-	ReportStage        string                       `json:"report_stage,omitempty"`
-	ReportCompleteness string                       `json:"report_completeness,omitempty"`
-	ReportRevision     int64                        `json:"report_revision"`
-	ReportUpdatedAt    *time.Time                   `json:"report_updated_at,omitempty"`
-	IntermediateReport string                       `json:"intermediate_report,omitempty"`
-	FinalReport        string                       `json:"final_report,omitempty"`
-	Progress           persistedProjectionProgress  `json:"progress,omitempty"`
-	Degraded           bool                         `json:"degraded,omitempty"`
-	DegradedReason     string                       `json:"degraded_reason,omitempty"`
-	Failures           []string                     `json:"failures,omitempty"`
-	Artifacts          persistedProjectionArtifacts `json:"artifacts,omitempty"`
-	TrackingDegraded   bool                         `json:"tracking_degraded,omitempty"`
-	DegradedInterop    bool                         `json:"degraded_interop,omitempty"`
-	InterOp            *InteropProvenance           `json:"interop,omitempty"`
+	RunID               string                        `json:"run_id,omitempty"`
+	Agent               string                        `json:"agent,omitempty"`
+	Status              string                        `json:"status,omitempty"`
+	ReportStage         string                        `json:"report_stage,omitempty"`
+	ReportCompleteness  string                        `json:"report_completeness,omitempty"`
+	ReportRevision      int64                         `json:"report_revision"`
+	ReportUpdatedAt     *time.Time                    `json:"report_updated_at,omitempty"`
+	IntermediateReport  string                        `json:"intermediate_report,omitempty"`
+	FinalReport         string                        `json:"final_report,omitempty"`
+	Progress            persistedProjectionProgress   `json:"progress,omitempty"`
+	Degraded            bool                          `json:"degraded,omitempty"`
+	DegradedReason      string                        `json:"degraded_reason,omitempty"`
+	Failures            []string                      `json:"failures,omitempty"`
+	Artifacts           persistedProjectionArtifacts  `json:"artifacts,omitempty"`
+	TrackingDegraded    bool                          `json:"tracking_degraded,omitempty"`
+	DegradedInterop     bool                          `json:"degraded_interop,omitempty"`
+	InterOp             *InteropProvenance            `json:"interop,omitempty"`
+	ConversationContext *persistedConversationContext `json:"conversation_context,omitempty"`
 }
 
 type persistedProjectionProgress struct {
@@ -119,7 +120,7 @@ func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection
 // and is bounded to three attempts before returning ErrBotProjectionConflict.
 func SaveBotRunProjection(ctx context.Context, username string, rowID int64, incoming BotRunProjection) error {
 	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
-		current, err := loadBotRunProjectionRow(ctx, username, rowID)
+		current, privateContext, currentRaw, currentRevision, err := loadPersistedBotProjectionRow(ctx, username, rowID)
 		if err != nil {
 			return err
 		}
@@ -132,12 +133,12 @@ func SaveBotRunProjection(ctx context.Context, username string, rowID int64, inc
 			return nil
 		}
 
-		encoded, err := marshalPersistedProjection(merged)
+		encoded, err := marshalPersistedProjectionWithContext(merged, privateContext)
 		if err != nil {
 			return err
 		}
 		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ? AND bot_report_revision = ?", rowID, username, current.ReportRevision).
+			Where("id = ? AND user_name = ? AND bot_report_revision = ? AND COALESCE(bot_projection_json, '') = ?", rowID, username, currentRevision, currentRaw).
 			Updates(map[string]interface{}{
 				"bot_projection_json": encoded,
 				"bot_report_revision": merged.ReportRevision,
@@ -159,22 +160,70 @@ func LoadBotRunProjection(ctx context.Context, username string, rowID int64) (Bo
 	return loadBotRunProjectionRow(ctx, username, rowID)
 }
 
+// SaveBotConversationContext updates only the bounded private extension for an
+// owner-scoped row. The report revision is used solely as a storage CAS
+// predicate; it is never treated as a business-context version.
+func SaveBotConversationContext(ctx context.Context, username string, rowID int64, incoming persistedConversationContext) error {
+	if err := incoming.validate(); err != nil {
+		return err
+	}
+	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
+		current, _, currentRaw, currentRevision, err := loadPersistedBotProjectionRow(ctx, username, rowID)
+		if err != nil {
+			return err
+		}
+		encoded, err := marshalPersistedProjectionWithContext(current, &incoming)
+		if err != nil {
+			return err
+		}
+		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ? AND bot_report_revision = ? AND COALESCE(bot_projection_json, '') = ?", rowID, username, currentRevision, currentRaw).
+			Updates(map[string]interface{}{"bot_projection_json": encoded})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 1 {
+			return nil
+		}
+	}
+	return ErrBotProjectionConflict
+}
+
+// LoadBotConversationContext reads the private extension through the same
+// owner predicate as the public projection. An existing row without the
+// extension returns the zero context rather than a not-found error.
+func LoadBotConversationContext(ctx context.Context, username string, rowID int64) (persistedConversationContext, error) {
+	_, privateContext, _, _, err := loadPersistedBotProjectionRow(ctx, username, rowID)
+	if err != nil {
+		return persistedConversationContext{}, err
+	}
+	if privateContext == nil {
+		return persistedConversationContext{}, nil
+	}
+	return privateContext.clone(), nil
+}
+
 func loadBotRunProjectionRow(ctx context.Context, username string, rowID int64) (BotRunProjection, error) {
+	projection, _, _, _, err := loadPersistedBotProjectionRow(ctx, username, rowID)
+	return projection, err
+}
+
+func loadPersistedBotProjectionRow(ctx context.Context, username string, rowID int64) (BotRunProjection, *persistedConversationContext, string, int64, error) {
 	var row botProjectionRow
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Select("bot_projection_json, bot_report_revision").
 		Where("id = ? AND user_name = ?", rowID, username).
 		Take(&row)
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
-		return BotRunProjection{}, ErrBotProjectionNotFound
+		return BotRunProjection{}, nil, "", 0, ErrBotProjectionNotFound
 	}
 	if result.Error != nil {
-		return BotRunProjection{}, result.Error
+		return BotRunProjection{}, nil, "", 0, result.Error
 	}
 
-	projection, err := unmarshalPersistedProjection(row.BotProjectionJSON)
+	projection, privateContext, err := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
 	if err != nil {
-		return BotRunProjection{}, err
+		return BotRunProjection{}, nil, "", 0, err
 	}
 	// The indexed revision is the CAS source of truth. Keep old rows with an
 	// empty JSON payload readable through the legacy -1 sentinel as well.
@@ -185,7 +234,7 @@ func loadBotRunProjectionRow(ctx context.Context, username string, rowID int64) 
 	if len(projection.Artifacts.Directories) == 0 && len(projection.Artifacts.OutputDirs) > 0 {
 		projection.Artifacts.Directories = append([]string(nil), projection.Artifacts.OutputDirs...)
 	}
-	return projection, nil
+	return projection, privateContext, row.BotProjectionJSON, row.BotReportRevision, nil
 }
 
 func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
@@ -273,6 +322,10 @@ func cloneBotRunProjection(in BotRunProjection) BotRunProjection {
 }
 
 func marshalPersistedProjection(projection BotRunProjection) (string, error) {
+	return marshalPersistedProjectionWithContext(projection, nil)
+}
+
+func marshalPersistedProjectionWithContext(projection BotRunProjection, privateContext *persistedConversationContext) (string, error) {
 	interop, err := normalizeInteropProvenance(projection.InterOp)
 	if err != nil {
 		return "", err
@@ -302,9 +355,10 @@ func marshalPersistedProjection(projection BotRunProjection) (string, error) {
 			OutputDirs:  append([]string(nil), projection.Artifacts.OutputDirs...),
 			Paths:       append([]string(nil), projection.Artifacts.Paths...),
 		},
-		TrackingDegraded: projection.TrackingDegraded,
-		DegradedInterop:  projection.DegradedInterop,
-		InterOp:          interop,
+		TrackingDegraded:    projection.TrackingDegraded,
+		DegradedInterop:     projection.DegradedInterop,
+		InterOp:             interop,
+		ConversationContext: privateContext,
 	})
 	if err != nil {
 		return "", err
@@ -313,16 +367,21 @@ func marshalPersistedProjection(projection BotRunProjection) (string, error) {
 }
 
 func unmarshalPersistedProjection(raw string) (BotRunProjection, error) {
+	projection, _, err := unmarshalPersistedProjectionWithContext(raw)
+	return projection, err
+}
+
+func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *persistedConversationContext, error) {
 	if strings.TrimSpace(raw) == "" || strings.TrimSpace(raw) == "null" {
-		return BotRunProjection{}, nil
+		return BotRunProjection{}, nil, nil
 	}
 	var stored persistedProjection
 	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
-		return BotRunProjection{}, fmt.Errorf("decode bot projection: %w", err)
+		return BotRunProjection{}, nil, fmt.Errorf("decode bot projection: %w", err)
 	}
 	interop, err := normalizeInteropProvenance(stored.InterOp)
 	if err != nil {
-		return BotRunProjection{}, err
+		return BotRunProjection{}, nil, err
 	}
 	return BotRunProjection{
 		RunID:              stored.RunID,
@@ -352,7 +411,7 @@ func unmarshalPersistedProjection(raw string) (BotRunProjection, error) {
 		TrackingDegraded: stored.TrackingDegraded,
 		DegradedInterop:  stored.DegradedInterop,
 		InterOp:          interop,
-	}, nil
+	}, stored.ConversationContext, nil
 }
 
 func cloneProjectionTime(in *time.Time) *time.Time {
