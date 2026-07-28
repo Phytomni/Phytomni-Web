@@ -27,6 +27,10 @@ const adminSources = {
 };
 
 describe("data and admin async-owner contracts", () => {
+  it("does not present a fake registration control", () => {
+    expect(adminSources.globalConfig).not.toContain("enableRegistration");
+  });
+
   it("does not use void to discard data-surface promises", () => {
     expect(dataSources.favorites).not.toContain("void handleUnfavorite");
     expect(dataSources.favorites).not.toContain("void fetchFavorites");

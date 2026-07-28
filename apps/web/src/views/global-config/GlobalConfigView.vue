@@ -97,10 +97,6 @@
             $t("globalConfig.featureSettings")
           }}</el-divider>
 
-          <el-form-item :label="$t('globalConfig.enableRegistration')">
-            <el-switch v-model="configForm.enableRegistration" />
-          </el-form-item>
-
           <el-form-item :label="$t('globalConfig.enableFileUpload')">
             <el-switch v-model="configForm.enableFileUpload" />
           </el-form-item>
@@ -210,7 +206,6 @@ const configForm = reactive({
   passwordPolicy: ["lowercase", "numbers"],
   maxLoginAttempts: 5,
   ipWhitelist: "",
-  enableRegistration: true,
   enableFileUpload: true,
   enableChatHistory: true,
   maxChatHistory: 100,
@@ -277,7 +272,6 @@ const handleReset = async () => {
       passwordPolicy: ["lowercase", "numbers"],
       maxLoginAttempts: 5,
       ipWhitelist: "",
-      enableRegistration: true,
       enableFileUpload: true,
       enableChatHistory: true,
       maxChatHistory: 100,

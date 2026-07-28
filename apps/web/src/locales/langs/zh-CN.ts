@@ -685,7 +685,6 @@ export default {
     attempts: "次",
     ipWhitelist: "IP白名单",
     ipWhitelistPlaceholder: "请输入IP地址，每行一个",
-    enableRegistration: "启用用户注册",
     enableFileUpload: "启用文件上传",
     enableChatHistory: "启用聊天历史",
     maxChatHistory: "最大聊天历史记录数",

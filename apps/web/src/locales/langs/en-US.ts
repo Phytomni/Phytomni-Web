@@ -699,7 +699,6 @@ export default {
     attempts: "attempts",
     ipWhitelist: "IP Whitelist",
     ipWhitelistPlaceholder: "Please enter IP addresses, one per line",
-    enableRegistration: "Enable User Registration",
     enableFileUpload: "Enable File Upload",
     enableChatHistory: "Enable Chat History",
     maxChatHistory: "Max Chat History Records",
