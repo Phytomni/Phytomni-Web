@@ -244,7 +244,6 @@ describe("useSendMessage", () => {
 
   it("keeps a blocking answer with authorized artifacts when context is degraded", async () => {
     stateFor("A").messageInput = "Build report";
-    const relayURL = "/api/v1/downloads/relay-file?token=signed-token";
     mockGetQueryAbortable.mockResolvedValueOnce(
       invalidInput<ApiEnvelope<DecodedQueryData>>({
         data: {
@@ -258,7 +257,6 @@ describe("useSendMessage", () => {
               id: "artifact-1",
               name: "report.pdf",
               kind: "report",
-              download_url: relayURL,
             },
           ],
         },
@@ -275,7 +273,6 @@ describe("useSendMessage", () => {
         id: "artifact-1",
         name: "report.pdf",
         kind: "report",
-        download_url: relayURL,
       },
     ]);
     expect(assistant.download_path).toBeUndefined();

@@ -54,25 +54,32 @@ func TestConversationArtifactLinksRequireOwnerDialogueAndMessageRow(t *testing.T
 	if links[0].Name != "report.pdf" || links[0].Kind != "report" {
 		t.Fatalf("link=%#v", links[0])
 	}
-	parsed, err := url.Parse(links[0].DownloadURL)
+	encoded, err := json.Marshal(links)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "download_url") ||
+		strings.Contains(string(encoded), "obs://") ||
+		strings.Contains(string(encoded), "bucket") {
+		t.Fatalf("browser DTO leaked storage path: %s", encoded)
+	}
+	signedURL, err := service.ConversationArtifactDownloadURL(
+		context.Background(), "alice", "dlg-artifact", 120, links[0].ID,
+	)
+	if err != nil {
+		t.Fatalf("click-time signing: %v", err)
+	}
+	parsed, err := url.Parse(signedURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	token := parsed.Query().Get("token")
 	if token == "" || len(parsed.Query()) != 1 || parsed.Query().Has("t") {
-		t.Fatalf("download URL does not use the canonical token query: %q", links[0].DownloadURL)
+		t.Fatalf("download URL does not use the canonical token query: %q", signedURL)
 	}
 	if key, err := middleware.ParseDownloadToken(token); err != nil ||
 		key != "obs://bucket/alice/run-1/report.pdf" {
 		t.Fatalf("signed key=%q err=%v", key, err)
-	}
-	encoded, err := json.Marshal(links)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(encoded), "obs://") ||
-		strings.Contains(string(encoded), "bucket") {
-		t.Fatalf("browser DTO leaked storage path: %s", encoded)
 	}
 
 	for _, attempt := range []struct {
@@ -88,6 +95,16 @@ func TestConversationArtifactLinksRequireOwnerDialogueAndMessageRow(t *testing.T
 		); !errors.Is(err, ErrConversationArtifactOwnership) {
 			t.Fatalf("attempt=%#v err=%v", attempt, err)
 		}
+		if _, err := service.ConversationArtifactDownloadURL(
+			context.Background(), attempt.user, attempt.dialogue, attempt.row, links[0].ID,
+		); !errors.Is(err, ErrConversationArtifactOwnership) {
+			t.Fatalf("click attempt=%#v err=%v", attempt, err)
+		}
+	}
+	if _, err := service.ConversationArtifactDownloadURL(
+		context.Background(), "alice", "dlg-artifact", 120, "obs://bucket/alice/run-1/report.pdf",
+	); !errors.Is(err, ErrConversationArtifactOwnership) {
+		t.Fatalf("raw path artifact id err=%v", err)
 	}
 }
 
@@ -109,22 +126,28 @@ func TestConversationArtifactLinksRegenerateAndExpiredTokensFail(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := NewService()
-	first, err := service.conversationArtifactLinks(
+	links, err := service.conversationArtifactLinks(
 		context.Background(), "alice", "dlg-regenerate", 121,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.ConversationArtifactDownloadURL(
+		context.Background(), "alice", "dlg-regenerate", 121, links[0].ID,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(1100 * time.Millisecond)
-	second, err := service.conversationArtifactLinks(
+	second, err := service.ConversationArtifactDownloadURL(
 		context.Background(), "alice", "dlg-regenerate", 121,
+		links[0].ID,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first[0].DownloadURL == second[0].DownloadURL ||
-		first[0].ID != second[0].ID {
-		t.Fatalf("links were not freshly signed with stable identity: %#v %#v", first, second)
+	if first == second {
+		t.Fatalf("click-time URLs were not freshly signed: %q", first)
 	}
 	var persistedProjection string
 	if err := gdb.Raw(
@@ -134,7 +157,7 @@ func TestConversationArtifactLinksRegenerateAndExpiredTokensFail(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Contains(persistedProjection, "relay-file") ||
-		strings.Contains(persistedProjection, first[0].DownloadURL) {
+		strings.Contains(persistedProjection, first) {
 		t.Fatalf("signed URL became durable message data: %s", persistedProjection)
 	}
 

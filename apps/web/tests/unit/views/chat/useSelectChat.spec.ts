@@ -17,6 +17,10 @@ import {
 import { invalidInput } from "../../../helpers/invalidInput";
 import { deferred, mustGet } from "../../../helpers/mockFactories";
 
+vi.mock("element-plus", () => ({
+  ElMessage: { warning: vi.fn() },
+}));
+
 // Mock getAnswerCheck API (the only API selectChat calls)
 vi.mock("@/api/chat", () => ({
   getAnswerCheck: vi.fn(),
@@ -28,6 +32,7 @@ vi.mock("@/views/chat/utils/agent-log", () => ({
 
 import { getAnswerCheck } from "@/api/chat";
 import { readServerFile } from "@/views/chat/utils/agent-log";
+import { ElMessage } from "element-plus";
 
 const mockGetAnswerCheck = vi.mocked(getAnswerCheck);
 const mockReadServerFile = vi.mocked(readServerFile);
@@ -222,6 +227,54 @@ describe("useSelectChat", () => {
     expect(reactions["old-msg"]).toBeUndefined();
     // The new entry is hydrated
     expect(reactions["msg-1"]).toBe(1);
+  });
+
+  it("warns once for a hydrated degraded answer and keeps context rebuild quiet", async () => {
+    const degraded = invalidInput<ChatHistoryRecord>({
+      ...buildChatHistoryRecord({
+        id: "degraded-message",
+        query: "Question",
+        answer: "Saved answer",
+        tool_name: "ChatAgent",
+      }),
+      context_rebuilt: true,
+      context_degraded: true,
+    });
+    mockGetAnswerCheck.mockResolvedValueOnce(historyResponse([degraded]));
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    expect(messageAt("d1", 1, "degraded history").content).toBe("Saved answer");
+    expect(ElMessage.warning).toHaveBeenCalledTimes(1);
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      "Answer saved. Conversation context will be rebuilt on the next message."
+    );
+
+    // Force a second hydration of the same row to prove the warning is
+    // message-scoped rather than selection-scoped.
+    stateFor("d1").renderedChat = null;
+    mockGetAnswerCheck.mockResolvedValueOnce(historyResponse([degraded]));
+    await selectChat("d1");
+    expect(ElMessage.warning).toHaveBeenCalledTimes(1);
+
+    vi.clearAllMocks();
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        invalidInput<ChatHistoryRecord>({
+          ...buildChatHistoryRecord({
+            id: "rebuilt-message",
+            query: "Question",
+            answer: "Rebuilt answer",
+            tool_name: "ChatAgent",
+          }),
+          context_rebuilt: true,
+        }),
+      ])
+    );
+    stateFor("d1").renderedChat = null;
+    await selectChat("d1");
+    expect(ElMessage.warning).not.toHaveBeenCalled();
   });
 
   it("ignores optional history source metadata and preserves legacy rendering", async () => {

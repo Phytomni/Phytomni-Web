@@ -6,6 +6,7 @@ import { useChatStates } from "@/views/chat/composables/useChatStates";
 import type { ChatMessage } from "@/views/chat/types";
 
 const artifactMocks = vi.hoisted(() => ({
+  getConversationArtifactDownloadURL: vi.fn(),
   getConversationArtifactFile: vi.fn(),
   removeDownloadTransfer: vi.fn(),
   saveAs: vi.fn(),
@@ -16,6 +17,8 @@ vi.mock("@/api/chat", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/chat")>();
   return {
     ...actual,
+    getConversationArtifactDownloadURL:
+      artifactMocks.getConversationArtifactDownloadURL,
     getConversationArtifactFile: artifactMocks.getConversationArtifactFile,
   };
 });
@@ -71,8 +74,11 @@ describe("useArtifactPanel", () => {
       id: "artifact-1",
       name: "report.pdf",
       kind: "report" as const,
-      download_url: "/api/v1/downloads/relay-file?token=signed-token",
     };
+    artifactMocks.getConversationArtifactDownloadURL.mockResolvedValueOnce({
+      code: 200,
+      data: "/api/v1/downloads/relay-file?token=signed-token",
+    });
     const blob = new Blob(["report"]);
     artifactMocks.getConversationArtifactFile.mockImplementationOnce(
       async (_url, opts) => {
@@ -90,12 +96,18 @@ describe("useArtifactPanel", () => {
     panel.openArtifact("42");
     await panel.downloadArtifact({
       ...artifact,
-      download_url: "https://evil.invalid",
     });
 
     expect(panel.currentArtifactLinks.value).toEqual([artifact]);
+    expect(
+      artifactMocks.getConversationArtifactDownloadURL
+    ).toHaveBeenCalledWith({
+      dialogue_id: "A",
+      message_id: "42",
+      artifact_id: artifact.id,
+    });
     expect(artifactMocks.getConversationArtifactFile).toHaveBeenCalledWith(
-      artifact.download_url,
+      "/api/v1/downloads/relay-file?token=signed-token",
       expect.objectContaining({
         requestId: expect.stringMatching(/^conversation-artifact-/),
         onDownloadProgress: expect.any(Function),
@@ -133,7 +145,6 @@ describe("useArtifactPanel", () => {
               id: "table-1",
               name: "table.csv",
               kind: "table",
-              download_url: "/api/v1/downloads/relay-file?token=table-token",
             },
           ],
         }),
@@ -152,7 +163,6 @@ describe("useArtifactPanel", () => {
         id: "artifact-1",
         name: "report.pdf",
         kind: "report" as const,
-        download_url: "/api/v1/downloads/relay-file?token=history-token",
       },
     ];
 

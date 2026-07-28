@@ -17,6 +17,7 @@ import request, { createAbortableRequest } from "@/utils/request";
 import {
   decodeQueryData,
   getChatdownloadURL,
+  getConversationArtifactDownloadURL,
   getConversationArtifactFile,
   getReactionType,
   getUserTool,
@@ -147,12 +148,30 @@ describe("QueryData — conversation artifact contract", () => {
     id: "artifact-1",
     name: "report.pdf",
     kind: "report",
-    download_url: relayURL,
   };
 
   beforeEach(() => {
     mockRequest.mockReset();
     mockCreateAbortableRequest.mockReset();
+  });
+
+  it("resolves an artifact URL only through the authenticated identity endpoint", async () => {
+    mockRequest.mockResolvedValueOnce({
+      code: 200,
+      data: relayURL,
+    });
+
+    await expect(
+      getConversationArtifactDownloadURL({
+        dialogue_id: "dialogue/1",
+        message_id: "42",
+        artifact_id: "opaque-id",
+      })
+    ).resolves.toEqual({ code: 200, data: relayURL });
+    expect(mockRequest).toHaveBeenCalledWith({
+      url: "/api/v1/conversations/dialogue%2F1/messages/42/artifacts/opaque-id/download-url",
+      method: "get",
+    });
   });
 
   it("accepts bounded relay links and exposes only public context booleans", () => {

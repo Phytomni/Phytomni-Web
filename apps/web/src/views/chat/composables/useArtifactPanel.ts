@@ -2,7 +2,10 @@ import { computed, watch } from "vue";
 import type { Ref } from "vue";
 import { ElMessage } from "element-plus";
 import { saveAs } from "file-saver";
-import { getConversationArtifactFile } from "@/api/chat";
+import {
+  getConversationArtifactDownloadURL,
+  getConversationArtifactFile,
+} from "@/api/chat";
 import i18n from "@/locales";
 import {
   removeDownloadTransfer,
@@ -79,15 +82,26 @@ export function useArtifactPanel(opts: {
     const requestId = `conversation-artifact-${Date.now()}-${++artifactDownloadSequence}`;
     const tracker = createTransferTracker({ phase: "download", requestId });
     try {
-      const response = await getConversationArtifactFile(
-        selected.download_url,
-        {
-          requestId,
-          onDownloadProgress: (event) => {
-            upsertDownloadTransfer(tracker.update(event));
-          },
-        }
+      const messageId = normalizeServerMessageId(
+        currentArtifactMessage.value?.id
       );
+      const dialogueId = currentChatId.value;
+      if (messageId === null || dialogueId === "") return;
+
+      const signed = await getConversationArtifactDownloadURL({
+        dialogue_id: dialogueId,
+        message_id: messageId,
+        artifact_id: selected.id,
+      });
+      if (signed.code !== 200 || !signed.data) {
+        throw new Error("Artifact signing failed");
+      }
+      const response = await getConversationArtifactFile(signed.data, {
+        requestId,
+        onDownloadProgress: (event) => {
+          upsertDownloadTransfer(tracker.update(event));
+        },
+      });
       saveAs(response.data, selected.name);
     } catch (error) {
       if (isCanceledRequest(error)) {

@@ -31,15 +31,14 @@ const (
 	geneRelayRoot = "gene-examples/"
 
 	maxConversationArtifactLinks     = 50
+	maxConversationArtifactIDBytes   = 128
 	maxConversationArtifactNameBytes = 255
-	maxConversationArtifactURLBytes  = 2 << 10
 )
 
 type ConversationArtifactLink struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Kind        string `json:"kind"`
-	DownloadURL string `json:"download_url"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 }
 
 // geneObsfsDir returns the configured obsfs mount root if it is a readable
@@ -376,14 +375,50 @@ func conversationArtifactID(rowID int64, artifactPath string) string {
 	return fmt.Sprintf("%x", sum[:])
 }
 
-// conversationArtifactLinks signs only paths stored on the authenticated,
-// successful message row. The returned DTO never contains the OBS reference.
-func (ps *Service) conversationArtifactLinks(
+type conversationArtifact struct {
+	link ConversationArtifactLink
+	path string
+}
+
+func isOpaqueConversationArtifactID(value string) bool {
+	if value == "" || len([]byte(value)) > maxConversationArtifactIDBytes {
+		return false
+	}
+	for index, char := range value {
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			(index > 0 && (char == '.' || char == '_' || char == '-')) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func conversationArtifactPathContained(projection BotRunProjection, artifactPath string) bool {
+	if rxBot.ValidateProjectionOBSPath(artifactPath) != nil {
+		return false
+	}
+	directories := append([]string(nil), projection.Artifacts.Directories...)
+	directories = append(directories, projection.Artifacts.OutputDirs...)
+	for _, directory := range directories {
+		if artifactPathWithinPrefix(directory, artifactPath) {
+			return true
+		}
+	}
+	return false
+}
+
+// conversationArtifacts returns only opaque identity and display metadata for
+// the authenticated, successful message row. It deliberately does not sign
+// or serialize any storage path.
+func (ps *Service) conversationArtifacts(
 	ctx context.Context,
 	username string,
 	dialogueID string,
 	rowID int64,
-) ([]ConversationArtifactLink, error) {
+) ([]conversationArtifact, error) {
 	var row model.QuestionAgentLog
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Select("id, user_name, dialogue_id, status, bot_projection_json, bot_report_revision").
@@ -406,16 +441,16 @@ func (ps *Service) conversationArtifactLinks(
 	if err != nil {
 		return nil, err
 	}
-	links := make([]ConversationArtifactLink, 0)
+	artifacts := make([]conversationArtifact, 0)
 	seen := make(map[string]struct{})
 	for _, artifactPath := range projection.Artifacts.Paths {
-		if len(links) == maxConversationArtifactLinks {
+		if len(artifacts) == maxConversationArtifactLinks {
 			break
 		}
 		if _, duplicate := seen[artifactPath]; duplicate {
 			continue
 		}
-		if rxBot.ValidateProjectionOBSPath(artifactPath) != nil {
+		if !conversationArtifactPathContained(projection, artifactPath) {
 			return nil, ErrConversationArtifactOwnership
 		}
 		name := path.Base(artifactPath)
@@ -423,22 +458,59 @@ func (ps *Service) conversationArtifactLinks(
 			len([]byte(name)) > maxConversationArtifactNameBytes {
 			return nil, ErrConversationArtifactOwnership
 		}
-		downloadURL, err := relayDownloadURL(artifactPath)
-		if err != nil {
-			return nil, err
-		}
-		if len([]byte(downloadURL)) > maxConversationArtifactURLBytes {
-			return nil, ErrConversationArtifactOwnership
-		}
-		links = append(links, ConversationArtifactLink{
-			ID:          conversationArtifactID(rowID, artifactPath),
-			Name:        name,
-			Kind:        conversationArtifactKind(name),
-			DownloadURL: downloadURL,
+		artifacts = append(artifacts, conversationArtifact{
+			link: ConversationArtifactLink{
+				ID:   conversationArtifactID(rowID, artifactPath),
+				Name: name,
+				Kind: conversationArtifactKind(name),
+			},
+			path: artifactPath,
 		})
 		seen[artifactPath] = struct{}{}
 	}
+	return artifacts, nil
+}
+
+func (ps *Service) conversationArtifactLinks(
+	ctx context.Context,
+	username string,
+	dialogueID string,
+	rowID int64,
+) ([]ConversationArtifactLink, error) {
+	artifacts, err := ps.conversationArtifacts(ctx, username, dialogueID, rowID)
+	if err != nil {
+		return nil, err
+	}
+	links := make([]ConversationArtifactLink, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		links = append(links, artifact.link)
+	}
 	return links, nil
+}
+
+// ConversationArtifactDownloadURL authorizes a browser click against the
+// current owner/dialogue/message row and mints a fresh relay URL only after
+// resolving the exact opaque artifact ID to a contained projection path.
+func (ps *Service) ConversationArtifactDownloadURL(
+	ctx context.Context,
+	username string,
+	dialogueID string,
+	rowID int64,
+	artifactID string,
+) (string, error) {
+	if !isOpaqueConversationArtifactID(artifactID) {
+		return "", ErrConversationArtifactOwnership
+	}
+	artifacts, err := ps.conversationArtifacts(ctx, username, dialogueID, rowID)
+	if err != nil {
+		return "", err
+	}
+	for _, artifact := range artifacts {
+		if artifact.link.ID == artifactID {
+			return relayDownloadURL(artifact.path)
+		}
+	}
+	return "", ErrConversationArtifactOwnership
 }
 
 func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {

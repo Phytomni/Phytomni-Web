@@ -212,6 +212,7 @@ func TestApiV1ConversationRoutes(t *testing.T) {
 		[]string{
 			"GET /api/v1/conversations",
 			"GET /api/v1/conversations/:id/messages",
+			"GET /api/v1/conversations/:id/messages/:message_id/artifacts/:artifact_id/download-url",
 			"POST /api/v1/conversations/:id/a2ui-actions",
 			"DELETE /api/v1/conversations/:id",
 			"PATCH /api/v1/conversations/:id",

@@ -123,7 +123,6 @@ export interface ConversationArtifactLink {
   id: string;
   name: string;
   kind: ConversationArtifactKind;
-  download_url: string;
 }
 
 export interface QueryData extends ConversationContextNotice {
@@ -373,17 +372,24 @@ function decodeConversationArtifacts(
   const seen = new Set<string>();
   return value.map((item) => {
     if (!isRecord(item)) invalid("chat response");
+    for (const forbiddenKey of [
+      "download_url",
+      "obs_path",
+      "path",
+      "token",
+      "url",
+    ]) {
+      if (hasOwn(item, forbiddenKey)) invalid("chat response");
+    }
     const id = requiredString(item, "id", "chat response");
     const name = requiredString(item, "name", "chat response");
     const kind = requiredString(item, "kind", "chat response");
-    const downloadURL = requiredString(item, "download_url", "chat response");
     if (
       utf8Length(id) > MAX_CONVERSATION_ARTIFACT_ID_BYTES ||
       !ARTIFACT_ID_PATTERN.test(id) ||
       seen.has(id) ||
       utf8Length(name) > MAX_CONVERSATION_ARTIFACT_NAME_BYTES ||
-      !CONVERSATION_ARTIFACT_KINDS.has(kind as ConversationArtifactKind) ||
-      !isConversationArtifactDownloadURL(downloadURL)
+      !CONVERSATION_ARTIFACT_KINDS.has(kind as ConversationArtifactKind)
     ) {
       invalid("chat response");
     }
@@ -392,7 +398,6 @@ function decodeConversationArtifacts(
       id,
       name,
       kind: kind as ConversationArtifactKind,
-      download_url: downloadURL,
     };
   });
 }

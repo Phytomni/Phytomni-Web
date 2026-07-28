@@ -130,6 +130,26 @@ export const getAnswerCheck = (data: {
     decodeChatHistory
   );
 
+// Sign one conversation artifact only after an explicit authenticated click.
+// The returned relay URL is consumed immediately and never enters chat or
+// history state.
+export const getConversationArtifactDownloadURL = (data: {
+  dialogue_id: string;
+  message_id: string;
+  artifact_id: string;
+}): Promise<ApiEnvelope<string>> =>
+  requestApi(
+    {
+      url: `/api/v1/conversations/${encodeURIComponent(
+        data.dialogue_id
+      )}/messages/${encodeURIComponent(
+        data.message_id
+      )}/artifacts/${encodeURIComponent(data.artifact_id)}/download-url`,
+      method: "get",
+    },
+    decodeString
+  );
+
 // Get user tool permissions
 export const getUserTool = (): Promise<ApiEnvelope<UserToolResponse>> =>
   requestApi(

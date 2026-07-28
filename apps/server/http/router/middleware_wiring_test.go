@@ -53,6 +53,13 @@ func TestRelayFileRouteSkipsJWTAuth(t *testing.T) {
 	if w.Code == http.StatusUnauthorized || w.Code == http.StatusForbidden {
 		t.Fatalf("relay-file rejected the no-JWT request with %d; it must NOT sit behind AuthMiddleware (got body=%s)", w.Code, w.Body.String())
 	}
+
+	legacy := httptest.NewRecorder()
+	legacyReq := httptest.NewRequest(http.MethodGet, "/api/v1/downloads/relay-file?t="+url.QueryEscape(tok), nil)
+	engine.ServeHTTP(legacy, legacyReq)
+	if legacy.Code != http.StatusUnauthorized {
+		t.Fatalf("legacy relay alias was accepted with status %d; want 401", legacy.Code)
+	}
 }
 
 // TestLoginRouteSkipsJWTAuth: the login endpoint is open — you must be able to

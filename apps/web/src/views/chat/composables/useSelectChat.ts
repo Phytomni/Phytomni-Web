@@ -1,5 +1,6 @@
 import { nextTick, toRaw } from "vue";
 import type { Ref } from "vue";
+import { ElMessage } from "element-plus";
 import type { Chat, ChatMessage, ChatResponse, ChatUIState } from "../types";
 import { normalizeChatContextNotice } from "../types";
 import { parseMessageWithFiles } from "../utils/message-parse";
@@ -12,6 +13,7 @@ import {
 } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 import { getAnswerCheck } from "@/api/chat";
+import i18n from "@/locales";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
 import { decodeAgentSteps, decodeFollowUpQuestions } from "../messageTypes";
 import {
@@ -48,6 +50,7 @@ export function useSelectChat(opts: {
     timestamp,
   } = opts;
   const hydrationGenerations = new Map<string, number>();
+  const degradedHistoryWarnings = new Set<string>();
 
   const beginHydration = (dialogueId: string) => {
     const generation = (hydrationGenerations.get(dialogueId) || 0) + 1;
@@ -431,6 +434,27 @@ export function useSelectChat(opts: {
             }
           }
         });
+      }
+
+      // A degraded context does not invalidate the saved answer. Warn once per
+      // hydrated assistant row, while keeping context_rebuilt non-interrupting.
+      for (const item of historyRows) {
+        if (item.context_degraded !== true || item.id === undefined) continue;
+        const messageId = String(item.id);
+        if (
+          !messages.some(
+            (message) =>
+              message.role === "assistant" &&
+              String(message.id ?? "") === messageId &&
+              message.contextNotice?.degraded === true
+          )
+        ) {
+          continue;
+        }
+        const warningKey = `${capturedDialogueId}\u0000${messageId}`;
+        if (degradedHistoryWarnings.has(warningKey)) continue;
+        degradedHistoryWarnings.add(warningKey);
+        ElMessage.warning(i18n.global.t("chat.contextDegraded"));
       }
 
       chatState.historyQuestion = historyMessages;

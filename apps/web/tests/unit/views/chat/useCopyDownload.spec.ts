@@ -170,7 +170,7 @@ describe("useCopyDownload", () => {
       const open = vi.fn();
       vi.stubGlobal("open", open);
       mockGetChatdownloadURL.mockResolvedValueOnce(
-        buildApiEnvelope("/api/v1/downloads/relay-file?t=signed")
+        buildApiEnvelope("/api/v1/downloads/relay-file?token=signed")
       );
 
       const { downloadFile } = makeComposable();
@@ -180,7 +180,7 @@ describe("useCopyDownload", () => {
         obs_path: "/obs/internal/run/out",
       });
       expect(open).toHaveBeenCalledWith(
-        "/api/v1/downloads/relay-file?t=signed",
+        "/api/v1/downloads/relay-file?token=signed",
         "_blank",
         "noopener,noreferrer"
       );

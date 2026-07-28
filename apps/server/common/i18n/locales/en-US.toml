@@ -57,6 +57,11 @@ fetch_failed = "failed to fetch file"
 missing_parameter = "missing parameter"
 email_download_unavailable = "email download links are currently unavailable"
 
+[conversation_artifact]
+unauthorized = "unauthorized"
+not_found = "artifact not found"
+unavailable = "artifact download unavailable"
+
 [common]
 not_logged_in = "not logged in"
 forbidden = "forbidden request"

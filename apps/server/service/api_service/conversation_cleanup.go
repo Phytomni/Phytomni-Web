@@ -23,7 +23,7 @@ const (
 
 var (
 	ErrConversationDeleteNotFound = errors.New("conversation not found")
-	errConversationBotUnavailable = errors.New("Bot conversation context unavailable")
+	errConversationBotUnavailable = errors.New("bot conversation context unavailable")
 )
 
 // CleanupResult reports one bounded cleanup pass without coupling cron to
