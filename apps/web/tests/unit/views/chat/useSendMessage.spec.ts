@@ -244,8 +244,7 @@ describe("useSendMessage", () => {
 
   it("keeps a blocking answer with authorized artifacts when context is degraded", async () => {
     stateFor("A").messageInput = "Build report";
-    const relayURL =
-      "/api/v1/downloads/relay-file?token=signed-token&t=signed-token";
+    const relayURL = "/api/v1/downloads/relay-file?token=signed-token";
     mockGetQueryAbortable.mockResolvedValueOnce(
       invalidInput<ApiEnvelope<DecodedQueryData>>({
         data: {
@@ -279,7 +278,7 @@ describe("useSendMessage", () => {
         download_url: relayURL,
       },
     ]);
-    expect(assistant.download_path).toBe(relayURL);
+    expect(assistant.download_path).toBeUndefined();
     expect(assistant.contextNotice).toEqual({
       rebuilt: true,
       degraded: true,

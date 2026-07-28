@@ -157,6 +157,22 @@ export const getChatdownloadURL = (data: {
   );
 };
 
+export const getConversationArtifactFile = (
+  downloadURL: string,
+  opts?: DownloadProgressOpts
+): Promise<BinaryResponse> => {
+  if (!isConversationArtifactDownloadURL(downloadURL)) {
+    throw new TypeError("Invalid conversation artifact download URL");
+  }
+  return createAbortableRequest<BinaryResponse>({
+    url: downloadURL,
+    method: "get",
+    responseType: "blob",
+    requestId: opts?.requestId,
+    onDownloadProgress: opts?.onDownloadProgress,
+  });
+};
+
 // Get rendering-file download URL
 export const getFileDownUrlApi = (
   data: { id: string; document_format: string } | FormData,

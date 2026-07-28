@@ -19,6 +19,18 @@ import {
   resolveHistoryQuestion,
 } from "../utils/chat-history-normalization";
 
+export function historyAssistantMetadata(
+  item: Pick<ChatResponse, "artifacts" | "context_rebuilt" | "context_degraded">
+): Pick<ChatMessage, "artifacts" | "contextNotice"> {
+  const metadata: Pick<ChatMessage, "artifacts" | "contextNotice"> = {};
+  if (Array.isArray(item.artifacts)) {
+    metadata.artifacts = item.artifacts.map((artifact) => ({ ...artifact }));
+  }
+  const contextNotice = normalizeChatContextNotice(item);
+  if (contextNotice) metadata.contextNotice = contextNotice;
+  return metadata;
+}
+
 export function useSelectChat(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
   currentChatId: Ref<string>;
@@ -118,6 +130,7 @@ export function useSelectChat(opts: {
       if (historyRows.length > 0) {
         historyRows.forEach((row, rowIndex) => {
           const item: Partial<ChatResponse> = row;
+          const assistantMetadata = historyAssistantMetadata(item);
           // sync the reaction state returned by the server
           if (item.id && item.reaction_type) {
             chatState.reactions[item.id.toString()] = parseInt(
@@ -159,6 +172,7 @@ export function useSelectChat(opts: {
               if (finalAnswer) {
                 messages.push({
                   role: "assistant",
+                  ...assistantMetadata,
                   content: finalAnswer,
                   steps: decodeAgentSteps(answerData.steps),
                   status: item?.status || "",
@@ -181,6 +195,7 @@ export function useSelectChat(opts: {
                 if (item.tool_name === "ChatAgent") {
                   messages.push({
                     role: "assistant",
+                    ...assistantMetadata,
                     content: item.answer,
                     steps: [],
                     status: item?.status || "",
@@ -208,6 +223,7 @@ export function useSelectChat(opts: {
                   // log the doc_list data
                   messages.push({
                     role: "assistant",
+                    ...assistantMetadata,
                     content:
                       optionalStringValue(contentData, "content") ||
                       item.answer,
@@ -234,6 +250,7 @@ export function useSelectChat(opts: {
                   const tableData = convertToTableData(tableInput);
                   messages.push({
                     role: "assistant",
+                    ...assistantMetadata,
                     content: tableData,
                     tableHeaders: tableInput.headers.map((header: string) => ({
                       prop: header.replace(/\s+/g, "_").toLowerCase(),
@@ -259,6 +276,7 @@ export function useSelectChat(opts: {
                 } else if (item.tool_name === "AnalystAgent") {
                   messages.push({
                     role: "assistant",
+                    ...assistantMetadata,
                     content: item.answer,
                     status: item?.status || "",
                     upload_path: item?.upload_path || "",
@@ -284,6 +302,7 @@ export function useSelectChat(opts: {
                   // create the message object
                   const deepGenomeMessage = {
                     role: "assistant",
+                    ...assistantMetadata,
                     content:
                       optionalStringValue(contentData, "content") ||
                       item.answer,
@@ -360,6 +379,7 @@ export function useSelectChat(opts: {
                 } else {
                   messages.push({
                     role: "assistant",
+                    ...assistantMetadata,
                     content: item.answer,
                     status: item?.status || "",
                     upload_path: item?.upload_path || "",
@@ -382,6 +402,7 @@ export function useSelectChat(opts: {
             } catch {
               messages.push({
                 role: "assistant",
+                ...assistantMetadata,
                 content: item.answer,
                 steps: [],
                 status: item?.status || "",

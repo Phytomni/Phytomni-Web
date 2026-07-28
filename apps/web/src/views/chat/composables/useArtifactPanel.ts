@@ -1,13 +1,30 @@
 import { computed, watch } from "vue";
 import type { Ref } from "vue";
+import { ElMessage } from "element-plus";
+import { saveAs } from "file-saver";
+import { getConversationArtifactFile } from "@/api/chat";
+import i18n from "@/locales";
+import {
+  removeDownloadTransfer,
+  upsertDownloadTransfer,
+} from "@/utils/download-transfers";
+import { createTransferTracker } from "@/utils/transfer-progress";
 import type { ArtifactTab, ChatMessage, ChatUIState, ChatView } from "../types";
 import type { ConversationArtifactLink } from "@/api/types";
 import { artifactKindForMessage } from "../utils/artifact-policy";
+
+let artifactDownloadSequence = 0;
 
 function normalizeServerMessageId(id: unknown): string | null {
   if (typeof id !== "string" && typeof id !== "number") return null;
   const normalized = String(id).trim();
   return normalized === "" ? null : normalized;
+}
+
+function isCanceledRequest(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const record = error as Record<string, unknown>;
+  return record.code === "ERR_CANCELED" || record.name === "CanceledError";
 }
 
 export function useArtifactPanel(opts: {
@@ -36,7 +53,11 @@ export function useArtifactPanel(opts: {
       (message) => normalizeServerMessageId(message.id) === messageId
     );
     if (matches.length !== 1) return null;
-    return artifactKindForMessage(matches[0]) === null ? null : matches[0];
+    const message = matches[0];
+    return artifactKindForMessage(message) === null &&
+      (message.artifacts?.length ?? 0) === 0
+      ? null
+      : message;
   };
 
   const currentArtifactMessage = computed((): ChatMessage | null => {
@@ -50,12 +71,33 @@ export function useArtifactPanel(opts: {
       currentArtifactMessage.value?.artifacts ?? []
   );
 
-  const downloadArtifact = (artifact: ConversationArtifactLink) => {
+  const downloadArtifact = async (artifact: ConversationArtifactLink) => {
     const selected = currentArtifactLinks.value.find(
       (item) => item.id === artifact.id
     );
     if (!selected) return;
-    window.open(selected.download_url, "_blank", "noopener,noreferrer");
+    const requestId = `conversation-artifact-${Date.now()}-${++artifactDownloadSequence}`;
+    const tracker = createTransferTracker({ phase: "download", requestId });
+    try {
+      const response = await getConversationArtifactFile(
+        selected.download_url,
+        {
+          requestId,
+          onDownloadProgress: (event) => {
+            upsertDownloadTransfer(tracker.update(event));
+          },
+        }
+      );
+      saveAs(response.data, selected.name);
+    } catch (error) {
+      if (isCanceledRequest(error)) {
+        ElMessage.info(i18n.global.t("chat.downloadCancelled"));
+        return;
+      }
+      ElMessage.error(i18n.global.t("chat.downloadError"));
+    } finally {
+      removeDownloadTransfer(requestId);
+    }
   };
 
   const resetArtifact = (state: ChatUIState) => {

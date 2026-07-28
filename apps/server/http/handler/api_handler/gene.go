@@ -131,11 +131,10 @@ func (ph *Handler) GetDownloadObsFile(ctx *gin.Context) {
 }
 
 // RelayFileDownload streams an OBS object through the Bot relay. Auth is via
-// a short-lived query token (middleware.ParseDownloadToken): window.open,
-// <img src>, and email links cannot carry an Authorization header, so this
-// is the unified browser-direct download entry point.
+// a short-lived query token (middleware.ParseDownloadToken), allowing browser
+// downloads without placing the OBS key in the URL.
 func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
-	key, err := middleware.ParseDownloadToken(ctx.Query("t"))
+	key, err := middleware.ParseDownloadToken(ctx.Query("token"))
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.TMaybe(ctx, err.Error())})
 		return

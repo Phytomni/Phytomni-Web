@@ -25,7 +25,7 @@ import (
 
 // TestRelayFileRouteSkipsJWTAuth: the relay download is the browser-direct face —
 // window.open / <img src> / email links carry no Authorization header, so auth is
-// the ?t= signed token, not a JWT. A valid-token request with no Authorization
+// the ?token= signed token, not a JWT. A valid-token request with no Authorization
 // must reach the handler (which then fails at the unreachable Bot → 502), proving
 // the route is not behind AuthMiddleware.
 func TestRelayFileRouteSkipsJWTAuth(t *testing.T) {
@@ -47,7 +47,7 @@ func TestRelayFileRouteSkipsJWTAuth(t *testing.T) {
 	Api(engine.Group("/"))
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/downloads/relay-file?t="+url.QueryEscape(tok), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/downloads/relay-file?token="+url.QueryEscape(tok), nil)
 	engine.ServeHTTP(w, req)
 
 	if w.Code == http.StatusUnauthorized || w.Code == http.StatusForbidden {

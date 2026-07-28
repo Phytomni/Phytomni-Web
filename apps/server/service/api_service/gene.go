@@ -353,10 +353,7 @@ func relayDownloadURL(obsKey string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	escaped := url.QueryEscape(token)
-	// token is the canonical browser contract. Keep t as the relay handler's
-	// compatibility alias until that public endpoint is versioned separately.
-	return "/api/v1/downloads/relay-file?token=" + escaped + "&t=" + escaped, nil
+	return "/api/v1/downloads/relay-file?token=" + url.QueryEscape(token), nil
 }
 
 func conversationArtifactKind(name string) string {

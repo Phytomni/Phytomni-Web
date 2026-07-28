@@ -517,8 +517,36 @@
           </template>
           <template #activity>{{ t("chat.log.noData") }}</template>
           <template #downloads>
+            <ul
+              v-if="currentArtifactLinks.length"
+              class="authorized-artifact-list"
+            >
+              <li
+                v-for="artifact in currentArtifactLinks"
+                :key="artifact.id"
+                class="authorized-artifact-list__item"
+              >
+                <span class="authorized-artifact-list__name">
+                  {{ artifact.name }}
+                </span>
+                <el-tooltip
+                  :content="`${t('chat.downloadFile')}: ${artifact.name}`"
+                  placement="top"
+                >
+                  <el-button
+                    text
+                    circle
+                    :aria-label="`${t('chat.downloadFile')}: ${artifact.name}`"
+                    data-test="authorized-artifact-download"
+                    @click="downloadArtifact(artifact)"
+                  >
+                    <el-icon><Download /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </li>
+            </ul>
             <BotArtifactList
-              v-if="currentArtifactLifecycle"
+              v-else-if="currentArtifactLifecycle"
               :artifacts="currentArtifactLifecycle.artifacts"
               :empty-label="t('chat.botReport.emptyArtifacts')"
               :download="downloadFile"
@@ -563,7 +591,7 @@ import {
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
-import { Menu } from "@element-plus/icons-vue";
+import { Download, Menu } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
 import LangSwitch from "@/components/LangSwitch.vue";
@@ -866,6 +894,8 @@ const {
   activeArtifactMessageId,
   artifactTab,
   currentArtifactMessage,
+  currentArtifactLinks,
+  downloadArtifact,
   openArtifact: setArtifactOpen,
   closeArtifact: resetArtifactPanel,
   selectArtifactTab,
@@ -912,7 +942,8 @@ function isCompletedDeepGenomeMessage(message: ChatMessage): boolean {
 
 function artifactPreviewForMessage(message: ChatMessage) {
   const artifactKind = artifactKindForMessage(message);
-  if (artifactKind === null) return null;
+  if (artifactKind === null && (message.artifacts?.length ?? 0) === 0)
+    return null;
   if (
     artifactKind === "deep-genome" &&
     !isCompletedDeepGenomeMessage(message)
@@ -2401,6 +2432,31 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   margin-top: 10px;
   width: 100%;
   text-align: right;
+}
+
+.authorized-artifact-list {
+  display: grid;
+  gap: var(--phy-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.authorized-artifact-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--phy-space-12);
+  min-width: 0;
+  padding: var(--phy-space-8) 0;
+  border-bottom: 1px solid var(--phy-color-border-subtle);
+}
+
+.authorized-artifact-list__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Agents architecture diagram dialog styles */
 .agents-view-container {

@@ -59,8 +59,8 @@ func TestConversationArtifactLinksRequireOwnerDialogueAndMessageRow(t *testing.T
 		t.Fatal(err)
 	}
 	token := parsed.Query().Get("token")
-	if token == "" || parsed.Query().Get("t") != token {
-		t.Fatalf("download URL missing compatible signed token: %q", links[0].DownloadURL)
+	if token == "" || len(parsed.Query()) != 1 || parsed.Query().Has("t") {
+		t.Fatalf("download URL does not use the canonical token query: %q", links[0].DownloadURL)
 	}
 	if key, err := middleware.ParseDownloadToken(token); err != nil ||
 		key != "obs://bucket/alice/run-1/report.pdf" {
@@ -204,7 +204,7 @@ func TestDownloadAnalystAgentObsFilePreservesRelativeRelayZipKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("signed URL parse: %v", err)
 	}
-	token := parsed.Query().Get("t")
+	token := parsed.Query().Get("token")
 	if token == "" {
 		t.Fatal("missing signed download token")
 	}
@@ -232,7 +232,7 @@ func TestDownloadAnalystAgentObsImagesPreservesRelativeRelayImageKey(t *testing.
 	if err != nil {
 		t.Fatalf("signed URL parse: %v", err)
 	}
-	key, err := middleware.ParseDownloadToken(parsed.Query().Get("t"))
+	key, err := middleware.ParseDownloadToken(parsed.Query().Get("token"))
 	if err != nil || key != relayKey {
 		t.Fatalf("signed key = %q, err=%v; want unchanged relative relay key %q", key, err, relayKey)
 	}
@@ -251,7 +251,7 @@ func TestDownloadAnalystAgentObsImagesPreservesRelativeRelayImageKey(t *testing.
 	if err != nil {
 		t.Fatalf("URI signed URL parse: %v", err)
 	}
-	uriKey, err := middleware.ParseDownloadToken(uriParsed.Query().Get("t"))
+	uriKey, err := middleware.ParseDownloadToken(uriParsed.Query().Get("token"))
 	if err != nil || uriKey != uriRelayKey {
 		t.Fatalf("URI signed key = %q, err=%v; want unchanged relative relay key %q", uriKey, err, uriRelayKey)
 	}

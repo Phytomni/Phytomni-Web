@@ -256,9 +256,6 @@ function attachBlockingLegacyFields(
   }
   if (Array.isArray(data.artifacts)) {
     message.artifacts = data.artifacts.map((artifact) => ({ ...artifact }));
-    if (data.artifacts[0]) {
-      message.download_path = data.artifacts[0].download_url;
-    }
   }
 }
 

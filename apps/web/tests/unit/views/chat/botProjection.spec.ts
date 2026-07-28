@@ -199,8 +199,7 @@ describe("parseBotProjection", () => {
           id: "artifact-1",
           name: "report.pdf",
           kind: "report",
-          download_url:
-            "/api/v1/downloads/relay-file?token=signed-token&t=signed-token",
+          download_url: "/api/v1/downloads/relay-file?token=signed-token",
         },
       ],
     });

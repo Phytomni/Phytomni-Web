@@ -1,8 +1,31 @@
 import { nextTick } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import { useArtifactPanel } from "@/views/chat/composables/useArtifactPanel";
+import { historyAssistantMetadata } from "@/views/chat/composables/useSelectChat";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import type { ChatMessage } from "@/views/chat/types";
+
+const artifactMocks = vi.hoisted(() => ({
+  getConversationArtifactFile: vi.fn(),
+  removeDownloadTransfer: vi.fn(),
+  saveAs: vi.fn(),
+  upsertDownloadTransfer: vi.fn(),
+}));
+
+vi.mock("@/api/chat", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/chat")>();
+  return {
+    ...actual,
+    getConversationArtifactFile: artifactMocks.getConversationArtifactFile,
+  };
+});
+
+vi.mock("@/utils/download-transfers", () => ({
+  removeDownloadTransfer: artifactMocks.removeDownloadTransfer,
+  upsertDownloadTransfer: artifactMocks.upsertDownloadTransfer,
+}));
+
+vi.mock("file-saver", () => ({ saveAs: artifactMocks.saveAs }));
 
 const eligibleMessage = (
   id: string,
@@ -42,15 +65,21 @@ describe("useArtifactPanel", () => {
     );
   });
 
-  it("downloads only a signed link owned by the selected message", () => {
+  it("downloads only a signed link owned by the selected message through shared progress", async () => {
     const { states, panel } = makePanel();
     const artifact = {
       id: "artifact-1",
       name: "report.pdf",
       kind: "report" as const,
-      download_url:
-        "/api/v1/downloads/relay-file?token=signed-token&t=signed-token",
+      download_url: "/api/v1/downloads/relay-file?token=signed-token",
     };
+    const blob = new Blob(["report"]);
+    artifactMocks.getConversationArtifactFile.mockImplementationOnce(
+      async (_url, opts) => {
+        opts?.onDownloadProgress?.({ loaded: 4, total: 8 });
+        return { data: blob, headers: {} };
+      }
+    );
     states.currentChatId.value = "A";
     states.currentChat.value = {
       dialogue_id: "A",
@@ -59,21 +88,87 @@ describe("useArtifactPanel", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
 
     panel.openArtifact("42");
-    panel.downloadArtifact({
+    await panel.downloadArtifact({
       ...artifact,
       download_url: "https://evil.invalid",
     });
 
     expect(panel.currentArtifactLinks.value).toEqual([artifact]);
-    expect(open).toHaveBeenCalledWith(
+    expect(artifactMocks.getConversationArtifactFile).toHaveBeenCalledWith(
       artifact.download_url,
-      "_blank",
-      "noopener,noreferrer"
+      expect.objectContaining({
+        requestId: expect.stringMatching(/^conversation-artifact-/),
+        onDownloadProgress: expect.any(Function),
+      })
     );
+    expect(artifactMocks.upsertDownloadTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: "download",
+        loaded: 4,
+        total: 8,
+        percent: 50,
+      })
+    );
+    expect(artifactMocks.saveAs).toHaveBeenCalledWith(blob, "report.pdf");
+    expect(artifactMocks.removeDownloadTransfer).toHaveBeenCalledWith(
+      expect.stringMatching(/^conversation-artifact-/)
+    );
+    expect(open).not.toHaveBeenCalled();
 
-    panel.downloadArtifact({ ...artifact, id: "foreign-artifact" });
-    expect(open).toHaveBeenCalledTimes(1);
+    await panel.downloadArtifact({ ...artifact, id: "foreign-artifact" });
+    expect(artifactMocks.getConversationArtifactFile).toHaveBeenCalledTimes(1);
     open.mockRestore();
+  });
+
+  it("treats a completed message with authorized links as artifact-eligible", () => {
+    const { states, panel } = makePanel();
+    states.currentChatId.value = "A";
+    states.currentChat.value = {
+      dialogue_id: "A",
+      messages: [
+        eligibleMessage("data-artifact", {
+          tool_name: "DataAgent",
+          artifacts: [
+            {
+              id: "table-1",
+              name: "table.csv",
+              kind: "table",
+              download_url: "/api/v1/downloads/relay-file?token=table-token",
+            },
+          ],
+        }),
+      ],
+    };
+
+    panel.openArtifact("data-artifact");
+
+    expect(panel.currentArtifactMessage.value?.id).toBe("data-artifact");
+    expect(panel.currentArtifactLinks.value).toHaveLength(1);
+  });
+
+  it("preserves bounded artifacts and context notices during history hydration", () => {
+    const artifacts = [
+      {
+        id: "artifact-1",
+        name: "report.pdf",
+        kind: "report" as const,
+        download_url: "/api/v1/downloads/relay-file?token=history-token",
+      },
+    ];
+
+    expect(
+      historyAssistantMetadata({
+        artifacts,
+        context_rebuilt: true,
+        context_degraded: true,
+      })
+    ).toEqual({
+      artifacts,
+      contextNotice: {
+        rebuilt: true,
+        degraded: true,
+      },
+    });
   });
 
   it.each([

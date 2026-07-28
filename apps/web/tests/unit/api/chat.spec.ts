@@ -13,10 +13,11 @@ vi.mock("@/utils/request", () => ({
   isRelogin: { show: false },
 }));
 
-import request from "@/utils/request";
+import request, { createAbortableRequest } from "@/utils/request";
 import {
   decodeQueryData,
   getChatdownloadURL,
+  getConversationArtifactFile,
   getReactionType,
   getUserTool,
   type QueryData,
@@ -25,6 +26,7 @@ import { decodeConversationContextNotice } from "@/api/types";
 import { feedback } from "@/api/feedback";
 
 const mockRequest = vi.mocked(request);
+const mockCreateAbortableRequest = vi.mocked(createAbortableRequest);
 
 describe("getReactionType — wire contract", () => {
   beforeEach(() => {
@@ -140,8 +142,7 @@ describe("QueryData — interop wire contract", () => {
 });
 
 describe("QueryData — conversation artifact contract", () => {
-  const relayURL =
-    "/api/v1/downloads/relay-file?token=signed-token&t=signed-token";
+  const relayURL = "/api/v1/downloads/relay-file?token=signed-token";
   const artifact = {
     id: "artifact-1",
     name: "report.pdf",
@@ -151,6 +152,7 @@ describe("QueryData — conversation artifact contract", () => {
 
   beforeEach(() => {
     mockRequest.mockReset();
+    mockCreateAbortableRequest.mockReset();
   });
 
   it("accepts bounded relay links and exposes only public context booleans", () => {
@@ -168,7 +170,7 @@ describe("QueryData — conversation artifact contract", () => {
     });
 
     expect(result.artifacts).toEqual([artifact]);
-    expect(result.download_path).toBe(relayURL);
+    expect(result.download_path).toBeUndefined();
     expect(result.context_rebuilt).toBe(true);
     expect(result.context_degraded).toBe(true);
     for (const key of [
@@ -193,6 +195,15 @@ describe("QueryData — conversation artifact contract", () => {
         {
           ...artifact,
           download_url: "/api/v1/downloads/relay-file?t=signed-token",
+        },
+      ],
+    },
+    {
+      name: "relay URL with a legacy token alias",
+      artifacts: [
+        {
+          ...artifact,
+          download_url: `${relayURL}&t=signed-token`,
         },
       ],
     },
@@ -226,6 +237,33 @@ describe("QueryData — conversation artifact contract", () => {
 
     expect(result).toEqual({ code: 200, data: relayURL });
     expect(mockRequest).not.toHaveBeenCalled();
+  });
+
+  it("downloads a canonical relay link through the abortable blob transport", async () => {
+    const response = {
+      data: new Blob(["report"]),
+      headers: {},
+    };
+    mockCreateAbortableRequest.mockResolvedValueOnce(response);
+    const onDownloadProgress = vi.fn();
+
+    await expect(
+      getConversationArtifactFile(relayURL, {
+        requestId: "artifact-request",
+        onDownloadProgress,
+      })
+    ).resolves.toBe(response);
+
+    expect(mockCreateAbortableRequest).toHaveBeenCalledWith({
+      url: relayURL,
+      method: "get",
+      responseType: "blob",
+      requestId: "artifact-request",
+      onDownloadProgress,
+    });
+    expect(() =>
+      getConversationArtifactFile("https://evil.invalid/report.pdf")
+    ).toThrow("Invalid conversation artifact download URL");
   });
 });
 

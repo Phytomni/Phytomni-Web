@@ -353,19 +353,14 @@ export function isConversationArtifactDownloadURL(
   const params = new URLSearchParams(value.slice(value.indexOf("?") + 1));
   const keys = [...params.keys()];
   if (
-    keys.some((key) => key !== "token" && key !== "t") ||
-    params.getAll("token").length !== 1 ||
-    params.getAll("t").length > 1
+    keys.some((key) => key !== "token") ||
+    params.getAll("token").length !== 1
   ) {
     return false;
   }
   const token = params.get("token");
-  const relayAlias = params.get("t");
   return (
-    typeof token === "string" &&
-    token.length > 0 &&
-    !/[\s\u0000]/u.test(token) &&
-    (relayAlias === null || relayAlias === token)
+    typeof token === "string" && token.length > 0 && !/[\s\u0000]/u.test(token)
   );
 }
 
@@ -683,9 +678,6 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
   if (hasOwn(value, "a2ui")) result.a2ui = value.a2ui;
   if (hasOwn(value, "artifacts")) {
     result.artifacts = decodeConversationArtifacts(value.artifacts);
-    if (!result.download_path && result.artifacts.length > 0) {
-      result.download_path = result.artifacts[0].download_url;
-    }
   }
   const contextNotice = decodeConversationContextNotice(value);
   if (contextNotice) {
