@@ -197,6 +197,10 @@ export default {
   register: {
     title: "注册账户",
     subtitle: "创建您的农科发现大模型账户",
+    closedTitle: "暂未开放注册",
+    closedSubtitle: "当前暂不接受新账户注册。",
+    closedDescription: "如需开通账户，请联系管理员。",
+    returnToLogin: "返回登录",
     email: "邮箱",
     emailPlaceholder: "请输入邮箱地址",
     password: "密码",

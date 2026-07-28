@@ -11,6 +11,7 @@ import {
 const mocks = vi.hoisted(() => ({
   login: vi.fn(),
   register: vi.fn(),
+  getAuthCapabilities: vi.fn(),
   setToken: vi.fn(),
   safeRedirect: vi.fn(() => "/chat"),
   redirectIfAuthed: vi.fn(),
@@ -32,7 +33,10 @@ vi.mock("vue-router", () => ({
   useRoute: () => mocks.route,
 }));
 vi.mock("@/api/login", () => ({ login: mocks.login }));
-vi.mock("@/api/auth", () => ({ register: mocks.register }));
+vi.mock("@/api/auth", () => ({
+  register: mocks.register,
+  getAuthCapabilities: mocks.getAuthCapabilities,
+}));
 vi.mock("@/utils/auth", () => ({ setToken: mocks.setToken }));
 vi.mock("@/utils/auth-redirect", () => ({
   redirectIfAuthed: mocks.redirectIfAuthed,
@@ -201,6 +205,10 @@ describe("Login auth surface", () => {
         password_warning: "Rotate your password soon",
       },
     });
+    mocks.getAuthCapabilities.mockResolvedValue({
+      code: 200,
+      data: { registration_enabled: true },
+    });
   });
 
   it("mounts one login form on the horizon auth shell with the production logo", () => {
@@ -234,6 +242,17 @@ describe("Login auth surface", () => {
     expect(wrapper.get(".login-subtitle").text()).toBe(
       "面向科学发现与植物设计的多智能体科研系统"
     );
+  });
+
+  it("hides the login registration link when registration is closed", async () => {
+    mocks.getAuthCapabilities.mockResolvedValue({
+      code: 200,
+      data: { registration_enabled: false },
+    });
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.find(".register-container").exists()).toBe(false);
   });
 
   it("runs the authenticated reverse guard on mount", () => {

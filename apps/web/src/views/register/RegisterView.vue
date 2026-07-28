@@ -8,12 +8,25 @@
     </template>
 
     <template #title>
-      <h1 class="register-title">{{ $t("register.title") }}</h1>
+      <h1 class="register-title">
+        {{
+          $t(registrationEnabled ? "register.title" : "register.closedTitle")
+        }}
+      </h1>
     </template>
     <template #description>
-      <p class="register-subtitle">{{ $t("register.subtitle") }}</p>
+      <p class="register-subtitle">
+        {{
+          $t(
+            registrationEnabled
+              ? "register.subtitle"
+              : "register.closedSubtitle"
+          )
+        }}
+      </p>
     </template>
     <el-form
+      v-if="registrationEnabled"
       ref="formRef"
       class="register-form"
       :model="formData"
@@ -98,6 +111,12 @@
         </a>
       </div>
     </el-form>
+    <div v-else class="registration-closed" data-testid="registration-closed">
+      <p>{{ $t("register.closedDescription") }}</p>
+      <el-button type="primary" @click="goToLogin">
+        {{ $t("register.returnToLogin") }}
+      </el-button>
+    </div>
   </PhyAuthLayout>
 </template>
 
@@ -110,6 +129,7 @@ import { redirectIfAuthed } from "@/utils/auth-redirect";
 import type { ElForm } from "element-plus";
 import { ElMessage } from "element-plus";
 import { register } from "@/api/auth";
+import { useRegistrationAvailability } from "@/composables/useRegistrationAvailability";
 import LangSwitch from "@/components/LangSwitch.vue";
 import { PhyAuthBrand, PhyAuthLayout } from "@/components/shell";
 import { useI18n } from "vue-i18n";
@@ -122,6 +142,7 @@ onMounted(() => {
 });
 const loading = ref(false);
 const formRef = ref<InstanceType<typeof ElForm>>();
+const { registrationEnabled } = useRegistrationAvailability();
 
 const formData = reactive({
   email: "",
@@ -297,6 +318,10 @@ const goToLogin = () => {
 .register-subtitle {
   margin: var(--phy-space-8) 0 0;
   font-weight: 400;
+  color: var(--phy-color-text-secondary);
+}
+
+.registration-closed {
   color: var(--phy-color-text-secondary);
 }
 

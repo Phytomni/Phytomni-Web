@@ -193,6 +193,10 @@ export default {
   register: {
     title: "Create Account",
     subtitle: "Create your Phytomni account",
+    closedTitle: "Registration unavailable",
+    closedSubtitle: "New account registration is currently closed.",
+    closedDescription: "Please contact an administrator to open an account.",
+    returnToLogin: "Return to Login",
     email: "Email",
     emailPlaceholder: "Please enter your email address",
     password: "Password",

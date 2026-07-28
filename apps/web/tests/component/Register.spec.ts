@@ -10,6 +10,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   register: vi.fn(),
+  getAuthCapabilities: vi.fn(),
   redirectIfAuthed: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
@@ -25,7 +26,10 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ push: mocks.push, replace: mocks.replace }),
   useRoute: () => mocks.route,
 }));
-vi.mock("@/api/auth", () => ({ register: mocks.register }));
+vi.mock("@/api/auth", () => ({
+  register: mocks.register,
+  getAuthCapabilities: mocks.getAuthCapabilities,
+}));
 vi.mock("@/utils/auth-redirect", () => ({
   redirectIfAuthed: mocks.redirectIfAuthed,
 }));
@@ -224,6 +228,10 @@ describe("Registration auth surface", () => {
     mocks.formValidateReject = false;
     mocks.validateFieldReject = false;
     mocks.register.mockResolvedValue({ code: 200 });
+    mocks.getAuthCapabilities.mockResolvedValue({
+      code: 200,
+      data: { registration_enabled: true },
+    });
   });
 
   it("uses the auth shell title, description, and production logo", () => {
@@ -256,6 +264,31 @@ describe("Registration auth surface", () => {
       expect.objectContaining({ replace: mocks.replace })
     );
     wrapper.unmount();
+  });
+
+  it("renders a closed register state without submitting", async () => {
+    mocks.getAuthCapabilities.mockResolvedValue({
+      code: 200,
+      data: { registration_enabled: false },
+    });
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid=registration-closed]").exists()).toBe(
+      true
+    );
+    expect(wrapper.find(".register-form").exists()).toBe(false);
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
+
+  it("keeps the existing register form when capability loading fails", async () => {
+    mocks.getAuthCapabilities.mockRejectedValue(
+      new Error("network unavailable")
+    );
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.find(".register-form").exists()).toBe(true);
   });
 
   it("keeps consent unchecked, gates submit, and isolates legal links", async () => {

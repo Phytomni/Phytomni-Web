@@ -70,7 +70,7 @@
         {{ $t("login.loginButton") }}
       </el-button>
 
-      <div class="register-container">
+      <div v-if="registrationEnabled" class="register-container">
         <span>{{ $t("login.noAccount") }}</span>
         <a href="/register" class="register-link" @click.prevent="goToRegister">
           {{ $t("login.register") }}
@@ -90,6 +90,7 @@ import type { ElForm } from "element-plus";
 import { ElMessage, ElNotification } from "element-plus";
 import { login } from "@/api/login";
 import { register } from "@/api/auth";
+import { useRegistrationAvailability } from "@/composables/useRegistrationAvailability";
 import type { ApiEnvelope } from "@/api/types";
 import { isRecord, optionalString } from "@/api/contracts";
 import { setToken } from "@/utils/auth";
@@ -108,6 +109,7 @@ onMounted(() => {
 const isLogin = ref(true);
 const loading = ref(false);
 const formRef = ref<InstanceType<typeof ElForm>>();
+const { registrationEnabled } = useRegistrationAvailability();
 
 const formData = reactive({
   email: "",
