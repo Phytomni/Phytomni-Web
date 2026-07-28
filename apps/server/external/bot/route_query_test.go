@@ -186,3 +186,43 @@ func TestDoJSON_RetainsLastValueBehaviorOutsideRouteQuery(t *testing.T) {
 		t.Fatalf("ordinary doJSON decoded agent=%q, want last value research", out.Agent)
 	}
 }
+
+func TestRouteQueryV1ReturnsValidatedContextMetadata(t *testing.T) {
+	envelope := validConversationEnvelope()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request RouteQueryRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode route request: %v", err)
+			return
+		}
+		if request.Conversation == nil || request.Conversation.TurnID != envelope.TurnID {
+			t.Errorf("conversation envelope=%#v", request.Conversation)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"run-v1","run_id":"run-v1","object":"agent.run",
+			"agent":"data","status":"succeeded","task_ids":[],
+			"result":{"formatted":{"answer":"ok"}},
+			"conversation_context":{
+				"schema_version":1,"turn_id":"7","selected_agent_id":"DataAgent",
+				"route_source":"explicit_selection","route_reason_code":"EXPLICIT_SELECTION",
+				"base_business_context_version":2,"proposed_business_context_version":3,
+				"last_applied_ledger_cursor":6,"context_truncated":false,
+				"context_rebuilt":false,"context_degraded":false
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	response, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery: "next", AllowedTools: []string{"ChatAgent", "DataAgent"},
+		ForcedTool: envelope.RequestedAgentID, Conversation: &envelope,
+	})
+	if err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+	if response.ConversationContext == nil ||
+		response.ConversationContext.SelectedAgentID != "DataAgent" {
+		t.Fatalf("context metadata=%#v", response.ConversationContext)
+	}
+}

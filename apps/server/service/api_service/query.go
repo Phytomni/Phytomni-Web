@@ -64,6 +64,7 @@ var (
 	ErrDuplicateClientTurn      = errors.New("duplicate client turn conflict")
 	ErrInvalidQueryFile         = errors.New("invalid query file")
 	ErrQueryAuthentication      = errors.New("query authentication required")
+	ErrInvalidConversationStage = errors.New("invalid conversation context stage")
 )
 
 var serviceClientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
@@ -71,6 +72,7 @@ var serviceClientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]
 const (
 	recentClientTurnLookupLimit = 200
 	turnAllocationTimeout       = time.Second
+	turnSubmissionLease         = 5 * time.Second
 	maxMySQLTurnWaitSeconds     = 30
 )
 
@@ -436,7 +438,8 @@ func requestedAgentForV1(in QueryInput) *string {
 func baseBusinessContextVersion(ledger ConversationLedger, currentRowID int64) int64 {
 	var version int64
 	for _, row := range ledger.rows {
-		if row.ID >= currentRowID || row.Context == nil || row.Context.Stage == nil {
+		if row.ID >= currentRowID || row.Context == nil || row.Context.Stage == nil ||
+			row.Context.SettlementState != conversationSettlementAcked {
 			continue
 		}
 		if row.Context.Stage.ProposedBusinessContextVersion > version {
@@ -446,12 +449,117 @@ func baseBusinessContextVersion(ledger ConversationLedger, currentRowID int64) i
 	return version
 }
 
+func validateV1ContextStage(
+	envelope *rxBot.ConversationEnvelopeV1,
+	stage *rxBot.ContextStageMetadata,
+	selectedTool string,
+) error {
+	if envelope == nil || stage == nil {
+		return ErrInvalidConversationStage
+	}
+	if err := stage.ValidateForTurn(envelope.TurnID); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidConversationStage, err)
+	}
+	if !containsAgentTool(envelope.AllowedAgentIDs, stage.SelectedAgentID) ||
+		stage.SelectedAgentID != selectedTool {
+		return fmt.Errorf("%w: selected agent", ErrInvalidConversationStage)
+	}
+	if envelope.RequestedAgentID != nil &&
+		stage.SelectedAgentID != *envelope.RequestedAgentID {
+		return fmt.Errorf("%w: explicit selection", ErrInvalidConversationStage)
+	}
+	expectedSource := "router"
+	if envelope.Mode == "instant" {
+		expectedSource = "instant_lock"
+		if stage.SelectedAgentID != "ChatAgent" {
+			return fmt.Errorf("%w: instant agent", ErrInvalidConversationStage)
+		}
+	} else if envelope.RequestedAgentID != nil {
+		expectedSource = "explicit_selection"
+	}
+	if stage.RouteSource != expectedSource ||
+		stage.BaseBusinessContextVersion != envelope.BaseBusinessContextVersion ||
+		stage.ProposedBusinessContextVersion != envelope.BaseBusinessContextVersion+1 ||
+		stage.LastAppliedLedgerCursor != envelope.LedgerCursor {
+		return fmt.Errorf("%w: route or version metadata", ErrInvalidConversationStage)
+	}
+	return nil
+}
+
+func acknowledgeConversationContext(
+	ctx context.Context,
+	client *rxBot.Client,
+	username string,
+	dialogueID string,
+	rowID int64,
+	ledgerVersion string,
+	stage *rxBot.ContextStageMetadata,
+) error {
+	if stage == nil {
+		return ErrInvalidConversationStage
+	}
+	ackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	response, err := client.SettleConversationContext(ackCtx, rxBot.ContextSettlementRequest{
+		SchemaVersion:   1,
+		ConversationKey: dialogueID,
+		TurnID:          strconv.FormatInt(rowID, 10),
+		LedgerVersion:   ledgerVersion,
+	})
+	if err != nil {
+		return err
+	}
+	if response.ContextVersion != stage.ProposedBusinessContextVersion {
+		return ErrInvalidConversationStage
+	}
+	return updateConversationSettlementState(
+		ackCtx,
+		username,
+		rowID,
+		ledgerVersion,
+		conversationSettlementAckPending,
+		conversationSettlementAcked,
+	)
+}
+
+func finalizePendingConversationAcknowledgments(
+	ctx context.Context,
+	client *rxBot.Client,
+	username string,
+	ledger ConversationLedger,
+	currentRowID int64,
+) error {
+	for _, row := range ledger.rows {
+		if row.ID >= currentRowID || row.Status != statusSucceeded ||
+			row.Context == nil ||
+			row.Context.SettlementState != conversationSettlementAckPending {
+			continue
+		}
+		if row.Context.Stage == nil || row.Context.SettlementLedgerHash == "" {
+			return ErrInvalidBotConversationContext
+		}
+		if err := acknowledgeConversationContext(
+			ctx,
+			client,
+			username,
+			ledger.DialogueID,
+			row.ID,
+			row.Context.SettlementLedgerHash,
+			row.Context.Stage,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (ps *Service) allocateV1Submission(
 	ctx context.Context,
 	username string,
 	in QueryInput,
 	target v1SubmissionTarget,
 	permissions AgentPermissionResolution,
+	finalizePending bool,
 ) (*v1Submission, error) {
 	var allocated model.QuestionAgentLog
 	var duplicate *QueryData
@@ -465,7 +573,9 @@ func (ps *Service) allocateV1Submission(
 				return err
 			}
 			allocated = *existing
-			if existing.Status != "SUBMITTING" {
+			if existing.Status != "SUBMITTING" ||
+				(!existing.UpdatedAt.IsZero() &&
+					time.Since(existing.UpdatedAt) < turnSubmissionLease) {
 				duplicate = queryDataFromStoredRow(*existing)
 			}
 			return nil
@@ -578,6 +688,21 @@ func (ps *Service) allocateV1Submission(
 	ledger, err := BuildConversationLedger(ctx, username, allocated.DialogueId)
 	if err != nil {
 		return nil, err
+	}
+	if finalizePending {
+		if err := finalizePendingConversationAcknowledgments(
+			ctx,
+			rxBot.NewClient(),
+			username,
+			ledger,
+			allocated.Id,
+		); err != nil {
+			return nil, err
+		}
+		ledger, err = BuildConversationLedger(ctx, username, allocated.DialogueId)
+		if err != nil {
+			return nil, err
+		}
 	}
 	requestID := requestIDFromContext(ctx)
 	if requestID == "" {
@@ -1181,7 +1306,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 
 	var submission *v1Submission
 	if v1 {
-		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions)
+		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions, true)
 		if err != nil {
 			return nil, err
 		}
@@ -1251,6 +1376,8 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	}
 	var botRunID, serverID, taskID, logStatus string
 	var expertProjection *BotRunProjection
+	var contextStage *rxBot.ContextStageMetadata
+	var assistantSummary string
 	if in.Mode == "expert" {
 		var forcedTool *string
 		if in.Tool != "" {
@@ -1259,7 +1386,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 		routeRequest := rxBot.RouteQueryRequest{
 			UserQuery:   in.Query,
-			History:     parseHistory(in.History),
 			OBSFileList: obsPaths,
 			DialogueID:  dialogueID,
 			AllowedTools: append(
@@ -1267,6 +1393,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				permissions.AllowedTools...,
 			),
 			ForcedTool: forcedTool,
+		}
+		if !v1 {
+			routeRequest.History = parseHistory(in.History)
 		}
 		if v1 {
 			routeRequest.Conversation = submission.envelope
@@ -1314,6 +1443,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		botSubmission.ReportRevision = responseReportRevisionOrDefault(-1, resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
 		botSubmission.TrackingDegraded = resp.DegradedTracking
 		expertProjection = &botSubmission
+		contextStage = resp.ConversationContext
 		slug = resolvedSlug
 		out.ToolName = resolvedTool
 		botRunID = botSubmission.RunID
@@ -1331,6 +1461,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// formatting survives and SyncBotRuns reconciles async runs by agent slug.
 		if botSubmission.Status == "SUCCEEDED" {
 			if resp.Result.Formatted != nil {
+				assistantSummary = resp.Result.Formatted.Answer
 				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
@@ -1357,9 +1488,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			}
 		}
 	} else if chatModel, isChat := rxBot.ChatModelFor(slug); isChat {
+		messages := chatMessagesForRequest(in.History, in.Query)
+		if v1 {
+			messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
+		}
 		req := rxBot.ChatCompletionRequest{
 			Model:      chatModel,
-			Messages:   chatMessagesForRequest(in.History, in.Query),
+			Messages:   messages,
 			DialogueID: dialogueID,
 		}
 		if v1 {
@@ -1374,6 +1509,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		botRunID = canonicalBotRunID(resp.RunID)
+		contextStage = resp.ConversationContext
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, metadataReportRevision(resp.Formatted.Metadata), metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
@@ -1395,10 +1531,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			// choices[0].message.content; source it there, then reshape per slug
 			// (knowledge/review become {content, doc_list}; chat stays plain).
 			if strings.EqualFold(strings.TrimSpace(resp.Status), "succeeded") && len(resp.Choices) == 0 && resp.Result.Formatted != nil {
+				assistantSummary = resp.Result.Formatted.Answer
 				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			} else {
-				out.Answer = rxBot.ShapeAnswer(slug, rxBot.ChatAnswerText(resp), &resp.Formatted)
+				assistantSummary = rxBot.ChatAnswerText(resp)
+				out.Answer = rxBot.ShapeAnswer(slug, assistantSummary, &resp.Formatted)
 				out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
 			}
 		}
@@ -1501,6 +1639,58 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		return nil, v1SubmissionError(ctx, username, submission, ErrMissingBotRunID)
 	}
 	out.TaskId = taskID
+
+	if v1 && out.Status == statusSucceeded {
+		settlementState := conversationSettlementRebuildRequired
+		if contextStage != nil {
+			if err := validateV1ContextStage(
+				submission.envelope,
+				contextStage,
+				out.ToolName,
+			); err != nil {
+				return nil, v1SubmissionError(ctx, username, submission, err)
+			}
+			if !contextStage.ContextDegraded {
+				settlementState = conversationSettlementAckPending
+			}
+		}
+		private := persistedConversationContext{
+			ClientTurnID:     in.ClientTurnID,
+			Stage:            contextStage,
+			SettlementState:  settlementState,
+			AssistantSummary: boundedAssistantSummary(assistantSummary),
+			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+		}
+		out.Id = submission.row.Id
+		out.UploadPath = strings.Join(obsPaths, ",")
+		ledgerVersion, err := settleBlockingConversationContext(
+			ctx,
+			username,
+			dialogueID,
+			submission.row.Id,
+			out,
+			in.Mode,
+			expertProjection,
+			private,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if settlementState == conversationSettlementAckPending {
+			// The visible answer is already durable. A lost acknowledgment is
+			// retried before the next envelope and must not hide this success.
+			_ = acknowledgeConversationContext(
+				ctx,
+				client,
+				username,
+				dialogueID,
+				submission.row.Id,
+				ledgerVersion,
+				contextStage,
+			)
+		}
+		return out, nil
+	}
 
 	// 5. Persist the Web row (INSERT new, or UPDATE on refresh).
 	titleQuery := ""
@@ -1976,7 +2166,7 @@ func (ps *Service) QueryStream(
 
 	var submission *v1Submission
 	if v1 {
-		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions)
+		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions, false)
 		if err != nil {
 			return nil, err
 		}

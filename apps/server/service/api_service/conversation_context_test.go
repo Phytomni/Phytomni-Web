@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 )
 
 func validPersistedConversationContext() persistedConversationContext {
@@ -184,5 +186,71 @@ func TestLoadBotConversationContextReturnsZeroForLegacyProjection(t *testing.T) 
 	}
 	if got.ClientTurnID != "" || got.Stage != nil || len(got.ArtifactRefs) != 0 {
 		t.Fatalf("legacy context=%#v, want zero", got)
+	}
+}
+
+func TestConversationSettlementStateIsIdempotentWithoutLedgerMutation(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	raw, err := marshalPersistedProjectionWithContext(
+		BotRunProjection{ReportRevision: -1},
+		&persistedConversationContext{
+			ClientTurnID: "context-state-1", SettlementState: "submission_append",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := model.QuestionAgentLog{
+		DialogueId: "11111111-1111-4111-8111-111111111111",
+		UserName:   "alice", Query: "question", ToolName: "ChatAgent",
+		Status: "SUBMITTING", Mode: "instant", BotProjectionJSON: raw,
+		BotReportRevision: -1,
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	stage := validContextStageMetadata()
+	stage.TurnID = fmt.Sprint(row.Id)
+	stage.BaseBusinessContextVersion = 0
+	stage.ProposedBusinessContextVersion = 1
+	stage.LastAppliedLedgerCursor = row.Id
+	version, err := settleBlockingConversationContext(
+		context.Background(),
+		"alice",
+		row.DialogueId,
+		row.Id,
+		&QueryData{
+			Id: row.Id, DialogueId: row.DialogueId, ToolName: "ChatAgent",
+			Answer: "answer", Status: "SUCCEEDED",
+		},
+		"instant",
+		nil,
+		persistedConversationContext{
+			ClientTurnID: "context-state-1", Stage: stage,
+			SettlementState:  conversationSettlementAckPending,
+			AssistantSummary: "answer",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := updateConversationSettlementState(
+		context.Background(), "alice", row.Id, version,
+		conversationSettlementAckPending, conversationSettlementAcked,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := updateConversationSettlementState(
+		context.Background(), "alice", row.Id, version,
+		conversationSettlementAckPending, conversationSettlementAcked,
+	); err != nil {
+		t.Fatalf("repeated ACK update: %v", err)
+	}
+	ledger, err := BuildConversationLedger(context.Background(), "alice", row.DialogueId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ledger.Version != version {
+		t.Fatalf("ledger version changed after ACK: got %s want %s", ledger.Version, version)
 	}
 }

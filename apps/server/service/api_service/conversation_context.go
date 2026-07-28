@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,10 @@ import (
 	"unicode/utf8"
 
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -30,6 +35,12 @@ var (
 )
 
 var ErrInvalidBotConversationContext = errors.New("invalid bot conversation context")
+
+const (
+	conversationSettlementAckPending      = "ACK_PENDING"
+	conversationSettlementAcked           = "ACKED"
+	conversationSettlementRebuildRequired = "REBUILD_REQUIRED"
+)
 
 // persistedConversationContext is the private, bounded context extension
 // stored alongside the public Bot projection. It is deliberately absent from
@@ -150,4 +161,172 @@ func (value *persistedConversationContext) UnmarshalJSON(data []byte) error {
 	}
 	*value = validated
 	return nil
+}
+
+func boundedAssistantSummary(value string) string {
+	if len([]byte(value)) <= maxPersistedAssistantSummaryBytes {
+		return value
+	}
+	for len(value) > 0 && len([]byte(value)) > maxPersistedAssistantSummaryBytes {
+		_, size := utf8.DecodeLastRuneInString(value)
+		value = value[:len(value)-size]
+	}
+	return value
+}
+
+func settleBlockingConversationContext(
+	ctx context.Context,
+	username string,
+	dialogueID string,
+	rowID int64,
+	out *QueryData,
+	mode string,
+	projection *BotRunProjection,
+	private persistedConversationContext,
+) (string, error) {
+	var ledgerVersion string
+	err := model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var stored botProjectionRow
+		result := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Model(&model.QuestionAgentLog{}).
+			Select("bot_projection_json, bot_report_revision").
+			Where(
+				"id = ? AND user_name = ? AND dialogue_id = ? AND status = ?",
+				rowID,
+				username,
+				dialogueID,
+				"SUBMITTING",
+			).
+			First(&stored)
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return ErrBotProjectionNotFound
+		}
+		if result.Error != nil {
+			return result.Error
+		}
+
+		current, currentPrivate, err := unmarshalPersistedProjectionWithContext(
+			stored.BotProjectionJSON,
+		)
+		if err != nil {
+			return err
+		}
+		if currentPrivate != nil && private.ClientTurnID == "" {
+			private.ClientTurnID = currentPrivate.ClientTurnID
+		}
+		current.ReportRevision = stored.BotReportRevision
+		if projection != nil {
+			current, _, err = MergeBotRunProjection(current, *projection)
+			if err != nil {
+				return err
+			}
+		}
+		private.SettlementLedgerHash = ""
+		raw, err := marshalPersistedProjectionWithContext(current, &private)
+		if err != nil {
+			return err
+		}
+		updates := map[string]interface{}{
+			"answer":              out.Answer,
+			"bot_projection_json": raw,
+			"bot_report_revision": current.ReportRevision,
+			"bot_run_id":          out.BotRunID,
+			"follow_up_questions": out.FollowUpQuestions,
+			"log_status":          "",
+			"mode":                mode,
+			"status":              out.Status,
+			"task_id":             out.TaskId,
+			"tool_name":           out.ToolName,
+		}
+		settled := tx.Model(&model.QuestionAgentLog{}).
+			Where(
+				"id = ? AND user_name = ? AND dialogue_id = ? AND status = ?",
+				rowID,
+				username,
+				dialogueID,
+				"SUBMITTING",
+			).
+			Updates(updates)
+		if settled.Error != nil {
+			return settled.Error
+		}
+		if settled.RowsAffected != 1 {
+			return ErrBotProjectionConflict
+		}
+
+		ledger, err := buildConversationLedgerWithDB(
+			ctx,
+			tx,
+			username,
+			dialogueID,
+		)
+		if err != nil {
+			return err
+		}
+		ledgerVersion = ledger.Version
+		private.SettlementLedgerHash = ledgerVersion
+		raw, err = marshalPersistedProjectionWithContext(current, &private)
+		if err != nil {
+			return err
+		}
+		finalized := tx.Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ? AND dialogue_id = ?", rowID, username, dialogueID).
+			UpdateColumn("bot_projection_json", raw)
+		if finalized.Error != nil {
+			return finalized.Error
+		}
+		if finalized.RowsAffected != 1 {
+			return ErrBotProjectionConflict
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return ledgerVersion, nil
+}
+
+func updateConversationSettlementState(
+	ctx context.Context,
+	username string,
+	rowID int64,
+	ledgerVersion string,
+	from string,
+	to string,
+) error {
+	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
+		projection, private, currentRaw, revision, err := loadPersistedBotProjectionRow(
+			ctx,
+			username,
+			rowID,
+		)
+		if err != nil {
+			return err
+		}
+		if private == nil || private.SettlementLedgerHash != ledgerVersion {
+			return ErrInvalidBotConversationContext
+		}
+		if private.SettlementState == to {
+			return nil
+		}
+		if private.SettlementState != from {
+			return ErrInvalidBotConversationContext
+		}
+		next := private.clone()
+		next.SettlementState = to
+		encoded, err := marshalPersistedProjectionWithContext(projection, &next)
+		if err != nil {
+			return err
+		}
+		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where(botProjectionCASPredicate, rowID, username, revision, currentRaw).
+			UpdateColumn("bot_projection_json", encoded)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 1 {
+			return nil
+		}
+	}
+	return ErrBotProjectionConflict
 }

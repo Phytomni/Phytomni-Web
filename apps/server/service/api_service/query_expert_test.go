@@ -1013,3 +1013,130 @@ func TestExpertModeEnabled_TracksBotConfig(t *testing.T) {
 		t.Error("ExpertModeEnabled must be true when BotConfig.ExpertEnabled=true")
 	}
 }
+
+func TestQueryExpertContextSelectionSettlement(t *testing.T) {
+	tests := []struct {
+		name, requestedTool, selectedTool, selectedSlug, routeSource string
+	}{
+		{"explicit", "DataAgent", "DataAgent", "data", "explicit_selection"},
+		{"router", "", "KnowledgeAgent", "knowledge", "router"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setupExpertTestDB(t)
+			var captured rxBot.RouteQueryRequest
+			var settleCalls int
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/v1/query/route":
+					if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+						t.Errorf("decode route request: %v", err)
+						return
+					}
+					stage := rxBot.ContextStageMetadata{
+						SchemaVersion: 1, TurnID: captured.Conversation.TurnID,
+						SelectedAgentID: test.selectedTool, RouteSource: test.routeSource,
+						RouteReasonCode:                strings.ToUpper(test.routeSource),
+						BaseBusinessContextVersion:     captured.Conversation.BaseBusinessContextVersion,
+						ProposedBusinessContextVersion: captured.Conversation.BaseBusinessContextVersion + 1,
+						LastAppliedLedgerCursor:        captured.Conversation.LedgerCursor,
+					}
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"id": "run-context", "run_id": "run-context",
+						"object": "agent.run", "agent": test.selectedSlug,
+						"status": "succeeded", "task_ids": []string{},
+						"result": map[string]interface{}{"formatted": map[string]interface{}{
+							"answer": "expert answer", "references": []interface{}{},
+						}},
+						"conversation_context": stage,
+					})
+				case "/v1/conversation-context/settle":
+					settleCalls++
+					_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+						SchemaVersion: 1, State: "committed", ContextVersion: 1,
+					})
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
+				MultiturnV1Enabled: true, TimeoutSeconds: 2,
+				ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			out, err := NewService().Query(context.Background(), "alice", QueryInput{
+				Query: "route this", History: `[{"role":"user","content":"browser poison"}]`,
+				Mode: "expert", Tool: test.requestedTool,
+				ClientTurnID: "expert-context-" + test.name,
+			})
+			if err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if out.Status != "SUCCEEDED" || out.ToolName != test.selectedTool || settleCalls != 1 {
+				t.Fatalf("result=%#v settle calls=%d", out, settleCalls)
+			}
+			if len(captured.History) != 0 || captured.Conversation == nil {
+				t.Fatalf("route request leaked browser history: %#v", captured)
+			}
+			if test.requestedTool == "" {
+				if captured.ForcedTool != nil ||
+					!reflect.DeepEqual(captured.Conversation.AllowedAgentIDs, captured.AllowedTools) {
+					t.Fatalf("router constraints=%#v", captured)
+				}
+			} else if captured.ForcedTool == nil ||
+				*captured.ForcedTool != test.requestedTool {
+				t.Fatalf("forced tool=%#v", captured.ForcedTool)
+			}
+		})
+	}
+}
+
+func TestQueryExpertContextAsyncKeepsRunningLifecycleWithoutSettlement(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var settleCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/query/route":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": "run-async-context", "run_id": "run-async-context",
+				"object": "agent.run", "agent": "research", "status": "running",
+				"task_ids": []string{"task-async-context"}, "result": map[string]interface{}{},
+			})
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			http.Error(w, "unexpected", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
+		MultiturnV1Enabled: true, TimeoutSeconds: 2, ResearchEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "long research", Mode: "expert", ClientTurnID: "expert-async-context",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out.Status != "RUNNING" || out.BotRunID != "run-async-context" || settleCalls != 0 {
+		t.Fatalf("result=%#v settle calls=%d", out, settleCalls)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "RUNNING" || row.BotRunId != "run-async-context" {
+		t.Fatalf("async row=%#v", row)
+	}
+}
