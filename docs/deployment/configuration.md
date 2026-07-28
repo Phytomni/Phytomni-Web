@@ -61,6 +61,24 @@ jwt:
 Verification is pinned to HS256 (`0.1.3`). Keep the secret stable across
 deploys so issued tokens stay valid. Overridable via `PHYTOMNI_JWT_SECRET`.
 
+### `auth` — public self-registration gate (default ON)
+
+```yaml
+auth:
+  registration_enabled: true
+```
+
+When `auth.registration_enabled` is missing or `true`, public
+`POST /api/v1/auth/registrations` remains available. Set it to `false` to close
+that public route: it returns HTTP 403 with the localized closed-registration
+message. `GET /api/v1/auth/capabilities` remains public and reports the
+`registration_enabled` boolean for client presentation.
+
+`POST /api/v1/users` still requires an administrator token and remains usable
+when public registration is closed. Changing this value requires a Go service
+restart; no schema migration is involved. To roll back, set the key back to
+`true` and restart the Go service.
+
 ### `redis` — user/product layer (critical; fail-open)
 
 ```yaml
