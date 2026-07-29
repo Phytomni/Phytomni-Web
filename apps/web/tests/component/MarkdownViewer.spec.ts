@@ -77,6 +77,48 @@ describe("MarkdownViewer — XSS hardening of the v-html render path", () => {
   });
 });
 
+describe("MarkdownViewer — static ATX headings", () => {
+  it("renders valid H1 through H6 lines as their matching heading levels", () => {
+    const wrapper = render(
+      [
+        "# Level 1",
+        "## Level 2",
+        "### Level 3",
+        "#### Level 4",
+        "##### Level 5",
+        "###### Level 6",
+      ].join("\n")
+    );
+
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      expect(wrapper.get(`h${level}`).text()).toBe(`Level ${level}`);
+      expect(wrapper.findAll(`h${level}`)).toHaveLength(1);
+    }
+  });
+
+  it("renders the reported Chinese subsection as an H4", () => {
+    const wrapper = render("#### 1. 基因定位与靶点设计");
+
+    expect(wrapper.get("h4").text()).toBe("1. 基因定位与靶点设计");
+    expect(wrapper.text()).not.toContain("####");
+  });
+
+  it("keeps seven hashes, missing-space hashes, and inline hashes as text", () => {
+    const wrapper = render(
+      [
+        "####### Seven hashes",
+        "####No separating space",
+        "Paragraph #### Inline hashes",
+      ].join("\n")
+    );
+
+    expect(wrapper.find("h1, h2, h3, h4, h5, h6").exists()).toBe(false);
+    expect(wrapper.text()).toContain("####### Seven hashes");
+    expect(wrapper.text()).toContain("####No separating space");
+    expect(wrapper.text()).toContain("Paragraph #### Inline hashes");
+  });
+});
+
 describe("MarkdownViewer surface classes", () => {
   it("keeps every MarkdownViewer surface bounded when legacy styles reset inherited layout", () => {
     expect(MARKDOWN_SOURCE).toContain("display: block;");
