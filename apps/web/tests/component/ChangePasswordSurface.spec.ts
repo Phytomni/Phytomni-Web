@@ -76,8 +76,13 @@ const ElFormStub = defineComponent({
   props: {
     model: { type: Object, required: true },
     rules: { type: Object, default: () => ({}) },
+    labelPosition: String,
   },
   setup(props, { expose, slots }) {
+    const model = props.model as Record<string, unknown>;
+    const initialValues = Object.fromEntries(
+      Object.entries(model).map(([field, value]) => [field, value])
+    );
     const errors = ref<Record<string, string>>({});
     provide(formErrorsKey, errors);
     const validate = async (callback?: (valid: boolean) => void) => {
@@ -124,7 +129,25 @@ const ElFormStub = defineComponent({
         }
       }
     };
-    expose({ validate, validateField, resetFields: vi.fn() });
+    const resetFields = (fields?: string | string[]) => {
+      const targets =
+        fields === undefined
+          ? Object.keys(initialValues)
+          : Array.isArray(fields)
+            ? fields
+            : [fields];
+
+      for (const field of targets) {
+        model[field] = initialValues[field];
+      }
+
+      errors.value = Object.fromEntries(
+        Object.entries(errors.value).filter(
+          ([field]) => !targets.includes(field)
+        )
+      );
+    };
+    expose({ validate, validateField, resetFields });
     return () => h("form", { class: "el-form" }, slots.default?.());
   },
 });
@@ -253,6 +276,29 @@ describe("Change Password surface", () => {
     expect(wrapper.find(".change-password-back").exists()).toBe(false);
     expect(wrapper.find(".change-password-form").exists()).toBe(true);
     expect(wrapper.findAll("input")).toHaveLength(4);
+    expect(wrapper.getComponent(ElFormStub).props("labelPosition")).toBe("top");
+  });
+
+  it("resets only password fields and preserves the store-derived username", async () => {
+    const wrapper = mountView("1");
+    await fillForm(wrapper, "", "Short1!", "Another1!");
+    await wrapper.get(".change-password-submit").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.findAll(".el-form-item__error").length).toBeGreaterThan(0);
+    expect(
+      (wrapper.findAll("input")[0].element as HTMLInputElement).value
+    ).toBe("researcher@example.test");
+
+    await wrapper.get(".change-password-reset").trigger("click");
+    await flushPromises();
+
+    const inputs = wrapper.findAll("input");
+    expect(
+      inputs.map((input) => (input.element as HTMLInputElement).value)
+    ).toEqual(["researcher@example.test", "", "", ""]);
+    expect(wrapper.findAll(".el-form-item__error")).toHaveLength(0);
+    expect(mocks.changePassword).not.toHaveBeenCalled();
   });
 
   it("shows Back for returning users and uses router.back", async () => {
@@ -400,10 +446,6 @@ describe("Change Password surface", () => {
     expect(SOURCE).not.toContain("SET_LOGIN_STATUS");
     expect(SOURCE).toContain("PhyAuthLayout");
     expect(SOURCE).toContain("--phy-control-height-primary");
-    expect(SOURCE).toContain("@media (max-width: 599px)");
-    expect(SOURCE).toMatch(
-      /@media \(max-width: 599px\)[\s\S]*?\.change-password-field\s*\{[\s\S]*?display:\s*block;/
-    );
     expect(SOURCE).not.toContain("height: 100vh");
   });
 });

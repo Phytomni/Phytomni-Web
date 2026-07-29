@@ -35,6 +35,7 @@
       class="change-password-form"
       :model="passwordForm"
       :rules="formRules"
+      label-position="top"
       status-icon
     >
       <el-form-item
@@ -263,11 +264,14 @@ const formRules = reactive({
   ],
 });
 
+const RESETTABLE_PASSWORD_FIELDS = [
+  "oldPassword",
+  "newPassword",
+  "confirmPassword",
+] as const;
+
 const resetForm = () => {
-  passwordForm.oldPassword = "";
-  passwordForm.newPassword = "";
-  passwordForm.confirmPassword = "";
-  passwordFormRef.value?.resetFields();
+  passwordFormRef.value?.resetFields([...RESETTABLE_PASSWORD_FIELDS]);
 };
 
 const finishPasswordChange = async () => {
@@ -391,12 +395,6 @@ onMounted(() => {
 .change-password-field :deep(.el-input),
 .change-password-field :deep(input) {
   min-height: var(--phy-control-height-primary);
-}
-
-@media (max-width: 599px) {
-  .change-password-field {
-    display: block;
-  }
 }
 
 .change-password-actions-item {
