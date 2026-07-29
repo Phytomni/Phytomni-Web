@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clientTurnDraftFingerprint,
+  clientTurnDraftFingerprintMatches,
   createClientTurnId,
   isDefinitePreDispatch4xx,
   type ClientTurnDraft,
@@ -99,6 +100,43 @@ describe("client turn identity", () => {
     expect(clientTurnDraftFingerprint({ ...baseDraft(), ...change })).not.toBe(
       clientTurnDraftFingerprint(baseDraft())
     );
+  });
+
+  it("matches a pending draft across a temporary-to-server parent rekey", () => {
+    const temporary = clientTurnDraftFingerprint({
+      ...baseDraft(),
+      parentRowId: 0,
+    });
+    const canonical = clientTurnDraftFingerprint({
+      ...baseDraft(),
+      parentRowId: 99,
+    });
+
+    expect(temporary).not.toBe(canonical);
+    expect(clientTurnDraftFingerprintMatches(temporary, canonical)).toBe(true);
+  });
+
+  it("does not match a rekeyed draft after the query changes", () => {
+    const temporary = clientTurnDraftFingerprint({
+      ...baseDraft(),
+      parentRowId: 0,
+    });
+    const edited = clientTurnDraftFingerprint({
+      ...baseDraft(),
+      parentRowId: 99,
+      query: "Find different evidence",
+    });
+
+    expect(clientTurnDraftFingerprintMatches(temporary, edited)).toBe(false);
+  });
+
+  it("does not relax an arbitrary persisted parent-row change", () => {
+    expect(
+      clientTurnDraftFingerprintMatches(
+        clientTurnDraftFingerprint(baseDraft()),
+        clientTurnDraftFingerprint({ ...baseDraft(), parentRowId: 99 })
+      )
+    ).toBe(false);
   });
 
   it.each([

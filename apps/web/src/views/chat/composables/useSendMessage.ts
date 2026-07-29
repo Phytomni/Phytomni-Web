@@ -33,6 +33,7 @@ import { useStreamMessage } from "./useStreamMessage";
 import { createChatRequestKey } from "../utils/chat-request-key";
 import {
   clientTurnDraftFingerprint,
+  clientTurnDraftFingerprintMatches,
   createClientTurnId,
   isDefinitePreDispatch4xx,
 } from "../utils/client-turn-id";
@@ -94,7 +95,11 @@ function clearPendingTurnIdentity(
 ): void {
   if (
     chatState.pendingTurnId === clientTurnId &&
-    chatState.pendingTurnFingerprint === draftFingerprint
+    chatState.pendingTurnFingerprint !== null &&
+    clientTurnDraftFingerprintMatches(
+      chatState.pendingTurnFingerprint,
+      draftFingerprint
+    )
   ) {
     chatState.pendingTurnId = null;
     chatState.pendingTurnFingerprint = null;
@@ -470,7 +475,11 @@ export function useSendMessage(opts: {
       })),
     });
     const clientTurnId =
-      chatState.pendingTurnFingerprint === draftFingerprint &&
+      chatState.pendingTurnFingerprint !== null &&
+      clientTurnDraftFingerprintMatches(
+        chatState.pendingTurnFingerprint,
+        draftFingerprint
+      ) &&
       chatState.pendingTurnId
         ? chatState.pendingTurnId
         : createClientTurnId();

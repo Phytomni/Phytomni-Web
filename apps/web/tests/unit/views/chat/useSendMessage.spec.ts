@@ -403,6 +403,123 @@ describe("useSendMessage", () => {
     expect(state.pendingTurnFingerprint).toBeNull();
   });
 
+  it("reuses one logical turn ID after a network error", async () => {
+    const { isNetworkError } = await import("@/utils/network-error");
+    vi.mocked(isNetworkError).mockReturnValue(true);
+    vi.useFakeTimers();
+
+    const state = stateFor("A");
+    state.renderedChat = {
+      messages: [
+        buildChatMessage({
+          role: "assistant",
+          id: "prior-message",
+          content: "Earlier answer",
+        }),
+      ],
+    };
+    currentChat.value = state.renderedChat;
+    state.messageInput = "retry after network error";
+    mockGetAnswerCheck.mockResolvedValueOnce({ code: 200, data: [] });
+    mockGetQueryAbortable.mockRejectedValueOnce(new Error("Network Error"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      const firstSend = makeComposable().sendMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1000);
+      await firstSend;
+
+      const firstTurnId = mustGet(state.pendingTurnId, "network retry turn ID");
+      const [, firstRequestId] = queryCallAt(0, "network query call");
+
+      state.messageInput = "retry after network error";
+      mockGetQueryAbortable.mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: "ChatAgent",
+            answer: "accepted after network retry",
+            id: "network-retry-accepted",
+            follow_up_questions: [],
+          },
+        })
+      );
+      const retrySend = makeComposable().sendMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(300);
+      await retrySend;
+
+      const [retryForm] = queryCallAt(1, "network retry query call");
+      const [, retryRequestId] = queryCallAt(1, "network retry request key");
+      expect((retryForm as FormData).get("client_turn_id")).toBe(firstTurnId);
+      expect(retryRequestId).not.toBe(firstRequestId);
+      expect(state.pendingTurnId).toBeNull();
+      expect(state.pendingTurnFingerprint).toBeNull();
+    } finally {
+      errorSpy.mockRestore();
+      vi.mocked(isNetworkError).mockReturnValue(false);
+      vi.useRealTimers();
+    }
+  });
+
+  it("reuses a pending turn ID after a temporary dialogue is rekeyed", async () => {
+    const tempId = "new_rekey_retry";
+    const serverId = "server-rekey-retry";
+    const state = makeState({ messageInput: "rekey-safe retry" });
+    states.set(tempId, state);
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+    mockGetQueryAbortable.mockRejectedValueOnce({ response: { status: 504 } });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      await makeComposable().sendMessage();
+      const firstTurnId = mustGet(
+        state.pendingTurnId,
+        "temporary dialogue pending turn ID"
+      );
+
+      states.delete(tempId);
+      states.set(serverId, state);
+      currentChatId.value = serverId;
+      currentChat.value = state.renderedChat;
+      chatList.value = [
+        {
+          id: 99,
+          dialogue_id: serverId,
+          title: "",
+          date: "",
+          isFavorite: false,
+        },
+      ];
+      state.messageInput = "rekey-safe retry";
+      mockGetQueryAbortable.mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: "ChatAgent",
+            answer: "accepted after rekey",
+            id: "rekey-accepted",
+            follow_up_questions: [],
+          },
+        })
+      );
+
+      await makeComposable().sendMessage();
+
+      const [retryForm] = queryCallAt(1, "rekey retry query call");
+      expect((retryForm as FormData).get("id")).toBe("99");
+      expect((retryForm as FormData).get("client_turn_id")).toBe(firstTurnId);
+      expect(state.pendingTurnId).toBeNull();
+      expect(state.pendingTurnFingerprint).toBeNull();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("reuses the logical turn ID when a blocking retry switches to streaming", async () => {
     const state = stateFor("A");
     state.messageInput = "switch transport after timeout";

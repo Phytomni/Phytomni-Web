@@ -51,6 +51,66 @@ export function clientTurnDraftFingerprint(draft: ClientTurnDraft): string {
 }
 
 /**
+ * Match a pending retry draft, tolerating only a temporary-to-server parent
+ * row rekey while keeping the user-visible turn inputs strict.
+ */
+export function clientTurnDraftFingerprintMatches(
+  expectedFingerprint: string,
+  actualFingerprint: string
+): boolean {
+  if (expectedFingerprint === actualFingerprint) return true;
+
+  const comparable = (
+    fingerprint: string
+  ): { parentRowId: number; value: string } | null => {
+    try {
+      const parsed: unknown = JSON.parse(fingerprint);
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        return null;
+      }
+      const record = parsed as Record<string, unknown>;
+      if (
+        typeof record.parentRowId !== "number" ||
+        !Number.isSafeInteger(record.parentRowId) ||
+        typeof record.operation !== "string" ||
+        typeof record.mode !== "string" ||
+        typeof record.selectedAgent !== "string" ||
+        typeof record.query !== "string" ||
+        !Array.isArray(record.files)
+      ) {
+        return null;
+      }
+      return {
+        parentRowId: record.parentRowId,
+        value: JSON.stringify({
+          operation: record.operation,
+          mode: record.mode,
+          selectedAgent: record.selectedAgent,
+          query: record.query,
+          files: record.files,
+        }),
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const expected = comparable(expectedFingerprint);
+  const actual = comparable(actualFingerprint);
+  return (
+    expected !== null &&
+    actual !== null &&
+    expected.parentRowId === 0 &&
+    actual.parentRowId > 0 &&
+    expected.value === actual.value
+  );
+}
+
+/**
  * HTTP responses that reject validation/auth/routing before a turn can be
  * accepted. The gateway provenance marker is required because Bot-originated
  * 4xx responses use the same browser status range.
