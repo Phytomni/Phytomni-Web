@@ -39,8 +39,9 @@ type Config struct {
 	// UserAPIKey is the single ptm_<web> key representing the whole Web app;
 	// Bot sees user_id="web" and real-user isolation stays in Web Go MySQL.
 	UserAPIKey string `json:"user_api_key" yaml:"user_api_key" mapstructure:"user_api_key"`
-	// TimeoutSeconds bounds each Web→Bot HTTP call. Long-running agents return
-	// 202 immediately, so this only caps the synchronous request itself.
+	// TimeoutSeconds is the global fallback for Web→Bot calls not covered by the
+	// per-Agent map. Long-running agents return 202 immediately, so this only
+	// caps the synchronous request itself.
 	TimeoutSeconds int `json:"timeout_seconds" yaml:"timeout_seconds" mapstructure:"timeout_seconds"`
 	// AgentTimeoutSeconds bounds one synchronous Agent execution request by
 	// canonical Bot slug. Missing/invalid entries use compiled defaults.

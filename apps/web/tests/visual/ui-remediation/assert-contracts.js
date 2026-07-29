@@ -25,11 +25,11 @@
     const labels = document.querySelectorAll(
       ".change-password-form .el-form-item__label"
     );
-    if (
-      controls.length !== 4 ||
-      labels.length !== 4 ||
-      !document.body.textContent.includes("researcher@example.test")
-    )
+    const username = controls.find(
+      (control) =>
+        control.disabled && control.value === "researcher@example.test"
+    );
+    if (controls.length !== 4 || labels.length !== 4 || !username)
       fail("password controls");
     const lefts = controls.map((control) =>
       Math.round(control.getBoundingClientRect().left)
@@ -50,6 +50,13 @@
       document.querySelectorAll(".cited-answer").length < 1
     )
       fail("agent demo");
+    if (
+      state === "brief-gene" &&
+      !document
+        .querySelector(".cited-answer")
+        ?.textContent?.includes("Os01g0177400")
+    )
+      fail("brief gene content");
   } else if (state === "cases") {
     counts.links = document.querySelectorAll(
       '[data-testid="chat-case-link"]'

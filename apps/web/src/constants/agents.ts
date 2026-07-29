@@ -119,7 +119,7 @@ export const CANONICAL_AGENT_ROUTES = {
 } as const;
 
 /**
- * Permission-independent destinations used by the seven Chat case cards.
+ * Permission-independent destinations used by the eight Chat case cards.
  *
  * Gene Network and Digital Design have separate live product routes. Their
  * case cards must continue to open the existing static examples instead of
@@ -137,7 +137,7 @@ export const CANONICAL_AGENT_CASE_ROUTES: Record<RoutedAgentTool, string> = {
 };
 
 /**
- * Remote product surfaces are intentionally separate from the seven sidebar
+ * Remote product surfaces are intentionally separate from the eight sidebar
  * routes above.  The three records describe a future capability-gated route
  * contract; they do not make a demo route look like a live product surface.
  */

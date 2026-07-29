@@ -57,6 +57,7 @@ describe("product route metadata", () => {
       "/login",
       "/privacy",
       "/register",
+      "/review-agent",
       "/terms",
     ]);
     expect(hiddenSidebarPaths).toEqual(["/gene-display"]);

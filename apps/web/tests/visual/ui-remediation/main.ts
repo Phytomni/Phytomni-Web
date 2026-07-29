@@ -22,7 +22,12 @@ const resolved = resolveUiRemediationFixture(
 );
 const fixtureRouter = createRouter({
   history: createMemoryHistory(),
-  routes: [{ path: "/", component: { template: "<div />" } }],
+  routes: [
+    { path: "/", component: { template: "<div />" } },
+    // RouterLink resolves production demo destinations while the isolated
+    // fixture intentionally does not mount production route components.
+    { path: "/:pathMatch(.*)*", component: { template: "<div />" } },
+  ],
 });
 
 async function boot() {

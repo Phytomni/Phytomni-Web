@@ -790,7 +790,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 		} else {
-			// Remote agent: only a task id is back; the answer arrives later.
+			// Remote agents may initially return no child task ids; when present,
+			// the first task id is retained for legacy status surfaces. The answer
+			// arrives later.
 			out.Status = "RUNNING"
 			logStatus = "sync_running"
 			if resp.Result.DedupHit {

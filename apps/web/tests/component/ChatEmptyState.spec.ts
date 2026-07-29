@@ -149,10 +149,16 @@ describe("Chat empty state", () => {
     expect(CASES_SOURCE).toContain(
       "grid-template-columns: repeat(4, minmax(0, 1fr))"
     );
-    expect(CASES_SOURCE).toContain("@media (min-width: 1360px)");
+    expect(CASES_SOURCE).toContain("@media (max-width: 1279px)");
     expect(CASES_SOURCE).toContain(
-      "grid-template-columns: repeat(7, minmax(0, 1fr))"
+      "grid-template-columns: repeat(3, minmax(0, 1fr))"
     );
+    expect(CASES_SOURCE).toContain("@media (max-width: 899px)");
+    expect(CASES_SOURCE).toContain(
+      "grid-template-columns: repeat(2, minmax(0, 1fr))"
+    );
+    expect(CASES_SOURCE).toContain("@media (max-width: 599px)");
+    expect(CASES_SOURCE).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(CASES_SOURCE).toContain("width: 100%;");
   });
 });

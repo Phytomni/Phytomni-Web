@@ -5,7 +5,7 @@ WEB_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 REPO_ROOT="$(cd "${WEB_ROOT}/../.." && pwd)"
 EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/ui-remediation"
 SESSION="phy-ui-remediation"
-BASE_URL="http://127.0.0.1:5174/tests/visual/ui-remediation/"
+BASE_URL="http://127.0.0.1:5175/tests/visual/ui-remediation/"
 captures=(
     "change-password|1190|903|en-US" "change-password|1190|903|zh-CN" "change-password|390|844|en-US" "change-password|390|844|zh-CN" "markdown|1190|903|zh-CN" "review|1190|903|en-US" "review|390|844|en-US" "brief-gene|1190|903|en-US" "brief-gene|390|844|en-US" "cases|1440|900|en-US" "cases|768|1024|en-US" "cases|390|844|en-US" "review-preview|1440|900|en-US" "review-preview|390|844|en-US" "brief-gene-preview|1440|900|en-US" "brief-gene-preview|390|844|en-US"
 )

@@ -54,6 +54,13 @@ describe("UI remediation visual fixtures", () => {
     expect(app).toContain("BriefGeneAgentView");
     expect(app).toContain("ChatCases");
     expect(app).toContain("AgentCapabilityPopover");
+    const entry = read("tests/visual/ui-remediation/main.ts");
+    expect(entry).toContain('path: "/:pathMatch(.*)*"');
+    const contracts = read("tests/visual/ui-remediation/assert-contracts.js");
+    expect(contracts).toContain("control.disabled");
+    expect(contracts).toContain('control.value === "researcher@example.test"');
+    expect(contracts).not.toContain("document.body.textContent.includes");
+    expect(contracts).toContain('"Os01g0177400"');
     const capture = read("tests/visual/ui-remediation/capture-matrix.sh");
     expect(capture.match(/"[^"\n]+\|\d+\|\d+\|(en-US|zh-CN)"/g)).toEqual([
       '"change-password|1190|903|en-US"',

@@ -4,11 +4,11 @@
     :subtitle="$t('agents.briefGene.subtitle')"
     @back="goBack"
   >
-    <template #question>{{ REVIEW_CASE.question }}</template>
+    <template #question>{{ BRIEF_GENE_CASE.question }}</template>
     <template #result>
       <CitedAnswer
-        :content="REVIEW_CASE.content"
-        :references="REVIEW_CASE.references"
+        :content="BRIEF_GENE_CASE.content"
+        :references="BRIEF_GENE_CASE.references"
         ns="bg"
         surface="artifact"
       />
@@ -22,7 +22,7 @@
 import { useRouter } from "vue-router";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import AgentDemoShell from "@/components/demo/AgentDemoShell.vue";
-import { REVIEW_CASE } from "../review-agent/review-case";
+import { BRIEF_GENE_CASE } from "./brief-gene-case";
 
 const router = useRouter();
 const goBack = () => {
