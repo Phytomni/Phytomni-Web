@@ -136,8 +136,16 @@ export interface QueryData {
   mode?: "instant" | "expert";
   query?: string;
   steps?: unknown[];
+  /** Bounded semantic-context outcome; malformed values are ignored by the decoder. */
+  context_rebuilt?: boolean;
+  context_degraded?: boolean;
   /** The A2UI parser owns the nested surface contract. */
   a2ui?: unknown;
+}
+
+export interface ConversationContextNotice {
+  context_rebuilt?: boolean;
+  context_degraded?: boolean;
 }
 
 export interface ConversationSummary {
@@ -587,6 +595,15 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
   }
   if (hasOwn(value, "interop")) result.interop = decodeInterop(value.interop);
   if (hasOwn(value, "a2ui")) result.a2ui = value.a2ui;
+  const contextNotice = decodeConversationContextNotice(value);
+  if (contextNotice) {
+    if (contextNotice.context_rebuilt !== undefined) {
+      result.context_rebuilt = contextNotice.context_rebuilt;
+    }
+    if (contextNotice.context_degraded !== undefined) {
+      result.context_degraded = contextNotice.context_degraded;
+    }
+  }
   const booleans: Array<keyof QueryData> = [
     "tracking_degraded",
     "degraded_interop",
@@ -612,6 +629,23 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
     if (mode !== "instant" && mode !== "expert") invalid("chat response");
     result.mode = mode;
   }
+  return result;
+}
+
+/**
+ * Decode only the two public context booleans. A malformed notice is omitted
+ * while the surrounding successful answer remains usable.
+ */
+export function decodeConversationContextNotice(
+  value: unknown
+): ConversationContextNotice | undefined {
+  if (!isRecord(value)) return undefined;
+  const keys = ["context_rebuilt", "context_degraded"] as const;
+  const present = keys.filter((key) => hasOwn(value, key));
+  if (present.length === 0) return undefined;
+  if (present.some((key) => typeof value[key] !== "boolean")) return undefined;
+  const result: ConversationContextNotice = {};
+  for (const key of present) result[key] = value[key] as boolean;
   return result;
 }
 

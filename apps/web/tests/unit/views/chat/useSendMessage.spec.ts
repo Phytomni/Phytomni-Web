@@ -297,6 +297,61 @@ describe("useSendMessage", () => {
     ]);
   });
 
+  it("keeps the answer while exposing only a bounded degraded context notice", async () => {
+    stateFor("A").messageInput = "context-safe answer";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "The answer remains visible.",
+          id: "context-safe-1",
+          context_rebuilt: false,
+          context_degraded: true,
+          context_version: "private-v1",
+          context_summary: "private summary",
+          follow_up_questions: [],
+        },
+      })
+    );
+
+    await makeComposable().sendMessage();
+
+    const assistant = lastMessageFor(
+      stateFor("A"),
+      "degraded context blocking answer"
+    );
+    expect(assistant.content).toBe("The answer remains visible.");
+    expect(assistant.contextNotice).toEqual({ rebuilt: false, degraded: true });
+    expect("context_version" in assistant).toBe(false);
+    expect("context_summary" in assistant).toBe(false);
+  });
+
+  it("ignores malformed context notice fields without dropping the answer", async () => {
+    stateFor("A").messageInput = "malformed context answer";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "Still visible despite malformed context metadata.",
+          id: "context-malformed-1",
+          context_degraded: "true",
+          follow_up_questions: [],
+        },
+      })
+    );
+
+    await makeComposable().sendMessage();
+
+    const assistant = lastMessageFor(
+      stateFor("A"),
+      "malformed context blocking answer"
+    );
+    expect(assistant.content).toBe(
+      "Still visible despite malformed context metadata."
+    );
+    expect(assistant.contextNotice).toBeUndefined();
+  });
+
   it("keeps an optimistically listed pending chat selectable while its first response is in flight", async () => {
     const tempId = "new_pending_sidebar";
     currentChatId.value = tempId;

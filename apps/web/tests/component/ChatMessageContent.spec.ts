@@ -204,6 +204,29 @@ const block = (text = "hi"): ContentBlock => ({
 });
 
 describe("ChatMessageContent branch selection (truthiness gate)", () => {
+  it("renders a non-blocking degraded context status without replacing the answer", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "Answer remains visible",
+      contextNotice: { rebuilt: false, degraded: true },
+    });
+
+    expect(wrapper.get('[role="status"]').text()).toBe("chat.contextDegraded");
+    expect(
+      wrapper.findComponent({ name: "MarkdownViewer" }).props("content")
+    ).toBe("Answer remains visible");
+  });
+
+  it("keeps rebuilt-only context notices silent", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "Answer remains visible",
+      contextNotice: { rebuilt: true, degraded: false },
+    });
+
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+  });
+
   const cases: Array<{ name: string; message: ChatMessage }> = [
     {
       name: "user bubble → markdown",

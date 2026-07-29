@@ -414,6 +414,40 @@ describe("useStreamMessage", () => {
     expect(placeholder.doc_list).toEqual([{ title: "T1" }]);
   });
 
+  it("keeps the first valid context notice and rejects malformed or conflicting duplicates", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r-context"}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.context_staged","value":{"context_rebuilt":true,"context_degraded":false}}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.context_staged","value":{"context_rebuilt":false,"context_degraded":true}}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.context_staged","value":{"context_rebuilt":"true","context_degraded":false}}\n\n',
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"answer"}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r-context"}\n\n',
+    ]);
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+
+    await useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    }).streamMessage({
+      dialogueId: "d-context",
+      formData: new FormData(),
+      requestId: "r-context",
+      placeholder,
+    });
+
+    expect(placeholder.contextNotice).toEqual({
+      rebuilt: true,
+      degraded: false,
+    });
+    expect(markdownBlock(placeholder, "context stream").text).toBe("answer");
+  });
+
   it("reassembles a frame whose bytes are split across two reader chunks", async () => {
     // The reader hands back arbitrary byte boundaries; a frame (here mid-JSON)
     // split across two reads must be buffered via `rest` and reduced whole.

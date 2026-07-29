@@ -1,4 +1,9 @@
-import type { CitationDocument, ContentBlock } from "../types";
+import {
+  normalizeChatContextNotice,
+  type ChatContextNotice,
+  type CitationDocument,
+  type ContentBlock,
+} from "../types";
 import type { AguiEvent } from "./aguiEvents";
 import { parseA2uiCustomValue } from "./a2uiParse";
 
@@ -9,12 +14,19 @@ export interface ReducerState {
   runId: string;
   followUp: string[];
   references: CitationDocument[]; // phyto.references doc_list (P1 cited streaming)
+  contextNotice?: ChatContextNotice;
   done: boolean;
   error?: { message: string };
 }
 
 export function initReducerState(): ReducerState {
-  return { blocks: [], runId: "", followUp: [], references: [], done: false };
+  return {
+    blocks: [],
+    runId: "",
+    followUp: [],
+    references: [],
+    done: false,
+  };
 }
 
 // reduceAGUIEvent folds one event into a NEW state (pure; never mutates input).
@@ -77,6 +89,19 @@ export function reduceAGUIEvent(
         // P1 cited streaming: finalize copies these into message.doc_list so
         // the ns-aware cited render path engages (citation ns invariant).
         next.references = decodeCitationDocuments(value.doc_list);
+      } else if (name === "phyto.context_staged") {
+        const contextNotice = decodeContextStagedValue(value);
+        if (!contextNotice) break;
+        if (!next.contextNotice) {
+          next.contextNotice = contextNotice;
+        } else if (
+          next.contextNotice.rebuilt !== contextNotice.rebuilt ||
+          next.contextNotice.degraded !== contextNotice.degraded
+        ) {
+          // Keep the first valid notice; a conflicting duplicate is not a
+          // trustworthy UI signal and must not replace it.
+          break;
+        }
       } else if (name === "phyto.a2ui") {
         const parsed = parseA2uiCustomValue(value);
         if (parsed.ok) {
@@ -151,6 +176,21 @@ export function reduceAGUIEvent(
       break;
   }
   return next;
+}
+
+function decodeContextStagedValue(
+  value: unknown
+): ChatContextNotice | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    !Object.prototype.hasOwnProperty.call(value, "context_rebuilt") ||
+    !Object.prototype.hasOwnProperty.call(value, "context_degraded") ||
+    typeof value.context_rebuilt !== "boolean" ||
+    typeof value.context_degraded !== "boolean"
+  ) {
+    return undefined;
+  }
+  return normalizeChatContextNotice(value);
 }
 
 function stringField(value: unknown): string {

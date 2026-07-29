@@ -97,6 +97,43 @@ export interface ChatMessage {
   botProjection?: BotRunProjection;
   /** Monotonic report state derived from the sanitized Bot projection. */
   botLifecycle?: BotLifecycleState;
+  /** Bounded, localized semantic-context status from the gateway. */
+  contextNotice?: ChatContextNotice;
+}
+
+export interface ChatContextNotice {
+  rebuilt: boolean;
+  degraded: boolean;
+}
+
+/** Convert only the public snake_case context fields into message state. */
+export function normalizeChatContextNotice(
+  value: unknown
+): ChatContextNotice | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const hasRebuilt = Object.prototype.hasOwnProperty.call(
+    record,
+    "context_rebuilt"
+  );
+  const hasDegraded = Object.prototype.hasOwnProperty.call(
+    record,
+    "context_degraded"
+  );
+  if (!hasRebuilt && !hasDegraded) return undefined;
+  if (
+    (hasRebuilt && typeof record.context_rebuilt !== "boolean") ||
+    (hasDegraded && typeof record.context_degraded !== "boolean")
+  ) {
+    return undefined;
+  }
+  const notice = {
+    rebuilt: record.context_rebuilt === true,
+    degraded: record.context_degraded === true,
+  };
+  return notice.rebuilt || notice.degraded ? notice : undefined;
 }
 
 /** Backward-compatible name for the bounded stream-block union. */
@@ -125,6 +162,8 @@ export interface ChatResponse {
   interop?: BotInteropPayload | null;
   report_revision?: number;
   request_id?: string | null;
+  context_rebuilt?: boolean;
+  context_degraded?: boolean;
   /** Bounded input-required surface from the Web Go gateway. */
   a2ui?: unknown;
 }

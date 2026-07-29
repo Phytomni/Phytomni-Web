@@ -1,6 +1,7 @@
 import { nextTick, toRaw } from "vue";
 import type { Ref } from "vue";
 import type { Chat, ChatMessage, ChatResponse, ChatUIState } from "../types";
+import { normalizeChatContextNotice } from "../types";
 import { parseMessageWithFiles } from "../utils/message-parse";
 import {
   convertToTableData,
@@ -401,6 +402,11 @@ export function useSelectChat(opts: {
                 content: item.answer,
               });
               timestamp.value = Date.now();
+            }
+            const contextNotice = normalizeChatContextNotice(item);
+            const lastMessage = messages.at(-1);
+            if (contextNotice && lastMessage?.role === "assistant") {
+              lastMessage.contextNotice = contextNotice;
             }
           }
         });

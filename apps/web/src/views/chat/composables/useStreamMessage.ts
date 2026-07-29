@@ -130,6 +130,9 @@ export function useStreamMessage(opts: {
         // can engage after finalization.
         placeholder.doc_list = state.references;
       }
+      if (state.contextNotice) {
+        placeholder.contextNotice = state.contextNotice;
+      }
       if (state.error) {
         placeholder.content = state.error.message;
         placeholder.a2uiRuntime = undefined;

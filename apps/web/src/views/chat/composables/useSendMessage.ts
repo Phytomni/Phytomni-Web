@@ -9,6 +9,7 @@ import type {
   ChatView,
   UploadFile,
 } from "../types";
+import { normalizeChatContextNotice } from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
 import i18n from "@/locales";
 import {
@@ -938,7 +939,9 @@ export function useSendMessage(opts: {
           }
         }
 
+        const contextNotice = normalizeChatContextNotice(response.data);
         if (assistantMessage) {
+          if (contextNotice) assistantMessage.contextNotice = contextNotice;
           attachBlockingLegacyFields(assistantMessage, responseData);
           // Keep the Web row id and Bot umbrella identity in distinct fields;
           // only the parser output crosses into reactive message state.
@@ -980,6 +983,7 @@ export function useSendMessage(opts: {
             showFollowUpQuestions: false,
             showLog: false,
           };
+          if (contextNotice) assistantMessage.contextNotice = contextNotice;
           attachBlockingLegacyFields(assistantMessage, responseData);
           if (botProjection) {
             assistantMessage.botProjection = botProjection;

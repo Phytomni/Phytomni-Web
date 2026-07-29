@@ -1,4 +1,11 @@
 <template>
+  <div
+    v-if="message.contextNotice?.degraded"
+    class="context-degraded"
+    role="status"
+  >
+    {{ $t("chat.contextDegraded") }}
+  </div>
   <!-- User message, or an answer without reasoning steps -->
   <div
     v-if="message.role === 'user' || (!message.steps && !message.tableHeaders)"
@@ -224,6 +231,13 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
 </script>
 
 <style scoped lang="scss">
+.context-degraded {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* Content owns internal overflow so wide children cannot stretch the transcript. */
 .message-text {
   position: relative;

@@ -347,6 +347,8 @@ export default {
     sendFailed: "Failed to send message, please try again later.",
     timeoutFailed:
       "The request timed out. Try narrowing your query or retry later.",
+    contextDegraded:
+      "Answer saved. Conversation context will be rebuilt on the next message.",
     requestId: "Request ID",
     sendAriaLabel: "Send",
     abortAriaLabel: "Stop answering",

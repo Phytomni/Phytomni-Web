@@ -20,6 +20,7 @@ import {
   getUserTool,
   type QueryData,
 } from "@/api/chat";
+import { decodeConversationContextNotice } from "@/api/types";
 import { feedback } from "@/api/feedback";
 
 const mockRequest = vi.mocked(request);
@@ -102,6 +103,38 @@ describe("QueryData — interop wire contract", () => {
         follow_up_questions: { token: "secret-token" },
       })
     ).toThrow("Invalid chat response");
+  });
+
+  it("accepts only boolean context notice fields", () => {
+    expect(
+      decodeConversationContextNotice({
+        context_rebuilt: true,
+        context_degraded: false,
+      })
+    ).toEqual({ context_rebuilt: true, context_degraded: false });
+
+    for (const key of ["context_rebuilt", "context_degraded"] as const) {
+      for (const value of ["true", 1, [], {}]) {
+        expect(
+          decodeConversationContextNotice({ [key]: value })
+        ).toBeUndefined();
+      }
+    }
+  });
+
+  it("keeps a successful answer when the context notice is malformed", () => {
+    const result = decodeQueryData({
+      id: 5,
+      answer: "saved answer",
+      context_degraded: "true",
+      context_version: "internal-v9",
+      context_summary: "private summary",
+    });
+
+    expect(result.answer).toBe("saved answer");
+    expect(result.context_degraded).toBeUndefined();
+    expect("context_version" in result).toBe(false);
+    expect("context_summary" in result).toBe(false);
   });
 });
 

@@ -173,6 +173,30 @@ describe("useSelectChat", () => {
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
+  it("hydrates only the bounded degraded context notice from history", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        invalidInput<ChatHistoryRecord>({
+          ...buildChatHistoryRecord({
+            id: "context-history-1",
+            query: "Historical question",
+            answer: "Historical answer",
+            tool_name: "ChatAgent",
+            context_rebuilt: false,
+            context_degraded: true,
+          }),
+          context_version: "private-v2",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    const assistant = messageAt("d1", 1, "history context notice");
+    expect(assistant.contextNotice).toEqual({ rebuilt: false, degraded: true });
+    expect("context_version" in assistant).toBe(false);
+  });
+
   it("resets reaction state before loading: stale entries are cleared before hydration", async () => {
     // Seed a stale reaction (pointing to the same d1 record)
     const stale = getChatState("d1");
