@@ -23,6 +23,10 @@ import {
   decodeAgentSteps,
   decodeFollowUpQuestions,
 } from "../messageTypes";
+import {
+  createClientTurnId,
+  isDefinitePreDispatch4xx,
+} from "../utils/client-turn-id";
 
 export function useRefreshMessage(opts: {
   currentChat: Ref<ChatView | null>;
@@ -80,6 +84,9 @@ export function useRefreshMessage(opts: {
     const capturedMode = chatState.mode;
     const capturedSelectedAgent =
       capturedMode === "expert" ? chatState.selectedAgent : "";
+    const clientTurnId =
+      chatState.refreshTurnIds[messageId] ?? createClientTurnId();
+    chatState.refreshTurnIds[messageId] = clientTurnId;
 
     // set the refresh state - keyed by both messageIndex and messageId
     const refreshKey = `${messageIndex}_${messageId}`;
@@ -101,6 +108,7 @@ export function useRefreshMessage(opts: {
         "tool",
         capturedMode === "expert" ? capturedSelectedAgent : ""
       );
+      queryData.append("client_turn_id", clientTurnId);
 
       // add the history (if any)
       if (chatState.historyQuestion) {
@@ -358,6 +366,10 @@ export function useRefreshMessage(opts: {
         // update the captured message array only
         if (newAssistantMessage) {
           targetMessages[messageIndex] = newAssistantMessage;
+          // The captured target ID is already durable; every successful
+          // replacement settles the logical refresh turn, even if a legacy
+          // response omits a replacement ID and keeps the original row.
+          delete chatState.refreshTurnIds[messageId];
 
           // clean up the old refresh state
           if (chatState.refreshingMessages[refreshKey]) {
@@ -377,6 +389,9 @@ export function useRefreshMessage(opts: {
       }
     } catch (error: unknown) {
       console.error("Failed to refresh message:", error);
+      if (isDefinitePreDispatch4xx(error)) {
+        delete chatState.refreshTurnIds[messageId];
+      }
       if (isStillActive()) {
         ElMessage.error(i18n.global.t("common.refreshFailedRetry"));
       }

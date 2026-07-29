@@ -231,6 +231,11 @@ describe("useSendMessage", () => {
     expect(formData.get("id")).toBe("1");
     const requestId = requestIdArg as string;
     expect(requestId.startsWith("chat-request-")).toBe(true);
+    expect(formData.get("client_turn_id")).toMatch(
+      /^turn-[A-Za-z0-9-]{16,64}$/
+    );
+    expect(stateA.pendingTurnId).toBeNull();
+    expect(stateA.pendingTurnFingerprint).toBeNull();
   });
 
   it("commits each successful turn so the next request carries current multi-turn history", async () => {
@@ -271,11 +276,17 @@ describe("useSendMessage", () => {
       { role: "user", content: "Follow up one" },
       { role: "assistant", content: "First follow-up answer" },
     ]);
+    const [firstForm] = queryCallAt(0, "first multi-turn query call");
+    const firstTurnId = (firstForm as FormData).get("client_turn_id");
+    expect(firstTurnId).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
 
     state.messageInput = "Follow up two";
     await sendMessage();
 
     const [secondFormArg] = queryCallAt(1, "second multi-turn query call");
+    expect((secondFormArg as FormData).get("client_turn_id")).not.toBe(
+      firstTurnId
+    );
     expect(
       JSON.parse(String((secondFormArg as FormData).get("history")))
     ).toEqual([
@@ -354,6 +365,138 @@ describe("useSendMessage", () => {
     expect(lastMessage.followUpQuestions).toEqual([]);
   });
 
+  it("reuses one logical turn ID after a timeout and clears it after durable acceptance", async () => {
+    const state = stateFor("A");
+    state.messageInput = "retry this turn";
+    mockGetQueryAbortable.mockRejectedValueOnce({ response: { status: 504 } });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      const { sendMessage } = makeComposable();
+      await sendMessage();
+    } finally {
+      errorSpy.mockRestore();
+    }
+
+    const firstTurnId = mustGet(state.pendingTurnId, "pending retry turn ID");
+    expect(firstTurnId).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+    const [, firstRequestId] = queryCallAt(0, "initial uncertain query call");
+
+    state.messageInput = "retry this turn";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "accepted after retry",
+          id: "retry-accepted",
+          follow_up_questions: [],
+        },
+      })
+    );
+    await makeComposable().sendMessage();
+
+    const [retryForm] = queryCallAt(1, "retry query call");
+    const [, retryRequestId] = queryCallAt(1, "retry request identity");
+    expect((retryForm as FormData).get("client_turn_id")).toBe(firstTurnId);
+    expect(retryRequestId).not.toBe(firstRequestId);
+    expect(state.pendingTurnId).toBeNull();
+    expect(state.pendingTurnFingerprint).toBeNull();
+  });
+
+  it("reuses the logical turn ID when a blocking retry switches to streaming", async () => {
+    const state = stateFor("A");
+    state.messageInput = "switch transport after timeout";
+    mockGetQueryAbortable.mockRejectedValueOnce({ response: { status: 504 } });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      await makeComposable().sendMessage();
+      const firstTurnId = mustGet(
+        state.pendingTurnId,
+        "transport retry turn ID"
+      );
+
+      vi.stubEnv("VITE_STREAM_ENABLED", "true");
+      state.messageInput = "switch transport after timeout";
+      streamHarness.streamMessage.mockResolvedValueOnce({});
+      await makeComposable().sendMessage();
+
+      const streamCall = mustGet(
+        streamHarness.streamMessage.mock.calls.at(-1),
+        "stream retry call"
+      );
+      expect((streamCall[0].formData as FormData).get("client_turn_id")).toBe(
+        firstTurnId
+      );
+      expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("clears the logical turn ID when streaming reports a definite 4xx", async () => {
+    vi.stubEnv("VITE_STREAM_ENABLED", "true");
+    const state = stateFor("A");
+    state.messageInput = "stream validation failure";
+    streamHarness.streamMessage.mockResolvedValueOnce({
+      preDispatch4xx: true,
+    });
+
+    await makeComposable().sendMessage();
+
+    expect(state.pendingTurnId).toBeNull();
+    expect(state.pendingTurnFingerprint).toBeNull();
+  });
+
+  it("creates a new logical turn ID when the retry draft changes", async () => {
+    const state = stateFor("A");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+    try {
+      state.messageInput = "original draft";
+      mockGetQueryAbortable.mockRejectedValueOnce({
+        response: { status: 504 },
+      });
+      await makeComposable().sendMessage();
+      const firstTurnId = mustGet(
+        state.pendingTurnId,
+        "first pending draft turn ID"
+      );
+
+      state.messageInput = "edited draft";
+      mockGetQueryAbortable.mockRejectedValueOnce({
+        response: { status: 504 },
+      });
+      await makeComposable().sendMessage();
+
+      expect(state.pendingTurnId).not.toBe(firstTurnId);
+      expect(state.pendingTurnId).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+      const [editedForm] = queryCallAt(1, "edited retry query call");
+      expect((editedForm as FormData).get("client_turn_id")).toBe(
+        state.pendingTurnId
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("clears the logical turn ID for a definite pre-dispatch 4xx", async () => {
+    const state = stateFor("A");
+    state.messageInput = "rejected before dispatch";
+    mockGetQueryAbortable.mockRejectedValueOnce({
+      response: { status: 422, data: { pre_dispatch: true } },
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(vi.fn());
+
+    try {
+      await makeComposable().sendMessage();
+    } finally {
+      errorSpy.mockRestore();
+    }
+
+    expect(state.pendingTurnId).toBeNull();
+    expect(state.pendingTurnFingerprint).toBeNull();
+  });
+
   it("two existing dialogues start in the same millisecond with unique keys and distinct parent row ids", async () => {
     stateFor("A").messageInput = "from-A";
     stateFor("B").messageInput = "from-B";
@@ -381,6 +524,9 @@ describe("useSendMessage", () => {
     const [formB, keyB] = queryCallAt(1, "dialogue B query call");
     expect((formA as FormData).get("id")).toBe("1");
     expect((formB as FormData).get("id")).toBe("2");
+    expect((formA as FormData).get("client_turn_id")).not.toBe(
+      (formB as FormData).get("client_turn_id")
+    );
     expect(keyA).not.toBe(keyB);
     expect(String(keyA).startsWith("chat-request-")).toBe(true);
     expect(String(keyB).startsWith("chat-request-")).toBe(true);
@@ -1130,6 +1276,7 @@ describe("useSendMessage", () => {
     const fd = call.formData as FormData;
     expect(fd.get("streamPresentationKey")).toBeNull();
     expect(fd.has("stream_presentation_key")).toBe(false);
+    expect(fd.get("client_turn_id")).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
     const assistant = mustGet(
       messagesFor(getChatState("A"), "stream response").find(
         (m: ChatMessage) => m.role === "assistant"
@@ -1652,6 +1799,8 @@ describe("useSendMessage", () => {
     await sendMessage();
 
     expect(state.selectedAgent).toBe("");
+    expect(state.pendingTurnId).toBeNull();
+    expect(state.pendingTurnFingerprint).toBeNull();
   });
 
   it("clears an unchanged captured forced Expert selection after accepted RUNNING response", async () => {
@@ -1675,6 +1824,8 @@ describe("useSendMessage", () => {
     await sendMessage();
 
     expect(state.selectedAgent).toBe("");
+    expect(state.pendingTurnId).toBeNull();
+    expect(state.pendingTurnFingerprint).toBeNull();
   });
 
   it.each(["PENDING", "QUEUED", "INPUT_REQUIRED"] as const)(
@@ -1699,6 +1850,8 @@ describe("useSendMessage", () => {
       await sendMessage();
 
       expect(state.selectedAgent).toBe("DataAgent");
+      expect(state.pendingTurnId).not.toBeNull();
+      expect(state.pendingTurnFingerprint).not.toBeNull();
     }
   );
 

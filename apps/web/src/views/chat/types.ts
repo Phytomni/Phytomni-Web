@@ -193,6 +193,12 @@ export interface ChatUIState {
   activeRequestId: string;
   /** True after Stop aborted the dialogue's in-flight request. */
   generationStopped: boolean;
+  /** Opaque logical turn identity retained across uncertain send retries. */
+  pendingTurnId: string | null;
+  /** Browser-local fingerprint paired with pendingTurnId. */
+  pendingTurnFingerprint: string | null;
+  /** Opaque refresh identities keyed by the durable target message ID. */
+  refreshTurnIds: Record<string, string>;
   /**
    * Per-message Activity disclosure map keyed by
    * `stream:<messageKey>:activity-<startIndex>`. Owned by chatStates so A→B→A

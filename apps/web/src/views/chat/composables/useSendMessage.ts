@@ -31,6 +31,11 @@ import { createTransferTracker } from "@/utils/transfer-progress";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
 import { createChatRequestKey } from "../utils/chat-request-key";
+import {
+  clientTurnDraftFingerprint,
+  createClientTurnId,
+  isDefinitePreDispatch4xx,
+} from "../utils/client-turn-id";
 import { parentRowIdForDialogue } from "../utils/chat-parent-row";
 import { parseBotProjection } from "../botProjection";
 import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
@@ -75,6 +80,35 @@ function clearCapturedSelectionAfterAcceptance(
   ) {
     chatState.selectedAgent = "";
   }
+}
+
+function hasDurableRowId(value: unknown): boolean {
+  if (typeof value === "string") return value.trim() !== "";
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function clearPendingTurnIdentity(
+  chatState: ChatUIState,
+  clientTurnId: string,
+  draftFingerprint: string
+): void {
+  if (
+    chatState.pendingTurnId === clientTurnId &&
+    chatState.pendingTurnFingerprint === draftFingerprint
+  ) {
+    chatState.pendingTurnId = null;
+    chatState.pendingTurnFingerprint = null;
+  }
+}
+
+function settlePendingTurnIdentity(
+  chatState: ChatUIState,
+  clientTurnId: string,
+  draftFingerprint: string,
+  durableRowId: unknown
+): void {
+  if (!hasDurableRowId(durableRowId)) return;
+  clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
 }
 
 function isAcceptedExpertResponse(
@@ -422,6 +456,49 @@ export function useSendMessage(opts: {
       return;
     }
 
+    const draftFingerprint = clientTurnDraftFingerprint({
+      parentRowId,
+      operation: "append",
+      mode: capturedMode,
+      selectedAgent: capturedSelectedAgent,
+      query: currentMessage,
+      files: capturedFiles.map((file) => ({
+        name: file.name,
+        size: file.size ?? file.file?.size ?? 0,
+        type: file.file?.type || file.type || "",
+        lastModified: file.file?.lastModified ?? 0,
+      })),
+    });
+    const clientTurnId =
+      chatState.pendingTurnFingerprint === draftFingerprint &&
+      chatState.pendingTurnId
+        ? chatState.pendingTurnId
+        : createClientTurnId();
+    chatState.pendingTurnId = clientTurnId;
+    chatState.pendingTurnFingerprint = draftFingerprint;
+
+    const settleAcceptedTurn = (
+      assistantMessage: ChatMessage,
+      acceptedExpertResponse: boolean
+    ): void => {
+      if (capturedMode === "expert" && !acceptedExpertResponse) return;
+      const durableRowId = assistantMessage.id;
+      if (!hasDurableRowId(durableRowId)) return;
+      settlePendingTurnIdentity(
+        chatState,
+        clientTurnId,
+        draftFingerprint,
+        durableRowId
+      );
+      if (capturedMode !== "expert" || acceptedExpertResponse) {
+        clearCapturedSelectionAfterAcceptance(
+          chatState,
+          capturedMode,
+          capturedSelectedAgent
+        );
+      }
+    };
+
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
       const pendingMessages = sendingMessages as unknown as Array<{
         role: string;
@@ -457,6 +534,7 @@ export function useSendMessage(opts: {
         capturedMode === "expert" ? capturedSelectedAgent : ""
       );
       queryData.append("mode", capturedMode);
+      queryData.append("client_turn_id", clientTurnId);
       if (capturedHistory) {
         queryData.append("history", JSON.stringify(capturedHistory));
       }
@@ -500,6 +578,7 @@ export function useSendMessage(opts: {
           formData: queryData,
           requestId: requestKey,
           placeholder,
+          clientTurnId,
         });
         if (
           chatState.activeRequestId === requestKey &&
@@ -513,6 +592,20 @@ export function useSendMessage(opts: {
           streamResult.completed === true
         ) {
           commitSuccessfulTurn(chatState, userMessage, placeholder);
+          if (streamResult.messageId) {
+            settlePendingTurnIdentity(
+              chatState,
+              clientTurnId,
+              draftFingerprint,
+              streamResult.messageId
+            );
+          }
+        }
+        if (
+          chatState.activeRequestId === requestKey &&
+          streamResult.preDispatch4xx
+        ) {
+          clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
         }
         return;
       }
@@ -858,13 +951,7 @@ export function useSendMessage(opts: {
         } else if (assistantMessage) {
           sendingMessages.push(assistantMessage);
           commitSuccessfulTurn(chatState, userMessage, assistantMessage);
-          if (capturedMode !== "expert" || acceptedExpertResponse) {
-            clearCapturedSelectionAfterAcceptance(
-              chatState,
-              capturedMode,
-              capturedSelectedAgent
-            );
-          }
+          settleAcceptedTurn(assistantMessage, acceptedExpertResponse);
         } else {
           // if assistantMessage was not created, create a default message
           console.warn(
@@ -891,13 +978,7 @@ export function useSendMessage(opts: {
           }
           sendingMessages.push(assistantMessage);
           commitSuccessfulTurn(chatState, userMessage, assistantMessage);
-          if (capturedMode !== "expert" || acceptedExpertResponse) {
-            clearCapturedSelectionAfterAcceptance(
-              chatState,
-              capturedMode,
-              capturedSelectedAgent
-            );
-          }
+          settleAcceptedTurn(assistantMessage, acceptedExpertResponse);
         }
       } else {
         throw new Error("invalid response envelope");
@@ -930,6 +1011,10 @@ export function useSendMessage(opts: {
       // messages or steal focus for a stale failure.
       if (chatState.activeRequestId !== requestKey) {
         return;
+      }
+
+      if (isDefinitePreDispatch4xx(error)) {
+        clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
       }
 
       // check whether it's a token-expired error

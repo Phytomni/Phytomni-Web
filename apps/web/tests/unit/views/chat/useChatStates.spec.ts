@@ -76,6 +76,9 @@ describe("useChatStates parallel chat state", () => {
       renderedChat: null,
       activeRequestId: "",
       generationStopped: false,
+      pendingTurnId: null,
+      pendingTurnFingerprint: null,
+      refreshTurnIds: {},
       activityExpandedByMessage: {},
       artifactOpen: false,
       activeArtifactMessageId: null,
@@ -211,6 +214,31 @@ describe("useChatStates parallel chat state", () => {
 
     // No chat state should be created when there is no currentChatId
     expect(Object.keys(s.chatStates.value)).toHaveLength(0);
+  });
+
+  it("isolates pending turn identities and preserves them through dialogue rekey", () => {
+    const s = useChatStates();
+    const stateA = s.getChatState("temp-a");
+    stateA.pendingTurnId = "turn-a";
+    stateA.pendingTurnFingerprint = "fingerprint-a";
+    stateA.refreshTurnIds["message-a"] = "turn-refresh-a";
+
+    const stateB = s.getChatState("dialogue-b");
+    expect(stateB.pendingTurnId).toBeNull();
+    expect(stateB.pendingTurnFingerprint).toBeNull();
+    expect(stateB.refreshTurnIds).toEqual({});
+
+    expect(s.rekeyChatState("temp-a", "dialogue-a")).toEqual({
+      outcome: "moved",
+    });
+    expect(s.getChatState("dialogue-a")).toBe(stateA);
+    expect(s.getChatState("dialogue-a").pendingTurnId).toBe("turn-a");
+    expect(s.getChatState("dialogue-a").pendingTurnFingerprint).toBe(
+      "fingerprint-a"
+    );
+    expect(s.getChatState("dialogue-a").refreshTurnIds).toEqual({
+      "message-a": "turn-refresh-a",
+    });
   });
 });
 

@@ -100,6 +100,39 @@ describe("useStreamMessage", () => {
     expect(chatState.isStreaming).toBe(false);
   });
 
+  it("appends the provided logical turn ID once for direct stream callers", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r-turn"}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r-turn"}\n\n',
+    ]);
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const formData = new FormData();
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "d-turn",
+      formData,
+      requestId: "req-turn",
+      placeholder,
+      clientTurnId: "turn-direct-identity",
+    });
+
+    expect(formData.getAll("client_turn_id")).toEqual(["turn-direct-identity"]);
+    const [, init] = fetchCallAt(0, "direct stream call");
+    expect((init?.body as FormData).get("client_turn_id")).toBe(
+      "turn-direct-identity"
+    );
+  });
+
   it("keeps one bounded stream identity for Chat, Knowledge, and BriefGene", async () => {
     const cases = [
       {
@@ -261,7 +294,7 @@ describe("useStreamMessage", () => {
       getChatState: () => chatState,
       t: (k: string) => k,
     });
-    await streamMessage({
+    const result = await streamMessage({
       dialogueId: "d1",
       formData: new FormData(),
       requestId: "r",
@@ -272,6 +305,36 @@ describe("useStreamMessage", () => {
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
     expect(chatState.streamingMessageId).toBeNull();
+    expect(result.preDispatch4xx).toBe(false);
+  });
+
+  it("marks a definite stream validation rejection for logical-turn cleanup", async () => {
+    mockedFetch().mockResolvedValue(
+      new Response(null, {
+        status: 422,
+        headers: { "X-Phyto-Dispatch-State": "not-started" },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    });
+
+    const result = await streamMessage({
+      dialogueId: "d-validation",
+      formData: new FormData(),
+      requestId: "r-validation",
+      placeholder,
+    });
+
+    expect(result.preDispatch4xx).toBe(true);
+    expect(placeholder.content).toBe("chat.streamInterrupted");
   });
 
   it("shows the interrupted copy when the fetch itself fails (network error)", async () => {

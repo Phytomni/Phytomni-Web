@@ -164,6 +164,12 @@ describe("useRefreshMessage", () => {
     expect(rebuilt.id).toBe("msg-2");
     expect(rebuilt.instantMessage).toBe(true);
 
+    const refreshCall = mustGet(mockGetQuery.mock.calls[0], "refresh call");
+    expect((refreshCall[0] as FormData).get("client_turn_id")).toMatch(
+      /^turn-[A-Za-z0-9-]{16,64}$/
+    );
+    expect(stateFor("A").refreshTurnIds).toEqual({});
+
     // The reaction is hydrated into A's chatState (string "1" → number 1)
     expect(stateFor("A").reactions["msg-2"]).toBe(1);
 
@@ -281,6 +287,43 @@ describe("useRefreshMessage", () => {
 
     // The finally history fetch still runs
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses a refresh turn ID after failure and clears it after accepted replacement", async () => {
+    mockGetQuery.mockRejectedValueOnce(new Error("uncertain refresh"));
+    await makeComposable().refreshMessage(1);
+
+    const firstTurnId = mustGet(
+      stateFor("A").refreshTurnIds["msg-1"],
+      "pending refresh turn ID"
+    );
+    expect(firstTurnId).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+
+    mockGetQuery.mockResolvedValueOnce(
+      queryResponse({
+        tool_name: "ChatAgent",
+        answer: "accepted refresh",
+        id: "msg-3",
+      })
+    );
+    await makeComposable().refreshMessage(1);
+
+    const secondCall = mustGet(
+      mockGetQuery.mock.calls[1],
+      "retry refresh call"
+    );
+    expect((secondCall[0] as FormData).get("client_turn_id")).toBe(firstTurnId);
+    expect(stateFor("A").refreshTurnIds).toEqual({});
+  });
+
+  it("clears a refresh turn ID after a definite pre-dispatch 4xx", async () => {
+    mockGetQuery.mockRejectedValueOnce({
+      response: { status: 422, data: { pre_dispatch: true } },
+    });
+
+    await makeComposable().refreshMessage(1);
+
+    expect(stateFor("A").refreshTurnIds).toEqual({});
   });
 
   it.each([

@@ -11,6 +11,7 @@ import {
 } from "../streaming/aguiEvents";
 import { initReducerState, reduceAGUIEvent } from "../streaming/eventReducer";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
+import { isDefinitePreDispatch4xx } from "../utils/client-turn-id";
 import type { ChatMessage, ChatUIState } from "../types";
 
 export interface StreamInput {
@@ -18,6 +19,8 @@ export interface StreamInput {
   formData: FormData;
   requestId: string;
   placeholder: ChatMessage;
+  /** Logical turn identity; the send path normally already appended it. */
+  clientTurnId?: string;
 }
 
 export interface StreamResult {
@@ -31,6 +34,8 @@ export interface StreamResult {
   botRequestId?: string;
   /** True only after a terminal successful stream was fully reduced. */
   completed?: boolean;
+  /** True when the gateway rejected the request before dispatching a turn. */
+  preDispatch4xx?: boolean;
 }
 
 const UUID_PATTERN =
@@ -96,7 +101,11 @@ export function useStreamMessage(opts: {
   const { getChatState, t } = opts;
 
   const streamMessage = async (input: StreamInput): Promise<StreamResult> => {
-    const { dialogueId, formData, requestId, placeholder } = input;
+    const { dialogueId, formData, requestId, placeholder, clientTurnId } =
+      input;
+    if (clientTurnId && !formData.has("client_turn_id")) {
+      formData.append("client_turn_id", clientTurnId);
+    }
     const chatState = getChatState(dialogueId);
     // The send route still accepts the captured parent row id. It is not a
     // canonical conversation identity and must never address A2UI actions.
@@ -147,6 +156,9 @@ export function useStreamMessage(opts: {
         }
       );
       if (!resp.ok || !resp.body) {
+        result.preDispatch4xx = isDefinitePreDispatch4xx({
+          response: { status: resp.status, headers: resp.headers },
+        });
         throw new Error(`stream HTTP ${resp.status}`);
       }
 
