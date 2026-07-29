@@ -6,10 +6,10 @@ Status: dark launch. The Go and Bot feature flags remain disabled by default. Th
 
 V1 covers the synchronous Chat, Knowledge, Data, Review, and Brief Gene agents. Expert mode may still select an asynchronous agent, but its existing `202` and run/task lifecycle is unchanged. V1 does not claim synchronous completion for those agents.
 
-| Boundary | Authority |
-| --- | --- |
+| Boundary                                                                                                                                      | Authority      |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
 | Authentication, user permissions, dialogue ownership, durable visible rows, retry identity, deletion, and owner-scoped artifact authorization | Web Go service |
-| Agent selection result, business-context projection, per-agent thread state, context delta, stage, settlement, and tombstone behavior | Phytomni-Bot |
+| Agent selection result, business-context projection, per-agent thread state, context delta, stage, settlement, and tombstone behavior         | Phytomni-Bot   |
 
 Bot is authoritative for business context. Web Go is authoritative for user service and authorization. Bot never becomes a user or permission store, and Web never reconstructs business state from display prose.
 
@@ -31,13 +31,13 @@ Both sides must be enabled deliberately in an authorized environment. With the G
 
 ## Lifecycle states
 
-| State | Meaning | Operator action |
-| --- | --- | --- |
-| `SUBMITTING` | Go has allocated a logical turn, but Bot completion or settlement is uncertain. | Retry the same logical client turn; do not create a second turn manually. |
-| `ACK_PENDING` | The visible Go result is durable, but Bot acknowledgment is pending. | Allow the acknowledgment retry/reconciler to run before accepting the next V1 envelope. |
-| `CONTEXT_DELETE_PENDING` | The owner-visible dialogue was deleted, but Bot tombstoning has not been confirmed. | Keep the row hidden and allow tombstone retry. |
-| `CONTEXT_DELETE_ACKED` | Bot confirmed the tombstone. | No further context read or write is allowed for the deleted dialogue. |
-| degraded/rebuild required | Bot context is absent, incompatible, or explicitly degraded. | Perform the one bounded rebuild from accepted Go metadata; do not replay raw answers. |
+| State                     | Meaning                                                                             | Operator action                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `SUBMITTING`              | Go has allocated a logical turn, but Bot completion or settlement is uncertain.     | Retry the same logical client turn; do not create a second turn manually.               |
+| `ACK_PENDING`             | The visible Go result is durable, but Bot acknowledgment is pending.                | Allow the acknowledgment retry/reconciler to run before accepting the next V1 envelope. |
+| `CONTEXT_DELETE_PENDING`  | The owner-visible dialogue was deleted, but Bot tombstoning has not been confirmed. | Keep the row hidden and allow tombstone retry.                                          |
+| `CONTEXT_DELETE_ACKED`    | Bot confirmed the tombstone.                                                        | No further context read or write is allowed for the deleted dialogue.                   |
+| degraded/rebuild required | Bot context is absent, incompatible, or explicitly degraded.                        | Perform the one bounded rebuild from accepted Go metadata; do not replay raw answers.   |
 
 ## Artifacts and email boundary
 
