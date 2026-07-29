@@ -62,10 +62,14 @@ vi.mock("vue-router", async (importOriginal) => {
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatIndex from "@/views/chat/ChatView.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
+import CitedAnswer from "@/components/CitedAnswer.vue";
 import enUS from "@/locales/langs/en-US";
 import { SIDEBAR_COLLAPSED_PREFERENCE_KEY } from "@/views/chat/composables/useSidebarResponsive";
 import type { ChatMessage } from "@/views/chat/types";
-import type { BotRunProjection } from "@/views/chat/botProjection";
+import {
+  parseBotProjection,
+  type BotRunProjection,
+} from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import { createTestAppContext } from "../helpers/test-app-context";
 
@@ -108,6 +112,23 @@ const citedMessage: ChatMessage = {
   doc_list: [{ title: "Complete source document" }],
 };
 
+const knowledgeZeroReferenceRaw =
+  '{"content":"Based on the provided documents, no supporting evidence was found.","doc_list":[]}';
+
+const knowledgeZeroReferenceMessage: ChatMessage = {
+  role: "assistant",
+  id: "knowledge-empty-1",
+  tool_name: "KnowledgeAgent",
+  status: "SUCCEEDED",
+  content: "Based on the provided documents, no supporting evidence was found.",
+  doc_list: [],
+  botProjection: parseBotProjection({
+    agent: "KnowledgeAgent",
+    status: "SUCCEEDED",
+    answer: knowledgeZeroReferenceRaw,
+  }),
+};
+
 const researchMessage: ChatMessage = {
   role: "assistant",
   id: "research-1",
@@ -145,6 +166,7 @@ const partialResearchProjection: BotRunProjection = {
   reportCompleteness: "partial",
   reportRevision: 2,
   reportUpdatedAt: "2026-07-17T10:00:00Z",
+  reportPresentation: true,
   intermediateReport: "# Projection partial report",
   finalReport: "",
   progress: {
@@ -838,6 +860,101 @@ describe("Chat artifact shell integration", () => {
         code: "degraded",
       },
     });
+  });
+
+  it("renders cited Knowledge answers outside the report lifecycle", async () => {
+    const { wrapper } = await mountProductionChat(1440, {
+      messagesA: [knowledgeZeroReferenceMessage],
+    });
+
+    await wrapper.get("[data-test=artifact-open]").trigger("click");
+    expect(wrapper.findComponent(BotReportState).exists()).toBe(false);
+    expect(wrapper.get("[data-test=markdown-body]").text()).toContain(
+      "Based on the provided documents, no supporting evidence was found."
+    );
+    expect(wrapper.html()).not.toContain(knowledgeZeroReferenceRaw);
+    expect(wrapper.text()).not.toContain("doc_list");
+
+    await wrapper.get('[data-tab-id="evidence"]').trigger("click");
+    expect(wrapper.get(".research-evidence-panel__empty").text()).toContain(
+      enUS.common.noData
+    );
+  });
+
+  it("renders cited Knowledge references outside the report lifecycle", async () => {
+    const citedWithReference: ChatMessage = {
+      ...knowledgeZeroReferenceMessage,
+      id: "knowledge-reference-1",
+      content: "One supporting source [1].",
+      doc_list: [{ title: "Usable knowledge source" }],
+      botProjection: parseBotProjection({
+        agent: "KnowledgeAgent",
+        status: "SUCCEEDED",
+        answer:
+          '{"content":"One supporting source [1].","doc_list":[{"title":"Usable knowledge source"}]}',
+      }),
+    };
+
+    const cited = await mountProductionChat(1440, {
+      messagesA: [citedWithReference],
+    });
+    await cited.wrapper.get("[data-test=artifact-open]").trigger("click");
+    expect(cited.wrapper.findComponent(BotReportState).exists()).toBe(false);
+    expect(cited.wrapper.findComponent(CitedAnswer).exists()).toBe(true);
+    await cited.wrapper.get('[data-tab-id="evidence"]').trigger("click");
+    expect(
+      cited.wrapper.findAll(".research-evidence-panel__item")
+    ).toHaveLength(1);
+    expect(cited.wrapper.text()).toContain("Usable knowledge source");
+  });
+
+  it("renders malformed cited compatibility text without report lifecycle or anchors", async () => {
+    const malformedCited: ChatMessage = {
+      ...knowledgeZeroReferenceMessage,
+      id: "knowledge-malformed-1",
+      content: '{"content":"incomplete",',
+      botProjection: parseBotProjection({
+        agent: "KnowledgeAgent",
+        status: "SUCCEEDED",
+        answer: '{"content":"incomplete",',
+      }),
+    };
+    const malformed = await mountProductionChat(1440, {
+      messagesA: [malformedCited],
+    });
+    await malformed.wrapper.get("[data-test=artifact-open]").trigger("click");
+    expect(malformed.wrapper.findComponent(BotReportState).exists()).toBe(
+      false
+    );
+    expect(malformed.wrapper.get("[data-test=markdown-body]").text()).toContain(
+      '{"content":"incomplete",'
+    );
+    expect(malformed.wrapper.find("a.citation-ref").exists()).toBe(false);
+  });
+
+  it("keeps an ordinary Chat answer on the normal answer path", async () => {
+    const ordinaryChat: ChatMessage = {
+      role: "assistant",
+      id: "chat-ordinary-1",
+      tool_name: "ChatAgent",
+      status: "SUCCEEDED",
+      content: "Ordinary Chat answer",
+      botProjection: parseBotProjection({
+        agent: "ChatAgent",
+        status: "SUCCEEDED",
+        answer: "Ordinary Chat answer",
+      }),
+    };
+    const ordinary = await mountProductionChat(1440, {
+      messagesA: [ordinaryChat],
+    });
+    expect(ordinary.wrapper.get("[data-test=markdown-body]").text()).toContain(
+      "Ordinary Chat answer"
+    );
+    expect(ordinary.wrapper.findComponent(BotReportState).exists()).toBe(false);
+    expect(ordinary.wrapper.find("[data-test=artifact-open]").exists()).toBe(
+      false
+    );
   });
 
   it("wires production Chat to the artifact state, renderers, and adaptive slot", () => {

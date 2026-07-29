@@ -251,6 +251,7 @@ function syntheticDegradedState(): BotRemoteAgentRunState {
     reportCompleteness: "partial",
     reportRevision: 1,
     reportUpdatedAt: "2026-07-16T08:30:00.000Z",
+    reportPresentation: true,
     intermediateReport: "Synthetic report",
     finalReport: "",
     progress: {

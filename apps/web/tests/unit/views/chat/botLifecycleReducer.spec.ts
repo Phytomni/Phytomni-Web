@@ -23,6 +23,7 @@ function projection(
     reportCompleteness: "partial",
     reportRevision: 1,
     reportUpdatedAt: null,
+    reportPresentation: true,
     intermediateReport: "",
     finalReport: "",
     progress: {

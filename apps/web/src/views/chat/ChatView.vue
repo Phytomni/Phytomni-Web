@@ -956,6 +956,13 @@ function lifecycleFromMessage(
   message: ChatMessage
 ): ChatArtifactLifecycleState | null {
   const projection = message.botProjection;
+  if (
+    !message.botLifecycle &&
+    projection &&
+    projection.reportPresentation !== true
+  ) {
+    return null;
+  }
   if (message.botLifecycle) {
     if (!projection) {
       return {

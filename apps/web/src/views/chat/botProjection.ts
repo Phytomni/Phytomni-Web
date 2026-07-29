@@ -92,6 +92,7 @@ export interface BotRunProjection {
   runId: string | null;
   agent: string;
   status: BotRunStatus;
+  reportPresentation: boolean;
   reportStage: BotReportStage;
   reportCompleteness: BotReportCompleteness;
   reportRevision: number;
@@ -125,6 +126,19 @@ const STATUS_ALIASES: Record<string, BotRunStatus> = {
   TIMED_OUT: "TIMED_OUT",
   TIMEOUT: "TIMED_OUT",
 };
+
+const ANSWER_REPORT_FALLBACK_AGENTS = new Set([
+  "AnalystAgent",
+  "analyst",
+  "DeepGenomeAgent",
+  "deep_genome",
+  "InSilicoResearchAgent",
+  "research",
+  "DigitalDesignAgent",
+  "design",
+  "GeneNetworkAgent",
+  "network",
+]);
 
 const REPORT_STAGES = new Set<Exclude<BotReportStage, null>>([
   "waiting_for_brief_gene",
@@ -695,19 +709,25 @@ export function parseBotProjection(input: unknown): BotRunProjection {
   const answer = parseMarkdown(readField(sources, ["answer"]), "answer");
   const hasExplicitReport =
     intermediateValue.trim() !== "" || finalValue.trim() !== "";
-  const intermediateReport =
-    hasExplicitReport || status === "SUCCEEDED" ? intermediateValue : answer;
+  const reportPresentation =
+    hasExplicitReport || ANSWER_REPORT_FALLBACK_AGENTS.has(agentValue ?? "");
+  const intermediateReport = hasExplicitReport
+    ? intermediateValue
+    : reportPresentation && status !== "SUCCEEDED"
+      ? answer
+      : "";
   const finalReport = hasExplicitReport
     ? finalValue
-    : status === "SUCCEEDED"
+    : reportPresentation && status === "SUCCEEDED"
       ? answer
-      : finalValue;
+      : "";
   const interopEnabled = INTEROP_AGENT_NAMES.has(agentValue ?? "");
 
   return {
     runId,
     agent: agentValue ?? "",
     status,
+    reportPresentation,
     reportStage: parseEnum(
       readField(sources, ["report_stage", "reportStage"]),
       "report_stage",

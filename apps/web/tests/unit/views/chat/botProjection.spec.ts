@@ -211,6 +211,7 @@ describe("parseBotProjection", () => {
   it("does not retain unknown raw payload fields", () => {
     const projection = parseBotProjection({
       bot_run_id: "run-safe",
+      agent: "InSilicoResearchAgent",
       status: "succeeded",
       answer: "# Safe",
       raw: { phytomni_state: "secret" },
@@ -228,8 +229,46 @@ describe("parseBotProjection", () => {
     expect(JSON.stringify(projection)).not.toContain("provider_trace");
   });
 
-  it("falls back to answer when reports contain only whitespace", () => {
+  it("does not promote a cited Knowledge answer into a report", () => {
+    const raw = '{"content":"No matching evidence was found.","doc_list":[]}';
     const projection = parseBotProjection({
+      agent: "KnowledgeAgent",
+      status: "SUCCEEDED",
+      answer: raw,
+    });
+
+    expect(projection.reportPresentation).toBe(false);
+    expect(projection.intermediateReport).toBe("");
+    expect(projection.finalReport).toBe("");
+    expect(visibleBotReport(projection)).toBe("");
+  });
+
+  it("keeps analyst-class answer fallback as report compatibility", () => {
+    const projection = parseBotProjection({
+      agent: "InSilicoResearchAgent",
+      status: "SUCCEEDED",
+      answer: "# Compatibility report",
+    });
+
+    expect(projection.reportPresentation).toBe(true);
+    expect(projection.finalReport).toBe("# Compatibility report");
+  });
+
+  it("treats an explicit final report as report presentation", () => {
+    const projection = parseBotProjection({
+      agent: "ReviewAgent",
+      status: "SUCCEEDED",
+      answer: "Compact answer",
+      final_report: "# Explicit report",
+    });
+
+    expect(projection.reportPresentation).toBe(true);
+    expect(projection.finalReport).toBe("# Explicit report");
+  });
+
+  it("falls back to an analyst-class answer when reports contain only whitespace", () => {
+    const projection = parseBotProjection({
+      agent: "AnalystAgent",
       status: "SUCCEEDED",
       answer: "# Answer fallback",
       intermediate_report: "\n  ",
