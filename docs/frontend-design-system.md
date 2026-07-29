@@ -131,10 +131,15 @@ searchable picker, mention suggestions, populated dropdown, and `useComposer`
 runtime guard consume that same derived collection. Unresolved or failed role
 loading is fail-closed; Cases remains permission-independent because
 it links to static demonstration routes rather than granting live-agent access;
-the seven visible Cases use the same fixed order without applying agent
+the eight visible Cases use the same fixed order without applying agent
 permissions. Explore Agents is likewise a visible discovery entry for every
 user who can open Chat; its destinations are static demos, while live-agent
 execution remains protected by route and server authorization.
+
+The approved Case order is Knowledge, Data, Analyst, Review, In Silico
+Research, Gene Network, Digital Design, and BriefGene. Case media is an explicit
+image-or-monogram union: seven image marks and the `BG` BriefGene monogram.
+Workflow preview media is optional; BriefGene deliberately remains text-only.
 
 Chat routing controls remain owned by `ChatComposer`: the empty landing owns
 the Instant/Expert presentation selector, Expert empty states own the picker
@@ -187,7 +192,7 @@ When a route changes, update its owner and behavior test together.
 | Help document            | `/help`                                                                                                                                                                                     | `HelpView` + `PhyDocLayout`                       | `.help-page` (`data-scroll-root="help"`)                            | `HelpView` slot                 |
 | Recovery                 | `/401`, unmatched routes                                                                                                                                                                    | `UnauthorizedView`/`NotFoundView`                 | `.phy-recovery-page` (`data-scroll-root="recovery"`)                | recovery view                   |
 | Adaptive chat            | `/chat`                                                                                                                                                                                     | `PhyAdaptiveShell` + Chat views                   | `chat-content-stack` when empty; `message-container` when populated | none; App transfer overlay only |
-| Static agent demo        | `/knowledge-agent`, `/data-agent`, `/analyst-agent`, `/brief-gene-agent`, `/cases/gene-network-agent`, `/deep-genome-agent`, `/cases/digital-design-agent`, `/design`                       | `AgentDemoShell`                                  | `.agent-demo-shell` (`data-scroll-root="agent-demo"`)               | `AgentDemoShell`                |
+| Static agent demo        | `/knowledge-agent`, `/data-agent`, `/analyst-agent`, `/review-agent`, `/brief-gene-agent`, `/cases/gene-network-agent`, `/deep-genome-agent`, `/cases/digital-design-agent`, `/design`      | `AgentDemoShell`                                  | `.agent-demo-shell` (`data-scroll-root="agent-demo"`)               | `AgentDemoShell`                |
 | Workspace/data           | `/gene-display`, `/log-list`, `/user-list`, `/permi-manage`, `/favorites`, `/history`, `/profile`, `/cloud-storage`, `/feedback`, `/task-management`, `/global-config`, `/admin-management` | `PhyWorkspaceShell`                               | `data-scroll-root="workspace"`                                      | outer `LayoutView` Footer       |
 | Gene detail workspace    | `/gene-display/detail`                                                                                                                                                                      | `GeneDetailView`                                  | `.gene-detail-route` (`data-scroll-root="gene-detail"`)             | none                            |
 | Capability-gated product | `/research-agent`, `/gene-network-agent`, `/digital-design-agent`                                                                                                                           | guarded product view + `ResearchArtifactShell`    | route-specific `data-scroll-root`                                   | none                            |

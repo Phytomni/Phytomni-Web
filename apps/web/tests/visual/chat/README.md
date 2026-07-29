@@ -113,7 +113,7 @@ URL above:
 `2560x1440` is the agreed 4K-at-150%-scaling review in CSS pixels; do not
 substitute a `3840x2160` CSS viewport. `empty` proves the top composition and
 visible Composer. `empty-cases` runs the same page at the bottom of the
-empty-state scroll owner and proves the seventh case is reachable. A screenshot
+empty-state scroll owner and proves the eighth case is reachable. A screenshot
 is invalid unless its geometry JSON passes before capture. The capture script
 cleans the current evidence directory before each run and fails unless both
 exact file counts and every PNG/geometry pair are present.
@@ -145,17 +145,17 @@ The focused set is 390x844, 1440x900, and 2560x1440 × light/dark × Start New
 selected, Explore Agents selected, Instant selected, and Expert selected = 24
 PNGs. Every PNG requires matching passing geometry/refinement JSON first.
 
-For Task 5.2, inspect all 232 responsive-continuity PNGs individually and record
+Inspect all 232 responsive-continuity PNGs individually and record
 one filename/result row in the ignored `visual-review-ledger.md`. Check locale,
 theme, one title/header, controls inside the viewport, Footer clearance, Cases
-reachability, Agent order/labels, complete flowcharts, no horizontal overflow,
+reachability, Agent order/labels, available workflow media and intentional text-only previews, no horizontal overflow,
 compact disclosure containment, and each history title-only/loading/empty/error
 state. Use `Needs Verification` for unsupported browser modalities; never claim
 authenticated or production acceptance from synthetic captures.
 
 ## Accessibility modality evidence
 
-Task 5.3 records keyboard, zoom, reduced-motion, and forced-colors checks in the
+Keyboard, zoom, reduced-motion, and forced-colors checks belong in the
 ignored `modality-review-ledger.md` beside the responsive-continuity captures.
 Use synthetic fixture URLs only; an authenticated row requires the redaction
 protocol above before every snapshot or evaluation. Every row includes the
