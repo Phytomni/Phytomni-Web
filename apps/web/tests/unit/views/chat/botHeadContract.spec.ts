@@ -10,7 +10,7 @@ const manifestPath = resolve(
   "tests/fixtures/bot-head/contract-manifest.json"
 );
 
-const releaseSha = "e0c296e6773f6638bac57a181bc727fd97c8a9fb";
+const releaseSha = "7bb00c67155044d6cb83c44c7f8c426c8b968bbd";
 const releaseSlugs = [
   "chat",
   "knowledge",
@@ -40,6 +40,7 @@ const fixtureIds = [
   "degraded_tracking",
   "deep_genome_revision",
   "review_input_required",
+  "conversation_context_v1",
 ];
 
 type ContractManifest = {
