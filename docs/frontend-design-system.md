@@ -136,8 +136,8 @@ permissions. Explore Agents is likewise a visible discovery entry for every
 user who can open Chat; its destinations are static demos, while live-agent
 execution remains protected by route and server authorization.
 
-The approved Case order is Knowledge, Data, Analyst, Review, In Silico
-Research, Gene Network, Digital Design, and BriefGene. Case media is an explicit
+The approved Case order is Knowledge, Data, Analyst, Review, Gene Network,
+BriefGene, DeepGenome, and Digital Design. Case media is an explicit
 image-or-monogram union: seven image marks and the `BG` BriefGene monogram.
 Workflow preview media is optional; BriefGene deliberately remains text-only.
 

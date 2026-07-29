@@ -21,8 +21,16 @@ const sourceFiles = (directory: string): string[] =>
 
 describe("UI remediation visual fixtures", () => {
   it("resolves only the closed state and locale registry", () => {
-    expect(UI_REMEDIATION_FIXTURE_KEYS).toHaveLength(7);
-    expect(UI_REMEDIATION_LOCALES).toHaveLength(2);
+    expect(UI_REMEDIATION_FIXTURE_KEYS).toEqual([
+      "change-password",
+      "markdown",
+      "review",
+      "brief-gene",
+      "cases",
+      "review-preview",
+      "brief-gene-preview",
+    ]);
+    expect(UI_REMEDIATION_LOCALES).toEqual(["en-US", "zh-CN"]);
     expect(resolveUiRemediationFixture("cases", "en-US")).toEqual({
       ok: true,
       state: "cases",
@@ -47,9 +55,24 @@ describe("UI remediation visual fixtures", () => {
     expect(app).toContain("ChatCases");
     expect(app).toContain("AgentCapabilityPopover");
     const capture = read("tests/visual/ui-remediation/capture-matrix.sh");
-    expect(
-      capture.match(/"[^"\n]+\|\d+\|\d+\|(en-US|zh-CN)"/g) ?? []
-    ).toHaveLength(16);
+    expect(capture.match(/"[^"\n]+\|\d+\|\d+\|(en-US|zh-CN)"/g)).toEqual([
+      '"change-password|1190|903|en-US"',
+      '"change-password|1190|903|zh-CN"',
+      '"change-password|390|844|en-US"',
+      '"change-password|390|844|zh-CN"',
+      '"markdown|1190|903|zh-CN"',
+      '"review|1190|903|en-US"',
+      '"review|390|844|en-US"',
+      '"brief-gene|1190|903|en-US"',
+      '"brief-gene|390|844|en-US"',
+      '"cases|1440|900|en-US"',
+      '"cases|768|1024|en-US"',
+      '"cases|390|844|en-US"',
+      '"review-preview|1440|900|en-US"',
+      '"review-preview|390|844|en-US"',
+      '"brief-gene-preview|1440|900|en-US"',
+      '"brief-gene-preview|390|844|en-US"',
+    ]);
     expect(capture).toContain("set -euo pipefail");
     const productionImports = sourceFiles(resolve(webRoot, "src"))
       .map((path) => readFileSync(path, "utf8"))
