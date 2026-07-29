@@ -1,6 +1,32 @@
 package bot
 
-import "github.com/spf13/viper"
+import (
+	rxLog "phytomni-server/log"
+
+	"github.com/spf13/viper"
+)
+
+var defaultAgentTimeoutSeconds = map[string]int{
+	"chat":       3000,
+	"knowledge":  15000,
+	"data":       9000,
+	"review":     30000,
+	"brief_gene": 30000,
+}
+
+func normalizeAgentTimeoutSeconds(overrides map[string]int) map[string]int {
+	normalized := make(map[string]int, len(defaultAgentTimeoutSeconds))
+	for slug, seconds := range defaultAgentTimeoutSeconds {
+		normalized[slug] = seconds
+	}
+	for slug, seconds := range overrides {
+		if _, known := defaultAgentTimeoutSeconds[slug]; !known || seconds <= 0 {
+			continue
+		}
+		normalized[slug] = seconds
+	}
+	return normalized
+}
 
 // Config maps the app.yml `bot:` section into a typed struct.
 //
@@ -16,6 +42,9 @@ type Config struct {
 	// TimeoutSeconds bounds each Web→Bot HTTP call. Long-running agents return
 	// 202 immediately, so this only caps the synchronous request itself.
 	TimeoutSeconds int `json:"timeout_seconds" yaml:"timeout_seconds" mapstructure:"timeout_seconds"`
+	// AgentTimeoutSeconds bounds one synchronous Agent execution request by
+	// canonical Bot slug. Missing/invalid entries use compiled defaults.
+	AgentTimeoutSeconds map[string]int `json:"agent_timeout_seconds" yaml:"agent_timeout_seconds" mapstructure:"agent_timeout_seconds"`
 	// ProxyEnabled is the master switch for the /query gateway. While false the
 	// gateway stays dormant and /query keeps flowing to the Python service.
 	ProxyEnabled bool `json:"proxy_enabled" yaml:"proxy_enabled" mapstructure:"proxy_enabled"`
@@ -57,6 +86,21 @@ type Config struct {
 // BotConfig is the process-wide singleton populated by InitFromViper.
 var BotConfig *Config
 
+func (c *Config) TimeoutForAgent(slug string) int {
+	if c != nil {
+		if seconds, ok := c.AgentTimeoutSeconds[slug]; ok && seconds > 0 {
+			return seconds
+		}
+		if seconds, ok := defaultAgentTimeoutSeconds[slug]; ok {
+			return seconds
+		}
+		if c.TimeoutSeconds > 0 {
+			return c.TimeoutSeconds
+		}
+	}
+	return 60
+}
+
 // InitFromViper deserializes the `bot` section from the already-loaded viper
 // singleton. main.initConfig calls this after utils.LoadConfigInFile, so the
 // config is in memory by the time this runs. A missing section yields a
@@ -69,6 +113,17 @@ func InitFromViper() error {
 	if cfg.TimeoutSeconds <= 0 {
 		cfg.TimeoutSeconds = 60
 	}
+	for slug, seconds := range cfg.AgentTimeoutSeconds {
+		_, known := defaultAgentTimeoutSeconds[slug]
+		if !known || seconds <= 0 {
+			rxLog.Sugar().Warnw(
+				"ignoring invalid Bot agent timeout",
+				"agent", slug,
+				"seconds", seconds,
+			)
+		}
+	}
+	cfg.AgentTimeoutSeconds = normalizeAgentTimeoutSeconds(cfg.AgentTimeoutSeconds)
 	BotConfig = &cfg
 	return nil
 }
