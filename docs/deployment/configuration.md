@@ -141,7 +141,15 @@ active. Bypass for `admin`/`super_admin`/`vip_user`; fail-open on DB error.
 bot:
   base_url: "http://<BOT_HOST>:8000"
   user_api_key: "<PTM_WEB_KEY>" # mint/rotate per operations.md §1–3
-  timeout_seconds: 900 # MUST exceed the slowest SYNC agent (chat ~140s / knowledge ~198s / review >300s)
+  # Fallback for uploads, control calls, and background-Agent submission.
+  timeout_seconds: 900
+  # Per synchronous Agent execution request; keys are canonical Bot slugs.
+  agent_timeout_seconds:
+    chat: 3000
+    knowledge: 15000
+    data: 9000
+    review: 30000
+    brief_gene: 30000
   proxy_enabled: true
   key_audit_redact: true
   expert_enabled: false # dark-launch: Expert routing (operations.md §11.1)
@@ -156,6 +164,14 @@ bot:
   max_upload_file_count: 10
   max_upload_total_bytes: 52428800 # 50 MiB per request
 ```
+
+`agent_timeout_seconds` overrides the compiled defaults entry by entry for one
+Web Go-to-Bot synchronous Agent request. Instant uses `chat`; forced Expert
+uses the selected Agent; autonomous Expert uses the maximum configured value
+among the server-resolved allowed synchronous Agents. Uploads, run polling,
+A2UI, interop, OBS relay, and background-Agent submission use
+`timeout_seconds`. These settings do not change Bot-internal dependency
+timeouts.
 
 The `ptm_<web>` key must carry the `agents` and `relay:obs` scopes; the Bot must
 run with `RELAY_ENABLED=true` or relay downloads 404. See
