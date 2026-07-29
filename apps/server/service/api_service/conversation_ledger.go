@@ -35,7 +35,9 @@ type ConversationLedger struct {
 	ConversationKey string
 	DialogueID      string
 	RootID          int64
+	RootStatus      string
 	Mode            string
+	ModeLockState   string
 	Cursor          int64
 	Version         string
 
@@ -126,7 +128,9 @@ func buildConversationLedgerWithDB(
 		ConversationKey: dialogueID,
 		DialogueID:      dialogueID,
 		RootID:          root.Id,
+		RootStatus:      root.Status,
 		Mode:            normalizedConversationLedgerMode(root.Mode),
+		ModeLockState:   "locked",
 		rows:            make([]conversationLedgerRow, 0, len(storedRows)),
 		artifacts:       make(map[string]rxBot.ArtifactRefV1),
 	}
@@ -140,6 +144,9 @@ func buildConversationLedgerWithDB(
 		if privateContext != nil {
 			cloned := privateContext.clone()
 			privateContext = &cloned
+		}
+		if stored.Id == root.Id && privateContext != nil && privateContext.ModeLockState == "provisional" {
+			ledger.ModeLockState = "provisional"
 		}
 		row := conversationLedgerRow{
 			ID:      stored.Id,

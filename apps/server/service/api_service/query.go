@@ -240,8 +240,13 @@ func (ps *Service) resolveV1SubmissionTarget(
 	if lockedMode == "" {
 		lockedMode = "instant"
 	}
-	if lockedMode != in.Mode {
+	modeIsProvisionalFailure := ledger.ModeLockState == "provisional" && ledger.RootStatus == "FAILED"
+	if !modeIsProvisionalFailure && lockedMode != in.Mode {
 		return v1SubmissionTarget{}, ErrConversationModeConflict
+	}
+	effectiveMode := lockedMode
+	if modeIsProvisionalFailure {
+		effectiveMode = in.Mode
 	}
 	artifacts, err := ledger.AuthorizeArtifactIDs(in.ArtifactIDs)
 	if err != nil {
@@ -249,7 +254,7 @@ func (ps *Service) resolveV1SubmissionTarget(
 	}
 	target.dialogueID = dialogueID
 	target.parentID = parentID
-	target.mode = lockedMode
+	target.mode = effectiveMode
 	target.artifacts = artifacts
 	return target, nil
 }
@@ -277,12 +282,13 @@ func withProcessTurnAllocationLock(
 	}
 }
 
-func withMySQLTurnAllocationLock(
+func withMySQLTurnAllocationLockDB(
 	ctx context.Context,
+	gdb *gorm.DB,
 	key string,
 	fn func() error,
 ) error {
-	sqlDB, err := model.DB(ctx).DB()
+	sqlDB, err := gdb.DB()
 	if err != nil {
 		return err
 	}
@@ -317,15 +323,16 @@ func withMySQLTurnAllocationLock(
 	return fn()
 }
 
-func withTurnAllocationLock(
+func withTurnAllocationLockDB(
 	ctx context.Context,
+	gdb *gorm.DB,
 	username string,
 	clientTurnID string,
 	fn func() error,
 ) error {
 	key := turnAllocationKey(username, clientTurnID)
-	if model.DB(ctx).Dialector.Name() == "mysql" {
-		return withMySQLTurnAllocationLock(ctx, key, fn)
+	if gdb.Dialector.Name() == "mysql" {
+		return withMySQLTurnAllocationLockDB(ctx, gdb, key, fn)
 	}
 	return withProcessTurnAllocationLock(ctx, key, fn)
 }
@@ -364,29 +371,59 @@ func persistedClientTurnID(private *persistedConversationContext) string {
 	return private.ClientTurnID
 }
 
+func applyClientTurnLookup(
+	gdb *gorm.DB,
+	username string,
+	clientTurnID string,
+) *gorm.DB {
+	query := gdb.Where("user_name = ? AND delete_at IS NULL", username)
+	if gdb.Dialector.Name() == "mysql" {
+		const projectionJSON = "CASE WHEN JSON_VALID(bot_projection_json) THEN bot_projection_json ELSE '{}' END"
+		return query.Where(
+			"JSON_UNQUOTE(JSON_EXTRACT("+projectionJSON+", '$.conversation_context.client_turn_id')) = ? OR "+
+				"JSON_UNQUOTE(JSON_EXTRACT("+projectionJSON+", '$.conversation_context.replacement.client_turn_id')) = ?",
+			clientTurnID,
+			clientTurnID,
+		).Order("id DESC").Limit(2)
+	}
+	return query.Order("id DESC").Limit(recentClientTurnLookupLimit)
+}
+
 func findRecentClientTurn(
 	ctx context.Context,
 	username string,
 	clientTurnID string,
 ) (*model.QuestionAgentLog, *persistedConversationContext, error) {
+	return findRecentClientTurnWithDB(ctx, model.DB(ctx), username, clientTurnID)
+}
+
+func findRecentClientTurnWithDB(
+	ctx context.Context,
+	gdb *gorm.DB,
+	username string,
+	clientTurnID string,
+) (*model.QuestionAgentLog, *persistedConversationContext, error) {
 	var rows []model.QuestionAgentLog
-	if err := model.DB(ctx).
-		Where("user_name = ? AND delete_at IS NULL", username).
-		Order("id DESC").
-		Limit(recentClientTurnLookupLimit).
+	if err := applyClientTurnLookup(gdb.WithContext(ctx), username, clientTurnID).
 		Find(&rows).Error; err != nil {
 		return nil, nil, err
 	}
+	var match *model.QuestionAgentLog
+	var matchPrivate *persistedConversationContext
 	for index := range rows {
 		_, private, err := unmarshalPersistedProjectionWithContext(rows[index].BotProjectionJSON)
 		if err != nil {
 			return nil, nil, err
 		}
 		if persistedClientTurnID(private) == clientTurnID {
-			return &rows[index], private, nil
+			if match != nil {
+				return nil, nil, ErrDuplicateClientTurn
+			}
+			match = &rows[index]
+			matchPrivate = private
 		}
 	}
-	return nil, nil, nil
+	return match, matchPrivate, nil
 }
 
 func validateDuplicateSubmission(
@@ -427,6 +464,15 @@ func validateDuplicateSubmission(
 
 func (ps *Service) queryDataFromStoredRow(
 	ctx context.Context,
+	username string,
+	row model.QuestionAgentLog,
+) (*QueryData, error) {
+	return ps.queryDataFromStoredRowWithDB(ctx, model.DB(ctx), username, row)
+}
+
+func (ps *Service) queryDataFromStoredRowWithDB(
+	ctx context.Context,
+	gdb *gorm.DB,
 	username string,
 	row model.QuestionAgentLog,
 ) (*QueryData, error) {
@@ -687,10 +733,30 @@ func (ps *Service) allocateV1Submission(
 	permissions AgentPermissionResolution,
 	finalizePending bool,
 ) (*v1Submission, error) {
+	return ps.allocateV1SubmissionWithDB(
+		ctx,
+		model.DB(ctx),
+		username,
+		in,
+		target,
+		permissions,
+		finalizePending,
+	)
+}
+
+func (ps *Service) allocateV1SubmissionWithDB(
+	ctx context.Context,
+	gdb *gorm.DB,
+	username string,
+	in QueryInput,
+	target v1SubmissionTarget,
+	permissions AgentPermissionResolution,
+	finalizePending bool,
+) (*v1Submission, error) {
 	var allocated model.QuestionAgentLog
 	var duplicate *QueryData
-	err := withTurnAllocationLock(ctx, username, in.ClientTurnID, func() error {
-		existing, private, err := findRecentClientTurn(ctx, username, in.ClientTurnID)
+	err := withTurnAllocationLockDB(ctx, gdb, username, in.ClientTurnID, func() error {
+		existing, private, err := findRecentClientTurnWithDB(ctx, gdb, username, in.ClientTurnID)
 		if err != nil {
 			return err
 		}
@@ -702,7 +768,7 @@ func (ps *Service) allocateV1Submission(
 			if existing.Status != "SUBMITTING" ||
 				(!existing.UpdatedAt.IsZero() &&
 					time.Since(existing.UpdatedAt) < turnSubmissionLease) {
-				duplicate, err = ps.queryDataFromStoredRow(ctx, username, *existing)
+				duplicate, err = ps.queryDataFromStoredRowWithDB(ctx, gdb, username, *existing)
 				if err != nil {
 					return err
 				}
@@ -712,6 +778,7 @@ func (ps *Service) allocateV1Submission(
 
 		privateContext := &persistedConversationContext{
 			ClientTurnID:    in.ClientTurnID,
+			ModeLockState:   "provisional",
 			SettlementState: "submission_append",
 		}
 
@@ -725,7 +792,7 @@ func (ps *Service) allocateV1Submission(
 		}
 		if target.operation == "replace" {
 			var current model.QuestionAgentLog
-			if err := model.DB(ctx).
+			if err := gdb.WithContext(ctx).
 				Where("id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND status = ?",
 					in.RefreshId,
 					username,
@@ -759,7 +826,7 @@ func (ps *Service) allocateV1Submission(
 			if err != nil {
 				return err
 			}
-			result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			result := gdb.WithContext(ctx).Model(&model.QuestionAgentLog{}).
 				Where(
 					"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND bot_projection_json = ?",
 					in.RefreshId,
@@ -801,7 +868,7 @@ func (ps *Service) allocateV1Submission(
 			ReactionType:      "0",
 			CollectType:       "0",
 		}
-		return model.DB(ctx).Create(&allocated).Error
+		return gdb.WithContext(ctx).Create(&allocated).Error
 	})
 	if err != nil {
 		return nil, err
@@ -810,7 +877,7 @@ func (ps *Service) allocateV1Submission(
 		return &v1Submission{row: allocated, duplicate: duplicate}, nil
 	}
 
-	ledger, err := BuildConversationLedger(ctx, username, allocated.DialogueId)
+	ledger, err := buildConversationLedgerWithDB(ctx, gdb, username, allocated.DialogueId)
 	if err != nil {
 		return nil, err
 	}
@@ -826,7 +893,7 @@ func (ps *Service) allocateV1Submission(
 		if err != nil {
 			return nil, err
 		}
-		ledger, err = BuildConversationLedger(ctx, username, allocated.DialogueId)
+		ledger, err = buildConversationLedgerWithDB(ctx, gdb, username, allocated.DialogueId)
 		if err != nil {
 			return nil, err
 		}
@@ -2067,6 +2134,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	}
 	out.Id = id
 	out.UploadPath = strings.Join(obsPaths, ",")
+	if v1 && (out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED") {
+		lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		err := lockConversationRootMode(lockCtx, username, dialogueID)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+	}
 	if expertProjection != nil {
 		// The row now exists, so the accepted Expert submission can enter the
 		// same owner-scoped projection store used by polling/reconciliation.

@@ -24,6 +24,7 @@ const (
 	maxPersistedArtifactRefs          = 50
 	maxPersistedArtifactFieldBytes    = 512
 	maxPersistedSettlementStateBytes  = 32
+	maxPersistedModeLockStateBytes    = 16
 	maxPersistedLedgerHashBytes       = 128
 	maxPersistedConversationBytes     = 64 << 10
 	maxPersistedReplacementQueryBytes = 32 << 10
@@ -51,6 +52,7 @@ const (
 // BotRunProjection so response metadata cannot leak through public APIs.
 type persistedConversationContext struct {
 	ClientTurnID         string                      `json:"client_turn_id,omitempty"`
+	ModeLockState        string                      `json:"mode_lock_state,omitempty"`
 	Stage                *rxBot.ContextStageMetadata `json:"stage,omitempty"`
 	SettlementState      string                      `json:"settlement_state,omitempty"`
 	SettlementLedgerHash string                      `json:"settlement_ledger_hash,omitempty"`
@@ -96,6 +98,12 @@ func (value persistedConversationContext) validate() error {
 	}
 	if err := validatePersistedToken("settlement_state", value.SettlementState, maxPersistedSettlementStateBytes); err != nil {
 		return err
+	}
+	if err := validatePersistedToken("mode_lock_state", value.ModeLockState, maxPersistedModeLockStateBytes); err != nil {
+		return err
+	}
+	if value.ModeLockState != "" && value.ModeLockState != "provisional" && value.ModeLockState != "locked" {
+		return persistedContextError("mode_lock_state is invalid")
 	}
 	if err := validatePersistedASCII("settlement_ledger_hash", value.SettlementLedgerHash, maxPersistedLedgerHashBytes); err != nil {
 		return err
@@ -323,6 +331,7 @@ func settleBlockingConversationContext(
 			}
 		}
 		private.SettlementLedgerHash = ""
+		private.ModeLockState = "locked"
 		raw, err := marshalPersistedProjectionWithContext(current, &private)
 		if err != nil {
 			return err
@@ -366,6 +375,9 @@ func settleBlockingConversationContext(
 		if settled.RowsAffected != 1 {
 			return ErrBotProjectionConflict
 		}
+		if err := lockConversationRootModeWithDB(ctx, tx, username, dialogueID); err != nil {
+			return err
+		}
 		if replacement {
 			if err := invalidateConversationContextsAfter(
 				ctx,
@@ -408,6 +420,71 @@ func settleBlockingConversationContext(
 		return "", err
 	}
 	return ledgerVersion, nil
+}
+
+func lockConversationRootModeWithDB(
+	ctx context.Context,
+	tx *gorm.DB,
+	username string,
+	dialogueID string,
+) error {
+	var root struct {
+		ID                int64  `gorm:"column:id"`
+		BotProjectionJSON string `gorm:"column:bot_projection_json"`
+		BotReportRevision int64  `gorm:"column:bot_report_revision"`
+	}
+	result := tx.WithContext(ctx).
+		Model(&model.QuestionAgentLog{}).
+		Select("id, bot_projection_json, bot_report_revision").
+		Where(
+			"dialogue_id = ? AND f_id = 0 AND user_name = ? AND delete_at IS NULL",
+			dialogueID,
+			username,
+		).
+		Order("id ASC").
+		First(&root)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return ErrBotProjectionNotFound
+	}
+	if result.Error != nil {
+		return result.Error
+	}
+	projection, private, err := unmarshalPersistedProjectionWithContext(root.BotProjectionJSON)
+	if err != nil {
+		return err
+	}
+	if private == nil {
+		private = &persistedConversationContext{}
+	}
+	if private.ModeLockState == "locked" {
+		return nil
+	}
+	next := private.clone()
+	next.ModeLockState = "locked"
+	encoded, err := marshalPersistedProjectionWithContext(projection, &next)
+	if err != nil {
+		return err
+	}
+	updated := tx.Model(&model.QuestionAgentLog{}).
+		Where(botProjectionCASPredicate, root.ID, username, root.BotReportRevision, root.BotProjectionJSON).
+		UpdateColumn("bot_projection_json", encoded)
+	if updated.Error != nil {
+		return updated.Error
+	}
+	if updated.RowsAffected != 1 {
+		return ErrBotProjectionConflict
+	}
+	return nil
+}
+
+func lockConversationRootMode(
+	ctx context.Context,
+	username string,
+	dialogueID string,
+) error {
+	return model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return lockConversationRootModeWithDB(ctx, tx, username, dialogueID)
+	})
 }
 
 func invalidateConversationContextsAfter(
