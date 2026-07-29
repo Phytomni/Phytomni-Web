@@ -15,9 +15,12 @@ const t = vi.hoisted(() => {
   const messages: Record<string, string> = {
     "chat.agentLabels.chatAgent": "Chat Agent",
     "chat.agentLabels.deepGenomeAgent": "Deep Genome Agent",
+    "chat.agentLabels.briefGeneAgent": "Brief Gene Agent",
     "chat.agents.chatAgent": "Natural-language plant research assistance.",
     "chat.agents.deepGenomeAgent":
       "Plant genome analysis for breeding research.",
+    "chat.agents.briefGeneAgent":
+      "Creates rapid gene-function briefs and research leads.",
     "chat.agentPresentation.chatAgentAlt": "Chat Agent workflow flowchart",
     "chat.agentPresentation.deepGenomeAgentAlt":
       "Deep Genome Agent workflow flowchart",
@@ -89,6 +92,20 @@ describe("AgentCapabilityPopover", () => {
     expect(wrapper.get("button").attributes("aria-controls")).toBe(
       panel.attributes("id")
     );
+  });
+
+  it("renders BriefGene description without an empty workflow frame", async () => {
+    const wrapper = mountPopover("BriefGeneAgent");
+    await wrapper.get("button").trigger("focus");
+
+    expect(wrapper.get('[role="dialog"]').text()).toContain("Brief Gene Agent");
+    expect(wrapper.get('[role="dialog"]').text()).toContain(
+      "rapid gene-function briefs"
+    );
+    expect(wrapper.find(".agent-capability-popover__media").exists()).toBe(
+      false
+    );
+    expect(wrapper.find("img").exists()).toBe(false);
   });
 
   it("emits selection on click", async () => {

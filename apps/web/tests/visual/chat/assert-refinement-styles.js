@@ -76,9 +76,9 @@
     if (exploreButton?.getAttribute("aria-expanded") !== "true") {
       fail("Explore Agents selection lacks aria-expanded=true");
     }
-    if (!exploreAgentsList || exploreAgentOptions?.length !== 7) {
+    if (!exploreAgentsList || exploreAgentOptions?.length !== 8) {
       fail(
-        "Explore Agents selection must reveal seven expandable agent options"
+        "Explore Agents selection must reveal eight expandable agent options"
       );
     }
   } else {
@@ -140,12 +140,22 @@
     "KnowledgeAgent.jpg",
     "DataAgent.jpg",
     "AnalystAgent.jpg",
+    "ReviewAgent.jpg",
     "GeneNetworkAgent.jpg",
-    "BriefReviewAgent.jpg",
     "DeepGenomeAgent.jpg",
     "DigitalDesignAgent.jpg",
   ];
   const images = [...root.querySelectorAll(".chat-case-icon img")];
+  const caseLinks = [
+    ...root.querySelectorAll('[data-testid="chat-case-link"]'),
+  ];
+  const monograms = [...root.querySelectorAll(".chat-case-monogram")];
+  if (caseLinks.length !== 8) {
+    fail("expected eight case links, found " + caseLinks.length);
+  }
+  if (monograms.length !== 1 || monograms[0]?.textContent?.trim() !== "BG") {
+    fail("expected one BG case monogram");
+  }
   if (images.length !== 7) {
     fail("expected seven case images, found " + images.length);
   }
@@ -178,6 +188,8 @@
     activeItem,
     chatMode,
     selectedCount: selectedRows.length,
+    caseLinkCount: caseLinks.length,
     caseImageCount: images.length,
+    caseMonogramCount: monograms.length,
   };
 })();

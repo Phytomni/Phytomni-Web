@@ -83,16 +83,26 @@ describe("canonical agent locale names", () => {
     }
   });
 
-  it("has Chinese and English alt text for every canonical flowchart", () => {
+  it("has Chinese and English alt text for every workflow with media", () => {
     for (const toolName of CANONICAL_AGENT_DISPLAY_ORDER) {
-      const altKey = CANONICAL_AGENT_PRESENTATIONS[toolName].flowchartAltKey;
-      expect(getMessage(zhCN, altKey), `${toolName} zh-CN alt`).toEqual(
-        expect.any(String)
-      );
-      expect(getMessage(enUS, altKey), `${toolName} en-US alt`).toEqual(
-        expect.any(String)
-      );
+      const workflow = CANONICAL_AGENT_PRESENTATIONS[toolName].workflow;
+      if (!workflow) continue;
+      expect(
+        getMessage(zhCN, workflow.altKey),
+        `${toolName} zh-CN alt`
+      ).toEqual(expect.any(String));
+      expect(
+        getMessage(enUS, workflow.altKey),
+        `${toolName} en-US alt`
+      ).toEqual(expect.any(String));
     }
+
+    expect(
+      getMessage(zhCN, "chat.agentPresentation.briefGeneAgentAlt")
+    ).toBeUndefined();
+    expect(
+      getMessage(enUS, "chat.agentPresentation.briefGeneAgentAlt")
+    ).toBeUndefined();
   });
 
   it("keeps compact picker labels separate from long agent descriptions", () => {

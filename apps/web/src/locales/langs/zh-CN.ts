@@ -458,7 +458,6 @@ export default {
       reviewAgentAlt: "综述智能体工作流程图",
       inSilicoResearchAgentAlt: "虚拟研究智能体工作流程图",
       geneNetworkAgentAlt: "基因网络智能体工作流程图",
-      briefGeneAgentAlt: "基因综述智能体工作流程图",
       deepGenomeAgentAlt: "基因深度分析智能体工作流程图",
       digitalDesignAgentAlt: "智能设计智能体工作流程图",
     },
@@ -725,6 +724,10 @@ export default {
         cdsLength: "静态示例输出 — CDS 长度",
         homologs: "静态示例输出 — 同源基因",
       },
+    },
+    review: {
+      title: "综述智能体",
+      subtitle: "综述智能体 - 提供面向植物科研主题的结构化文献综述服务",
     },
     briefGene: {
       title: "基因综述智能体",

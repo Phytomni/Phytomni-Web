@@ -50,10 +50,13 @@
       <p class="agent-capability-popover__description">
         {{ t(presentation.descriptionKey) }}
       </p>
-      <div class="agent-capability-popover__media is-scrollable">
+      <div
+        v-if="presentation.workflow"
+        class="agent-capability-popover__media is-scrollable"
+      >
         <img
-          :src="presentation.flowchartSrc"
-          :alt="t(presentation.flowchartAltKey)"
+          :src="presentation.workflow.src"
+          :alt="t(presentation.workflow.altKey)"
         />
       </div>
     </section>

@@ -15,6 +15,7 @@ const routes = [
   "/knowledge-agent",
   "/data-agent",
   "/analyst-agent",
+  "/review-agent",
   "/cases/gene-network-agent",
   "/brief-gene-agent",
   "/deep-genome-agent",
@@ -25,6 +26,7 @@ const enTitles = [
   "Knowledge Agent",
   "Data Agent",
   "Analyst Agent",
+  "Review Agent",
   "Gene Network Agent",
   "Brief Gene Agent",
   "Deep Genome Agent",
@@ -35,6 +37,7 @@ const zhTitles = [
   "知识智能体",
   "数据智能体",
   "分析智能体",
+  "综述智能体",
   "基因网络智能体",
   "基因综述智能体",
   "基因深度分析智能体",
@@ -45,8 +48,8 @@ const imagePaths = [
   "/agent-icons/KnowledgeAgent.jpg",
   "/agent-icons/DataAgent.jpg",
   "/agent-icons/AnalystAgent.jpg",
+  "/agent-icons/ReviewAgent.jpg",
   "/agent-icons/GeneNetworkAgent.jpg",
-  "/agent-icons/BriefReviewAgent.jpg",
   "/agent-icons/DeepGenomeAgent.jpg",
   "/agent-icons/DigitalDesignAgent.jpg",
 ];
@@ -60,7 +63,7 @@ const imageHashes: Record<string, string> = {
     "09e79c24fb971d5cdbc42d4cbaf166a68e47f830816d9f94f8bd5cd1717405af",
   "GeneNetworkAgent.jpg":
     "79a18a4289d7465ae4893d2f9fd1bc44df4e95c1577915f7783c875339054494",
-  "BriefReviewAgent.jpg":
+  "ReviewAgent.jpg":
     "229c13bf7ae44161f04de82d32f5cb8ea4b732ca95618aff87fa05abe0712e22",
   "DeepGenomeAgent.jpg":
     "30b512140fa63dd5817ffd4f18730f1e7201b541b5124ee7f81d56c2b1323dc7",
@@ -85,16 +88,19 @@ const mountCases = (locale: "en-US" | "zh-CN") => {
 };
 
 describe("ChatCases", () => {
-  it("keeps the seven-card group on the bounded conversation lane", () => {
+  it("keeps the eight-card group on the bounded conversation lane", () => {
     expect(CASES_SOURCE).toContain(
       "max-width: var(--phy-layout-transcript-max-width)"
     );
     expect(CASES_SOURCE).toContain(
+      "grid-template-columns: repeat(4, minmax(0, 1fr))"
+    );
+    expect(CASES_SOURCE).not.toContain(
       "grid-template-columns: repeat(7, minmax(0, 1fr))"
     );
   });
 
-  it("uses compact mobile cards so all seven Cases fit the reviewed landing", () => {
+  it("uses compact mobile cards so all eight Cases fit the reviewed landing", () => {
     expect(CASES_SOURCE).toMatch(
       /@media \(max-width: 599px\)[\s\S]*?\.chat-case-link\s*\{[\s\S]*?padding:\s*var\(--phy-space-8\) var\(--phy-space-12\);/
     );
@@ -108,9 +114,11 @@ describe("ChatCases", () => {
     const links = wrapper.findAll('[data-testid="chat-case-link"]');
 
     expect(wrapper.props()).toEqual({});
-    expect(links).toHaveLength(7);
+    expect(links).toHaveLength(8);
     expect(links.map((link) => link.attributes("href"))).toEqual(routes);
-    expect(links.map((link) => link.text())).toEqual(enTitles);
+    expect(links.map((link) => link.get(".chat-case-title").text())).toEqual(
+      enTitles
+    );
   });
 
   it("uses Chinese page titles without leaking English registry names", () => {
@@ -118,12 +126,14 @@ describe("ChatCases", () => {
     const links = wrapper.findAll('[data-testid="chat-case-link"]');
 
     expect(wrapper.get("h2").text()).toBe("智能体案例");
-    expect(links.map((link) => link.text())).toEqual(zhTitles);
+    expect(links.map((link) => link.get(".chat-case-title").text())).toEqual(
+      zhTitles
+    );
     expect(wrapper.text()).not.toContain("Knowledge Agent");
     expect(wrapper.text()).not.toContain("Deep Genome Agent");
   });
 
-  it("maps every fixed case to its approved decorative image", () => {
+  it("maps every fixed case to approved decorative media", () => {
     const wrapper = mountCases("en-US");
     const images = wrapper.findAll(".chat-case-icon img");
 
@@ -133,6 +143,11 @@ describe("ChatCases", () => {
       expect(image.attributes("alt")).toBe("");
       expect(image.attributes("loading")).toBe("eager");
     }
+
+    const monograms = wrapper.findAll(".chat-case-monogram");
+    expect(monograms).toHaveLength(1);
+    expect(monograms[0].text()).toBe("BG");
+    expect(monograms[0].attributes("aria-hidden")).toBe("true");
   });
 
   it("keeps byte-identical copies of the approved legacy icons", () => {

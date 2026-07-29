@@ -117,6 +117,19 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     sourceMarkers: ["AgentDemoShell"],
   },
   {
+    path: "/review-agent",
+    component: "views/review-agent/ReviewAgentView.vue",
+    productLayout: "demo",
+    migrationTask: "agent demo shell",
+    behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
+    sourceMarkers: [
+      "AgentDemoShell",
+      'ns="review"',
+      "CitedAnswer",
+      "router.back",
+    ],
+  },
+  {
     path: "/brief-gene-agent",
     component: "views/brief-gene-agent/BriefGeneAgentView.vue",
     productLayout: "demo",
@@ -320,6 +333,7 @@ const STATIC_AGENT_DEMO_PATHS = [
   "/knowledge-agent",
   "/data-agent",
   "/analyst-agent",
+  "/review-agent",
   "/brief-gene-agent",
   "/cases/gene-network-agent",
   "/deep-genome-agent",
@@ -385,6 +399,7 @@ const ROUTE_OWNERSHIP_CONTRACTS = [
       "/knowledge-agent",
       "/data-agent",
       "/analyst-agent",
+      "/review-agent",
       "/brief-gene-agent",
       "/cases/gene-network-agent",
       "/deep-genome-agent",
@@ -451,7 +466,7 @@ describe("routed visual archetypes", () => {
     const actualPaths = activeLeafRoutes.map((route) => route.path).sort();
     const contractPaths = ROUTE_CONTRACTS.map((route) => route.path).sort();
 
-    expect(contractPaths).toHaveLength(33);
+    expect(contractPaths).toHaveLength(34);
     expect(new Set(contractPaths).size).toBe(contractPaths.length);
     expect(actualPaths).toEqual(contractPaths);
   });

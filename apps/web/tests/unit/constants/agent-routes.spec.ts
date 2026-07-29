@@ -7,17 +7,18 @@ import {
 } from "@/constants/agents";
 
 describe("CANONICAL_AGENT_ROUTES registry lock", () => {
-  it("has exactly the seven approved tool→route pairs byte-for-byte", () => {
+  it("has exactly the eight approved tool→route pairs byte-for-byte", () => {
     expect(CANONICAL_AGENT_ROUTES).toEqual({
       KnowledgeAgent: "/knowledge-agent",
       DataAgent: "/data-agent",
       AnalystAgent: "/analyst-agent",
+      ReviewAgent: "/review-agent",
       BriefGeneAgent: "/brief-gene-agent",
       GeneNetworkAgent: "/gene-network-agent",
       DeepGenomeAgent: "/deep-genome-agent",
       DigitalDesignAgent: "/digital-design-agent",
     });
-    expect(Object.keys(CANONICAL_AGENT_ROUTES)).toHaveLength(7);
+    expect(Object.keys(CANONICAL_AGENT_ROUTES)).toHaveLength(8);
   });
 
   it("resolves every route value to an active router record", () => {
@@ -27,13 +28,14 @@ describe("CANONICAL_AGENT_ROUTES registry lock", () => {
     }
   });
 
-  it("derives seven sidebar route options from the registry", () => {
+  it("derives eight sidebar route options from the registry", () => {
     const options = deriveSidebarRouteOptions();
-    expect(options).toHaveLength(7);
+    expect(options).toHaveLength(8);
     expect(options.map((option) => option.toolName)).toEqual([
       "KnowledgeAgent",
       "DataAgent",
       "AnalystAgent",
+      "ReviewAgent",
       "GeneNetworkAgent",
       "BriefGeneAgent",
       "DeepGenomeAgent",
@@ -42,7 +44,7 @@ describe("CANONICAL_AGENT_ROUTES registry lock", () => {
     for (const option of options) {
       expect(option.route).toBe(CANONICAL_AGENT_ROUTES[option.toolName]);
       expect(option.name).toBeTruthy();
-      expect(option.img).toBeTruthy();
+      expect(option.media).toBeTruthy();
     }
   });
 
@@ -53,6 +55,7 @@ describe("CANONICAL_AGENT_ROUTES registry lock", () => {
       "KnowledgeAgent",
       "DataAgent",
       "AnalystAgent",
+      "ReviewAgent",
       "GeneNetworkAgent",
       "BriefGeneAgent",
       "DeepGenomeAgent",
@@ -62,10 +65,22 @@ describe("CANONICAL_AGENT_ROUTES registry lock", () => {
       "/knowledge-agent",
       "/data-agent",
       "/analyst-agent",
+      "/review-agent",
       "/cases/gene-network-agent",
       "/brief-gene-agent",
       "/deep-genome-agent",
       "/cases/digital-design-agent",
     ]);
+
+    const briefGene = caseOptions.find(
+      (option) => option.toolName === "BriefGeneAgent"
+    );
+    expect(briefGene?.media).toEqual({ kind: "monogram", text: "BG" });
+
+    for (const option of caseOptions.filter(
+      (item) => item.toolName !== "BriefGeneAgent"
+    )) {
+      expect(option.media.kind).toBe("image");
+    }
   });
 });

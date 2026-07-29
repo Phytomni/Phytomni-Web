@@ -468,9 +468,9 @@
     historyState === "error";
 
   if (state === "empty" && !historyRecoveryState) {
-    if (caseRegions.length !== 1 || caseLinks.length !== 7) {
+    if (caseRegions.length !== 1 || caseLinks.length !== 8) {
       reasons.push(
-        `empty state requires one Cases region with seven links; found regions=${caseRegions.length} links=${caseLinks.length}`
+        `empty state requires one Cases region with eight links; found regions=${caseRegions.length} links=${caseLinks.length}`
       );
     }
     const expectedQuickSelectCount =

@@ -15,13 +15,16 @@ vi.mock("vue-element-plus-x", () => ({
 
 import KnowledgeAgent from "@/views/knowledge-agent/KnowledgeAgentView.vue";
 import BriefGeneAgent from "@/views/brief-gene-agent/BriefGeneAgentView.vue";
+import ReviewAgent from "@/views/review-agent/ReviewAgentView.vue";
 
 const AGENT_DEMO_SHELL_SOURCE = readFileSync(
   resolve(__dirname, "../../../src/components/demo/AgentDemoShell.vue"),
   "utf8"
 );
 
-function mountDemo(component: typeof KnowledgeAgent | typeof BriefGeneAgent) {
+function mountDemo(
+  component: typeof KnowledgeAgent | typeof BriefGeneAgent | typeof ReviewAgent
+) {
   return mountWithApp(component, {
     global: {
       stubs: {
@@ -64,6 +67,7 @@ describe("cited agent demonstrations", () => {
 
   it.each([
     [KnowledgeAgent, "kb", "20", "epigenetic modifications"],
+    [ReviewAgent, "review", "17", "single-cell RNA sequencing"],
     [BriefGeneAgent, "bg", "17", "single-cell RNA sequencing"],
   ])(
     "keeps the %s cited report in the shared static shell",

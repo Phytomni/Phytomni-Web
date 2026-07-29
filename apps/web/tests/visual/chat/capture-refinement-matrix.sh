@@ -47,7 +47,7 @@ open_fixture() {
     agent-browser --session "${SESSION}" wait --fn \
         "document.querySelector('[data-testid=chat-visual-root]')?.dataset.fixtureReady === 'true'"
     agent-browser --session "${SESSION}" wait --fn \
-        "[...document.querySelectorAll('.chat-case-icon img')].length === 7 && [...document.querySelectorAll('.chat-case-icon img')].every((img) => img.complete && img.naturalWidth === 660)"
+        "document.querySelectorAll('[data-testid=\"chat-case-link\"]').length === 8 && document.querySelectorAll('.chat-case-monogram').length === 1 && [...document.querySelectorAll('.chat-case-icon img')].length === 7 && [...document.querySelectorAll('.chat-case-icon img')].every((img) => img.complete && img.naturalWidth === 660)"
 }
 
 for viewport in "${viewports[@]}"; do

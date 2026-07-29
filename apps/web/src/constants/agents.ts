@@ -99,6 +99,7 @@ export const CANONICAL_AGENT_PAGE_TITLE_KEYS: Partial<
 > = {
   KnowledgeAgent: "agents.knowledge.title",
   DataAgent: "agents.data.title",
+  ReviewAgent: "agents.review.title",
   BriefGeneAgent: "agents.briefGene.title",
   AnalystAgent: "agents.analyst.title",
   DeepGenomeAgent: "agents.deepGenome.title",
@@ -110,6 +111,7 @@ export const CANONICAL_AGENT_ROUTES = {
   KnowledgeAgent: "/knowledge-agent",
   DataAgent: "/data-agent",
   AnalystAgent: "/analyst-agent",
+  ReviewAgent: "/review-agent",
   BriefGeneAgent: "/brief-gene-agent",
   GeneNetworkAgent: "/gene-network-agent",
   DeepGenomeAgent: "/deep-genome-agent",
@@ -127,6 +129,7 @@ export const CANONICAL_AGENT_CASE_ROUTES: Record<RoutedAgentTool, string> = {
   KnowledgeAgent: "/knowledge-agent",
   DataAgent: "/data-agent",
   AnalystAgent: "/analyst-agent",
+  ReviewAgent: "/review-agent",
   BriefGeneAgent: "/brief-gene-agent",
   GeneNetworkAgent: "/cases/gene-network-agent",
   DeepGenomeAgent: "/deep-genome-agent",
@@ -223,13 +226,17 @@ export function derivePickerOptions(
   }));
 }
 
+export type AgentCaseMedia =
+  | Readonly<{ kind: "image"; src: string }>
+  | Readonly<{ kind: "monogram"; text: string }>;
+
 export type SidebarRouteOption = {
   id: number;
   name: string;
   toolName: RoutedAgentTool;
   icon: string;
   route: string;
-  img: string;
+  media: AgentCaseMedia;
 };
 
 function isRoutedAgentTool(tool: CanonicalAgentTool): tool is RoutedAgentTool {
@@ -238,42 +245,47 @@ function isRoutedAgentTool(tool: CanonicalAgentTool): tool is RoutedAgentTool {
 
 const SIDEBAR_ROUTE_META: Record<
   RoutedAgentTool,
-  { id: number; icon: string; img: string }
+  { id: number; icon: string; media: AgentCaseMedia }
 > = {
   KnowledgeAgent: {
     id: 2,
     icon: "Search",
-    img: "/agent-icons/KnowledgeAgent.jpg",
+    media: { kind: "image", src: "/agent-icons/KnowledgeAgent.jpg" },
   },
   DataAgent: {
     id: 3,
     icon: "DataLine",
-    img: "/agent-icons/DataAgent.jpg",
+    media: { kind: "image", src: "/agent-icons/DataAgent.jpg" },
   },
   AnalystAgent: {
     id: 4,
     icon: "Edit",
-    img: "/agent-icons/AnalystAgent.jpg",
+    media: { kind: "image", src: "/agent-icons/AnalystAgent.jpg" },
+  },
+  ReviewAgent: {
+    id: 9,
+    icon: "Edit",
+    media: { kind: "image", src: "/agent-icons/ReviewAgent.jpg" },
   },
   BriefGeneAgent: {
     id: 5,
     icon: "Edit",
-    img: "/agent-icons/BriefReviewAgent.jpg",
+    media: { kind: "monogram", text: "BG" },
   },
   GeneNetworkAgent: {
     id: 6,
     icon: "Edit",
-    img: "/agent-icons/GeneNetworkAgent.jpg",
+    media: { kind: "image", src: "/agent-icons/GeneNetworkAgent.jpg" },
   },
   DeepGenomeAgent: {
     id: 7,
     icon: "Edit",
-    img: "/agent-icons/DeepGenomeAgent.jpg",
+    media: { kind: "image", src: "/agent-icons/DeepGenomeAgent.jpg" },
   },
   DigitalDesignAgent: {
     id: 8,
     icon: "Edit",
-    img: "/agent-icons/DigitalDesignAgent.jpg",
+    media: { kind: "image", src: "/agent-icons/DigitalDesignAgent.jpg" },
   },
 };
 
@@ -285,7 +297,7 @@ export function deriveSidebarRouteOptions(): SidebarRouteOption[] {
       toolName,
       icon: SIDEBAR_ROUTE_META[toolName].icon,
       route: CANONICAL_AGENT_ROUTES[toolName],
-      img: SIDEBAR_ROUTE_META[toolName].img,
+      media: SIDEBAR_ROUTE_META[toolName].media,
     })
   );
 }

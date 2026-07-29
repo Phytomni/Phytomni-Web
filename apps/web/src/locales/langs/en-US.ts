@@ -460,7 +460,6 @@ export default {
       reviewAgentAlt: "Review Agent workflow flowchart",
       inSilicoResearchAgentAlt: "In Silico Research Agent workflow flowchart",
       geneNetworkAgentAlt: "Gene Network Agent workflow flowchart",
-      briefGeneAgentAlt: "Brief Gene Agent workflow flowchart",
       deepGenomeAgentAlt: "Deep Genome Agent workflow flowchart",
       digitalDesignAgentAlt: "Digital Design Agent workflow flowchart",
     },
@@ -743,6 +742,11 @@ export default {
         cdsLength: "Sample output — CDS length",
         homologs: "Sample output — homologous genes",
       },
+    },
+    review: {
+      title: "Review Agent",
+      subtitle:
+        "Review Agent - Provides structured literature reviews for plant research topics",
     },
     briefGene: {
       title: "Brief Gene Agent",

@@ -1,7 +1,7 @@
 <template>
   <AgentDemoShell
-    :title="$t('agents.briefGene.title')"
-    :subtitle="$t('agents.briefGene.subtitle')"
+    :title="$t('agents.review.title')"
+    :subtitle="$t('agents.review.subtitle')"
     @back="goBack"
   >
     <template #question>{{ REVIEW_CASE.question }}</template>
@@ -9,11 +9,10 @@
       <CitedAnswer
         :content="REVIEW_CASE.content"
         :references="REVIEW_CASE.references"
-        ns="bg"
+        ns="review"
         surface="artifact"
       />
     </template>
-
     <template #footer>{{ $t("common.Tip") }}</template>
   </AgentDemoShell>
 </template>
@@ -22,7 +21,7 @@
 import { useRouter } from "vue-router";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import AgentDemoShell from "@/components/demo/AgentDemoShell.vue";
-import { REVIEW_CASE } from "../review-agent/review-case";
+import { REVIEW_CASE } from "./review-case";
 
 const router = useRouter();
 const goBack = () => {

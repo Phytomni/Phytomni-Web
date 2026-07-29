@@ -32,6 +32,13 @@ const DEMO_CONTRACTS: DemoContract[] = [
     boundedContent: "agent-demo-result",
   },
   {
+    path: "/review-agent",
+    source: "views/review-agent/ReviewAgentView.vue",
+    required: ["AgentDemoShell", 'ns="review"', "CitedAnswer", "router.back"],
+    shell: "agent-demo",
+    boundedContent: "agent-demo-result",
+  },
+  {
     path: "/data-agent",
     source: "views/data-agent/DataAgentView.vue",
     required: [
@@ -151,6 +158,7 @@ describe("routed agent demonstration inventory", () => {
     expect(DEMO_CONTRACTS.map((contract) => contract.path)).toEqual([
       "/knowledge-agent",
       "/brief-gene-agent",
+      "/review-agent",
       "/data-agent",
       "/analyst-agent",
       "/cases/gene-network-agent",
@@ -202,6 +210,7 @@ describe("routed agent demonstration inventory", () => {
     expect(staticContracts.map((contract) => contract.path)).toEqual([
       "/knowledge-agent",
       "/brief-gene-agent",
+      "/review-agent",
       "/data-agent",
       "/analyst-agent",
       "/cases/gene-network-agent",

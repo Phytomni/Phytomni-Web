@@ -14,7 +14,16 @@
         data-testid="chat-case-link"
       >
         <span class="chat-case-icon" aria-hidden="true">
-          <img :src="item.img" alt="" loading="eager" decoding="async" />
+          <img
+            v-if="item.media.kind === 'image'"
+            :src="item.media.src"
+            alt=""
+            loading="eager"
+            decoding="async"
+          />
+          <span v-else class="chat-case-monogram" aria-hidden="true">
+            {{ item.media.text }}
+          </span>
         </span>
         <span class="chat-case-title">{{ item.title }}</span>
       </RouterLink>
@@ -115,6 +124,19 @@ const caseOptions = computed(() =>
   object-fit: cover;
 }
 
+.chat-case-monogram {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--phy-color-action-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
 .chat-case-title {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -141,18 +163,6 @@ const caseOptions = computed(() =>
     white-space: nowrap;
     font-size: 0.75rem;
     line-height: 1.25;
-  }
-}
-
-@media (min-width: 1360px) {
-  .chat-cases-grid {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: var(--phy-space-4);
-  }
-
-  .chat-case-title {
-    overflow-wrap: anywhere;
-    white-space: normal;
   }
 }
 

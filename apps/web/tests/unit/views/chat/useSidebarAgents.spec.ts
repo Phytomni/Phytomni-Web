@@ -16,14 +16,15 @@ describe("sidebar agent route options", () => {
     expect(SIDEBAR_SOURCE).toContain(':can-explore-agents="true"');
   });
 
-  it("derives seven formal Case routes from the canonical registry", () => {
+  it("derives eight formal Case routes from the canonical registry", () => {
     const options = deriveCaseRouteOptions();
 
-    expect(options).toHaveLength(7);
+    expect(options).toHaveLength(8);
     expect(options.map((option) => option.toolName)).toEqual([
       "KnowledgeAgent",
       "DataAgent",
       "AnalystAgent",
+      "ReviewAgent",
       "GeneNetworkAgent",
       "BriefGeneAgent",
       "DeepGenomeAgent",
@@ -32,7 +33,7 @@ describe("sidebar agent route options", () => {
     for (const option of options) {
       expect(option.route).toBe(CANONICAL_AGENT_CASE_ROUTES[option.toolName]);
       expect(option.name).toBeTruthy();
-      expect(option.img).toBeTruthy();
+      expect(option.media).toBeTruthy();
     }
     expect(
       options.find((option) => option.toolName === "GeneNetworkAgent")?.route
@@ -40,6 +41,17 @@ describe("sidebar agent route options", () => {
     expect(
       options.find((option) => option.toolName === "DigitalDesignAgent")?.route
     ).toBe("/cases/digital-design-agent");
+
+    const briefGene = options.find(
+      (option) => option.toolName === "BriefGeneAgent"
+    );
+    expect(briefGene?.media).toEqual({ kind: "monogram", text: "BG" });
+
+    for (const option of options.filter(
+      (item) => item.toolName !== "BriefGeneAgent"
+    )) {
+      expect(option.media.kind).toBe("image");
+    }
   });
 
   it("keeps list visibility and navigation reset in the active sidebar", () => {

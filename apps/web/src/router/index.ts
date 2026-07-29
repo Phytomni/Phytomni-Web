@@ -197,6 +197,12 @@ export const constantRoutes = [
         meta: { title: "Analyst Agent", layout: "nolayout" },
       },
       {
+        path: "/review-agent",
+        name: "reviewAgent",
+        component: () => import("@/views/review-agent/ReviewAgentView.vue"),
+        meta: { title: "Review Agent", layout: "nolayout" },
+      },
+      {
         path: "/brief-gene-agent",
         name: "briefGeneAgent",
         component: () =>

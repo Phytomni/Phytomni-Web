@@ -191,9 +191,9 @@ async function runGeometryHarness(
     options.lastMessageRect ?? rect(360, 620, Math.min(width - 40, 1080), 700)
   );
   const casesRegion = makeElement(rect(240, 560, width - 24, 840));
-  const caseLinks = Array.from({ length: 7 }, (_value, index) =>
+  const caseLinks = Array.from({ length: 8 }, (_value, index) =>
     makeElement(
-      index === 6
+      index === 7
         ? (options.lastCaseRect ?? rect(280, 720, width - 40, 800))
         : rect(280, 560 + index * 20, width - 40, 600 + index * 20)
     )
@@ -1273,11 +1273,11 @@ describe("Chat visual fixture rendering (no network)", () => {
     wrapper.unmount();
   });
 
-  it("renders all seven Cases in both empty fixture positions", async () => {
+  it("renders all eight Cases in both empty fixture positions", async () => {
     for (const key of ["empty", "empty-cases"] as const) {
       const wrapper = mountFixtureApp(getChatVisualFixture(key));
       await flushPromises();
-      expect(wrapper.findAll('[data-testid="chat-case-link"]')).toHaveLength(7);
+      expect(wrapper.findAll('[data-testid="chat-case-link"]')).toHaveLength(8);
       expect(
         wrapper.get('[data-testid="chat-content-stack"]').classes()
       ).toContain("is-empty");
