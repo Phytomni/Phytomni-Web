@@ -389,14 +389,6 @@ func applyClientTurnLookup(
 	return query.Order("id DESC").Limit(recentClientTurnLookupLimit)
 }
 
-func findRecentClientTurn(
-	ctx context.Context,
-	username string,
-	clientTurnID string,
-) (*model.QuestionAgentLog, *persistedConversationContext, error) {
-	return findRecentClientTurnWithDB(ctx, model.DB(ctx), username, clientTurnID)
-}
-
 func findRecentClientTurnWithDB(
 	ctx context.Context,
 	gdb *gorm.DB,
@@ -460,14 +452,6 @@ func validateDuplicateSubmission(
 		return ErrDuplicateClientTurn
 	}
 	return nil
-}
-
-func (ps *Service) queryDataFromStoredRow(
-	ctx context.Context,
-	username string,
-	row model.QuestionAgentLog,
-) (*QueryData, error) {
-	return ps.queryDataFromStoredRowWithDB(ctx, model.DB(ctx), username, row)
 }
 
 func (ps *Service) queryDataFromStoredRowWithDB(
