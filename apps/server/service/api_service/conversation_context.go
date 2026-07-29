@@ -50,15 +50,18 @@ const (
 // stored alongside the public Bot projection. It is deliberately absent from
 // BotRunProjection so response metadata cannot leak through public APIs.
 type persistedConversationContext struct {
-	ClientTurnID         string                            `json:"client_turn_id,omitempty"`
-	Stage                *rxBot.ContextStageMetadata       `json:"stage,omitempty"`
-	SettlementState      string                            `json:"settlement_state,omitempty"`
-	SettlementLedgerHash string                            `json:"settlement_ledger_hash,omitempty"`
-	RebuildLedgerVersion string                            `json:"rebuild_ledger_version,omitempty"`
-	RebuildLedgerCursor  int64                             `json:"rebuild_ledger_cursor,omitempty"`
-	AssistantSummary     string                            `json:"assistant_summary,omitempty"`
-	ArtifactRefs         []rxBot.ArtifactRefV1             `json:"artifact_refs,omitempty"`
-	Replacement          *persistedConversationReplacement `json:"replacement,omitempty"`
+	ClientTurnID         string                      `json:"client_turn_id,omitempty"`
+	Stage                *rxBot.ContextStageMetadata `json:"stage,omitempty"`
+	SettlementState      string                      `json:"settlement_state,omitempty"`
+	SettlementLedgerHash string                      `json:"settlement_ledger_hash,omitempty"`
+	RebuildLedgerVersion string                      `json:"rebuild_ledger_version,omitempty"`
+	RebuildLedgerCursor  int64                       `json:"rebuild_ledger_cursor,omitempty"`
+	// AssistantSummary is reserved for a future typed Bot-owned metadata
+	// summary. V1 settlement currently leaves it empty so display output never
+	// becomes replayable conversation context.
+	AssistantSummary string                            `json:"assistant_summary,omitempty"`
+	ArtifactRefs     []rxBot.ArtifactRefV1             `json:"artifact_refs,omitempty"`
+	Replacement      *persistedConversationReplacement `json:"replacement,omitempty"`
 }
 
 type persistedConversationReplacement struct {
@@ -247,15 +250,11 @@ func (value *persistedConversationContext) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func boundedAssistantSummary(value string) string {
-	if len([]byte(value)) <= maxPersistedAssistantSummaryBytes {
-		return value
-	}
-	for len(value) > 0 && len([]byte(value)) > maxPersistedAssistantSummaryBytes {
-		_, size := utf8.DecodeLastRuneInString(value)
-		value = value[:len(value)-size]
-	}
-	return value
+// v1AssistantSummary is the V1 context boundary. Answer/report/table prose is
+// display output only; until Bot provides a typed metadata-only summary, V1
+// persists no assistant summary while retaining stage and artifact metadata.
+func v1AssistantSummary(_ *rxBot.ContextStageMetadata) string {
+	return ""
 }
 
 func settleBlockingConversationContext(

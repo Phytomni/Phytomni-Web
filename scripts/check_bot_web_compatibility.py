@@ -123,6 +123,7 @@ DEFAULT_OFF_FLAGS = (
     "expert_enabled",
     "stream_enabled",
     "a2ui_actions_enabled",
+    "multiturn_v1_enabled",
 )
 
 PASS_LINE = "Bot/Web compatibility contract: PASS"

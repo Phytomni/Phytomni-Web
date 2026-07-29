@@ -9,9 +9,88 @@ import (
 	"strings"
 	"testing"
 
+	"gorm.io/gorm"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
 )
+
+const (
+	v1ConversationArtifactID   = "entity-artifact-1"
+	v1ConversationOutputMarker = "answer-prose-marker|report-prose-marker|table-prose-marker|full-output-marker"
+)
+
+func seedV1ConversationRoot(t *testing.T, gdb *gorm.DB, username, dialogueID string) {
+	t.Helper()
+	stage := validContextStageMetadata()
+	stage.TurnID = "1"
+	stage.BaseBusinessContextVersion = 0
+	stage.ProposedBusinessContextVersion = 1
+	stage.LastAppliedLedgerCursor = 1
+	private := persistedConversationContext{
+		Stage:           stage,
+		SettlementState: conversationSettlementAcked,
+		ArtifactRefs: []rxBot.ArtifactRefV1{{
+			ArtifactID:  v1ConversationArtifactID,
+			DisplayName: "entity-results.csv",
+		}},
+	}
+	raw, err := marshalPersistedProjectionWithContext(
+		BotRunProjection{ReportRevision: -1},
+		&private,
+	)
+	if err != nil {
+		t.Fatalf("marshal V1 root context: %v", err)
+	}
+	if err := gdb.Create(&model.QuestionAgentLog{
+		Id:                1,
+		DialogueId:        dialogueID,
+		UserName:          username,
+		Query:             "Name the focus entity.",
+		Answer:            "visible root answer",
+		ToolName:          "ChatAgent",
+		Status:            statusSucceeded,
+		Mode:              "instant",
+		BotProjectionJSON: raw,
+		BotReportRevision: -1,
+	}).Error; err != nil {
+		t.Fatalf("persist V1 root context: %v", err)
+	}
+}
+
+func assertV1ContextDoesNotReplayOutput(
+	t *testing.T,
+	username string,
+	rowID int64,
+	outputMarker string,
+) {
+	t.Helper()
+	private, err := LoadBotConversationContext(context.Background(), username, rowID)
+	if err != nil {
+		t.Fatalf("load settled V1 context: %v", err)
+	}
+	if private.AssistantSummary != "" {
+		t.Fatalf("V1 assistant summary contains display output: %q", private.AssistantSummary)
+	}
+	if private.Stage == nil || private.Stage.SelectedAgentID != "ChatAgent" {
+		t.Fatalf("V1 staged metadata was not retained: %#v", private.Stage)
+	}
+	if len(private.ArtifactRefs) != 1 || private.ArtifactRefs[0].ArtifactID != v1ConversationArtifactID {
+		t.Fatalf("V1 artifact metadata was not retained: %#v", private.ArtifactRefs)
+	}
+	var row model.QuestionAgentLog
+	if err := model.DB(context.Background()).Where("id = ? AND user_name = ?", rowID, username).First(&row).Error; err != nil {
+		t.Fatalf("load settled V1 row: %v", err)
+	}
+	ledger, err := BuildConversationLedger(context.Background(), username, row.DialogueId)
+	if err != nil {
+		t.Fatalf("build settled V1 ledger: %v", err)
+	}
+	for _, entry := range ledger.HistoryBefore(rowID + 1) {
+		if entry.Role == "assistant" || strings.Contains(entry.Content, outputMarker) || strings.Contains(entry.Summary, outputMarker) {
+			t.Fatalf("display output entered replay history: %#v", entry)
+		}
+	}
+}
 
 // TestSlugRoutingDecision pins the chat-vs-remote dispatch decision and the
 // empty-tool default, which drive which Bot endpoint Query calls.
@@ -160,8 +239,8 @@ func TestQueryBlockingContextSettlementPersistsBeforeAcknowledgment(t *testing.T
 	if second.Id != first.Id || chatCalls != 1 || settleCalls != 1 {
 		t.Fatalf("duplicate result=%#v calls chat=%d settle=%d", second, chatCalls, settleCalls)
 	}
-	if strings.Contains(private.AssistantSummary, "browser poison") {
-		t.Fatalf("browser history entered private summary: %q", private.AssistantSummary)
+	if private.AssistantSummary != "" {
+		t.Fatalf("V1 persisted display output as assistant summary: %q", private.AssistantSummary)
 	}
 }
 
@@ -261,8 +340,9 @@ func TestQueryAckPendingFinalizesBeforeNextEnvelope(t *testing.T) {
 				if request.Conversation.BaseBusinessContextVersion != 1 {
 					t.Errorf("second base context version=%d, want 1", request.Conversation.BaseBusinessContextVersion)
 				}
-				if len(request.Conversation.HistoryDelta) != 2 ||
-					request.Conversation.HistoryDelta[1].Summary != "first answer" {
+				if len(request.Conversation.HistoryDelta) != 1 ||
+					request.Conversation.HistoryDelta[0].Role != "user" ||
+					request.Conversation.HistoryDelta[0].Content != "first" {
 					t.Errorf("second history=%#v", request.Conversation.HistoryDelta)
 				}
 			}
@@ -824,4 +904,105 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 		private.Stage.ProposedBusinessContextVersion != 1 {
 		t.Fatalf("failed refresh changed accepted state: row=%#v private=%#v", stored, private)
 	}
+}
+
+func TestConversationContextIntegrationBlockingSettlementRedactsOutput(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	username := "alice"
+	dialogueID := "55555555-5555-4555-8555-555555555555"
+	seedV1ConversationRoot(t, gdb, username, dialogueID)
+	var chatCalls, settleCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			chatCalls++
+			var request rxBot.ChatCompletionRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode blocking V1 request: %v", err)
+				return
+			}
+			if request.Conversation == nil || len(request.Conversation.ArtifactRefs) != 1 ||
+				request.Conversation.ArtifactRefs[0].ArtifactID != v1ConversationArtifactID {
+				t.Errorf("blocking V1 request lost artifact metadata: %#v", request.Conversation)
+				return
+			}
+			stage := rxBot.ContextStageMetadata{
+				SchemaVersion:                  1,
+				TurnID:                         request.Conversation.TurnID,
+				SelectedAgentID:                "ChatAgent",
+				RouteSource:                    "instant_lock",
+				RouteReasonCode:                "INSTANT_LOCK",
+				BaseBusinessContextVersion:     request.Conversation.BaseBusinessContextVersion,
+				ProposedBusinessContextVersion: request.Conversation.BaseBusinessContextVersion + 1,
+				LastAppliedLedgerCursor:        request.Conversation.LedgerCursor,
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":     "blocking-redaction",
+				"object": "chat.completion",
+				"status": "succeeded",
+				"choices": []map[string]interface{}{{
+					"message": map[string]string{
+						"role":    "assistant",
+						"content": v1ConversationOutputMarker,
+					},
+				}},
+				"formatted": map[string]interface{}{
+					"answer": v1ConversationOutputMarker,
+					"tabular": map[string]interface{}{
+						"headers": []string{"value"},
+						"rows":    [][]string{{v1ConversationOutputMarker}},
+					},
+				},
+				"conversation_context": stage,
+			})
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			var request rxBot.ContextSettlementRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode blocking V1 settlement: %v", err)
+				return
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.Where("id = ?", request.TurnID).First(&row).Error; err != nil {
+				t.Errorf("load blocking row before acknowledgment: %v", err)
+				return
+			}
+			private, err := LoadBotConversationContext(context.Background(), username, row.Id)
+			if err != nil {
+				t.Errorf("load blocking context before acknowledgment: %v", err)
+				return
+			}
+			if row.Answer != v1ConversationOutputMarker || private.AssistantSummary != "" ||
+				private.Stage == nil || len(private.ArtifactRefs) != 1 {
+				t.Errorf("blocking settlement retained unsafe context: row=%#v private=%#v", row, private)
+			}
+			_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+				SchemaVersion: 1, State: "committed", ContextVersion: 2,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	out, err := NewService().Query(context.Background(), username, QueryInput{
+		Query:        "Continue with the focus entity.",
+		Id:           1,
+		Mode:         "instant",
+		ClientTurnID: "blocking-redaction-2",
+		ArtifactIDs:  []string{v1ConversationArtifactID},
+	})
+	if err != nil || out == nil || out.Status != statusSucceeded || out.Answer != v1ConversationOutputMarker {
+		t.Fatalf("blocking V1 result=%#v error=%v", out, err)
+	}
+	if chatCalls != 1 || settleCalls != 1 {
+		t.Fatalf("blocking V1 calls chat=%d settle=%d, want 1/1", chatCalls, settleCalls)
+	}
+	assertV1ContextDoesNotReplayOutput(t, username, out.Id, v1ConversationOutputMarker)
 }

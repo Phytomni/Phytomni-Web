@@ -244,6 +244,26 @@ def test_default_off_gate_is_required(tmp_path: Path):
     assert any("default" in violation and "false" in violation for violation in violations)
 
 
+def test_multiturn_v1_default_off_gate_rejects_enabled(tmp_path: Path):
+    root = tmp_path
+    manifest_path = root / checker.MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(json.dumps(release_manifest()), encoding="utf-8")
+
+    for name, relative in checker.SCOPED_FILES.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        source = (checker.ROOT / relative).read_text(encoding="utf-8")
+        if name == "feature_config":
+            source = source.replace(
+                "multiturn_v1_enabled: false", "multiturn_v1_enabled: true"
+            )
+        path.write_text(source, encoding="utf-8")
+
+    violations = checker.check(root)
+    assert any("multiturn_v1_enabled" in violation for violation in violations)
+
+
 def test_current_go_alias_and_query_maps_are_checked(tmp_path: Path):
     root = tmp_path
     manifest_path = root / checker.MANIFEST_REL

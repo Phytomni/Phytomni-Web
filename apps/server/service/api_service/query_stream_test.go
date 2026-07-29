@@ -201,7 +201,7 @@ func TestQueryStreamContextSettlementPersistsBeforeAcknowledgment(t *testing.T) 
 		t.Fatal(err)
 	}
 	if private.SettlementState != conversationSettlementAcked ||
-		private.AssistantSummary != "settled stream answer" {
+		private.AssistantSummary != "" {
 		t.Fatalf("settled private context = %#v", private)
 	}
 	if chatCalls != 1 || settleCalls != 1 {
@@ -1338,4 +1338,81 @@ func TestQueryStream_RunErrorPersistsFailed(t *testing.T) {
 	if status != "FAILED" {
 		t.Fatalf("persisted status = %q, want FAILED (RunError must not persist SUCCEEDED)", status)
 	}
+}
+
+func TestConversationContextIntegrationStreamingSettlementRedactsOutput(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	username := "alice"
+	dialogueID := "66666666-6666-4666-8666-666666666666"
+	seedV1ConversationRoot(t, gdb, username, dialogueID)
+	var chatCalls, settleCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			chatCalls++
+			var request rxBot.ChatCompletionRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode streaming V1 request: %v", err)
+				return
+			}
+			if request.Conversation == nil || len(request.Conversation.ArtifactRefs) != 1 ||
+				request.Conversation.ArtifactRefs[0].ArtifactID != v1ConversationArtifactID {
+				t.Errorf("streaming V1 request lost artifact metadata: %#v", request.Conversation)
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(v1ContextStream(
+				contextStageForStream(request),
+				v1ConversationOutputMarker,
+			)))
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			var request rxBot.ContextSettlementRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode streaming V1 settlement: %v", err)
+				return
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.Where("id = ?", request.TurnID).First(&row).Error; err != nil {
+				t.Errorf("load streaming row before acknowledgment: %v", err)
+				return
+			}
+			private, err := LoadBotConversationContext(context.Background(), username, row.Id)
+			if err != nil {
+				t.Errorf("load streaming context before acknowledgment: %v", err)
+				return
+			}
+			if row.Answer != v1ConversationOutputMarker || private.AssistantSummary != "" ||
+				private.Stage == nil || len(private.ArtifactRefs) != 1 {
+				t.Errorf("streaming settlement retained unsafe context: row=%#v private=%#v", row, private)
+			}
+			_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+				SchemaVersion: 1, State: "committed", ContextVersion: 2,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	out, err := NewService().QueryStream(context.Background(), username, QueryInput{
+		Query:        "Continue the focus entity stream.",
+		Id:           1,
+		Mode:         "instant",
+		ClientTurnID: "stream-redaction-2",
+		ArtifactIDs:  []string{v1ConversationArtifactID},
+	}, nil, nil)
+	if err != nil || out == nil || out.Status != statusSucceeded || out.Answer != v1ConversationOutputMarker {
+		t.Fatalf("streaming V1 result=%#v error=%v", out, err)
+	}
+	if chatCalls != 1 || settleCalls != 1 {
+		t.Fatalf("streaming V1 calls chat=%d settle=%d, want 1/1", chatCalls, settleCalls)
+	}
+	assertV1ContextDoesNotReplayOutput(t, username, out.Id, v1ConversationOutputMarker)
 }

@@ -1670,7 +1670,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	var botRunID, serverID, taskID, logStatus string
 	var expertProjection *BotRunProjection
 	var contextStage *rxBot.ContextStageMetadata
-	var assistantSummary string
 	if in.Mode == "expert" {
 		var forcedTool *string
 		if in.Tool != "" {
@@ -1773,7 +1772,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// formatting survives and SyncBotRuns reconciles async runs by agent slug.
 		if botSubmission.Status == "SUCCEEDED" {
 			if resp.Result.Formatted != nil {
-				assistantSummary = resp.Result.Formatted.Answer
 				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
@@ -1862,12 +1860,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			// choices[0].message.content; source it there, then reshape per slug
 			// (knowledge/review become {content, doc_list}; chat stays plain).
 			if strings.EqualFold(strings.TrimSpace(resp.Status), "succeeded") && len(resp.Choices) == 0 && resp.Result.Formatted != nil {
-				assistantSummary = resp.Result.Formatted.Answer
 				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			} else {
-				assistantSummary = rxBot.ChatAnswerText(resp)
-				out.Answer = rxBot.ShapeAnswer(slug, assistantSummary, &resp.Formatted)
+				answerText := rxBot.ChatAnswerText(resp)
+				out.Answer = rxBot.ShapeAnswer(slug, answerText, &resp.Formatted)
 				out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
 			}
 		}
@@ -1989,7 +1986,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			ClientTurnID:     in.ClientTurnID,
 			Stage:            contextStage,
 			SettlementState:  settlementState,
-			AssistantSummary: boundedAssistantSummary(assistantSummary),
+			AssistantSummary: v1AssistantSummary(contextStage),
 			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
 		}
 		if submission.envelope.Operation == "rebuild" {
@@ -2806,7 +2803,7 @@ func (ps *Service) QueryStream(
 			ClientTurnID:     in.ClientTurnID,
 			Stage:            stage,
 			SettlementState:  settlementState,
-			AssistantSummary: boundedAssistantSummary(acc.AnswerText()),
+			AssistantSummary: v1AssistantSummary(stage),
 			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
 		}
 		if submission.envelope.Operation == "rebuild" {
