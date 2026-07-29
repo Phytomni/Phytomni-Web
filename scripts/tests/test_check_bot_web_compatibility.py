@@ -12,7 +12,7 @@ import pytest
 import check_bot_web_compatibility as checker
 
 
-RELEASE_SHA = "e0c296e6773f6638bac57a181bc727fd97c8a9fb"
+RELEASE_SHA = "7bb00c67155044d6cb83c44c7f8c426c8b968bbd"
 RELEASE_AGENTS = [
     "chat",
     "knowledge",
@@ -30,6 +30,7 @@ REQUIRED_FIXTURES = [
     "degraded_tracking",
     "deep_genome_revision",
     "review_input_required",
+    "conversation_context_v1",
 ]
 
 
@@ -45,7 +46,7 @@ def release_manifest() -> dict[str, object]:
 def test_manifest_has_release_pins_and_required_cases():
     manifest = {
         "schema_version": 1,
-        "bot_commit": "e0c296e6773f6638bac57a181bc727fd97c8a9fb",
+        "bot_commit": "7bb00c67155044d6cb83c44c7f8c426c8b968bbd",
         "required_agents": [
             "chat",
             "knowledge",
@@ -63,6 +64,7 @@ def test_manifest_has_release_pins_and_required_cases():
             "degraded_tracking",
             "deep_genome_revision",
             "review_input_required",
+            "conversation_context_v1",
         ],
     }
     assert checker.validate_manifest(manifest) == []
@@ -107,6 +109,27 @@ def test_current_checkout_passes_without_printing_fixture_payloads():
     assert output.getvalue().strip() == checker.PASS_LINE
     assert "Synthetic" not in output.getvalue()
     assert "secret" not in output.getvalue()
+
+
+def test_conversation_context_fixture_rejects_raw_context_fields(tmp_path: Path):
+    source = checker.ROOT / checker.FIXTURE_PATHS["conversation_context_v1"][0]
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["requests"]["expert_unforced_envelope"]["history_delta"][0][
+        "assistant_summary"
+    ] = "private"
+    fixture_path = tmp_path / checker.FIXTURE_PATHS["conversation_context_v1"][0]
+    fixture_path.parent.mkdir(parents=True)
+    fixture_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    violations: list[str] = []
+    checker._check_fixture(
+        tmp_path,
+        "conversation_context_v1",
+        checker.FIXTURE_PATHS["conversation_context_v1"][0],
+        violations,
+    )
+    assert any("conversation_context_v1" in violation for violation in violations)
+    assert all("private" not in violation for violation in violations)
 
 
 def test_default_off_gate_is_required(tmp_path: Path):

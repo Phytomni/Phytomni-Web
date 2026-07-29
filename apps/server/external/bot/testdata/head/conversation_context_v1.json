@@ -1,0 +1,155 @@
+{
+  "protocol_advertisement": {
+    "object": "list",
+    "protocols": {
+      "conversation_context": [1]
+    }
+  },
+  "redaction_contract": {
+    "bounded_context_fields": [
+      "active_entities",
+      "artifact_index",
+      "per_agent_memory",
+      "recent_turns",
+      "task_summary"
+    ],
+    "excluded_output_kinds": ["answer", "report", "table", "tabular"]
+  },
+  "requests": {
+    "instant_envelope": {
+      "schema_version": 1,
+      "conversation_key": "00000000-0000-0000-0000-000000000001",
+      "dialogue_id": "00000000-0000-0000-0000-000000000011",
+      "turn_id": "1",
+      "request_id": "request-opaque-1",
+      "operation": "append",
+      "mode": "instant",
+      "current_message": {
+        "content": "Describe the focus item.",
+        "locale": "en-US"
+      },
+      "requested_agent_id": null,
+      "allowed_agent_ids": ["ChatAgent"],
+      "ledger_cursor": 1,
+      "ledger_version": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "base_business_context_version": 0,
+      "history_delta": [],
+      "artifact_refs": []
+    },
+    "expert_unforced_envelope": {
+      "schema_version": 1,
+      "conversation_key": "00000000-0000-0000-0000-000000000002",
+      "dialogue_id": "00000000-0000-0000-0000-000000000012",
+      "turn_id": "2",
+      "request_id": "request-opaque-2",
+      "operation": "append",
+      "mode": "expert",
+      "current_message": {
+        "content": "Compare the focus item with the reference item.",
+        "locale": "en-US"
+      },
+      "requested_agent_id": null,
+      "allowed_agent_ids": [
+        "ChatAgent",
+        "KnowledgeAgent",
+        "DataAgent",
+        "AnalystAgent",
+        "ReviewAgent",
+        "BriefGeneAgent",
+        "DeepGenomeAgent",
+        "InSilicoResearchAgent",
+        "DigitalDesignAgent",
+        "GeneNetworkAgent"
+      ],
+      "ledger_cursor": 2,
+      "ledger_version": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      "base_business_context_version": 0,
+      "history_delta": [
+        {
+          "turn_id": "1",
+          "role": "user",
+          "content": "Describe the focus item."
+        },
+        {
+          "turn_id": "2",
+          "role": "user",
+          "content": "Compare the focus item with the reference item."
+        }
+      ],
+      "artifact_refs": [
+        {
+          "artifact_id": "artifact-opaque-1",
+          "display_name": "bounded artifact label"
+        }
+      ]
+    },
+    "expert_explicit_envelope": {
+      "schema_version": 1,
+      "conversation_key": "00000000-0000-0000-0000-000000000003",
+      "dialogue_id": "00000000-0000-0000-0000-000000000013",
+      "turn_id": "3",
+      "request_id": "request-opaque-3",
+      "operation": "append",
+      "mode": "expert",
+      "current_message": {
+        "content": "Find bounded evidence for the focus item.",
+        "locale": "en-US"
+      },
+      "requested_agent_id": "KnowledgeAgent",
+      "allowed_agent_ids": ["KnowledgeAgent", "ChatAgent"],
+      "ledger_cursor": 3,
+      "ledger_version": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "base_business_context_version": 0,
+      "history_delta": [],
+      "artifact_refs": []
+    },
+    "settlement_request": {
+      "schema_version": 1,
+      "conversation_key": "00000000-0000-0000-0000-000000000003",
+      "turn_id": "3",
+      "ledger_version": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    },
+    "tombstone_request": {
+      "schema_version": 1,
+      "conversation_key": "00000000-0000-0000-0000-000000000003"
+    }
+  },
+  "responses": {
+    "staged_metadata_response": {
+      "schema_version": 1,
+      "turn_id": "3",
+      "selected_agent_id": "KnowledgeAgent",
+      "route_source": "explicit_selection",
+      "route_reason_code": "EXPLICIT_SELECTION",
+      "base_business_context_version": 0,
+      "proposed_business_context_version": 1,
+      "last_applied_ledger_cursor": 3,
+      "context_truncated": false,
+      "context_rebuilt": true,
+      "context_degraded": false
+    },
+    "settlement_response": {
+      "schema_version": 1,
+      "state": "committed",
+      "context_version": 1
+    },
+    "tombstone_response": {
+      "schema_version": 1,
+      "state": "tombstoned",
+      "context_version": 1
+    },
+    "degraded_context_success": {
+      "schema_version": 1,
+      "turn_id": "4",
+      "selected_agent_id": "ChatAgent",
+      "route_source": "instant_lock",
+      "route_reason_code": "INSTANT_LOCK",
+      "base_business_context_version": 1,
+      "proposed_business_context_version": 2,
+      "last_applied_ledger_cursor": 4,
+      "context_truncated": false,
+      "context_rebuilt": false,
+      "context_degraded": true
+    }
+  }
+}

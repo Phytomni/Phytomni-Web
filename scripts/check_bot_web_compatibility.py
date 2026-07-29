@@ -20,7 +20,7 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_REL = Path("apps/web/tests/fixtures/bot-head/contract-manifest.json")
 
-RELEASE_BOT_COMMIT = "e0c296e6773f6638bac57a181bc727fd97c8a9fb"
+RELEASE_BOT_COMMIT = "7bb00c67155044d6cb83c44c7f8c426c8b968bbd"
 REQUIRED_AGENT_SLUGS = (
     "chat",
     "knowledge",
@@ -38,6 +38,7 @@ REQUIRED_FIXTURE_IDS = (
     "degraded_tracking",
     "deep_genome_revision",
     "review_input_required",
+    "conversation_context_v1",
 )
 
 # Keep this set intentionally small. These keys are provider/debug payload
@@ -47,6 +48,24 @@ FORBIDDEN_RAW_FIELDS = {
     "raw_payload",
     "traceback",
     "stack_trace",
+}
+
+CONVERSATION_CONTEXT_FORBIDDEN_FIELDS = FORBIDDEN_RAW_FIELDS | {
+    "answer",
+    "report",
+    "table",
+    "tabular",
+    "assistant_summary",
+    "full_answer",
+    "full_report",
+    "full_table",
+    "raw_path",
+    "path",
+    "url",
+    "token",
+    "credential",
+    "username",
+    "user_id",
 }
 
 SCOPED_FILES = {
@@ -72,6 +91,9 @@ FIXTURE_PATHS = {
     ),
     "review_input_required": (
         Path("apps/server/external/bot/testdata/head/review_input_required.json"),
+    ),
+    "conversation_context_v1": (
+        Path("apps/server/external/bot/testdata/head/conversation_context_v1.json"),
     ),
 }
 
@@ -337,6 +359,82 @@ def _check_fixture(root: Path, fixture_id: str, relative: Path, violations: list
         violations.append(
             f"fixture {fixture_id} contains raw payload field: {', '.join(forbidden)}"
         )
+    if fixture_id == "conversation_context_v1":
+        _check_conversation_context_fixture(payload, violations)
+
+
+def _check_conversation_context_fixture(
+    payload: dict[str, Any], violations: list[str]
+) -> None:
+    """Keep the V1 fixture to bounded metadata, never raw context/output."""
+
+    requests = payload.get("requests")
+    responses = payload.get("responses")
+    if not isinstance(requests, dict) or not isinstance(responses, dict):
+        violations.append("fixture conversation_context_v1 requires requests and responses objects")
+        return
+
+    request_names = (
+        "instant_envelope",
+        "expert_unforced_envelope",
+        "expert_explicit_envelope",
+    )
+    for name in request_names:
+        envelope = requests.get(name)
+        if not isinstance(envelope, dict):
+            violations.append(f"fixture conversation_context_v1 request {name} must be an object")
+            continue
+        history_delta = envelope.get("history_delta")
+        if not isinstance(history_delta, list):
+            violations.append(f"fixture conversation_context_v1 request {name} history_delta must be a list")
+        else:
+            for entry in history_delta:
+                if not isinstance(entry, dict):
+                    violations.append(f"fixture conversation_context_v1 request {name} history_delta entry must be an object")
+                    continue
+                forbidden = sorted(set(entry) & CONVERSATION_CONTEXT_FORBIDDEN_FIELDS)
+                if forbidden:
+                    violations.append(
+                        "fixture conversation_context_v1 history_delta contains raw output field"
+                    )
+        artifact_refs = envelope.get("artifact_refs")
+        if not isinstance(artifact_refs, list):
+            violations.append(f"fixture conversation_context_v1 request {name} artifact_refs must be a list")
+        else:
+            for ref in artifact_refs:
+                if not isinstance(ref, dict):
+                    violations.append(f"fixture conversation_context_v1 request {name} artifact_ref must be an object")
+                    continue
+                forbidden = sorted(set(ref) & CONVERSATION_CONTEXT_FORBIDDEN_FIELDS)
+                if forbidden:
+                    violations.append(
+                        "fixture conversation_context_v1 artifact_refs contains raw storage field"
+                    )
+
+    scoped_payload = {"requests": requests, "responses": responses}
+    forbidden = sorted(set(_iter_keys(scoped_payload)) & CONVERSATION_CONTEXT_FORBIDDEN_FIELDS)
+    if forbidden:
+        violations.append(
+            "fixture conversation_context_v1 contains raw context/output field"
+        )
+    serialized = json.dumps(scoped_payload, ensure_ascii=True).lower()
+    for marker in (
+        "http://",
+        "https://",
+        "@",
+        "password",
+        "username",
+        "signed",
+        "token",
+        "full answer",
+        "full report",
+        "full table",
+    ):
+        if marker in serialized:
+            violations.append("fixture conversation_context_v1 contains sensitive content")
+            break
+    if "/" in serialized or "\\" in serialized:
+        violations.append("fixture conversation_context_v1 contains a raw path")
 
 
 def _check_fixtures(root: Path, manifest: dict[str, Any] | None, violations: list[str]) -> None:

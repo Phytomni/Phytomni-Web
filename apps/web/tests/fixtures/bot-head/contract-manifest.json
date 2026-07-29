@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "bot_commit": "e0c296e6773f6638bac57a181bc727fd97c8a9fb",
+  "bot_commit": "7bb00c67155044d6cb83c44c7f8c426c8b968bbd",
   "required_agents": [
     "chat",
     "knowledge",
@@ -17,6 +17,7 @@
     "chat_completion_run_id",
     "degraded_tracking",
     "deep_genome_revision",
-    "review_input_required"
+    "review_input_required",
+    "conversation_context_v1"
   ]
 }
