@@ -537,14 +537,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		in.InteropTargets = append([]string(nil), interop.Targets...)
 	}
 
-	client := rxBot.NewClient()
+	uploadClient := rxBot.NewClient()
 
 	// 2. Upload attachments to Bot OBS; keep names/paths for the Web row and
 	//    the structured obs_file_list passed to capable chat models. This runs
 	//    only after required interop evidence and target authorization succeed.
 	var obsPaths, fileNames []string
 	for _, f := range in.Files {
-		up, err := client.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
+		up, err := uploadClient.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
 		if err != nil {
 			return nil, err
 		}
@@ -559,6 +559,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if err != nil {
 		return nil, err
 	}
+	executionClient := newExecutionBotClient(
+		rxBot.BotConfig,
+		in.Mode,
+		in.Tool,
+		slug,
+		permissions.AllowedTools,
+	)
 
 	// 4. Dispatch. Web Go never runs an LLM; it forwards free-form query text
 	//    (and structured obs_file_list to capable chat models).
@@ -593,7 +600,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			),
 			ForcedTool: forcedTool,
 		}
-		resp, meta, err := client.RouteQueryWithMeta(ctx, routeRequest)
+		resp, meta, err := executionClient.RouteQueryWithMeta(ctx, routeRequest)
 		logBotResponseMeta(ctx, meta)
 		if err != nil {
 			if isExpertEnvelopeDecodeError(err) {
@@ -664,7 +671,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			} else if len(resp.TaskIDs) > 0 {
 				taskID = resp.TaskIDs[0]
 			}
-			out.Answer = "Task created: " + taskID
+			if taskID != "" {
+				out.Answer = "Task created: " + taskID
+			}
 		}
 	} else if chatModel, isChat := rxBot.ChatModelFor(slug); isChat {
 		req := rxBot.ChatCompletionRequest{
@@ -675,7 +684,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if len(obsPaths) > 0 {
 			req.OBSFileList = obsPaths
 		}
-		resp, meta, err := client.ChatCompletionWithMeta(ctx, req)
+		resp, meta, err := executionClient.ChatCompletionWithMeta(ctx, req)
 		logBotResponseMeta(ctx, meta)
 		if err != nil {
 			return nil, err
@@ -728,7 +737,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if err != nil {
 			return nil, err
 		}
-		resp, meta, err := client.InvokeAgentWithMeta(ctx, slug, rxBot.AgentRunRequest{
+		resp, meta, err := executionClient.InvokeAgentWithMeta(ctx, slug, rxBot.AgentRunRequest{
 			Arguments:  args,
 			DialogueID: dialogueID,
 		})
@@ -789,11 +798,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			} else if len(resp.TaskIDs) > 0 {
 				taskID = resp.TaskIDs[0]
 			}
-			if slug == "deep_genome" {
-				serverID = taskID
-				out.Answer = "Server task created: " + serverID
-			} else {
-				out.Answer = "Task created: " + taskID
+			if taskID != "" {
+				if slug == "deep_genome" {
+					serverID = taskID
+					out.Answer = "Server task created: " + serverID
+				} else {
+					out.Answer = "Task created: " + taskID
+				}
 			}
 		}
 	}
@@ -1247,13 +1258,13 @@ func (ps *Service) QueryStream(
 		return nil, fmt.Errorf("%w: tool %q has no Bot streaming primitive (handoff P1)", ErrStreamUnsupported, in.Tool)
 	}
 
-	client := rxBot.NewClient()
+	uploadClient := rxBot.NewClient()
 
 	// Upload attachments before opening the stream so upload errors still
 	// surface as a normal (non-SSE) error to the handler.
 	var obsPaths, fileNames []string
 	for _, f := range in.Files {
-		up, err := client.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
+		up, err := uploadClient.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
 		if err != nil {
 			return nil, err
 		}
@@ -1265,6 +1276,13 @@ func (ps *Service) QueryStream(
 	if err != nil {
 		return nil, err
 	}
+	streamClient := newExecutionBotClient(
+		rxBot.BotConfig,
+		"instant",
+		"",
+		"chat",
+		permissions.AllowedTools,
+	)
 
 	req := rxBot.ChatCompletionRequest{
 		Model:      chatModel,
@@ -1274,7 +1292,7 @@ func (ps *Service) QueryStream(
 	if len(obsPaths) > 0 {
 		req.OBSFileList = obsPaths
 	}
-	rc, err := client.ChatCompletionStream(ctx, req)
+	rc, err := streamClient.ChatCompletionStream(ctx, req)
 	if err != nil {
 		// Pre-first-byte failure (auth / unsupported) surfaces as a normal
 		// error so the handler can still return a non-SSE status.

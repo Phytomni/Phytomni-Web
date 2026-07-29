@@ -147,7 +147,6 @@ func TestQueryDedicatedProductUsesNativeIDAcrossRouteOwnedRunMatrix(t *testing.T
 		t.Run(tt.slug, func(t *testing.T) {
 			gdb := setupExpertTestDB(t)
 			runID := "run-product-" + tt.slug
-			taskID := "task-product-" + tt.slug
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				if r.URL.Path != "/v1/agents/"+tt.slug+"/runs" {
@@ -156,8 +155,29 @@ func TestQueryDedicatedProductUsesNativeIDAcrossRouteOwnedRunMatrix(t *testing.T
 				}
 				w.WriteHeader(http.StatusAccepted)
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"id": runID, "object": "agent.run", "agent": tt.slug,
-					"status": "running", "task_ids": []string{taskID}, "result": map[string]interface{}{},
+					"id":       runID,
+					"object":   "agent.run",
+					"agent":    tt.slug,
+					"status":   "running",
+					"task_ids": []string{},
+					"result": map[string]interface{}{
+						"formatted": map[string]interface{}{
+							"answer":              "",
+							"follow_up_questions": []interface{}{},
+							"references":          []interface{}{},
+							"tabular":             map[string]interface{}{},
+							"metadata":            map[string]interface{}{},
+						},
+						"execution": map[string]interface{}{
+							"tracking":    map[string]interface{}{"degraded": false},
+							"warnings":    []interface{}{},
+							"tasks":       []interface{}{},
+							"artifacts":   []interface{}{},
+							"output_dirs": []interface{}{},
+							"report":      nil,
+							"diagnostics": []interface{}{},
+						},
+					},
 				})
 			}))
 			t.Cleanup(srv.Close)
@@ -177,12 +197,23 @@ func TestQueryDedicatedProductUsesNativeIDAcrossRouteOwnedRunMatrix(t *testing.T
 			if out.BotRunID != runID || out.Status != "RUNNING" {
 				t.Fatalf("native response identity/status = %#v, want run=%q status=RUNNING", out, runID)
 			}
-			var persistedRunID string
-			if err := gdb.Raw(`SELECT COALESCE(bot_run_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&persistedRunID); err != nil {
+			if out.TaskId != "" || out.Answer != "" {
+				t.Fatalf("fabricated child surface task=%q answer=%q", out.TaskId, out.Answer)
+			}
+			var persisted struct {
+				RunID  string
+				TaskID string
+				Answer string
+				Status string
+			}
+			if err := gdb.Raw(`SELECT COALESCE(bot_run_id,''), COALESCE(task_id,''),
+				COALESCE(answer,''), status FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(
+				&persisted.RunID, &persisted.TaskID, &persisted.Answer, &persisted.Status,
+			); err != nil {
 				t.Fatalf("read persisted run id: %v", err)
 			}
-			if persistedRunID != runID {
-				t.Fatalf("persisted bot_run_id = %q, want %q", persistedRunID, runID)
+			if persisted.RunID != runID || persisted.TaskID != "" || persisted.Answer != "" || persisted.Status != "RUNNING" {
+				t.Fatalf("persisted accepted row=%#v", persisted)
 			}
 		})
 	}
@@ -209,11 +240,12 @@ func TestQueryExpertUsesNativeIDAcrossResolvedAgentMatrix(t *testing.T) {
 		t.Run(tt.slug, func(t *testing.T) {
 			gdb := setupExpertTestDB(t)
 			runID := "run-expert-" + tt.slug
-			taskIDs := []string{"task-expert-" + tt.slug}
+			taskIDs := []string{}
 			result := map[string]interface{}{}
 			if tt.status == "succeeded" {
-				taskIDs = []string{}
 				result["formatted"] = map[string]interface{}{"answer": "sync answer"}
+			} else if tt.slug == "deep_genome" {
+				taskIDs = []string{"task-expert-deep_genome"}
 			}
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
@@ -246,12 +278,28 @@ func TestQueryExpertUsesNativeIDAcrossResolvedAgentMatrix(t *testing.T) {
 			if out.BotRunID != runID || out.Status != strings.ToUpper(tt.status) {
 				t.Fatalf("expert response identity/status = %#v", out)
 			}
-			var persistedRunID string
-			if err := gdb.Raw(`SELECT COALESCE(bot_run_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&persistedRunID); err != nil {
+			if tt.status == "running" && tt.slug != "deep_genome" {
+				if out.TaskId != "" || out.Answer != "" {
+					t.Fatalf("expert fabricated child surface task=%q answer=%q", out.TaskId, out.Answer)
+				}
+			}
+			var persisted struct {
+				RunID  string
+				TaskID string
+				Answer string
+				Status string
+			}
+			if err := gdb.Raw(`SELECT COALESCE(bot_run_id,''), COALESCE(task_id,''),
+				COALESCE(answer,''), status FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(
+				&persisted.RunID, &persisted.TaskID, &persisted.Answer, &persisted.Status,
+			); err != nil {
 				t.Fatalf("read persisted run id: %v", err)
 			}
-			if persistedRunID != runID {
-				t.Fatalf("persisted bot_run_id = %q, want %q", persistedRunID, runID)
+			if persisted.RunID != runID {
+				t.Fatalf("persisted bot_run_id = %q, want %q", persisted.RunID, runID)
+			}
+			if tt.status == "running" && tt.slug != "deep_genome" && (persisted.TaskID != "" || persisted.Answer != "" || persisted.Status != "RUNNING") {
+				t.Fatalf("persisted accepted row=%#v", persisted)
 			}
 		})
 	}
