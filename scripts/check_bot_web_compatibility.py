@@ -56,6 +56,10 @@ CONVERSATION_CONTEXT_FORBIDDEN_FIELDS = FORBIDDEN_RAW_FIELDS | {
     "table",
     "tabular",
     "assistant_summary",
+    "assistant_summaries",
+    "summary",
+    "full_output",
+    "final_report",
     "full_answer",
     "full_report",
     "full_table",
@@ -67,6 +71,24 @@ CONVERSATION_CONTEXT_FORBIDDEN_FIELDS = FORBIDDEN_RAW_FIELDS | {
     "username",
     "user_id",
 }
+
+CONVERSATION_CONTEXT_RAW_TEXT_FIELDS = {
+    "answer",
+    "assistant_summary",
+    "assistant_summaries",
+    "content",
+    "final_report",
+    "full_output",
+    "full_answer",
+    "full_report",
+    "full_table",
+    "report",
+    "summary",
+    "table",
+    "tabular",
+}
+CONVERSATION_CONTEXT_ARTIFACT_FIELDS = {"artifact_id", "display_name"}
+CONVERSATION_CONTEXT_HISTORY_FIELDS = {"content", "role", "summary", "turn_id"}
 
 SCOPED_FILES = {
     "web_agents": Path("apps/web/src/constants/agents.ts"),
@@ -374,6 +396,8 @@ def _check_conversation_context_fixture(
         violations.append("fixture conversation_context_v1 requires requests and responses objects")
         return
 
+    allowed_user_content_paths: set[tuple[str | int, ...]] = set()
+
     request_names = (
         "instant_envelope",
         "expert_unforced_envelope",
@@ -384,14 +408,24 @@ def _check_conversation_context_fixture(
         if not isinstance(envelope, dict):
             violations.append(f"fixture conversation_context_v1 request {name} must be an object")
             continue
+        allowed_user_content_paths.add(("requests", name, "current_message", "content"))
         history_delta = envelope.get("history_delta")
         if not isinstance(history_delta, list):
             violations.append(f"fixture conversation_context_v1 request {name} history_delta must be a list")
         else:
-            for entry in history_delta:
+            for index, entry in enumerate(history_delta):
                 if not isinstance(entry, dict):
                     violations.append(f"fixture conversation_context_v1 request {name} history_delta entry must be an object")
                     continue
+                if entry.get("role") == "user" and "content" in entry:
+                    allowed_user_content_paths.add(
+                        ("requests", name, "history_delta", index, "content")
+                    )
+                unsupported = set(entry) - CONVERSATION_CONTEXT_HISTORY_FIELDS
+                if unsupported:
+                    violations.append(
+                        "fixture conversation_context_v1 history_delta contains unsupported text field"
+                    )
                 forbidden = sorted(set(entry) & CONVERSATION_CONTEXT_FORBIDDEN_FIELDS)
                 if forbidden:
                     violations.append(
@@ -405,6 +439,10 @@ def _check_conversation_context_fixture(
                 if not isinstance(ref, dict):
                     violations.append(f"fixture conversation_context_v1 request {name} artifact_ref must be an object")
                     continue
+                if set(ref) - CONVERSATION_CONTEXT_ARTIFACT_FIELDS:
+                    violations.append(
+                        "fixture conversation_context_v1 artifact_refs contains unsupported raw field"
+                    )
                 forbidden = sorted(set(ref) & CONVERSATION_CONTEXT_FORBIDDEN_FIELDS)
                 if forbidden:
                     violations.append(
@@ -412,6 +450,9 @@ def _check_conversation_context_fixture(
                     )
 
     scoped_payload = {"requests": requests, "responses": responses}
+    _check_conversation_text_fields(
+        scoped_payload, allowed_user_content_paths, violations
+    )
     forbidden = sorted(set(_iter_keys(scoped_payload)) & CONVERSATION_CONTEXT_FORBIDDEN_FIELDS)
     if forbidden:
         violations.append(
@@ -435,6 +476,32 @@ def _check_conversation_context_fixture(
             break
     if "/" in serialized or "\\" in serialized:
         violations.append("fixture conversation_context_v1 contains a raw path")
+
+
+def _check_conversation_text_fields(
+    value: Any,
+    allowed_user_content_paths: set[tuple[str | int, ...]],
+    violations: list[str],
+    path: tuple[str | int, ...] = (),
+) -> None:
+    """Reject text-bearing output fields outside the user-message contract."""
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = path + (key,)
+            if key in CONVERSATION_CONTEXT_RAW_TEXT_FIELDS:
+                if child_path not in allowed_user_content_paths:
+                    message = "fixture conversation_context_v1 contains unbounded conversation text"
+                    if message not in violations:
+                        violations.append(message)
+            _check_conversation_text_fields(
+                child, allowed_user_content_paths, violations, child_path
+            )
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _check_conversation_text_fields(
+                child, allowed_user_content_paths, violations, path + (index,)
+            )
 
 
 def _check_fixtures(root: Path, manifest: dict[str, Any] | None, violations: list[str]) -> None:
@@ -469,6 +536,10 @@ def _load_manifest(root: Path, violations: list[str]) -> dict[str, Any] | None:
 
 def _sanitize_failure(message: str) -> str:
     compact = " ".join(str(message).split())
+    compact = "".join(
+        character if 0x20 <= ord(character) <= 0x7E else "?"
+        for character in compact
+    )
     if len(compact) > MAX_FAILURE_LENGTH:
         return compact[: MAX_FAILURE_LENGTH - 1] + "…"
     return compact
