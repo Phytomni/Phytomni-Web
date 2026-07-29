@@ -201,3 +201,33 @@ func TestChatCompletionWrapperPreservesTimeoutContract(t *testing.T) {
 		t.Fatalf("err=%v, want wrapped ErrBotTimeout", err)
 	}
 }
+
+func TestNewClientWithTimeoutUsesExplicitDuration(t *testing.T) {
+	previous := BotConfig
+	BotConfig = &Config{
+		BaseURL:        "http://bot.test",
+		UserAPIKey:     "ptm_test",
+		TimeoutSeconds: 17,
+	}
+	t.Cleanup(func() { BotConfig = previous })
+
+	client := NewClientWithTimeout(125 * time.Millisecond)
+	if got := client.http.Timeout; got != 125*time.Millisecond {
+		t.Fatalf("explicit timeout=%s, want 125ms", got)
+	}
+}
+
+func TestNewClientUsesGlobalTimeout(t *testing.T) {
+	previous := BotConfig
+	BotConfig = &Config{
+		BaseURL:        "http://bot.test",
+		UserAPIKey:     "ptm_test",
+		TimeoutSeconds: 17,
+	}
+	t.Cleanup(func() { BotConfig = previous })
+
+	client := NewClient()
+	if got := client.http.Timeout; got != 17*time.Second {
+		t.Fatalf("global timeout=%s, want 17s", got)
+	}
+}

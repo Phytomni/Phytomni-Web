@@ -23,10 +23,21 @@ type Client struct {
 	userKey string
 }
 
-// NewClient builds a Client from the loaded BotConfig.
+// NewClient builds a Client using the global fallback timeout.
 func NewClient() *Client {
+	return NewClientWithTimeout(
+		time.Duration(BotConfig.TimeoutSeconds) * time.Second,
+	)
+}
+
+// NewClientWithTimeout builds a Client for one explicitly bounded request
+// class without mutating the process-wide BotConfig.
+func NewClientWithTimeout(timeout time.Duration) *Client {
+	if timeout <= 0 {
+		timeout = time.Duration(BotConfig.TimeoutSeconds) * time.Second
+	}
 	return &Client{
-		http:    &http.Client{Timeout: time.Duration(BotConfig.TimeoutSeconds) * time.Second},
+		http:    &http.Client{Timeout: timeout},
 		baseURL: BotConfig.BaseURL,
 		userKey: BotConfig.UserAPIKey,
 	}
