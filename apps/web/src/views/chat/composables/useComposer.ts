@@ -37,25 +37,14 @@ export function useComposer(opts: {
     messageInput,
     isSending,
     selectedAgent,
-    chatMode,
     scrollToBottom,
     authorizedAgentTools,
   } = opts;
 
   const displayMessageInput = computed<string>({
-    get() {
-      const selected = chatMode.value === "expert" ? selectedAgent.value : "";
-      return `${selectedAgentPrefix(selected)}${messageInput.value}`;
-    },
-    set(value: string) {
-      const selected = chatMode.value === "expert" ? selectedAgent.value : "";
-      const prefix = selectedAgentPrefix(selected);
-      if (prefix !== "" && !value.startsWith(prefix)) {
-        selectedAgent.value = "";
-        messageInput.value = value;
-        return;
-      }
-      messageInput.value = removeExactSelectedPrefix(value, selected);
+    get: () => messageInput.value,
+    set: (value: string) => {
+      messageInput.value = value;
     },
   });
 

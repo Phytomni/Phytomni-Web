@@ -156,34 +156,35 @@ describe("useComposer", () => {
   });
 
   describe("displayMessageInput adapter", () => {
-    it("renders the exact current selection token without mutating the plain draft", () => {
+    it("keeps the selected Agent out of the visible plain draft", () => {
       messageInput.value = "user text";
       selectedAgent.value = "KnowledgeAgent";
       const { displayMessageInput } = makeComposable();
 
-      expect(displayMessageInput.value).toBe("@KnowledgeAgent,user text");
+      expect(displayMessageInput.value).toBe("user text");
       expect(messageInput.value).toBe("user text");
+      expect(selectedAgent.value).toBe("KnowledgeAgent");
     });
 
-    it("strips only the exact current selection prefix when writing back", () => {
+    it("preserves the selected Agent while the user edits the plain draft", () => {
       selectedAgent.value = "DataAgent";
       messageInput.value = "old";
       const { displayMessageInput } = makeComposable();
 
-      displayMessageInput.value = "@DataAgent,new body";
+      displayMessageInput.value = "new body";
+
       expect(messageInput.value).toBe("new body");
       expect(selectedAgent.value).toBe("DataAgent");
     });
 
-    it("clears selection when the user edits away the exact prefix", () => {
+    it("preserves literal leading Agent text when the same Agent is selected", () => {
       selectedAgent.value = "DataAgent";
-      messageInput.value = "old";
       const { displayMessageInput } = makeComposable();
 
-      displayMessageInput.value = "literal @DataAgent,new body";
+      displayMessageInput.value = "@DataAgent,new body";
 
-      expect(selectedAgent.value).toBe("");
-      expect(messageInput.value).toBe("literal @DataAgent,new body");
+      expect(messageInput.value).toBe("@DataAgent,new body");
+      expect(selectedAgent.value).toBe("DataAgent");
     });
 
     it("preserves a literal leading @DataAgent token when it is not selected", () => {
@@ -207,7 +208,7 @@ describe("useComposer", () => {
       );
     });
 
-    it("hides the selection token in Instant without changing the draft", () => {
+    it("keeps the plain draft mode independent", () => {
       chatMode.value = "instant";
       selectedAgent.value = "DataAgent";
       messageInput.value = "compare these genes";
