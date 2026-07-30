@@ -115,6 +115,34 @@ describe("useSelectChat", () => {
     });
   }
 
+  it.each(["instant", "expert"] as const)(
+    "restores persisted %s mode instead of retaining the new-chat default",
+    async (persistedMode) => {
+      states.set(
+        "d1",
+        buildChatState({
+          mode: persistedMode === "instant" ? "expert" : "instant",
+        })
+      );
+      mockGetAnswerCheck.mockResolvedValueOnce(
+        historyResponse([
+          buildChatHistoryRecord({
+            id: `mode-${persistedMode}`,
+            query: "Persisted question",
+            answer: "Persisted answer",
+            tool_name: "ChatAgent",
+            mode: persistedMode,
+          }),
+        ])
+      );
+
+      const { selectChat } = makeComposable();
+      await selectChat("d1");
+
+      expect(stateFor("d1").mode).toBe(persistedMode);
+    }
+  );
+
   it("ChatAgent history: syncs currentChatId, hydrates reaction, rebuilds messages, sets historyQuestion, updates URL", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce({
       ...historyResponse([

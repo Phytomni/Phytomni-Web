@@ -21,7 +21,7 @@ function createDefaultChatUIState(): ChatUIState {
     sendStartedAt: null,
     activeAgentName: "",
     completing: false,
-    mode: "instant",
+    mode: "expert",
     isStreaming: false,
     streamingMessageId: null,
     uploadTransfer: null,
@@ -102,7 +102,7 @@ export function useChatStates() {
   // routing mode - per the current conversation (locked after the first send)
   const chatMode = computed({
     get: (): "instant" | "expert" => {
-      if (!currentChatId.value) return "instant";
+      if (!currentChatId.value) return "expert";
       return getChatState(currentChatId.value).mode;
     },
     set: (value: "instant" | "expert") => {

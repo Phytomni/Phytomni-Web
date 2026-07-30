@@ -68,7 +68,7 @@ describe("useChatStates parallel chat state", () => {
       sendStartedAt: null,
       activeAgentName: "",
       completing: false,
-      mode: "instant",
+      mode: "expert",
       isStreaming: false,
       streamingMessageId: null,
       uploadTransfer: null,
@@ -243,19 +243,28 @@ describe("useChatStates parallel chat state", () => {
 });
 
 describe("useChatStates mode", () => {
-  it("defaults mode to instant and proxies chatMode to the current conversation", () => {
+  it("reports Expert before a dialogue exists and defaults a new dialogue to Expert", () => {
     const s = useChatStates();
+
+    expect(s.chatMode.value).toBe("expert");
+
     s.currentChatId.value = "c1";
-    expect(s.chatMode.value).toBe("instant");
-    s.chatMode.value = "expert";
-    expect(s.getChatState("c1").mode).toBe("expert");
+    expect(s.chatMode.value).toBe("expert");
+
+    s.chatMode.value = "instant";
+    expect(s.getChatState("c1").mode).toBe("instant");
   });
 
-  it("keeps mode independent per conversation", () => {
+  it("keeps mode independent and defaults every new dialogue to Expert", () => {
     const s = useChatStates();
+
     s.currentChatId.value = "a";
-    s.chatMode.value = "expert";
+    s.chatMode.value = "instant";
+
     s.currentChatId.value = "b";
+    expect(s.chatMode.value).toBe("expert");
+
+    s.currentChatId.value = "a";
     expect(s.chatMode.value).toBe("instant");
   });
 
