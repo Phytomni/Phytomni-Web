@@ -43,6 +43,12 @@ const mountQuickSelect = (props: Record<string, unknown> = {}) =>
   });
 
 describe("ChatAgentQuickSelect", () => {
+  it("styles the child-owned trigger through an explicit scoped deep selector", () => {
+    expect(QUICK_SELECT_SOURCE).toContain(
+      ".chat-agent-quick-select :deep(.chat-agent-quick-option)"
+    );
+  });
+
   it("keeps the mobile rail touch-scrollable without native scrollbar chrome", () => {
     expect(QUICK_SELECT_SOURCE).toMatch(
       /@media \(max-width: 599px\)[\s\S]*?\.agent-quick-list\s*\{[\s\S]*?overflow-x:\s*auto;[\s\S]*?scrollbar-width:\s*none;/
@@ -78,6 +84,9 @@ describe("ChatAgentQuickSelect", () => {
     const buttons = wrapper.findAll('[data-testid="chat-agent-quick-option"]');
     expect(buttons[0].attributes("aria-pressed")).toBe("false");
     expect(buttons[1].attributes("aria-pressed")).toBe("true");
+    expect(buttons[0].classes()).toContain("chat-agent-quick-option");
+    expect(buttons[1].classes()).toContain("chat-agent-quick-option");
+    expect(buttons[1].classes()).toContain("is-selected");
 
     await buttons[1].trigger("click");
     expect(wrapper.emitted("toggle")?.[0]).toEqual(["DeepGenomeAgent"]);

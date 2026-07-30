@@ -971,18 +971,21 @@ describe("Chat visual fixture geometry negative controls", () => {
       "chat-case-icon img",
       "In Silico",
       "rendered In Silico label is not semantic",
+      "chat-agent-quick-option",
+      "quick-select trigger is not pill-shaped",
+      "selected quick-select background is not primary-soft",
     ]) {
       expect(REFINEMENT_ASSERT_SOURCE).toContain(needle);
     }
     for (const viewport of ["390 844", "1440 900", "2560 1440"]) {
       expect(REFINEMENT_CAPTURE_SOURCE).toContain(viewport);
     }
-    expect(REFINEMENT_CAPTURE_SOURCE).toContain('test "${png_count}" -eq 24');
+    expect(REFINEMENT_CAPTURE_SOURCE).toContain('test "${png_count}" -eq 30');
     expect(REFINEMENT_CAPTURE_SOURCE).toContain(
-      'test "${geometry_count}" -eq 24'
+      'test "${geometry_count}" -eq 30'
     );
     expect(REFINEMENT_CAPTURE_SOURCE).toContain(
-      'test "${refinement_count}" -eq 24'
+      'test "${refinement_count}" -eq 30'
     );
   });
 

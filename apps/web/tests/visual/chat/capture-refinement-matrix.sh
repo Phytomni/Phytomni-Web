@@ -73,15 +73,18 @@ for viewport in "${viewports[@]}"; do
         agent-browser --session "${SESSION}" wait --fn \
             "document.querySelector('[data-testid=chat-visual-root]')?.dataset.chatMode === 'expert'"
         capture_current "chat__expert-selected__${width}x${height}__en-US__${theme}"
+        open_fixture "expert-selected-empty" "${theme}"
+        capture_current \
+            "chat__expert-agent-selected__${width}x${height}__en-US__${theme}"
     done
 done
 
 png_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')
 geometry_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.geometry.json' | wc -l | tr -d ' ')
 refinement_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.refinement.json' | wc -l | tr -d ' ')
-test "${png_count}" -eq 24
-test "${geometry_count}" -eq 24
-test "${refinement_count}" -eq 24
+test "${png_count}" -eq 30
+test "${geometry_count}" -eq 30
+test "${refinement_count}" -eq 30
 
 agent-browser --session "${SESSION}" close
 trap - EXIT

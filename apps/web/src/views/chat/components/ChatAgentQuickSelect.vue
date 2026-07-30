@@ -74,7 +74,7 @@ const presentationFor = (tool: string) =>
   min-width: 0;
 }
 
-.chat-agent-quick-option {
+.chat-agent-quick-select :deep(.chat-agent-quick-option) {
   min-height: var(--phy-control-height-compact);
   padding: var(--phy-space-4) var(--phy-space-12);
   border: 1px solid var(--phy-color-border-subtle);
@@ -91,24 +91,24 @@ const presentationFor = (tool: string) =>
     color var(--phy-motion-fast) var(--phy-motion-ease-out);
 }
 
-.chat-agent-quick-option:hover:not(:disabled) {
+.chat-agent-quick-select :deep(.chat-agent-quick-option:hover:not(:disabled)) {
   border-color: var(--phy-color-border-control);
   background: var(--phy-color-fill-subtle);
   color: var(--phy-color-text);
 }
 
-.chat-agent-quick-option.is-selected {
+.chat-agent-quick-select :deep(.chat-agent-quick-option.is-selected) {
   border-color: var(--phy-color-action-text);
   background: var(--phy-color-primary-soft);
   color: var(--phy-color-action-text);
 }
 
-.chat-agent-quick-option:focus-visible {
+.chat-agent-quick-select :deep(.chat-agent-quick-option:focus-visible) {
   outline: 2px solid var(--phy-color-focus);
   outline-offset: 2px;
 }
 
-.chat-agent-quick-option:disabled {
+.chat-agent-quick-select :deep(.chat-agent-quick-option:disabled) {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -137,7 +137,7 @@ const presentationFor = (tool: string) =>
     display: none;
   }
 
-  .chat-agent-quick-option {
+  .chat-agent-quick-select :deep(.chat-agent-quick-option) {
     flex: 0 0 auto;
     min-height: var(--phy-control-height-primary);
     scroll-snap-align: start;

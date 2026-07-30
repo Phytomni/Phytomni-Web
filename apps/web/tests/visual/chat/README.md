@@ -142,8 +142,9 @@ The focused capture script in tests/visual/chat remains an additional interactio
 refinement set; it is separate from the 232-file responsive-continuity matrix.
 
 The focused set is 390x844, 1440x900, and 2560x1440 × light/dark × Start New
-selected, Explore Agents selected, Instant selected, and Expert selected = 24
-PNGs. Every PNG requires matching passing geometry/refinement JSON first.
+selected, Explore Agents selected, Instant selected, autonomous Expert, and
+selected-Agent Expert = 30 PNGs. Every PNG requires matching passing
+geometry/refinement JSON first.
 
 Inspect all 232 responsive-continuity PNGs individually and record
 one filename/result row in the ignored `visual-review-ledger.md`. Check locale,

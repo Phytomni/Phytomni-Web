@@ -27,6 +27,7 @@
   const selectedRow = selectedRows[0];
   const selectedStyle = selectedRow ? getComputedStyle(selectedRow) : null;
   const primarySoft = token("--phy-color-primary-soft");
+  const elevatedBackground = token("--phy-color-bg-elevated");
   const actionText = token("--phy-color-action-text");
   if (selectedStyle?.backgroundColor !== primarySoft) {
     fail("selected sidebar background is not primary-soft");
@@ -116,6 +117,37 @@
     const value = activeMode.previousElementSibling?.getAttribute("value");
     if (value !== chatMode) {
       fail("active mode DOM value does not match fixture mode");
+    }
+  }
+
+  const quickOptions = [
+    ...root.querySelectorAll('[data-testid="chat-agent-quick-option"]'),
+  ];
+  const chatState = root.dataset.chatState;
+  if (
+    chatState === "empty" &&
+    chatMode === "expert" &&
+    quickOptions.length === 0
+  ) {
+    fail("Expert empty state is missing quick-select buttons");
+  }
+  for (const option of quickOptions) {
+    const style = getComputedStyle(option);
+    const rect = option.getBoundingClientRect();
+    if (parseFloat(style.borderTopLeftRadius) < rect.height / 2) {
+      fail("quick-select trigger is not pill-shaped");
+    }
+    if (parseFloat(style.borderTopWidth) < 1) {
+      fail("quick-select trigger lost its tokenized border");
+    }
+    const selected = option.getAttribute("aria-pressed") === "true";
+    const expectedBackground = selected ? primarySoft : elevatedBackground;
+    if (style.backgroundColor !== expectedBackground) {
+      fail(
+        selected
+          ? "selected quick-select background is not primary-soft"
+          : "quick-select background is not elevated"
+      );
     }
   }
 
