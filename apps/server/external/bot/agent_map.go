@@ -119,20 +119,23 @@ var aliasToSlug = map[string]string{
 	"GeneNetworkAgent":      "network",
 }
 
-// slugToChatModel maps the sync chat-family slugs to their
-// /v1/chat/completions model id. BriefGene remains an agent_run for the
-// blocking path, so its stream model lives in slugToStreamModel below instead
-// of changing Query's established dispatch contract.
+// slugToChatModel maps the chat-family slugs to their /v1/chat/completions
+// model id. It mirrors Bot's MODEL_TO_TOOL exactly (phyto-chat, phyto-knowledge,
+// phyto-review, phyto-brief-gene) so every chat-family agent — including a forced
+// Expert selection — dispatches through the direct chat-completions entry rather
+// than the LLM router. BriefGene carries resolve_gene_id on that path (see
+// ChatCompletionRequest); the flag is Bot-rejected for the other three models.
 var slugToChatModel = map[string]string{
-	"chat":      "phyto-chat",
-	"knowledge": "phyto-knowledge",
-	"review":    "phyto-review",
+	"chat":       "phyto-chat",
+	"knowledge":  "phyto-knowledge",
+	"review":     "phyto-review",
+	"brief_gene": "phyto-brief-gene",
 }
 
 // slugToStreamModel is the Web-owned allowlist for the AG-UI chat-completion
-// models that may be opened by QueryStream. Keep the stream-only BriefGene
-// mapping separate from slugToChatModel: the blocking Query path still routes
-// BriefGene through /v1/agents/{slug}/runs until its blocking contract changes.
+// models that may be opened by QueryStream. It mirrors slugToChatModel minus
+// review (review's A2UI pause is served over the blocking chat-completions path,
+// not the stream), keeping the stream surface a strict subset of the chat models.
 var slugToStreamModel = map[string]string{
 	"chat":       "phyto-chat",
 	"knowledge":  "phyto-knowledge",

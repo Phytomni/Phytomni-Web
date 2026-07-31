@@ -9,14 +9,17 @@ type ChatMessage struct {
 }
 
 // ChatCompletionRequest is the body for POST /v1/chat/completions. Only
-// phyto-chat honors Stream=true; other models reject it with 400.
+// phyto-chat honors Stream=true; other models reject it with 400. ResolveGeneID
+// is honored only by phyto-brief-gene (Bot rejects it with 400 for the other
+// chat models), so it stays omitempty and is set for brief_gene alone.
 type ChatCompletionRequest struct {
-	Model        string                  `json:"model"`
-	Messages     []ChatMessage           `json:"messages"`
-	Stream       bool                    `json:"stream"`
-	OBSFileList  []string                `json:"obs_file_list,omitempty"`
-	DialogueID   string                  `json:"dialogue_id,omitempty"`
-	Conversation *ConversationEnvelopeV1 `json:"conversation,omitempty"`
+	Model         string                  `json:"model"`
+	Messages      []ChatMessage           `json:"messages"`
+	Stream        bool                    `json:"stream"`
+	OBSFileList   []string                `json:"obs_file_list,omitempty"`
+	ResolveGeneID bool                    `json:"resolve_gene_id,omitempty"`
+	DialogueID    string                  `json:"dialogue_id,omitempty"`
+	Conversation  *ConversationEnvelopeV1 `json:"conversation,omitempty"`
 }
 
 // Formatted is the Phytomni-specific envelope Bot returns alongside the

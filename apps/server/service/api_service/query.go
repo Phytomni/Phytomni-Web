@@ -1622,10 +1622,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	}
 	// 1. Web-owned alias -> Bot slug. Empty tool defaults to the chat agent.
-	// Expert delegates agent choice to Bot unless its canonical forced selection
-	// has passed the server-owned effective allowlist above.
+	// A forced Expert selection resolves its own slug and dispatches directly,
+	// exactly as instant mode does; only autonomous Expert (no forced tool)
+	// leaves slug empty and delegates agent choice to Bot's router. The forced
+	// tool already passed the server-owned effective allowlist above.
 	var slug string
-	if in.Mode != "expert" {
+	if in.Mode != "expert" || in.Tool != "" {
 		var ok bool
 		slug, ok = rxBot.SlugFor(in.Tool)
 		if !ok {
@@ -1633,7 +1635,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	}
 	interop := localInteropDecision("off")
-	if in.Mode != "expert" {
+	// A forced Expert selection dispatches directly (like instant), so it must
+	// pass the same server-owned interop authorization: prepareInterop authorizes
+	// research/design targets against the runtime allowlist and returns "off" for
+	// every non-interop agent. Only autonomous Expert (no forced tool) skips this;
+	// its router request never forwards interop controls.
+	if in.Mode != "expert" || in.Tool != "" {
 		interop, err = ps.prepareInterop(ctx, username, slug, in.InteropMode, in.InteropTargets)
 		if err != nil {
 			failed := &QueryData{
@@ -1721,12 +1728,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	var botRunID, serverID, taskID, logStatus string
 	var expertProjection *BotRunProjection
 	var contextStage *rxBot.ContextStageMetadata
-	if in.Mode == "expert" {
-		var forcedTool *string
-		if in.Tool != "" {
-			selected := in.Tool
-			forcedTool = &selected
-		}
+	if in.Mode == "expert" && in.Tool == "" {
+		// Autonomous Expert only: no forced tool, so Bot's LLM router picks the
+		// agent. A forced Expert selection never reaches here — it resolves its
+		// own slug above and falls through to the direct chat/agent-run branches,
+		// exactly as instant mode dispatches that slug.
 		routeRequest := rxBot.RouteQueryRequest{
 			UserQuery:   in.Query,
 			OBSFileList: obsPaths,
@@ -1735,7 +1741,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				[]string(nil),
 				permissions.AllowedTools...,
 			),
-			ForcedTool: forcedTool,
 		}
 		if !v1 {
 			routeRequest.History = parseHistory(in.History)
@@ -1863,6 +1868,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 		if len(obsPaths) > 0 {
 			req.OBSFileList = obsPaths
+		}
+		if slug == "brief_gene" {
+			// BriefGene resolves the free-form message into a canonical gene id
+			// before invoking the tool; Bot rejects this flag for the other chat
+			// models, so it is set for brief_gene alone.
+			req.ResolveGeneID = true
 		}
 		var resp *rxBot.ChatCompletionResponse
 		for {
