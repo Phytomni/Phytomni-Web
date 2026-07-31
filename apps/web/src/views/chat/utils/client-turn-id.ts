@@ -4,12 +4,7 @@ export interface ClientTurnDraft {
   mode: "instant" | "expert";
   selectedAgent: string;
   query: string;
-  files: readonly {
-    name: string;
-    size: number;
-    type: string;
-    lastModified: number;
-  }[];
+  attachments: readonly string[];
 }
 
 const PRE_DISPATCH_4XX = new Set([
@@ -41,12 +36,7 @@ export function clientTurnDraftFingerprint(draft: ClientTurnDraft): string {
     mode: draft.mode,
     selectedAgent: draft.selectedAgent,
     query: draft.query,
-    files: draft.files.map((file) => [
-      file.name,
-      file.size,
-      file.type,
-      file.lastModified,
-    ]),
+    attachments: [...draft.attachments],
   });
 }
 
@@ -80,7 +70,8 @@ export function clientTurnDraftFingerprintMatches(
         typeof record.mode !== "string" ||
         typeof record.selectedAgent !== "string" ||
         typeof record.query !== "string" ||
-        !Array.isArray(record.files)
+        !Array.isArray(record.attachments) ||
+        !record.attachments.every((item) => typeof item === "string")
       ) {
         return null;
       }
@@ -91,7 +82,7 @@ export function clientTurnDraftFingerprintMatches(
           mode: record.mode,
           selectedAgent: record.selectedAgent,
           query: record.query,
-          files: record.files,
+          attachments: record.attachments,
         }),
       };
     } catch {

@@ -5,7 +5,8 @@ export interface ParsedMessageWithFiles {
   attachedFiles?: readonly ChatAttachment[];
 }
 
-// Parse message content and extract file info
+// Parse marker metadata only when hydrating rows written before structured
+// asset references existed. New sends must keep literal user text unchanged.
 export const parseMessageWithFiles = (
   messageContent: string
 ): ParsedMessageWithFiles => {

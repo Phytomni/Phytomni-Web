@@ -14,7 +14,6 @@ import i18n from "@/locales";
 import {
   decodeCitationDocuments,
   decodeTableDataInput,
-  formatFileSize,
   convertToTableData,
   optionalStringValue,
   parseAgentAnswer,
@@ -27,7 +26,6 @@ import {
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
-import { createTransferTracker } from "@/utils/transfer-progress";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
 import { createChatRequestKey } from "../utils/chat-request-key";
@@ -49,6 +47,10 @@ import {
   decodeAgentSteps,
   decodeFollowUpQuestions,
 } from "../messageTypes";
+import {
+  completedUploadDisplays,
+  toAssetAttachmentRefs,
+} from "../utils/asset-attachments";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 const MAX_CONTEXT_MESSAGES = 20;
@@ -152,6 +154,13 @@ function historyText(message: ChatMessage): string {
     .join("\n\n");
 }
 
+function historyAttachments(message: ChatMessage) {
+  const attachments = message.attachments
+    ?.map((attachment) => ({ ...attachment }))
+    .filter(({ asset_id }) => asset_id !== "");
+  return attachments && attachments.length > 0 ? attachments : undefined;
+}
+
 function commitSuccessfulTurn(
   chatState: ChatUIState,
   userMessage: ChatMessage,
@@ -170,11 +179,26 @@ function commitSuccessfulTurn(
       : []
   ).flatMap((message) => {
     const content = historyText(message);
-    return content ? [{ role: message.role, content }] : [];
+    const attachments = historyAttachments(message);
+    return content
+      ? [
+          {
+            role: message.role,
+            content,
+            ...(attachments ? { attachments } : {}),
+          },
+        ]
+      : [];
   });
   chatState.historyQuestion = [
     ...prior,
-    { role: "user", content: userContent },
+    {
+      role: "user",
+      content: userContent,
+      ...(historyAttachments(userMessage)
+        ? { attachments: historyAttachments(userMessage) }
+        : {}),
+    },
     { role: "assistant", content: assistantContent },
   ].slice(-MAX_CONTEXT_MESSAGES);
 }
@@ -366,23 +390,18 @@ export function useSendMessage(opts: {
     const currentMessage = chatState.messageInput;
     if (!currentMessage.trim()) return;
 
-    // Capture parent row, files, mode, history, and request key before any await
-    // so an A→B switch during scrollToBottom cannot retarget the payload.
+    // Capture parent row, completed asset references, mode, history, and request
+    // key before any await so an A→B switch during scrollToBottom cannot
+    // retarget the payload.
     const parentRowId = parentRowIdForDialogue(
       sendingDialogueId,
       chatList.value
     );
-    const capturedFiles = [...chatState.fileList];
-    if (
-      capturedFiles.some(
-        (file) =>
-          file.status !== undefined &&
-          file.status !== "completed" &&
-          file.status !== "aborted"
-      )
-    ) {
+    const capturedAttachments = completedUploadDisplays(chatState.fileList);
+    if (capturedAttachments === null) {
       return;
     }
+    const attachmentRefs = toAssetAttachmentRefs(capturedAttachments);
     const capturedHistory = chatState.historyQuestion;
     const requestKey = createChatRequestKey();
 
@@ -418,31 +437,19 @@ export function useSendMessage(opts: {
       chatState.renderedChat.messages
     );
 
-    // build the user message, including attached file info
+    // Keep the user-visible/persisted query exactly as authored. Attachment
+    // metadata is carried separately as bounded asset references.
     const userMessage = {
       role: "user",
       content: currentMessage,
-      attachedFiles: capturedFiles.length > 0 ? [...capturedFiles] : undefined,
+      attachments:
+        capturedAttachments.length > 0 ? [...capturedAttachments] : undefined,
     };
-
-    // append file info to the message content so it persists in history
-    let messageContent = currentMessage;
-    if (capturedFiles.length > 0) {
-      const fileInfo = capturedFiles
-        .map(
-          (file) => `[Attachment: ${file.name} (${formatFileSize(file.size)})]`
-        )
-        .join("\n");
-      messageContent = `${currentMessage}\n\n${fileInfo}`;
-    }
-
-    // update the user message content to include file info
-    userMessage.content = messageContent;
 
     const sendingMessages = chatState.renderedChat.messages;
     sendingMessages.push(userMessage);
 
-    const sendingTitle = messageContent;
+    const sendingTitle = currentMessage;
     let blockingDialogueId: string | undefined;
 
     if (parentRowId === null) {
@@ -480,12 +487,7 @@ export function useSendMessage(opts: {
       mode: capturedMode,
       selectedAgent: capturedSelectedAgent,
       query: currentMessage,
-      files: capturedFiles.map((file) => ({
-        name: file.name,
-        size: file.size ?? file.file?.size ?? 0,
-        type: file.file?.type || file.type || "",
-        lastModified: file.file?.lastModified ?? 0,
-      })),
+      attachments: attachmentRefs.map(({ asset_id }) => asset_id),
     });
     const clientTurnId =
       chatState.pendingTurnFingerprint !== null &&
@@ -549,7 +551,7 @@ export function useSendMessage(opts: {
 
     try {
       const queryData = new FormData();
-      queryData.append("query", messageContent); // use the message content that includes file info
+      queryData.append("query", currentMessage);
       queryData.append("id", parentRowId.toString());
       queryData.append(
         "tool",
@@ -560,11 +562,7 @@ export function useSendMessage(opts: {
       if (capturedHistory) {
         queryData.append("history", JSON.stringify(capturedHistory));
       }
-      if (capturedFiles.length > 0) {
-        capturedFiles.forEach((fileItem) => {
-          if (fileItem.file) queryData.append("files", fileItem.file);
-        });
-      }
+      queryData.append("attachments", JSON.stringify(attachmentRefs));
 
       // Stream branch: chat-family + instant mode + dark-launch flag. The
       // insertion point is inside the existing try, so returning here still
@@ -638,36 +636,7 @@ export function useSendMessage(opts: {
         return;
       }
 
-      const hasFiles = capturedFiles.length > 0;
-      const tracker = hasFiles
-        ? createTransferTracker({
-            phase: "upload",
-            requestId: requestKey,
-          })
-        : null;
-
-      const response = await getQueryAbortable(
-        queryData,
-        requestKey,
-        tracker
-          ? {
-              onUploadProgress: (e) => {
-                const snap = tracker.update({
-                  loaded: e.loaded,
-                  total: e.total ?? 0,
-                });
-                chatState.uploadTransfer = snap;
-                if (
-                  !snap.indeterminate &&
-                  snap.loaded >= snap.total &&
-                  snap.total > 0
-                ) {
-                  chatState.uploadTransfer = null;
-                }
-              },
-            }
-          : undefined
-      );
+      const response = await getQueryAbortable(queryData, requestKey);
 
       // On response: first fast-animate the progress bar to 100% (CSS 300ms), then swap in the answer.
       if (!chatState.generationStopped) {
@@ -1115,7 +1084,7 @@ export function useSendMessage(opts: {
               checkRes.data &&
               checkRes.data.some(
                 (historyRow) =>
-                  historyRow.query === messageContent &&
+                  historyRow.query === currentMessage &&
                   typeof historyRow.id === "string" &&
                   historyRow.id.trim() !== "" &&
                   !preRequestHistoryIds.has(historyRow.id)

@@ -3,6 +3,7 @@ import type { BotInteropPayload, BotRunProjection } from "./botProjection";
 import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import type {
+  AssetAttachmentRef,
   ConversationArtifactLink,
   ConversationContextNotice,
 } from "@/api/types";
@@ -13,6 +14,7 @@ import type {
   StreamContentBlock,
 } from "./messageTypes";
 import type { ResumableUploadItem } from "./upload/types";
+import type { ChatAttachmentDisplay } from "./utils/asset-attachments";
 
 export type { ResumableUploadItem, UploadStatus } from "./upload/types";
 
@@ -86,6 +88,9 @@ export interface ChatMessage {
   followUpQuestions?: string[]; // follow-up questions list
   showFollowUpQuestions?: boolean; // whether to show follow-up questions
   showLog?: boolean;
+  /** Structured completed assets used by new turns and hydrated history. */
+  attachments?: readonly ChatAttachmentDisplay[];
+  /** Legacy marker metadata retained only for pre-structured history rows. */
   attachedFiles?: readonly (ChatAttachment | ResumableUploadItem)[];
   compute_resource?: string; // compute resource info
   task_id?: string; // task ID
@@ -175,6 +180,7 @@ export interface ChatResponse extends ConversationContextNotice {
   /** Bounded input-required surface from the Web Go gateway. */
   a2ui?: unknown;
   artifacts?: ConversationArtifactLink[];
+  attachments?: AssetAttachmentRef[];
 }
 
 export type ChatHistoryHydrationStatus =

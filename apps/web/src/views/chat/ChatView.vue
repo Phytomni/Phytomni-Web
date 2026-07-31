@@ -242,16 +242,18 @@
                       <div
                         v-if="
                           message.role === 'user' &&
-                          message.attachedFiles &&
-                          message.attachedFiles.length > 0
+                          messageAttachments(message).length > 0
                         "
                         class="message-files"
                       >
                         <div class="files-list">
                           <div
-                            v-for="(file, fileIndex) in message.attachedFiles"
+                            v-for="(file, fileIndex) in messageAttachments(
+                              message
+                            )"
                             :key="fileIndex"
                             class="file-item-display"
+                            :data-asset-id="file.asset_id"
                           >
                             <FilesCard
                               :uid="fileIndex"
@@ -668,6 +670,16 @@ import {
   type BotLifecycleState,
 } from "./streaming/botLifecycleReducer";
 
+function messageAttachments(
+  message: ChatMessage
+): Array<{ name: string; size: number; asset_id?: string }> {
+  return (message.attachments ?? message.attachedFiles ?? []).map((file) => ({
+    name: file.name,
+    size: file.size,
+    asset_id: "asset_id" in file ? file.asset_id : undefined,
+  }));
+}
+
 const composerRef = ref<ComposerHandle | null>(null);
 
 const timestamp = ref(Date.now());
@@ -892,11 +904,12 @@ const {
 } = useChatStates();
 
 const botCapabilities = useBotCapabilities("chat");
+const uploadUsername = computed(() => userStore().name ?? "");
 const uploadQueue = useResumableUploads({
   currentChatId,
   getChatState,
   uploadCapability: botCapabilities.upload,
-  username: computed(() => userStore().name ?? ""),
+  username: uploadUsername,
   onValidationError: onAttachmentValidationError,
 });
 const hasBlockingUploads = computed(() => uploadQueue.hasBlockingUploads.value);
@@ -1675,6 +1688,8 @@ const { selectChat } = useSelectChat({
   updateUrlWithChatId,
   chatList,
   timestamp,
+  username: uploadUsername,
+  attachmentStore: uploadQueue.recoveryStore,
 });
 
 const retrySelectedChat = () => {

@@ -9,7 +9,6 @@ import type {
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getQuery } from "@/api/chat";
-import { createTransferTracker } from "@/utils/transfer-progress";
 import {
   convertToTableData,
   decodeCitationDocuments,
@@ -27,6 +26,10 @@ import {
   createClientTurnId,
   isDefinitePreDispatch4xx,
 } from "../utils/client-turn-id";
+import {
+  completedUploadDisplays,
+  toAssetAttachmentRefs,
+} from "../utils/asset-attachments";
 
 export function useRefreshMessage(opts: {
   currentChat: Ref<ChatView | null>;
@@ -84,6 +87,17 @@ export function useRefreshMessage(opts: {
     const capturedMode = chatState.mode;
     const capturedSelectedAgent =
       capturedMode === "expert" ? chatState.selectedAgent : "";
+    const replacementAttachments =
+      chatState.fileList.length > 0
+        ? completedUploadDisplays(chatState.fileList)
+        : null;
+    if (chatState.fileList.length > 0 && replacementAttachments === null) {
+      return;
+    }
+    const attachmentRefs =
+      replacementAttachments !== null
+        ? toAssetAttachmentRefs(replacementAttachments)
+        : toAssetAttachmentRefs(userMessage.attachments ?? []);
     const clientTurnId =
       chatState.refreshTurnIds[messageId] ?? createClientTurnId();
     chatState.refreshTurnIds[messageId] = clientTurnId;
@@ -115,42 +129,9 @@ export function useRefreshMessage(opts: {
         queryData.append("history", JSON.stringify(chatState.historyQuestion));
       }
 
-      // add files (if any)
-      if (chatState.fileList.length > 0) {
-        chatState.fileList.forEach((fileItem) => {
-          if (fileItem.file) queryData.append("files", fileItem.file);
-        });
-      }
+      queryData.append("attachments", JSON.stringify(attachmentRefs));
 
-      const hasFiles = chatState.fileList.length > 0;
-      const tracker = hasFiles
-        ? createTransferTracker({
-            phase: "upload",
-            requestId: Date.now().toString(),
-          })
-        : null;
-
-      const response = await getQuery(
-        queryData,
-        tracker
-          ? {
-              onUploadProgress: (e) => {
-                const snap = tracker.update({
-                  loaded: e.loaded,
-                  total: e.total ?? 0,
-                });
-                chatState.uploadTransfer = snap;
-                if (
-                  !snap.indeterminate &&
-                  snap.loaded >= snap.total &&
-                  snap.total > 0
-                ) {
-                  chatState.uploadTransfer = null;
-                }
-              },
-            }
-          : undefined
-      );
+      const response = await getQuery(queryData);
 
       if (response.data) {
         let newAssistantMessage: ChatMessage | undefined;

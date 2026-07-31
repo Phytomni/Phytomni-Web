@@ -429,6 +429,7 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
   }
 
   return {
+    recoveryStore: store,
     queueFiles,
     removeUpload,
     removeUploadById,

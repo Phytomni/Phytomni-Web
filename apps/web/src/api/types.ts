@@ -116,7 +116,7 @@ export interface QueryRequest {
   query: string;
   id?: number;
   tool?: string;
-  files?: File[];
+  attachments?: AssetAttachmentRef[];
   refresh_id?: number;
   mode?: "instant" | "expert";
   interop_mode?: "off" | "auto" | "required";
@@ -165,6 +165,7 @@ export interface QueryData extends ConversationContextNotice {
   /** The A2UI parser owns the nested surface contract. */
   a2ui?: unknown;
   artifacts?: ConversationArtifactLink[];
+  attachments?: AssetAttachmentRef[];
 }
 
 export interface ConversationSummary {
@@ -411,6 +412,27 @@ function decodeConversationArtifacts(
       name,
       kind: kind as ConversationArtifactKind,
     };
+  });
+}
+
+const MAX_ASSET_ATTACHMENTS = 10;
+const ASSET_ATTACHMENT_ID_PATTERN = /^file_[A-Za-z0-9_-]{1,123}$/u;
+
+function decodeAssetAttachments(value: unknown): AssetAttachmentRef[] {
+  if (!Array.isArray(value) || value.length > MAX_ASSET_ATTACHMENTS) {
+    invalid("chat response");
+  }
+  const seen = new Set<string>();
+  return value.map((item) => {
+    if (!isRecord(item) || Object.keys(item).length !== 1) {
+      invalid("chat response");
+    }
+    const assetId = requiredString(item, "asset_id", "chat response");
+    if (!ASSET_ATTACHMENT_ID_PATTERN.test(assetId) || seen.has(assetId)) {
+      invalid("chat response");
+    }
+    seen.add(assetId);
+    return { asset_id: assetId };
   });
 }
 
@@ -695,6 +717,9 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
   if (hasOwn(value, "a2ui")) result.a2ui = value.a2ui;
   if (hasOwn(value, "artifacts")) {
     result.artifacts = decodeConversationArtifacts(value.artifacts);
+  }
+  if (hasOwn(value, "attachments")) {
+    result.attachments = decodeAssetAttachments(value.attachments);
   }
   const contextNotice = decodeConversationContextNotice(value);
   if (contextNotice) {

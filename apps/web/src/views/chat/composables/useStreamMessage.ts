@@ -45,6 +45,15 @@ export interface StreamResult {
   contextNotice?: ConversationContextNotice;
 }
 
+/** Chat streaming accepts only scalar fields and JSON asset references. */
+export function assertReferenceOnlyFormData(formData: FormData): void {
+  for (const [, value] of formData.entries()) {
+    if (typeof value !== "string") {
+      throw new TypeError("Chat attachments must be asset references");
+    }
+  }
+}
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -113,6 +122,7 @@ export function useStreamMessage(opts: {
     if (clientTurnId && !formData.has("client_turn_id")) {
       formData.append("client_turn_id", clientTurnId);
     }
+    assertReferenceOnlyFormData(formData);
     const chatState = getChatState(dialogueId);
     // The send route still accepts the captured parent row id. It is not a
     // canonical conversation identity and must never address A2UI actions.

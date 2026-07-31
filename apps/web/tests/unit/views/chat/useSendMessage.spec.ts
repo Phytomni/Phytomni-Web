@@ -9,7 +9,7 @@ import type {
   ChatView,
   DialogueReconciliationResult,
 } from "@/views/chat/types";
-import type { AxiosProgressEvent } from "axios";
+import type { ResumableUploadItem } from "@/views/chat/upload/types";
 import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
 import { deferred, mustGet } from "../../../helpers/mockFactories";
 import {
@@ -108,6 +108,30 @@ describe("useSendMessage", () => {
     overrides: Partial<ChatStateRecord> = {}
   ): ChatStateRecord {
     return buildChatState({ messageInput: "hi", ...overrides });
+  }
+
+  function completedUpload(
+    name = "sample.txt",
+    assetId = "file_sample"
+  ): ResumableUploadItem {
+    return {
+      localId: `upload-${assetId}`,
+      file: null,
+      assetId,
+      name,
+      size: 5,
+      type: "text/plain",
+      lastModified: 0,
+      status: "completed",
+      partSize: 5,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 5,
+      speedBytesPerSecond: 0,
+      etaSeconds: null,
+      retryCount: 0,
+      errorCode: null,
+    };
   }
 
   function stateFor(dialogueId: string): ChatStateRecord {
@@ -965,14 +989,7 @@ describe("useSendMessage", () => {
     stateFor("A").historyQuestion = invalidInput<readonly ChatMessage[]>({
       h: 1,
     });
-    stateFor("A").fileList = [
-      {
-        name: "a.txt",
-        size: 1,
-        type: "text/plain",
-        file: new File(["a"], "a.txt"),
-      },
-    ];
+    stateFor("A").fileList = [completedUpload("a.txt", "file_a")];
 
     let resolveScroll: (() => void) | undefined;
     scrollToBottom.mockImplementationOnce(
@@ -1016,29 +1033,21 @@ describe("useSendMessage", () => {
     expect(formData.get("tool")).toBe("");
     expect(formData.get("query")).toContain("payload-A");
     expect(formData.get("history")).toBe(JSON.stringify({ h: 1 }));
-    expect(formData.getAll("files")).toHaveLength(1);
+    expect(formData.get("attachments")).toBe(
+      JSON.stringify([{ asset_id: "file_a" }])
+    );
     expect(getChatState("B").renderedChat?.messages ?? []).toHaveLength(0);
   });
 
-  it("tracks axios upload progress on the sending dialogue during blocking file send", async () => {
+  it("sends completed asset references without a Chat upload progress callback", async () => {
     stateFor("A").messageInput = "Upload this";
-    stateFor("A").fileList = [
-      {
-        name: "sample.txt",
-        size: 5,
-        type: "text/plain",
-        file: new File(["hello"], "sample.txt", { type: "text/plain" }),
-      },
-    ];
+    stateFor("A").fileList = [completedUpload()];
 
     let capturedRequestId = "";
     const pending = deferred<ApiEnvelope<DecodedQueryData>>();
     mockGetQueryAbortable.mockImplementationOnce((_data, requestId, opts) => {
       capturedRequestId = requestId || "";
-      opts?.onUploadProgress?.({
-        loaded: 50,
-        total: 100,
-      } as AxiosProgressEvent);
+      expect(opts).toBeUndefined();
       return pending.promise;
     });
 
@@ -1049,8 +1058,7 @@ describe("useSendMessage", () => {
     await Promise.resolve();
 
     expect(capturedRequestId.startsWith("chat-request-")).toBe(true);
-    expect(getChatState("A").uploadTransfer?.requestId).toBe(capturedRequestId);
-    expect(getChatState("A").uploadTransfer?.percent).toBe(50);
+    expect(getChatState("A").uploadTransfer).toBeNull();
     expect(getChatState("A").activeRequestId).toBe(capturedRequestId);
 
     pending.resolve(
@@ -1067,6 +1075,87 @@ describe("useSendMessage", () => {
 
     expect(getChatState("A").uploadTransfer).toBeNull();
     expect(getChatState("A").activeRequestId).toBe("");
+  });
+
+  it("keeps plain user text and literal attachment markers out of the wire query", async () => {
+    stateFor("A").messageInput =
+      "Keep this literal [Attachment: user-note.txt (1 KB)]";
+    stateFor("A").fileList = [completedUpload("reads.fastq", "file_reads")];
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: { tool_name: "ChatAgent", answer: "ok", id: "plain-1" },
+      })
+    );
+
+    await makeComposable().sendMessage();
+
+    const formData = queryCallAt(
+      0,
+      "plain text attachment query"
+    )[0] as FormData;
+    expect(formData.get("query")).toBe(
+      "Keep this literal [Attachment: user-note.txt (1 KB)]"
+    );
+    expect(formData.get("attachments")).toBe(
+      JSON.stringify([{ asset_id: "file_reads" }])
+    );
+    expect(formData.getAll("files")).toEqual([]);
+    expect(
+      messagesFor(stateFor("A"), "plain text attachment message")[0]
+    ).toMatchObject({
+      content: "Keep this literal [Attachment: user-note.txt (1 KB)]",
+      attachments: [
+        {
+          asset_id: "file_reads",
+          name: "reads.fastq",
+        },
+      ],
+    });
+  });
+
+  it("does not send while an upload is incomplete", async () => {
+    stateFor("A").messageInput = "Wait for this upload";
+    stateFor("A").fileList = [
+      {
+        ...completedUpload("queued.fastq", "file_queued"),
+        status: "uploading",
+      },
+    ];
+
+    await makeComposable().sendMessage();
+
+    expect(mockGetQueryAbortable).not.toHaveBeenCalled();
+    expect(stateFor("A").messageInput).toBe("Wait for this upload");
+  });
+
+  it("stopping a send does not resurrect or mutate the completed upload queue", async () => {
+    stateFor("A").messageInput = "Stop after upload";
+    stateFor("A").fileList = [completedUpload("stop.fastq", "file_stop")];
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
+
+    const sendPromise = makeComposable().sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    stateFor("A").generationStopped = true;
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: { tool_name: "ChatAgent", answer: "late", id: "stop-late" },
+      })
+    );
+    await sendPromise;
+
+    const formData = queryCallAt(0, "stopped send query")[0] as FormData;
+    expect(formData.getAll("files")).toEqual([]);
+    expect(formData.get("attachments")).toBe(
+      JSON.stringify([{ asset_id: "file_stop" }])
+    );
+    expect(stateFor("A").fileList).toEqual([]);
+    expect(
+      messagesFor(stateFor("A"), "stopped send messages").some(
+        (message) => message.id === "stop-late"
+      )
+    ).toBe(false);
   });
 
   it("resets a prior generationStopped before sending a later message", async () => {
@@ -1522,23 +1611,13 @@ describe("useSendMessage", () => {
     currentChatId = chatStatesApi.currentChatId;
     const state = chatStatesApi.getChatState(tempId);
     state.messageInput = "upload";
-    state.fileList = [
-      {
-        name: "f.txt",
-        size: 1,
-        type: "text/plain",
-        file: new File(["x"], "f.txt"),
-      },
-    ];
+    state.fileList = [completedUpload("f.txt", "file_f")];
     currentChat.value = { messages: [] };
     getChatState = (id: string) => chatStatesApi.getChatState(id);
 
     const pending = deferred<ApiEnvelope<DecodedQueryData>>();
     mockGetQueryAbortable.mockImplementationOnce((_d, _r, opts) => {
-      opts?.onUploadProgress?.({
-        loaded: 25,
-        total: 100,
-      } as AxiosProgressEvent);
+      expect(opts).toBeUndefined();
       chatStatesApi.rekeyChatState(tempId, serverId);
       return pending.promise;
     });
@@ -1548,7 +1627,7 @@ describe("useSendMessage", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(state.uploadTransfer?.percent).toBe(25);
+    expect(state.uploadTransfer).toBeNull();
     expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
 
     pending.resolve(

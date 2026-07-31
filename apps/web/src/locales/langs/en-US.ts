@@ -470,6 +470,7 @@ export default {
         cancel: "Cancel upload for {file}",
         remove: "Remove {file}",
       },
+      completedFile: "Completed file",
     },
     timeGroup: {
       today: "Today",

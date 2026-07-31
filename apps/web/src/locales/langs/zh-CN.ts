@@ -467,6 +467,7 @@ export default {
         cancel: "取消上传“{file}”",
         remove: "移除“{file}”",
       },
+      completedFile: "已完成的文件",
     },
     timeGroup: {
       today: "今天",

@@ -9,6 +9,8 @@ import type {
   ChatView,
 } from "@/views/chat/types";
 import type { ApiEnvelope, ChatHistoryRecord } from "@/api/types";
+import type { UploadRecoveryStore } from "@/views/chat/upload/store";
+import { accountScopeForUsername } from "@/views/chat/upload/hash";
 import { buildChat, buildChatState } from "../../../helpers/chatBuilders";
 import {
   buildApiEnvelope,
@@ -46,6 +48,7 @@ describe("useSelectChat", () => {
   let scrollToBottom: Mock<() => Promise<void>>;
   let updateUrlWithChatId: ReturnType<typeof vi.fn>;
   let timestamp: Ref<number>;
+  let username: Ref<string>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,6 +67,7 @@ describe("useSelectChat", () => {
     scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     updateUrlWithChatId = vi.fn();
     timestamp = ref(0);
+    username = ref("researcher@example.com");
   });
 
   function historyResponse(
@@ -104,7 +108,12 @@ describe("useSelectChat", () => {
     return mustGet(historyQuestion[index], label);
   }
 
-  function makeComposable() {
+  function makeComposable(
+    options: Partial<{
+      username: Ref<string>;
+      attachmentStore: UploadRecoveryStore;
+    }> = {}
+  ) {
     return useSelectChat({
       getChatState,
       currentChatId,
@@ -112,7 +121,26 @@ describe("useSelectChat", () => {
       updateUrlWithChatId,
       chatList,
       timestamp,
+      ...options,
     });
+  }
+
+  function attachmentStore(
+    records: Array<{
+      assetId: string;
+      name: string;
+      size: number;
+      type: string;
+      status: "completed" | "failed";
+    }>
+  ): UploadRecoveryStore {
+    return {
+      list: vi.fn().mockResolvedValue(records),
+      upsert: vi.fn(),
+      load: vi.fn(),
+      remove: vi.fn(),
+      close: vi.fn(),
+    } as unknown as UploadRecoveryStore;
   }
 
   it.each(["instant", "expert"] as const)(
@@ -142,6 +170,157 @@ describe("useSelectChat", () => {
       expect(stateFor("d1").mode).toBe(persistedMode);
     }
   );
+
+  it("hydrates structured attachments with same-account metadata", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "asset-history",
+          query: "Analyze these reads",
+          answer: "Done",
+          tool_name: "ChatAgent",
+          attachments: [{ asset_id: "file_reads" }],
+        }),
+      ])
+    );
+    const store = attachmentStore([
+      {
+        assetId: "file_reads",
+        name: "reads.fastq.gz",
+        size: 42,
+        type: "application/gzip",
+        status: "completed",
+      },
+    ]);
+
+    await makeComposable({ username, attachmentStore: store }).selectChat("d1");
+
+    const user = messageAt("d1", 0, "structured attachment user");
+    expect(user.content).toBe("Analyze these reads");
+    expect(user.attachments).toEqual([
+      {
+        asset_id: "file_reads",
+        name: "reads.fastq.gz",
+        size: 42,
+        type: "application/gzip",
+      },
+    ]);
+    expect(
+      historyAt("d1", 0, "structured attachment history").attachments
+    ).toEqual(user.attachments);
+  });
+
+  it("uses a localized generic label when same-account metadata is unavailable", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          query: "Inspect the asset",
+          answer: "Done",
+          tool_name: "ChatAgent",
+          attachments: [{ asset_id: "file_missing" }],
+        }),
+      ])
+    );
+
+    await makeComposable({
+      username,
+      attachmentStore: attachmentStore([]),
+    }).selectChat("d1");
+
+    expect(
+      messageAt("d1", 0, "missing attachment fallback").attachments
+    ).toEqual([
+      {
+        asset_id: "file_missing",
+        name: "Completed file",
+        size: 0,
+        type: "",
+      },
+    ]);
+  });
+
+  it("does not reuse IndexedDB metadata across account scopes", async () => {
+    const firstScope = await accountScopeForUsername(username.value);
+    const list = vi.fn().mockImplementation((scope: string) =>
+      Promise.resolve(
+        scope === firstScope
+          ? [
+              {
+                assetId: "file_private",
+                name: "private.fastq",
+                size: 9,
+                type: "application/gzip",
+                status: "completed",
+              },
+            ]
+          : []
+      )
+    );
+    const store = {
+      list,
+      upsert: vi.fn(),
+      load: vi.fn(),
+      remove: vi.fn(),
+      close: vi.fn(),
+    } as unknown as UploadRecoveryStore;
+    const history = (query: string) =>
+      historyResponse([
+        buildChatHistoryRecord({
+          query,
+          answer: "Done",
+          tool_name: "ChatAgent",
+          attachments: [{ asset_id: "file_private" }],
+        }),
+      ]);
+
+    mockGetAnswerCheck.mockResolvedValueOnce(history("First account"));
+    const composable = makeComposable({ username, attachmentStore: store });
+    await composable.selectChat("d1");
+    expect(
+      messageAt("d1", 0, "first account attachment").attachments?.[0]?.name
+    ).toBe("private.fastq");
+
+    username.value = "other@example.com";
+    getChatState("d2").renderedChat = null;
+    mockGetAnswerCheck.mockResolvedValueOnce(history("Second account"));
+    await composable.selectChat("d2");
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list.mock.calls[0]?.[0]).not.toBe(list.mock.calls[1]?.[0]);
+    expect(
+      messageAt("d2", 0, "second account attachment").attachments?.[0]
+    ).toMatchObject({
+      asset_id: "file_private",
+      name: "Completed file",
+    });
+  });
+
+  it("keeps literal marker text for structured rows and only parses legacy rows", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          query: "Literal [Attachment: note.txt (1 KB)]",
+          answer: "Structured",
+          tool_name: "ChatAgent",
+          attachments: [],
+        }),
+        buildChatHistoryRecord({
+          id: "legacy",
+          query: "Legacy\n\n[Attachment: old.txt (1 KB)]",
+          answer: "Legacy answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    expect(messageAt("d1", 0, "literal structured marker").content).toBe(
+      "Literal [Attachment: note.txt (1 KB)]"
+    );
+    expect(messageAt("d1", 2, "legacy marker").content).toBe("Legacy");
+    expect(messageAt("d1", 2, "legacy marker").attachedFiles).toHaveLength(1);
+  });
 
   it("ChatAgent history: syncs currentChatId, hydrates reaction, rebuilds messages, sets historyQuestion, updates URL", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce({

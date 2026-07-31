@@ -13,14 +13,7 @@ const baseDraft = (): ClientTurnDraft => ({
   mode: "expert",
   selectedAgent: "KnowledgeAgent",
   query: "Find evidence",
-  files: [
-    {
-      name: "evidence.txt",
-      size: 12,
-      type: "text/plain",
-      lastModified: 1_725_000_000_000,
-    },
-  ],
+  attachments: ["file_evidence"],
 });
 
 describe("client turn identity", () => {
@@ -70,30 +63,15 @@ describe("client turn identity", () => {
     ["selected agent", { selectedAgent: "DataAgent" }],
     ["query", { query: "Find different evidence" }],
     [
-      "file order",
+      "attachment order",
       {
-        files: [
-          {
-            name: "other.txt",
-            size: 1,
-            type: "text/plain",
-            lastModified: 1,
-          },
-          ...baseDraft().files,
-        ],
+        attachments: ["file_other", ...baseDraft().attachments],
       },
     ],
     [
-      "file metadata",
+      "asset reference",
       {
-        files: [
-          {
-            name: "evidence.txt",
-            size: 13,
-            type: "text/plain",
-            lastModified: 1_725_000_000_000,
-          },
-        ],
+        attachments: ["file_different"],
       },
     ],
   ])("changes when %s changes", (_label, change) => {

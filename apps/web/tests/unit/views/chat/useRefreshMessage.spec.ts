@@ -363,4 +363,69 @@ describe("useRefreshMessage", () => {
       expect(formData.get("query")).toBe("Original question");
     }
   );
+
+  it("reuses accepted structured attachments without sending a File or upload progress", async () => {
+    stateFor("A").renderedChat = {
+      messages: [
+        buildChatMessage({
+          role: "user",
+          content: "Refresh this analysis",
+          attachments: [
+            {
+              asset_id: "file_reads",
+              name: "reads.fastq",
+              size: 100,
+              type: "application/gzip",
+            },
+          ],
+        }),
+        buildChatMessage({
+          role: "assistant",
+          content: "Old answer",
+          id: "msg-structured",
+          tool_name: "ChatAgent",
+        }),
+      ],
+    };
+    mockGetQuery.mockResolvedValueOnce(queryResponse());
+
+    await makeComposable().refreshMessage(1);
+
+    const call = mustGet(mockGetQuery.mock.calls[0], "structured refresh call");
+    const formData = call[0] as FormData;
+    expect(formData.get("query")).toBe("Refresh this analysis");
+    expect(formData.get("attachments")).toBe(
+      JSON.stringify([{ asset_id: "file_reads" }])
+    );
+    expect(formData.getAll("files")).toEqual([]);
+    expect(call).toHaveLength(1);
+  });
+
+  it("blocks refresh when an explicitly selected replacement upload is incomplete", async () => {
+    stateFor("A").fileList = [
+      {
+        localId: "upload-pending",
+        file: null,
+        assetId: "file_pending",
+        name: "pending.fastq",
+        size: 1,
+        type: "application/gzip",
+        lastModified: 0,
+        status: "uploading",
+        partSize: 1,
+        partCount: 1,
+        receivedParts: [],
+        loadedBytes: 0,
+        speedBytesPerSecond: 0,
+        etaSeconds: null,
+        retryCount: 0,
+        errorCode: null,
+      },
+    ];
+
+    await makeComposable().refreshMessage(1);
+
+    expect(mockGetQuery).not.toHaveBeenCalled();
+    expect(stateFor("A").isSending).toBe(false);
+  });
 });

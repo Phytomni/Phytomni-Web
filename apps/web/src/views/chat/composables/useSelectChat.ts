@@ -1,6 +1,7 @@
 import { nextTick, toRaw } from "vue";
 import type { Ref } from "vue";
 import { ElMessage } from "element-plus";
+import type { AssetAttachmentRef } from "@/api/types";
 import type { Chat, ChatMessage, ChatResponse, ChatUIState } from "../types";
 import { normalizeChatContextNotice } from "../types";
 import { parseMessageWithFiles } from "../utils/message-parse";
@@ -20,6 +21,13 @@ import {
   normalizeHistoryRows,
   resolveHistoryQuestion,
 } from "../utils/chat-history-normalization";
+import { accountScopeForUsername } from "../upload/hash";
+import type { UploadRecoveryStore } from "../upload/store";
+import {
+  displayAttachmentRefs,
+  isSafeAssetId,
+  type AttachmentMetadata,
+} from "../utils/asset-attachments";
 
 export function historyAssistantMetadata(
   item: Pick<ChatResponse, "artifacts" | "context_rebuilt" | "context_degraded">
@@ -40,6 +48,8 @@ export function useSelectChat(opts: {
   updateUrlWithChatId: (dialogueId: string) => void;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
+  username?: Ref<string> | (() => string);
+  attachmentStore?: UploadRecoveryStore;
 }) {
   const {
     getChatState,
@@ -49,6 +59,33 @@ export function useSelectChat(opts: {
     chatList,
     timestamp,
   } = opts;
+  const usernameValue = () =>
+    typeof opts.username === "function"
+      ? opts.username()
+      : (opts.username?.value ?? "");
+  const loadAttachmentMetadata = async (): Promise<
+    ReadonlyMap<string, AttachmentMetadata>
+  > => {
+    if (!opts.attachmentStore || !opts.username) return new Map();
+    try {
+      const scope = await accountScopeForUsername(usernameValue());
+      const records = await opts.attachmentStore.list(scope);
+      return new Map(
+        records
+          .filter((record) => record.status === "completed" && record.assetId)
+          .map((record) => [
+            record.assetId as string,
+            {
+              name: record.name,
+              size: record.size,
+              type: record.type,
+            },
+          ])
+      );
+    } catch {
+      return new Map();
+    }
+  };
   const hydrationGenerations = new Map<string, number>();
   const degradedHistoryWarnings = new Set<string>();
 
@@ -124,6 +161,8 @@ export function useSelectChat(opts: {
       const messages: ChatMessage[] = [];
       const historyMessages: ChatMessage[] = [];
       const historyRows = normalizeHistoryRows(res.data);
+      const attachmentMetadata = await loadAttachmentMetadata();
+      if (!isCurrentHydration()) return;
       // Reconstruct the per-conversation routing mode from the persisted parent
       // row so refreshes/threads in this conversation route correctly. Default
       // to "instant" for legacy rows that predate the mode column.
@@ -150,18 +189,48 @@ export function useSelectChat(opts: {
             rowIndex === 0 ? chat?.title || "" : ""
           );
           if (question) {
-            // parse the message content and extract file info
-            const { content, attachedFiles } = parseMessageWithFiles(question);
-
-            messages.push({
-              role: "user",
-              content: content,
-              attachedFiles: attachedFiles,
-            });
-            historyMessages.push({
-              role: "user",
-              content: content,
-            });
+            const hasStructuredAttachments =
+              Object.prototype.hasOwnProperty.call(item, "attachments");
+            if (hasStructuredAttachments && Array.isArray(item.attachments)) {
+              const refs = item.attachments.filter(
+                (attachment): attachment is AssetAttachmentRef =>
+                  typeof attachment === "object" &&
+                  attachment !== null &&
+                  !Array.isArray(attachment) &&
+                  isSafeAssetId(
+                    (attachment as unknown as Record<string, unknown>).asset_id
+                  )
+              );
+              const attachments = displayAttachmentRefs(
+                refs,
+                attachmentMetadata,
+                i18n.global.t("chat.upload.completedFile")
+              );
+              messages.push({
+                role: "user",
+                content: question,
+                attachments,
+              });
+              historyMessages.push({
+                role: "user",
+                content: question,
+                attachments,
+              });
+            } else {
+              // Only pre-structured rows use the legacy marker parser. New
+              // rows keep literal user-authored marker text unchanged.
+              const { content, attachedFiles } =
+                parseMessageWithFiles(question);
+              messages.push({
+                role: "user",
+                content,
+                attachedFiles,
+              });
+              historyMessages.push({
+                role: "user",
+                content,
+              });
+            }
           }
 
           // add the assistant message only when the persisted value is usable
