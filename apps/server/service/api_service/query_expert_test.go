@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -236,12 +235,31 @@ func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
 	}
 }
 
+// TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection locks that a forced
+// non-chat agent under the v1 multiturn flag dispatches directly to
+// /v1/agents/{slug}/runs (not the LLM router) and persists exactly one owner row.
+// NOTE: /v1/agents/{slug}/runs has no conversation envelope field, so a forced
+// non-chat agent does NOT forward v1 conversation context today — that gap is
+// tracked for the Bot dev team (see docs handoff). Chat-family forced agents
+// keep full v1 context via /v1/chat/completions.
 func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	var captured rxBot.RouteQueryRequest
-	effects := &queryPermissionEffects{}
-	permissionRouteServer(t, effects, &captured)
-	rxBot.BotConfig.MultiturnV1Enabled = true
+	var hit string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/agents/data/runs" {
+			_, _ = w.Write([]byte(`{"id":"run-v1-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		MultiturnV1Enabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
 		Query:        "compare datasets",
@@ -252,20 +270,11 @@ func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if captured.ForcedTool == nil || *captured.ForcedTool != "DataAgent" {
-		t.Fatalf("forced tool = %#v, want DataAgent", captured.ForcedTool)
+	if hit != "/v1/agents/data/runs" {
+		t.Fatalf("forced DataAgent under v1 must dispatch to /v1/agents/data/runs, hit %q", hit)
 	}
-	if captured.Conversation == nil || captured.Conversation.RequestedAgentID == nil ||
-		*captured.Conversation.RequestedAgentID != "DataAgent" {
-		t.Fatalf("conversation requested agent = %#v", captured.Conversation)
-	}
-	if captured.Conversation.TurnID != fmt.Sprint(out.Id) ||
-		captured.Conversation.LedgerCursor != out.Id {
-		t.Fatalf("turn identity = %q/%d, row id = %d",
-			captured.Conversation.TurnID,
-			captured.Conversation.LedgerCursor,
-			out.Id,
-		)
+	if out.ToolName != "DataAgent" {
+		t.Fatalf("tool_name = %q, want DataAgent", out.ToolName)
 	}
 	var rows int64
 	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
@@ -314,27 +323,39 @@ func TestQuery_ExpertUsesServerOrderedAllowedTools(t *testing.T) {
 	}
 }
 
+// TestQuery_ExpertForwardsAllowedForcedTool locks the direct-dispatch contract:
+// a forced non-chat agent (DataAgent) in Expert mode is permission-gated and
+// then invoked directly on /v1/agents/{slug}/runs — never through the LLM router
+// at /v1/query/route. Only autonomous Expert (no forced tool) uses the router.
 func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	seedExpertPermissionUser(t, gdb, "forced@example.com", "forced")
 	seedExpertPermissionTool(t, gdb, "forced", "AnalystAgent", 1)
 	seedExpertPermissionTool(t, gdb, "forced", "ChatAgent", 2)
 	seedExpertPermissionTool(t, gdb, "forced", "DataAgent", 3)
-	effects := &queryPermissionEffects{}
-	var captured rxBot.RouteQueryRequest
-	permissionRouteServer(t, effects, &captured)
+	var hit string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/agents/data/runs" {
+			_, _ = w.Write([]byte(`{"id":"run-forced-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	if _, err := NewService().Query(context.Background(), "forced@example.com", QueryInput{
 		Query: "q", Mode: "expert", Tool: "DataAgent",
 	}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	want := []string{"ChatAgent", "DataAgent", "AnalystAgent"}
-	if !reflect.DeepEqual(captured.AllowedTools, want) {
-		t.Fatalf("allowed tools = %#v, want %#v", captured.AllowedTools, want)
-	}
-	if captured.ForcedTool == nil || *captured.ForcedTool != "DataAgent" {
-		t.Fatalf("forced tool = %#v, want DataAgent", captured.ForcedTool)
+	if hit != "/v1/agents/data/runs" {
+		t.Fatalf("forced DataAgent must dispatch directly to /v1/agents/data/runs, hit %q", hit)
 	}
 }
 
@@ -694,6 +715,29 @@ func expertRouteServer(t *testing.T, routeBody string) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
 
+// agentRunServer returns an httptest Bot whose /v1/agents/{slug}/runs answers
+// with the supplied body, so a test can exercise a forced agent dispatched
+// directly (not through the LLM router at /v1/query/route). Any other path 404s
+// so a mis-dispatch to the router surfaces as a hard test failure.
+func agentRunServer(t *testing.T, slug, runBody string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/agents/"+slug+"/runs" {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(runBody))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+}
+
 // TestQuery_ExpertRunningArm covers the Expert async (non-"succeeded") arm: a
 // "running" route response must persist Status=RUNNING with the run id and the
 // task id from task_ids, and surface the task id in the answer.
@@ -741,19 +785,25 @@ func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
 	}
 }
 
+// TestQuery_ExpertResolvedRemoteUsesCanonicalProjection: a forced remote agent
+// (analyst) dispatched directly to /v1/agents/{slug}/runs persists a RUNNING row
+// carrying the reconciliation join key (bot_run_id) plus the legacy compatibility
+// fields, so the GA cron can later poll and settle it by bot_run_id. A non-interop
+// async agent gets no projection row at submit time (the cron writes it on the
+// first poll) — the row itself is the durable recovery anchor.
 func TestQuery_ExpertResolvedRemoteUsesCanonicalProjection(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"run-expert-1","object":"agent.run","agent":"research","status":"running","task_ids":["child-1"],"result":{}}`)
+	agentRunServer(t, "analyst", `{"id":"run-expert-1","object":"agent.run","agent":"analyst","status":"running","task_ids":["child-1"],"result":{}}`)
 
 	ctx := utils.WithRequestID(context.Background(), "web-request-1")
 	out, err := NewService().Query(ctx, "alice", QueryInput{
-		Query: "find a candidate gene", Tool: "InSilicoResearchAgent", Mode: "expert",
+		Query: "find a candidate gene", Tool: "AnalystAgent", Mode: "expert",
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if out.ToolName != "InSilicoResearchAgent" {
-		t.Fatalf("tool_name=%q, want InSilicoResearchAgent", out.ToolName)
+	if out.ToolName != "AnalystAgent" {
+		t.Fatalf("tool_name=%q, want AnalystAgent", out.ToolName)
 	}
 	if out.BotRunID != "run-expert-1" || out.TaskId != "child-1" {
 		t.Fatalf("identity mismatch: bot_run_id=%q task_id=%q", out.BotRunID, out.TaskId)
@@ -762,18 +812,17 @@ func TestQuery_ExpertResolvedRemoteUsesCanonicalProjection(t *testing.T) {
 		t.Fatalf("lifecycle/correlation mismatch: status=%q request_id=%q", out.Status, out.RequestID)
 	}
 
-	projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
-	if err != nil {
-		t.Fatalf("LoadBotRunProjection: %v", err)
+	// The persisted row is the reconciliation anchor: owner + bot_run_id join key +
+	// RUNNING status + legacy compatibility fields (tool_name, task_id).
+	var storedRunID, storedStatus, storedTool, storedTask string
+	if err := gdb.Raw(`SELECT bot_run_id, status, tool_name, task_id FROM question_agent_logs WHERE id=? AND user_name='alice'`, out.Id).
+		Row().Scan(&storedRunID, &storedStatus, &storedTool, &storedTask); err != nil {
+		t.Fatalf("read persisted reconciliation fields: %v", err)
 	}
-	if projection.RunID != "run-expert-1" || projection.Agent != "research" || projection.Status != "RUNNING" {
-		t.Fatalf("projection identity mismatch: %+v", projection)
+	if storedRunID != "run-expert-1" || storedStatus != "RUNNING" {
+		t.Fatalf("reconciliation key mismatch: bot_run_id=%q status=%q", storedRunID, storedStatus)
 	}
-	var storedTool, storedTask string
-	if err := gdb.Raw(`SELECT tool_name, task_id FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&storedTool, &storedTask); err != nil {
-		t.Fatalf("read legacy compatibility fields: %v", err)
-	}
-	if storedTool != "InSilicoResearchAgent" || storedTask != "child-1" {
+	if storedTool != "AnalystAgent" || storedTask != "child-1" {
 		t.Fatalf("legacy fields mismatch: tool=%q task=%q", storedTool, storedTask)
 	}
 }
@@ -872,17 +921,11 @@ func TestQuery_ExpertResolvedToolContractFailuresHaveNoRows(t *testing.T) {
 			},
 			body: `{"id":"run-outside","object":"agent.run","agent":"analyst","status":"running","task_ids":["child-outside"],"result":{}}`,
 		},
-		{
-			name:     "forced mismatch",
-			username: "forced-mismatch@example.com",
-			tool:     "DataAgent",
-			setup: func(t *testing.T, gdb *gorm.DB) {
-				seedExpertPermissionUser(t, gdb, "forced-mismatch@example.com", "forced-mismatch")
-				seedExpertPermissionTool(t, gdb, "forced-mismatch", "DataAgent", 1)
-				seedExpertPermissionTool(t, gdb, "forced-mismatch", "AnalystAgent", 2)
-			},
-			body: `{"id":"run-mismatch","object":"agent.run","agent":"analyst","status":"running","task_ids":["child-mismatch"],"result":{}}`,
-		},
+		// NOTE: the former "forced mismatch" case (a forced tool the router
+		// resolved to a different agent) is gone by construction: a forced tool no
+		// longer reaches /v1/query/route — the gateway dispatches SlugFor(in.Tool)
+		// directly, so there is no router resolution that could diverge from the
+		// caller's selection. That guarantee is now structural, not a runtime check.
 		{
 			name:     "unknown agent",
 			username: "alice",
@@ -1014,11 +1057,15 @@ func TestExpertModeEnabled_TracksBotConfig(t *testing.T) {
 	}
 }
 
+// TestQueryExpertContextSelectionSettlement covers autonomous Expert: with no
+// forced tool, the turn routes through /v1/query/route, the router selects the
+// agent, and Web settles the returned conversation-context stage. A forced tool
+// no longer reaches the router (it dispatches directly), so only the autonomous
+// case exercises router-driven settlement here.
 func TestQueryExpertContextSelectionSettlement(t *testing.T) {
 	tests := []struct {
 		name, requestedTool, selectedTool, selectedSlug, routeSource string
 	}{
-		{"explicit", "DataAgent", "DataAgent", "data", "explicit_selection"},
 		{"router", "", "KnowledgeAgent", "knowledge", "router"},
 	}
 	for _, test := range tests {

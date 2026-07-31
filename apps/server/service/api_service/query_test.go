@@ -106,7 +106,7 @@ func TestSlugRoutingDecision(t *testing.T) {
 		{"ReviewAgent", "review", true},
 		{"AnalystAgent", "analyst", false},
 		{"DeepGenomeAgent", "deep_genome", false},
-		{"BriefGeneAgent", "brief_gene", false},
+		{"BriefGeneAgent", "brief_gene", true},
 	}
 	for _, c := range cases {
 		slug, ok := rxBot.SlugFor(c.tool)

@@ -753,8 +753,8 @@ func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/query/route":
-			var req rxBot.RouteQueryRequest
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents/deep_genome/runs":
+			var req rxBot.AgentRunRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Errorf("decode submit request: %v", err)
 			}
@@ -762,6 +762,7 @@ func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
 				t.Error("submit dialogue_id must be non-empty")
 			}
 			submittedDialogue = req.DialogueID
+			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"id":"run-deep-genome-e2e","object":"agent.run","agent":"deep_genome","status":"running","task_ids":["child-deep-genome-e2e"],"result":{}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/"+runID:
 			var body string

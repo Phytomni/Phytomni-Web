@@ -13,25 +13,31 @@ func TestFailedProvisionalV1TurnDoesNotLockMode(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/v1/chat/completions" {
+		if r.URL.Path != "/v1/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		// Both turns now dispatch to chat-completions: the first (instant) turn is
+		// phyto-chat and must fail; the second (expert + forced KnowledgeAgent) is
+		// phyto-knowledge and must be accepted. Distinguish by the requested model.
+		var body struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Model == "phyto-chat" {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":{"message":"synthetic rejection"}}`))
 			return
 		}
-		if r.URL.Path != "/v1/query/route" {
-			http.NotFound(w, r)
-			return
-		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":       "run-after-provisional-failure",
-			"run_id":   "run-after-provisional-failure",
-			"object":   "agent.run",
-			"agent":    "knowledge",
-			"status":   "succeeded",
-			"task_ids": []string{},
-			"result": map[string]any{
-				"formatted": map[string]any{"answer": "second turn accepted"},
+			"id":     "run-after-provisional-failure",
+			"run_id": "run-after-provisional-failure",
+			"object": "chat.completion",
+			"status": "succeeded",
+			"choices": []map[string]any{
+				{"index": 0, "message": map[string]any{"role": "assistant", "content": "second turn accepted"}},
 			},
+			"formatted": map[string]any{"answer": "second turn accepted"},
 		})
 	})
 

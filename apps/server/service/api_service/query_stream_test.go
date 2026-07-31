@@ -1052,21 +1052,23 @@ func TestQueryStream_CombinedRunErrorFixture(t *testing.T) {
 	}
 }
 
-// TestCompatibilityFixture_ExpertResearchProjectionIdentity covers the
-// blocking Expert route used by the resolved research slug. The Web request
-// id, umbrella Bot run id, and child task id remain separate and the accepted
-// projection is persisted owner-scoped for history reads.
+// TestCompatibilityFixture_ExpertResearchProjectionIdentity covers the blocking
+// direct-dispatch path used by a forced research selection: it is invoked on
+// /v1/agents/research/runs (not the LLM router). The Web request id, umbrella Bot
+// run id, and child task id remain separate and the accepted projection is
+// persisted owner-scoped for history reads.
 func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	requestCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/query/route" {
+		if r.URL.Path != "/v1/agents/research/runs" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		requestCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Request-Id", "bot-request-task27")
+		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-research-task27","object":"agent.run","agent":"research","status":"running","task_ids":["child-task27"],"result":{}}`))
 	}))
 	t.Cleanup(srv.Close)
@@ -1084,7 +1086,7 @@ func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 		t.Fatalf("Expert Query error: %v", err)
 	}
 	if requestCount != 1 {
-		t.Fatalf("route request count = %d, want one", requestCount)
+		t.Fatalf("agent-run request count = %d, want one", requestCount)
 	}
 	if out.ToolName != "InSilicoResearchAgent" || out.RequestID != "web-request-task27" {
 		t.Fatalf("resolved tool/request = %q/%q", out.ToolName, out.RequestID)
