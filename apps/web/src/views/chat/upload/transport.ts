@@ -54,6 +54,10 @@ export interface UploadDataPlane {
   ): Promise<void>;
   complete(options?: UploadRequestOptions): Promise<UploadCompletion>;
   abort(options?: UploadRequestOptions): Promise<void>;
+  /** Replace the in-memory bearer after a Go-mediated renewal. */
+  replaceCapability?(capability: string): void;
+  /** Drop the in-memory bearer after completion/cancel. */
+  clearCapability?(): void;
 }
 
 export class UploadTransportError extends Error {
@@ -330,13 +334,14 @@ export function createUploadDataPlane(
     options.expectedOrigin,
     options.assetId
   );
+  let activeCapability = options.capability;
 
   return {
     async head(requestOptions): Promise<UploadHeadState> {
       const response = await fetchUpload(
         baseURL,
         "HEAD",
-        options.capability,
+        activeCapability,
         requestOptions
       );
       const protocol = requiredHeader(response, "Upload-Protocol");
@@ -375,7 +380,7 @@ export function createUploadDataPlane(
       const url = uploadEndpoint(baseURL, "parts", partNumber);
       return putPartWithXHR(
         url,
-        options.capability,
+        activeCapability,
         body,
         sha256,
         requestOptions
@@ -386,7 +391,7 @@ export function createUploadDataPlane(
       const response = await fetchUpload(
         uploadEndpoint(baseURL, "complete"),
         "POST",
-        options.capability,
+        activeCapability,
         requestOptions
       );
       let payload: unknown;
@@ -405,9 +410,18 @@ export function createUploadDataPlane(
       await fetchUpload(
         uploadEndpoint(baseURL, "abort"),
         "DELETE",
-        options.capability,
+        activeCapability,
         requestOptions
       );
+    },
+    replaceCapability(capability: string): void {
+      if (typeof capability !== "string" || capability.length === 0) {
+        throw new TypeError("Invalid upload capability");
+      }
+      activeCapability = capability;
+    },
+    clearCapability(): void {
+      activeCapability = "";
     },
   };
 }
