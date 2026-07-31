@@ -16,6 +16,14 @@ const AGENT_PROGRESS_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/utils/agentProgress.ts"),
   "utf8"
 );
+const COMPOSER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatComposer.vue"),
+  "utf8"
+);
+const UPLOAD_CARD_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatUploadCard.vue"),
+  "utf8"
+);
 
 const loadingStart = CHAT_SOURCE.indexOf("<!-- Loading message:");
 const loadingEnd = CHAT_SOURCE.indexOf("</ChatMessageRow>", loadingStart);
@@ -75,5 +83,24 @@ describe("Chat progress placement integration", () => {
     expect(getMessage(zhCN, "chat.eta")).toBeUndefined();
     expect(getMessage(enUS, "chat.eta.fast")).toBeUndefined();
     expect(getMessage(zhCN, "chat.eta.fast")).toBeUndefined();
+  });
+
+  it("keeps aggregate transfer progress separate from per-file recovery controls", () => {
+    expect(CHAT_SOURCE).toContain(':has-blocking-uploads="hasBlockingUploads"');
+    expect(CHAT_SOURCE).toContain('@pause-upload="uploadQueue.pauseUpload"');
+    expect(CHAT_SOURCE).toContain(
+      '@reselect-upload="uploadQueue.reselectUpload"'
+    );
+    expect(CHAT_SOURCE).toContain(
+      '@remove-upload="uploadQueue.removeUploadById"'
+    );
+    expect(COMPOSER_SOURCE).toContain("hasBlockingUploads: boolean");
+    expect(COMPOSER_SOURCE).toContain("!props.hasBlockingUploads");
+    expect(COMPOSER_SOURCE).toContain("<ChatUploadCard");
+    expect(COMPOSER_SOURCE).not.toContain("CHAT_ATTACHMENT_ACCEPT");
+    expect(UPLOAD_CARD_SOURCE).toContain('role="progressbar"');
+    expect(UPLOAD_CARD_SOURCE).toContain('aria-live="polite"');
+    expect(UPLOAD_CARD_SOURCE).toContain("speedText");
+    expect(UPLOAD_CARD_SOURCE).toContain("etaText");
   });
 });

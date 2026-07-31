@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { ref } from "vue";
-import type { UploadFile } from "@/views/chat/types";
+import type { ResumableUploadItem } from "@/views/chat/types";
 import { mountWithApp } from "../helpers/test-app-context";
 
 const mentionExpose = {
@@ -38,12 +38,6 @@ vi.mock("vue-element-plus-x", () => ({
       expose(mentionExpose);
       return {};
     },
-  },
-  FilesCard: {
-    name: "FilesCard",
-    template: '<div class="files-card-stub" @click="$emit(\'delete\')" />',
-    props: ["uid", "name", "fileSize", "showDelIcon"],
-    emits: ["delete"],
   },
 }));
 
@@ -85,7 +79,8 @@ const baseProps = () => ({
   expertModeEnabled: true,
   modeUsable: true,
   showModeSelector: true,
-  fileList: [] as UploadFile[],
+  fileList: [] as ResumableUploadItem[],
+  hasBlockingUploads: false,
   rolesLoading: false,
   hasMessages: false,
   selectedAgent: "",
@@ -116,6 +111,13 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
             '<div data-testid="chat-agent-quick-select"><button v-for="option in options" :key="option.tool">{{ option.label }}</button></div>',
           props: ["options", "rolesLoading", "selectedAgent", "disabled"],
           emits: ["toggle"],
+        },
+        ChatUploadCard: {
+          name: "ChatUploadCard",
+          template:
+            '<div class="chat-upload-card-stub"><button data-testid="stub-remove" @click="$emit(\'remove\', item.localId)">Remove</button></div>',
+          props: ["item"],
+          emits: ["pause", "resume", "retry", "reselect", "cancel", "remove"],
         },
         ElUpload: {
           name: "ElUpload",
@@ -395,12 +397,24 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("update:chatMode")?.[0]).toEqual(["expert"]);
   });
 
-  it("shows attachment cards and emits remove-file", async () => {
-    const file: UploadFile = {
+  it("shows upload cards and emits remove-upload", async () => {
+    const file: ResumableUploadItem = {
+      localId: "upload-doc",
+      assetId: null,
       name: "doc.pdf",
       size: 10,
       type: "application/pdf",
       file: new File(["x"], "doc.pdf"),
+      lastModified: 0,
+      status: "completed",
+      partSize: 10,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 10,
+      speedBytesPerSecond: 0,
+      etaSeconds: 0,
+      retryCount: 0,
+      errorCode: null,
     };
     const wrapper = mountComposer({ fileList: [file] });
     expect(wrapper.find(".composer-attachments").exists()).toBe(true);
@@ -410,8 +424,23 @@ describe("ChatComposer", () => {
         .element.closest(".phy-composer-frame")
     ).toBeTruthy();
     expect(wrapper.find(".file-list-container").exists()).toBe(true);
-    await wrapper.findComponent({ name: "FilesCard" }).vm.$emit("delete");
-    expect(wrapper.emitted("remove-file")?.[0]).toEqual([0]);
+    await wrapper
+      .findComponent({ name: "ChatUploadCard" })
+      .vm.$emit("remove", file.localId);
+    expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
+  });
+
+  it("blocks only send while an upload is incomplete and keeps the editor usable", () => {
+    const wrapper = mountComposer({
+      modelValue: "keep editing",
+      hasBlockingUploads: true,
+    });
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(false);
+    expect(
+      wrapper.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
   });
 
   it("emits file-change from the upload control", async () => {

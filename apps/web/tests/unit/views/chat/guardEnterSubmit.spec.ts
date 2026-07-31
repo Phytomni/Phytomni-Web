@@ -23,7 +23,6 @@ vi.mock("vue-element-plus-x", () => ({
       return {};
     },
   },
-  FilesCard: { name: "FilesCard", template: "<div />" },
 }));
 
 import ChatComposer from "@/views/chat/components/ChatComposer.vue";
@@ -37,6 +36,7 @@ const baseProps = () => ({
   modeUsable: true,
   showModeSelector: false,
   fileList: [],
+  hasBlockingUploads: false,
   rolesLoading: false,
   hasMessages: false,
   selectedAgent: "",

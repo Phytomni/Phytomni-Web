@@ -289,6 +289,22 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
     refreshTransfer(dialogueId);
   };
 
+  const removeUploadById = async (localId: string): Promise<void> => {
+    const dialogueId = options.currentChatId.value;
+    const item = stateFor(dialogueId).fileList.find(
+      (candidate) => candidate.localId === localId
+    );
+    if (item) await removeUpload(item);
+  };
+
+  const cancelUpload = async (localId: string): Promise<void> => {
+    const dialogueId = options.currentChatId.value;
+    const engine = enginesByDialogue.get(dialogueId)?.get(localId);
+    if (!engine) return;
+    await engine.cancel();
+    refreshTransfer(dialogueId);
+  };
+
   const action = async (
     localId: string,
     method: "pause" | "resume" | "retry"
@@ -415,6 +431,8 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
   return {
     queueFiles,
     removeUpload,
+    removeUploadById,
+    cancelUpload,
     pauseUpload,
     resumeUpload,
     retryUpload,

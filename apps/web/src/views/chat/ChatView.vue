@@ -386,6 +386,7 @@
                   :mode-usable="activeModeEnabled"
                   :show-mode-selector="!currentChat?.messages?.length"
                   :file-list="fileList"
+                  :has-blocking-uploads="hasBlockingUploads"
                   :roles-loading="rolesLoading"
                   :has-messages="!!currentChat?.messages?.length"
                   :selected-agent="selectedAgent"
@@ -399,6 +400,12 @@
                   @file-change="handleFileChange"
                   @paste-files="handlePastedFiles"
                   @remove-file="removeFile"
+                  @pause-upload="uploadQueue.pauseUpload"
+                  @resume-upload="uploadQueue.resumeUpload"
+                  @retry-upload="uploadQueue.retryUpload"
+                  @reselect-upload="uploadQueue.reselectUpload"
+                  @cancel-upload="uploadQueue.cancelUpload"
+                  @remove-upload="uploadQueue.removeUploadById"
                   @clear-agent="clearSelectedAgent"
                   @toggle-agent="handleButtonClick"
                 />
@@ -892,6 +899,7 @@ const uploadQueue = useResumableUploads({
   username: computed(() => userStore().name ?? ""),
   onValidationError: onAttachmentValidationError,
 });
+const hasBlockingUploads = computed(() => uploadQueue.hasBlockingUploads.value);
 
 watch(
   currentChatId,

@@ -15,17 +15,15 @@
           class="phy-composer-frame__attachments composer-attachments file-list-container"
         >
           <div class="file-list">
-            <div
-              v-for="(file, index) in fileList"
-              :key="index"
-              class="file-item"
-            >
-              <FilesCard
-                :uid="index"
-                :name="file.name"
-                :file-size="file.size"
-                :show-del-icon="true"
-                @delete="emit('remove-file', index)"
+            <div v-for="file in fileList" :key="file.localId" class="file-item">
+              <ChatUploadCard
+                :item="file"
+                @pause="emit('pause-upload', $event)"
+                @resume="emit('resume-upload', $event)"
+                @retry="emit('retry-upload', $event)"
+                @reselect="handleReselect"
+                @cancel="emit('cancel-upload', $event)"
+                @remove="emit('remove-upload', $event)"
               />
             </div>
           </div>
@@ -85,7 +83,6 @@
               ref="uploadRef"
               class="upload-demo"
               :limit="10"
-              :accept="CHAT_ATTACHMENT_ACCEPT"
               :show-file-list="false"
               :auto-upload="false"
               :disabled="composerDisabled"
@@ -192,7 +189,7 @@
 import { computed, ref, unref } from "vue";
 import type { VNodeRef } from "vue";
 import { useI18n } from "vue-i18n";
-import { MentionSender, FilesCard } from "vue-element-plus-x";
+import { MentionSender } from "vue-element-plus-x";
 import type { MentionOption } from "vue-element-plus-x/types/MentionSender";
 import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
@@ -200,10 +197,10 @@ import ChatAgentPicker, {
   type ChatAgentPickerOption,
 } from "./ChatAgentPicker.vue";
 import ChatAgentQuickSelect from "./ChatAgentQuickSelect.vue";
+import ChatUploadCard from "./ChatUploadCard.vue";
 import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
 import type { ChatComposerHandle, ResumableUploadItem } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
-import { CHAT_ATTACHMENT_ACCEPT } from "../composables/useFileUpload";
 
 const props = defineProps<{
   modelValue: string;
@@ -214,6 +211,7 @@ const props = defineProps<{
   modeUsable: boolean;
   showModeSelector: boolean;
   fileList: ResumableUploadItem[];
+  hasBlockingUploads: boolean;
   rolesLoading: boolean;
   hasMessages: boolean;
   selectedAgent: string;
@@ -232,6 +230,12 @@ const emit = defineEmits<{
   "file-change": [file: unknown];
   "paste-files": [files: File[]];
   "remove-file": [index: number];
+  "pause-upload": [localId: string];
+  "resume-upload": [localId: string];
+  "retry-upload": [localId: string];
+  "reselect-upload": [localId: string, file: File];
+  "cancel-upload": [localId: string];
+  "remove-upload": [localId: string];
   "clear-agent": [];
   "toggle-agent": [tool: string];
 }>();
@@ -268,7 +272,10 @@ const showQuickSelect = computed(
   () => !props.hasMessages && expertControlsEnabled.value
 );
 const canSubmit = computed(
-  () => Boolean(props.modelValue.trim()) && !composerDisabled.value
+  () =>
+    Boolean(props.modelValue.trim()) &&
+    !composerDisabled.value &&
+    !props.hasBlockingUploads
 );
 
 const popoverVisible = computed(() =>
@@ -295,6 +302,10 @@ const onUploadExceed = (files: File[]) => {
 const onUploadChange = (file: unknown) => {
   if (composerDisabled.value) return;
   emit("file-change", file);
+};
+
+const handleReselect = (localId: string, file: File) => {
+  emit("reselect-upload", localId, file);
 };
 
 const bindTourInputTarget: VNodeRef = (ref) => {
@@ -462,18 +473,15 @@ defineExpose<ChatComposerHandle>({
 
 .file-list-container .file-list {
   display: flex;
-  flex-direction: row;
-  gap: 3px;
+  flex-direction: column;
+  gap: var(--phy-space-8);
   flex-wrap: wrap;
-  padding: 4px;
+  padding: var(--phy-space-4);
 }
 
 .file-list-container .file-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 4px;
-  font-size: 12px;
+  display: block;
+  min-width: 0;
 }
 
 .send-btn,

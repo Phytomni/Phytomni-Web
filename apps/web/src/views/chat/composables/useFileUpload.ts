@@ -16,9 +16,6 @@ export const CHAT_ATTACHMENT_LIMITS = Object.freeze({
   maxFiles: RESUMABLE_UPLOAD_LIMITS.maxAttachments,
 });
 
-/** Empty means every extension is allowed; semantic support belongs to Agents. */
-export const CHAT_ATTACHMENT_ACCEPT = "";
-
 export type ChatAttachmentValidationError = {
   code: UploadValidationErrorCode | "upload_disabled" | "upload_unavailable";
   fileName?: string;

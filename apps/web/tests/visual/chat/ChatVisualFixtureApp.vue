@@ -366,6 +366,7 @@
                   :mode-usable="true"
                   :show-mode-selector="fixture.chatState === 'empty'"
                   :file-list="fileList"
+                  :has-blocking-uploads="false"
                   :roles-loading="routingPermissionsLoading"
                   :has-messages="fixture.chatState === 'populated'"
                   :selected-agent="fixture.selectedAgent"
