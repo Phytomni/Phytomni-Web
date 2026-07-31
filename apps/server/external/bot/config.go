@@ -71,6 +71,15 @@ type Config struct {
 	// MultiturnV1Enabled enables the server-to-server conversation-context
 	// envelope. It stays false unless Bot capability negotiation succeeds.
 	MultiturnV1Enabled bool `json:"multiturn_v1_enabled" yaml:"multiturn_v1_enabled" mapstructure:"multiturn_v1_enabled"`
+	// ResumableUploadEnabled is the Web-owned dark-launch switch for the
+	// metadata-only upload control plane. It remains false until the Bot
+	// advertises the exact resumable protocol and the public upload origin is
+	// explicitly configured.
+	ResumableUploadEnabled bool `json:"resumable_upload_enabled" yaml:"resumable_upload_enabled" mapstructure:"resumable_upload_enabled"`
+	// UploadPublicOrigin is the exact browser-reachable Bot origin used by the
+	// direct upload data plane. It must never be inferred from BaseURL, which
+	// may be an internal service address.
+	UploadPublicOrigin string `json:"upload_public_origin" yaml:"upload_public_origin" mapstructure:"upload_public_origin"`
 	// ResearchEnabled, DesignEnabled, and NetworkEnabled are independent
 	// product gates for the remote agent surfaces. They intentionally default
 	// false so a missing config key cannot activate a Bot-backed product.

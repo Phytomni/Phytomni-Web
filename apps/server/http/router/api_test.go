@@ -185,19 +185,22 @@ func TestBotCapabilitiesAuthenticatedRouteReturnsManifest(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body=%s)", res.Code, http.StatusOK, res.Body.String())
 	}
 	var envelope struct {
-		Code int                      `json:"code"`
-		Data []map[string]interface{} `json:"data"`
+		Code int `json:"code"`
+		Data struct {
+			Agents []map[string]interface{} `json:"agents"`
+			Upload map[string]interface{}   `json:"upload"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode envelope: %v", err)
 	}
-	if envelope.Code != http.StatusOK || len(envelope.Data) != 10 {
+	if envelope.Code != http.StatusOK || len(envelope.Data.Agents) != 10 || len(envelope.Data.Upload) == 0 {
 		t.Fatalf("envelope = %#v, want success with ten rows", envelope)
 	}
-	if _, ok := envelope.Data[0]["api_key"]; ok {
+	if _, ok := envelope.Data.Agents[0]["api_key"]; ok {
 		t.Fatal("private field leaked through authenticated route")
 	}
-	if enabled, _ := envelope.Data[0]["enabled"].(bool); !enabled {
+	if enabled, _ := envelope.Data.Agents[0]["enabled"].(bool); !enabled {
 		t.Fatal("present ChatAgent should be enabled")
 	}
 }

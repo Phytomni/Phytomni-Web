@@ -2,6 +2,8 @@ package api_service
 
 import (
 	"context"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -130,12 +132,38 @@ type BotCapability struct {
 	Enabled     bool   `json:"enabled"`
 }
 
+const (
+	resumableUploadMaxFileBytes   int64 = 10 << 30
+	resumableUploadMaxAttachments       = 10
+)
+
+// BotUploadCapability is the bounded browser-facing upload contract. The
+// origin is copied only from the explicitly configured public origin; it is
+// never derived from the internal Bot BaseURL.
+type BotUploadCapability struct {
+	Enabled        bool   `json:"enabled"`
+	Protocol       string `json:"protocol"`
+	UploadOrigin   string `json:"upload_origin"`
+	MaxFileBytes   int64  `json:"max_file_bytes"`
+	MaxAttachments int    `json:"max_attachments"`
+}
+
+// BotCapabilityManifest keeps the existing agent capability list and the
+// negotiated upload contract under one bounded response object.
+type BotCapabilityManifest struct {
+	Agents []BotCapability     `json:"agents"`
+	Upload BotUploadCapability `json:"upload"`
+}
+
 // BotCapabilities returns the Web capability manifest. Bot /v1/agents is only
 // an advisory presence check: local gates and the Web-owned release table
 // remain authoritative. Any Bot/config/listing failure returns the same
 // bounded all-disabled shape so callers never receive private upstream data.
-func (ps *Service) BotCapabilities(ctx context.Context, _ string) ([]BotCapability, error) {
-	manifest := disabledBotCapabilities()
+func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapabilityManifest, error) {
+	manifest := BotCapabilityManifest{
+		Agents: disabledBotCapabilities(),
+		Upload: disabledBotUploadCapability(),
+	}
 	cfg := rxBot.BotConfig
 	if cfg == nil || !cfg.ProxyEnabled || strings.TrimSpace(cfg.BaseURL) == "" {
 		return manifest, nil
@@ -152,6 +180,21 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) ([]BotCapabili
 	if err != nil {
 		return manifest, nil
 	}
+	uploadOrigin, validOrigin := validUploadPublicOrigin(cfg.UploadPublicOrigin)
+	uploadEnabled := cfg.ResumableUploadEnabled && validOrigin && rxBot.SupportsProtocol(
+		response,
+		rxBot.ResumableUploadProtocol,
+		rxBot.ResumableUploadProtocolVersion,
+	)
+	if uploadEnabled {
+		manifest.Upload = BotUploadCapability{
+			Enabled:        true,
+			Protocol:       rxBot.ResumableUploadProtocol,
+			UploadOrigin:   uploadOrigin,
+			MaxFileBytes:   resumableUploadMaxFileBytes,
+			MaxAttachments: resumableUploadMaxAttachments,
+		}
+	}
 
 	for index, definition := range rxBot.WebAgentDefinitions {
 		if _, ok := presence[definition.Slug]; !ok {
@@ -163,20 +206,55 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) ([]BotCapabili
 			continue
 		}
 
-		manifest[index].Enabled = true
-		manifest[index].Attachments = attachmentsFor(definition.Slug)
-		manifest[index].Artifacts = artifactsFor(definition.Slug)
+		manifest.Agents[index].Enabled = true
+		manifest.Agents[index].Attachments = uploadEnabled && attachmentsFor(definition.Slug)
+		manifest.Agents[index].Artifacts = artifactsFor(definition.Slug)
 		if cfg.StreamEnabled && streamEligible(definition.Slug) {
-			manifest[index].Stream = true
+			manifest.Agents[index].Stream = true
 		}
 		if cfg.A2uiActionsEnabled && definition.Slug == "review" {
-			manifest[index].A2UI = true
+			manifest.Agents[index].A2UI = true
 		}
 		if cfg.ExpertEnabled && definition.Slug == "chat" {
-			manifest[index].Resolver = true
+			manifest.Agents[index].Resolver = true
 		}
 	}
 	return manifest, nil
+}
+
+func disabledBotUploadCapability() BotUploadCapability {
+	return BotUploadCapability{
+		Protocol:       rxBot.ResumableUploadProtocol,
+		MaxFileBytes:   resumableUploadMaxFileBytes,
+		MaxAttachments: resumableUploadMaxAttachments,
+	}
+}
+
+func validUploadPublicOrigin(raw string) (string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", false
+	}
+	u, err := url.ParseRequestURI(trimmed)
+	if err != nil || u == nil || u.Opaque != "" || u.Host == "" || u.Hostname() == "" {
+		return "", false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", false
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery || u.RawPath != "" {
+		return "", false
+	}
+	if u.Path != "" && u.Path != "/" {
+		return "", false
+	}
+	if port := u.Port(); port != "" {
+		value, err := strconv.Atoi(port)
+		if err != nil || value < 1 || value > 65535 {
+			return "", false
+		}
+	}
+	return strings.ToLower(u.Scheme) + "://" + u.Host, true
 }
 
 func disabledBotCapabilities() []BotCapability {

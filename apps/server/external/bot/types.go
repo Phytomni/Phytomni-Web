@@ -2,6 +2,13 @@ package bot
 
 import "encoding/json"
 
+const (
+	// ResumableUploadProtocol is the only browser-to-Bot upload protocol
+	// negotiated by the Web control plane.
+	ResumableUploadProtocol        = "obs-multipart-v2"
+	ResumableUploadProtocolVersion = 2
+)
+
 // ChatMessage is one turn in an OpenAI-compatible message array.
 type ChatMessage struct {
 	Role    string `json:"role"`

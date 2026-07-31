@@ -52,7 +52,11 @@ func useCapabilityBotConfig(t *testing.T, baseURL string, cfg rxBot.Config) {
 
 func capabilityManifestResponse(t *testing.T, descriptors []rxBot.AgentDescriptor) string {
 	t.Helper()
-	body, err := json.Marshal(rxBot.AgentsListResponse{Object: "list", Data: descriptors})
+	body, err := json.Marshal(rxBot.AgentsListResponse{
+		Object:    "list",
+		Data:      descriptors,
+		Protocols: map[string][]int{rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion}},
+	})
 	if err != nil {
 		t.Fatalf("marshal agent response: %v", err)
 	}
@@ -68,10 +72,14 @@ func capabilityBySlug(rows []BotCapability, slug string) BotCapability {
 	return BotCapability{}
 }
 
-func disabledManifest(t *testing.T, rows []BotCapability) {
+func disabledManifest(t *testing.T, manifest BotCapabilityManifest) {
 	t.Helper()
+	rows := manifest.Agents
 	if len(rows) != len(rxBot.WebAgentDefinitions) {
 		t.Fatalf("manifest length = %d, want %d", len(rows), len(rxBot.WebAgentDefinitions))
+	}
+	if manifest.Upload.Enabled || manifest.Upload.UploadOrigin != "" {
+		t.Fatalf("upload capability was not disabled: %#v", manifest.Upload)
 	}
 	for _, row := range rows {
 		if row.Enabled || row.Stream || row.A2UI || row.Resolver || row.Attachments || row.Artifacts {
@@ -93,7 +101,10 @@ func TestBotCapabilitiesDoNotExposeUpstreamPrivateFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var public []map[string]interface{}
+	var public struct {
+		Agents []map[string]interface{} `json:"agents"`
+		Upload map[string]interface{}   `json:"upload"`
+	}
 	if err := json.Unmarshal(encoded, &public); err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +113,10 @@ func TestBotCapabilitiesDoNotExposeUpstreamPrivateFields(t *testing.T) {
 		"a2ui": true, "resolver": true, "attachments": true,
 		"artifacts": true, "enabled": true,
 	}
-	for _, row := range public {
+	if len(public.Upload) == 0 {
+		t.Fatal("upload capability missing")
+	}
+	for _, row := range public.Agents {
 		for key := range row {
 			if !allowed[key] {
 				t.Fatalf("private or unknown manifest field %q leaked", key)
@@ -118,7 +132,14 @@ func TestBotCapabilitiesDoNotExposeUpstreamPrivateFields(t *testing.T) {
 			t.Fatal("legacy aliases leaked")
 		}
 	}
-	if got := capabilityBySlug(rows, "research"); got.Enabled {
+	for key := range public.Upload {
+		switch key {
+		case "enabled", "protocol", "upload_origin", "max_file_bytes", "max_attachments":
+		default:
+			t.Fatalf("private or unknown upload field %q leaked", key)
+		}
+	}
+	if got := capabilityBySlug(rows.Agents, "research"); got.Enabled {
 		t.Fatal("new remote research capability must stay dark")
 	}
 }
@@ -133,11 +154,11 @@ func TestBotCapabilitiesStablePairsAndAbsentAgentsDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != len(rxBot.WebAgentDefinitions) {
-		t.Fatalf("manifest length = %d, want %d", len(rows), len(rxBot.WebAgentDefinitions))
+	if len(rows.Agents) != len(rxBot.WebAgentDefinitions) {
+		t.Fatalf("manifest length = %d, want %d", len(rows.Agents), len(rxBot.WebAgentDefinitions))
 	}
 	for _, definition := range rxBot.WebAgentDefinitions {
-		row := capabilityBySlug(rows, definition.Slug)
+		row := capabilityBySlug(rows.Agents, definition.Slug)
 		if row.Tool != definition.Tool || row.Slug != definition.Slug || row.Execution != definition.Execution {
 			t.Fatalf("stable pair mismatch for %s: %#v", definition.Slug, row)
 		}
@@ -145,6 +166,108 @@ func TestBotCapabilitiesStablePairsAndAbsentAgentsDisabled(t *testing.T) {
 		if row.Enabled != wantEnabled {
 			t.Fatalf("%s enabled=%v want=%v", definition.Slug, row.Enabled, wantEnabled)
 		}
+	}
+}
+
+func TestBotCapabilitiesUploadNegotiation(t *testing.T) {
+	withProtocol := capabilityManifestResponse(t, capabilityDescriptors())
+	withoutProtocol, err := json.Marshal(rxBot.AgentsListResponse{
+		Object: "list",
+		Data:   capabilityDescriptors(),
+	})
+	if err != nil {
+		t.Fatalf("marshal missing protocol response: %v", err)
+	}
+	wrongVersion, err := json.Marshal(rxBot.AgentsListResponse{
+		Object:    "list",
+		Data:      capabilityDescriptors(),
+		Protocols: map[string][]int{rxBot.ResumableUploadProtocol: {1}},
+	})
+	if err != nil {
+		t.Fatalf("marshal wrong protocol response: %v", err)
+	}
+
+	tests := []struct {
+		name            string
+		config          rxBot.Config
+		status          int
+		body            string
+		wantUpload      bool
+		wantAgents      bool
+		wantAttachments bool
+	}{
+		{name: "switch off", config: rxBot.Config{ProxyEnabled: true}, status: http.StatusOK, body: withProtocol, wantAgents: true},
+		{name: "proxy off", config: rxBot.Config{ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: withProtocol},
+		{name: "absent protocol", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: string(withoutProtocol), wantAgents: true},
+		{name: "wrong protocol version", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: string(wrongVersion), wantAgents: true},
+		{name: "invalid public origin", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example/path"}, status: http.StatusOK, body: withProtocol, wantAgents: true},
+		{name: "discovery error", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusBadGateway, body: `{}`, wantAgents: false},
+		{name: "fully enabled", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example/"}, status: http.StatusOK, body: withProtocol, wantUpload: true, wantAgents: true, wantAttachments: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := capabilityServer(t, tt.status, tt.body, 0)
+			t.Cleanup(srv.Close)
+			tt.config.BaseURL = srv.URL
+			useCapabilityBotConfig(t, srv.URL, tt.config)
+
+			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if manifest.Upload.Enabled != tt.wantUpload {
+				t.Fatalf("upload enabled=%v want=%v: %#v", manifest.Upload.Enabled, tt.wantUpload, manifest.Upload)
+			}
+			if manifest.Upload.Enabled {
+				if manifest.Upload.UploadOrigin != "http://upload.example" || manifest.Upload.MaxFileBytes != 10<<30 || manifest.Upload.MaxAttachments != 10 {
+					t.Fatalf("unexpected upload manifest: %#v", manifest.Upload)
+				}
+			}
+			chat := capabilityBySlug(manifest.Agents, "chat")
+			if chat.Enabled != tt.wantAgents {
+				t.Fatalf("chat enabled=%v want=%v: %#v", chat.Enabled, tt.wantAgents, chat)
+			}
+			if chat.Attachments != tt.wantAttachments {
+				t.Fatalf("chat attachments=%v want=%v: %#v", chat.Attachments, tt.wantAttachments, chat)
+			}
+		})
+	}
+
+	t.Run("nil config", func(t *testing.T) {
+		previous := rxBot.BotConfig
+		rxBot.BotConfig = nil
+		t.Cleanup(func() { rxBot.BotConfig = previous })
+		manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+		if err != nil {
+			t.Fatal(err)
+		}
+		disabledManifest(t, manifest)
+	})
+}
+
+func TestValidUploadPublicOrigin(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+		ok    bool
+	}{
+		{input: "http://localhost:8000", want: "http://localhost:8000", ok: true},
+		{input: "https://UPLOAD.example/", want: "https://UPLOAD.example", ok: true},
+		{input: "", ok: false},
+		{input: "ftp://upload.example", ok: false},
+		{input: "http://user:pass@upload.example", ok: false},
+		{input: "http://upload.example/path", ok: false},
+		{input: "http://upload.example?token=secret", ok: false},
+		{input: "http://upload.example#fragment", ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, ok := validUploadPublicOrigin(tt.input)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("validUploadPublicOrigin(%q)=(%q,%v), want (%q,%v)", tt.input, got, ok, tt.want, tt.ok)
+			}
+		})
 	}
 }
 
@@ -163,18 +286,18 @@ func TestBotCapabilitiesLocalGatesAndRemoteDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, slug := range []string{"chat", "knowledge", "brief_gene"} {
-		if !capabilityBySlug(rows, slug).Stream {
+		if !capabilityBySlug(rows.Agents, slug).Stream {
 			t.Fatalf("%s stream capability should be enabled by the local gate", slug)
 		}
 	}
-	if !capabilityBySlug(rows, "review").A2UI {
+	if !capabilityBySlug(rows.Agents, "review").A2UI {
 		t.Fatal("Review A2UI should follow the explicit local gate")
 	}
-	if !capabilityBySlug(rows, "chat").Resolver {
+	if !capabilityBySlug(rows.Agents, "chat").Resolver {
 		t.Fatal("Chat resolver should follow the explicit Expert gate")
 	}
 	for _, slug := range []string{"analyst", "deep_genome", "research", "design", "network"} {
-		row := capabilityBySlug(rows, slug)
+		row := capabilityBySlug(rows.Agents, slug)
 		if row.Enabled || row.Stream || row.A2UI || row.Resolver || row.Attachments || row.Artifacts {
 			t.Fatalf("new remote %s was enabled unexpectedly: %#v", slug, row)
 		}
