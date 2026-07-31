@@ -68,6 +68,17 @@ func TestGenericJSONRedactionKeepsRecursiveCredentialMasking(t *testing.T) {
 	}
 }
 
+func TestUploadCreateAuditMarkerDropsMetadata(t *testing.T) {
+	body := []byte(`{"filename":"patient-cohort.fastq.gz","size_bytes":42,"content_type_hint":"application/octet-stream"}`)
+	out := redactOperationLogBody("POST", "/api/v1/files", "/api/v1/files", "application/json", body)
+	if out != uploadCreateAuditMarker {
+		t.Fatalf("upload audit body = %q, want fixed marker", out)
+	}
+	if strings.Contains(out, "patient-cohort.fastq.gz") || strings.Contains(out, "application/octet-stream") {
+		t.Fatalf("upload metadata leaked into audit body: %q", out)
+	}
+}
+
 // TestRedactJSONBodyNested verifies recursive redaction: sensitive keys inside nested objects are masked too.
 func TestRedactJSONBodyNested(t *testing.T) {
 	out := redactJSONBody([]byte(`{"user":{"password":"x"}}`))

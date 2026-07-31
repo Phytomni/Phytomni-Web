@@ -168,6 +168,8 @@ func redactBodyByContentType(contentType string, body []byte) string {
 const (
 	a2uiActionAuditInvalidBody = "[redacted: invalid a2ui action]"
 	a2uiActionAuditMask        = "[REDACTED]"
+	uploadCreateAuditMarker    = "[redacted: upload metadata]"
+	uploadCreateBodyLimit      = int64(16 << 10)
 )
 
 // a2uiActionAuditBody is deliberately separate from the service envelope. It
@@ -235,6 +237,19 @@ func redactA2uiActionBody(body []byte) string {
 	return string(masked)
 }
 
+func redactOperationLogBody(method, path, fullPath, contentType string, body []byte) string {
+	if fullPath == "/api/v1/conversations/:id/a2ui-actions" {
+		return redactA2uiActionBody(body)
+	}
+	if method == "POST" && path == "/api/v1/files" {
+		// File metadata contains user-controlled biological filenames and MIME
+		// hints. Keep the audit row useful as a route marker without storing
+		// either the metadata or any future capability-bearing field.
+		return uploadCreateAuditMarker
+	}
+	return redactBodyByContentType(contentType, body)
+}
+
 func OperationLog() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
@@ -243,7 +258,13 @@ func OperationLog() gin.HandlerFunc {
 		contentType := c.ContentType()
 		if !strings.Contains(contentType, "multipart/form-data") {
 			if c.Request.Body != nil {
-				bodyBytes, _ = io.ReadAll(c.Request.Body)
+				bodyReader := io.Reader(c.Request.Body)
+				if c.Request.Method == "POST" && c.Request.URL.Path == "/api/v1/files" {
+					// The handler enforces the same limit. Keep the audit middleware
+					// from buffering an unbounded metadata body before that guard runs.
+					bodyReader = io.LimitReader(c.Request.Body, uploadCreateBodyLimit+1)
+				}
+				bodyBytes, _ = io.ReadAll(bodyReader)
 			}
 			// Restore the body so downstream BindJSON/etc. can still read it.
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
@@ -299,15 +320,10 @@ func OperationLog() gin.HandlerFunc {
 
 		// Body redaction — the A2UI action route masks its complete payload while
 		// all other endpoints retain the generic content-type rules.
-		var bodyStr string
-		if c.FullPath() == "/api/v1/conversations/:id/a2ui-actions" {
-			bodyStr = redactA2uiActionBody(bodyBytes)
-		} else {
-			// urlencoded uses the same masking as redactQueryParams (covers /login,
-			// /register, /modify/password PostForm credentials), JSON is recursively
-			// masked, everything else is a placeholder.
-			bodyStr = redactBodyByContentType(contentType, bodyBytes)
-		}
+		// urlencoded uses the same masking as redactQueryParams (covers /login,
+		// /register, /modify/password PostForm credentials), JSON is recursively
+		// masked, everything else is a placeholder.
+		bodyStr := redactOperationLogBody(c.Request.Method, c.Request.URL.Path, c.FullPath(), contentType, bodyBytes)
 
 		// The same redaction rules cover the query string so ?token=xxx / ?api_key=xxx
 		// URL forms cannot leak credentials into the audit log.

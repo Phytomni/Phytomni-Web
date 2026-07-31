@@ -51,6 +51,12 @@ capabilities_unavailable = "Bot 能力不可用"
 capabilities_not_found = "互操作能力不存在"
 capabilities_unavailable = "互操作能力不可用"
 
+[upload]
+invalid_request = "上传请求无效"
+unsupported_media_type = "上传请求必须使用 JSON"
+request_too_large = "上传元数据过大"
+unavailable = "文件上传暂时不可用"
+
 [gene]
 file_name_required = "参数file_name不能为空"
 fetch_failed = "获取文件失败"

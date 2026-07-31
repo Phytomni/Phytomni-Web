@@ -33,6 +33,9 @@ func Api(r *gin.RouterGroup) {
 	{
 		apiV1Router.GET("/bot/capabilities", apiHandler.BotCapabilities)             // Web-owned, authenticated Bot capability manifest
 		apiV1Router.GET("/bot/interop/capabilities", apiHandler.InteropCapabilities) // opt-in, sanitized interop capability discovery
+		// Upload control plane: metadata allocation and owner-scoped renewal.
+		apiV1Router.POST("/files", apiHandler.CreateUpload)
+		apiV1Router.POST("/files/:asset_id/capability", apiHandler.RenewUploadCapability)
 		apiV1Router.POST("/users", apiHandler.Register)                              // admin registers a user or vip user
 		apiV1Router.GET("/users", apiHandler.PermissionUserList)                     // admin user list
 		apiV1Router.GET("/users/me", apiHandler.GetUserProfile)                      // get own profile (email from JWT, IDOR closed)

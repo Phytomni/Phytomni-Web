@@ -51,6 +51,12 @@ capabilities_unavailable = "bot capabilities unavailable"
 capabilities_not_found = "interop capabilities not found"
 capabilities_unavailable = "interop capabilities unavailable"
 
+[upload]
+invalid_request = "invalid upload request"
+unsupported_media_type = "upload requests must use JSON"
+request_too_large = "upload metadata is too large"
+unavailable = "file upload is temporarily unavailable"
+
 [gene]
 file_name_required = "parameter file_name cannot be empty"
 fetch_failed = "failed to fetch file"
