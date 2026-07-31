@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from "vue";
 import request from "@/utils/request";
+import type { BotUploadCapability } from "@/api/types";
 import {
   CANONICAL_AGENT_TOOLS,
   type CanonicalAgentTool,
@@ -19,6 +20,13 @@ export interface BotCapability {
   enabled: boolean;
 }
 
+export type { BotUploadCapability } from "@/api/types";
+
+export interface BotCapabilityManifest {
+  agents: BotCapability[];
+  upload: BotUploadCapability;
+}
+
 export type BotCapabilityByTool = Partial<
   Record<CanonicalAgentTool, BotCapability>
 >;
@@ -27,6 +35,9 @@ export type BotCapabilityBySlug = Record<string, BotCapability>;
 export const BOT_CAPABILITIES_URL = "/api/v1/bot/capabilities";
 export const MAX_BOT_CAPABILITIES = CANONICAL_AGENT_TOOLS.length;
 export const MAX_BOT_CAPABILITY_CACHE_ENTRIES = 32;
+export const RESUMABLE_UPLOAD_PROTOCOL = "obs-multipart-v2";
+export const RESUMABLE_UPLOAD_MAX_FILE_BYTES = 10 * 1024 * 1024 * 1024;
+export const RESUMABLE_UPLOAD_MAX_ATTACHMENTS = 10;
 
 const TOOL_TO_SLUG: Record<CanonicalAgentTool, string> = {
   ChatAgent: "chat",
@@ -57,7 +68,7 @@ const EXECUTION_BY_TOOL: Record<CanonicalAgentTool, BotCapabilityExecution> = {
 type CapabilityRecord = Record<string, unknown>;
 type CacheKeyInput = string | { cacheKey?: string } | undefined;
 
-const cache = new Map<string, BotCapability[]>();
+const cache = new Map<string, BotCapabilityManifest>();
 
 function cacheKeyFor(input: CacheKeyInput): string {
   if (typeof input === "string" && input.trim() !== "") {
@@ -96,6 +107,21 @@ function cloneManifest(manifest: readonly BotCapability[]): BotCapability[] {
   return manifest.map((capability) => ({ ...capability }));
 }
 
+function cloneUploadCapability(
+  capability: BotUploadCapability
+): BotUploadCapability {
+  return { ...capability };
+}
+
+function cloneCapabilityManifest(
+  manifest: BotCapabilityManifest
+): BotCapabilityManifest {
+  return {
+    agents: cloneManifest(manifest.agents),
+    upload: cloneUploadCapability(manifest.upload),
+  };
+}
+
 function isRecord(value: unknown): value is CapabilityRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -104,20 +130,66 @@ function isBooleanRecord(record: CapabilityRecord, key: string): boolean {
   return typeof record[key] === "boolean";
 }
 
-function parseCapabilityResponse(payload: unknown): BotCapability[] {
-  if (!isRecord(payload)) return disabledBotCapabilities();
+export function disabledBotUploadCapability(): BotUploadCapability {
+  return {
+    enabled: false,
+    protocol: RESUMABLE_UPLOAD_PROTOCOL,
+    upload_origin: "",
+    max_file_bytes: RESUMABLE_UPLOAD_MAX_FILE_BYTES,
+    max_attachments: RESUMABLE_UPLOAD_MAX_ATTACHMENTS,
+  };
+}
 
-  if ("code" in payload && payload.code !== 200) {
-    return disabledBotCapabilities();
+function isValidUploadOrigin(value: string): boolean {
+  try {
+    const origin = new URL(value);
+    return (
+      (origin.protocol === "http:" || origin.protocol === "https:") &&
+      origin.hostname !== "" &&
+      origin.username === "" &&
+      origin.password === "" &&
+      origin.search === "" &&
+      origin.hash === "" &&
+      (origin.pathname === "" || origin.pathname === "/")
+    );
+  } catch {
+    return false;
   }
+}
 
-  const data = payload.data;
-  const records = Array.isArray(data)
-    ? data
-    : isRecord(data) && Array.isArray(data.capabilities)
-      ? data.capabilities
-      : null;
-  if (!records || records.length > MAX_BOT_CAPABILITIES) {
+function parseUploadCapability(value: unknown): BotUploadCapability {
+  const disabled = disabledBotUploadCapability();
+  if (!isRecord(value)) return disabled;
+  if (
+    value.protocol !== RESUMABLE_UPLOAD_PROTOCOL ||
+    typeof value.enabled !== "boolean" ||
+    typeof value.upload_origin !== "string" ||
+    typeof value.max_file_bytes !== "number" ||
+    !Number.isSafeInteger(value.max_file_bytes) ||
+    value.max_file_bytes < 1 ||
+    value.max_file_bytes > RESUMABLE_UPLOAD_MAX_FILE_BYTES ||
+    typeof value.max_attachments !== "number" ||
+    !Number.isSafeInteger(value.max_attachments) ||
+    value.max_attachments < 1 ||
+    value.max_attachments > RESUMABLE_UPLOAD_MAX_ATTACHMENTS
+  ) {
+    return disabled;
+  }
+  if (value.enabled && !isValidUploadOrigin(value.upload_origin as string)) {
+    return disabled;
+  }
+  if (!value.enabled && value.upload_origin !== "") return disabled;
+  return {
+    enabled: value.enabled as boolean,
+    protocol: RESUMABLE_UPLOAD_PROTOCOL,
+    upload_origin: value.upload_origin as string,
+    max_file_bytes: value.max_file_bytes as number,
+    max_attachments: value.max_attachments as number,
+  };
+}
+
+function parseAgentCapabilities(records: unknown): BotCapability[] {
+  if (!Array.isArray(records) || records.length > MAX_BOT_CAPABILITIES) {
     return disabledBotCapabilities();
   }
 
@@ -167,12 +239,29 @@ function parseCapabilityResponse(payload: unknown): BotCapability[] {
   return disabled;
 }
 
-function setCache(key: string, manifest: readonly BotCapability[]): void {
+export function parseCapabilityResponse(
+  payload: unknown
+): BotCapabilityManifest {
+  const fallback: BotCapabilityManifest = {
+    agents: disabledBotCapabilities(),
+    upload: disabledBotUploadCapability(),
+  };
+  if (!isRecord(payload) || ("code" in payload && payload.code !== 200)) {
+    return fallback;
+  }
+  if (!isRecord(payload.data)) return fallback;
+  return {
+    agents: parseAgentCapabilities(payload.data.agents),
+    upload: parseUploadCapability(payload.data.upload),
+  };
+}
+
+function setCache(key: string, manifest: BotCapabilityManifest): void {
   if (!cache.has(key) && cache.size >= MAX_BOT_CAPABILITY_CACHE_ENTRIES) {
     const oldest: unknown = cache.keys().next().value;
     if (typeof oldest === "string") cache.delete(oldest);
   }
-  cache.set(key, cloneManifest(manifest));
+  cache.set(key, cloneCapabilityManifest(manifest));
 }
 
 export function clearBotCapabilitiesCache(): void {
@@ -181,6 +270,7 @@ export function clearBotCapabilitiesCache(): void {
 
 export function useBotCapabilities(caller?: CacheKeyInput): {
   capabilities: Ref<BotCapability[]>;
+  upload: Ref<BotUploadCapability>;
   loading: Ref<boolean>;
   loaded: Ref<boolean>;
   byTool: Readonly<Ref<BotCapabilityByTool>>;
@@ -189,6 +279,7 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
 } {
   const key = cacheKeyFor(caller);
   const capabilities = ref<BotCapability[]>(disabledBotCapabilities());
+  const upload = ref<BotUploadCapability>(disabledBotUploadCapability());
   const loading = ref(false);
   const loaded = ref(false);
 
@@ -211,9 +302,11 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
     if (!force) {
       const cached = cache.get(key);
       if (cached) {
-        capabilities.value = cloneManifest(cached);
+        const cloned = cloneCapabilityManifest(cached);
+        capabilities.value = cloned.agents;
+        upload.value = cloned.upload;
         loaded.value = true;
-        return cloneManifest(cached);
+        return cloneManifest(cloned.agents);
       }
     }
 
@@ -224,20 +317,25 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
         method: "get",
       });
       const parsed = parseCapabilityResponse(response);
-      capabilities.value = parsed;
+      capabilities.value = parsed.agents;
+      upload.value = parsed.upload;
       setCache(key, parsed);
       loaded.value = true;
-      return cloneManifest(parsed);
+      return cloneManifest(parsed.agents);
     } catch {
-      const fallback = disabledBotCapabilities();
-      capabilities.value = fallback;
+      const fallback: BotCapabilityManifest = {
+        agents: disabledBotCapabilities(),
+        upload: disabledBotUploadCapability(),
+      };
+      capabilities.value = fallback.agents;
+      upload.value = fallback.upload;
       setCache(key, fallback);
       loaded.value = true;
-      return cloneManifest(fallback);
+      return cloneManifest(fallback.agents);
     } finally {
       loading.value = false;
     }
   };
 
-  return { capabilities, loading, loaded, byTool, bySlug, load };
+  return { capabilities, upload, loading, loaded, byTool, bySlug, load };
 }

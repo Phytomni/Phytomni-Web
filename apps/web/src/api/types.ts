@@ -40,6 +40,18 @@ export interface AuthCapabilitiesResponse {
   registration_enabled: boolean;
 }
 
+export interface BotUploadCapability {
+  enabled: boolean;
+  protocol: string;
+  upload_origin: string;
+  max_file_bytes: number;
+  max_attachments: number;
+}
+
+export interface AssetAttachmentRef {
+  asset_id: string;
+}
+
 export interface RegistrationRequest {
   email: string;
   password: string;

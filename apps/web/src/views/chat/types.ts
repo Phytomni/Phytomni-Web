@@ -13,6 +13,8 @@ import type {
   StreamContentBlock,
 } from "./messageTypes";
 
+export type { ResumableUploadItem, UploadStatus } from "./upload/types";
+
 export type {
   AgentStep,
   ChatContent,

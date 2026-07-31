@@ -55,6 +55,24 @@ function record(tool: string, enabled = true) {
   };
 }
 
+function uploadRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: true,
+    protocol: "obs-multipart-v2",
+    upload_origin: "https://upload.example",
+    max_file_bytes: 10 * 1024 * 1024 * 1024,
+    max_attachments: 10,
+    ...overrides,
+  };
+}
+
+function manifestPayload(
+  agents: unknown[],
+  upload: Record<string, unknown> = uploadRecord()
+) {
+  return { code: 200, data: { agents, upload } };
+}
+
 describe("useBotCapabilities", () => {
   beforeEach(() => {
     mockRequest.mockReset();
@@ -63,8 +81,7 @@ describe("useBotCapabilities", () => {
 
   it("maps a valid Web response by tool and strips upstream fields", async () => {
     mockRequest.mockResolvedValueOnce({
-      code: 200,
-      data: [record("ChatAgent"), record("AnalystAgent", false)],
+      ...manifestPayload([record("ChatAgent"), record("AnalystAgent", false)]),
     });
 
     const state = useBotCapabilities("dialogue-1");
@@ -81,6 +98,7 @@ describe("useBotCapabilities", () => {
       "upstream_private_field"
     );
     expect(state.byTool.value.AnalystAgent?.enabled).toBe(false);
+    expect(state.upload.value).toEqual(uploadRecord());
     expect(mockRequest).toHaveBeenCalledWith({
       url: BOT_CAPABILITIES_URL,
       method: "get",
@@ -89,12 +107,11 @@ describe("useBotCapabilities", () => {
 
   it("keeps absent, malformed, and unknown records disabled", async () => {
     mockRequest.mockResolvedValueOnce({
-      code: 200,
-      data: [
+      ...manifestPayload([
         record("ChatAgent"),
         { ...record("KnowledgeAgent"), slug: "wrong" },
         { tool: "UnknownAgent", slug: "unknown", enabled: true },
-      ],
+      ]),
     });
 
     const state = useBotCapabilities({ cacheKey: "malformed" });
@@ -111,9 +128,10 @@ describe("useBotCapabilities", () => {
 
   it("rejects oversized manifests instead of widening the DTO", async () => {
     mockRequest.mockResolvedValueOnce({
-      code: 200,
-      data: Array.from({ length: MAX_BOT_CAPABILITIES + 1 }, () =>
-        record("ChatAgent")
+      ...manifestPayload(
+        Array.from({ length: MAX_BOT_CAPABILITIES + 1 }, () =>
+          record("ChatAgent")
+        )
       ),
     });
 
@@ -124,8 +142,8 @@ describe("useBotCapabilities", () => {
   });
 
   it.each([
-    ["401", { code: 401, data: [record("ChatAgent")] }],
-    ["404", { code: 404, data: [record("ChatAgent")] }],
+    ["401", { code: 401, data: manifestPayload([record("ChatAgent")]).data }],
+    ["404", { code: 404, data: manifestPayload([record("ChatAgent")]).data }],
   ])("returns disabled defaults for HTTP %s", async (_name, response) => {
     mockRequest.mockResolvedValueOnce(response);
 
@@ -148,8 +166,7 @@ describe("useBotCapabilities", () => {
 
   it("bounds per-caller cache entries and avoids repeated requests", async () => {
     mockRequest.mockImplementation(async () => ({
-      code: 200,
-      data: [record("ChatAgent")],
+      ...manifestPayload([record("ChatAgent")]),
     }));
 
     for (let index = 0; index < MAX_BOT_CAPABILITY_CACHE_ENTRIES; index += 1) {
@@ -162,5 +179,61 @@ describe("useBotCapabilities", () => {
     expect(mockRequest).toHaveBeenCalledTimes(
       MAX_BOT_CAPABILITY_CACHE_ENTRIES + 2
     );
+  });
+
+  it("decodes upload capability independently from Agent availability", async () => {
+    mockRequest.mockResolvedValueOnce(
+      manifestPayload([record("ChatAgent")], uploadRecord())
+    );
+
+    const state = useBotCapabilities("upload-valid");
+    await state.load();
+
+    expect(state.byTool.value.ChatAgent?.enabled).toBe(true);
+    expect(state.upload.value.enabled).toBe(true);
+    expect(state.upload.value.upload_origin).toBe("https://upload.example");
+  });
+
+  it.each([
+    ["missing upload", null],
+    ["wrong protocol", uploadRecord({ protocol: "other" })],
+    [
+      "invalid origin",
+      uploadRecord({ upload_origin: "https://upload.example/path" }),
+    ],
+    [
+      "invalid limit",
+      uploadRecord({ max_file_bytes: Number.MAX_SAFE_INTEGER + 1 }),
+    ],
+  ])(
+    "disables malformed upload fields without disabling valid Agents (%s)",
+    async (_name, upload) => {
+      mockRequest.mockResolvedValueOnce(
+        manifestPayload(
+          [record("ChatAgent")],
+          upload as Record<string, unknown>
+        )
+      );
+
+      const state = useBotCapabilities(`upload-invalid-${_name}`);
+      await state.load();
+
+      expect(state.byTool.value.ChatAgent?.enabled).toBe(true);
+      expect(state.upload.value.enabled).toBe(false);
+      expect(state.upload.value.upload_origin).toBe("");
+    }
+  );
+
+  it("rejects the legacy bare Agent array instead of treating it as a capability manifest", async () => {
+    mockRequest.mockResolvedValueOnce({
+      code: 200,
+      data: [record("ChatAgent")],
+    });
+
+    const state = useBotCapabilities("legacy-array");
+    await state.load();
+
+    expect(state.capabilities.value.every((item) => !item.enabled)).toBe(true);
+    expect(state.upload.value.enabled).toBe(false);
   });
 });
