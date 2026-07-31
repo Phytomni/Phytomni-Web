@@ -42,6 +42,14 @@ describe("validateUploadFile", () => {
     });
   });
 
+  it("accepts slash-separated MIME hints without restricting formats", () => {
+    expect(
+      validateUploadFile(
+        metadata("sample.data", { type: "application/vnd.custom+binary" })
+      )
+    ).toEqual({ ok: true, normalizedName: "sample.data" });
+  });
+
   it("normalizes the create/display filename to NFC without changing the byte source", () => {
     const result = validateUploadFile(metadata("e\u0301.fastq"));
     expect(result).toEqual({ ok: true, normalizedName: "é.fastq" });

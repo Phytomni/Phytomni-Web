@@ -47,6 +47,14 @@ function hasUnsafeFilenameRune(value: string): boolean {
   return false;
 }
 
+function hasUnsafeControlRune(value: string): boolean {
+  for (const rune of value) {
+    const codePoint = rune.codePointAt(0) ?? 0;
+    if (codePoint < 0x20 || codePoint === 0x7f) return true;
+  }
+  return false;
+}
+
 function isSafeFilename(name: unknown): name is string {
   if (typeof name !== "string") return false;
   let normalized: string;
@@ -72,7 +80,7 @@ function isSafeContentType(value: unknown): value is string {
   if (typeof value !== "string") return false;
   return (
     utf8ByteLength(value) <= RESUMABLE_UPLOAD_LIMITS.maxContentTypeBytes &&
-    !hasUnsafeFilenameRune(value)
+    !hasUnsafeControlRune(value)
   );
 }
 
