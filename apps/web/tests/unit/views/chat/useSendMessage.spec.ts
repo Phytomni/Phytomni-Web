@@ -1469,6 +1469,7 @@ describe("useSendMessage", () => {
     chatStatesApi.currentChatId.value = tempId;
     currentChatId = chatStatesApi.currentChatId;
     const state = chatStatesApi.getChatState(tempId);
+    state.mode = "instant";
     state.messageInput = "late send";
     currentChat.value = { messages: [] };
 
