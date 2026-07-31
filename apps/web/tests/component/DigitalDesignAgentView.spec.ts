@@ -45,6 +45,30 @@ const mocks = vi.hoisted(() => {
         },
       },
     },
+    upload: {
+      value: {
+        enabled: true,
+        protocol: "obs-multipart-v2",
+        upload_origin: "https://uploads.example.test",
+        max_file_bytes: 10 * 1024 * 1024 * 1024,
+        max_attachments: 10,
+      },
+    },
+  };
+  const chatState = { fileList: [] as unknown[] };
+  const uploadQueue = {
+    queueFiles: vi.fn().mockResolvedValue(undefined),
+    removeUpload: vi.fn().mockResolvedValue(undefined),
+    removeUploadById: vi.fn().mockResolvedValue(undefined),
+    cancelUpload: vi.fn().mockResolvedValue(undefined),
+    pauseUpload: vi.fn().mockResolvedValue(undefined),
+    resumeUpload: vi.fn().mockResolvedValue(undefined),
+    retryUpload: vi.fn().mockResolvedValue(undefined),
+    reselectUpload: vi.fn(),
+    cancelDialogue: vi.fn().mockResolvedValue(undefined),
+    recoveryStore: {},
+    hasBlockingUploads: { value: false, __v_isRef: true },
+    completedAssetIds: { value: [] as Array<{ asset_id: string }> },
   };
   return {
     state,
@@ -54,7 +78,9 @@ const mocks = vi.hoisted(() => {
     cancel: vi.fn().mockReturnValue(true),
     reset: vi.fn(),
     load: vi.fn().mockResolvedValue([]),
-    getChatState: vi.fn(() => ({})),
+    chatState,
+    uploadQueue,
+    getChatState: vi.fn(() => chatState),
     getChatdownloadURL: vi.fn(),
     routerBack: vi.fn(),
   };
@@ -81,6 +107,10 @@ mocks.useBotRemoteAgentRun.mockImplementation(() => ({
 
 vi.mock("@/views/chat/composables/useChatStates", () => ({
   useChatStates: () => ({ getChatState: mocks.getChatState }),
+}));
+
+vi.mock("@/views/chat/composables/useResumableUploads", () => ({
+  useResumableUploads: () => mocks.uploadQueue,
 }));
 
 vi.mock("@/components/research/ResearchArtifactShell.vue", () => ({
@@ -187,6 +217,9 @@ describe("DigitalDesignAgentView", () => {
     resetState();
     mocks.submit.mockResolvedValue(null);
     mocks.capabilities.load.mockResolvedValue([]);
+    mocks.chatState.fileList = [];
+    mocks.uploadQueue.hasBlockingUploads.value = false;
+    mocks.uploadQueue.completedAssetIds.value = [];
   });
 
   it("passes the Digital Design tool to the shared product runner", () => {
@@ -248,15 +281,118 @@ describe("DigitalDesignAgentView", () => {
       value: [context],
     });
     await fileInput.trigger("change");
-    await wrapper.get("form.digital-design-form").trigger("submit");
 
+    mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_context" }];
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([context]);
+    await wrapper.get("form.digital-design-form").trigger("submit");
     expect(mocks.submit).toHaveBeenCalledWith({
       query: "Design a stable protein",
-      files: [context],
+      attachments: [{ asset_id: "file_context" }],
       resolver: { geneId: "AT1G01010", speciesCode: "ath" },
     });
     expect(mocks.submit.mock.calls[0][0].query).not.toContain("AT1G01010");
     expect(mocks.submit.mock.calls[0][0].query).not.toContain("ath");
+    wrapper.unmount();
+  });
+
+  it("delegates arbitrary biological formats to the resumable queue", async () => {
+    const wrapper = mountView();
+    const input = wrapper.get('[data-test="design-files"]');
+    const reads = new File(["reads"], "sample.fastq.gz", {
+      type: "application/gzip",
+    });
+
+    expect(input.attributes("accept")).toBeUndefined();
+    Object.defineProperty(input.element, "files", {
+      configurable: true,
+      value: [reads],
+    });
+    await input.trigger("change");
+
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([reads]);
+    wrapper.unmount();
+  });
+
+  it("keeps file-free runs available when Agent attachments are disabled", async () => {
+    mocks.capabilities.byTool.value.DigitalDesignAgent.attachments = false;
+    const wrapper = mountView();
+
+    expect(wrapper.get('[data-test="design-files"]').element).toHaveProperty(
+      "disabled",
+      true
+    );
+    await wrapper
+      .get('[data-test="design-question"]')
+      .setValue("Design a protein without an upload");
+    await wrapper.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+    await wrapper.get('[data-test="design-species-code"]').setValue("ath");
+    await wrapper.get("form.digital-design-form").trigger("submit");
+
+    expect(mocks.submit).toHaveBeenCalledWith({
+      query: "Design a protein without an upload",
+      attachments: [],
+      resolver: { geneId: "AT1G01010", speciesCode: "ath" },
+    });
+    wrapper.unmount();
+  });
+
+  it("blocks submission while a queued asset is still active", async () => {
+    mocks.uploadQueue.hasBlockingUploads.value = true;
+    const wrapper = mountView();
+    await wrapper
+      .get('[data-test="design-question"]')
+      .setValue("Design a protein");
+    await wrapper.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+    await wrapper.get('[data-test="design-species-code"]').setValue("ath");
+
+    expect(wrapper.get('[data-test="design-submit"]').element).toHaveProperty(
+      "disabled",
+      true
+    );
+    await wrapper.get("form.digital-design-form").trigger("submit");
+    expect(mocks.submit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("wires pause, resume, retry, and remove actions to the shared queue", async () => {
+    const item = {
+      localId: "upload-1",
+      file: null,
+      assetId: null,
+      name: "sample.fastq.gz",
+      size: 3,
+      type: "application/gzip",
+      lastModified: 1,
+      status: "uploading",
+      partSize: 1,
+      partCount: 3,
+      receivedParts: [],
+      loadedBytes: 1,
+      speedBytesPerSecond: 1,
+      etaSeconds: 2,
+      retryCount: 0,
+      errorCode: null,
+    };
+    mocks.chatState.fileList = [item];
+    let wrapper = mountView();
+    await wrapper.get('[data-testid="chat-upload-pause"]').trigger("click");
+    await wrapper.get('[data-testid="chat-upload-remove"]').trigger("click");
+    expect(mocks.uploadQueue.pauseUpload).toHaveBeenCalledWith("upload-1");
+    expect(mocks.uploadQueue.removeUploadById).toHaveBeenCalledWith("upload-1");
+    wrapper.unmount();
+
+    mocks.chatState.fileList = [{ ...item, status: "paused" }];
+    wrapper = mountView();
+    await wrapper.get('[data-testid="chat-upload-resume"]').trigger("click");
+    expect(mocks.uploadQueue.resumeUpload).toHaveBeenCalledWith("upload-1");
+    wrapper.unmount();
+
+    mocks.chatState.fileList = [
+      { ...item, status: "failed", errorCode: "upload_failed" },
+    ];
+    wrapper = mountView();
+    await wrapper.get('[data-testid="chat-upload-retry"]').trigger("click");
+    expect(mocks.uploadQueue.retryUpload).toHaveBeenCalledWith("upload-1");
     wrapper.unmount();
   });
 
@@ -352,7 +488,7 @@ describe("DigitalDesignAgentView", () => {
       ),
     };
 
-    for (const field of ["enabled", "attachments", "artifacts"] as const) {
+    for (const field of ["enabled", "artifacts"] as const) {
       mocks.capabilities.byTool.value.DigitalDesignAgent = {
         ...baseCapability,
         [field]: false,

@@ -94,34 +94,30 @@
           }}</label>
           <input
             id="research-files"
-            ref="fileInput"
             data-test="research-files"
             type="file"
             multiple
-            :accept="RESEARCH_FILE_ACCEPT"
+            :disabled="!canPickAttachments || isSubmitting || isRunActive"
             @change="handleFiles"
           />
           <p class="research-agent-hint">
             {{ t("agents.research.contextFilesHint") }}
           </p>
           <ul
-            v-if="selectedFiles.length"
+            v-if="uploadItems.length"
             class="research-agent-file-list"
             data-test="research-file-list"
           >
-            <li
-              v-for="(file, index) in selectedFiles"
-              :key="`${file.name}-${file.lastModified}-${index}`"
-            >
-              <span>{{ file.name }}</span>
-              <button
-                type="button"
-                class="research-agent-file-remove"
-                :aria-label="`${t('common.delete')}: ${file.name}`"
-                @click="removeFile(index)"
-              >
-                {{ t("common.delete") }}
-              </button>
+            <li v-for="item in uploadItems" :key="item.localId">
+              <ChatUploadCard
+                :item="item"
+                @pause="pauseUpload"
+                @resume="resumeUpload"
+                @retry="retryUpload"
+                @reselect="reselectUpload"
+                @cancel="cancelUpload"
+                @remove="removeUpload"
+              />
             </li>
           </ul>
         </div>
@@ -161,7 +157,7 @@
             type="submit"
             class="research-agent-submit"
             data-test="research-submit"
-            :disabled="isSubmitting"
+            :disabled="isSubmitting || hasBlockingUploads"
             @click="submitResearch"
           >
             {{
@@ -219,6 +215,7 @@
               :updated-at="reportUpdatedAt"
               ns="research-agent"
               :labels="reportLabels"
+              :failure-label="reportFailureLabel"
               :empty-report-label="t('agents.research.emptyReport')"
             />
           </template>
@@ -279,13 +276,17 @@ import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import ChatUploadCard from "@/views/chat/components/ChatUploadCard.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
+import { userStore } from "@/stores";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
 import {
   useBotRemoteAgentRun,
   type BotRemoteAgentRunState,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
+import { useResumableUploads } from "@/views/chat/composables/useResumableUploads";
+import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
 import {
   isSafeBotObsPath,
   parseBotProjection,
@@ -297,17 +298,6 @@ import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReduc
 
 const MAX_QUERY_LENGTH = 4000;
 const MAX_DATASET_DESCRIPTION_LENGTH = 4000;
-const MAX_RESEARCH_FILES = 10;
-const MAX_RESEARCH_FILE_BYTES = 10 * 1024 * 1024;
-const RESEARCH_FILE_EXTENSIONS = [
-  ".pdf",
-  ".doc",
-  ".xlsx",
-  ".ppt",
-  ".txt",
-  ".png",
-] as const;
-const RESEARCH_FILE_ACCEPT = RESEARCH_FILE_EXTENSIONS.join(",");
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
 const SAFE_MESSAGE_ID = /^[1-9]\d{0,18}$/u;
 const DATASET_DESCRIPTION_MARKER = "\n\n[dataset-description]\n";
@@ -328,6 +318,9 @@ const routeDialogueId =
 const dialogueId = SAFE_DIALOGUE_ID.test(routeDialogueId)
   ? routeDialogueId
   : "research-agent";
+const uploadDialogueId = ref(dialogueId);
+const currentUser = userStore();
+const uploadUsername = computed(() => currentUser.name ?? "");
 const run = useBotRemoteAgentRun({
   tool: "InSilicoResearchAgent",
   dialogueId,
@@ -337,8 +330,6 @@ const run = useBotRemoteAgentRun({
 
 const question = ref("");
 const datasetDescription = ref("");
-const selectedFiles = ref<File[]>([]);
-const fileInput = ref<HTMLInputElement | null>(null);
 const fileError = ref("");
 const formError = ref("");
 const downloadError = ref("");
@@ -359,10 +350,38 @@ const capabilityAllowed = computed(() => {
     researchProduct.live === true &&
     capability?.enabled === true &&
     capability.execution === "agent_run" &&
-    capability.attachments === true &&
     capability.artifacts === true
   );
 });
+const canPickAttachments = computed(
+  () =>
+    researchCapability.value?.attachments === true &&
+    capabilities.upload.value.enabled === true
+);
+const uploadQueue = useResumableUploads({
+  currentChatId: uploadDialogueId,
+  getChatState,
+  uploadCapability: capabilities.upload,
+  username: uploadUsername,
+  onValidationError: (error) => {
+    fileError.value = attachmentErrorMessage(error);
+  },
+});
+const uploadItems = computed(() => getChatState(dialogueId).fileList ?? []);
+const hasBlockingUploads = uploadQueue.hasBlockingUploads;
+
+function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
+  return t(`chat.attachmentErrors.${error.code}`, {
+    file: error.fileName ?? "",
+    maxFiles: capabilities.upload.value.max_attachments,
+    maxFileMb: Math.ceil(
+      capabilities.upload.value.max_file_bytes / 1024 / 1024
+    ),
+    maxTotalMb: Math.ceil(
+      capabilities.upload.value.max_file_bytes / 1024 / 1024
+    ),
+  });
+}
 
 const displayedState = computed(
   () => (props.state ?? run.state.value) as BotRemoteAgentRunState
@@ -417,6 +436,11 @@ const reportLabels = computed(() => ({
   complete: t("agents.research.complete"),
   failed: t("common.failed"),
 }));
+const reportFailureLabel = computed(() =>
+  displayedState.value.failures.includes("unsupported_asset_format")
+    ? t("agents.research.unsupportedAssetFormat")
+    : t("common.failed")
+);
 const tabLabels = computed(() => ({
   content: t("agents.research.report"),
   evidence: t("agents.research.evidence"),
@@ -424,44 +448,52 @@ const tabLabels = computed(() => ({
   downloads: t("agents.research.downloads"),
 }));
 
-function extensionFor(name: string): string {
-  const lastDot = name.lastIndexOf(".");
-  return lastDot >= 0 ? name.slice(lastDot).toLowerCase() : "";
-}
-
-function isAllowedFile(file: File): boolean {
-  return (
-    file.size > 0 &&
-    file.size <= MAX_RESEARCH_FILE_BYTES &&
-    RESEARCH_FILE_EXTENSIONS.includes(
-      extensionFor(file.name) as (typeof RESEARCH_FILE_EXTENSIONS)[number]
-    )
-  );
-}
-
 function handleFiles(event: Event): void {
   const input = event.target as HTMLInputElement;
   const incoming = Array.from(input.files ?? []);
-  const accepted = incoming.filter(isAllowedFile).slice(0, MAX_RESEARCH_FILES);
-  selectedFiles.value = accepted;
-  fileError.value =
-    accepted.length !== incoming.length
-      ? t("agents.research.fileValidation")
-      : incoming.length > MAX_RESEARCH_FILES
-        ? t("agents.research.fileCountValidation")
-        : "";
+  fileError.value = "";
+  if (canPickAttachments.value) {
+    void uploadQueue.queueFiles(incoming).catch(() => undefined);
+  }
   input.value = "";
 }
 
-function removeFile(index: number): void {
-  selectedFiles.value = selectedFiles.value.filter(
-    (_, current) => current !== index
+function handleUploadAction(action: Promise<void>): void {
+  void action.catch(() => undefined);
+}
+
+const pauseUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.pauseUpload(localId));
+};
+const resumeUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.resumeUpload(localId));
+};
+const retryUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.retryUpload(localId));
+};
+const reselectUpload = (localId: string, file: File): void => {
+  uploadQueue.reselectUpload(localId, file);
+};
+const cancelUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.cancelUpload(localId));
+};
+const removeUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.removeUploadById(localId));
+};
+
+async function clearUploads(): Promise<void> {
+  await Promise.all(
+    [...uploadItems.value].map((item) => uploadQueue.removeUpload(item))
   );
-  fileError.value = "";
 }
 
 async function submitResearch(): Promise<void> {
-  if (!capabilityAllowed.value || isSubmitting.value) return;
+  if (
+    !capabilityAllowed.value ||
+    isSubmitting.value ||
+    hasBlockingUploads.value
+  )
+    return;
 
   const normalizedQuestion = question.value.trim();
   if (!normalizedQuestion) {
@@ -489,7 +521,7 @@ async function submitResearch(): Promise<void> {
       : normalizedQuestion;
     const projection = await run.submit({
       query,
-      files: [...selectedFiles.value],
+      attachments: uploadQueue.completedAssetIds.value,
     });
     if (
       projection &&
@@ -515,7 +547,7 @@ function resetResearch(): void {
   run.reset();
   question.value = "";
   datasetDescription.value = "";
-  selectedFiles.value = [];
+  void clearUploads().catch(() => undefined);
   fileError.value = "";
   formError.value = "";
   downloadError.value = "";

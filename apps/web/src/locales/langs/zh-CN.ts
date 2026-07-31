@@ -427,8 +427,7 @@ export default {
     uploadFile:
       "支持生物学数据和文本文件，单个最大 10 GiB，最多 10 个，也可直接粘贴复制的文件。",
     attachmentErrors: {
-      unsupported_type:
-        "不支持“{file}”。请选择 PDF、Word、Excel、PowerPoint、TXT 或 PNG 文件。",
+      unsupported_type: "当前智能体不支持“{file}”，请查看智能体能力后重试。",
       file_too_large: "“{file}”超过单个文件 {maxFileMb} MB 的限制。",
       total_too_large: "附件总大小不能超过 {maxTotalMb} MB。",
       too_many_files: "最多添加 {maxFiles} 个附件。",
@@ -856,13 +855,15 @@ export default {
       speciesCodePlaceholder: "例如 ath",
       contextFilesLabel: "上下文文件（可选）",
       contextFilesHint:
-        "最多上传 10 个文件（.pdf、.doc、.xlsx、.ppt、.txt 或 .png），每个文件不超过 10 MB。",
+        "可上传任意格式的生物学数据或文本，最多 10 个文件，每个文件不超过 10 GiB。",
       submit: "开始设计运行",
       submitting: "正在提交…",
       reset: "开始新的运行",
       progress: "设计运行中",
       complete: "设计报告已就绪",
       degraded: "部分分析不可用，当前设计报告内容不完整。",
+      unsupportedAssetFormat:
+        "该智能体无法处理此数据格式；文件已完成上传，请选择该智能体支持的输入格式。",
       trackingDegraded: "运行跟踪降级，当前显示内容可能不是 Bot 的最新状态。",
       reportTitle: "智能设计报告",
       report: "报告",
@@ -876,7 +877,8 @@ export default {
       capabilityLoading: "正在检查智能设计能力…",
       unavailableTitle: "智能设计智能体暂不可用",
       unavailableMessage: "此路由受能力开关保护，尚未创建任何结果。",
-      fileValidation: "部分文件未通过校验，请检查支持的类型和 10 MB 大小限制。",
+      fileValidation:
+        "部分文件未通过校验，请检查文件元数据和 10 GiB 大小限制。",
       fileCountValidation: "最多上传 10 个文件。",
       questionRequired: "提交前请输入设计问题。",
       questionTooLong: "设计问题过长。",
@@ -903,7 +905,7 @@ export default {
       questionPlaceholder: "描述您希望复现或探索的研究",
       contextFilesLabel: "论文与上下文文件",
       contextFilesHint:
-        "最多上传 10 个文件（.pdf、.doc、.xlsx、.ppt、.txt 或 .png），每个文件不超过 10 MB。",
+        "可上传任意格式的论文或生物学数据，最多 10 个文件，每个文件不超过 10 GiB。",
       datasetDescriptionLabel: "数据集描述（可选）",
       datasetDescriptionPlaceholder: "描述数据集、物种、参数或希望替换的内容",
       submit: "开始研究运行",
@@ -912,6 +914,8 @@ export default {
       progress: "研究运行中",
       complete: "报告已就绪",
       degraded: "部分分析不可用，当前报告内容不完整。",
+      unsupportedAssetFormat:
+        "该智能体无法处理此数据格式；文件已完成上传，请选择该智能体支持的输入格式。",
       reportTitle: "研究报告",
       report: "报告",
       evidence: "证据",
@@ -924,7 +928,8 @@ export default {
       capabilityLoading: "正在检查研究能力…",
       unavailableTitle: "研究智能体暂不可用",
       unavailableMessage: "此路由受能力开关保护，尚未创建任何结果。",
-      fileValidation: "部分文件未通过校验，请检查支持的类型和 10 MB 大小限制。",
+      fileValidation:
+        "部分文件未通过校验，请检查文件元数据和 10 GiB 大小限制。",
       fileCountValidation: "最多上传 10 个文件。",
       questionRequired: "提交前请输入研究问题。",
       questionTooLong: "研究问题过长。",

@@ -121,34 +121,30 @@
           </label>
           <input
             id="design-files"
-            ref="fileInput"
             data-test="design-files"
             type="file"
             multiple
-            :accept="DESIGN_FILE_ACCEPT"
+            :disabled="!canPickAttachments || isSubmitting || isRunActive"
             @change="handleFiles"
           />
           <p class="digital-design-hint">
             {{ t("agents.digitalDesign.contextFilesHint") }}
           </p>
           <ul
-            v-if="selectedFiles.length"
+            v-if="uploadItems.length"
             class="digital-design-file-list"
             data-test="design-file-list"
           >
-            <li
-              v-for="(file, index) in selectedFiles"
-              :key="`${file.name}-${file.lastModified}-${index}`"
-            >
-              <span>{{ file.name }}</span>
-              <button
-                type="button"
-                class="digital-design-file-remove"
-                :aria-label="`${t('common.delete')}: ${file.name}`"
-                @click="removeFile(index)"
-              >
-                {{ t("common.delete") }}
-              </button>
+            <li v-for="item in uploadItems" :key="item.localId">
+              <ChatUploadCard
+                :item="item"
+                @pause="pauseUpload"
+                @resume="resumeUpload"
+                @retry="retryUpload"
+                @reselect="reselectUpload"
+                @cancel="cancelUpload"
+                @remove="removeUpload"
+              />
             </li>
           </ul>
         </div>
@@ -189,7 +185,7 @@
             type="submit"
             class="digital-design-submit"
             data-test="design-submit"
-            :disabled="isSubmitting"
+            :disabled="isSubmitting || hasBlockingUploads"
             @keydown.enter.prevent="submitDesign"
           >
             {{
@@ -256,6 +252,7 @@
               :updated-at="reportUpdatedAt"
               ns="digital-design-agent"
               :labels="reportLabels"
+              :failure-label="reportFailureLabel"
               :empty-report-label="t('agents.digitalDesign.emptyReport')"
             />
           </template>
@@ -315,30 +312,23 @@ import { getChatdownloadURL } from "@/api/chat";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import ChatUploadCard from "@/views/chat/components/ChatUploadCard.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
+import { userStore } from "@/stores";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
 import {
   useBotRemoteAgentRun,
   type BotRemoteAgentRunState,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
+import { useResumableUploads } from "@/views/chat/composables/useResumableUploads";
+import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
 const MAX_QUERY_LENGTH = 4000;
 const MAX_GENE_ID_LENGTH = 128;
 const MAX_SPECIES_CODE_LENGTH = 32;
-const MAX_DESIGN_FILES = 10;
-const MAX_DESIGN_FILE_BYTES = 10 * 1024 * 1024;
-const DESIGN_FILE_EXTENSIONS = [
-  ".pdf",
-  ".doc",
-  ".xlsx",
-  ".ppt",
-  ".txt",
-  ".png",
-] as const;
-const DESIGN_FILE_ACCEPT = DESIGN_FILE_EXTENSIONS.join(",");
 const GENE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SPECIES_CODE_PATTERN = /^[a-z][a-z0-9_-]{1,31}$/u;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
@@ -355,6 +345,9 @@ const routeDialogueId =
 const dialogueId = SAFE_DIALOGUE_ID.test(routeDialogueId)
   ? routeDialogueId
   : "digital-design-agent";
+const uploadDialogueId = ref(dialogueId);
+const currentUser = userStore();
+const uploadUsername = computed(() => currentUser.name ?? "");
 const run = useBotRemoteAgentRun({
   tool: "DigitalDesignAgent",
   dialogueId,
@@ -365,8 +358,6 @@ const run = useBotRemoteAgentRun({
 const question = ref("");
 const geneId = ref("");
 const speciesCode = ref("");
-const selectedFiles = ref<File[]>([]);
-const fileInput = ref<HTMLInputElement | null>(null);
 const validationMessages = ref<string[]>([]);
 const fileError = ref("");
 const formError = ref("");
@@ -386,10 +377,38 @@ const capabilityAllowed = computed(() => {
     capability?.enabled === true &&
     capability.execution === "agent_run" &&
     capability.resolver === true &&
-    capability.attachments === true &&
     capability.artifacts === true
   );
 });
+const canPickAttachments = computed(
+  () =>
+    digitalDesignCapability.value?.attachments === true &&
+    capabilities.upload.value.enabled === true
+);
+const uploadQueue = useResumableUploads({
+  currentChatId: uploadDialogueId,
+  getChatState,
+  uploadCapability: capabilities.upload,
+  username: uploadUsername,
+  onValidationError: (error) => {
+    fileError.value = attachmentErrorMessage(error);
+  },
+});
+const uploadItems = computed(() => getChatState(dialogueId).fileList ?? []);
+const hasBlockingUploads = uploadQueue.hasBlockingUploads;
+
+function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
+  return t(`chat.attachmentErrors.${error.code}`, {
+    file: error.fileName ?? "",
+    maxFiles: capabilities.upload.value.max_attachments,
+    maxFileMb: Math.ceil(
+      capabilities.upload.value.max_file_bytes / 1024 / 1024
+    ),
+    maxTotalMb: Math.ceil(
+      capabilities.upload.value.max_file_bytes / 1024 / 1024
+    ),
+  });
+}
 
 const displayedState = computed(
   () => (props.state ?? run.state.value) as BotRemoteAgentRunState
@@ -449,6 +468,11 @@ const reportLabels = computed(() => ({
   complete: t("agents.digitalDesign.complete"),
   failed: t("common.failed"),
 }));
+const reportFailureLabel = computed(() =>
+  displayedState.value.failures.includes("unsupported_asset_format")
+    ? t("agents.digitalDesign.unsupportedAssetFormat")
+    : t("common.failed")
+);
 const tabLabels = computed(() => ({
   content: t("agents.digitalDesign.report"),
   evidence: t("agents.digitalDesign.evidence"),
@@ -456,40 +480,43 @@ const tabLabels = computed(() => ({
   downloads: t("agents.digitalDesign.downloads"),
 }));
 
-function extensionFor(name: string): string {
-  const lastDot = name.lastIndexOf(".");
-  return lastDot >= 0 ? name.slice(lastDot).toLowerCase() : "";
-}
-
-function isAllowedFile(file: File): boolean {
-  return (
-    file.size > 0 &&
-    file.size <= MAX_DESIGN_FILE_BYTES &&
-    DESIGN_FILE_EXTENSIONS.includes(
-      extensionFor(file.name) as (typeof DESIGN_FILE_EXTENSIONS)[number]
-    )
-  );
-}
-
 function handleFiles(event: Event): void {
   const input = event.target as HTMLInputElement;
   const incoming = Array.from(input.files ?? []);
-  const accepted = incoming.filter(isAllowedFile).slice(0, MAX_DESIGN_FILES);
-  selectedFiles.value = accepted;
-  fileError.value =
-    accepted.length !== incoming.length
-      ? t("agents.digitalDesign.fileValidation")
-      : incoming.length > MAX_DESIGN_FILES
-        ? t("agents.digitalDesign.fileCountValidation")
-        : "";
+  fileError.value = "";
+  if (canPickAttachments.value) {
+    void uploadQueue.queueFiles(incoming).catch(() => undefined);
+  }
   input.value = "";
 }
 
-function removeFile(index: number): void {
-  selectedFiles.value = selectedFiles.value.filter(
-    (_, current) => current !== index
+function handleUploadAction(action: Promise<void>): void {
+  void action.catch(() => undefined);
+}
+
+const pauseUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.pauseUpload(localId));
+};
+const resumeUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.resumeUpload(localId));
+};
+const retryUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.retryUpload(localId));
+};
+const reselectUpload = (localId: string, file: File): void => {
+  uploadQueue.reselectUpload(localId, file);
+};
+const cancelUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.cancelUpload(localId));
+};
+const removeUpload = (localId: string): void => {
+  handleUploadAction(uploadQueue.removeUploadById(localId));
+};
+
+async function clearUploads(): Promise<void> {
+  await Promise.all(
+    [...uploadItems.value].map((item) => uploadQueue.removeUpload(item))
   );
-  fileError.value = "";
 }
 
 function normalizedGeneId(value: string): string | null {
@@ -511,7 +538,12 @@ function normalizedSpeciesCode(value: string): string | null {
 }
 
 async function submitDesign(): Promise<void> {
-  if (!capabilityAllowed.value || isSubmitting.value) return;
+  if (
+    !capabilityAllowed.value ||
+    isSubmitting.value ||
+    hasBlockingUploads.value
+  )
+    return;
 
   validationMessages.value = [];
   formError.value = "";
@@ -539,7 +571,7 @@ async function submitDesign(): Promise<void> {
   try {
     await run.submit({
       query: normalizedQuestion,
-      files: [...selectedFiles.value],
+      attachments: uploadQueue.completedAssetIds.value,
       resolver: {
         geneId: normalizedGene,
         speciesCode: normalizedSpecies,
@@ -561,7 +593,7 @@ function resetDesign(): void {
   question.value = "";
   geneId.value = "";
   speciesCode.value = "";
-  selectedFiles.value = [];
+  void clearUploads().catch(() => undefined);
   validationMessages.value = [];
   fileError.value = "";
   formError.value = "";

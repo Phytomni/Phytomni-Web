@@ -79,6 +79,30 @@ const mocks = vi.hoisted(() => {
         },
       },
     },
+    upload: {
+      value: {
+        enabled: true,
+        protocol: "obs-multipart-v2",
+        upload_origin: "https://uploads.example.test",
+        max_file_bytes: 10 * 1024 * 1024 * 1024,
+        max_attachments: 10,
+      },
+    },
+  };
+  const chatState = { fileList: [] as unknown[] };
+  const uploadQueue = {
+    queueFiles: vi.fn().mockResolvedValue(undefined),
+    removeUpload: vi.fn().mockResolvedValue(undefined),
+    removeUploadById: vi.fn().mockResolvedValue(undefined),
+    cancelUpload: vi.fn().mockResolvedValue(undefined),
+    pauseUpload: vi.fn().mockResolvedValue(undefined),
+    resumeUpload: vi.fn().mockResolvedValue(undefined),
+    retryUpload: vi.fn().mockResolvedValue(undefined),
+    reselectUpload: vi.fn(),
+    cancelDialogue: vi.fn().mockResolvedValue(undefined),
+    recoveryStore: {},
+    hasBlockingUploads: { value: false, __v_isRef: true },
+    completedAssetIds: { value: [] as Array<{ asset_id: string }> },
   };
   return {
     state,
@@ -86,7 +110,9 @@ const mocks = vi.hoisted(() => {
     submit: vi.fn().mockResolvedValue(null),
     cancel: vi.fn().mockReturnValue(true),
     reset: vi.fn(),
-    getChatState: vi.fn(() => ({})),
+    chatState,
+    uploadQueue,
+    getChatState: vi.fn(() => chatState),
     getChatdownloadURL: vi.fn(),
     routerBack: vi.fn(),
     getAnswerCheck: vi.fn().mockResolvedValue({ code: 200, data: [] }),
@@ -120,6 +146,10 @@ vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
 
 vi.mock("@/views/chat/composables/useChatStates", () => ({
   useChatStates: () => ({ getChatState: mocks.getChatState }),
+}));
+
+vi.mock("@/views/chat/composables/useResumableUploads", () => ({
+  useResumableUploads: () => mocks.uploadQueue,
 }));
 
 vi.mock("vue-router", () => ({
@@ -409,6 +439,20 @@ describe("Bot remote-agent surface matrix", () => {
       wrapper.unmount();
     }
   );
+
+  it("keeps unsupported asset formats as Agent limitations", () => {
+    const state = syntheticFailureState();
+    state.failures = ["unsupported_asset_format"];
+    const wrapper = mountSurface("research", state);
+
+    const failure = wrapper.get('[data-test="bot-report-failure"]');
+    expect(failure.text()).toContain(
+      "This Agent cannot process that asset format"
+    );
+    expect(failure.text()).not.toContain("upload failed");
+    expect(failure.text()).not.toContain("timed out");
+    wrapper.unmount();
+  });
 
   it.each(Object.keys(surfaces) as Array<keyof typeof surfaces>)(
     "keeps timeout failure and empty-artifact recovery bounded for %s",

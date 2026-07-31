@@ -431,7 +431,7 @@ export default {
       "Attach biological data or text files (up to 10 GiB each, 10 files). You can also paste copied files.",
     attachmentErrors: {
       unsupported_type:
-        '"{file}" is not supported. Use PDF, Word, Excel, PowerPoint, TXT, or PNG files.',
+        '"{file}" is not supported by this Agent. Check the Agent capability before retrying.',
       file_too_large: '"{file}" exceeds the {maxFileMb} MB per-file limit.',
       total_too_large: "Attachments cannot exceed {maxTotalMb} MB in total.",
       too_many_files: "You can attach up to {maxFiles} files.",
@@ -887,7 +887,7 @@ export default {
       speciesCodePlaceholder: "For example, ath",
       contextFilesLabel: "Context files (optional)",
       contextFilesHint:
-        "Upload up to 10 files (.pdf, .doc, .xlsx, .ppt, .txt, or .png), up to 10 MB each.",
+        "Attach biological or text data in any format, up to 10 files and 10 GiB each.",
       submit: "Start design run",
       submitting: "Submitting…",
       reset: "Start another run",
@@ -895,6 +895,8 @@ export default {
       complete: "Design report ready",
       degraded:
         "The design report is partial because some analysis was unavailable.",
+      unsupportedAssetFormat:
+        "This Agent cannot process that asset format. The upload completed; choose an input format supported by this Agent.",
       trackingDegraded:
         "Run tracking is degraded. The displayed state may not include the latest Bot update.",
       reportTitle: "Digital design report",
@@ -911,7 +913,7 @@ export default {
       unavailableMessage:
         "This route is reserved for a capability-gated design workflow. No result was created.",
       fileValidation:
-        "Some files were rejected. Check the supported types and 10 MB size limit.",
+        "Some files were rejected. Check the file metadata and 10 GiB size limit.",
       fileCountValidation: "You can upload at most 10 files.",
       questionRequired: "Enter a design question before submitting.",
       questionTooLong: "The design question is too long.",
@@ -941,7 +943,7 @@ export default {
         "Describe the study you want to reproduce or explore",
       contextFilesLabel: "Paper and context files",
       contextFilesHint:
-        "Upload up to 10 files (.pdf, .doc, .xlsx, .ppt, .txt, or .png), up to 10 MB each.",
+        "Attach papers or biological data in any format, up to 10 files and 10 GiB each.",
       datasetDescriptionLabel: "Dataset description (optional)",
       datasetDescriptionPlaceholder:
         "Describe the dataset, species, parameters, or substitutions to consider",
@@ -951,6 +953,8 @@ export default {
       progress: "Research run in progress",
       complete: "Report ready",
       degraded: "The report is partial because some analysis was unavailable.",
+      unsupportedAssetFormat:
+        "This Agent cannot process that asset format. The upload completed; choose an input format supported by this Agent.",
       reportTitle: "Research report",
       report: "Report",
       evidence: "Evidence",
@@ -965,7 +969,7 @@ export default {
       unavailableMessage:
         "This route is reserved for a capability-gated research workflow. No result was created.",
       fileValidation:
-        "Some files were rejected. Check the supported types and 10 MB size limit.",
+        "Some files were rejected. Check the file metadata and 10 GiB size limit.",
       fileCountValidation: "You can upload at most 10 files.",
       questionRequired: "Enter a research question before submitting.",
       questionTooLong: "The research question is too long.",

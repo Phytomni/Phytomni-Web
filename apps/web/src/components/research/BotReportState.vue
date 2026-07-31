@@ -42,7 +42,7 @@
       class="bot-report-state__failure"
       data-test="bot-report-failure"
     >
-      {{ failureLabel }}
+      {{ resolvedFailureLabel }}
     </p>
   </section>
 </template>
@@ -89,6 +89,7 @@ const props = withDefaults(
     ns?: string;
     labels?: Partial<Record<BotReportStatus, string>>;
     emptyReportLabel?: string;
+    failureLabel?: string;
   }>(),
   {
     progress: null,
@@ -135,7 +136,9 @@ const emptyReportLabel = computed(() => {
     ? t("common.failed")
     : t("common.loading");
 });
-const failureLabel = computed(() => t("common.failed"));
+const resolvedFailureLabel = computed(
+  () => props.failureLabel || t("common.failed")
+);
 
 const effectiveUpdatedAt = computed(
   () => props.updatedAt ?? lifecycleMetadata.value.reportUpdatedAt ?? null

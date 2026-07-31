@@ -64,6 +64,21 @@ const mocks = vi.hoisted(() => {
       };
     }
   );
+  const chatState = { fileList: [] as unknown[] };
+  const uploadQueue = {
+    queueFiles: vi.fn().mockResolvedValue(undefined),
+    removeUpload: vi.fn().mockResolvedValue(undefined),
+    removeUploadById: vi.fn().mockResolvedValue(undefined),
+    cancelUpload: vi.fn().mockResolvedValue(undefined),
+    pauseUpload: vi.fn().mockResolvedValue(undefined),
+    resumeUpload: vi.fn().mockResolvedValue(undefined),
+    retryUpload: vi.fn().mockResolvedValue(undefined),
+    reselectUpload: vi.fn(),
+    cancelDialogue: vi.fn().mockResolvedValue(undefined),
+    recoveryStore: {},
+    hasBlockingUploads: { value: false, __v_isRef: true },
+    completedAssetIds: { value: [] as Array<{ asset_id: string }> },
+  };
   return {
     state,
     submit: vi.fn().mockResolvedValue(null),
@@ -72,7 +87,9 @@ const mocks = vi.hoisted(() => {
     cancel: vi.fn().mockReturnValue(true),
     reset: vi.fn(),
     load: vi.fn().mockResolvedValue([]),
-    getChatState: vi.fn(() => ({})),
+    chatState,
+    uploadQueue,
+    getChatState: vi.fn(() => chatState),
     getAnswerCheck: vi.fn().mockResolvedValue({ code: 200, data: [] }),
     capabilityLoaded: { value: true },
     routerBack: vi.fn(),
@@ -115,8 +132,21 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
         },
       },
     },
+    upload: {
+      value: {
+        enabled: true,
+        protocol: "obs-multipart-v2",
+        upload_origin: "https://uploads.example.test",
+        max_file_bytes: 10 * 1024 * 1024 * 1024,
+        max_attachments: 10,
+      },
+    },
     load: mocks.load,
   }),
+}));
+
+vi.mock("@/views/chat/composables/useResumableUploads", () => ({
+  useResumableUploads: () => mocks.uploadQueue,
 }));
 
 vi.mock("@/views/chat/composables/useChatStates", () => ({
@@ -215,6 +245,9 @@ describe("ResearchAgentView", () => {
     mocks.load.mockResolvedValue([]);
     mocks.getAnswerCheck.mockResolvedValue({ code: 200, data: [] });
     mocks.capabilityLoaded.value = true;
+    mocks.chatState.fileList = [];
+    mocks.uploadQueue.hasBlockingUploads.value = false;
+    mocks.uploadQueue.completedAssetIds.value = [];
   });
 
   afterEach(() => {
@@ -300,16 +333,51 @@ describe("ResearchAgentView", () => {
     });
     await fileInput.trigger("change");
 
-    expect(wrapper.text()).toContain("paper.pdf");
+    mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_paper" }];
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([paper]);
     await wrapper.get('[data-test="research-submit"]').trigger("click");
 
     expect(mocks.submit).toHaveBeenCalledWith(
       expect.objectContaining({
         query: "Summarize the paper",
-        files: expect.arrayContaining([paper]),
+        attachments: [{ asset_id: "file_paper" }],
       })
     );
     expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty("dataList");
+    wrapper.unmount();
+  });
+
+  it("delegates arbitrary biological formats to the resumable queue", async () => {
+    const wrapper = mountView();
+    const input = wrapper.get('[data-test="research-files"]');
+    const reads = new File(["reads"], "sample.bam", {
+      type: "application/octet-stream",
+    });
+
+    expect(input.attributes("accept")).toBeUndefined();
+    Object.defineProperty(input.element, "files", {
+      configurable: true,
+      value: [reads],
+    });
+    await input.trigger("change");
+
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([reads]);
+    wrapper.unmount();
+  });
+
+  it("blocks a research submission while an upload is active", async () => {
+    mocks.uploadQueue.hasBlockingUploads.value = true;
+    const wrapper = mountView();
+    await wrapper
+      .get('[data-test="research-question"]')
+      .setValue("Summarize a study");
+
+    expect(wrapper.get('[data-test="research-submit"]').element).toHaveProperty(
+      "disabled",
+      true
+    );
+    await wrapper.get("form.research-agent-form").trigger("submit");
+    expect(mocks.submit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 

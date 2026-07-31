@@ -2,10 +2,8 @@ import { ref, type Ref } from "vue";
 import { runAgentProductAbortable } from "@/api/chat";
 import { isSuccessfulDataEnvelope } from "@/api/contracts";
 import { abortRequest } from "@/utils/request";
-import {
-  createTransferTracker,
-  type TransferSnapshot,
-} from "@/utils/transfer-progress";
+import type { AssetAttachmentRef } from "@/api/types";
+import type { TransferSnapshot } from "@/utils/transfer-progress";
 import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
   type RemoteAgentTool,
@@ -20,6 +18,7 @@ import {
   reduceBotProjection,
   type BotLifecycleState,
 } from "../streaming/botLifecycleReducer";
+import { isSafeAssetId } from "../utils/asset-attachments";
 
 export type RemoteAgentRunPhase =
   | "idle"
@@ -39,11 +38,9 @@ export type RemoteAgentResolver = {
   species_code?: string;
 };
 
-export type RemoteAgentFile = File | { file: File };
-
 export type RemoteAgentSubmitInput = {
   query: string;
-  files?: RemoteAgentFile[];
+  attachments?: readonly AssetAttachmentRef[];
   resolver?: RemoteAgentResolver;
   dataList?: Record<string, string>;
   interopMode?: "off" | "auto" | "required";
@@ -52,6 +49,7 @@ export type RemoteAgentSubmitInput = {
 
 export interface RemoteAgentChatState {
   isSending?: boolean;
+  /** Upload progress is owned by the resumable queue, not this runner. */
   uploadTransfer?: TransferSnapshot | null;
   activeRequestId?: string;
   generationStopped?: boolean;
@@ -97,6 +95,7 @@ export class BotRemoteAgentRunError extends Error {
 export interface BotRemoteAgentRunState extends BotLifecycleState {
   phase: RemoteAgentRunPhase;
   requestId: string | null;
+  /** Upload progress is owned by the resumable queue, not this runner. */
   uploadTransfer: TransferSnapshot | null;
   projection: BotRunProjection | null;
   dialogueId: string | null;
@@ -234,20 +233,6 @@ function normalizeDialogueId(dialogueId: string): string {
   return normalized;
 }
 
-function fileValue(file: RemoteAgentFile): File | null {
-  if (typeof File !== "undefined" && file instanceof File) return file;
-  if (
-    file &&
-    typeof file === "object" &&
-    "file" in file &&
-    typeof file.file !== "undefined" &&
-    (typeof File === "undefined" || file.file instanceof File)
-  ) {
-    return file.file;
-  }
-  return null;
-}
-
 function appendOptional(formData: FormData, key: string, value: unknown): void {
   if (typeof value === "string" && value.trim() !== "") {
     formData.append(key, value.trim());
@@ -261,11 +246,7 @@ function buildFormData(
   const formData = new FormData();
   formData.append("id", dialogueId);
   formData.append("query", input.query);
-
-  for (const candidate of input.files ?? []) {
-    const file = fileValue(candidate);
-    if (file) formData.append("files", file);
-  }
+  formData.append("attachments", JSON.stringify(input.attachments ?? []));
 
   const resolver = input.resolver;
   if (resolver) {
@@ -335,6 +316,32 @@ function isCanceledRequest(error: unknown): boolean {
   return (
     candidate.code === "ERR_CANCELED" || candidate.name === "CanceledError"
   );
+}
+
+function normalizeAttachments(
+  attachments: readonly AssetAttachmentRef[] | undefined
+): AssetAttachmentRef[] {
+  if (attachments === undefined) return [];
+  if (!Array.isArray(attachments) || attachments.length > 10) {
+    throw new BotRemoteAgentRunError("invalid_query", "Invalid attachment");
+  }
+  const seen = new Set<string>();
+  const normalized: AssetAttachmentRef[] = [];
+  for (const attachment of attachments) {
+    if (
+      !attachment ||
+      typeof attachment !== "object" ||
+      Array.isArray(attachment) ||
+      Object.keys(attachment).some((key) => key !== "asset_id") ||
+      !isSafeAssetId(attachment.asset_id) ||
+      seen.has(attachment.asset_id)
+    ) {
+      throw new BotRemoteAgentRunError("invalid_query", "Invalid attachment");
+    }
+    seen.add(attachment.asset_id);
+    normalized.push({ asset_id: attachment.asset_id });
+  }
+  return normalized;
 }
 
 function capabilityLoader(
@@ -498,14 +505,8 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       );
     }
 
-    const files = input.files ?? [];
-    const validFiles = files
-      .map(fileValue)
-      .filter((file): file is File => file !== null);
-    if (validFiles.length !== files.length) {
-      throw new BotRemoteAgentRunError("invalid_query", "Invalid attachment");
-    }
-    if (validFiles.length > 0 && capability.attachments !== true) {
+    const attachments = normalizeAttachments(input.attachments);
+    if (attachments.length > 0 && capability.attachments !== true) {
       throw new BotRemoteAgentRunError(
         "attachments_disabled",
         "Remote agent attachments are disabled"
@@ -538,15 +539,12 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     }
 
     const formData = buildFormData(
-      { ...input, files: validFiles },
+      { ...input, attachments },
       normalizedDialogueId
     );
     const requestId = requestIdFor(normalizedDialogueId);
     const token: RemoteRequestToken = { id: requestId, cancelled: false };
     activeToken = token;
-    const tracker = validFiles.length
-      ? createTransferTracker({ phase: "upload", requestId })
-      : null;
     const freshLifecycle = initBotLifecycleState();
     owned.activeRequestId = requestId;
     owned.isSending = true;
@@ -568,29 +566,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       const response = await runAgentProductAbortable(
         tool,
         formData,
-        requestId,
-        tracker
-          ? {
-              onUploadProgress: (event) => {
-                if (activeToken !== token || token.cancelled) return;
-                const snapshot = tracker.update({
-                  loaded: event.loaded,
-                  total: event.total ?? 0,
-                });
-                if (!snapshot) return;
-                owned.uploadTransfer = snapshot;
-                state.value = { ...state.value, uploadTransfer: snapshot };
-                if (
-                  !snapshot.indeterminate &&
-                  snapshot.total > 0 &&
-                  snapshot.loaded >= snapshot.total
-                ) {
-                  owned.uploadTransfer = null;
-                  state.value = { ...state.value, uploadTransfer: null };
-                }
-              },
-            }
-          : undefined
+        requestId
       );
 
       if (activeToken !== token || token.cancelled) return null;

@@ -6,8 +6,6 @@ const mockChatQuery = vi.hoisted(() => vi.fn());
 const mockGetAnswerCheck = vi.hoisted(() => vi.fn());
 const mockGetChatdownloadURL = vi.hoisted(() => vi.fn());
 const mockAbortRequest = vi.hoisted(() => vi.fn(() => true));
-const mockTrackerUpdate = vi.hoisted(() => vi.fn());
-const mockTrackerReset = vi.hoisted(() => vi.fn());
 const mockUseBotCapabilities = vi.hoisted(() => vi.fn());
 const mockLoadCapabilities = vi.hoisted(() => vi.fn());
 
@@ -21,13 +19,6 @@ vi.mock("@/api/chat", () => ({
 vi.mock("@/utils/request", () => ({
   default: vi.fn(),
   abortRequest: mockAbortRequest,
-}));
-
-vi.mock("@/utils/transfer-progress", () => ({
-  createTransferTracker: vi.fn(() => ({
-    update: mockTrackerUpdate,
-    reset: mockTrackerReset,
-  })),
 }));
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
@@ -118,8 +109,6 @@ describe("useBotRemoteAgentRun", () => {
     mockGetAnswerCheck.mockReset();
     mockGetChatdownloadURL.mockReset();
     mockAbortRequest.mockClear();
-    mockTrackerUpdate.mockReset();
-    mockTrackerReset.mockReset();
     mockUseBotCapabilities.mockReset();
     mockLoadCapabilities.mockReset();
   });
@@ -188,9 +177,6 @@ describe("useBotRemoteAgentRun", () => {
         `remote agent state ${dialogueId}`
       );
     };
-    const paperFile = new File(["paper"], "paper.pdf", {
-      type: "application/pdf",
-    });
     mockQuery.mockResolvedValueOnce({
       data: {
         bot_run_id: "run-research-1",
@@ -216,7 +202,7 @@ describe("useBotRemoteAgentRun", () => {
 
     await run.submit({
       query: "paper",
-      files: [paperFile],
+      attachments: [{ asset_id: "file_paper" }],
       resolver: { geneId: "AT1G01010", speciesCode: "ath" },
       dataList: { "/obs/dataset.csv": "traits" },
       interopMode: "auto",
@@ -233,7 +219,13 @@ describe("useBotRemoteAgentRun", () => {
     expect(formData.get("tool")).toBeNull();
     expect(formData.get("mode")).toBeNull();
     expect(formData.get("id")).toBe("d1");
-    expect(formData.get("files")).toBeInstanceOf(File);
+    expect(formData.get("attachments")).toBe(
+      JSON.stringify([{ asset_id: "file_paper" }])
+    );
+    expect(formData.getAll("files")).toEqual([]);
+    expect(
+      Array.from(formData.values()).some((value) => value instanceof Blob)
+    ).toBe(false);
     expect(formData.get("gene_id")).toBe("AT1G01010");
     expect(formData.get("species_code")).toBe("ath");
     expect(formData.get("data_list")).toBe(
@@ -510,7 +502,7 @@ describe("useBotRemoteAgentRun", () => {
           null as unknown as boolean,
           "agent_run"
         ),
-        { files: [new File(["x"], "x.txt")] },
+        { attachments: [{ asset_id: "file_x" }] },
       ],
       [
         "missing resolver authorization",
@@ -556,19 +548,48 @@ describe("useBotRemoteAgentRun", () => {
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it("aborts the active request and clears dialogue upload progress", async () => {
-    let resolveRequest: (value: unknown) => void = () => undefined;
-    mockTrackerUpdate.mockReturnValue({
-      loaded: 1,
-      total: 2,
-      percent: 50,
-      etaSec: null,
-      indeterminate: false,
-      phase: "upload",
-      requestId: "pending",
+  it.each([
+    { asset_id: "file_queued", status: "queued" },
+    { asset_id: "file_failed", status: "failed" },
+  ])("rejects non-reference attachment metadata: %o", async (attachment) => {
+    const run = useBotRemoteAgentRun({
+      tool: "DigitalDesignAgent",
+      dialogueId: `invalid-${attachment.status}`,
+      capabilities: makeCapabilities("DigitalDesignAgent"),
     });
-    mockQuery.mockImplementationOnce((_tool, _formData, _requestId, config) => {
-      config?.onUploadProgress?.({ loaded: 1, total: 2 });
+
+    await expect(
+      run.submit({
+        query: "design",
+        attachments: [attachment] as never,
+      })
+    ).rejects.toMatchObject({ code: "invalid_query" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("allows a file-free run when the Agent attachment capability is disabled", async () => {
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        bot_run_id: "run-no-attachments",
+        tool_name: "DigitalDesignAgent",
+        status: "RUNNING",
+      },
+    });
+    const run = useBotRemoteAgentRun({
+      tool: "DigitalDesignAgent",
+      dialogueId: "no-attachments",
+      capabilities: makeCapabilities("DigitalDesignAgent", true, false),
+    });
+
+    await run.submit({ query: "design without a file" });
+
+    const formData = mockQuery.mock.calls[0][1] as FormData;
+    expect(formData.get("attachments")).toBe("[]");
+  });
+
+  it("aborts the active request without relaying file bytes", async () => {
+    let resolveRequest: (value: unknown) => void = () => undefined;
+    mockQuery.mockImplementationOnce(() => {
       return new Promise((resolve) => {
         resolveRequest = resolve;
       });
@@ -583,11 +604,11 @@ describe("useBotRemoteAgentRun", () => {
 
     const pending = run.submit({
       query: "design",
-      files: [new File(["design"], "design.txt", { type: "text/plain" })],
+      attachments: [{ asset_id: "file_design" }],
     });
     await Promise.resolve();
     expect(state.activeRequestId).not.toBe("");
-    expect(state.uploadTransfer?.percent).toBe(50);
+    expect(state.uploadTransfer).toBeNull();
     const requestId = state.activeRequestId;
     expect(run.cancel()).toBe(true);
     expect(mockAbortRequest).toHaveBeenCalledWith(requestId);
@@ -808,6 +829,13 @@ describe("useBotRemoteAgentRun", () => {
       loaded: ref(true),
       loading: ref(false),
       byTool: capabilities,
+      upload: ref({
+        enabled: true,
+        protocol: "obs-multipart-v2",
+        upload_origin: "https://uploads.example.test",
+        max_file_bytes: 10 * 1024 * 1024 * 1024,
+        max_attachments: 10,
+      }),
       load: mockLoadCapabilities.mockResolvedValue([]),
     }));
     mockGetAnswerCheck.mockResolvedValue({ code: 200, data: [] });
