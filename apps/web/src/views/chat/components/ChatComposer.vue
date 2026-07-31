@@ -201,7 +201,7 @@ import ChatAgentPicker, {
 } from "./ChatAgentPicker.vue";
 import ChatAgentQuickSelect from "./ChatAgentQuickSelect.vue";
 import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
-import type { ChatComposerHandle, UploadFile } from "../types";
+import type { ChatComposerHandle, ResumableUploadItem } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
 import { CHAT_ATTACHMENT_ACCEPT } from "../composables/useFileUpload";
 
@@ -213,7 +213,7 @@ const props = defineProps<{
   expertModeEnabled: boolean;
   modeUsable: boolean;
   showModeSelector: boolean;
-  fileList: UploadFile[];
+  fileList: ResumableUploadItem[];
   rolesLoading: boolean;
   hasMessages: boolean;
   selectedAgent: string;

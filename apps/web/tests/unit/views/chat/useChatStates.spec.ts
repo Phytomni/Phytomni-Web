@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
-import type { UploadFile } from "@/views/chat/types";
+import type { ResumableUploadItem } from "@/views/chat/types";
 import { clearPendingChat, isLocalStorageChat } from "@/utils/pending-chat";
 import type { RekeyChatStateOutcome } from "@/views/chat/types";
 
@@ -11,12 +11,24 @@ import type { RekeyChatStateOutcome } from "@/views/chat/types";
 describe("useChatStates parallel chat state", () => {
   it("isolates per-dialogue state via proxies — switching currentChatId flips state without bleed", () => {
     const s = useChatStates();
-    const fileA: UploadFile[] = [
+    const fileA: ResumableUploadItem[] = [
       {
+        localId: "upload-a",
+        assetId: null,
         name: "a.txt",
         size: 1,
         type: "text/plain",
         file: {} as File,
+        lastModified: 0,
+        status: "queued",
+        partSize: 0,
+        partCount: 0,
+        receivedParts: [],
+        loadedBytes: 0,
+        speedBytesPerSecond: 0,
+        etaSeconds: null,
+        retryCount: 0,
+        errorCode: null,
       },
     ];
 
@@ -275,10 +287,22 @@ describe("useChatStates mode", () => {
     s.selectedAgent.value = "DataAgent";
     s.messageInput.value = "compare these genes";
     const file = {
+      localId: "upload-gene",
+      assetId: null,
       name: "genes.csv",
       size: 12,
       type: "text/csv",
       file: {} as File,
+      lastModified: 0,
+      status: "queued" as const,
+      partSize: 0,
+      partCount: 0,
+      receivedParts: [],
+      loadedBytes: 0,
+      speedBytesPerSecond: 0,
+      etaSeconds: null,
+      retryCount: 0,
+      errorCode: null,
     };
     s.fileList.value = [file];
 

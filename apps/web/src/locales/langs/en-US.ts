@@ -428,13 +428,18 @@ export default {
     },
     inputPlaceholderTip: "Please enter your question",
     uploadFile:
-      "Attach PDF, Word, Excel, PowerPoint, TXT, or PNG files (10 files, 25 MB each, 50 MB total). You can also paste copied files.",
+      "Attach biological data or text files (up to 10 GiB each, 10 files). You can also paste copied files.",
     attachmentErrors: {
       unsupported_type:
         '"{file}" is not supported. Use PDF, Word, Excel, PowerPoint, TXT, or PNG files.',
       file_too_large: '"{file}" exceeds the {maxFileMb} MB per-file limit.',
       total_too_large: "Attachments cannot exceed {maxTotalMb} MB in total.",
       too_many_files: "You can attach up to {maxFiles} files.",
+      invalid_filename: '"{file}" has an invalid filename.',
+      invalid_size: '"{file}" must be between 1 byte and 10 GiB.',
+      invalid_metadata: '"{file}" has invalid file metadata.',
+      upload_disabled: "File uploads are currently unavailable.",
+      upload_unavailable: "The file upload service is temporarily unavailable.",
     },
     timeGroup: {
       today: "Today",

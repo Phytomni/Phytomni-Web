@@ -118,7 +118,7 @@ export function useRefreshMessage(opts: {
       // add files (if any)
       if (chatState.fileList.length > 0) {
         chatState.fileList.forEach((fileItem) => {
-          queryData.append("files", fileItem.file);
+          if (fileItem.file) queryData.append("files", fileItem.file);
         });
       }
 

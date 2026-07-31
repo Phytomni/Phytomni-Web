@@ -10,7 +10,11 @@ import { defineComponent, h, nextTick, reactive } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { useA2uiInteraction } from "@/views/chat/composables/useA2uiInteraction";
-import type { ChatMessage, ChatUIState, UploadFile } from "@/views/chat/types";
+import type {
+  ChatMessage,
+  ChatUIState,
+  ResumableUploadItem,
+} from "@/views/chat/types";
 import type { A2uiActionTransport } from "@/views/chat/streaming/a2uiAction";
 import { createMemoryA2uiTransport } from "@/views/chat/streaming/a2uiAction";
 import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
@@ -151,11 +155,23 @@ function populateFullChatState(
   label: string,
   transport: A2uiActionTransport
 ): void {
-  const file: UploadFile = {
+  const file: ResumableUploadItem = {
+    localId: `upload-${label}`,
+    assetId: null,
     name: `${label}.txt`,
     size: 4,
     type: "text/plain",
     file: {} as File,
+    lastModified: 0,
+    status: "uploading",
+    partSize: 4,
+    partCount: 1,
+    receivedParts: [],
+    loadedBytes: 0,
+    speedBytesPerSecond: 0,
+    etaSeconds: null,
+    retryCount: 0,
+    errorCode: null,
   };
   state.messageInput = `draft-${label}`;
   state.mode = label === "A" ? "expert" : "instant";

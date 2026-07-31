@@ -12,6 +12,7 @@ import type {
   CitationDocument,
   StreamContentBlock,
 } from "./messageTypes";
+import type { ResumableUploadItem } from "./upload/types";
 
 export type { ResumableUploadItem, UploadStatus } from "./upload/types";
 
@@ -37,7 +38,7 @@ export interface Chat {
   tool_name?: string;
   isSending?: boolean; // per-conversation sending state
   messageInput?: string; // per-conversation input content
-  fileList?: UploadFile[]; // per-conversation file list
+  fileList?: ResumableUploadItem[]; // per-conversation upload queue
   isFavorite: boolean; // favorite state
   isPending?: boolean; // local first turn remains selectable until reconciliation
 }
@@ -85,7 +86,7 @@ export interface ChatMessage {
   followUpQuestions?: string[]; // follow-up questions list
   showFollowUpQuestions?: boolean; // whether to show follow-up questions
   showLog?: boolean;
-  attachedFiles?: readonly ChatAttachment[]; // attached file metadata
+  attachedFiles?: readonly (ChatAttachment | ResumableUploadItem)[];
   compute_resource?: string; // compute resource info
   task_id?: string; // task ID
   server_file_path?: string; // server file path
@@ -211,7 +212,7 @@ export interface ChatComposerHandle {
 export interface ChatUIState {
   isSending: boolean;
   messageInput: string;
-  fileList: UploadFile[];
+  fileList: ResumableUploadItem[];
   historyQuestion: readonly ChatMessage[] | null;
   /** Lifecycle of this dialogue's persisted-history reconstruction. */
   historyHydration: ChatHistoryHydrationStatus;

@@ -369,6 +369,12 @@ export class ResumableUploadEngine {
     }
   }
 
+  private throwIfCancelled(): void {
+    if (this.item.status === "aborted" || this.controller?.signal.aborted) {
+      throw new DOMException("Upload aborted", "AbortError");
+    }
+  }
+
   pause(): void {
     if (this.item.status === "completed" || this.item.status === "aborted")
       return;
@@ -469,12 +475,14 @@ export class ResumableUploadEngine {
         this.idempotency
       )
     );
+    this.throwIfCancelled();
     this.applySession(result.session, result.data);
     this.setStatus("uploading");
     await this.persist();
   }
 
   private async reconcile(): Promise<void> {
+    this.throwIfCancelled();
     if (this.item.assetId === null)
       throw new UploadEngineError("upload_asset_missing");
     const head = await this.data.head({ signal: this.controller?.signal });
@@ -654,6 +662,7 @@ export class ResumableUploadEngine {
   }
 
   private async complete(): Promise<void> {
+    this.throwIfCancelled();
     if (this.item.receivedParts.length !== this.item.partCount) {
       throw new UploadEngineError("upload_parts_missing", 409);
     }

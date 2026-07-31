@@ -1,5 +1,6 @@
 import { ref, computed } from "vue";
-import type { ChatMessage, UploadFile, ChatUIState, ChatView } from "../types";
+import type { ChatMessage, ChatUIState, ChatView } from "../types";
+import type { ResumableUploadItem } from "../upload/types";
 import type { RekeyChatStateOutcome } from "../types";
 
 function createDefaultChatUIState(): ChatUIState {
@@ -134,7 +135,7 @@ export function useChatStates() {
       const chatState = getChatState(currentChatId.value);
       return chatState ? chatState.fileList : [];
     },
-    set: (value: UploadFile[]) => {
+    set: (value: ResumableUploadItem[]) => {
       if (!currentChatId.value) return;
       const chatState = getChatState(currentChatId.value);
       if (chatState) {

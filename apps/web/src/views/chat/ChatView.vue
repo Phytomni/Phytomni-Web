@@ -599,6 +599,8 @@ import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { useTutorial } from "./composables/useTutorial";
 import { useImageZoomPan } from "./composables/useImageZoomPan";
 import { useChatStates } from "./composables/useChatStates";
+import { useBotCapabilities } from "./composables/useBotCapabilities";
+import { useResumableUploads } from "./composables/useResumableUploads";
 import { useArtifactPanel } from "./composables/useArtifactPanel";
 import { useAgentImages } from "./composables/useAgentImages";
 import { useReactions } from "./composables/useReactions";
@@ -707,6 +709,17 @@ const {
 
 const botAvatar = chatLogo;
 
+const onAttachmentValidationError = (error: ChatAttachmentValidationError) => {
+  const messageKey = `chat.attachmentErrors.${error.code}`;
+  const message = t(messageKey, {
+    file: error.fileName ?? "",
+    maxFiles: CHAT_ATTACHMENT_LIMITS.maxFiles,
+    maxFileMb: CHAT_ATTACHMENT_LIMITS.maxFileBytes / 1024 / 1024,
+    maxTotalMb: CHAT_ATTACHMENT_LIMITS.maxTotalBytes / 1024 / 1024,
+  });
+  ElMessage.warning(message);
+};
+
 // Show the Agents architecture diagram dialog
 const showAgentsView = () => {
   agentsViewVisible.value = true;
@@ -788,6 +801,7 @@ onMounted(async () => {
 
   // Load permission info first
   await loadUserTools();
+  await botCapabilities.load();
 
   // Fetch the history question list
   getHistoryQuestionData().then(() => {
@@ -869,6 +883,23 @@ const {
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
+
+const botCapabilities = useBotCapabilities("chat");
+const uploadQueue = useResumableUploads({
+  currentChatId,
+  getChatState,
+  uploadCapability: botCapabilities.upload,
+  username: computed(() => userStore().name ?? ""),
+  onValidationError: onAttachmentValidationError,
+});
+
+watch(
+  currentChatId,
+  (dialogueId) => {
+    if (dialogueId) void uploadQueue.loadRecovery(dialogueId);
+  },
+  { immediate: true }
+);
 
 const currentHistoryHydration = computed(() => {
   if (!currentChatId.value) return "new";
@@ -1160,6 +1191,7 @@ const reconcileMatchedDialogue = (
   }
 
   if (reconciled) {
+    uploadQueue.rekeyDialogue(tempId, serverId);
     return { status: "reconciled", tempId, serverId, rekey };
   }
 
@@ -1490,23 +1522,14 @@ function analystLogErrorKind(
 }
 
 // File upload handling — state and logic extracted into the useFileUpload composable
-const onAttachmentValidationError = (error: ChatAttachmentValidationError) => {
-  ElMessage.warning(
-    t(`chat.attachmentErrors.${error.code}`, {
-      file: error.fileName ?? "",
-      maxFiles: CHAT_ATTACHMENT_LIMITS.maxFiles,
-      maxFileMb: CHAT_ATTACHMENT_LIMITS.maxFileBytes / 1024 / 1024,
-      maxTotalMb: CHAT_ATTACHMENT_LIMITS.maxTotalBytes / 1024 / 1024,
-    })
-  );
-};
-
 const { handleFileChange, handlePastedFiles, removeFile } = useFileUpload({
   fileList,
   currentChatId,
   getChatState,
   composerRef,
   scrollToBottom,
+  queueFiles: uploadQueue.queueFiles,
+  removeUpload: uploadQueue.removeUpload,
   onValidationError: onAttachmentValidationError,
 });
 
@@ -1533,6 +1556,10 @@ function findStateByRequestId(
 
 function abortTransfer(requestId: string) {
   const owned = findStateByRequestId(requestId);
+  if (owned?.state.uploadTransfer?.requestId === requestId) {
+    void uploadQueue.cancelDialogue(owned.dialogueId);
+    return;
+  }
   if (owned) {
     owned.state.uploadTransfer = null;
   }

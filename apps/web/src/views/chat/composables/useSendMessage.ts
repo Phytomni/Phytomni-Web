@@ -7,7 +7,6 @@ import type {
   DialogueReconciliationResult,
   ChatUIState,
   ChatView,
-  UploadFile,
 } from "../types";
 import { normalizeChatContextNotice } from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -373,7 +372,17 @@ export function useSendMessage(opts: {
       sendingDialogueId,
       chatList.value
     );
-    const capturedFiles = [...(chatState.fileList as UploadFile[])];
+    const capturedFiles = [...chatState.fileList];
+    if (
+      capturedFiles.some(
+        (file) =>
+          file.status !== undefined &&
+          file.status !== "completed" &&
+          file.status !== "aborted"
+      )
+    ) {
+      return;
+    }
     const capturedHistory = chatState.historyQuestion;
     const requestKey = createChatRequestKey();
 
@@ -553,7 +562,7 @@ export function useSendMessage(opts: {
       }
       if (capturedFiles.length > 0) {
         capturedFiles.forEach((fileItem) => {
-          queryData.append("files", fileItem.file);
+          if (fileItem.file) queryData.append("files", fileItem.file);
         });
       }
 

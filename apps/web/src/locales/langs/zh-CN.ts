@@ -425,13 +425,18 @@ export default {
     },
     inputPlaceholderTip: "请输入您的问题",
     uploadFile:
-      "支持 PDF、Word、Excel、PowerPoint、TXT 和 PNG；最多 10 个，单个 25 MB，总计 50 MB，也可直接粘贴复制的文件。",
+      "支持生物学数据和文本文件，单个最大 10 GiB，最多 10 个，也可直接粘贴复制的文件。",
     attachmentErrors: {
       unsupported_type:
         "不支持“{file}”。请选择 PDF、Word、Excel、PowerPoint、TXT 或 PNG 文件。",
       file_too_large: "“{file}”超过单个文件 {maxFileMb} MB 的限制。",
       total_too_large: "附件总大小不能超过 {maxTotalMb} MB。",
       too_many_files: "最多添加 {maxFiles} 个附件。",
+      invalid_filename: "“{file}”的文件名无效。",
+      invalid_size: "“{file}”大小必须在 1 字节到 10 GiB 之间。",
+      invalid_metadata: "“{file}”的文件元数据无效。",
+      upload_disabled: "文件上传当前不可用。",
+      upload_unavailable: "文件上传服务暂时不可用。",
     },
     timeGroup: {
       today: "今天",
