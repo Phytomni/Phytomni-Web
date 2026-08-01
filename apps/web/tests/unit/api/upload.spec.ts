@@ -79,6 +79,35 @@ describe("upload control API", () => {
     ).rejects.toThrow("Invalid upload response");
   });
 
+  it.each([
+    ["wrong status", { status: "aborted" }],
+    [
+      "path mismatch",
+      { upload_url: "https://upload.example/other/file_abc123" },
+    ],
+    ["query token", { upload_url: `${createData.upload_url}?token=secret` }],
+    ["oversized part count", { part_count: 100_001 }],
+    ["oversized parallelism", { max_parallel_parts: 5 }],
+    ["malformed expiry", { session_expires_at: "not-a-timestamp" }],
+  ])("rejects %s in a create response", async (_name, override) => {
+    mockRequest.mockResolvedValueOnce({
+      code: 200,
+      data: { ...createData, ...override },
+    });
+
+    await expect(
+      createUpload(
+        {
+          filename: "sample",
+          size_bytes: 1,
+          content_type_hint: "",
+          last_modified_ms: 0,
+        },
+        "1c2d3e4f-5061-4789-8abc-def012345678"
+      )
+    ).rejects.toThrow("Invalid upload response");
+  });
+
   it("renews a capability without sending browser authority or a request body", async () => {
     mockRequest.mockResolvedValueOnce({
       code: 200,

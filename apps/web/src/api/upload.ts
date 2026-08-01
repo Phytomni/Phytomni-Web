@@ -3,6 +3,9 @@ import { requestApi } from "@/api/types";
 import { isRecord } from "@/api/contracts";
 
 export const RESUMABLE_UPLOAD_PROTOCOL = "obs-multipart-v2";
+export const RESUMABLE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024 * 1024;
+export const RESUMABLE_UPLOAD_MAX_PART_COUNT = 100_000;
+export const RESUMABLE_UPLOAD_MAX_PARALLEL_PARTS = 4;
 
 export interface UploadCreateMetadata {
   filename: string;
@@ -55,13 +58,15 @@ function requiredString(
 function requiredSafePositiveInteger(
   value: Record<string, unknown>,
   key: string,
-  label: string
+  label: string,
+  max = Number.MAX_SAFE_INTEGER
 ): number {
   const candidate = value[key];
   if (
     typeof candidate !== "number" ||
     !Number.isSafeInteger(candidate) ||
-    candidate < 1
+    candidate < 1 ||
+    candidate > max
   ) {
     invalid(label);
   }
@@ -77,38 +82,83 @@ function requiredAssetId(value: Record<string, unknown>): string {
 function decodeUploadSession(value: unknown): UploadSession {
   if (!isRecord(value)) invalid("upload response");
   if (value.protocol !== RESUMABLE_UPLOAD_PROTOCOL) invalid("upload response");
+  const assetId = requiredAssetId(value);
+  const status = requiredString(value, "status", "upload response");
+  if (status !== "uploading" && status !== "completed") {
+    invalid("upload response");
+  }
+  const uploadUrl = requiredUploadURL(value, assetId, "upload response");
+  const capabilityExpiresAt = requiredTimestamp(
+    value,
+    "capability_expires_at",
+    "upload response"
+  );
+  const sessionExpiresAt = requiredTimestamp(
+    value,
+    "session_expires_at",
+    "upload response"
+  );
   return {
     protocol: RESUMABLE_UPLOAD_PROTOCOL,
-    asset_id: requiredAssetId(value),
-    status: requiredString(value, "status", "upload response"),
+    asset_id: assetId,
+    status,
     part_size_bytes: requiredSafePositiveInteger(
       value,
       "part_size_bytes",
-      "upload response"
+      "upload response",
+      RESUMABLE_UPLOAD_MAX_BYTES
     ),
     part_count: requiredSafePositiveInteger(
       value,
       "part_count",
-      "upload response"
+      "upload response",
+      RESUMABLE_UPLOAD_MAX_PART_COUNT
     ),
     max_parallel_parts: requiredSafePositiveInteger(
       value,
       "max_parallel_parts",
-      "upload response"
+      "upload response",
+      RESUMABLE_UPLOAD_MAX_PARALLEL_PARTS
     ),
-    upload_url: requiredString(value, "upload_url", "upload response"),
+    upload_url: uploadUrl,
     capability: requiredString(value, "capability", "upload response"),
-    capability_expires_at: requiredString(
-      value,
-      "capability_expires_at",
-      "upload response"
-    ),
-    session_expires_at: requiredString(
-      value,
-      "session_expires_at",
-      "upload response"
-    ),
+    capability_expires_at: capabilityExpiresAt,
+    session_expires_at: sessionExpiresAt,
   };
+}
+
+function requiredTimestamp(
+  value: Record<string, unknown>,
+  key: string,
+  label: string
+): string {
+  const candidate = requiredString(value, key, label);
+  if (!Number.isFinite(Date.parse(candidate))) invalid(label);
+  return candidate;
+}
+
+function requiredUploadURL(
+  value: Record<string, unknown>,
+  assetId: string,
+  label: string
+): string {
+  const candidate = requiredString(value, "upload_url", label);
+  try {
+    const parsed = new URL(candidate);
+    if (
+      (parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.search !== "" ||
+      parsed.hash !== "" ||
+      parsed.pathname !== `/v1/files/${assetId}`
+    ) {
+      invalid(label);
+    }
+  } catch {
+    invalid(label);
+  }
+  return candidate;
 }
 
 function decodeUploadCapabilityRenewal(
@@ -118,18 +168,23 @@ function decodeUploadCapabilityRenewal(
   if (value.protocol !== RESUMABLE_UPLOAD_PROTOCOL) {
     invalid("upload renewal response");
   }
+  const assetId = requiredAssetId(value);
+  const status = requiredString(value, "status", "upload renewal response");
+  if (status !== "uploading" && status !== "completed") {
+    invalid("upload renewal response");
+  }
   return {
     protocol: RESUMABLE_UPLOAD_PROTOCOL,
-    asset_id: requiredAssetId(value),
-    status: requiredString(value, "status", "upload renewal response"),
-    upload_url: requiredString(value, "upload_url", "upload renewal response"),
+    asset_id: assetId,
+    status,
+    upload_url: requiredUploadURL(value, assetId, "upload renewal response"),
     capability: requiredString(value, "capability", "upload renewal response"),
-    capability_expires_at: requiredString(
+    capability_expires_at: requiredTimestamp(
       value,
       "capability_expires_at",
       "upload renewal response"
     ),
-    session_expires_at: requiredString(
+    session_expires_at: requiredTimestamp(
       value,
       "session_expires_at",
       "upload renewal response"

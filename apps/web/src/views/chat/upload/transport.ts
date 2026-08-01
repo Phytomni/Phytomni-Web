@@ -2,7 +2,7 @@ import { uploadEndpoint, validateUploadURL } from "@/views/chat/upload/url";
 import { RESUMABLE_UPLOAD_PROTOCOL } from "@/api/upload";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
-const MAX_HEADER_PARTS = 100_000;
+const MAX_UPLOAD_PART_COUNT = 100_000;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 export interface UploadDataPlaneOptions {
@@ -82,9 +82,16 @@ export class UploadTransportError extends Error {
 }
 
 function responseError(response: Response): UploadTransportError {
-  const retryAfter = parseOptionalNonNegativeInteger(
-    response.headers.get("Retry-After")
+  return uploadStatusError(
+    response.status,
+    parseOptionalNonNegativeInteger(response.headers.get("Retry-After"))
   );
+}
+
+function uploadStatusError(
+  status: number,
+  retryAfterSeconds: number | null = null
+): UploadTransportError {
   const codeByStatus: Record<number, string> = {
     400: "invalid_upload_metadata",
     401: "upload_capability_invalid",
@@ -98,9 +105,9 @@ function responseError(response: Response): UploadTransportError {
     503: "upload_storage_unavailable",
   };
   return new UploadTransportError("Upload request failed", {
-    status: response.status,
-    code: codeByStatus[response.status] ?? "upload_transport_error",
-    retryAfterSeconds: retryAfter,
+    status,
+    code: codeByStatus[status] ?? "upload_transport_error",
+    retryAfterSeconds,
   });
 }
 
@@ -126,7 +133,14 @@ function parsePositiveHeader(
   name: string,
   max = Number.MAX_SAFE_INTEGER
 ): number {
-  const candidate = Number(requiredHeader(response, name));
+  const raw = requiredHeader(response, name);
+  if (!/^\d+$/.test(raw)) {
+    throw new UploadTransportError("Upload response is invalid", {
+      status: response.status,
+      code: "invalid_upload_response",
+    });
+  }
+  const candidate = Number(raw);
   if (!Number.isSafeInteger(candidate) || candidate < 1 || candidate > max) {
     throw new UploadTransportError("Upload response is invalid", {
       status: response.status,
@@ -139,14 +153,14 @@ function parsePositiveHeader(
 function parseReceivedParts(response: Response, partCount: number): number[] {
   const raw = response.headers.get("Upload-Received-Parts");
   if (raw === null || raw.trim() === "") return [];
-  const received = new Set<number>();
   const ranges = raw.split(",");
-  if (ranges.length > MAX_HEADER_PARTS) {
+  if (ranges.length > MAX_UPLOAD_PART_COUNT) {
     throw new UploadTransportError("Upload response is invalid", {
       status: response.status,
       code: "invalid_upload_response",
     });
   }
+  const parsedRanges: Array<[number, number]> = [];
   for (const range of ranges) {
     const pieces = range.trim().split("-");
     if (pieces.length > 2 || pieces.some((piece) => piece.trim() === "")) {
@@ -155,24 +169,46 @@ function parseReceivedParts(response: Response, partCount: number): number[] {
         code: "invalid_upload_response",
       });
     }
-    const start = Number(pieces[0]);
-    const end = pieces.length === 1 ? start : Number(pieces[1]);
+    const startToken = pieces[0].trim();
+    const endToken = pieces.length === 1 ? startToken : pieces[1].trim();
+    if (!/^\d+$/.test(startToken) || !/^\d+$/.test(endToken)) {
+      throw new UploadTransportError("Upload response is invalid", {
+        status: response.status,
+        code: "invalid_upload_response",
+      });
+    }
+    const start = Number(startToken);
+    const end = Number(endToken);
     if (
       !Number.isSafeInteger(start) ||
       !Number.isSafeInteger(end) ||
       start < 1 ||
       end < start ||
       end > partCount ||
-      end - start + 1 > MAX_HEADER_PARTS
+      end - start + 1 > MAX_UPLOAD_PART_COUNT
     ) {
       throw new UploadTransportError("Upload response is invalid", {
         status: response.status,
         code: "invalid_upload_response",
       });
     }
-    for (let part = start; part <= end; part += 1) received.add(part);
+    parsedRanges.push([start, end]);
   }
-  return [...received].sort((left, right) => left - right);
+
+  parsedRanges.sort(([left], [right]) => left - right);
+  let previousEnd = 0;
+  const received: number[] = [];
+  for (const [start, end] of parsedRanges) {
+    if (start <= previousEnd) {
+      throw new UploadTransportError("Upload response is invalid", {
+        status: response.status,
+        code: "invalid_upload_response",
+      });
+    }
+    for (let part = start; part <= end; part += 1) received.push(part);
+    previousEnd = end;
+  }
+  return received;
 }
 
 function parseCompletion(value: unknown, assetId: string): UploadCompletion {
@@ -296,10 +332,14 @@ function putPartWithXHR(
       }
       if (xhr.status < 200 || xhr.status >= 300) {
         finish(
-          new UploadTransportError("Upload request failed", {
-            status: xhr.status,
-            code: "upload_transport_error",
-          })
+          uploadStatusError(
+            xhr.status,
+            parseOptionalNonNegativeInteger(
+              typeof xhr.getResponseHeader === "function"
+                ? xhr.getResponseHeader("Retry-After")
+                : null
+            )
+          )
         );
         return;
       }
@@ -351,7 +391,11 @@ export function createUploadDataPlane(
           code: "upload_protocol_mismatch",
         });
       }
-      const partCount = parsePositiveHeader(response, "Upload-Part-Count");
+      const partCount = parsePositiveHeader(
+        response,
+        "Upload-Part-Count",
+        MAX_UPLOAD_PART_COUNT
+      );
       return {
         protocol: RESUMABLE_UPLOAD_PROTOCOL,
         status: requiredHeader(response, "Upload-Status"),

@@ -32,6 +32,7 @@ class FakeXHR {
   url = "";
   responseURL = "";
   status = 200;
+  responseHeaders: Record<string, string> = {};
   withCredentials = true;
   body: Blob | null = null;
   headers: Record<string, string> = {};
@@ -55,6 +56,10 @@ class FakeXHR {
 
   setRequestHeader(name: string, value: string): void {
     this.headers[name] = value;
+  }
+
+  getResponseHeader(name: string): string | null {
+    return this.responseHeaders[name] ?? null;
   }
 
   send(body: Blob): void {
@@ -192,6 +197,24 @@ describe("upload data-plane transport", () => {
     });
   });
 
+  it("honors Retry-After from an XHR 429 response", async () => {
+    const plane = createUploadDataPlane({
+      uploadUrl,
+      expectedOrigin: origin,
+      assetId,
+      capability,
+    });
+    const pending = plane.putPart(1, new Blob(["abc"]), digest);
+    FakeXHR.instances[0].status = 429;
+    FakeXHR.instances[0].responseHeaders["Retry-After"] = "7";
+
+    await expect(pending).rejects.toMatchObject<Partial<UploadTransportError>>({
+      status: 429,
+      code: "upload_rate_limited",
+      retryAfterSeconds: 7,
+    });
+  });
+
   it("rejects protocol or range header drift before returning state", async () => {
     fetchMock.mockResolvedValueOnce(
       headResponse({
@@ -207,6 +230,57 @@ describe("upload data-plane transport", () => {
 
     await expect(plane.head()).rejects.toMatchObject({
       code: "upload_protocol_mismatch",
+    });
+  });
+
+  it.each([
+    ["overlapping ranges", { "Upload-Received-Parts": "1-2,2-3" }],
+    ["duplicate ranges", { "Upload-Received-Parts": "1,1" }],
+    ["malformed range", { "Upload-Received-Parts": "1-" }],
+    ["non-decimal range", { "Upload-Received-Parts": "1e1" }],
+  ])("rejects %s in HEAD recovery metadata", async (_name, headers) => {
+    fetchMock.mockResolvedValueOnce(headResponse(headers));
+    const plane = createUploadDataPlane({
+      uploadUrl,
+      expectedOrigin: origin,
+      assetId,
+      capability,
+    });
+
+    await expect(plane.head()).rejects.toMatchObject({
+      code: "invalid_upload_response",
+    });
+  });
+
+  it("rejects an oversized part count before expanding ranges", async () => {
+    fetchMock.mockResolvedValueOnce(
+      headResponse({ "Upload-Part-Count": "100001" })
+    );
+    const plane = createUploadDataPlane({
+      uploadUrl,
+      expectedOrigin: origin,
+      assetId,
+      capability,
+    });
+
+    await expect(plane.head()).rejects.toMatchObject({
+      code: "invalid_upload_response",
+    });
+  });
+
+  it("rejects a non-decimal part count header", async () => {
+    fetchMock.mockResolvedValueOnce(
+      headResponse({ "Upload-Part-Count": "1e2" })
+    );
+    const plane = createUploadDataPlane({
+      uploadUrl,
+      expectedOrigin: origin,
+      assetId,
+      capability,
+    });
+
+    await expect(plane.head()).rejects.toMatchObject({
+      code: "invalid_upload_response",
     });
   });
 });
