@@ -9,6 +9,11 @@ export const CHAT_VISUAL_FIXTURE_KEYS = [
   "empty-cases",
   "populated",
   "attachment",
+  "upload-queued",
+  "upload-uploading",
+  "upload-paused",
+  "upload-failed",
+  "upload-completed",
   "sending",
   "picker-open",
   "picker-search",
@@ -127,6 +132,8 @@ export type ChatVisualFixtureDefinition = {
   offCanvas: boolean;
   isSending: boolean;
   hasAttachment: boolean;
+  /** Optional resumable-upload lifecycle state rendered by ChatUploadCard. */
+  uploadStatus?: import("@/views/chat/upload/types").UploadStatus;
   selectedAgent: string;
   pickerOpen: boolean;
   pickerSearchQuery: string;
@@ -139,6 +146,25 @@ export type ChatVisualFixtureDefinition = {
   /** Explicit persisted-history recovery state, when applicable. */
   historyState?: ChatVisualHistoryState;
 };
+
+const uploadFixture = (
+  key: ChatVisualFixtureKey,
+  uploadStatus: import("@/views/chat/upload/types").UploadStatus
+): ChatVisualFixtureDefinition => ({
+  key,
+  chatState: "empty",
+  sidebarCollapsed: false,
+  drawerOpen: false,
+  showSidebarTrigger: false,
+  offCanvas: false,
+  isSending: false,
+  hasAttachment: true,
+  uploadStatus,
+  selectedAgent: "",
+  pickerOpen: false,
+  pickerSearchQuery: "",
+  messageCount: 0,
+});
 
 const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
   "instant-empty": {
@@ -253,6 +279,11 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
     pickerSearchQuery: "",
     messageCount: 0,
   },
+  "upload-queued": uploadFixture("upload-queued", "queued"),
+  "upload-uploading": uploadFixture("upload-uploading", "uploading"),
+  "upload-paused": uploadFixture("upload-paused", "paused"),
+  "upload-failed": uploadFixture("upload-failed", "failed"),
+  "upload-completed": uploadFixture("upload-completed", "completed"),
   sending: {
     key: "sending",
     chatState: "populated",

@@ -154,6 +154,30 @@ compact disclosure containment, and each history title-only/loading/empty/error
 state. Use `Needs Verification` for unsupported browser modalities; never claim
 authenticated or production acceptance from synthetic captures.
 
+## Resumable upload-state matrix
+
+The upload-state harness uses the production `ChatUploadCard` component with
+synthetic, non-uploading `ResumableUploadItem` records. It covers `queued`,
+`uploading`, `paused`, `failed`, and `completed` at the eight agreed CSS
+viewports (`320`, `390`, `480`, `768`, `1024`, `1366`, `1920`, and `2560`) in
+both light and dark themes: exactly 80 PNGs, 80 geometry records, and 80
+upload-style assertion records.
+
+Start the fixed-port Vite server from Terminal A, then run from `apps/web/`:
+
+```bash
+./tests/visual/chat/capture-upload-matrix.sh
+```
+
+The script writes only to the ignored
+`.codex/evidence/frontend-v2/resumable-upload/` directory. Every screenshot is
+captured only after `measure-geometry.js`, `assert-geometry.js`, and
+`assert-upload-styles.js` pass. Inspect each PNG individually before adding a
+human review row. On the narrowest viewports the normal Composer surface can
+continue below the scroll owner; the geometry contract therefore checks that
+the upload card itself remains fully visible and bounded. The synthetic matrix
+is not evidence of a live Bot upload or 10 GiB behavior.
+
 ## Accessibility modality evidence
 
 Keyboard, zoom, reduced-motion, and forced-colors checks belong in the

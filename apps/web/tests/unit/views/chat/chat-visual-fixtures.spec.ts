@@ -69,6 +69,10 @@ const REFINEMENT_CAPTURE_SOURCE = readFileSync(
   resolve(VISUAL_CHAT, "capture-refinement-matrix.sh"),
   "utf8"
 );
+const UPLOAD_ASSERT_SOURCE = readFileSync(
+  resolve(VISUAL_CHAT, "assert-upload-styles.js"),
+  "utf8"
+);
 
 type GeometryResult = {
   pass: boolean;
@@ -115,6 +119,9 @@ type GeometryHarnessOptions = {
   triggerVisible?: boolean;
   primaryVisible?: boolean;
   composerVisible?: boolean;
+  uploadStatus?: "queued" | "uploading" | "paused" | "failed" | "completed";
+  includeUploadCard?: boolean;
+  uploadCardRect?: Rect;
 };
 
 const rect = (
@@ -140,6 +147,7 @@ async function runGeometryHarness(
   const state = options.state ?? "populated";
   const chatMode = options.chatModeOverride ?? options.chatMode ?? "instant";
   const emptyScrollPosition = options.emptyScrollPosition ?? "top";
+  const uploadStatus = options.uploadStatus ?? null;
   const includeCases = options.includeCases ?? state === "empty";
   const includeQuickSelect =
     options.includeQuickSelect ?? (state === "empty" && chatMode === "expert");
@@ -212,6 +220,7 @@ async function runGeometryHarness(
       if (name === "data-sidebar-drawer-state") return drawerState;
       if (name === "data-empty-scroll-position") return emptyScrollPosition;
       if (name === "data-chat-mode") return chatMode;
+      if (name === "data-upload-status") return uploadStatus;
       return null;
     },
     querySelectorAll: (selector: string) => {
@@ -240,6 +249,12 @@ async function runGeometryHarness(
         return includeCases ? casesRegion : null;
       }
       if (selector === '[data-testid="chat-composer"]') return composer;
+      if (
+        selector === '[data-testid="chat-upload-card"]' &&
+        options.includeUploadCard !== false
+      ) {
+        return uploadCard;
+      }
       if (selector === ".phy-adaptive-shell__main") return mainSurface;
       if (
         selector ===
@@ -277,6 +292,9 @@ async function runGeometryHarness(
       options.composerRect ??
       rect(Math.min(300, width / 4), 740, width - 24, 880),
     options.composerVisible ?? true
+  );
+  const uploadCard = makeElement(
+    options.uploadCardRect ?? rect(300, 560, width - 24, 700)
   );
   if (options.composerSurfaceRect) {
     Object.assign(composer, {
@@ -400,6 +418,11 @@ describe("Chat visual fixture registry", () => {
       "empty-cases",
       "populated",
       "attachment",
+      "upload-queued",
+      "upload-uploading",
+      "upload-paused",
+      "upload-failed",
+      "upload-completed",
       "sending",
       "picker-open",
       "picker-search",
@@ -847,12 +870,60 @@ describe("Chat visual fixture script contracts", () => {
       /(?:const|let|var)\s+\w+\s*=\s*nodes\[0\]\.(?:textContent|innerText)/
     );
   });
+
+  it("locks upload-state style assertions to the real card semantics", () => {
+    expect(UPLOAD_ASSERT_SOURCE).toContain("chat-upload-card");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("chat-upload-progress");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("aria-valuenow");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("uploading");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("completed");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("viewport horizontally");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("pass: true");
+    expect(UPLOAD_ASSERT_SOURCE).not.toContain("location.href");
+  });
 });
 
 describe("Chat visual fixture geometry negative controls", () => {
   it("passes a valid populated desktop layout", async () => {
     const result = await runGeometryHarness();
     expect(result).toMatchObject({ pass: true });
+  });
+
+  it("allows a narrow upload fixture to review its card while the composer scrolls", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      width: 320,
+      height: 568,
+      drawerState: "closed",
+      composerRect: rect(16, 292, 289, 612),
+      uploadStatus: "queued",
+      uploadCardRect: rect(16, 307, 287, 459),
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      uploadStatus: "queued",
+      uploadCard: { top: 307, bottom: 459 },
+    });
+  });
+
+  it("rejects an upload fixture when its card leaves the viewport", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      uploadStatus: "failed",
+      uploadCardRect: rect(280, 920, 1160, 1000),
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(
+      /upload fixture requires a visible upload card/
+    );
   });
 
   it.each([
@@ -1250,6 +1321,38 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
     expect(buildSyntheticFileList(fixture)).toHaveLength(0);
   });
+
+  it.each([
+    ["upload-queued", "queued", "chat-upload-cancel"],
+    ["upload-uploading", "uploading", "chat-upload-pause"],
+    ["upload-paused", "paused", "chat-upload-resume"],
+    ["upload-failed", "failed", "chat-upload-retry"],
+    ["upload-completed", "completed", "chat-upload-remove"],
+  ] as const)(
+    "renders the %s resumable upload state through ChatUploadCard",
+    async (key, status, actionTestId) => {
+      const wrapper = mountFixtureApp(getChatVisualFixture(key));
+      await flushPromises();
+      await nextTick();
+
+      const root = wrapper.get('[data-testid="chat-visual-root"]');
+      expect(root.attributes("data-upload-status")).toBe(status);
+      const card = wrapper.get('[data-testid="chat-upload-card"]');
+      expect(card.attributes("data-upload-status")).toBe(status);
+      expect(card.get('[data-testid="chat-upload-status"]').text()).not.toBe(
+        ""
+      );
+      expect(
+        card
+          .get('[data-testid="chat-upload-progress"]')
+          .attributes("aria-valuenow")
+      ).toMatch(/^\d+$/);
+      expect(card.get(`[data-testid="${actionTestId}"]`).exists()).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
+      wrapper.unmount();
+    }
+  );
 
   it("derives Chinese quick-select labels from the active locale", async () => {
     const wrapper = mountFixtureApp(

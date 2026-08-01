@@ -175,6 +175,15 @@
   }
 
   const contentStackEl = contentStacks[0];
+  const uploadStatus = root.getAttribute("data-upload-status");
+  const uploadFixtureStatuses = new Set([
+    "queued",
+    "uploading",
+    "paused",
+    "failed",
+    "completed",
+  ]);
+  const isUploadFixture = uploadFixtureStatuses.has(uploadStatus);
   const emptyScrollPosition =
     root.getAttribute("data-empty-scroll-position") === "cases"
       ? "cases"
@@ -266,6 +275,12 @@
             composerNodes[0]
         )
       : { ...measureRect(null), count: composerNodes.length };
+  const uploadCardNode = root.querySelector?.(
+    '[data-testid="chat-upload-card"]'
+  );
+  const uploadCard = uploadCardNode
+    ? measureRect(uploadCardNode)
+    : { ...measureRect(null), count: 0 };
   const lastMessage = lastRow
     ? { present: true, ...measureRect(lastRow) }
     : { present: false };
@@ -422,10 +437,19 @@
     reasons.push("composer missing or not visible");
   } else if (
     !openMobile &&
+    !isUploadFixture &&
     (state === "populated" || emptyScrollPosition === "top") &&
     !isInsideViewport(composer)
   ) {
     reasons.push("composer escapes viewport in the reviewed state");
+  }
+
+  if (isUploadFixture) {
+    if (!uploadCard.present || !isVisibleInViewport(uploadCard)) {
+      reasons.push(
+        "upload fixture requires a visible upload card in the viewport"
+      );
+    }
   }
 
   if (lastMessage.present) {
@@ -594,6 +618,8 @@
     primaryAction,
     navigationTrigger,
     composer,
+    uploadStatus,
+    uploadCard,
     mainSurfaceHidden: mainSurface?.getAttribute("aria-hidden") === "true",
     drawerSurface: measureRect(drawerSurface),
     drawerScrim: measureRect(drawerScrim),

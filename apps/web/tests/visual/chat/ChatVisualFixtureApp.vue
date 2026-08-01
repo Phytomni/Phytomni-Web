@@ -26,6 +26,7 @@
       "
       :data-sidebar-drawer-state="drawerStateAttr"
       :data-phase3c-kind="phase3cKindAttr"
+      :data-upload-status="fixture.uploadStatus"
       :data-active-sidebar-item="activeSidebarItem"
       :data-chat-mode="fixtureChatMode"
       class="chat-visual-fixture-root"
@@ -366,7 +367,7 @@
                   :mode-usable="true"
                   :show-mode-selector="fixture.chatState === 'empty'"
                   :file-list="fileList"
-                  :has-blocking-uploads="false"
+                  :has-blocking-uploads="hasBlockingUploads"
                   :roles-loading="routingPermissionsLoading"
                   :has-messages="fixture.chatState === 'populated'"
                   :selected-agent="fixture.selectedAgent"
@@ -644,6 +645,9 @@ const geneNetworkImages = computed(() =>
 
 const fileList = computed(() =>
   props.fixture ? buildSyntheticFileList(props.fixture) : []
+);
+const hasBlockingUploads = computed(() =>
+  fileList.value.some((item) => !["completed", "aborted"].includes(item.status))
 );
 const routingFixture = computed(() =>
   getChatRoutingFixture(props.fixture?.key)

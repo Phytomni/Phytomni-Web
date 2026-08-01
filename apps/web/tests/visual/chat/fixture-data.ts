@@ -1,7 +1,11 @@
 /** Deterministic synthetic data for the Chat visual fixture harness. */
 
 import type { ChatVisualFixtureDefinition } from "./fixture-registry";
-import type { ContentBlock, UploadFile, ChatMessage } from "@/views/chat/types";
+import type { ContentBlock, ChatMessage } from "@/views/chat/types";
+import type {
+  ResumableUploadItem,
+  UploadStatus,
+} from "@/views/chat/upload/types";
 import type {
   A2uiOpenSurface,
   A2uiSurfaceState,
@@ -97,10 +101,20 @@ export function getSharedPhase3COverlay(key: Phase3CFixtureKey) {
 
 export function buildSyntheticFileList(
   fixture: ChatVisualFixtureDefinition
-): UploadFile[] {
+): ResumableUploadItem[] {
   if (!fixture.hasAttachment) {
     return [];
   }
+  const status: UploadStatus = fixture.uploadStatus ?? "completed";
+  const size = 1024 * 1024;
+  const loadedBytes =
+    status === "completed"
+      ? size
+      : status === "uploading"
+        ? 256 * 1024
+        : status === "paused" || status === "failed"
+          ? 512 * 1024
+          : 0;
   const blob = new File(
     ["synthetic fixture attachment contents"],
     SYNTHETIC_FILE_NAME,
@@ -108,10 +122,22 @@ export function buildSyntheticFileList(
   );
   return [
     {
-      name: SYNTHETIC_FILE_NAME,
-      size: blob.size,
-      type: "text/plain",
+      localId: "fixture-upload-local",
       file: blob,
+      assetId: status === "completed" ? "file_fixture_attachment" : null,
+      name: SYNTHETIC_FILE_NAME,
+      size,
+      type: "text/plain",
+      lastModified: 1_700_000_000_000,
+      status,
+      partSize: size,
+      partCount: 1,
+      receivedParts: status === "completed" ? [1] : [],
+      loadedBytes,
+      speedBytesPerSecond: status === "uploading" ? 256 * 1024 : 0,
+      etaSeconds: status === "uploading" ? 3 : null,
+      retryCount: status === "failed" ? 1 : 0,
+      errorCode: status === "failed" ? "upload_failed" : null,
     },
   ];
 }
