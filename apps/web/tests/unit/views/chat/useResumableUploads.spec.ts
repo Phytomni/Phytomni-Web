@@ -256,6 +256,69 @@ describe("useResumableUploads", () => {
     await queue.dispose();
   });
 
+  it("keeps an active upload running when new uploads are disabled", async () => {
+    const { queue, capability, getChatState } = setup();
+    const data = fakeDataPlane();
+    let release!: () => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    data.putPart = vi.fn(async (_part, body, _digest, options) => {
+      markStarted();
+      await gate;
+      options?.onProgress?.({ loaded: body.size, total: body.size });
+    });
+    mocks.createUploadDataPlane.mockReturnValue(data);
+
+    await queue.queueFiles([fixtureFile("during-switch.fasta")]);
+    await started;
+
+    capability.value = {
+      ...enabledCapability,
+      enabled: false,
+      upload_origin: "",
+    };
+    release();
+
+    await vi.waitFor(() => {
+      expect(getChatState("A").fileList[0]?.status).toBe("completed");
+    });
+    expect(mocks.createUpload).toHaveBeenCalledTimes(1);
+    expect(data.putPart).toHaveBeenCalledTimes(1);
+    await queue.dispose();
+  });
+
+  it("does not pause a completed sibling when another attachment fails", async () => {
+    const { queue, getChatState } = setup();
+    let planeCount = 0;
+    mocks.createUploadDataPlane.mockImplementation(() => {
+      planeCount += 1;
+      const data = fakeDataPlane();
+      if (planeCount === 1) {
+        data.putPart = vi.fn(async () => {
+          throw new mocks.UploadTransportError("", { status: 413 });
+        });
+      }
+      return data;
+    });
+
+    await queue.queueFiles([
+      fixtureFile("failed-input.fasta"),
+      fixtureFile("sibling-input.vcf.gz"),
+    ]);
+
+    await vi.waitFor(() => {
+      expect(getChatState("A").fileList).toHaveLength(2);
+      expect(getChatState("A").fileList[0]?.status).toBe("failed");
+      expect(getChatState("A").fileList[1]?.status).toBe("completed");
+    });
+    await queue.dispose();
+  });
+
   it("cancels all incomplete items for one dialogue without touching another", async () => {
     const { queue, getChatState, currentChatId } = setup();
     await queue.queueFiles([fixtureFile("a.fastq")]);
