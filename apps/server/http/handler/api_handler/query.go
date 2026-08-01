@@ -18,6 +18,7 @@ import (
 	"phytomni-server/utils/errs"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // queryErrorStatus maps a /query service error to the HTTP status and message
@@ -34,6 +35,10 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, "invalid client turn id"
 	case errors.Is(err, api_service.ErrConversationModeConflict):
 		return http.StatusBadRequest, "conversation mode cannot be changed"
+	case errors.Is(err, api_service.ErrConversationLedgerNotFound):
+		return http.StatusNotFound, "conversation not found"
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return http.StatusNotFound, "conversation not found"
 	case errors.Is(err, api_service.ErrDuplicateClientTurn):
 		return http.StatusConflict, "client turn id conflicts with an existing turn"
 	case errors.Is(err, api_service.ErrInvalidQueryFile):

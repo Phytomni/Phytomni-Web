@@ -8,6 +8,8 @@ import (
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/service/api_service"
+
+	"gorm.io/gorm"
 )
 
 // TestQueryErrorStatus pins the /query error contract: a disabled gateway is a
@@ -26,6 +28,18 @@ func TestQueryErrorStatus(t *testing.T) {
 			err:        api_service.ErrGatewayDisabled,
 			wantStatus: http.StatusServiceUnavailable,
 			wantMsg:    "service temporarily unavailable",
+		},
+		{
+			name:       "conversation ledger ownership miss -> uniform 404",
+			err:        fmt.Errorf("resolve conversation: %w", api_service.ErrConversationLedgerNotFound),
+			wantStatus: http.StatusNotFound,
+			wantMsg:    "conversation not found",
+		},
+		{
+			name:       "raw owner lookup miss -> uniform 404",
+			err:        fmt.Errorf("resolve parent: %w", gorm.ErrRecordNotFound),
+			wantStatus: http.StatusNotFound,
+			wantMsg:    "conversation not found",
 		},
 		{
 			name:       "unknown tool (wrapped) -> 400",
