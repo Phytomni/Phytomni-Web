@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -71,6 +72,74 @@ func TestChatCompletionRejectsMismatchedContextTurn(t *testing.T) {
 	envelope.RequestedAgentID = nil
 	envelope.AllowedAgentIDs = []string{"ChatAgent"}
 	_, err := newTestClient(srv.URL).ChatCompletion(context.Background(), ChatCompletionRequest{Model: "phyto-chat", Conversation: &envelope})
+	if err == nil || !contains(err.Error(), "turn_id") {
+		t.Fatalf("mismatched response turn was accepted: %v", err)
+	}
+}
+
+func TestInvokeAgentForwardsConversationAndValidatesContext(t *testing.T) {
+	envelope := validConversationEnvelope()
+	var captured AgentRunRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Errorf("decode agent request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"run-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],
+			"result":{"formatted":{"answer":"ok"}},
+			"conversation_context":{
+				"schema_version":1,"turn_id":"7","selected_agent_id":"DataAgent",
+				"route_source":"explicit_selection","route_reason_code":"EXPLICIT_SELECTION",
+				"base_business_context_version":2,"proposed_business_context_version":3,
+				"last_applied_ledger_cursor":6,"context_truncated":false,
+				"context_rebuilt":false,"context_degraded":false
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	response, err := newTestClient(srv.URL).InvokeAgent(
+		context.Background(),
+		"data",
+		AgentRunRequest{
+			Arguments:    map[string]interface{}{"user_query": "next"},
+			DialogueID:   envelope.DialogueID,
+			Conversation: &envelope,
+		},
+	)
+	if err != nil {
+		t.Fatalf("InvokeAgent: %v", err)
+	}
+	if captured.Conversation == nil || captured.Conversation.TurnID != envelope.TurnID {
+		t.Fatalf("conversation envelope=%#v", captured.Conversation)
+	}
+	if response.ConversationContext == nil || response.ConversationContext.SelectedAgentID != "DataAgent" {
+		t.Fatalf("conversation context=%#v", response.ConversationContext)
+	}
+}
+
+func TestInvokeAgentRejectsMismatchedContextTurn(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"run-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],
+			"conversation_context":{
+				"schema_version":1,"turn_id":"8","selected_agent_id":"DataAgent",
+				"route_source":"explicit_selection","route_reason_code":"EXPLICIT_SELECTION",
+				"base_business_context_version":2,"proposed_business_context_version":3,
+				"last_applied_ledger_cursor":6,"context_truncated":false,
+				"context_rebuilt":false,"context_degraded":false
+			}
+		}`))
+	}))
+	defer srv.Close()
+	envelope := validConversationEnvelope()
+	_, err := newTestClient(srv.URL).InvokeAgent(
+		context.Background(),
+		"data",
+		AgentRunRequest{Arguments: map[string]interface{}{}, Conversation: &envelope},
+	)
 	if err == nil || !contains(err.Error(), "turn_id") {
 		t.Fatalf("mismatched response turn was accepted: %v", err)
 	}

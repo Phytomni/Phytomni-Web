@@ -389,6 +389,9 @@ func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunReque
 func (c *Client) InvokeAgentWithMeta(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, ResponseMeta, error) {
 	var out AgentRunResponse
 	meta, err := c.doJSONWithMetaOptions(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out, true)
+	if err == nil && req.Conversation != nil {
+		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
+	}
 	return &out, meta, err
 }
 

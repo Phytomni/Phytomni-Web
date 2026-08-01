@@ -72,9 +72,10 @@ type ChatCompletionResponse struct {
 
 // AgentRunRequest is the body for POST /v1/agents/{slug}/runs.
 type AgentRunRequest struct {
-	Arguments  map[string]interface{} `json:"arguments"`
-	DialogueID string                 `json:"dialogue_id,omitempty"`
-	Debug      bool                   `json:"debug,omitempty"`
+	Arguments    map[string]interface{}  `json:"arguments"`
+	DialogueID   string                  `json:"dialogue_id,omitempty"`
+	Debug        bool                    `json:"debug,omitempty"`
+	Conversation *ConversationEnvelopeV1 `json:"conversation,omitempty"`
 }
 
 // AgentRunResult carries either a finished formatted payload (sync agents) or
