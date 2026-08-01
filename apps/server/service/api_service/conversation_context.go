@@ -275,7 +275,10 @@ func settleBlockingConversationContext(
 	projection *BotRunProjection,
 	private persistedConversationContext,
 ) (string, error) {
-	var ledgerVersion string
+	stagedLedgerVersion := private.SettlementLedgerHash
+	if stagedLedgerVersion == "" {
+		return "", ErrInvalidBotConversationContext
+	}
 	err := model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var stored struct {
 			BotProjectionJSON string `gorm:"column:bot_projection_json"`
@@ -390,17 +393,15 @@ func settleBlockingConversationContext(
 			}
 		}
 
-		ledger, err := buildConversationLedgerWithDB(
+		if _, err := buildConversationLedgerWithDB(
 			ctx,
 			tx,
 			username,
 			dialogueID,
-		)
-		if err != nil {
+		); err != nil {
 			return err
 		}
-		ledgerVersion = ledger.Version
-		private.SettlementLedgerHash = ledgerVersion
+		private.SettlementLedgerHash = stagedLedgerVersion
 		raw, err = marshalPersistedProjectionWithContext(current, &private)
 		if err != nil {
 			return err
@@ -419,7 +420,7 @@ func settleBlockingConversationContext(
 	if err != nil {
 		return "", err
 	}
-	return ledgerVersion, nil
+	return stagedLedgerVersion, nil
 }
 
 func lockConversationRootModeWithDB(

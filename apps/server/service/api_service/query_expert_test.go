@@ -236,23 +236,47 @@ func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
 }
 
 // TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection locks that a forced
-// non-chat agent under the v1 multiturn flag dispatches directly to
-// /v1/agents/{slug}/runs (not the LLM router) and persists exactly one owner row.
-// NOTE: /v1/agents/{slug}/runs has no conversation envelope field, so a forced
-// non-chat agent does NOT forward v1 conversation context today — that gap is
-// tracked for the Bot dev team (see docs handoff). Chat-family forced agents
-// keep full v1 context via /v1/chat/completions.
+// agent under the v1 multiturn flag uses Bot's context-aware route and carries
+// the server-owned selection through forced_tool.
 func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	var hit string
+	var dispatchPath string
+	var captured rxBot.AgentRunRequest
+	var settleCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hit = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/v1/agents/data/runs" {
-			_, _ = w.Write([]byte(`{"id":"run-v1-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`))
-			return
+		switch r.URL.Path {
+		case "/v1/agents/data/runs":
+			dispatchPath = r.URL.Path
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Errorf("decode agent request: %v", err)
+				return
+			}
+			stage := rxBot.ContextStageMetadata{
+				SchemaVersion:                  1,
+				TurnID:                         captured.Conversation.TurnID,
+				SelectedAgentID:                "DataAgent",
+				RouteSource:                    "explicit_selection",
+				RouteReasonCode:                "EXPLICIT_SELECTION",
+				BaseBusinessContextVersion:     captured.Conversation.BaseBusinessContextVersion,
+				ProposedBusinessContextVersion: captured.Conversation.BaseBusinessContextVersion + 1,
+				LastAppliedLedgerCursor:        captured.Conversation.LedgerCursor,
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": "run-v1-data", "run_id": "run-v1-data",
+				"object": "agent.run", "agent": "data", "status": "succeeded",
+				"task_ids":             []string{},
+				"result":               map[string]interface{}{"formatted": map[string]interface{}{"answer": "ok"}},
+				"conversation_context": stage,
+			})
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+				SchemaVersion: 1, State: "committed", ContextVersion: 1,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
 		}
-		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
@@ -270,8 +294,12 @@ func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if hit != "/v1/agents/data/runs" {
-		t.Fatalf("forced DataAgent under v1 must dispatch to /v1/agents/data/runs, hit %q", hit)
+	if dispatchPath != "/v1/agents/data/runs" || settleCalls != 1 {
+		t.Fatalf("forced DataAgent under v1 dispatch/settle = %q/%d", dispatchPath, settleCalls)
+	}
+	if captured.Conversation == nil || captured.Conversation.RequestedAgentID == nil ||
+		*captured.Conversation.RequestedAgentID != "DataAgent" {
+		t.Fatalf("requested agent = %#v", captured.Conversation)
 	}
 	if out.ToolName != "DataAgent" {
 		t.Fatalf("tool_name = %q, want DataAgent", out.ToolName)
@@ -1057,26 +1085,28 @@ func TestExpertModeEnabled_TracksBotConfig(t *testing.T) {
 	}
 }
 
-// TestQueryExpertContextSelectionSettlement covers autonomous Expert: with no
-// forced tool, the turn routes through /v1/query/route, the router selects the
-// agent, and Web settles the returned conversation-context stage. A forced tool
-// no longer reaches the router (it dispatches directly), so only the autonomous
-// case exercises router-driven settlement here.
+// TestQueryExpertContextSelectionSettlement covers autonomous Expert and a
+// forced Expert selection. The autonomous turn uses the router; the forced turn
+// dispatches directly to the selected execution endpoint.
 func TestQueryExpertContextSelectionSettlement(t *testing.T) {
 	tests := []struct {
-		name, requestedTool, selectedTool, selectedSlug, routeSource string
+		name, requestedTool, selectedTool, selectedSlug, routeSource, expectedPath string
 	}{
-		{"router", "", "KnowledgeAgent", "knowledge", "router"},
+		{"router", "", "KnowledgeAgent", "knowledge", "router", "/v1/query/route"},
+		{"forced", "KnowledgeAgent", "KnowledgeAgent", "knowledge", "explicit_selection", "/v1/chat/completions"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			setupExpertTestDB(t)
 			var captured rxBot.RouteQueryRequest
+			var capturedChat rxBot.ChatCompletionRequest
 			var settleCalls int
+			var dispatchPath string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
 				case "/v1/query/route":
+					dispatchPath = r.URL.Path
 					if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 						t.Errorf("decode route request: %v", err)
 						return
@@ -1096,6 +1126,32 @@ func TestQueryExpertContextSelectionSettlement(t *testing.T) {
 						"result": map[string]interface{}{"formatted": map[string]interface{}{
 							"answer": "expert answer", "references": []interface{}{},
 						}},
+						"conversation_context": stage,
+					})
+				case "/v1/chat/completions":
+					dispatchPath = r.URL.Path
+					if err := json.NewDecoder(r.Body).Decode(&capturedChat); err != nil {
+						t.Errorf("decode chat request: %v", err)
+						return
+					}
+					stage := rxBot.ContextStageMetadata{
+						SchemaVersion:                  1,
+						TurnID:                         capturedChat.Conversation.TurnID,
+						SelectedAgentID:                test.selectedTool,
+						RouteSource:                    test.routeSource,
+						RouteReasonCode:                "EXPLICIT_SELECTION",
+						BaseBusinessContextVersion:     capturedChat.Conversation.BaseBusinessContextVersion,
+						ProposedBusinessContextVersion: capturedChat.Conversation.BaseBusinessContextVersion + 1,
+						LastAppliedLedgerCursor:        capturedChat.Conversation.LedgerCursor,
+					}
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"id": "run-context", "run_id": "run-context",
+						"object": "chat.completion", "status": "succeeded",
+						"choices": []interface{}{map[string]interface{}{
+							"index":   0,
+							"message": map[string]interface{}{"role": "assistant", "content": "expert answer"},
+						}},
+						"formatted":            map[string]interface{}{"answer": "expert answer"},
 						"conversation_context": stage,
 					})
 				case "/v1/conversation-context/settle":
@@ -1124,20 +1180,22 @@ func TestQueryExpertContextSelectionSettlement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			if out.Status != "SUCCEEDED" || out.ToolName != test.selectedTool || settleCalls != 1 {
+			if out.Status != "SUCCEEDED" || out.ToolName != test.selectedTool ||
+				dispatchPath != test.expectedPath || settleCalls != 1 {
 				t.Fatalf("result=%#v settle calls=%d", out, settleCalls)
 			}
-			if len(captured.History) != 0 || captured.Conversation == nil {
-				t.Fatalf("route request leaked browser history: %#v", captured)
-			}
 			if test.requestedTool == "" {
+				if len(captured.History) != 0 || captured.Conversation == nil {
+					t.Fatalf("route request leaked browser history: %#v", captured)
+				}
 				if captured.ForcedTool != nil ||
 					!reflect.DeepEqual(captured.Conversation.AllowedAgentIDs, captured.AllowedTools) {
 					t.Fatalf("router constraints=%#v", captured)
 				}
-			} else if captured.ForcedTool == nil ||
-				*captured.ForcedTool != test.requestedTool {
-				t.Fatalf("forced tool=%#v", captured.ForcedTool)
+			} else if capturedChat.Conversation == nil ||
+				capturedChat.Conversation.RequestedAgentID == nil ||
+				*capturedChat.Conversation.RequestedAgentID != test.requestedTool {
+				t.Fatalf("forced conversation=%#v", capturedChat.Conversation)
 			}
 		})
 	}

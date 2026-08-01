@@ -39,6 +39,72 @@ func validContextStageMetadata() *rxBot.ContextStageMetadata {
 	}
 }
 
+func TestApplyConversationRebuildEnvelopeRetainsPriorUserHistory(t *testing.T) {
+	// Rebuild history includes a trailing current-user slot for Bot projection.
+	gdb := setupExpertTestDB(t)
+	dialogueID := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	root := model.QuestionAgentLog{
+		Id: 1, DialogueId: dialogueID, UserName: "alice",
+		Query: "Remember marker REBUILD-1.", Status: statusSucceeded,
+		Mode: "instant", ToolName: "ChatAgent", BotReportRevision: -1,
+		BotProjectionJSON: `{"report_revision":-1}`,
+	}
+	current := model.QuestionAgentLog{
+		Id: 2, DialogueId: dialogueID, FId: 1, UserName: "alice",
+		Query: "What marker did I ask you to remember?", Status: "SUBMITTING",
+		Mode: "instant", ToolName: "ChatAgent", BotReportRevision: -1,
+	}
+	if err := gdb.Create(&root).Error; err != nil {
+		t.Fatalf("persist root: %v", err)
+	}
+	if err := gdb.Create(&current).Error; err != nil {
+		t.Fatalf("persist current row: %v", err)
+	}
+
+	requestedAgent := "ChatAgent"
+	submission := &v1Submission{
+		row: current,
+		envelope: &rxBot.ConversationEnvelopeV1{
+			SchemaVersion:   1,
+			ConversationKey: dialogueID,
+			DialogueID:      dialogueID,
+			TurnID:          "2",
+			RequestID:       "rebuild-request-2",
+			Operation:       "append",
+			Mode:            "instant",
+			CurrentMessage: rxBot.CurrentMessageV1{
+				Content: current.Query, Locale: "en-US",
+			},
+			RequestedAgentID:           &requestedAgent,
+			AllowedAgentIDs:            []string{"ChatAgent"},
+			LedgerCursor:               2,
+			LedgerVersion:              strings.Repeat("a", 64),
+			BaseBusinessContextVersion: 0,
+		},
+	}
+	target := v1SubmissionTarget{
+		dialogueID: dialogueID,
+		parentID:   1,
+		mode:       "instant",
+		operation:  "append",
+	}
+
+	if err := applyConversationRebuildEnvelope(
+		context.Background(), "alice", submission, target,
+	); err != nil {
+		t.Fatalf("apply rebuild envelope: %v", err)
+	}
+
+	if submission.envelope.Operation != "rebuild" {
+		t.Fatalf("operation = %q, want rebuild", submission.envelope.Operation)
+	}
+	if got := submission.envelope.HistoryDelta; len(got) != 2 ||
+		got[0].TurnID != "1" || got[0].Content != root.Query ||
+		got[1].TurnID != "2" || got[1].Content != current.Query {
+		t.Fatalf("rebuild history = %#v", got)
+	}
+}
+
 func TestPersistedConversationContextEnforcesBounds(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -191,6 +257,7 @@ func TestLoadBotConversationContextReturnsZeroForLegacyProjection(t *testing.T) 
 
 func TestConversationSettlementStateIsIdempotentWithoutLedgerMutation(t *testing.T) {
 	gdb := setupExpertTestDB(t)
+	stagedLedgerVersion := "staged-ledger-version"
 	raw, err := marshalPersistedProjectionWithContext(
 		BotRunProjection{ReportRevision: -1},
 		&persistedConversationContext{
@@ -227,8 +294,9 @@ func TestConversationSettlementStateIsIdempotentWithoutLedgerMutation(t *testing
 		nil,
 		persistedConversationContext{
 			ClientTurnID: "context-state-1", Stage: stage,
-			SettlementState:  conversationSettlementAckPending,
-			AssistantSummary: "answer",
+			SettlementState:      conversationSettlementAckPending,
+			AssistantSummary:     "answer",
+			SettlementLedgerHash: stagedLedgerVersion,
 		},
 	)
 	if err != nil {
@@ -246,12 +314,8 @@ func TestConversationSettlementStateIsIdempotentWithoutLedgerMutation(t *testing
 	); err != nil {
 		t.Fatalf("repeated ACK update: %v", err)
 	}
-	ledger, err := BuildConversationLedger(context.Background(), "alice", row.DialogueId)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ledger.Version != version {
-		t.Fatalf("ledger version changed after ACK: got %s want %s", ledger.Version, version)
+	if version != stagedLedgerVersion {
+		t.Fatalf("settlement version = %s, want staged %s", version, stagedLedgerVersion)
 	}
 }
 

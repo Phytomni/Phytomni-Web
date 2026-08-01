@@ -92,6 +92,88 @@ func assertV1ContextDoesNotReplayOutput(
 	}
 }
 
+func TestQueryContextPrebuildsForNonContiguousLedgerRow(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var (
+		envelopes []rxBot.ConversationEnvelopeV1
+		settles   int
+	)
+	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/conversation-context/settle" {
+			settles++
+			_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+				SchemaVersion: 1, State: "committed", ContextVersion: int64(settles),
+			})
+			return
+		}
+		var request rxBot.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode chat request: %v", err)
+			return
+		}
+		if request.Conversation == nil {
+			t.Error("missing V1 conversation envelope")
+			return
+		}
+		envelopes = append(envelopes, *request.Conversation)
+		stage := rxBot.ContextStageMetadata{
+			SchemaVersion:                  1,
+			TurnID:                         request.Conversation.TurnID,
+			SelectedAgentID:                "ChatAgent",
+			RouteSource:                    "instant_lock",
+			RouteReasonCode:                "INSTANT_LOCK",
+			BaseBusinessContextVersion:     request.Conversation.BaseBusinessContextVersion,
+			ProposedBusinessContextVersion: request.Conversation.BaseBusinessContextVersion + 1,
+			LastAppliedLedgerCursor:        request.Conversation.LedgerCursor,
+			ContextRebuilt:                 request.Conversation.Operation == "rebuild",
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "gap-chat", "object": "chat.completion",
+			"choices": []map[string]any{{"message": map[string]string{
+				"role": "assistant", "content": "gap answer",
+			}}},
+			"formatted":            map[string]any{"answer": "gap answer"},
+			"conversation_context": stage,
+		})
+	})
+
+	service := NewService()
+	root, err := service.Query(context.Background(), "alice", QueryInput{
+		Query: "first", Mode: "instant", ClientTurnID: "gap-root-1",
+	})
+	if err != nil {
+		t.Fatalf("root Query: %v", err)
+	}
+	if root.Id != 1 {
+		t.Fatalf("root id = %d, want 1", root.Id)
+	}
+	if err := gdb.Create(&model.QuestionAgentLog{
+		DialogueId: "unrelated-dialogue", UserName: "alice",
+		Query: "unrelated", Answer: "unrelated", ToolName: "ChatAgent",
+		Status: statusSucceeded, Mode: "instant", BotReportRevision: -1,
+	}).Error; err != nil {
+		t.Fatalf("insert unrelated row: %v", err)
+	}
+
+	follow, err := service.Query(context.Background(), "alice", QueryInput{
+		Query: "follow", Id: root.Id, Mode: "instant", ClientTurnID: "gap-follow-2",
+	})
+	if err != nil {
+		t.Fatalf("follow-up Query: %v", err)
+	}
+	if follow.Answer != "gap answer" || len(envelopes) != 2 {
+		t.Fatalf("follow-up result=%#v envelopes=%d", follow, len(envelopes))
+	}
+	if envelopes[0].Operation != "append" || envelopes[0].LedgerCursor != 1 {
+		t.Fatalf("root envelope=%#v", envelopes[0])
+	}
+	if envelopes[1].Operation != "rebuild" || envelopes[1].TurnID != "3" ||
+		envelopes[1].LedgerCursor != 3 || envelopes[1].BaseBusinessContextVersion != 1 {
+		t.Fatalf("non-contiguous follow-up envelope=%#v", envelopes[1])
+	}
+}
+
 // TestSlugRoutingDecision pins the chat-vs-remote dispatch decision and the
 // empty-tool default, which drive which Bot endpoint Query calls.
 func TestSlugRoutingDecision(t *testing.T) {
@@ -140,6 +222,7 @@ func TestToolNameMapCoversAgents(t *testing.T) {
 func TestQueryBlockingContextSettlementPersistsBeforeAcknowledgment(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	var chatCalls, settleCalls int
+	var stagedLedgerVersion string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -154,6 +237,7 @@ func TestQueryBlockingContextSettlementPersistsBeforeAcknowledgment(t *testing.T
 				t.Error("missing V1 conversation envelope")
 				return
 			}
+			stagedLedgerVersion = request.Conversation.LedgerVersion
 			if len(request.Messages) != 1 || request.Messages[0].Content != "current question" {
 				t.Errorf("messages = %#v, want current Go-authoritative message only", request.Messages)
 			}
@@ -182,6 +266,9 @@ func TestQueryBlockingContextSettlementPersistsBeforeAcknowledgment(t *testing.T
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Errorf("decode settlement request: %v", err)
 				return
+			}
+			if request.LedgerVersion != stagedLedgerVersion {
+				t.Errorf("settlement ledger version = %q, want staged %q", request.LedgerVersion, stagedLedgerVersion)
 			}
 			var row model.QuestionAgentLog
 			if err := gdb.First(&row, request.TurnID).Error; err != nil {
@@ -499,7 +586,9 @@ func TestQueryContextRebuildRetriesExactlyOnceWithDurableTurn(t *testing.T) {
 				if calls != 2 || request.Conversation.TurnID != firstTurnID ||
 					request.Conversation.Operation != "rebuild" ||
 					request.Conversation.BaseBusinessContextVersion != 0 ||
-					len(request.Conversation.HistoryDelta) != 0 {
+					len(request.Conversation.HistoryDelta) != 1 ||
+					request.Conversation.HistoryDelta[0].Role != "user" ||
+					request.Conversation.HistoryDelta[0].Content != "recover context" {
 					t.Errorf("rebuild envelope = %#v", request.Conversation)
 				}
 				stage := rxBot.ContextStageMetadata{
@@ -546,7 +635,7 @@ func TestQueryContextRebuildRetriesExactlyOnceWithDurableTurn(t *testing.T) {
 		}
 		if private.SettlementState != conversationSettlementAcked ||
 			private.RebuildLedgerVersion == "" ||
-			private.RebuildLedgerCursor != 0 {
+			private.RebuildLedgerCursor != 1 {
 			t.Fatalf("rebuilt private context = %#v", private)
 		}
 	})
@@ -768,15 +857,15 @@ func TestQueryRefreshReplaceStagesUntilTerminalSuccess(t *testing.T) {
 			}
 			if request.Conversation.Operation != "rebuild" ||
 				request.Conversation.TurnID != "10" ||
-				request.Conversation.BaseBusinessContextVersion != 0 {
+				request.Conversation.BaseBusinessContextVersion != 1 {
 				t.Errorf("refresh rebuild envelope = %#v", request.Conversation)
 			}
 			stage := rxBot.ContextStageMetadata{
 				SchemaVersion: 1, TurnID: "10",
 				SelectedAgentID: "ChatAgent", RouteSource: "instant_lock",
 				RouteReasonCode:                "INSTANT_LOCK",
-				BaseBusinessContextVersion:     0,
-				ProposedBusinessContextVersion: 1,
+				BaseBusinessContextVersion:     1,
+				ProposedBusinessContextVersion: 2,
 				LastAppliedLedgerCursor:        request.Conversation.LedgerCursor,
 				ContextRebuilt:                 true,
 			}

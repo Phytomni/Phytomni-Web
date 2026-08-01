@@ -697,10 +697,24 @@ func applyConversationRebuildEnvelope(
 	}
 	envelope := *submission.envelope
 	envelope.Operation = "rebuild"
-	envelope.LedgerCursor = rebuild.Cursor
+	// The rebuild snapshot describes the accepted rows used to reconstruct
+	// context, but the current row is incorporated by this turn. Bot therefore
+	// stages the current durable row ID as the applied cursor.
+	envelope.LedgerCursor = submission.row.Id
 	envelope.LedgerVersion = rebuild.Version
-	envelope.BaseBusinessContextVersion = 0
-	envelope.HistoryDelta = append([]rxBot.LedgerEntryV1(nil), rebuild.History...)
+	history := append([]rxBot.LedgerEntryV1(nil), rebuild.History...)
+	// Bot's rebuild projection removes the trailing current-user slot before
+	// dispatch. Include it here so the previous accepted user turn remains in
+	// the native model history after a rebuild.
+	history = append(history, rxBot.LedgerEntryV1{
+		TurnID:  envelope.TurnID,
+		Role:    "user",
+		Content: envelope.CurrentMessage.Content,
+	})
+	if len(history) > maxConversationLedgerHistoryEntries {
+		history = history[len(history)-maxConversationLedgerHistoryEntries:]
+	}
+	envelope.HistoryDelta = history
 	envelope.ArtifactRefs = artifacts
 	if err := envelope.Validate(); err != nil {
 		return err
@@ -881,6 +895,18 @@ func (ps *Service) allocateV1SubmissionWithDB(
 		if err != nil {
 			return nil, err
 		}
+	}
+	if !rebuildRequired && target.operation == "append" {
+		// QuestionAgentLog IDs are global to the database, while Bot's append
+		// contract requires the next ledger cursor to be the latest accepted
+		// row ID plus one. A different dialogue can consume IDs between two
+		// turns here, so enter the typed rebuild path before Bot records an
+		// append turn that it cannot accept.
+		rebuild, rebuildErr := ledger.RebuildBefore(allocated.Id)
+		if rebuildErr != nil {
+			return nil, rebuildErr
+		}
+		rebuildRequired = allocated.Id != rebuild.Cursor+1
 	}
 	requestID := requestIDFromContext(ctx)
 	if requestID == "" {
@@ -1729,10 +1755,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	var expertProjection *BotRunProjection
 	var contextStage *rxBot.ContextStageMetadata
 	if in.Mode == "expert" && in.Tool == "" {
-		// Autonomous Expert only: no forced tool, so Bot's LLM router picks the
-		// agent. A forced Expert selection never reaches here — it resolves its
-		// own slug above and falls through to the direct chat/agent-run branches,
-		// exactly as instant mode dispatches that slug.
+		// Autonomous Expert uses Bot's router so it can select an allowed agent.
 		routeRequest := rxBot.RouteQueryRequest{
 			UserQuery:   in.Query,
 			OBSFileList: obsPaths,
@@ -1949,14 +1972,38 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if err != nil {
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
-		resp, meta, err := executionClient.InvokeAgentWithMeta(ctx, slug, rxBot.AgentRunRequest{
+		agentRequest := rxBot.AgentRunRequest{
 			Arguments:  args,
 			DialogueID: dialogueID,
-		})
-		logBotResponseMeta(ctx, meta)
-		if err != nil {
+		}
+		if v1 {
+			agentRequest.Conversation = submission.envelope
+		}
+		var resp *rxBot.AgentRunResponse
+		for {
+			var meta rxBot.ResponseMeta
+			resp, meta, err = executionClient.InvokeAgentWithMeta(ctx, slug, agentRequest)
+			logBotResponseMeta(ctx, meta)
+			if err == nil {
+				break
+			}
+			retry, retryErr := prepareV1ConversationRebuildRetry(
+				ctx,
+				username,
+				submission,
+				target,
+				err,
+			)
+			if retryErr != nil {
+				return nil, retryErr
+			}
+			if retry {
+				agentRequest.Conversation = submission.envelope
+				continue
+			}
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
+		contextStage = resp.ConversationContext
 		botRunID, err = normalizeAgentRunResponseID(*resp)
 		if err != nil {
 			return nil, v1SubmissionError(ctx, username, submission, err)
@@ -2057,6 +2104,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 		out.Id = submission.row.Id
 		out.UploadPath = strings.Join(obsPaths, ",")
+		private.SettlementLedgerHash = submission.envelope.LedgerVersion
 		ledgerVersion, err := settleBlockingConversationContext(
 			ctx,
 			username,
@@ -2880,6 +2928,7 @@ func (ps *Service) QueryStream(
 			private.RebuildLedgerVersion = submission.envelope.LedgerVersion
 			private.RebuildLedgerCursor = submission.envelope.LedgerCursor
 		}
+		private.SettlementLedgerHash = submission.envelope.LedgerVersion
 		ledgerVersion, err := settleBlockingConversationContext(
 			finalizeCtx,
 			username,

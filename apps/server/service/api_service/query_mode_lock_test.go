@@ -13,32 +13,41 @@ func TestFailedProvisionalV1TurnDoesNotLockMode(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path != "/v1/chat/completions" {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			var body struct {
+				Model string `json:"model"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			switch body.Model {
+			case "phyto-chat":
+				// The first instant turn is phyto-chat and must fail.
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"message":"synthetic rejection"}}`))
+			case "phyto-knowledge":
+				// The second turn keeps its explicit KnowledgeAgent selection and
+				// dispatches directly to the chat-family endpoint.
+				_, _ = w.Write([]byte(`{"id":"run-after-provisional-failure","run_id":"run-after-provisional-failure","object":"chat.completion","status":"succeeded","choices":[{"index":0,"message":{"role":"assistant","content":"second turn accepted"}}],"formatted":{"answer":"second turn accepted"}}`))
+			default:
+				t.Fatalf("unexpected chat model %q", body.Model)
+			}
+		case "/v1/query/route":
+			// The second Expert turn uses the context-aware route with the
+			// validated per-turn KnowledgeAgent selection.
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":       "run-after-provisional-failure",
+				"run_id":   "run-after-provisional-failure",
+				"object":   "agent.run",
+				"agent":    "knowledge",
+				"status":   "succeeded",
+				"task_ids": []string{},
+				"result": map[string]any{"formatted": map[string]any{
+					"answer": "second turn accepted",
+				}},
+			})
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		// Both turns now dispatch to chat-completions: the first (instant) turn is
-		// phyto-chat and must fail; the second (expert + forced KnowledgeAgent) is
-		// phyto-knowledge and must be accepted. Distinguish by the requested model.
-		var body struct {
-			Model string `json:"model"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body.Model == "phyto-chat" {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(`{"error":{"message":"synthetic rejection"}}`))
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":     "run-after-provisional-failure",
-			"run_id": "run-after-provisional-failure",
-			"object": "chat.completion",
-			"status": "succeeded",
-			"choices": []map[string]any{
-				{"index": 0, "message": map[string]any{"role": "assistant", "content": "second turn accepted"}},
-			},
-			"formatted": map[string]any{"answer": "second turn accepted"},
-		})
 	})
 
 	_, err := NewService().Query(context.Background(), "alice", QueryInput{
