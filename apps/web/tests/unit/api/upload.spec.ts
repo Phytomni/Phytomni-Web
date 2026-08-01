@@ -89,6 +89,10 @@ describe("upload control API", () => {
     ["oversized part count", { part_count: 100_001 }],
     ["oversized parallelism", { max_parallel_parts: 5 }],
     ["malformed expiry", { session_expires_at: "not-a-timestamp" }],
+    [
+      "calendar-invalid expiry",
+      { session_expires_at: "2026-02-30T05:00:00+08:00" },
+    ],
   ])("rejects %s in a create response", async (_name, override) => {
     mockRequest.mockResolvedValueOnce({
       code: 200,
@@ -130,6 +134,32 @@ describe("upload control API", () => {
       url: "/api/v1/files/file_abc123/capability",
       method: "post",
     });
+  });
+
+  it.each([
+    ["wrong protocol", { protocol: "other" }],
+    ["wrong status", { status: "aborted" }],
+    ["empty capability", { capability: "" }],
+    ["malformed expiry", { capability_expires_at: "0" }],
+    ["query-bearing URL", { upload_url: `${createData.upload_url}?token=x` }],
+  ])("rejects %s in a renewal response", async (_name, override) => {
+    mockRequest.mockResolvedValueOnce({
+      code: 200,
+      data: {
+        protocol: RESUMABLE_UPLOAD_PROTOCOL,
+        asset_id: "file_abc123",
+        status: "uploading",
+        upload_url: createData.upload_url,
+        capability: "fresh-capability",
+        capability_expires_at: createData.capability_expires_at,
+        session_expires_at: createData.session_expires_at,
+        ...override,
+      },
+    });
+
+    await expect(renewUploadCapability("file_abc123")).rejects.toThrow(
+      "Invalid upload renewal response"
+    );
   });
 
   it("rejects malformed asset IDs before making a control request", () => {

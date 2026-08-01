@@ -113,7 +113,9 @@ function uploadStatusError(
 
 function parseOptionalNonNegativeInteger(value: string | null): number | null {
   if (value === null || value.trim() === "") return null;
-  const candidate = Number(value);
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) return null;
+  const candidate = Number(normalized);
   return Number.isSafeInteger(candidate) && candidate >= 0 ? candidate : null;
 }
 

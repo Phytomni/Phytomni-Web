@@ -489,6 +489,7 @@ export class ResumableUploadEngine {
     try {
       if (this.item.assetId === null) await this.createAsset();
       await this.reconcile();
+      if (this.item.status === "completed") return;
       await this.uploadMissingParts();
       await this.complete();
     } catch (error) {
@@ -540,6 +541,7 @@ export class ResumableUploadEngine {
     if (this.item.assetId === null)
       throw new UploadEngineError("upload_asset_missing");
     const head = await this.data.head({ signal: this.controller?.signal });
+    this.throwIfCancelled();
     await this.applyHead(head);
     await this.persist();
   }
@@ -569,6 +571,7 @@ export class ResumableUploadEngine {
       const digest = this.partDigests[String(part)];
       if (!digest) continue;
       const recalculated = await this.deps.hashPart(this.blobForPart(part));
+      this.throwIfCancelled();
       if (recalculated !== digest) {
         throw new UploadEngineError("upload_file_changed", 409);
       }
@@ -579,7 +582,17 @@ export class ResumableUploadEngine {
       this.item.receivedParts,
       this.partSizes
     );
-    this.emit();
+    if (
+      head.status === "completed" &&
+      this.item.receivedParts.length === this.item.partCount
+    ) {
+      this.item.loadedBytes = this.item.size;
+      this.item.etaSeconds = 0;
+      this.setStatus("completed");
+      this.data.clearCapability?.();
+    } else {
+      this.emit();
+    }
   }
 
   private blobForPart(partNumber: number): Blob {
@@ -659,6 +672,7 @@ export class ResumableUploadEngine {
       try {
         const blob = this.blobForPart(partNumber);
         const digest = await this.deps.hashPart(blob);
+        this.throwIfCancelled();
         const savedDigest = this.partDigests[String(partNumber)];
         if (savedDigest && savedDigest !== digest) {
           throw new UploadEngineError("upload_file_changed", 409);
@@ -749,6 +763,7 @@ export class ResumableUploadEngine {
         const result: UploadCompletion = await this.data.complete({
           signal: this.controller?.signal,
         });
+        this.throwIfCancelled();
         if (result.asset_id !== this.item.assetId) {
           throw new UploadEngineError("upload_asset_mismatch");
         }
@@ -762,11 +777,13 @@ export class ResumableUploadEngine {
         if (isAbortError(error)) throw error;
         if (needsCapabilityRenewal(error)) {
           await this.renewCapability();
+          if (this.item.status === "completed") return;
           continue;
         }
         const { status } = uploadErrorShape(error);
         if (status === 409 || status === 502) {
           await this.reconcile();
+          if (this.item.status === "completed") return;
           if (this.item.receivedParts.length !== this.item.partCount) {
             await this.uploadMissingParts();
           }

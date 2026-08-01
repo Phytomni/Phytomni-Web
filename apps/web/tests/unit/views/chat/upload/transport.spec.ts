@@ -283,4 +283,18 @@ describe("upload data-plane transport", () => {
       code: "invalid_upload_response",
     });
   });
+
+  it("ignores non-decimal Retry-After values", async () => {
+    fetchMock.mockResolvedValueOnce(headResponse({ "Retry-After": "1e2" }));
+    const plane = createUploadDataPlane({
+      uploadUrl,
+      expectedOrigin: origin,
+      assetId,
+      capability,
+    });
+
+    await expect(plane.head()).resolves.toMatchObject({
+      retryAfterSeconds: null,
+    });
+  });
 });
