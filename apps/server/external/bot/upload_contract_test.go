@@ -163,6 +163,60 @@ func TestUploadControlRejectsMalformedResponses(t *testing.T) {
 	}
 }
 
+func TestRenewUploadCapabilityRejectsMalformedResponses(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*UploadCapabilityResponse)
+	}{
+		{name: "wrong protocol", mutate: func(response *UploadCapabilityResponse) { response.Protocol = "legacy" }},
+		{name: "invalid state", mutate: func(response *UploadCapabilityResponse) { response.Status = "aborted" }},
+		{name: "asset mismatch", mutate: func(response *UploadCapabilityResponse) { response.AssetID = "file_other" }},
+		{name: "asset URL mismatch", mutate: func(response *UploadCapabilityResponse) {
+			response.UploadURL = "https://upload.example/v1/files/file_other"
+		}},
+		{name: "malformed timestamp", mutate: func(response *UploadCapabilityResponse) {
+			response.CapabilityExpiresAt = "tomorrow"
+		}},
+		{name: "missing capability", mutate: func(response *UploadCapabilityResponse) {
+			response.Capability = ""
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var srv *httptest.Server
+			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				response := uploadCapabilityFixture(srv.URL)
+				tt.mutate(&response)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(response)
+			}))
+			defer srv.Close()
+
+			response, _, err := newTestClient(srv.URL).RenewUploadCapability(
+				context.Background(), "file_test_abc", "alice@example.com",
+			)
+			if err == nil || response != nil {
+				t.Fatalf("malformed renewal response accepted: response=%#v err=%v", response, err)
+			}
+		})
+	}
+}
+
+func TestRenewUploadCapabilityRejectsDuplicateResponseKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"protocol":"obs-multipart-v2","protocol":"legacy"}`)
+	}))
+	defer srv.Close()
+
+	response, _, err := newTestClient(srv.URL).RenewUploadCapability(
+		context.Background(), "file_test_abc", "alice@example.com",
+	)
+	if response != nil || !errors.Is(err, errDuplicateJSONKey) {
+		t.Fatalf("duplicate renewal response keys accepted: response=%#v err=%v", response, err)
+	}
+}
+
 func TestCreateUploadRejectsDuplicateResponseKeys(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
