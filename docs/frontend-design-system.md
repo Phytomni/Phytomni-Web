@@ -261,6 +261,29 @@ Real transfer progress uses `TransferSnapshot` and `TransferProgress`:
 - the transfer region has localized phase, byte, percentage, and cancellation
   labels.
 
+Resumable biological attachments use one `obs-multipart-v2` protocol and keep
+the trust boundary explicit:
+
+- the browser sends JSON metadata and owner-scoped renewal requests through the
+  Web Go control plane (`/api/v1/files`); Go never receives a file body or a
+  Huawei credential;
+- the browser sends bounded parts directly to the Bot upload origin using the
+  short-lived opaque application capability returned by the control plane;
+- completed Chat, Research, and Digital Design submissions carry only private
+  `asset_id` references; they never put file bytes, OBS paths, or signed cloud
+  URLs into message text or history;
+- the client validates the exact Bot origin and asset path before every data
+  plane request, persists only non-secret recovery metadata, and keeps transfer
+  state per dialogue;
+- the Bot-owned contract is capable of a 10 GiB file with bounded part
+  concurrency. A local visual fixture or the synthetic progress bar does not
+  establish live storage, throughput, or 10 GiB acceptance.
+
+The resumable upload flag remains off until the Bot receipt, owner-isolation
+evidence, credential-boundary review, and the cross-repository source checker
+all pass. The legacy multipart relay is not an allowed fallback after the
+breaking cutover is accepted.
+
 Static demo downloads only communicate that a download has started. They do not
 claim backend completion, persistence, or measured transfer progress.
 

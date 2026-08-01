@@ -334,6 +334,36 @@ RC-LIVE-001 evidence is reviewed.
 flag; with it false, the blocking path must remain byte-compatible. Do not turn
 either flag on as part of the 0.1.3 deploy.
 
+### 8.6 Resumable biological upload gate (`bot.resumable_upload_enabled`)
+
+This is a breaking Web ↔ Bot data-plane cutover, not an additive fallback for
+the legacy multipart body relay. Keep it `false` during the normal 0.1.3/0.1.4
+deployment unless a separate acceptance packet covers both repositories.
+
+Before an operator changes the flag, record all of the following:
+
+1. the exact clean Web and Bot SHAs, with the Bot receipt's protocol,
+   persistence, cleanup, owner-isolation, AssetResolver, Agent wiring, and
+   credential-redaction evidence;
+2. a valid browser-reachable `upload_public_origin` that is distinct from the
+   internal Bot `base_url` and contains no credentials, query, fragment, or
+   path;
+3. Web `validate_web_local.sh` plus the 80-image synthetic visual matrix and
+   per-image review ledger; these prove UI/state coverage only;
+4. development evidence for small files, biological formats, interruption and
+   restart resume, capability renewal, cancel, cross-user denial, and Agent
+   byte fidelity; the 10 GiB procedure must state `Needs Verification` when it
+   was not run against the accepted Bot SHA;
+5. an explicit confirmation that the browser and Web Go hold no Huawei AK/SK,
+   account password, OBS upload ID, object key, or full file body.
+
+Activation is ordered: Bot data plane → Web with the flag off → capability
+manifest/origin smoke → flag on → small and biological fixture smokes →
+interruption/resume and owner-denial checks. If any result fails, set the flag
+back to `false` and restart Web. Do not restore the old body relay as an
+implicit fallback after the breaking cutover; handle a full release rollback
+with the owner and retain additive Bot persistence.
+
 ## 9. Evidence and ownership
 
 The release record should include:

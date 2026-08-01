@@ -160,6 +160,9 @@ bot:
   design_enabled: false # dark-launch: remote Design product surface
   network_enabled: false # dark-launch: remote Network product surface
   history_dual_read: false # observation path; legacy/projection fallback remains primary
+  # Breaking resumable biological upload protocol; keep OFF until Bot acceptance.
+  resumable_upload_enabled: false
+  upload_public_origin: "http://localhost:8000" # exact browser-reachable Bot origin; never derive from base_url
   max_upload_file_bytes: 26214400 # 25 MiB per file (matches Bot /v1/files 413)
   max_upload_file_count: 10
   max_upload_total_bytes: 52428800 # 50 MiB per request
@@ -173,8 +176,39 @@ A2UI, interop, OBS relay, and background-Agent submission use
 `timeout_seconds`. These settings do not change Bot-internal dependency
 timeouts.
 
-The `ptm_<web>` key must carry the `agents` and `relay:obs` scopes; the Bot must
-run with `RELAY_ENABLED=true` or relay downloads 404. See
+`resumable_upload_enabled` is a Web-side dark-launch switch. It is effective
+only when the Bot advertises protocol `obs-multipart-v2` version 2 and
+`upload_public_origin` is a valid scheme-plus-host origin with no credentials,
+query, fragment, or path. The origin is deliberately separate from the
+internal `base_url`: it is the browser-reachable Bot upload origin, not an OBS
+endpoint.
+
+The Bot upload origin must allow only the deployed Web origin, the documented
+`HEAD`/`PUT`/`POST`/`DELETE` upload methods, and the capability plus checksum
+headers required by `obs-multipart-v2`; it must expose only documented
+`Upload-*` response headers and must not enable credentialed cross-origin
+requests. CORS is a Bot deployment setting, not a reason to place cloud
+credentials in Web configuration.
+
+When enabled after the coordinated acceptance, the browser uses `/api/v1/files`
+only for bounded JSON create/renew control calls and sends parts directly to
+Bot. Huawei AK/SK, account credentials, OBS upload IDs, object keys, and full
+file bodies remain outside both the browser and Web Go. The Bot contract owns
+the 10 GiB inclusive file limit, part sizing, concurrency, persistence, cleanup,
+and Agent resolution; there is no separate small-file API.
+
+The `max_upload_file_bytes`, `max_upload_file_count`, and
+`max_upload_total_bytes` keys are legacy synchronous `/query` body limits while
+the old relay is still present in this checkout. They do not enable resumable
+biological uploads and must not be raised as a substitute for the breaking
+protocol cutover. Once the cutover is accepted, the legacy body relay and these
+keys are removed together.
+
+The current legacy relay key `ptm_<web>` must carry the `agents` and `relay:obs`
+scopes; the Bot must run with `RELAY_ENABLED=true` or relay downloads 404. For
+the breaking upload cutover, the Web service principal additionally needs the
+Bot-owned `files:delegate` scope for JSON create/renew calls; the browser's
+short-lived upload capability is a separate data-plane credential. See
 [`operations.md`](operations.md).
 
 The remote-product switches (`research_enabled`, `design_enabled`, and
