@@ -308,6 +308,39 @@ describe("useStreamMessage", () => {
     expect(result.preDispatch4xx).toBe(false);
   });
 
+  it("rejects a blocking JSON envelope instead of reading it as SSE", async () => {
+    mockedFetch().mockResolvedValue(
+      new Response(JSON.stringify({ data: { final_answer: "blocking" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+
+    const result = await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "json-response",
+      placeholder,
+    });
+
+    expect(result.completed).toBeUndefined();
+    expect(placeholder.content).toBe("chat.streamInterrupted");
+    expect(placeholder.blocks).toEqual([]);
+    expect(placeholder.a2uiRuntime).toBeUndefined();
+    expect(chatState.isStreaming).toBe(false);
+  });
+
   it("marks a definite stream validation rejection for logical-turn cleanup", async () => {
     mockedFetch().mockResolvedValue(
       new Response(null, {

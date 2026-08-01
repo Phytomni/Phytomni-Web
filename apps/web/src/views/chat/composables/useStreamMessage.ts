@@ -87,6 +87,14 @@ function isDoneFrame(frame: string): boolean {
   });
 }
 
+function isEventStreamResponse(resp: Response): boolean {
+  const contentType = resp.headers.get("Content-Type");
+  if (!contentType) return true;
+  return (
+    contentType.split(";", 1)[0].trim().toLowerCase() === "text/event-stream"
+  );
+}
+
 // Keep transport acceptance bounded even when Bot adds a new AG-UI event. The
 // reducer owns the detailed payload handling; this gate prevents an unknown
 // event type from becoming an accidental UI surface while retaining the
@@ -181,6 +189,9 @@ export function useStreamMessage(opts: {
           response: { status: resp.status, headers: resp.headers },
         });
         throw new Error(`stream HTTP ${resp.status}`);
+      }
+      if (!isEventStreamResponse(resp)) {
+        throw new Error("stream response content type mismatch");
       }
 
       const canonicalDialogueId = canonicalDialogueHeader(resp);
