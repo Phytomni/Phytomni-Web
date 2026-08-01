@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -68,6 +69,79 @@ func TestApiQuery_DisabledGatewayWiring(t *testing.T) {
 	}
 	if parsed.Message == "" {
 		t.Errorf("expected a non-empty user message, got empty")
+	}
+}
+
+func TestParseAssetAttachmentsStrictContract(t *testing.T) {
+	validTen := make([]string, rxBot.MaxAssetAttachmentRefs)
+	for i := range validTen {
+		validTen[i] = `{"asset_id":"file_` + strconv.Itoa(i) + `"}`
+	}
+	tests := []struct {
+		name string
+		raw  string
+		ok   bool
+		want int
+	}{
+		{name: "missing field", raw: "", ok: true, want: 0},
+		{name: "empty array", raw: "[]", ok: true, want: 0},
+		{name: "one", raw: `[{"asset_id":"file_one"}]`, ok: true, want: 1},
+		{name: "ten", raw: "[" + strings.Join(validTen, ",") + "]", ok: true, want: rxBot.MaxAssetAttachmentRefs},
+		{name: "eleven", raw: "[" + strings.Join(append(validTen, `{"asset_id":"file_extra"}`), ",") + "]", ok: false},
+		{name: "duplicate", raw: `[{"asset_id":"file_one"},{"asset_id":"file_one"}]`, ok: false},
+		{name: "malformed json", raw: `[{"asset_id":"file_one"}`, ok: false},
+		{name: "unknown field", raw: `[{"asset_id":"file_one","name":"reads.fastq"}]`, ok: false},
+		{name: "invalid prefix", raw: `[{"asset_id":"asset_one"}]`, ok: false},
+		{name: "overlong id", raw: `[{"asset_id":"file_` + strings.Repeat("a", 124) + `"}]`, ok: false},
+		{name: "trailing value", raw: `[{"asset_id":"file_one"}] {}`, ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := parseAssetAttachments(tt.raw)
+			if ok != tt.ok || len(got) != tt.want {
+				t.Fatalf("parseAssetAttachments(%q)=(%#v,%v), want len=%d ok=%v", tt.raw, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestApiQueryRejectsAnyMultipartFilePartBeforeDispatch(t *testing.T) {
+	previousConfig := rxBot.BotConfig
+	previousQuota := viper.Get("chatlimit.enforce")
+	t.Cleanup(func() {
+		rxBot.BotConfig = previousConfig
+		viper.Set("chatlimit.enforce", previousQuota)
+	})
+	viper.Set("chatlimit.enforce", false)
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField("query", "valid query"); err != nil {
+		t.Fatal(err)
+	}
+	part, err := mw.CreateFormFile("payload", "reads.fastq")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("not a relay")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &body)
+	c.Request.Header.Set("Content-Type", mw.FormDataContentType())
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	c.Set("username", "alice@example.com")
+	i18n.Localize()(c)
+
+	NewHandler().Query(c)
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status=%d body=%s, want 415", w.Code, w.Body.String())
 	}
 }
 

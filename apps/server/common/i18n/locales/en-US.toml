@@ -75,6 +75,7 @@ rate_limited = "too many requests, please try again later"
 
 [query]
 upload_too_large = "upload content too large"
+file_parts_unsupported = "file parts are not supported; upload an asset first"
 query_empty = "query content cannot be empty"
 file_unreadable = "cannot read uploaded file"
 task_id_required = "task_id is required"

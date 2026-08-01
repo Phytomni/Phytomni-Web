@@ -214,6 +214,29 @@ func validateAssetID(assetID string) error {
 	return nil
 }
 
+// ValidateAssetAttachmentRefs returns a detached, ordered copy of refs after
+// enforcing the reference-only Chat/Agent contract. Asset ownership is
+// checked later by Bot's AssetResolver; this helper only rejects malformed,
+// duplicated, or unbounded identifiers at the Web boundary.
+func ValidateAssetAttachmentRefs(refs []AssetAttachmentRef) ([]AssetAttachmentRef, error) {
+	if len(refs) > MaxAssetAttachmentRefs {
+		return nil, fmt.Errorf("too many asset attachments")
+	}
+	copyRefs := make([]AssetAttachmentRef, len(refs))
+	copy(copyRefs, refs)
+	seen := make(map[string]struct{}, len(copyRefs))
+	for index, ref := range copyRefs {
+		if err := validateAssetID(ref.AssetID); err != nil {
+			return nil, fmt.Errorf("attachment %d: %w", index, err)
+		}
+		if _, exists := seen[ref.AssetID]; exists {
+			return nil, fmt.Errorf("duplicate asset attachment %q", ref.AssetID)
+		}
+		seen[ref.AssetID] = struct{}{}
+	}
+	return copyRefs, nil
+}
+
 func validateCapability(capability string) error {
 	if capability == "" || len([]byte(capability)) > maxUploadCapabilityBytes || !utf8.ValidString(capability) {
 		return errors.New("invalid upload capability")

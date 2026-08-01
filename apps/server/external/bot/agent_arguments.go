@@ -8,8 +8,9 @@ import (
 
 // AgentArgumentInput contains the Web-owned values that can be projected into
 // one Bot native-run argument object. The gateway deliberately accepts only
-// values it already owns (the query and paths returned by UploadFile); it does
-// not invent dataset paths or accept arbitrary Bot arguments from the browser.
+// values it already owns (the query and server-managed dataset metadata); it
+// does not invent dataset paths or accept arbitrary Bot arguments from the
+// browser.
 type AgentArgumentInput struct {
 	UserQuery      string
 	DataList       map[string]interface{}

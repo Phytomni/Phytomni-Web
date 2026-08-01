@@ -62,6 +62,7 @@ var (
 	ErrInvalidClientTurnID      = errors.New("invalid client turn id")
 	ErrConversationModeConflict = errors.New("conversation mode conflict")
 	ErrDuplicateClientTurn      = errors.New("duplicate client turn conflict")
+	ErrInvalidQueryAttachments  = errors.New("invalid query attachments")
 	ErrInvalidQueryFile         = errors.New("invalid query file")
 	ErrQueryAuthentication      = errors.New("query authentication required")
 	ErrInvalidConversationStage = errors.New("invalid conversation context stage")
@@ -111,6 +112,7 @@ type QueryInput struct {
 	RefreshId      int64 // !=0 = re-answer an existing turn (UPDATE that row)
 	History        string
 	Mode           string // "instant" (default) | "expert"
+	Attachments    []rxBot.AssetAttachmentRef
 	Files          []QueryFile
 	InteropMode    string
 	InteropTargets []string

@@ -7,7 +7,16 @@ const (
 	// negotiated by the Web control plane.
 	ResumableUploadProtocol        = "obs-multipart-v2"
 	ResumableUploadProtocolVersion = 2
+	// MaxAssetAttachmentRefs bounds opaque asset references per submission.
+	MaxAssetAttachmentRefs = 10
 )
+
+// AssetAttachmentRef identifies one completed, owner-scoped upload. It is
+// intentionally reference-only: filenames, paths, MIME types, and bytes do
+// not cross the Chat/Agent request boundary.
+type AssetAttachmentRef struct {
+	AssetID string `json:"asset_id"`
+}
 
 // ChatMessage is one turn in an OpenAI-compatible message array.
 type ChatMessage struct {
@@ -24,6 +33,8 @@ type ChatCompletionRequest struct {
 	Messages      []ChatMessage           `json:"messages"`
 	Stream        bool                    `json:"stream"`
 	OBSFileList   []string                `json:"obs_file_list,omitempty"`
+	Attachments   []AssetAttachmentRef    `json:"attachments,omitempty"`
+	OwnerSubject  string                  `json:"owner_subject,omitempty"`
 	ResolveGeneID bool                    `json:"resolve_gene_id,omitempty"`
 	DialogueID    string                  `json:"dialogue_id,omitempty"`
 	Conversation  *ConversationEnvelopeV1 `json:"conversation,omitempty"`
@@ -73,6 +84,8 @@ type ChatCompletionResponse struct {
 // AgentRunRequest is the body for POST /v1/agents/{slug}/runs.
 type AgentRunRequest struct {
 	Arguments    map[string]interface{}  `json:"arguments"`
+	Attachments  []AssetAttachmentRef    `json:"attachments,omitempty"`
+	OwnerSubject string                  `json:"owner_subject,omitempty"`
 	DialogueID   string                  `json:"dialogue_id,omitempty"`
 	Debug        bool                    `json:"debug,omitempty"`
 	Conversation *ConversationEnvelopeV1 `json:"conversation,omitempty"`
@@ -113,6 +126,8 @@ type RouteQueryRequest struct {
 	UserQuery    string                  `json:"user_query"`
 	History      []ChatMessage           `json:"history,omitempty"`
 	OBSFileList  []string                `json:"obs_file_list,omitempty"`
+	Attachments  []AssetAttachmentRef    `json:"attachments,omitempty"`
+	OwnerSubject string                  `json:"owner_subject,omitempty"`
 	DialogueID   string                  `json:"dialogue_id,omitempty"`
 	AllowedTools []string                `json:"allowed_tools,omitempty"`
 	ForcedTool   *string                 `json:"forced_tool"`

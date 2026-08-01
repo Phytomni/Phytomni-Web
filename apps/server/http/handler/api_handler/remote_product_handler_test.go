@@ -376,7 +376,7 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 	}
 }
 
-func TestAgentProductRunRejectsOversizedUploadsBeforeBot(t *testing.T) {
+func TestAgentProductRunRejectsFilePartsBeforeBot(t *testing.T) {
 	for _, tool := range []string{"InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
 		t.Run(tool, func(t *testing.T) {
 			gdb := setupRemoteProductHandlerDB(t)
@@ -388,12 +388,11 @@ func TestAgentProductRunRejectsOversizedUploadsBeforeBot(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL:             srv.URL,
-				ProxyEnabled:        true,
-				ResearchEnabled:     true,
-				DesignEnabled:       true,
-				NetworkEnabled:      true,
-				MaxUploadTotalBytes: 1,
+				BaseURL:         srv.URL,
+				ProxyEnabled:    true,
+				ResearchEnabled: true,
+				DesignEnabled:   true,
+				NetworkEnabled:  true,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 			previousQuota := viper.Get("chatlimit.enforce")
@@ -404,8 +403,8 @@ func TestAgentProductRunRejectsOversizedUploadsBeforeBot(t *testing.T) {
 			c.Set("username", "remote@example.com")
 			NewHandler().AgentProductRun(c)
 
-			if w.Code != http.StatusRequestEntityTooLarge {
-				t.Fatalf("status = %d, body = %s; want 413", w.Code, w.Body.String())
+			if w.Code != http.StatusUnsupportedMediaType {
+				t.Fatalf("status = %d, body = %s; want 415", w.Code, w.Body.String())
 			}
 			if hits != 0 {
 				t.Fatalf("oversized upload reached Bot %d time(s)", hits)

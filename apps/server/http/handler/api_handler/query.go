@@ -33,6 +33,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, "invalid chat routing"
 	case errors.Is(err, api_service.ErrInvalidClientTurnID):
 		return http.StatusBadRequest, "invalid client turn id"
+	case errors.Is(err, api_service.ErrInvalidQueryAttachments):
+		return http.StatusBadRequest, "invalid query attachments"
 	case errors.Is(err, api_service.ErrConversationModeConflict):
 		return http.StatusBadRequest, "conversation mode cannot be changed"
 	case errors.Is(err, api_service.ErrConversationLedgerNotFound):
@@ -146,6 +148,36 @@ func parseArtifactIDs(raw string) ([]string, bool) {
 	return artifactIDs, true
 }
 
+const maxQueryControlBodyBytes int64 = 256 << 10
+
+// parseAssetAttachments accepts exactly one bounded JSON array of opaque asset
+// references. Strict object decoding keeps filenames, paths, MIME hints, and
+// future authority fields out of the Chat/Agent request contract.
+func parseAssetAttachments(raw string) ([]rxBot.AssetAttachmentRef, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, true
+	}
+	if len(raw) > int(maxQueryControlBodyBytes) || raw[0] != '[' || raw[len(raw)-1] != ']' {
+		return nil, false
+	}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var refs []rxBot.AssetAttachmentRef
+	if err := decoder.Decode(&refs); err != nil || refs == nil {
+		return nil, false
+	}
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, false
+	}
+	validated, err := rxBot.ValidateAssetAttachmentRefs(refs)
+	if err != nil {
+		return nil, false
+	}
+	return validated, true
+}
+
 var clientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 var artifactIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
@@ -230,8 +262,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 	}
 
-	_, totalBytes, _ := rxBot.UploadLimits()
-	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, totalBytes)
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxQueryControlBodyBytes)
 
 	// Parse the bounded multipart body once: a MaxBytesReader trip surfaces
 	// here, so an over-limit upload is reported as too large rather than
@@ -306,30 +337,23 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	in.RefreshId, _ = strconv.ParseInt(ctx.DefaultPostForm("refresh_id", "0"), 10, 64)
 
 	if form != nil {
-		files := form.File["files"]
-		sizes := make([]int64, len(files))
-		for i, fh := range files {
-			sizes[i] = fh.Size
-		}
-		if verr := rxBot.CheckFiles(sizes); verr != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.TMaybe(ctx, verr.Error())})
-			return
-		}
-		for _, fh := range files {
-			f, err := fh.Open()
-			if err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.file_unreadable")})
+		for _, files := range form.File {
+			if len(files) > 0 {
+				ctx.JSON(http.StatusUnsupportedMediaType, gin.H{
+					"code":    http.StatusUnsupportedMediaType,
+					"message": i18n.T(ctx, "query.file_parts_unsupported"),
+				})
 				return
 			}
-			data, err := io.ReadAll(f)
-			_ = f.Close()
-			if err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.file_unreadable")})
-				return
-			}
-			in.Files = append(in.Files, api_service.QueryFile{Filename: fh.Filename, Data: data})
 		}
 	}
+	attachments, ok := parseAssetAttachments(ctx.PostForm("attachments"))
+	if !ok {
+		status, message := queryErrorStatus(api_service.ErrInvalidQueryAttachments)
+		writeQueryError(ctx, status, message)
+		return
+	}
+	in.Attachments = attachments
 
 	// SSE branch (dark-launch). Taken when the caller accepts
 	// text/event-stream, the flag is on, and the turn is Instant. The
