@@ -5,6 +5,7 @@ import {
   UPLOAD_RECOVERY_DB_NAME,
   UPLOAD_RECOVERY_DB_VERSION,
   UPLOAD_RECOVERY_STORE_NAME,
+  serializeUploadRecoveryRecord,
   type UploadDatabaseAdapter,
   type UploadObjectStoreAdapter,
   type UploadRecoveryRecord,
@@ -153,6 +154,58 @@ describe("non-secret upload recovery store", () => {
     visit(raw);
   });
 
+  it("pins schema version one and reuses the injected database connection", async () => {
+    const store = createUploadRecoveryStore({ openDatabase });
+
+    await store.list(accountA);
+    await store.list(accountA);
+
+    expect(openDatabase).toHaveBeenCalledTimes(1);
+    expect(openDatabase).toHaveBeenCalledWith(
+      UPLOAD_RECOVERY_DB_NAME,
+      UPLOAD_RECOVERY_DB_VERSION
+    );
+    expect(UPLOAD_RECOVERY_DB_VERSION).toBe(1);
+  });
+
+  it("rejects forbidden values before they can enter the recovery store", async () => {
+    const store = createUploadRecoveryStore({ openDatabase });
+    const forbidden = {
+      ...queuedRecord(),
+      file: new File(["private bytes"], "sample.fastq.gz"),
+      capability: "opaque-capability",
+      authorization: "Bearer secret-token",
+      uploadUrl: "https://upload.example/v1/files/file_abc123",
+      objectKey: "obs/private/object",
+      rawError: "upstream details",
+    } as unknown as UploadRecoveryRecord;
+
+    await expect(store.upsert(forbidden)).rejects.toMatchObject({
+      code: "upload_recovery_corrupt",
+    });
+    expect(database.objectStore.values).toHaveLength(0);
+
+    const record = queuedRecord();
+    await store.upsert(record);
+    const raw = [...database.objectStore.values.values()][0];
+    expect(raw).toEqual(serializeUploadRecoveryRecord(record));
+    expect(JSON.stringify(raw)).not.toContain("opaque-capability");
+    expect(JSON.stringify(raw)).not.toContain("Bearer secret-token");
+    expect(JSON.stringify(raw)).not.toContain("upload.example");
+    expect(JSON.stringify(raw)).not.toContain("obs/private/object");
+    const inspectValues = (value: unknown): void => {
+      expect(value).not.toBeInstanceOf(Blob);
+      expect(value).not.toBeInstanceOf(File);
+      if (Array.isArray(value)) {
+        value.forEach(inspectValues);
+        return;
+      }
+      if (typeof value !== "object" || value === null) return;
+      Object.values(value).forEach(inspectValues);
+    };
+    inspectValues(raw);
+  });
+
   it("partitions records by account scope and preserves the idempotency UUID", async () => {
     const store = createUploadRecoveryStore({ openDatabase });
     await store.upsert(queuedRecord());
@@ -166,6 +219,27 @@ describe("non-secret upload recovery store", () => {
     });
     await expect(store.list(accountA)).resolves.toHaveLength(1);
     await expect(store.list(accountB)).resolves.toHaveLength(1);
+  });
+
+  it("deletes only the requested account-scoped recovery key", async () => {
+    const store = createUploadRecoveryStore({ openDatabase });
+    await store.upsert(queuedRecord({ localId: "local-a" }));
+    await store.upsert(
+      queuedRecord({ accountScope: accountB, localId: "local-a" })
+    );
+    await store.upsert(queuedRecord({ localId: "local-b" }));
+
+    await store.remove(accountA, "local-a");
+
+    await expect(store.load(accountA, "local-a")).resolves.toBeNull();
+    await expect(store.load(accountB, "local-a")).resolves.toMatchObject({
+      accountScope: accountB,
+      localId: "local-a",
+    });
+    await expect(store.load(accountA, "local-b")).resolves.toMatchObject({
+      accountScope: accountA,
+      localId: "local-b",
+    });
   });
 
   it("deletes expired active records while retaining completed metadata", async () => {
