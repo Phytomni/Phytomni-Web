@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -940,6 +941,7 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 		ClientTurnID: "accepted-turn", Stage: oldStage,
 		SettlementState:  conversationSettlementAcked,
 		AssistantSummary: "accepted summary",
+		InputAttachments: []rxBot.AssetAttachmentRef{{AssetID: "file_accepted"}},
 	}
 	raw, err := marshalPersistedProjectionWithContext(
 		BotRunProjection{ReportRevision: -1}, &oldPrivate,
@@ -956,7 +958,11 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 	if err := gdb.Create(&row).Error; err != nil {
 		t.Fatal(err)
 	}
+	var captured rxBot.ChatCompletionRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Errorf("decode failed refresh request: %v", err)
+		}
 		http.Error(
 			w,
 			`{"error":{"code":"invalid_request","message":"rejected","retryable":false}}`,
@@ -971,12 +977,17 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
+	newRefs := []rxBot.AssetAttachmentRef{{AssetID: "file_replacement"}}
 	_, err = NewService().Query(context.Background(), "alice", QueryInput{
 		Query: "replacement fails", RefreshId: 20, Mode: "instant",
 		ClientTurnID: "refresh-failure-20",
+		Attachments:  newRefs,
 	})
 	if err == nil {
 		t.Fatal("refresh failure was accepted")
+	}
+	if !reflect.DeepEqual(captured.Attachments, newRefs) || captured.OwnerSubject != "alice" {
+		t.Fatalf("failed refresh sent attachments=%#v owner=%q, want %#v/alice", captured.Attachments, captured.OwnerSubject, newRefs)
 	}
 	var stored model.QuestionAgentLog
 	if err := gdb.First(&stored, 20).Error; err != nil {
@@ -989,7 +1000,7 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 	if stored.Answer != "accepted answer" || stored.Query != "accepted question" ||
 		stored.Status != statusSucceeded || private.Replacement != nil ||
 		private.SettlementState != conversationSettlementAcked ||
-		private.Stage == nil ||
+		private.Stage == nil || len(private.InputAttachments) != 1 || private.InputAttachments[0].AssetID != "file_accepted" ||
 		private.Stage.ProposedBusinessContextVersion != 1 {
 		t.Fatalf("failed refresh changed accepted state: row=%#v private=%#v", stored, private)
 	}

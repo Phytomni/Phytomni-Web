@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -53,28 +52,6 @@ func TestResponseMetaPrefersHeaderRequestIDForJSONErrors(t *testing.T) {
 	}
 	if apiErr.RequestID != "bot-header-id" {
 		t.Fatalf("APIError request id=%q, want header id", apiErr.RequestID)
-	}
-}
-
-func TestUploadFileWithMetaReadsBotRequestID(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/files" {
-			t.Errorf("request=%s %s, want POST /v1/files", r.Method, r.URL.Path)
-		}
-		w.Header().Set("X-Request-Id", "bot-upload-3")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"id":"file-1","path":"obs://bucket/file-1"}`)
-	}))
-	defer srv.Close()
-
-	response, meta, err := newTestClient(srv.URL).UploadFileWithMeta(
-		context.Background(), "sample.txt", "assistants", strings.NewReader("hello"),
-	)
-	if err != nil || response == nil || response.ID != "file-1" || meta.BotRequestID != "bot-upload-3" {
-		t.Fatalf("response=%#v meta=%#v err=%v", response, meta, err)
-	}
-	if meta.StatusCode != http.StatusOK {
-		t.Fatalf("status=%d, want %d", meta.StatusCode, http.StatusOK)
 	}
 }
 

@@ -211,6 +211,47 @@ func TestApiAnswerCheck_ScopesChildrenToOwner(t *testing.T) {
 	}
 }
 
+func TestAnswerCheckReturnsOwnerScopedAttachmentReferences(t *testing.T) {
+	gdb := setupTestDB(t)
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_alice_reads"}, {AssetID: "file_alice_variants"}}
+	private := persistedConversationContext{InputAttachments: refs}
+	raw, err := marshalPersistedProjectionWithContext(BotRunProjection{}, &private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Create(&model.QuestionAgentLog{
+		Id: 73, DialogueId: "dlg-attachments", UserName: "alice",
+		Query: "alice query", Status: statusSucceeded, BotProjectionJSON: raw,
+		BotReportRevision: -1,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	rows, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-attachments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || len(rows[0].Attachments) != len(refs) ||
+		rows[0].Attachments[0].AssetID != refs[0].AssetID ||
+		rows[0].Attachments[1].AssetID != refs[1].AssetID {
+		t.Fatalf("alice history attachments=%#v, want %#v", rows, refs)
+	}
+
+	foreign, err := NewService().AnswerCheck(context.Background(), "bob", "dlg-attachments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(foreign) != 0 {
+		t.Fatalf("bob history enumerated Alice's attachment row: %#v", foreign)
+	}
+	missing, err := NewService().AnswerCheck(context.Background(), "mallory", "dlg-attachments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 0 {
+		t.Fatalf("foreign history enumerated attachment rows: %#v", missing)
+	}
+}
+
 // TestApiAnswerCheck_OverlayReshapesBotContent pins the activated read path:
 // a knowledge row carrying a bot_run_id gets its answer reshaped into the
 // {content, doc_list} JSON the Web app parses (sourced from the run's formatted

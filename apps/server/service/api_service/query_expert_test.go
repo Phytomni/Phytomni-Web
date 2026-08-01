@@ -339,7 +339,10 @@ func TestQuery_ExpertUsesServerOrderedAllowedTools(t *testing.T) {
 	var captured rxBot.RouteQueryRequest
 	permissionRouteServer(t, effects, &captured)
 
-	if _, err := NewService().Query(context.Background(), "partial@example.com", QueryInput{Query: "q", Mode: "expert"}); err != nil {
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_route_reads"}, {AssetID: "file_route_variants"}}
+	if _, err := NewService().Query(context.Background(), "partial@example.com", QueryInput{
+		Query: "q", Mode: "expert", Attachments: refs,
+	}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 	want := []string{"ChatAgent", "DataAgent", "AnalystAgent"}
@@ -348,6 +351,9 @@ func TestQuery_ExpertUsesServerOrderedAllowedTools(t *testing.T) {
 	}
 	if captured.ForcedTool != nil {
 		t.Fatalf("autonomous Expert forced tool = %q, want nil", *captured.ForcedTool)
+	}
+	if !reflect.DeepEqual(captured.Attachments, refs) || captured.OwnerSubject != "partial@example.com" {
+		t.Fatalf("route attachments=%#v owner=%q, want %#v/partial@example.com", captured.Attachments, captured.OwnerSubject, refs)
 	}
 }
 
@@ -362,10 +368,15 @@ func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
 	seedExpertPermissionTool(t, gdb, "forced", "ChatAgent", 2)
 	seedExpertPermissionTool(t, gdb, "forced", "DataAgent", 3)
 	var hit string
+	var captured rxBot.AgentRunRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hit = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/v1/agents/data/runs" {
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Errorf("decode forced agent request: %v", err)
+				return
+			}
 			_, _ = w.Write([]byte(`{"id":"run-forced-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`))
 			return
 		}
@@ -377,13 +388,17 @@ func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_forced_data"}}
 	if _, err := NewService().Query(context.Background(), "forced@example.com", QueryInput{
-		Query: "q", Mode: "expert", Tool: "DataAgent",
+		Query: "q", Mode: "expert", Tool: "DataAgent", Attachments: refs,
 	}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 	if hit != "/v1/agents/data/runs" {
 		t.Fatalf("forced DataAgent must dispatch directly to /v1/agents/data/runs, hit %q", hit)
+	}
+	if !reflect.DeepEqual(captured.Attachments, refs) || captured.OwnerSubject != "forced@example.com" {
+		t.Fatalf("forced agent attachments=%#v owner=%q, want %#v/forced@example.com", captured.Attachments, captured.OwnerSubject, refs)
 	}
 }
 
@@ -561,7 +576,7 @@ func TestQuery_PermissionFailuresHaveNoSideEffects(t *testing.T) {
 
 			_, err := NewService().Query(context.Background(), tc.username, QueryInput{
 				Query: "permission check", Id: 77, Mode: tc.mode, Tool: tc.tool,
-				Files: []QueryFile{{Filename: "permission.txt", Data: []byte("x")}},
+				Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_permission"}},
 			})
 			tc.assertErr(t, err)
 			effects.assertNone(t)
@@ -627,7 +642,7 @@ func TestQueryStream_PermissionFailuresHaveNoSideEffects(t *testing.T) {
 
 			_, err := NewService().QueryStream(context.Background(), tc.username, QueryInput{
 				Query: "permission check", Id: 77, Mode: "instant",
-				Files: []QueryFile{{Filename: "permission.txt", Data: []byte("x")}},
+				Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_permission"}},
 			}, nil, nil)
 			tc.assertErr(t, err)
 			effects.assertNone(t)
@@ -652,7 +667,7 @@ func TestQueryStream_InvalidRoutingHasNoSideEffects(t *testing.T) {
 
 			_, err := NewService().QueryStream(context.Background(), "alice", QueryInput{
 				Query: "invalid routing", Id: 77, Mode: tc.mode, Tool: tc.tool,
-				Files: []QueryFile{{Filename: "invalid.txt", Data: []byte("x")}},
+				Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_invalid"}},
 			}, nil, nil)
 			if !errors.Is(err, ErrInvalidChatRouting) {
 				t.Fatalf("error = %v, want ErrInvalidChatRouting", err)

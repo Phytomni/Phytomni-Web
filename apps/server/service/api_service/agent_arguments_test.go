@@ -14,6 +14,8 @@ import (
 func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	var gotArgs map[string]interface{}
+	var gotAttachments []rxBot.AssetAttachmentRef
+	var gotOwner string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/agents/research/runs" {
 			w.WriteHeader(http.StatusNotFound)
@@ -24,6 +26,8 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 			t.Errorf("decode request: %v", err)
 		}
 		gotArgs = body.Arguments
+		gotAttachments = body.Attachments
+		gotOwner = body.OwnerSubject
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`))
 	}))
@@ -36,6 +40,7 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
 		Query: "paper", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
+		Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_research"}},
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -43,12 +48,14 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 	want := map[string]interface{}{
 		"user_query":      "paper",
 		"data_list":       map[string]interface{}{},
-		"obs_file_list":   []interface{}{},
 		"interop_mode":    "off",
 		"interop_targets": []interface{}{},
 	}
 	if !reflect.DeepEqual(gotArgs, want) {
 		t.Fatalf("arguments=%#v want=%#v", gotArgs, want)
+	}
+	if len(gotAttachments) != 1 || gotAttachments[0].AssetID != "file_research" || gotOwner != "alice" {
+		t.Fatalf("attachments=%#v owner=%q, want file_research/alice", gotAttachments, gotOwner)
 	}
 	if out.Status != "RUNNING" {
 		t.Fatalf("status=%q want RUNNING", out.Status)
@@ -70,7 +77,7 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 		{
 			name: "design", tool: "DigitalDesignAgent", path: "/v1/agents/design/runs",
 			want: map[string]interface{}{
-				"user_query": "design", "obs_file_list": []interface{}{},
+				"user_query":   "design",
 				"interop_mode": "off", "interop_targets": []interface{}{},
 				"resolve_gene_id": true,
 			},
@@ -78,7 +85,7 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 		{
 			name: "network", tool: "GeneNetworkAgent", path: "/v1/agents/network/runs",
 			want: map[string]interface{}{
-				"user_query": "network", "obs_file_list": []interface{}{},
+				"user_query":    "network",
 				"resolve_to_id": true,
 			},
 		},

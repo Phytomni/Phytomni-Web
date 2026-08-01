@@ -11,7 +11,6 @@ import (
 	"io"
 	"net"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,7 +62,6 @@ var (
 	ErrConversationModeConflict = errors.New("conversation mode conflict")
 	ErrDuplicateClientTurn      = errors.New("duplicate client turn conflict")
 	ErrInvalidQueryAttachments  = errors.New("invalid query attachments")
-	ErrInvalidQueryFile         = errors.New("invalid query file")
 	ErrQueryAuthentication      = errors.New("query authentication required")
 	ErrInvalidConversationStage = errors.New("invalid conversation context stage")
 )
@@ -89,12 +87,6 @@ var ErrInteropRequired = errors.New("required interop evidence unavailable")
 // available, allowlisted target in the Web-owned discovery snapshot.
 var ErrInteropTargetForbidden = errors.New("interop target is not allowlisted")
 
-// QueryFile is one uploaded attachment, read into memory by the handler.
-type QueryFile struct {
-	Filename string
-	Data     []byte
-}
-
 // QuerySurface identifies the authenticated HTTP surface that supplied a query.
 // Its zero value is Chat so existing callers retain their established behavior.
 type QuerySurface uint8
@@ -113,7 +105,6 @@ type QueryInput struct {
 	History        string
 	Mode           string // "instant" (default) | "expert"
 	Attachments    []rxBot.AssetAttachmentRef
-	Files          []QueryFile
 	InteropMode    string
 	InteropTargets []string
 	ClientTurnID   string
@@ -178,29 +169,32 @@ func validateV1CurrentMessage(value string) error {
 	return nil
 }
 
-var allowedQueryFileExtensions = map[string]struct{}{
-	".csv": {}, ".doc": {}, ".docx": {}, ".json": {}, ".pdf": {},
-	".png": {}, ".ppt": {}, ".pptx": {}, ".tsv": {}, ".txt": {},
-	".xls": {}, ".xlsx": {},
+func validateQueryAttachments(refs []rxBot.AssetAttachmentRef) ([]rxBot.AssetAttachmentRef, error) {
+	validated, err := rxBot.ValidateAssetAttachmentRefs(refs)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidQueryAttachments, err)
+	}
+	return validated, nil
 }
 
-func validateQueryFiles(files []QueryFile) error {
-	sizes := make([]int64, len(files))
-	for index, file := range files {
-		name := strings.TrimSpace(file.Filename)
-		if name == "" || len(name) > 255 || filepath.Base(name) != name ||
-			strings.ContainsAny(name, `/\`) || len(file.Data) == 0 {
-			return ErrInvalidQueryFile
-		}
-		if _, allowed := allowedQueryFileExtensions[strings.ToLower(filepath.Ext(name))]; !allowed {
-			return ErrInvalidQueryFile
-		}
-		sizes[index] = int64(len(file.Data))
+func attachmentProjectionJSON(refs []rxBot.AssetAttachmentRef) (string, error) {
+	if len(refs) == 0 {
+		return "", nil
 	}
-	if err := rxBot.CheckFiles(sizes); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidQueryFile, err)
+	private := &persistedConversationContext{
+		InputAttachments: append([]rxBot.AssetAttachmentRef(nil), refs...),
 	}
-	return nil
+	return marshalPersistedProjectionWithContext(
+		BotRunProjection{ReportRevision: -1},
+		private,
+	)
+}
+
+func attachmentOwnerSubject(username string, refs []rxBot.AssetAttachmentRef) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	return username
 }
 
 func queryOperation(in QueryInput) string {
@@ -478,6 +472,11 @@ func (ps *Service) queryDataFromStoredRowWithDB(
 		TaskId:            row.TaskId,
 		ReportRevision:    row.BotReportRevision,
 	}
+	private, err := LoadBotConversationContext(ctx, username, row.Id)
+	if err != nil {
+		return nil, err
+	}
+	out.Attachments = append([]rxBot.AssetAttachmentRef(nil), private.InputAttachments...)
 	if row.Status == statusSucceeded {
 		if err := ps.decorateConversationQueryData(ctx, username, out); err != nil {
 			return nil, err
@@ -777,9 +776,10 @@ func (ps *Service) allocateV1SubmissionWithDB(
 		}
 
 		privateContext := &persistedConversationContext{
-			ClientTurnID:    in.ClientTurnID,
-			ModeLockState:   "provisional",
-			SettlementState: "submission_append",
+			ClientTurnID:     in.ClientTurnID,
+			ModeLockState:    "provisional",
+			SettlementState:  "submission_append",
+			InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 		}
 
 		toolName := in.Tool
@@ -816,11 +816,11 @@ func (ps *Service) allocateV1SubmissionWithDB(
 			}
 			nextPrivate := currentPrivate.clone()
 			nextPrivate.Replacement = &persistedConversationReplacement{
-				ClientTurnID: in.ClientTurnID,
-				Query:        in.Query,
-				ToolName:     toolName,
-				Mode:         target.mode,
-				FileName:     fileNamesForInput(in.Files),
+				ClientTurnID:     in.ClientTurnID,
+				Query:            in.Query,
+				ToolName:         toolName,
+				Mode:             target.mode,
+				InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 			}
 			raw, err := marshalPersistedProjectionWithContext(projection, &nextPrivate)
 			if err != nil {
@@ -861,7 +861,6 @@ func (ps *Service) allocateV1SubmissionWithDB(
 			UserName:          username,
 			Query:             in.Query,
 			TitleQuery:        titleQuery,
-			FileName:          fileNamesForInput(in.Files),
 			ToolName:          toolName,
 			Status:            "SUBMITTING",
 			Mode:              target.mode,
@@ -964,14 +963,6 @@ func (ps *Service) allocateV1SubmissionWithDB(
 		}
 	}
 	return submission, nil
-}
-
-func fileNamesForInput(files []QueryFile) string {
-	names := make([]string, 0, len(files))
-	for _, file := range files {
-		names = append(names, file.Filename)
-	}
-	return strings.Join(names, ",")
 }
 
 func failV1Submission(
@@ -1111,66 +1102,6 @@ func prepareV1ConversationRebuildRetry(
 	return true, nil
 }
 
-func updateV1SubmissionUploads(
-	ctx context.Context,
-	username string,
-	rowID int64,
-	fileNames []string,
-	obsPaths []string,
-) error {
-	if len(fileNames) == 0 && len(obsPaths) == 0 {
-		return nil
-	}
-	replacementConflict := false
-	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
-		projection, private, currentRaw, revision, err := loadPersistedBotProjectionRow(
-			ctx,
-			username,
-			rowID,
-		)
-		if err != nil {
-			return err
-		}
-		if private == nil || private.Replacement == nil {
-			replacementConflict = false
-			break
-		}
-		replacementConflict = true
-		next := private.clone()
-		next.Replacement.FileName = strings.Join(fileNames, ",")
-		next.Replacement.UploadPath = strings.Join(obsPaths, ",")
-		encoded, err := marshalPersistedProjectionWithContext(projection, &next)
-		if err != nil {
-			return err
-		}
-		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where(botProjectionCASPredicate, rowID, username, revision, currentRaw).
-			UpdateColumn("bot_projection_json", encoded)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 1 {
-			return nil
-		}
-	}
-	if replacementConflict {
-		return ErrBotProjectionConflict
-	}
-	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-		Where("id = ? AND user_name = ? AND status = ?", rowID, username, "SUBMITTING").
-		Updates(map[string]interface{}{
-			"file_name":   strings.Join(fileNames, ","),
-			"upload_path": strings.Join(obsPaths, ","),
-		})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected != 1 {
-		return fmt.Errorf("submitting row %d not found", rowID)
-	}
-	return nil
-}
-
 // IsDedicatedAgentProductTool reports whether tool has its own route-owned
 // product-run surface.
 func IsDedicatedAgentProductTool(tool string) bool {
@@ -1205,6 +1136,7 @@ type QueryData struct {
 	DegradedInterop   bool                       `json:"degraded_interop,omitempty"`
 	InterOp           *InteropProvenance         `json:"interop,omitempty"`
 	Artifacts         []ConversationArtifactLink `json:"artifacts,omitempty"`
+	Attachments       []rxBot.AssetAttachmentRef `json:"attachments,omitempty"`
 	ContextRebuilt    bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded   bool                       `json:"context_degraded,omitempty"`
 }
@@ -1226,6 +1158,7 @@ func (ps *Service) decorateConversationQueryData(
 	if err != nil {
 		return err
 	}
+	out.Attachments = append([]rxBot.AssetAttachmentRef(nil), private.InputAttachments...)
 	if private.Stage != nil {
 		out.ContextRebuilt = private.Stage.ContextRebuilt
 		out.ContextDegraded = private.Stage.ContextDegraded
@@ -1560,7 +1493,7 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 	rxLog.SugarContext(ctx).Debugw("Bot response received", "bot_request_id", meta.BotRequestID)
 }
 
-// Query is the gateway orchestration: upload files to Bot, dispatch to the
+// Query is the gateway orchestration: dispatch opaque asset references to the
 // resolved agent, persist a Web-side row (Bot owns the content; Web keeps the
 // ownership/threading record plus a transitional content fallback), and return
 // exactly what the Web app consumes.
@@ -1574,6 +1507,11 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
 func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
 	v1 := multiturnV1Enabled(in)
+	attachments, err := validateQueryAttachments(in.Attachments)
+	if err != nil {
+		return nil, err
+	}
+	in.Attachments = attachments
 	// QuerySurface is exported, so no non-Chat caller may select an arbitrary
 	// tool. The only non-Chat surface is the route-owned dedicated product run.
 	if in.Surface == QuerySurfaceChat {
@@ -1586,9 +1524,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			}
 			in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
 			if err := normalizeV1ChatRouting(&in); err != nil {
-				return nil, err
-			}
-			if err := validateQueryFiles(in.Files); err != nil {
 				return nil, err
 			}
 		} else {
@@ -1618,10 +1553,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 		in.Mode = target.mode
 	}
-	var (
-		permissions AgentPermissionResolution
-		err         error
-	)
+	var permissions AgentPermissionResolution
 	if in.Surface == QuerySurfaceChat {
 		permissions, err = ps.ResolveAgentPermissions(ctx, username)
 		if err != nil {
@@ -1692,23 +1624,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return submission.duplicate, nil
 		}
 	}
-	uploadClient := rxBot.NewClient()
 	contextClient := rxBot.NewClient()
 
-	// 2. Upload attachments to Bot OBS; keep names/paths for the Web row and
-	//    the structured obs_file_list passed to capable chat models. This runs
-	//    only after required interop evidence and target authorization succeed.
-	var obsPaths, fileNames []string
-	for _, f := range in.Files {
-		up, err := uploadClient.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
-		if err != nil {
-			return nil, v1SubmissionError(ctx, username, submission, err)
-		}
-		obsPaths = append(obsPaths, up.Path)
-		fileNames = append(fileNames, f.Filename)
-	}
-
-	// 3. Resolve dialogue_id + f_id from the threading model above. Ownership
+	// 2. Resolve dialogue_id + f_id from the threading model above. Ownership
 	//    is enforced by user_name so a caller cannot thread onto, or overwrite,
 	//    another user's conversation (real-user isolation lives in Web Go).
 	var dialogueID string
@@ -1716,15 +1634,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if v1 {
 		dialogueID = submission.row.DialogueId
 		fID = submission.row.FId
-		if err := updateV1SubmissionUploads(
-			ctx,
-			username,
-			submission.row.Id,
-			fileNames,
-			obsPaths,
-		); err != nil {
-			return nil, err
-		}
 	} else {
 		dialogueID, fID, err = ps.resolveDialogue(ctx, username, in)
 		if err != nil {
@@ -1739,8 +1648,8 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		permissions.AllowedTools,
 	)
 
-	// 4. Dispatch. Web Go never runs an LLM; it forwards free-form query text
-	//    (and structured obs_file_list to capable chat models).
+	// 3. Dispatch. Web Go never runs an LLM; it forwards free-form query text
+	//    and opaque asset references to Bot's resolver.
 	out := &QueryData{
 		ToolName:        "",
 		ReactionType:    "0",
@@ -1759,9 +1668,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if in.Mode == "expert" && in.Tool == "" {
 		// Autonomous Expert uses Bot's router so it can select an allowed agent.
 		routeRequest := rxBot.RouteQueryRequest{
-			UserQuery:   in.Query,
-			OBSFileList: obsPaths,
-			DialogueID:  dialogueID,
+			UserQuery:    in.Query,
+			Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
+			DialogueID:   dialogueID,
 			AllowedTools: append(
 				[]string(nil),
 				permissions.AllowedTools...,
@@ -1884,15 +1794,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
 		}
 		req := rxBot.ChatCompletionRequest{
-			Model:      chatModel,
-			Messages:   messages,
-			DialogueID: dialogueID,
+			Model:        chatModel,
+			Messages:     messages,
+			DialogueID:   dialogueID,
+			Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
 		}
 		if v1 {
 			req.Conversation = submission.envelope
-		}
-		if len(obsPaths) > 0 {
-			req.OBSFileList = obsPaths
 		}
 		if slug == "brief_gene" {
 			// BriefGene resolves the free-form message into a canonical gene id
@@ -1963,8 +1872,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// Branch on the returned status;
 		// never assume remote, or a sync agent's answer is silently dropped.
 		argumentInput := rxBot.AgentArgumentInput{
-			UserQuery:   in.Query,
-			OBSFileList: obsPaths,
+			UserQuery: in.Query,
 		}
 		if interopAgent(slug) {
 			argumentInput.InteropMode = in.InteropMode
@@ -1975,8 +1883,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		agentRequest := rxBot.AgentRunRequest{
-			Arguments:  args,
-			DialogueID: dialogueID,
+			Arguments:    args,
+			Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
+			DialogueID:   dialogueID,
 		}
 		if v1 {
 			agentRequest.Conversation = submission.envelope
@@ -2078,6 +1988,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		return nil, v1SubmissionError(ctx, username, submission, ErrMissingBotRunID)
 	}
 	out.TaskId = taskID
+	out.Attachments = append([]rxBot.AssetAttachmentRef(nil), in.Attachments...)
 
 	if v1 && out.Status == statusSucceeded {
 		settlementState := conversationSettlementRebuildRequired
@@ -2099,13 +2010,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			SettlementState:  settlementState,
 			AssistantSummary: v1AssistantSummary(contextStage),
 			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+			InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 		}
 		if submission.envelope.Operation == "rebuild" {
 			private.RebuildLedgerVersion = submission.envelope.LedgerVersion
 			private.RebuildLedgerCursor = submission.envelope.LedgerCursor
 		}
 		out.Id = submission.row.Id
-		out.UploadPath = strings.Join(obsPaths, ",")
+		out.UploadPath = submission.row.UploadPath
 		private.SettlementLedgerHash = submission.envelope.LedgerVersion
 		ledgerVersion, err := settleBlockingConversationContext(
 			ctx,
@@ -2139,10 +2051,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		return out, nil
 	}
 
-	// 5. Persist the Web row (INSERT new, or UPDATE on refresh).
+	// 4. Persist the Web row (INSERT new, or UPDATE on refresh).
 	titleQuery := ""
 	if fID == 0 && in.RefreshId == 0 {
 		titleQuery = in.Query // first turn of a new conversation is its title
+	}
+	attachmentProjection, err := attachmentProjectionJSON(in.Attachments)
+	if err != nil {
+		return nil, err
 	}
 	row := model.QuestionAgentLog{
 		DialogueId:        dialogueID,
@@ -2156,8 +2072,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		FollowUpQuestions: out.FollowUpQuestions,
 		TaskId:            taskID,
 		TaskLog:           "",
-		FileName:          strings.Join(fileNames, ","),
-		UploadPath:        strings.Join(obsPaths, ","),
+		BotProjectionJSON: attachmentProjection,
 		DownloadPath:      "",
 		ComputeResource:   "",
 		ServerFilePath:    "", // not the task id; the output file path is filled by update_log once the remote task emits it
@@ -2167,6 +2082,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		Mode:              in.Mode,
 		ReactionType:      "0",
 		CollectType:       "0",
+	}
+	if v1 {
+		row.BotProjectionJSON = ""
 	}
 
 	persistID := in.RefreshId
@@ -2178,7 +2096,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		return nil, err
 	}
 	out.Id = id
-	out.UploadPath = strings.Join(obsPaths, ",")
 	if v1 && (out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED") {
 		lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		err := lockConversationRootMode(lockCtx, username, dialogueID)
@@ -2580,6 +2497,11 @@ func (ps *Service) QueryStream(
 	forward func(frame []byte) error,
 ) (*QueryData, error) {
 	v1 := multiturnV1Enabled(in)
+	attachments, err := validateQueryAttachments(in.Attachments)
+	if err != nil {
+		return nil, err
+	}
+	in.Attachments = attachments
 	if v1 {
 		if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
 			return nil, err
@@ -2589,9 +2511,6 @@ func (ps *Service) QueryStream(
 		}
 		in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
 		if err := normalizeV1ChatRouting(&in); err != nil {
-			return nil, err
-		}
-		if err := validateQueryFiles(in.Files); err != nil {
 			return nil, err
 		}
 	} else {
@@ -2661,35 +2580,13 @@ func (ps *Service) QueryStream(
 			return submission.duplicate, nil
 		}
 	}
-	uploadClient := rxBot.NewClient()
 	contextClient := rxBot.NewClient()
-
-	// Upload attachments before opening the stream so upload errors still
-	// surface as a normal (non-SSE) error to the handler.
-	var obsPaths, fileNames []string
-	for _, f := range in.Files {
-		up, err := uploadClient.UploadFile(ctx, f.Filename, "", bytes.NewReader(f.Data))
-		if err != nil {
-			return nil, v1SubmissionError(ctx, username, submission, err)
-		}
-		obsPaths = append(obsPaths, up.Path)
-		fileNames = append(fileNames, f.Filename)
-	}
 
 	var dialogueID string
 	var fID int64
 	if v1 {
 		dialogueID = submission.row.DialogueId
 		fID = submission.row.FId
-		if err := updateV1SubmissionUploads(
-			ctx,
-			username,
-			submission.row.Id,
-			fileNames,
-			obsPaths,
-		); err != nil {
-			return nil, err
-		}
 	} else {
 		dialogueID, fID, err = ps.resolveDialogue(ctx, username, in)
 		if err != nil {
@@ -2705,12 +2602,11 @@ func (ps *Service) QueryStream(
 	)
 
 	req := rxBot.ChatCompletionRequest{
-		Model:      chatModel,
-		Messages:   chatMessagesForRequest(in.History, in.Query),
-		DialogueID: dialogueID,
-	}
-	if len(obsPaths) > 0 {
-		req.OBSFileList = obsPaths
+		Model:        chatModel,
+		Messages:     chatMessagesForRequest(in.History, in.Query),
+		DialogueID:   dialogueID,
+		Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+		OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
 	}
 	if v1 {
 		req.Messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
@@ -2763,13 +2659,15 @@ func (ps *Service) QueryStream(
 			TitleQuery:        titleQuery,
 			Answer:            "",
 			FollowUpQuestions: "",
-			FileName:          strings.Join(fileNames, ","),
-			UploadPath:        strings.Join(obsPaths, ","),
 			ToolName:          slugToToolName[slug],
 			Status:            "RUNNING",
 			Mode:              in.Mode,
 			ReactionType:      "0",
 			CollectType:       "0",
+		}
+		row.BotProjectionJSON, err = attachmentProjectionJSON(in.Attachments)
+		if err != nil {
+			return nil, err
 		}
 		id, err = ps.beginQuestionStream(ctx, username, in.RefreshId, &row)
 		if err != nil {
@@ -2894,6 +2792,7 @@ func (ps *Service) QueryStream(
 		DialogueId:   dialogueID,
 		Status:       status,
 		BotRunID:     acc.RunID(),
+		Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 	}
 	if !v1 || status == statusSucceeded {
 		out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
@@ -2901,7 +2800,6 @@ func (ps *Service) QueryStream(
 	}
 	if retainSubmitting {
 		out.Status = "SUBMITTING"
-		out.UploadPath = strings.Join(obsPaths, ",")
 		return out, streamErr
 	}
 	finalizeCtx, cancelFinalize := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
@@ -2911,7 +2809,6 @@ func (ps *Service) QueryStream(
 			if err := failV1Submission(finalizeCtx, username, id); err != nil {
 				return nil, err
 			}
-			out.UploadPath = strings.Join(obsPaths, ",")
 			return out, streamErr
 		}
 		stage := acc.ContextStage()
@@ -2925,6 +2822,7 @@ func (ps *Service) QueryStream(
 			SettlementState:  settlementState,
 			AssistantSummary: v1AssistantSummary(stage),
 			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+			InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 		}
 		if submission.envelope.Operation == "rebuild" {
 			private.RebuildLedgerVersion = submission.envelope.LedgerVersion
@@ -2944,7 +2842,6 @@ func (ps *Service) QueryStream(
 		if err != nil {
 			return nil, err
 		}
-		out.UploadPath = strings.Join(obsPaths, ",")
 		if settlementState == conversationSettlementAckPending {
 			_ = acknowledgeConversationContext(
 				ctx,
@@ -2964,7 +2861,6 @@ func (ps *Service) QueryStream(
 	if err := ps.finalizeQuestionStream(finalizeCtx, username, identity, acc.RunID(), out); err != nil {
 		return nil, err
 	}
-	out.UploadPath = strings.Join(obsPaths, ",")
 	if streamErr != nil {
 		return out, streamErr
 	}
@@ -2982,27 +2878,36 @@ func (ps *Service) beginQuestionStream(ctx context.Context, username string, ref
 		}
 		return row.Id, nil
 	}
+	updates := map[string]interface{}{
+		"answer":              "",
+		"bot_run_id":          "",
+		"collect_type":        row.CollectType,
+		"f_id":                row.FId,
+		"follow_up_questions": "",
+		"log_status":          "",
+		"mode":                row.Mode,
+		"query":               row.Query,
+		"reaction_type":       row.ReactionType,
+		"server_file_path":    "",
+		"server_id":           "",
+		"status":              row.Status,
+		"task_id":             "",
+		"title_query":         row.TitleQuery,
+		"tool_name":           row.ToolName,
+	}
+	if row.FileName != "" {
+		updates["file_name"] = row.FileName
+	}
+	if row.UploadPath != "" {
+		updates["upload_path"] = row.UploadPath
+	}
+	if row.BotProjectionJSON != "" {
+		updates["bot_projection_json"] = row.BotProjectionJSON
+		updates["bot_report_revision"] = row.BotReportRevision
+	}
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("id = ? AND user_name = ? AND dialogue_id = ?", refreshID, username, row.DialogueId).
-		Updates(map[string]interface{}{
-			"answer":              "",
-			"bot_run_id":          "",
-			"collect_type":        row.CollectType,
-			"f_id":                row.FId,
-			"file_name":           row.FileName,
-			"follow_up_questions": "",
-			"log_status":          "",
-			"mode":                row.Mode,
-			"query":               row.Query,
-			"reaction_type":       row.ReactionType,
-			"server_file_path":    "",
-			"server_id":           "",
-			"status":              row.Status,
-			"task_id":             "",
-			"title_query":         row.TitleQuery,
-			"tool_name":           row.ToolName,
-			"upload_path":         row.UploadPath,
-		})
+		Updates(updates)
 	if result.Error != nil {
 		return 0, result.Error
 	}

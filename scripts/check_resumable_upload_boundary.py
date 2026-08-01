@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Check the Web repository's reference-only upload relay boundary.
 
-This scanner is intentionally offline and source-based.  It is prepared as a
-strict gate for the point at which the Go file relay is removed; until that
-cutover, running it against the current checkout is expected to report the
-legacy relay.  It never reads a Bot checkout, production configuration, or
-file contents from an upload.
+This scanner is intentionally offline and source-based. It enforces the
+reference-only boundary after the Go file relay cutover. It never reads a Bot
+checkout, production configuration, or file contents from an upload.
 """
 
 from __future__ import annotations

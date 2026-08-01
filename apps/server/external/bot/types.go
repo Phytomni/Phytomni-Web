@@ -32,7 +32,6 @@ type ChatCompletionRequest struct {
 	Model         string                  `json:"model"`
 	Messages      []ChatMessage           `json:"messages"`
 	Stream        bool                    `json:"stream"`
-	OBSFileList   []string                `json:"obs_file_list,omitempty"`
 	Attachments   []AssetAttachmentRef    `json:"attachments,omitempty"`
 	OwnerSubject  string                  `json:"owner_subject,omitempty"`
 	ResolveGeneID bool                    `json:"resolve_gene_id,omitempty"`
@@ -125,7 +124,6 @@ type AgentRunResponse struct {
 type RouteQueryRequest struct {
 	UserQuery    string                  `json:"user_query"`
 	History      []ChatMessage           `json:"history,omitempty"`
-	OBSFileList  []string                `json:"obs_file_list,omitempty"`
 	Attachments  []AssetAttachmentRef    `json:"attachments,omitempty"`
 	OwnerSubject string                  `json:"owner_subject,omitempty"`
 	DialogueID   string                  `json:"dialogue_id,omitempty"`
@@ -172,18 +170,6 @@ type RunLogsResponse struct {
 	RunID    string                   `json:"run_id"`
 	TaskIDs  []string                 `json:"task_ids"`
 	TaskLogs []map[string]interface{} `json:"task_logs"`
-}
-
-// FileUploadResponse is the 201 body from POST /v1/files. Path is the
-// obs://… reference Web Go feeds back into obs_file_list.
-type FileUploadResponse struct {
-	ID       string `json:"id"`
-	Object   string `json:"object"`
-	Bytes    int64  `json:"bytes"`
-	Filename string `json:"filename"`
-	Purpose  string `json:"purpose"`
-	OBSPath  string `json:"obs_path"`
-	Path     string `json:"path"`
 }
 
 // AgentDescriptor is one row of GET /v1/agents. LegacyAliases is advisory

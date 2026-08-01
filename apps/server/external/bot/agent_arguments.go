@@ -14,7 +14,6 @@ import (
 type AgentArgumentInput struct {
 	UserQuery      string
 	DataList       map[string]interface{}
-	OBSFileList    []string
 	GeneID         string
 	ToID           string
 	SpeciesCode    string
@@ -37,17 +36,6 @@ func validOBSPath(path string) bool {
 		return false
 	}
 	return true
-}
-
-func validateOBSPaths(paths []string, field string) ([]string, error) {
-	copyPaths := make([]string, len(paths))
-	copy(copyPaths, paths)
-	for _, path := range copyPaths {
-		if !validOBSPath(path) {
-			return nil, fmt.Errorf("%s contains an invalid OBS path", field)
-		}
-	}
-	return copyPaths, nil
 }
 
 func validateInterop(mode string, targets []string) (string, []string, error) {
@@ -116,10 +104,6 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 	if strings.TrimSpace(input.UserQuery) == "" {
 		return nil, fmt.Errorf("user query is required")
 	}
-	obsPaths, err := validateOBSPaths(input.OBSFileList, "obs_file_list")
-	if err != nil {
-		return nil, err
-	}
 	interopMode, interopTargets, err := validateInterop(input.InteropMode, input.InteropTargets)
 	if err != nil {
 		return nil, err
@@ -133,7 +117,6 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 			return nil, err
 		}
 		args["data_list"] = dataList
-		args["obs_file_list"] = obsPaths
 		args["interop_mode"] = interopMode
 		args["interop_targets"] = interopTargets
 	case "analyst":
@@ -143,12 +126,10 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 		}
 		args["goal_description"] = input.UserQuery
 		args["data_list"] = dataList
-		args["obs_file_list"] = obsPaths
 	case "design":
 		if len(input.DataList) > 0 {
 			return nil, fmt.Errorf("data_list is not supported for design")
 		}
-		args["obs_file_list"] = obsPaths
 		args["interop_mode"] = interopMode
 		args["interop_targets"] = interopTargets
 		args["resolve_gene_id"] = true
@@ -162,11 +143,6 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 	case "network":
 		if len(input.DataList) > 0 {
 			return nil, fmt.Errorf("data_list is not supported for network")
-		}
-		if len(obsPaths) == 0 {
-			args["obs_file_list"] = []string{}
-		} else {
-			args["obs_file_list"] = obsPaths
 		}
 		if input.ToID != "" || input.SpeciesCode != "" {
 			if input.ToID == "" || input.SpeciesCode == "" {
@@ -190,9 +166,6 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 	default:
 		if len(input.DataList) > 0 {
 			return nil, fmt.Errorf("data_list is not supported for %s", slug)
-		}
-		if len(obsPaths) > 0 {
-			return nil, fmt.Errorf("obs_file_list is not supported for %s", slug)
 		}
 		if input.InteropMode != "" || len(input.InteropTargets) > 0 {
 			return nil, fmt.Errorf("interop controls are not supported for %s", slug)

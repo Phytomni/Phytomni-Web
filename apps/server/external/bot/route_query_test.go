@@ -69,7 +69,8 @@ func TestRouteQuery_PostsOrderedToolConstraints(t *testing.T) {
 		assertJSONEqual(t, `{
 			"user_query": "Compare drought candidates",
 			"history": [{"role": "user", "content": "Earlier drought evidence"}],
-			"obs_file_list": ["obs://bucket/drought.csv"],
+			"attachments": [{"asset_id": "file_drought"}],
+			"owner_subject": "alice@example.com",
 			"dialogue_id": "dialogue-1",
 			"allowed_tools": ["ChatAgent", "DataAgent", "AnalystAgent"],
 			"forced_tool": "DataAgent"
@@ -82,7 +83,8 @@ func TestRouteQuery_PostsOrderedToolConstraints(t *testing.T) {
 	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
 		UserQuery:    "Compare drought candidates",
 		History:      []ChatMessage{{Role: "user", Content: "Earlier drought evidence"}},
-		OBSFileList:  []string{"obs://bucket/drought.csv"},
+		Attachments:  []AssetAttachmentRef{{AssetID: "file_drought"}},
+		OwnerSubject: "alice@example.com",
 		DialogueID:   "dialogue-1",
 		AllowedTools: []string{"ChatAgent", "DataAgent", "AnalystAgent"},
 		ForcedTool:   &forcedTool,
@@ -112,7 +114,6 @@ func TestRouteQuery_AutonomousToolConstraintsSerializeNullForcedTool(t *testing.
 	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
 		UserQuery:    "Compare drought candidates",
 		History:      []ChatMessage{},
-		OBSFileList:  []string{},
 		DialogueID:   "dialogue-1",
 		AllowedTools: []string{"ChatAgent", "DataAgent", "AnalystAgent"},
 	})

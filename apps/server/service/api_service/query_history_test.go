@@ -121,14 +121,19 @@ func TestQueryStreamForwardsHistoryBeforeCurrentTurn(t *testing.T) {
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_stream_reads"}}
 	_, err := NewService().QueryStream(context.Background(), "alice", QueryInput{
 		Query: "follow up", History: `[{"role":"assistant","content":"prior"}]`, Mode: "instant",
+		Attachments: refs,
 	}, nil, nil)
 	if err != nil {
 		t.Fatalf("QueryStream: %v", err)
 	}
 	if len(captured.Messages) != 2 || captured.Messages[0].Content != "prior" || captured.Messages[1].Content != "follow up" {
 		t.Fatalf("stream messages = %#v", captured.Messages)
+	}
+	if len(captured.Attachments) != 1 || captured.Attachments[0].AssetID != refs[0].AssetID || captured.OwnerSubject != "alice" {
+		t.Fatalf("stream attachments=%#v owner=%q, want %#v/alice", captured.Attachments, captured.OwnerSubject, refs)
 	}
 }
 

@@ -43,8 +43,6 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusNotFound, "conversation not found"
 	case errors.Is(err, api_service.ErrDuplicateClientTurn):
 		return http.StatusConflict, "client turn id conflicts with an existing turn"
-	case errors.Is(err, api_service.ErrInvalidQueryFile):
-		return http.StatusBadRequest, "invalid query file"
 	case errors.Is(err, api_service.ErrAgentToolForbidden):
 		return http.StatusNotFound, "agent tool not found"
 	case errors.Is(err, api_service.ErrNoExecutableAgentTools):
@@ -197,8 +195,9 @@ func streamEnabled() bool {
 	return rxBot.BotConfig != nil && rxBot.BotConfig.StreamEnabled
 }
 
-// Query is the gateway entry for chat sends. It parses the multipart form
-// the Web app posts, hands it to the service, and returns the row the Web app renders.
+// Query is the gateway entry for chat sends. It parses the bounded multipart
+// control form the Web app posts, hands only metadata and asset references to
+// the service, and returns the row the Web app renders.
 // The Web app consumes this as JSON via axios by default. A caller can opt into
 // AG-UI SSE pass-through by sending Accept: text/event-stream; when the
 // bot.stream_enabled dark-launch flag is also on and the turn is Instant (not

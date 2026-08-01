@@ -231,11 +231,6 @@ bot:
   research_enabled: false   # dark-launch: Research product surface remains unavailable until external acceptance
   design_enabled: false     # dark-launch: Design product surface remains unavailable until external acceptance
   network_enabled: false    # dark-launch: Network product surface remains unavailable until external acceptance
-  # /query upload bounds (0 or omitted = built-in default). Tune without recompiling.
-  max_upload_file_bytes: 26214400    # 25 MiB per file (matches Bot /v1/files 413)
-  max_upload_file_count: 10
-  max_upload_total_bytes: 52428800   # 50 MiB per request
-
 # ---------------------------------------------------------------------
 # Outbound notification email — common/email/email_send.go.
 # `web_base_url` / `api_base_url` are stitched into the link bodies of

@@ -162,6 +162,7 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 type ConversationHistoryRow struct {
 	*model.QuestionAgentLog
 	Artifacts       []ConversationArtifactLink `json:"artifacts,omitempty"`
+	Attachments     []rxBot.AssetAttachmentRef `json:"attachments,omitempty"`
 	ContextRebuilt  bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded bool                       `json:"context_degraded,omitempty"`
 }
@@ -177,6 +178,11 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 			continue
 		}
 		historyRow := &ConversationHistoryRow{QuestionAgentLog: row}
+		private, contextErr := LoadBotConversationContext(ctx, username, row.Id)
+		if contextErr != nil {
+			return nil, contextErr
+		}
+		historyRow.Attachments = append([]rxBot.AssetAttachmentRef(nil), private.InputAttachments...)
 		if row.Status == statusSucceeded {
 			projection, _, projectionErr := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
 			if projectionErr != nil {
@@ -188,10 +194,6 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 					return nil, linkErr
 				}
 				historyRow.Artifacts = links
-			}
-			private, contextErr := LoadBotConversationContext(ctx, username, row.Id)
-			if contextErr != nil {
-				return nil, contextErr
 			}
 			if private.Stage != nil {
 				historyRow.ContextRebuilt = private.Stage.ContextRebuilt

@@ -88,12 +88,6 @@ type Config struct {
 	NetworkEnabled  bool `json:"network_enabled" yaml:"network_enabled" mapstructure:"network_enabled"`
 	// KeyAuditRedact, when true, requires loggers to emit only the key prefix.
 	KeyAuditRedact bool `json:"key_audit_redact" yaml:"key_audit_redact" mapstructure:"key_audit_redact"`
-	// MaxUploadFileBytes / MaxUploadFileCount / MaxUploadTotalBytes bound the
-	// /query multipart upload. Zero means "use the built-in default" (see
-	// UploadLimits); set them in app.yml to tune without recompiling.
-	MaxUploadFileBytes  int64 `json:"max_upload_file_bytes" yaml:"max_upload_file_bytes" mapstructure:"max_upload_file_bytes"`
-	MaxUploadFileCount  int   `json:"max_upload_file_count" yaml:"max_upload_file_count" mapstructure:"max_upload_file_count"`
-	MaxUploadTotalBytes int64 `json:"max_upload_total_bytes" yaml:"max_upload_total_bytes" mapstructure:"max_upload_total_bytes"`
 }
 
 // BotConfig is the process-wide singleton populated by InitFromViper.

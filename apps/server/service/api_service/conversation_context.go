@@ -63,16 +63,18 @@ type persistedConversationContext struct {
 	// becomes replayable conversation context.
 	AssistantSummary string                            `json:"assistant_summary,omitempty"`
 	ArtifactRefs     []rxBot.ArtifactRefV1             `json:"artifact_refs,omitempty"`
+	InputAttachments []rxBot.AssetAttachmentRef        `json:"input_attachments,omitempty"`
 	Replacement      *persistedConversationReplacement `json:"replacement,omitempty"`
 }
 
 type persistedConversationReplacement struct {
-	ClientTurnID string `json:"client_turn_id"`
-	Query        string `json:"query"`
-	ToolName     string `json:"tool_name"`
-	Mode         string `json:"mode"`
-	FileName     string `json:"file_name,omitempty"`
-	UploadPath   string `json:"upload_path,omitempty"`
+	ClientTurnID     string                     `json:"client_turn_id"`
+	Query            string                     `json:"query"`
+	ToolName         string                     `json:"tool_name"`
+	Mode             string                     `json:"mode"`
+	FileName         string                     `json:"file_name,omitempty"`
+	UploadPath       string                     `json:"upload_path,omitempty"`
+	InputAttachments []rxBot.AssetAttachmentRef `json:"input_attachments,omitempty"`
 }
 
 func (value persistedConversationContext) clone() persistedConversationContext {
@@ -82,8 +84,10 @@ func (value persistedConversationContext) clone() persistedConversationContext {
 		copyValue.Stage = &stage
 	}
 	copyValue.ArtifactRefs = append([]rxBot.ArtifactRefV1(nil), value.ArtifactRefs...)
+	copyValue.InputAttachments = append([]rxBot.AssetAttachmentRef(nil), value.InputAttachments...)
 	if value.Replacement != nil {
 		replacement := *value.Replacement
+		replacement.InputAttachments = append([]rxBot.AssetAttachmentRef(nil), value.Replacement.InputAttachments...)
 		copyValue.Replacement = &replacement
 	}
 	return copyValue
@@ -135,6 +139,9 @@ func (value persistedConversationContext) validate() error {
 			return persistedContextError(fmt.Sprintf("artifact_refs[%d].display_name is invalid", index))
 		}
 	}
+	if _, err := rxBot.ValidateAssetAttachmentRefs(value.InputAttachments); err != nil {
+		return persistedContextError("input_attachments: " + err.Error())
+	}
 	if value.Replacement != nil {
 		if err := value.Replacement.validate(); err != nil {
 			return err
@@ -180,11 +187,17 @@ func (value persistedConversationReplacement) validate() error {
 	); err != nil {
 		return err
 	}
-	return validatePersistedUTF8(
+	if err := validatePersistedUTF8(
 		"replacement.upload_path",
 		value.UploadPath,
 		maxPersistedReplacementPathBytes,
-	)
+	); err != nil {
+		return err
+	}
+	if _, err := rxBot.ValidateAssetAttachmentRefs(value.InputAttachments); err != nil {
+		return persistedContextError("replacement.input_attachments: " + err.Error())
+	}
+	return nil
 }
 
 func validatePersistedASCII(field, value string, limit int) error {
@@ -353,8 +366,15 @@ func settleBlockingConversationContext(
 		}
 		if replacement {
 			updates["query"] = currentPrivate.Replacement.Query
-			updates["file_name"] = currentPrivate.Replacement.FileName
-			updates["upload_path"] = currentPrivate.Replacement.UploadPath
+			// New reference-only submissions leave the legacy columns untouched.
+			// Preserve the assignments only for an older private replacement that
+			// still carries historical file metadata.
+			if currentPrivate.Replacement.FileName != "" {
+				updates["file_name"] = currentPrivate.Replacement.FileName
+			}
+			if currentPrivate.Replacement.UploadPath != "" {
+				updates["upload_path"] = currentPrivate.Replacement.UploadPath
+			}
 			updates["server_id"] = ""
 			updates["server_file_path"] = ""
 			updates["download_path"] = ""

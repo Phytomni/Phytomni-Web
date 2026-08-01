@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -467,59 +466,4 @@ func (c *Client) GetAgentsWithMeta(ctx context.Context) (*AgentsListResponse, Re
 	var out AgentsListResponse
 	meta, err := c.doJSONWithMeta(ctx, http.MethodGet, "/v1/agents", nil, &out)
 	return &out, meta, err
-}
-
-// UploadFile streams one file to Bot OBS ingestion and returns its metadata.
-func (c *Client) UploadFile(ctx context.Context, filename, purpose string, r io.Reader) (*FileUploadResponse, error) {
-	response, _, err := c.UploadFileWithMeta(ctx, filename, purpose, r)
-	if err != nil {
-		return nil, err
-	}
-	return response, nil
-}
-
-// UploadFileWithMeta streams one file to Bot OBS ingestion and returns its
-// metadata together with the Bot response status and request id.
-func (c *Client) UploadFileWithMeta(ctx context.Context, filename, purpose string, r io.Reader) (*FileUploadResponse, ResponseMeta, error) {
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	part, err := mw.CreateFormFile("file", filename)
-	if err != nil {
-		return nil, ResponseMeta{}, err
-	}
-	if _, err := io.Copy(part, r); err != nil {
-		return nil, ResponseMeta{}, err
-	}
-	if purpose != "" {
-		if err := mw.WriteField("purpose", purpose); err != nil {
-			return nil, ResponseMeta{}, err
-		}
-	}
-	if err := mw.Close(); err != nil {
-		return nil, ResponseMeta{}, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/files", &buf)
-	if err != nil {
-		return nil, ResponseMeta{}, err
-	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+c.userKey)
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, ResponseMeta{}, wrapTransportError(err)
-	}
-	defer resp.Body.Close()
-	meta := responseMeta(resp)
-	raw, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return nil, meta, wrapTransportError(readErr)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, meta, preferBotRequestID(botError(http.MethodPost, "/v1/files", resp.StatusCode, raw), meta.BotRequestID)
-	}
-	var out FileUploadResponse
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, meta, err
-	}
-	return &out, meta, nil
 }

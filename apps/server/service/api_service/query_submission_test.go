@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -175,28 +174,49 @@ func TestQuerySubmissionConcurrentDuplicateAllocatesOneRow(t *testing.T) {
 	}
 }
 
-func TestQuerySubmissionUploadFailureSettlesFailed(t *testing.T) {
+func TestQuerySubmissionAttachmentReferencesReachBotAndPersist(t *testing.T) {
 	gdb := setupExpertTestDB(t)
+	var captured rxBot.ChatCompletionRequest
 	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/files" {
+		if r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("unexpected Bot path %s", r.URL.Path)
 		}
-		http.Error(w, `{"error":{"message":"upload rejected"}}`, http.StatusBadRequest)
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chat-attachments","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"formatted":{"answer":"ok"}}`))
 	})
 
-	_, err := NewService().Query(context.Background(), "alice", QueryInput{
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_reads"}, {AssetID: "file_variants"}}
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
 		Query: "with file", Mode: "instant", ClientTurnID: "upload-turn-1",
-		Files: []QueryFile{{Filename: "input.csv", Data: []byte("a,b\n1,2\n")}},
+		Attachments: refs,
 	})
-	if err == nil {
-		t.Fatal("expected upload error")
+	if err != nil {
+		t.Fatalf("reference-only submission: %v", err)
+	}
+	if len(captured.Attachments) != len(refs) || captured.Attachments[0].AssetID != refs[0].AssetID ||
+		captured.Attachments[1].AssetID != refs[1].AssetID {
+		t.Fatalf("Bot attachments=%#v, want %#v", captured.Attachments, refs)
+	}
+	if captured.OwnerSubject != "alice" {
+		t.Fatalf("Bot owner_subject=%q, want alice", captured.OwnerSubject)
 	}
 	var row model.QuestionAgentLog
-	if err := gdb.First(&row).Error; err != nil {
+	if err := gdb.First(&row, out.Id).Error; err != nil {
 		t.Fatal(err)
 	}
-	if row.Status != "FAILED" {
-		t.Fatalf("status = %q, want FAILED", row.Status)
+	if row.FileName != "" || row.UploadPath != "" {
+		t.Fatalf("legacy upload columns were populated: file_name=%q upload_path=%q", row.FileName, row.UploadPath)
+	}
+	private, err := LoadBotConversationContext(context.Background(), "alice", row.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(private.InputAttachments) != len(refs) || private.InputAttachments[0].AssetID != refs[0].AssetID ||
+		private.InputAttachments[1].AssetID != refs[1].AssetID {
+		t.Fatalf("stored attachments=%#v, want %#v", private.InputAttachments, refs)
 	}
 }
 
@@ -304,23 +324,33 @@ func TestQuerySubmissionUncertainTransportRetainsSubmitting(t *testing.T) {
 	}
 }
 
-func TestQuerySubmissionRejectsUnsafeFileBeforeAllocation(t *testing.T) {
+func TestQuerySubmissionRejectsInvalidAttachmentReferencesBeforeAllocation(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	v1SubmissionServer(t, func(http.ResponseWriter, *http.Request) {
 		t.Fatal("Bot must not be called")
 	})
 
-	for index, file := range []QueryFile{
-		{Filename: "../secret.csv", Data: []byte("x")},
-		{Filename: "payload.exe", Data: []byte("x")},
-		{Filename: "empty.csv", Data: nil},
+	for _, tc := range []struct {
+		name string
+		refs []rxBot.AssetAttachmentRef
+	}{
+		{name: "bad prefix", refs: []rxBot.AssetAttachmentRef{{AssetID: "asset_secret"}}},
+		{name: "empty suffix", refs: []rxBot.AssetAttachmentRef{{AssetID: "file_"}}},
+		{name: "duplicate", refs: []rxBot.AssetAttachmentRef{{AssetID: "file_same"}, {AssetID: "file_same"}}},
+		{name: "too many", refs: func() []rxBot.AssetAttachmentRef {
+			refs := make([]rxBot.AssetAttachmentRef, rxBot.MaxAssetAttachmentRefs+1)
+			for index := range refs {
+				refs[index].AssetID = "file_asset_" + strings.Repeat("a", index+1)
+			}
+			return refs
+		}()},
 	} {
 		_, err := NewService().Query(context.Background(), "alice", QueryInput{
-			Query: "unsafe", Mode: "instant", ClientTurnID: "unsafe-file-" + strconv.Itoa(index),
-			Files: []QueryFile{file},
+			Query: "unsafe", Mode: "instant", ClientTurnID: "unsafe-attachment-" + tc.name,
+			Attachments: tc.refs,
 		})
-		if !errors.Is(err, ErrInvalidQueryFile) {
-			t.Fatalf("file %q error = %v, want invalid file", file.Filename, err)
+		if !errors.Is(err, ErrInvalidQueryAttachments) {
+			t.Fatalf("%s error = %v, want invalid attachments", tc.name, err)
 		}
 	}
 	var count int64

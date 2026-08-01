@@ -8,8 +8,7 @@ import (
 
 func TestBuildAgentArgumentsResearchDefaultsToLocalEmptyDataset(t *testing.T) {
 	got, err := BuildAgentArguments("research", AgentArgumentInput{
-		UserQuery:   "paper",
-		OBSFileList: []string{"/obs/bucket/paper.pdf"},
+		UserQuery: "paper",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -17,7 +16,6 @@ func TestBuildAgentArgumentsResearchDefaultsToLocalEmptyDataset(t *testing.T) {
 	want := map[string]interface{}{
 		"user_query":      "paper",
 		"data_list":       map[string]interface{}{},
-		"obs_file_list":   []string{"/obs/bucket/paper.pdf"},
 		"interop_mode":    "off",
 		"interop_targets": []string{},
 	}
@@ -70,8 +68,8 @@ func TestBuildAgentArgumentsRejectsUntrustedInput(t *testing.T) {
 	}{
 		{name: "unknown slug", slug: "unknown", input: AgentArgumentInput{UserQuery: "q"}},
 		{name: "empty query", slug: "research", input: AgentArgumentInput{}},
-		{name: "non OBS attachment", slug: "research", input: AgentArgumentInput{
-			UserQuery: "q", OBSFileList: []string{"/tmp/paper.pdf"},
+		{name: "unsupported dataset path", slug: "research", input: AgentArgumentInput{
+			UserQuery: "q", DataList: map[string]interface{}{`/tmp/paper.pdf`: "dataset"},
 		}},
 		{name: "invalid interop mode", slug: "research", input: AgentArgumentInput{
 			UserQuery: "q", InteropMode: "always",
