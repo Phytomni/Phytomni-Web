@@ -40,6 +40,9 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@/api/upload", () => ({
   RESUMABLE_UPLOAD_PROTOCOL: "obs-multipart-v2",
+  RESUMABLE_UPLOAD_MAX_BYTES: 10 * 1024 * 1024 * 1024,
+  RESUMABLE_UPLOAD_MAX_PART_COUNT: 100_000,
+  RESUMABLE_UPLOAD_MAX_PARALLEL_PARTS: 4,
   createUpload: mocks.createUpload,
   renewUploadCapability: mocks.renewUploadCapability,
 }));

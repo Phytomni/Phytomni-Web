@@ -206,6 +206,22 @@ describe("non-secret upload recovery store", () => {
     ).toBe(false);
   });
 
+  it("rejects digests for parts that the server has not registered", async () => {
+    const store = createUploadRecoveryStore({ openDatabase });
+    database.objectStore.values.set(JSON.stringify([accountA, "stale"]), {
+      ...createdRecord({
+        localId: "stale",
+        receivedParts: [1],
+        partDigests: { "1": digest, "2": digest },
+      }),
+    });
+
+    await expect(store.load(accountA, "stale")).resolves.toBeNull();
+    expect(
+      database.objectStore.values.has(JSON.stringify([accountA, "stale"]))
+    ).toBe(false);
+  });
+
   it("closes the injected database and allows a fresh reopen", async () => {
     const store = createUploadRecoveryStore({ openDatabase });
     await store.upsert(queuedRecord());

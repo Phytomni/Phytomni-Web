@@ -258,6 +258,103 @@ describe("resumable upload engine", () => {
     expect(engine.snapshot.receivedParts).toEqual([1, 2, 3, 4]);
   });
 
+  it("lowers concurrency to the browser memory budget", async () => {
+    const store = new MemoryStore();
+    let active = 0;
+    let maximum = 0;
+    const data = makeData(
+      async () =>
+        headState({
+          lengthBytes: 12,
+          partSizeBytes: 3,
+          partCount: 4,
+        }),
+      async () => {
+        active += 1;
+        maximum = Math.max(maximum, active);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        active -= 1;
+      },
+      async () => ({
+        asset_id: sessionBase.asset_id,
+        status: "completed",
+        filename: "sample.bin",
+        size_bytes: 12,
+        completed_at: "2099-08-01T05:00:00+08:00",
+      })
+    );
+    const deps = makeDeps(
+      store,
+      data,
+      {},
+      { ...sessionBase, part_count: 4, max_parallel_parts: 4 }
+    );
+    deps.browserMemoryLimit = 1;
+    const engine = createResumableUploadEngine(
+      input(
+        new File(["abcdefghijkl"], "sample.bin", {
+          type: "application/octet-stream",
+          lastModified: 1,
+        })
+      ),
+      deps
+    );
+
+    await engine.start();
+
+    expect(maximum).toBe(1);
+  });
+
+  it("rejects HEAD session drift before uploading any part", async () => {
+    const store = new MemoryStore();
+    const data = makeData(async () =>
+      headState({ partSizeBytes: 2, status: "paused" })
+    );
+    const engine = createResumableUploadEngine(
+      input(file),
+      makeDeps(store, data)
+    );
+
+    await engine.start();
+
+    expect(engine.snapshot).toMatchObject({
+      status: "failed",
+      errorCode: "upload_session_mismatch",
+    });
+    expect(data.putPart).not.toHaveBeenCalled();
+  });
+
+  it("does not persist a digest until the part is registered", async () => {
+    const store = new MemoryStore();
+    const data = makeData(
+      async () => headState({ partCount: 1, partSizeBytes: 6 }),
+      async () => {
+        throw new UploadTransportError("", { status: 503 });
+      }
+    );
+    const deps = makeDeps(
+      store,
+      data,
+      {},
+      {
+        ...sessionBase,
+        part_size_bytes: 6,
+        part_count: 1,
+        max_parallel_parts: 1,
+      }
+    );
+    deps.retryPolicy = { maxAttempts: 1, baseDelayMs: 0, maxDelayMs: 0 };
+    const engine = createResumableUploadEngine(input(file), deps);
+
+    await engine.start();
+
+    expect(engine.snapshot.status).toBe("failed");
+    await expect(store.load(accountScope, "local-1")).resolves.toMatchObject({
+      receivedParts: [],
+      partDigests: {},
+    });
+  });
+
   it("pauses in-flight work and resumes without aborting the server asset", async () => {
     const store = new MemoryStore();
     let ready!: () => void;
@@ -464,5 +561,121 @@ describe("resumable upload engine", () => {
     expect(engine.snapshot.status).toBe("aborted");
     expect(data.abort).toHaveBeenCalledTimes(1);
     await expect(store.load(accountScope, "local-1")).resolves.toBeNull();
+  });
+
+  it("fences progress callbacks after cancellation", async () => {
+    const store = new MemoryStore();
+    let ready!: () => void;
+    let finish!: () => void;
+    let progress: ((value: UploadPartProgress) => void) | undefined;
+    const readyPromise = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const data = makeData(
+      async () => headState({ partCount: 1, partSizeBytes: 6 }),
+      async (_part, _body, _digest, options) =>
+        new Promise<void>((resolve) => {
+          progress = options?.onProgress;
+          finish = resolve;
+          ready();
+        })
+    );
+    const engine = createResumableUploadEngine(
+      input(file),
+      makeDeps(
+        store,
+        data,
+        {},
+        {
+          ...sessionBase,
+          part_size_bytes: 6,
+          part_count: 1,
+          max_parallel_parts: 1,
+        }
+      )
+    );
+    const running = engine.start();
+    await readyPromise;
+    await engine.cancel();
+    progress?.({ loaded: 6, total: 6 });
+    finish();
+    await running;
+
+    expect(engine.snapshot).toMatchObject({
+      status: "aborted",
+      loadedBytes: 0,
+    });
+  });
+
+  it("aborts a resource created after the user cancels", async () => {
+    const store = new MemoryStore();
+    let resolveCreate!: (value: {
+      session: UploadSession;
+      data: UploadDataPlane;
+    }) => void;
+    const createPromise = new Promise<{
+      session: UploadSession;
+      data: UploadDataPlane;
+    }>((resolve) => {
+      resolveCreate = resolve;
+    });
+    const data = makeData(async () =>
+      headState({ partCount: 1, partSizeBytes: 6 })
+    );
+    const deps = makeDeps(store, data, {
+      create: vi.fn(() => createPromise),
+    });
+    const engine = createResumableUploadEngine(input(file), deps);
+    const running = engine.start();
+    await Promise.resolve();
+    await engine.cancel();
+    resolveCreate({
+      session: {
+        ...sessionBase,
+        part_size_bytes: 6,
+        part_count: 1,
+        max_parallel_parts: 1,
+      },
+      data,
+    });
+    await running;
+
+    expect(data.abort).toHaveBeenCalledTimes(1);
+    expect(engine.snapshot.status).toBe("aborted");
+  });
+
+  it("recreates an asset after an incompatible part conflict", async () => {
+    const store = new MemoryStore();
+    const data = makeData(
+      async () => headState({ partCount: 1, partSizeBytes: 6 }),
+      async () => {
+        if (
+          (data.putPart as ReturnType<typeof vi.fn>).mock.calls.length === 1
+        ) {
+          throw new UploadTransportError("", { status: 409 });
+        }
+      }
+    );
+    const deps = makeDeps(
+      store,
+      data,
+      {},
+      {
+        ...sessionBase,
+        part_size_bytes: 6,
+        part_count: 1,
+        max_parallel_parts: 1,
+      }
+    );
+    deps.retryPolicy = { maxAttempts: 1, baseDelayMs: 0, maxDelayMs: 0 };
+    const engine = createResumableUploadEngine(input(file), deps);
+
+    await engine.start();
+    expect(engine.snapshot.errorCode).toBe("upload_state_conflict");
+    await engine.retry();
+
+    expect(data.abort).toHaveBeenCalledTimes(1);
+    expect(deps.control.create).toHaveBeenCalledTimes(2);
+    expect(engine.snapshot.status).toBe("completed");
   });
 });

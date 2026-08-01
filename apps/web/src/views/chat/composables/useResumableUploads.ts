@@ -40,7 +40,18 @@ export interface ResumableUploadQueueOptions {
   store?: UploadRecoveryStore;
   now?: () => number;
   random?: () => number;
+  browserMemoryLimit?: number;
   onValidationError?: (error: ChatAttachmentValidationError) => void;
+}
+
+function defaultBrowserMemoryLimit(): number {
+  if (typeof navigator === "undefined") return 4;
+  const deviceMemory = (navigator as Navigator & { deviceMemory?: unknown })
+    .deviceMemory;
+  if (typeof deviceMemory !== "number" || !Number.isFinite(deviceMemory)) {
+    return 4;
+  }
+  return Math.max(1, Math.min(4, Math.floor(deviceMemory / 2)));
 }
 
 const EMPTY_DATA_PLANE: UploadDataPlane = {
@@ -201,6 +212,8 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
     hashPart: hashBlobSlice,
     now,
     random,
+    browserMemoryLimit:
+      options.browserMemoryLimit ?? defaultBrowserMemoryLimit(),
   });
 
   const queueFiles = async (files: readonly File[]): Promise<void> => {

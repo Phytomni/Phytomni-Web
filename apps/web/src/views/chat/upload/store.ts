@@ -152,12 +152,14 @@ function validatePartDigests(
     string,
     string
   >;
+  const received = new Set(receivedParts);
   for (const [key, digest] of Object.entries(value)) {
     const partNumber = Number(key);
     if (
       !Number.isSafeInteger(partNumber) ||
       partNumber < 1 ||
       partNumber > partCount ||
+      !received.has(partNumber) ||
       typeof digest !== "string" ||
       !SHA256_PATTERN.test(digest)
     ) {

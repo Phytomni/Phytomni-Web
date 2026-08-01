@@ -2,6 +2,9 @@ import {
   type UploadCapabilityRenewal,
   type UploadCreateMetadata,
   type UploadSession,
+  RESUMABLE_UPLOAD_MAX_PARALLEL_PARTS,
+  RESUMABLE_UPLOAD_MAX_BYTES,
+  RESUMABLE_UPLOAD_MAX_PART_COUNT,
 } from "@/api/upload";
 import type {
   ResumableUploadItem,
@@ -56,6 +59,8 @@ export interface ResumableUploadEngineDeps {
   random: () => number;
   sleep?: (delayMs: number) => Promise<void>;
   retryPolicy?: RetryPolicy;
+  /** Upper bound selected from browser memory/connection conditions. */
+  browserMemoryLimit?: number;
 }
 
 export interface ResumableUploadEngineInput {
@@ -122,8 +127,10 @@ function partSizesForSession(
   if (
     !Number.isSafeInteger(session.part_size_bytes) ||
     session.part_size_bytes < 1 ||
+    session.part_size_bytes > RESUMABLE_UPLOAD_MAX_BYTES ||
     !Number.isSafeInteger(session.part_count) ||
-    session.part_count < 1
+    session.part_count < 1 ||
+    session.part_count > RESUMABLE_UPLOAD_MAX_PART_COUNT
   ) {
     throw new UploadEngineError("invalid_upload_session");
   }
@@ -234,6 +241,7 @@ export class ResumableUploadEngine {
       partCount: 0,
       receivedParts: [],
       loadedBytes: 0,
+      instantaneousSpeedBytesPerSecond: 0,
       speedBytesPerSecond: 0,
       etaSeconds: null,
       retryCount: 0,
@@ -258,6 +266,7 @@ export class ResumableUploadEngine {
       partCount: record.partCount,
       receivedParts: [...record.receivedParts],
       loadedBytes: completedBytes(record.receivedParts, record.partSizes),
+      instantaneousSpeedBytesPerSecond: 0,
       speedBytesPerSecond: 0,
       etaSeconds: null,
       retryCount: 0,
@@ -325,6 +334,15 @@ export class ResumableUploadEngine {
   }
 
   private applySession(session: UploadSession, data?: UploadDataPlane): void {
+    if (
+      session.protocol !== "obs-multipart-v2" ||
+      (session.status !== "uploading" && session.status !== "completed") ||
+      !Number.isSafeInteger(session.max_parallel_parts) ||
+      session.max_parallel_parts < 1 ||
+      session.max_parallel_parts > RESUMABLE_UPLOAD_MAX_PARALLEL_PARTS
+    ) {
+      throw new UploadEngineError("invalid_upload_session");
+    }
     if (session.asset_id !== this.item.assetId && this.item.assetId !== null) {
       throw new UploadEngineError("upload_asset_mismatch");
     }
@@ -333,9 +351,17 @@ export class ResumableUploadEngine {
     this.item.assetId = session.asset_id;
     this.item.partSize = session.part_size_bytes;
     this.item.partCount = session.part_count;
+    const browserMemoryLimit = this.deps.browserMemoryLimit ?? 4;
+    if (!Number.isSafeInteger(browserMemoryLimit) || browserMemoryLimit < 1) {
+      throw new UploadEngineError("invalid_upload_session");
+    }
     this.maxParallelParts = Math.max(
       1,
-      Math.min(4, session.max_parallel_parts)
+      Math.min(
+        RESUMABLE_UPLOAD_MAX_PARALLEL_PARTS,
+        session.max_parallel_parts,
+        browserMemoryLimit
+      )
     );
     this.item.receivedParts = this.item.receivedParts.filter(
       (part) => part >= 1 && part <= session.part_count
@@ -389,17 +415,34 @@ export class ResumableUploadEngine {
     return this.start();
   }
 
+  private async recreateFromLocalState(): Promise<void> {
+    if (this.item.assetId !== null) {
+      try {
+        await this.data.abort();
+      } catch {
+        // The old asset is still bounded by Bot expiry if best-effort abort fails.
+      }
+    }
+    this.data.clearCapability?.();
+    this.item.assetId = null;
+    this.item.partSize = 0;
+    this.item.partCount = 0;
+    this.item.receivedParts = [];
+    this.item.loadedBytes = 0;
+    this.partSizes.splice(0);
+    for (const key of Object.keys(this.partDigests))
+      delete this.partDigests[key];
+    this.idempotency = idempotencyKey();
+  }
+
   async retry(): Promise<void> {
     if (this.item.status !== "failed" && this.item.status !== "expired") return;
-    if (this.item.status === "expired") {
-      this.item.assetId = null;
-      this.item.partSize = 0;
-      this.item.partCount = 0;
-      this.item.receivedParts = [];
-      this.partSizes.splice(0);
-      for (const key of Object.keys(this.partDigests))
-        delete this.partDigests[key];
-      this.idempotency = idempotencyKey();
+    if (
+      this.item.status === "expired" ||
+      this.item.errorCode === "upload_file_changed" ||
+      this.item.errorCode === "upload_state_conflict"
+    ) {
+      await this.recreateFromLocalState();
     }
     this.item.errorCode = null;
     this.setStatus(this.item.assetId ? "uploading" : "queued");
@@ -430,6 +473,7 @@ export class ResumableUploadEngine {
     if (this.item.status === "completed" || this.item.status === "aborted")
       return;
     this.controller?.abort();
+    this.setStatus("aborted");
     if (this.item.assetId !== null) {
       try {
         await this.data.abort();
@@ -438,7 +482,6 @@ export class ResumableUploadEngine {
       }
     }
     this.data.clearCapability?.();
-    this.setStatus("aborted");
     await this.deps.store.remove(this.accountScope, this.item.localId);
   }
 
@@ -475,7 +518,18 @@ export class ResumableUploadEngine {
         this.idempotency
       )
     );
-    this.throwIfCancelled();
+    try {
+      this.throwIfCancelled();
+    } catch (error) {
+      const createdData = result.data ?? this.data;
+      try {
+        await createdData.abort();
+      } catch {
+        // Best effort: a canceled create must not block the visible cancel.
+      }
+      createdData.clearCapability?.();
+      throw error;
+    }
     this.applySession(result.session, result.data);
     this.setStatus("uploading");
     await this.persist();
@@ -492,12 +546,24 @@ export class ResumableUploadEngine {
 
   private async applyHead(head: UploadHeadState): Promise<void> {
     if (
+      head.protocol !== "obs-multipart-v2" ||
+      (head.status !== "uploading" && head.status !== "completed") ||
       head.partCount !== this.item.partCount ||
-      head.lengthBytes !== this.item.size
+      head.lengthBytes !== this.item.size ||
+      head.partSizeBytes !== this.item.partSize
     ) {
       throw new UploadEngineError("upload_session_mismatch");
     }
     const serverParts = new Set(head.receivedParts);
+    if (
+      head.status === "completed" &&
+      serverParts.size !== this.item.partCount
+    ) {
+      throw new UploadEngineError("upload_session_mismatch");
+    }
+    for (const key of Object.keys(this.partDigests)) {
+      if (!serverParts.has(Number(key))) delete this.partDigests[key];
+    }
     const verified: number[] = [];
     for (const part of serverParts) {
       const digest = this.partDigests[String(part)];
@@ -537,6 +603,14 @@ export class ResumableUploadEngine {
     const loaded =
       committed + [...this.inFlight.values()].reduce((a, b) => a + b, 0);
     const now = this.deps.now();
+    const previous = this.samples[this.samples.length - 1];
+    const instantaneousElapsed = previous
+      ? Math.max(1, now - previous.at) / 1000
+      : 0;
+    this.item.instantaneousSpeedBytesPerSecond =
+      previous && instantaneousElapsed > 0
+        ? Math.max(0, loaded - previous.bytes) / instantaneousElapsed
+        : 0;
     this.samples.push({ at: now, bytes: loaded });
     this.samples = this.samples.filter((sample) => now - sample.at <= 2_000);
     const first = this.samples[0];
@@ -589,14 +663,15 @@ export class ResumableUploadEngine {
         if (savedDigest && savedDigest !== digest) {
           throw new UploadEngineError("upload_file_changed", 409);
         }
-        this.partDigests[String(partNumber)] = digest;
         this.inFlight.set(partNumber, 0);
         this.updateProgress(partNumber, { loaded: 0, total: blob.size });
         await this.data.putPart(partNumber, blob, digest, {
           signal: this.controller?.signal,
           onProgress: (progress) => this.updateProgress(partNumber, progress),
         });
+        this.throwIfCancelled();
         this.inFlight.delete(partNumber);
+        this.partDigests[String(partNumber)] = digest;
         this.item.receivedParts = [...this.item.receivedParts, partNumber].sort(
           (left, right) => left - right
         );

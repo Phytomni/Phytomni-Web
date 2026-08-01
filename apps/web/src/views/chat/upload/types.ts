@@ -23,6 +23,8 @@ export interface ResumableUploadItem {
   partCount: number;
   receivedParts: number[];
   loadedBytes: number;
+  /** Most recent progress interval; UI displays the smoothed speed below. */
+  instantaneousSpeedBytesPerSecond?: number;
   speedBytesPerSecond: number;
   etaSeconds: number | null;
   retryCount: number;
