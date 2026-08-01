@@ -239,6 +239,16 @@ function parseAgentCapabilities(records: unknown): BotCapability[] {
   return disabled;
 }
 
+function applyUploadAttachmentPolicy(
+  agents: BotCapability[],
+  upload: BotUploadCapability
+): BotCapability[] {
+  if (upload.enabled) return agents;
+  return agents.map((agent) =>
+    agent.attachments ? { ...agent, attachments: false } : agent
+  );
+}
+
 export function parseCapabilityResponse(
   payload: unknown
 ): BotCapabilityManifest {
@@ -250,9 +260,13 @@ export function parseCapabilityResponse(
     return fallback;
   }
   if (!isRecord(payload.data)) return fallback;
+  const upload = parseUploadCapability(payload.data.upload);
   return {
-    agents: parseAgentCapabilities(payload.data.agents),
-    upload: parseUploadCapability(payload.data.upload),
+    agents: applyUploadAttachmentPolicy(
+      parseAgentCapabilities(payload.data.agents),
+      upload
+    ),
+    upload,
   };
 }
 

@@ -221,8 +221,26 @@ describe("useBotCapabilities", () => {
       expect(state.byTool.value.ChatAgent?.enabled).toBe(true);
       expect(state.upload.value.enabled).toBe(false);
       expect(state.upload.value.upload_origin).toBe("");
+      expect(state.byTool.value.ChatAgent?.attachments).toBe(false);
     }
   );
+
+  it("disables Agent attachments when the upload capability is disabled", async () => {
+    mockRequest.mockResolvedValueOnce(
+      manifestPayload(
+        [record("ChatAgent"), record("AnalystAgent")],
+        uploadRecord({ enabled: false, upload_origin: "" })
+      )
+    );
+
+    const state = useBotCapabilities("upload-disabled-attachments");
+    await state.load();
+
+    expect(state.upload.value.enabled).toBe(false);
+    expect(state.byTool.value.ChatAgent?.enabled).toBe(true);
+    expect(state.byTool.value.ChatAgent?.attachments).toBe(false);
+    expect(state.byTool.value.AnalystAgent?.attachments).toBe(false);
+  });
 
   it("rejects the legacy bare Agent array instead of treating it as a capability manifest", async () => {
     mockRequest.mockResolvedValueOnce({
