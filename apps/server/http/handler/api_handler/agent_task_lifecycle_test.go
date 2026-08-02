@@ -158,7 +158,10 @@ func analystLogHandlerRequest(t *testing.T, handler *Handler, id, username strin
 	return recorder
 }
 
-func TestAgentTaskLogHandlerReturnsBoundedDTOAndSharedNotFound(t *testing.T) {
+// Mutation coverage: setting can_request_legacy_refresh for a task-only row
+// would direct the browser to the PATCH route, which currently requires a Bot
+// run and returns a conflict.
+func TestAgentTaskLogHandlerReturnsBoundedDTOWithoutUnavailableRefresh(t *testing.T) {
 	gdb := setupAgentTaskLifecycleHandlerDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, user_name, task_id, task_log, status, bot_report_revision) VALUES
@@ -185,7 +188,7 @@ func TestAgentTaskLogHandlerReturnsBoundedDTOAndSharedNotFound(t *testing.T) {
 	if err := json.Unmarshal(ok.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if envelope.Code != http.StatusOK || envelope.Data.State != "AVAILABLE" || envelope.Data.Source != "LEGACY_TASK" || envelope.Data.Text != "persisted legacy log" || !envelope.Data.CanRequestLegacyRefresh || envelope.Data.ErrorCode != nil {
+	if envelope.Code != http.StatusOK || envelope.Data.State != "AVAILABLE" || envelope.Data.Source != "LEGACY_TASK" || envelope.Data.Text != "persisted legacy log" || envelope.Data.CanRequestLegacyRefresh || envelope.Data.ErrorCode != nil {
 		t.Fatalf("unexpected log envelope: %+v", envelope)
 	}
 

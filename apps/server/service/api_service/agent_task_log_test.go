@@ -120,7 +120,31 @@ func TestAgentTaskLogModernFailureIsDegradedWithoutRawError(t *testing.T) {
 	}
 }
 
-func TestAgentTaskLogLegacyRowsUsePersistedTextAndCanRefresh(t *testing.T) {
+// Mutation coverage: returning TaskLog verbatim would leak a serialized Bot
+// payload. Historical JSON maps must use the same public-field allowlist as
+// modern Bot-run logs.
+func TestAgentTaskLogSanitizesSerializedLegacyTaskLog(t *testing.T) {
+	legacyJSON := `{"status":"safe legacy status","path":"/private/run","headers":{"authorization":"Bearer secret"},"credentials":"secret-token","formatted":{"answer":"safe legacy answer","token":"secret"}}`
+	seedAgentTaskLogRow(t, 88, "alice", "", "task-88", legacyJSON, "RUNNING", 0)
+
+	value, err := NewService().AnalystAgentGetLog(context.Background(), 88, "alice")
+	if err != nil {
+		t.Fatalf("AnalystAgentGetLog: %v", err)
+	}
+	got := decodeAgentTaskLogResponse(t, value)
+	if got.State != "AVAILABLE" || got.Source != "LEGACY_TASK" || got.Text != "safe legacy status\nsafe legacy answer" || got.CanRequestLegacyRefresh {
+		t.Fatalf("log DTO = %+v", got)
+	}
+	for _, forbidden := range []string{"secret", "private", "Bearer", "credentials", "headers"} {
+		if strings.Contains(got.Text, forbidden) {
+			t.Fatalf("legacy public text leaked %q: %q", forbidden, got.Text)
+		}
+	}
+}
+
+// Mutation coverage: advertising the PATCH write-back as a task-only refresh
+// would make clients issue a request the current route rejects without a run.
+func TestAgentTaskLogLegacyRowsRetainPlaintextWithoutAdvertisingRefresh(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		log   string
@@ -137,7 +161,7 @@ func TestAgentTaskLogLegacyRowsUsePersistedTextAndCanRefresh(t *testing.T) {
 				t.Fatalf("AnalystAgentGetLog: %v", err)
 			}
 			got := decodeAgentTaskLogResponse(t, value)
-			if got.State != tc.state || got.Source != "LEGACY_TASK" || got.Text != tc.log || !got.CanRequestLegacyRefresh || got.ErrorCode != nil || fake.logCalls != 0 {
+			if got.State != tc.state || got.Source != "LEGACY_TASK" || got.Text != tc.log || got.CanRequestLegacyRefresh || got.ErrorCode != nil || fake.logCalls != 0 {
 				t.Fatalf("log DTO = %+v, calls=%d", got, fake.logCalls)
 			}
 		})

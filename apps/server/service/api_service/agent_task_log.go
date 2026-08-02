@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -75,18 +76,17 @@ func (ps *Service) AnalystAgentGetLog(ctx context.Context, rowID int, username s
 	if strings.TrimSpace(row.TaskId) == "" {
 		return AnalystAgentLogDTO{}, ErrAgentTaskLogNotFound
 	}
-	text, truncated := boundedPublicLogText(row.TaskLog)
+	text, truncated := publicLegacyTaskLogText(row.TaskLog)
 	state := agentTaskLogStateAvailable
 	if text == "" {
 		state = agentTaskLogStatePending
 	}
 	return AnalystAgentLogDTO{
-		State:                   state,
-		Source:                  agentTaskLogSourceLegacy,
-		Text:                    text,
-		Revision:                publicLogRevision(row.BotReportRevision),
-		Truncated:               truncated,
-		CanRequestLegacyRefresh: true,
+		State:     state,
+		Source:    agentTaskLogSourceLegacy,
+		Text:      text,
+		Revision:  publicLogRevision(row.BotReportRevision),
+		Truncated: truncated,
 	}, nil
 }
 
@@ -109,9 +109,25 @@ func publicBotRunLogText(logs *rxBot.RunLogsResponse) (string, bool) {
 	if logs == nil {
 		return "", false
 	}
-	parts := make([]string, 0, len(logs.TaskLogs)*5)
+	return publicLogEntriesText(logs.TaskLogs)
+}
+
+func publicLegacyTaskLogText(raw string) (string, bool) {
+	var entry map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &entry); err == nil {
+		return publicLogEntriesText([]map[string]interface{}{entry})
+	}
+	var entries []map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &entries); err == nil {
+		return publicLogEntriesText(entries)
+	}
+	return boundedPublicLogText(raw)
+}
+
+func publicLogEntriesText(entries []map[string]interface{}) (string, bool) {
+	parts := make([]string, 0, len(entries)*5)
 	truncated := false
-	for _, entry := range logs.TaskLogs {
+	for _, entry := range entries {
 		for _, key := range []string{"status", "message", "log", "text"} {
 			part, clipped := publicLogString(entry[key])
 			if part != "" {

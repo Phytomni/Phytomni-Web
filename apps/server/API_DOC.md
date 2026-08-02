@@ -223,6 +223,7 @@ No Token required to access.
   - `state`: `PENDING`, `AVAILABLE`, `TERMINAL_EMPTY`, or `DEGRADED`.
   - `source`: `BOT_RUN` for modern rows and `LEGACY_TASK` for historical task-only rows.
   - `text`: allowlisted, valid UTF-8 public log text; it is capped at 512 KiB and keeps the newest complete-rune suffix when `truncated` is true.
+  - `can_request_legacy_refresh`: `false`; task-only historical logs retain persisted content but cannot use the Bot-run write-back route as a refresh operation.
   - `error_code`: `null` or `log_refresh_unavailable`; degraded log reads remain HTTP 200 responses without transport details.
 - **Errors**:
   - HTTP 404: missing task and cross-owner task requests intentionally use the same response body.
@@ -231,7 +232,7 @@ No Token required to access.
 
 - **URL**: `/api/v1/async-tasks/analyst-log`
 - **Method**: `PATCH`
-- **Description**: Historical task-only refresh and Bot write-back endpoint. **Note: The legacy path `POST /query/analyst/update_log` continues to be served as a temporary alias until the Bot side completes migration.** Modern Bot-run log reads do not request this refresh route.
+- **Description**: Bot-run write-back endpoint. Task-only historical log responses are not refreshable through this route and return `can_request_legacy_refresh: false`. **Note: The legacy path `POST /query/analyst/update_log` continues to be served as a temporary alias until the Bot side completes migration.**
 
 #### Query Operation Logs
 
