@@ -152,7 +152,7 @@ describe("useLogView", () => {
         text,
         revision: 0,
         truncated: false,
-        can_request_legacy_refresh: false,
+        can_request_legacy_refresh: true,
         error_code: null,
       },
       { code }
@@ -199,7 +199,7 @@ describe("useLogView", () => {
     await setLogExpanded(message, true);
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
     expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "11" });
-    expect(getChatState("A").logData["11"]).toBe("cached-log");
+    expect(getChatState("A").logData["11"]?.text).toBe("cached-log");
     expect(
       getChatState("A").activityExpandedByMessage[analystLogActivityKey("11")]
     ).toBe(true);
@@ -207,6 +207,54 @@ describe("useLogView", () => {
     await setLogExpanded(message, false);
     await setLogExpanded(message, true);
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes a material modern log only while its activity is expanded", async () => {
+    const message = msg({ id: "71" });
+    const state = getChatState("A");
+    state.logData["71"] = {
+      state: "AVAILABLE",
+      source: "BOT_RUN",
+      text: "cached",
+      revision: 1,
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    };
+    mockGetAnalystAgentLog.mockResolvedValue(logResponse("fresh"));
+    const { refreshModernLog } = makeComposable();
+    await refreshModernLog(message);
+    expect(mockGetAnalystAgentLog).not.toHaveBeenCalled();
+    state.activityExpandedByMessage[analystLogActivityKey("71")] = true;
+    await refreshModernLog(message);
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "71" });
+  });
+
+  it("retains cached safe text when a degraded modern response is empty", async () => {
+    const message = msg({ id: "72" });
+    const state = getChatState("A");
+    state.activityExpandedByMessage[analystLogActivityKey("72")] = true;
+    state.logData["72"] = {
+      state: "AVAILABLE",
+      source: "BOT_RUN",
+      text: "last safe",
+      revision: 1,
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    };
+    mockGetAnalystAgentLog.mockResolvedValue(
+      buildApiEnvelope({
+        ...state.logData["72"],
+        state: "DEGRADED",
+        text: "",
+        error_code: "log_refresh_unavailable",
+      })
+    );
+    const { refreshModernLog } = makeComposable();
+    await refreshModernLog(message);
+    expect(state.logData["72"]?.state).toBe("DEGRADED");
+    expect(state.logData["72"]?.text).toBe("last safe");
   });
 
   it("code===200 with empty DTO text is empty success (no fetch error) and caches", async () => {
@@ -217,7 +265,7 @@ describe("useLogView", () => {
     const { setLogExpanded } = makeComposable();
     await setLogExpanded(message, true);
 
-    expect(getChatState("A").logData["12"]).toBe("");
+    expect(getChatState("A").logData["12"]?.text).toBe("");
     expect(getChatState("A").logErrorKinds["12"]).toBeUndefined();
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
 
@@ -285,7 +333,7 @@ describe("useLogView", () => {
     await retryLog(message);
     expect(getChatState("A").logErrorKinds["5"]).toBeUndefined();
     expect(mockGetAnalystAgentLog).toHaveBeenLastCalledWith({ id: "5" });
-    expect(getChatState("A").logData["5"]).toBe("recovered");
+    expect(getChatState("A").logData["5"]?.text).toBe("recovered");
 
     mockUpdateAnalystAgentLog.mockRejectedValueOnce(new Error("patch-fail"));
     await updateLog(message);
@@ -338,7 +386,7 @@ describe("useLogView", () => {
     currentChat.value = { messages: [message] };
     const { setLogExpanded } = makeComposable();
     await setLogExpanded(message, true);
-    expect(getChatState("A").logData["31"]).toBe("A-log");
+    expect(getChatState("A").logData["31"]?.text).toBe("A-log");
 
     currentChatId.value = "B";
     expect(getChatState("B").logData["31"]).toBeUndefined();
@@ -354,6 +402,15 @@ describe("useLogView", () => {
     currentChat.value = { messages: [message] };
     getChatState("A").activityExpandedByMessage[analystLogActivityKey("41")] =
       true;
+    getChatState("A").logData["41"] = {
+      state: "AVAILABLE",
+      source: "LEGACY_TASK",
+      text: "cached",
+      revision: 1,
+      truncated: false,
+      can_request_legacy_refresh: true,
+      error_code: null,
+    };
 
     const { updateLog } = makeComposable();
     const inflight = updateLog(message);

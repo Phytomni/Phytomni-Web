@@ -153,7 +153,15 @@ describe("useChatStates parallel chat state", () => {
     s.currentChatId.value = "A";
     const stateA = s.getChatState("A");
     stateA.logErrorKinds["12"] = "fetch";
-    stateA.logData["12"] = "A-log";
+    stateA.logData["12"] = {
+      state: "AVAILABLE",
+      source: "BOT_RUN",
+      text: "A-log",
+      revision: 1,
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    };
     stateA.activityExpandedByMessage["log:12"] = true;
 
     s.currentChatId.value = "B";
@@ -164,7 +172,7 @@ describe("useChatStates parallel chat state", () => {
 
     s.currentChatId.value = "A";
     expect(s.getChatState("A").logErrorKinds["12"]).toBe("fetch");
-    expect(s.getChatState("A").logData["12"]).toBe("A-log");
+    expect(s.getChatState("A").logData["12"]?.text).toBe("A-log");
     expect(s.getChatState("A").activityExpandedByMessage["log:12"]).toBe(true);
   });
 
@@ -194,7 +202,17 @@ describe("useChatStates parallel chat state", () => {
 
     s.currentChatId.value = "A";
     s.historyQuestion.value = history;
-    s.logData.value = { "12": { status: "done", rows: 2 } };
+    s.logData.value = {
+      "12": {
+        state: "AVAILABLE",
+        source: "BOT_RUN",
+        text: "done",
+        revision: 2,
+        truncated: false,
+        can_request_legacy_refresh: false,
+        error_code: null,
+      },
+    };
 
     s.currentChatId.value = "B";
     expect(s.historyQuestion.value).toBeNull();
@@ -202,7 +220,7 @@ describe("useChatStates parallel chat state", () => {
 
     s.currentChatId.value = "A";
     expect(s.historyQuestion.value).toEqual(history);
-    expect(s.logData.value).toEqual({ "12": { status: "done", rows: 2 } });
+    expect(s.logData.value["12"]?.text).toBe("done");
   });
 
   it("isolates activityExpandedByMessage per dialogue (A→B→A restoration)", () => {

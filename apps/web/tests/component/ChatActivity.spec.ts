@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
+import type { AgentTaskLifecycle } from "@/api/types";
 import { activityDisclosureStateKey } from "@/views/chat/streaming/presentation";
 
 const ACTIVITY_SOURCE = readFileSync(
@@ -20,6 +21,7 @@ type ChatActivityProps = {
   ns?: string;
   label?: string;
   hideCount?: boolean;
+  lifecycle?: AgentTaskLifecycle;
 };
 
 function mountActivity(props: ChatActivityProps) {
@@ -151,6 +153,44 @@ describe("ChatActivity", () => {
     expect(w.text()).toContain("Execution log");
     expect(w.text()).not.toMatch(/\b0\b/);
     expect(w.find("[data-testid='slot-body']").text()).toBe("analyst body");
+  });
+
+  it("prefers a public lifecycle phase and announces it without hiding slot content", () => {
+    const lifecycle = (
+      phase: AgentTaskLifecycle["phase"]
+    ): AgentTaskLifecycle => ({
+      id: 9,
+      phase,
+      terminal: ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase),
+      child_task_count: 0,
+      child_work_accepted: false,
+      report_revision: 0,
+      artifact_summary: {
+        image_count: 0,
+        output_directory_count: 0,
+        has_report: false,
+      },
+      reconciliation: "FRESH",
+      tracking_degraded: false,
+      error_code: null,
+    });
+    for (const [phase, label] of [
+      ["PREPARING", "Preparing"],
+      ["RUNNING", "Running"],
+      ["SUCCEEDED", "Succeeded"],
+      ["FAILED", "Failed"],
+      ["CANCELLED", "Cancelled"],
+    ] as const) {
+      const w = mountWithApp(ChatActivity, {
+        props: { stateKey, expanded: true, lifecycle: lifecycle(phase) },
+        slots: { default: '<div data-testid="slot-body">safe content</div>' },
+      });
+      expect(w.text()).toContain(label);
+      expect(w.get(".chat-activity__status").attributes("aria-live")).toBe(
+        "polite"
+      );
+      expect(w.get("[data-testid='slot-body']").text()).toBe("safe content");
+    }
   });
 
   it("uses semantic tokens for a compact timeline instead of nested cards", () => {

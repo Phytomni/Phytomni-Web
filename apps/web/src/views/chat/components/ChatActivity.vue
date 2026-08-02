@@ -30,7 +30,8 @@
         }}</span>
         <span
           class="chat-activity__status"
-          :class="streaming ? 'is-running' : 'is-done'"
+          :class="isActive ? 'is-running' : 'is-done'"
+          aria-live="polite"
         >
           {{ statusLabel }}
         </span>
@@ -66,6 +67,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ContentBlock } from "../types";
+import type { AgentTaskLifecycle } from "@/api/types";
 import { resolveBlockRenderer } from "../streaming/blockRegistry";
 import { activityRegionDomId } from "../streaming/presentation";
 
@@ -81,6 +83,8 @@ const props = withDefaults(
     label?: string;
     /** Hide the block-count chip (slot-driven bodies such as analyst logs). */
     hideCount?: boolean;
+    /** Sanitized async-agent lifecycle, when this disclosure owns a task row. */
+    lifecycle?: AgentTaskLifecycle;
   }>(),
   {
     blocks: () => [],
@@ -104,10 +108,23 @@ const regionId = computed(() =>
 
 const displayLabel = computed(() => props.label || t("chat.activity.label"));
 
+const lifecycleStatusKey = computed(() =>
+  props.lifecycle
+    ? `chat.lifecycle.${props.lifecycle.phase.toLowerCase()}`
+    : null
+);
 const statusLabel = computed(() =>
-  props.streaming
-    ? t("chat.activity.status.running")
-    : t("chat.activity.status.done")
+  lifecycleStatusKey.value
+    ? t(lifecycleStatusKey.value)
+    : props.streaming
+      ? t("chat.activity.status.running")
+      : t("chat.activity.status.done")
+);
+const isActive = computed(
+  () =>
+    props.lifecycle?.phase === "PREPARING" ||
+    props.lifecycle?.phase === "RUNNING" ||
+    props.streaming
 );
 
 const renderer = (type: string) => resolveBlockRenderer(type);

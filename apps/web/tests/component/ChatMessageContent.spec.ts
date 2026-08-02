@@ -12,6 +12,7 @@ vi.mock("vue-element-plus-x", () => ({
 
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import type { ChatMessage, ContentBlock } from "@/views/chat/types";
+import type { AgentTaskLifecycle } from "@/api/types";
 import type { A2uiSurfaceActionEvent } from "@/views/chat/composables/useA2uiInteraction";
 import {
   MESSAGE_SHORT_GENERIC,
@@ -192,7 +193,14 @@ const mountContent = (
         Loading: true,
       },
       mocks: {
-        $t: (key: string) => key,
+        $t: (key: string) =>
+          ({
+            "chat.lifecycle.preparing": "Preparing",
+            "chat.lifecycle.running": "Running",
+            "chat.lifecycle.succeeded": "Succeeded",
+            "chat.lifecycle.failed": "Failed",
+            "chat.lifecycle.cancelled": "Cancelled",
+          })[key] || key,
       },
     },
   });
@@ -204,6 +212,143 @@ const block = (text = "hi"): ContentBlock => ({
 });
 
 describe("ChatMessageContent branch selection (truthiness gate)", () => {
+  const lifecycle = (
+    phase: AgentTaskLifecycle["phase"]
+  ): AgentTaskLifecycle => ({
+    id: 1,
+    phase,
+    terminal: ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase),
+    child_task_count: 0,
+    child_work_accepted: false,
+    report_revision: 0,
+    artifact_summary: {
+      image_count: 0,
+      output_directory_count: 0,
+      has_report: false,
+    },
+    reconciliation: "FRESH",
+    tracking_degraded: false,
+    error_code: null,
+  });
+
+  it("renders lifecycle before specialized-agent artifact emptiness", () => {
+    for (const tool_name of [
+      "GeneNetworkAgent",
+      "DigitalDesignAgent",
+    ] as const) {
+      const preparing = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `${tool_name}-preparing`,
+          tool_name,
+        },
+        { lifecycle: lifecycle("PREPARING") }
+      );
+      expect(preparing.text()).toContain("Preparing");
+      expect(preparing.text()).not.toContain("common.noData");
+
+      const failed = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `${tool_name}-failed`,
+          tool_name,
+        },
+        { lifecycle: lifecycle("FAILED") }
+      );
+      expect(failed.text()).toContain("Failed");
+      expect(failed.text()).not.toContain("common.noData");
+
+      const cancelled = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `${tool_name}-cancelled`,
+          tool_name,
+        },
+        { lifecycle: lifecycle("CANCELLED") }
+      );
+      expect(cancelled.text()).toContain("Cancelled");
+      expect(cancelled.text()).not.toContain("common.noData");
+
+      const report = mountContent(
+        {
+          role: "assistant",
+          content: "partial report",
+          id: `${tool_name}-report`,
+          tool_name,
+        },
+        { lifecycle: lifecycle("RUNNING") }
+      );
+      expect(report.text()).toContain("Running");
+      expect(
+        report.findComponent({ name: "MarkdownViewer" }).props("content")
+      ).toBe("partial report");
+
+      const pendingImage = mountContent(
+        { role: "assistant", content: "", id: `${tool_name}-image`, tool_name },
+        {
+          lifecycle: {
+            ...lifecycle("RUNNING"),
+            artifact_summary: {
+              image_count: 1,
+              output_directory_count: 0,
+              has_report: false,
+            },
+          },
+        }
+      );
+      expect(pendingImage.text()).toContain("Running");
+      expect(pendingImage.text()).not.toContain("common.noData");
+
+      const imageId = `${tool_name}-success`;
+      const successfulImage = mountContent(
+        { role: "assistant", content: "", id: imageId, tool_name },
+        {
+          lifecycle: lifecycle("SUCCEEDED"),
+          ...(tool_name === "GeneNetworkAgent"
+            ? {
+                geneNetworkImages: {
+                  [imageId]: ["data:image/svg+xml,%3Csvg/%3E"],
+                },
+              }
+            : {
+                digitalDesignImages: {
+                  [imageId]: ["data:image/svg+xml,%3Csvg/%3E"],
+                },
+              }),
+        }
+      );
+      expect(successfulImage.find("img.result-image").exists()).toBe(true);
+
+      const empty = mountContent(
+        { role: "assistant", content: "", id: `${tool_name}-empty`, tool_name },
+        { lifecycle: lifecycle("SUCCEEDED") }
+      );
+      expect(empty.text()).toContain("common.noData");
+
+      const downloadOnly = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `${tool_name}-download`,
+          tool_name,
+        },
+        {
+          lifecycle: {
+            ...lifecycle("SUCCEEDED"),
+            artifact_summary: {
+              image_count: 0,
+              output_directory_count: 1,
+              has_report: false,
+            },
+          },
+        }
+      );
+      expect(downloadOnly.text()).not.toContain("common.noData");
+    }
+  });
   it("renders a non-blocking degraded context status without replacing the answer", () => {
     const wrapper = mountContent({
       role: "assistant",

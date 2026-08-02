@@ -209,6 +209,7 @@ export function removeDeletedChat(options: {
                         :digital-design-images-loading="
                           digitalDesignImagesLoading
                         "
+                        :lifecycle="agentRunLifecycleForMessage(message)"
                         @finish="() => handleMarkdownFinish(index)"
                         @open-artifact="openArtifact(String(message.id))"
                         @update:activity-expanded="
@@ -236,6 +237,7 @@ export function removeDeletedChat(options: {
                           :expanded="isAnalystLogExpanded(message)"
                           :label="$t('chat.log.activityLabel')"
                           :hide-count="true"
+                          :lifecycle="agentRunLifecycleForMessage(message)"
                           @update:expanded="
                             (open) => setLogExpanded(message, open)
                           "
@@ -1506,7 +1508,7 @@ const {
   scrollToBottom,
   authorizedAgentTools,
 });
-const { setLogExpanded, updateLog, retryLog } = useLogView({
+const { setLogExpanded, updateLog, retryLog, refreshModernLog } = useLogView({
   isSending,
   currentChat,
   currentChatId,
@@ -1534,11 +1536,56 @@ function analystLogState(message: ChatMessage): ChatUIState | null {
   return getChatState(currentChatId.value);
 }
 
-function analystLogData(message: ChatMessage): unknown {
+function analystLogData(message: ChatMessage): ChatUIState["logData"][string] {
   const rowId = deriveAnalystLogRowId(message);
   const state = analystLogState(message);
   return rowId && state ? state.logData[rowId] : undefined;
 }
+
+function agentRunLifecycleForMessage(message: ChatMessage) {
+  const rowId = deriveAnalystLogRowId(message);
+  if (!rowId || !currentChatId.value) return undefined;
+  return getChatState(currentChatId.value).agentRunLifecycles[rowId];
+}
+
+watch(
+  () => {
+    const dialogueId = currentChatId.value;
+    if (!dialogueId) return ["", ""] as const;
+    const signature = Object.entries(
+      getChatState(dialogueId).agentRunLifecycles
+    )
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([rowId, lifecycle]) =>
+        [
+          rowId,
+          lifecycle.phase,
+          lifecycle.child_task_count,
+          lifecycle.report_revision,
+          lifecycle.artifact_summary.image_count,
+          lifecycle.artifact_summary.output_directory_count,
+          lifecycle.artifact_summary.has_report,
+        ].join(":")
+      )
+      .join("|");
+    return [dialogueId, signature] as const;
+  },
+  ([dialogueId, next], [previousDialogueId, previous]) => {
+    if (
+      !previousDialogueId ||
+      dialogueId !== previousDialogueId ||
+      !previous ||
+      next === previous
+    ) {
+      return;
+    }
+    for (const message of currentChat.value?.messages ?? []) {
+      if (agentRunLifecycleForMessage(message)) {
+        void refreshModernLog(message);
+      }
+    }
+  }
+);
 
 function analystLogLoading(message: ChatMessage): boolean {
   const rowId = deriveAnalystLogRowId(message);

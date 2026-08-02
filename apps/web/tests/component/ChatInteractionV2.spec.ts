@@ -190,7 +190,17 @@ function populateFullChatState(
     [FIXTURE_ACTIVITY_STATE_KEY]: true,
     [`log:42`]: label === "A",
   };
-  state.logData = { "42": `log-${label}` };
+  state.logData = {
+    "42": {
+      state: "AVAILABLE",
+      source: "BOT_RUN",
+      text: `log-${label}`,
+      revision: 1,
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    },
+  };
   state.loadingLog = { "42": label === "B" };
   state.updatingLog = { "42": false };
   state.logErrorKinds = { "42": label === "A" ? "fetch" : "update" };
@@ -372,10 +382,13 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       global: { stubs: { ElAvatar: true } },
     });
     expect(user.attributes("data-message-role")).toBe("user");
+    expect(user.find(".message-avatar").exists()).toBe(false);
 
     const assistant = mount(ChatMessageRow, {
       props: { role: "assistant", streaming: true },
       slots: {
+        avatar: () =>
+          h("img", { "data-testid": "agent-avatar", src: "phytomni-logo" }),
         default: () => "assistant body",
         activity: () => "activity",
         "follow-up": () => "follow-up",
@@ -384,6 +397,10 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       global: { stubs: { ElAvatar: true } },
     });
     expect(assistant.classes()).toContain("streaming");
+    expect(assistant.find(".message-avatar").exists()).toBe(true);
+    expect(
+      assistant.get("[data-testid='agent-avatar']").attributes("src")
+    ).toBe("phytomni-logo");
     expect(assistant.text()).toContain("activity");
     expect(assistant.text()).toContain("follow-up");
     expect(assistant.text()).toContain("actions");
@@ -459,7 +476,15 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       props: {
         rowId: MESSAGE_ANALYST_LOG.id,
         taskId: MESSAGE_ANALYST_LOG.task_id,
-        logData: "Synthetic log",
+        logData: {
+          state: "AVAILABLE",
+          source: "BOT_RUN",
+          text: "Synthetic log",
+          revision: 1,
+          truncated: false,
+          can_request_legacy_refresh: false,
+          error_code: null,
+        },
       },
       global: {},
     });
@@ -583,7 +608,7 @@ describe("ChatInteractionV2 — per-dialogue isolation", () => {
       [FIXTURE_ACTIVITY_STATE_KEY]: true,
       "log:42": true,
     });
-    expect(s.getChatState("A").logData["42"]).toBe("log-A");
+    expect(s.getChatState("A").logData["42"]?.text).toBe("log-A");
     expect(s.getChatState("A").loadingLog["42"]).toBe(false);
     expect(s.getChatState("A").logErrorKinds["42"]).toBe("fetch");
     expect(s.getChatState("A").reactions["99"]).toBe(1);

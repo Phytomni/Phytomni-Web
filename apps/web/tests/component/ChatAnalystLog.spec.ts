@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
 import type { LogErrorKind } from "@/views/chat/composables/useLogView";
+import type { AnalystAgentLog } from "@/api/types";
 import { createTestAppContext } from "../helpers/test-app-context";
 
 const ANALYST_LOG_SOURCE = readFileSync(
@@ -25,6 +26,11 @@ const messages = {
         fetchError: "Failed to load log",
         updateError: "Failed to update log",
         retry: "Retry",
+        reconnecting: "Reconnecting to the Agent log…",
+        pending: "The Agent log is not available yet.",
+        terminalEmpty: "This Agent run completed without a log.",
+        truncated: "Only the available portion of this log is shown.",
+        historicalRefresh: "Refresh historical log",
       },
     },
   },
@@ -40,15 +46,31 @@ const messages = {
         fetchError: "加载日志失败",
         updateError: "更新日志失败",
         retry: "重试",
+        reconnecting: "正在重新连接智能体日志……",
+        pending: "智能体日志暂不可用。",
+        terminalEmpty: "该智能体任务已完成，但没有日志。",
+        truncated: "仅显示当前可用的日志内容。",
+        historicalRefresh: "刷新历史日志",
       },
     },
   },
 };
 
+const log = (overrides: Partial<AnalystAgentLog> = {}): AnalystAgentLog => ({
+  state: "AVAILABLE",
+  source: "BOT_RUN",
+  text: "",
+  revision: 0,
+  truncated: false,
+  can_request_legacy_refresh: false,
+  error_code: null,
+  ...overrides,
+});
+
 type ChatAnalystLogProps = {
   rowId?: string;
   taskId?: string;
-  logData?: unknown;
+  logData?: AnalystAgentLog;
   loading?: boolean;
   updating?: boolean;
   errorKind?: LogErrorKind;
@@ -77,53 +99,54 @@ describe("ChatAnalystLog", () => {
     expect(w.find("[data-testid='analyst-log-update']").exists()).toBe(false);
   });
 
-  it("disables update with localized unavailable label when taskId is missing", () => {
-    const w = mountLog({ rowId: "42", taskId: undefined, logData: "ok" });
-    const btn = w.find("[data-testid='analyst-log-update']");
-    expect(btn.exists()).toBe(true);
-    expect(btn.attributes("disabled")).toBeDefined();
-    expect(btn.text()).toContain("Update unavailable");
-    expect(btn.classes()).toContain("is-text");
-    expect(btn.classes()).not.toContain("el-button--primary");
+  it("offers historical refresh only for confirmed legacy DTOs", () => {
+    const base: AnalystAgentLog = {
+      state: "AVAILABLE",
+      source: "BOT_RUN",
+      text: "safe log",
+      revision: 1,
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    };
+    expect(
+      mountLog({ rowId: "42", taskId: "legacy-id", logData: base })
+        .find("[data-testid='analyst-log-update']")
+        .exists()
+    ).toBe(false);
+    expect(
+      mountLog({
+        rowId: "42",
+        taskId: "legacy-id",
+        logData: {
+          ...base,
+          source: "LEGACY_TASK",
+          can_request_legacy_refresh: true,
+        },
+      })
+        .find("[data-testid='analyst-log-update']")
+        .exists()
+    ).toBe(true);
   });
 
-  it("renders string log via safe pre and array log via table", () => {
+  it("does not offer a historical refresh without an eligible legacy DTO", () => {
+    const w = mountLog({
+      rowId: "42",
+      taskId: undefined,
+      logData: log({ text: "ok" }),
+    });
+    const btn = w.find("[data-testid='analyst-log-update']");
+    expect(btn.exists()).toBe(false);
+  });
+
+  it("renders bounded log text via safe pre", () => {
     const stringW = mountLog({
       rowId: "1",
       taskId: "t",
-      logData: "line1\nline2",
+      logData: log({ text: "line1\nline2" }),
     });
     expect(stringW.find("pre.log-pre").exists()).toBe(true);
     expect(stringW.find("pre.log-pre").text()).toContain("line1");
-
-    const arrayW = makeAnalystContext().mount(ChatAnalystLog, {
-      props: {
-        rowId: "1",
-        taskId: "t",
-        logData: [{ content: "row-a" }],
-      },
-      global: {
-        // happy-dom cannot host Element Plus table's MutationObserver
-        stubs: {
-          "el-table": {
-            name: "ElTable",
-            props: {
-              data: { type: Array, default: () => [] },
-              border: { type: Boolean, default: false },
-              size: { type: String, default: undefined },
-            },
-            template:
-              '<div class="el-table-stub"><div v-for="(r, i) in data" :key="i">{{ r.content }}</div></div>',
-          },
-          "el-table-column": true,
-        },
-      },
-    });
-    expect(arrayW.find(".el-table-stub").exists()).toBe(true);
-    expect(arrayW.text()).toContain("row-a");
-    const table = arrayW.findComponent({ name: "ElTable" });
-    expect(table.props("border")).toBe(false);
-    expect(table.props("size")).toBe("small");
   });
 
   it("shows loading and empty states", () => {
@@ -164,11 +187,44 @@ describe("ChatAnalystLog", () => {
     const w = mountLog({
       rowId: "5",
       taskId: "task-5",
-      logData: "x",
+      logData: log({
+        source: "LEGACY_TASK",
+        text: "x",
+        can_request_legacy_refresh: true,
+      }),
     });
     await w.find("[data-testid='analyst-log-update']").trigger("click");
     await flushPromises();
     expect(w.emitted("update")?.length).toBe(1);
+  });
+
+  it("labels pending, terminal empty, degraded cached text, and truncation", () => {
+    expect(
+      mountLog({ rowId: "1", logData: log({ state: "PENDING" }) }).text()
+    ).toContain("not available yet");
+    expect(
+      mountLog({ rowId: "1", logData: log({ state: "TERMINAL_EMPTY" }) }).text()
+    ).toContain("completed without a log");
+    const degraded = mountLog({
+      rowId: "1",
+      logData: log({ state: "DEGRADED", text: "last safe", truncated: true }),
+    });
+    expect(degraded.text()).toContain("last safe");
+    expect(
+      degraded.find("[data-testid='analyst-log-reconnecting']").exists()
+    ).toBe(true);
+    expect(
+      degraded.find("[data-testid='analyst-log-truncated']").exists()
+    ).toBe(true);
+  });
+
+  it("keeps ANSI rendering escaped for injected handlers", () => {
+    const w = mountLog({
+      rowId: "1",
+      logData: log({ text: "\u001b[31m<img src=x onerror=alert(1)>" }),
+    });
+    expect(w.find("pre.log-pre").html()).toContain("&lt;img");
+    expect(w.find("pre.log-pre img").exists()).toBe(false);
   });
 
   it("uses one quiet semantic surface instead of a nested dashboard", () => {

@@ -46,7 +46,28 @@
       class="gene-network-images"
     >
       <div
-        v-if="geneNetworkImagesLoading[message.id || '']"
+        v-if="lifecycle"
+        class="agent-lifecycle"
+        role="status"
+        aria-live="polite"
+      >
+        {{ $t(lifecycleLabel) }}
+      </div>
+      <MarkdownViewer
+        v-if="hasSpecializedReport"
+        :instantMessage="(message?.instantMessage && isLastMessage) || false"
+        :content="chatContentToText(message.content)"
+        surface="chat"
+        @finish="emit('finish')"
+      />
+      <div v-if="isTerminalLifecycle" class="agent-lifecycle__terminal">
+        {{ $t(lifecycleLabel) }}
+      </div>
+      <div
+        v-else-if="
+          geneNetworkImagesLoading[message.id || ''] ||
+          awaitingSpecializedImages
+        "
         class="images-loading"
       >
         <el-icon class="is-loading"><Loading /></el-icon>
@@ -64,7 +85,7 @@
           class="result-image"
         />
       </div>
-      <div v-else class="no-images">
+      <div v-else-if="shouldShowSpecializedNoData" class="no-images">
         {{ $t("common.noData") }}
       </div>
     </div>
@@ -77,7 +98,28 @@
       class="gene-network-images"
     >
       <div
-        v-if="digitalDesignImagesLoading[message.id || '']"
+        v-if="lifecycle"
+        class="agent-lifecycle"
+        role="status"
+        aria-live="polite"
+      >
+        {{ $t(lifecycleLabel) }}
+      </div>
+      <MarkdownViewer
+        v-if="hasSpecializedReport"
+        :instantMessage="(message?.instantMessage && isLastMessage) || false"
+        :content="chatContentToText(message.content)"
+        surface="chat"
+        @finish="emit('finish')"
+      />
+      <div v-if="isTerminalLifecycle" class="agent-lifecycle__terminal">
+        {{ $t(lifecycleLabel) }}
+      </div>
+      <div
+        v-else-if="
+          digitalDesignImagesLoading[message.id || ''] ||
+          awaitingSpecializedImages
+        "
         class="images-loading"
       >
         <el-icon class="is-loading"><Loading /></el-icon>
@@ -95,7 +137,7 @@
           class="result-image"
         />
       </div>
-      <div v-else class="no-images">
+      <div v-else-if="shouldShowSpecializedNoData" class="no-images">
         {{ $t("common.noData") }}
       </div>
     </div>
@@ -196,11 +238,13 @@ import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
 import StreamMessage from "./StreamMessage.vue";
+import { computed } from "vue";
+import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "../types";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
 import { chatContentToRows, chatContentToText } from "../messageTypes";
 
-defineProps<{
+const props = defineProps<{
   message: ChatMessage;
   index: number;
   isLastMessage: boolean;
@@ -215,6 +259,7 @@ defineProps<{
   geneNetworkImagesLoading: Record<string, boolean>;
   digitalDesignImages: Record<string, string[]>;
   digitalDesignImagesLoading: Record<string, boolean>;
+  lifecycle?: AgentTaskLifecycle;
 }>();
 
 const emit = defineEmits<{
@@ -228,6 +273,45 @@ const emit = defineEmits<{
 const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
 };
+
+const lifecycleLabel = computed(() =>
+  props.lifecycle ? `chat.lifecycle.${props.lifecycle.phase.toLowerCase()}` : ""
+);
+const isTerminalLifecycle = computed(
+  () =>
+    props.lifecycle?.phase === "FAILED" ||
+    props.lifecycle?.phase === "CANCELLED"
+);
+const hasSpecializedReport = computed(
+  () =>
+    typeof props.message.content === "string" &&
+    props.message.content.trim() !== ""
+);
+const activeSpecializedLifecycle = computed(
+  () =>
+    props.lifecycle?.phase === "PREPARING" ||
+    props.lifecycle?.phase === "RUNNING"
+);
+const awaitingSpecializedImages = computed(
+  () =>
+    activeSpecializedLifecycle.value &&
+    (props.lifecycle?.artifact_summary.image_count ?? 0) > 0
+);
+const selectedImages = computed(() =>
+  props.message.tool_name === "GeneNetworkAgent"
+    ? props.geneNetworkImages[props.message.id || ""]
+    : props.digitalDesignImages[props.message.id || ""]
+);
+const shouldShowSpecializedNoData = computed(() => {
+  if (!props.lifecycle) return true;
+  return (
+    props.lifecycle.phase === "SUCCEEDED" &&
+    !hasSpecializedReport.value &&
+    (selectedImages.value?.length ?? 0) === 0 &&
+    props.lifecycle.artifact_summary.image_count === 0 &&
+    props.lifecycle.artifact_summary.output_directory_count === 0
+  );
+});
 </script>
 
 <style scoped lang="scss">
@@ -236,6 +320,17 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   color: var(--phy-color-text-muted);
   font-size: 13px;
   line-height: 1.4;
+}
+
+.agent-lifecycle {
+  margin-bottom: var(--phy-space-8);
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
+}
+
+.agent-lifecycle__terminal {
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
 }
 
 /* Content owns internal overflow so wide children cannot stretch the transcript. */

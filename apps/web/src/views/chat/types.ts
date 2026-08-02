@@ -3,6 +3,7 @@ import type { BotInteropPayload, BotRunProjection } from "./botProjection";
 import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import type {
+  AnalystAgentLog,
   AssetAttachmentRef,
   ConversationArtifactLink,
   ConversationContextNotice,
@@ -227,7 +228,7 @@ export interface ChatUIState {
   historyErrorKind: ChatHistoryErrorKind | null;
   copyVisible: number;
   copyTimeRef: ReturnType<typeof setTimeout> | undefined;
-  logData: Record<string, unknown>;
+  logData: Record<string, AnalystAgentLog | undefined>;
   loadingLog: Record<string, boolean>;
   refreshingMessages: Record<string, boolean>;
   /** Last sanitized lifecycle snapshot for each positive Web task-row id. */

@@ -1,5 +1,6 @@
 import { ref, computed } from "vue";
 import type { ChatMessage, ChatUIState, ChatView } from "../types";
+import type { AnalystAgentLog } from "@/api/types";
 import type { ResumableUploadItem } from "../upload/types";
 import type { RekeyChatStateOutcome } from "../types";
 
@@ -189,13 +190,13 @@ export function useChatStates() {
   });
 
   // log state management - now based on the current conversation
-  const logData = computed<Record<string, unknown>>({
+  const logData = computed<Record<string, AnalystAgentLog | undefined>>({
     get: () => {
       if (!currentChatId.value) return {};
       const chatState = getChatState(currentChatId.value);
       return chatState ? chatState.logData : {};
     },
-    set: (value: Record<string, unknown>) => {
+    set: (value: Record<string, AnalystAgentLog | undefined>) => {
       if (!currentChatId.value) return;
       const chatState = getChatState(currentChatId.value);
       if (chatState) {

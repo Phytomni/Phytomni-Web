@@ -5,6 +5,7 @@
 
 import type { ContentBlock, ChatMessage } from "@/views/chat/types";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
+import type { AnalystAgentLog } from "@/api/types";
 import { activityDisclosureStateKey } from "@/views/chat/streaming/presentation";
 import { PHASE_3B_USER_PROMPT } from "./messages";
 
@@ -152,7 +153,7 @@ export const FIXTURE_PROGRESS_STARTED_AT = 1_700_000_000_000;
 export type Phase3CLogProps = {
   rowId?: string;
   taskId?: string;
-  logData?: unknown;
+  logData?: AnalystAgentLog;
   loading?: boolean;
   updating?: boolean;
   errorKind?: "fetch" | "update";
@@ -216,7 +217,15 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
       log: {
         rowId: "42",
         taskId: "fixture-task-42",
-        logData: "Synthetic analyst log line 1\nline 2",
+        logData: {
+          state: "AVAILABLE",
+          source: "BOT_RUN",
+          text: "Synthetic analyst log line 1\nline 2",
+          revision: 1,
+          truncated: false,
+          can_request_legacy_refresh: false,
+          error_code: null,
+        },
         loading: false,
       },
       assistantMessage: MESSAGE_ANALYST_LOG,
@@ -237,7 +246,15 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
       log: {
         rowId: "43",
         taskId: undefined,
-        logData: "Synthetic log without update path",
+        logData: {
+          state: "AVAILABLE",
+          source: "BOT_RUN",
+          text: "Synthetic log without update path",
+          revision: 1,
+          truncated: false,
+          can_request_legacy_refresh: false,
+          error_code: null,
+        },
       },
       assistantMessage: MESSAGE_ANALYST_LOG_MISSING_TASK,
     },

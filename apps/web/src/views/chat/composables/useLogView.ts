@@ -1,5 +1,6 @@
 import { nextTick, watch } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
+import type { AnalystAgentLog } from "@/api/types";
 import type { ChatMessage, ChatUIState, ChatView } from "../types";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
@@ -31,14 +32,14 @@ export function analystLogActivityKey(rowId: string): string {
   return `log:${rowId}`;
 }
 
-function parseLogPayload(data: unknown): unknown {
-  if (typeof data !== "string") return data;
-  try {
-    return JSON.parse(data);
-  } catch (parseError) {
-    console.error("JSON parse failed:", parseError);
-    return data;
+function mergeLogResponse(
+  cached: AnalystAgentLog | undefined,
+  next: AnalystAgentLog
+): AnalystAgentLog {
+  if (next.state !== "DEGRADED" || next.text !== "" || !cached?.text) {
+    return next;
   }
+  return { ...next, text: cached.text };
 }
 
 export function useLogView(opts: {
@@ -68,10 +69,12 @@ export function useLogView(opts: {
     chatState.loadingLog[rowId] = true;
     try {
       const res = await getAnalystAgentLog({ id: rowId });
-      // code===200 is success even when the bounded DTO text is empty (show no-data).
+      // Preserve the bounded DTO; presentation owns state-specific labels.
       if (res.code === 200) {
-        chatState.logData[rowId] =
-          res.data.text === "" ? "" : parseLogPayload(res.data.text);
+        chatState.logData[rowId] = mergeLogResponse(
+          chatState.logData[rowId],
+          res.data
+        );
         delete chatState.logErrorKinds[rowId];
         nextTick(() => {
           scrollToBottom().catch(() => undefined);
@@ -156,6 +159,13 @@ export function useLogView(opts: {
 
     const chatState = getChatState(currentChatId.value);
     if (!chatState) return;
+    const cached = chatState.logData[rowId];
+    if (
+      cached?.source !== "LEGACY_TASK" ||
+      cached.can_request_legacy_refresh !== true
+    ) {
+      return;
+    }
 
     chatState.updatingLog[rowId] = true;
 
@@ -212,11 +222,27 @@ export function useLogView(opts: {
     await fetchLogIfNeeded(rowId, chatState, true);
   };
 
+  const refreshModernLog = async (message: ChatMessage) => {
+    if (!currentChatId.value) return;
+    const rowId = deriveAnalystLogRowId(message);
+    if (!rowId) return;
+    const chatState = getChatState(currentChatId.value);
+    if (
+      chatState.activityExpandedByMessage[analystLogActivityKey(rowId)] !== true
+    ) {
+      return;
+    }
+    const cached = chatState.logData[rowId];
+    if (cached && cached.source !== "BOT_RUN") return;
+    await fetchLogIfNeeded(rowId, chatState, cached?.source === "BOT_RUN");
+  };
+
   return {
     setLogExpanded,
     toggleLogView,
     updateLog,
     retryLog,
+    refreshModernLog,
     ensureLegacyLogActivityInit,
   };
 }

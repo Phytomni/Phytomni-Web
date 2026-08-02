@@ -8,21 +8,19 @@
       {{ t("chat.log.unavailable") }}
     </div>
     <template v-else>
-      <div class="log-actions">
+      <div v-if="canRequestLegacyRefresh" class="log-actions">
         <el-button
           text
           size="small"
           data-testid="analyst-log-update"
           :loading="updating"
-          :disabled="!taskId || updating"
+          :disabled="updating"
           @click="emit('update')"
         >
           <el-icon>
             <Refresh />
           </el-icon>
-          {{
-            taskId ? t("chat.log.updateLog") : t("chat.log.updateUnavailable")
-          }}
+          {{ t("chat.log.historicalRefresh") }}
         </el-button>
       </div>
 
@@ -41,34 +39,36 @@
           {{ t("chat.log.retry") }}
         </el-button>
       </div>
-      <div v-else-if="loading" class="log-loading">
+      <div v-if="loading" class="log-loading">
         <el-icon class="is-loading">
           <Loading />
         </el-icon>
         {{ t("chat.log.loading") }}
       </div>
-      <div v-else-if="logData != null && logData !== ''" class="log-content">
-        <div v-if="typeof logData === 'string'" class="log-text-content">
+      <div v-else-if="logData?.text" class="log-content">
+        <div class="log-text-content">
           <pre
             class="log-pre"
-            v-html="formatLogContentWithColors(logData)"
+            v-html="formatLogContentWithColors(logData.text)"
           ></pre>
         </div>
-        <el-table
-          v-else-if="Array.isArray(logData)"
-          :data="logData"
-          size="small"
-          style="width: 100%"
-        >
-          <el-table-column
-            prop="content"
-            :label="t('chat.log.contentColumn')"
-            align="left"
-          />
-        </el-table>
       </div>
-      <div v-else class="log-empty">
-        {{ t("chat.log.noData") }}
+      <div
+        v-if="logData?.state === 'DEGRADED'"
+        class="log-hint"
+        data-testid="analyst-log-reconnecting"
+      >
+        {{ t("chat.log.reconnecting") }}
+      </div>
+      <div
+        v-if="logData?.truncated"
+        class="log-hint"
+        data-testid="analyst-log-truncated"
+      >
+        {{ t("chat.log.truncated") }}
+      </div>
+      <div v-if="!loading && !logData?.text" class="log-empty">
+        {{ emptyLabel }}
       </div>
     </template>
   </div>
@@ -79,11 +79,13 @@ import { useI18n } from "vue-i18n";
 import { Loading, Refresh } from "@element-plus/icons-vue";
 import { formatLogContentWithColors } from "../utils/agent-log";
 import type { LogErrorKind } from "../composables/useLogView";
+import type { AnalystAgentLog } from "@/api/types";
+import { computed } from "vue";
 
-defineProps<{
+const props = defineProps<{
   rowId?: string;
   taskId?: string;
-  logData?: unknown;
+  logData?: AnalystAgentLog;
   loading?: boolean;
   updating?: boolean;
   errorKind?: LogErrorKind;
@@ -95,6 +97,20 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const canRequestLegacyRefresh = computed(
+  () =>
+    props.logData?.source === "LEGACY_TASK" &&
+    props.logData.can_request_legacy_refresh === true &&
+    !!props.taskId
+);
+const emptyLabel = computed(() => {
+  if (props.logData?.state === "PENDING") return t("chat.log.pending");
+  if (props.logData?.state === "TERMINAL_EMPTY") {
+    return t("chat.log.terminalEmpty");
+  }
+  if (props.logData?.state === "DEGRADED") return t("chat.log.reconnecting");
+  return t("chat.log.noData");
+});
 </script>
 
 <style scoped lang="scss">
