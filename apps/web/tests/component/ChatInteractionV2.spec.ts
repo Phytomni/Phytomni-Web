@@ -26,6 +26,7 @@ import TransferProgress from "@/components/TransferProgress.vue";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
 import FollowUpQuestions from "@/views/chat/FollowUpQuestions.vue";
+import chatLogo from "@/assets/images/chat/logo.png";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import {
@@ -375,6 +376,59 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     wrapper.unmount();
   });
 
+  it("wires the ChatView Agent avatar to the Phytomni logo, not authenticated-user state", () => {
+    const authenticatedUserAvatar = "data:image/svg+xml,user-avatar";
+    const transcriptStart = CHAT_SOURCE.indexOf("<ChatMessageRow");
+    const transcriptEnd = CHAT_SOURCE.indexOf(
+      "</ChatMessageRow>",
+      transcriptStart
+    );
+    const transcript = CHAT_SOURCE.slice(transcriptStart, transcriptEnd);
+
+    expect(CHAT_SOURCE).toContain("const botAvatar = chatLogo;");
+    expect(transcript).toContain(':src="botAvatar"');
+    expect(transcript).not.toContain("userStore().avatar");
+
+    const ChatViewAvatarHarness = defineComponent({
+      setup() {
+        return () =>
+          h("section", [
+            h(
+              ChatMessageRow,
+              { role: "user" },
+              {
+                avatar: () =>
+                  h("img", {
+                    "data-testid": "authenticated-user-avatar",
+                    src: authenticatedUserAvatar,
+                  }),
+              }
+            ),
+            h(
+              ChatMessageRow,
+              { role: "assistant" },
+              {
+                avatar: () =>
+                  h("img", {
+                    "data-testid": "agent-avatar",
+                    src: chatLogo,
+                  }),
+              }
+            ),
+          ]);
+      },
+    });
+    const rows = mount(ChatViewAvatarHarness);
+    const user = rows.get('[data-message-role="user"]');
+    const agent = rows.get('[data-message-role="assistant"]');
+
+    expect(user.find(".message-avatar").exists()).toBe(false);
+    expect(agent.get("[data-testid='agent-avatar']").attributes("src")).toBe(
+      chatLogo
+    );
+    expect(agent.html()).not.toContain(authenticatedUserAvatar);
+  });
+
   it("mounts user/assistant rows, follow-ups, and actions chrome", () => {
     const user = mount(ChatMessageRow, {
       props: { role: "user" },
@@ -387,8 +441,6 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     const assistant = mount(ChatMessageRow, {
       props: { role: "assistant", streaming: true },
       slots: {
-        avatar: () =>
-          h("img", { "data-testid": "agent-avatar", src: "phytomni-logo" }),
         default: () => "assistant body",
         activity: () => "activity",
         "follow-up": () => "follow-up",
@@ -398,9 +450,6 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     });
     expect(assistant.classes()).toContain("streaming");
     expect(assistant.find(".message-avatar").exists()).toBe(true);
-    expect(
-      assistant.get("[data-testid='agent-avatar']").attributes("src")
-    ).toBe("phytomni-logo");
     expect(assistant.text()).toContain("activity");
     expect(assistant.text()).toContain("follow-up");
     expect(assistant.text()).toContain("actions");
