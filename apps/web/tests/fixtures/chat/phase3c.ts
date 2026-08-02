@@ -5,9 +5,19 @@
 
 import type { ContentBlock, ChatMessage } from "@/views/chat/types";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
-import type { AnalystAgentLog } from "@/api/types";
 import { activityDisclosureStateKey } from "@/views/chat/streaming/presentation";
 import { PHASE_3B_USER_PROMPT } from "./messages";
+
+/** Bounded analyst-log DTO shape kept local so visual fixtures have no API dependency. */
+type Phase3CAnalystLog = {
+  state: "PENDING" | "AVAILABLE" | "TERMINAL_EMPTY" | "DEGRADED";
+  source: "BOT_RUN" | "LEGACY_TASK";
+  text: string;
+  revision: number;
+  truncated: boolean;
+  can_request_legacy_refresh: boolean;
+  error_code: "log_refresh_unavailable" | null;
+};
 
 /** Exact Phase 3C visual/registry keys (stable contract). */
 export const PHASE_3C_FIXTURE_KEYS = [
@@ -153,7 +163,7 @@ export const FIXTURE_PROGRESS_STARTED_AT = 1_700_000_000_000;
 export type Phase3CLogProps = {
   rowId?: string;
   taskId?: string;
-  logData?: AnalystAgentLog;
+  logData?: Phase3CAnalystLog;
   loading?: boolean;
   updating?: boolean;
   errorKind?: "fetch" | "update";
