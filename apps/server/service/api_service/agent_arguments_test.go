@@ -47,10 +47,8 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 	}
 	want := map[string]interface{}{
 		"user_query":      "paper",
-		"data_list":       map[string]interface{}{},
 		"interop_mode":    "off",
 		"interop_targets": []interface{}{},
-		"obs_file_list":   []interface{}{},
 	}
 	if !reflect.DeepEqual(gotArgs, want) {
 		t.Fatalf("arguments=%#v want=%#v", gotArgs, want)
@@ -84,7 +82,6 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 				"interop_mode": "off", "interop_targets": []interface{}{},
 				"resolve_gene_id": true,
 				"gene_id":         "AT1G01010", "species_code": "ath",
-				"obs_file_list": []interface{}{},
 			},
 		},
 		{
@@ -95,7 +92,6 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 				"resolve_trait_id": true,
 				"to_id":            "TO:0000207",
 				"species_code":     "osa",
-				"obs_file_list":    []interface{}{},
 			},
 		},
 	} {
