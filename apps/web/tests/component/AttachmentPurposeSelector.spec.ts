@@ -19,4 +19,20 @@ describe("AttachmentPurposeSelector", () => {
     await radioGroup.vm.$emit("change", "document");
     expect(wrapper.emitted("update:modelValue")).toEqual([["document"]]);
   });
+
+  it("does not emit when disabled", async () => {
+    const wrapper = mountWithApp(AttachmentPurposeSelector, {
+      props: {
+        modelValue: "document",
+        allowedPurposes: ["document"],
+        disabled: true,
+      },
+    });
+
+    await wrapper
+      .findComponent({ name: "ElRadioGroup" })
+      .vm.$emit("change", "document");
+
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+  });
 });

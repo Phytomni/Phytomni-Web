@@ -109,7 +109,7 @@
               :limit="10"
               :show-file-list="false"
               :auto-upload="false"
-              :disabled="composerDisabled"
+              :disabled="!canQueueFiles"
               :on-change="onUploadChange"
               :on-exceed="onUploadExceed"
               multiple
@@ -120,7 +120,7 @@
                   <el-button
                     circle
                     class="composer-tool-button"
-                    :disabled="composerDisabled"
+                    :disabled="!canQueueFiles"
                     :aria-label="t('chat.uploadFile')"
                   >
                     <el-icon><Paperclip /></el-icon>
@@ -294,6 +294,11 @@ const mentionTriggers = computed(() =>
 const composerDisabled = computed(
   () => props.isSending || props.rolesLoading || !props.modeUsable
 );
+const canQueueFiles = computed(
+  () =>
+    !composerDisabled.value &&
+    props.allowedUploadPurposes.includes(props.uploadPurpose)
+);
 const permissionUnavailable = computed(
   () => !props.rolesLoading && !props.modeUsable
 );
@@ -319,7 +324,7 @@ const onComposerEnterCapture = (e: KeyboardEvent) => {
 };
 
 const onPaste = (event: ClipboardEvent) => {
-  if (composerDisabled.value) return;
+  if (!canQueueFiles.value) return;
   const files = Array.from(event.clipboardData?.files ?? []);
   if (files.length === 0) return;
   event.preventDefault();
@@ -327,12 +332,12 @@ const onPaste = (event: ClipboardEvent) => {
 };
 
 const onUploadExceed = (files: File[]) => {
-  if (composerDisabled.value) return;
+  if (!canQueueFiles.value) return;
   emit("paste-files", Array.from(files));
 };
 
 const onUploadChange = (file: unknown) => {
-  if (composerDisabled.value) return;
+  if (!canQueueFiles.value) return;
   emit("file-change", file);
 };
 

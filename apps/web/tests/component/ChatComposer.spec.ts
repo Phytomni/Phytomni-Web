@@ -454,6 +454,29 @@ describe("ChatComposer", () => {
     );
   });
 
+  it("disables file selection and suppresses file events without an allowed purpose", () => {
+    const wrapper = mountComposer({ allowedUploadPurposes: [] });
+    const upload = wrapper.findComponent({ name: "ElUpload" });
+    const selector = wrapper.findComponent({
+      name: "AttachmentPurposeSelector",
+    });
+    const file = new File(["x"], "notes.txt", { type: "text/plain" });
+
+    expect(upload.props("disabled")).toBe(true);
+    expect(selector.props("disabled")).toBe(true);
+
+    upload.props("onChange")?.({ name: file.name, raw: file });
+    upload.props("onExceed")?.([file]);
+
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { files: [file] } });
+    wrapper.element.dispatchEvent(paste);
+
+    expect(paste.defaultPrevented).toBe(false);
+    expect(wrapper.emitted("file-change")).toBeUndefined();
+    expect(wrapper.emitted("paste-files")).toBeUndefined();
+  });
+
   it("blocks only send while an upload is incomplete and keeps the editor usable", () => {
     const wrapper = mountComposer({
       modelValue: "keep editing",
