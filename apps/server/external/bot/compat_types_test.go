@@ -116,3 +116,26 @@ func TestHeadFixturesDecodeRemoteTerminalArtifacts(t *testing.T) {
 		t.Fatalf("terminal projection = %#v", projection)
 	}
 }
+
+func TestHeadFixturesDecodeRemoteLifecycleStates(t *testing.T) {
+	tests := []struct {
+		fixture    string
+		wantStatus string
+		wantChilds int
+	}{
+		{fixture: "remote_preparing.json", wantStatus: "running", wantChilds: 0},
+		{fixture: "remote_running.json", wantStatus: "running", wantChilds: 1},
+		{fixture: "remote_failed.json", wantStatus: "failed", wantChilds: 1},
+		{fixture: "remote_cancelled.json", wantStatus: "cancelled", wantChilds: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fixture, func(t *testing.T) {
+			var got RunRecord
+			decodeFixture(t, tt.fixture, &got)
+			if got.Status != tt.wantStatus || len(got.TaskIDs) != tt.wantChilds {
+				t.Fatalf("remote lifecycle = %#v, want status=%q children=%d", got, tt.wantStatus, tt.wantChilds)
+			}
+		})
+	}
+}

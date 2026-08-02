@@ -1,0 +1,10 @@
+{
+  "run_id": "run-b5-running",
+  "agent": "analyst",
+  "status": "running",
+  "task_ids": ["child-b5-running"],
+  "result": {
+    "report_revision": 1,
+    "intermediate_report": "Synthetic running report"
+  }
+}
