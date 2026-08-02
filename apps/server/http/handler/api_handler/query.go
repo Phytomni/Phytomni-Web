@@ -35,6 +35,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, "invalid client turn id"
 	case errors.Is(err, api_service.ErrInvalidQueryAttachments):
 		return http.StatusBadRequest, "invalid query attachments"
+	case errors.Is(err, api_service.ErrInvalidAgentResolver):
+		return http.StatusBadRequest, "invalid agent resolver"
 	case errors.Is(err, api_service.ErrConversationModeConflict):
 		return http.StatusBadRequest, "conversation mode cannot be changed"
 	case errors.Is(err, api_service.ErrConversationLedgerNotFound):
@@ -178,6 +180,68 @@ func parseAssetAttachments(raw string) ([]rxBot.AssetAttachmentRef, bool) {
 
 var clientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 var artifactIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+var agentResolverGeneIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+var agentResolverDesignSpeciesPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,31}$`)
+var agentResolverNetworkTraitPattern = regexp.MustCompile(`^TO:[0-9]{7}$`)
+
+var agentResolverNetworkTraits = map[string]struct{}{
+	"TO:0000011": {},
+	"TO:0000019": {},
+	"TO:0000040": {},
+	"TO:0000128": {},
+	"TO:0000207": {},
+	"TO:0000430": {},
+}
+
+var agentResolverNetworkSpecies = map[string]struct{}{
+	"ath": {},
+	"osa": {},
+	"zma": {},
+	"sbi": {},
+	"gma": {},
+}
+
+// parseAgentProductResolver accepts resolver controls only on their owning
+// dedicated route. It normalizes accepted scalar values before they can reach
+// the Bot argument builder and rejects every partial or cross-route payload.
+func parseAgentProductResolver(ctx *gin.Context, surface api_service.QuerySurface, routeTool string) (geneID, toID, speciesCode string, err error) {
+	rawGeneID, hasGeneID := ctx.GetPostForm("gene_id")
+	rawToID, hasToID := ctx.GetPostForm("to_id")
+	rawSpeciesCode, hasSpeciesCode := ctx.GetPostForm("species_code")
+	if !hasGeneID && !hasToID && !hasSpeciesCode {
+		return "", "", "", nil
+	}
+	if surface != api_service.QuerySurfaceAgentProduct {
+		return "", "", "", api_service.ErrInvalidAgentResolver
+	}
+
+	geneID = strings.TrimSpace(rawGeneID)
+	toID = strings.ToUpper(strings.TrimSpace(rawToID))
+	speciesCode = strings.ToLower(strings.TrimSpace(rawSpeciesCode))
+	switch routeTool {
+	case "DigitalDesignAgent":
+		if hasToID || !hasGeneID || !hasSpeciesCode ||
+			!agentResolverGeneIDPattern.MatchString(geneID) ||
+			!agentResolverDesignSpeciesPattern.MatchString(speciesCode) {
+			return "", "", "", api_service.ErrInvalidAgentResolver
+		}
+		return geneID, "", speciesCode, nil
+	case "GeneNetworkAgent":
+		if hasGeneID || !hasToID || !hasSpeciesCode ||
+			!agentResolverNetworkTraitPattern.MatchString(toID) {
+			return "", "", "", api_service.ErrInvalidAgentResolver
+		}
+		if _, ok := agentResolverNetworkTraits[toID]; !ok {
+			return "", "", "", api_service.ErrInvalidAgentResolver
+		}
+		if _, ok := agentResolverNetworkSpecies[speciesCode]; !ok {
+			return "", "", "", api_service.ErrInvalidAgentResolver
+		}
+		return "", toID, speciesCode, nil
+	default:
+		return "", "", "", api_service.ErrInvalidAgentResolver
+	}
+}
 
 func validateQueryClientTurn(in api_service.QueryInput) error {
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.MultiturnV1Enabled ||
@@ -277,6 +341,15 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	}
 
 	in := queryInputForSurface(ctx, surface, routeTool)
+	geneID, toID, speciesCode, err := parseAgentProductResolver(ctx, surface, routeTool)
+	if err != nil {
+		status, message := queryErrorStatus(err)
+		writeQueryError(ctx, status, message)
+		return
+	}
+	in.GeneID = geneID
+	in.ToID = toID
+	in.SpeciesCode = speciesCode
 	if err := validateQueryClientTurn(in); err != nil {
 		status, message := queryErrorStatus(err)
 		writeQueryError(ctx, status, message)

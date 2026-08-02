@@ -81,7 +81,7 @@ func setupRemoteProductHandlerDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-func newRemoteProductHandlerRequest(t *testing.T, tool string) (*gin.Context, *httptest.ResponseRecorder) {
+func newRemoteProductHandlerRequest(t *testing.T, tool string, fields map[string]string) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
@@ -93,6 +93,11 @@ func newRemoteProductHandlerRequest(t *testing.T, tool string) (*gin.Context, *h
 	}
 	if err := mw.WriteField("mode", "expert"); err != nil {
 		t.Fatalf("write mode: %v", err)
+	}
+	for name, value := range fields {
+		if err := mw.WriteField(name, value); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
 	}
 	if err := mw.Close(); err != nil {
 		t.Fatalf("close form: %v", err)
@@ -223,7 +228,7 @@ func TestAgentProductRunFlagOffReturns503BeforeBot(t *testing.T) {
 	viper.Set("chatlimit.enforce", false)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
 
-	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent")
+	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent", nil)
 	c.Set("username", "remote@example.com")
 	NewHandler().AgentProductRun(c)
 
@@ -261,7 +266,7 @@ func TestAgentProductRunPermissionDeniedReturns404BeforeBot(t *testing.T) {
 	viper.Set("chatlimit.enforce", false)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
 
-	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent")
+	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent", nil)
 	c.Set("username", "denied@example.com")
 	NewHandler().AgentProductRun(c)
 
@@ -290,7 +295,7 @@ func TestAgentProductRunUnknownToolReturns400BeforeBodyOrBot(t *testing.T) {
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 
-	c, w := newRemoteProductHandlerRequest(t, "UnknownAgent")
+	c, w := newRemoteProductHandlerRequest(t, "UnknownAgent", nil)
 	c.Set("username", "remote@example.com")
 	NewHandler().AgentProductRun(c)
 
@@ -308,12 +313,16 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 		slug          string
 		upstreamCode  int
 		upstreamState string
+		fields        map[string]string
+		wantGeneID    string
+		wantToID      string
+		wantSpecies   string
 	}{
 		{tool: "InSilicoResearchAgent", slug: "research", upstreamCode: http.StatusOK, upstreamState: "succeeded"},
 		{tool: "InSilicoResearchAgent", slug: "research", upstreamCode: http.StatusAccepted, upstreamState: "running"},
-		{tool: "DigitalDesignAgent", slug: "design", upstreamCode: http.StatusOK, upstreamState: "succeeded"},
+		{tool: "DigitalDesignAgent", slug: "design", upstreamCode: http.StatusOK, upstreamState: "succeeded", fields: map[string]string{"gene_id": " AT1G01010 ", "species_code": " ATH "}, wantGeneID: "AT1G01010", wantSpecies: "ath"},
 		{tool: "DigitalDesignAgent", slug: "design", upstreamCode: http.StatusAccepted, upstreamState: "running"},
-		{tool: "GeneNetworkAgent", slug: "network", upstreamCode: http.StatusOK, upstreamState: "succeeded"},
+		{tool: "GeneNetworkAgent", slug: "network", upstreamCode: http.StatusOK, upstreamState: "succeeded", fields: map[string]string{"to_id": " to:0000207 ", "species_code": " OSA "}, wantToID: "TO:0000207", wantSpecies: "osa"},
 		{tool: "GeneNetworkAgent", slug: "network", upstreamCode: http.StatusAccepted, upstreamState: "running"},
 	} {
 		t.Run(tc.slug+"-"+http.StatusText(tc.upstreamCode), func(t *testing.T) {
@@ -323,10 +332,18 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			}
 			previousConfig := rxBot.BotConfig
 			var gotPath string
+			var gotArguments map[string]interface{}
 			runID := "run-" + tc.slug
 			taskID := "task-" + tc.slug
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotPath = r.URL.Path
+				var request struct {
+					Arguments map[string]interface{} `json:"arguments"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Errorf("decode Bot request: %v", err)
+				}
+				gotArguments = request.Arguments
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.upstreamCode)
 				_, _ = w.Write([]byte(`{"id":"` + runID + `","object":"agent.run","agent":"` + tc.slug + `","status":"` + tc.upstreamState + `","task_ids":["` + taskID + `"],"result":{}}`))
@@ -338,7 +355,7 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			viper.Set("chatlimit.enforce", false)
 			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
 
-			c, w := newRemoteProductHandlerRequest(t, tc.tool)
+			c, w := newRemoteProductHandlerRequest(t, tc.tool, tc.fields)
 			captured := queryInputForSurface(c, api_service.QuerySurfaceAgentProduct, tc.tool)
 			if captured.Surface != api_service.QuerySurfaceAgentProduct || captured.Tool != tc.tool || captured.Mode != "instant" {
 				t.Fatalf("route-owned input = %#v; want product surface, %q, instant", captured, tc.tool)
@@ -351,6 +368,15 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			}
 			if gotPath != "/v1/agents/"+tc.slug+"/runs" {
 				t.Fatalf("Bot path = %q, want dedicated %s run", gotPath, tc.slug)
+			}
+			if tc.wantGeneID != "" && gotArguments["gene_id"] != tc.wantGeneID {
+				t.Fatalf("Bot gene_id = %#v, want %q", gotArguments["gene_id"], tc.wantGeneID)
+			}
+			if tc.wantToID != "" && gotArguments["to_id"] != tc.wantToID {
+				t.Fatalf("Bot to_id = %#v, want %q", gotArguments["to_id"], tc.wantToID)
+			}
+			if tc.wantSpecies != "" && gotArguments["species_code"] != tc.wantSpecies {
+				t.Fatalf("Bot species_code = %#v, want %q", gotArguments["species_code"], tc.wantSpecies)
 			}
 			var response struct {
 				Code int                   `json:"code"`
@@ -371,6 +397,49 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			}
 			if tc.upstreamCode == http.StatusAccepted && (response.Data.TaskId != taskID || row.TaskId != taskID) {
 				t.Fatalf("async task identity = response:%q row:%q; want %q", response.Data.TaskId, row.TaskId, taskID)
+			}
+		})
+	}
+}
+
+func TestAgentProductResolverRejectsBeforeBot(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		tool   string
+		fields map[string]string
+	}{
+		{name: "design missing species", tool: "DigitalDesignAgent", fields: map[string]string{"gene_id": "AT1G01010"}},
+		{name: "network rejects gene", tool: "GeneNetworkAgent", fields: map[string]string{"gene_id": "AT1G01010", "species_code": "ath"}},
+		{name: "research rejects resolver", tool: "InSilicoResearchAgent", fields: map[string]string{"gene_id": "AT1G01010"}},
+		{name: "invalid values stay generic", tool: "GeneNetworkAgent", fields: map[string]string{"to_id": "TO:9999999", "species_code": "ath"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupRemoteProductHandlerDB(t)
+			if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
+				t.Fatalf("seed user: %v", err)
+			}
+			previousConfig := rxBot.BotConfig
+			hits := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+			previousQuota := viper.Get("chatlimit.enforce")
+			viper.Set("chatlimit.enforce", false)
+			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+			c, w := newRemoteProductHandlerRequest(t, tc.tool, tc.fields)
+			c.Set("username", "remote@example.com")
+			NewHandler().AgentProductRun(c)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, body = %s; want 400", w.Code, w.Body.String())
+			}
+			if w.Body.String() != `{"code":400,"message":"invalid agent resolver"}` {
+				t.Fatalf("resolver error body = %s", w.Body.String())
+			}
+			if hits != 0 {
+				t.Fatalf("invalid resolver reached Bot %d time(s)", hits)
 			}
 		})
 	}
@@ -432,7 +501,7 @@ func TestAgentProductRunUpstreamFailuresStayOpaque(t *testing.T) {
 			viper.Set("chatlimit.enforce", false)
 			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
 
-			c, w := newRemoteProductHandlerRequest(t, tool)
+			c, w := newRemoteProductHandlerRequest(t, tool, nil)
 			c.Set("username", "remote@example.com")
 			NewHandler().AgentProductRun(c)
 

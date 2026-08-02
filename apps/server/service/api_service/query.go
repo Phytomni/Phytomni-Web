@@ -62,6 +62,7 @@ var (
 	ErrConversationModeConflict = errors.New("conversation mode conflict")
 	ErrDuplicateClientTurn      = errors.New("duplicate client turn conflict")
 	ErrInvalidQueryAttachments  = errors.New("invalid query attachments")
+	ErrInvalidAgentResolver     = errors.New("invalid agent resolver")
 	ErrQueryAuthentication      = errors.New("query authentication required")
 	ErrInvalidConversationStage = errors.New("invalid conversation context stage")
 )
@@ -109,6 +110,9 @@ type QueryInput struct {
 	InteropTargets []string
 	ClientTurnID   string
 	ArtifactIDs    []string
+	GeneID         string
+	ToID           string
+	SpeciesCode    string
 	Surface        QuerySurface
 }
 
@@ -1872,7 +1876,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// Branch on the returned status;
 		// never assume remote, or a sync agent's answer is silently dropped.
 		argumentInput := rxBot.AgentArgumentInput{
-			UserQuery: in.Query,
+			UserQuery:   in.Query,
+			GeneID:      in.GeneID,
+			ToID:        in.ToID,
+			SpeciesCode: in.SpeciesCode,
 		}
 		if interopAgent(slug) {
 			argumentInput.InteropMode = in.InteropMode

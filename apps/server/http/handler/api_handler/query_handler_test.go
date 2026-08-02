@@ -73,3 +73,54 @@ func TestQueryInputForSurfaceClientTurnCompatibility(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentProductResolver(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name        string
+		surface     api_service.QuerySurface
+		routeTool   string
+		fields      url.Values
+		wantGeneID  string
+		wantToID    string
+		wantSpecies string
+		wantErr     bool
+	}{
+		{name: "design absent", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent"},
+		{name: "design normalizes pair", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent", fields: url.Values{"gene_id": {" AT1G01010 "}, "species_code": {" ATH "}}, wantGeneID: "AT1G01010", wantSpecies: "ath"},
+		{name: "network absent", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent"},
+		{name: "network normalizes pair", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"to_id": {" to:0000207 "}, "species_code": {" OSA "}}, wantToID: "TO:0000207", wantSpecies: "osa"},
+		{name: "design missing species", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent", fields: url.Values{"gene_id": {"AT1G01010"}}, wantErr: true},
+		{name: "network missing trait", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"species_code": {"ath"}}, wantErr: true},
+		{name: "network rejects gene", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"gene_id": {"AT1G01010"}, "species_code": {"ath"}}, wantErr: true},
+		{name: "design rejects trait", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent", fields: url.Values{"to_id": {"TO:0000207"}, "species_code": {"ath"}}, wantErr: true},
+		{name: "research rejects resolver", surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent", fields: url.Values{"gene_id": {"AT1G01010"}}, wantErr: true},
+		{name: "chat rejects resolver", surface: api_service.QuerySurfaceChat, fields: url.Values{"gene_id": {"AT1G01010"}}, wantErr: true},
+		{name: "design rejects malformed gene", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent", fields: url.Values{"gene_id": {"bad gene"}, "species_code": {"ath"}}, wantErr: true},
+		{name: "network rejects malformed trait", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"to_id": {"TO:0001"}, "species_code": {"ath"}}, wantErr: true},
+		{name: "network rejects unsupported trait", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"to_id": {"TO:9999999"}, "species_code": {"ath"}}, wantErr: true},
+		{name: "network rejects species", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"to_id": {"TO:0000207"}, "species_code": {"wht"}}, wantErr: true},
+		{name: "design rejects species", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent", fields: url.Values{"gene_id": {"AT1G01010"}, "species_code": {"1ath"}}, wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/query", strings.NewReader(tc.fields.Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = request
+
+			geneID, toID, speciesCode, err := parseAgentProductResolver(ctx, tc.surface, tc.routeTool)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("parseAgentProductResolver() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				return
+			}
+			got := api_service.QueryInput{GeneID: geneID, ToID: toID, SpeciesCode: speciesCode}
+			if got.GeneID != tc.wantGeneID || got.ToID != tc.wantToID || got.SpeciesCode != tc.wantSpecies {
+				t.Fatalf("resolver QueryInput = %#v; want gene_id=%q to_id=%q species_code=%q", got, tc.wantGeneID, tc.wantToID, tc.wantSpecies)
+			}
+		})
+	}
+}
