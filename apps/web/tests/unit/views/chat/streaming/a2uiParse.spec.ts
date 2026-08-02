@@ -87,15 +87,44 @@ describe("decodeA2uiOpenSurface", () => {
     if (result.ok) expect(result.value.widget).toBe(_widget);
   });
 
-  it.each(["confirm_label", "cancel_label"] as const)(
-    "rejects a Confirm surface missing required %s",
-    (missingLabel) => {
-      const props = { ...confirmProps };
-      delete props[missingLabel];
-      expectReason(
-        decodeA2uiOpenSurface(openSurface("confirm", props)),
-        "props_invalid"
+  it("accepts a minimal Confirm surface and omits optional copy", () => {
+    const result = decodeA2uiOpenSurface(
+      openSurface("confirm", { title: "Approve" })
+    );
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        widget: "confirm",
+        props: { title: "Approve" },
+      }),
+    });
+  });
+
+  it.each([true, 7, {}, []])("rejects invalid optional label %j", (value) => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", confirm_label: value })
+      ),
+      "props_invalid"
+    );
+  });
+
+  it.each([null, "", "   "])(
+    "normalizes optional Confirm labels %j to absence",
+    (value) => {
+      const result = decodeA2uiOpenSurface(
+        openSurface("confirm", {
+          title: "Approve",
+          confirm_label: value,
+          cancel_label: value,
+        })
       );
+      expect(result).toEqual({
+        ok: true,
+        value: expect.objectContaining({
+          props: { title: "Approve" },
+        }),
+      });
     }
   );
 

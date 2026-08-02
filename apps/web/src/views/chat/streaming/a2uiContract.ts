@@ -45,8 +45,8 @@ type A2uiOpenConfirmSurface = A2uiSurfaceIdentity & {
   props: {
     title: string;
     body?: string;
-    confirm_label: string;
-    cancel_label: string;
+    confirm_label?: string;
+    cancel_label?: string;
   };
 };
 

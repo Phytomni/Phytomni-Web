@@ -154,7 +154,11 @@ function readOptionalLabel(
   key: string
 ): A2uiDecodeResult<string | undefined> {
   if (!hasOwn(props, key)) return ok(undefined);
-  const result = readLabel(props[key]);
+  const value = props[key];
+  if (value === null) return ok(undefined);
+  if (typeof value !== "string") return fail("props_invalid");
+  if (value.trim().length === 0) return ok(undefined);
+  const result = readLabel(value);
   return result.ok ? result : result;
 }
 
@@ -257,19 +261,19 @@ function decodeOpenProps(
     if (!title.ok) return title;
     const body = readOptionalText(props, "body");
     if (!body.ok) return body;
-    const confirmLabel = readLabel(
-      hasOwn(props, "confirm_label") ? props.confirm_label : undefined
-    );
+    const confirmLabel = readOptionalLabel(props, "confirm_label");
     if (!confirmLabel.ok) return confirmLabel;
-    const cancelLabel = readLabel(
-      hasOwn(props, "cancel_label") ? props.cancel_label : undefined
-    );
+    const cancelLabel = readOptionalLabel(props, "cancel_label");
     if (!cancelLabel.ok) return cancelLabel;
     return ok({
       title: title.value,
       ...(body.value !== undefined ? { body: body.value } : {}),
-      confirm_label: confirmLabel.value,
-      cancel_label: cancelLabel.value,
+      ...(confirmLabel.value !== undefined
+        ? { confirm_label: confirmLabel.value }
+        : {}),
+      ...(cancelLabel.value !== undefined
+        ? { cancel_label: cancelLabel.value }
+        : {}),
     });
   }
 

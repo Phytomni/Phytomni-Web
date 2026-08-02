@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { decodeA2uiOpenSurface } from "@/views/chat/streaming/a2uiParse";
 
 type FixtureClass = "upstream-projection" | "web-http-synthetic";
 type ContractKind =
@@ -120,6 +121,22 @@ const expectedWebHttpFixtures = [
 const sourceCommit = "27448d121139699d99f24820afed3948658fe89f";
 
 describe("A2UI contract fixtures", () => {
+  it("decodes fixture surfaces without mutating their protocol objects", () => {
+    const source = JSON.parse(
+      readFileSync(
+        resolve(
+          process.cwd(),
+          "tests/fixtures/a2ui/upstream/chat_confirm/downlink.json"
+        ),
+        "utf8"
+      )
+    ) as Record<string, unknown>;
+    const before = structuredClone(source);
+
+    expect(decodeA2uiOpenSurface(source).ok).toBe(true);
+    expect(source).toEqual(before);
+  });
+
   it.each(expectedUpstreamProjections)(
     "pins the $id projection to its audited Bot source",
     (expected) => {
