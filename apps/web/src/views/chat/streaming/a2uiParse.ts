@@ -38,6 +38,12 @@ const RESERVED_FIELD_NAMES = Object.assign(Object.create(null), {
 }) as Record<string, true>;
 const WIDGETS = new Set<A2uiWidgetKind>(["confirm", "form", "choice"]);
 const FORM_FIELD_TYPES = new Set(["text", "number", "select"]);
+const CONFIRM_PROP_KEYS = new Set([
+  "title",
+  "body",
+  "confirm_label",
+  "cancel_label",
+]);
 
 const ok = <T>(value: T): A2uiDecodeResult<T> => ({ ok: true, value });
 const fail = (reason: A2uiDecodeReason): Failure => ({ ok: false, reason });
@@ -60,6 +66,10 @@ function isOrdinaryObject(value: unknown): value is A2uiObject {
 
 function hasOwn(value: A2uiObject, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function hasOnlyKeys(value: A2uiObject, allowed: Set<string>): boolean {
+  return Object.keys(value).every((key) => allowed.has(key));
 }
 
 function readIdentifier(value: unknown): A2uiDecodeResult<string> {
@@ -157,6 +167,7 @@ function readOptionalLabel(
   const value = props[key];
   if (value === null) return ok(undefined);
   if (typeof value !== "string") return fail("props_invalid");
+  if (value.length > A2UI_LIMITS.labelChars) return fail("limit_exceeded");
   if (value.trim().length === 0) return ok(undefined);
   const result = readLabel(value);
   return result.ok ? result : result;
@@ -167,7 +178,12 @@ function readOptionalText(
   key: string
 ): A2uiDecodeResult<string | undefined> {
   if (!hasOwn(props, key)) return ok(undefined);
-  const result = readText(props[key], false);
+  const value = props[key];
+  if (value === null) return ok(undefined);
+  if (typeof value !== "string") return fail("props_invalid");
+  if (value.length > A2UI_LIMITS.textChars) return fail("limit_exceeded");
+  if (value.trim().length === 0) return ok(undefined);
+  const result = readText(value);
   return result.ok ? result : result;
 }
 
@@ -257,6 +273,7 @@ function decodeOpenProps(
   props: A2uiObject
 ): A2uiDecodeResult<A2uiOpenSurface["props"]> {
   if (widget === "confirm") {
+    if (!hasOnlyKeys(props, CONFIRM_PROP_KEYS)) return fail("props_invalid");
     const title = readLabel(hasOwn(props, "title") ? props.title : undefined);
     if (!title.ok) return title;
     const body = readOptionalText(props, "body");

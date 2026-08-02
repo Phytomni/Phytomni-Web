@@ -128,6 +128,59 @@ describe("decodeA2uiOpenSurface", () => {
     }
   );
 
+  it("normalizes a null optional Confirm body to absence", () => {
+    expect(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", body: null })
+      )
+    ).toEqual({
+      ok: true,
+      value: expect.objectContaining({ props: { title: "Approve" } }),
+    });
+  });
+
+  it.each([true, 7, {}, []])(
+    "rejects invalid optional Confirm body %j",
+    (value) => {
+      expectReason(
+        decodeA2uiOpenSurface(
+          openSurface("confirm", { title: "Approve", body: value })
+        ),
+        "props_invalid"
+      );
+    }
+  );
+
+  it("rejects unknown Confirm props", () => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", onclick: "alert(1)" })
+      ),
+      "props_invalid"
+    );
+  });
+
+  it("checks optional Confirm copy bounds before blank normalization", () => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", {
+          title: "Approve",
+          confirm_label: " ".repeat(A2UI_LIMITS.labelChars + 1),
+        })
+      ),
+      "limit_exceeded"
+    );
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", {
+          title: "Approve",
+          body: " ".repeat(A2UI_LIMITS.textChars + 1),
+        })
+      ),
+      "limit_exceeded"
+    );
+  });
+
   it("rejects a Choice surface missing required multiple", () => {
     expectReason(
       decodeA2uiOpenSurface(
@@ -298,9 +351,10 @@ describe("decodeA2uiOpenSurface", () => {
 
   it("allows identifiers at 256 chars and rejects 257", () => {
     expect(
-      decodeA2uiOpenSurface(
-        openSurface("confirm", { ...confirmProps, surface_id: "x".repeat(256) })
-      ).ok
+      decodeA2uiOpenSurface({
+        ...openSurface("confirm", confirmProps),
+        surface_id: "x".repeat(256),
+      }).ok
     ).toBe(true);
     expectReason(
       decodeA2uiOpenSurface({
