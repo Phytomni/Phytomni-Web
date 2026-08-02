@@ -53,7 +53,8 @@ func (ps *Service) AgentTaskLifecycle(ctx context.Context, rowID int64, username
 	if err != nil {
 		return AgentTaskLifecycleDTO{}, err
 	}
-	if rowIsTerminal(row.Status) || strings.TrimSpace(row.BotRunId) == "" {
+	storedProjection := lifecycleStoredProjection(row)
+	if rowIsTerminal(row.Status) || rowIsTerminal(storedProjection.Status) || strings.TrimSpace(row.BotRunId) == "" {
 		return lifecycleFromStored(row, lifecycleReconciliationCached, nil), nil
 	}
 

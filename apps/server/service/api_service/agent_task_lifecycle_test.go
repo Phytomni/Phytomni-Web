@@ -155,6 +155,44 @@ func TestAgentTaskLifecycleReadsBackProjectionWinner(t *testing.T) {
 	}
 }
 
+// Mutation coverage: checking only row.Status polls Bot for a row whose durable
+// projection is already terminal. The projection winner must be cached instead.
+func TestAgentTaskLifecycleCachesTerminalProjectionWithStaleRowStatus(t *testing.T) {
+	tests := []struct {
+		status    string
+		wantPhase string
+	}{
+		{status: "SUCCEEDED", wantPhase: "SUCCEEDED"},
+		{status: "FAILED", wantPhase: "FAILED"},
+		{status: "CANCELLED", wantPhase: "CANCELLED"},
+		{status: "TIMED_OUT", wantPhase: "FAILED"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			gdb := setupAgentTaskLifecycleDB(t)
+			stored, err := marshalPersistedProjection(BotRunProjection{
+				RunID: "run-terminal-projection", Agent: "analyst", Status: tt.status, ReportRevision: 4,
+			})
+			if err != nil {
+				t.Fatalf("marshal stored projection: %v", err)
+			}
+			seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
+				id: 9, username: "alice", runID: "run-terminal-projection", status: "RUNNING", projection: stored, reportRevision: 4,
+			})
+			fake := &lifecycleFakeRunReader{err: errors.New("terminal projection must not poll")}
+
+			got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 9, "alice")
+			if err != nil {
+				t.Fatalf("AgentTaskLifecycle: %v", err)
+			}
+			if got.Phase != tt.wantPhase || !got.Terminal || got.Reconciliation != "CACHED" || fake.calls != 0 {
+				t.Fatalf("lifecycle=%+v calls=%d, want cached terminal projection without polling", got, fake.calls)
+			}
+		})
+	}
+}
+
 func TestAgentTaskLifecycleUsesCachedStateWithoutPolling(t *testing.T) {
 	tests := []struct {
 		name      string
