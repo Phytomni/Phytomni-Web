@@ -42,6 +42,33 @@ func (ph *Handler) AsyncTaskInfo(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(info))
 }
 
+// AgentTaskLifecycle returns a bounded lifecycle snapshot for the authenticated
+// owner's task row. Browser input can name only the Web-owned row id.
+func (ph *Handler) AgentTaskLifecycle(ctx *gin.Context) {
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": i18n.T(ctx, "query.task_id_required"),
+		})
+		return
+	}
+	name, _ := ctx.Get("username")
+	lifecycle, err := ph.service.AgentTaskLifecycle(ctx, id, name.(string))
+	if err != nil {
+		if errors.Is(err, api_service.ErrAgentTaskLifecycleNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{
+				"code":    http.StatusNotFound,
+				"message": i18n.TMaybe(ctx, err.Error()),
+			})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
+		return
+	}
+	ctx.JSON(errs.SucResp(lifecycle))
+}
+
 func (ph *Handler) AnalystAgentGetLog(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful: task id from path /async-tasks/:id
 	name, _ := ctx.Get("username")

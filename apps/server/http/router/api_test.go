@@ -245,14 +245,29 @@ func TestApiV1AsyncTaskRoutes(t *testing.T) {
 		[]string{
 			"GET /api/v1/async-tasks",
 			"GET /api/v1/async-tasks/:id",
+			"GET /api/v1/async-tasks/:id/lifecycle",
 			"GET /api/v1/async-tasks/:id/analyst-log",
 		},
 		[]string{
+			"GET /api/v1/auth/async-tasks/:id/lifecycle",
 			"GET /v1/async_task/list",
 			"GET /v1/async_task/info",
 			"GET /v1/analyst/get_log",
 		},
 	)
+}
+
+func TestAgentTaskLifecycleRouteRequiresAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/async-tasks/1/lifecycle", nil)
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated lifecycle request status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
 }
 
 // TestApiV1AuditGeneDownloadRoutes pins the §5.6 migration of the audit, gene and

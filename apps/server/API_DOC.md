@@ -196,6 +196,22 @@ No Token required to access.
 - **Parameters**:
   - `id` (int, path, required): Task ID (migrated to URL path segment; formerly query parameter `id`)
 
+#### Task Lifecycle
+
+- **URL**: `/api/v1/async-tasks/{id}/lifecycle`
+- **Method**: `GET`
+- **Authentication**: Required. The authenticated user is the task owner; a browser must not provide a run ID, child ID, or owner identity.
+- **Parameters**:
+  - `id` (positive int64, path, required): Web-owned task row ID. Non-positive, non-decimal, and overflowing values return HTTP 400.
+- **Success response**: Standard success envelope with `data` containing only `id`, `phase`, `terminal`, `child_task_count`, `child_work_accepted`, `report_revision`, `artifact_summary`, `reconciliation`, `tracking_degraded`, and `error_code`.
+  - `phase`: `PREPARING`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`.
+  - `reconciliation`: `CACHED`, `FRESH`, or `DEGRADED`.
+  - `artifact_summary`: bounded `image_count`, `output_directory_count`, and `has_report`; no artifact paths or report content are returned.
+  - `error_code`: `null`, `bot_transport_failed`, or `run_contract_invalid`. A degraded reconciliation remains an HTTP 200 response with cached state.
+- **Errors**:
+  - HTTP 400: invalid path ID.
+  - HTTP 404: missing task and cross-owner task requests intentionally use the same response body.
+
 #### Get Analyst Log
 
 - **URL**: `/api/v1/async-tasks/{id}/analyst-log`
