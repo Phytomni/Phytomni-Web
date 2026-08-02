@@ -45,10 +45,10 @@ type A2uiSurfacePropsDTO interface {
 }
 
 type A2uiConfirmPropsDTO struct {
-	Title        string `json:"title"`
-	Body         string `json:"body,omitempty"`
-	ConfirmLabel string `json:"confirm_label"`
-	CancelLabel  string `json:"cancel_label"`
+	Title        string  `json:"title"`
+	Body         *string `json:"body,omitempty"`
+	ConfirmLabel *string `json:"confirm_label,omitempty"`
+	CancelLabel  *string `json:"cancel_label,omitempty"`
 }
 
 func (A2uiConfirmPropsDTO) isA2uiSurfaceProps() {}
@@ -298,6 +298,34 @@ func decodeA2uiText(raw json.RawMessage, required bool) (string, bool) {
 	return value, true
 }
 
+func decodeA2uiOptionalLabel(raw json.RawMessage) (*string, bool) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, true
+	}
+	value, ok := decodeA2uiStringValue(raw)
+	if !ok || !utf8.ValidString(value) || utf8.RuneCountInString(value) > a2uiLabelMaxChars {
+		return nil, false
+	}
+	if strings.TrimSpace(value) == "" {
+		return nil, true
+	}
+	if strings.TrimSpace(value) != value {
+		return nil, false
+	}
+	return &value, true
+}
+
+func decodeA2uiOptionalText(raw json.RawMessage) (*string, bool) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, true
+	}
+	value, ok := decodeA2uiText(raw, false)
+	if !ok {
+		return nil, false
+	}
+	return &value, true
+}
+
 func decodeA2uiCatalog(raw json.RawMessage) (string, bool) {
 	value, ok := decodeA2uiIdentifier(raw)
 	if !ok {
@@ -323,22 +351,18 @@ func decodeA2uiSurfaceProps(widget string, raw json.RawMessage) (A2uiSurfaceProp
 	fields := a2uiEntriesMap(entries)
 	switch widget {
 	case "confirm":
-		if !a2uiEntriesAllowed(entries, "title", "body", "confirm_label", "cancel_label") || len(entries) < 3 {
+		if !a2uiEntriesAllowed(entries, "title", "body", "confirm_label", "cancel_label") {
 			return nil, false
 		}
 		title, titleOK := decodeA2uiLabel(fields["title"], true)
-		confirmLabel, confirmOK := decodeA2uiLabel(fields["confirm_label"], true)
-		cancelLabel, cancelOK := decodeA2uiLabel(fields["cancel_label"], true)
-		if !titleOK || !confirmOK || !cancelOK {
+		if !titleOK {
 			return nil, false
 		}
-		body := ""
-		if rawBody, exists := fields["body"]; exists {
-			var bodyOK bool
-			body, bodyOK = decodeA2uiText(rawBody, false)
-			if !bodyOK {
-				return nil, false
-			}
+		body, bodyOK := decodeA2uiOptionalText(fields["body"])
+		confirmLabel, confirmOK := decodeA2uiOptionalLabel(fields["confirm_label"])
+		cancelLabel, cancelOK := decodeA2uiOptionalLabel(fields["cancel_label"])
+		if !bodyOK || !confirmOK || !cancelOK {
+			return nil, false
 		}
 		return A2uiConfirmPropsDTO{
 			Title: title, Body: body, ConfirmLabel: confirmLabel, CancelLabel: cancelLabel,

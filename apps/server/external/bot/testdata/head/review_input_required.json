@@ -12,9 +12,7 @@
         "surface_id": "surface-synthetic-1",
         "widget": "confirm",
         "props": {
-          "title": "Synthetic review",
-          "confirm_label": "Approve",
-          "cancel_label": "Reject"
+          "title": "Synthetic review"
         }
       }
     }

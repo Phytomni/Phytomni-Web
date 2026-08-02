@@ -25,7 +25,7 @@ func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"run-review-1","run_id":"run-review-1","object":"agent.run","agent":"chat","status":"input_required","interrupt":{"draft":{"draft":"summary","a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}}},"task_ids":[],"result":{}}`))
+		_, _ = w.Write([]byte(`{"id":"run-review-1","run_id":"run-review-1","object":"agent.run","agent":"chat","status":"input_required","interrupt":{"draft":{"draft":"summary","a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve"}}}},"task_ids":[],"result":{}}`))
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
@@ -51,6 +51,9 @@ func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 	if !strings.Contains(string(encoded), `"a2ui"`) {
 		t.Fatalf("bounded surface missing from QueryData: %s", encoded)
 	}
+	if !strings.Contains(string(encoded), `"title":"Approve"`) || strings.Contains(string(encoded), "confirm_label") || strings.Contains(string(encoded), "cancel_label") {
+		t.Fatalf("unexpected confirmation props in QueryData: %s", encoded)
+	}
 }
 
 func TestDecodeA2uiSurfaceStrictBounds(t *testing.T) {
@@ -61,6 +64,11 @@ func TestDecodeA2uiSurfaceStrictBounds(t *testing.T) {
 		want bool
 	}{
 		{name: "valid", raw: base, want: true},
+		{name: "minimal confirm", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve"}}`, want: true},
+		{name: "null optional confirm fields", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","body":null,"confirm_label":null,"cancel_label":null}}`, want: true},
+		{name: "blank optional labels", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":"  ","cancel_label":""}}`, want: true},
+		{name: "wrong optional label type", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","confirm_label":true}}`},
+		{name: "unknown confirm key", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve","onclick":"x"}}`},
 		{name: "duplicate surface key", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","surface_id":"surface-2","widget":"confirm","props":{"title":"Approve","confirm_label":"Yes","cancel_label":"No"}}`},
 		{name: "unsupported widget", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"button","props":{"title":"Approve"}}`},
 		{name: "overlong title", raw: `{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"` + strings.Repeat("x", a2uiLabelMaxChars+1) + `","confirm_label":"Yes","cancel_label":"No"}}`},

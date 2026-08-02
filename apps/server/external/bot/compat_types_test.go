@@ -39,6 +39,17 @@ func TestHeadFixturesPreserveNullRunAndInputRequired(t *testing.T) {
 	if paused.Status != "input_required" || paused.Interrupt == nil || paused.Interrupt.ThreadID != "run-review-1" || paused.Interrupt.RunID != "run-review-1" {
 		t.Fatalf("paused=%#v", paused)
 	}
+	var draft struct {
+		A2UI struct {
+			Props map[string]json.RawMessage `json:"props"`
+		} `json:"a2ui"`
+	}
+	if err := json.Unmarshal(paused.Interrupt.Draft, &draft); err != nil {
+		t.Fatalf("decode review draft: %v", err)
+	}
+	if len(draft.A2UI.Props) != 1 || string(draft.A2UI.Props["title"]) != `"Synthetic review"` {
+		t.Fatalf("review props=%s", paused.Interrupt.Draft)
+	}
 }
 
 func TestHeadFixturesNormalizeLegacyInterruptRunID(t *testing.T) {
