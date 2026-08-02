@@ -54,6 +54,24 @@ export function useChatAgentRunLifecycle(options: {
     { dialogueId: string; state: ChatUIState }
   >();
 
+  const finishTerminalReload = (
+    rowId: string,
+    dialogueId: string,
+    state: ChatUIState
+  ): void => {
+    if (!terminalReloadRequested.has(rowId)) return;
+    terminalReloadRequested.delete(rowId);
+    deferredTerminalReloads.delete(rowId);
+    if (
+      options.chatStates.value[dialogueId] !== state ||
+      state.agentRunLifecycles[rowId]?.terminal !== true
+    ) {
+      return;
+    }
+    watchedRows.delete(rowId);
+    lifecycle.unwatchRow(rowId);
+  };
+
   const performReload = async (
     rowId: string,
     dialogueId: string,
@@ -75,7 +93,9 @@ export function useChatAgentRunLifecycle(options: {
       ) {
         deferredTerminalReloads.delete(rowId);
         void performReload(rowId, dialogueId, state);
+        return;
       }
+      finishTerminalReload(rowId, dialogueId, state);
     }
   };
 
@@ -114,8 +134,6 @@ export function useChatAgentRunLifecycle(options: {
       state.agentRunLifecycles[rowId] = next;
       if (next.terminal) {
         await reloadDialogue(rowId, dialogueId, state, true);
-        watchedRows.delete(rowId);
-        lifecycle.unwatchRow(rowId);
         return;
       }
       await reloadDialogue(rowId, dialogueId, state);
@@ -133,8 +151,6 @@ export function useChatAgentRunLifecycle(options: {
         state.agentRunLifecycles[rowId] = snapshot;
         if (snapshot.terminal) {
           void reloadDialogue(rowId, dialogueId, state, true);
-          watchedRows.delete(rowId);
-          lifecycle.unwatchRow(rowId);
         }
       }
     },
@@ -152,7 +168,13 @@ export function useChatAgentRunLifecycle(options: {
       if (state.historyHydration !== "ready") continue;
       for (const message of state.renderedChat?.messages ?? []) {
         const rowId = isWatchableMessage(message);
-        if (!rowId || state.agentRunLifecycles[rowId]?.terminal) continue;
+        if (!rowId) continue;
+        if (
+          state.agentRunLifecycles[rowId]?.terminal &&
+          !terminalReloadRequested.has(rowId)
+        ) {
+          continue;
+        }
         if (desiredRows.has(rowId)) continue;
         desiredRows.set(rowId, {
           dialogueId,

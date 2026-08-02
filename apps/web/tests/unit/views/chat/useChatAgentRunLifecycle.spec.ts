@@ -393,6 +393,7 @@ describe("useChatAgentRunLifecycle", () => {
 
     await vi.advanceTimersByTimeAsync(1000);
     await flush();
+    expect(reloadChat).toHaveBeenCalledOnce();
     materialReload.resolve();
     await flush();
 
@@ -402,6 +403,54 @@ describe("useChatAgentRunLifecycle", () => {
 
     expect(state.renderedChat?.messages[0]?.content).toBe("completed analysis");
     expect(state.agentRunLifecycles["91"]?.terminal).toBe(true);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(fetchLifecycle).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it("cancels a queued terminal reload when its dialogue is disposed", async () => {
+    vi.useFakeTimers();
+    const materialReload = deferred<void>();
+    const state = buildChatState({
+      historyHydration: "ready",
+      agentRunLifecycles: { "92": lifecycle(92) },
+      renderedChat: {
+        messages: [
+          buildChatMessage({
+            id: "92",
+            tool_name: "AnalystAgent",
+            status: "RUNNING",
+            content: "",
+          }),
+        ],
+      },
+    });
+    const chatStates = ref({ a: state });
+    const reloadChat = vi.fn().mockReturnValue(materialReload.promise);
+    const fetchLifecycle = vi
+      .fn()
+      .mockResolvedValueOnce(response(lifecycle(92, { phase: "RUNNING" })))
+      .mockResolvedValueOnce(
+        response(lifecycle(92, { phase: "SUCCEEDED", terminal: true }))
+      );
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat,
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    await flush();
+    await vi.advanceTimersByTimeAsync(1000);
+    await flush();
+    expect(reloadChat).toHaveBeenCalledOnce();
+
+    coordinator.disposeDialogue("a");
+    materialReload.resolve();
+    await flush();
+
+    expect(reloadChat).toHaveBeenCalledOnce();
     coordinator.dispose();
   });
 });
