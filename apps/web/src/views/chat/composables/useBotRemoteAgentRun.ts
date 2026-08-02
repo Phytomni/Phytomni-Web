@@ -42,7 +42,6 @@ export type RemoteAgentSubmitInput = {
   query: string;
   attachments?: readonly AssetAttachmentRef[];
   resolver?: RemoteAgentResolver;
-  dataList?: Record<string, string>;
   interopMode?: "off" | "auto" | "required";
   interopTargets?: string[];
 };
@@ -259,9 +258,6 @@ function buildFormData(
     );
   }
 
-  if (input.dataList) {
-    formData.append("data_list", JSON.stringify(input.dataList));
-  }
   appendOptional(formData, "interop_mode", input.interopMode);
   if (input.interopTargets && input.interopTargets.length > 0) {
     formData.append("interop_targets", JSON.stringify(input.interopTargets));

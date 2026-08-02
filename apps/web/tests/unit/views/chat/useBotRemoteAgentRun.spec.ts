@@ -40,6 +40,7 @@ vi.mock("@/components/research/BotArtifactList.vue", () => ({
 import {
   useBotRemoteAgentRun,
   type RemoteAgentChatState,
+  type RemoteAgentSubmitInput,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import type {
   BotCapability,
@@ -200,14 +201,15 @@ describe("useBotRemoteAgentRun", () => {
       ),
     });
 
-    await run.submit({
+    const submitInput = {
       query: "paper",
       attachments: [{ asset_id: "file_paper" }],
       resolver: { geneId: "AT1G01010", speciesCode: "ath" },
-      dataList: { "/obs/dataset.csv": "traits" },
       interopMode: "auto",
       interopTargets: ["mcp-peer"],
-    });
+    } satisfies RemoteAgentSubmitInput;
+
+    await run.submit(submitInput);
 
     expect(getChatState("d1").botProjection?.runId).toBe("run-research-1");
     expect(getChatState("d1").botLifecycle?.runId).toBe("run-research-1");
@@ -228,9 +230,7 @@ describe("useBotRemoteAgentRun", () => {
     ).toBe(false);
     expect(formData.get("gene_id")).toBe("AT1G01010");
     expect(formData.get("species_code")).toBe("ath");
-    expect(formData.get("data_list")).toBe(
-      JSON.stringify({ "/obs/dataset.csv": "traits" })
-    );
+    expect(formData.has("data_list")).toBe(false);
     expect(formData.get("interop_mode")).toBe("auto");
     expect(formData.get("interop_targets")).toBe(JSON.stringify(["mcp-peer"]));
     expect(formData.get("query")).not.toContain("AT1G01010");
