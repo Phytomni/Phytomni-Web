@@ -216,14 +216,22 @@ No Token required to access.
 
 - **URL**: `/api/v1/async-tasks/{id}/analyst-log`
 - **Method**: `GET`
+- **Authentication**: Required. The authenticated user is the task owner; a browser must not provide a Bot run ID, task ID, or owner identity.
 - **Parameters**:
-  - `id` (int, path, required): Log ID (migrated to URL path segment; formerly query parameter `id`)
+  - `id` (int, path, required): Web-owned task row ID.
+- **Success response**: Standard success envelope with an atomic `data` object containing `state`, `source`, `text`, `revision`, `truncated`, `can_request_legacy_refresh`, and `error_code`.
+  - `state`: `PENDING`, `AVAILABLE`, `TERMINAL_EMPTY`, or `DEGRADED`.
+  - `source`: `BOT_RUN` for modern rows and `LEGACY_TASK` for historical task-only rows.
+  - `text`: allowlisted, valid UTF-8 public log text; it is capped at 512 KiB and keeps the newest complete-rune suffix when `truncated` is true.
+  - `error_code`: `null` or `log_refresh_unavailable`; degraded log reads remain HTTP 200 responses without transport details.
+- **Errors**:
+  - HTTP 404: missing task and cross-owner task requests intentionally use the same response body.
 
 #### Update Analyst Log (Bot Write-back Endpoint)
 
 - **URL**: `/api/v1/async-tasks/analyst-log`
 - **Method**: `PATCH`
-- **Description**: Cross-repo Bot write-back endpoint. **Note: The legacy path `POST /query/analyst/update_log` continues to be served as a temporary alias until the Bot side completes migration.**
+- **Description**: Historical task-only refresh and Bot write-back endpoint. **Note: The legacy path `POST /query/analyst/update_log` continues to be served as a temporary alias until the Bot side completes migration.** Modern Bot-run log reads do not request this refresh route.
 
 #### Query Operation Logs
 

@@ -946,35 +946,42 @@ func TestAnalystAgentGetLog_ReturnsDatabaseErrorBeforeRowAccess(t *testing.T) {
 	}
 }
 
-func TestAnalystAgentGetLog_PreservesBlankTaskBehavior(t *testing.T) {
+func TestAnalystAgentGetLogReturnsSharedNotFoundForMissingIdentity(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
-		(id, user_name, task_id, task_log) VALUES (71, 'alice', '', 'blank task')`).Error; err != nil {
+		(id, user_name, task_id, bot_run_id, task_log) VALUES (71, 'alice', '', '', 'ignored')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	got, err := NewService().AnalystAgentGetLog(context.Background(), 71, "alice")
-	if err == nil || err.Error() != "log task not found" {
-		t.Fatalf("blank task error = %v, want log task not found", err)
-	}
-	if got != "" {
-		t.Fatalf("blank task log = %q, want empty result", got)
+	_, err := NewService().AnalystAgentGetLog(context.Background(), 71, "alice")
+	if err == nil || err.Error() != "agent task log not found" {
+		t.Fatalf("error = %v, want shared owner-scoped not found", err)
 	}
 }
 
-func TestAnalystAgentGetLog_PreservesOwnerMismatchBehavior(t *testing.T) {
+func TestAnalystAgentGetLogUsesOwnerScopedLookupBeforeIdentityChecks(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
-		(id, user_name, task_id, task_log) VALUES (72, 'bob', 'task-72', 'private log')`).Error; err != nil {
+		(id, user_name, task_id, bot_run_id, task_log) VALUES (72, 'bob', 'task-72', 'run-72', 'private log')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-
-	got, err := NewService().AnalystAgentGetLog(context.Background(), 72, "alice")
-	if err == nil || err.Error() != "log does not match user" {
-		t.Fatalf("owner mismatch error = %v, want log does not match user", err)
+	var querySQL []string
+	if err := gdb.Callback().Query().After("gorm:query").Register("test:agent-log-owner-scope", func(tx *gorm.DB) {
+		querySQL = append(querySQL, tx.Statement.SQL.String())
+	}); err != nil {
+		t.Fatalf("register query observer: %v", err)
 	}
-	if got != "" {
-		t.Fatalf("owner mismatch log = %q, want empty result", got)
+
+	fake := &agentTaskLogFakeReader{}
+	_, err := (&Service{runReader: fake}).AnalystAgentGetLog(context.Background(), 72, "alice")
+	if err == nil || err.Error() != "agent task log not found" {
+		t.Fatalf("error = %v, want shared owner-scoped not found", err)
+	}
+	if len(querySQL) != 1 || !strings.Contains(querySQL[0], "WHERE id = ? AND user_name = ?") {
+		t.Fatalf("query = %v, want owner-scoped id lookup before identities", querySQL)
+	}
+	if fake.logCalls != 0 {
+		t.Fatalf("Bot calls = %d, want zero", fake.logCalls)
 	}
 }
 

@@ -28,6 +28,8 @@ func setupAgentTaskLifecycleHandlerDB(t *testing.T) *gorm.DB {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_name TEXT NOT NULL,
 		bot_run_id TEXT,
+		task_id TEXT,
+		task_log TEXT,
 		status TEXT,
 		answer TEXT,
 		download_path TEXT,
@@ -140,5 +142,56 @@ func TestAgentTaskLifecycleReturnsDegradedStateSuccessfully(t *testing.T) {
 	}
 	if envelope.Data.Reconciliation != "DEGRADED" || !envelope.Data.TrackingDegraded || envelope.Data.ErrorCode == nil || *envelope.Data.ErrorCode != "bot_transport_failed" {
 		t.Fatalf("unexpected degraded lifecycle data: %+v", envelope.Data)
+	}
+}
+
+func analystLogHandlerRequest(t *testing.T, handler *Handler, id, username string) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/async-tasks/"+id+"/analyst-log", nil)
+	ctx.Params = gin.Params{{Key: "id", Value: id}}
+	ctx.Set("username", username)
+	i18n.Localize()(ctx)
+	handler.AnalystAgentGetLog(ctx)
+	return recorder
+}
+
+func TestAgentTaskLogHandlerReturnsBoundedDTOAndSharedNotFound(t *testing.T) {
+	gdb := setupAgentTaskLifecycleHandlerDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, task_id, task_log, status, bot_report_revision) VALUES
+		(51, 'alice', 'task-51', 'persisted legacy log', 'RUNNING', 0),
+		(52, 'bob', 'task-52', 'private log', 'RUNNING', 0)`).Error; err != nil {
+		t.Fatalf("seed task logs: %v", err)
+	}
+	handler := NewHandler()
+
+	ok := analystLogHandlerRequest(t, handler, "51", "alice")
+	if ok.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", ok.Code, http.StatusOK, ok.Body.String())
+	}
+	var envelope struct {
+		Code int `json:"code"`
+		Data struct {
+			State                   string  `json:"state"`
+			Source                  string  `json:"source"`
+			Text                    string  `json:"text"`
+			CanRequestLegacyRefresh bool    `json:"can_request_legacy_refresh"`
+			ErrorCode               *string `json:"error_code"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(ok.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if envelope.Code != http.StatusOK || envelope.Data.State != "AVAILABLE" || envelope.Data.Source != "LEGACY_TASK" || envelope.Data.Text != "persisted legacy log" || !envelope.Data.CanRequestLegacyRefresh || envelope.Data.ErrorCode != nil {
+		t.Fatalf("unexpected log envelope: %+v", envelope)
+	}
+
+	missing := analystLogHandlerRequest(t, handler, "404", "alice")
+	foreign := analystLogHandlerRequest(t, handler, "52", "alice")
+	if missing.Code != http.StatusNotFound || foreign.Code != http.StatusNotFound || missing.Body.String() != foreign.Body.String() {
+		t.Fatalf("missing=%d/%s foreign=%d/%s, want same 404", missing.Code, missing.Body.String(), foreign.Code, foreign.Body.String())
 	}
 }

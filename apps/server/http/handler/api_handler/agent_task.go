@@ -72,13 +72,20 @@ func (ph *Handler) AgentTaskLifecycle(ctx *gin.Context) {
 func (ph *Handler) AnalystAgentGetLog(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful: task id from path /async-tasks/:id
 	name, _ := ctx.Get("username")
-	taskId, err := ph.service.AnalystAgentGetLog(ctx, id, name.(string))
+	log, err := ph.service.AnalystAgentGetLog(ctx, id, name.(string))
 	if err != nil {
+		if errors.Is(err, api_service.ErrAgentTaskLogNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{
+				"code":    http.StatusNotFound,
+				"message": i18n.TMaybe(ctx, err.Error()),
+			})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
 
-	ctx.JSON(errs.SucResp(taskId))
+	ctx.JSON(errs.SucResp(log))
 }
 
 func (ph *Handler) QueryList(ctx *gin.Context) {

@@ -92,26 +92,6 @@ func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (
 	return
 }
 
-func (ps *Service) AnalystAgentGetLog(ctx context.Context, id int, name string) (taskLog string, err error) {
-
-	var questionAgentLogList *model.QuestionAgentLog
-	err = model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().Where("id = ?", id).First(&questionAgentLogList).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", errors.New("log task not found")
-		}
-		return "", err
-	}
-	if questionAgentLogList.TaskId == "" {
-		return "", errors.New("log task not found")
-	}
-	if name != questionAgentLogList.UserName {
-		return "", errors.New("log does not match user")
-	}
-
-	return questionAgentLogList.TaskLog, nil
-}
-
 func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.QueryListRequest, error) {
 	var QuestionAgentLogList []*common.QueryListRequest
 	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", username, 0).
