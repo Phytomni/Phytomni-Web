@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 REPO_ROOT="$(cd "${WEB_ROOT}/../.." && pwd)"
 EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/agent-lifecycle"
+LEDGER_PATH="${EVIDENCE_DIR}/visual-review-ledger.md"
 SESSION="phy-agent-lifecycle-matrix"
 BASE_URL="http://127.0.0.1:5174/tests/visual/chat/"
 
@@ -45,6 +46,14 @@ capture_fixture() {
         "${BASE_URL}?state=${state}&locale=en-US&theme=${theme}"
     agent-browser --session "${SESSION}" wait --fn \
         "document.querySelector('[data-testid=chat-visual-root]')?.dataset.fixtureReady === 'true'"
+    if [[ "${state}" == "agent-succeeded-artifacts" ]]; then
+        agent-browser --session "${SESSION}" wait --fn \
+            "(() => { const images = Array.from(document.querySelectorAll('[data-testid=chat-visual-root] img')); return images.length > 0 && images.every((image) => image.complete && image.naturalWidth > 0); })()"
+    else
+        agent-browser --session "${SESSION}" wait --fn \
+            "Array.from(document.querySelectorAll('[data-testid=chat-visual-root] img')).every((image) => image.complete && image.naturalWidth > 0)"
+    fi
+    agent-browser --session "${SESSION}" wait 500
     agent-browser --session "${SESSION}" eval --stdin \
         <"${SCRIPT_DIR}/measure-geometry.js" |
         tee "${EVIDENCE_DIR}/${stem}.geometry.json"
@@ -57,6 +66,27 @@ capture_fixture() {
     test -s "${EVIDENCE_DIR}/${stem}.lifecycle-style.json"
     agent-browser --session "${SESSION}" screenshot \
         "${EVIDENCE_DIR}/${stem}.png"
+}
+
+regenerate_visual_review_ledger() {
+    {
+        printf '%s\n' '| Screenshot | Locale | Theme | Viewport | State | fixture_source | Geometry | identity_redaction | manual_review | Notes |'
+        printf '%s\n' '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+        while IFS= read -r png; do
+            local filename="${png##*/}"
+            local remainder="${filename#agent-lifecycle__}"
+            local state="${remainder%%__*}"
+            remainder="${remainder#*__}"
+            local viewport="${remainder%%__*}"
+            remainder="${remainder#*__}"
+            local theme="${remainder%.png}"
+            printf '%s\n' "| \`${filename}\` | en-US | ${theme} | ${viewport} | ${state} | tests/visual/chat | PASS | not-needed-synthetic | Pending | Geometry and lifecycle-style assertions passed; manual review pending. |"
+        done < <(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.png' -print | LC_ALL=C sort)
+    } >"${LEDGER_PATH}"
+
+    local ledger_rows
+    ledger_rows=$(grep -Ec '^\| [^|]*agent-lifecycle__.*[.]png[^|]*\|' "${LEDGER_PATH}")
+    test "${ledger_rows}" -eq "${EXPECTED_COUNT}"
 }
 
 for state in "${states[@]}"; do
@@ -80,6 +110,8 @@ for png in "${EVIDENCE_DIR}"/*.png; do
     test -s "${png%.png}.geometry.json"
     test -s "${png%.png}.lifecycle-style.json"
 done
+
+regenerate_visual_review_ledger
 
 agent-browser --session "${SESSION}" close
 trap - EXIT

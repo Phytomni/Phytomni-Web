@@ -201,12 +201,18 @@ records under the ignored
 style assertions must pass before each screenshot. The style contract checks
 horizontal containment, unclipped controls, visible status or log semantics,
 terminal-only empty copy, and a 24 CSS pixel minimum control target without
-locking exact colors.
+locking exact colors. For the artifact fixture, the capture script also waits
+for at least one successfully decoded artifact image; other states may contain
+no images.
 
-Inspect every PNG individually after the final capture and add one PASS, FAIL,
-or Needs Verification row per filename to the ignored
-`visual-review-ledger.md`. Any FAIL requires a fixture or production-style fix
-and a complete recapture; file counts alone are not visual acceptance.
+After a successful 32/32/32 capture, the script deterministically regenerates
+the ignored `visual-review-ledger.md` with one schema-complete row per PNG.
+Its geometry result is `PASS` because the script asserted it, while every
+`manual_review` starts as `Pending`; rerunning the matrix deliberately resets
+those human findings. Inspect every PNG individually after the final capture
+and update each row to PASS, FAIL, or Needs Verification with a concise note.
+Any FAIL requires a fixture or production-style fix and a complete recapture;
+file counts and automated assertions alone are not visual acceptance.
 
 ## Accessibility modality evidence
 

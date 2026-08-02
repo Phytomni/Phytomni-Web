@@ -150,7 +150,14 @@ const backgroundTools = new Set([
   "GeneNetworkAgent",
   "DigitalDesignAgent",
 ]);
-const terminalStatuses = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
+const terminalStatuses = new Set([
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELLED",
+  "CANCELED",
+  "TIMED_OUT",
+  "TIMEOUT",
+]);
 let activeFetch: Promise<void> | null = null;
 let lifecycleRefreshQueued = false;
 let viewGeneration = 0;
@@ -186,7 +193,7 @@ const isWatchableRow = (
   row.id > 0 &&
   typeof row.tool_name === "string" &&
   backgroundTools.has(row.tool_name) &&
-  !terminalStatuses.has(row.status?.toUpperCase() ?? "");
+  !terminalStatuses.has(normalizeRawStatus(row.status));
 
 const replaceWatchedRows = (rows: AsyncTaskRecord[]) => {
   const nextIds = new Set(
@@ -271,10 +278,27 @@ const fetchData = (): Promise<void> => {
   return request;
 };
 
+const normalizeRawStatus = (status?: string) =>
+  typeof status === "string" ? status.trim().toUpperCase() : "";
+
+const displayStatus = (status?: string) => {
+  switch (normalizeRawStatus(status)) {
+    case "TIMED_OUT":
+    case "TIMEOUT":
+      return "FAILED";
+    case "CANCELED":
+      return "CANCELLED";
+    default:
+      return normalizeRawStatus(status);
+  }
+};
+
 const effectiveStatus = (data: AsyncTaskRecord) =>
-  data.id && data.id > 0
-    ? lifecycle.snapshots.value[String(data.id)]?.phase || data.status
-    : data.status;
+  displayStatus(
+    data.id && data.id > 0
+      ? lifecycle.snapshots.value[String(data.id)]?.phase || data.status
+      : data.status
+  );
 
 const showStatus = (data: AsyncTaskRecord) => {
   switch (effectiveStatus(data)) {

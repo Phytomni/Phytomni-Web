@@ -252,6 +252,11 @@ describe("Task Manager workspace", () => {
           { id: 3, status: "RUNNING", tool_name: "GeneNetworkAgent" },
           { id: 4, status: "PENDING", tool_name: "DigitalDesignAgent" },
           { id: 5, status: "SUCCEEDED", tool_name: "AnalystAgent" },
+          { id: 7, status: "FAILED", tool_name: "AnalystAgent" },
+          { id: 8, status: "CANCELLED", tool_name: "AnalystAgent" },
+          { id: 9, status: "CANCELED", tool_name: "AnalystAgent" },
+          { id: 10, status: "TIMED_OUT", tool_name: "AnalystAgent" },
+          { id: 11, status: "TIMEOUT", tool_name: "AnalystAgent" },
           { status: "RUNNING", tool_name: "AnalystAgent" },
           { id: 0, status: "RUNNING", tool_name: "AnalystAgent" },
           { id: 6, status: "RUNNING", tool_name: "ChatAgent" },
@@ -270,6 +275,43 @@ describe("Task Manager workspace", () => {
       "3",
       "4",
     ]);
+  });
+
+  it("normalizes repository terminal status aliases without polling them", async () => {
+    mocks.getTaskList.mockResolvedValueOnce({
+      code: 200,
+      data: {
+        total: 6,
+        gene_list: [
+          { id: 20, status: "SUCCEEDED", tool_name: "AnalystAgent" },
+          { id: 21, status: "FAILED", tool_name: "AnalystAgent" },
+          { id: 22, status: "CANCELLED", tool_name: "AnalystAgent" },
+          { id: 23, status: "CANCELED", tool_name: "AnalystAgent" },
+          { id: 24, status: "TIMED_OUT", tool_name: "AnalystAgent" },
+          { id: 25, status: " timeout ", tool_name: "AnalystAgent" },
+        ],
+      },
+    });
+
+    const { wrapper } = mountView();
+    await flushPromises();
+
+    expect(mocks.watchRow).not.toHaveBeenCalled();
+    expect(
+      wrapper.findAll(".task-status-badge").map((badge) => badge.text())
+    ).toEqual([
+      "Finished",
+      "Failed",
+      "Cancelled",
+      "Cancelled",
+      "Failed",
+      "Failed",
+    ]);
+    expect(
+      wrapper
+        .findAll(".task-status-badge")
+        .map((badge) => badge.attributes("data-type"))
+    ).toEqual(["success", "danger", "info", "info", "danger", "danger"]);
   });
 
   it("overrides stale status labels from lifecycle snapshots without changing row actions", async () => {
