@@ -139,6 +139,28 @@ describe("decodeA2uiOpenSurface", () => {
     });
   });
 
+  it("preserves an explicit empty optional Confirm body", () => {
+    expect(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", body: "" })
+      )
+    ).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        props: { title: "Approve", body: "" },
+      }),
+    });
+  });
+
+  it("rejects a whitespace-only optional Confirm body", () => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", body: "   " })
+      ),
+      "props_invalid"
+    );
+  });
+
   it.each([true, 7, {}, []])(
     "rejects invalid optional Confirm body %j",
     (value) => {

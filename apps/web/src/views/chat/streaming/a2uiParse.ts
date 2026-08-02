@@ -182,7 +182,8 @@ function readOptionalText(
   if (value === null) return ok(undefined);
   if (typeof value !== "string") return fail("props_invalid");
   if (value.length > A2UI_LIMITS.textChars) return fail("limit_exceeded");
-  if (value.trim().length === 0) return ok(undefined);
+  if (value.length === 0) return ok(value);
+  if (value.trim().length === 0) return fail("props_invalid");
   const result = readText(value);
   return result.ok ? result : result;
 }
