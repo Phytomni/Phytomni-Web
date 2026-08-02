@@ -48,8 +48,13 @@ export function useChatAgentRunLifecycle(options: {
   >;
 }): { disposeDialogue: (dialogueId: string) => void; dispose: () => void } {
   const watchedRows = new Map<string, string>();
+  const terminalReloadRequested = new Set<string>();
+  const deferredTerminalReloads = new Map<
+    string,
+    { dialogueId: string; state: ChatUIState }
+  >();
 
-  const reloadDialogue = async (
+  const performReload = async (
     rowId: string,
     dialogueId: string,
     state: ChatUIState
@@ -62,7 +67,35 @@ export function useChatAgentRunLifecycle(options: {
       if (options.chatStates.value[dialogueId] === state) {
         delete state.refreshingMessages[rowId];
       }
+      const deferred = deferredTerminalReloads.get(rowId);
+      if (
+        deferred?.dialogueId === dialogueId &&
+        deferred.state === state &&
+        options.chatStates.value[dialogueId] === state
+      ) {
+        deferredTerminalReloads.delete(rowId);
+        void performReload(rowId, dialogueId, state);
+      }
     }
+  };
+
+  const reloadDialogue = async (
+    rowId: string,
+    dialogueId: string,
+    state: ChatUIState,
+    terminal = false
+  ): Promise<void> => {
+    if (terminal) {
+      if (terminalReloadRequested.has(rowId)) return;
+      terminalReloadRequested.add(rowId);
+    }
+    if (state.refreshingMessages[rowId]) {
+      if (terminal) {
+        deferredTerminalReloads.set(rowId, { dialogueId, state });
+      }
+      return;
+    }
+    await performReload(rowId, dialogueId, state);
   };
 
   const lifecycle = useAgentRunLifecycle({
@@ -80,7 +113,7 @@ export function useChatAgentRunLifecycle(options: {
 
       state.agentRunLifecycles[rowId] = next;
       if (next.terminal) {
-        await reloadDialogue(rowId, dialogueId, state);
+        await reloadDialogue(rowId, dialogueId, state, true);
         watchedRows.delete(rowId);
         lifecycle.unwatchRow(rowId);
         return;
@@ -99,7 +132,7 @@ export function useChatAgentRunLifecycle(options: {
         if (!state) continue;
         state.agentRunLifecycles[rowId] = snapshot;
         if (snapshot.terminal) {
-          void reloadDialogue(rowId, dialogueId, state);
+          void reloadDialogue(rowId, dialogueId, state, true);
           watchedRows.delete(rowId);
           lifecycle.unwatchRow(rowId);
         }
@@ -132,6 +165,8 @@ export function useChatAgentRunLifecycle(options: {
       if (desiredRows.get(rowId)?.dialogueId === dialogueId) continue;
       lifecycle.unwatchRow(rowId);
       watchedRows.delete(rowId);
+      terminalReloadRequested.delete(rowId);
+      deferredTerminalReloads.delete(rowId);
     }
     for (const [rowId, desired] of desiredRows) {
       if (watchedRows.get(rowId) === desired.dialogueId) continue;
@@ -150,6 +185,8 @@ export function useChatAgentRunLifecycle(options: {
       if (ownerDialogueId !== dialogueId) continue;
       lifecycle.unwatchRow(rowId);
       watchedRows.delete(rowId);
+      terminalReloadRequested.delete(rowId);
+      deferredTerminalReloads.delete(rowId);
     }
   };
 
@@ -159,6 +196,8 @@ export function useChatAgentRunLifecycle(options: {
       stopWatchingStates();
       stopWatchingSnapshots();
       watchedRows.clear();
+      terminalReloadRequested.clear();
+      deferredTerminalReloads.clear();
       lifecycle.dispose();
     },
   };

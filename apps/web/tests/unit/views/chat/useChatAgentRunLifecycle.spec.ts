@@ -5,6 +5,7 @@ import {
   buildChatMessage,
   buildChatState,
 } from "../../../helpers/chatBuilders";
+import { deferred } from "../../../helpers/mockFactories";
 import { useChatAgentRunLifecycle } from "@/views/chat/composables/useChatAgentRunLifecycle";
 
 function lifecycle(
@@ -335,6 +336,72 @@ describe("useChatAgentRunLifecycle", () => {
     expect(reloadChat).toHaveBeenCalledOnce();
     expect(state.renderedChat?.messages[0]?.content).toBe("completed design");
     expect(fetchLifecycle).toHaveBeenCalledOnce();
+    coordinator.dispose();
+  });
+
+  it("queues one terminal reload after an in-flight material reload settles", async () => {
+    vi.useFakeTimers();
+    const materialReload = deferred<void>();
+    const terminalReload = deferred<void>();
+    const state = buildChatState({
+      historyHydration: "ready",
+      agentRunLifecycles: { "91": lifecycle(91) },
+      renderedChat: {
+        messages: [
+          buildChatMessage({
+            id: "91",
+            tool_name: "AnalystAgent",
+            status: "RUNNING",
+            content: "",
+          }),
+        ],
+      },
+    });
+    const chatStates = ref({ a: state });
+    const reloadChat = vi
+      .fn()
+      .mockReturnValueOnce(materialReload.promise)
+      .mockImplementationOnce(async () => {
+        await terminalReload.promise;
+        state.renderedChat = {
+          messages: [
+            buildChatMessage({
+              id: "91",
+              tool_name: "AnalystAgent",
+              status: "SUCCEEDED",
+              content: "completed analysis",
+            }),
+          ],
+        };
+      });
+    const fetchLifecycle = vi
+      .fn()
+      .mockResolvedValueOnce(response(lifecycle(91, { phase: "RUNNING" })))
+      .mockResolvedValueOnce(
+        response(lifecycle(91, { phase: "SUCCEEDED", terminal: true }))
+      );
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat,
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    await flush();
+    expect(reloadChat).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await flush();
+    materialReload.resolve();
+    await flush();
+
+    expect(reloadChat).toHaveBeenCalledTimes(2);
+    terminalReload.resolve();
+    await flush();
+
+    expect(state.renderedChat?.messages[0]?.content).toBe("completed analysis");
+    expect(state.agentRunLifecycles["91"]?.terminal).toBe(true);
     coordinator.dispose();
   });
 });
