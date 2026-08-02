@@ -31,7 +31,11 @@ const isElementUploadFile = (value: unknown): value is ElementUploadFile => {
   );
 };
 
-function fallbackItem(file: File, index: number): ResumableUploadItem {
+function fallbackItem(
+  file: File,
+  index: number,
+  purpose: UploadPurpose
+): ResumableUploadItem {
   return {
     localId: `legacy-upload-${Date.now()}-${index}`,
     file,
@@ -40,7 +44,7 @@ function fallbackItem(file: File, index: number): ResumableUploadItem {
     size: file.size,
     type: file.type,
     lastModified: file.lastModified,
-    purpose: "document",
+    purpose,
     status: "queued",
     partSize: 0,
     partCount: 0,
@@ -66,6 +70,7 @@ function reportValidation(
 export function useFileUpload(opts: {
   fileList: WritableComputedRef<ResumableUploadItem[]>;
   currentChatId: Ref<string>;
+  uploadPurpose: Readonly<Ref<UploadPurpose>>;
   getChatState: (dialogueId: string) => ChatUIState;
   composerRef: Ref<ChatComposerHandle | null>;
   scrollToBottom: () => Promise<void>;
@@ -79,6 +84,7 @@ export function useFileUpload(opts: {
   const {
     fileList,
     currentChatId,
+    uploadPurpose,
     getChatState,
     composerRef,
     scrollToBottom,
@@ -116,13 +122,14 @@ export function useFileUpload(opts: {
       }
     }
     if (accepted.length === 0) return;
+    const purpose = uploadPurpose.value;
 
     if (queueFiles) {
-      Promise.resolve(queueFiles(accepted, "document")).catch(() => undefined);
+      Promise.resolve(queueFiles(accepted, purpose)).catch(() => undefined);
     } else {
       chatState.fileList = [
         ...chatState.fileList,
-        ...accepted.map((file, index) => fallbackItem(file, index)),
+        ...accepted.map((file, index) => fallbackItem(file, index, purpose)),
       ];
     }
 

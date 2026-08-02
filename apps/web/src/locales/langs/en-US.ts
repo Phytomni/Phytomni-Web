@@ -1,5 +1,12 @@
 // English language pack.
 export default {
+  attachmentPurpose: {
+    dataset: "Analysis data",
+    document: "Reference material",
+    descriptionLabel: "Dataset description (optional)",
+    descriptionPlaceholder:
+      "Describe the dataset, organism, groups, and intended analysis",
+  },
   // Common parts
   common: {
     confirm: "Confirm",

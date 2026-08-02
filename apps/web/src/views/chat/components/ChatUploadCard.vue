@@ -17,6 +17,12 @@
           <span class="chat-upload-card__size">
             {{ formatBytes(item.size) }}
           </span>
+          <span
+            class="chat-upload-card__purpose"
+            data-testid="chat-upload-purpose"
+          >
+            {{ t(`attachmentPurpose.${item.purpose}`) }}
+          </span>
         </div>
         <span
           class="chat-upload-card__status"
@@ -234,6 +240,11 @@ const handleFileChange = (event: Event) => {
 
 .chat-upload-card__identity {
   gap: var(--phy-space-8);
+}
+
+.chat-upload-card__purpose {
+  color: var(--phy-color-text-secondary);
+  font-size: 0.75rem;
 }
 
 .chat-upload-card__name {

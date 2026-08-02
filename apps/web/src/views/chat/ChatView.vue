@@ -405,6 +405,12 @@ export function removeDeletedChat(options: {
                   :mode-usable="activeModeEnabled"
                   :show-mode-selector="!currentChat?.messages?.length"
                   :file-list="fileList"
+                  v-model:upload-purpose="uploadPurpose"
+                  v-model:dataset-description="datasetDescription"
+                  :allowed-upload-purposes="allowedUploadPurposes"
+                  :show-dataset-description="
+                    fileList.some((item) => item.purpose === 'dataset')
+                  "
                   :has-blocking-uploads="hasBlockingUploads"
                   :roles-loading="rolesLoading"
                   :has-messages="!!currentChat?.messages?.length"
@@ -682,6 +688,7 @@ import type {
   ChatUIState,
   DialogueReconciliationResult,
 } from "./types";
+import type { UploadPurpose } from "./upload/types";
 import type { BotRunProjection } from "./botProjection";
 import {
   cloneBotInterop,
@@ -917,6 +924,8 @@ const {
   chatMode,
   selectedAgent,
   fileList,
+  uploadPurpose,
+  datasetDescription,
   uploadTransfer,
   copyVisible,
   copyTimeRef,
@@ -924,6 +933,9 @@ const {
 } = useChatStates();
 
 const botCapabilities = useBotCapabilities("chat");
+const allowedUploadPurposes = computed<UploadPurpose[]>(() =>
+  botCapabilities.upload.value.enabled ? ["document"] : []
+);
 const uploadUsername = computed(() => userStore().name ?? "");
 const uploadQueue = useResumableUploads({
   currentChatId,
@@ -933,6 +945,18 @@ const uploadQueue = useResumableUploads({
   onValidationError: onAttachmentValidationError,
 });
 const hasBlockingUploads = computed(() => uploadQueue.hasBlockingUploads.value);
+
+watch(
+  [currentChatId, allowedUploadPurposes],
+  ([dialogueId, allowedPurposes]) => {
+    if (!dialogueId || allowedPurposes.includes(uploadPurpose.value)) return;
+    const fallback = allowedPurposes.includes("document")
+      ? "document"
+      : allowedPurposes[0];
+    if (fallback) uploadPurpose.value = fallback;
+  },
+  { immediate: true }
+);
 
 watch(
   currentChatId,
@@ -1611,6 +1635,7 @@ function analystLogErrorKind(
 const { handleFileChange, handlePastedFiles, removeFile } = useFileUpload({
   fileList,
   currentChatId,
+  uploadPurpose,
   getChatState,
   composerRef,
   scrollToBottom,

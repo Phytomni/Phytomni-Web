@@ -85,6 +85,10 @@ const baseProps = () => ({
   hasMessages: false,
   selectedAgent: "",
   pickerOptions,
+  uploadPurpose: "document" as const,
+  datasetDescription: "",
+  allowedUploadPurposes: ["document"] as const,
+  showDatasetDescription: false,
 });
 
 const mountComposer = (overrides: Record<string, unknown> = {}) =>
@@ -118,6 +122,12 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
             '<div class="chat-upload-card-stub"><button data-testid="stub-remove" @click="$emit(\'remove\', item.localId)">Remove</button></div>',
           props: ["item"],
           emits: ["pause", "resume", "retry", "reselect", "cancel", "remove"],
+        },
+        AttachmentPurposeSelector: {
+          name: "AttachmentPurposeSelector",
+          template: '<div data-testid="attachment-purpose-selector-stub" />',
+          props: ["modelValue", "allowedPurposes", "disabled"],
+          emits: ["update:modelValue"],
         },
         ElUpload: {
           name: "ElUpload",
@@ -428,6 +438,20 @@ describe("ChatComposer", () => {
       .findComponent({ name: "ChatUploadCard" })
       .vm.$emit("remove", file.localId);
     expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
+  });
+
+  it("shows purpose controls but hides the dataset description for a document-only queue", () => {
+    const wrapper = mountComposer({
+      allowedUploadPurposes: ["document"],
+      showDatasetDescription: false,
+    });
+
+    expect(
+      wrapper.find('[data-testid="attachment-purpose-selector-stub"]').exists()
+    ).toBe(true);
+    expect(wrapper.find('[data-testid="dataset-description"]').exists()).toBe(
+      false
+    );
   });
 
   it("blocks only send while an upload is incomplete and keeps the editor usable", () => {

@@ -6,6 +6,12 @@
  * 既往不恋！当下不杂！！未来不迎！！！
  */
 export default {
+  attachmentPurpose: {
+    dataset: "分析数据",
+    document: "参考材料",
+    descriptionLabel: "数据集描述（可选）",
+    descriptionPlaceholder: "描述数据集、物种、分组和预期分析",
+  },
   // 通用部分
   common: {
     confirm: "确认",

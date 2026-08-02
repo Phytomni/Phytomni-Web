@@ -26,6 +26,7 @@ describe("useFileUpload", () => {
   let chatState: ChatUIState;
   let fileList: Ref<ResumableUploadItem[]>;
   let currentChatId: Ref<string>;
+  let uploadPurpose: Ref<"dataset" | "document">;
   let getChatState: (dialogueId: string) => ChatUIState;
   let composerRef: Ref<ChatComposerHandle | null>;
   let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
@@ -36,6 +37,7 @@ describe("useFileUpload", () => {
     chatState = buildChatState();
     fileList = ref<ResumableUploadItem[]>([]);
     currentChatId = ref("d1");
+    uploadPurpose = ref("document");
     getChatState = () => chatState;
     composerRef = ref({
       openHeader: vi.fn(),
@@ -105,6 +107,7 @@ describe("useFileUpload", () => {
     return useFileUpload({
       fileList: writableRef(fileList),
       currentChatId,
+      uploadPurpose,
       getChatState,
       composerRef,
       scrollToBottom,
@@ -124,6 +127,7 @@ describe("useFileUpload", () => {
   }
 
   it("adapts picker files into the resumable queue item shape", async () => {
+    uploadPurpose.value = "dataset";
     const { handleFileChange } = makeComposable();
     const browserFile = rawFile("a.txt");
 
@@ -136,6 +140,7 @@ describe("useFileUpload", () => {
         size: browserFile.size,
         type: "text/plain",
         file: browserFile,
+        purpose: "dataset",
         status: "queued",
       })
     );
@@ -148,12 +153,13 @@ describe("useFileUpload", () => {
 
   it("forwards accepted files to the queue without applying an extension allowlist", () => {
     const queueFiles = vi.fn();
+    uploadPurpose.value = "dataset";
     const { handlePastedFiles } = makeComposable({ queueFiles });
     const pasted = sizedFile("reads.fastq.gz", 128, "application/gzip");
 
     handlePastedFiles([pasted]);
 
-    expect(queueFiles).toHaveBeenCalledWith([pasted], "document");
+    expect(queueFiles).toHaveBeenCalledWith([pasted], "dataset");
     expect(chatState.fileList).toHaveLength(0);
     expect(onValidationError).not.toHaveBeenCalled();
   });

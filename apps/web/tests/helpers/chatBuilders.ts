@@ -7,6 +7,8 @@ export function buildChatState(
     isSending: false,
     messageInput: "",
     fileList: [],
+    uploadPurpose: "document",
+    datasetDescription: "",
     historyQuestion: null,
     historyHydration: "new",
     historyErrorKind: null,

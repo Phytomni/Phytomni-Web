@@ -26,6 +26,7 @@ function makeItem(
     size: 1024,
     type: "application/octet-stream",
     lastModified: 1,
+    purpose: "document",
     status: "uploading",
     partSize: 1024,
     partCount: 1,
@@ -58,6 +59,23 @@ function mountCard(item: ResumableUploadItem, attachToDocument = false) {
 }
 
 describe("ChatUploadCard", () => {
+  it.each([
+    ["document", "Reference material"],
+    ["dataset", "Analysis data"],
+  ] as const)(
+    "renders the localized immutable %s purpose",
+    (purpose, label) => {
+      const wrapper = mountCard(makeItem({ purpose }));
+
+      expect(wrapper.get('[data-testid="chat-upload-purpose"]').text()).toBe(
+        label
+      );
+      expect(
+        wrapper.find('[data-testid="chat-upload-purpose"] button').exists()
+      ).toBe(false);
+    }
+  );
+
   it.each(statusLabels)(
     "renders the %s lifecycle status with real progress semantics",
     (status, label) => {

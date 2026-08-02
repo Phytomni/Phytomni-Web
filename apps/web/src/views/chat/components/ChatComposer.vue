@@ -79,6 +79,30 @@
           </div>
 
           <div class="composer-utility-actions">
+            <AttachmentPurposeSelector
+              :model-value="uploadPurpose"
+              :allowed-purposes="allowedUploadPurposes"
+              :disabled="composerDisabled || allowedUploadPurposes.length === 0"
+              @update:model-value="emit('update:uploadPurpose', $event)"
+            />
+            <div
+              v-if="showDatasetDescription"
+              class="composer-dataset-description"
+            >
+              <label for="dataset-description">
+                {{ t("attachmentPurpose.descriptionLabel") }}
+              </label>
+              <el-input
+                id="dataset-description"
+                data-testid="dataset-description"
+                :model-value="datasetDescription"
+                :placeholder="t('attachmentPurpose.descriptionPlaceholder')"
+                :disabled="composerDisabled"
+                type="textarea"
+                :autosize="{ minRows: 1, maxRows: 3 }"
+                @update:model-value="emit('update:datasetDescription', $event)"
+              />
+            </div>
             <el-upload
               ref="uploadRef"
               class="upload-demo"
@@ -198,8 +222,10 @@ import ChatAgentPicker, {
 } from "./ChatAgentPicker.vue";
 import ChatAgentQuickSelect from "./ChatAgentQuickSelect.vue";
 import ChatUploadCard from "./ChatUploadCard.vue";
+import AttachmentPurposeSelector from "./AttachmentPurposeSelector.vue";
 import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
 import type { ChatComposerHandle, ResumableUploadItem } from "../types";
+import type { UploadPurpose } from "../upload/types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
 
 const props = defineProps<{
@@ -216,12 +242,18 @@ const props = defineProps<{
   hasMessages: boolean;
   selectedAgent: string;
   pickerOptions: ChatAgentPickerOption[];
+  uploadPurpose: UploadPurpose;
+  datasetDescription: string;
+  allowedUploadPurposes: readonly UploadPurpose[];
+  showDatasetDescription: boolean;
   setTourInputTarget?: (el: HTMLElement | null) => void;
 }>();
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
   "update:chatMode": [mode: "instant" | "expert"];
+  "update:uploadPurpose": [value: UploadPurpose];
+  "update:datasetDescription": [value: string];
   submit: [];
   stop: [];
   select: [option: MentionOption];
@@ -424,6 +456,17 @@ defineExpose<ChatComposerHandle>({
 
 .composer-utility-actions {
   gap: var(--phy-space-4);
+}
+
+.composer-dataset-description {
+  display: grid;
+  gap: var(--phy-space-4);
+  min-width: min(100%, 18rem);
+}
+
+.composer-dataset-description label {
+  color: var(--phy-color-text-secondary);
+  font-size: 0.75rem;
 }
 
 .composer-tooltip-anchor {
