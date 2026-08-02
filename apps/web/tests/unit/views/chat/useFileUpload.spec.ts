@@ -153,7 +153,7 @@ describe("useFileUpload", () => {
 
     handlePastedFiles([pasted]);
 
-    expect(queueFiles).toHaveBeenCalledWith([pasted]);
+    expect(queueFiles).toHaveBeenCalledWith([pasted], "document");
     expect(chatState.fileList).toHaveLength(0);
     expect(onValidationError).not.toHaveBeenCalled();
   });

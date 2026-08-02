@@ -185,7 +185,7 @@ describe("useResumableUploads", () => {
     const { queue, getChatState, currentChatId } = setup();
     const file = fixtureFile("reads.fastq.gz");
 
-    await queue.queueFiles([file]);
+    await queue.queueFiles([file], "document");
     await vi.waitFor(() => {
       expect(getChatState("A").fileList[0]?.status).toBe("completed");
     });
@@ -205,9 +205,9 @@ describe("useResumableUploads", () => {
   it("isolates simultaneous A/B queues and aggregate snapshots", async () => {
     const { queue, getChatState, currentChatId } = setup();
 
-    await queue.queueFiles([fixtureFile("a.bam")]);
+    await queue.queueFiles([fixtureFile("a.bam")], "document");
     currentChatId.value = "B";
-    await queue.queueFiles([fixtureFile("b.vcf")]);
+    await queue.queueFiles([fixtureFile("b.vcf")], "document");
 
     await vi.waitFor(() => {
       expect(getChatState("A").fileList[0]?.status).toBe("completed");
@@ -223,7 +223,7 @@ describe("useResumableUploads", () => {
 
   it("moves the engine registry across a temporary-to-canonical dialogue rekey", async () => {
     const { queue, getChatState, states } = setup();
-    await queue.queueFiles([fixtureFile("pending.bam")]);
+    await queue.queueFiles([fixtureFile("pending.bam")], "document");
     const sourceState = getChatState("A");
     states.set("server-1", sourceState);
     states.delete("A");
@@ -244,7 +244,7 @@ describe("useResumableUploads", () => {
       upload_origin: "",
     };
 
-    await queue.queueFiles([fixtureFile("blocked.fastq")]);
+    await queue.queueFiles([fixtureFile("blocked.fastq")], "document");
 
     expect(mocks.createUpload).not.toHaveBeenCalled();
     expect(onValidationError).toHaveBeenCalledWith(
@@ -274,7 +274,7 @@ describe("useResumableUploads", () => {
     });
     mocks.createUploadDataPlane.mockReturnValue(data);
 
-    await queue.queueFiles([fixtureFile("during-switch.fasta")]);
+    await queue.queueFiles([fixtureFile("during-switch.fasta")], "document");
     await started;
 
     capability.value = {
@@ -306,10 +306,10 @@ describe("useResumableUploads", () => {
       return data;
     });
 
-    await queue.queueFiles([
-      fixtureFile("failed-input.fasta"),
-      fixtureFile("sibling-input.vcf.gz"),
-    ]);
+    await queue.queueFiles(
+      [fixtureFile("failed-input.fasta"), fixtureFile("sibling-input.vcf.gz")],
+      "document"
+    );
 
     await vi.waitFor(() => {
       expect(getChatState("A").fileList).toHaveLength(2);
@@ -321,9 +321,9 @@ describe("useResumableUploads", () => {
 
   it("cancels all incomplete items for one dialogue without touching another", async () => {
     const { queue, getChatState, currentChatId } = setup();
-    await queue.queueFiles([fixtureFile("a.fastq")]);
+    await queue.queueFiles([fixtureFile("a.fastq")], "document");
     currentChatId.value = "B";
-    await queue.queueFiles([fixtureFile("b.fastq")]);
+    await queue.queueFiles([fixtureFile("b.fastq")], "document");
     await vi.waitFor(() => {
       expect(getChatState("A").fileList[0]).toBeTruthy();
       expect(getChatState("B").fileList[0]?.status).toBe("completed");
@@ -333,6 +333,35 @@ describe("useResumableUploads", () => {
 
     expect(getChatState("A").uploadTransfer).toBeNull();
     expect(getChatState("B").fileList[0]?.status).toBe("completed");
+    await queue.dispose();
+  });
+
+  it("retains distinct purposes selected in separate picker actions", async () => {
+    const { queue, getChatState } = setup();
+
+    await queue.queueFiles([fixtureFile("reference.pdf")], "document");
+    await queue.queueFiles([fixtureFile("reads.fastq.gz")], "dataset");
+
+    await vi.waitFor(() => {
+      expect(getChatState("A").fileList).toHaveLength(2);
+      expect(
+        getChatState("A").fileList.every((item) => item.status === "completed")
+      ).toBe(true);
+    });
+    expect(getChatState("A").fileList.map((item) => item.purpose)).toEqual([
+      "document",
+      "dataset",
+    ]);
+    expect(mocks.createUpload).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ purpose: "document" }),
+      expect.any(String)
+    );
+    expect(mocks.createUpload).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ purpose: "dataset" }),
+      expect.any(String)
+    );
     await queue.dispose();
   });
 });

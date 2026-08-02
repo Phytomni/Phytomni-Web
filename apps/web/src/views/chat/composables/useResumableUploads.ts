@@ -27,7 +27,10 @@ import {
   createUploadRecoveryStore,
   type UploadRecoveryStore,
 } from "@/views/chat/upload/store";
-import type { ResumableUploadItem } from "@/views/chat/upload/types";
+import type {
+  ResumableUploadItem,
+  UploadPurpose,
+} from "@/views/chat/upload/types";
 import { validateUploadFile } from "@/views/chat/upload/validation";
 import type { ChatUIState } from "../types";
 import type { ChatAttachmentValidationError } from "./useFileUpload";
@@ -216,7 +219,10 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
       options.browserMemoryLimit ?? defaultBrowserMemoryLimit(),
   });
 
-  const queueFiles = async (files: readonly File[]): Promise<void> => {
+  const queueFiles = async (
+    files: readonly File[],
+    purpose: UploadPurpose
+  ): Promise<void> => {
     const dialogueId = options.currentChatId.value;
     if (!dialogueId) return;
     const capability = options.uploadCapability.value;
@@ -265,7 +271,8 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
           item.name === validation.normalizedName &&
           item.size === file.size &&
           item.type === file.type &&
-          item.lastModified === file.lastModified
+          item.lastModified === file.lastModified &&
+          item.purpose === purpose
       );
       if (existing) {
         engines.get(existing.localId)?.reselect(file);
@@ -279,6 +286,7 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
           accountScope,
           file,
           idempotencyKey: newUUID(),
+          purpose,
         },
         depsFor(EMPTY_DATA_PLANE),
         { onChange: (item) => setItem(dialogueId, item) }
@@ -411,6 +419,7 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
           accountScope: scope,
           file: null,
           idempotencyKey: recovered.idempotencyKey,
+          purpose: recovered.purpose,
           recovered,
         },
         depsFor(data),

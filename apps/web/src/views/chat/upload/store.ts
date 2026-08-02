@@ -1,5 +1,5 @@
 import { validateUploadFile } from "@/views/chat/upload/validation";
-import type { UploadStatus } from "@/views/chat/upload/types";
+import type { UploadPurpose, UploadStatus } from "@/views/chat/upload/types";
 
 export const UPLOAD_RECOVERY_DB_NAME = "phytomni-resumable-uploads";
 export const UPLOAD_RECOVERY_DB_VERSION = 1;
@@ -34,6 +34,7 @@ const RECORD_KEYS = new Set([
   "size",
   "type",
   "lastModified",
+  "purpose",
   "partSize",
   "partCount",
   "partSizes",
@@ -53,6 +54,7 @@ export interface UploadRecoveryRecord {
   size: number;
   type: string;
   lastModified: number;
+  purpose: UploadPurpose;
   partSize: number;
   partCount: number;
   partSizes: number[];
@@ -106,6 +108,12 @@ export interface UploadRecoveryStore {
 
 function invalidRecord(): never {
   throw new UploadRecoveryError("upload_recovery_corrupt");
+}
+
+function recoveryPurpose(value: unknown): UploadPurpose {
+  if (value === undefined) return "document";
+  if (value === "dataset" || value === "document") return value;
+  return invalidRecord();
 }
 
 function safeId(value: unknown): value is string {
@@ -183,6 +191,7 @@ function validateRecoveryRecord(value: unknown): UploadRecoveryRecord {
     invalidRecord();
   }
   const record = value as Record<string, unknown>;
+  const purpose = recoveryPurpose(record.purpose);
   if (
     typeof record.accountScope !== "string" ||
     !/^[0-9a-f]{64}$/.test(record.accountScope) ||
@@ -259,6 +268,7 @@ function validateRecoveryRecord(value: unknown): UploadRecoveryRecord {
     size: record.size,
     type: record.type,
     lastModified: record.lastModified,
+    purpose,
     partSize,
     partCount,
     partSizes: [...record.partSizes],

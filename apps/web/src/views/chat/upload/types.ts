@@ -9,6 +9,8 @@ export type UploadStatus =
   | "aborted"
   | "expired";
 
+export type UploadPurpose = "dataset" | "document";
+
 /** Serializable, non-secret state for one browser-to-Bot asset. */
 export interface ResumableUploadItem {
   localId: string;
@@ -18,6 +20,7 @@ export interface ResumableUploadItem {
   size: number;
   type: string;
   lastModified: number;
+  purpose: UploadPurpose;
   status: UploadStatus;
   partSize: number;
   partCount: number;

@@ -404,7 +404,10 @@ describe("ResearchAgentView", () => {
     await fileInput.trigger("change");
 
     mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_paper" }];
-    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([paper]);
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith(
+      [paper],
+      "dataset"
+    );
     await wrapper.get('[data-test="research-submit"]').trigger("click");
 
     expect(mocks.submit).toHaveBeenCalledWith(
@@ -431,7 +434,10 @@ describe("ResearchAgentView", () => {
     });
     await input.trigger("change");
 
-    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([reads]);
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith(
+      [reads],
+      "dataset"
+    );
     wrapper.unmount();
   });
 

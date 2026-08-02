@@ -62,6 +62,7 @@ function record(
     size: 6,
     type: "application/octet-stream",
     lastModified: 1,
+    purpose: "document",
     partSize: 0,
     partCount: 0,
     partSizes: [],
@@ -105,7 +106,8 @@ class MemoryStore implements UploadRecoveryStore {
 
 function input(
   file: File | null,
-  recovered?: UploadRecoveryRecord
+  recovered?: UploadRecoveryRecord,
+  purpose: "dataset" | "document" = "document"
 ): ResumableUploadEngineInput {
   return {
     localId: "local-1",
@@ -113,6 +115,7 @@ function input(
     accountScope,
     file,
     idempotencyKey: "1c2d3e4f-5061-4789-8abc-def012345678",
+    purpose,
     recovered,
   };
 }
@@ -191,9 +194,10 @@ describe("resumable upload engine", () => {
       part_count: 1,
       max_parallel_parts: 1,
     };
+    const deps = makeDeps(store, data, {}, session);
     const engine = createResumableUploadEngine(
-      input(file),
-      makeDeps(store, data, {}, session)
+      input(file, undefined, "dataset"),
+      deps
     );
 
     await engine.start();
@@ -209,7 +213,12 @@ describe("resumable upload engine", () => {
     await expect(store.load(accountScope, "local-1")).resolves.toMatchObject({
       status: "completed",
       assetId: "file_abc123",
+      purpose: "dataset",
     });
+    expect(deps.control.create).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: "dataset" }),
+      expect.any(String)
+    );
   });
 
   it("marks an unknown completion outcome complete when HEAD confirms it", async () => {

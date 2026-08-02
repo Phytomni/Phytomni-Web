@@ -1,6 +1,7 @@
 import type { ApiEnvelope } from "@/api/types";
 import { requestApi } from "@/api/types";
 import { isRecord } from "@/api/contracts";
+import type { UploadPurpose } from "@/views/chat/upload/types";
 
 export const RESUMABLE_UPLOAD_PROTOCOL = "obs-multipart-v2";
 export const RESUMABLE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024 * 1024;
@@ -12,6 +13,7 @@ export interface UploadCreateMetadata {
   size_bytes: number;
   content_type_hint: string;
   last_modified_ms: number;
+  purpose: UploadPurpose;
 }
 
 export interface UploadSession {

@@ -2,7 +2,7 @@ import { nextTick, watch } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
 import type { UploadFile as ElementUploadFile } from "element-plus";
 import type { ChatComposerHandle, ChatUIState } from "../types";
-import type { ResumableUploadItem } from "../upload/types";
+import type { ResumableUploadItem, UploadPurpose } from "../upload/types";
 import {
   RESUMABLE_UPLOAD_LIMITS,
   validateUploadFile,
@@ -40,6 +40,7 @@ function fallbackItem(file: File, index: number): ResumableUploadItem {
     size: file.size,
     type: file.type,
     lastModified: file.lastModified,
+    purpose: "document",
     status: "queued",
     partSize: 0,
     partCount: 0,
@@ -68,7 +69,10 @@ export function useFileUpload(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
   composerRef: Ref<ChatComposerHandle | null>;
   scrollToBottom: () => Promise<void>;
-  queueFiles?: (files: readonly File[]) => void | Promise<void>;
+  queueFiles?: (
+    files: readonly File[],
+    purpose: UploadPurpose
+  ) => void | Promise<void>;
   removeUpload?: (item: ResumableUploadItem) => void | Promise<void>;
   onValidationError?: (error: ChatAttachmentValidationError) => void;
 }) {
@@ -114,7 +118,7 @@ export function useFileUpload(opts: {
     if (accepted.length === 0) return;
 
     if (queueFiles) {
-      Promise.resolve(queueFiles(accepted)).catch(() => undefined);
+      Promise.resolve(queueFiles(accepted, "document")).catch(() => undefined);
     } else {
       chatState.fileList = [
         ...chatState.fileList,

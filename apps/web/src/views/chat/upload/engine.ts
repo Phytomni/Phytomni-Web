@@ -8,6 +8,7 @@ import {
 } from "@/api/upload";
 import type {
   ResumableUploadItem,
+  UploadPurpose,
   UploadStatus,
 } from "@/views/chat/upload/types";
 import {
@@ -69,6 +70,7 @@ export interface ResumableUploadEngineInput {
   accountScope: string;
   file: File | null;
   idempotencyKey: string;
+  purpose: UploadPurpose;
   recovered?: UploadRecoveryRecord;
 }
 
@@ -157,6 +159,7 @@ function metadataForItem(item: ResumableUploadItem): UploadCreateMetadata {
     size_bytes: item.size,
     content_type_hint: item.type,
     last_modified_ms: item.lastModified,
+    purpose: item.purpose,
   };
 }
 
@@ -236,6 +239,7 @@ export class ResumableUploadEngine {
       size: input.file.size,
       type: input.file.type,
       lastModified: input.file.lastModified,
+      purpose: input.purpose,
       status: "queued",
       partSize: 0,
       partCount: 0,
@@ -261,6 +265,7 @@ export class ResumableUploadEngine {
       size: record.size,
       type: record.type,
       lastModified: record.lastModified,
+      purpose: record.purpose,
       status: record.status,
       partSize: record.partSize,
       partCount: record.partCount,
@@ -317,6 +322,7 @@ export class ResumableUploadEngine {
       size: this.item.size,
       type: this.item.type,
       lastModified: this.item.lastModified,
+      purpose: this.item.purpose,
       partSize: this.item.partSize,
       partCount: this.item.partCount,
       partSizes: [...this.partSizes],
