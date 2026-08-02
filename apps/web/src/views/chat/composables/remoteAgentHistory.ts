@@ -19,11 +19,15 @@ export interface RemoteAgentHistorySnapshot {
   dialogueId: string | null;
 }
 
+function isUnknownArray(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
 function isHistoryRecord(value: unknown): value is HistoryRecord {
   return (
     typeof value === "object" &&
     value !== null &&
-    !Array.isArray(value) &&
+    !isUnknownArray(value) &&
     Object.prototype.toString.call(value) === "[object Object]"
   );
 }
@@ -40,12 +44,12 @@ function safeHistoryIdentity(value: unknown, pattern: RegExp): string | null {
 
 function historyArtifactPaths(value: unknown): string[] {
   const values: unknown[] = [];
-  if (Array.isArray(value)) {
+  if (isUnknownArray(value)) {
     values.push(...value.slice(0, MAX_HISTORY_ARTIFACTS));
   } else if (typeof value === "string" && value.trim() !== "") {
     try {
       const parsed: unknown = JSON.parse(value);
-      if (Array.isArray(parsed)) {
+      if (isUnknownArray(parsed)) {
         values.push(...parsed.slice(0, MAX_HISTORY_ARTIFACTS));
       } else {
         values.push(value);

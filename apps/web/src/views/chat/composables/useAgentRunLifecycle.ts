@@ -31,7 +31,7 @@ function materialChanged(
   previous: AgentTaskLifecycle | undefined,
   next: AgentTaskLifecycle
 ): boolean {
-  if (!previous) return false;
+  if (!previous) return next.terminal;
   return (
     previous.phase !== next.phase ||
     previous.child_task_count !== next.child_task_count ||

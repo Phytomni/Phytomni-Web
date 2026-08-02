@@ -267,6 +267,65 @@ describe("useRemoteAgentLifecycle", () => {
     controller.dispose();
   });
 
+  it("hydrates terminal history when the first lifecycle snapshot is terminal", async () => {
+    const state = ref(runState());
+    const hydrate = vi.fn();
+    mocks.getTaskLifecycle.mockResolvedValueOnce({
+      data: lifecycle({
+        phase: "SUCCEEDED",
+        terminal: true,
+        report_revision: 2,
+        artifact_summary: {
+          image_count: 1,
+          output_directory_count: 1,
+          has_report: true,
+        },
+      }),
+    });
+    mocks.getAnswerCheck.mockResolvedValueOnce({
+      code: 200,
+      data: [
+        historyRow({
+          status: "SUCCEEDED",
+          report_revision: 2,
+          answer: JSON.stringify({ final_report: "Network final" }),
+          download_path: "/obs/bucket/network",
+          image_paths: JSON.stringify(["/obs/bucket/network/network.png"]),
+        }),
+      ],
+    });
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      run: { state, hydrate },
+      dialogueId: "dialogue-42",
+    });
+
+    await flushAsync();
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledWith({
+      dialogue_id: "dialogue-42",
+    });
+    expect(hydrate).toHaveBeenCalledTimes(1);
+    expect(hydrate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "SUCCEEDED",
+        finalReport: "Network final",
+        artifacts: [
+          {
+            outputDir: "/obs/bucket/network",
+            paths: ["/obs/bucket/network/network.png"],
+          },
+        ],
+      }),
+      { dialogueId: "dialogue-42", messageId: "19" }
+    );
+    const terminalPolls = mocks.getTaskLifecycle.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.getTaskLifecycle).toHaveBeenCalledTimes(terminalPolls);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+
   it("ignores a history response that arrives after reset", async () => {
     let resolveHistory: ((value: unknown) => void) | undefined;
     mocks.getTaskLifecycle

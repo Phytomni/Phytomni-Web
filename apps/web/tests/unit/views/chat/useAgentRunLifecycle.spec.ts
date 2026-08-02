@@ -113,23 +113,27 @@ describe("useAgentRunLifecycle", () => {
   it("schedules unchanged nonterminal rows with capped exponential delays", async () => {
     vi.useFakeTimers();
     const delays: number[] = [];
+    const onSnapshot = vi.fn();
     const fetchLifecycle = vi.fn().mockResolvedValue(response(lifecycle()));
     const poller = useAgentRunLifecycle({
       scope: "chat:1",
       fetchLifecycle,
       jitter: () => 0,
       scheduler: testScheduler(delays),
+      onSnapshot,
     });
 
     poller.watchRow("42");
     await flush();
     expect(fetchLifecycle).toHaveBeenCalledTimes(1);
+    expect(onSnapshot).not.toHaveBeenCalled();
 
     for (const delay of [1000, 2000, 4000, 8000]) {
       await vi.advanceTimersByTimeAsync(delay);
       expect(fetchLifecycle).toHaveBeenCalledTimes(delays.length);
     }
     expect(delays).toEqual([1000, 2000, 4000, 8000, 15000]);
+    expect(onSnapshot).not.toHaveBeenCalled();
     poller.dispose();
   });
 
@@ -166,6 +170,7 @@ describe("useAgentRunLifecycle", () => {
 
   it("stops terminal rows permanently", async () => {
     vi.useFakeTimers();
+    const onSnapshot = vi.fn();
     const fetchLifecycle = vi
       .fn()
       .mockResolvedValue(
@@ -174,6 +179,7 @@ describe("useAgentRunLifecycle", () => {
     const poller = useAgentRunLifecycle({
       scope: "chat:1",
       fetchLifecycle,
+      onSnapshot,
       jitter: () => 0,
       scheduler: testScheduler(),
     });
@@ -184,6 +190,12 @@ describe("useAgentRunLifecycle", () => {
 
     expect(fetchLifecycle).toHaveBeenCalledOnce();
     expect(poller.snapshots.value["42"].terminal).toBe(true);
+    expect(onSnapshot).toHaveBeenCalledTimes(1);
+    expect(onSnapshot).toHaveBeenCalledWith(
+      "42",
+      expect.objectContaining({ phase: "SUCCEEDED", terminal: true }),
+      undefined
+    );
     poller.dispose();
   });
 

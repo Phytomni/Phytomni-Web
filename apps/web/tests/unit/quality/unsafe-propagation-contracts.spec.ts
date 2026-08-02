@@ -35,7 +35,9 @@ describe("unsafe propagation contracts", () => {
   it("keeps object-entry and array-spread boundaries typed as unknown", () => {
     const utils = source("utils/index.ts");
     const projection = source("views/chat/botProjection.ts");
-    const research = source("views/research-agent/ResearchAgentView.vue");
+    const remoteAgentHistory = source(
+      "views/chat/composables/remoteAgentHistory.ts"
+    );
 
     expect(utils).toContain(
       "function entriesOf(value: object): Array<[string, unknown]>"
@@ -44,7 +46,7 @@ describe("unsafe propagation contracts", () => {
     expect(projection).toContain(
       "function isUnknownArray(value: unknown): value is readonly unknown[]"
     );
-    expect(research).toContain(
+    expect(remoteAgentHistory).toContain(
       "function isUnknownArray(value: unknown): value is readonly unknown[]"
     );
 
