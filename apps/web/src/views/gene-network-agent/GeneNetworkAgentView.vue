@@ -309,6 +309,7 @@ import {
   useBotRemoteAgentRun,
   type BotRemoteAgentRunState,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
+import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgentLifecycle";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
@@ -357,6 +358,11 @@ const run = useBotRemoteAgentRun({
   dialogueId,
   getChatState,
   capabilities,
+});
+const remoteLifecycle = useRemoteAgentLifecycle({
+  tool: "GeneNetworkAgent",
+  run,
+  dialogueId,
 });
 
 const question = ref("");
@@ -500,10 +506,12 @@ async function submitNetwork(): Promise<void> {
 }
 
 function cancelNetwork(): void {
+  remoteLifecycle.reset();
   run.cancel();
 }
 
 function resetNetwork(): void {
+  remoteLifecycle.reset();
   run.reset();
   question.value = "";
   toId.value = "";
@@ -514,6 +522,7 @@ function resetNetwork(): void {
 }
 
 function goBack(): void {
+  remoteLifecycle.dispose();
   router.back();
 }
 
@@ -551,6 +560,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  remoteLifecycle.dispose();
   run.cancel();
 });
 </script>

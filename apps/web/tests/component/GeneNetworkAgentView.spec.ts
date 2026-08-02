@@ -1,11 +1,15 @@
+import { ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentTaskLifecycle } from "@/api/types";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import GeneNetworkAgentView from "@/views/gene-network-agent/GeneNetworkAgentView.vue";
+import type { BotRunProjection } from "@/views/chat/botProjection";
+import type { BotRemoteAgentRunState } from "@/views/chat/composables/useBotRemoteAgentRun";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => {
-  const state = {
+  const state: { value: BotRemoteAgentRunState } = {
     value: {
       runId: null,
       status: "RUNNING" as const,
@@ -49,18 +53,27 @@ const mocks = vi.hoisted(() => {
     state,
     capabilities,
     submit: vi.fn().mockResolvedValue(null),
+    hydrate: vi.fn(),
     useBotRemoteAgentRun: vi.fn(),
     cancel: vi.fn().mockReturnValue(true),
     reset: vi.fn(),
     getChatState: vi.fn(() => ({})),
     getChatdownloadURL: vi.fn(),
+    getAnswerCheck: vi.fn().mockResolvedValue({ code: 200, data: [] }),
+    getTaskLifecycle: vi.fn(),
     routerBack: vi.fn(),
   };
 });
 
 vi.mock("@/api/chat", () => ({
   getChatdownloadURL: mocks.getChatdownloadURL,
+  getAnswerCheck: mocks.getAnswerCheck,
 }));
+
+vi.mock("@/api/task", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/task")>();
+  return { ...actual, getTaskLifecycle: mocks.getTaskLifecycle };
+});
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
   useBotCapabilities: () => mocks.capabilities,
@@ -73,6 +86,7 @@ vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
 mocks.useBotRemoteAgentRun.mockImplementation(() => ({
   state: mocks.state,
   submit: mocks.submit,
+  hydrate: mocks.hydrate,
   cancel: mocks.cancel,
   reset: mocks.reset,
 }));
@@ -115,10 +129,12 @@ function mountView(options: { state?: BotLifecycleState } = {}) {
         BotReportState: {
           props: ["state"],
           template:
-            '<div data-test="bot-report-state"><span v-if="state.degraded" data-test="network-degraded">degraded</span></div>',
+            '<div data-test="bot-report-state"><span v-if="state.degraded" data-test="network-degraded">degraded</span><span data-test="network-report-text">{{ state.visibleReport }}</span></div>',
         },
         BotArtifactList: {
-          template: '<div data-test="bot-artifact-list" />',
+          props: ["artifacts"],
+          template:
+            '<div data-test="bot-artifact-list">{{ artifacts.map((artifact) => artifact.outputDir).join(",") }}</div>',
         },
       },
     },
@@ -126,7 +142,7 @@ function mountView(options: { state?: BotLifecycleState } = {}) {
 }
 
 function resetState(): void {
-  mocks.state.value = {
+  mocks.state = ref({
     runId: null,
     status: "RUNNING",
     reportRevision: -1,
@@ -143,7 +159,7 @@ function resetState(): void {
     error: null,
     dialogueId: null,
     messageId: null,
-  };
+  });
   mocks.capabilities.loaded.value = true;
   REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live = true;
   mocks.capabilities.byTool.value.GeneNetworkAgent = {
@@ -159,8 +175,32 @@ function resetState(): void {
   };
 }
 
+function lifecycle(
+  overrides: Partial<AgentTaskLifecycle> = {}
+): AgentTaskLifecycle {
+  return {
+    id: 19,
+    phase: "PREPARING",
+    terminal: false,
+    child_task_count: 1,
+    child_work_accepted: true,
+    report_revision: 0,
+    artifact_summary: {
+      image_count: 0,
+      output_directory_count: 0,
+      has_report: false,
+    },
+    reconciliation: "FRESH",
+    tracking_degraded: false,
+    error_code: null,
+    ...overrides,
+  };
+}
+
 afterEach(() => {
   REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live = false;
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 function degradedState(): BotLifecycleState {
@@ -183,12 +223,29 @@ describe("GeneNetworkAgentView", () => {
     mocks.useBotRemoteAgentRun.mockImplementation(() => ({
       state: mocks.state,
       submit: mocks.submit,
+      hydrate: mocks.hydrate,
       cancel: mocks.cancel,
       reset: mocks.reset,
     }));
     resetState();
     mocks.submit.mockResolvedValue(null);
+    mocks.hydrate.mockImplementation((next: BotRunProjection) => {
+      mocks.state.value = {
+        ...mocks.state.value,
+        runId: next.runId,
+        status: next.status === "SUCCEEDED" ? "SUCCEEDED" : "RUNNING",
+        phase: next.status === "SUCCEEDED" ? "succeeded" : "running",
+        reportRevision: next.reportRevision,
+        visibleReport: next.finalReport || next.intermediateReport,
+        intermediateReport: next.intermediateReport,
+        finalReport: next.finalReport,
+        artifacts: next.artifacts,
+        projection: next,
+      };
+    });
     mocks.capabilities.load.mockResolvedValue([]);
+    mocks.getAnswerCheck.mockResolvedValue({ code: 200, data: [] });
+    mocks.getTaskLifecycle.mockResolvedValue({ data: lifecycle() });
   });
 
   it("passes the Gene Network tool to the shared product runner", () => {
@@ -372,6 +429,126 @@ describe("GeneNetworkAgentView", () => {
 
     await wrapper.get('[data-test="network-reset"]').trigger("click");
     expect(mocks.reset).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it("reconciles preparing, running, and terminal network reports after 24 seconds", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const runningProjection: BotRunProjection = {
+      runId: "run-network",
+      agent: "GeneNetworkAgent",
+      status: "RUNNING",
+      reportPresentation: true,
+      reportStage: null,
+      reportCompleteness: "partial",
+      reportRevision: 0,
+      reportUpdatedAt: null,
+      intermediateReport: "",
+      finalReport: "",
+      progress: {
+        completed: 0,
+        total: 1,
+        failed: 0,
+        pending: 1,
+        briefGeneStatus: "",
+      },
+      degraded: false,
+      degradedReason: null,
+      failures: [],
+      artifacts: [],
+      requestId: null,
+      trackingDegraded: false,
+    };
+    mocks.submit.mockImplementationOnce(async () => {
+      mocks.state.value = {
+        ...mocks.state.value,
+        runId: "run-network",
+        phase: "running",
+        projection: runningProjection,
+        dialogueId: "dialogue-network",
+        messageId: "19",
+      };
+      return runningProjection;
+    });
+    const preparing = lifecycle();
+    mocks.getTaskLifecycle
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "RUNNING",
+          report_revision: 1,
+          artifact_summary: { ...preparing.artifact_summary, has_report: true },
+        }),
+      })
+      .mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "SUCCEEDED",
+          terminal: true,
+          report_revision: 2,
+          artifact_summary: {
+            image_count: 1,
+            output_directory_count: 1,
+            has_report: true,
+          },
+        }),
+      });
+    mocks.getAnswerCheck
+      .mockResolvedValueOnce({
+        code: 200,
+        data: [
+          {
+            id: 19,
+            dialogue_id: "dialogue-network",
+            tool_name: "GeneNetworkAgent",
+            bot_run_id: "run-network",
+            status: "RUNNING",
+            report_revision: 1,
+            answer: JSON.stringify({
+              intermediate_report: "Network intermediate",
+            }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        code: 200,
+        data: [
+          {
+            id: 19,
+            dialogue_id: "dialogue-network",
+            tool_name: "GeneNetworkAgent",
+            bot_run_id: "run-network",
+            status: "SUCCEEDED",
+            report_revision: 2,
+            answer: JSON.stringify({ final_report: "Network final" }),
+            download_path: "/obs/bucket/network",
+          },
+        ],
+      });
+
+    const wrapper = mountView();
+    await wrapper
+      .get('[data-test="network-question"]')
+      .setValue("Analyze the trait network");
+    await wrapper.get('[data-test="network-trait"]').setValue("TO:0000011");
+    await wrapper.get('[data-test="network-species"]').setValue("ath");
+    await wrapper.get("form.gene-network-form").trigger("submit");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(wrapper.get('[data-test="network-report-text"]').text()).toBe(
+      "Network intermediate"
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(wrapper.get('[data-test="network-report-text"]').text()).toBe(
+      "Network final"
+    );
+    expect(wrapper.get('[data-test="bot-artifact-list"]').text()).toContain(
+      "/obs/bucket/network"
+    );
     wrapper.unmount();
   });
 });

@@ -271,7 +271,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
-import { getAnswerCheck, getChatdownloadURL } from "@/api/chat";
+import { getChatdownloadURL } from "@/api/chat";
 import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
@@ -286,25 +286,15 @@ import {
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { useResumableUploads } from "@/views/chat/composables/useResumableUploads";
+import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgentLifecycle";
 import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
-import {
-  isSafeBotObsPath,
-  parseBotProjection,
-  type BotArtifact,
-  type BotProgress,
-  type BotRunProjection,
-} from "@/views/chat/botProjection";
+import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 
 const MAX_QUERY_LENGTH = 4000;
 const MAX_DATASET_DESCRIPTION_LENGTH = 4000;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
-const SAFE_MESSAGE_ID = /^[1-9]\d{0,18}$/u;
 const DATASET_DESCRIPTION_MARKER = "\n\n[dataset-description]\n";
-const HISTORY_POLL_INTERVAL_MS = 2000;
-const MAX_HISTORY_POLL_ATTEMPTS = 12;
-const MAX_HISTORY_ROWS = 64;
-const MAX_HISTORY_ARTIFACTS = 64;
 
 const props = defineProps<{ state?: BotLifecycleState }>();
 const { t } = useI18n();
@@ -327,6 +317,11 @@ const run = useBotRemoteAgentRun({
   getChatState,
   capabilities,
 });
+const remoteLifecycle = useRemoteAgentLifecycle({
+  tool: "InSilicoResearchAgent",
+  run,
+  dialogueId,
+});
 
 const question = ref("");
 const datasetDescription = ref("");
@@ -334,9 +329,6 @@ const fileError = ref("");
 const formError = ref("");
 const downloadError = ref("");
 const isSubmitting = ref(false);
-let historyPollTimer: ReturnType<typeof setTimeout> | null = null;
-let historyPollGeneration = 0;
-let viewMounted = false;
 
 const capabilityLoaded = computed(() => capabilities.loaded.value === true);
 const researchCapability = computed(
@@ -513,23 +505,15 @@ async function submitResearch(): Promise<void> {
 
   formError.value = "";
   isSubmitting.value = true;
-  stopHistoryPolling();
   try {
     const normalizedDataset = datasetDescription.value.trim();
     const query = normalizedDataset
       ? `${normalizedQuestion}${DATASET_DESCRIPTION_MARKER}${normalizedDataset}`
       : normalizedQuestion;
-    const projection = await run.submit({
+    await run.submit({
       query,
       attachments: uploadQueue.completedAssetIds.value,
     });
-    if (
-      projection &&
-      ["RUNNING", "PENDING", "QUEUED"].includes(projection.status) &&
-      run.state.value.dialogueId
-    ) {
-      startHistoryPolling(run.state.value.dialogueId);
-    }
   } catch {
     formError.value = t("agents.research.submitFailed");
   } finally {
@@ -538,12 +522,12 @@ async function submitResearch(): Promise<void> {
 }
 
 function cancelResearch(): void {
-  stopHistoryPolling();
+  remoteLifecycle.reset();
   run.cancel();
 }
 
 function resetResearch(): void {
-  stopHistoryPolling();
+  remoteLifecycle.reset();
   run.reset();
   question.value = "";
   datasetDescription.value = "";
@@ -554,216 +538,8 @@ function resetResearch(): void {
 }
 
 function goBack(): void {
+  remoteLifecycle.dispose();
   router.back();
-}
-
-type HistoryRecord = Record<string, unknown>;
-
-function isHistoryRecord(value: unknown): value is HistoryRecord {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.prototype.toString.call(value) === "[object Object]"
-  );
-}
-
-function safeHistoryIdentity(value: unknown, pattern: RegExp): string | null {
-  const normalized =
-    typeof value === "number" && Number.isSafeInteger(value)
-      ? String(value)
-      : typeof value === "string"
-        ? value.trim()
-        : "";
-  return normalized && pattern.test(normalized) ? normalized : null;
-}
-
-function isUnknownArray(value: unknown): value is readonly unknown[] {
-  return Array.isArray(value);
-}
-
-function historyArtifactPaths(value: unknown): string[] {
-  const values: unknown[] = [];
-  if (isUnknownArray(value)) {
-    values.push(...value.slice(0, MAX_HISTORY_ARTIFACTS));
-  } else if (typeof value === "string" && value.trim() !== "") {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (isUnknownArray(parsed))
-        values.push(...parsed.slice(0, MAX_HISTORY_ARTIFACTS));
-      else values.push(value);
-    } catch {
-      values.push(value);
-    }
-  }
-  return values.filter(isSafeBotObsPath).slice(0, MAX_HISTORY_ARTIFACTS);
-}
-
-function artifactsFromHistoryRow(row: HistoryRecord): BotArtifact[] {
-  const outputDirs = historyArtifactPaths(row.download_path);
-  const imagePaths = historyArtifactPaths(row.image_paths);
-  return outputDirs.map((outputDir) => {
-    const paths = imagePaths.filter(
-      (path) => path === outputDir || path.startsWith(`${outputDir}/`)
-    );
-    return {
-      outputDir,
-      // The signed Web download endpoint accepts the validated output
-      // directory itself when no flattened image list is present.
-      paths: paths.length > 0 ? paths : [outputDir],
-    };
-  });
-}
-
-function projectionFromHistoryRow(row: unknown): {
-  projection: BotRunProjection;
-  dialogueId: string | null;
-  messageId: string | null;
-} | null {
-  if (!isHistoryRecord(row)) return null;
-  if (
-    typeof row.tool_name === "string" &&
-    row.tool_name !== "InSilicoResearchAgent"
-  ) {
-    return null;
-  }
-
-  let answerPayload: unknown = row.answer;
-  if (typeof row.answer === "string" && row.answer.trim() !== "") {
-    try {
-      answerPayload = JSON.parse(row.answer);
-    } catch {
-      answerPayload = row.answer;
-    }
-  }
-  const candidate: HistoryRecord = isHistoryRecord(answerPayload)
-    ? { ...answerPayload }
-    : {};
-  for (const key of [
-    "status",
-    "tool_name",
-    "bot_run_id",
-    "report_revision",
-    "request_id",
-    "tracking_degraded",
-  ]) {
-    if (row[key] !== undefined && candidate[key] === undefined) {
-      candidate[key] = row[key];
-    }
-  }
-  if (candidate.answer === undefined && typeof row.answer === "string") {
-    candidate.answer = row.answer;
-  }
-  if (
-    candidate.answer === undefined &&
-    typeof candidate.final_answer === "string"
-  ) {
-    candidate.answer = candidate.final_answer;
-  }
-
-  let projection: BotRunProjection;
-  try {
-    projection = parseBotProjection(candidate);
-  } catch {
-    return null;
-  }
-  if (projection.agent !== "" && projection.agent !== "InSilicoResearchAgent") {
-    return null;
-  }
-  const rowArtifacts = artifactsFromHistoryRow(row);
-  return {
-    projection: {
-      ...projection,
-      artifacts: rowArtifacts.length > 0 ? rowArtifacts : projection.artifacts,
-    },
-    dialogueId: safeHistoryIdentity(row.dialogue_id, SAFE_DIALOGUE_ID),
-    messageId: safeHistoryIdentity(row.id, SAFE_MESSAGE_ID),
-  };
-}
-
-function stopHistoryPolling(): void {
-  if (historyPollTimer !== null) {
-    clearTimeout(historyPollTimer);
-    historyPollTimer = null;
-  }
-  historyPollGeneration += 1;
-}
-
-function scheduleHistoryPolling(
-  dialogueId: string,
-  generation: number,
-  attempt: number
-): void {
-  if (
-    !viewMounted ||
-    generation !== historyPollGeneration ||
-    attempt >= MAX_HISTORY_POLL_ATTEMPTS
-  ) {
-    return;
-  }
-  historyPollTimer = setTimeout(() => {
-    historyPollTimer = null;
-    pollHistory(dialogueId, generation, attempt + 1).catch(() => undefined);
-  }, HISTORY_POLL_INTERVAL_MS);
-}
-
-async function pollHistory(
-  dialogueId: string,
-  generation: number,
-  attempt: number
-): Promise<void> {
-  if (
-    !viewMounted ||
-    generation !== historyPollGeneration ||
-    run.state.value.dialogueId !== dialogueId ||
-    ["succeeded", "failed", "cancelled"].includes(run.state.value.phase)
-  ) {
-    return;
-  }
-
-  try {
-    const response = await getAnswerCheck({ dialogue_id: dialogueId });
-    if (
-      !viewMounted ||
-      generation !== historyPollGeneration ||
-      run.state.value.dialogueId !== dialogueId
-    ) {
-      return;
-    }
-    const envelope = response as { code?: unknown; data?: unknown };
-    if (envelope.code === 200 && Array.isArray(envelope.data)) {
-      const expectedRunId = run.state.value.projection?.runId;
-      for (const row of envelope.data.slice(0, MAX_HISTORY_ROWS)) {
-        const parsed = projectionFromHistoryRow(row);
-        if (!parsed) continue;
-        if (expectedRunId && parsed.projection.runId !== expectedRunId) {
-          continue;
-        }
-        run.hydrate(parsed.projection, {
-          dialogueId: parsed.dialogueId ?? dialogueId,
-          messageId: parsed.messageId,
-        });
-      }
-    }
-  } catch {
-    // A bounded history refresh is best effort; the existing run state remains
-    // visible and the next attempt can recover without exposing raw errors.
-  }
-
-  if (
-    viewMounted &&
-    generation === historyPollGeneration &&
-    run.state.value.dialogueId === dialogueId &&
-    !["succeeded", "failed", "cancelled"].includes(run.state.value.phase)
-  ) {
-    scheduleHistoryPolling(dialogueId, generation, attempt);
-  }
-}
-
-function startHistoryPolling(dialogueId: string): void {
-  stopHistoryPolling();
-  const generation = historyPollGeneration;
-  scheduleHistoryPolling(dialogueId, generation, 0);
 }
 
 function isSafeDownloadUrl(value: unknown): value is string {
@@ -796,13 +572,11 @@ async function downloadArtifact(outputDir: string): Promise<void> {
 }
 
 onMounted(() => {
-  viewMounted = true;
   Promise.resolve(capabilities.load()).catch(() => undefined);
 });
 
 onBeforeUnmount(() => {
-  viewMounted = false;
-  stopHistoryPolling();
+  remoteLifecycle.dispose();
   run.cancel();
 });
 </script>

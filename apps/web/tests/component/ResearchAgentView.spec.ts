@@ -1,4 +1,6 @@
+import { ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentTaskLifecycle } from "@/api/types";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import ResearchAgentView from "@/views/research-agent/ResearchAgentView.vue";
 import type { BotRunProjection } from "@/views/chat/botProjection";
@@ -91,6 +93,7 @@ const mocks = vi.hoisted(() => {
     uploadQueue,
     getChatState: vi.fn(() => chatState),
     getAnswerCheck: vi.fn().mockResolvedValue({ code: 200, data: [] }),
+    getTaskLifecycle: vi.fn(),
     capabilityLoaded: { value: true },
     routerBack: vi.fn(),
   };
@@ -100,6 +103,11 @@ vi.mock("@/api/chat", () => ({
   getAnswerCheck: mocks.getAnswerCheck,
   getChatdownloadURL: vi.fn(),
 }));
+
+vi.mock("@/api/task", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/task")>();
+  return { ...actual, getTaskLifecycle: mocks.getTaskLifecycle };
+});
 
 vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
   useBotRemoteAgentRun: mocks.useBotRemoteAgentRun,
@@ -188,10 +196,12 @@ function mountView(options: { state?: BotLifecycleState } = {}) {
         BotReportState: {
           props: ["state"],
           template:
-            '<div data-test="bot-report-state"><span v-if="state.degraded" data-test="research-degraded">degraded</span></div>',
+            '<div data-test="bot-report-state"><span v-if="state.degraded" data-test="research-degraded">degraded</span><span data-test="research-report-text">{{ state.visibleReport }}</span></div>',
         },
         BotArtifactList: {
-          template: '<div data-test="bot-artifact-list" />',
+          props: ["artifacts"],
+          template:
+            '<div data-test="bot-artifact-list">{{ artifacts.map((artifact) => artifact.outputDir).join(",") }}</div>',
         },
       },
     },
@@ -212,6 +222,28 @@ function degradedState(): BotLifecycleState {
   };
 }
 
+function lifecycle(
+  overrides: Partial<AgentTaskLifecycle> = {}
+): AgentTaskLifecycle {
+  return {
+    id: 19,
+    phase: "PREPARING",
+    terminal: false,
+    child_task_count: 1,
+    child_work_accepted: true,
+    report_revision: 0,
+    artifact_summary: {
+      image_count: 0,
+      output_directory_count: 0,
+      has_report: false,
+    },
+    reconciliation: "FRESH",
+    tracking_degraded: false,
+    error_code: null,
+    ...overrides,
+  };
+}
+
 describe("ResearchAgentView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -223,7 +255,7 @@ describe("ResearchAgentView", () => {
       reset: mocks.reset,
     }));
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
-    mocks.state.value = {
+    mocks.state = ref({
       runId: null,
       status: "RUNNING",
       reportRevision: -1,
@@ -240,10 +272,46 @@ describe("ResearchAgentView", () => {
       error: null,
       dialogueId: null,
       messageId: null,
-    };
+    });
+    mocks.hydrate.mockImplementation(
+      (
+        projection: BotRunProjection,
+        identity: Partial<RemoteAgentRunIdentity> = {}
+      ) => {
+        mocks.state.value = {
+          ...mocks.state.value,
+          phase:
+            projection.status === "SUCCEEDED"
+              ? "succeeded"
+              : projection.status === "FAILED" ||
+                  projection.status === "CANCELLED"
+                ? "failed"
+                : "running",
+          projection,
+          runId: projection.runId,
+          status:
+            projection.status === "SUCCEEDED"
+              ? "SUCCEEDED"
+              : projection.status === "FAILED" ||
+                  projection.status === "CANCELLED"
+                ? "FAILED"
+                : "RUNNING",
+          visibleReport:
+            projection.finalReport || projection.intermediateReport,
+          finalReport: projection.finalReport,
+          intermediateReport: projection.intermediateReport,
+          degraded: projection.degraded,
+          failures: projection.failures,
+          artifacts: projection.artifacts,
+          dialogueId: identity.dialogueId ?? mocks.state.value.dialogueId,
+          messageId: identity.messageId ?? mocks.state.value.messageId,
+        };
+      }
+    );
     mocks.submit.mockResolvedValue(null);
     mocks.load.mockResolvedValue([]);
     mocks.getAnswerCheck.mockResolvedValue({ code: 200, data: [] });
+    mocks.getTaskLifecycle.mockResolvedValue({ data: lifecycle() });
     mocks.capabilityLoaded.value = true;
     mocks.chatState.fileList = [];
     mocks.uploadQueue.hasBlockingUploads.value = false;
@@ -252,6 +320,8 @@ describe("ResearchAgentView", () => {
 
   afterEach(() => {
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = false;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("passes the Research tool to the shared product runner", () => {
@@ -410,13 +480,15 @@ describe("ResearchAgentView", () => {
     wrapper.unmount();
   });
 
-  it("hydrates terminal history once and stops polling after cancellation", async () => {
+  it("keeps Research watched beyond 24 seconds and renders intermediate and terminal history", async () => {
     vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
     mocks.submit.mockImplementationOnce(async () => {
       mocks.state.value = {
         ...mocks.state.value,
         phase: "running",
         dialogueId: "42",
+        messageId: "19",
         projection: {
           runId: "run-research",
           agent: "InSilicoResearchAgent",
@@ -444,103 +516,93 @@ describe("ResearchAgentView", () => {
       };
       return mocks.state.value.projection;
     });
-    mocks.getAnswerCheck.mockResolvedValueOnce({
-      code: 200,
-      data: [
-        {
-          id: 19,
-          dialogue_id: "42",
-          tool_name: "InSilicoResearchAgent",
-          bot_run_id: "run-research",
-          status: "SUCCEEDED",
-          answer: JSON.stringify({ final_report: "Terminal report" }),
-          download_path: "/obs/bucket/report",
-          image_paths: JSON.stringify([
-            "/obs/bucket/report/result.pdf",
-            "javascript:alert(1)",
-          ]),
-        },
-      ],
-    });
+    const preparing = lifecycle();
+    mocks.getTaskLifecycle
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "RUNNING",
+          report_revision: 1,
+          artifact_summary: { ...preparing.artifact_summary, has_report: true },
+        }),
+      })
+      .mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "SUCCEEDED",
+          terminal: true,
+          report_revision: 2,
+          artifact_summary: {
+            image_count: 1,
+            output_directory_count: 1,
+            has_report: true,
+          },
+        }),
+      });
+    mocks.getAnswerCheck
+      .mockResolvedValueOnce({
+        code: 200,
+        data: [
+          {
+            id: 19,
+            dialogue_id: "42",
+            tool_name: "InSilicoResearchAgent",
+            bot_run_id: "run-research",
+            status: "RUNNING",
+            report_revision: 1,
+            answer: JSON.stringify({
+              intermediate_report: "Intermediate report",
+            }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        code: 200,
+        data: [
+          {
+            id: 19,
+            dialogue_id: "42",
+            tool_name: "InSilicoResearchAgent",
+            bot_run_id: "run-research",
+            status: "SUCCEEDED",
+            report_revision: 2,
+            answer: JSON.stringify({ final_report: "Terminal report" }),
+            download_path: "/obs/bucket/report",
+            image_paths: JSON.stringify([
+              "/obs/bucket/report/result.pdf",
+              "javascript:alert(1)",
+            ]),
+          },
+        ],
+      });
     const wrapper = mountView();
     await wrapper
       .get('[data-test="research-question"]')
       .setValue("Summarize the paper");
     await wrapper.get('[data-test="research-submit"]').trigger("click");
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(30_000);
 
     expect(mocks.getAnswerCheck).toHaveBeenCalledWith({ dialogue_id: "42" });
-    expect(mocks.hydrate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "SUCCEEDED",
-        finalReport: "Terminal report",
-        artifacts: [
-          {
-            outputDir: "/obs/bucket/report",
-            paths: ["/obs/bucket/report/result.pdf"],
-          },
-        ],
-      }),
-      expect.objectContaining({ dialogueId: "42", messageId: "19" })
+    expect(wrapper.get('[data-test="research-report-text"]').text()).toBe(
+      "Intermediate report"
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(wrapper.get('[data-test="research-report-text"]').text()).toBe(
+      "Terminal report"
+    );
+    expect(wrapper.get('[data-test="bot-artifact-list"]').text()).toContain(
+      "/obs/bucket/report"
     );
     expect(wrapper.find('a[href*="javascript"]').exists()).toBe(false);
 
     const callsAfterTerminal = mocks.getAnswerCheck.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(6000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(mocks.getAnswerCheck.mock.calls.length).toBe(callsAfterTerminal);
 
     wrapper.unmount();
-    vi.useRealTimers();
-  });
-
-  it("stops a pending history poll on cancel and reset", async () => {
-    vi.useFakeTimers();
-    mocks.state.value = {
-      ...mocks.state.value,
-      phase: "running",
-      dialogueId: "44",
-    };
-    mocks.submit.mockImplementationOnce(async () => {
-      return {
-        runId: "run-pending",
-        agent: "InSilicoResearchAgent",
-        status: "RUNNING",
-        reportStage: null,
-        reportCompleteness: "partial",
-        reportRevision: 0,
-        reportUpdatedAt: null,
-        intermediateReport: "",
-        finalReport: "",
-        progress: {
-          completed: 0,
-          total: 1,
-          failed: 0,
-          pending: 1,
-          briefGeneStatus: "",
-        },
-        degraded: false,
-        degradedReason: null,
-        failures: [],
-        artifacts: [],
-        requestId: null,
-        trackingDegraded: false,
-      };
-    });
-    const wrapper = mountView();
-    await wrapper
-      .get('[data-test="research-question"]')
-      .setValue("Summarize the paper");
-    await wrapper.get('[data-test="research-submit"]').trigger("click");
-    await vi.advanceTimersByTimeAsync(0);
-    await wrapper.get('[data-test="research-cancel"]').trigger("click");
-    await vi.advanceTimersByTimeAsync(4000);
-    expect(mocks.getAnswerCheck).not.toHaveBeenCalled();
-
-    await wrapper.get('[data-test="research-reset"]').trigger("click");
-    await vi.advanceTimersByTimeAsync(4000);
-    expect(mocks.getAnswerCheck).not.toHaveBeenCalled();
-
-    wrapper.unmount();
-    vi.useRealTimers();
   });
 });

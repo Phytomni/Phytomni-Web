@@ -320,6 +320,7 @@ import {
   useBotRemoteAgentRun,
   type BotRemoteAgentRunState,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
+import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgentLifecycle";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { useResumableUploads } from "@/views/chat/composables/useResumableUploads";
 import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
@@ -353,6 +354,11 @@ const run = useBotRemoteAgentRun({
   dialogueId,
   getChatState,
   capabilities,
+});
+const remoteLifecycle = useRemoteAgentLifecycle({
+  tool: "DigitalDesignAgent",
+  run,
+  dialogueId,
 });
 
 const question = ref("");
@@ -585,10 +591,12 @@ async function submitDesign(): Promise<void> {
 }
 
 function cancelDesign(): void {
+  remoteLifecycle.reset();
   run.cancel();
 }
 
 function resetDesign(): void {
+  remoteLifecycle.reset();
   run.reset();
   question.value = "";
   geneId.value = "";
@@ -601,6 +609,7 @@ function resetDesign(): void {
 }
 
 function goBack(): void {
+  remoteLifecycle.dispose();
   router.back();
 }
 
@@ -638,6 +647,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  remoteLifecycle.dispose();
   run.cancel();
 });
 </script>

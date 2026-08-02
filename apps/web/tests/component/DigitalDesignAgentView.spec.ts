@@ -1,12 +1,16 @@
+import { ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentTaskLifecycle } from "@/api/types";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import DigitalDesignAgentView from "@/views/digital-design-agent/DigitalDesignAgentView.vue";
+import type { BotRunProjection } from "@/views/chat/botProjection";
+import type { BotRemoteAgentRunState } from "@/views/chat/composables/useBotRemoteAgentRun";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import { mustGet } from "../helpers/mockFactories";
 import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => {
-  const state = {
+  const state: { value: BotRemoteAgentRunState } = {
     value: {
       runId: null,
       status: "RUNNING" as const,
@@ -74,6 +78,7 @@ const mocks = vi.hoisted(() => {
     state,
     capabilities,
     submit: vi.fn().mockResolvedValue(null),
+    hydrate: vi.fn(),
     useBotRemoteAgentRun: vi.fn(),
     cancel: vi.fn().mockReturnValue(true),
     reset: vi.fn(),
@@ -82,13 +87,21 @@ const mocks = vi.hoisted(() => {
     uploadQueue,
     getChatState: vi.fn(() => chatState),
     getChatdownloadURL: vi.fn(),
+    getAnswerCheck: vi.fn().mockResolvedValue({ code: 200, data: [] }),
+    getTaskLifecycle: vi.fn(),
     routerBack: vi.fn(),
   };
 });
 
 vi.mock("@/api/chat", () => ({
   getChatdownloadURL: mocks.getChatdownloadURL,
+  getAnswerCheck: mocks.getAnswerCheck,
 }));
+
+vi.mock("@/api/task", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/task")>();
+  return { ...actual, getTaskLifecycle: mocks.getTaskLifecycle };
+});
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
   useBotCapabilities: () => mocks.capabilities,
@@ -101,6 +114,7 @@ vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
 mocks.useBotRemoteAgentRun.mockImplementation(() => ({
   state: mocks.state,
   submit: mocks.submit,
+  hydrate: mocks.hydrate,
   cancel: mocks.cancel,
   reset: mocks.reset,
 }));
@@ -143,10 +157,12 @@ function mountView(options: { state?: BotLifecycleState } = {}) {
         BotReportState: {
           props: ["state"],
           template:
-            '<div data-test="bot-report-state"><span v-if="state.degraded" data-test="design-degraded">degraded</span></div>',
+            '<div data-test="bot-report-state"><span v-if="state.degraded" data-test="design-degraded">degraded</span><span data-test="design-report-text">{{ state.visibleReport }}</span></div>',
         },
         BotArtifactList: {
-          template: '<div data-test="bot-artifact-list" />',
+          props: ["artifacts"],
+          template:
+            '<div data-test="bot-artifact-list">{{ artifacts.map((artifact) => artifact.outputDir).join(",") }}</div>',
         },
       },
     },
@@ -154,7 +170,7 @@ function mountView(options: { state?: BotLifecycleState } = {}) {
 }
 
 function resetState(): void {
-  mocks.state.value = {
+  mocks.state = ref({
     runId: null,
     status: "RUNNING",
     reportRevision: -1,
@@ -171,7 +187,7 @@ function resetState(): void {
     error: null,
     dialogueId: null,
     messageId: null,
-  };
+  });
   mocks.capabilities.loaded.value = true;
   REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = true;
   mocks.capabilities.byTool.value.DigitalDesignAgent = {
@@ -187,8 +203,32 @@ function resetState(): void {
   };
 }
 
+function lifecycle(
+  overrides: Partial<AgentTaskLifecycle> = {}
+): AgentTaskLifecycle {
+  return {
+    id: 19,
+    phase: "PREPARING",
+    terminal: false,
+    child_task_count: 1,
+    child_work_accepted: true,
+    report_revision: 0,
+    artifact_summary: {
+      image_count: 0,
+      output_directory_count: 0,
+      has_report: false,
+    },
+    reconciliation: "FRESH",
+    tracking_degraded: false,
+    error_code: null,
+    ...overrides,
+  };
+}
+
 afterEach(() => {
   REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = false;
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 function degradedState(): BotLifecycleState {
@@ -211,12 +251,29 @@ describe("DigitalDesignAgentView", () => {
     mocks.useBotRemoteAgentRun.mockImplementation(() => ({
       state: mocks.state,
       submit: mocks.submit,
+      hydrate: mocks.hydrate,
       cancel: mocks.cancel,
       reset: mocks.reset,
     }));
     resetState();
     mocks.submit.mockResolvedValue(null);
+    mocks.hydrate.mockImplementation((next: BotRunProjection) => {
+      mocks.state.value = {
+        ...mocks.state.value,
+        runId: next.runId,
+        status: next.status === "SUCCEEDED" ? "SUCCEEDED" : "RUNNING",
+        phase: next.status === "SUCCEEDED" ? "succeeded" : "running",
+        reportRevision: next.reportRevision,
+        visibleReport: next.finalReport || next.intermediateReport,
+        intermediateReport: next.intermediateReport,
+        finalReport: next.finalReport,
+        artifacts: next.artifacts,
+        projection: next,
+      };
+    });
     mocks.capabilities.load.mockResolvedValue([]);
+    mocks.getAnswerCheck.mockResolvedValue({ code: 200, data: [] });
+    mocks.getTaskLifecycle.mockResolvedValue({ data: lifecycle() });
     mocks.chatState.fileList = [];
     mocks.uploadQueue.hasBlockingUploads.value = false;
     mocks.uploadQueue.completedAssetIds.value = [];
@@ -533,6 +590,126 @@ describe("DigitalDesignAgentView", () => {
     expect(mocks.submit).toHaveBeenCalledTimes(1);
     await wrapper.get('[data-test="design-reset"]').trigger("click");
     expect(mocks.reset).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it("reconciles preparing, running, and terminal design reports after 24 seconds", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const runningProjection: BotRunProjection = {
+      runId: "run-design",
+      agent: "DigitalDesignAgent",
+      status: "RUNNING",
+      reportPresentation: true,
+      reportStage: null,
+      reportCompleteness: "partial",
+      reportRevision: 0,
+      reportUpdatedAt: null,
+      intermediateReport: "",
+      finalReport: "",
+      progress: {
+        completed: 0,
+        total: 1,
+        failed: 0,
+        pending: 1,
+        briefGeneStatus: "",
+      },
+      degraded: false,
+      degradedReason: null,
+      failures: [],
+      artifacts: [],
+      requestId: null,
+      trackingDegraded: false,
+    };
+    mocks.submit.mockImplementationOnce(async () => {
+      mocks.state.value = {
+        ...mocks.state.value,
+        runId: "run-design",
+        phase: "running",
+        projection: runningProjection,
+        dialogueId: "dialogue-design",
+        messageId: "19",
+      };
+      return runningProjection;
+    });
+    const preparing = lifecycle();
+    mocks.getTaskLifecycle
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({ data: preparing })
+      .mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "RUNNING",
+          report_revision: 1,
+          artifact_summary: { ...preparing.artifact_summary, has_report: true },
+        }),
+      })
+      .mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "SUCCEEDED",
+          terminal: true,
+          report_revision: 2,
+          artifact_summary: {
+            image_count: 1,
+            output_directory_count: 1,
+            has_report: true,
+          },
+        }),
+      });
+    mocks.getAnswerCheck
+      .mockResolvedValueOnce({
+        code: 200,
+        data: [
+          {
+            id: 19,
+            dialogue_id: "dialogue-design",
+            tool_name: "DigitalDesignAgent",
+            bot_run_id: "run-design",
+            status: "RUNNING",
+            report_revision: 1,
+            answer: JSON.stringify({
+              intermediate_report: "Design intermediate",
+            }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        code: 200,
+        data: [
+          {
+            id: 19,
+            dialogue_id: "dialogue-design",
+            tool_name: "DigitalDesignAgent",
+            bot_run_id: "run-design",
+            status: "SUCCEEDED",
+            report_revision: 2,
+            answer: JSON.stringify({ final_report: "Design final" }),
+            download_path: "/obs/bucket/design",
+          },
+        ],
+      });
+
+    const wrapper = mountView();
+    await wrapper
+      .get('[data-test="design-question"]')
+      .setValue("Design a stable protein");
+    await wrapper.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+    await wrapper.get('[data-test="design-species-code"]').setValue("ath");
+    await wrapper.get("form.digital-design-form").trigger("submit");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(wrapper.get('[data-test="design-report-text"]').text()).toBe(
+      "Design intermediate"
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(wrapper.get('[data-test="design-report-text"]').text()).toBe(
+      "Design final"
+    );
+    expect(wrapper.get('[data-test="bot-artifact-list"]').text()).toContain(
+      "/obs/bucket/design"
+    );
     wrapper.unmount();
   });
 });
