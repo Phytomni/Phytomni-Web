@@ -136,15 +136,48 @@ func TestCreateUploadHandlerSuccessSetsNoStore(t *testing.T) {
 	var captures []uploadHandlerCreateCapture
 	server := uploadHandlerServer(t, &captures, nil)
 	setupUploadHandler(t, server.URL)
-	response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"sample.fastq.gz","size_bytes":1,"content_type_hint":"application/octet-stream"}`, "application/json; charset=utf-8", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
+	response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"sample.fastq.gz","size_bytes":1,"content_type_hint":"application/octet-stream","purpose":"dataset"}`, "application/json; charset=utf-8", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	if response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("Cache-Control=%q, want no-store", response.Header().Get("Cache-Control"))
 	}
-	if len(captures) != 1 || captures[0].OwnerSubject != "alice@example.com" || captures[0].Purpose != "chat_attachment" {
+	if len(captures) != 1 || captures[0].OwnerSubject != "alice@example.com" || captures[0].Purpose != "dataset" {
 		t.Fatalf("Bot request authority=%#v", captures)
+	}
+}
+
+func TestCreateUploadHandlerRequiresFinitePurpose(t *testing.T) {
+	for name, body := range map[string]string{
+		"missing":          `{"filename":"counts.csv","size_bytes":9}`,
+		"blank":            `{"filename":"counts.csv","size_bytes":9,"purpose":""}`,
+		"wrong case":       `{"filename":"counts.csv","size_bytes":9,"purpose":"Dataset"}`,
+		"unknown":          `{"filename":"counts.csv","size_bytes":9,"purpose":"analysis"}`,
+		"legacy forbidden": `{"filename":"counts.csv","size_bytes":9,"purpose":"chat_attachment"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var calls int
+			server := uploadHandlerServer(t, nil, &calls)
+			setupUploadHandler(t, server.URL)
+			response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", body, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
+			if response.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status=%d body=%s, want 422", response.Code, response.Body.String())
+			}
+			var envelope struct {
+				Code      int    `json:"code"`
+				ErrorCode string `json:"error_code"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if envelope.Code != http.StatusUnprocessableEntity || envelope.ErrorCode != "attachment_purpose_invalid" {
+				t.Fatalf("response=%#v", envelope)
+			}
+			if calls != 0 {
+				t.Fatalf("invalid purpose reached Bot %d times", calls)
+			}
+		})
 	}
 }
 
@@ -214,7 +247,7 @@ func TestCreateUploadHandlerScopesSameIdempotencyKeyPerUser(t *testing.T) {
 	server := uploadHandlerServer(t, &captures, nil)
 	setupUploadHandler(t, server.URL)
 	for _, user := range []string{"alice@example.com", "bob@example.com"} {
-		response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"sample.bin","size_bytes":1}`, "application/json", user, "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
+		response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"sample.bin","size_bytes":1,"purpose":"document"}`, "application/json", user, "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
 		if response.Code != http.StatusOK {
 			t.Fatalf("user %s status=%d body=%s", user, response.Code, response.Body.String())
 		}

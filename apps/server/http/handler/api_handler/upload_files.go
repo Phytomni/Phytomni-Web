@@ -24,10 +24,11 @@ type uploadCreateBody struct {
 	SizeBytes    int64  `json:"size_bytes"`
 	ContentType  string `json:"content_type_hint,omitempty"`
 	LastModified int64  `json:"last_modified_ms,omitempty"`
+	Purpose      string `json:"purpose"`
 }
 
 // CreateUpload accepts metadata only. The authenticated Web identity supplies
-// owner and purpose; the browser never chooses either authority field.
+// the owner; the browser chooses only its finite attachment purpose.
 func (ph *Handler) CreateUpload(ctx *gin.Context) {
 	username, ok := uploadUsername(ctx)
 	if !ok {
@@ -63,6 +64,7 @@ func (ph *Handler) CreateUpload(ctx *gin.Context) {
 		SizeBytes:    request.SizeBytes,
 		ContentType:  request.ContentType,
 		LastModified: request.LastModified,
+		Purpose:      request.Purpose,
 	}, keys[0])
 	if err != nil {
 		writeUploadServiceError(ctx, err)
@@ -142,11 +144,28 @@ func uploadRequestBodyEmpty(ctx *gin.Context) bool {
 }
 
 func writeUploadServiceError(ctx *gin.Context, err error) {
+	if errors.Is(err, api_service.ErrAttachmentPurposeInvalid) {
+		writeUploadErrorCode(
+			ctx,
+			http.StatusUnprocessableEntity,
+			"attachment_purpose_invalid",
+			"upload.invalid_purpose",
+		)
+		return
+	}
 	if errors.Is(err, api_service.ErrUploadMetadataInvalid) {
 		writeUploadError(ctx, http.StatusBadRequest, "upload.invalid_request")
 		return
 	}
 	writeUploadError(ctx, http.StatusServiceUnavailable, "upload.unavailable")
+}
+
+func writeUploadErrorCode(ctx *gin.Context, status int, errorCode, messageKey string) {
+	ctx.JSON(status, gin.H{
+		"code":       status,
+		"error_code": errorCode,
+		"message":    i18n.T(ctx, messageKey),
+	})
 }
 
 func writeUploadError(ctx *gin.Context, status int, messageKey string) {

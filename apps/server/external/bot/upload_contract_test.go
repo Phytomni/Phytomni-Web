@@ -49,7 +49,7 @@ func uploadCapabilityFixture(serverURL string) UploadCapabilityResponse {
 	}
 }
 
-func TestCreateUploadUsesMetadataOnlyJSONAndFixedPurpose(t *testing.T) {
+func TestCreateUploadUsesMetadataOnlyJSONAndPurpose(t *testing.T) {
 	var got UploadCreateRequest
 	var rawBody string
 	var srv *httptest.Server
@@ -85,11 +85,24 @@ func TestCreateUploadUsesMetadataOnlyJSONAndFixedPurpose(t *testing.T) {
 	if response == nil || response.AssetID != wantResponse.AssetID || meta.StatusCode != http.StatusOK {
 		t.Fatalf("response=%#v meta=%#v, want asset %q and 200", response, meta, wantResponse.AssetID)
 	}
-	if got.OwnerSubject != request.OwnerSubject || got.Filename != request.Filename || got.SizeBytes != request.SizeBytes || got.Purpose != "chat_attachment" || got.IdempotencyKey != request.IdempotencyKey {
+	if got.OwnerSubject != request.OwnerSubject || got.Filename != request.Filename || got.SizeBytes != request.SizeBytes || got.Purpose != request.Purpose || got.IdempotencyKey != request.IdempotencyKey {
 		t.Fatalf("request=%#v, want owner and metadata from caller", got)
 	}
 	if strings.Contains(rawBody, "multipart/form-data") || strings.Contains(rawBody, "file_bytes") {
 		t.Fatalf("create request contained file/multipart data: %q", rawBody)
+	}
+}
+
+func TestUploadControlAcceptsTrustedCreatePurposes(t *testing.T) {
+	request, _ := uploadCreateFixture("https://upload.example")
+	for _, purpose := range []string{"dataset", "document", "chat_attachment"} {
+		t.Run(purpose, func(t *testing.T) {
+			request := request
+			request.Purpose = purpose
+			if err := validateUploadCreateRequest(request); err != nil {
+				t.Fatalf("purpose %q rejected: %v", purpose, err)
+			}
+		})
 	}
 }
 

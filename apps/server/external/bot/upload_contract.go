@@ -126,7 +126,9 @@ func validateUploadCreateRequest(in UploadCreateRequest) error {
 	if in.LastModified < 0 {
 		return errors.New("invalid upload last-modified timestamp")
 	}
-	if in.Purpose != "chat_attachment" {
+	switch in.Purpose {
+	case "dataset", "document", "chat_attachment":
+	default:
 		return errors.New("invalid upload purpose")
 	}
 	if _, err := uuid.Parse(in.IdempotencyKey); err != nil {

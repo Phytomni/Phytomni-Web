@@ -53,6 +53,7 @@ capabilities_unavailable = "interop capabilities unavailable"
 
 [upload]
 invalid_request = "invalid upload request"
+invalid_purpose = "invalid upload attachment purpose"
 unsupported_media_type = "upload requests must use JSON"
 request_too_large = "upload metadata is too large"
 unavailable = "file upload is temporarily unavailable"

@@ -79,8 +79,13 @@ function response<T>(data: T): ApiEnvelope<T> {
   return { code: 200, data };
 }
 
-function fakeStore(): UploadRecoveryStore {
+function fakeStore(
+  initialRecords: readonly UploadRecoveryRecord[] = []
+): UploadRecoveryStore {
   const records = new Map<string, UploadRecoveryRecord>();
+  for (const record of initialRecords) {
+    records.set(`${record.accountScope}:${record.localId}`, record);
+  }
   return {
     upsert: vi.fn(async (record) => {
       records.set(`${record.accountScope}:${record.localId}`, record);
@@ -133,7 +138,7 @@ function fixtureFile(name: string): File {
   return new File(["abc"], name, { type: "application/octet-stream" });
 }
 
-function setup() {
+function setup(store = fakeStore()) {
   const currentChatId = ref("A");
   const states = new Map<string, ChatUIState>();
   const getChatState = (dialogueId: string): ChatUIState => {
@@ -146,7 +151,6 @@ function setup() {
   };
   const capability = ref<BotUploadCapability>(enabledCapability);
   const onValidationError = vi.fn();
-  const store = fakeStore();
   const queue = useResumableUploads({
     currentChatId,
     getChatState,
@@ -363,5 +367,33 @@ describe("useResumableUploads", () => {
       expect.any(String)
     );
     await queue.dispose();
+  });
+
+  it("does not reselect a recovered row when the requested purpose differs", async () => {
+    const store = fakeStore();
+    const first = setup(store);
+    const file = fixtureFile("counts.csv");
+
+    await first.queue.queueFiles([file], "document");
+    await vi.waitFor(() => {
+      expect(first.getChatState("A").fileList[0]?.status).toBe("completed");
+    });
+    await first.queue.dispose();
+
+    const recovered = setup(store);
+    await recovered.queue.loadRecovery();
+    expect(recovered.getChatState("A").fileList).toEqual([
+      expect.objectContaining({ file: null, purpose: "document" }),
+    ]);
+
+    await recovered.queue.queueFiles([file], "dataset");
+    await vi.waitFor(() => {
+      expect(recovered.getChatState("A").fileList).toHaveLength(2);
+      expect(recovered.getChatState("A").fileList[1]?.status).toBe("completed");
+    });
+    expect(
+      recovered.getChatState("A").fileList.map((item) => item.purpose)
+    ).toEqual(["document", "dataset"]);
+    await recovered.queue.dispose();
   });
 });
