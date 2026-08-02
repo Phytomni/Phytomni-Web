@@ -18,6 +18,7 @@ func TestBuildAgentArgumentsResearchDefaultsToLocalEmptyDataset(t *testing.T) {
 		"data_list":       map[string]interface{}{},
 		"interop_mode":    "off",
 		"interop_targets": []string{},
+		"obs_file_list":   []string{},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("payload=%#v want=%#v", got, want)
@@ -31,18 +32,58 @@ func TestBuildAgentArgumentsDesignAndNetworkUseResolverFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if design["resolve_gene_id"] != true || design["gene_id"] != "AT1G01010" {
-		t.Fatalf("design=%#v", design)
+	wantDesign := map[string]interface{}{
+		"user_query":      "design",
+		"interop_mode":    "off",
+		"interop_targets": []string{},
+		"resolve_gene_id": true,
+		"gene_id":         "AT1G01010",
+		"species_code":    "ath",
+		"obs_file_list":   []string{},
+	}
+	if !reflect.DeepEqual(design, wantDesign) {
+		t.Fatalf("design=%#v want=%#v", design, wantDesign)
 	}
 
 	network, err := BuildAgentArguments("network", AgentArgumentInput{
-		UserQuery: "network", ToID: "TO:0001", SpeciesCode: "ath",
+		UserQuery: "network", ToID: "TO:0000207", SpeciesCode: "osa",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if network["resolve_trait_id"] != true || network["to_id"] != "TO:0001" {
-		t.Fatalf("network=%#v", network)
+	wantNetwork := map[string]interface{}{
+		"user_query":       "network",
+		"resolve_trait_id": true,
+		"to_id":            "TO:0000207",
+		"species_code":     "osa",
+		"obs_file_list":    []string{},
+	}
+	if !reflect.DeepEqual(network, wantNetwork) {
+		t.Fatalf("network=%#v want=%#v", network, wantNetwork)
+	}
+}
+
+func TestBuildAgentArgumentsBackgroundUsesFreshEmptyOBSFileList(t *testing.T) {
+	for _, slug := range []string{"analyst", "research", "network", "design"} {
+		t.Run(slug, func(t *testing.T) {
+			first, err := BuildAgentArguments(slug, AgentArgumentInput{UserQuery: "run"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, ok := first["obs_file_list"].([]string)
+			if !ok || files == nil || len(files) != 0 {
+				t.Fatalf("obs_file_list=%#v, want non-nil empty []string", first["obs_file_list"])
+			}
+			first["obs_file_list"] = append(files, "mutated")
+
+			second, err := BuildAgentArguments(slug, AgentArgumentInput{UserQuery: "run"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if files, ok := second["obs_file_list"].([]string); !ok || files == nil || len(files) != 0 {
+				t.Fatalf("fresh obs_file_list=%#v, want non-nil empty []string", second["obs_file_list"])
+			}
+		})
 	}
 }
 

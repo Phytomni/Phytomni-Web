@@ -112,6 +112,7 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 	args := map[string]interface{}{"user_query": input.UserQuery}
 	switch slug {
 	case "research":
+		args["obs_file_list"] = []string{}
 		dataList, err := validateDataList(input.DataList)
 		if err != nil {
 			return nil, err
@@ -120,6 +121,7 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 		args["interop_mode"] = interopMode
 		args["interop_targets"] = interopTargets
 	case "analyst":
+		args["obs_file_list"] = []string{}
 		dataList, err := validateDataList(input.DataList)
 		if err != nil {
 			return nil, err
@@ -127,6 +129,7 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 		args["goal_description"] = input.UserQuery
 		args["data_list"] = dataList
 	case "design":
+		args["obs_file_list"] = []string{}
 		if len(input.DataList) > 0 {
 			return nil, fmt.Errorf("data_list is not supported for design")
 		}
@@ -141,6 +144,7 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 			args["species_code"] = input.SpeciesCode
 		}
 	case "network":
+		args["obs_file_list"] = []string{}
 		if len(input.DataList) > 0 {
 			return nil, fmt.Errorf("data_list is not supported for network")
 		}

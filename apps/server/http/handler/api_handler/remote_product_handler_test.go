@@ -94,6 +94,9 @@ func newRemoteProductHandlerRequest(t *testing.T, tool string, fields map[string
 	if err := mw.WriteField("mode", "expert"); err != nil {
 		t.Fatalf("write mode: %v", err)
 	}
+	if err := mw.WriteField("attachments", `[{"asset_id":"file_route"}]`); err != nil {
+		t.Fatalf("write attachments: %v", err)
+	}
 	for name, value := range fields {
 		if err := mw.WriteField(name, value); err != nil {
 			t.Fatalf("write %s: %v", name, err)
@@ -332,18 +335,14 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			}
 			previousConfig := rxBot.BotConfig
 			var gotPath string
-			var gotArguments map[string]interface{}
+			var gotRequest rxBot.AgentRunRequest
 			runID := "run-" + tc.slug
 			taskID := "task-" + tc.slug
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotPath = r.URL.Path
-				var request struct {
-					Arguments map[string]interface{} `json:"arguments"`
-				}
-				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 					t.Errorf("decode Bot request: %v", err)
 				}
-				gotArguments = request.Arguments
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.upstreamCode)
 				_, _ = w.Write([]byte(`{"id":"` + runID + `","object":"agent.run","agent":"` + tc.slug + `","status":"` + tc.upstreamState + `","task_ids":["` + taskID + `"],"result":{}}`))
@@ -369,14 +368,25 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			if gotPath != "/v1/agents/"+tc.slug+"/runs" {
 				t.Fatalf("Bot path = %q, want dedicated %s run", gotPath, tc.slug)
 			}
-			if tc.wantGeneID != "" && gotArguments["gene_id"] != tc.wantGeneID {
-				t.Fatalf("Bot gene_id = %#v, want %q", gotArguments["gene_id"], tc.wantGeneID)
+			if gotRequest.Arguments["obs_file_list"] == nil {
+				t.Fatal("required empty obs_file_list is missing")
 			}
-			if tc.wantToID != "" && gotArguments["to_id"] != tc.wantToID {
-				t.Fatalf("Bot to_id = %#v, want %q", gotArguments["to_id"], tc.wantToID)
+			if tc.slug != "research" {
+				if _, leaked := gotRequest.Arguments["data_list"]; leaked {
+					t.Fatal("untrusted data_list crossed the product boundary")
+				}
 			}
-			if tc.wantSpecies != "" && gotArguments["species_code"] != tc.wantSpecies {
-				t.Fatalf("Bot species_code = %#v, want %q", gotArguments["species_code"], tc.wantSpecies)
+			if tc.wantGeneID != "" && gotRequest.Arguments["gene_id"] != tc.wantGeneID {
+				t.Fatalf("Bot gene_id = %#v, want %q", gotRequest.Arguments["gene_id"], tc.wantGeneID)
+			}
+			if tc.wantToID != "" && gotRequest.Arguments["to_id"] != tc.wantToID {
+				t.Fatalf("Bot to_id = %#v, want %q", gotRequest.Arguments["to_id"], tc.wantToID)
+			}
+			if tc.wantSpecies != "" && gotRequest.Arguments["species_code"] != tc.wantSpecies {
+				t.Fatalf("Bot species_code = %#v, want %q", gotRequest.Arguments["species_code"], tc.wantSpecies)
+			}
+			if len(gotRequest.Attachments) != 1 || gotRequest.Attachments[0].AssetID != "file_route" {
+				t.Fatalf("opaque attachments=%#v, want file_route", gotRequest.Attachments)
 			}
 			var response struct {
 				Code int                   `json:"code"`

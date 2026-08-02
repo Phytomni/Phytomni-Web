@@ -50,6 +50,7 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 		"data_list":       map[string]interface{}{},
 		"interop_mode":    "off",
 		"interop_targets": []interface{}{},
+		"obs_file_list":   []interface{}{},
 	}
 	if !reflect.DeepEqual(gotArgs, want) {
 		t.Fatalf("arguments=%#v want=%#v", gotArgs, want)
@@ -69,24 +70,32 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 
 func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		tool string
-		path string
-		want map[string]interface{}
+		name  string
+		tool  string
+		path  string
+		input QueryInput
+		want  map[string]interface{}
 	}{
 		{
 			name: "design", tool: "DigitalDesignAgent", path: "/v1/agents/design/runs",
+			input: QueryInput{GeneID: "AT1G01010", SpeciesCode: "ath"},
 			want: map[string]interface{}{
 				"user_query":   "design",
 				"interop_mode": "off", "interop_targets": []interface{}{},
 				"resolve_gene_id": true,
+				"gene_id":         "AT1G01010", "species_code": "ath",
+				"obs_file_list": []interface{}{},
 			},
 		},
 		{
 			name: "network", tool: "GeneNetworkAgent", path: "/v1/agents/network/runs",
+			input: QueryInput{ToID: "TO:0000207", SpeciesCode: "osa"},
 			want: map[string]interface{}{
-				"user_query":    "network",
-				"resolve_to_id": true,
+				"user_query":       "network",
+				"resolve_trait_id": true,
+				"to_id":            "TO:0000207",
+				"species_code":     "osa",
+				"obs_file_list":    []interface{}{},
 			},
 		},
 	} {
@@ -113,9 +122,9 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 			}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
-			if _, err := NewService().Query(context.Background(), "alice", QueryInput{
-				Query: tt.name, Tool: tt.tool, Mode: "instant", Surface: QuerySurfaceAgentProduct,
-			}); err != nil {
+			in := tt.input
+			in.Query, in.Tool, in.Mode, in.Surface = tt.name, tt.tool, "instant", QuerySurfaceAgentProduct
+			if _, err := NewService().Query(context.Background(), "alice", in); err != nil {
 				t.Fatalf("Query: %v", err)
 			}
 			if !reflect.DeepEqual(gotArgs, tt.want) {

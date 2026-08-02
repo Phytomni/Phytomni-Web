@@ -23,8 +23,10 @@ func TestResolveExecutionTimeoutSeconds(t *testing.T) {
 		want         int
 	}{
 		{name: "instant chat", mode: "instant", directSlug: "chat", want: 3000},
+		{name: "direct review", mode: "instant", directSlug: "review", want: 30000},
 		{name: "direct background", mode: "instant", directSlug: "research", want: 17},
 		{name: "forced brief gene", mode: "expert", forcedTool: "BriefGeneAgent", want: 30000},
+		{name: "forced review", mode: "expert", forcedTool: "ReviewAgent", want: 30000},
 		{name: "forced analyst", mode: "expert", forcedTool: "AnalystAgent", want: 17},
 		{
 			name: "autonomous maximum synchronous", mode: "expert",
