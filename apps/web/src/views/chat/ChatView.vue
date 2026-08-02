@@ -631,7 +631,10 @@ import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { useTutorial } from "./composables/useTutorial";
 import { useImageZoomPan } from "./composables/useImageZoomPan";
 import { useChatStates } from "./composables/useChatStates";
-import { useBotCapabilities } from "./composables/useBotCapabilities";
+import {
+  useBotCapabilities,
+  type BotCapability,
+} from "./composables/useBotCapabilities";
 import { useResumableUploads } from "./composables/useResumableUploads";
 import { useArtifactPanel } from "./composables/useArtifactPanel";
 import { useAgentImages } from "./composables/useAgentImages";
@@ -703,6 +706,21 @@ function messageAttachments(
     size: file.size,
     asset_id: "asset_id" in file ? file.asset_id : undefined,
   }));
+}
+
+function unionPurposes(
+  capabilities: readonly (BotCapability | undefined)[]
+): UploadPurpose[] {
+  const present = new Set<UploadPurpose>();
+  for (const capability of capabilities) {
+    if (!capability?.enabled || !capability.attachments) continue;
+    for (const purpose of capability.attachmentPurposes) {
+      present.add(purpose);
+    }
+  }
+  return (["document", "dataset"] as const).filter((purpose) =>
+    present.has(purpose)
+  );
 }
 
 const composerRef = ref<ComposerHandle | null>(null);
@@ -933,9 +951,25 @@ const {
 } = useChatStates();
 
 const botCapabilities = useBotCapabilities("chat");
-const allowedUploadPurposes = computed<UploadPurpose[]>(() =>
-  botCapabilities.upload.value.enabled ? ["document"] : []
-);
+const allowedUploadPurposes = computed<UploadPurpose[]>(() => {
+  if (!botCapabilities.upload.value.enabled) return [];
+
+  const byTool = botCapabilities.byTool.value;
+  if (chatMode.value === "instant") {
+    return authorizedAgentTools.value.includes("ChatAgent")
+      ? unionPurposes([byTool.ChatAgent])
+      : [];
+  }
+
+  if (selectedAgent.value) {
+    const tool = selectedAgent.value as CanonicalAgentTool;
+    return authorizedAgentTools.value.includes(tool)
+      ? unionPurposes([byTool[tool]])
+      : [];
+  }
+
+  return unionPurposes(authorizedAgentTools.value.map((tool) => byTool[tool]));
+});
 const uploadUsername = computed(() => userStore().name ?? "");
 const uploadQueue = useResumableUploads({
   currentChatId,

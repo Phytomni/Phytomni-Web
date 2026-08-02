@@ -105,6 +105,71 @@ describe("useBotCapabilities", () => {
     });
   });
 
+  it("decodes finite attachment purposes", async () => {
+    mockRequest.mockResolvedValueOnce(
+      manifestPayload([
+        {
+          ...record("AnalystAgent"),
+          attachment_purposes: ["dataset", "document"],
+        },
+      ])
+    );
+
+    const state = useBotCapabilities("attachment-purposes-valid");
+    await state.load(true);
+
+    expect(state.byTool.value.AnalystAgent?.attachmentPurposes).toEqual([
+      "dataset",
+      "document",
+    ]);
+  });
+
+  it.each([
+    ["unknown", ["dataset", "binary"]],
+    ["duplicate", ["dataset", "dataset"]],
+    ["wrong type", "dataset"],
+  ])(
+    "fails closed for %s attachment purpose data",
+    async (_name, attachmentPurposes) => {
+      mockRequest.mockResolvedValueOnce(
+        manifestPayload([
+          {
+            ...record("AnalystAgent"),
+            attachment_purposes: attachmentPurposes,
+          },
+        ])
+      );
+
+      const state = useBotCapabilities(`attachment-purposes-${_name}`);
+      await state.load(true);
+
+      expect(state.byTool.value.AnalystAgent?.attachmentPurposes).toEqual([]);
+    }
+  );
+
+  it("clears attachment purposes for disabled attachments and Agents", async () => {
+    mockRequest.mockResolvedValueOnce(
+      manifestPayload([
+        {
+          ...record("ChatAgent"),
+          attachments: false,
+          attachment_purposes: ["document"],
+        },
+        {
+          ...record("AnalystAgent", false),
+          attachments: true,
+          attachment_purposes: ["dataset"],
+        },
+      ])
+    );
+
+    const state = useBotCapabilities("attachment-purposes-disabled");
+    await state.load(true);
+
+    expect(state.byTool.value.ChatAgent?.attachmentPurposes).toEqual([]);
+    expect(state.byTool.value.AnalystAgent?.attachmentPurposes).toEqual([]);
+  });
+
   it("keeps absent, malformed, and unknown records disabled", async () => {
     mockRequest.mockResolvedValueOnce({
       ...manifestPayload([
@@ -181,6 +246,28 @@ describe("useBotCapabilities", () => {
     );
   });
 
+  it("clones attachment purpose arrays across cache entries", async () => {
+    mockRequest.mockResolvedValueOnce(
+      manifestPayload([
+        {
+          ...record("AnalystAgent"),
+          attachment_purposes: ["dataset"],
+        },
+      ])
+    );
+
+    const first = useBotCapabilities("attachment-purpose-cache");
+    await first.load();
+    first.byTool.value.AnalystAgent?.attachmentPurposes.push("document");
+
+    const second = useBotCapabilities("attachment-purpose-cache");
+    await second.load();
+
+    expect(second.byTool.value.AnalystAgent?.attachmentPurposes).toEqual([
+      "dataset",
+    ]);
+  });
+
   it("decodes upload capability independently from Agent availability", async () => {
     mockRequest.mockResolvedValueOnce(
       manifestPayload([record("ChatAgent")], uploadRecord())
@@ -240,6 +327,8 @@ describe("useBotCapabilities", () => {
     expect(state.byTool.value.ChatAgent?.enabled).toBe(true);
     expect(state.byTool.value.ChatAgent?.attachments).toBe(false);
     expect(state.byTool.value.AnalystAgent?.attachments).toBe(false);
+    expect(state.byTool.value.ChatAgent?.attachmentPurposes).toEqual([]);
+    expect(state.byTool.value.AnalystAgent?.attachmentPurposes).toEqual([]);
   });
 
   it("rejects the legacy bare Agent array instead of treating it as a capability manifest", async () => {

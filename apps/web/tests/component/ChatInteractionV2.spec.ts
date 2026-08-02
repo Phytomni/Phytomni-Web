@@ -16,6 +16,8 @@ import type {
   ChatUIState,
   ResumableUploadItem,
 } from "@/views/chat/types";
+import type { BotCapabilityByTool } from "@/views/chat/composables/useBotCapabilities";
+import type { BotUploadCapability } from "@/api/types";
 import type { A2uiActionTransport } from "@/views/chat/streaming/a2uiAction";
 import { createMemoryA2uiTransport } from "@/views/chat/streaming/a2uiAction";
 import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
@@ -76,6 +78,18 @@ const chatViewState = vi.hoisted(() => ({
   > | null,
 }));
 
+const mockBotCapabilities = {
+  byTool: ref<BotCapabilityByTool>({}),
+  upload: ref<BotUploadCapability>({
+    enabled: true,
+    protocol: "obs-multipart-v2",
+    upload_origin: "https://upload.example",
+    max_file_bytes: 10 * 1024 * 1024 * 1024,
+    max_attachments: 10,
+  }),
+  load: vi.fn().mockResolvedValue(undefined),
+};
+
 vi.mock("@/views/chat/composables/useChatStates", async (importOriginal) => {
   const actual =
     await importOriginal<
@@ -101,8 +115,9 @@ vi.mock("@/api/chat", async (importOriginal) => {
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
   useBotCapabilities: () => ({
-    upload: ref(false),
-    load: vi.fn().mockResolvedValue(undefined),
+    byTool: mockBotCapabilities.byTool,
+    upload: mockBotCapabilities.upload,
+    load: mockBotCapabilities.load,
   }),
 }));
 
@@ -489,6 +504,202 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       wrapper.unmount();
     }
   });
+
+  it.each([
+    [
+      "Instant Chat + Chat(document)",
+      ["ChatAgent"],
+      "instant",
+      "",
+      {
+        ChatAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["document"],
+        },
+      },
+      ["document"],
+    ],
+    [
+      "Explicit Analyst + authorized(dataset,document)",
+      ["AnalystAgent"],
+      "expert",
+      "AnalystAgent",
+      {
+        AnalystAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["dataset", "document"],
+        },
+      },
+      ["document", "dataset"],
+    ],
+    [
+      "Explicit Review + authorized(document)",
+      ["ReviewAgent"],
+      "expert",
+      "ReviewAgent",
+      {
+        ReviewAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["document"],
+        },
+      },
+      ["document"],
+    ],
+    [
+      "Instant Chat without Chat permission",
+      ["ReviewAgent"],
+      "instant",
+      "",
+      {
+        ChatAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["document"],
+        },
+      },
+      [],
+    ],
+    [
+      "Explicit Analyst without Analyst permission",
+      ["ReviewAgent"],
+      "expert",
+      "AnalystAgent",
+      {
+        AnalystAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["dataset"],
+        },
+        ReviewAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["document"],
+        },
+      },
+      [],
+    ],
+    [
+      "Autonomous Expert + Analyst permission",
+      ["AnalystAgent"],
+      "expert",
+      "",
+      {
+        AnalystAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["dataset", "document"],
+        },
+        ReviewAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["document"],
+        },
+      },
+      ["document", "dataset"],
+    ],
+    [
+      "Autonomous Expert + Review permission only",
+      ["ReviewAgent"],
+      "expert",
+      "",
+      {
+        AnalystAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["dataset"],
+        },
+        ReviewAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentPurposes: ["document"],
+        },
+      },
+      ["document"],
+    ],
+    [
+      "No enabled authorized capability",
+      ["AnalystAgent"],
+      "expert",
+      "",
+      {
+        AnalystAgent: {
+          enabled: false,
+          attachments: true,
+          attachmentPurposes: ["dataset"],
+        },
+      },
+      [],
+    ],
+  ])(
+    "derives upload purposes for %s without widening the authorized Agent set",
+    async (_name, roles, mode, selectedAgent, capabilities, expected) => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+          { path: "/:pathMatch(.*)*", component: { template: "<div />" } },
+        ],
+      });
+      await router.push("/chat");
+      await router.isReady();
+      const context = createTestAppContext({ router });
+      userStore().SET_ROLES(roles);
+      userStore().expertEnabled = true;
+      mockBotCapabilities.byTool.value = capabilities as BotCapabilityByTool;
+      mockBotCapabilities.upload.value = {
+        enabled: true,
+        protocol: "obs-multipart-v2",
+        upload_origin: "https://upload.example",
+        max_file_bytes: 10 * 1024 * 1024 * 1024,
+        max_attachments: 10,
+      };
+
+      const wrapper = context.mount(ChatView, {
+        shallow: true,
+        global: {
+          stubs: {
+            PhyAdaptiveShell: {
+              template:
+                '<div><slot name="sidebar" /><slot name="main" /><slot name="artifact" /></div>',
+            },
+            ChatComposer: {
+              name: "ChatComposer",
+              props: ["allowedUploadPurposes"],
+              setup(
+                _props: unknown,
+                { expose }: { expose: (value: Record<string, unknown>) => void }
+              ) {
+                expose({ openHeader: vi.fn(), closeHeader: vi.fn() });
+                return {};
+              },
+              template: "<div />",
+            },
+            ElIcon: true,
+          },
+        },
+      });
+      const states = chatViewState.states;
+      if (!states) throw new Error("ChatView state was not captured");
+      const dialogueId = `attachment-purpose-${mode}-${selectedAgent || "auto"}`;
+
+      try {
+        states.currentChatId.value = dialogueId;
+        states.chatMode.value = mode;
+        states.selectedAgent.value = selectedAgent;
+        await nextTick();
+
+        expect(
+          wrapper
+            .findComponent({ name: "ChatComposer" })
+            .props("allowedUploadPurposes")
+        ).toEqual(expected);
+      } finally {
+        wrapper.unmount();
+      }
+    }
+  );
 
   it("mounts user/assistant rows, follow-ups, and actions chrome", () => {
     const user = mount(ChatMessageRow, {
@@ -926,6 +1137,7 @@ describe("ChatInteractionV2 — Phase 3C harness registry", () => {
         global: {
           mocks: { $t: (k: string) => k },
           stubs: {
+            ChatComposer: true,
             ChatModeSelector: true,
             ChatAgentPicker: true,
             LangSwitch: true,
