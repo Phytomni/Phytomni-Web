@@ -60,13 +60,11 @@
         surface="chat"
         @finish="emit('finish')"
       />
-      <div v-if="isTerminalLifecycle" class="agent-lifecycle__terminal">
-        {{ $t(lifecycleLabel) }}
-      </div>
       <div
-        v-else-if="
-          geneNetworkImagesLoading[message.id || ''] ||
-          awaitingSpecializedImages
+        v-if="
+          !isTerminalLifecycle &&
+          (geneNetworkImagesLoading[message.id || ''] ||
+            awaitingSpecializedImages)
         "
         class="images-loading"
       >
@@ -74,7 +72,10 @@
         {{ $t("common.loading") }}
       </div>
       <div
-        v-else-if="geneNetworkImages[message.id || '']?.length > 0"
+        v-else-if="
+          !isTerminalLifecycle &&
+          geneNetworkImages[message.id || '']?.length > 0
+        "
         class="images-container"
       >
         <img
@@ -112,13 +113,11 @@
         surface="chat"
         @finish="emit('finish')"
       />
-      <div v-if="isTerminalLifecycle" class="agent-lifecycle__terminal">
-        {{ $t(lifecycleLabel) }}
-      </div>
       <div
-        v-else-if="
-          digitalDesignImagesLoading[message.id || ''] ||
-          awaitingSpecializedImages
+        v-if="
+          !isTerminalLifecycle &&
+          (digitalDesignImagesLoading[message.id || ''] ||
+            awaitingSpecializedImages)
         "
         class="images-loading"
       >
@@ -126,7 +125,10 @@
         {{ $t("common.loading") }}
       </div>
       <div
-        v-else-if="digitalDesignImages[message.id || '']?.length > 0"
+        v-else-if="
+          !isTerminalLifecycle &&
+          digitalDesignImages[message.id || '']?.length > 0
+        "
         class="images-container"
       >
         <img
@@ -324,11 +326,6 @@ const shouldShowSpecializedNoData = computed(() => {
 
 .agent-lifecycle {
   margin-bottom: var(--phy-space-8);
-  color: var(--phy-color-text-muted);
-  font-size: 13px;
-}
-
-.agent-lifecycle__terminal {
   color: var(--phy-color-text-muted);
   font-size: 13px;
 }

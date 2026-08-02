@@ -56,7 +56,21 @@ export const CHAT_VISUAL_FIXTURE_KEYS = [
   "parallel-b",
 ] as const;
 
-export type ChatVisualFixtureKey = (typeof CHAT_VISUAL_FIXTURE_KEYS)[number];
+export const AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS = [
+  "agent-preparing",
+  "agent-running-partial",
+  "agent-succeeded-artifacts",
+  "agent-succeeded-empty",
+  "agent-failed",
+  "review-confirm-fallback",
+  "analyst-log-pending",
+  "analyst-log-available",
+] as const;
+
+export type AgentLifecycleVisualFixtureKey =
+  (typeof AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS)[number];
+export type ChatVisualFixtureKey =
+  (typeof CHAT_VISUAL_FIXTURE_KEYS)[number] | AgentLifecycleVisualFixtureKey;
 
 export const CHAT_VISUAL_LOCALES = ["en-US", "zh-CN"] as const;
 export type ChatVisualLocale = (typeof CHAT_VISUAL_LOCALES)[number];
@@ -164,6 +178,23 @@ const uploadFixture = (
   pickerOpen: false,
   pickerSearchQuery: "",
   messageCount: 0,
+});
+
+const agentLifecycleFixture = (
+  key: AgentLifecycleVisualFixtureKey
+): ChatVisualFixtureDefinition => ({
+  key,
+  chatState: "populated",
+  sidebarCollapsed: false,
+  drawerOpen: false,
+  showSidebarTrigger: false,
+  offCanvas: false,
+  isSending: false,
+  hasAttachment: false,
+  selectedAgent: "",
+  pickerOpen: false,
+  pickerSearchQuery: "",
+  messageCount: 1,
 });
 
 const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
@@ -822,6 +853,16 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
     pickerSearchQuery: "",
     messageCount: 2,
   },
+  "agent-preparing": agentLifecycleFixture("agent-preparing"),
+  "agent-running-partial": agentLifecycleFixture("agent-running-partial"),
+  "agent-succeeded-artifacts": agentLifecycleFixture(
+    "agent-succeeded-artifacts"
+  ),
+  "agent-succeeded-empty": agentLifecycleFixture("agent-succeeded-empty"),
+  "agent-failed": agentLifecycleFixture("agent-failed"),
+  "review-confirm-fallback": agentLifecycleFixture("review-confirm-fallback"),
+  "analyst-log-pending": agentLifecycleFixture("analyst-log-pending"),
+  "analyst-log-available": agentLifecycleFixture("analyst-log-available"),
 };
 
 export type ResolveChatVisualFixtureOk = {
@@ -845,7 +886,21 @@ export function isChatVisualFixtureKey(
 ): value is ChatVisualFixtureKey {
   return (
     typeof value === "string" &&
-    (CHAT_VISUAL_FIXTURE_KEYS as readonly string[]).includes(value)
+    (
+      [
+        ...CHAT_VISUAL_FIXTURE_KEYS,
+        ...AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS,
+      ] as readonly string[]
+    ).includes(value)
+  );
+}
+
+export function isAgentLifecycleVisualFixtureKey(
+  value: string | null | undefined
+): value is AgentLifecycleVisualFixtureKey {
+  return (
+    typeof value === "string" &&
+    (AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS as readonly string[]).includes(value)
   );
 }
 
@@ -885,9 +940,10 @@ export function resolveChatVisualFixture(
   if (!isChatVisualFixtureKey(state)) {
     return {
       ok: false,
-      error: `Unknown fixture state "${String(
-        state
-      )}". Expected one of: ${CHAT_VISUAL_FIXTURE_KEYS.join(", ")}.`,
+      error: `Unknown fixture state "${String(state)}". Expected one of: ${[
+        ...CHAT_VISUAL_FIXTURE_KEYS,
+        ...AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS,
+      ].join(", ")}.`,
     };
   }
   if (!isChatVisualLocale(locale)) {

@@ -1,6 +1,9 @@
 /** Deterministic synthetic data for the Chat visual fixture harness. */
 
-import type { ChatVisualFixtureDefinition } from "./fixture-registry";
+import type {
+  AgentLifecycleVisualFixtureKey,
+  ChatVisualFixtureDefinition,
+} from "./fixture-registry";
 import type { ContentBlock, ChatMessage } from "@/views/chat/types";
 import type {
   ResumableUploadItem,
@@ -45,6 +48,236 @@ export type SyntheticMessage = {
   content: string;
 };
 
+type SyntheticLifecycle = {
+  id: number;
+  phase: "PREPARING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+  terminal: boolean;
+  child_task_count: number;
+  child_work_accepted: boolean;
+  report_revision: number;
+  artifact_summary: {
+    image_count: number;
+    output_directory_count: number;
+    has_report: boolean;
+  };
+  reconciliation: "FRESH" | "CACHED" | "DEGRADED";
+  tracking_degraded: boolean;
+  error_code: "bot_transport_failed" | "run_contract_invalid" | null;
+};
+
+type SyntheticAnalystLog = {
+  state: "PENDING" | "AVAILABLE" | "TERMINAL_EMPTY" | "DEGRADED";
+  source: "BOT_RUN" | "LEGACY_TASK";
+  text: string;
+  revision: number;
+  truncated: boolean;
+  can_request_legacy_refresh: boolean;
+  error_code: "log_refresh_unavailable" | null;
+};
+
+const SYNTHETIC_NETWORK_RESULT_DATA_URL =
+  "data:image/svg+xml," +
+  encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-labelledby="title desc">
+      <title id="title">Synthetic plant gene network</title>
+      <desc id="desc">A bounded fixture diagram with six connected genes.</desc>
+      <rect width="640" height="360" rx="24" fill="#f7fbf9"/>
+      <g stroke="#78a7c8" stroke-width="4" opacity="0.72">
+        <path d="M120 180 L250 90 L390 120 L520 190 L400 285 L235 270 Z" fill="none"/>
+        <path d="M120 180 L390 120 M250 90 L400 285 M235 270 L520 190" fill="none"/>
+      </g>
+      <g font-family="Inter,Arial,sans-serif" font-size="18" font-weight="600" text-anchor="middle">
+        <g><circle cx="120" cy="180" r="42" fill="#4f8f67"/><text x="120" y="186" fill="white">RGA1</text></g>
+        <g><circle cx="250" cy="90" r="38" fill="#3b82a0"/><text x="250" y="96" fill="white">DREB</text></g>
+        <g><circle cx="390" cy="120" r="44" fill="#5a9c73"/><text x="390" y="126" fill="white">NAC6</text></g>
+        <g><circle cx="520" cy="190" r="39" fill="#397f9d"/><text x="520" y="196" fill="white">WRKY</text></g>
+        <g><circle cx="400" cy="285" r="42" fill="#65a67a"/><text x="400" y="291" fill="white">ERF3</text></g>
+        <g><circle cx="235" cy="270" r="37" fill="#498ba8"/><text x="235" y="276" fill="white">MYB2</text></g>
+      </g>
+    </svg>
+  `);
+
+export type AgentLifecycleVisualData = {
+  message: ChatMessage;
+  lifecycle?: SyntheticLifecycle;
+  geneNetworkImages?: Record<string, string[]>;
+  log?: {
+    rowId: string;
+    taskId: string;
+    data: SyntheticAnalystLog;
+  };
+};
+
+const lifecycle = (
+  phase: SyntheticLifecycle["phase"],
+  options: {
+    imageCount?: number;
+    hasReport?: boolean;
+    reportRevision?: number;
+  } = {}
+): SyntheticLifecycle => ({
+  id: 901,
+  phase,
+  terminal: ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase),
+  child_task_count: phase === "PREPARING" ? 0 : 1,
+  child_work_accepted: phase !== "PREPARING",
+  report_revision: options.reportRevision ?? 0,
+  artifact_summary: {
+    image_count: options.imageCount ?? 0,
+    output_directory_count: 0,
+    has_report: options.hasReport ?? false,
+  },
+  reconciliation: "FRESH",
+  tracking_degraded: false,
+  error_code: phase === "FAILED" ? "bot_transport_failed" : null,
+});
+
+const AGENT_LIFECYCLE_VISUAL_DATA: Record<
+  AgentLifecycleVisualFixtureKey,
+  AgentLifecycleVisualData
+> = {
+  "agent-preparing": {
+    message: {
+      id: "fixture-agent-preparing",
+      role: "assistant",
+      content: "",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("PREPARING", { imageCount: 1 }),
+  },
+  "agent-running-partial": {
+    message: {
+      id: "fixture-agent-running-partial",
+      role: "assistant",
+      content:
+        "### Partial network report\n\nThe Agent has accepted one bounded analysis step.",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("RUNNING", {
+      imageCount: 1,
+      hasReport: true,
+      reportRevision: 1,
+    }),
+  },
+  "agent-succeeded-artifacts": {
+    message: {
+      id: "fixture-agent-succeeded-artifacts",
+      role: "assistant",
+      content:
+        "### Network report\n\nA synthetic regulatory edge passed the fixture threshold.",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", {
+      imageCount: 1,
+      hasReport: true,
+      reportRevision: 2,
+    }),
+    geneNetworkImages: {
+      "fixture-agent-succeeded-artifacts": [SYNTHETIC_NETWORK_RESULT_DATA_URL],
+    },
+  },
+  "agent-succeeded-empty": {
+    message: {
+      id: "fixture-agent-succeeded-empty",
+      role: "assistant",
+      content: "",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED"),
+  },
+  "agent-failed": {
+    message: {
+      id: "fixture-agent-failed",
+      role: "assistant",
+      content: "",
+      tool_name: "DigitalDesignAgent",
+    },
+    lifecycle: lifecycle("FAILED"),
+  },
+  "review-confirm-fallback": {
+    message: {
+      id: "fixture-review-confirm-fallback",
+      role: "assistant",
+      content: "",
+      tool_name: "ReviewAgent",
+      blocks: [
+        {
+          type: "agent-surface",
+          authority: "agent",
+          interactive: true,
+          a2ui: {
+            surface: {
+              catalog_version: "v1.0",
+              surface_id: "fixture-review-confirm-fallback",
+              widget: "confirm",
+              props: {
+                title: "Continue the synthetic review?",
+                body: "This fixture intentionally omits optional action copy.",
+              },
+            },
+            state: { status: "ready", round: 1 },
+          },
+        },
+      ],
+    },
+  },
+  "analyst-log-pending": {
+    message: {
+      id: "fixture-analyst-log-pending",
+      role: "assistant",
+      content: "The synthetic analysis request was accepted.",
+      tool_name: "AnalystAgent",
+      task_id: "fixture-analyst-task-pending",
+    },
+    lifecycle: lifecycle("RUNNING"),
+    log: {
+      rowId: "902",
+      taskId: "fixture-analyst-task-pending",
+      data: {
+        state: "PENDING",
+        source: "BOT_RUN",
+        text: "",
+        revision: 0,
+        truncated: false,
+        can_request_legacy_refresh: false,
+        error_code: null,
+      },
+    },
+  },
+  "analyst-log-available": {
+    message: {
+      id: "fixture-analyst-log-available",
+      role: "assistant",
+      content: "The synthetic analysis report is available.",
+      tool_name: "AnalystAgent",
+      task_id: "fixture-analyst-task-available",
+    },
+    lifecycle: lifecycle("SUCCEEDED", {
+      hasReport: true,
+      reportRevision: 2,
+    }),
+    log: {
+      rowId: "903",
+      taskId: "fixture-analyst-task-available",
+      data: {
+        state: "AVAILABLE",
+        source: "BOT_RUN",
+        text: "[INFO] Synthetic analysis initialized.\n[DONE] Fixture report ready.",
+        revision: 2,
+        truncated: false,
+        can_request_legacy_refresh: false,
+        error_code: null,
+      },
+    },
+  },
+};
+
+export function getAgentLifecycleVisualData(
+  key: AgentLifecycleVisualFixtureKey
+): AgentLifecycleVisualData {
+  return AGENT_LIFECYCLE_VISUAL_DATA[key];
+}
+
 export function buildSyntheticMessages(
   fixture: ChatVisualFixtureDefinition
 ): SyntheticMessage[] {
@@ -73,6 +306,12 @@ export function buildSyntheticMessages(
 export function buildHarnessMessages(
   fixture: ChatVisualFixtureDefinition
 ): ChatMessage[] | SyntheticMessage[] {
+  if (fixture.key in AGENT_LIFECYCLE_VISUAL_DATA) {
+    return [
+      AGENT_LIFECYCLE_VISUAL_DATA[fixture.key as AgentLifecycleVisualFixtureKey]
+        .message,
+    ];
+  }
   if (isPhase3BMessageKey(fixture.key)) {
     return buildPhase3BTranscript(fixture.key);
   }

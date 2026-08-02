@@ -26,6 +26,7 @@
       "
       :data-sidebar-drawer-state="drawerStateAttr"
       :data-phase3c-kind="phase3cKindAttr"
+      :data-agent-lifecycle-state="agentLifecycleStateAttr"
       :data-upload-status="fixture.uploadStatus"
       :data-active-sidebar-item="activeSidebarItem"
       :data-chat-mode="fixtureChatMode"
@@ -279,10 +280,11 @@
                             index === contentMessages.length - 1
                           "
                           :activity-expanded-by-message="activityExpandedMap"
-                          :gene-network-images="EMPTY_IMAGES"
+                          :gene-network-images="geneNetworkImages"
                           :gene-network-images-loading="EMPTY_LOADING"
                           :digital-design-images="EMPTY_IMAGES"
                           :digital-design-images-loading="EMPTY_LOADING"
+                          :lifecycle="agentLifecycleOverlay?.lifecycle"
                         />
                         <template
                           v-if="logOverlay && message.role === 'assistant'"
@@ -293,6 +295,7 @@
                             :expanded="logOverlayExpanded"
                             :label="$t('chat.log.activityLabel')"
                             :hide-count="true"
+                            :lifecycle="agentLifecycleOverlay?.lifecycle"
                             @update:expanded="onFixtureAction('log-expanded')"
                           >
                             <ChatAnalystLog
@@ -450,6 +453,7 @@ import { useAppStore } from "@/stores";
 import type { ChatMessage } from "@/views/chat/types";
 import {
   getChatRoutingFixture,
+  isAgentLifecycleVisualFixtureKey,
   type ChatVisualFixtureDefinition,
 } from "./fixture-registry";
 import {
@@ -470,6 +474,8 @@ import {
   buildFixtureGeneNetworkImages,
   buildSyntheticPickerOptions,
   COMPOSER_MODEL_VALUE_BY_KEY,
+  getAgentLifecycleVisualData,
+  type AgentLifecycleVisualData,
   type SyntheticMessage,
 } from "./fixture-data";
 import { deriveCaseRouteOptions } from "@/constants/agents";
@@ -554,14 +560,38 @@ const phase3cOverlay = computed((): Phase3COverlaySpec | null => {
 
 const phase3cKindAttr = computed(() => phase3cOverlay.value?.kind ?? undefined);
 
+const agentLifecycleOverlay = computed((): AgentLifecycleVisualData | null => {
+  if (!props.fixture || !isAgentLifecycleVisualFixtureKey(props.fixture.key)) {
+    return null;
+  }
+  return getAgentLifecycleVisualData(props.fixture.key);
+});
+const agentLifecycleStateAttr = computed(
+  () =>
+    (props.fixture &&
+      isAgentLifecycleVisualFixtureKey(props.fixture.key) &&
+      props.fixture.key) ||
+    undefined
+);
+
 const logOverlay = computed((): Phase3CLogProps | null => {
+  const lifecycleLog = agentLifecycleOverlay.value?.log;
+  if (lifecycleLog) {
+    return {
+      rowId: lifecycleLog.rowId,
+      taskId: lifecycleLog.taskId,
+      logData: lifecycleLog.data,
+    };
+  }
   const overlay = phase3cOverlay.value;
   if (!overlay || overlay.kind !== "log" || !overlay.log) return null;
   return overlay.log;
 });
 
 const logOverlayExpanded = computed(
-  () => phase3cOverlay.value?.activityExpanded === true
+  () =>
+    agentLifecycleOverlay.value?.log !== undefined ||
+    phase3cOverlay.value?.activityExpanded === true
 );
 
 const isMessageContentFixture = computed(
@@ -584,7 +614,10 @@ const isA2uiLifecycleContentFixture = computed(
 );
 
 const isStructuredContentFixture = computed(
-  () => isPhase3CContentFixture.value || isA2uiLifecycleContentFixture.value
+  () =>
+    isPhase3CContentFixture.value ||
+    isA2uiLifecycleContentFixture.value ||
+    agentLifecycleOverlay.value !== null
 );
 
 const contentMessages = computed((): ChatMessage[] => {
@@ -637,10 +670,12 @@ const progressProps = computed((): Phase3CProgressProps | null => {
   return overlay.progress;
 });
 
-const geneNetworkImages = computed(() =>
-  props.fixture?.key === "image"
-    ? buildFixtureGeneNetworkImages()
-    : EMPTY_IMAGES
+const geneNetworkImages = computed(
+  () =>
+    agentLifecycleOverlay.value?.geneNetworkImages ??
+    (props.fixture?.key === "image"
+      ? buildFixtureGeneNetworkImages()
+      : EMPTY_IMAGES)
 );
 
 const fileList = computed(() =>

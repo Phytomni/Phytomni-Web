@@ -178,6 +178,36 @@ continue below the scroll owner; the geometry contract therefore checks that
 the upload card itself remains fully visible and bounded. The synthetic matrix
 is not evidence of a live Bot upload or 10 GiB behavior.
 
+## Agent lifecycle acceptance matrix
+
+The lifecycle harness registers eight finite, sanitized states separately from
+the long-lived base fixture list: `agent-preparing`, `agent-running-partial`,
+`agent-succeeded-artifacts`, `agent-succeeded-empty`, `agent-failed`,
+`review-confirm-fallback`, `analyst-log-pending`, and
+`analyst-log-available`. They render the production `ChatMessageContent`,
+`ChatActivity`, `ChatAnalystLog`, and `ConfirmWidget` paths without a network or
+real task data.
+
+Start the fixed-port Vite server, then run from `apps/web/`:
+
+```bash
+./tests/visual/chat/capture-agent-lifecycle-matrix.sh
+```
+
+The script captures all eight states at `390x844` and `1440x900` in light and
+dark themes: exactly 32 PNGs, 32 geometry records, and 32 lifecycle-style
+records under the ignored
+`.codex/evidence/frontend-v2/agent-lifecycle/` directory. Geometry and semantic
+style assertions must pass before each screenshot. The style contract checks
+horizontal containment, unclipped controls, visible status or log semantics,
+terminal-only empty copy, and a 24 CSS pixel minimum control target without
+locking exact colors.
+
+Inspect every PNG individually after the final capture and add one PASS, FAIL,
+or Needs Verification row per filename to the ignored
+`visual-review-ledger.md`. Any FAIL requires a fixture or production-style fix
+and a complete recapture; file counts alone are not visual acceptance.
+
 ## Accessibility modality evidence
 
 Keyboard, zoom, reduced-motion, and forced-colors checks belong in the
