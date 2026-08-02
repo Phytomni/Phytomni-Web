@@ -9,6 +9,25 @@ import type { RekeyChatStateOutcome } from "@/views/chat/types";
 // never bleeds across them" runtime invariant.
 
 describe("useChatStates parallel chat state", () => {
+  it("removes a deleted dialogue state without retaining its foreground owner", () => {
+    const s = useChatStates();
+    const stateA = s.getChatState("deleted-dialogue");
+    const stateB = s.getChatState("retained-dialogue");
+    stateA.renderedChat = { messages: [{ role: "assistant", content: "A" }] };
+    stateB.renderedChat = { messages: [{ role: "assistant", content: "B" }] };
+    s.currentChatId.value = "deleted-dialogue";
+
+    (
+      s as unknown as {
+        removeChatState: (dialogueId: string) => void;
+      }
+    ).removeChatState("deleted-dialogue");
+
+    expect(s.chatStates.value["deleted-dialogue"]).toBeUndefined();
+    expect(s.currentChatId.value).toBe("");
+    expect(s.chatStates.value["retained-dialogue"]).toBe(stateB);
+  });
+
   it("keeps lifecycle snapshots isolated and moves them with a dialogue rekey", () => {
     const s = useChatStates();
     const stateA = s.getChatState("A") as unknown as {

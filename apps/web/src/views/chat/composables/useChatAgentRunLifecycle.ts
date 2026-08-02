@@ -46,8 +46,24 @@ export function useChatAgentRunLifecycle(options: {
     Document,
     "hidden" | "addEventListener" | "removeEventListener"
   >;
-}): { dispose: () => void } {
+}): { disposeDialogue: (dialogueId: string) => void; dispose: () => void } {
   const watchedRows = new Map<string, string>();
+
+  const reloadDialogue = async (
+    rowId: string,
+    dialogueId: string,
+    state: ChatUIState
+  ): Promise<void> => {
+    if (state.refreshingMessages[rowId]) return;
+    state.refreshingMessages[rowId] = true;
+    try {
+      await options.reloadChat(dialogueId);
+    } finally {
+      if (options.chatStates.value[dialogueId] === state) {
+        delete state.refreshingMessages[rowId];
+      }
+    }
+  };
 
   const lifecycle = useAgentRunLifecycle({
     scope: "chat-lifecycle",
@@ -64,20 +80,12 @@ export function useChatAgentRunLifecycle(options: {
 
       state.agentRunLifecycles[rowId] = next;
       if (next.terminal) {
+        await reloadDialogue(rowId, dialogueId, state);
         watchedRows.delete(rowId);
         lifecycle.unwatchRow(rowId);
         return;
       }
-      if (state.refreshingMessages[rowId]) return;
-
-      state.refreshingMessages[rowId] = true;
-      try {
-        await options.reloadChat(dialogueId);
-      } finally {
-        if (options.chatStates.value[dialogueId] === state) {
-          delete state.refreshingMessages[rowId];
-        }
-      }
+      await reloadDialogue(rowId, dialogueId, state);
     },
   });
 
@@ -91,6 +99,7 @@ export function useChatAgentRunLifecycle(options: {
         if (!state) continue;
         state.agentRunLifecycles[rowId] = snapshot;
         if (snapshot.terminal) {
+          void reloadDialogue(rowId, dialogueId, state);
           watchedRows.delete(rowId);
           lifecycle.unwatchRow(rowId);
         }
@@ -136,7 +145,16 @@ export function useChatAgentRunLifecycle(options: {
     immediate: true,
   });
 
+  const disposeDialogue = (dialogueId: string): void => {
+    for (const [rowId, ownerDialogueId] of watchedRows) {
+      if (ownerDialogueId !== dialogueId) continue;
+      lifecycle.unwatchRow(rowId);
+      watchedRows.delete(rowId);
+    }
+  };
+
   return {
+    disposeDialogue,
     dispose: () => {
       stopWatchingStates();
       stopWatchingSnapshots();

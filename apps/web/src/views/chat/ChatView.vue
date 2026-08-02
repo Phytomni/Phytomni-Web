@@ -1,3 +1,18 @@
+<script lang="ts">
+import type { Chat as ChatRecord } from "./types";
+
+export function removeDeletedChat(options: {
+  chatList: ChatRecord[];
+  deletedChat: ChatRecord;
+  disposeDialogue: (dialogueId: string) => void;
+  removeChatState: (dialogueId: string) => void;
+}): ChatRecord[] {
+  const dialogueId = options.deletedChat.dialogue_id;
+  options.disposeDialogue(dialogueId);
+  options.removeChatState(dialogueId);
+  return options.chatList.filter((chat) => chat.dialogue_id !== dialogueId);
+}
+</script>
 <template>
   <div
     class="chat-page-root"
@@ -892,6 +907,7 @@ const {
   chatStates,
   getChatState,
   rekeyChatState,
+  removeChatState,
   currentChatId,
   currentChat,
   messageInput,
@@ -1660,9 +1676,12 @@ const handleChatRenamed = (updatedChat: Chat) => {
 
 // The parent holds chatList; deletion removes the item from the list here (the child only emits the chatDeleted event).
 const handleChatDeleted = (deletedChat: Chat) => {
-  chatList.value = chatList.value.filter(
-    (c) => c.dialogue_id !== deletedChat.dialogue_id
-  );
+  chatList.value = removeDeletedChat({
+    chatList: chatList.value,
+    deletedChat,
+    disposeDialogue: chatAgentRunLifecycle.disposeDialogue,
+    removeChatState,
+  });
 };
 
 // The favorite state is likewise updated by the parent (the child only emits the chatFavorited event).

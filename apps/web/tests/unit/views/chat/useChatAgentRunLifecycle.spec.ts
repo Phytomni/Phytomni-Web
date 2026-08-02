@@ -192,6 +192,62 @@ describe("useChatAgentRunLifecycle", () => {
     expect(reloadChat).not.toHaveBeenCalled();
   });
 
+  it("disposes only the deleted dialogue controller before its state is removed", async () => {
+    let resolve!: (value: ApiEnvelope<AgentTaskLifecycle>) => void;
+    const pending = new Promise<ApiEnvelope<AgentTaskLifecycle>>((settle) => {
+      resolve = settle;
+    });
+    const stateA = buildChatState({
+      historyHydration: "ready",
+      agentRunLifecycles: { "71": lifecycle(71) },
+      renderedChat: {
+        messages: [
+          buildChatMessage({
+            id: "71",
+            tool_name: "AnalystAgent",
+            status: "RUNNING",
+          }),
+        ],
+      },
+    });
+    const stateB = buildChatState({
+      historyHydration: "ready",
+      renderedChat: {
+        messages: [
+          buildChatMessage({
+            id: "72",
+            tool_name: "GeneNetworkAgent",
+            status: "RUNNING",
+          }),
+        ],
+      },
+    });
+    const chatStates = ref({ a: stateA, b: stateB });
+    const reloadChat = vi.fn().mockResolvedValue(undefined);
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat,
+      fetchLifecycle: vi.fn((rowId: string) =>
+        rowId === "71" ? pending : Promise.resolve(response(lifecycle(72)))
+      ),
+    });
+
+    await flush();
+    (
+      coordinator as unknown as {
+        disposeDialogue: (dialogueId: string) => void;
+      }
+    ).disposeDialogue("a");
+    delete chatStates.value.a;
+    resolve(response(lifecycle(71, { phase: "RUNNING" })));
+    await flush();
+
+    expect(reloadChat).not.toHaveBeenCalledWith("a");
+    expect(stateB.agentRunLifecycles["72"]?.id).toBe(72);
+    coordinator.dispose();
+  });
+
   it("keeps a duplicated malformed row ownership in the first hydrated dialogue", async () => {
     const stateA = buildChatState({
       historyHydration: "ready",
@@ -252,10 +308,22 @@ describe("useChatAgentRunLifecycle", () => {
       .mockResolvedValue(
         response(lifecycle(81, { phase: "SUCCEEDED", terminal: true }))
       );
+    const reloadChat = vi.fn(async () => {
+      state.renderedChat = {
+        messages: [
+          buildChatMessage({
+            id: "81",
+            tool_name: "DigitalDesignAgent",
+            status: "SUCCEEDED",
+            content: "completed design",
+          }),
+        ],
+      };
+    });
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
       getChatState: (dialogueId) => chatStates.value[dialogueId],
-      reloadChat: vi.fn().mockResolvedValue(undefined),
+      reloadChat,
       fetchLifecycle,
       jitter: () => 0,
     });
@@ -264,6 +332,8 @@ describe("useChatAgentRunLifecycle", () => {
     await vi.advanceTimersByTimeAsync(60000);
 
     expect(state.agentRunLifecycles["81"]?.terminal).toBe(true);
+    expect(reloadChat).toHaveBeenCalledOnce();
+    expect(state.renderedChat?.messages[0]?.content).toBe("completed design");
     expect(fetchLifecycle).toHaveBeenCalledOnce();
     coordinator.dispose();
   });

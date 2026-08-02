@@ -286,10 +286,16 @@ export function useChatStates() {
     return { outcome: "moved" };
   };
 
+  const removeChatState = (dialogueId: string): void => {
+    delete chatStates.value[dialogueId];
+    if (currentChatId.value === dialogueId) currentChatId.value = "";
+  };
+
   return {
     chatStates,
     getChatState,
     rekeyChatState,
+    removeChatState,
     currentChatId,
     currentChat,
     messageInput,
