@@ -6,8 +6,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { flushPromises } from "@vue/test-utils";
-import { defineComponent, h, nextTick, reactive } from "vue";
+import { defineComponent, h, nextTick, reactive, ref } from "vue";
 import { createPinia, setActivePinia } from "pinia";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { useA2uiInteraction } from "@/views/chat/composables/useA2uiInteraction";
 import type {
@@ -27,6 +28,7 @@ import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
 import FollowUpQuestions from "@/views/chat/FollowUpQuestions.vue";
 import chatLogo from "@/assets/images/chat/logo.png";
+import { userStore } from "@/stores";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import {
@@ -67,6 +69,42 @@ const mount: TestAppContext["mount"] = ((component, mountOptions) =>
   )) as TestAppContext["mount"];
 
 beforeEach(() => setActivePinia(createPinia()));
+
+const chatViewState = vi.hoisted(() => ({
+  states: null as ReturnType<
+    typeof import("@/views/chat/composables/useChatStates").useChatStates
+  > | null,
+}));
+
+vi.mock("@/views/chat/composables/useChatStates", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/views/chat/composables/useChatStates")
+    >();
+  return {
+    ...actual,
+    useChatStates: () => {
+      const states = actual.useChatStates();
+      chatViewState.states = states;
+      return states;
+    },
+  };
+});
+
+vi.mock("@/api/chat", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/chat")>();
+  return {
+    ...actual,
+    getHistoryQuestionList: vi.fn(() => new Promise(() => undefined)),
+  };
+});
+
+vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
+  useBotCapabilities: () => ({
+    upload: ref(false),
+    load: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
 
 vi.mock("vue-element-plus-x", () => ({
   MentionSender: {
@@ -112,6 +150,7 @@ vi.mock("vue-element-plus-x", () => ({
 }));
 
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
+import ChatView from "@/views/chat/ChatView.vue";
 import ChatVisualFixtureApp from "../visual/chat/ChatVisualFixtureApp.vue";
 
 const CHAT_SOURCE = readFileSync(
@@ -376,57 +415,79 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     wrapper.unmount();
   });
 
-  it("wires the ChatView Agent avatar to the Phytomni logo, not authenticated-user state", () => {
+  it("wires the real ChatView Agent avatar to the Phytomni logo, not authenticated-user state", async () => {
     const authenticatedUserAvatar = "data:image/svg+xml,user-avatar";
-    const transcriptStart = CHAT_SOURCE.indexOf("<ChatMessageRow");
-    const transcriptEnd = CHAT_SOURCE.indexOf(
-      "</ChatMessageRow>",
-      transcriptStart
-    );
-    const transcript = CHAT_SOURCE.slice(transcriptStart, transcriptEnd);
-
-    expect(CHAT_SOURCE).toContain("const botAvatar = chatLogo;");
-    expect(transcript).toContain(':src="botAvatar"');
-    expect(transcript).not.toContain("userStore().avatar");
-
-    const ChatViewAvatarHarness = defineComponent({
-      setup() {
-        return () =>
-          h("section", [
-            h(
-              ChatMessageRow,
-              { role: "user" },
-              {
-                avatar: () =>
-                  h("img", {
-                    "data-testid": "authenticated-user-avatar",
-                    src: authenticatedUserAvatar,
-                  }),
-              }
-            ),
-            h(
-              ChatMessageRow,
-              { role: "assistant" },
-              {
-                avatar: () =>
-                  h("img", {
-                    "data-testid": "agent-avatar",
-                    src: chatLogo,
-                  }),
-              }
-            ),
-          ]);
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/:pathMatch(.*)*", component: { template: "<div />" } },
+      ],
+    });
+    await router.push("/chat");
+    await router.isReady();
+    const context = createTestAppContext({ router });
+    userStore().SET_AVATAR(authenticatedUserAvatar);
+    userStore().SET_ROLES(["ChatAgent"]);
+    const wrapper = context.mount(ChatView, {
+      shallow: true,
+      global: {
+        stubs: {
+          PhyAdaptiveShell: {
+            template:
+              '<div><slot name="sidebar" /><slot name="main" /><slot name="artifact" /></div>',
+          },
+          ChatMessageRow,
+          ChatComposer: {
+            setup(
+              _props: unknown,
+              { expose }: { expose: (value: Record<string, unknown>) => void }
+            ) {
+              expose({ openHeader: vi.fn(), closeHeader: vi.fn() });
+              return {};
+            },
+            template: "<div />",
+          },
+          ElAvatar: {
+            props: ["src"],
+            template:
+              '<img data-testid="chat-view-agent-avatar" :data-src="src" />',
+          },
+          ElIcon: true,
+        },
       },
     });
-    const rows = mount(ChatViewAvatarHarness);
-    const user = rows.get('[data-message-role="user"]');
-    const agent = rows.get('[data-message-role="assistant"]');
+    const states = chatViewState.states;
+    if (!states) throw new Error("ChatView state was not captured");
+    const dialogueId = "avatar-regression";
+    try {
+      states.getChatState(dialogueId).renderedChat = {
+        dialogue_id: dialogueId,
+        messages: [
+          { role: "user", content: "User message" },
+          {
+            role: "assistant",
+            content: "Agent response",
+            tool_name: "ChatAgent",
+          },
+        ],
+      };
+      states.currentChatId.value = dialogueId;
+      await nextTick();
+      await nextTick();
 
-    expect(user.find(".message-avatar").exists()).toBe(false);
-    expect(agent.get("[data-testid='agent-avatar']").attributes("src")).toBe(
-      chatLogo
-    );
-    expect(agent.html()).not.toContain(authenticatedUserAvatar);
+      const user = wrapper.get('[data-message-role="user"]');
+      const agent = wrapper.get('[data-message-role="assistant"]');
+      expect(userStore().avatar).toBe(authenticatedUserAvatar);
+      expect(user.find(".message-avatar").exists()).toBe(false);
+      expect(
+        agent
+          .get("[data-testid='chat-view-agent-avatar']")
+          .attributes("data-src")
+      ).toBe(chatLogo);
+      expect(agent.html()).not.toContain(authenticatedUserAvatar);
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it("mounts user/assistant rows, follow-ups, and actions chrome", () => {
