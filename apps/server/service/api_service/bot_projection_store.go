@@ -31,6 +31,7 @@ type persistedProjection struct {
 	RunID               string                        `json:"run_id,omitempty"`
 	Agent               string                        `json:"agent,omitempty"`
 	Status              string                        `json:"status,omitempty"`
+	ChildTaskCount      int                           `json:"child_task_count,omitempty"`
 	ReportStage         string                        `json:"report_stage,omitempty"`
 	ReportCompleteness  string                        `json:"report_completeness,omitempty"`
 	ReportRevision      int64                         `json:"report_revision"`
@@ -247,8 +248,9 @@ func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
 	if strings.TrimSpace(incoming.Agent) != "" {
 		dst.Agent = incoming.Agent
 	}
-	if strings.TrimSpace(incoming.Status) != "" {
-		dst.Status = incoming.Status
+	dst.Status = mergeProjectionStatus(dst.Status, incoming.Status)
+	if incoming.ChildTaskCount > dst.ChildTaskCount {
+		dst.ChildTaskCount = incoming.ChildTaskCount
 	}
 	if strings.TrimSpace(incoming.ReportStage) != "" {
 		dst.ReportStage = incoming.ReportStage
@@ -290,6 +292,22 @@ func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
 	if len(incoming.Artifacts.Paths) > 0 {
 		dst.Artifacts.Paths = append([]string(nil), incoming.Artifacts.Paths...)
 	}
+}
+
+func isProjectionTerminalStatus(status string) bool {
+	switch status {
+	case "SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT":
+		return true
+	default:
+		return false
+	}
+}
+
+func mergeProjectionStatus(current, incoming string) string {
+	if isProjectionTerminalStatus(current) || strings.TrimSpace(incoming) == "" {
+		return current
+	}
+	return incoming
 }
 
 func mergeProjectionProgress(dst *ProjectionProgress, incoming ProjectionProgress) {
@@ -340,6 +358,7 @@ func marshalPersistedProjectionWithContext(projection BotRunProjection, privateC
 		RunID:              projection.RunID,
 		Agent:              projection.Agent,
 		Status:             projection.Status,
+		ChildTaskCount:     projection.ChildTaskCount,
 		ReportStage:        projection.ReportStage,
 		ReportCompleteness: projection.ReportCompleteness,
 		ReportRevision:     projection.ReportRevision,
@@ -388,6 +407,7 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 		RunID:              stored.RunID,
 		Agent:              stored.Agent,
 		Status:             stored.Status,
+		ChildTaskCount:     stored.ChildTaskCount,
 		ReportStage:        stored.ReportStage,
 		ReportCompleteness: stored.ReportCompleteness,
 		ReportRevision:     stored.ReportRevision,

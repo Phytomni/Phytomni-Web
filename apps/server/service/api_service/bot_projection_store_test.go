@@ -45,6 +45,70 @@ func TestMergeBotRunProjectionAcceptsNewerVisibleReport(t *testing.T) {
 	}
 }
 
+func TestMergeBotRunProjectionPreservesChildCountAndTerminalStatus(t *testing.T) {
+	cases := []struct {
+		name     string
+		current  BotRunProjection
+		incoming BotRunProjection
+		status   string
+		children int
+	}{
+		{
+			name:     "running child count advances",
+			current:  BotRunProjection{RunID: "run-child-advance", Status: "RUNNING", ReportRevision: 1},
+			incoming: BotRunProjection{RunID: "run-child-advance", Status: "RUNNING", ReportRevision: 2, ChildTaskCount: 2},
+			status:   "RUNNING",
+			children: 2,
+		},
+		{
+			name:     "stale child count cannot disappear",
+			current:  BotRunProjection{RunID: "run-child-retain", Status: "RUNNING", ReportRevision: 1, ChildTaskCount: 2},
+			incoming: BotRunProjection{RunID: "run-child-retain", Status: "RUNNING", ReportRevision: 2},
+			status:   "RUNNING",
+			children: 2,
+		},
+		{
+			name:     "succeeded cannot downgrade to running",
+			current:  BotRunProjection{RunID: "run-succeeded", Status: "SUCCEEDED", ReportRevision: 1},
+			incoming: BotRunProjection{RunID: "run-succeeded", Status: "RUNNING", ReportRevision: 2},
+			status:   "SUCCEEDED",
+		},
+		{
+			name:     "failed cannot downgrade to running",
+			current:  BotRunProjection{RunID: "run-failed", Status: "FAILED", ReportRevision: 1},
+			incoming: BotRunProjection{RunID: "run-failed", Status: "RUNNING", ReportRevision: 2},
+			status:   "FAILED",
+		},
+		{
+			name:     "cancelled cannot change to succeeded",
+			current:  BotRunProjection{RunID: "run-cancelled", Status: "CANCELLED", ReportRevision: 1},
+			incoming: BotRunProjection{RunID: "run-cancelled", Status: "SUCCEEDED", ReportRevision: 2},
+			status:   "CANCELLED",
+		},
+		{
+			name:     "terminal snapshot still adds visible metadata",
+			current:  BotRunProjection{RunID: "run-terminal-metadata", Status: "SUCCEEDED", ReportRevision: 1},
+			incoming: BotRunProjection{RunID: "run-terminal-metadata", Status: "FAILED", ReportRevision: 2, FinalReport: "finished", Artifacts: ProjectionArtifacts{Paths: []string{"obs://bucket/run-terminal-metadata/report.md"}}},
+			status:   "SUCCEEDED",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			merged, _, err := MergeBotRunProjection(tc.current, tc.incoming)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if merged.Status != tc.status || merged.ChildTaskCount != tc.children {
+				t.Fatalf("merged=%#v want status=%q childTaskCount=%d", merged, tc.status, tc.children)
+			}
+			if tc.name == "terminal snapshot still adds visible metadata" && (merged.FinalReport != "finished" || len(merged.Artifacts.Paths) != 1) {
+				t.Fatalf("terminal metadata not merged=%#v", merged)
+			}
+		})
+	}
+}
+
 func TestSaveBotRunProjectionCannotCrossOwner(t *testing.T) {
 	setupTestDB(t)
 	if err := setupProjectionRow(9, "bob@example.com", -1, ""); err != nil {
@@ -100,6 +164,7 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 		},
 		RequestID:        "bot-request-secret",
 		TrackingDegraded: true,
+		ChildTaskCount:   2,
 		RawPayload:       []byte("{\"token\":\"must-not-persist\"}"),
 	}
 	if err := SaveBotRunProjection(context.Background(), "alice@example.com", 11, incoming); err != nil {
@@ -113,7 +178,10 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 	if !strings.Contains(raw, "\"report_revision\":3") {
 		t.Fatalf("revision missing from JSON: %s", raw)
 	}
-	for _, forbidden := range []string{"RawPayload", "raw_payload", "must-not-persist", "bot-request-secret"} {
+	if !strings.Contains(raw, "\"child_task_count\":2") {
+		t.Fatalf("child task count missing from JSON: %s", raw)
+	}
+	for _, forbidden := range []string{"RawPayload", "raw_payload", "must-not-persist", "bot-request-secret", "private-child-a", "private-child-b"} {
 		if strings.Contains(raw, forbidden) {
 			t.Fatalf("private field %q serialized: %s", forbidden, raw)
 		}
@@ -136,7 +204,7 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 	if loaded.RequestID != "" || loaded.RawPayload != nil {
 		t.Fatalf("private metadata loaded=%#v", loaded)
 	}
-	if !loaded.TrackingDegraded || loaded.Progress.Completed != 2 || len(loaded.Artifacts.Paths) != 1 {
+	if !loaded.TrackingDegraded || loaded.ChildTaskCount != 2 || loaded.Progress.Completed != 2 || len(loaded.Artifacts.Paths) != 1 {
 		t.Fatalf("loaded public projection=%#v", loaded)
 	}
 
@@ -146,6 +214,20 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 	}
 	if revision != incoming.ReportRevision {
 		t.Fatalf("indexed revision=%d want %d", revision, incoming.ReportRevision)
+	}
+}
+
+func TestLoadBotRunProjectionReadsLegacyJSON(t *testing.T) {
+	setupTestDB(t)
+	if err := setupProjectionRow(15, "alice@example.com", 1, `{"run_id":"run-15","status":"RUNNING","report_revision":1}`); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadBotRunProjection(context.Background(), "alice@example.com", 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ChildTaskCount != 0 {
+		t.Fatalf("legacy child task count=%d want 0", loaded.ChildTaskCount)
 	}
 }
 

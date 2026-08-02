@@ -56,6 +56,42 @@ func TestDecodeRunProjectionPrefersFinalAndRejectsPrivatePayload(t *testing.T) {
 	}
 }
 
+func TestDecodeRunProjectionStoresOnlyBoundedChildCount(t *testing.T) {
+	privateChildren := []string{"private-child-a", "private-child-b"}
+	projection, err := DecodeRunProjection(&rxBot.RunRecord{
+		RunID: "run-child-count", Agent: "analyst", Status: "running", TaskIDs: privateChildren,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.ChildTaskCount != len(privateChildren) {
+		t.Fatalf("child task count=%d want %d", projection.ChildTaskCount, len(privateChildren))
+	}
+	persisted, err := marshalPersistedProjection(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, privateChild := range privateChildren {
+		if strings.Contains(persisted, privateChild) {
+			t.Fatalf("persisted projection retained private child %q: %s", privateChild, persisted)
+		}
+	}
+}
+
+func TestDecodeRunProjectionRejectsExcessChildCount(t *testing.T) {
+	_, err := DecodeRunProjection(rxBot.RunRecord{
+		RunID: "run-too-many-children", Agent: "analyst", Status: "running",
+		TaskIDs: make([]string, maxProjectionChildTasks+1),
+	})
+	var projectionErr *ProjectionDecodeError
+	if !errors.As(err, &projectionErr) {
+		t.Fatalf("error=%T %v, want *ProjectionDecodeError", err, err)
+	}
+	if projectionErr.Field != "task_ids" {
+		t.Fatalf("field=%q want task_ids", projectionErr.Field)
+	}
+}
+
 func TestDecodeRunProjectionMatrix(t *testing.T) {
 	longFailure := strings.Repeat("x", maxProjectionFailureMessage+1)
 	cases := []struct {

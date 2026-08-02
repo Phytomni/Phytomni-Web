@@ -16,6 +16,7 @@ const (
 	maxProjectionRunID          = 128
 	maxProjectionAgent          = 64
 	maxProjectionStatus         = 32
+	maxProjectionChildTasks     = 256
 	maxProjectionReportStage    = 64
 	maxProjectionCompleteness   = 32
 	maxProjectionDegraded       = rxBot.MaxProjectionFailureMessage
@@ -72,6 +73,7 @@ type BotRunProjection struct {
 	RunID              string
 	Agent              string
 	Status             string
+	ChildTaskCount     int
 	ReportStage        string
 	ReportCompleteness string
 	ReportRevision     int64
@@ -172,6 +174,9 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	if err != nil {
 		return BotRunProjection{}, err
 	}
+	if len(record.TaskIDs) > maxProjectionChildTasks {
+		return BotRunProjection{}, projectionDecodeError("task_ids", "too many child tasks")
+	}
 
 	envelope, err := decodeProjectionEnvelope(record.Result)
 	if err != nil {
@@ -181,6 +186,7 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	if err != nil {
 		return BotRunProjection{}, err
 	}
+	projection.ChildTaskCount = len(record.TaskIDs)
 	return projection, nil
 }
 
@@ -192,6 +198,9 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 	status, err := normalizeProjectionStatus(response.Status)
 	if err != nil {
 		return BotRunProjection{}, err
+	}
+	if len(response.TaskIDs) > maxProjectionChildTasks {
+		return BotRunProjection{}, projectionDecodeError("task_ids", "too many child tasks")
 	}
 	var interopMetadata botInteropMetadata
 	if interopAgent(agent) {
@@ -220,6 +229,7 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		RunID:            runID,
 		Agent:            agent,
 		Status:           status,
+		ChildTaskCount:   len(response.TaskIDs),
 		ReportRevision:   -1,
 		TrackingDegraded: response.DegradedTracking,
 		DegradedInterop:  interopMetadata.DegradedInterop,
