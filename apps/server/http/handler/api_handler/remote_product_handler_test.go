@@ -368,12 +368,9 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			if gotPath != "/v1/agents/"+tc.slug+"/runs" {
 				t.Fatalf("Bot path = %q, want dedicated %s run", gotPath, tc.slug)
 			}
-			if gotRequest.Arguments["obs_file_list"] == nil {
-				t.Fatal("required empty obs_file_list is missing")
-			}
-			if tc.slug != "research" {
-				if _, leaked := gotRequest.Arguments["data_list"]; leaked {
-					t.Fatal("untrusted data_list crossed the product boundary")
+			for _, key := range []string{"data_list", "obs_file_list"} {
+				if _, leaked := gotRequest.Arguments[key]; leaked {
+					t.Fatalf("legacy dataset field %q crossed the product boundary", key)
 				}
 			}
 			if tc.wantGeneID != "" && gotRequest.Arguments["gene_id"] != tc.wantGeneID {

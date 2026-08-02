@@ -7,13 +7,10 @@ import (
 )
 
 // AgentArgumentInput contains the Web-owned values that can be projected into
-// one Bot native-run argument object. The gateway deliberately accepts only
-// values it already owns (the query and server-managed dataset metadata); it
-// does not invent dataset paths or accept arbitrary Bot arguments from the
-// browser.
+// one Bot native-run argument object. Opaque asset references travel through
+// the dedicated attachments field, never through native argument paths.
 type AgentArgumentInput struct {
 	UserQuery      string
-	DataList       map[string]interface{}
 	GeneID         string
 	ToID           string
 	SpeciesCode    string
@@ -27,16 +24,6 @@ const (
 	MaxInteropTargets    = 16
 	MaxInteropModeLength = 16
 )
-
-func validOBSPath(path string) bool {
-	if !strings.HasPrefix(path, "/obs/") || len(path) <= len("/obs/") {
-		return false
-	}
-	if strings.ContainsAny(path, "\\\x00\r\n") || strings.Contains(path, "..") {
-		return false
-	}
-	return true
-}
 
 func validateInterop(mode string, targets []string) (string, []string, error) {
 	if mode == "" {
@@ -83,17 +70,6 @@ func ValidateInteropControls(mode string, targets []string) (string, []string, e
 	return validateInterop(mode, targets)
 }
 
-func validateDataList(dataList map[string]interface{}) (map[string]interface{}, error) {
-	copyData := make(map[string]interface{}, len(dataList))
-	for path, description := range dataList {
-		if !validOBSPath(path) {
-			return nil, fmt.Errorf("data_list contains an invalid OBS path")
-		}
-		copyData[path] = description
-	}
-	return copyData, nil
-}
-
 // BuildAgentArguments projects validated Web input into the release-native
 // argument shape for one agent run. It returns a fresh map and fresh slices so
 // callers cannot mutate a payload after it has been handed to the Bot client.
@@ -112,27 +88,11 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 	args := map[string]interface{}{"user_query": input.UserQuery}
 	switch slug {
 	case "research":
-		args["obs_file_list"] = []string{}
-		dataList, err := validateDataList(input.DataList)
-		if err != nil {
-			return nil, err
-		}
-		args["data_list"] = dataList
 		args["interop_mode"] = interopMode
 		args["interop_targets"] = interopTargets
 	case "analyst":
-		args["obs_file_list"] = []string{}
-		dataList, err := validateDataList(input.DataList)
-		if err != nil {
-			return nil, err
-		}
 		args["goal_description"] = input.UserQuery
-		args["data_list"] = dataList
 	case "design":
-		args["obs_file_list"] = []string{}
-		if len(input.DataList) > 0 {
-			return nil, fmt.Errorf("data_list is not supported for design")
-		}
 		args["interop_mode"] = interopMode
 		args["interop_targets"] = interopTargets
 		args["resolve_gene_id"] = true
@@ -144,10 +104,6 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 			args["species_code"] = input.SpeciesCode
 		}
 	case "network":
-		args["obs_file_list"] = []string{}
-		if len(input.DataList) > 0 {
-			return nil, fmt.Errorf("data_list is not supported for network")
-		}
 		if input.ToID != "" || input.SpeciesCode != "" {
 			if input.ToID == "" || input.SpeciesCode == "" {
 				return nil, fmt.Errorf("network resolver values require to_id and species_code")
@@ -168,9 +124,6 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 			args["species_code"] = input.SpeciesCode
 		}
 	default:
-		if len(input.DataList) > 0 {
-			return nil, fmt.Errorf("data_list is not supported for %s", slug)
-		}
 		if input.InteropMode != "" || len(input.InteropTargets) > 0 {
 			return nil, fmt.Errorf("interop controls are not supported for %s", slug)
 		}
