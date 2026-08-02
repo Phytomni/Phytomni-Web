@@ -113,6 +113,7 @@ describe("blocking Bot response identity", () => {
     expect(assistant.id).toBe(41);
     expect(assistant.botProjection?.runId).toBe("run-41");
     expect(assistant.botProjection?.status).toBe("SUCCEEDED");
+    expect(state.agentRunLifecycles).toEqual({});
   });
 
   it("does not synthesize identity for tracking-degraded success", async () => {

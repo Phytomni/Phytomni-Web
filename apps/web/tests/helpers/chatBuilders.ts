@@ -15,6 +15,7 @@ export function buildChatState(
     logData: {},
     loadingLog: {},
     refreshingMessages: {},
+    agentRunLifecycles: {},
     reactions: {},
     updatingLog: {},
     logErrorKinds: {},

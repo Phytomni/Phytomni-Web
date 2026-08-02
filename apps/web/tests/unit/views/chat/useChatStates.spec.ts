@@ -9,6 +9,33 @@ import type { RekeyChatStateOutcome } from "@/views/chat/types";
 // never bleeds across them" runtime invariant.
 
 describe("useChatStates parallel chat state", () => {
+  it("keeps lifecycle snapshots isolated and moves them with a dialogue rekey", () => {
+    const s = useChatStates();
+    const stateA = s.getChatState("A") as unknown as {
+      agentRunLifecycles: Record<string, { phase: string }>;
+    };
+    const stateB = s.getChatState("B") as unknown as {
+      agentRunLifecycles: Record<string, { phase: string }>;
+    };
+
+    expect(stateA.agentRunLifecycles).toEqual({});
+    expect(stateB.agentRunLifecycles).toEqual({});
+
+    stateA.agentRunLifecycles["41"] = { phase: "PREPARING" };
+    stateB.agentRunLifecycles["41"] = { phase: "RUNNING" };
+
+    expect(stateA.agentRunLifecycles["41"]).toEqual({ phase: "PREPARING" });
+    expect(stateB.agentRunLifecycles["41"]).toEqual({ phase: "RUNNING" });
+    expect(s.rekeyChatState("A", "A-server")).toEqual({ outcome: "moved" });
+    expect(
+      (
+        s.getChatState("A-server") as unknown as {
+          agentRunLifecycles: Record<string, { phase: string }>;
+        }
+      ).agentRunLifecycles
+    ).toEqual({ "41": { phase: "PREPARING" } });
+  });
+
   it("isolates per-dialogue state via proxies — switching currentChatId flips state without bleed", () => {
     const s = useChatStates();
     const fileA: ResumableUploadItem[] = [
@@ -74,6 +101,7 @@ describe("useChatStates parallel chat state", () => {
       logData: {},
       loadingLog: {},
       refreshingMessages: {},
+      agentRunLifecycles: {},
       reactions: {},
       updatingLog: {},
       logErrorKinds: {},

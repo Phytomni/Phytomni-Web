@@ -178,6 +178,7 @@ describe("useRefreshMessage", () => {
 
     // The old refreshKey is cleaned up (1_msg-1)
     expect(stateFor("A").refreshingMessages["1_msg-1"]).toBeUndefined();
+    expect(stateFor("A").agentRunLifecycles).toEqual({});
 
     // getHistoryQuestionData is called in finally
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);

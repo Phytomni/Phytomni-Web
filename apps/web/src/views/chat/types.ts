@@ -13,6 +13,7 @@ import type {
   CitationDocument,
   StreamContentBlock,
 } from "./messageTypes";
+import type { AgentTaskLifecycle } from "@/api/types";
 import type { ResumableUploadItem } from "./upload/types";
 import type { ChatAttachmentDisplay } from "./utils/asset-attachments";
 
@@ -229,6 +230,8 @@ export interface ChatUIState {
   logData: Record<string, unknown>;
   loadingLog: Record<string, boolean>;
   refreshingMessages: Record<string, boolean>;
+  /** Last sanitized lifecycle snapshot for each positive Web task-row id. */
+  agentRunLifecycles: Record<string, AgentTaskLifecycle>;
   reactions: Record<string, number>;
   updatingLog: Record<string, boolean>;
   /** Stable enum for analyst-log errors; translate at render time. */

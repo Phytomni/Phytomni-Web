@@ -14,6 +14,7 @@ import {
 } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 import { getAnswerCheck } from "@/api/chat";
+import { normalizePositiveTaskRowId } from "@/api/task";
 import i18n from "@/locales";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
 import { decodeAgentSteps, decodeFollowUpQuestions } from "../messageTypes";
@@ -39,6 +40,40 @@ export function historyAssistantMetadata(
   const contextNotice = normalizeChatContextNotice(item);
   if (contextNotice) metadata.contextNotice = contextNotice;
   return metadata;
+}
+
+const BACKGROUND_AGENT_TOOLS = new Set([
+  "AnalystAgent",
+  "InSilicoResearchAgent",
+  "GeneNetworkAgent",
+  "DigitalDesignAgent",
+]);
+
+function isTerminalHistoryStatus(status: unknown): boolean {
+  return [
+    "SUCCEEDED",
+    "FAILED",
+    "TIMED_OUT",
+    "TIMEOUT",
+    "CANCELLED",
+    "CANCELED",
+  ].includes(
+    String(status ?? "")
+      .trim()
+      .toUpperCase()
+  );
+}
+
+function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
+  if (typeof item.answer !== "string" || item.answer.trim()) return false;
+  if (!BACKGROUND_AGENT_TOOLS.has(item.tool_name ?? "")) return false;
+  if (isTerminalHistoryStatus(item.status)) return false;
+  try {
+    normalizePositiveTaskRowId(item.id ?? "");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function useSelectChat(opts: {
@@ -95,7 +130,12 @@ export function useSelectChat(opts: {
     return generation;
   };
 
-  const selectChat = async (dialogueId: string) => {
+  type HydrationMode = { force: boolean; foreground: boolean };
+
+  const hydrateChat = async (
+    dialogueId: string,
+    mode: HydrationMode
+  ): Promise<void> => {
     // Capture dialogue + state before await so a late response never writes
     // another dialogue's renderedChat or steals foreground URL/scroll.
     const capturedDialogueId = dialogueId;
@@ -104,28 +144,40 @@ export function useSelectChat(opts: {
     const hydrationGeneration = beginHydration(capturedDialogueId);
     const isCurrentHydration = () =>
       hydrationGenerations.get(capturedDialogueId) === hydrationGeneration;
-    currentChatId.value = capturedDialogueId;
+    if (mode.foreground) currentChatId.value = capturedDialogueId;
     const chat = chatList.value.find(
       (c: Chat) => c.dialogue_id === capturedDialogueId
     );
 
     // A live rendered owner already contains message-scoped stream/runtime
     // state. Re-selecting it must not rehydrate stale history over that tree.
-    if (chatState.renderedChat) {
+    if (!mode.force && chatState.renderedChat) {
       if (chatState.renderedChat.messages.length > 0 && isCurrentHydration()) {
-        await scrollToBottom();
+        if (mode.foreground) await scrollToBottom();
       }
-      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
+      if (
+        mode.foreground &&
+        isCurrentHydration() &&
+        currentChatId.value === capturedDialogueId
+      ) {
         updateUrlWithChatId(capturedDialogueId);
       }
       return;
     }
 
-    chatState.historyHydration = "loading";
+    const previousHistoryHydration = chatState.historyHydration;
+    if (!mode.force) chatState.historyHydration = "loading";
     chatState.historyErrorKind = null;
-    chatState.historyQuestion = null;
-    chatState.renderedChat = null;
-    chatState.reactions = {};
+    if (!mode.force) {
+      chatState.historyQuestion = null;
+      chatState.renderedChat = null;
+      chatState.reactions = {};
+    }
+
+    const retainReloadedTreeOnFailure = () => {
+      if (!mode.force) return;
+      chatState.historyHydration = previousHistoryHydration;
+    };
 
     let res;
     try {
@@ -133,9 +185,14 @@ export function useSelectChat(opts: {
       res = await getAnswerCheck({ dialogue_id: capturedDialogueId });
     } catch {
       if (!isCurrentHydration()) return;
-      chatState.historyHydration = "error";
+      retainReloadedTreeOnFailure();
+      if (!mode.force) chatState.historyHydration = "error";
       chatState.historyErrorKind = "request";
-      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
+      if (
+        mode.foreground &&
+        isCurrentHydration() &&
+        currentChatId.value === capturedDialogueId
+      ) {
         updateUrlWithChatId(capturedDialogueId);
       }
       return;
@@ -144,9 +201,14 @@ export function useSelectChat(opts: {
     if (!isCurrentHydration()) return;
 
     if (res.code !== 200) {
-      chatState.historyHydration = "error";
+      retainReloadedTreeOnFailure();
+      if (!mode.force) chatState.historyHydration = "error";
       chatState.historyErrorKind = "request";
-      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
+      if (
+        mode.foreground &&
+        isCurrentHydration() &&
+        currentChatId.value === capturedDialogueId
+      ) {
         updateUrlWithChatId(capturedDialogueId);
       }
       return;
@@ -160,13 +222,14 @@ export function useSelectChat(opts: {
       // process the returned data into message format
       const messages: ChatMessage[] = [];
       const historyMessages: ChatMessage[] = [];
+      const nextReactions: Record<string, number> = {};
       const historyRows = normalizeHistoryRows(res.data);
       const attachmentMetadata = await loadAttachmentMetadata();
       if (!isCurrentHydration()) return;
       // Reconstruct the per-conversation routing mode from the persisted parent
       // row so refreshes/threads in this conversation route correctly. Default
       // to "instant" for legacy rows that predate the mode column.
-      chatState.mode = historyRows[0]?.mode === "expert" ? "expert" : "instant";
+      const nextMode = historyRows[0]?.mode === "expert" ? "expert" : "instant";
 
       // iterate the returned array and convert to message format
       if (historyRows.length > 0) {
@@ -175,9 +238,7 @@ export function useSelectChat(opts: {
           const assistantMetadata = historyAssistantMetadata(item);
           // sync the reaction state returned by the server
           if (item.id && item.reaction_type) {
-            chatState.reactions[item.id.toString()] = parseInt(
-              item.reaction_type
-            );
+            nextReactions[item.id.toString()] = parseInt(item.reaction_type);
           }
 
           // Add the user message, including a legacy title-only parent row.
@@ -233,7 +294,28 @@ export function useSelectChat(opts: {
             }
           }
 
-          // add the assistant message only when the persisted value is usable
+          if (blankBackgroundAssistantRow(item)) {
+            messages.push({
+              role: "assistant",
+              ...assistantMetadata,
+              content: "",
+              status: item.status || "",
+              upload_path: item.upload_path || "",
+              download_path: item.download_path || "",
+              id: String(item.id),
+              task_id: item.task_id,
+              tool_name: item.tool_name,
+              followUpQuestions: decodeFollowUpQuestions(
+                item.follow_up_questions
+              ),
+              showFollowUpQuestions: true,
+              showLog: false,
+              instantMessage: false,
+              compute_resource: item.compute_resource || "",
+            });
+          }
+
+          // Add the assistant message only when the persisted value is usable.
           if (typeof item.answer === "string" && item.answer.trim()) {
             try {
               const answerData = parseAgentAnswer(item.answer);
@@ -526,6 +608,8 @@ export function useSelectChat(opts: {
         ElMessage.warning(i18n.global.t("chat.contextDegraded"));
       }
 
+      chatState.mode = nextMode;
+      chatState.reactions = nextReactions;
       chatState.historyQuestion = historyMessages;
       // Populate only this dialogue's rendered owner — never the live current ref
       chatState.renderedChat = {
@@ -536,7 +620,11 @@ export function useSelectChat(opts: {
         messages.length > 0 ? "ready" : "history-empty";
 
       // Foreground shell effects only while this dialogue is still selected
-      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
+      if (
+        mode.foreground &&
+        isCurrentHydration() &&
+        currentChatId.value === capturedDialogueId
+      ) {
         if (messages.length > 0) {
           await scrollToBottom();
         }
@@ -550,13 +638,23 @@ export function useSelectChat(opts: {
       return;
     } catch {
       if (!isCurrentHydration()) return;
-      chatState.historyHydration = "error";
+      retainReloadedTreeOnFailure();
+      if (!mode.force) chatState.historyHydration = "error";
       chatState.historyErrorKind = "decode";
-      if (isCurrentHydration() && currentChatId.value === capturedDialogueId) {
+      if (
+        mode.foreground &&
+        isCurrentHydration() &&
+        currentChatId.value === capturedDialogueId
+      ) {
         updateUrlWithChatId(capturedDialogueId);
       }
     }
   };
 
-  return { selectChat };
+  const selectChat = (dialogueId: string) =>
+    hydrateChat(dialogueId, { force: false, foreground: true });
+  const reloadChat = (dialogueId: string) =>
+    hydrateChat(dialogueId, { force: true, foreground: false });
+
+  return { selectChat, reloadChat };
 }

@@ -98,6 +98,7 @@ describe("useStreamMessage", () => {
     expect(md?.text).toBe("hello world");
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
+    expect(chatState.agentRunLifecycles).toEqual({});
   });
 
   it("appends the provided logical turn ID once for direct stream callers", async () => {

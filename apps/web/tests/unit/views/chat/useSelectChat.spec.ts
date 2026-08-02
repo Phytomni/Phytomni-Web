@@ -847,6 +847,118 @@ describe("useSelectChat", () => {
     expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
   });
 
+  it("reloads a background dialogue without changing foreground navigation or composer state", async () => {
+    const pendingA = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const stateA = getChatState("d1");
+    stateA.renderedChat = {
+      dialogue_id: "d1",
+      messages: [{ role: "assistant", content: "old A" }],
+    };
+    stateA.historyHydration = "ready";
+    const stateB = getChatState("d2");
+    stateB.renderedChat = {
+      dialogue_id: "d2",
+      messages: [{ role: "assistant", content: "B stays visible" }],
+    };
+    stateB.messageInput = "draft for B";
+    stateB.selectedAgent = "AnalystAgent";
+    currentChatId.value = "d2";
+    mockGetAnswerCheck.mockReturnValueOnce(pendingA.promise);
+
+    const { reloadChat } = makeComposable();
+    const reload = reloadChat("d1");
+
+    expect(currentChatId.value).toBe("d2");
+    expect(stateFor("d1").renderedChat?.messages[0]?.content).toBe("old A");
+    expect(stateFor("d2").messageInput).toBe("draft for B");
+    expect(stateFor("d2").selectedAgent).toBe("AnalystAgent");
+
+    pendingA.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "updated-a",
+          query: "updated question",
+          answer: "updated answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+    await reload;
+
+    expect(messageAt("d1", 0, "background reloaded A").content).toBe(
+      "updated question"
+    );
+    expect(messageAt("d2", 0, "preserved B").content).toBe("B stays visible");
+    expect(currentChatId.value).toBe("d2");
+    expect(updateUrlWithChatId).not.toHaveBeenCalled();
+    expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
+  it("does not let an older background reload overwrite a newer reload", async () => {
+    const older = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const newer = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const stateA = getChatState("d1");
+    stateA.renderedChat = { dialogue_id: "d1", messages: [] };
+    stateA.historyHydration = "ready";
+    currentChatId.value = "d2";
+    mockGetAnswerCheck
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+
+    const { reloadChat } = makeComposable();
+    const oldReload = reloadChat("d1");
+    const newReload = reloadChat("d1");
+
+    newer.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
+          query: "new question",
+          answer: "new answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+    await newReload;
+    older.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
+          query: "old question",
+          answer: "old answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+    await oldReload;
+
+    expect(messageAt("d1", 0, "newer background reload").content).toBe(
+      "new question"
+    );
+    expect(currentChatId.value).toBe("d2");
+  });
+
+  it("keeps the rendered background tree ready when a reload request fails", async () => {
+    const stateA = getChatState("d1");
+    stateA.renderedChat = {
+      dialogue_id: "d1",
+      messages: [{ role: "assistant", content: "keep this answer" }],
+    };
+    stateA.historyHydration = "ready";
+    currentChatId.value = "d2";
+    mockGetAnswerCheck.mockRejectedValueOnce(new Error("network unavailable"));
+
+    const { reloadChat } = makeComposable();
+    await reloadChat("d1");
+
+    expect(stateFor("d1").renderedChat?.messages[0]?.content).toBe(
+      "keep this answer"
+    );
+    expect(stateFor("d1").historyHydration).toBe("ready");
+    expect(stateFor("d1").historyErrorKind).toBe("request");
+    expect(currentChatId.value).toBe("d2");
+    expect(updateUrlWithChatId).not.toHaveBeenCalled();
+    expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
   it("updates the still-owned DeepGenome history message after leave and reselect", async () => {
     const fileRead = deferred<string>();
     mockReadServerFile.mockReturnValueOnce(fileRead.promise);
@@ -948,5 +1060,83 @@ describe("useSelectChat", () => {
     expect(assistant.tool_name).toBe("AnalystAgent");
     expect(assistant.id).toBe("1001");
     expect(assistant.task_id).toBe("ei-task-abc");
+  });
+
+  it("hydrates blank nonterminal background agents as discoverable assistant placeholders", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        ...[
+          "AnalystAgent",
+          "InSilicoResearchAgent",
+          "GeneNetworkAgent",
+          "DigitalDesignAgent",
+        ].map((tool_name, index) =>
+          buildChatHistoryRecord({
+            id: String(201 + index),
+            answer: "",
+            status: "RUNNING",
+            tool_name,
+          })
+        ),
+        buildChatHistoryRecord({
+          id: "205",
+          answer: "",
+          status: "RUNNING",
+          tool_name: "ChatAgent",
+        }),
+        buildChatHistoryRecord({
+          id: "malformed",
+          answer: "",
+          status: "RUNNING",
+          tool_name: "AnalystAgent",
+        }),
+        buildChatHistoryRecord({
+          id: "206",
+          answer: "",
+          status: "SUCCEEDED",
+          tool_name: "AnalystAgent",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    expect(renderedFor("d1", "blank background rows").messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          id: "201",
+          tool_name: "AnalystAgent",
+          status: "RUNNING",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "202",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "203",
+          tool_name: "GeneNetworkAgent",
+          status: "RUNNING",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "204",
+          tool_name: "DigitalDesignAgent",
+          status: "RUNNING",
+          content: "",
+        }),
+      ])
+    );
+    expect(
+      renderedFor("d1", "blank background rows").messages.map((message) =>
+        String(message.id ?? "")
+      )
+    ).not.toEqual(expect.arrayContaining(["205", "206", "malformed"]));
   });
 });

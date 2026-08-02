@@ -16,6 +16,7 @@ function createDefaultChatUIState(): ChatUIState {
     logData: {},
     loadingLog: {},
     refreshingMessages: {},
+    agentRunLifecycles: {},
     reactions: {},
     updatingLog: {},
     logErrorKinds: {},

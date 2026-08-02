@@ -628,6 +628,7 @@ import {
 } from "@/constants/agents";
 import type { CanonicalAgentTool } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
+import { useChatAgentRunLifecycle } from "./composables/useChatAgentRunLifecycle";
 import { useSendMessage } from "./composables/useSendMessage";
 import { useA2uiInteraction } from "./composables/useA2uiInteraction";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
@@ -862,6 +863,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener("resize", updateMobileViewport);
+  chatAgentRunLifecycle.dispose();
 });
 
 // Load a specific incomplete session from localStorage (used by onMounted keyed on the url chatId)
@@ -1681,7 +1683,7 @@ const updateUrlWithChatId = (dialogueId: string) => {
 };
 
 // Select a chat — history-loading logic extracted into the useSelectChat composable
-const { selectChat } = useSelectChat({
+const { selectChat, reloadChat } = useSelectChat({
   getChatState,
   currentChatId,
   scrollToBottom,
@@ -1690,6 +1692,11 @@ const { selectChat } = useSelectChat({
   timestamp,
   username: uploadUsername,
   attachmentStore: uploadQueue.recoveryStore,
+});
+const chatAgentRunLifecycle = useChatAgentRunLifecycle({
+  chatStates,
+  getChatState,
+  reloadChat,
 });
 
 const retrySelectedChat = () => {
