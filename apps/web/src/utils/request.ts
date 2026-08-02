@@ -40,11 +40,15 @@ const service: AxiosInstance = axios.create({
   timeout: 100000000,
 });
 
+/** Request-local controls understood only by the Phytomni HTTP boundary. */
+export type PhytomniRequestConfig<D = unknown> = AxiosRequestConfig<D> & {
+  requestId?: string;
+  suppressErrorToast?: boolean;
+};
+
 /** Axios returns the interceptor's unwrapped payload at runtime. */
 export interface UnwrappedHttpClient {
-  <T = unknown, D = unknown>(
-    config: AxiosRequestConfig<D> & { requestId?: string }
-  ): Promise<T>;
+  <T = unknown, D = unknown>(config: PhytomniRequestConfig<D>): Promise<T>;
 }
 
 const request = service as unknown as UnwrappedHttpClient;
@@ -222,6 +226,10 @@ function isCanceledRequest(error: unknown): boolean {
   return error.code === "ERR_CANCELED" || error.name === "CanceledError";
 }
 
+function suppressesErrorToast(config: unknown): boolean {
+  return isRecord(config) && config.suppressErrorToast === true;
+}
+
 // response interceptor
 responseInterceptors.use(
   (res: AxiosResponse<unknown>) => {
@@ -254,6 +262,7 @@ responseInterceptors.use(
       responseData && isRecord(responseData.detail)
         ? responseData.detail.code
         : undefined;
+    const suppressErrorToast = suppressesErrorToast(res.config);
     if (code === 401 || detailCode === 403) {
       if (!isRelogin.show) {
         isRelogin.show = true;
@@ -284,7 +293,10 @@ responseInterceptors.use(
       }
       return Promise.reject(i18n.global.t("request.sessionInvalid"));
     } else if (code === 500) {
-      if (msg !== "Cannot create property 'headers' on boolean 'false'") {
+      if (
+        !suppressErrorToast &&
+        msg !== "Cannot create property 'headers' on boolean 'false'"
+      ) {
         ElMessage({
           message: msg as string,
           type: "error",
@@ -292,10 +304,12 @@ responseInterceptors.use(
       }
       return Promise.reject(new Error(msg as string));
     } else if (code !== 200) {
-      ElMessage({
-        message: msg as string,
-        type: "error",
-      });
+      if (!suppressErrorToast) {
+        ElMessage({
+          message: msg as string,
+          type: "error",
+        });
+      }
 
       return Promise.reject("error");
     } else {
@@ -306,6 +320,11 @@ responseInterceptors.use(
     const response = readErrorResponse(error);
     const responseData =
       response && isRecord(response.data) ? response.data : undefined;
+    const suppressErrorToast = axios.isAxiosError<unknown>(error)
+      ? suppressesErrorToast(error.config)
+      : isRecord(error)
+        ? suppressesErrorToast(error.config)
+        : false;
     let message = readErrorMessage(error);
     // Redacted log — the raw axios error embeds config.headers (Bearer token + satoken),
     // so we expose only the non-sensitive fields useful for debugging.
@@ -361,7 +380,10 @@ responseInterceptors.use(
         code: message.substr(message.length - 3),
       });
     }
-    if (message !== "Cannot create property 'headers' on boolean 'false'") {
+    if (
+      !suppressErrorToast &&
+      message !== "Cannot create property 'headers' on boolean 'false'"
+    ) {
       ElMessage({
         message: message,
         type: "error",
@@ -440,7 +462,7 @@ export function download(
 // optional) so call sites can pass plain config literals; the stored
 // `requestId` is just a tag used to address controller entries.
 export const createAbortableRequest = <T = unknown, D = unknown>(
-  config: AxiosRequestConfig<D> & { requestId?: string }
+  config: PhytomniRequestConfig<D>
 ): Promise<T> => {
   const controller = new AbortController();
   const requestId = config.requestId || Date.now().toString();

@@ -68,10 +68,10 @@ export function useLogView(opts: {
     chatState.loadingLog[rowId] = true;
     try {
       const res = await getAnalystAgentLog({ id: rowId });
-      // code===200 is success even when TaskLog is empty/falsy (show no-data).
+      // code===200 is success even when the bounded DTO text is empty (show no-data).
       if (res.code === 200) {
         chatState.logData[rowId] =
-          res.data == null || res.data === "" ? "" : parseLogPayload(res.data);
+          res.data.text === "" ? "" : parseLogPayload(res.data.text);
         delete chatState.logErrorKinds[rowId];
         nextTick(() => {
           scrollToBottom().catch(() => undefined);

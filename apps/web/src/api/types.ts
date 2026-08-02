@@ -1,6 +1,9 @@
-import type { AxiosRequestConfig, AxiosResponse } from "axios";
+import type { AxiosResponse } from "axios";
 
-import request, { createAbortableRequest } from "@/utils/request";
+import request, {
+  createAbortableRequest,
+  type PhytomniRequestConfig,
+} from "@/utils/request";
 import {
   isRecord,
   optionalString,
@@ -246,6 +249,45 @@ export interface AsyncTaskListResponse {
   gene_list: AsyncTaskRecord[];
 }
 
+export type AgentRunPhase =
+  "PREPARING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+
+export type AgentReconciliation = "FRESH" | "CACHED" | "DEGRADED";
+
+export interface AgentArtifactSummary {
+  image_count: number;
+  output_directory_count: number;
+  has_report: boolean;
+}
+
+export interface AgentTaskLifecycle {
+  id: number;
+  phase: AgentRunPhase;
+  terminal: boolean;
+  child_task_count: number;
+  child_work_accepted: boolean;
+  report_revision: number;
+  artifact_summary: AgentArtifactSummary;
+  reconciliation: AgentReconciliation;
+  tracking_degraded: boolean;
+  error_code: "bot_transport_failed" | "run_contract_invalid" | null;
+}
+
+export type AgentLogState =
+  "PENDING" | "AVAILABLE" | "TERMINAL_EMPTY" | "DEGRADED";
+
+export type AgentLogSource = "BOT_RUN" | "LEGACY_TASK";
+
+export interface AnalystAgentLog {
+  state: AgentLogState;
+  source: AgentLogSource;
+  text: string;
+  revision: number;
+  truncated: boolean;
+  can_request_legacy_refresh: boolean;
+  error_code: "log_refresh_unavailable" | null;
+}
+
 export type MutationData = string | number | { up_id: number } | null;
 
 export type BinaryResponse = AxiosResponse<Blob>;
@@ -336,10 +378,57 @@ function optionalBooleanField(
   return value[key] as boolean;
 }
 
+function requiredBoolean(
+  value: Record<string, unknown>,
+  key: string,
+  label: string
+): boolean {
+  if (typeof value[key] !== "boolean") invalid(label);
+  return value[key] as boolean;
+}
+
+function requiredSafeInteger(
+  value: Record<string, unknown>,
+  key: string,
+  label: string
+): number {
+  const candidate = value[key];
+  if (typeof candidate !== "number" || !Number.isSafeInteger(candidate)) {
+    invalid(label);
+  }
+  return candidate;
+}
+
+function requiredNonnegativeCount(
+  value: Record<string, unknown>,
+  key: string,
+  maximum: number,
+  label: string
+): number {
+  const candidate = requiredSafeInteger(value, key, label);
+  if (candidate < 0 || candidate > maximum) invalid(label);
+  return candidate;
+}
+
+function requireExactKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+  label: string
+): void {
+  if (
+    Object.keys(value).length !== keys.length ||
+    Object.keys(value).some((key) => !keys.includes(key))
+  ) {
+    invalid(label);
+  }
+}
+
 const MAX_CONVERSATION_ARTIFACTS = 50;
 const MAX_CONVERSATION_ARTIFACT_ID_BYTES = 128;
 const MAX_CONVERSATION_ARTIFACT_NAME_BYTES = 255;
 const MAX_CONVERSATION_ARTIFACT_URL_BYTES = 2 << 10;
+const MAX_AGENT_TASK_COUNT = 256;
+const MAX_AGENT_LOG_BYTES = 512 << 10;
 const CONVERSATION_ARTIFACT_KINDS = new Set<ConversationArtifactKind>([
   "file",
   "report",
@@ -350,6 +439,195 @@ const CONVERSATION_ARTIFACT_KINDS = new Set<ConversationArtifactKind>([
 const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const utf8Length = (value: string): number =>
   new TextEncoder().encode(value).length;
+
+const AGENT_RUN_PHASES = new Set<AgentRunPhase>([
+  "PREPARING",
+  "RUNNING",
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELLED",
+]);
+const AGENT_RECONCILIATIONS = new Set<AgentReconciliation>([
+  "FRESH",
+  "CACHED",
+  "DEGRADED",
+]);
+const AGENT_LIFECYCLE_ERROR_CODES = new Set<
+  NonNullable<AgentTaskLifecycle["error_code"]>
+>(["bot_transport_failed", "run_contract_invalid"]);
+const AGENT_LOG_STATES = new Set<AgentLogState>([
+  "PENDING",
+  "AVAILABLE",
+  "TERMINAL_EMPTY",
+  "DEGRADED",
+]);
+const AGENT_LOG_SOURCES = new Set<AgentLogSource>(["BOT_RUN", "LEGACY_TASK"]);
+const AGENT_LOG_ERROR_CODES = new Set<
+  NonNullable<AnalystAgentLog["error_code"]>
+>(["log_refresh_unavailable"]);
+
+function requiredAllowedString<T extends string>(
+  value: Record<string, unknown>,
+  key: string,
+  allowed: ReadonlySet<T>,
+  label: string
+): T {
+  const candidate = requiredString(value, key, label);
+  if (!allowed.has(candidate as T)) invalid(label);
+  return candidate as T;
+}
+
+function requiredAllowedNullableError<T extends string>(
+  value: Record<string, unknown>,
+  allowed: ReadonlySet<T>,
+  label: string
+): T | null {
+  const candidate = value.error_code;
+  if (candidate === null) return null;
+  if (typeof candidate !== "string" || !allowed.has(candidate as T)) {
+    invalid(label);
+  }
+  return candidate as T;
+}
+
+export function decodeAgentTaskLifecycle(value: unknown): AgentTaskLifecycle {
+  const label = "agent task lifecycle";
+  if (!isRecord(value)) invalid(label);
+  requireExactKeys(
+    value,
+    [
+      "id",
+      "phase",
+      "terminal",
+      "child_task_count",
+      "child_work_accepted",
+      "report_revision",
+      "artifact_summary",
+      "reconciliation",
+      "tracking_degraded",
+      "error_code",
+    ],
+    label
+  );
+  const id = requiredSafeInteger(value, "id", label);
+  if (id <= 0) invalid(label);
+  const phase = requiredAllowedString(value, "phase", AGENT_RUN_PHASES, label);
+  const terminal = requiredBoolean(value, "terminal", label);
+  if (terminal !== ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase)) {
+    invalid(label);
+  }
+  const childTaskCount = requiredNonnegativeCount(
+    value,
+    "child_task_count",
+    MAX_AGENT_TASK_COUNT,
+    label
+  );
+  const childWorkAccepted = requiredBoolean(
+    value,
+    "child_work_accepted",
+    label
+  );
+  if (childWorkAccepted !== childTaskCount > 0) invalid(label);
+  const reportRevision = requiredNonnegativeCount(
+    value,
+    "report_revision",
+    Number.MAX_SAFE_INTEGER,
+    label
+  );
+  if (!isRecord(value.artifact_summary)) invalid(label);
+  requireExactKeys(
+    value.artifact_summary,
+    ["image_count", "output_directory_count", "has_report"],
+    label
+  );
+  const artifactSummary: AgentArtifactSummary = {
+    image_count: requiredNonnegativeCount(
+      value.artifact_summary,
+      "image_count",
+      MAX_AGENT_TASK_COUNT,
+      label
+    ),
+    output_directory_count: requiredNonnegativeCount(
+      value.artifact_summary,
+      "output_directory_count",
+      MAX_AGENT_TASK_COUNT,
+      label
+    ),
+    has_report: requiredBoolean(value.artifact_summary, "has_report", label),
+  };
+  return {
+    id,
+    phase,
+    terminal,
+    child_task_count: childTaskCount,
+    child_work_accepted: childWorkAccepted,
+    report_revision: reportRevision,
+    artifact_summary: artifactSummary,
+    reconciliation: requiredAllowedString(
+      value,
+      "reconciliation",
+      AGENT_RECONCILIATIONS,
+      label
+    ),
+    tracking_degraded: requiredBoolean(value, "tracking_degraded", label),
+    error_code: requiredAllowedNullableError(
+      value,
+      AGENT_LIFECYCLE_ERROR_CODES,
+      label
+    ),
+  };
+}
+
+export function decodeAnalystAgentLog(value: unknown): AnalystAgentLog {
+  const label = "analyst agent log";
+  if (!isRecord(value)) invalid(label);
+  requireExactKeys(
+    value,
+    [
+      "state",
+      "source",
+      "text",
+      "revision",
+      "truncated",
+      "can_request_legacy_refresh",
+      "error_code",
+    ],
+    label
+  );
+  const source = requiredAllowedString(
+    value,
+    "source",
+    AGENT_LOG_SOURCES,
+    label
+  );
+  const canRequestLegacyRefresh = requiredBoolean(
+    value,
+    "can_request_legacy_refresh",
+    label
+  );
+  if (source === "BOT_RUN" && canRequestLegacyRefresh) invalid(label);
+  const text = value.text;
+  if (typeof text !== "string") invalid(label);
+  if (utf8Length(text) > MAX_AGENT_LOG_BYTES) invalid(label);
+  return {
+    state: requiredAllowedString(value, "state", AGENT_LOG_STATES, label),
+    source,
+    text,
+    revision: requiredNonnegativeCount(
+      value,
+      "revision",
+      Number.MAX_SAFE_INTEGER,
+      label
+    ),
+    truncated: requiredBoolean(value, "truncated", label),
+    can_request_legacy_refresh: canRequestLegacyRefresh,
+    error_code: requiredAllowedNullableError(
+      value,
+      AGENT_LOG_ERROR_CODES,
+      label
+    ),
+  };
+}
 
 export function isConversationArtifactDownloadURL(
   value: unknown
@@ -986,7 +1264,7 @@ export function decodeAsyncTaskListResponse(
 }
 
 export function requestApi<T, D = unknown>(
-  config: AxiosRequestConfig<D>,
+  config: PhytomniRequestConfig<D>,
   decodeData: Decoder<T>
 ): Promise<ApiEnvelope<T>> {
   const response = request<ApiEnvelope<T>, D>(config);
@@ -994,7 +1272,7 @@ export function requestApi<T, D = unknown>(
 }
 
 export function requestAbortableApi<T, D = unknown>(
-  config: AxiosRequestConfig<D> & { requestId?: string },
+  config: PhytomniRequestConfig<D>,
   decodeData: Decoder<T>
 ): Promise<ApiEnvelope<T>> {
   const response = createAbortableRequest<ApiEnvelope<T>, D>(config);

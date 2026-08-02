@@ -6,7 +6,7 @@ import {
   type Ref,
   type WritableComputedRef,
 } from "vue";
-import type { ApiEnvelope, MutationData } from "@/api/types";
+import type { AnalystAgentLog, ApiEnvelope, MutationData } from "@/api/types";
 import type { ChatMessage, ChatUIState, ChatView } from "@/views/chat/types";
 import { buildApiEnvelope } from "../../../helpers/apiBuilders";
 import {
@@ -24,7 +24,7 @@ vi.mock("element-plus", () => ({
 }));
 
 const mockGetAnalystAgentLog = vi.hoisted(() =>
-  vi.fn<(data: { id: string }) => Promise<ApiEnvelope<string>>>()
+  vi.fn<(data: { id: string }) => Promise<ApiEnvelope<AnalystAgentLog>>>()
 );
 const mockUpdateAnalystAgentLog = vi.hoisted(() =>
   vi.fn<
@@ -144,16 +144,29 @@ describe("useLogView", () => {
     });
   }
 
-  function logResponse(data: string, code = 200): ApiEnvelope<string> {
-    return buildApiEnvelope(data, { code });
+  function logResponse(text: string, code = 200): ApiEnvelope<AnalystAgentLog> {
+    return buildApiEnvelope(
+      {
+        state: text === "" ? "PENDING" : "AVAILABLE",
+        source: "LEGACY_TASK",
+        text,
+        revision: 0,
+        truncated: false,
+        can_request_legacy_refresh: false,
+        error_code: null,
+      },
+      { code }
+    );
   }
 
   function mutationResponse(code = 200): ApiEnvelope<MutationData> {
     return buildApiEnvelope<MutationData>(null, { code });
   }
 
-  function invalidLogResponse(code: number): ApiEnvelope<string> {
-    return invalidInput<ApiEnvelope<string>>(buildApiEnvelope(null, { code }));
+  function invalidLogResponse(code: number): ApiEnvelope<AnalystAgentLog> {
+    return invalidInput<ApiEnvelope<AnalystAgentLog>>(
+      buildApiEnvelope(null, { code })
+    );
   }
 
   function formDataCallAt(index: number, label: string): FormData {
@@ -196,7 +209,7 @@ describe("useLogView", () => {
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
   });
 
-  it("code===200 with empty/falsy data is empty success (no fetch error) and caches", async () => {
+  it("code===200 with empty DTO text is empty success (no fetch error) and caches", async () => {
     const message = msg({ id: "12" });
     currentChat.value = { messages: [message] };
     mockGetAnalystAgentLog.mockResolvedValue(logResponse(""));
@@ -211,13 +224,6 @@ describe("useLogView", () => {
     await setLogExpanded(message, false);
     await setLogExpanded(message, true);
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
-
-    mockGetAnalystAgentLog.mockResolvedValueOnce(invalidLogResponse(200));
-    const nullMsg = msg({ id: "13" });
-    currentChat.value = { messages: [nullMsg] };
-    await setLogExpanded(nullMsg, true);
-    expect(getChatState("A").logData["13"]).toBe("");
-    expect(getChatState("A").logErrorKinds["13"]).toBeUndefined();
 
     mockGetAnalystAgentLog.mockResolvedValueOnce(invalidLogResponse(500));
     const failMsg = msg({ id: "14" });

@@ -19,6 +19,7 @@ import {
   getChatdownloadURL,
   getConversationArtifactDownloadURL,
   getConversationArtifactFile,
+  getAnalystAgentLog,
   getReactionType,
   getUserTool,
   type QueryData,
@@ -302,6 +303,42 @@ describe("getUserTool — wire contract", () => {
       method: "get",
     });
   });
+});
+
+describe("getAnalystAgentLog — wire contract", () => {
+  beforeEach(() => {
+    mockRequest.mockReset();
+  });
+
+  it("gets a validated owner-scoped task log", async () => {
+    const data = {
+      state: "AVAILABLE",
+      source: "LEGACY_TASK",
+      text: "safe log",
+      revision: 0,
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    };
+    mockRequest.mockResolvedValueOnce({ code: 200, data });
+
+    await expect(getAnalystAgentLog({ id: "42" })).resolves.toEqual({
+      code: 200,
+      data,
+    });
+    expect(mockRequest).toHaveBeenCalledWith({
+      url: "/api/v1/async-tasks/42/analyst-log",
+      method: "get",
+    });
+  });
+
+  it.each(["", "0", "-1", "1.5", "bot-run", "9007199254740992"])(
+    "rejects invalid local task ID %s before Axios",
+    (id) => {
+      expect(() => getAnalystAgentLog({ id })).toThrow("Invalid task row ID");
+      expect(mockRequest).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe("feedback — wire contract", () => {

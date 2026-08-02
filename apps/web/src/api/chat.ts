@@ -1,9 +1,11 @@
 import type { AxiosProgressEvent } from "axios";
 
 import { createAbortableRequest } from "@/utils/request";
+import { normalizePositiveTaskRowId } from "@/api/task";
 import type { RemoteAgentTool } from "@/constants/agents";
 import type {
   ApiEnvelope,
+  AnalystAgentLog,
   BinaryResponse,
   ConversationSummary,
   DecodedQueryData,
@@ -15,6 +17,7 @@ import {
   decodeImageData,
   decodeMutationData,
   decodeQueryData,
+  decodeAnalystAgentLog,
   decodeString,
   decodeUserToolResponse,
   isConversationArtifactDownloadURL,
@@ -209,15 +212,17 @@ export const getFileDownUrlApi = (
 
 // Get analyst log (RESTful: task id in path)
 export const getAnalystAgentLog = (data: {
-  id: string;
-}): Promise<ApiEnvelope<string>> =>
-  requestApi(
+  id: string | number;
+}): Promise<ApiEnvelope<AnalystAgentLog>> => {
+  const rowId = normalizePositiveTaskRowId(data.id);
+  return requestApi(
     {
-      url: `/api/v1/async-tasks/${data.id}/analyst-log`,
+      url: `/api/v1/async-tasks/${rowId}/analyst-log`,
       method: "get",
     },
-    decodeString
+    decodeAnalystAgentLog
   );
+};
 
 // Reaction like/dislike (RESTful: conversation id in path)
 export const getReactionType = (

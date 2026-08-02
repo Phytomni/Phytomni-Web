@@ -356,6 +356,85 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
     expect(requestMocks.fedLogOut).toHaveBeenCalledTimes(1);
   });
 
+  it("suppresses generic HTTP failure toasts for quiet lifecycle reads", async () => {
+    service.defaults.adapter = async (config) => ({
+      data: { code: 500, message: "background failure" },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: config as InternalAxiosRequestConfig,
+      request: { responseType: "" },
+    });
+
+    await expect(
+      service.get("/api/v1/async-tasks/42/lifecycle", {
+        suppressErrorToast: true,
+      })
+    ).rejects.toThrow("background failure");
+    expect(requestMocks.message).not.toHaveBeenCalled();
+  });
+
+  it("suppresses transport failure toasts for quiet lifecycle reads", async () => {
+    const error = {
+      config: {
+        url: "/api/v1/async-tasks/42/lifecycle",
+        suppressErrorToast: true,
+      },
+      response: { status: 503, data: { message: "transport failure" } },
+      message: "Request failed with status code 503",
+    };
+    service.defaults.adapter = async () => Promise.reject(error);
+
+    await expect(service.get("/api/v1/async-tasks/42/lifecycle")).rejects.toBe(
+      error
+    );
+    expect(requestMocks.message).not.toHaveBeenCalled();
+  });
+
+  it("keeps generic HTTP failure toasts for ordinary reads", async () => {
+    service.defaults.adapter = async (config) => ({
+      data: { code: 500, message: "foreground failure" },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: config as InternalAxiosRequestConfig,
+      request: { responseType: "" },
+    });
+
+    await expect(service.get("/api/v1/probe")).rejects.toThrow(
+      "foreground failure"
+    );
+    expect(requestMocks.message).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps session expiry handling for quiet lifecycle reads", async () => {
+    requestMocks.fedLogOut.mockImplementation(
+      () => new Promise<void>(() => undefined)
+    );
+    requestMocks.alert.mockImplementation(
+      (_message: unknown, options: { callback?: () => void }) => {
+        options.callback?.();
+        return Promise.resolve();
+      }
+    );
+    service.defaults.adapter = async (config) => ({
+      data: { code: 401, message: "expired" },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: config as InternalAxiosRequestConfig,
+      request: { responseType: "" },
+    });
+
+    await expect(
+      service.get("/api/v1/async-tasks/42/lifecycle", {
+        suppressErrorToast: true,
+      })
+    ).rejects.toBe("request.sessionInvalid");
+    expect(requestMocks.alert).toHaveBeenCalledTimes(1);
+    expect(requestMocks.fedLogOut).toHaveBeenCalledTimes(1);
+  });
+
   it("logs out on a forbidden response without logging headers", async () => {
     const secret = "Bearer forbidden-secret";
     const error = {
