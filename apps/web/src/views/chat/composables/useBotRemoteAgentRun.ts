@@ -19,6 +19,10 @@ import {
   type BotLifecycleState,
 } from "../streaming/botLifecycleReducer";
 import { isSafeAssetId } from "../utils/asset-attachments";
+import {
+  DatasetDescriptionError,
+  normalizeDatasetDescription,
+} from "../utils/dataset-description";
 
 export type RemoteAgentRunPhase =
   | "idle"
@@ -41,6 +45,7 @@ export type RemoteAgentResolver = {
 export type RemoteAgentSubmitInput = {
   query: string;
   attachments?: readonly AssetAttachmentRef[];
+  datasetDescription?: string;
   resolver?: RemoteAgentResolver;
   interopMode?: "off" | "auto" | "required";
   interopTargets?: string[];
@@ -79,6 +84,7 @@ export type BotRemoteAgentRunErrorCode =
   | "resolver_disabled"
   | "invalid_dialogue"
   | "invalid_query"
+  | "invalid_dataset_description"
   | "run_in_progress";
 
 export class BotRemoteAgentRunError extends Error {
@@ -246,6 +252,9 @@ function buildFormData(
   formData.append("id", dialogueId);
   formData.append("query", input.query);
   formData.append("attachments", JSON.stringify(input.attachments ?? []));
+  if (input.datasetDescription !== undefined) {
+    formData.append("dataset_description", input.datasetDescription);
+  }
 
   const resolver = input.resolver;
   if (resolver) {
@@ -473,6 +482,20 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     }
 
     const normalizedDialogueId = normalizeDialogueId(dialogueId);
+    let datasetDescription: string | undefined;
+    try {
+      datasetDescription = normalizeDatasetDescription(
+        input.datasetDescription ?? ""
+      );
+    } catch (error) {
+      if (error instanceof DatasetDescriptionError) {
+        throw new BotRemoteAgentRunError(
+          "invalid_dataset_description",
+          error.message
+        );
+      }
+      throw error;
+    }
     try {
       await ensureCapabilitiesLoaded();
     } catch {
@@ -535,7 +558,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     }
 
     const formData = buildFormData(
-      { ...input, attachments },
+      { ...input, attachments, datasetDescription },
       normalizedDialogueId
     );
     const requestId = requestIdFor(normalizedDialogueId);

@@ -51,6 +51,7 @@ import {
   completedUploadDisplays,
   toAssetAttachmentRefs,
 } from "../utils/asset-attachments";
+import { normalizeDatasetDescription } from "../utils/dataset-description";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 const MAX_CONTEXT_MESSAGES = 20;
@@ -397,11 +398,24 @@ export function useSendMessage(opts: {
       sendingDialogueId,
       chatList.value
     );
-    const capturedAttachments = completedUploadDisplays(chatState.fileList);
+    const capturedUploads = [...chatState.fileList];
+    const capturedAttachments = completedUploadDisplays(capturedUploads);
     if (capturedAttachments === null) {
       return;
     }
-    const attachmentRefs = toAssetAttachmentRefs(capturedAttachments);
+    const attachmentRefs = toAssetAttachmentRefs(capturedUploads);
+    const capturedDatasetDescriptionInput = chatState.datasetDescription;
+    const hasDataset = capturedUploads.some(
+      (item) => item.status === "completed" && item.purpose === "dataset"
+    );
+    let capturedDatasetDescription: string | undefined;
+    try {
+      capturedDatasetDescription = hasDataset
+        ? normalizeDatasetDescription(capturedDatasetDescriptionInput)
+        : undefined;
+    } catch {
+      return;
+    }
     const capturedHistory = chatState.historyQuestion;
     const requestKey = createChatRequestKey();
 
@@ -488,6 +502,7 @@ export function useSendMessage(opts: {
       selectedAgent: capturedSelectedAgent,
       query: currentMessage,
       attachments: attachmentRefs.map(({ asset_id }) => asset_id),
+      datasetDescription: capturedDatasetDescription ?? "",
     });
     const clientTurnId =
       chatState.pendingTurnFingerprint !== null &&
@@ -520,6 +535,12 @@ export function useSendMessage(opts: {
           capturedMode,
           capturedSelectedAgent
         );
+      }
+      if (
+        capturedDatasetDescription !== undefined &&
+        chatState.datasetDescription === capturedDatasetDescriptionInput
+      ) {
+        chatState.datasetDescription = "";
       }
     };
 
@@ -563,6 +584,9 @@ export function useSendMessage(opts: {
         queryData.append("history", JSON.stringify(capturedHistory));
       }
       queryData.append("attachments", JSON.stringify(attachmentRefs));
+      if (capturedDatasetDescription !== undefined) {
+        queryData.append("dataset_description", capturedDatasetDescription);
+      }
 
       // Stream branch: chat-family + instant mode + dark-launch flag. The
       // insertion point is inside the existing try, so returning here still

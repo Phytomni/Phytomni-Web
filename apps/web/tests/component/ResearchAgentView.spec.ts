@@ -457,7 +457,15 @@ describe("ResearchAgentView", () => {
     wrapper.unmount();
   });
 
-  it("sends a bounded dataset description through the stable query marker", async () => {
+  it("submits the dataset description separately without changing the query", async () => {
+    mocks.chatState.fileList = [
+      {
+        assetId: "file_dataset",
+        purpose: "dataset",
+        status: "completed",
+      },
+    ];
+    mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_dataset" }];
     const wrapper = mountView();
 
     await wrapper
@@ -470,8 +478,9 @@ describe("ResearchAgentView", () => {
 
     expect(mocks.submit).toHaveBeenCalledWith(
       expect.objectContaining({
-        query:
-          "Summarize the paper\n\n[dataset-description]\nTraits were measured in drought-treated plants.",
+        query: "Summarize the paper",
+        attachments: [{ asset_id: "file_dataset" }],
+        datasetDescription: "Traits were measured in drought-treated plants.",
       })
     );
     expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty("dataList");

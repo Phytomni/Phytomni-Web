@@ -5,6 +5,7 @@ export interface ClientTurnDraft {
   selectedAgent: string;
   query: string;
   attachments: readonly string[];
+  datasetDescription: string;
 }
 
 const PRE_DISPATCH_4XX = new Set([
@@ -37,6 +38,7 @@ export function clientTurnDraftFingerprint(draft: ClientTurnDraft): string {
     selectedAgent: draft.selectedAgent,
     query: draft.query,
     attachments: [...draft.attachments],
+    datasetDescription: draft.datasetDescription,
   });
 }
 
@@ -71,7 +73,8 @@ export function clientTurnDraftFingerprintMatches(
         typeof record.selectedAgent !== "string" ||
         typeof record.query !== "string" ||
         !Array.isArray(record.attachments) ||
-        !record.attachments.every((item) => typeof item === "string")
+        !record.attachments.every((item) => typeof item === "string") ||
+        typeof record.datasetDescription !== "string"
       ) {
         return null;
       }
@@ -83,6 +86,7 @@ export function clientTurnDraftFingerprintMatches(
           selectedAgent: record.selectedAgent,
           query: record.query,
           attachments: record.attachments,
+          datasetDescription: record.datasetDescription,
         }),
       };
     } catch {

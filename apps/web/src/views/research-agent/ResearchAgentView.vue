@@ -290,11 +290,13 @@ import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgent
 import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import {
+  DatasetDescriptionError,
+  normalizeDatasetDescription,
+} from "@/views/chat/utils/dataset-description";
 
 const MAX_QUERY_LENGTH = 4000;
-const MAX_DATASET_DESCRIPTION_LENGTH = 4000;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
-const DATASET_DESCRIPTION_MARKER = "\n\n[dataset-description]\n";
 
 const props = defineProps<{ state?: BotLifecycleState }>();
 const { t } = useI18n();
@@ -496,24 +498,41 @@ async function submitResearch(): Promise<void> {
     formError.value = t("agents.research.questionTooLong");
     return;
   }
-  if (
-    Array.from(datasetDescription.value).length > MAX_DATASET_DESCRIPTION_LENGTH
-  ) {
-    formError.value = t("agents.research.datasetTooLong");
-    return;
+  const capturedUploads = [...uploadItems.value];
+  const capturedAttachments = [...uploadQueue.completedAssetIds.value];
+  const hasDataset = capturedUploads.some(
+    (item) => item.status === "completed" && item.purpose === "dataset"
+  );
+  const capturedDatasetDescriptionInput = datasetDescription.value;
+  let capturedDatasetDescription: string | undefined;
+  try {
+    capturedDatasetDescription = hasDataset
+      ? normalizeDatasetDescription(capturedDatasetDescriptionInput)
+      : undefined;
+  } catch (error) {
+    if (error instanceof DatasetDescriptionError) {
+      formError.value = t("agents.research.datasetTooLong");
+      return;
+    }
+    throw error;
   }
 
   formError.value = "";
   isSubmitting.value = true;
   try {
-    const normalizedDataset = datasetDescription.value.trim();
-    const query = normalizedDataset
-      ? `${normalizedQuestion}${DATASET_DESCRIPTION_MARKER}${normalizedDataset}`
-      : normalizedQuestion;
     await run.submit({
-      query,
-      attachments: uploadQueue.completedAssetIds.value,
+      query: normalizedQuestion,
+      attachments: capturedAttachments,
+      ...(capturedDatasetDescription !== undefined
+        ? { datasetDescription: capturedDatasetDescription }
+        : {}),
     });
+    if (
+      capturedDatasetDescription !== undefined &&
+      datasetDescription.value === capturedDatasetDescriptionInput
+    ) {
+      datasetDescription.value = "";
+    }
   } catch {
     formError.value = t("agents.research.submitFailed");
   } finally {

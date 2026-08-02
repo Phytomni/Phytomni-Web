@@ -132,6 +132,7 @@ describe("useSelectChat", () => {
       size: number;
       type: string;
       status: "completed" | "failed";
+      purpose?: "dataset" | "document";
     }>
   ): UploadRecoveryStore {
     return {
@@ -190,6 +191,7 @@ describe("useSelectChat", () => {
         size: 42,
         type: "application/gzip",
         status: "completed",
+        purpose: "dataset",
       },
     ]);
 
@@ -203,11 +205,50 @@ describe("useSelectChat", () => {
         name: "reads.fastq.gz",
         size: 42,
         type: "application/gzip",
+        purpose: "dataset",
       },
     ]);
     expect(
       historyAt("d1", 0, "structured attachment history").attachments
     ).toEqual(user.attachments);
+  });
+
+  it("defaults historical structured attachments without purpose to document", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          query: "Inspect the old attachment",
+          answer: "Done",
+          tool_name: "ChatAgent",
+          attachments: [{ asset_id: "file_legacy" }],
+        }),
+      ])
+    );
+
+    await makeComposable({
+      username,
+      attachmentStore: attachmentStore([
+        {
+          assetId: "file_legacy",
+          name: "legacy.csv",
+          size: 12,
+          type: "text/csv",
+          status: "completed",
+        },
+      ]),
+    }).selectChat("d1");
+
+    expect(messageAt("d1", 0, "legacy purpose attachment").attachments).toEqual(
+      [
+        {
+          asset_id: "file_legacy",
+          name: "legacy.csv",
+          size: 12,
+          type: "text/csv",
+          purpose: "document",
+        },
+      ]
+    );
   });
 
   it("uses a localized generic label when same-account metadata is unavailable", async () => {
@@ -235,6 +276,7 @@ describe("useSelectChat", () => {
         name: "Completed file",
         size: 0,
         type: "",
+        purpose: "document",
       },
     ]);
   });

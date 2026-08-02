@@ -1,5 +1,5 @@
 import type { AssetAttachmentRef } from "@/api/types";
-import type { ResumableUploadItem } from "../upload/types";
+import type { ResumableUploadItem, UploadPurpose } from "../upload/types";
 
 const ASSET_ID_PATTERN = /^file_[A-Za-z0-9_-]{1,123}$/u;
 
@@ -7,11 +7,12 @@ export interface ChatAttachmentDisplay extends AssetAttachmentRef {
   name: string;
   size: number;
   type: string;
+  purpose: UploadPurpose;
 }
 
 export type AttachmentMetadata = Pick<
   ChatAttachmentDisplay,
-  "name" | "size" | "type"
+  "name" | "size" | "type" | "purpose"
 >;
 
 export function isSafeAssetId(value: unknown): value is string {
@@ -38,15 +39,24 @@ export function completedUploadDisplays(
       name: item.name,
       size: item.size,
       type: item.type,
+      purpose: item.purpose,
     });
   }
   return output;
 }
 
 export function toAssetAttachmentRefs(
-  displays: readonly ChatAttachmentDisplay[]
+  items: readonly (ResumableUploadItem | ChatAttachmentDisplay)[]
 ): AssetAttachmentRef[] {
-  return displays.map(({ asset_id }) => ({ asset_id }));
+  return items
+    .filter(
+      (item) =>
+        (!("status" in item) || item.status === "completed") &&
+        isSafeAssetId("assetId" in item ? item.assetId : item.asset_id)
+    )
+    .map((item) => ({
+      asset_id: ("assetId" in item ? item.assetId : item.asset_id) as string,
+    }));
 }
 
 export function displayAttachmentRefs(
@@ -61,6 +71,7 @@ export function displayAttachmentRefs(
       name: details?.name || fallbackName,
       size: details?.size ?? 0,
       type: details?.type ?? "",
+      purpose: details?.purpose ?? "document",
     };
   });
 }

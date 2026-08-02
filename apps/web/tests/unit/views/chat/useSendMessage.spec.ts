@@ -9,7 +9,10 @@ import type {
   ChatView,
   DialogueReconciliationResult,
 } from "@/views/chat/types";
-import type { ResumableUploadItem } from "@/views/chat/upload/types";
+import type {
+  ResumableUploadItem,
+  UploadPurpose,
+} from "@/views/chat/upload/types";
 import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
 import { deferred, mustGet } from "../../../helpers/mockFactories";
 import {
@@ -112,7 +115,8 @@ describe("useSendMessage", () => {
 
   function completedUpload(
     name = "sample.txt",
-    assetId = "file_sample"
+    assetId = "file_sample",
+    purpose: UploadPurpose = "document"
   ): ResumableUploadItem {
     return {
       localId: `upload-${assetId}`,
@@ -122,6 +126,7 @@ describe("useSendMessage", () => {
       size: 5,
       type: "text/plain",
       lastModified: 0,
+      purpose,
       status: "completed",
       partSize: 5,
       partCount: 1,
@@ -1111,6 +1116,52 @@ describe("useSendMessage", () => {
         },
       ],
     });
+  });
+
+  it("sends one normalized dataset description only with a completed dataset", async () => {
+    stateFor("A").messageInput = "Analyze the uploaded data";
+    stateFor("A").datasetDescription = "  Treatment and control counts  ";
+    stateFor("A").fileList = [
+      completedUpload("context.pdf", "file_context", "document"),
+      completedUpload("counts.csv", "file_counts", "dataset"),
+    ];
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: { tool_name: "ChatAgent", answer: "ok", id: "dataset-1" },
+      })
+    );
+
+    await makeComposable().sendMessage();
+
+    const formData = queryCallAt(0, "dataset description query")[0] as FormData;
+    expect(formData.get("query")).toBe("Analyze the uploaded data");
+    expect(formData.getAll("dataset_description")).toEqual([
+      "Treatment and control counts",
+    ]);
+    expect(formData.get("attachments")).toBe(
+      JSON.stringify([
+        { asset_id: "file_context" },
+        { asset_id: "file_counts" },
+      ])
+    );
+    expect(stateFor("A").datasetDescription).toBe("");
+  });
+
+  it("omits a dataset description for document-only submissions", async () => {
+    stateFor("A").messageInput = "Summarize the paper";
+    stateFor("A").datasetDescription = "Do not submit this without a dataset";
+    stateFor("A").fileList = [completedUpload("paper.pdf", "file_paper")];
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: { tool_name: "ChatAgent", answer: "ok", id: "document-1" },
+      })
+    );
+
+    await makeComposable().sendMessage();
+
+    const formData = queryCallAt(0, "document-only query")[0] as FormData;
+    expect(formData.has("dataset_description")).toBe(false);
+    expect(formData.get("query")).toBe("Summarize the paper");
   });
 
   it("does not send while an upload is incomplete", async () => {

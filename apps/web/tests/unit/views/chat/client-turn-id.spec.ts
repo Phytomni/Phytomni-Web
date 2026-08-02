@@ -14,6 +14,7 @@ const baseDraft = (): ClientTurnDraft => ({
   selectedAgent: "KnowledgeAgent",
   query: "Find evidence",
   attachments: ["file_evidence"],
+  datasetDescription: "",
 });
 
 describe("client turn identity", () => {
@@ -62,6 +63,7 @@ describe("client turn identity", () => {
     ["mode", { mode: "instant" as const }],
     ["selected agent", { selectedAgent: "DataAgent" }],
     ["query", { query: "Find different evidence" }],
+    ["dataset description", { datasetDescription: "Updated dataset context" }],
     [
       "attachment order",
       {
