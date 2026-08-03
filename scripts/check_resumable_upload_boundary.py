@@ -33,6 +33,11 @@ GO_RELAY_PATHS = (
     Path("apps/server/external/bot/types.go"),
     Path("apps/server/external/bot/agent_arguments.go"),
 )
+CANONICAL_AGENT_ARGUMENTS_PATH = Path("apps/server/external/bot/agent_arguments.go")
+CANONICAL_EMPTY_ASSIGNMENTS = {
+    'args["data_list"] = map[string]string{}': 2,
+    'args["obs_file_list"] = []string{}': 4,
+}
 
 # If a future scanner extension reads tests, only these exact legacy-history
 # parsers may mention the old marker.  A broad directory or substring
@@ -81,6 +86,13 @@ def _scan_web_file(relative: Path, source: str, violations: list[str]) -> None:
     _find(
         relative,
         source,
+        r"\.append\(\s*[\"'](?:data_list|obs_file_list|DataList|OBSFileList)[\"']\s*,",
+        "native attachment field appended to a browser request",
+        violations,
+    )
+    _find(
+        relative,
+        source,
         r"\.append\(\s*[\"'][^\"']+[\"']\s*,\s*(?:file|selectedFiles|selectedFile|blob)\b",
         "browser File/Blob appended to a Chat/product control request",
         violations,
@@ -94,7 +106,35 @@ def _scan_web_file(relative: Path, source: str, violations: list[str]) -> None:
     )
 
 
+def _remove_canonical_empty_assignments(source: str, violations: list[str]) -> str:
+    """Remove only the counted, canonical native compatibility assignments."""
+
+    lines = source.splitlines(keepends=True)
+    normalized = [line.strip() for line in lines]
+    for assignment, expected_count in CANONICAL_EMPTY_ASSIGNMENTS.items():
+        actual_count = normalized.count(assignment)
+        if actual_count != expected_count:
+            violations.append(
+                f"{CANONICAL_AGENT_ARGUMENTS_PATH}: canonical assignment "
+                f"count for {assignment!r} is {actual_count}, expected {expected_count}"
+            )
+    return "".join(
+        line
+        for line in lines
+        if line.strip() not in CANONICAL_EMPTY_ASSIGNMENTS
+    )
+
+
 def _scan_go_file(relative: Path, source: str, violations: list[str]) -> None:
+    if relative == CANONICAL_AGENT_ARGUMENTS_PATH:
+        source = _remove_canonical_empty_assignments(source, violations)
+        _find(
+            relative,
+            source,
+            r"\b(?:data_list|obs_file_list|DataList|OBSFileList)\b",
+            "noncanonical native attachment field remains in the argument builder",
+            violations,
+        )
     _find(
         relative,
         source,
@@ -133,8 +173,15 @@ def _scan_go_file(relative: Path, source: str, violations: list[str]) -> None:
     _find(
         relative,
         source,
-        r"\bobs_file_list\b|\bOBSFileList\b",
-        "OBS path list remains in a Web → Bot attachment request builder",
+        r"\b\w+\s*\[\s*[\"'](?:data_list|obs_file_list)[\"']\s*\]\s*=|[\"'](?:data_list|obs_file_list)[\"']\s*:",
+        "native attachment field assigned in a Web → Bot request builder",
+        violations,
+    )
+    _find(
+        relative,
+        source,
+        r"\b(?:DataList|OBSFileList)\s+(?:\[\][A-Za-z0-9_.*]+|map\[)",
+        "Go native attachment field remains in a Web → Bot request builder",
         violations,
     )
     _find(

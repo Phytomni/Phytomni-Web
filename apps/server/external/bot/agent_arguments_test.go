@@ -5,20 +5,20 @@ import (
 	"testing"
 )
 
-func TestBuildAgentArgumentsResearchOmitsLegacyDatasetPaths(t *testing.T) {
-	got, err := BuildAgentArguments("research", AgentArgumentInput{
-		UserQuery: "paper",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]interface{}{
-		"user_query":      "paper",
-		"interop_mode":    "off",
-		"interop_targets": []string{},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("payload=%#v want=%#v", got, want)
+func TestBuildAgentArgumentsAnalystAndResearchUseCanonicalEmptyFiles(t *testing.T) {
+	for _, slug := range []string{"analyst", "research"} {
+		t.Run(slug, func(t *testing.T) {
+			got, err := BuildAgentArguments(slug, AgentArgumentInput{UserQuery: "run"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got["data_list"], map[string]string{}) {
+				t.Fatalf("%s data_list=%#v", slug, got["data_list"])
+			}
+			if !reflect.DeepEqual(got["obs_file_list"], []string{}) {
+				t.Fatalf("%s obs_file_list=%#v", slug, got["obs_file_list"])
+			}
+		})
 	}
 }
 
@@ -33,6 +33,7 @@ func TestBuildAgentArgumentsDesignAndNetworkUseResolverFields(t *testing.T) {
 		"user_query":      "design",
 		"interop_mode":    "off",
 		"interop_targets": []string{},
+		"obs_file_list":   []string{},
 		"resolve_gene_id": true,
 		"gene_id":         "AT1G01010",
 		"species_code":    "ath",
@@ -49,6 +50,7 @@ func TestBuildAgentArgumentsDesignAndNetworkUseResolverFields(t *testing.T) {
 	}
 	wantNetwork := map[string]interface{}{
 		"user_query":       "network",
+		"obs_file_list":    []string{},
 		"resolve_trait_id": true,
 		"to_id":            "TO:0000207",
 		"species_code":     "osa",
@@ -58,19 +60,23 @@ func TestBuildAgentArgumentsDesignAndNetworkUseResolverFields(t *testing.T) {
 	}
 }
 
-func TestBuildAgentArgumentsBackgroundOmitsLegacyDatasetPaths(t *testing.T) {
-	for _, slug := range []string{"analyst", "research", "network", "design"} {
-		t.Run(slug, func(t *testing.T) {
-			first, err := BuildAgentArguments(slug, AgentArgumentInput{UserQuery: "run"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, key := range []string{"data_list", "obs_file_list"} {
-				if _, exists := first[key]; exists {
-					t.Fatalf("legacy dataset field %q crossed the native argument boundary: %#v", key, first)
-				}
-			}
-		})
+func TestBuildAgentArgumentsCanonicalEmptyFilesAreFresh(t *testing.T) {
+	first, err := BuildAgentArguments("analyst", AgentArgumentInput{UserQuery: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first["data_list"].(map[string]string)["obs://mutated"] = "mutated"
+	first["obs_file_list"] = append(first["obs_file_list"].([]string), "obs://mutated")
+
+	second, err := BuildAgentArguments("analyst", AgentArgumentInput{UserQuery: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(second["data_list"], map[string]string{}) {
+		t.Fatalf("second data_list=%#v", second["data_list"])
+	}
+	if !reflect.DeepEqual(second["obs_file_list"], []string{}) {
+		t.Fatalf("second obs_file_list=%#v", second["obs_file_list"])
 	}
 }
 

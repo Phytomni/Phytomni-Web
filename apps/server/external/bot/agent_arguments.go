@@ -88,11 +88,16 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 	args := map[string]interface{}{"user_query": input.UserQuery}
 	switch slug {
 	case "research":
+		args["data_list"] = map[string]string{}
+		args["obs_file_list"] = []string{}
 		args["interop_mode"] = interopMode
 		args["interop_targets"] = interopTargets
 	case "analyst":
+		args["data_list"] = map[string]string{}
+		args["obs_file_list"] = []string{}
 		args["goal_description"] = input.UserQuery
 	case "design":
+		args["obs_file_list"] = []string{}
 		args["interop_mode"] = interopMode
 		args["interop_targets"] = interopTargets
 		args["resolve_gene_id"] = true
@@ -104,6 +109,7 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 			args["species_code"] = input.SpeciesCode
 		}
 	case "network":
+		args["obs_file_list"] = []string{}
 		if input.ToID != "" || input.SpeciesCode != "" {
 			if input.ToID == "" || input.SpeciesCode == "" {
 				return nil, fmt.Errorf("network resolver values require to_id and species_code")
