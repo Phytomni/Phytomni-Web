@@ -131,7 +131,7 @@
           </ul>
         </div>
 
-        <div class="analysis-agent-field">
+        <div v-if="hasDatasetUpload" class="analysis-agent-field">
           <label :for="`${agentKey}-dataset`">
             {{ t(`${localePrefix}.datasetDescriptionLabel`) }}
           </label>
@@ -397,6 +397,11 @@ const uploadQueue = useResumableUploads({
   },
 });
 const uploadItems = computed(() => getChatState(dialogueId).fileList ?? []);
+const hasDatasetUpload = computed(() =>
+  uploadItems.value.some(
+    (item) => item.purpose === "dataset" && item.status !== "aborted"
+  )
+);
 const hasBlockingUploads = uploadQueue.hasBlockingUploads;
 
 watch(

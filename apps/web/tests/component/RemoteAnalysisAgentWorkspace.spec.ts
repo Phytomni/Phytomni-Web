@@ -135,6 +135,13 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     vi.clearAllMocks();
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
     mocks.submit.mockResolvedValue(null);
+    mocks.chatState.fileList = [
+      {
+        assetId: "file_dataset_1234567890",
+        purpose: "dataset",
+        status: "completed",
+      },
+    ];
   });
 
   afterEach(() => {
@@ -159,6 +166,28 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       datasetDescription: "Rice count matrix",
     });
     wrapper.unmount();
+  });
+
+  it("shows the dataset description only for active dataset uploads", () => {
+    mocks.chatState.fileList = [];
+    const emptyQueue = mountWorkspace();
+    expect(emptyQueue.find('[data-test="analyst-dataset"]').exists()).toBe(
+      false
+    );
+    emptyQueue.unmount();
+
+    mocks.chatState.fileList = [
+      {
+        assetId: "file_document_1234567890",
+        purpose: "document",
+        status: "completed",
+      },
+    ];
+    const documentOnlyQueue = mountWorkspace();
+    expect(
+      documentOnlyQueue.find('[data-test="analyst-dataset"]').exists()
+    ).toBe(false);
+    documentOnlyQueue.unmount();
   });
 
   it("renders terminal reports and artifact lists through the shared surface", () => {
