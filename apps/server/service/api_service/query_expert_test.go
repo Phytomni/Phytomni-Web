@@ -341,7 +341,7 @@ func TestQuery_ExpertUsesServerOrderedAllowedTools(t *testing.T) {
 
 	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_route_reads"}, {AssetID: "file_route_variants"}}
 	if _, err := NewService().Query(context.Background(), "partial@example.com", QueryInput{
-		Query: "q", Mode: "expert", Attachments: refs,
+		Query: "q", Mode: "expert", Attachments: refs, DatasetDescription: "  route dataset context  ",
 	}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -354,6 +354,12 @@ func TestQuery_ExpertUsesServerOrderedAllowedTools(t *testing.T) {
 	}
 	if !reflect.DeepEqual(captured.Attachments, refs) || captured.OwnerSubject != "partial@example.com" {
 		t.Fatalf("route attachments=%#v owner=%q, want %#v/partial@example.com", captured.Attachments, captured.OwnerSubject, refs)
+	}
+	if captured.DatasetDescription != "route dataset context" {
+		t.Fatalf("route dataset_description=%q, want normalized structured value", captured.DatasetDescription)
+	}
+	if captured.UserQuery != "q" || len(captured.History) != 0 {
+		t.Fatalf("route query/history leaked structured description: %#v", captured)
 	}
 }
 
@@ -390,7 +396,7 @@ func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
 
 	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_forced_data"}}
 	if _, err := NewService().Query(context.Background(), "forced@example.com", QueryInput{
-		Query: "q", Mode: "expert", Tool: "DataAgent", Attachments: refs,
+		Query: "q", Mode: "expert", Tool: "DataAgent", Attachments: refs, DatasetDescription: "  forced dataset context  ",
 	}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -399,6 +405,12 @@ func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
 	}
 	if !reflect.DeepEqual(captured.Attachments, refs) || captured.OwnerSubject != "forced@example.com" {
 		t.Fatalf("forced agent attachments=%#v owner=%q, want %#v/forced@example.com", captured.Attachments, captured.OwnerSubject, refs)
+	}
+	if captured.DatasetDescription != "forced dataset context" {
+		t.Fatalf("forced agent dataset_description=%q, want normalized structured value", captured.DatasetDescription)
+	}
+	if _, leaked := captured.Arguments["dataset_description"]; leaked {
+		t.Fatalf("agent arguments leaked structured description: %#v", captured.Arguments)
 	}
 }
 

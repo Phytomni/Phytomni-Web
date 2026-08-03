@@ -321,7 +321,7 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 		wantToID      string
 		wantSpecies   string
 	}{
-		{tool: "InSilicoResearchAgent", slug: "research", upstreamCode: http.StatusOK, upstreamState: "succeeded"},
+		{tool: "InSilicoResearchAgent", slug: "research", upstreamCode: http.StatusOK, upstreamState: "succeeded", fields: map[string]string{"dataset_description": "  direct product dataset context  "}},
 		{tool: "InSilicoResearchAgent", slug: "research", upstreamCode: http.StatusAccepted, upstreamState: "running"},
 		{tool: "DigitalDesignAgent", slug: "design", upstreamCode: http.StatusOK, upstreamState: "succeeded", fields: map[string]string{"gene_id": " AT1G01010 ", "species_code": " ATH "}, wantGeneID: "AT1G01010", wantSpecies: "ath"},
 		{tool: "DigitalDesignAgent", slug: "design", upstreamCode: http.StatusAccepted, upstreamState: "running"},
@@ -368,7 +368,7 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			if gotPath != "/v1/agents/"+tc.slug+"/runs" {
 				t.Fatalf("Bot path = %q, want dedicated %s run", gotPath, tc.slug)
 			}
-			for _, key := range []string{"data_list", "obs_file_list"} {
+			for _, key := range []string{"data_list", "obs_file_list", "dataset_description"} {
 				if _, leaked := gotRequest.Arguments[key]; leaked {
 					t.Fatalf("legacy dataset field %q crossed the product boundary", key)
 				}
@@ -384,6 +384,9 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			}
 			if len(gotRequest.Attachments) != 1 || gotRequest.Attachments[0].AssetID != "file_route" {
 				t.Fatalf("opaque attachments=%#v, want file_route", gotRequest.Attachments)
+			}
+			if tc.tool == "InSilicoResearchAgent" && tc.upstreamCode == http.StatusOK && gotRequest.DatasetDescription != "direct product dataset context" {
+				t.Fatalf("dataset_description=%q, want normalized structured value", gotRequest.DatasetDescription)
 			}
 			var response struct {
 				Code int                   `json:"code"`

@@ -61,6 +61,65 @@ func TestDoJSONDecodesErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestChatCompletionClientForwardsDatasetDescriptionAcrossRequestPaths(t *testing.T) {
+	const description = "normalized dataset context"
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode %s request: %v", r.URL.Path, err)
+			return
+		}
+		if body["dataset_description"] != description {
+			t.Errorf("%s dataset_description=%v, want normalized structured value", r.URL.Path, body["dataset_description"])
+		}
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			if body["stream"] == true {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("event: RunFinished\\ndata: {\\\"type\\\":\\\"RunFinished\\\"}\\n\\n"))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"chat","object":"chat.completion","choices":[],"formatted":{}}`))
+		case "/v1/agents/data/runs", "/v1/query/route":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"run","run_id":"run","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	if _, err := client.ChatCompletion(context.Background(), ChatCompletionRequest{
+		Model: "phyto-chat", DatasetDescription: description,
+	}); err != nil {
+		t.Fatalf("ChatCompletion: %v", err)
+	}
+	stream, err := client.ChatCompletionStream(context.Background(), ChatCompletionRequest{
+		Model: "phyto-chat", DatasetDescription: description,
+	})
+	if err != nil {
+		t.Fatalf("ChatCompletionStream: %v", err)
+	}
+	_ = stream.Close()
+	if _, err := client.InvokeAgent(context.Background(), "data", AgentRunRequest{
+		Arguments: map[string]interface{}{"user_query": "analyze"}, DatasetDescription: description,
+	}); err != nil {
+		t.Fatalf("InvokeAgent: %v", err)
+	}
+	if _, err := client.RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery: "analyze", DatasetDescription: description,
+	}); err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+	if got := strings.Join(paths, ","); got != "/v1/chat/completions,/v1/chat/completions,/v1/agents/data/runs,/v1/query/route" {
+		t.Fatalf("request paths=%q", got)
+	}
+}
+
 func TestChatCompletionRejectsMismatchedContextTurn(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

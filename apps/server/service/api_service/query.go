@@ -58,13 +58,14 @@ var ErrInvalidA2uiSurface = errors.New("invalid a2ui input-required surface")
 var ErrStreamUnsupported = errors.New("streaming not supported for this request")
 
 var (
-	ErrInvalidClientTurnID      = errors.New("invalid client turn id")
-	ErrConversationModeConflict = errors.New("conversation mode conflict")
-	ErrDuplicateClientTurn      = errors.New("duplicate client turn conflict")
-	ErrInvalidQueryAttachments  = errors.New("invalid query attachments")
-	ErrInvalidAgentResolver     = errors.New("invalid agent resolver")
-	ErrQueryAuthentication      = errors.New("query authentication required")
-	ErrInvalidConversationStage = errors.New("invalid conversation context stage")
+	ErrInvalidClientTurnID       = errors.New("invalid client turn id")
+	ErrConversationModeConflict  = errors.New("conversation mode conflict")
+	ErrDuplicateClientTurn       = errors.New("duplicate client turn conflict")
+	ErrInvalidQueryAttachments   = errors.New("invalid query attachments")
+	ErrInvalidDatasetDescription = errors.New("invalid dataset description")
+	ErrInvalidAgentResolver      = errors.New("invalid agent resolver")
+	ErrQueryAuthentication       = errors.New("query authentication required")
+	ErrInvalidConversationStage  = errors.New("invalid conversation context stage")
 )
 
 var serviceClientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
@@ -74,6 +75,7 @@ const (
 	turnAllocationTimeout       = time.Second
 	turnSubmissionLease         = 5 * time.Second
 	maxMySQLTurnWaitSeconds     = 30
+	maxDatasetDescriptionRunes  = 4000
 )
 
 var sqliteTurnAllocationLocks sync.Map
@@ -99,21 +101,22 @@ const (
 
 // QueryInput is the parsed /query multipart form.
 type QueryInput struct {
-	Query          string
-	Id             int64 // the Web app's threading id: 0 = new conversation, else parent row id
-	Tool           string
-	RefreshId      int64 // !=0 = re-answer an existing turn (UPDATE that row)
-	History        string
-	Mode           string // "instant" (default) | "expert"
-	Attachments    []rxBot.AssetAttachmentRef
-	InteropMode    string
-	InteropTargets []string
-	ClientTurnID   string
-	ArtifactIDs    []string
-	GeneID         string
-	ToID           string
-	SpeciesCode    string
-	Surface        QuerySurface
+	Query              string
+	Id                 int64 // the Web app's threading id: 0 = new conversation, else parent row id
+	Tool               string
+	RefreshId          int64 // !=0 = re-answer an existing turn (UPDATE that row)
+	History            string
+	Mode               string // "instant" (default) | "expert"
+	Attachments        []rxBot.AssetAttachmentRef
+	DatasetDescription string
+	InteropMode        string
+	InteropTargets     []string
+	ClientTurnID       string
+	ArtifactIDs        []string
+	GeneID             string
+	ToID               string
+	SpeciesCode        string
+	Surface            QuerySurface
 }
 
 type v1SubmissionTarget struct {
@@ -179,6 +182,26 @@ func validateQueryAttachments(refs []rxBot.AssetAttachmentRef) ([]rxBot.AssetAtt
 		return nil, fmt.Errorf("%w: %v", ErrInvalidQueryAttachments, err)
 	}
 	return validated, nil
+}
+
+func normalizeDatasetDescription(raw string) (string, error) {
+	if !utf8.ValidString(raw) || strings.ContainsRune(raw, '\x00') {
+		return "", ErrInvalidDatasetDescription
+	}
+	normalized := strings.TrimSpace(raw)
+	if utf8.RuneCountInString(normalized) > maxDatasetDescriptionRunes {
+		return "", ErrInvalidDatasetDescription
+	}
+	return normalized, nil
+}
+
+func normalizeQueryInputDatasetDescription(in *QueryInput) error {
+	normalized, err := normalizeDatasetDescription(in.DatasetDescription)
+	if err != nil {
+		return err
+	}
+	in.DatasetDescription = normalized
+	return nil
 }
 
 func attachmentProjectionJSON(refs []rxBot.AssetAttachmentRef) (string, error) {
@@ -1510,6 +1533,9 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 // So Id=0 starts a new conversation (fresh dialogue_id), Id=N appends a child
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
 func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
+	if err := normalizeQueryInputDatasetDescription(&in); err != nil {
+		return nil, err
+	}
 	v1 := multiturnV1Enabled(in)
 	attachments, err := validateQueryAttachments(in.Attachments)
 	if err != nil {
@@ -1672,10 +1698,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if in.Mode == "expert" && in.Tool == "" {
 		// Autonomous Expert uses Bot's router so it can select an allowed agent.
 		routeRequest := rxBot.RouteQueryRequest{
-			UserQuery:    in.Query,
-			Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
-			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
-			DialogueID:   dialogueID,
+			UserQuery:          in.Query,
+			Attachments:        append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			OwnerSubject:       attachmentOwnerSubject(username, in.Attachments),
+			DatasetDescription: in.DatasetDescription,
+			DialogueID:         dialogueID,
 			AllowedTools: append(
 				[]string(nil),
 				permissions.AllowedTools...,
@@ -1798,11 +1825,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
 		}
 		req := rxBot.ChatCompletionRequest{
-			Model:        chatModel,
-			Messages:     messages,
-			DialogueID:   dialogueID,
-			Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
-			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
+			Model:              chatModel,
+			Messages:           messages,
+			DialogueID:         dialogueID,
+			Attachments:        append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			OwnerSubject:       attachmentOwnerSubject(username, in.Attachments),
+			DatasetDescription: in.DatasetDescription,
 		}
 		if v1 {
 			req.Conversation = submission.envelope
@@ -1890,10 +1918,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		agentRequest := rxBot.AgentRunRequest{
-			Arguments:    args,
-			Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
-			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
-			DialogueID:   dialogueID,
+			Arguments:          args,
+			Attachments:        append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			OwnerSubject:       attachmentOwnerSubject(username, in.Attachments),
+			DatasetDescription: in.DatasetDescription,
+			DialogueID:         dialogueID,
 		}
 		if v1 {
 			agentRequest.Conversation = submission.envelope
@@ -2503,6 +2532,9 @@ func (ps *Service) QueryStream(
 	onReady func(StreamIdentity),
 	forward func(frame []byte) error,
 ) (*QueryData, error) {
+	if err := normalizeQueryInputDatasetDescription(&in); err != nil {
+		return nil, err
+	}
 	v1 := multiturnV1Enabled(in)
 	attachments, err := validateQueryAttachments(in.Attachments)
 	if err != nil {
@@ -2609,11 +2641,12 @@ func (ps *Service) QueryStream(
 	)
 
 	req := rxBot.ChatCompletionRequest{
-		Model:        chatModel,
-		Messages:     chatMessagesForRequest(in.History, in.Query),
-		DialogueID:   dialogueID,
-		Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
-		OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
+		Model:              chatModel,
+		Messages:           chatMessagesForRequest(in.History, in.Query),
+		DialogueID:         dialogueID,
+		Attachments:        append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+		OwnerSubject:       attachmentOwnerSubject(username, in.Attachments),
+		DatasetDescription: in.DatasetDescription,
 	}
 	if v1 {
 		req.Messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}

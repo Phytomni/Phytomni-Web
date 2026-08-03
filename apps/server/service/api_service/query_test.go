@@ -15,6 +15,105 @@ import (
 	"phytomni-server/model"
 )
 
+func TestNormalizeDatasetDescription(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		raw     string
+		want    string
+		wantErr bool
+	}{
+		{name: "empty omitted", raw: " \t\n ", want: ""},
+		{name: "trimmed", raw: "  normalized dataset context  ", want: "normalized dataset context"},
+		{name: "maximum runes", raw: strings.Repeat("数", 4000), want: strings.Repeat("数", 4000)},
+		{name: "too many runes", raw: strings.Repeat("x", 4001), wantErr: true},
+		{name: "nul", raw: "bad\x00value", wantErr: true},
+		{name: "invalid utf8", raw: "bad\xffvalue", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := normalizeDatasetDescription(tc.raw)
+			if tc.wantErr {
+				if !errors.Is(err, ErrInvalidDatasetDescription) {
+					t.Fatalf("normalize error=%v, want ErrInvalidDatasetDescription", err)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("normalized=%q err=%v, want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestQueryRejectsInvalidDatasetDescriptionBeforeDispatch(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	effects := observeQueryPermissionEffects(t, gdb)
+	previous := rxBot.BotConfig
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	_, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "Analyze counts", Mode: "instant", DatasetDescription: strings.Repeat("x", 4001),
+	})
+	if !errors.Is(err, ErrInvalidDatasetDescription) {
+		t.Fatalf("Query error=%v, want ErrInvalidDatasetDescription", err)
+	}
+	if hits != 0 {
+		t.Fatalf("invalid description reached Bot %d time(s)", hits)
+	}
+	effects.assertNone(t)
+}
+
+func TestQueryForwardsNormalizedDatasetDescriptionToBlockingAndStreamChat(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stream bool
+	}{
+		{name: "blocking"},
+		{name: "stream", stream: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupExpertTestDB(t)
+			var captured rxBot.ChatCompletionRequest
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+					t.Errorf("decode chat request: %v", err)
+					return
+				}
+				if tc.stream {
+					w.Header().Set("Content-Type", "text/event-stream")
+					_, _ = w.Write([]byte("event: RunStarted\\ndata: {\\\"type\\\":\\\"RunStarted\\\",\\\"run_id\\\":\\\"run-dataset\\\"}\\n\\nevent: RunFinished\\ndata: {\\\"type\\\":\\\"RunFinished\\\",\\\"run_id\\\":\\\"run-dataset\\\"}\\n\\n"))
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":"chat-dataset","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"formatted":{"answer":"ok"}}`))
+			}))
+			t.Cleanup(srv.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: tc.stream, TimeoutSeconds: 5}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			in := QueryInput{Query: "Analyze counts", Mode: "instant", DatasetDescription: "  normalized dataset context  "}
+			if tc.stream {
+				_, err := NewService().QueryStream(context.Background(), "alice@example.com", in, nil, nil)
+				if err != nil {
+					t.Fatalf("QueryStream: %v", err)
+				}
+			} else if _, err := NewService().Query(context.Background(), "alice", in); err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if captured.DatasetDescription != "normalized dataset context" {
+				t.Fatalf("dataset_description=%q, want normalized structured value", captured.DatasetDescription)
+			}
+			if captured.Messages[0].Content != "Analyze counts" || strings.Contains(captured.Messages[0].Content, "dataset context") {
+				t.Fatalf("chat message leaked structured description: %#v", captured.Messages)
+			}
+		})
+	}
+}
+
 const (
 	v1ConversationArtifactID   = "entity-artifact-1"
 	v1ConversationOutputMarker = "answer-prose-marker|report-prose-marker|table-prose-marker|full-output-marker"

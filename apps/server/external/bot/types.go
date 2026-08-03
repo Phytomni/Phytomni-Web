@@ -29,14 +29,15 @@ type ChatMessage struct {
 // is honored only by phyto-brief-gene (Bot rejects it with 400 for the other
 // chat models), so it stays omitempty and is set for brief_gene alone.
 type ChatCompletionRequest struct {
-	Model         string                  `json:"model"`
-	Messages      []ChatMessage           `json:"messages"`
-	Stream        bool                    `json:"stream"`
-	Attachments   []AssetAttachmentRef    `json:"attachments,omitempty"`
-	OwnerSubject  string                  `json:"owner_subject,omitempty"`
-	ResolveGeneID bool                    `json:"resolve_gene_id,omitempty"`
-	DialogueID    string                  `json:"dialogue_id,omitempty"`
-	Conversation  *ConversationEnvelopeV1 `json:"conversation,omitempty"`
+	Model              string                  `json:"model"`
+	Messages           []ChatMessage           `json:"messages"`
+	Stream             bool                    `json:"stream"`
+	Attachments        []AssetAttachmentRef    `json:"attachments,omitempty"`
+	OwnerSubject       string                  `json:"owner_subject,omitempty"`
+	DatasetDescription string                  `json:"dataset_description,omitempty"`
+	ResolveGeneID      bool                    `json:"resolve_gene_id,omitempty"`
+	DialogueID         string                  `json:"dialogue_id,omitempty"`
+	Conversation       *ConversationEnvelopeV1 `json:"conversation,omitempty"`
 }
 
 // Formatted is the Phytomni-specific envelope Bot returns alongside the
@@ -82,12 +83,13 @@ type ChatCompletionResponse struct {
 
 // AgentRunRequest is the body for POST /v1/agents/{slug}/runs.
 type AgentRunRequest struct {
-	Arguments    map[string]interface{}  `json:"arguments"`
-	Attachments  []AssetAttachmentRef    `json:"attachments,omitempty"`
-	OwnerSubject string                  `json:"owner_subject,omitempty"`
-	DialogueID   string                  `json:"dialogue_id,omitempty"`
-	Debug        bool                    `json:"debug,omitempty"`
-	Conversation *ConversationEnvelopeV1 `json:"conversation,omitempty"`
+	Arguments          map[string]interface{}  `json:"arguments"`
+	Attachments        []AssetAttachmentRef    `json:"attachments,omitempty"`
+	OwnerSubject       string                  `json:"owner_subject,omitempty"`
+	DatasetDescription string                  `json:"dataset_description,omitempty"`
+	DialogueID         string                  `json:"dialogue_id,omitempty"`
+	Debug              bool                    `json:"debug,omitempty"`
+	Conversation       *ConversationEnvelopeV1 `json:"conversation,omitempty"`
 }
 
 // AgentRunResult carries either a finished formatted payload (sync agents) or
@@ -122,14 +124,15 @@ type AgentRunResponse struct {
 // router. AllowedTools preserves its caller-provided order; ForcedTool=nil
 // means autonomous routing (the v1 Expert contract).
 type RouteQueryRequest struct {
-	UserQuery    string                  `json:"user_query"`
-	History      []ChatMessage           `json:"history,omitempty"`
-	Attachments  []AssetAttachmentRef    `json:"attachments,omitempty"`
-	OwnerSubject string                  `json:"owner_subject,omitempty"`
-	DialogueID   string                  `json:"dialogue_id,omitempty"`
-	AllowedTools []string                `json:"allowed_tools,omitempty"`
-	ForcedTool   *string                 `json:"forced_tool"`
-	Conversation *ConversationEnvelopeV1 `json:"conversation,omitempty"`
+	UserQuery          string                  `json:"user_query"`
+	History            []ChatMessage           `json:"history,omitempty"`
+	Attachments        []AssetAttachmentRef    `json:"attachments,omitempty"`
+	OwnerSubject       string                  `json:"owner_subject,omitempty"`
+	DatasetDescription string                  `json:"dataset_description,omitempty"`
+	DialogueID         string                  `json:"dialogue_id,omitempty"`
+	AllowedTools       []string                `json:"allowed_tools,omitempty"`
+	ForcedTool         *string                 `json:"forced_tool"`
+	Conversation       *ConversationEnvelopeV1 `json:"conversation,omitempty"`
 }
 
 // RouteQueryResponse mirrors AgentRunResponse exactly: Bot's route endpoint

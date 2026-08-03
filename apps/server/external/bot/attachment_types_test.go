@@ -54,20 +54,22 @@ func TestBotRequestFamiliesSerializeReferenceOnlyAttachments(t *testing.T) {
 		{
 			name: "chat",
 			value: ChatCompletionRequest{
-				Model: "phyto-chat", Attachments: refs, OwnerSubject: "alice@example.com",
+				Model: "phyto-chat", Attachments: refs, OwnerSubject: "alice@example.com", DatasetDescription: "normalized dataset context",
 			},
 		},
 		{
 			name: "route",
 			value: RouteQueryRequest{
-				UserQuery: "analyze", Attachments: refs, OwnerSubject: "alice@example.com",
+				UserQuery: "analyze", Attachments: refs, OwnerSubject: "alice@example.com", DatasetDescription: "normalized dataset context",
 			},
 		},
 		{
 			name: "agent",
 			value: AgentRunRequest{
-				Arguments:   map[string]interface{}{"user_query": "analyze"},
-				Attachments: refs, OwnerSubject: "alice@example.com",
+				Arguments:          map[string]interface{}{"user_query": "analyze"},
+				Attachments:        refs,
+				OwnerSubject:       "alice@example.com",
+				DatasetDescription: "normalized dataset context",
 			},
 		},
 	}
@@ -84,11 +86,37 @@ func TestBotRequestFamiliesSerializeReferenceOnlyAttachments(t *testing.T) {
 			if decoded["owner_subject"] != "alice@example.com" {
 				t.Fatalf("owner_subject=%v, want authenticated owner", decoded["owner_subject"])
 			}
+			if decoded["dataset_description"] != "normalized dataset context" {
+				t.Fatalf("dataset_description=%v, want normalized structured value", decoded["dataset_description"])
+			}
 			if _, ok := decoded["obs_file_list"]; ok {
 				t.Fatalf("request serialized legacy OBS paths: %s", raw)
 			}
 			if !strings.Contains(string(raw), `"attachments"`) || !strings.Contains(string(raw), `file_reads`) {
 				t.Fatalf("request omitted asset references: %s", raw)
+			}
+		})
+	}
+}
+
+func TestBotRequestFamiliesOmitEmptyDatasetDescription(t *testing.T) {
+	tests := map[string]interface{}{
+		"chat":  ChatCompletionRequest{Model: "phyto-chat"},
+		"route": RouteQueryRequest{UserQuery: "analyze"},
+		"agent": AgentRunRequest{Arguments: map[string]interface{}{"user_query": "analyze"}},
+	}
+	for name, value := range tests {
+		t.Run(name, func(t *testing.T) {
+			raw, err := json.Marshal(value)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			var decoded map[string]interface{}
+			if err := json.Unmarshal(raw, &decoded); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if _, ok := decoded["dataset_description"]; ok {
+				t.Fatalf("empty dataset description serialized: %s", raw)
 			}
 		})
 	}
