@@ -78,34 +78,49 @@ var (
 )
 
 type remoteProductRequirement struct {
-	tool    string
-	enabled func(*rxBot.Config) bool
+	tool                    string
+	enabled                 func(*rxBot.Config) bool
+	filterGenericPermission bool
 }
 
 var remoteProductRequirements = map[string]remoteProductRequirement{
+	"AnalystAgent": {
+		tool:    "AnalystAgent",
+		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.AnalystEnabled },
+	},
+	"analyst": {
+		tool:    "AnalystAgent",
+		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.AnalystEnabled },
+	},
 	"InSilicoResearchAgent": {
-		tool:    "InSilicoResearchAgent",
-		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.ResearchEnabled },
+		tool:                    "InSilicoResearchAgent",
+		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.ResearchEnabled },
+		filterGenericPermission: true,
 	},
 	"research": {
-		tool:    "InSilicoResearchAgent",
-		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.ResearchEnabled },
+		tool:                    "InSilicoResearchAgent",
+		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.ResearchEnabled },
+		filterGenericPermission: true,
 	},
 	"DigitalDesignAgent": {
-		tool:    "DigitalDesignAgent",
-		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.DesignEnabled },
+		tool:                    "DigitalDesignAgent",
+		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.DesignEnabled },
+		filterGenericPermission: true,
 	},
 	"design": {
-		tool:    "DigitalDesignAgent",
-		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.DesignEnabled },
+		tool:                    "DigitalDesignAgent",
+		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.DesignEnabled },
+		filterGenericPermission: true,
 	},
 	"GeneNetworkAgent": {
-		tool:    "GeneNetworkAgent",
-		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.NetworkEnabled },
+		tool:                    "GeneNetworkAgent",
+		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.NetworkEnabled },
+		filterGenericPermission: true,
 	},
 	"network": {
-		tool:    "GeneNetworkAgent",
-		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.NetworkEnabled },
+		tool:                    "GeneNetworkAgent",
+		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.NetworkEnabled },
+		filterGenericPermission: true,
 	},
 }
 
@@ -116,7 +131,7 @@ func isRemoteProductTool(tool string) bool {
 
 func isRemoteProductEnabled(tool string) bool {
 	requirement, ok := remoteProductRequirements[tool]
-	return !ok || requirement.enabled(rxBot.BotConfig)
+	return !ok || !requirement.filterGenericPermission || requirement.enabled(rxBot.BotConfig)
 }
 
 // IsRemoteProductTool reports whether a canonical or Bot-slug tool belongs to

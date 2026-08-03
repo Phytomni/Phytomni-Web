@@ -121,15 +121,16 @@ func HistoryReadModeFromConfig() HistoryReadMode {
 // browser. It intentionally contains no Bot descriptor, URL, credential, or
 // upstream diagnostic field.
 type BotCapability struct {
-	Tool        string `json:"tool"`
-	Slug        string `json:"slug"`
-	Execution   string `json:"execution"`
-	Stream      bool   `json:"stream"`
-	A2UI        bool   `json:"a2ui"`
-	Resolver    bool   `json:"resolver"`
-	Attachments bool   `json:"attachments"`
-	Artifacts   bool   `json:"artifacts"`
-	Enabled     bool   `json:"enabled"`
+	Tool               string   `json:"tool"`
+	Slug               string   `json:"slug"`
+	Execution          string   `json:"execution"`
+	Stream             bool     `json:"stream"`
+	A2UI               bool     `json:"a2ui"`
+	Resolver           bool     `json:"resolver"`
+	Attachments        bool     `json:"attachments"`
+	AttachmentPurposes []string `json:"attachment_purposes"`
+	Artifacts          bool     `json:"artifacts"`
+	Enabled            bool     `json:"enabled"`
 }
 
 const (
@@ -197,17 +198,24 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 	}
 
 	for index, definition := range rxBot.WebAgentDefinitions {
-		if _, ok := presence[definition.Slug]; !ok {
+		agentPresence, ok := presence[definition.Slug]
+		if !ok || !agentPresence.Present {
 			continue
 		}
-		if !stableWebAgent(definition.Slug) {
-			// New remote product surfaces stay dark until their separate
-			// capability and acceptance gates land.
+		if !localCapabilityEnabled(definition.Slug, cfg) {
+			continue
+		}
+		attachmentPurposes := attachmentPurposesFor(definition.Slug, agentPresence, uploadEnabled)
+		if productAttachmentCapability(definition.Slug) && len(attachmentPurposes) == 0 {
+			// Analyst and Research are attachment-enabled product surfaces. Their
+			// browser records remain dark until local product, upload negotiation,
+			// and Bot channel evidence all agree.
 			continue
 		}
 
 		manifest.Agents[index].Enabled = true
-		manifest.Agents[index].Attachments = uploadEnabled && attachmentsFor(definition.Slug)
+		manifest.Agents[index].AttachmentPurposes = attachmentPurposes
+		manifest.Agents[index].Attachments = len(attachmentPurposes) > 0
 		manifest.Agents[index].Artifacts = artifactsFor(definition.Slug)
 		if cfg.StreamEnabled && streamEligible(definition.Slug) {
 			manifest.Agents[index].Stream = true
@@ -261,9 +269,10 @@ func disabledBotCapabilities() []BotCapability {
 	manifest := make([]BotCapability, len(rxBot.WebAgentDefinitions))
 	for index, definition := range rxBot.WebAgentDefinitions {
 		manifest[index] = BotCapability{
-			Tool:      definition.Tool,
-			Slug:      definition.Slug,
-			Execution: definition.Execution,
+			Tool:               definition.Tool,
+			Slug:               definition.Slug,
+			Execution:          definition.Execution,
+			AttachmentPurposes: []string{},
 		}
 	}
 	return manifest
@@ -278,6 +287,21 @@ func stableWebAgent(slug string) bool {
 	}
 }
 
+func localCapabilityEnabled(slug string, cfg *rxBot.Config) bool {
+	switch slug {
+	case "analyst":
+		return cfg != nil && cfg.AnalystEnabled
+	case "research":
+		return cfg != nil && cfg.ResearchEnabled
+	default:
+		return stableWebAgent(slug)
+	}
+}
+
+func productAttachmentCapability(slug string) bool {
+	return slug == "analyst" || slug == "research"
+}
+
 func streamEligible(slug string) bool {
 	switch slug {
 	case "chat", "knowledge", "brief_gene":
@@ -287,18 +311,27 @@ func streamEligible(slug string) bool {
 	}
 }
 
-func attachmentsFor(slug string) bool {
-	switch slug {
-	case "chat", "knowledge", "data", "review", "brief_gene":
-		return true
-	default:
-		return false
+func attachmentPurposesFor(
+	slug string,
+	presence rxBot.WebAgentPresence,
+	uploadEnabled bool,
+) []string {
+	if !uploadEnabled {
+		return []string{}
 	}
+	purposes := make([]string, 0, 2)
+	if presence.Documents {
+		purposes = append(purposes, "document")
+	}
+	if presence.Datasets && (slug == "analyst" || slug == "research") {
+		purposes = append(purposes, "dataset")
+	}
+	return purposes
 }
 
 func artifactsFor(slug string) bool {
 	switch slug {
-	case "data", "brief_gene":
+	case "data", "brief_gene", "analyst", "research":
 		return true
 	default:
 		return false

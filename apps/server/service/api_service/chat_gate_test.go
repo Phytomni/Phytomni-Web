@@ -269,7 +269,7 @@ func TestCheckRemoteProductAllowed_UnknownToolFailsClosed(t *testing.T) {
 }
 
 func TestIsDedicatedAgentProductTool(t *testing.T) {
-	for _, tool := range []string{"InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
+	for _, tool := range []string{"AnalystAgent", "analyst", "InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
 		if !IsDedicatedAgentProductTool(tool) {
 			t.Fatalf("%s must have a dedicated product route", tool)
 		}

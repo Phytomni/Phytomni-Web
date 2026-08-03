@@ -151,6 +151,7 @@ func TestAgentProductRunRejectsBeforeReadingAttachmentOrBot(t *testing.T) {
 		tool string
 		name string
 	}{
+		{tool: "AnalystAgent", name: "analyst"},
 		{tool: "InSilicoResearchAgent", name: "research"},
 		{tool: "DigitalDesignAgent", name: "design"},
 		{tool: "GeneNetworkAgent", name: "network"},
@@ -175,7 +176,7 @@ func TestAgentProductRunRejectsBeforeReadingAttachmentOrBot(t *testing.T) {
 					name:     "permission denied",
 					email:    "denied@example.com",
 					code:     "ordinary",
-					config:   &rxBot.Config{ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true},
+					config:   &rxBot.Config{ProxyEnabled: true, AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true},
 					wantCode: http.StatusNotFound,
 				},
 			} {

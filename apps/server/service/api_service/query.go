@@ -1133,7 +1133,7 @@ func prepareV1ConversationRebuildRetry(
 // product-run surface.
 func IsDedicatedAgentProductTool(tool string) bool {
 	switch tool {
-	case "InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent":
+	case "AnalystAgent", "analyst", "InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent":
 		return true
 	default:
 		return false

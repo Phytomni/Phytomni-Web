@@ -55,6 +55,14 @@ func CanonicalAgentDisplayTools() []string {
 
 const maxBotAgentDescriptors = 32
 
+// WebAgentPresence is the finite descriptor projection consumed by the Web
+// capability manifest. It deliberately excludes raw Bot descriptor metadata.
+type WebAgentPresence struct {
+	Present   bool
+	Documents bool
+	Datasets  bool
+}
+
 func supportsProtocol(resp *AgentsListResponse, protocol string, version int) bool {
 	if resp == nil || version < 1 {
 		return false
@@ -74,17 +82,18 @@ func SupportsProtocol(resp *AgentsListResponse, protocol string, version int) bo
 }
 
 // ValidateWebAgentDescriptors validates only the public shape needed by the
-// Web capability manifest. It returns presence by canonical slug and never
-// returns the original descriptor, legacy aliases, or any other Bot metadata.
+// Web capability manifest. It returns finite presence by canonical slug and
+// never returns the original descriptor, legacy aliases, or any other Bot
+// metadata.
 // A missing canonical slug is valid (the caller marks that capability off),
 // but an unknown, duplicate, or malformed descriptor fails the complete
 // manifest closed.
-func ValidateWebAgentDescriptors(resp *AgentsListResponse) (map[string]struct{}, error) {
+func ValidateWebAgentDescriptors(resp *AgentsListResponse) (map[string]WebAgentPresence, error) {
 	if resp == nil || len(resp.Data) > maxBotAgentDescriptors {
 		return nil, fmt.Errorf("invalid bot agent listing")
 	}
 
-	present := make(map[string]struct{}, len(resp.Data))
+	present := make(map[string]WebAgentPresence, len(resp.Data))
 	for _, descriptor := range resp.Data {
 		slug := strings.TrimSpace(descriptor.Slug)
 		tool := strings.TrimSpace(descriptor.Tool)
@@ -98,7 +107,11 @@ func ValidateWebAgentDescriptors(resp *AgentsListResponse) (map[string]struct{},
 		if _, duplicate := present[slug]; duplicate {
 			return nil, fmt.Errorf("duplicate bot agent descriptor")
 		}
-		present[slug] = struct{}{}
+		present[slug] = WebAgentPresence{
+			Present:   true,
+			Documents: descriptor.Capabilities.Attachments.DocumentContext != nil,
+			Datasets:  descriptor.Capabilities.Attachments.Datasets != nil,
+		}
 	}
 	return present, nil
 }

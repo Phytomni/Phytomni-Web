@@ -175,13 +175,28 @@ type RunLogsResponse struct {
 	TaskLogs []map[string]interface{} `json:"task_logs"`
 }
 
+// AgentDescriptorAttachments is the finite attachment-channel presence
+// projection accepted from GET /v1/agents. Its empty struct values deliberately
+// discard every nested limit, extension, provider, and diagnostic field.
+type AgentDescriptorAttachments struct {
+	DocumentContext *struct{} `json:"document_context"`
+	Datasets        *struct{} `json:"datasets"`
+}
+
+// AgentDescriptorCapabilities is the finite descriptor capability projection
+// used by the Web manifest boundary.
+type AgentDescriptorCapabilities struct {
+	Attachments AgentDescriptorAttachments `json:"attachments"`
+}
+
 // AgentDescriptor is one row of GET /v1/agents. LegacyAliases is advisory
 // metadata only; Web Go maintains its own alias->slug table (see agent_map).
 type AgentDescriptor struct {
-	Slug          string   `json:"slug"`
-	Tool          string   `json:"tool"`
-	Origin        string   `json:"origin"`
-	LegacyAliases []string `json:"legacy_aliases"`
+	Slug          string                      `json:"slug"`
+	Tool          string                      `json:"tool"`
+	Origin        string                      `json:"origin"`
+	LegacyAliases []string                    `json:"legacy_aliases"`
+	Capabilities  AgentDescriptorCapabilities `json:"capabilities"`
 }
 
 // AgentsListResponse is the GET /v1/agents envelope.

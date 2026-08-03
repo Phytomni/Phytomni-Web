@@ -80,9 +80,10 @@ type Config struct {
 	// direct upload data plane. It must never be inferred from BaseURL, which
 	// may be an internal service address.
 	UploadPublicOrigin string `json:"upload_public_origin" yaml:"upload_public_origin" mapstructure:"upload_public_origin"`
-	// ResearchEnabled, DesignEnabled, and NetworkEnabled are independent
-	// product gates for the remote agent surfaces. They intentionally default
-	// false so a missing config key cannot activate a Bot-backed product.
+	// AnalystEnabled, ResearchEnabled, DesignEnabled, and NetworkEnabled are
+	// independent product gates for the remote agent surfaces. They intentionally
+	// default false so a missing config key cannot activate a Bot-backed product.
+	AnalystEnabled  bool `json:"analyst_enabled" yaml:"analyst_enabled" mapstructure:"analyst_enabled"`
 	ResearchEnabled bool `json:"research_enabled" yaml:"research_enabled" mapstructure:"research_enabled"`
 	DesignEnabled   bool `json:"design_enabled" yaml:"design_enabled" mapstructure:"design_enabled"`
 	NetworkEnabled  bool `json:"network_enabled" yaml:"network_enabled" mapstructure:"network_enabled"`

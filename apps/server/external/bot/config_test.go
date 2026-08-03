@@ -158,8 +158,15 @@ func TestInteropEnabledTrueWhenSet(t *testing.T) {
 
 func TestRemoteProductFlagsDefaultOff(t *testing.T) {
 	cfg := Config{}
-	if cfg.ResearchEnabled || cfg.DesignEnabled || cfg.NetworkEnabled {
+	if cfg.AnalystEnabled || cfg.ResearchEnabled || cfg.DesignEnabled || cfg.NetworkEnabled {
 		t.Fatal("remote product flags must default off")
+	}
+}
+
+func TestAnalystProductDefaultsOff(t *testing.T) {
+	cfg := &Config{}
+	if cfg.AnalystEnabled {
+		t.Fatal("Analyst must default off")
 	}
 }
 
@@ -173,17 +180,18 @@ func TestInitFromViper_RemoteProductFlags(t *testing.T) {
 	if err := InitFromViper(); err != nil {
 		t.Fatalf("InitFromViper defaults: %v", err)
 	}
-	if BotConfig.ResearchEnabled || BotConfig.DesignEnabled || BotConfig.NetworkEnabled {
+	if BotConfig.AnalystEnabled || BotConfig.ResearchEnabled || BotConfig.DesignEnabled || BotConfig.NetworkEnabled {
 		t.Fatal("remote product flags must remain disabled when keys are absent")
 	}
 
+	viper.Set("bot.analyst_enabled", true)
 	viper.Set("bot.research_enabled", true)
 	viper.Set("bot.design_enabled", true)
 	viper.Set("bot.network_enabled", true)
 	if err := InitFromViper(); err != nil {
 		t.Fatalf("InitFromViper explicit flags: %v", err)
 	}
-	if !BotConfig.ResearchEnabled || !BotConfig.DesignEnabled || !BotConfig.NetworkEnabled {
+	if !BotConfig.AnalystEnabled || !BotConfig.ResearchEnabled || !BotConfig.DesignEnabled || !BotConfig.NetworkEnabled {
 		t.Fatalf("explicit remote product flags were not decoded: %#v", BotConfig)
 	}
 }

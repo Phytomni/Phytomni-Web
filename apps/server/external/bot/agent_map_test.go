@@ -37,3 +37,41 @@ func TestSupportsProtocol(t *testing.T) {
 		t.Fatal("nil agent response was accepted")
 	}
 }
+
+func TestValidateWebAgentDescriptorsProjectsAttachmentChannels(t *testing.T) {
+	presence, err := ValidateWebAgentDescriptors(&AgentsListResponse{
+		Data: []AgentDescriptor{{
+			Slug: "analyst",
+			Tool: "AnalystAgent",
+			Capabilities: AgentDescriptorCapabilities{
+				Attachments: AgentDescriptorAttachments{
+					DocumentContext: &struct{}{},
+					Datasets:        &struct{}{},
+				},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ValidateWebAgentDescriptors: %v", err)
+	}
+	if got := presence["analyst"]; got != (WebAgentPresence{Present: true, Documents: true, Datasets: true}) {
+		t.Fatalf("analyst presence = %#v", got)
+	}
+}
+
+func TestValidateWebAgentDescriptorsFailsClosedForMalformedAndDuplicate(t *testing.T) {
+	tests := []struct {
+		name string
+		data []AgentDescriptor
+	}{
+		{name: "malformed", data: []AgentDescriptor{{Slug: "analyst"}}},
+		{name: "duplicate", data: []AgentDescriptor{{Slug: "analyst", Tool: "AnalystAgent"}, {Slug: "analyst", Tool: "AnalystAgent"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := ValidateWebAgentDescriptors(&AgentsListResponse{Data: tt.data}); err == nil {
+				t.Fatal("ValidateWebAgentDescriptors accepted an invalid descriptor list")
+			}
+		})
+	}
+}
