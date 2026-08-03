@@ -230,6 +230,26 @@ func TestCheckRemoteProductAllowed_FlagOff(t *testing.T) {
 	}
 }
 
+func TestResolveAgentPermissions_DisabledAnalystIsNotGenericAllowed(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "analyst@example.com", "analyst-role", 5)
+	seedRemoteProductPermission(t, gdb, "analyst-role", "AnalystAgent", 1)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	resolution, err := NewService().ResolveAgentPermissions(context.Background(), "analyst@example.com")
+	if err != nil {
+		t.Fatalf("resolve permissions: %v", err)
+	}
+	if !containsAgentTool(resolution.GrantedTools, "AnalystAgent") {
+		t.Fatalf("granted tools = %#v, want AnalystAgent retained", resolution.GrantedTools)
+	}
+	if containsAgentTool(resolution.AllowedTools, "AnalystAgent") {
+		t.Fatalf("disabled Analyst remained generic-allowed: %#v", resolution.AllowedTools)
+	}
+}
+
 func TestCheckRemoteProductAllowed_RequiresRolePermission(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)

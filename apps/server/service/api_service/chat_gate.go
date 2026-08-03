@@ -85,12 +85,14 @@ type remoteProductRequirement struct {
 
 var remoteProductRequirements = map[string]remoteProductRequirement{
 	"AnalystAgent": {
-		tool:    "AnalystAgent",
-		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.AnalystEnabled },
+		tool:                    "AnalystAgent",
+		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.AnalystEnabled },
+		filterGenericPermission: true,
 	},
 	"analyst": {
-		tool:    "AnalystAgent",
-		enabled: func(cfg *rxBot.Config) bool { return cfg != nil && cfg.AnalystEnabled },
+		tool:                    "AnalystAgent",
+		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.AnalystEnabled },
+		filterGenericPermission: true,
 	},
 	"InSilicoResearchAgent": {
 		tool:                    "InSilicoResearchAgent",

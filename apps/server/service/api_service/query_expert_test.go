@@ -201,7 +201,7 @@ func permissionRouteServer(t *testing.T, effects *queryPermissionEffects, captur
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
 		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 }
@@ -765,7 +765,7 @@ func expertRouteServer(t *testing.T, routeBody string) {
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
 		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
@@ -788,7 +788,7 @@ func agentRunServer(t *testing.T, slug, runBody string) {
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
 		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }

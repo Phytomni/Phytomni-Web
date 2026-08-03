@@ -69,7 +69,7 @@ func seedAgentPermissionTool(t *testing.T, gdb *gorm.DB, code, tool string, id i
 }
 
 func allAgentFlags() *rxBot.Config {
-	return &rxBot.Config{ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+	return &rxBot.Config{AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
 }
 
 func TestResolveAgentPermissions(t *testing.T) {
@@ -164,9 +164,9 @@ func TestResolveAgentPermissions(t *testing.T) {
 		config   *rxBot.Config
 		disabled string
 	}{
-		{"research flag", &rxBot.Config{DesignEnabled: true, NetworkEnabled: true}, "InSilicoResearchAgent"},
-		{"design flag", &rxBot.Config{ResearchEnabled: true, NetworkEnabled: true}, "DigitalDesignAgent"},
-		{"network flag", &rxBot.Config{ResearchEnabled: true, DesignEnabled: true}, "GeneNetworkAgent"},
+		{"research flag", &rxBot.Config{AnalystEnabled: true, DesignEnabled: true, NetworkEnabled: true}, "InSilicoResearchAgent"},
+		{"design flag", &rxBot.Config{AnalystEnabled: true, ResearchEnabled: true, NetworkEnabled: true}, "DigitalDesignAgent"},
+		{"network flag", &rxBot.Config{AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true}, "GeneNetworkAgent"},
 	} {
 		t.Run(tc.name+" filters only its product", func(t *testing.T) {
 			gdb := setupAgentPermissionDB(t)
