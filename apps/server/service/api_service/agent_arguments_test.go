@@ -47,6 +47,8 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 	}
 	want := map[string]interface{}{
 		"user_query":      "paper",
+		"data_list":       map[string]interface{}{},
+		"obs_file_list":   []interface{}{},
 		"interop_mode":    "off",
 		"interop_targets": []interface{}{},
 	}
@@ -78,8 +80,9 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 			name: "design", tool: "DigitalDesignAgent", path: "/v1/agents/design/runs",
 			input: QueryInput{GeneID: "AT1G01010", SpeciesCode: "ath"},
 			want: map[string]interface{}{
-				"user_query":   "design",
-				"interop_mode": "off", "interop_targets": []interface{}{},
+				"user_query":    "design",
+				"obs_file_list": []interface{}{},
+				"interop_mode":  "off", "interop_targets": []interface{}{},
 				"resolve_gene_id": true,
 				"gene_id":         "AT1G01010", "species_code": "ath",
 			},
@@ -89,6 +92,7 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 			input: QueryInput{ToID: "TO:0000207", SpeciesCode: "osa"},
 			want: map[string]interface{}{
 				"user_query":       "network",
+				"obs_file_list":    []interface{}{},
 				"resolve_trait_id": true,
 				"to_id":            "TO:0000207",
 				"species_code":     "osa",
