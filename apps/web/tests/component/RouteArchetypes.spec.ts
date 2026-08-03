@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  canActivateRemoteAgentRoute,
   constantRoutes,
   dynamicRoutes,
   REMOTE_AGENT_LAZY_ROUTES,
@@ -111,10 +112,10 @@ const ROUTE_CONTRACTS: RouteContract[] = [
   {
     path: "/analyst-agent",
     component: "views/analyst-agent/AnalystAgentView.vue",
-    productLayout: "demo",
-    migrationTask: "agent demo shell",
-    behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell"],
+    productLayout: "standalone",
+    migrationTask: "capability-gated remote agent surface",
+    behaviorTest: "tests/component/AnalystAgentView.spec.ts",
+    sourceMarkers: ["RemoteAnalysisAgentWorkspace", "AnalystAgent"],
   },
   {
     path: "/review-agent",
@@ -332,7 +333,6 @@ const activeLeafRoutes = flattenLeafRoutes(
 const STATIC_AGENT_DEMO_PATHS = [
   "/knowledge-agent",
   "/data-agent",
-  "/analyst-agent",
   "/review-agent",
   "/brief-gene-agent",
   "/cases/gene-network-agent",
@@ -398,7 +398,6 @@ const ROUTE_OWNERSHIP_CONTRACTS = [
     paths: [
       "/knowledge-agent",
       "/data-agent",
-      "/analyst-agent",
       "/review-agent",
       "/brief-gene-agent",
       "/cases/gene-network-agent",
@@ -439,10 +438,10 @@ const ROUTE_OWNERSHIP_CONTRACTS = [
     footerMarker: "",
   },
   {
-    paths: ["/research-agent"],
-    component: "views/research-agent/ResearchAgentView.vue",
-    ownerMarker: "research-agent-page",
-    scrollMarker: 'data-scroll-root="research-agent"',
+    paths: ["/analyst-agent", "/research-agent"],
+    component: "views/analysis-agent/RemoteAnalysisAgentWorkspace.vue",
+    ownerMarker: "analysis-agent-page",
+    scrollMarker: 'data-scroll-root="`${agentKey}-agent`"',
     footerMarker: "",
   },
   {
@@ -641,11 +640,15 @@ describe("routed visual archetypes", () => {
 
   it("keeps capability-gated product pages separate from static cases", () => {
     const productRoutes = [
+      "/analyst-agent",
       "/research-agent",
       "/gene-network-agent",
       "/digital-design-agent",
     ];
 
+    expect(STATIC_AGENT_DEMO_PATHS).not.toContain(
+      "/analyst-agent" as (typeof STATIC_AGENT_DEMO_PATHS)[number]
+    );
     expect(STATIC_AGENT_DEMO_PATHS).not.toContain(
       "/gene-network-agent" as (typeof STATIC_AGENT_DEMO_PATHS)[number]
     );
@@ -666,5 +669,45 @@ describe("routed visual archetypes", () => {
     );
     expect(DESIGN_SYSTEM_SOURCE).not.toContain("Bot deployment is complete");
     expect(DESIGN_SYSTEM_SOURCE).not.toContain("production acceptance passed");
+  });
+
+  it("registers Analyst as a default-off guarded remote product", () => {
+    expect(REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent).toMatchObject({
+      slug: "analyst",
+      route: "/analyst-agent",
+      capability: "agent_run",
+      attachments: true,
+      artifacts: true,
+      live: false,
+    });
+    const analystRoute = constantRoutes
+      .flatMap((route) => route.children ?? [])
+      .find((route) => route.path === "/analyst-agent");
+    expect(analystRoute?.beforeEnter).toBeTypeOf("function");
+  });
+
+  it("rejects Analyst navigation without its role or enabled capability", () => {
+    const product = REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent;
+    product.live = true;
+    try {
+      expect(
+        canActivateRemoteAgentRoute("AnalystAgent", {
+          roles: [],
+          capabilities: {
+            AnalystAgent: { enabled: true, execution: "agent_run" },
+          },
+        })
+      ).toBe(false);
+      expect(
+        canActivateRemoteAgentRoute("AnalystAgent", {
+          roles: ["AnalystAgent"],
+          capabilities: {
+            AnalystAgent: { enabled: false, execution: "agent_run" },
+          },
+        })
+      ).toBe(false);
+    } finally {
+      product.live = false;
+    }
   });
 });

@@ -10,10 +10,8 @@ import {
 } from "@/constants/agents";
 
 /**
- * Capability-gated route contracts for remote product views. The Research
- * surface has a real lazy component but remains dark until its `live` contract
- * is enabled; the other registry entries remain metadata-only demos. Keeping
- * them outside `constantRoutes` avoids advertising inactive products.
+ * Capability-gated route contracts for remote product views. The live surfaces
+ * remain dark until their respective `live` contracts are enabled.
  */
 export const REMOTE_AGENT_ROUTE_CONTRACTS = REMOTE_AGENT_PRODUCT_REGISTRY;
 
@@ -194,6 +192,7 @@ export const constantRoutes = [
         path: "/analyst-agent",
         name: "analystAgent",
         component: () => import("@/views/analyst-agent/AnalystAgentView.vue"),
+        beforeEnter: remoteAgentRouteGuard("AnalystAgent"),
         meta: { title: "Analyst Agent", layout: "nolayout" },
       },
       {

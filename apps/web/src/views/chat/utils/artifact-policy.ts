@@ -6,6 +6,7 @@ export const REMOTE_AGENT_ARTIFACT_POLICIES: Record<
   RemoteAgentTool,
   { kind: ArtifactKind; autoOpen: boolean }
 > = {
+  AnalystAgent: { kind: null, autoOpen: false },
   InSilicoResearchAgent: { kind: "research", autoOpen: true },
   DigitalDesignAgent: { kind: null, autoOpen: false },
   GeneNetworkAgent: { kind: null, autoOpen: false },

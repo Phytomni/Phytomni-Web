@@ -135,6 +135,7 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
           a2ui: false,
           resolver: false,
           attachments: true,
+          attachmentPurposes: ["dataset"],
           artifacts: true,
           enabled: true,
         },

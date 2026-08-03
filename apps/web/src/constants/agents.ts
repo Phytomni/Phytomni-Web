@@ -138,17 +138,20 @@ export const CANONICAL_AGENT_CASE_ROUTES: Record<RoutedAgentTool, string> = {
 
 /**
  * Remote product surfaces are intentionally separate from the eight sidebar
- * routes above.  The three records describe a future capability-gated route
+ * routes above. The records describe future capability-gated routes
  * contract; they do not make a demo route look like a live product surface.
  */
 export type RemoteAgentTool = Extract<
   CanonicalAgentTool,
-  "InSilicoResearchAgent" | "DigitalDesignAgent" | "GeneNetworkAgent"
+  | "AnalystAgent"
+  | "InSilicoResearchAgent"
+  | "DigitalDesignAgent"
+  | "GeneNetworkAgent"
 >;
 
 export interface RemoteAgentProductMetadata {
   tool: RemoteAgentTool;
-  slug: "research" | "design" | "network";
+  slug: "analyst" | "research" | "design" | "network";
   route: string;
   routeName: string;
   capability: "agent_run";
@@ -162,6 +165,17 @@ export const REMOTE_AGENT_PRODUCT_REGISTRY: Record<
   RemoteAgentTool,
   RemoteAgentProductMetadata
 > = {
+  AnalystAgent: {
+    tool: "AnalystAgent",
+    slug: "analyst",
+    route: "/analyst-agent",
+    routeName: "analystAgent",
+    capability: "agent_run",
+    requiredRole: "AnalystAgent",
+    attachments: true,
+    artifacts: true,
+    live: false,
+  },
   InSilicoResearchAgent: {
     tool: "InSilicoResearchAgent",
     slug: "research",
@@ -199,6 +213,7 @@ export const REMOTE_AGENT_PRODUCT_REGISTRY: Record<
 
 /** Route values consumed by future guarded product views, never by the @ picker. */
 export const REMOTE_AGENT_ROUTES: Record<RemoteAgentTool, string> = {
+  AnalystAgent: "/analyst-agent",
   InSilicoResearchAgent: "/research-agent",
   DigitalDesignAgent: "/digital-design-agent",
   GeneNetworkAgent: "/gene-network-agent",

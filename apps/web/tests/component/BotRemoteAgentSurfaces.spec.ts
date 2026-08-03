@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DigitalDesignAgentView from "@/views/digital-design-agent/DigitalDesignAgentView.vue";
 import GeneNetworkAgentView from "@/views/gene-network-agent/GeneNetworkAgentView.vue";
+import AnalystAgentView from "@/views/analyst-agent/AnalystAgentView.vue";
 import ResearchAgentView from "@/views/research-agent/ResearchAgentView.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import {
@@ -44,6 +45,18 @@ const mocks = vi.hoisted(() => {
     load: vi.fn().mockResolvedValue([]),
     byTool: {
       value: {
+        AnalystAgent: {
+          tool: "AnalystAgent",
+          slug: "analyst",
+          execution: "agent_run",
+          stream: false,
+          a2ui: false,
+          resolver: false,
+          attachments: true,
+          attachmentPurposes: ["dataset"],
+          artifacts: true,
+          enabled: true,
+        },
         InSilicoResearchAgent: {
           tool: "InSilicoResearchAgent",
           slug: "research",
@@ -52,6 +65,7 @@ const mocks = vi.hoisted(() => {
           a2ui: false,
           resolver: false,
           attachments: true,
+          attachmentPurposes: ["dataset"],
           artifacts: true,
           enabled: true,
         },
@@ -63,6 +77,7 @@ const mocks = vi.hoisted(() => {
           a2ui: false,
           resolver: true,
           attachments: true,
+          attachmentPurposes: ["dataset"],
           artifacts: true,
           enabled: true,
         },
@@ -74,6 +89,7 @@ const mocks = vi.hoisted(() => {
           a2ui: false,
           resolver: true,
           attachments: true,
+          attachmentPurposes: ["dataset"],
           artifacts: true,
           enabled: true,
         },
@@ -158,12 +174,14 @@ vi.mock("vue-router", () => ({
 }));
 
 const surfaces = {
+  analyst: AnalystAgentView,
   research: ResearchAgentView,
   design: DigitalDesignAgentView,
   network: GeneNetworkAgentView,
 } as const;
 
 const products = {
+  analyst: REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent,
   research: REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent,
   design: REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent,
   network: REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent,
@@ -423,11 +441,13 @@ describe("Bot remote-agent surface matrix", () => {
         wrapper.findAll('button[data-test="bot-artifact-download"]')
       ).toHaveLength(1);
       const scrollRoot =
-        surface === "design"
-          ? "digital-design"
-          : surface === "network"
-            ? "gene-network"
-            : "research";
+        surface === "analyst"
+          ? "analyst"
+          : surface === "design"
+            ? "digital-design"
+            : surface === "network"
+              ? "gene-network"
+              : "research";
       expect(wrapper.attributes("data-scroll-root")).toBe(
         `${scrollRoot}-agent`
       );

@@ -784,11 +784,45 @@ export default {
     analyst: {
       title: "Analyst Agent",
       subtitle:
-        "Analysis Agent - Provides bioinformatics data analysis and interpretation services",
-      sampleTask: "Static sample task ID",
-      sampleResult: "Static sample result",
-      taskCreated: "Task created successfully",
-      downloadResults: "Download sample results",
+        "Submit an analysis objective and datasets for a structured bioinformatics report.",
+      agentLabel: "Analysis workflow",
+      questionLabel: "Analysis question",
+      questionPlaceholder:
+        "Describe the analysis, species, and comparison you need",
+      contextFilesLabel: "Analysis files",
+      contextFilesHint:
+        "Attach documents or biological data in a supported purpose, up to 10 files and 10 GiB each.",
+      datasetDescriptionLabel: "Dataset description (optional)",
+      datasetDescriptionPlaceholder:
+        "Describe the dataset, groups, species, and analysis parameters",
+      submit: "Start analysis run",
+      submitting: "Submitting…",
+      reset: "Start another run",
+      progress: "Analysis run in progress",
+      complete: "Report ready",
+      degraded: "The report is partial because some analysis was unavailable.",
+      unsupportedAssetFormat:
+        "This Agent cannot process that asset format. The upload completed; choose an input format supported by this Agent.",
+      reportTitle: "Analysis report",
+      report: "Report",
+      evidence: "Evidence",
+      activity: "Activity",
+      downloads: "Downloads",
+      download: "Request download",
+      noEvidence: "No structured evidence is available for this run.",
+      noDownloads: "No safe downloads are available for this run.",
+      emptyReport: "The analysis report is not available yet.",
+      capabilityLoading: "Checking analysis capability…",
+      unavailableTitle: "Analyst Agent is not available",
+      unavailableMessage:
+        "This route is reserved for a capability-gated analysis workflow. No result was created.",
+      questionRequired: "Enter an analysis question before submitting.",
+      questionTooLong: "The analysis question is too long.",
+      datasetTooLong: "The dataset description is too long.",
+      submitFailed:
+        "The analysis run could not be submitted. Please try again.",
+      downloadFailed: "The download request could not be completed.",
+      sectionsLabel: "Analysis report sections",
     },
     data: {
       title: "Data Agent",
