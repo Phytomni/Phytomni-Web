@@ -46,7 +46,7 @@
       class="gene-network-images"
     >
       <div
-        v-if="lifecycle"
+        v-if="lifecycleLabel"
         class="agent-lifecycle"
         role="status"
         aria-live="polite"
@@ -99,7 +99,7 @@
       class="gene-network-images"
     >
       <div
-        v-if="lifecycle"
+        v-if="lifecycleLabel"
         class="agent-lifecycle"
         role="status"
         aria-live="polite"
@@ -276,13 +276,35 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
 };
 
+function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
+  const status = props.message.status?.trim().toUpperCase();
+  if (status === "PENDING" || status === "SUBMITTED") return "PREPARING";
+  if (status === "TIMEOUT" || status === "TIMED_OUT") return "FAILED";
+  if (status === "CANCELED") return "CANCELLED";
+  if (
+    status === "PREPARING" ||
+    status === "RUNNING" ||
+    status === "SUCCEEDED" ||
+    status === "FAILED" ||
+    status === "CANCELLED"
+  ) {
+    return status;
+  }
+  return null;
+}
+
+const effectiveLifecyclePhase = computed(
+  () => props.lifecycle?.phase ?? messageLifecyclePhase()
+);
 const lifecycleLabel = computed(() =>
-  props.lifecycle ? `chat.lifecycle.${props.lifecycle.phase.toLowerCase()}` : ""
+  effectiveLifecyclePhase.value
+    ? `chat.lifecycle.${effectiveLifecyclePhase.value.toLowerCase()}`
+    : ""
 );
 const isTerminalLifecycle = computed(
   () =>
-    props.lifecycle?.phase === "FAILED" ||
-    props.lifecycle?.phase === "CANCELLED"
+    effectiveLifecyclePhase.value === "FAILED" ||
+    effectiveLifecyclePhase.value === "CANCELLED"
 );
 const hasSpecializedReport = computed(
   () =>
@@ -291,8 +313,8 @@ const hasSpecializedReport = computed(
 );
 const activeSpecializedLifecycle = computed(
   () =>
-    props.lifecycle?.phase === "PREPARING" ||
-    props.lifecycle?.phase === "RUNNING"
+    effectiveLifecyclePhase.value === "PREPARING" ||
+    effectiveLifecyclePhase.value === "RUNNING"
 );
 const awaitingSpecializedImages = computed(
   () =>
@@ -305,7 +327,14 @@ const selectedImages = computed(() =>
     : props.digitalDesignImages[props.message.id || ""]
 );
 const shouldShowSpecializedNoData = computed(() => {
-  if (!props.lifecycle) return true;
+  if (!props.lifecycle) {
+    return (
+      (effectiveLifecyclePhase.value === null ||
+        effectiveLifecyclePhase.value === "SUCCEEDED") &&
+      !hasSpecializedReport.value &&
+      (selectedImages.value?.length ?? 0) === 0
+    );
+  }
   return (
     props.lifecycle.phase === "SUCCEEDED" &&
     !hasSpecializedReport.value &&

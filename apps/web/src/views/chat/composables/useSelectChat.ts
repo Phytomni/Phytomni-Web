@@ -49,25 +49,18 @@ const BACKGROUND_AGENT_TOOLS = new Set([
   "DigitalDesignAgent",
 ]);
 
-function isTerminalHistoryStatus(status: unknown): boolean {
-  return [
-    "SUCCEEDED",
-    "FAILED",
-    "TIMED_OUT",
-    "TIMEOUT",
-    "CANCELLED",
-    "CANCELED",
-  ].includes(
+function isSuccessfulHistoryStatus(status: unknown): boolean {
+  return (
     String(status ?? "")
       .trim()
-      .toUpperCase()
+      .toUpperCase() === "SUCCEEDED"
   );
 }
 
 function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
   if (typeof item.answer !== "string" || item.answer.trim()) return false;
   if (!BACKGROUND_AGENT_TOOLS.has(item.tool_name ?? "")) return false;
-  if (isTerminalHistoryStatus(item.status)) return false;
+  if (isSuccessfulHistoryStatus(item.status)) return false;
   try {
     normalizePositiveTaskRowId(item.id ?? "");
     return true;

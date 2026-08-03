@@ -231,6 +231,33 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
     error_code: null,
   });
 
+  it("uses persisted message status before lifecycle polling attaches", () => {
+    for (const tool_name of [
+      "GeneNetworkAgent",
+      "DigitalDesignAgent",
+    ] as const) {
+      const running = mountContent({
+        role: "assistant",
+        content: "",
+        id: `${tool_name}-status-running`,
+        tool_name,
+        status: "RUNNING",
+      });
+      expect(running.text()).toContain("Running");
+      expect(running.text()).not.toContain("common.noData");
+
+      const failed = mountContent({
+        role: "assistant",
+        content: "",
+        id: `${tool_name}-status-failed`,
+        tool_name,
+        status: "FAILED",
+      });
+      expect(failed.text()).toContain("Failed");
+      expect(failed.text()).not.toContain("common.noData");
+    }
+  });
+
   it("renders lifecycle before specialized-agent artifact emptiness", () => {
     for (const tool_name of [
       "GeneNetworkAgent",

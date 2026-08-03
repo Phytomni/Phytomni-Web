@@ -1492,6 +1492,7 @@ describe("useSendMessage", () => {
     expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, {
       blockingDialogueId: "server-exact-id",
     });
+    expect(stateFor(tempId).historyHydration).toBe("ready");
     expect(mockClearPendingChat).not.toHaveBeenCalled();
     expect(currentChatId.value).toBe(tempId);
     const [formDataArg] = queryCallAt(0, "new-chat query call");
@@ -2165,6 +2166,36 @@ describe("useSendMessage", () => {
     });
     expect(stateFor("A").historyQuestion).toBeNull();
   });
+
+  it.each(["GeneNetworkAgent", "DigitalDesignAgent"] as const)(
+    "%s keeps an accepted empty background response free of refusal copy",
+    async (toolName) => {
+      stateFor("A").messageInput = "start background work";
+      stateFor("A").mode = "expert";
+      stateFor("A").selectedAgent = toolName;
+      mockGetQueryAbortable.mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: toolName,
+            answer: "",
+            status: "RUNNING",
+            id: "501",
+            bot_run_id: `run-${toolName}`,
+            follow_up_questions: [],
+          },
+        })
+      );
+
+      await makeComposable().sendMessage();
+
+      expect(lastMessageFor(stateFor("A"), toolName)).toMatchObject({
+        role: "assistant",
+        tool_name: toolName,
+        status: "RUNNING",
+        content: "",
+      });
+    }
+  );
 
   it("Expert rejects a non-terminal response without bot run identity", async () => {
     stateFor("A").messageInput = "research without identity";

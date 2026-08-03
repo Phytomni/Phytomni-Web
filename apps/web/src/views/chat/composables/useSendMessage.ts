@@ -906,11 +906,17 @@ export function useSendMessage(opts: {
               }
             } else {
               // handle other unknown tool types with the default format
+              const acceptedSpecializedBackground =
+                acceptedExpertResponse &&
+                (response.data.tool_name === "GeneNetworkAgent" ||
+                  response.data.tool_name === "DigitalDesignAgent");
               assistantMessage = {
                 role: "assistant",
                 content:
                   response.data?.answer ||
-                  "Sorry, I cannot answer this question.",
+                  (acceptedSpecializedBackground
+                    ? ""
+                    : "Sorry, I cannot answer this question."),
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 download_path: response.data?.download_path || "",
@@ -1166,7 +1172,13 @@ export function useSendMessage(opts: {
       if (ownsLifecycle) {
         const historyOpts =
           blockingDialogueId !== undefined ? { blockingDialogueId } : undefined;
-        await getHistoryQuestionData(sendingDialogueId, historyOpts);
+        const reconciliation = await getHistoryQuestionData(
+          sendingDialogueId,
+          historyOpts
+        );
+        if (reconciliation?.status === "reconciled") {
+          chatState.historyHydration = "ready";
+        }
 
         if (!isNewChat) {
           // for an existing chat, update the sending conversation's title (if it changed)

@@ -1138,6 +1138,18 @@ describe("useSelectChat", () => {
           status: "SUCCEEDED",
           tool_name: "AnalystAgent",
         }),
+        buildChatHistoryRecord({
+          id: "207",
+          answer: "",
+          status: "FAILED",
+          tool_name: "GeneNetworkAgent",
+        }),
+        buildChatHistoryRecord({
+          id: "208",
+          answer: "",
+          status: "CANCELLED",
+          tool_name: "DigitalDesignAgent",
+        }),
       ])
     );
 
@@ -1171,6 +1183,20 @@ describe("useSelectChat", () => {
           id: "204",
           tool_name: "DigitalDesignAgent",
           status: "RUNNING",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "207",
+          tool_name: "GeneNetworkAgent",
+          status: "FAILED",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "208",
+          tool_name: "DigitalDesignAgent",
+          status: "CANCELLED",
           content: "",
         }),
       ])
