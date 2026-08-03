@@ -53,9 +53,12 @@ const DEMO_CONTRACTS: DemoContract[] = [
   {
     path: "/analyst-agent",
     source: "views/analyst-agent/AnalystAgentView.vue",
-    required: ["AgentDemoShell", "analyst-download", "router.back"],
-    shell: "agent-demo",
-    boundedContent: "agent-demo-result",
+    required: [
+      "RemoteAnalysisAgentWorkspace",
+      'tool="AnalystAgent"',
+      'locale-prefix="agents.analyst"',
+      ':state="state"',
+    ],
   },
   {
     path: "/cases/gene-network-agent",
@@ -178,6 +181,20 @@ describe("routed agent demonstration inventory", () => {
     ).toBe(true);
   });
 
+  it("keeps the Analyst route capability-guarded instead of serving static artifacts", () => {
+    const analyst = readDemoSource("views/analyst-agent/AnalystAgentView.vue");
+    const workspace = readDemoSource(
+      "views/analysis-agent/RemoteAnalysisAgentWorkspace.vue"
+    );
+
+    expect(analyst).toContain("RemoteAnalysisAgentWorkspace");
+    expect(workspace).toContain("REMOTE_AGENT_PRODUCT_REGISTRY");
+    expect(workspace).toContain("product.value.live === true");
+    expect(workspace).toContain("capability?.enabled === true");
+    expect(workspace).toContain("`${agentKey}-unavailable`");
+    expect(analyst).not.toContain("/static/downloads/");
+  });
+
   it("keeps dormant dynamic routes separate from shipped demonstrations", () => {
     expect(dynamicRoutes).toHaveLength(1);
     expect(dynamicRoutes[0]).toMatchObject({
@@ -212,7 +229,6 @@ describe("routed agent demonstration inventory", () => {
       "/brief-gene-agent",
       "/review-agent",
       "/data-agent",
-      "/analyst-agent",
       "/cases/gene-network-agent",
       "/cases/digital-design-agent",
       "/deep-genome-agent",

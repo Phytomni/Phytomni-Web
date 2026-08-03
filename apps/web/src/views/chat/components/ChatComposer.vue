@@ -228,26 +228,34 @@ import type { ChatComposerHandle, ResumableUploadItem } from "../types";
 import type { UploadPurpose } from "../upload/types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
 
-const props = defineProps<{
-  modelValue: string;
-  isSending: boolean;
-  chatMode: "instant" | "expert";
-  instantModeEnabled: boolean;
-  expertModeEnabled: boolean;
-  modeUsable: boolean;
-  showModeSelector: boolean;
-  fileList: ResumableUploadItem[];
-  hasBlockingUploads: boolean;
-  rolesLoading: boolean;
-  hasMessages: boolean;
-  selectedAgent: string;
-  pickerOptions: ChatAgentPickerOption[];
-  uploadPurpose: UploadPurpose;
-  datasetDescription: string;
-  allowedUploadPurposes: readonly UploadPurpose[];
-  showDatasetDescription: boolean;
-  setTourInputTarget?: (el: HTMLElement | null) => void;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    isSending: boolean;
+    chatMode: "instant" | "expert";
+    instantModeEnabled: boolean;
+    expertModeEnabled: boolean;
+    modeUsable: boolean;
+    showModeSelector: boolean;
+    fileList: ResumableUploadItem[];
+    hasBlockingUploads: boolean;
+    rolesLoading: boolean;
+    hasMessages: boolean;
+    selectedAgent: string;
+    pickerOptions: ChatAgentPickerOption[];
+    uploadPurpose?: UploadPurpose;
+    datasetDescription?: string;
+    allowedUploadPurposes?: readonly UploadPurpose[];
+    showDatasetDescription?: boolean;
+    setTourInputTarget?: (el: HTMLElement | null) => void;
+  }>(),
+  {
+    uploadPurpose: "document",
+    datasetDescription: "",
+    allowedUploadPurposes: () => [],
+    showDatasetDescription: false,
+  }
+);
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];

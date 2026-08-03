@@ -1,135 +1,150 @@
-import { describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { mountWithApp } from "../../helpers/test-app-context";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
+import AnalystAgentView from "@/views/analyst-agent/AnalystAgentView.vue";
+import { createTestAppContext } from "../../helpers/test-app-context";
 
-const routerBack = vi.hoisted(() => vi.fn());
-
-const SAMPLE_QUESTION =
-  'Your data is {"/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_1.fq.gz": "pair-end 1 chip-seq data for rice", "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_2.fq.gz": "pair-end 2 chip-seq data for rice", "/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/NIP_genome_final.fa": "rice genome fasta file"}, please help me to perform the callpeak analysis.';
+const mocks = vi.hoisted(() => {
+  const state = {
+    value: {
+      runId: null,
+      status: "RUNNING",
+      reportRevision: -1,
+      visibleReport: "",
+      intermediateReport: "",
+      finalReport: "",
+      degraded: false,
+      failures: [],
+      artifacts: [],
+      phase: "idle",
+      requestId: null,
+      uploadTransfer: null,
+      projection: null,
+      error: null,
+      dialogueId: null,
+      messageId: null,
+    },
+  };
+  return {
+    state,
+    load: vi.fn().mockResolvedValue([]),
+    submit: vi.fn().mockResolvedValue(null),
+    cancel: vi.fn(),
+    reset: vi.fn(),
+    dispose: vi.fn(),
+    routerBack: vi.fn(),
+    useBotRemoteAgentRun: vi.fn(() => ({
+      state,
+      submit: mocks.submit,
+      cancel: mocks.cancel,
+      reset: mocks.reset,
+    })),
+    uploadQueue: {
+      completedAssetIds: { value: [] },
+      hasBlockingUploads: { value: false, __v_isRef: true },
+      queueFiles: vi.fn(),
+      removeUpload: vi.fn().mockResolvedValue(undefined),
+      removeUploadById: vi.fn(),
+      cancelUpload: vi.fn(),
+      pauseUpload: vi.fn(),
+      resumeUpload: vi.fn(),
+      retryUpload: vi.fn(),
+      reselectUpload: vi.fn(),
+    },
+  };
+});
 
 vi.mock("vue-router", () => ({
-  useRouter: () => ({ back: routerBack }),
+  useRoute: () => ({ query: { dialogue_id: "analyst-demo-test" } }),
+  useRouter: () => ({ back: mocks.routerBack }),
 }));
 
 vi.mock("vue-element-plus-x", () => ({
   Typewriter: { name: "Typewriter", template: "<div />" },
 }));
 
-const AgentDemoShellStub = {
-  props: ["title", "subtitle"],
-  emits: ["back"],
-  template: `
-    <div data-test="demo-shell">
-      <span data-test="agent-demo-static-badge">Static example</span>
-      <button data-test="shell-back" @click="$emit('back')">Back</button>
-      <slot name="question" />
-      <slot name="result" />
-      <slot name="footer" />
-    </div>
-  `,
-};
-
-import AnalystAgent from "@/views/analyst-agent/AnalystAgentView.vue";
-
-const ANALYST_AGENT_SOURCE = readFileSync(
-  resolve(__dirname, "../../../src/views/analyst-agent/AnalystAgentView.vue"),
-  "utf8"
-);
-
-function mountDemo() {
-  return mountWithApp(AnalystAgent, {
-    global: {
-      stubs: { AgentDemoShell: AgentDemoShellStub },
+vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
+  useBotCapabilities: () => ({
+    loaded: { value: true },
+    byTool: {
+      value: {
+        AnalystAgent: {
+          enabled: true,
+          execution: "agent_run",
+          attachments: true,
+          attachmentPurposes: ["document"],
+          artifacts: true,
+        },
+      },
     },
-  });
+    upload: {
+      value: {
+        enabled: true,
+        max_file_bytes: 10 * 1024 * 1024 * 1024,
+        max_attachments: 10,
+      },
+    },
+    load: mocks.load,
+  }),
+}));
+
+vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
+  useBotRemoteAgentRun: mocks.useBotRemoteAgentRun,
+}));
+
+vi.mock("@/views/chat/composables/useChatStates", () => ({
+  useChatStates: () => ({ getChatState: () => ({ fileList: [] }) }),
+}));
+
+vi.mock("@/views/chat/composables/useResumableUploads", () => ({
+  useResumableUploads: () => mocks.uploadQueue,
+}));
+
+vi.mock("@/views/chat/composables/useRemoteAgentLifecycle", () => ({
+  useRemoteAgentLifecycle: () => ({ dispose: mocks.dispose, reset: vi.fn() }),
+}));
+
+function mountAgent() {
+  return createTestAppContext().mount(AnalystAgentView);
 }
 
-describe("Analyst Agent static demonstration", () => {
-  it("wraps long task identifiers within a shrinkable result column", () => {
-    expect(ANALYST_AGENT_SOURCE).toContain("overflow-wrap: anywhere;");
-    expect(ANALYST_AGENT_SOURCE).toContain(
-      "grid-template-columns: minmax(0, 1fr);"
-    );
+describe("Analyst Agent remote workspace", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = false;
   });
 
-  it("discloses the sample question, task ID, and result without live status claims", () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const wrapper = mountDemo();
+  afterEach(() => {
+    REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = false;
+  });
 
-    expect(wrapper.get("[data-test=agent-demo-static-badge]").text()).toContain(
-      "Static example"
+  it("keeps the default-off Analyst product unavailable despite a granted capability", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const wrapper = mountAgent();
+
+    expect(wrapper.get('[data-test="analyst-unavailable"]').exists()).toBe(
+      true
     );
-    expect(wrapper.get("[data-test=analyst-question]").text()).toBe(
-      SAMPLE_QUESTION
+    expect(wrapper.find("form.analysis-agent-form").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Static example");
+    expect(wrapper.text()).not.toContain("callpeak_results.zip");
+    expect(mocks.useBotRemoteAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tool: "AnalystAgent",
+        dialogueId: "analyst-demo-test",
+      })
     );
-    expect(SAMPLE_QUESTION).toContain(
-      '{"/obs/phytomni/agent_data/raw_data/04.benchmark_data/07.testbenchmark/epigenetic/callpeak/data1_1.fq.gz":'
-    );
-    expect(wrapper.get("[data-test=analyst-task-label]").text()).toContain(
-      "4a7715a-996a-22e0-acd5-fb278e7d45b3"
-    );
-    expect(wrapper.get("[data-test=analyst-result-label]").text()).toContain(
-      "Static sample result"
-    );
-    expect(wrapper.text()).not.toMatch(
-      /created successfully|completed|progress|loading/i
-    );
-    const progressNodes = wrapper
-      .findAll("[data-test], [aria-label]")
-      .filter((node) =>
-        /progress/i.test(
-          `${node.attributes("data-test") ?? ""} ${
-            node.attributes("aria-label") ?? ""
-          }`
-        )
-      );
-    expect(progressNodes).toHaveLength(0);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+    wrapper.unmount();
   });
 
-  it("keeps the bundled download target, filename, cleanup, and keyboard activation", async () => {
-    const appendSpy = vi.spyOn(document.body, "appendChild");
-    const removeSpy = vi.spyOn(document.body, "removeChild");
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
-    const wrapper = mountDemo();
-    const download = wrapper.get("[data-test=analyst-download]");
+  it("keeps the guarded remote workspace Back control wired to the router", async () => {
+    const wrapper = mountAgent();
 
-    await download.trigger("click");
-    await download.trigger("keydown.enter");
+    await wrapper.get('[data-test="analyst-back"]').trigger("click");
 
-    const anchors = appendSpy.mock.calls
-      .map(([node]) => node)
-      .filter(
-        (node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement
-      );
-    const anchor = anchors.at(-1);
-    expect(anchor).toBeDefined();
-    expect(anchor?.getAttribute("href")).toBe(
-      "/static/downloads/3.Analyst Agent/1.AnalystAgent/results/callpeak_results.zip"
-    );
-    expect(anchor?.download).toBe("callpeak_results.zip");
-    expect(clickSpy).toHaveBeenCalledTimes(2);
-    expect(removeSpy).toHaveBeenCalledWith(anchor);
-  });
-
-  it("keeps Back navigation and avoids legacy chat chrome", async () => {
-    routerBack.mockReset();
-    const wrapper = mountDemo();
-
-    expect(
-      wrapper.findAll(".chat-header, .chat-messages, .message-avatar")
-    ).toHaveLength(0);
-    expect(wrapper.find("[data-test=analyst-question]").classes()).toEqual([]);
-    expect(wrapper.find("[data-test=analyst-result]").classes()).toContain(
-      "analyst-result"
-    );
-    expect(wrapper.findAll(".analyst-message")).toHaveLength(0);
-
-    await wrapper.get("[data-test=shell-back]").trigger("click");
-    expect(routerBack).toHaveBeenCalledTimes(1);
+    expect(mocks.dispose).toHaveBeenCalledTimes(1);
+    expect(mocks.routerBack).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
   });
 });

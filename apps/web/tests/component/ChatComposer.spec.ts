@@ -176,6 +176,15 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
     },
   });
 
+const legacyProps = (): Record<string, unknown> => {
+  const props: Record<string, unknown> = { ...baseProps() };
+  delete props.uploadPurpose;
+  delete props.datasetDescription;
+  delete props.allowedUploadPurposes;
+  delete props.showDatasetDescription;
+  return props;
+};
+
 describe("ChatComposer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -188,6 +197,40 @@ describe("ChatComposer", () => {
     expect(roots).toHaveLength(1);
     expect(wrapper.element).toBe(roots[0].element);
     expect(wrapper.find('[data-testid="chat-composer"]').exists()).toBe(true);
+  });
+
+  it("safely disables upload metadata controls for legacy callers", () => {
+    const wrapper = mountWithApp(ChatComposer, {
+      props: legacyProps(),
+      global: {
+        stubs: {
+          AttachmentPurposeSelector: {
+            name: "AttachmentPurposeSelector",
+            template: "<div />",
+            props: ["modelValue", "allowedPurposes", "disabled"],
+          },
+          ElUpload: {
+            name: "ElUpload",
+            template: "<div />",
+            props: ["disabled"],
+          },
+        },
+      },
+    });
+
+    expect(
+      wrapper
+        .getComponent({ name: "AttachmentPurposeSelector" })
+        .props("modelValue")
+    ).toBe("document");
+    expect(
+      wrapper
+        .getComponent({ name: "AttachmentPurposeSelector" })
+        .props("allowedPurposes")
+    ).toEqual([]);
+    expect(wrapper.getComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
   });
 
   it("keeps compact DOM order without legacy wrappers", () => {
