@@ -71,6 +71,15 @@ func TestCreateUploadUsesMetadataOnlyJSONAndPurpose(t *testing.T) {
 		if err := json.Unmarshal(body, &got); err != nil {
 			t.Errorf("decode JSON body: %v", err)
 		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(body, &fields); err != nil {
+			t.Errorf("decode JSON fields: %v", err)
+		}
+		for _, forbidden := range []string{"body", "file_bytes", "bucket", "object_key", "upload_id", "storage_path", "path"} {
+			if _, exists := fields[forbidden]; exists {
+				t.Errorf("create request exposed forbidden storage field %q", forbidden)
+			}
+		}
 		_, response := uploadCreateFixture(srv.URL)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
