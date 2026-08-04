@@ -1677,6 +1677,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		slug,
 		permissions.AllowedTools,
 	)
+	_, forcedChatFamily := rxBot.ChatModelFor(slug)
+	useExpertContextRoute := in.Mode == "expert" &&
+		(in.Tool == "" || (v1 && forcedChatFamily))
 
 	// 3. Dispatch. Web Go never runs an LLM; it forwards free-form query text
 	//    and opaque asset references to Bot's resolver.
@@ -1695,8 +1698,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	var botRunID, serverID, taskID, logStatus string
 	var expertProjection *BotRunProjection
 	var contextStage *rxBot.ContextStageMetadata
-	if in.Mode == "expert" && in.Tool == "" {
-		// Autonomous Expert uses Bot's router so it can select an allowed agent.
+	if useExpertContextRoute {
+		// Autonomous Expert lets Bot select from the allowlist. A forced V1
+		// chat-family turn uses the same endpoint, but requested_agent_id in the
+		// envelope bypasses the LLM router and dispatches the selected agent.
 		routeRequest := rxBot.RouteQueryRequest{
 			UserQuery:          in.Query,
 			Attachments:        append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
