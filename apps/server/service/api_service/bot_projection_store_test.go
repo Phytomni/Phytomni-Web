@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +12,46 @@ import (
 
 	"phytomni-server/model"
 )
+
+const (
+	testProjectionDigestA = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	testProjectionDigestB = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+)
+
+func testPendingDelivery(revision int64, digest string) *ProjectionDelivery {
+	return &ProjectionDelivery{
+		SchemaVersion:   1,
+		Required:        true,
+		Status:          "pending",
+		Revision:        revision,
+		InventoryDigest: digest,
+	}
+}
+
+func testReadyDelivery(revision int64, digest string) *ProjectionDelivery {
+	return &ProjectionDelivery{
+		SchemaVersion:   1,
+		Required:        true,
+		Status:          "ready",
+		Revision:        revision,
+		InventoryDigest: digest,
+		ArchiveName:     "analyst-results.zip",
+		ArchiveSize:     4097,
+		ArchiveRef:      "obs://bucket/owner/run/delivery/" + strings.TrimPrefix(digest, "sha256:") + "/analyst-results.zip",
+	}
+}
+
+func testFailedDelivery(revision int64, digest string, retryable bool) *ProjectionDelivery {
+	return &ProjectionDelivery{
+		SchemaVersion:   1,
+		Required:        true,
+		Status:          "failed",
+		Revision:        revision,
+		InventoryDigest: digest,
+		ErrorCode:       "archive_publish_failed",
+		Retryable:       retryable,
+	}
+}
 
 func TestMergeBotRunProjectionRejectsOlderBlankReport(t *testing.T) {
 	current := BotRunProjection{RunID: "run-1", ReportRevision: 4, IntermediateReport: "visible", Degraded: true}
@@ -109,6 +150,183 @@ func TestMergeBotRunProjectionPreservesChildCountAndTerminalStatus(t *testing.T)
 	}
 }
 
+func TestMergeBotRunProjectionMergesDeliveryRevisionIndependently(t *testing.T) {
+	t.Run("lower delivery revision is ignored", func(t *testing.T) {
+		current := BotRunProjection{
+			RunID: "run-delivery", ReportRevision: 4, ResultArchiveV1: true,
+			Delivery: testReadyDelivery(2, testProjectionDigestA),
+		}
+		incoming := BotRunProjection{
+			RunID: "run-delivery", ReportRevision: 4, ResultArchiveV1: true,
+			Delivery: testFailedDelivery(1, testProjectionDigestA, true),
+		}
+		merged, changed, err := MergeBotRunProjection(current, incoming)
+		if err != nil || changed || !reflect.DeepEqual(merged.Delivery, current.Delivery) {
+			t.Fatalf("merged=%#v changed=%v err=%v", merged, changed, err)
+		}
+	})
+
+	t.Run("same revision initializes pending digest once", func(t *testing.T) {
+		current := BotRunProjection{
+			RunID: "run-init", Status: "RUNNING", ReportRevision: 1, ResultArchiveV1: true,
+			Delivery: testPendingDelivery(1, ""),
+		}
+		incoming := BotRunProjection{
+			RunID: "run-init", Status: "RUNNING", ReportRevision: 1, ResultArchiveV1: true,
+			Delivery: testPendingDelivery(1, testProjectionDigestA),
+		}
+		merged, changed, err := MergeBotRunProjection(current, incoming)
+		if err != nil || !changed || merged.Delivery == nil || merged.Delivery.InventoryDigest != testProjectionDigestA {
+			t.Fatalf("merged=%#v changed=%v err=%v", merged, changed, err)
+		}
+	})
+
+	t.Run("same revision pending advances to ready", func(t *testing.T) {
+		current := BotRunProjection{
+			RunID: "run-ready", Status: "RUNNING", ReportRevision: 2, ResultArchiveV1: true,
+			Delivery: testPendingDelivery(1, testProjectionDigestA),
+		}
+		incoming := BotRunProjection{
+			RunID: "run-ready", Status: "SUCCEEDED", ReportRevision: 2, ResultArchiveV1: true,
+			Delivery: testReadyDelivery(1, testProjectionDigestA),
+		}
+		merged, changed, err := MergeBotRunProjection(current, incoming)
+		if err != nil || !changed || merged.Delivery == nil || merged.Delivery.Status != "ready" || merged.Status != "SUCCEEDED" {
+			t.Fatalf("merged=%#v changed=%v err=%v", merged, changed, err)
+		}
+	})
+
+	t.Run("same revision failed cannot regress ready", func(t *testing.T) {
+		current := BotRunProjection{
+			RunID: "run-terminal", Status: "SUCCEEDED", ReportRevision: 2, ResultArchiveV1: true,
+			Delivery: testReadyDelivery(1, testProjectionDigestA),
+		}
+		incoming := BotRunProjection{
+			RunID: "run-terminal", Status: "SUCCEEDED", ReportRevision: 2, ResultArchiveV1: true,
+			Delivery: testFailedDelivery(1, testProjectionDigestA, true),
+		}
+		merged, changed, err := MergeBotRunProjection(current, incoming)
+		if err != nil || changed || merged.Delivery == nil || merged.Delivery.Status != "ready" {
+			t.Fatalf("merged=%#v changed=%v err=%v", merged, changed, err)
+		}
+	})
+
+	t.Run("ready descriptor is immutable", func(t *testing.T) {
+		current := BotRunProjection{
+			RunID: "run-immutable", Status: "SUCCEEDED", ReportRevision: 2, ResultArchiveV1: true,
+			Delivery: testReadyDelivery(1, testProjectionDigestA),
+		}
+		incoming := current
+		incoming.Delivery = testReadyDelivery(1, testProjectionDigestA)
+		incoming.Delivery.ArchiveName = "replacement.zip"
+		incoming.Delivery.ArchiveRef = "obs://bucket/owner/run/delivery/replacement.zip"
+		merged, changed, err := MergeBotRunProjection(current, incoming)
+		if err != nil || changed || !reflect.DeepEqual(merged.Delivery, current.Delivery) {
+			t.Fatalf("merged=%#v changed=%v err=%v", merged, changed, err)
+		}
+	})
+}
+
+func TestMergeBotRunProjectionAcceptsOnlyValidManualRetry(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-retry", Status: "SUCCEEDED", ReportRevision: 5, ResultArchiveV1: true,
+		Delivery: testFailedDelivery(1, testProjectionDigestA, true),
+	}
+	incoming := BotRunProjection{
+		RunID: "run-retry", Status: "SUCCEEDED", ReportRevision: 5, ResultArchiveV1: true,
+		Delivery: testPendingDelivery(2, testProjectionDigestA),
+	}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err != nil || !changed || merged.Delivery == nil || merged.Delivery.Status != "pending" || merged.Delivery.Revision != 2 {
+		t.Fatalf("merged=%#v changed=%v err=%v", merged, changed, err)
+	}
+
+	invalidCurrent := []struct {
+		name     string
+		delivery *ProjectionDelivery
+	}{
+		{name: "nonretryable failed", delivery: testFailedDelivery(1, testProjectionDigestA, false)},
+		{name: "pending", delivery: testPendingDelivery(1, testProjectionDigestA)},
+		{name: "ready", delivery: testReadyDelivery(1, testProjectionDigestA)},
+	}
+	for _, tc := range invalidCurrent {
+		t.Run(tc.name, func(t *testing.T) {
+			base := current
+			base.Delivery = tc.delivery
+			got, accepted, mergeErr := MergeBotRunProjection(base, incoming)
+			if mergeErr == nil || accepted || got.RunID != "" {
+				t.Fatalf("merged=%#v changed=%v err=%v, want rejected retry", got, accepted, mergeErr)
+			}
+		})
+	}
+}
+
+func TestMergeBotRunProjectionRejectsDeliveryDigestMutation(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-digest", Status: "RUNNING", ReportRevision: 2, ResultArchiveV1: true,
+		Delivery: testPendingDelivery(1, testProjectionDigestA),
+	}
+	incoming := BotRunProjection{
+		RunID: "run-digest", Status: "SUCCEEDED", ReportRevision: 2, ResultArchiveV1: true,
+		Delivery: testReadyDelivery(1, testProjectionDigestB),
+	}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err == nil || changed || merged.RunID != "" {
+		t.Fatalf("merged=%#v changed=%v err=%v, want digest mutation rejected", merged, changed, err)
+	}
+}
+
+func TestMergeBotRunProjectionKeepsReportAndDeliveryRevisionsIndependent(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-independent", Status: "SUCCEEDED", ReportRevision: 5, FinalReport: "new report", ResultArchiveV1: true,
+		Delivery: testPendingDelivery(1, testProjectionDigestA),
+	}
+	olderReportReady := BotRunProjection{
+		RunID: "run-independent", Status: "SUCCEEDED", ReportRevision: 4, FinalReport: "old report", ResultArchiveV1: true,
+		Delivery: testReadyDelivery(1, testProjectionDigestA),
+	}
+	merged, changed, err := MergeBotRunProjection(current, olderReportReady)
+	if err != nil || !changed || merged.ReportRevision != 5 || merged.FinalReport != "new report" || merged.Delivery == nil || merged.Delivery.Status != "ready" {
+		t.Fatalf("older-report merge=%#v changed=%v err=%v", merged, changed, err)
+	}
+
+	newerReportStaleDelivery := BotRunProjection{
+		RunID: "run-independent", Status: "SUCCEEDED", ReportRevision: 6, FinalReport: "latest report", ResultArchiveV1: true,
+		Delivery: testPendingDelivery(0, testProjectionDigestA),
+	}
+	merged, changed, err = MergeBotRunProjection(merged, newerReportStaleDelivery)
+	if err != nil || !changed || merged.ReportRevision != 6 || merged.FinalReport != "latest report" || merged.Delivery == nil || merged.Delivery.Status != "ready" {
+		t.Fatalf("newer-report merge=%#v changed=%v err=%v", merged, changed, err)
+	}
+}
+
+func TestMergeBotRunProjectionRejectsActiveV1SuccessWithoutDelivery(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-missing-delivery", Status: "RUNNING", ReportRevision: 1, ResultArchiveV1: true,
+		Delivery: testPendingDelivery(1, testProjectionDigestA),
+	}
+	incoming := BotRunProjection{RunID: "run-missing-delivery", Status: "SUCCEEDED", ReportRevision: 2}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err == nil || changed || merged.RunID != "" {
+		t.Fatalf("merged=%#v changed=%v err=%v, want missing delivery rejected", merged, changed, err)
+	}
+}
+
+func TestMergeBotRunProjectionDeepClonesDelivery(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-clone", ReportRevision: 1, ResultArchiveV1: true,
+		Delivery: testReadyDelivery(1, testProjectionDigestA),
+	}
+	merged, _, err := MergeBotRunProjection(current, BotRunProjection{RunID: "run-clone", ReportRevision: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	merged.Delivery.ArchiveName = "mutated.zip"
+	if current.Delivery.ArchiveName != "analyst-results.zip" {
+		t.Fatalf("current delivery mutated through clone: %#v", current.Delivery)
+	}
+}
+
 func TestSaveBotRunProjectionCannotCrossOwner(t *testing.T) {
 	setupTestDB(t)
 	if err := setupProjectionRow(9, "bob@example.com", -1, ""); err != nil {
@@ -139,7 +357,7 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 	updatedAt := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	incoming := BotRunProjection{
 		RunID:              "run-11",
-		Agent:              "research",
+		Agent:              "analyst",
 		Status:             "SUCCEEDED",
 		ReportStage:        "final",
 		ReportCompleteness: "complete",
@@ -162,6 +380,8 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 			OutputDirs:  []string{"obs://bucket/run-11"},
 			Paths:       []string{"obs://bucket/run-11/report.md"},
 		},
+		ResultArchiveV1:  true,
+		Delivery:         testReadyDelivery(2, testProjectionDigestA),
 		RequestID:        "bot-request-secret",
 		TrackingDegraded: true,
 		ChildTaskCount:   2,
@@ -180,6 +400,11 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 	}
 	if !strings.Contains(raw, "\"child_task_count\":2") {
 		t.Fatalf("child task count missing from JSON: %s", raw)
+	}
+	for _, required := range []string{"\"result_archive_v1\":true", testProjectionDigestA, incoming.Delivery.ArchiveRef} {
+		if !strings.Contains(raw, required) {
+			t.Fatalf("persisted delivery field %q missing from JSON: %s", required, raw)
+		}
 	}
 	for _, forbidden := range []string{"RawPayload", "raw_payload", "must-not-persist", "bot-request-secret", "private-child-a", "private-child-b"} {
 		if strings.Contains(raw, forbidden) {
@@ -206,6 +431,9 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 	}
 	if !loaded.TrackingDegraded || loaded.ChildTaskCount != 2 || loaded.Progress.Completed != 2 || len(loaded.Artifacts.Paths) != 1 {
 		t.Fatalf("loaded public projection=%#v", loaded)
+	}
+	if !loaded.ResultArchiveV1 || !reflect.DeepEqual(loaded.Delivery, incoming.Delivery) {
+		t.Fatalf("loaded delivery=%#v incoming=%#v", loaded.Delivery, incoming.Delivery)
 	}
 
 	var revision int64

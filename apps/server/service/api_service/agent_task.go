@@ -143,6 +143,7 @@ type ConversationHistoryRow struct {
 	*model.QuestionAgentLog
 	Artifacts       []ConversationArtifactLink `json:"artifacts,omitempty"`
 	Attachments     []rxBot.AssetAttachmentRef `json:"attachments,omitempty"`
+	Delivery        *AgentTaskDeliveryDTO      `json:"delivery,omitempty"`
 	ContextRebuilt  bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded bool                       `json:"context_degraded,omitempty"`
 }
@@ -163,11 +164,12 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 			return nil, contextErr
 		}
 		historyRow.Attachments = append([]rxBot.AssetAttachmentRef(nil), private.InputAttachments...)
+		projection, _, projectionErr := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
+		if projectionErr != nil {
+			return nil, projectionErr
+		}
+		historyRow.Delivery = agentTaskDeliveryDTO(projection)
 		if row.Status == statusSucceeded {
-			projection, _, projectionErr := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
-			if projectionErr != nil {
-				return nil, projectionErr
-			}
 			if len(projection.Artifacts.Paths) > 0 {
 				links, linkErr := ps.conversationArtifactLinks(ctx, username, dialogueId, row.Id)
 				if linkErr != nil {
@@ -524,6 +526,9 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 	}
 	if strings.TrimSpace(projection.Status) != "" {
 		row.Status = projection.Status
+		if projectionHasPendingRequiredDelivery(projection) && !isProjectionFailureStatus(projection.Status) {
+			row.Status = "RUNNING"
+		}
 	}
 	if toolName := slugToToolName[projection.Agent]; toolName != "" {
 		row.ToolName = toolName

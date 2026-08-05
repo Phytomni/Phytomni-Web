@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
 	"phytomni-server/db"
@@ -92,6 +93,52 @@ func lifecycleRunRecord(runID, status string, childIDs ...string) *rxBot.RunReco
 	}
 }
 
+func lifecycleDeliveryRunRecord(t *testing.T, runID, scientificStatus, deliveryStatus string, revision int64) *rxBot.RunRecord {
+	t.Helper()
+	delivery := map[string]interface{}{
+		"schema_version":   1,
+		"required":         true,
+		"status":           deliveryStatus,
+		"revision":         revision,
+		"inventory_digest": testProjectionDigestA,
+		"archive":          nil,
+		"error_code":       nil,
+		"retryable":        false,
+	}
+	switch deliveryStatus {
+	case "ready":
+		delivery["archive"] = map[string]interface{}{
+			"role":                    "result_archive",
+			"name":                    "analyst-results.zip",
+			"media_type":              "application/zip",
+			"size_bytes":              int64(4097),
+			"downloadable":            true,
+			"report_context_eligible": false,
+			"download_ref":            "result-archive:" + testProjectionDigestA,
+		}
+	case "failed":
+		delivery["error_code"] = "archive_publish_failed"
+		delivery["retryable"] = true
+	}
+	result, err := json.Marshal(map[string]interface{}{
+		"report_revision": 3,
+		"final_report":    "# Scientific result",
+		"execution": map[string]interface{}{
+			"output_dirs": []string{"obs://bucket/owner/run"},
+			"delivery":    delivery,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal lifecycle run: %v", err)
+	}
+	return &rxBot.RunRecord{
+		RunID:  runID,
+		Agent:  "analyst",
+		Status: scientificStatus,
+		Result: result,
+	}
+}
+
 // Mutation coverage: mapping a zero-child running umbrella run to RUNNING
 // would make this test fail. It must remain PREPARING until child work exists.
 func TestAgentTaskLifecycleMapsFreshRunStates(t *testing.T) {
@@ -152,6 +199,178 @@ func TestAgentTaskLifecycleReadsBackProjectionWinner(t *testing.T) {
 	}
 	if got.Phase != "SUCCEEDED" || !got.Terminal || got.ChildTaskCount != 5 || !got.ChildWorkAccepted || got.ReportRevision != 7 {
 		t.Fatalf("lifecycle=%+v, want persisted winner", got)
+	}
+}
+
+func TestAgentTaskLifecycleKeepsRequiredPendingDeliveryPollable(t *testing.T) {
+	gdb := setupAgentTaskLifecycleDB(t)
+	stored, err := marshalPersistedProjection(BotRunProjection{
+		RunID: "run-pending-delivery", Agent: "analyst", Status: "SUCCEEDED", ReportRevision: 3,
+		ResultArchiveV1: true, Delivery: testPendingDelivery(1, testProjectionDigestA),
+	})
+	if err != nil {
+		t.Fatalf("marshal stored projection: %v", err)
+	}
+	seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
+		id: 20, username: "alice", runID: "run-pending-delivery", status: "SUCCEEDED", projection: stored, reportRevision: 3,
+	})
+	fake := &lifecycleFakeRunReader{record: lifecycleDeliveryRunRecord(t, "run-pending-delivery", "succeeded", "pending", 1)}
+
+	got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 20, "alice")
+	if err != nil {
+		t.Fatalf("AgentTaskLifecycle: %v", err)
+	}
+	if got.Phase != "RUNNING" || got.Terminal || got.Reconciliation != "FRESH" || fake.calls != 1 {
+		t.Fatalf("lifecycle=%+v calls=%d, want fresh nonterminal pending delivery", got, fake.calls)
+	}
+	if got.Delivery == nil || got.Delivery.Status != "pending" || got.Delivery.Revision != 1 {
+		t.Fatalf("delivery=%+v, want pending revision 1", got.Delivery)
+	}
+	status, _ := readStatusAnswer(t, gdb, 20)
+	if status != "RUNNING" {
+		t.Fatalf("business row status=%q, want RUNNING", status)
+	}
+	assertDeliveryDTOIsBounded(t, got.Delivery)
+}
+
+func TestAgentTaskLifecycleDerivesDeliveryTerminalStates(t *testing.T) {
+	tests := []struct {
+		name             string
+		scientificStatus string
+		delivery         *ProjectionDelivery
+		wantPhase        string
+		wantTerminal     bool
+	}{
+		{
+			name: "scientific failure remains terminal with initial pending delivery", scientificStatus: "FAILED",
+			delivery: testPendingDelivery(1, ""), wantPhase: "FAILED", wantTerminal: true,
+		},
+		{
+			name: "ready delivery completes business result", scientificStatus: "SUCCEEDED",
+			delivery: testReadyDelivery(1, testProjectionDigestA), wantPhase: "SUCCEEDED", wantTerminal: true,
+		},
+		{
+			name: "delivery failure is terminal but incomplete", scientificStatus: "SUCCEEDED",
+			delivery: testFailedDelivery(1, testProjectionDigestA, true), wantPhase: "FAILED", wantTerminal: true,
+		},
+	}
+	for index, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gdb := setupAgentTaskLifecycleDB(t)
+			stored, err := marshalPersistedProjection(BotRunProjection{
+				RunID: "run-terminal-delivery", Agent: "analyst", Status: tt.scientificStatus, ReportRevision: 3,
+				ResultArchiveV1: true, Delivery: tt.delivery,
+			})
+			if err != nil {
+				t.Fatalf("marshal stored projection: %v", err)
+			}
+			seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
+				id: int64(30 + index), username: "alice", runID: "run-terminal-delivery", status: tt.scientificStatus,
+				projection: stored, reportRevision: 3,
+			})
+			fake := &lifecycleFakeRunReader{err: errors.New("terminal delivery must not poll")}
+
+			got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), int64(30+index), "alice")
+			if err != nil {
+				t.Fatalf("AgentTaskLifecycle: %v", err)
+			}
+			if got.Phase != tt.wantPhase || got.Terminal != tt.wantTerminal || got.Reconciliation != "CACHED" || fake.calls != 0 {
+				t.Fatalf("lifecycle=%+v calls=%d", got, fake.calls)
+			}
+			if got.Delivery == nil || got.Delivery.Status != tt.delivery.Status {
+				t.Fatalf("delivery=%+v, want %q", got.Delivery, tt.delivery.Status)
+			}
+			assertDeliveryDTOIsBounded(t, got.Delivery)
+		})
+	}
+}
+
+func TestAnswerCheckIncludesBoundedDeliveryForOwnerHistory(t *testing.T) {
+	gdb := setupTestDB(t)
+	previousDualRead := viper.Get("bot.history_dual_read")
+	viper.Set("bot.history_dual_read", false)
+	t.Cleanup(func() { viper.Set("bot.history_dual_read", previousDualRead) })
+	previousBotConfig := rxBot.BotConfig
+	rxBot.BotConfig = nil
+	t.Cleanup(func() { rxBot.BotConfig = previousBotConfig })
+
+	deliveries := []*ProjectionDelivery{
+		testPendingDelivery(1, testProjectionDigestA),
+		testReadyDelivery(1, testProjectionDigestA),
+		testFailedDelivery(1, testProjectionDigestA, true),
+	}
+	for index, delivery := range deliveries {
+		rowID := int64(40 + index)
+		parentID := int64(40)
+		projection, err := marshalPersistedProjection(BotRunProjection{
+			RunID: "run-history-" + delivery.Status, Agent: "analyst", Status: "SUCCEEDED", ReportRevision: 3,
+			ResultArchiveV1: true, Delivery: delivery,
+		})
+		if err != nil {
+			t.Fatalf("marshal history projection: %v", err)
+		}
+		fID := int64(0)
+		if index > 0 {
+			fID = parentID
+		}
+		rowStatus := "SUCCEEDED"
+		if delivery.Status == "pending" {
+			rowStatus = "RUNNING"
+		}
+		if err := gdb.Exec(`INSERT INTO question_agent_logs
+			(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, bot_projection_json, bot_report_revision, created_at)
+			VALUES (?, 'dlg-delivery', ?, 'alice', 'q', 'answer', 'AnalystAgent', ?, ?, ?, 3, '2026-08-05 00:00:00')`,
+			rowID, fID, "run-history-"+delivery.Status, rowStatus, projection,
+		).Error; err != nil {
+			t.Fatalf("seed history row: %v", err)
+		}
+	}
+
+	history, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-delivery")
+	if err != nil {
+		t.Fatalf("AnswerCheck: %v", err)
+	}
+	if len(history) != 3 {
+		t.Fatalf("history rows=%d, want 3", len(history))
+	}
+	for index, wantStatus := range []string{"pending", "ready", "failed"} {
+		if history[index].Delivery == nil || history[index].Delivery.Status != wantStatus {
+			t.Fatalf("history[%d].delivery=%+v, want %q", index, history[index].Delivery, wantStatus)
+		}
+		if wantStatus == "pending" && history[index].Status != "RUNNING" {
+			t.Fatalf("pending history status=%q, want RUNNING", history[index].Status)
+		}
+		assertDeliveryDTOIsBounded(t, history[index].Delivery)
+	}
+	foreign, err := NewService().AnswerCheck(context.Background(), "bob", "dlg-delivery")
+	if err != nil || len(foreign) != 0 {
+		t.Fatalf("foreign history=%+v err=%v, want empty", foreign, err)
+	}
+}
+
+func assertDeliveryDTOIsBounded(t *testing.T, dto *AgentTaskDeliveryDTO) {
+	t.Helper()
+	encoded, err := json.Marshal(dto)
+	if err != nil {
+		t.Fatalf("marshal delivery DTO: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("decode delivery DTO: %v", err)
+	}
+	wantFields := []string{"schema_version", "required", "status", "revision", "name", "size_bytes", "error_code", "retryable"}
+	if len(fields) != len(wantFields) {
+		t.Fatalf("delivery DTO keys=%v, want exactly %v", fields, wantFields)
+	}
+	for _, field := range wantFields {
+		if _, ok := fields[field]; !ok {
+			t.Fatalf("delivery DTO missing %q: %s", field, encoded)
+		}
+	}
+	for _, forbidden := range []string{"inventory_digest", "archive_ref", "download_ref", "output_dirs", "members", "provider", testProjectionDigestA, "obs://"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("delivery DTO leaked %q: %s", forbidden, encoded)
+		}
 	}
 }
 

@@ -164,3 +164,44 @@ func TestSyncBotRunsOlderRevisionCannotClobberVisibleReport(t *testing.T) {
 		t.Fatalf("stale projection=%#v, want revision 2", projection)
 	}
 }
+
+func TestSyncBotRunsKeepsRequiredDeliveryPendingThenSettlesReady(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, download_path, image_paths, created_at) VALUES
+		(160, 'dlg-delivery', 'alice', 'q', 'Task created', 'AnalystAgent', 'run-delivery', 'RUNNING', 'obs://legacy/output', '["obs://legacy/output/plot.png"]', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	pending := `{"run_id":"run-delivery","agent":"analyst","status":"succeeded","result":{"report_revision":3,"final_report":"# Scientific result","execution":{"output_dirs":["obs://bucket/owner/run"],"delivery":{"schema_version":1,"required":true,"status":"pending","revision":1,"inventory_digest":"` + testProjectionDigestA + `","archive":null,"error_code":null,"retryable":false}}}}`
+	ready := `{"run_id":"run-delivery","agent":"analyst","status":"succeeded","result":{"report_revision":3,"final_report":"# Scientific result","execution":{"output_dirs":["obs://bucket/owner/run"],"delivery":{"schema_version":1,"required":true,"status":"ready","revision":1,"inventory_digest":"` + testProjectionDigestA + `","archive":{"role":"result_archive","name":"analyst-results.zip","media_type":"application/zip","size_bytes":4097,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + testProjectionDigestA + `"},"error_code":null,"retryable":false}}}}`
+	botRunRecordSequenceServer(t, pending, ready)
+	row := model.QuestionAgentLog{Id: 160, UserName: "alice", BotRunId: "run-delivery", Status: "RUNNING", ToolName: "AnalystAgent"}
+
+	SyncBotRuns([]model.QuestionAgentLog{row})
+	status, answer := readStatusAnswer(t, gdb, 160)
+	if status != "RUNNING" || !strings.Contains(answer, "Scientific result") {
+		t.Fatalf("pending status=%q answer=%q, want RUNNING with report", status, answer)
+	}
+	projection := loadBotRunProjectionForTest(t, "alice", 160)
+	if !projection.ResultArchiveV1 || projection.Delivery == nil || projection.Delivery.Status != "pending" {
+		t.Fatalf("pending projection=%#v", projection)
+	}
+	downloadPath, imagePaths := readGalleryCols(t, gdb, 160)
+	if downloadPath != "obs://legacy/output" || imagePaths != `["obs://legacy/output/plot.png"]` {
+		t.Fatalf("active v1 wrote legacy gallery, download=%q images=%q", downloadPath, imagePaths)
+	}
+
+	SyncBotRuns([]model.QuestionAgentLog{row})
+	status, answer = readStatusAnswer(t, gdb, 160)
+	if status != "SUCCEEDED" || !strings.Contains(answer, "Scientific result") {
+		t.Fatalf("ready status=%q answer=%q, want SUCCEEDED with report", status, answer)
+	}
+	projection = loadBotRunProjectionForTest(t, "alice", 160)
+	if projection.Delivery == nil || projection.Delivery.Status != "ready" || projection.Delivery.ArchiveRef == "" {
+		t.Fatalf("ready projection=%#v", projection)
+	}
+	downloadPath, imagePaths = readGalleryCols(t, gdb, 160)
+	if downloadPath != "obs://legacy/output" || imagePaths != `["obs://legacy/output/plot.png"]` {
+		t.Fatalf("ready v1 wrote legacy gallery, download=%q images=%q", downloadPath, imagePaths)
+	}
+}

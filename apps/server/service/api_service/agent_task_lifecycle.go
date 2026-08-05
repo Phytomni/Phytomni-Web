@@ -35,7 +35,21 @@ type AgentTaskLifecycleDTO struct {
 	ArtifactSummary   AgentTaskArtifactSummaryDTO `json:"artifact_summary"`
 	Reconciliation    string                      `json:"reconciliation"`
 	TrackingDegraded  bool                        `json:"tracking_degraded"`
+	Delivery          *AgentTaskDeliveryDTO       `json:"delivery,omitempty"`
 	ErrorCode         *string                     `json:"error_code"`
+}
+
+// AgentTaskDeliveryDTO exposes only browser-renderable delivery state. Storage
+// references, inventory identity, and provider diagnostics remain server-side.
+type AgentTaskDeliveryDTO struct {
+	SchemaVersion int     `json:"schema_version"`
+	Required      bool    `json:"required"`
+	Status        string  `json:"status"`
+	Revision      int64   `json:"revision"`
+	Name          *string `json:"name"`
+	SizeBytes     *int64  `json:"size_bytes"`
+	ErrorCode     *string `json:"error_code"`
+	Retryable     bool    `json:"retryable"`
 }
 
 // AgentTaskArtifactSummaryDTO exposes only bounded aggregate artifact state.
@@ -54,7 +68,9 @@ func (ps *Service) AgentTaskLifecycle(ctx context.Context, rowID int64, username
 		return AgentTaskLifecycleDTO{}, err
 	}
 	storedProjection := lifecycleStoredProjection(row)
-	if rowIsTerminal(row.Status) || rowIsTerminal(storedProjection.Status) || strings.TrimSpace(row.BotRunId) == "" {
+	pendingDelivery := projectionHasPendingRequiredDelivery(storedProjection) &&
+		!isProjectionFailureStatus(lifecycleScientificStatus(row, storedProjection))
+	if (!pendingDelivery && (rowIsTerminal(row.Status) || rowIsTerminal(storedProjection.Status))) || strings.TrimSpace(row.BotRunId) == "" {
 		return lifecycleFromStored(row, lifecycleReconciliationCached, nil), nil
 	}
 
@@ -110,10 +126,8 @@ func rowIsTerminal(status string) bool {
 func lifecycleFromStored(row *model.QuestionAgentLog, reconciliation string, errorCode *string) AgentTaskLifecycleDTO {
 	projection := lifecycleStoredProjection(row)
 	childCount := boundedLifecycleCount(projection.ChildTaskCount)
-	phase, terminal := lifecyclePhase(projection.Status, childCount)
-	if strings.TrimSpace(projection.Status) == "" {
-		phase, terminal = lifecyclePhase(row.Status, childCount)
-	}
+	phase, terminal := lifecyclePhase(lifecycleScientificStatus(row, projection), childCount)
+	phase, terminal = lifecycleDeliveryPhase(phase, terminal, projection)
 
 	revision := projection.ReportRevision
 	if revision < 0 {
@@ -129,8 +143,61 @@ func lifecycleFromStored(row *model.QuestionAgentLog, reconciliation string, err
 		ArtifactSummary:   lifecycleArtifactSummary(row, projection),
 		Reconciliation:    reconciliation,
 		TrackingDegraded:  projection.TrackingDegraded,
+		Delivery:          agentTaskDeliveryDTO(projection),
 		ErrorCode:         errorCode,
 	}
+}
+
+func lifecycleScientificStatus(row *model.QuestionAgentLog, projection BotRunProjection) string {
+	if strings.TrimSpace(projection.Status) != "" {
+		return projection.Status
+	}
+	if row == nil {
+		return ""
+	}
+	return row.Status
+}
+
+func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjection) (string, bool) {
+	if !projection.ResultArchiveV1 || projection.Delivery == nil || !projection.Delivery.Required ||
+		phase == "FAILED" || phase == "CANCELLED" {
+		return phase, terminal
+	}
+	switch projection.Delivery.Status {
+	case "pending":
+		return "RUNNING", false
+	case "failed":
+		return "FAILED", true
+	default:
+		return phase, terminal
+	}
+}
+
+func agentTaskDeliveryDTO(projection BotRunProjection) *AgentTaskDeliveryDTO {
+	if !projection.ResultArchiveV1 || projection.Delivery == nil {
+		return nil
+	}
+	delivery := projection.Delivery
+	dto := &AgentTaskDeliveryDTO{
+		SchemaVersion: delivery.SchemaVersion,
+		Required:      delivery.Required,
+		Status:        delivery.Status,
+		Revision:      delivery.Revision,
+		Retryable:     delivery.Retryable,
+	}
+	if delivery.ArchiveName != "" {
+		name := delivery.ArchiveName
+		dto.Name = &name
+	}
+	if delivery.ArchiveSize > 0 {
+		size := delivery.ArchiveSize
+		dto.SizeBytes = &size
+	}
+	if delivery.ErrorCode != "" {
+		code := delivery.ErrorCode
+		dto.ErrorCode = &code
+	}
+	return dto
 }
 
 func lifecycleStoredProjection(row *model.QuestionAgentLog) BotRunProjection {

@@ -43,6 +43,8 @@ type persistedProjection struct {
 	DegradedReason      string                        `json:"degraded_reason,omitempty"`
 	Failures            []string                      `json:"failures,omitempty"`
 	Artifacts           persistedProjectionArtifacts  `json:"artifacts,omitempty"`
+	ResultArchiveV1     bool                          `json:"result_archive_v1,omitempty"`
+	Delivery            *persistedProjectionDelivery  `json:"delivery,omitempty"`
 	TrackingDegraded    bool                          `json:"tracking_degraded,omitempty"`
 	DegradedInterop     bool                          `json:"degraded_interop,omitempty"`
 	InterOp             *InteropProvenance            `json:"interop,omitempty"`
@@ -61,6 +63,19 @@ type persistedProjectionArtifacts struct {
 	Directories []string `json:"directories,omitempty"`
 	OutputDirs  []string `json:"output_dirs,omitempty"`
 	Paths       []string `json:"paths,omitempty"`
+}
+
+type persistedProjectionDelivery struct {
+	SchemaVersion   int    `json:"schema_version"`
+	Required        bool   `json:"required"`
+	Status          string `json:"status"`
+	Revision        int64  `json:"revision"`
+	InventoryDigest string `json:"inventory_digest"`
+	ArchiveName     string `json:"name,omitempty"`
+	ArchiveSize     int64  `json:"size_bytes,omitempty"`
+	ArchiveRef      string `json:"archive_ref,omitempty"`
+	ErrorCode       string `json:"error_code,omitempty"`
+	Retryable       bool   `json:"retryable"`
 }
 
 type botProjectionRow struct {
@@ -107,16 +122,80 @@ func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection
 	if merged.RunID == "" {
 		merged.RunID = incoming.RunID
 	}
-	if incoming.ReportRevision < current.ReportRevision {
-		return merged, false, nil
+	if incoming.ReportRevision >= current.ReportRevision {
+		newer := incoming.ReportRevision > current.ReportRevision
+		mergeProjectionMetadata(&merged, incoming)
+		if newer {
+			merged.ReportRevision = incoming.ReportRevision
+		}
 	}
-
-	newer := incoming.ReportRevision > current.ReportRevision
-	mergeProjectionMetadata(&merged, incoming)
-	if newer {
-		merged.ReportRevision = incoming.ReportRevision
+	if err := mergeProjectionDelivery(&merged, current, incoming); err != nil {
+		return BotRunProjection{}, false, err
 	}
 	return merged, !reflect.DeepEqual(merged, current), nil
+}
+
+func mergeProjectionDelivery(dst *BotRunProjection, current, incoming BotRunProjection) error {
+	currentActive := current.ResultArchiveV1 || current.Delivery != nil
+	incomingActive := incoming.ResultArchiveV1 || incoming.Delivery != nil
+	if incoming.ResultArchiveV1 && incoming.Delivery == nil {
+		return errors.New("active result archive projection has no delivery")
+	}
+	if currentActive && strings.EqualFold(strings.TrimSpace(incoming.Status), "SUCCEEDED") && !incomingActive {
+		return errors.New("active result archive success has no delivery")
+	}
+	if !incomingActive {
+		dst.ResultArchiveV1 = currentActive
+		return nil
+	}
+	if incoming.Delivery == nil {
+		return errors.New("result archive delivery is missing")
+	}
+
+	dst.ResultArchiveV1 = true
+	if current.Delivery == nil {
+		dst.Delivery = cloneProjectionDelivery(incoming.Delivery)
+		return nil
+	}
+
+	currentDelivery := current.Delivery
+	incomingDelivery := incoming.Delivery
+	if incomingDelivery.Revision < currentDelivery.Revision {
+		return nil
+	}
+	if currentDelivery.InventoryDigest != "" && incomingDelivery.InventoryDigest != "" &&
+		currentDelivery.InventoryDigest != incomingDelivery.InventoryDigest {
+		return errors.New("result archive inventory digest mutation")
+	}
+
+	if incomingDelivery.Revision == currentDelivery.Revision {
+		switch currentDelivery.Status {
+		case "ready", "failed":
+			return nil
+		case "pending":
+			switch incomingDelivery.Status {
+			case "pending":
+				if currentDelivery.InventoryDigest == "" && incomingDelivery.InventoryDigest != "" {
+					dst.Delivery = cloneProjectionDelivery(incomingDelivery)
+				}
+				return nil
+			case "ready", "failed":
+				dst.Delivery = cloneProjectionDelivery(incomingDelivery)
+				return nil
+			default:
+				return errors.New("invalid result archive delivery transition")
+			}
+		default:
+			return errors.New("invalid stored result archive delivery status")
+		}
+	}
+
+	if currentDelivery.Status != "failed" || !currentDelivery.Retryable || incomingDelivery.Status != "pending" ||
+		currentDelivery.InventoryDigest == "" || incomingDelivery.InventoryDigest != currentDelivery.InventoryDigest {
+		return errors.New("invalid result archive retry transition")
+	}
+	dst.Delivery = cloneProjectionDelivery(incomingDelivery)
+	return nil
 }
 
 // SaveBotRunProjection stores a projection only when the row still has the
@@ -303,6 +382,19 @@ func isProjectionTerminalStatus(status string) bool {
 	}
 }
 
+func isProjectionFailureStatus(status string) bool {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "FAILED", "CANCELLED", "CANCELED", "TIMED_OUT", "TIMEOUT":
+		return true
+	default:
+		return false
+	}
+}
+
+func projectionHasPendingRequiredDelivery(projection BotRunProjection) bool {
+	return projection.ResultArchiveV1 && projection.Delivery != nil && projection.Delivery.Required && projection.Delivery.Status == "pending"
+}
+
 func mergeProjectionStatus(current, incoming string) string {
 	if isProjectionTerminalStatus(current) || strings.TrimSpace(incoming) == "" {
 		return current
@@ -338,11 +430,20 @@ func cloneBotRunProjection(in BotRunProjection) BotRunProjection {
 	out.Artifacts.Directories = append([]string(nil), in.Artifacts.Directories...)
 	out.Artifacts.OutputDirs = append([]string(nil), in.Artifacts.OutputDirs...)
 	out.Artifacts.Paths = append([]string(nil), in.Artifacts.Paths...)
+	out.Delivery = cloneProjectionDelivery(in.Delivery)
 	out.RawPayload = append([]byte(nil), in.RawPayload...)
 	if in.InterOp != nil {
 		out.InterOp = interopProvenancePtr(*in.InterOp)
 	}
 	return out
+}
+
+func cloneProjectionDelivery(in *ProjectionDelivery) *ProjectionDelivery {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	return &out
 }
 
 func marshalPersistedProjection(projection BotRunProjection) (string, error) {
@@ -380,6 +481,8 @@ func marshalPersistedProjectionWithContext(projection BotRunProjection, privateC
 			OutputDirs:  append([]string(nil), projection.Artifacts.OutputDirs...),
 			Paths:       append([]string(nil), projection.Artifacts.Paths...),
 		},
+		ResultArchiveV1:     projection.ResultArchiveV1,
+		Delivery:            persistProjectionDelivery(projection.Delivery),
 		TrackingDegraded:    projection.TrackingDegraded,
 		DegradedInterop:     projection.DegradedInterop,
 		InterOp:             interop,
@@ -429,10 +532,48 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 			OutputDirs:  append([]string(nil), stored.Artifacts.OutputDirs...),
 			Paths:       append([]string(nil), stored.Artifacts.Paths...),
 		},
+		ResultArchiveV1:  stored.ResultArchiveV1,
+		Delivery:         restoreProjectionDelivery(stored.Delivery),
 		TrackingDegraded: stored.TrackingDegraded,
 		DegradedInterop:  stored.DegradedInterop,
 		InterOp:          interop,
 	}, stored.ConversationContext, nil
+}
+
+func persistProjectionDelivery(in *ProjectionDelivery) *persistedProjectionDelivery {
+	if in == nil {
+		return nil
+	}
+	return &persistedProjectionDelivery{
+		SchemaVersion:   in.SchemaVersion,
+		Required:        in.Required,
+		Status:          in.Status,
+		Revision:        in.Revision,
+		InventoryDigest: in.InventoryDigest,
+		ArchiveName:     in.ArchiveName,
+		ArchiveSize:     in.ArchiveSize,
+		ArchiveRef:      in.ArchiveRef,
+		ErrorCode:       in.ErrorCode,
+		Retryable:       in.Retryable,
+	}
+}
+
+func restoreProjectionDelivery(in *persistedProjectionDelivery) *ProjectionDelivery {
+	if in == nil {
+		return nil
+	}
+	return &ProjectionDelivery{
+		SchemaVersion:   in.SchemaVersion,
+		Required:        in.Required,
+		Status:          in.Status,
+		Revision:        in.Revision,
+		InventoryDigest: in.InventoryDigest,
+		ArchiveName:     in.ArchiveName,
+		ArchiveSize:     in.ArchiveSize,
+		ArchiveRef:      in.ArchiveRef,
+		ErrorCode:       in.ErrorCode,
+		Retryable:       in.Retryable,
+	}
 }
 
 func cloneProjectionTime(in *time.Time) *time.Time {

@@ -2321,7 +2321,11 @@ func (ps *Service) applyBotRunProjection(ctx context.Context, row *model.Questio
 func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.RunRecord, statusPresent bool) map[string]interface{} {
 	updates := make(map[string]interface{})
 	if statusPresent && stored.Status != "" {
-		updates["status"] = stored.Status
+		businessStatus := stored.Status
+		if projectionHasPendingRequiredDelivery(stored) && !isProjectionFailureStatus(stored.Status) {
+			businessStatus = "RUNNING"
+		}
+		updates["status"] = businessStatus
 	}
 
 	visible := strings.TrimSpace(stored.VisibleReport())
@@ -2342,12 +2346,14 @@ func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.Ru
 		}
 	}
 
-	if len(stored.Artifacts.Directories) > 0 && strings.TrimSpace(stored.Artifacts.Directories[0]) != "" {
-		updates["download_path"] = stored.Artifacts.Directories[0]
-	}
-	if len(stored.Artifacts.Paths) > 0 {
-		if encoded, err := json.Marshal(stored.Artifacts.Paths); err == nil {
-			updates["image_paths"] = string(encoded)
+	if !stored.ResultArchiveV1 {
+		if len(stored.Artifacts.Directories) > 0 && strings.TrimSpace(stored.Artifacts.Directories[0]) != "" {
+			updates["download_path"] = stored.Artifacts.Directories[0]
+		}
+		if len(stored.Artifacts.Paths) > 0 {
+			if encoded, err := json.Marshal(stored.Artifacts.Paths); err == nil {
+				updates["image_paths"] = string(encoded)
+			}
 		}
 	}
 	return updates
