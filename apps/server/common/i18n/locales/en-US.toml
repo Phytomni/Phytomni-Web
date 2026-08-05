@@ -68,6 +68,7 @@ email_download_unavailable = "email download links are currently unavailable"
 unauthorized = "unauthorized"
 not_found = "artifact not found"
 unavailable = "artifact download unavailable"
+retry_unavailable = "archive retry unavailable"
 
 [common]
 not_logged_in = "not logged in"

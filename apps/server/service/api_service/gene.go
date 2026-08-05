@@ -441,6 +441,9 @@ func (ps *Service) conversationArtifacts(
 	if err != nil {
 		return nil, err
 	}
+	if projection.ResultArchiveV1 {
+		return resultArchiveConversationArtifact(rowID, projection)
+	}
 	artifacts := make([]conversationArtifact, 0)
 	seen := make(map[string]struct{})
 	for _, artifactPath := range projection.Artifacts.Paths {
@@ -469,6 +472,29 @@ func (ps *Service) conversationArtifacts(
 		seen[artifactPath] = struct{}{}
 	}
 	return artifacts, nil
+}
+
+func resultArchiveConversationArtifact(rowID int64, projection BotRunProjection) ([]conversationArtifact, error) {
+	delivery := projection.Delivery
+	if delivery == nil || delivery.Status != "ready" {
+		return []conversationArtifact{}, nil
+	}
+	if delivery.SchemaVersion != rxBot.ResultArchiveProtocolVersion || !delivery.Required ||
+		delivery.ArchiveSize <= 0 || delivery.ArchiveName == "" || delivery.ArchiveRef == "" ||
+		path.Base(delivery.ArchiveRef) != delivery.ArchiveName ||
+		len([]byte(delivery.ArchiveName)) > maxConversationArtifactNameBytes ||
+		conversationArtifactKind(delivery.ArchiveName) != "archive" ||
+		!conversationArtifactPathContained(projection, delivery.ArchiveRef) {
+		return []conversationArtifact{}, nil
+	}
+	return []conversationArtifact{{
+		link: ConversationArtifactLink{
+			ID:   conversationArtifactID(rowID, delivery.ArchiveRef),
+			Name: delivery.ArchiveName,
+			Kind: "archive",
+		},
+		path: delivery.ArchiveRef,
+	}}, nil
 }
 
 func (ps *Service) conversationArtifactLinks(

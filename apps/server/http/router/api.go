@@ -48,6 +48,7 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/conversations", apiHandler.Conversations)                                                                                // conversation list (?favorite=true for favourites)
 		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)                                                                     // all child messages for a conversation
 		apiV1Router.GET("/conversations/:id/messages/:message_id/artifacts/:artifact_id/download-url", apiHandler.ConversationArtifactDownloadURL) // click-time artifact signer
+		apiV1Router.POST("/conversations/:id/messages/:message_id/artifacts/archive/retry", apiHandler.ConversationArtifactRetry)                  // owner-authorized archive retry
 		apiV1Router.POST("/conversations/:id/messages", middleware.PerUserRateLimit("query"), apiHandler.Query)                                    // send message (id=0 for new conversation, relayed to Bot, per-user rate limited)
 		apiV1Router.POST(
 			"/agent-products/:tool/runs",

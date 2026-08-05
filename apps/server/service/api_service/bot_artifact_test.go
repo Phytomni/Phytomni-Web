@@ -173,6 +173,103 @@ func TestConversationArtifactLinksRegenerateAndExpiredTokensFail(t *testing.T) {
 	}
 }
 
+func TestConversationArtifactLinksUseOnlyReadyResultArchiveV1(t *testing.T) {
+	gdb := setupTestDB(t)
+	const digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	archiveRef := "obs://bucket/alice/run-archive/delivery/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/analyst-results.zip"
+	readyProjection, err := marshalPersistedProjection(BotRunProjection{
+		RunID:           "run-archive-ready",
+		Agent:           "analyst",
+		Status:          "SUCCEEDED",
+		ReportRevision:  3,
+		ResultArchiveV1: true,
+		Artifacts: ProjectionArtifacts{
+			OutputDirs: []string{"obs://bucket/alice/run-archive"},
+			Paths:      []string{"obs://bucket/alice/run-archive/report.pdf"},
+		},
+		Delivery: &ProjectionDelivery{
+			SchemaVersion:   1,
+			Required:        true,
+			Status:          "ready",
+			Revision:        2,
+			InventoryDigest: digest,
+			ArchiveName:     "analyst-results.zip",
+			ArchiveSize:     4097,
+			ArchiveRef:      archiveRef,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, status, bot_projection_json, bot_report_revision, created_at)
+		VALUES (122, 'dlg-archive', 0, 'alice', 'SUCCEEDED', ?, 3, '2026-08-06 00:00:00')`, readyProjection).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService()
+	links, err := service.conversationArtifactLinks(context.Background(), "alice", "dlg-archive", 122)
+	if err != nil || len(links) != 1 {
+		t.Fatalf("links=%#v err=%v", links, err)
+	}
+	if links[0].Name != "analyst-results.zip" || links[0].Kind != "archive" || links[0].ID == conversationArtifactID(122, "obs://bucket/alice/run-archive/report.pdf") {
+		t.Fatalf("archive link=%#v", links[0])
+	}
+	encoded, err := json.Marshal(links)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "obs://") || strings.Contains(string(encoded), "delivery/") {
+		t.Fatalf("browser DTO leaked archive reference: %s", encoded)
+	}
+	signedURL, err := service.ConversationArtifactDownloadURL(context.Background(), "alice", "dlg-archive", 122, links[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(signedURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := middleware.ParseDownloadToken(parsed.Query().Get("token"))
+	if err != nil || key != archiveRef {
+		t.Fatalf("signed archive key=%q err=%v", key, err)
+	}
+
+	for _, delivery := range []*ProjectionDelivery{
+		testPendingDelivery(3, digest),
+		testFailedDelivery(3, digest, true),
+	} {
+		projection, err := marshalPersistedProjection(BotRunProjection{
+			RunID:           "run-archive-" + delivery.Status,
+			Agent:           "analyst",
+			Status:          "SUCCEEDED",
+			ReportRevision:  3,
+			ResultArchiveV1: true,
+			Artifacts: ProjectionArtifacts{
+				OutputDirs: []string{"obs://bucket/alice/run-archive"},
+				Paths:      []string{"obs://bucket/alice/run-archive/report.pdf"},
+			},
+			Delivery: delivery,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rowID := int64(123)
+		if delivery.Status == "failed" {
+			rowID = 124
+		}
+		if err := gdb.Exec(`INSERT INTO question_agent_logs
+			(id, dialogue_id, f_id, user_name, status, bot_projection_json, bot_report_revision, created_at)
+			VALUES (?, 'dlg-archive', 0, 'alice', 'SUCCEEDED', ?, 3, '2026-08-06 00:00:00')`, rowID, projection).Error; err != nil {
+			t.Fatal(err)
+		}
+		links, err := service.conversationArtifactLinks(context.Background(), "alice", "dlg-archive", rowID)
+		if err != nil || len(links) != 0 {
+			t.Fatalf("delivery=%s links=%#v err=%v", delivery.Status, links, err)
+		}
+	}
+}
+
 func TestArtifactPathWithinPrefixTightensDirectBucketChildButKeepsDeeperRunSiblings(t *testing.T) {
 	tests := []struct {
 		name      string

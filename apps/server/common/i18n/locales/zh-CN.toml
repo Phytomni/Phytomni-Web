@@ -68,6 +68,7 @@ email_download_unavailable = "邮件下载链接当前不可用"
 unauthorized = "未授权"
 not_found = "工件不存在"
 unavailable = "工件下载不可用"
+retry_unavailable = "归档重试不可用"
 
 [common]
 not_logged_in = "未登录"

@@ -170,7 +170,7 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 		}
 		historyRow.Delivery = agentTaskDeliveryDTO(projection)
 		if row.Status == statusSucceeded {
-			if len(projection.Artifacts.Paths) > 0 {
+			if projection.ResultArchiveV1 || len(projection.Artifacts.Paths) > 0 {
 				links, linkErr := ps.conversationArtifactLinks(ctx, username, dialogueId, row.Id)
 				if linkErr != nil {
 					return nil, linkErr
