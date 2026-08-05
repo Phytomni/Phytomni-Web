@@ -15,6 +15,7 @@ import { createTransferTracker } from "@/utils/transfer-progress";
 import type { ArtifactTab, ChatMessage, ChatUIState, ChatView } from "../types";
 import type { ConversationArtifactLink } from "@/api/types";
 import { artifactKindForMessage } from "../utils/artifact-policy";
+import { useResultArchiveDelivery } from "./useResultArchiveDelivery";
 
 let artifactDownloadSequence = 0;
 
@@ -36,6 +37,7 @@ export function useArtifactPanel(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
 }) {
   const { currentChatId, currentChat, getChatState } = opts;
+  const resultArchiveDelivery = useResultArchiveDelivery({ getChatState });
 
   const artifactOpen = computed(() =>
     currentChatId.value ? getChatState(currentChatId.value).artifactOpen : false
@@ -112,6 +114,34 @@ export function useArtifactPanel(opts: {
     } finally {
       removeDownloadTransfer(requestId);
     }
+  };
+
+  const downloadResultArchive = async (artifact: ConversationArtifactLink) => {
+    const messageId = normalizeServerMessageId(
+      currentArtifactMessage.value?.id
+    );
+    const dialogueId = currentChatId.value;
+    if (messageId === null || dialogueId === "") return;
+    await resultArchiveDelivery.downloadResultArchive({
+      dialogueId,
+      messageId,
+      artifact,
+    });
+  };
+
+  const retryResultArchive = async (
+    onPending: (delivery: import("@/api/types").AgentResultDelivery) => void
+  ) => {
+    const messageId = normalizeServerMessageId(
+      currentArtifactMessage.value?.id
+    );
+    const dialogueId = currentChatId.value;
+    if (messageId === null || dialogueId === "") return;
+    await resultArchiveDelivery.retryResultArchive({
+      dialogueId,
+      messageId,
+      onPending,
+    });
   };
 
   const resetArtifact = (state: ChatUIState) => {
@@ -192,6 +222,8 @@ export function useArtifactPanel(opts: {
     currentArtifactMessage,
     currentArtifactLinks,
     downloadArtifact,
+    downloadResultArchive,
+    retryResultArchive,
     openArtifact,
     closeArtifact,
     selectArtifactTab,

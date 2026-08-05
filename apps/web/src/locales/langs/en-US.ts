@@ -628,6 +628,16 @@ export default {
     downloadCancelled: "Download cancelled",
     downloadError:
       "An error occurred while downloading, please contact the administrator!",
+    resultArchive: {
+      preparing: "Preparing result archive",
+      download: "Download {name}",
+      generationFailed: "Result archive generation failed",
+      unavailable: "Result archive is not available",
+      retry: "Retry archive generation",
+      retrying: "Retrying archive generation",
+      retryFailed: "The archive retry could not be started.",
+      downloadFailed: "The result archive could not be downloaded.",
+    },
   },
 
   // History module

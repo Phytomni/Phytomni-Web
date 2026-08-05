@@ -21,6 +21,7 @@ import {
   getSharedMessageFixture,
   getSharedPhase3COverlay,
   buildA2uiLifecycleMessages,
+  getAgentLifecycleVisualData,
 } from "../../../visual/chat/fixture-data";
 import {
   PHASE_3B_MESSAGE_KEYS,
@@ -484,6 +485,22 @@ describe("Chat visual fixture registry", () => {
           }
         }
       }
+    }
+  });
+
+  it("registers all bounded result-archive delivery visual states", () => {
+    for (const key of [
+      "agent-delivery-pending",
+      "agent-delivery-ready",
+      "agent-delivery-retryable",
+      "agent-delivery-nonretryable",
+    ] as const) {
+      const fixture = getChatVisualFixture(key);
+      const data = getAgentLifecycleVisualData(key);
+      expect(fixture.messageCount).toBe(1);
+      expect(data.message.content).toContain("Analysis report");
+      expect(data.message.content).not.toContain("obs://");
+      expect(data.artifactLinks?.length ?? 0).toBeLessThanOrEqual(1);
     }
   });
 

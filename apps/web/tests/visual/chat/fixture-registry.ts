@@ -62,6 +62,10 @@ export const AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS = [
   "agent-succeeded-artifacts",
   "agent-succeeded-empty",
   "agent-failed",
+  "agent-delivery-pending",
+  "agent-delivery-ready",
+  "agent-delivery-retryable",
+  "agent-delivery-nonretryable",
   "review-confirm-fallback",
   "analyst-log-pending",
   "analyst-log-available",
@@ -860,6 +864,12 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
   ),
   "agent-succeeded-empty": agentLifecycleFixture("agent-succeeded-empty"),
   "agent-failed": agentLifecycleFixture("agent-failed"),
+  "agent-delivery-pending": agentLifecycleFixture("agent-delivery-pending"),
+  "agent-delivery-ready": agentLifecycleFixture("agent-delivery-ready"),
+  "agent-delivery-retryable": agentLifecycleFixture("agent-delivery-retryable"),
+  "agent-delivery-nonretryable": agentLifecycleFixture(
+    "agent-delivery-nonretryable"
+  ),
   "review-confirm-fallback": agentLifecycleFixture("review-confirm-fallback"),
   "analyst-log-pending": agentLifecycleFixture("analyst-log-pending"),
   "analyst-log-available": agentLifecycleFixture("analyst-log-available"),

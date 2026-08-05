@@ -8,6 +8,10 @@
     "agent-succeeded-artifacts",
     "agent-succeeded-empty",
     "agent-failed",
+    "agent-delivery-pending",
+    "agent-delivery-ready",
+    "agent-delivery-retryable",
+    "agent-delivery-nonretryable",
     "review-confirm-fallback",
     "analyst-log-pending",
     "analyst-log-available",
@@ -85,6 +89,21 @@
     const image = root.querySelector(".images-container img");
     if (!image || !image.getAttribute("alt")) {
       fail("succeeded-artifacts fixture has no accessible result image");
+    }
+  }
+  if (state?.startsWith("agent-delivery-")) {
+    const archiveActions = root.querySelectorAll(
+      '[data-test="result-archive-download"], [data-test="result-archive-retry"]'
+    );
+    if (archiveActions.length > 1)
+      fail("delivery fixture rendered multiple archive actions");
+    if (/obs:\/\//iu.test(visibleText(root)))
+      fail("delivery fixture exposed raw OBS text");
+    if (state === "agent-delivery-ready" && archiveActions.length !== 1) {
+      fail("ready delivery fixture must render one archive action");
+    }
+    if (state === "agent-delivery-pending" && archiveActions.length !== 0) {
+      fail("pending delivery fixture must not render an archive action");
     }
   }
   if (state === "review-confirm-fallback") {

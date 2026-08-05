@@ -265,29 +265,39 @@
           </template>
 
           <template #downloads>
-            <div
-              :data-test="
-                displayedState.artifacts.length === 0
-                  ? 'network-empty-artifacts'
-                  : undefined
-              "
-            >
-              <BotArtifactList
-                :artifacts="displayedState.artifacts"
-                :download="downloadArtifact"
-                :title-label="t('agents.geneNetwork.downloads')"
-                :download-text="t('agents.geneNetwork.download')"
-                :empty-label="t('agents.geneNetwork.noDownloads')"
-              />
-            </div>
-            <p
-              v-if="downloadError"
-              class="gene-network-error"
-              data-test="network-download-error"
-              role="alert"
-            >
-              {{ downloadError }}
-            </p>
+            <ResultArchiveDelivery
+              v-if="isResultArchiveV1"
+              :delivery="displayedState.delivery"
+              :artifacts="displayedState.artifactLinks"
+              :retrying="archiveRetrying"
+              @download="downloadResultArchive"
+              @retry="retryResultArchive"
+            />
+            <template v-else>
+              <div
+                :data-test="
+                  displayedState.artifacts.length === 0
+                    ? 'network-empty-artifacts'
+                    : undefined
+                "
+              >
+                <BotArtifactList
+                  :artifacts="displayedState.artifacts"
+                  :download="downloadArtifact"
+                  :title-label="t('agents.geneNetwork.downloads')"
+                  :download-text="t('agents.geneNetwork.download')"
+                  :empty-label="t('agents.geneNetwork.noDownloads')"
+                />
+              </div>
+              <p
+                v-if="downloadError"
+                class="gene-network-error"
+                data-test="network-download-error"
+                role="alert"
+              >
+                {{ downloadError }}
+              </p>
+            </template>
           </template>
         </ResearchArtifactShell>
       </section>
@@ -303,6 +313,7 @@ import { getChatdownloadURL } from "@/api/chat";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
 import {
@@ -311,8 +322,13 @@ import {
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgentLifecycle";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
+import { useResultArchiveDelivery } from "@/views/chat/composables/useResultArchiveDelivery";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import type {
+  AgentResultDelivery,
+  ConversationArtifactLink,
+} from "@/api/types";
 
 const MAX_QUERY_LENGTH = 4000;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
@@ -393,6 +409,18 @@ const capabilityAllowed = computed(() => {
 const displayedState = computed(
   () => (props.state ?? run.state.value) as BotRemoteAgentRunState
 );
+const archiveDelivery = useResultArchiveDelivery({ getChatState });
+const isResultArchiveV1 = computed(
+  () => displayedState.value.projection?.resultArchiveV1 === true
+);
+const archiveRetrying = computed(() => {
+  const messageId = displayedState.value.messageId;
+  const ownerDialogueId = displayedState.value.dialogueId ?? dialogueId;
+  return Boolean(
+    messageId &&
+    getChatState(ownerDialogueId).archiveRetryingByMessageId[messageId]
+  );
+});
 const reportProgress = computed<BotProgress | null>(
   () => displayedState.value.projection?.progress ?? null
 );
@@ -524,6 +552,42 @@ function resetNetwork(): void {
 function goBack(): void {
   remoteLifecycle.dispose();
   router.back();
+}
+
+function applyPendingArchiveDelivery(delivery: AgentResultDelivery): void {
+  if (props.state !== undefined) return;
+  const current = run.state.value;
+  if (!current.projection || !current.messageId) return;
+  run.hydrate(
+    { ...current.projection, status: "RUNNING", delivery: { ...delivery } },
+    {
+      dialogueId: current.dialogueId ?? dialogueId,
+      messageId: current.messageId,
+      artifactLinks: [],
+    }
+  );
+}
+
+async function retryResultArchive(): Promise<void> {
+  const current = displayedState.value;
+  if (!current.messageId) return;
+  await archiveDelivery.retryResultArchive({
+    dialogueId: current.dialogueId ?? dialogueId,
+    messageId: current.messageId,
+    onPending: applyPendingArchiveDelivery,
+  });
+}
+
+async function downloadResultArchive(
+  artifact: ConversationArtifactLink
+): Promise<void> {
+  const current = displayedState.value;
+  if (!current.messageId) return;
+  await archiveDelivery.downloadResultArchive({
+    dialogueId: current.dialogueId ?? dialogueId,
+    messageId: current.messageId,
+    artifact,
+  });
 }
 
 function isSafeDownloadUrl(value: unknown): value is string {

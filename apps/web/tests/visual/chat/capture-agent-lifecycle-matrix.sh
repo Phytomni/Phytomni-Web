@@ -4,10 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 REPO_ROOT="$(cd "${WEB_ROOT}/../.." && pwd)"
-EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/agent-lifecycle"
+EVIDENCE_DIR="${PHYTOMNI_VISUAL_EVIDENCE_DIR:-${REPO_ROOT}/.codex/evidence/frontend-v2/agent-lifecycle}"
 LEDGER_PATH="${EVIDENCE_DIR}/visual-review-ledger.md"
 SESSION="phy-agent-lifecycle-matrix"
-BASE_URL="http://127.0.0.1:5174/tests/visual/chat/"
+BASE_URL="${PHYTOMNI_VISUAL_BASE_URL:-http://127.0.0.1:5174/tests/visual/chat/}"
 
 cleanup() {
     if ! agent-browser --session "${SESSION}" close >/dev/null 2>&1; then
@@ -26,6 +26,10 @@ states=(
     "agent-succeeded-artifacts"
     "agent-succeeded-empty"
     "agent-failed"
+    "agent-delivery-pending"
+    "agent-delivery-ready"
+    "agent-delivery-retryable"
+    "agent-delivery-nonretryable"
     "review-confirm-fallback"
     "analyst-log-pending"
     "analyst-log-available"
@@ -98,7 +102,7 @@ for state in "${states[@]}"; do
     done
 done
 
-EXPECTED_COUNT=32
+EXPECTED_COUNT=$((${#states[@]} * ${#viewports[@]} * ${#themes[@]}))
 png_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')
 geometry_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.geometry.json' | wc -l | tr -d ' ')
 style_count=$(find "${EVIDENCE_DIR}" -maxdepth 1 -type f -name '*.lifecycle-style.json' | wc -l | tr -d ' ')

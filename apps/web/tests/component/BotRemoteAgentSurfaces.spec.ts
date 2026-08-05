@@ -105,7 +105,10 @@ const mocks = vi.hoisted(() => {
       },
     },
   };
-  const chatState = { fileList: [] as unknown[] };
+  const chatState = {
+    fileList: [] as unknown[],
+    archiveRetryingByMessageId: {} as Record<string, boolean>,
+  };
   const uploadQueue = {
     queueFiles: vi.fn().mockResolvedValue(undefined),
     removeUpload: vi.fn().mockResolvedValue(undefined),
@@ -373,6 +376,60 @@ function syntheticFailureState(): BotRemoteAgentRunState {
   };
 }
 
+function syntheticArchiveState(
+  surface: keyof typeof surfaces
+): BotRemoteAgentRunState {
+  const base = syntheticDegradedState();
+  const agent = products[surface].tool;
+  const archiveName =
+    surface === "analyst"
+      ? "analyst-results.zip"
+      : surface === "research"
+        ? "research-results.zip"
+        : surface === "network"
+          ? "network-results.zip"
+          : "design-results.zip";
+  const projection: BotRunProjection = {
+    ...mustGet(base.projection, "synthetic archive projection"),
+    runId: `run-${surface}-archive`,
+    agent,
+    status: "SUCCEEDED",
+    reportStage: "final",
+    reportCompleteness: "complete",
+    finalReport: `# ${surface} archive report`,
+    intermediateReport: "",
+    degraded: false,
+    degradedReason: null,
+    failures: [],
+    artifacts: [],
+    resultArchiveV1: true,
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "ready",
+      revision: 2,
+      name: archiveName,
+      size_bytes: 2048,
+      error_code: null,
+      retryable: false,
+    },
+  };
+  const lifecycle = reduceBotProjection(initBotLifecycleState(), projection);
+  return {
+    ...lifecycle,
+    phase: "succeeded",
+    requestId: null,
+    uploadTransfer: null,
+    projection,
+    artifactLinks: [
+      { id: `archive-${surface}`, name: archiveName, kind: "archive" },
+    ],
+    dialogueId: `dialogue-${surface}`,
+    messageId: "42",
+    error: null,
+  };
+}
+
 function mountSurface(
   surface: keyof typeof surfaces,
   state: BotRemoteAgentRunState = syntheticDegradedState()
@@ -455,6 +512,27 @@ describe("Bot remote-agent surface matrix", () => {
       expect(wrapper.text()).toContain("partial");
       expect(wrapper.text()).toContain("No safe downloads");
       expect(wrapper.text()).not.toContain("secret.txt");
+
+      wrapper.unmount();
+    }
+  );
+
+  it.each(Object.keys(surfaces) as Array<keyof typeof surfaces>)(
+    "renders one opaque archive with its report and no legacy artifact list for active v1 %s",
+    (surface) => {
+      const wrapper = mountSurface(surface, syntheticArchiveState(surface));
+
+      expect(wrapper.find('[data-test="bot-report-content"]').text()).toContain(
+        `${surface} archive report`
+      );
+      expect(
+        wrapper.find('[data-test="result-archive-delivery"]').exists()
+      ).toBe(true);
+      expect(
+        wrapper.findAll('[data-test="result-archive-download"]')
+      ).toHaveLength(1);
+      expect(wrapper.find(".bot-artifact-list").exists()).toBe(false);
+      expect(wrapper.text()).not.toContain("obs://");
 
       wrapper.unmount();
     }

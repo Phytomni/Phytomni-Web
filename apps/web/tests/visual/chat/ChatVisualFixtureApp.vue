@@ -286,6 +286,11 @@
                           :digital-design-images-loading="EMPTY_LOADING"
                           :lifecycle="agentLifecycleOverlay?.lifecycle"
                         />
+                        <ResultArchiveDelivery
+                          v-if="agentLifecycleOverlay?.delivery"
+                          :delivery="agentLifecycleOverlay.delivery"
+                          :artifacts="agentLifecycleOverlay.artifactLinks"
+                        />
                         <template
                           v-if="logOverlay && message.role === 'assistant'"
                           #activity
@@ -445,6 +450,7 @@ import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import SendProgress from "@/views/chat/components/SendProgress.vue";
 import TransferProgress from "@/components/TransferProgress.vue";
 import LangSwitch from "@/components/LangSwitch.vue";

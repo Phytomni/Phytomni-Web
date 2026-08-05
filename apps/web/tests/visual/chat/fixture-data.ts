@@ -75,6 +75,23 @@ type SyntheticAnalystLog = {
   error_code: "log_refresh_unavailable" | null;
 };
 
+type SyntheticResultArchiveDelivery = {
+  schema_version: 1;
+  required: true;
+  status: "pending" | "ready" | "failed";
+  revision: number;
+  name: string | null;
+  size_bytes: number | null;
+  error_code: "archive_generation_failed" | "archive_contract_invalid" | null;
+  retryable: boolean;
+};
+
+type SyntheticConversationArtifactLink = {
+  id: string;
+  name: string;
+  kind: "archive";
+};
+
 const SYNTHETIC_NETWORK_RESULT_DATA_URL =
   "data:image/svg+xml," +
   encodeURIComponent(`
@@ -100,6 +117,8 @@ const SYNTHETIC_NETWORK_RESULT_DATA_URL =
 export type AgentLifecycleVisualData = {
   message: ChatMessage;
   lifecycle?: SyntheticLifecycle;
+  delivery?: SyntheticResultArchiveDelivery;
+  artifactLinks?: SyntheticConversationArtifactLink[];
   geneNetworkImages?: Record<string, string[]>;
   log?: {
     rowId: string;
@@ -193,6 +212,93 @@ const AGENT_LIFECYCLE_VISUAL_DATA: Record<
       tool_name: "DigitalDesignAgent",
     },
     lifecycle: lifecycle("FAILED"),
+  },
+  "agent-delivery-pending": {
+    message: {
+      id: "fixture-agent-delivery-pending",
+      role: "assistant",
+      content:
+        "### Analysis report\n\nThe scientific report remains available while delivery is prepared.",
+      tool_name: "AnalystAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", { hasReport: true, reportRevision: 2 }),
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "pending",
+      revision: 2,
+      name: null,
+      size_bytes: null,
+      error_code: null,
+      retryable: false,
+    },
+  },
+  "agent-delivery-ready": {
+    message: {
+      id: "fixture-agent-delivery-ready",
+      role: "assistant",
+      content:
+        "### Analysis report\n\nThe scientific report remains visible with one result archive.",
+      tool_name: "InSilicoResearchAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", { hasReport: true, reportRevision: 2 }),
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "ready",
+      revision: 2,
+      name: "research-results.zip",
+      size_bytes: 2048,
+      error_code: null,
+      retryable: false,
+    },
+    artifactLinks: [
+      {
+        id: "fixture-archive-ready",
+        name: "research-results.zip",
+        kind: "archive",
+      },
+    ],
+  },
+  "agent-delivery-retryable": {
+    message: {
+      id: "fixture-agent-delivery-retryable",
+      role: "assistant",
+      content:
+        "### Analysis report\n\nThe scientific report remains visible after archive generation failed.",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", { hasReport: true, reportRevision: 2 }),
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "failed",
+      revision: 2,
+      name: null,
+      size_bytes: null,
+      error_code: "archive_generation_failed",
+      retryable: true,
+    },
+  },
+  "agent-delivery-nonretryable": {
+    message: {
+      id: "fixture-agent-delivery-nonretryable",
+      role: "assistant",
+      content:
+        "### Analysis report\n\nThe scientific report remains visible when archive delivery cannot continue.",
+      tool_name: "DigitalDesignAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", { hasReport: true, reportRevision: 2 }),
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "failed",
+      revision: 2,
+      name: null,
+      size_bytes: null,
+      error_code: "archive_contract_invalid",
+      retryable: false,
+    },
   },
   "review-confirm-fallback": {
     message: {

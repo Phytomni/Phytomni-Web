@@ -282,21 +282,31 @@
           </template>
 
           <template #downloads>
-            <BotArtifactList
-              :artifacts="displayedState.artifacts"
-              :download="downloadArtifact"
-              :title-label="t('agents.digitalDesign.downloads')"
-              :download-text="t('agents.digitalDesign.download')"
-              :empty-label="t('agents.digitalDesign.noDownloads')"
+            <ResultArchiveDelivery
+              v-if="isResultArchiveV1"
+              :delivery="displayedState.delivery"
+              :artifacts="displayedState.artifactLinks"
+              :retrying="archiveRetrying"
+              @download="downloadResultArchive"
+              @retry="retryResultArchive"
             />
-            <p
-              v-if="downloadError"
-              class="digital-design-error"
-              data-test="design-download-error"
-              role="alert"
-            >
-              {{ downloadError }}
-            </p>
+            <template v-else>
+              <BotArtifactList
+                :artifacts="displayedState.artifacts"
+                :download="downloadArtifact"
+                :title-label="t('agents.digitalDesign.downloads')"
+                :download-text="t('agents.digitalDesign.download')"
+                :empty-label="t('agents.digitalDesign.noDownloads')"
+              />
+              <p
+                v-if="downloadError"
+                class="digital-design-error"
+                data-test="design-download-error"
+                role="alert"
+              >
+                {{ downloadError }}
+              </p>
+            </template>
           </template>
         </ResearchArtifactShell>
       </section>
@@ -312,6 +322,7 @@ import { getChatdownloadURL } from "@/api/chat";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import ChatUploadCard from "@/views/chat/components/ChatUploadCard.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import { userStore } from "@/stores";
@@ -322,10 +333,15 @@ import {
 } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgentLifecycle";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
+import { useResultArchiveDelivery } from "@/views/chat/composables/useResultArchiveDelivery";
 import { useResumableUploads } from "@/views/chat/composables/useResumableUploads";
 import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import type {
+  AgentResultDelivery,
+  ConversationArtifactLink,
+} from "@/api/types";
 
 const MAX_QUERY_LENGTH = 4000;
 const MAX_GENE_ID_LENGTH = 128;
@@ -419,6 +435,18 @@ function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
 const displayedState = computed(
   () => (props.state ?? run.state.value) as BotRemoteAgentRunState
 );
+const archiveDelivery = useResultArchiveDelivery({ getChatState });
+const isResultArchiveV1 = computed(
+  () => displayedState.value.projection?.resultArchiveV1 === true
+);
+const archiveRetrying = computed(() => {
+  const messageId = displayedState.value.messageId;
+  const ownerDialogueId = displayedState.value.dialogueId ?? dialogueId;
+  return Boolean(
+    messageId &&
+    getChatState(ownerDialogueId).archiveRetryingByMessageId[messageId]
+  );
+});
 const reportProgress = computed<BotProgress | null>(
   () => displayedState.value.projection?.progress ?? null
 );
@@ -611,6 +639,42 @@ function resetDesign(): void {
 function goBack(): void {
   remoteLifecycle.dispose();
   router.back();
+}
+
+function applyPendingArchiveDelivery(delivery: AgentResultDelivery): void {
+  if (props.state !== undefined) return;
+  const current = run.state.value;
+  if (!current.projection || !current.messageId) return;
+  run.hydrate(
+    { ...current.projection, status: "RUNNING", delivery: { ...delivery } },
+    {
+      dialogueId: current.dialogueId ?? dialogueId,
+      messageId: current.messageId,
+      artifactLinks: [],
+    }
+  );
+}
+
+async function retryResultArchive(): Promise<void> {
+  const current = displayedState.value;
+  if (!current.messageId) return;
+  await archiveDelivery.retryResultArchive({
+    dialogueId: current.dialogueId ?? dialogueId,
+    messageId: current.messageId,
+    onPending: applyPendingArchiveDelivery,
+  });
+}
+
+async function downloadResultArchive(
+  artifact: ConversationArtifactLink
+): Promise<void> {
+  const current = displayedState.value;
+  if (!current.messageId) return;
+  await archiveDelivery.downloadResultArchive({
+    dialogueId: current.dialogueId ?? dialogueId,
+    messageId: current.messageId,
+    artifact,
+  });
 }
 
 function isSafeDownloadUrl(value: unknown): value is string {

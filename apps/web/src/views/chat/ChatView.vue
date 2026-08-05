@@ -549,41 +549,51 @@ export function removeDeletedChat(options: {
           </template>
           <template #activity>{{ t("chat.log.noData") }}</template>
           <template #downloads>
-            <ul
-              v-if="currentArtifactLinks.length"
-              class="authorized-artifact-list"
-            >
-              <li
-                v-for="artifact in currentArtifactLinks"
-                :key="artifact.id"
-                class="authorized-artifact-list__item"
-              >
-                <span class="authorized-artifact-list__name">
-                  {{ artifact.name }}
-                </span>
-                <el-tooltip
-                  :content="`${t('chat.downloadFile')}: ${artifact.name}`"
-                  placement="top"
-                >
-                  <el-button
-                    text
-                    circle
-                    :aria-label="`${t('chat.downloadFile')}: ${artifact.name}`"
-                    data-test="authorized-artifact-download"
-                    @click="downloadArtifact(artifact)"
-                  >
-                    <el-icon><Download /></el-icon>
-                  </el-button>
-                </el-tooltip>
-              </li>
-            </ul>
-            <BotArtifactList
-              v-else-if="currentArtifactLifecycle"
-              :artifacts="currentArtifactLifecycle.artifacts"
-              :empty-label="t('chat.botReport.emptyArtifacts')"
-              :download="downloadFile"
+            <ResultArchiveDelivery
+              v-if="currentArtifactProjection?.resultArchiveV1 === true"
+              :delivery="currentArtifactDelivery"
+              :artifacts="currentArtifactLinks"
+              :retrying="currentArtifactRetrying"
+              @download="downloadResultArchive"
+              @retry="retryCurrentResultArchive"
             />
-            <span v-else>{{ t("common.noData") }}</span>
+            <template v-else>
+              <ul
+                v-if="currentArtifactLinks.length"
+                class="authorized-artifact-list"
+              >
+                <li
+                  v-for="artifact in currentArtifactLinks"
+                  :key="artifact.id"
+                  class="authorized-artifact-list__item"
+                >
+                  <span class="authorized-artifact-list__name">
+                    {{ artifact.name }}
+                  </span>
+                  <el-tooltip
+                    :content="`${t('chat.downloadFile')}: ${artifact.name}`"
+                    placement="top"
+                  >
+                    <el-button
+                      text
+                      circle
+                      :aria-label="`${t('chat.downloadFile')}: ${artifact.name}`"
+                      data-test="authorized-artifact-download"
+                      @click="downloadArtifact(artifact)"
+                    >
+                      <el-icon><Download /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </li>
+              </ul>
+              <BotArtifactList
+                v-else-if="currentArtifactLifecycle"
+                :artifacts="currentArtifactLifecycle.artifacts"
+                :empty-label="t('chat.botReport.emptyArtifacts')"
+                :download="downloadFile"
+              />
+              <span v-else>{{ t("common.noData") }}</span>
+            </template>
           </template>
         </ResearchArtifactShell>
       </template>
@@ -622,6 +632,7 @@ import {
 } from "@/components/research";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import { Download, Menu } from "@element-plus/icons-vue";
 import { getHistoryQuestionList } from "@/api/chat";
@@ -1026,6 +1037,8 @@ const {
   currentArtifactMessage,
   currentArtifactLinks,
   downloadArtifact,
+  downloadResultArchive,
+  retryResultArchive,
   openArtifact: setArtifactOpen,
   closeArtifact: resetArtifactPanel,
   selectArtifactTab,
@@ -1182,6 +1195,52 @@ const currentArtifactLifecycle = computed(() => {
   const message = currentArtifactMessage.value;
   return message ? lifecycleFromMessage(message) : null;
 });
+
+const currentArtifactDelivery = computed(
+  () =>
+    currentArtifactMessage.value?.delivery ??
+    currentArtifactLifecycle.value?.delivery ??
+    currentArtifactProjection.value?.delivery
+);
+
+const currentArtifactRetrying = computed(() => {
+  const messageId = activeArtifactMessageId.value;
+  return Boolean(
+    messageId &&
+    currentChatId.value &&
+    getChatState(currentChatId.value).archiveRetryingByMessageId[messageId]
+  );
+});
+
+function retryCurrentResultArchive(): void {
+  const dialogueId = currentChatId.value;
+  const selectedMessage = currentArtifactMessage.value;
+  const messageId = selectedMessage?.id;
+  const chat = currentChat.value;
+  if (!dialogueId || !messageId || !chat) return;
+
+  void retryResultArchive((delivery) => {
+    const matches = chat.messages.filter((message) => message.id === messageId);
+    if (matches.length !== 1) return;
+    const [message] = matches;
+    message.delivery = { ...delivery };
+    message.status = "RUNNING";
+    if (message.botProjection) {
+      message.botProjection = {
+        ...message.botProjection,
+        status: "RUNNING",
+        delivery: { ...delivery },
+      };
+    }
+    if (message.botLifecycle) {
+      message.botLifecycle = {
+        ...message.botLifecycle,
+        status: "RUNNING",
+        delivery: { ...delivery },
+      };
+    }
+  });
+}
 
 function reportStatusForArtifact(
   state: BotLifecycleState

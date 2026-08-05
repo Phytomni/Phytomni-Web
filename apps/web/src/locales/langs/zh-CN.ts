@@ -616,6 +616,16 @@ export default {
     transferProgressIndeterminate: "{phase}：已传输 {loaded}",
     downloadCancelled: "已取消下载",
     downloadError: "下载过程中出错，请联系管理员！",
+    resultArchive: {
+      preparing: "正在准备结果归档",
+      download: "下载 {name}",
+      generationFailed: "结果归档生成失败",
+      unavailable: "结果归档暂不可用",
+      retry: "重试生成归档",
+      retrying: "正在重试生成归档",
+      retryFailed: "无法开始归档重试。",
+      downloadFailed: "无法下载结果归档。",
+    },
   },
 
   // 历史记录模块
