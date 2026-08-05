@@ -21,6 +21,7 @@ import {
   getConversationArtifactFile,
   getAnalystAgentLog,
   getReactionType,
+  retryConversationResultArchive,
   getUserTool,
   type QueryData,
 } from "@/api/chat";
@@ -58,6 +59,38 @@ describe("getReactionType — wire contract", () => {
     await expect(
       getReactionType({ id: "abc", reaction_type: "like" })
     ).rejects.toBe(err);
+  });
+});
+
+describe("retryConversationResultArchive — wire contract", () => {
+  const delivery = {
+    schema_version: 1,
+    required: true,
+    status: "pending",
+    revision: 2,
+    name: null,
+    size_bytes: null,
+    error_code: null,
+    retryable: false,
+  } as const;
+
+  beforeEach(() => {
+    mockRequest.mockReset();
+  });
+
+  it("posts to the encoded retry path and decodes the delivery envelope", async () => {
+    mockRequest.mockResolvedValueOnce({ code: 200, data: delivery });
+
+    await expect(
+      retryConversationResultArchive({
+        dialogue_id: "dialogue/1",
+        message_id: "message 2",
+      })
+    ).resolves.toEqual({ code: 200, data: delivery });
+    expect(mockRequest).toHaveBeenCalledWith({
+      url: "/api/v1/conversations/dialogue%2F1/messages/message%202/artifacts/archive/retry",
+      method: "post",
+    });
   });
 });
 

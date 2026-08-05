@@ -271,6 +271,54 @@ describe("useSendMessage", () => {
     expect(stateA.pendingTurnFingerprint).toBeNull();
   });
 
+  it("keeps only bounded archive delivery and links for a blocking v1 response", async () => {
+    const delivery = {
+      schema_version: 1,
+      required: true,
+      status: "ready",
+      revision: 1,
+      name: "network-results.zip",
+      size_bytes: 1024,
+      error_code: null,
+      retryable: false,
+    } as const;
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          id: "42",
+          dialogue_id: "A",
+          bot_run_id: "run-network",
+          tool_name: "GeneNetworkAgent",
+          status: "SUCCEEDED",
+          answer: "Network report",
+          result_archive_v1: true,
+          delivery,
+          artifacts: [
+            { id: "archive-1", name: "network-results.zip", kind: "archive" },
+          ],
+          upload_path: "/obs/private/upload",
+          download_path: "/obs/private/download",
+          image_paths: ["/obs/private/result.png"],
+          server_file_path: "/srv/private/result.txt",
+        },
+      })
+    );
+
+    await makeComposable().sendMessage();
+
+    const assistant = lastMessageFor(stateFor("A"), "archive response");
+    expect(assistant.delivery).toEqual(delivery);
+    expect(assistant.artifacts).toEqual([
+      { id: "archive-1", name: "network-results.zip", kind: "archive" },
+    ]);
+    expect(assistant.botProjection?.artifacts).toEqual([]);
+    expect(assistant).not.toHaveProperty("upload_path");
+    expect(assistant).not.toHaveProperty("download_path");
+    expect(assistant).not.toHaveProperty("server_file_path");
+    expect(JSON.stringify(assistant)).not.toContain("/obs/private");
+    expect(JSON.stringify(assistant)).not.toContain("/srv/private");
+  });
+
   it("keeps a blocking answer with authorized artifacts when context is degraded", async () => {
     stateFor("A").messageInput = "Build report";
     mockGetQueryAbortable.mockResolvedValueOnce(

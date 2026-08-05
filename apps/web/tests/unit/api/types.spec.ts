@@ -73,10 +73,20 @@ describe("agent lifecycle decoding", () => {
     } as const;
 
     expect(decodeAgentResultDelivery(delivery)).toEqual(delivery);
-    expect(decodeQueryData({ id: 42, delivery }).delivery).toEqual(delivery);
+    expect(
+      decodeQueryData({ id: 42, result_archive_v1: true, delivery })
+    ).toMatchObject({ result_archive_v1: true, delivery });
     expect(
       decodeAgentTaskLifecycle({ ...lifecycle, delivery }).delivery
     ).toEqual(delivery);
+  });
+
+  it("preserves the active archive marker on history rows", () => {
+    expect(
+      decodeChatHistory([
+        { id: 42, result_archive_v1: true, answer: "completed" },
+      ])[0]
+    ).toMatchObject({ id: "42", result_archive_v1: true });
   });
 
   it.each([

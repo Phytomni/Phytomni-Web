@@ -267,13 +267,14 @@ const SAFE_DIALOGUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
 
 function attachBlockingLegacyFields(
   message: ChatMessage,
-  data: QueryData
+  data: QueryData,
+  resultArchiveV1: boolean
 ): void {
   if (typeof data.task_id === "string" && data.task_id.trim() !== "") {
     message.task_id = data.task_id;
   }
   if (
-    data.delivery === undefined &&
+    !resultArchiveV1 &&
     typeof data.download_path === "string" &&
     data.download_path.trim() !== ""
   ) {
@@ -283,6 +284,17 @@ function attachBlockingLegacyFields(
   if (Array.isArray(data.artifacts)) {
     message.artifacts = data.artifacts.map((artifact) => ({ ...artifact }));
   }
+}
+
+function stripActiveArchiveLegacyFields(
+  message: ChatMessage,
+  resultArchiveV1: boolean
+): void {
+  if (!resultArchiveV1) return;
+  delete message.download_path;
+  delete message.upload_path;
+  delete message.server_file_path;
+  delete message.original;
 }
 
 function attachBlockingA2ui(
@@ -676,6 +688,9 @@ export function useSendMessage(opts: {
       if (isSuccessfulDataEnvelope<QueryData>(response)) {
         const responseData = response.data;
         const botProjection = parseBlockingProjection(responseData);
+        const resultArchiveV1 =
+          botProjection?.resultArchiveV1 === true ||
+          responseData.result_archive_v1 === true;
         const expertSucceeded =
           botProjection?.status === "SUCCEEDED" ||
           (botProjection === undefined &&
@@ -961,7 +976,12 @@ export function useSendMessage(opts: {
         const contextNotice = normalizeChatContextNotice(response.data);
         if (assistantMessage) {
           if (contextNotice) assistantMessage.contextNotice = contextNotice;
-          attachBlockingLegacyFields(assistantMessage, responseData);
+          attachBlockingLegacyFields(
+            assistantMessage,
+            responseData,
+            resultArchiveV1
+          );
+          stripActiveArchiveLegacyFields(assistantMessage, resultArchiveV1);
           // Keep the Web row id and Bot umbrella identity in distinct fields;
           // only the parser output crosses into reactive message state.
           if (botProjection) {
@@ -1006,7 +1026,12 @@ export function useSendMessage(opts: {
             showLog: false,
           };
           if (contextNotice) assistantMessage.contextNotice = contextNotice;
-          attachBlockingLegacyFields(assistantMessage, responseData);
+          attachBlockingLegacyFields(
+            assistantMessage,
+            responseData,
+            resultArchiveV1
+          );
+          stripActiveArchiveLegacyFields(assistantMessage, resultArchiveV1);
           if (botProjection) {
             assistantMessage.botProjection = botProjection;
             attachBlockingA2ui(assistantMessage, responseData, botProjection);

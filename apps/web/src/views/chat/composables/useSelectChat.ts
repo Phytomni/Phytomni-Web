@@ -49,6 +49,42 @@ export function historyAssistantMetadata(
   return metadata;
 }
 
+function isActiveResultArchiveV1(item: Partial<ChatResponse>): boolean {
+  if (item.result_archive_v1 === true) return true;
+  if (typeof item.answer !== "string" || item.answer.trim() === "") {
+    return false;
+  }
+  try {
+    const answer = JSON.parse(item.answer) as unknown;
+    return (
+      typeof answer === "object" &&
+      answer !== null &&
+      !Array.isArray(answer) &&
+      (answer as Record<string, unknown>).result_archive_v1 === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+function withoutActiveArchiveLegacyFields(
+  item: Partial<ChatResponse>
+): Partial<ChatResponse> {
+  if (!isActiveResultArchiveV1(item)) return item;
+  const safeItem = { ...item };
+  delete safeItem.upload_path;
+  delete safeItem.download_path;
+  delete safeItem.server_file_path;
+  return safeItem;
+}
+
+function stripActiveArchiveLegacyFields(message: ChatMessage): void {
+  delete message.upload_path;
+  delete message.download_path;
+  delete message.server_file_path;
+  delete message.original;
+}
+
 const BACKGROUND_AGENT_TOOLS = new Set([
   "AnalystAgent",
   "InSilicoResearchAgent",
@@ -235,7 +271,13 @@ export function useSelectChat(opts: {
       // iterate the returned array and convert to message format
       if (historyRows.length > 0) {
         historyRows.forEach((row, rowIndex) => {
-          const item: Partial<ChatResponse> = row;
+          const resultArchiveV1 = isActiveResultArchiveV1(
+            row as Partial<ChatResponse>
+          );
+          const rowMessageStart = messages.length;
+          const item = withoutActiveArchiveLegacyFields(
+            row as Partial<ChatResponse>
+          );
           const assistantMetadata = historyAssistantMetadata(item);
           // sync the reaction state returned by the server
           if (item.id && item.reaction_type) {
@@ -583,6 +625,12 @@ export function useSelectChat(opts: {
             const lastMessage = messages.at(-1);
             if (contextNotice && lastMessage?.role === "assistant") {
               lastMessage.contextNotice = contextNotice;
+            }
+            if (resultArchiveV1) {
+              messages
+                .slice(rowMessageStart)
+                .filter((message) => message.role === "assistant")
+                .forEach(stripActiveArchiveLegacyFields);
             }
           }
         });

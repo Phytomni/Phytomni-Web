@@ -184,6 +184,7 @@ export interface ChatResponse extends ConversationContextNotice {
   /** Bounded input-required surface from the Web Go gateway. */
   a2ui?: unknown;
   artifacts?: ConversationArtifactLink[];
+  result_archive_v1?: boolean;
   delivery?: AgentResultDelivery;
   attachments?: AssetAttachmentRef[];
 }

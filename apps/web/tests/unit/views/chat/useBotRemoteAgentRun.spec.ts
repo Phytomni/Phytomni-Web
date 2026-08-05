@@ -487,6 +487,71 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.degradedInterop).toBe(false);
   });
 
+  it("restores pending archive delivery from dialogue-owned run state", () => {
+    const owned = makeState();
+    const first = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-pending-archive",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    first.hydrate(
+      {
+        runId: "run-pending-archive",
+        agent: "InSilicoResearchAgent",
+        status: "SUCCEEDED",
+        reportPresentation: true,
+        reportStage: "final",
+        reportCompleteness: "complete",
+        reportRevision: 1,
+        reportUpdatedAt: null,
+        intermediateReport: "",
+        finalReport: "Scientific report",
+        progress: {
+          completed: 1,
+          total: 1,
+          failed: 0,
+          pending: 0,
+          briefGeneStatus: "",
+        },
+        degraded: false,
+        degradedReason: null,
+        failures: [],
+        artifacts: [],
+        resultArchiveV1: true,
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "pending",
+          revision: 1,
+          name: null,
+          size_bytes: null,
+          error_code: null,
+          retryable: false,
+        },
+        requestId: null,
+        trackingDegraded: false,
+        degradedInterop: false,
+        interop: null,
+      },
+      { dialogueId: "42", messageId: "19" }
+    );
+
+    expect(owned.botLifecycle?.delivery?.status).toBe("pending");
+    expect(owned.botProjection?.delivery?.status).toBe("pending");
+
+    const restored = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-pending-archive",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    expect(restored.state.value.phase).toBe("succeeded");
+    expect(restored.state.value.delivery?.status).toBe("pending");
+    expect(restored.state.value.messageId).toBe("19");
+  });
+
   it("loads the default capability source before submitting", async () => {
     const source = makeCapabilities(
       "GeneNetworkAgent",

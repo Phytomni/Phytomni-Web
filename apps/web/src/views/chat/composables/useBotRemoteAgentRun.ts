@@ -2,7 +2,12 @@ import { ref, type Ref } from "vue";
 import { runAgentProductAbortable } from "@/api/chat";
 import { isSuccessfulDataEnvelope } from "@/api/contracts";
 import { abortRequest } from "@/utils/request";
-import type { AssetAttachmentRef, ConversationArtifactLink } from "@/api/types";
+import {
+  decodeAgentResultDelivery,
+  type AgentResultDelivery,
+  type AssetAttachmentRef,
+  type ConversationArtifactLink,
+} from "@/api/types";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
@@ -189,8 +194,12 @@ function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
       }
     : initBotLifecycleState();
   const projection = safeProjectionCopy(owned.botProjection);
+  const delivery =
+    safeDeliveryCopy(owned.botLifecycle?.delivery) ??
+    safeDeliveryCopy(projection?.delivery);
   return {
     ...lifecycle,
+    ...(delivery ? { delivery } : {}),
     phase: projection ? phaseFor(projection.status) : "idle",
     requestId: owned.activeRequestId?.trim() || null,
     uploadTransfer: owned.uploadTransfer ?? null,
@@ -200,6 +209,17 @@ function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
     messageId: owned.messageId ?? null,
     error: null,
   };
+}
+
+function safeDeliveryCopy(
+  delivery: AgentResultDelivery | undefined
+): AgentResultDelivery | undefined {
+  if (!delivery) return undefined;
+  try {
+    return decodeAgentResultDelivery(delivery);
+  } catch {
+    return undefined;
+  }
 }
 
 function cloneArtifactLinks(
@@ -416,6 +436,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   let capabilityLoadPromise: Promise<void> | null = null;
 
   const syncOwnedState = () => {
+    const delivery = safeDeliveryCopy(state.value.delivery);
     owned.botProjection =
       safeProjectionCopy(state.value.projection) ?? undefined;
     owned.botLifecycle = {
@@ -433,6 +454,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
         outputDir: artifact.outputDir,
         paths: [...artifact.paths],
       })),
+      ...(delivery ? { delivery } : {}),
     };
     owned.artifactLinks = cloneArtifactLinks(state.value.artifactLinks);
   };

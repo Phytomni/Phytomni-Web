@@ -189,6 +189,7 @@ export interface QueryData extends ConversationContextNotice {
   a2ui?: unknown;
   artifacts?: ConversationArtifactLink[];
   attachments?: AssetAttachmentRef[];
+  result_archive_v1?: boolean;
   delivery?: AgentResultDelivery;
 }
 
@@ -1144,6 +1145,14 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
   }
   if (hasOwn(value, "delivery")) {
     result.delivery = decodeAgentResultDelivery(value.delivery);
+  }
+  const resultArchiveV1 = optionalBooleanField(
+    value,
+    "result_archive_v1",
+    "chat response"
+  );
+  if (resultArchiveV1 !== undefined) {
+    result.result_archive_v1 = resultArchiveV1;
   }
   if (hasOwn(value, "attachments")) {
     result.attachments = decodeAssetAttachments(value.attachments);
