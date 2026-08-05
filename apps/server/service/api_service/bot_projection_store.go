@@ -160,6 +160,8 @@ func mergeProjectionDelivery(dst *BotRunProjection, current, incoming BotRunProj
 
 	currentDelivery := current.Delivery
 	incomingDelivery := incoming.Delivery
+	// Older delivery snapshots are stale regardless of their immutable
+	// descriptor. Check their revision before validating the digest.
 	if incomingDelivery.Revision < currentDelivery.Revision {
 		return nil
 	}

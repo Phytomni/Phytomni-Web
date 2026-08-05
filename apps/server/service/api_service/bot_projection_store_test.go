@@ -151,14 +151,14 @@ func TestMergeBotRunProjectionPreservesChildCountAndTerminalStatus(t *testing.T)
 }
 
 func TestMergeBotRunProjectionMergesDeliveryRevisionIndependently(t *testing.T) {
-	t.Run("lower delivery revision is ignored", func(t *testing.T) {
+	t.Run("lower delivery revision ignores mismatched digest", func(t *testing.T) {
 		current := BotRunProjection{
 			RunID: "run-delivery", ReportRevision: 4, ResultArchiveV1: true,
 			Delivery: testReadyDelivery(2, testProjectionDigestA),
 		}
 		incoming := BotRunProjection{
 			RunID: "run-delivery", ReportRevision: 4, ResultArchiveV1: true,
-			Delivery: testFailedDelivery(1, testProjectionDigestA, true),
+			Delivery: testFailedDelivery(1, testProjectionDigestB, true),
 		}
 		merged, changed, err := MergeBotRunProjection(current, incoming)
 		if err != nil || changed || !reflect.DeepEqual(merged.Delivery, current.Delivery) {
