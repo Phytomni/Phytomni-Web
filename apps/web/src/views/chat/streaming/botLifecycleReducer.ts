@@ -9,7 +9,10 @@ import type {
   BotRunProjection,
   BotRunStatus,
 } from "../botProjection";
-import type { ConversationContextNotice } from "@/api/types";
+import type {
+  AgentResultDelivery,
+  ConversationContextNotice,
+} from "@/api/types";
 import type { AguiEvent } from "./aguiEvents";
 
 export type BotLifecycleStatus =
@@ -27,6 +30,7 @@ export interface BotLifecycleState {
   interop?: BotInteropProvenance | null;
   failures: string[];
   artifacts: BotArtifact[];
+  delivery?: AgentResultDelivery;
 }
 
 const TERMINAL_STATUSES = new Set<BotLifecycleStatus>(["SUCCEEDED", "FAILED"]);
@@ -111,6 +115,33 @@ function cloneArtifacts(artifacts: readonly BotArtifact[]): BotArtifact[] {
   }
 
   return cloned;
+}
+
+function cloneDelivery(
+  delivery: AgentResultDelivery | undefined
+): AgentResultDelivery | undefined {
+  return delivery ? { ...delivery } : undefined;
+}
+
+function mergeDelivery(
+  current: AgentResultDelivery | undefined,
+  incoming: AgentResultDelivery | undefined
+): AgentResultDelivery | undefined {
+  if (!incoming) return cloneDelivery(current);
+  if (!current || incoming.revision > current.revision) {
+    return cloneDelivery(incoming);
+  }
+  if (incoming.revision < current.revision) return cloneDelivery(current);
+  if (
+    (current.status === "ready" || current.status === "failed") &&
+    incoming.status === "pending"
+  ) {
+    return cloneDelivery(current);
+  }
+  if (current.status === "ready" && incoming.status === "failed") {
+    return cloneDelivery(current);
+  }
+  return cloneDelivery(incoming);
 }
 
 const INTEROP_MODES = new Set(["off", "auto", "required"]);
@@ -339,6 +370,7 @@ export function initBotLifecycleState(): BotLifecycleState {
     interop: null,
     failures: [],
     artifacts: [],
+    delivery: undefined,
   };
 }
 
@@ -399,7 +431,10 @@ export function reduceBotProjection(
       (interopEnabled && incoming.degradedInterop === true),
     interop: nextInterop,
     failures: mergeFailures(state.failures, incoming.failures),
-    artifacts: mergeArtifacts(state.artifacts, incoming.artifacts),
+    artifacts: incoming.resultArchiveV1
+      ? []
+      : mergeArtifacts(state.artifacts, incoming.artifacts),
+    delivery: mergeDelivery(state.delivery, incoming.delivery),
   };
 }
 
@@ -424,5 +459,6 @@ export function reduceBotFailure(
     interop: cloneBotInterop(state.interop),
     failures: mergeFailures(state.failures, [safeMessage]),
     artifacts: cloneArtifacts(state.artifacts),
+    delivery: cloneDelivery(state.delivery),
   };
 }

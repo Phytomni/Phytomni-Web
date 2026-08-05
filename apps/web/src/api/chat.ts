@@ -6,6 +6,7 @@ import type { RemoteAgentTool } from "@/constants/agents";
 import type {
   ApiEnvelope,
   AnalystAgentLog,
+  AgentResultDelivery,
   BinaryResponse,
   ConversationSummary,
   DecodedQueryData,
@@ -18,6 +19,7 @@ import {
   decodeMutationData,
   decodeQueryData,
   decodeAnalystAgentLog,
+  decodeAgentResultDelivery,
   decodeString,
   decodeUserToolResponse,
   isConversationArtifactDownloadURL,
@@ -63,6 +65,20 @@ export const getHistoryQuestionList = (): Promise<
       method: "get",
     },
     decodeConversationList
+  );
+
+export const retryConversationResultArchive = (data: {
+  dialogue_id: string;
+  message_id: string;
+}): Promise<ApiEnvelope<AgentResultDelivery>> =>
+  requestApi(
+    {
+      url:
+        `/api/v1/conversations/${encodeURIComponent(data.dialogue_id)}` +
+        `/messages/${encodeURIComponent(data.message_id)}/artifacts/archive/retry`,
+      method: "post",
+    },
+    decodeAgentResultDelivery
   );
 
 // Conversation (send message; RESTful: conversation id in path, id=0 is a new conversation)

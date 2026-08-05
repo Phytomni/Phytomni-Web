@@ -1,5 +1,10 @@
 import { type RemoteAgentTool } from "@/constants/agents";
 import {
+  decodeConversationArtifacts,
+  type AgentResultDelivery,
+  type ConversationArtifactLink,
+} from "@/api/types";
+import {
   isSafeBotObsPath,
   parseBotProjection,
   type BotArtifact,
@@ -17,6 +22,8 @@ export interface RemoteAgentHistorySnapshot {
   projection: BotRunProjection;
   rowId: string;
   dialogueId: string | null;
+  delivery?: AgentResultDelivery;
+  artifactLinks?: ConversationArtifactLink[];
 }
 
 function isUnknownArray(value: unknown): value is readonly unknown[] {
@@ -108,6 +115,8 @@ function snapshotFromHistoryRow(
     "report_revision",
     "request_id",
     "tracking_degraded",
+    "result_archive_v1",
+    "delivery",
   ]) {
     if (row[key] !== undefined && candidate[key] === undefined) {
       candidate[key] = row[key];
@@ -128,7 +137,13 @@ function snapshotFromHistoryRow(
     if (projection.agent !== tool || projection.runId !== expectedRunId) {
       return null;
     }
-    const rowArtifacts = artifactsFromHistoryRow(row);
+    const rowArtifacts = projection.resultArchiveV1
+      ? []
+      : artifactsFromHistoryRow(row);
+    const artifactLinks =
+      projection.resultArchiveV1 && row.artifacts !== undefined
+        ? decodeConversationArtifacts(row.artifacts)
+        : [];
     return {
       projection: {
         ...projection,
@@ -137,6 +152,10 @@ function snapshotFromHistoryRow(
       },
       rowId,
       dialogueId: safeHistoryIdentity(row.dialogue_id, SAFE_DIALOGUE_ID),
+      ...(projection.delivery ? { delivery: { ...projection.delivery } } : {}),
+      ...(projection.resultArchiveV1
+        ? { artifactLinks: artifactLinks.map((artifact) => ({ ...artifact })) }
+        : {}),
     };
   } catch {
     return null;

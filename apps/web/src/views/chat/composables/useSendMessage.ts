@@ -273,11 +273,13 @@ function attachBlockingLegacyFields(
     message.task_id = data.task_id;
   }
   if (
+    data.delivery === undefined &&
     typeof data.download_path === "string" &&
     data.download_path.trim() !== ""
   ) {
     message.download_path = data.download_path;
   }
+  if (data.delivery) message.delivery = { ...data.delivery };
   if (Array.isArray(data.artifacts)) {
     message.artifacts = data.artifacts.map((artifact) => ({ ...artifact }));
   }

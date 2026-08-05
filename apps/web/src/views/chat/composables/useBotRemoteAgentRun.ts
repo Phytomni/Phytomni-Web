@@ -2,7 +2,7 @@ import { ref, type Ref } from "vue";
 import { runAgentProductAbortable } from "@/api/chat";
 import { isSuccessfulDataEnvelope } from "@/api/contracts";
 import { abortRequest } from "@/utils/request";
-import type { AssetAttachmentRef } from "@/api/types";
+import type { AssetAttachmentRef, ConversationArtifactLink } from "@/api/types";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
@@ -60,6 +60,7 @@ export interface RemoteAgentChatState {
   activeAgentName?: string;
   botProjection?: BotRunProjection;
   botLifecycle?: BotLifecycleState;
+  artifactLinks?: ConversationArtifactLink[];
   dialogueId?: string;
   messageId?: string;
 }
@@ -103,6 +104,7 @@ export interface BotRemoteAgentRunState extends BotLifecycleState {
   /** Upload progress is owned by the resumable queue, not this runner. */
   uploadTransfer: TransferSnapshot | null;
   projection: BotRunProjection | null;
+  artifactLinks: ConversationArtifactLink[];
   dialogueId: string | null;
   messageId: string | null;
   error:
@@ -119,6 +121,7 @@ export type UseBotRemoteAgentRunOptions = {
 export type RemoteAgentRunIdentity = {
   dialogueId: string | null;
   messageId: string | null;
+  artifactLinks?: readonly ConversationArtifactLink[];
 };
 
 let requestSequence = 0;
@@ -192,10 +195,37 @@ function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
     requestId: owned.activeRequestId?.trim() || null,
     uploadTransfer: owned.uploadTransfer ?? null,
     projection,
+    artifactLinks: cloneArtifactLinks(owned.artifactLinks),
     dialogueId: owned.dialogueId ?? null,
     messageId: owned.messageId ?? null,
     error: null,
   };
+}
+
+function cloneArtifactLinks(
+  links: readonly ConversationArtifactLink[] | undefined
+): ConversationArtifactLink[] {
+  if (!Array.isArray(links)) return [];
+  const kinds = new Set(["file", "report", "table", "image", "archive"]);
+  const seen = new Set<string>();
+  const cloned: ConversationArtifactLink[] = [];
+  for (const link of links) {
+    if (
+      !link ||
+      typeof link.id !== "string" ||
+      typeof link.name !== "string" ||
+      !kinds.has(link.kind) ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(link.id) ||
+      link.name.length === 0 ||
+      seen.has(link.id) ||
+      cloned.length >= 50
+    ) {
+      continue;
+    }
+    seen.add(link.id);
+    cloned.push({ ...link });
+  }
+  return cloned;
 }
 
 function phaseFor(status: BotRunProjection["status"]): RemoteAgentRunPhase {
@@ -404,6 +434,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
         paths: [...artifact.paths],
       })),
     };
+    owned.artifactLinks = cloneArtifactLinks(state.value.artifactLinks);
   };
 
   const hydrate = (
@@ -427,6 +458,10 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       requestId: null,
       uploadTransfer: null,
       projection: safeProjection,
+      artifactLinks:
+        identity.artifactLinks === undefined
+          ? cloneArtifactLinks(state.value.artifactLinks)
+          : cloneArtifactLinks(identity.artifactLinks),
       dialogueId,
       messageId,
       error: null,
@@ -575,6 +610,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       requestId,
       uploadTransfer: null,
       projection: null,
+      artifactLinks: [],
       dialogueId: null,
       messageId: null,
       error: null,
@@ -674,12 +710,14 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     owned.messageId = undefined;
     delete owned.botProjection;
     delete owned.botLifecycle;
+    delete owned.artifactLinks;
     state.value = {
       ...initBotLifecycleState(),
       phase: "idle",
       requestId: null,
       uploadTransfer: null,
       projection: null,
+      artifactLinks: [],
       dialogueId: null,
       messageId: null,
       error: null,

@@ -208,6 +208,35 @@ describe("parseBotProjection", () => {
     expect(JSON.stringify(projection)).not.toContain("signed-token");
   });
 
+  it("retains bounded v1 delivery but drops raw artifact paths", () => {
+    const projection = parseBotProjection({
+      agent: "InSilicoResearchAgent",
+      status: "SUCCEEDED",
+      result_archive_v1: true,
+      delivery: {
+        schema_version: 1,
+        required: true,
+        status: "ready",
+        revision: 1,
+        name: "research-results.zip",
+        size_bytes: 1024,
+        error_code: null,
+        retryable: false,
+      },
+      artifacts: [
+        {
+          output_dir: "/obs/private/research",
+          paths: ["/obs/private/research/results.tsv"],
+        },
+      ],
+    });
+
+    expect(projection.resultArchiveV1).toBe(true);
+    expect(projection.delivery?.name).toBe("research-results.zip");
+    expect(projection.artifacts).toEqual([]);
+    expect(JSON.stringify(projection)).not.toContain("/obs/private");
+  });
+
   it("rejects non-objects and oversized bounded values", () => {
     expect(() => parseBotProjection(null)).toThrow(/object/);
     expect(() => parseBotProjection([])).toThrow(/object/);

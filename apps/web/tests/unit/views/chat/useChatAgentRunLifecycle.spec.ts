@@ -156,6 +156,49 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
+  it("keeps a scientifically succeeded background row watchable while delivery is pending", async () => {
+    vi.useFakeTimers();
+    const state = buildChatState({
+      historyHydration: "ready",
+      renderedChat: {
+        messages: [
+          buildChatMessage({
+            id: "77",
+            tool_name: "InSilicoResearchAgent",
+            status: "SUCCEEDED",
+            delivery: {
+              schema_version: 1,
+              required: true,
+              status: "pending",
+              revision: 1,
+              name: null,
+              size_bytes: null,
+              error_code: null,
+              retryable: false,
+            },
+          }),
+        ],
+      },
+    });
+    const chatStates = ref({ archive: state });
+    const fetchLifecycle = vi
+      .fn()
+      .mockResolvedValue(
+        response(lifecycle(77, { phase: "RUNNING", terminal: false }))
+      );
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat: vi.fn().mockResolvedValue(undefined),
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    await flush();
+    expect(fetchLifecycle).toHaveBeenCalledWith("77", expect.any(String));
+    coordinator.dispose();
+  });
+
   it("stops late lifecycle snapshots after a dialogue is removed or disposed", async () => {
     let resolve!: (value: ApiEnvelope<AgentTaskLifecycle>) => void;
     const pending = new Promise<ApiEnvelope<AgentTaskLifecycle>>((settle) => {

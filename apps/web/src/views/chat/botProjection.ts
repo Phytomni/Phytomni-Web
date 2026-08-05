@@ -7,6 +7,11 @@
  * reactive state.
  */
 
+import {
+  decodeAgentResultDelivery,
+  type AgentResultDelivery,
+} from "@/api/types";
+
 export const MAX_BOT_RUN_ID_LENGTH = 128;
 export const MAX_BOT_AGENT_LENGTH = 64;
 export const MAX_BOT_STATUS_LENGTH = 32;
@@ -104,6 +109,8 @@ export interface BotRunProjection {
   degradedReason: string | null;
   failures: string[];
   artifacts: BotArtifact[];
+  resultArchiveV1: boolean;
+  delivery?: AgentResultDelivery;
   requestId: string | null;
   trackingDegraded: boolean;
   /** True when the interop path degraded; never contains provider metadata. */
@@ -736,6 +743,21 @@ export function parseBotProjection(input: unknown): BotRunProjection {
       ? answer
       : "";
   const interopEnabled = INTEROP_AGENT_NAMES.has(agentValue ?? "");
+  const resultArchiveRaw = readField(sources, [
+    "result_archive_v1",
+    "resultArchiveV1",
+  ]);
+  if (resultArchiveRaw !== undefined && typeof resultArchiveRaw !== "boolean") {
+    error("result_archive_v1", "must be a boolean");
+  }
+  const resultArchiveV1 = resultArchiveRaw === true;
+  const deliveryRaw = readField(sources, ["delivery"]);
+  if (deliveryRaw !== undefined && !resultArchiveV1) {
+    error("delivery", "requires result_archive_v1");
+  }
+  const delivery = resultArchiveV1
+    ? decodeAgentResultDelivery(deliveryRaw)
+    : undefined;
 
   return {
     runId,
@@ -769,7 +791,11 @@ export function parseBotProjection(input: unknown): BotRunProjection {
       { nullable: true }
     ),
     failures: parseFailures(readField(sources, ["failures"])),
-    artifacts: parseArtifacts(readField(sources, ["artifacts"])),
+    artifacts: resultArchiveV1
+      ? []
+      : parseArtifacts(readField(sources, ["artifacts"])),
+    resultArchiveV1,
+    ...(delivery ? { delivery } : {}),
     requestId: boundedString(
       readField(sources, ["request_id", "requestId"]),
       "request_id",

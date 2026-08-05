@@ -326,6 +326,37 @@ describe("useRemoteAgentLifecycle", () => {
     controller.dispose();
   });
 
+  it("keeps the dedicated workspace watcher active for pending delivery after scientific success", async () => {
+    const state = ref(
+      runState({
+        phase: "succeeded",
+        status: "SUCCEEDED",
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "pending",
+          revision: 1,
+          name: null,
+          size_bytes: null,
+          error_code: null,
+          retryable: false,
+        },
+      })
+    );
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      run: { state, hydrate: vi.fn() },
+      dialogueId: "dialogue-42",
+    });
+
+    await flushAsync();
+    expect(mocks.getTaskLifecycle).toHaveBeenCalledWith(
+      "19",
+      expect.stringContaining("remote-GeneNetworkAgent-19-")
+    );
+    controller.dispose();
+  });
+
   it("ignores a history response that arrives after reset", async () => {
     let resolveHistory: ((value: unknown) => void) | undefined;
     mocks.getTaskLifecycle

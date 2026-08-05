@@ -42,6 +42,7 @@ function createDefaultChatUIState(): ChatUIState {
     activeArtifactMessageId: null,
     artifactTab: "content",
     autoOpenedArtifactMessageIds: [],
+    archiveRetryingByMessageId: {},
   };
 }
 

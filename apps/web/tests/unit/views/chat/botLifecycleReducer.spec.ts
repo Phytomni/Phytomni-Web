@@ -116,6 +116,32 @@ describe("bot lifecycle reducer", () => {
     expect(next.reportRevision).toBe(2);
   });
 
+  it("retains v1 delivery while suppressing raw artifact paths", () => {
+    const next = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({
+        agent: "InSilicoResearchAgent",
+        status: "SUCCEEDED",
+        resultArchiveV1: true,
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "pending",
+          revision: 1,
+          name: null,
+          size_bytes: null,
+          error_code: null,
+          retryable: false,
+        },
+        artifacts: [artifact("/obs/private/run", ["/obs/private/run/a.tsv"])],
+      } as BotRunProjection)
+    );
+
+    expect(next.delivery?.status).toBe("pending");
+    expect(next.artifacts).toEqual([]);
+    expect(JSON.stringify(next)).not.toContain("/obs/private");
+  });
+
   it("ignores older blank content and retains final content", () => {
     const state = reduceBotProjection(
       initBotLifecycleState(),

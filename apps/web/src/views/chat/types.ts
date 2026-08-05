@@ -4,6 +4,7 @@ import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import type {
   AnalystAgentLog,
+  AgentResultDelivery,
   AssetAttachmentRef,
   ConversationArtifactLink,
   ConversationContextNotice,
@@ -112,6 +113,7 @@ export interface ChatMessage {
   /** Monotonic report state derived from the sanitized Bot projection. */
   botLifecycle?: BotLifecycleState;
   artifacts?: readonly ConversationArtifactLink[];
+  delivery?: AgentResultDelivery;
   /** Bounded, localized semantic-context status from the gateway. */
   contextNotice?: ChatContextNotice;
 }
@@ -182,6 +184,7 @@ export interface ChatResponse extends ConversationContextNotice {
   /** Bounded input-required surface from the Web Go gateway. */
   a2ui?: unknown;
   artifacts?: ConversationArtifactLink[];
+  delivery?: AgentResultDelivery;
   attachments?: AssetAttachmentRef[];
 }
 
@@ -270,6 +273,8 @@ export interface ChatUIState {
   artifactTab: ArtifactTab;
   /** Runtime-only server IDs already considered for automatic artifact opening. */
   autoOpenedArtifactMessageIds: string[];
+  /** Retry state remains isolated to the owning dialogue and message. */
+  archiveRetryingByMessageId: Record<string, boolean>;
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */

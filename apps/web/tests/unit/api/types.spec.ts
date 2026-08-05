@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  decodeAgentResultDelivery,
   decodeAgentTaskLifecycle,
   decodeAnalystAgentLog,
   decodeChatHistory,
@@ -57,6 +58,93 @@ describe("agent lifecycle decoding", () => {
 
   it("accepts the complete bounded lifecycle DTO", () => {
     expect(decodeAgentTaskLifecycle(lifecycle)).toEqual(lifecycle);
+  });
+
+  it("decodes only the exact browser-safe result delivery DTO", () => {
+    const delivery = {
+      schema_version: 1,
+      required: true,
+      status: "ready",
+      revision: 2,
+      name: "research-results.zip",
+      size_bytes: 1024,
+      error_code: null,
+      retryable: false,
+    } as const;
+
+    expect(decodeAgentResultDelivery(delivery)).toEqual(delivery);
+    expect(decodeQueryData({ id: 42, delivery }).delivery).toEqual(delivery);
+    expect(
+      decodeAgentTaskLifecycle({ ...lifecycle, delivery }).delivery
+    ).toEqual(delivery);
+  });
+
+  it.each([
+    {
+      schema_version: 1,
+      required: true,
+      status: "ready",
+      revision: 1,
+      name: null,
+      size_bytes: null,
+      error_code: null,
+      retryable: false,
+      download_ref: "obs://private",
+    },
+    {
+      schema_version: 1,
+      required: true,
+      status: "ready",
+      revision: 1,
+      name: "../results.zip",
+      size_bytes: 1,
+      error_code: null,
+      retryable: false,
+    },
+    {
+      schema_version: 1,
+      required: true,
+      status: "ready",
+      revision: 1,
+      name: "research-results.zip",
+      size_bytes: 10 * 1024 * 1024 * 1024 + 1,
+      error_code: null,
+      retryable: false,
+    },
+    {
+      schema_version: 1,
+      required: true,
+      status: "failed",
+      revision: 1,
+      name: null,
+      size_bytes: null,
+      error_code: "provider_secret",
+      retryable: false,
+    },
+    {
+      schema_version: 1,
+      required: true,
+      status: "failed",
+      revision: 1,
+      name: null,
+      size_bytes: null,
+      error_code: "archive_contract_invalid",
+      retryable: true,
+    },
+    {
+      schema_version: 1,
+      required: true,
+      status: "pending",
+      revision: 1,
+      name: null,
+      size_bytes: null,
+      error_code: null,
+      retryable: true,
+    },
+  ])("rejects unsafe or contradictory delivery state", (delivery) => {
+    expect(() => decodeAgentResultDelivery(delivery)).toThrow(
+      "Invalid result delivery"
+    );
   });
 
   it.each([

@@ -140,6 +140,26 @@ export interface ConversationArtifactLink {
   kind: ConversationArtifactKind;
 }
 
+export type ResultDeliveryErrorCode =
+  | "artifact_listing_failed"
+  | "artifact_manifest_invalid"
+  | "no_user_deliverables"
+  | "archive_inventory_limit_exceeded"
+  | "archive_generation_failed"
+  | "archive_publish_failed"
+  | "archive_contract_invalid";
+
+export interface AgentResultDelivery {
+  schema_version: 1;
+  required: true;
+  status: "pending" | "ready" | "failed";
+  revision: number;
+  name: string | null;
+  size_bytes: number | null;
+  error_code: ResultDeliveryErrorCode | null;
+  retryable: boolean;
+}
+
 export interface QueryData extends ConversationContextNotice {
   /** Backend QuestionAgentLog IDs are JSON numbers; legacy adapters may use strings. */
   id?: number | string;
@@ -169,6 +189,7 @@ export interface QueryData extends ConversationContextNotice {
   a2ui?: unknown;
   artifacts?: ConversationArtifactLink[];
   attachments?: AssetAttachmentRef[];
+  delivery?: AgentResultDelivery;
 }
 
 export interface ConversationSummary {
@@ -270,6 +291,7 @@ export interface AgentTaskLifecycle {
   artifact_summary: AgentArtifactSummary;
   reconciliation: AgentReconciliation;
   tracking_degraded: boolean;
+  delivery?: AgentResultDelivery;
   error_code: "bot_transport_failed" | "run_contract_invalid" | null;
 }
 
@@ -465,6 +487,36 @@ const AGENT_LOG_SOURCES = new Set<AgentLogSource>(["BOT_RUN", "LEGACY_TASK"]);
 const AGENT_LOG_ERROR_CODES = new Set<
   NonNullable<AnalystAgentLog["error_code"]>
 >(["log_refresh_unavailable"]);
+const RESULT_DELIVERY_STATUSES = new Set<AgentResultDelivery["status"]>([
+  "pending",
+  "ready",
+  "failed",
+]);
+const RESULT_DELIVERY_ERROR_CODES = new Set<ResultDeliveryErrorCode>([
+  "artifact_listing_failed",
+  "artifact_manifest_invalid",
+  "no_user_deliverables",
+  "archive_inventory_limit_exceeded",
+  "archive_generation_failed",
+  "archive_publish_failed",
+  "archive_contract_invalid",
+]);
+const RESULT_DELIVERY_RETRYABILITY: Record<ResultDeliveryErrorCode, boolean> = {
+  artifact_listing_failed: true,
+  artifact_manifest_invalid: false,
+  no_user_deliverables: false,
+  archive_inventory_limit_exceeded: false,
+  archive_generation_failed: true,
+  archive_publish_failed: true,
+  archive_contract_invalid: false,
+};
+const RESULT_ARCHIVE_NAMES = new Set([
+  "analyst-results.zip",
+  "research-results.zip",
+  "network-results.zip",
+  "design-results.zip",
+]);
+const MAX_RESULT_ARCHIVE_SIZE_BYTES = 10 * 1024 * 1024 * 1024;
 
 function requiredAllowedString<T extends string>(
   value: Record<string, unknown>,
@@ -490,25 +542,115 @@ function requiredAllowedNullableError<T extends string>(
   return candidate as T;
 }
 
-export function decodeAgentTaskLifecycle(value: unknown): AgentTaskLifecycle {
-  const label = "agent task lifecycle";
+/** Decode the complete browser-safe archive delivery DTO and nothing else. */
+export function decodeAgentResultDelivery(value: unknown): AgentResultDelivery {
+  const label = "result delivery";
   if (!isRecord(value)) invalid(label);
   requireExactKeys(
     value,
     [
-      "id",
-      "phase",
-      "terminal",
-      "child_task_count",
-      "child_work_accepted",
-      "report_revision",
-      "artifact_summary",
-      "reconciliation",
-      "tracking_degraded",
+      "schema_version",
+      "required",
+      "status",
+      "revision",
+      "name",
+      "size_bytes",
       "error_code",
+      "retryable",
     ],
     label
   );
+  if (value.schema_version !== 1 || value.required !== true) invalid(label);
+  const status = requiredAllowedString(
+    value,
+    "status",
+    RESULT_DELIVERY_STATUSES,
+    label
+  );
+  const revision = requiredSafeInteger(value, "revision", label);
+  if (revision < 1) invalid(label);
+  if (value.name !== null && typeof value.name !== "string") invalid(label);
+  const name = value.name;
+  if (name !== null && !RESULT_ARCHIVE_NAMES.has(name)) invalid(label);
+  if (
+    value.size_bytes !== null &&
+    (typeof value.size_bytes !== "number" ||
+      !Number.isSafeInteger(value.size_bytes) ||
+      value.size_bytes < 1 ||
+      value.size_bytes > MAX_RESULT_ARCHIVE_SIZE_BYTES)
+  ) {
+    invalid(label);
+  }
+  const sizeBytes = value.size_bytes;
+  const errorCode = requiredAllowedNullableError(
+    value,
+    RESULT_DELIVERY_ERROR_CODES,
+    label
+  );
+  const retryable = requiredBoolean(value, "retryable", label);
+
+  if (status === "ready") {
+    if (
+      name === null ||
+      sizeBytes === null ||
+      errorCode !== null ||
+      retryable
+    ) {
+      invalid(label);
+    }
+  } else if (status === "pending") {
+    if (
+      name !== null ||
+      sizeBytes !== null ||
+      errorCode !== null ||
+      retryable
+    ) {
+      invalid(label);
+    }
+  } else if (
+    name !== null ||
+    sizeBytes !== null ||
+    errorCode === null ||
+    retryable !== RESULT_DELIVERY_RETRYABILITY[errorCode]
+  ) {
+    invalid(label);
+  }
+
+  return {
+    schema_version: 1,
+    required: true,
+    status,
+    revision,
+    name,
+    size_bytes: sizeBytes,
+    error_code: errorCode,
+    retryable,
+  };
+}
+
+export function decodeAgentTaskLifecycle(value: unknown): AgentTaskLifecycle {
+  const label = "agent task lifecycle";
+  if (!isRecord(value)) invalid(label);
+  const lifecycleKeys = [
+    "id",
+    "phase",
+    "terminal",
+    "child_task_count",
+    "child_work_accepted",
+    "report_revision",
+    "artifact_summary",
+    "reconciliation",
+    "tracking_degraded",
+    "error_code",
+  ];
+  if (
+    lifecycleKeys.some((key) => !hasOwn(value, key)) ||
+    Object.keys(value).some(
+      (key) => !lifecycleKeys.includes(key) && key !== "delivery"
+    )
+  ) {
+    invalid(label);
+  }
   const id = requiredSafeInteger(value, "id", label);
   if (id <= 0) invalid(label);
   const phase = requiredAllowedString(value, "phase", AGENT_RUN_PHASES, label);
@@ -555,7 +697,7 @@ export function decodeAgentTaskLifecycle(value: unknown): AgentTaskLifecycle {
     ),
     has_report: requiredBoolean(value.artifact_summary, "has_report", label),
   };
-  return {
+  const result: AgentTaskLifecycle = {
     id,
     phase,
     terminal,
@@ -576,6 +718,10 @@ export function decodeAgentTaskLifecycle(value: unknown): AgentTaskLifecycle {
       label
     ),
   };
+  if (hasOwn(value, "delivery")) {
+    result.delivery = decodeAgentResultDelivery(value.delivery);
+  }
+  return result;
 }
 
 export function decodeAnalystAgentLog(value: unknown): AnalystAgentLog {
@@ -654,7 +800,7 @@ export function isConversationArtifactDownloadURL(
   );
 }
 
-function decodeConversationArtifacts(
+export function decodeConversationArtifacts(
   value: unknown
 ): ConversationArtifactLink[] {
   if (!Array.isArray(value) || value.length > MAX_CONVERSATION_ARTIFACTS) {
@@ -995,6 +1141,9 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
   if (hasOwn(value, "a2ui")) result.a2ui = value.a2ui;
   if (hasOwn(value, "artifacts")) {
     result.artifacts = decodeConversationArtifacts(value.artifacts);
+  }
+  if (hasOwn(value, "delivery")) {
+    result.delivery = decodeAgentResultDelivery(value.delivery);
   }
   if (hasOwn(value, "attachments")) {
     result.attachments = decodeAssetAttachments(value.attachments);

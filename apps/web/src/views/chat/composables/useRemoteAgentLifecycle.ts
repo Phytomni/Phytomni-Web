@@ -62,10 +62,14 @@ export function useRemoteAgentLifecycle(options: {
       expectedRunId
     );
     if (!snapshot) return;
-    options.run.hydrate(snapshot.projection, {
+    const identity: Partial<RemoteAgentRunIdentity> = {
       dialogueId: snapshot.dialogueId ?? dialogueId,
       messageId: snapshot.rowId,
-    });
+    };
+    if (snapshot.artifactLinks !== undefined) {
+      identity.artifactLinks = snapshot.artifactLinks;
+    }
+    options.run.hydrate(snapshot.projection, identity);
   };
 
   const lifecycle = useAgentRunLifecycle({
@@ -85,15 +89,16 @@ export function useRemoteAgentLifecycle(options: {
       [
         options.run.state.value.messageId,
         options.run.state.value.phase,
+        options.run.state.value.delivery?.status,
       ] as const,
-    ([messageId, phase]) => {
+    ([messageId, phase, deliveryStatus]) => {
       const rowId = positiveRowId(messageId);
       if (!rowId) {
         stopTracking();
         return;
       }
       if (trackedRowId.value === rowId) return;
-      if (!ACTIVE_PHASES.has(phase)) {
+      if (!ACTIVE_PHASES.has(phase) && deliveryStatus !== "pending") {
         stopTracking();
         return;
       }

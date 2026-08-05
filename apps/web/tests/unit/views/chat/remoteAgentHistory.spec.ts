@@ -101,6 +101,45 @@ describe("findRemoteAgentHistorySnapshot", () => {
     );
   });
 
+  it("hydrates v1 delivery and opaque artifact links without legacy OBS paths", () => {
+    const snapshot = findRemoteAgentHistorySnapshot(
+      [
+        {
+          ...baseRow,
+          status: "SUCCEEDED",
+          download_path: "/obs/private/research",
+          image_paths: JSON.stringify(["/obs/private/research/results.tsv"]),
+          artifacts: [
+            { id: "archive-1", name: "research-results.zip", kind: "archive" },
+          ],
+          answer: JSON.stringify({
+            final_report: "Final report",
+            result_archive_v1: true,
+            delivery: {
+              schema_version: 1,
+              required: true,
+              status: "ready",
+              revision: 1,
+              name: "research-results.zip",
+              size_bytes: 1024,
+              error_code: null,
+              retryable: false,
+            },
+          }),
+        },
+      ],
+      "InSilicoResearchAgent",
+      "run-research"
+    );
+
+    expect(snapshot?.delivery?.name).toBe("research-results.zip");
+    expect(snapshot?.artifactLinks).toEqual([
+      { id: "archive-1", name: "research-results.zip", kind: "archive" },
+    ]);
+    expect(snapshot?.projection.artifacts).toEqual([]);
+    expect(JSON.stringify(snapshot)).not.toContain("/obs/private");
+  });
+
   it("rejects malformed answers and unsafe Web row identities", () => {
     expect(
       findRemoteAgentHistorySnapshot(

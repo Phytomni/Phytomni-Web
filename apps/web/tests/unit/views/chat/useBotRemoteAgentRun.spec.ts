@@ -440,6 +440,17 @@ describe("useBotRemoteAgentRun", () => {
         degradedReason: null,
         failures: [],
         artifacts: [{ outputDir: "/obs/bucket/report", paths: [] }],
+        resultArchiveV1: true,
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "ready",
+          revision: 1,
+          name: "research-results.zip",
+          size_bytes: 1024,
+          error_code: null,
+          retryable: false,
+        },
         requestId: null,
         trackingDegraded: false,
         interop: {
@@ -458,6 +469,9 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.finalReport).toBe("Terminal report");
     expect(run.state.value.dialogueId).toBe("43");
     expect(run.state.value.messageId).toBe("18");
+    expect(run.state.value.delivery?.name).toBe("research-results.zip");
+    expect(run.state.value.artifactLinks).toEqual([]);
+    expect(JSON.stringify(run.state.value)).not.toContain("/obs/bucket/report");
     expect(run.state.value.interop).toEqual({
       mode: "required",
       status: "delegated",

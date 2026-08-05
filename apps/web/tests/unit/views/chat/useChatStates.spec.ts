@@ -145,6 +145,7 @@ describe("useChatStates parallel chat state", () => {
       activeArtifactMessageId: null,
       artifactTab: "content",
       autoOpenedArtifactMessageIds: [],
+      archiveRetryingByMessageId: {},
     });
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);

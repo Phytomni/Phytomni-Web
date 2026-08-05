@@ -31,12 +31,19 @@ import {
 } from "../utils/asset-attachments";
 
 export function historyAssistantMetadata(
-  item: Pick<ChatResponse, "artifacts" | "context_rebuilt" | "context_degraded">
-): Pick<ChatMessage, "artifacts" | "contextNotice"> {
-  const metadata: Pick<ChatMessage, "artifacts" | "contextNotice"> = {};
+  item: Pick<
+    ChatResponse,
+    "artifacts" | "delivery" | "context_rebuilt" | "context_degraded"
+  >
+): Pick<ChatMessage, "artifacts" | "delivery" | "contextNotice"> {
+  const metadata: Pick<
+    ChatMessage,
+    "artifacts" | "delivery" | "contextNotice"
+  > = {};
   if (Array.isArray(item.artifacts)) {
     metadata.artifacts = item.artifacts.map((artifact) => ({ ...artifact }));
   }
+  if (item.delivery) metadata.delivery = { ...item.delivery };
   const contextNotice = normalizeChatContextNotice(item);
   if (contextNotice) metadata.contextNotice = contextNotice;
   return metadata;

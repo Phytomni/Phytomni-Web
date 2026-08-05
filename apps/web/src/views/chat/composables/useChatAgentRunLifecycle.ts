@@ -24,7 +24,11 @@ const TERMINAL_HISTORY_STATUSES = new Set([
 
 function isWatchableMessage(message: ChatMessage): string | null {
   if (!BACKGROUND_AGENT_TOOLS.has(message.tool_name ?? "")) return null;
-  if (TERMINAL_HISTORY_STATUSES.has((message.status ?? "").toUpperCase())) {
+  const deliveryPending = message.delivery?.status === "pending";
+  if (
+    TERMINAL_HISTORY_STATUSES.has((message.status ?? "").toUpperCase()) &&
+    !deliveryPending
+  ) {
     return null;
   }
   try {
