@@ -55,15 +55,23 @@ func (ps *Service) RetryConversationResultArchive(
 	if err := SaveBotRunProjection(ctx, username, rowID, incoming); err != nil {
 		return AgentTaskDeliveryDTO{}, err
 	}
+	stored, _, storedRaw, storedRevision, err := loadPersistedBotProjectionRow(ctx, username, rowID)
+	if err != nil || !storedArchiveRetryInstalled(stored, row.BotRunId, retried) {
+		return AgentTaskDeliveryDTO{}, ErrConversationResultArchiveRetryConflict
+	}
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where(
-			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND bot_run_id = ? AND UPPER(status) IN (?, ?)",
+			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND bot_run_id = ? AND UPPER(status) IN (?, ?) AND "+botProjectionCASPredicate,
 			rowID,
 			username,
 			dialogueID,
 			row.BotRunId,
 			"SUCCEEDED",
 			"RUNNING",
+			rowID,
+			username,
+			storedRevision,
+			storedRaw,
 		).
 		Update("status", "RUNNING")
 	if result.Error != nil {
@@ -73,7 +81,7 @@ func (ps *Service) RetryConversationResultArchive(
 		return AgentTaskDeliveryDTO{}, ErrConversationResultArchiveRetryConflict
 	}
 
-	stored, err := LoadBotRunProjection(ctx, username, rowID)
+	stored, err = LoadBotRunProjection(ctx, username, rowID)
 	dto := agentTaskDeliveryDTO(stored)
 	if err != nil || dto == nil {
 		return AgentTaskDeliveryDTO{}, ErrConversationResultArchiveRetryConflict
@@ -112,10 +120,28 @@ func storedResultArchiveProjection(row *model.QuestionAgentLog) (BotRunProjectio
 		return BotRunProjection{}, ErrConversationResultArchiveRetryConflict
 	}
 	projection.ReportRevision = row.BotReportRevision
-	if !projection.ResultArchiveV1 || projection.Delivery == nil || !projection.Delivery.Required {
+	if projection.RunID != row.BotRunId || !projection.ResultArchiveV1 || projection.Delivery == nil || !projection.Delivery.Required {
 		return BotRunProjection{}, ErrConversationResultArchiveRetryConflict
 	}
 	return projection, nil
+}
+
+// storedArchiveRetryInstalled confirms this retry won the projection CAS before
+// the row's business status is changed. A later reconciler snapshot must not be
+// overwritten with RUNNING merely because SaveBotRunProjection merged no change.
+func storedArchiveRetryInstalled(stored BotRunProjection, rowRunID string, retried *rxBot.RunDelivery) bool {
+	delivery := stored.Delivery
+	return retried != nil &&
+		stored.RunID == rowRunID &&
+		stored.ResultArchiveV1 &&
+		delivery != nil &&
+		delivery.SchemaVersion == retried.SchemaVersion &&
+		delivery.Required == retried.Required &&
+		delivery.Status == retried.Status &&
+		delivery.Revision == retried.Revision &&
+		delivery.InventoryDigest == retried.InventoryDigest &&
+		delivery.ArchiveName == "" && delivery.ArchiveSize == 0 && delivery.ArchiveRef == "" &&
+		delivery.ErrorCode == "" && !delivery.Retryable
 }
 
 func validArchiveRetryDelivery(current *ProjectionDelivery, retried *rxBot.RunDelivery) bool {
