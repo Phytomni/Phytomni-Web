@@ -57,6 +57,10 @@ func TestDecodeRunDeliveryAcceptsReadyArchive(t *testing.T) {
 	if got.InventoryDigest != testArchiveDigest || got.Archive.DownloadRef != "result-archive:"+testArchiveDigest {
 		t.Fatalf("delivery = %#v", got)
 	}
+	expectedObjectRef := "obs://bucket/owner/run/delivery/" + strings.TrimPrefix(testArchiveDigest, "sha256:") + "/research-results.zip"
+	if got.Archive.ObjectRef != expectedObjectRef {
+		t.Fatalf("object ref = %q, want %q", got.Archive.ObjectRef, expectedObjectRef)
+	}
 }
 
 func TestDecodeRunDeliveryAcceptsOnlyInitialPendingWithoutDigest(t *testing.T) {
@@ -120,10 +124,11 @@ func TestDecodeRunDeliveryRejectsMalformedContracts(t *testing.T) {
 		{name: "control character reference", mutate: func(p map[string]interface{}) {
 			p["archive"].(map[string]interface{})["download_ref"] = "result-archive:\n" + testArchiveDigest
 		}},
-		{name: "archive outside root", mutate: func(p map[string]interface{}) {
+		{name: "raw obs reference", mutate: func(p map[string]interface{}) {
 			p["archive"].(map[string]interface{})["download_ref"] = "obs://bucket/owner/other/research-results.zip"
 		}},
 		{name: "missing root", mutate: func(map[string]interface{}) {}, roots: []string{}},
+		{name: "multiple roots", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/run", "obs://bucket/owner/second-run"}},
 		{name: "url root", mutate: func(map[string]interface{}) {}, roots: []string{"https://example.invalid/run"}},
 		{name: "traversal root", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/../run"}},
 		{name: "control character root", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/\nrun"}},

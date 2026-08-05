@@ -660,7 +660,7 @@ func projectRunDelivery(delivery *rxBot.RunDelivery) *ProjectionDelivery {
 	if delivery.Archive != nil {
 		projected.ArchiveName = delivery.Archive.Name
 		projected.ArchiveSize = delivery.Archive.SizeBytes
-		projected.ArchiveRef = delivery.Archive.DownloadRef
+		projected.ArchiveRef = delivery.Archive.ObjectRef
 	}
 	return projected
 }

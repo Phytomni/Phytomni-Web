@@ -88,7 +88,8 @@ func TestDecodeRunProjectionPrefersCanonicalArchiveDelivery(t *testing.T) {
 	if got.VisibleReport() != "# Canonical report" || !reflect.DeepEqual(got.Artifacts.OutputDirs, []string{"obs://bucket/owner/run"}) {
 		t.Fatalf("canonical projection = %#v", got)
 	}
-	if len(got.Artifacts.Paths) != 0 || got.Delivery.ArchiveRef != "result-archive:"+digest {
+	expectedArchiveRef := "obs://bucket/owner/run/delivery/" + strings.TrimPrefix(digest, "sha256:") + "/research-results.zip"
+	if len(got.Artifacts.Paths) != 0 || got.Delivery.ArchiveRef != expectedArchiveRef {
 		t.Fatalf("canonical artifacts = %#v delivery=%#v", got.Artifacts, got.Delivery)
 	}
 	browserJSON, err := json.Marshal(struct {
@@ -97,7 +98,10 @@ func TestDecodeRunProjectionPrefersCanonicalArchiveDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(browserJSON), "download_ref") || strings.Contains(string(browserJSON), "result-archive:") {
+	if strings.Contains(string(browserJSON), "download_ref") ||
+		strings.Contains(string(browserJSON), "result-archive:") ||
+		strings.Contains(string(browserJSON), digest) ||
+		strings.Contains(string(browserJSON), expectedArchiveRef) {
 		t.Fatalf("server-only archive reference leaked: %s", browserJSON)
 	}
 }

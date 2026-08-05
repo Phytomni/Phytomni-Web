@@ -46,6 +46,7 @@ type RunArchiveDescriptor struct {
 	Downloadable          bool   `json:"downloadable"`
 	ReportContextEligible bool   `json:"report_context_eligible"`
 	DownloadRef           string `json:"download_ref"`
+	ObjectRef             string `json:"-"`
 }
 
 // RunDelivery is Bot's bounded archive-delivery state.
@@ -186,6 +187,13 @@ func DecodeRunDelivery(raw json.RawMessage, agent string, outputDirs []string) (
 	if err := validateRunDeliveryState(delivery, agent); err != nil {
 		return RunDelivery{}, err
 	}
+	if delivery.Archive != nil {
+		archiveRef, err := deriveRunArchiveObjectRef(delivery, outputDirs)
+		if err != nil {
+			return RunDelivery{}, err
+		}
+		delivery.Archive.ObjectRef = archiveRef
+	}
 	return delivery, nil
 }
 
@@ -304,6 +312,24 @@ func validateRunDeliveryState(delivery RunDelivery, agent string) error {
 		return fmt.Errorf("delivery: unsupported status")
 	}
 	return nil
+}
+
+// deriveRunArchiveObjectRef resolves Bot's opaque archive reference inside the
+// one output root that defines the Web service's storage scope. The resulting
+// path remains server-only and is never sent back to the browser.
+func deriveRunArchiveObjectRef(delivery RunDelivery, outputDirs []string) (string, error) {
+	if delivery.Status != "ready" || delivery.Archive == nil {
+		return "", nil
+	}
+	roots, err := validateResultArchiveOutputDirs(outputDirs)
+	if err != nil {
+		return "", err
+	}
+	if len(roots) != 1 {
+		return "", fmt.Errorf("execution.output_dirs: ready delivery requires exactly one root")
+	}
+	digestHex := strings.TrimPrefix(delivery.InventoryDigest, "sha256:")
+	return roots[0] + "/delivery/" + digestHex + "/" + delivery.Archive.Name, nil
 }
 
 func decodeResultArchiveOutputDirs(raw json.RawMessage) ([]string, error) {
