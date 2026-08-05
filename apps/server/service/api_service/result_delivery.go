@@ -52,8 +52,12 @@ func (ps *Service) RetryConversationResultArchive(
 	incoming := cloneBotRunProjection(projection)
 	incoming.ResultArchiveV1 = true
 	incoming.Delivery = projectRunDelivery(retried)
-	if err := SaveBotRunProjection(ctx, username, rowID, incoming); err != nil {
+	applied, err := saveBotRunProjection(ctx, username, rowID, incoming)
+	if err != nil {
 		return AgentTaskDeliveryDTO{}, err
+	}
+	if !applied {
+		return AgentTaskDeliveryDTO{}, ErrConversationResultArchiveRetryConflict
 	}
 	stored, _, storedRaw, storedRevision, err := loadPersistedBotProjectionRow(ctx, username, rowID)
 	if err != nil || !storedArchiveRetryInstalled(stored, row.BotRunId, retried) {
@@ -126,9 +130,9 @@ func storedResultArchiveProjection(row *model.QuestionAgentLog) (BotRunProjectio
 	return projection, nil
 }
 
-// storedArchiveRetryInstalled confirms this retry won the projection CAS before
-// the row's business status is changed. A later reconciler snapshot must not be
-// overwritten with RUNNING merely because SaveBotRunProjection merged no change.
+// storedArchiveRetryInstalled confirms the applied retry projection is still
+// present before the row's business status is changed. A later reconciler
+// snapshot must not be overwritten with RUNNING.
 func storedArchiveRetryInstalled(stored BotRunProjection, rowRunID string, retried *rxBot.RunDelivery) bool {
 	delivery := stored.Delivery
 	return retried != nil &&

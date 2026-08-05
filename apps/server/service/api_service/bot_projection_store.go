@@ -204,23 +204,32 @@ func mergeProjectionDelivery(dst *BotRunProjection, current, incoming BotRunProj
 // revision observed by this attempt. A stale writer retries from a fresh row
 // and is bounded to three attempts before returning ErrBotProjectionConflict.
 func SaveBotRunProjection(ctx context.Context, username string, rowID int64, incoming BotRunProjection) error {
+	_, err := saveBotRunProjection(ctx, username, rowID, incoming)
+	return err
+}
+
+// saveBotRunProjection reports whether this caller applied a projection update.
+// A no-op merge remains successful for ordinary projection saves, but retry
+// callers use the result to avoid changing business state after a concurrent
+// writer has already installed the same projection.
+func saveBotRunProjection(ctx context.Context, username string, rowID int64, incoming BotRunProjection) (bool, error) {
 	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
 		current, privateContext, currentRaw, currentRevision, err := loadPersistedBotProjectionRow(ctx, username, rowID)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		merged, changed, err := MergeBotRunProjection(current, incoming)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if !changed {
-			return nil
+			return false, nil
 		}
 
 		encoded, err := marshalPersistedProjectionWithContext(merged, privateContext)
 		if err != nil {
-			return err
+			return false, err
 		}
 		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 			Where(botProjectionCASPredicate, rowID, username, currentRevision, currentRaw).
@@ -229,13 +238,13 @@ func SaveBotRunProjection(ctx context.Context, username string, rowID int64, inc
 				"bot_report_revision": merged.ReportRevision,
 			})
 		if result.Error != nil {
-			return result.Error
+			return false, result.Error
 		}
 		if result.RowsAffected == 1 {
-			return nil
+			return true, nil
 		}
 	}
-	return ErrBotProjectionConflict
+	return false, ErrBotProjectionConflict
 }
 
 // LoadBotRunProjection reads a projection only through the authenticated

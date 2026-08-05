@@ -194,6 +194,53 @@ func TestRetryConversationResultArchiveDoesNotOverwriteConcurrentReadyProjection
 	}
 }
 
+func TestRetryConversationResultArchiveRejectsConcurrentExactPendingProjection(t *testing.T) {
+	setupTestDB(t)
+	seedResultDeliveryRow(t, 709, "alice", "dlg-exact-pending", "SUCCEEDED", testFailedDelivery(2, resultDeliveryTestDigest, true))
+	pendingProjection, err := marshalPersistedProjection(BotRunProjection{
+		RunID:           "run-result-delivery",
+		Agent:           "analyst",
+		Status:          "SUCCEEDED",
+		ReportRevision:  3,
+		ResultArchiveV1: true,
+		Delivery:        testPendingDelivery(3, resultDeliveryTestDigest),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &resultDeliveryClientFake{
+		result: &rxBot.RunDelivery{
+			SchemaVersion:   1,
+			Required:        true,
+			Status:          "pending",
+			Revision:        3,
+			InventoryDigest: resultDeliveryTestDigest,
+		},
+		onRetry: func() {
+			if err := model.DB(context.Background()).Model(&model.QuestionAgentLog{}).
+				Where("id = ?", 709).
+				Updates(map[string]interface{}{"bot_projection_json": pendingProjection, "bot_report_revision": 3}).Error; err != nil {
+				t.Fatalf("persist concurrent pending projection: %v", err)
+			}
+		},
+	}
+
+	_, err = (&Service{deliveryClient: fake}).RetryConversationResultArchive(context.Background(), "alice", "dlg-exact-pending", 709)
+	if !errors.Is(err, ErrConversationResultArchiveRetryConflict) {
+		t.Fatalf("err=%v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("Bot calls=%q", fake.calls)
+	}
+	var status string
+	if err := model.DB(context.Background()).Raw("SELECT status FROM question_agent_logs WHERE id = ?", 709).Scan(&status).Error; err != nil {
+		t.Fatal(err)
+	}
+	if status != "SUCCEEDED" {
+		t.Fatalf("status=%q, want SUCCEEDED", status)
+	}
+}
+
 func TestRetryConversationResultArchivePreservesFinalRowPredicates(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
