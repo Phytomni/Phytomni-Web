@@ -56,6 +56,89 @@ func TestDecodeRunProjectionPrefersFinalAndRejectsPrivatePayload(t *testing.T) {
 	}
 }
 
+func TestDecodeRunProjectionPrefersCanonicalArchiveDelivery(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("2", 64)
+	record := rxBot.RunRecord{
+		RunID:  "run-archive-ready",
+		Agent:  "research",
+		Status: "succeeded",
+		Result: json.RawMessage(`{
+			"formatted":{"answer":"# Canonical report"},
+			"artifacts":[{"output_dir":"obs://bucket/legacy","paths":["obs://bucket/legacy/old.txt"]}],
+			"execution":{
+				"output_dirs":["obs://bucket/owner/run"],
+				"artifacts":[{"download_ref":"obs://bucket/owner/run/private.tsv"}],
+				"delivery":{
+					"schema_version":1,"required":true,"status":"ready","revision":1,
+					"inventory_digest":"` + digest + `",
+					"archive":{"role":"result_archive","name":"research-results.zip","media_type":"application/zip","size_bytes":4097,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + digest + `"},
+					"error_code":null,"retryable":false
+				}
+			}
+		}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ResultArchiveV1 || got.Delivery == nil || got.Delivery.Status != "ready" {
+		t.Fatalf("delivery projection = %#v", got)
+	}
+	if got.VisibleReport() != "# Canonical report" || !reflect.DeepEqual(got.Artifacts.OutputDirs, []string{"obs://bucket/owner/run"}) {
+		t.Fatalf("canonical projection = %#v", got)
+	}
+	if len(got.Artifacts.Paths) != 0 || got.Delivery.ArchiveRef != "result-archive:"+digest {
+		t.Fatalf("canonical artifacts = %#v delivery=%#v", got.Artifacts, got.Delivery)
+	}
+	browserJSON, err := json.Marshal(struct {
+		Delivery *ProjectionDelivery `json:"delivery"`
+	}{Delivery: got.Delivery})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(browserJSON), "download_ref") || strings.Contains(string(browserJSON), "result-archive:") {
+		t.Fatalf("server-only archive reference leaked: %s", browserJSON)
+	}
+}
+
+func TestDecodeRunProjectionRetainsLegacyArtifactsWithoutDeliveryMarker(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:  "run-legacy-artifacts",
+		Agent:  "research",
+		Status: "succeeded",
+		Result: json.RawMessage(`{
+			"formatted":{"answer":"legacy report"},
+			"execution":{"output_dirs":["obs://bucket/canonical-without-marker"],"delivery":null},
+			"artifacts":[{"output_dir":"obs://bucket/legacy","paths":["obs://bucket/legacy/result.txt"]}]
+		}`),
+	}
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ResultArchiveV1 || got.Delivery != nil {
+		t.Fatalf("legacy record activated v1: %#v", got)
+	}
+	if !reflect.DeepEqual(got.Artifacts.Paths, []string{"obs://bucket/legacy/result.txt"}) {
+		t.Fatalf("legacy artifacts = %#v", got.Artifacts)
+	}
+}
+
+func TestDecodeRunProjectionRejectsMalformedCanonicalDelivery(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("3", 64)
+	results := []json.RawMessage{
+		json.RawMessage(`{"execution":{"output_dirs":["obs://bucket/owner/run"],"delivery":{"schema_version":1,"required":true,"status":"ready","revision":1,"inventory_digest":"` + digest + `","archive":{"role":"result_archive","name":"analyst-results.zip","media_type":"application/zip","size_bytes":1,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + digest + `"},"error_code":null,"retryable":false}}}`),
+		json.RawMessage(`{"execution":{"output_dirs":["obs://bucket/owner/run"],"delivery":{"schema_version":1,"required":true,"status":"pending","status":"ready","revision":1,"inventory_digest":"","archive":null,"error_code":null,"retryable":false}}}`),
+	}
+	for _, result := range results {
+		got, err := DecodeRunProjection(rxBot.RunRecord{RunID: "run-malformed-delivery", Agent: "research", Status: "succeeded", Result: result})
+		if err == nil {
+			t.Fatalf("malformed canonical delivery accepted: %#v", got)
+		}
+	}
+}
+
 func TestDecodeRunProjectionStoresOnlyBoundedChildCount(t *testing.T) {
 	privateChildren := []string{"private-child-a", "private-child-b"}
 	projection, err := DecodeRunProjection(&rxBot.RunRecord{

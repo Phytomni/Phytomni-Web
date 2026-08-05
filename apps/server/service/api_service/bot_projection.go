@@ -64,6 +64,22 @@ type ProjectionArtifacts struct {
 	Paths       []string
 }
 
+// ProjectionDelivery is the bounded delivery state retained by Web. The
+// inventory digest and archive resolver reference are server-only and are
+// excluded from accidental JSON serialization.
+type ProjectionDelivery struct {
+	SchemaVersion   int    `json:"schema_version"`
+	Required        bool   `json:"required"`
+	Status          string `json:"status"`
+	Revision        int64  `json:"revision"`
+	InventoryDigest string `json:"-"`
+	ArchiveName     string `json:"name,omitempty"`
+	ArchiveSize     int64  `json:"size_bytes,omitempty"`
+	ArchiveRef      string `json:"-"`
+	ErrorCode       string `json:"error_code,omitempty"`
+	Retryable       bool   `json:"retryable"`
+}
+
 // BotRunProjection is the Web-owned, sanitized lifecycle snapshot. It never
 // carries Bot's raw result, SQL, credentials, child task payloads, or provider
 // diagnostics. RawPayload exists only as a nil compatibility sentinel for
@@ -85,6 +101,8 @@ type BotRunProjection struct {
 	DegradedReason     string
 	Failures           []string
 	Artifacts          ProjectionArtifacts
+	ResultArchiveV1    bool
+	Delivery           *ProjectionDelivery
 	RequestID          string
 	TrackingDegraded   bool
 	DegradedInterop    bool
@@ -258,6 +276,7 @@ type projectionEnvelope struct {
 	Failures           json.RawMessage `json:"failures"`
 	Artifacts          json.RawMessage `json:"artifacts"`
 	Formatted          json.RawMessage `json:"formatted"`
+	Execution          json.RawMessage `json:"execution"`
 	Interop            json.RawMessage `json:"interop"`
 	DegradedInterop    bool            `json:"degraded_interop"`
 }
@@ -547,9 +566,16 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	if err != nil {
 		return BotRunProjection{}, projectionDecodeError("progress", err.Error())
 	}
-	runArtifacts, err := rxBot.ParseRunProjectionArtifacts(envelope.Artifacts)
+	executionDelivery, err := rxBot.DecodeRunExecutionDelivery(envelope.Execution, agent)
 	if err != nil {
-		return BotRunProjection{}, projectionDecodeError("artifacts", err.Error())
+		return BotRunProjection{}, projectionDecodeError("execution.delivery", err.Error())
+	}
+	var runArtifacts []rxBot.BoundedRunArtifact
+	if !executionDelivery.ResultArchiveV1 {
+		runArtifacts, err = rxBot.ParseRunProjectionArtifacts(envelope.Artifacts)
+		if err != nil {
+			return BotRunProjection{}, projectionDecodeError("artifacts", err.Error())
+		}
 	}
 	var interop *InteropProvenance
 	if interopAgent(agent) {
@@ -572,7 +598,10 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 		}
 	}
 
-	directories := make([]string, 0, len(runArtifacts))
+	directories := append([]string(nil), executionDelivery.OutputDirs...)
+	if !executionDelivery.ResultArchiveV1 {
+		directories = make([]string, 0, len(runArtifacts))
+	}
 	paths := make([]string, 0)
 	for _, artifact := range runArtifacts {
 		if artifact.OutputDir != "" {
@@ -602,15 +631,38 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 			Pending:         runProgress.Pending,
 			BriefGeneStatus: runProgress.BriefGeneStatus,
 		},
-		Degraded:       envelope.Degraded,
-		DegradedReason: degradedReason,
-		Failures:       failures,
-		Artifacts:      artifacts,
+		Degraded:        envelope.Degraded,
+		DegradedReason:  degradedReason,
+		Failures:        failures,
+		Artifacts:       artifacts,
+		ResultArchiveV1: executionDelivery.ResultArchiveV1,
+		Delivery:        projectRunDelivery(executionDelivery.Delivery),
 		// RequestID intentionally remains empty. A Bot request id is response
 		// metadata, not public run state, and is never copied from provider data.
 		DegradedInterop: interopAgent(agent) && (envelope.DegradedInterop || formattedInterop.DegradedInterop),
 		InterOp:         interop,
 	}, nil
+}
+
+func projectRunDelivery(delivery *rxBot.RunDelivery) *ProjectionDelivery {
+	if delivery == nil {
+		return nil
+	}
+	projected := &ProjectionDelivery{
+		SchemaVersion:   delivery.SchemaVersion,
+		Required:        delivery.Required,
+		Status:          delivery.Status,
+		Revision:        delivery.Revision,
+		InventoryDigest: delivery.InventoryDigest,
+		ErrorCode:       delivery.ErrorCode,
+		Retryable:       delivery.Retryable,
+	}
+	if delivery.Archive != nil {
+		projected.ArchiveName = delivery.Archive.Name
+		projected.ArchiveSize = delivery.Archive.SizeBytes
+		projected.ArchiveRef = delivery.Archive.DownloadRef
+	}
+	return projected
 }
 
 // interopProvenancePtr returns a private copy so response/projection callers

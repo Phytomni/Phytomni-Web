@@ -7,6 +7,10 @@ const (
 	// negotiated by the Web control plane.
 	ResumableUploadProtocol        = "obs-multipart-v2"
 	ResumableUploadProtocolVersion = 2
+	// ResultArchiveProtocol identifies Bot's canonical run-level archive
+	// delivery projection.
+	ResultArchiveProtocol        = "result_archive_v1"
+	ResultArchiveProtocolVersion = 1
 	// MaxAssetAttachmentRefs bounds opaque asset references per submission.
 	MaxAssetAttachmentRefs = 10
 )

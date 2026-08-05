@@ -442,6 +442,32 @@ func (c *Client) GetRunWithMeta(ctx context.Context, runID string) (*RunRecord, 
 	return &out, meta, err
 }
 
+// RetryRunDelivery starts or observes one idempotent archive-delivery retry.
+// Bot returns only the new pending delivery revision; scientific work is not
+// resubmitted by this command.
+func (c *Client) RetryRunDelivery(ctx context.Context, runID string) (*RunDelivery, error) {
+	var raw json.RawMessage
+	_, err := c.doJSONWithMetaOptions(
+		ctx,
+		http.MethodPost,
+		"/v1/runs/"+url.PathEscape(runID)+"/delivery/retry",
+		nil,
+		&raw,
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+	delivery, err := DecodeRunDelivery(raw, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	if delivery.Status != "pending" {
+		return nil, fmt.Errorf("delivery retry returned non-pending state")
+	}
+	return &delivery, nil
+}
+
 // GetRunLogs fetches the task logs for a run (used by the update-log path).
 func (c *Client) GetRunLogs(ctx context.Context, runID string) (*RunLogsResponse, error) {
 	var out RunLogsResponse
