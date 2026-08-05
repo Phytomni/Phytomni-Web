@@ -38,6 +38,53 @@ func TestSupportsProtocol(t *testing.T) {
 	}
 }
 
+func TestFindAgentCapability(t *testing.T) {
+	capability := AgentDescriptorCapabilities{Artifacts: true}
+	tests := []struct {
+		name string
+		resp *AgentsListResponse
+		slug string
+		want bool
+	}{
+		{
+			name: "one matching descriptor",
+			resp: &AgentsListResponse{Data: []AgentDescriptor{{
+				Slug: "analyst", Tool: "AnalystAgent", Capabilities: capability,
+			}}},
+			slug: "analyst",
+			want: true,
+		},
+		{
+			name: "descriptor absent",
+			resp: &AgentsListResponse{Data: []AgentDescriptor{{
+				Slug: "research", Tool: "InSilicoResearchAgent", Capabilities: capability,
+			}}},
+			slug: "analyst",
+		},
+		{
+			name: "duplicate matching descriptor",
+			resp: &AgentsListResponse{Data: []AgentDescriptor{
+				{Slug: "analyst", Tool: "AnalystAgent", Capabilities: capability},
+				{Slug: "analyst", Tool: "AnalystAgent", Capabilities: capability},
+			}},
+			slug: "analyst",
+		},
+		{name: "nil response", slug: "analyst"},
+		{name: "blank slug", resp: &AgentsListResponse{}, slug: " "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := FindAgentCapability(tt.resp, tt.slug)
+			if ok != tt.want {
+				t.Fatalf("FindAgentCapability() ok=%v, want %v", ok, tt.want)
+			}
+			if ok && !got.Artifacts {
+				t.Fatalf("FindAgentCapability() = %#v, want artifacts support", got)
+			}
+		})
+	}
+}
+
 func TestValidateWebAgentDescriptorsProjectsAttachmentChannels(t *testing.T) {
 	presence, err := ValidateWebAgentDescriptors(&AgentsListResponse{
 		Data: []AgentDescriptor{{

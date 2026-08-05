@@ -81,6 +81,28 @@ func SupportsProtocol(resp *AgentsListResponse, protocol string, version int) bo
 	return supportsProtocol(resp, protocol, version)
 }
 
+// FindAgentCapability returns the bounded capability projection for one
+// canonical Bot descriptor. Missing, blank, or duplicate descriptors fail
+// closed so callers cannot accidentally select an arbitrary upstream row.
+func FindAgentCapability(resp *AgentsListResponse, slug string) (AgentDescriptorCapabilities, bool) {
+	if resp == nil || strings.TrimSpace(slug) == "" {
+		return AgentDescriptorCapabilities{}, false
+	}
+	var capability AgentDescriptorCapabilities
+	found := false
+	for _, descriptor := range resp.Data {
+		if descriptor.Slug != slug {
+			continue
+		}
+		if found {
+			return AgentDescriptorCapabilities{}, false
+		}
+		capability = descriptor.Capabilities
+		found = true
+	}
+	return capability, found
+}
+
 // ValidateWebAgentDescriptors validates only the public shape needed by the
 // Web capability manifest. It returns finite presence by canonical slug and
 // never returns the original descriptor, legacy aliases, or any other Bot

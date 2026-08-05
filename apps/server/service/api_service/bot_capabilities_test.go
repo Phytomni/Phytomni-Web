@@ -19,6 +19,7 @@ func capabilityDescriptors() []rxBot.AgentDescriptor {
 			Slug: definition.Slug,
 			Tool: definition.Tool,
 			Capabilities: rxBot.AgentDescriptorCapabilities{
+				Artifacts:   resultArchiveAgent(definition.Slug),
 				Attachments: rxBot.AgentDescriptorAttachments{DocumentContext: &struct{}{}},
 			},
 		})
@@ -56,9 +57,12 @@ func useCapabilityBotConfig(t *testing.T, baseURL string, cfg rxBot.Config) {
 func capabilityManifestResponse(t *testing.T, descriptors []rxBot.AgentDescriptor) string {
 	t.Helper()
 	body, err := json.Marshal(rxBot.AgentsListResponse{
-		Object:    "list",
-		Data:      descriptors,
-		Protocols: map[string][]int{rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion}},
+		Object: "list",
+		Data:   descriptors,
+		Protocols: map[string][]int{
+			rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion},
+			rxBot.ResultArchiveProtocol:   {rxBot.ResultArchiveProtocolVersion},
+		},
 	})
 	if err != nil {
 		t.Fatalf("marshal agent response: %v", err)
@@ -201,6 +205,162 @@ func TestBotCapabilitiesAnalystResearchAttachmentIntersection(t *testing.T) {
 	}
 	if got := strings.Join(capabilityBySlug(manifest.Agents, "analyst").AttachmentPurposes, ","); got != "document" {
 		t.Fatalf("analyst attachment purposes = %q, want document", got)
+	}
+}
+
+func TestResultArchiveV1Effective(t *testing.T) {
+	configFor := func(slug string) *rxBot.Config {
+		cfg := &rxBot.Config{}
+		switch slug {
+		case "analyst":
+			cfg.AnalystEnabled = true
+		case "research":
+			cfg.ResearchEnabled = true
+		case "network":
+			cfg.NetworkEnabled = true
+		case "design":
+			cfg.DesignEnabled = true
+		}
+		return cfg
+	}
+	responseFor := func(slug string, artifacts bool, versions []int) *rxBot.AgentsListResponse {
+		tool := rxBot.CanonicalAgentTool[slug]
+		return &rxBot.AgentsListResponse{
+			Data: []rxBot.AgentDescriptor{{
+				Slug: slug, Tool: tool,
+				Capabilities: rxBot.AgentDescriptorCapabilities{Artifacts: artifacts},
+			}},
+			Protocols: map[string][]int{rxBot.ResultArchiveProtocol: versions},
+		}
+	}
+	tests := []struct {
+		name string
+		resp *rxBot.AgentsListResponse
+		slug string
+		cfg  *rxBot.Config
+		want bool
+	}{
+		{name: "analyst full intersection", resp: responseFor("analyst", true, []int{1}), slug: "analyst", cfg: configFor("analyst"), want: true},
+		{name: "research full intersection", resp: responseFor("research", true, []int{1}), slug: "research", cfg: configFor("research"), want: true},
+		{name: "network full intersection", resp: responseFor("network", true, []int{1}), slug: "network", cfg: configFor("network"), want: true},
+		{name: "design full intersection", resp: responseFor("design", true, []int{1}), slug: "design", cfg: configFor("design"), want: true},
+		{name: "missing protocol", resp: responseFor("analyst", true, nil), slug: "analyst", cfg: configFor("analyst")},
+		{name: "wrong protocol version", resp: responseFor("analyst", true, []int{2}), slug: "analyst", cfg: configFor("analyst")},
+		{name: "product flag disabled", resp: responseFor("analyst", true, []int{1}), slug: "analyst", cfg: &rxBot.Config{}},
+		{name: "descriptor without artifacts", resp: responseFor("analyst", false, []int{1}), slug: "analyst", cfg: configFor("analyst")},
+		{name: "descriptor absent", resp: &rxBot.AgentsListResponse{Protocols: map[string][]int{rxBot.ResultArchiveProtocol: {1}}}, slug: "analyst", cfg: configFor("analyst")},
+		{name: "unscoped data agent", resp: responseFor("data", true, []int{1}), slug: "data", cfg: &rxBot.Config{}},
+		{name: "unknown slug", resp: responseFor("unknown", true, []int{1}), slug: "unknown", cfg: &rxBot.Config{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resultArchiveV1Effective(tt.resp, tt.slug, tt.cfg); got != tt.want {
+				t.Fatalf("resultArchiveV1Effective(%q)=%v, want %v", tt.slug, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLocalCapabilityEnabledUsesDedicatedRemoteFlags(t *testing.T) {
+	cfg := &rxBot.Config{DesignEnabled: true, NetworkEnabled: false}
+	if !localCapabilityEnabled("design", cfg) {
+		t.Fatal("design must use DesignEnabled")
+	}
+	if localCapabilityEnabled("network", cfg) {
+		t.Fatal("network must use NetworkEnabled")
+	}
+	if localCapabilityEnabled("design", &rxBot.Config{}) || localCapabilityEnabled("network", &rxBot.Config{}) {
+		t.Fatal("network and design must not fall through to stable Web agents")
+	}
+}
+
+func TestBotCapabilitiesResultArchiveArtifactsRequireFullIntersection(t *testing.T) {
+	descriptors := capabilityDescriptors()
+	config := rxBot.Config{
+		ProxyEnabled:           true,
+		ResumableUploadEnabled: true,
+		UploadPublicOrigin:     "https://upload.example",
+		AnalystEnabled:         true,
+		ResearchEnabled:        true,
+		NetworkEnabled:         true,
+		DesignEnabled:          true,
+	}
+	protocols := func(resultArchive bool) map[string][]int {
+		values := map[string][]int{rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion}}
+		if resultArchive {
+			values[rxBot.ResultArchiveProtocol] = []int{rxBot.ResultArchiveProtocolVersion}
+		}
+		return values
+	}
+	tests := []struct {
+		name        string
+		descriptors []rxBot.AgentDescriptor
+		protocols   map[string][]int
+		config      rxBot.Config
+		want        map[string]bool
+	}{
+		{
+			name:        "all factors present",
+			descriptors: descriptors,
+			protocols:   protocols(true),
+			config:      config,
+			want:        map[string]bool{"analyst": true, "research": true, "network": true, "design": true},
+		},
+		{
+			name:        "missing protocol",
+			descriptors: descriptors,
+			protocols:   protocols(false),
+			config:      config,
+			want:        map[string]bool{"analyst": false, "research": false, "network": false, "design": false},
+		},
+		{
+			name: "descriptor support absent",
+			descriptors: func() []rxBot.AgentDescriptor {
+				rows := append([]rxBot.AgentDescriptor(nil), descriptors...)
+				for index := range rows {
+					if rows[index].Slug == "network" {
+						rows[index].Capabilities.Artifacts = false
+					}
+				}
+				return rows
+			}(),
+			protocols: protocols(true),
+			config:    config,
+			want:      map[string]bool{"analyst": true, "research": true, "network": false, "design": true},
+		},
+		{
+			name:        "dedicated release flag disabled",
+			descriptors: descriptors,
+			protocols:   protocols(true),
+			config:      func() rxBot.Config { cfg := config; cfg.DesignEnabled = false; return cfg }(),
+			want:        map[string]bool{"analyst": true, "research": true, "network": true, "design": false},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, err := json.Marshal(rxBot.AgentsListResponse{Object: "list", Data: tt.descriptors, Protocols: tt.protocols})
+			if err != nil {
+				t.Fatalf("marshal agent response: %v", err)
+			}
+			srv := capabilityServer(t, http.StatusOK, string(body), 0)
+			t.Cleanup(srv.Close)
+			useCapabilityBotConfig(t, srv.URL, tt.config)
+
+			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for slug, want := range tt.want {
+				if got := capabilityBySlug(manifest.Agents, slug).Artifacts; got != want {
+					t.Fatalf("%s artifacts=%v, want %v", slug, got, want)
+				}
+			}
+			for _, slug := range []string{"data", "brief_gene"} {
+				if !capabilityBySlug(manifest.Agents, slug).Artifacts {
+					t.Fatalf("%s must retain its unrelated artifact capability", slug)
+				}
+			}
+		})
 	}
 }
 

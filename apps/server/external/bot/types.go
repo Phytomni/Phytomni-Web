@@ -191,6 +191,7 @@ type AgentDescriptorAttachments struct {
 // used by the Web manifest boundary.
 type AgentDescriptorCapabilities struct {
 	Attachments AgentDescriptorAttachments `json:"attachments"`
+	Artifacts   bool                       `json:"artifacts"`
 }
 
 // AgentDescriptor is one row of GET /v1/agents. LegacyAliases is advisory

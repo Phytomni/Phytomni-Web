@@ -216,7 +216,7 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		manifest.Agents[index].Enabled = true
 		manifest.Agents[index].AttachmentPurposes = attachmentPurposes
 		manifest.Agents[index].Attachments = len(attachmentPurposes) > 0
-		manifest.Agents[index].Artifacts = artifactsFor(definition.Slug)
+		manifest.Agents[index].Artifacts = artifactsFor(response, definition.Slug, cfg)
 		if cfg.StreamEnabled && streamEligible(definition.Slug) {
 			manifest.Agents[index].Stream = true
 		}
@@ -293,6 +293,10 @@ func localCapabilityEnabled(slug string, cfg *rxBot.Config) bool {
 		return cfg != nil && cfg.AnalystEnabled
 	case "research":
 		return cfg != nil && cfg.ResearchEnabled
+	case "design":
+		return cfg != nil && cfg.DesignEnabled
+	case "network":
+		return cfg != nil && cfg.NetworkEnabled
 	default:
 		return stableWebAgent(slug)
 	}
@@ -329,11 +333,29 @@ func attachmentPurposesFor(
 	return purposes
 }
 
-func artifactsFor(slug string) bool {
+func resultArchiveAgent(slug string) bool {
 	switch slug {
-	case "data", "brief_gene", "analyst", "research":
+	case "analyst", "research", "network", "design":
 		return true
 	default:
 		return false
 	}
+}
+
+func resultArchiveV1Effective(resp *rxBot.AgentsListResponse, slug string, cfg *rxBot.Config) bool {
+	if !resultArchiveAgent(slug) || !localCapabilityEnabled(slug, cfg) {
+		return false
+	}
+	descriptor, ok := rxBot.FindAgentCapability(resp, slug)
+	if !ok || !descriptor.Artifacts {
+		return false
+	}
+	return rxBot.SupportsProtocol(resp, rxBot.ResultArchiveProtocol, rxBot.ResultArchiveProtocolVersion)
+}
+
+func artifactsFor(resp *rxBot.AgentsListResponse, slug string, cfg *rxBot.Config) bool {
+	if resultArchiveAgent(slug) {
+		return resultArchiveV1Effective(resp, slug, cfg)
+	}
+	return slug == "data" || slug == "brief_gene"
 }

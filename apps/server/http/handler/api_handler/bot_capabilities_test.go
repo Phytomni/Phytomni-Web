@@ -19,9 +19,12 @@ func handlerCapabilityBody(t *testing.T) string {
 		descriptors = append(descriptors, rxBot.AgentDescriptor{Slug: definition.Slug, Tool: definition.Tool})
 	}
 	body, err := json.Marshal(rxBot.AgentsListResponse{
-		Object:    "list",
-		Data:      descriptors,
-		Protocols: map[string][]int{rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion}},
+		Object: "list",
+		Data:   descriptors,
+		Protocols: map[string][]int{
+			rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion},
+			rxBot.ResultArchiveProtocol:   {rxBot.ResultArchiveProtocolVersion},
+		},
 	})
 	if err != nil {
 		t.Fatalf("marshal capability response: %v", err)
@@ -87,6 +90,18 @@ func TestBotCapabilitiesResponseHasBoundedManifest(t *testing.T) {
 	}
 	if _, ok := envelope.Data["upload"]; !ok {
 		t.Fatal("upload missing from manifest")
+	}
+	var agents []map[string]interface{}
+	if err := json.Unmarshal(envelope.Data["agents"], &agents); err != nil {
+		t.Fatalf("decode agent capabilities: %v", err)
+	}
+	for _, agent := range agents {
+		if _, ok := agent["protocols"]; ok {
+			t.Fatal("Bot protocol advertisement leaked to browser manifest")
+		}
+		if _, ok := agent["result_archive_v1"]; ok {
+			t.Fatal("result archive protocol detail leaked to browser manifest")
+		}
 	}
 }
 
