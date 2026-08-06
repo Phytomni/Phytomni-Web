@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "bot_commit": "7bb00c67155044d6cb83c44c7f8c426c8b968bbd",
+  "schema_version": 2,
+  "bot_commit": "c58ccdbc69048ca30398fb57008646ff4e51e11e",
   "required_agents": [
     "chat",
     "knowledge",
@@ -19,5 +19,26 @@
     "deep_genome_revision",
     "review_input_required",
     "conversation_context_v1"
-  ]
+  ],
+  "result_archive_v1": {
+    "protocol_version": 1,
+    "fixtures": {
+      "analyst": {
+        "path": "apps/server/external/bot/testdata/head/analyst_terminal.json",
+        "sha256": "b82b7809bdea88f023e90132a4a361386a3134f01b2b0766356209bdaf379ad8"
+      },
+      "research": {
+        "path": "apps/server/external/bot/testdata/head/research_terminal.json",
+        "sha256": "80199a81f713589511301052ba3f1f78f0529c460a80cc703dae2e7a98150052"
+      },
+      "network": {
+        "path": "apps/server/external/bot/testdata/head/network_terminal.json",
+        "sha256": "ce1cda9d84b7f730715fb9f500c6bc71127ab1fc94aa34b03ed0c36340999f53"
+      },
+      "design": {
+        "path": "apps/server/external/bot/testdata/head/design_terminal.json",
+        "sha256": "43c9628ec27920b52f416c0d6b6056417e28ef0a48910fb810bc18b7c0e1bda2"
+      }
+    }
+  }
 }

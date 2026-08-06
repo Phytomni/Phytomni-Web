@@ -6,14 +6,16 @@ import contextlib
 import copy
 import io
 import json
+import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 import check_bot_web_compatibility as checker
 
 
-RELEASE_SHA = "7bb00c67155044d6cb83c44c7f8c426c8b968bbd"
+RELEASE_SHA = "c58ccdbc69048ca30398fb57008646ff4e51e11e"
 RELEASE_AGENTS = [
     "chat",
     "knowledge",
@@ -33,6 +35,12 @@ REQUIRED_FIXTURES = [
     "review_input_required",
     "conversation_context_v1",
 ]
+ARCHIVE_FIXTURE_HASHES = {
+    "analyst": "b82b7809bdea88f023e90132a4a361386a3134f01b2b0766356209bdaf379ad8",
+    "research": "80199a81f713589511301052ba3f1f78f0529c460a80cc703dae2e7a98150052",
+    "network": "ce1cda9d84b7f730715fb9f500c6bc71127ab1fc94aa34b03ed0c36340999f53",
+    "design": "43c9628ec27920b52f416c0d6b6056417e28ef0a48910fb810bc18b7c0e1bda2",
+}
 ADVERSARIAL_PROSE = (
     "Routine assistant prose contains a sensitive finding without provider markers."
     + " x" * 1000
@@ -41,38 +49,25 @@ ADVERSARIAL_PROSE = (
 
 def release_manifest() -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "bot_commit": RELEASE_SHA,
         "required_agents": RELEASE_AGENTS.copy(),
         "fixtures": REQUIRED_FIXTURES.copy(),
+        "result_archive_v1": {
+            "protocol_version": 1,
+            "fixtures": {
+                agent: {
+                    "path": f"apps/server/external/bot/testdata/head/{agent}_terminal.json",
+                    "sha256": digest,
+                }
+                for agent, digest in ARCHIVE_FIXTURE_HASHES.items()
+            },
+        },
     }
 
 
 def test_manifest_has_release_pins_and_required_cases():
-    manifest = {
-        "schema_version": 1,
-        "bot_commit": "7bb00c67155044d6cb83c44c7f8c426c8b968bbd",
-        "required_agents": [
-            "chat",
-            "knowledge",
-            "data",
-            "review",
-            "brief_gene",
-            "analyst",
-            "deep_genome",
-            "research",
-            "design",
-            "network",
-        ],
-        "fixtures": [
-            "chat_completion_run_id",
-            "degraded_tracking",
-            "deep_genome_revision",
-            "review_input_required",
-            "conversation_context_v1",
-        ],
-    }
-    assert checker.validate_manifest(manifest) == []
+    assert checker.validate_manifest(release_manifest()) == []
 
 
 @pytest.mark.parametrize(
@@ -83,6 +78,7 @@ def test_manifest_has_release_pins_and_required_cases():
         ("required_agents", RELEASE_AGENTS + ["extra"], "required_agents"),
         ("fixtures", REQUIRED_FIXTURES[:-1], "fixtures"),
         ("fixtures", REQUIRED_FIXTURES + ["unknown"], "fixtures"),
+        ("result_archive_v1", {}, "result_archive_v1"),
     ],
 )
 def test_manifest_rejects_release_drift(field, value, marker):
@@ -114,6 +110,113 @@ def test_current_checkout_passes_without_printing_fixture_payloads():
     assert output.getvalue().strip() == checker.PASS_LINE
     assert "Synthetic" not in output.getvalue()
     assert "secret" not in output.getvalue()
+
+
+def contract_tree(root: Path) -> Path:
+    manifest_path = root / checker.MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(release_manifest()), encoding="utf-8")
+    for relative in checker.SCOPED_FILES.values():
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(checker.ROOT / relative, destination)
+    for relative in checker.RESULT_ARCHIVE_FIXTURE_PATHS.values():
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(checker.ROOT / relative, destination)
+    return root
+
+
+@pytest.mark.parametrize(
+    ("name", "mutate", "marker"),
+    [
+        ("missing analyst", lambda root: (root / checker.RESULT_ARCHIVE_FIXTURE_PATHS["analyst"]).unlink(), "missing result archive fixture"),
+        ("wrong protocol", lambda root: mutate_delivery(root, "analyst", lambda delivery: delivery.__setitem__("schema_version", 2)), "protocol_version"),
+        ("legacy artifacts", lambda root: mutate_result(root, "research", lambda result: result.__setitem__("artifacts", [])), "legacy artifacts"),
+        ("empty archive", lambda root: mutate_delivery(root, "design", lambda delivery: delivery.__setitem__("archive", None)), "archive"),
+        ("second archive", lambda root: mutate_execution(root, "network", add_second_archive), "exactly one archive"),
+        ("unsafe reference", lambda root: mutate_archive(root, "research", lambda archive: archive.__setitem__("download_ref", "obs://private/archive.zip")), "download_ref"),
+        ("changed hash", lambda root: mutate_manifest_hash(root, "analyst"), "sha256"),
+        ("private delivery", lambda root: mutate_delivery(root, "network", lambda delivery: delivery.__setitem__("delivery_internal", {"secret": "not-for-output"})), "private delivery"),
+        ("zero size", lambda root: mutate_archive(root, "analyst", lambda archive: archive.__setitem__("size_bytes", 0)), "size_bytes"),
+    ],
+)
+def test_result_archive_contract_rejects_one_mutation_at_a_time(
+    tmp_path: Path, name: str, mutate, marker: str
+):
+    root = contract_tree(tmp_path)
+    mutate(root)
+    violations = checker.check(root)
+    assert any(marker in violation for violation in violations), name
+    assert all("not-for-output" not in violation for violation in violations)
+    assert all(len(violation) <= checker.MAX_FAILURE_LENGTH for violation in violations)
+
+
+def archive_fixture(root: Path, agent: str) -> tuple[Path, dict[str, Any]]:
+    path = root / checker.RESULT_ARCHIVE_FIXTURE_PATHS[agent]
+    return path, json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_archive_fixture(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def archive_delivery(payload: dict[str, Any]) -> dict[str, Any]:
+    result = payload["result"]
+    assert isinstance(result, dict)
+    execution = result["execution"]
+    assert isinstance(execution, dict)
+    delivery = execution["delivery"]
+    assert isinstance(delivery, dict)
+    return delivery
+
+
+def mutate_delivery(root: Path, agent: str, mutate) -> None:
+    path, payload = archive_fixture(root, agent)
+    mutate(archive_delivery(payload))
+    write_archive_fixture(path, payload)
+
+
+def mutate_archive(root: Path, agent: str, mutate) -> None:
+    def mutate_delivery_archive(delivery: dict[str, Any]) -> None:
+        archive = delivery["archive"]
+        assert isinstance(archive, dict)
+        mutate(archive)
+
+    mutate_delivery(root, agent, mutate_delivery_archive)
+
+
+def mutate_result(root: Path, agent: str, mutate) -> None:
+    path, payload = archive_fixture(root, agent)
+    result = payload["result"]
+    assert isinstance(result, dict)
+    mutate(result)
+    write_archive_fixture(path, payload)
+
+
+def add_second_archive(execution: dict[str, Any]) -> None:
+    delivery = execution["delivery"]
+    artifacts = execution["artifacts"]
+    assert isinstance(delivery, dict)
+    assert isinstance(artifacts, list)
+    artifacts.append(copy.deepcopy(delivery["archive"]))
+
+
+def mutate_execution(root: Path, agent: str, mutate) -> None:
+    path, payload = archive_fixture(root, agent)
+    result = payload["result"]
+    assert isinstance(result, dict)
+    execution = result["execution"]
+    assert isinstance(execution, dict)
+    mutate(execution)
+    write_archive_fixture(path, payload)
+
+
+def mutate_manifest_hash(root: Path, agent: str) -> None:
+    path = root / checker.MANIFEST_REL
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["result_archive_v1"]["fixtures"][agent]["sha256"] = "0" * 64
+    path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
 def test_conversation_context_fixture_rejects_raw_context_fields(tmp_path: Path):

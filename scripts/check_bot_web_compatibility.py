@@ -11,6 +11,7 @@ for a local pre-commit gate.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -20,7 +21,7 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_REL = Path("apps/web/tests/fixtures/bot-head/contract-manifest.json")
 
-RELEASE_BOT_COMMIT = "7bb00c67155044d6cb83c44c7f8c426c8b968bbd"
+RELEASE_BOT_COMMIT = "c58ccdbc69048ca30398fb57008646ff4e51e11e"
 REQUIRED_AGENT_SLUGS = (
     "chat",
     "knowledge",
@@ -40,6 +41,33 @@ REQUIRED_FIXTURE_IDS = (
     "review_input_required",
     "conversation_context_v1",
 )
+RESULT_ARCHIVE_PROTOCOL_VERSION = 1
+RESULT_ARCHIVE_AGENT_SLUGS = ("analyst", "research", "network", "design")
+RESULT_ARCHIVE_FIXTURE_PATHS = {
+    agent: Path(f"apps/server/external/bot/testdata/head/{agent}_terminal.json")
+    for agent in RESULT_ARCHIVE_AGENT_SLUGS
+}
+RESULT_ARCHIVE_DOWNLOAD_REF_RE = re.compile(r"^result-archive:sha256:[0-9a-f]{64}$")
+RESULT_ARCHIVE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+RESULT_ARCHIVE_ARCHIVE_FIELDS = {
+    "role",
+    "name",
+    "media_type",
+    "size_bytes",
+    "downloadable",
+    "report_context_eligible",
+    "download_ref",
+}
+RESULT_ARCHIVE_DELIVERY_FIELDS = {
+    "schema_version",
+    "required",
+    "status",
+    "revision",
+    "inventory_digest",
+    "archive",
+    "error_code",
+    "retryable",
+}
 
 # Keep this set intentionally small. These keys are provider/debug payload
 # details and must not become part of a Web-facing compatibility fixture.
@@ -131,7 +159,13 @@ FAIL_LINE = "Bot/Web compatibility contract: FAIL"
 MAX_FAILURE_LINES = 32
 MAX_FAILURE_LENGTH = 240
 
-_MANIFEST_FIELDS = {"schema_version", "bot_commit", "required_agents", "fixtures"}
+_MANIFEST_FIELDS = {
+    "schema_version",
+    "bot_commit",
+    "required_agents",
+    "fixtures",
+    "result_archive_v1",
+}
 _GO_ENTRY_RE = re.compile(
     r'(?m)^\s*"(?P<key>[A-Za-z0-9_]+)"\s*:\s*'
     r'"(?P<value>[A-Za-z0-9_.-]+)"\s*,?\s*$'
@@ -193,8 +227,8 @@ def validate_manifest(manifest: Any) -> list[str]:
             "manifest contains unsupported fields: " + ", ".join(unsupported)
         )
 
-    if manifest.get("schema_version") != 1:
-        violations.append("manifest schema_version must be 1")
+    if manifest.get("schema_version") != 2:
+        violations.append("manifest schema_version must be 2")
 
     bot_commit = manifest.get("bot_commit")
     if bot_commit != RELEASE_BOT_COMMIT:
@@ -207,6 +241,32 @@ def validate_manifest(manifest: Any) -> list[str]:
     fixtures = _manifest_list(manifest, "fixtures", violations)
     if fixtures is not None:
         _compare_exact_set("manifest fixtures", fixtures, REQUIRED_FIXTURE_IDS, violations)
+
+    archive_v1 = manifest.get("result_archive_v1")
+    if not isinstance(archive_v1, dict):
+        violations.append("manifest result_archive_v1 must be an object")
+        return violations
+    if set(archive_v1) != {"protocol_version", "fixtures"}:
+        violations.append("manifest result_archive_v1 fields are invalid")
+        return violations
+    if archive_v1.get("protocol_version") != RESULT_ARCHIVE_PROTOCOL_VERSION:
+        violations.append("manifest result_archive_v1 protocol_version must be 1")
+    archive_fixtures = archive_v1.get("fixtures")
+    if not isinstance(archive_fixtures, dict) or set(archive_fixtures) != set(
+        RESULT_ARCHIVE_AGENT_SLUGS
+    ):
+        violations.append("manifest result_archive_v1 fixtures must cover all scoped agents")
+        return violations
+    for agent in RESULT_ARCHIVE_AGENT_SLUGS:
+        entry = archive_fixtures.get(agent)
+        if not isinstance(entry, dict) or set(entry) != {"path", "sha256"}:
+            violations.append("manifest result_archive_v1 fixture metadata is invalid")
+            continue
+        if entry.get("path") != RESULT_ARCHIVE_FIXTURE_PATHS[agent].as_posix():
+            violations.append("manifest result_archive_v1 fixture path is not canonical")
+        digest = entry.get("sha256")
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            violations.append("manifest result_archive_v1 fixture sha256 is invalid")
 
     return violations
 
@@ -520,6 +580,98 @@ def _check_fixtures(root: Path, manifest: dict[str, Any] | None, violations: lis
             continue
         for relative in paths:
             _check_fixture(root, fixture_id, relative, violations)
+    _check_result_archive_fixtures(root, manifest, violations)
+
+
+def _check_result_archive_fixtures(
+    root: Path, manifest: dict[str, Any], violations: list[str]
+) -> None:
+    archive_v1 = manifest.get("result_archive_v1")
+    if not isinstance(archive_v1, dict):
+        return
+    entries = archive_v1.get("fixtures")
+    if not isinstance(entries, dict):
+        return
+    for agent in RESULT_ARCHIVE_AGENT_SLUGS:
+        entry = entries.get(agent)
+        if not isinstance(entry, dict):
+            continue
+        relative = RESULT_ARCHIVE_FIXTURE_PATHS[agent]
+        raw = _read_bytes(root, relative, violations)
+        if raw is None:
+            violations.append("missing result archive fixture")
+            continue
+        digest = entry.get("sha256")
+        if not isinstance(digest, str) or hashlib.sha256(raw).hexdigest() != digest:
+            violations.append("result archive fixture sha256 does not match manifest")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            violations.append("result archive fixture JSON is malformed")
+            continue
+        _check_result_archive_fixture(agent, payload, violations)
+
+
+def _check_result_archive_fixture(
+    agent: str, payload: Any, violations: list[str]
+) -> None:
+    if not isinstance(payload, dict):
+        violations.append("result archive fixture must be an object")
+        return
+    if payload.get("agent") != agent:
+        violations.append("result archive fixture agent is not canonical")
+    if "artifacts" in payload:
+        violations.append("result archive fixture contains top-level legacy artifacts")
+    if "delivery_internal" in set(_iter_keys(payload)):
+        violations.append("result archive fixture contains private delivery fields")
+
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        violations.append("result archive fixture result must be an object")
+        return
+    if "artifacts" in result:
+        violations.append("result archive fixture contains legacy artifacts")
+    execution = result.get("execution")
+    if not isinstance(execution, dict):
+        violations.append("result archive fixture execution must be an object")
+        return
+    delivery = execution.get("delivery")
+    if not isinstance(delivery, dict):
+        violations.append("result archive fixture execution delivery must be an object")
+        return
+    if set(delivery) != RESULT_ARCHIVE_DELIVERY_FIELDS:
+        violations.append("result archive fixture delivery fields are invalid")
+        return
+    if delivery.get("schema_version") != RESULT_ARCHIVE_PROTOCOL_VERSION:
+        violations.append("result archive fixture delivery protocol_version must be 1")
+    if delivery.get("required") is not True or delivery.get("status") != "ready":
+        violations.append("result archive fixture delivery must be required and ready")
+    if not isinstance(delivery.get("revision"), int) or delivery["revision"] < 1:
+        violations.append("result archive fixture delivery revision is invalid")
+    if not isinstance(delivery.get("inventory_digest"), str) or not RESULT_ARCHIVE_DIGEST_RE.fullmatch(delivery["inventory_digest"]):
+        violations.append("result archive fixture delivery digest is invalid")
+    if delivery.get("error_code") is not None or delivery.get("retryable") is not False:
+        violations.append("result archive fixture ready delivery state is invalid")
+    archive = delivery.get("archive")
+    if not isinstance(archive, dict):
+        violations.append("result archive fixture delivery archive must be an object")
+        return
+    if set(archive) != RESULT_ARCHIVE_ARCHIVE_FIELDS:
+        violations.append("result archive fixture delivery archive fields are invalid")
+        return
+    if archive.get("role") != "result_archive" or archive.get("name") != f"{agent}-results.zip":
+        violations.append("result archive fixture delivery archive identity is invalid")
+    if archive.get("media_type") != "application/zip" or archive.get("downloadable") is not True or archive.get("report_context_eligible") is not False:
+        violations.append("result archive fixture delivery archive metadata is invalid")
+    if not isinstance(archive.get("size_bytes"), int) or archive["size_bytes"] <= 0:
+        violations.append("result archive fixture delivery archive size_bytes is invalid")
+    if not isinstance(archive.get("download_ref"), str) or not RESULT_ARCHIVE_DOWNLOAD_REF_RE.fullmatch(archive["download_ref"]):
+        violations.append("result archive fixture delivery archive download_ref is unsafe")
+    artifacts = execution.get("artifacts")
+    if not isinstance(artifacts, list):
+        violations.append("result archive fixture execution artifacts must be a list")
+    elif sum(isinstance(item, dict) and item.get("role") == "result_archive" for item in artifacts) != 0:
+        violations.append("result archive fixture must contain exactly one archive")
 
 
 def _load_manifest(root: Path, violations: list[str]) -> dict[str, Any] | None:

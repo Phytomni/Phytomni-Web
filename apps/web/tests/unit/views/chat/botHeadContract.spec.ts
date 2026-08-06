@@ -10,7 +10,7 @@ const manifestPath = resolve(
   "tests/fixtures/bot-head/contract-manifest.json"
 );
 
-const releaseSha = "7bb00c67155044d6cb83c44c7f8c426c8b968bbd";
+const releaseSha = "c58ccdbc69048ca30398fb57008646ff4e51e11e";
 const releaseSlugs = [
   "chat",
   "knowledge",
@@ -42,12 +42,34 @@ const fixtureIds = [
   "review_input_required",
   "conversation_context_v1",
 ];
+const archiveFixtures = {
+  analyst: {
+    path: "apps/server/external/bot/testdata/head/analyst_terminal.json",
+    sha256: "b82b7809bdea88f023e90132a4a361386a3134f01b2b0766356209bdaf379ad8",
+  },
+  research: {
+    path: "apps/server/external/bot/testdata/head/research_terminal.json",
+    sha256: "80199a81f713589511301052ba3f1f78f0529c460a80cc703dae2e7a98150052",
+  },
+  network: {
+    path: "apps/server/external/bot/testdata/head/network_terminal.json",
+    sha256: "ce1cda9d84b7f730715fb9f500c6bc71127ab1fc94aa34b03ed0c36340999f53",
+  },
+  design: {
+    path: "apps/server/external/bot/testdata/head/design_terminal.json",
+    sha256: "43c9628ec27920b52f416c0d6b6056417e28ef0a48910fb810bc18b7c0e1bda2",
+  },
+};
 
 type ContractManifest = {
   schema_version: number;
   bot_commit: string;
   required_agents: string[];
   fixtures: string[];
+  result_archive_v1: {
+    protocol_version: number;
+    fixtures: typeof archiveFixtures;
+  };
 };
 
 function readManifest(): ContractManifest {
@@ -55,14 +77,16 @@ function readManifest(): ContractManifest {
 }
 
 describe("Bot HEAD compatibility contract", () => {
-  it("pins the release SHA, exact ten slugs, and required fixture IDs", () => {
+  it("pins the release SHA, ten slugs, fixture IDs, and archive hashes", () => {
     const manifest = readManifest();
-    expect(manifest.schema_version).toBe(1);
+    expect(manifest.schema_version).toBe(2);
     expect(manifest.bot_commit).toBe(releaseSha);
     expect(manifest.required_agents).toEqual(releaseSlugs);
     expect(new Set(manifest.required_agents).size).toBe(releaseSlugs.length);
     expect(manifest.fixtures).toEqual(fixtureIds);
     expect(new Set(manifest.fixtures).size).toBe(fixtureIds.length);
+    expect(manifest.result_archive_v1.protocol_version).toBe(1);
+    expect(manifest.result_archive_v1.fixtures).toEqual(archiveFixtures);
   });
 
   it("keeps the Web canonical tool map aligned with the ten release agents", () => {
@@ -76,6 +100,7 @@ describe("Bot HEAD compatibility contract", () => {
       "bot_commit",
       "fixtures",
       "required_agents",
+      "result_archive_v1",
       "schema_version",
     ]);
     expect(

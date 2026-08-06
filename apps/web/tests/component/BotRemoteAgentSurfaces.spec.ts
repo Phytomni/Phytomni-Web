@@ -195,19 +195,25 @@ type TerminalFixture = {
   run_id: string;
   agent: string;
   status: string;
+  answer?: string;
   result: {
-    report_stage?: string;
-    report_completeness?: string;
-    report_revision?: number;
-    report_updated_at?: string;
-    intermediate_report?: string;
-    final_report?: string;
     formatted?: { answer?: string };
-    progress?: Record<string, unknown>;
-    degraded?: boolean;
-    degraded_reason?: string;
-    failures?: unknown[];
-    artifacts?: Array<{ output_dir?: string; paths?: string[] }>;
+    execution?: {
+      delivery?: {
+        schema_version?: number;
+        required?: boolean;
+        status?: string;
+        revision?: number;
+        archive?: {
+          role?: string;
+          name?: string;
+          size_bytes?: number;
+          download_ref?: string;
+        } | null;
+        error_code?: string | null;
+        retryable?: boolean;
+      };
+    };
   };
 };
 
@@ -218,31 +224,32 @@ const PRODUCT_FIXTURE_ROOT = resolve(
 
 const PRODUCT_FIXTURE_MATRIX = [
   {
+    surface: "analyst" as const,
+    fixture: "analyst_terminal.json",
+    agent: "analyst",
+    report: "# Synthetic Analyst Result\n\nArchive ready.",
+    archiveName: "analyst-results.zip",
+  },
+  {
     surface: "research" as const,
     fixture: "research_terminal.json",
-    fixtureId: "rc-web-004-research-terminal",
     agent: "research",
-    report: "# Research terminal report",
-    downloads: 2,
-    warning: false,
+    report: "# Synthetic Research Result\n\nArchive ready.",
+    archiveName: "research-results.zip",
   },
   {
     surface: "design" as const,
     fixture: "design_terminal.json",
-    fixtureId: "rc-web-004-design-terminal",
     agent: "design",
-    report: "# Design terminal answer",
-    downloads: 0,
-    warning: true,
+    report: "# Synthetic Design Result\n\nArchive ready.",
+    archiveName: "design-results.zip",
   },
   {
     surface: "network" as const,
     fixture: "network_terminal.json",
-    fixtureId: "rc-web-004-network-terminal",
     agent: "network",
-    report: "# Network terminal report",
-    downloads: 0,
-    warning: true,
+    report: "# Synthetic Network Result\n\nArchive ready.",
+    archiveName: "network-results.zip",
   },
 ] as const;
 
@@ -250,6 +257,39 @@ function readProductFixture(fileName: string): TerminalFixture {
   return JSON.parse(
     readFileSync(resolve(PRODUCT_FIXTURE_ROOT, fileName), "utf8")
   ) as TerminalFixture;
+}
+
+function deliveryFromProductFixture(fixture: TerminalFixture) {
+  const delivery = fixture.result.execution?.delivery;
+  const archive = delivery?.archive;
+  if (
+    delivery?.schema_version !== 1 ||
+    delivery.required !== true ||
+    delivery.status !== "ready" ||
+    !Number.isSafeInteger(delivery.revision) ||
+    delivery.revision < 1 ||
+    !archive ||
+    archive.role !== "result_archive" ||
+    typeof archive.name !== "string" ||
+    !Number.isSafeInteger(archive.size_bytes) ||
+    archive.size_bytes <= 0 ||
+    typeof archive.download_ref !== "string" ||
+    !/^result-archive:sha256:[0-9a-f]{64}$/u.test(archive.download_ref) ||
+    delivery.error_code !== null ||
+    delivery.retryable !== false
+  ) {
+    throw new TypeError("invalid canonical result archive fixture");
+  }
+  return {
+    schema_version: 1 as const,
+    required: true as const,
+    status: "ready" as const,
+    revision: delivery.revision,
+    name: archive.name,
+    size_bytes: archive.size_bytes,
+    error_code: null,
+    retryable: false,
+  };
 }
 
 /**
@@ -263,22 +303,14 @@ function stateFromProductFixture(
   fixture: TerminalFixture
 ): BotRemoteAgentRunState {
   const result = fixture.result;
+  const delivery = deliveryFromProductFixture(fixture);
   const projection = parseBotProjection({
     bot_run_id: fixture.run_id,
     agent: fixture.agent,
     status: fixture.status,
-    report_stage: result.report_stage,
-    report_completeness: result.report_completeness,
-    report_revision: result.report_revision,
-    report_updated_at: result.report_updated_at,
-    intermediate_report: result.intermediate_report,
-    final_report: result.final_report,
-    answer: result.formatted?.answer,
-    progress: result.progress,
-    degraded: result.degraded,
-    degraded_reason: result.degraded_reason,
-    failures: result.failures,
-    artifacts: result.artifacts,
+    answer: result.formatted?.answer ?? fixture.answer,
+    result_archive_v1: true,
+    delivery,
   });
   const lifecycle = reduceBotProjection(initBotLifecycleState(), projection);
   return {
@@ -287,6 +319,9 @@ function stateFromProductFixture(
     requestId: null,
     uploadTransfer: null,
     projection,
+    artifactLinks: [
+      { id: `archive-${fixture.agent}`, name: delivery.name, kind: "archive" },
+    ],
     dialogueId: fixture.fixture_id,
     messageId: fixture.run_id,
     error: null,
@@ -572,29 +607,29 @@ describe("Bot remote-agent surface matrix", () => {
   );
 
   it.each(PRODUCT_FIXTURE_MATRIX)(
-    "renders the sanitized %s terminal fixture through the shared report surface",
-    ({ surface, fixture, fixtureId, agent, report, downloads, warning }) => {
+    "renders the canonical %s delivery fixture through the shared report surface",
+    ({ surface, fixture, agent, report, archiveName }) => {
       const terminal = readProductFixture(fixture);
-      expect(terminal.fixture_id).toBe(fixtureId);
       expect(terminal.agent).toBe(agent);
-      expect(terminal.result.artifacts).toEqual(expect.any(Array));
+      expect(
+        terminal.result.execution?.delivery?.archive?.download_ref
+      ).toMatch(/^result-archive:sha256:[0-9a-f]{64}$/u);
 
       const state = stateFromProductFixture(terminal);
       expect(state.projection?.agent).toBe(agent);
       expect(state.visibleReport).toBe(report);
+      expect(state.delivery?.name).toBe(archiveName);
       const wrapper = mountSurface(surface, state);
 
       expect(wrapper.find('[data-test="bot-report-content"]').text()).toContain(
         report
       );
       expect(
-        wrapper.findAll('button[data-test="bot-artifact-download"]')
-      ).toHaveLength(downloads);
-      expect(wrapper.find('[data-test="bot-artifact-warning"]').exists()).toBe(
-        warning
-      );
+        wrapper.findAll('[data-test="result-archive-download"]')
+      ).toHaveLength(1);
+      expect(wrapper.find(".bot-artifact-list").exists()).toBe(false);
       expect(wrapper.find("a[href]").exists()).toBe(false);
-      expect(wrapper.text()).not.toContain("synthetic-bucket");
+      expect(wrapper.text()).not.toContain("result-archive:");
 
       wrapper.unmount();
     }

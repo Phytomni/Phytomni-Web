@@ -73,11 +73,7 @@ payloads, user data, queries, answers, URLs, request ids, or upstream errors.
   ],
   "local_readiness": {
     "rc_web_004": {
-      "fixture_ids": [
-        "rc-web-004-research-terminal",
-        "rc-web-004-design-terminal",
-        "rc-web-004-network-terminal"
-      ],
+      "fixture_ids": ["analyst", "research", "network", "design"],
       "shared_report_surface_test": "apps/web/tests/component/BotRemoteAgentSurfaces.spec.ts"
     }
   },
@@ -98,7 +94,7 @@ payloads, user data, queries, answers, URLs, request ids, or upstream errors.
 | RC-WEB-001  | Umbrella submission and run identity               | External Pending |
 | RC-WEB-002  | Monotonic intermediate/final report revisions      | External Pending |
 | RC-WEB-003  | DeepGenome partial, degraded, and failure behavior | External Pending |
-| RC-WEB-004  | Analyst, Design, and Network reports and artifacts | External Pending |
+| RC-WEB-004  | Analysis-agent reports and result archives         | External Pending |
 | RC-WEB-005  | Timeout and request-id behavior                    | External Pending |
 | RC-WEB-006  | A2UI and AG-UI pass-through                        | External Pending |
 | RC-WEB-007  | Expert/history dual-read and rollback              | External Pending |
@@ -156,15 +152,13 @@ above passed from local evidence alone.
   not performed. `RC-WEB-001` through `RC-WEB-007` and `RC-LIVE-001` remain
   `External Pending`.
 
-## Local RC-WEB-004 product fixture record (2026-07-18)
+## Local RC-WEB-004 product fixture record (2026-08-06)
 
-- Product fixture ids: `rc-web-004-research-terminal`,
-  `rc-web-004-design-terminal`, and `rc-web-004-network-terminal`. Each fixture
-  is sanitized, uses a canonical agent slug, and carries an explicit artifact
-  list; the Design fixture is empty and the Network fixture has an empty path
-  list to exercise warning behavior.
+- Product fixture ids: `analyst`, `research`, `network`, and `design`. Each
+  fixture is copied byte-for-byte from Bot's canonical `result_archive_v1`
+  contract and contains one ready archive under `result.execution.delivery`.
 - Shared report-surface test: `apps/web/tests/component/BotRemoteAgentSurfaces.spec.ts`.
-  The offline checker requires all three distinct fixture ids and this shared
+  The offline checker requires all four distinct fixture ids and this shared
   test before local RC-WEB-004 readiness is accepted.
 - This is Web-owned synthetic evidence only. The RC-WEB-004 acceptance row
   remains `External Pending` until an authorized Bot/operations acceptance

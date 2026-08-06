@@ -600,44 +600,43 @@ func TestDecodeRunProjectionAcceptsNonInteropFormattedMetadata(t *testing.T) {
 	}
 }
 
-func TestDecodeResearchDesignNetworkTerminalArtifacts(t *testing.T) {
+func TestDecodeCanonicalResultArchiveTerminalFixtures(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name          string
-		fixture       string
-		wantFixtureID string
-		wantAgent     string
-		wantReport    string
-		wantArtifacts int
-		wantPaths     int
+		name        string
+		fixture     string
+		wantAgent   string
+		wantReport  string
+		wantArchive string
 	}{
 		{
-			name:          "research report and artifacts",
-			fixture:       "research_terminal.json",
-			wantFixtureID: "rc-web-004-research-terminal",
-			wantAgent:     "research",
-			wantReport:    "# Research terminal report",
-			wantArtifacts: 1,
-			wantPaths:     2,
+			name:        "analyst delivery",
+			fixture:     "analyst_terminal.json",
+			wantAgent:   "analyst",
+			wantReport:  "# Synthetic Analyst Result\n\nArchive ready.",
+			wantArchive: "analyst-results.zip",
 		},
 		{
-			name:          "design formatted answer and empty artifacts",
-			fixture:       "design_terminal.json",
-			wantFixtureID: "rc-web-004-design-terminal",
-			wantAgent:     "design",
-			wantReport:    "# Design terminal answer",
-			wantArtifacts: 0,
-			wantPaths:     0,
+			name:        "research delivery",
+			fixture:     "research_terminal.json",
+			wantAgent:   "research",
+			wantReport:  "# Synthetic Research Result\n\nArchive ready.",
+			wantArchive: "research-results.zip",
 		},
 		{
-			name:          "network report and empty artifact paths",
-			fixture:       "network_terminal.json",
-			wantFixtureID: "rc-web-004-network-terminal",
-			wantAgent:     "network",
-			wantReport:    "# Network terminal report",
-			wantArtifacts: 1,
-			wantPaths:     0,
+			name:        "design delivery",
+			fixture:     "design_terminal.json",
+			wantAgent:   "design",
+			wantReport:  "# Synthetic Design Result\n\nArchive ready.",
+			wantArchive: "design-results.zip",
+		},
+		{
+			name:        "network delivery",
+			fixture:     "network_terminal.json",
+			wantAgent:   "network",
+			wantReport:  "# Synthetic Network Result\n\nArchive ready.",
+			wantArchive: "network-results.zip",
 		},
 	}
 
@@ -645,7 +644,7 @@ func TestDecodeResearchDesignNetworkTerminalArtifacts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var raw map[string]interface{}
 			decodeFixtureForProjectionTest(t, tc.fixture, &raw)
-			assertSanitizedTerminalFixture(t, raw, tc.wantFixtureID, tc.wantAgent)
+			assertCanonicalResultArchiveFixture(t, raw, tc.wantAgent, tc.wantArchive)
 
 			record := loadRunRecordFixture(t, tc.fixture)
 			if record.Agent != tc.wantAgent {
@@ -656,82 +655,54 @@ func TestDecodeResearchDesignNetworkTerminalArtifacts(t *testing.T) {
 			}
 
 			var envelope struct {
-				FinalReport string `json:"final_report"`
-				Formatted   *struct {
+				Formatted *struct {
 					Answer string `json:"answer"`
 				} `json:"formatted"`
-				Artifacts []struct {
-					OutputDir string   `json:"output_dir"`
-					Paths     []string `json:"paths"`
-				} `json:"artifacts"`
 			}
 			if err := json.Unmarshal(record.Result, &envelope); err != nil {
 				t.Fatalf("decode result envelope: %v", err)
 			}
-			if strings.TrimSpace(envelope.FinalReport) == "" &&
-				(envelope.Formatted == nil || strings.TrimSpace(envelope.Formatted.Answer) == "") {
-				t.Fatal("terminal fixture has neither a final report nor formatted answer")
-			}
-			if len(envelope.Artifacts) != tc.wantArtifacts {
-				t.Fatalf("artifact entries=%d want %d", len(envelope.Artifacts), tc.wantArtifacts)
-			}
-			pathCount := 0
-			for _, artifact := range envelope.Artifacts {
-				if artifact.OutputDir == "" && len(artifact.Paths) > 0 {
-					t.Fatal("artifact paths must not exist without an output directory")
-				}
-				pathCount += len(artifact.Paths)
-			}
-			if pathCount != tc.wantPaths {
-				t.Fatalf("artifact paths=%d want %d", pathCount, tc.wantPaths)
+			if envelope.Formatted == nil || strings.TrimSpace(envelope.Formatted.Answer) == "" {
+				t.Fatal("terminal fixture has no formatted answer")
 			}
 
 			projection, err := DecodeRunProjection(record)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if projection.Agent != tc.wantAgent || projection.VisibleReport() != tc.wantReport {
+			if projection.Agent != tc.wantAgent || projection.VisibleReport() != tc.wantReport ||
+				!projection.ResultArchiveV1 || projection.Delivery == nil ||
+				projection.Delivery.ArchiveName != tc.wantArchive || projection.Delivery.ArchiveSize <= 0 {
 				t.Fatalf("projection agent/report=%q/%q", projection.Agent, projection.VisibleReport())
 			}
-			if len(projection.Artifacts.Paths) != tc.wantPaths {
-				t.Fatalf("projection paths=%d want %d", len(projection.Artifacts.Paths), tc.wantPaths)
+			if len(projection.Artifacts.Paths) != 0 {
+				t.Fatalf("active v1 projection retained legacy paths=%#v", projection.Artifacts.Paths)
 			}
 		})
 	}
 }
 
-func assertSanitizedTerminalFixture(t *testing.T, payload map[string]interface{}, fixtureID, agent string) {
+func assertCanonicalResultArchiveFixture(t *testing.T, payload map[string]interface{}, agent, archiveName string) {
 	t.Helper()
-	if payload["fixture_id"] != fixtureID {
-		t.Fatalf("fixture_id=%v want %q", payload["fixture_id"], fixtureID)
-	}
 	if payload["agent"] != agent {
 		t.Fatalf("agent=%v want %q", payload["agent"], agent)
 	}
-	forbidden := map[string]struct{}{
-		"created_at": {}, "dialogue_id": {}, "error": {}, "expires_at": {},
-		"model": {}, "origin": {}, "payload": {}, "private": {},
-		"private_payload": {}, "query": {}, "raw": {}, "raw_payload": {},
-		"request_id": {}, "stack_trace": {}, "task_id": {}, "task_ids": {},
-		"traceback": {}, "updated_at": {}, "user_id": {},
+	result, ok := payload["result"].(map[string]interface{})
+	if !ok || result["artifacts"] != nil {
+		t.Fatalf("fixture retained legacy result artifacts")
 	}
-	var visit func(interface{})
-	visit = func(value interface{}) {
-		switch current := value.(type) {
-		case map[string]interface{}:
-			for key, child := range current {
-				if _, blocked := forbidden[key]; blocked {
-					t.Fatalf("fixture contains raw/private field %q", key)
-				}
-				visit(child)
-			}
-		case []interface{}:
-			for _, child := range current {
-				visit(child)
-			}
-		}
+	execution, ok := result["execution"].(map[string]interface{})
+	if !ok {
+		t.Fatal("fixture execution is missing")
 	}
-	visit(payload)
+	delivery, ok := execution["delivery"].(map[string]interface{})
+	if !ok || delivery["delivery_internal"] != nil || delivery["schema_version"] != float64(1) {
+		t.Fatalf("fixture delivery is invalid")
+	}
+	archive, ok := delivery["archive"].(map[string]interface{})
+	if !ok || archive["name"] != archiveName || archive["role"] != "result_archive" {
+		t.Fatalf("fixture archive is invalid")
+	}
 }
 
 func decodeFixtureForProjectionTest(t *testing.T, name string, out interface{}) {

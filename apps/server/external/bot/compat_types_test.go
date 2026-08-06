@@ -117,6 +117,59 @@ func TestHeadFixturesDecodeRemoteTerminalArtifacts(t *testing.T) {
 	}
 }
 
+func TestHeadFixturesDecodeCanonicalResultArchiveDelivery(t *testing.T) {
+	tests := []struct {
+		fixture string
+		agent   string
+		name    string
+	}{
+		{fixture: "analyst_terminal.json", agent: "analyst", name: "analyst-results.zip"},
+		{fixture: "research_terminal.json", agent: "research", name: "research-results.zip"},
+		{fixture: "network_terminal.json", agent: "network", name: "network-results.zip"},
+		{fixture: "design_terminal.json", agent: "design", name: "design-results.zip"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.agent, func(t *testing.T) {
+			var record RunRecord
+			decodeFixture(t, tt.fixture, &record)
+			var projection struct {
+				Execution json.RawMessage `json:"execution"`
+			}
+			if err := json.Unmarshal(record.Result, &projection); err != nil {
+				t.Fatalf("decode result: %v", err)
+			}
+			delivery, err := DecodeRunExecutionDelivery(projection.Execution, tt.agent)
+			if err != nil {
+				t.Fatalf("decode delivery: %v", err)
+			}
+			if !delivery.ResultArchiveV1 || len(delivery.OutputDirs) != 1 || delivery.Delivery == nil ||
+				delivery.Delivery.Status != "ready" || delivery.Delivery.Archive == nil ||
+				delivery.Delivery.Archive.Name != tt.name || delivery.Delivery.Archive.SizeBytes <= 0 {
+				t.Fatalf("canonical delivery = %#v", delivery)
+			}
+		})
+	}
+}
+
+func TestHeadFixturesKeepHistoricalTerminalArtifactsLegacy(t *testing.T) {
+	var record RunRecord
+	decodeFixture(t, "remote_terminal_artifacts.json", &record)
+	var projection struct {
+		Execution json.RawMessage `json:"execution"`
+	}
+	if err := json.Unmarshal(record.Result, &projection); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	delivery, err := DecodeRunExecutionDelivery(projection.Execution, "research")
+	if err != nil {
+		t.Fatalf("decode legacy execution: %v", err)
+	}
+	if delivery.ResultArchiveV1 || delivery.Delivery != nil {
+		t.Fatalf("legacy terminal fixture became v1 delivery: %#v", delivery)
+	}
+}
+
 func TestHeadFixturesDecodeRemoteLifecycleStates(t *testing.T) {
 	tests := []struct {
 		fixture    string

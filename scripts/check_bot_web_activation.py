@@ -91,27 +91,12 @@ DEFAULT_CHECK_FILES: dict[Path, str] = {
     ),
 }
 
-PRODUCT_FIXTURE_IDS = (
-    "rc-web-004-research-terminal",
-    "rc-web-004-design-terminal",
-    "rc-web-004-network-terminal",
-)
+PRODUCT_FIXTURE_IDS = ("analyst", "research", "network", "design")
 PRODUCT_FIXTURE_PATHS: dict[str, Path] = {
-    "rc-web-004-research-terminal": Path(
-        "apps/server/external/bot/testdata/head/research_terminal.json"
-    ),
-    "rc-web-004-design-terminal": Path(
-        "apps/server/external/bot/testdata/head/design_terminal.json"
-    ),
-    "rc-web-004-network-terminal": Path(
-        "apps/server/external/bot/testdata/head/network_terminal.json"
-    ),
+    agent: Path(f"apps/server/external/bot/testdata/head/{agent}_terminal.json")
+    for agent in PRODUCT_FIXTURE_IDS
 }
-PRODUCT_FIXTURE_AGENTS = {
-    "rc-web-004-research-terminal": "research",
-    "rc-web-004-design-terminal": "design",
-    "rc-web-004-network-terminal": "network",
-}
+PRODUCT_FIXTURE_AGENTS = {agent: agent for agent in PRODUCT_FIXTURE_IDS}
 SHARED_REPORT_SURFACE_TEST = Path(
     "apps/web/tests/component/BotRemoteAgentSurfaces.spec.ts"
 )
@@ -164,30 +149,18 @@ _FORBIDDEN_PARTS = frozenset(
     }
 )
 
-_FORBIDDEN_FIXTURE_FIELDS = frozenset(
+_PRIVATE_DELIVERY_FIELDS = frozenset(
     {
-        "created_at",
-        "dialogue_id",
-        "error",
-        "expires_at",
-        "model",
-        "origin",
-        "payload",
-        "private",
-        "private_payload",
-        "query",
-        "raw",
-        "raw_payload",
-        "request_id",
-        "stack_trace",
-        "task_id",
-        "task_ids",
-        "traceback",
-        "updated_at",
-        "user_id",
+        "delivery_internal",
+        "inventory",
+        "object_ref",
+        "private_delivery",
+        "retry_attempts",
     }
 )
 _FIXTURE_DEPTH_LIMIT_MARKER = "__fixture_depth_limit__"
+_RESULT_ARCHIVE_REF_RE = re.compile(r"^result-archive:sha256:[0-9a-f]{64}$")
+_RESULT_ARCHIVE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def _has_forbidden_part(path: Path) -> bool:
@@ -433,7 +406,7 @@ def validate_local_readiness(value: Any) -> list[str]:
     ):
         errors.append("RC-WEB-004 local fixture ids must be bounded metadata")
     elif len(fixture_ids) != len(PRODUCT_FIXTURE_IDS) or len(set(fixture_ids)) != len(fixture_ids):
-        errors.append("RC-WEB-004 requires three distinct product fixture ids")
+        errors.append("RC-WEB-004 requires four distinct product fixture ids")
     elif set(fixture_ids) != set(PRODUCT_FIXTURE_IDS):
         errors.append("RC-WEB-004 product fixture ids are incomplete")
 
@@ -481,44 +454,56 @@ def _check_product_fixture(root: Path, fixture_id: str, violations: list[str]) -
             violations.append("RC-WEB-004 product fixture must be an object")
         return
 
-    if payload.get("fixture_id") != fixture_id:
-        violations.append("RC-WEB-004 product fixture id does not match its allowlist")
     if payload.get("agent") != PRODUCT_FIXTURE_AGENTS[fixture_id]:
         violations.append("RC-WEB-004 product fixture agent slug is not canonical")
     field_names = _fixture_field_names(payload)
     if _FIXTURE_DEPTH_LIMIT_MARKER in field_names:
         violations.append("RC-WEB-004 product fixture nesting exceeds scanner bound")
-    if field_names & _FORBIDDEN_FIXTURE_FIELDS:
-        violations.append("RC-WEB-004 product fixture contains raw or private fields")
+    if field_names & _PRIVATE_DELIVERY_FIELDS:
+        violations.append("RC-WEB-004 product fixture contains private delivery fields")
 
     result = payload.get("result")
     if not isinstance(result, dict):
         violations.append("RC-WEB-004 product fixture result must be an object")
         return
-    final_report = result.get("final_report")
     formatted = result.get("formatted")
     formatted_answer = formatted.get("answer") if isinstance(formatted, dict) else ""
-    if not (
-        isinstance(final_report, str)
-        and final_report.strip()
-        or isinstance(formatted_answer, str)
-        and formatted_answer.strip()
-    ):
-        violations.append("RC-WEB-004 product fixture needs a final report or formatted answer")
-
-    artifacts = result.get("artifacts")
-    if not isinstance(artifacts, list):
-        violations.append("RC-WEB-004 product fixture artifacts must be an explicit list")
+    if not isinstance(formatted_answer, str) or not formatted_answer.strip():
+        violations.append("RC-WEB-004 product fixture needs a formatted answer")
+    if "artifacts" in result:
+        violations.append("RC-WEB-004 product fixture contains legacy artifacts")
         return
-    for artifact in artifacts:
-        if not isinstance(artifact, dict):
-            violations.append("RC-WEB-004 product fixture artifact must be an object")
-            continue
-        if not isinstance(artifact.get("output_dir"), str):
-            violations.append("RC-WEB-004 product fixture artifact directory is missing")
-        paths = artifact.get("paths")
-        if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
-            violations.append("RC-WEB-004 product fixture artifact paths must be a list")
+    execution = result.get("execution")
+    if not isinstance(execution, dict):
+        violations.append("RC-WEB-004 product fixture execution must be an object")
+        return
+    delivery = execution.get("delivery")
+    if not isinstance(delivery, dict):
+        violations.append("RC-WEB-004 product fixture execution delivery must be an object")
+        return
+    if delivery.get("schema_version") != 1:
+        violations.append("RC-WEB-004 product fixture delivery protocol_version must be 1")
+    if delivery.get("required") is not True or delivery.get("status") != "ready":
+        violations.append("RC-WEB-004 product fixture delivery must be required and ready")
+    archive = delivery.get("archive")
+    if not isinstance(archive, dict):
+        violations.append("RC-WEB-004 product fixture delivery archive must be an object")
+        return
+    if archive.get("role") != "result_archive" or archive.get("name") != f"{fixture_id}-results.zip":
+        violations.append("RC-WEB-004 product fixture delivery archive identity is invalid")
+    if not isinstance(archive.get("size_bytes"), int) or archive["size_bytes"] <= 0:
+        violations.append("RC-WEB-004 product fixture delivery archive size_bytes is invalid")
+    download_ref = archive.get("download_ref")
+    if not isinstance(download_ref, str) or not _RESULT_ARCHIVE_REF_RE.fullmatch(download_ref):
+        violations.append("RC-WEB-004 product fixture delivery archive download_ref is unsafe")
+    digest = delivery.get("inventory_digest")
+    if not isinstance(digest, str) or not _RESULT_ARCHIVE_DIGEST_RE.fullmatch(digest):
+        violations.append("RC-WEB-004 product fixture delivery digest is invalid")
+    artifacts = execution.get("artifacts")
+    if not isinstance(artifacts, list):
+        violations.append("RC-WEB-004 product fixture execution artifacts must be a list")
+    elif sum(isinstance(item, dict) and item.get("role") == "result_archive" for item in artifacts) != 0:
+        violations.append("RC-WEB-004 product fixture must contain exactly one archive")
 
 
 def _check_rc_web_004_local_readiness(

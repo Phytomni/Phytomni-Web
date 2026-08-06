@@ -1,22 +1,92 @@
 {
-  "fixture_id": "rc-web-004-research-terminal",
-  "run_id": "run-rc-web-004-research-1",
+  "a2a_context_id": null,
+  "a2a_message_id": null,
+  "a2a_task_id": null,
   "agent": "research",
-  "status": "succeeded",
+  "answer": "# Synthetic Research Result\n\nArchive ready.",
+  "created_at": "2026-08-05T00:00:00+00:00",
+  "dialogue_id": null,
+  "error": null,
+  "expires_at": "2026-08-12T01:00:00+00:00",
+  "model": null,
+  "origin": "remote",
+  "query": null,
+  "request_id": null,
   "result": {
-    "report_stage": "final",
-    "report_completeness": "complete",
-    "report_revision": 1,
-    "report_updated_at": "2026-07-18T00:00:00Z",
-    "final_report": "# Research terminal report",
-    "artifacts": [
-      {
-        "output_dir": "obs://synthetic-bucket/rc-web-004/research",
-        "paths": [
-          "obs://synthetic-bucket/rc-web-004/research/report.md",
-          "obs://synthetic-bucket/rc-web-004/research/evidence.tsv"
-        ]
-      }
-    ]
-  }
+    "execution": {
+      "artifacts": [
+        {
+          "download_ref": "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-research/children/part-001/research-summary.md",
+          "downloadable": true,
+          "media_type": "text/markdown",
+          "name": "research-summary.md",
+          "report_context_eligible": true,
+          "role": "scientific_report",
+          "size_bytes": 1024
+        }
+      ],
+      "delivery": {
+        "archive": {
+          "download_ref": "result-archive:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "downloadable": true,
+          "media_type": "application/zip",
+          "name": "research-results.zip",
+          "report_context_eligible": false,
+          "role": "result_archive",
+          "size_bytes": 4097
+        },
+        "error_code": null,
+        "inventory_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "required": true,
+        "retryable": false,
+        "revision": 1,
+        "schema_version": 1,
+        "status": "ready"
+      },
+      "diagnostics": [],
+      "output_dirs": [
+        "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-research"
+      ],
+      "report": {
+        "degraded": false,
+        "source_artifact_count": 1,
+        "state": "final"
+      },
+      "tasks": [
+        {
+          "accepted": true,
+          "id": "task-synthetic-research-001",
+          "status": "succeeded"
+        }
+      ],
+      "tracking": {
+        "degraded": false
+      },
+      "warnings": []
+    },
+    "formatted": {
+      "answer": "# Synthetic Research Result\n\nArchive ready.",
+      "follow_up_questions": [],
+      "metadata": {
+        "report": {
+          "degraded": false,
+          "source_artifact_count": 1,
+          "state": "final"
+        }
+      },
+      "output_dirs": [
+        "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-research"
+      ],
+      "references": [],
+      "tabular": null
+    }
+  },
+  "run_id": "run-synthetic-research",
+  "status": "succeeded",
+  "task_ids": [
+    "task-synthetic-research-001"
+  ],
+  "tool_name": null,
+  "updated_at": "2026-08-05T01:00:00+00:00",
+  "user_id": "synthetic@example.invalid"
 }

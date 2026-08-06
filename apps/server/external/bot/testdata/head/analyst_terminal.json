@@ -2,8 +2,8 @@
   "a2a_context_id": null,
   "a2a_message_id": null,
   "a2a_task_id": null,
-  "agent": "network",
-  "answer": "# Synthetic Network Result\n\nArchive ready.",
+  "agent": "analyst",
+  "answer": "# Synthetic Analyst Result\n\nArchive ready.",
   "created_at": "2026-08-05T00:00:00+00:00",
   "dialogue_id": null,
   "error": null,
@@ -16,10 +16,10 @@
     "execution": {
       "artifacts": [
         {
-          "download_ref": "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-network/children/part-001/network-summary.md",
+          "download_ref": "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-analyst/children/part-001/analyst-summary.md",
           "downloadable": true,
           "media_type": "text/markdown",
-          "name": "network-summary.md",
+          "name": "analyst-summary.md",
           "report_context_eligible": true,
           "role": "scientific_report",
           "size_bytes": 1024
@@ -27,16 +27,16 @@
       ],
       "delivery": {
         "archive": {
-          "download_ref": "result-archive:sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "download_ref": "result-archive:sha256:1111111111111111111111111111111111111111111111111111111111111111",
           "downloadable": true,
           "media_type": "application/zip",
-          "name": "network-results.zip",
+          "name": "analyst-results.zip",
           "report_context_eligible": false,
           "role": "result_archive",
-          "size_bytes": 4098
+          "size_bytes": 4096
         },
         "error_code": null,
-        "inventory_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "inventory_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "required": true,
         "retryable": false,
         "revision": 1,
@@ -45,7 +45,7 @@
       },
       "diagnostics": [],
       "output_dirs": [
-        "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-network"
+        "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-analyst"
       ],
       "report": {
         "degraded": false,
@@ -55,7 +55,7 @@
       "tasks": [
         {
           "accepted": true,
-          "id": "task-synthetic-network-001",
+          "id": "task-synthetic-analyst-001",
           "status": "succeeded"
         }
       ],
@@ -65,7 +65,7 @@
       "warnings": []
     },
     "formatted": {
-      "answer": "# Synthetic Network Result\n\nArchive ready.",
+      "answer": "# Synthetic Analyst Result\n\nArchive ready.",
       "follow_up_questions": [],
       "metadata": {
         "report": {
@@ -75,16 +75,16 @@
         }
       },
       "output_dirs": [
-        "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-network"
+        "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-analyst"
       ],
       "references": [],
       "tabular": null
     }
   },
-  "run_id": "run-synthetic-network",
+  "run_id": "run-synthetic-analyst",
   "status": "succeeded",
   "task_ids": [
-    "task-synthetic-network-001"
+    "task-synthetic-analyst-001"
   ],
   "tool_name": null,
   "updated_at": "2026-08-05T01:00:00+00:00",

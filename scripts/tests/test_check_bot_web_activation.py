@@ -112,12 +112,34 @@ def local_readiness_matrix_value() -> MatrixValue:
 
 
 def product_fixture_payload(fixture_id: str) -> dict[str, object]:
+    agent = checker.PRODUCT_FIXTURE_AGENTS[fixture_id]
     return {
         "fixture_id": fixture_id,
-        "agent": checker.PRODUCT_FIXTURE_AGENTS[fixture_id],
+        "agent": agent,
         "result": {
-            "final_report": "synthetic terminal report",
-            "artifacts": [],
+            "formatted": {"answer": "synthetic terminal report"},
+            "execution": {
+                "artifacts": [],
+                "delivery": {
+                    "schema_version": 1,
+                    "required": True,
+                    "status": "ready",
+                    "revision": 1,
+                    "inventory_digest": "sha256:" + "a" * 64,
+                    "archive": {
+                        "role": "result_archive",
+                        "name": f"{agent}-results.zip",
+                        "media_type": "application/zip",
+                        "size_bytes": 1,
+                        "downloadable": True,
+                        "report_context_eligible": False,
+                        "download_ref": "result-archive:sha256:" + "a" * 64,
+                    },
+                    "error_code": None,
+                    "retryable": False,
+                },
+                "output_dirs": ["/obs/synthetic/run"],
+            },
         },
     }
 
@@ -222,6 +244,42 @@ def test_committed_matrix_is_dark_and_cli_has_one_stable_pass_line() -> None:
     with contextlib.redirect_stdout(output):
         assert checker.main([]) == 0
     assert output.getvalue().strip() == checker.PASS_LINE
+
+
+@pytest.mark.parametrize(
+    ("mutate", "marker"),
+    [
+        (
+            lambda payload: payload["result"].__setitem__("artifacts", []),
+            "legacy artifacts",
+        ),
+        (
+            lambda payload: payload["result"]["execution"]["delivery"].__setitem__(
+                "delivery_internal", {"secret": "not-for-output"}
+            ),
+            "private delivery",
+        ),
+        (
+            lambda payload: payload["result"]["execution"]["delivery"]["archive"].__setitem__(
+                "size_bytes", 0
+            ),
+            "size_bytes",
+        ),
+    ],
+)
+def test_local_readiness_rejects_legacy_or_private_delivery_shapes(
+    tmp_path: Path, mutate, marker: str
+) -> None:
+    root = local_readiness_tree(tmp_path)
+    fixture_id = checker.PRODUCT_FIXTURE_IDS[0]
+    path = root / checker.PRODUCT_FIXTURE_PATHS[fixture_id]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    mutate(payload)
+    write(root, checker.PRODUCT_FIXTURE_PATHS[fixture_id].as_posix(), payload)
+
+    errors = checker.check(root)
+    assert any(marker in error for error in errors)
+    assert all("not-for-output" not in error for error in errors)
 
 
 def test_cli_failure_is_bounded_and_does_not_echo_raw_content(tmp_path: Path) -> None:
