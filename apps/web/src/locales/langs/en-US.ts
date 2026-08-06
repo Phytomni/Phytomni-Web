@@ -607,6 +607,8 @@ export default {
       succeeded: "Succeeded",
       failed: "Failed",
       cancelled: "Cancelled",
+      resultUnavailable:
+        "The task finished, but the report is not yet available.",
     },
     logUpdatedSuccess: "Log updated successfully",
     logUpdateFailed: "Failed to update log",

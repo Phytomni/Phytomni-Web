@@ -694,7 +694,10 @@ import { formatDetailedCitation } from "@/utils/citation";
 import { chatContentToText } from "./messageTypes";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import { messageActionCapabilities } from "./utils/message-action-capabilities";
-import { artifactKindForMessage } from "./utils/artifact-policy";
+import {
+  artifactKindForMessage,
+  isCompletedDeepGenomeMessage,
+} from "./utils/artifact-policy";
 import type {
   Chat,
   ChatMessage,
@@ -1061,26 +1064,6 @@ function artifactAgentLabel(message: ChatMessage): string {
   return locale.value === "zh-CN"
     ? CANONICAL_AGENT_ZH_NAMES[tool]
     : CANONICAL_AGENT_DISPLAY_NAMES[tool];
-}
-
-const DEEP_GENOME_SUCCESS_STATUSES = new Set(["SUCCEEDED"]);
-
-function isCompletedDeepGenomeMessage(message: ChatMessage): boolean {
-  if (artifactKindForMessage(message) !== "deep-genome") return false;
-
-  const status = String(message.status || "")
-    .trim()
-    .toUpperCase();
-  if (!DEEP_GENOME_SUCCESS_STATUSES.has(status)) return false;
-
-  const content =
-    typeof message.content === "string" ? message.content.trim() : "";
-  return (
-    content !== "" &&
-    !/^Loading file content\.\.\.?$/i.test(content) &&
-    !/^File content is empty or failed to load$/i.test(content) &&
-    !/^Failed to load file/i.test(content)
-  );
 }
 
 function artifactPreviewForMessage(message: ChatMessage) {

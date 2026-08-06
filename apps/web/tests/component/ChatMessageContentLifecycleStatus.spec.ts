@@ -93,4 +93,15 @@ describe("ChatMessageContent lifecycle status", () => {
     expect(wrapper.findAll(".agent-lifecycle")).toHaveLength(1);
     expect(wrapper.find(".agent-lifecycle").text()).toBe("Preparing");
   });
+
+  it("keeps the leading DeepGenome lifecycle as the only live region", () => {
+    const wrapper = mountContent(
+      { tool_name: "DeepGenomeAgent" },
+      lifecycle("RUNNING")
+    );
+
+    expect(wrapper.findAll(".agent-lifecycle")).toHaveLength(1);
+    expect(wrapper.findAll('[role="status"]')).toHaveLength(1);
+    expect(wrapper.find(".agent-lifecycle").text()).toBe("Running");
+  });
 });

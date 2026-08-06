@@ -162,17 +162,23 @@
       "
       @open="emit('open-artifact')"
     />
-    <!-- Ineligible DeepGenome results (streaming, missing id, failed, or
-         transient file loading) retain the embedded compatibility viewer. -->
-    <DeepGenomeResultViewer
-      v-else-if="
-        message.role === 'assistant' && message.tool_name === 'DeepGenomeAgent'
-      "
-      :markdown="chatContentToText(message.content).replace(/\n/g, '\\n')"
-      :references="message.doc_list || []"
-      :ns="'m' + index"
-      embedded
-    />
+    <template v-else-if="isDeepGenomeMessage">
+      <DeepGenomeResultViewer
+        v-if="hasMeaningfulDeepGenomeReport"
+        :markdown="chatContentToText(message.content).replace(/\n/g, '\\n')"
+        :references="message.doc_list || []"
+        :ns="'m' + index"
+        :show-actions="showDeepGenomeFinalActions"
+        :show-references="hasDeepGenomeReferences"
+        embedded
+      />
+      <p
+        v-else-if="showDeepGenomeResultUnavailable"
+        class="deep-genome-result-unavailable"
+      >
+        {{ $t("chat.lifecycle.resultUnavailable") }}
+      </p>
+    </template>
     <CitedAnswer
       v-else-if="
         message.doc_list &&
@@ -253,6 +259,11 @@ import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "../types";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
 import { chatContentToRows, chatContentToText } from "../messageTypes";
+import { normalizePositiveTaskRowId } from "@/api/task";
+import {
+  isDeepGenomeTransportPlaceholder,
+  isMeaningfulDeepGenomeReport,
+} from "../utils/artifact-policy";
 
 const props = defineProps<{
   message: ChatMessage;
@@ -284,6 +295,20 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
 };
 
+const isDeepGenomeMessage = computed(
+  () =>
+    props.message.role === "assistant" &&
+    props.message.tool_name === "DeepGenomeAgent"
+);
+const hasMeaningfulDeepGenomeReport = computed(
+  () =>
+    isDeepGenomeMessage.value &&
+    isMeaningfulDeepGenomeReport(props.message.content)
+);
+const hasDeepGenomeReferences = computed(
+  () => isDeepGenomeMessage.value && (props.message.doc_list?.length ?? 0) > 0
+);
+
 function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   const status = props.message.status?.trim().toUpperCase();
   if (status === "PENDING" || status === "SUBMITTED") return "PREPARING";
@@ -298,6 +323,18 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   ) {
     return status;
   }
+  if (
+    isDeepGenomeMessage.value &&
+    !hasMeaningfulDeepGenomeReport.value &&
+    isDeepGenomeTransportPlaceholder(props.message.content)
+  ) {
+    try {
+      normalizePositiveTaskRowId(props.message.id ?? "");
+      return "PREPARING";
+    } catch {
+      return null;
+    }
+  }
   return null;
 }
 
@@ -308,6 +345,17 @@ const lifecycleLabel = computed(() =>
   effectiveLifecyclePhase.value
     ? `chat.lifecycle.${effectiveLifecyclePhase.value.toLowerCase()}`
     : ""
+);
+const showDeepGenomeFinalActions = computed(
+  () =>
+    effectiveLifecyclePhase.value === null ||
+    effectiveLifecyclePhase.value === "SUCCEEDED"
+);
+const showDeepGenomeResultUnavailable = computed(
+  () =>
+    isDeepGenomeMessage.value &&
+    effectiveLifecyclePhase.value === "SUCCEEDED" &&
+    !hasMeaningfulDeepGenomeReport.value
 );
 const isSpecializedImageAgent = computed(
   () =>
@@ -378,6 +426,13 @@ const shouldShowSpecializedNoData = computed(() => {
   margin-bottom: var(--phy-space-8);
   color: var(--phy-color-text-muted);
   font-size: 13px;
+}
+
+.deep-genome-result-unavailable {
+  margin: 0;
+  padding: var(--phy-space-8) 0;
+  color: var(--phy-color-text-muted);
+  font-size: 14px;
 }
 
 /* Content owns internal overflow so wide children cannot stretch the transcript. */

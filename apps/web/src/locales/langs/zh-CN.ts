@@ -596,6 +596,7 @@ export default {
       succeeded: "已成功",
       failed: "失败",
       cancelled: "已取消",
+      resultUnavailable: "任务已完成，但报告暂不可用。",
     },
     logUpdatedSuccess: "日志更新成功",
     logUpdateFailed: "日志更新失败",

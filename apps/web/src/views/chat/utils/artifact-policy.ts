@@ -29,8 +29,34 @@ const ARTIFACT_POLICY_BY_TOOL: Readonly<
 
 type ArtifactPolicyMessage = Pick<
   ChatMessage,
-  "role" | "content" | "id" | "streaming" | "tool_name"
+  "role" | "content" | "id" | "streaming" | "tool_name" | "status"
 >;
+
+const DEEP_GENOME_PLACEHOLDER_PATTERNS = [
+  /^Server task created:\s*.*$/iu,
+  /^Loading file content\.\.\.?$/iu,
+  /^File content is empty or failed to load$/iu,
+  /^Failed to load file/iu,
+] as const;
+
+export function isDeepGenomeTransportPlaceholder(
+  content: ChatMessage["content"]
+): boolean {
+  if (typeof content !== "string") return false;
+  const normalized = content.trim();
+  return (
+    normalized !== "" &&
+    DEEP_GENOME_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(normalized))
+  );
+}
+
+export function isMeaningfulDeepGenomeReport(
+  content: ChatMessage["content"]
+): boolean {
+  if (typeof content !== "string") return false;
+  const normalized = content.trim();
+  return normalized !== "" && !isDeepGenomeTransportPlaceholder(normalized);
+}
 
 export function artifactKindForMessage(
   message: ArtifactPolicyMessage
@@ -58,5 +84,20 @@ export function shouldAutoOpenArtifact(
     artifactKindForMessage(message) !== null &&
     !!message.tool_name &&
     ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.autoOpen === true
+  );
+}
+
+export function isCompletedDeepGenomeMessage(
+  message: Pick<
+    ChatMessage,
+    "role" | "content" | "id" | "streaming" | "tool_name" | "status"
+  >
+): boolean {
+  return (
+    artifactKindForMessage(message) === "deep-genome" &&
+    String(message.status || "")
+      .trim()
+      .toUpperCase() === "SUCCEEDED" &&
+    isMeaningfulDeepGenomeReport(message.content)
   );
 }

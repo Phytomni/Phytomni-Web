@@ -592,8 +592,8 @@ describe("Chat artifact shell integration", () => {
         content: "Server task created: task-123",
       },
     },
-  ])("does not auto-open a $name", async ({ message }) => {
-    const { state } = await mountProductionChat(1440, {
+  ])("does not auto-open a $name", async ({ name, message }) => {
+    const { wrapper, state } = await mountProductionChat(1440, {
       markDeepSeen: false,
       messagesA: [message],
     });
@@ -602,6 +602,13 @@ describe("Chat artifact shell integration", () => {
 
     expect(state.getChatState("A").artifactOpen).toBe(false);
     expect(state.getChatState("A").autoOpenedArtifactMessageIds).toEqual([]);
+    if (name === "running server task") {
+      expect(wrapper.text()).not.toContain("Server task created");
+      expect(wrapper.find('[data-test="deep-genome-inline"]').exists()).toBe(
+        false
+      );
+      expect(wrapper.text()).not.toContain("No references available.");
+    }
   });
 
   it("does not steal focus when a completed result appeared in a background dialogue", async () => {

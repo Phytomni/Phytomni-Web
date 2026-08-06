@@ -34,6 +34,7 @@ import {
 } from "../fixtures/chat";
 import { getSharedMessageFixture } from "../visual/chat/fixture-data";
 import { mountWithApp } from "../helpers/test-app-context";
+import { isCompletedDeepGenomeMessage } from "@/views/chat/utils/artifact-policy";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -77,13 +78,7 @@ function expectedBranch(message: ChatMessage): Branch {
     ) {
       return "digital-design";
     }
-    if (
-      message.role === "assistant" &&
-      message.tool_name === "DeepGenomeAgent" &&
-      message.id &&
-      typeof message.content === "string" &&
-      message.content.trim()
-    ) {
+    if (isCompletedDeepGenomeMessage(message)) {
       return "artifact-preview";
     }
     if (
@@ -134,18 +129,14 @@ const mountContent = (
       message,
       index: 0,
       isLastMessage: true,
-      artifactPreview:
-        message.tool_name === "DeepGenomeAgent" &&
-        message.id &&
-        typeof message.content === "string" &&
-        message.content.trim()
-          ? {
-              title: "Finished",
-              kind: "Deep Genome Agent",
-              summary: "Deep genome analysis",
-              openLabel: "View",
-            }
-          : null,
+      artifactPreview: isCompletedDeepGenomeMessage(message)
+        ? {
+            title: "Finished",
+            kind: "Deep Genome Agent",
+            summary: "Deep genome analysis",
+            openLabel: "View",
+          }
+        : null,
       geneNetworkImages: EMPTY_IMAGES,
       geneNetworkImagesLoading: EMPTY_LOADING,
       digitalDesignImages: EMPTY_IMAGES,
@@ -168,9 +159,11 @@ const mountContent = (
             references: Array,
             ns: String,
             embedded: Boolean,
+            showActions: Boolean,
+            showReferences: Boolean,
           },
           template:
-            "<div data-testid=\"deep-genome\" :data-ns=\"ns === undefined ? '__absent__' : ns\" :data-embedded=\"embedded ? 'true' : 'false'\" />",
+            "<div data-testid=\"deep-genome\" :data-ns=\"ns === undefined ? '__absent__' : ns\" :data-embedded=\"embedded ? 'true' : 'false'\" :data-show-actions=\"showActions ? 'true' : 'false'\" :data-show-references=\"showReferences ? 'true' : 'false'\" />",
         },
         CitedAnswer: {
           name: "CitedAnswer",
@@ -200,6 +193,8 @@ const mountContent = (
             "chat.lifecycle.succeeded": "Succeeded",
             "chat.lifecycle.failed": "Failed",
             "chat.lifecycle.cancelled": "Cancelled",
+            "chat.lifecycle.resultUnavailable":
+              "The task finished, but the report is not yet available.",
           })[key] || key,
       },
     },
@@ -454,7 +449,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       },
     },
     {
-      name: "DeepGenomeAgent with docs → artifact preview",
+      name: "legacy DeepGenomeAgent with docs → embedded report",
       message: {
         role: "assistant",
         content: "md",
@@ -587,7 +582,7 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
     "short-generic": "markdown",
     "long-generic": "markdown",
     cited: "cited",
-    "deep-genome": "artifact-preview",
+    "deep-genome": "deep-genome",
     table: "table",
     steps: "legacy",
     image: "gene-network",
@@ -684,6 +679,122 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
     expect(MESSAGE_LONG_GENERIC.content).toBe(LONG_GENERIC_MARKDOWN);
     expect(MESSAGE_CITED.content).toBe(CITED_MARKDOWN);
     expect(MESSAGE_CITED.doc_list?.[0]).toEqual(FIXTURE_REFERENCE_DOC);
+  });
+});
+
+describe("ChatMessageContent DeepGenome lifecycle presentation", () => {
+  const deepGenomeMessage = (
+    overrides: Partial<ChatMessage> = {}
+  ): ChatMessage => ({
+    role: "assistant",
+    content: "",
+    id: "42",
+    tool_name: "DeepGenomeAgent",
+    ...overrides,
+  });
+
+  it("renders an anchored task placeholder as preparing without raw content", () => {
+    const wrapper = mountContent(
+      deepGenomeMessage({ content: "Server task created: child-task-123" })
+    );
+
+    expect(wrapper.text()).toContain("Preparing");
+    expect(wrapper.text()).not.toContain("Server task created");
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+      false
+    );
+  });
+
+  it("renders a running empty result without viewer or reference fallback", () => {
+    const wrapper = mountContent(deepGenomeMessage({ status: "RUNNING" }));
+
+    expect(wrapper.text()).toContain("Running");
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("No references available.");
+  });
+
+  it("renders a running partial report without final actions or references", () => {
+    const wrapper = mountContent(
+      deepGenomeMessage({
+        status: "RUNNING",
+        content: "# Partial report",
+      })
+    );
+
+    const viewer = wrapper.get('[data-testid="deep-genome"]');
+    expect(wrapper.text()).toContain("Running");
+    expect(viewer.attributes("data-show-actions")).toBe("false");
+    expect(viewer.attributes("data-show-references")).toBe("false");
+  });
+
+  it("shows references for a running partial report when references exist", () => {
+    const wrapper = mountContent(
+      deepGenomeMessage({
+        status: "RUNNING",
+        content: "# Partial report",
+        doc_list: [{ title: "Partial source" }],
+      })
+    );
+
+    expect(
+      wrapper
+        .get('[data-testid="deep-genome"]')
+        .attributes("data-show-references")
+    ).toBe("true");
+  });
+
+  it.each([
+    ["FAILED", "Failed"],
+    ["CANCELLED", "Cancelled"],
+  ])(
+    "renders a %s partial report with terminal status and no final actions",
+    (status, label) => {
+      const wrapper = mountContent(
+        deepGenomeMessage({ status, content: "# Partial report" })
+      );
+
+      expect(wrapper.text()).toContain(label);
+      expect(
+        wrapper
+          .get('[data-testid="deep-genome"]')
+          .attributes("data-show-actions")
+      ).toBe("false");
+    }
+  );
+
+  it.each([
+    ["FAILED", "Failed"],
+    ["CANCELLED", "Cancelled"],
+  ])(
+    "renders a %s empty result as the terminal label only",
+    (status, label) => {
+      const wrapper = mountContent(deepGenomeMessage({ status }));
+
+      expect(wrapper.text()).toContain(label);
+      expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+        false
+      );
+    }
+  );
+
+  it("renders a succeeded meaningful report as an artifact preview", () => {
+    const wrapper = mountContent(
+      deepGenomeMessage({ status: "SUCCEEDED", content: "# Final report" })
+    );
+
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+  });
+
+  it("renders bounded unavailable copy for a succeeded result without a report", () => {
+    const wrapper = mountContent(deepGenomeMessage({ status: "SUCCEEDED" }));
+
+    expect(wrapper.text()).toContain(
+      "The task finished, but the report is not yet available."
+    );
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
   });
 });
 

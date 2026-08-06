@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import {
   artifactKindForMessage,
+  isCompletedDeepGenomeMessage,
+  isDeepGenomeTransportPlaceholder,
+  isMeaningfulDeepGenomeReport,
   shouldAutoOpenArtifact,
 } from "@/views/chat/utils/artifact-policy";
 import type { ArtifactKind, ChatMessage } from "@/views/chat/types";
@@ -43,6 +46,85 @@ const autoOpenByTool: Record<(typeof CANONICAL_AGENT_TOOLS)[number], boolean> =
   };
 
 describe("artifact policy", () => {
+  it.each([
+    "",
+    "   ",
+    "Server task created: child-task-123",
+    "Loading file content...",
+    "File content is empty or failed to load",
+    "Failed to load file, please try again later",
+  ])("rejects DeepGenome transport placeholder %j", (content) => {
+    expect(isMeaningfulDeepGenomeReport(content)).toBe(false);
+  });
+
+  it.each([
+    "Server task created: child-task-123",
+    "Loading file content...",
+    "File content is empty or failed to load",
+    "Failed to load file, please try again later",
+  ])("recognizes DeepGenome transport placeholder %j", (content) => {
+    expect(isDeepGenomeTransportPlaceholder(content)).toBe(true);
+  });
+
+  it.each(["", "   ", "# Gene report\n\nSynthetic evidence."])(
+    "does not classify %j as a DeepGenome transport placeholder",
+    (content) => {
+      expect(isDeepGenomeTransportPlaceholder(content)).toBe(false);
+    }
+  );
+
+  it("accepts a real DeepGenome Markdown report", () => {
+    expect(
+      isMeaningfulDeepGenomeReport("# Gene report\n\nSynthetic evidence.")
+    ).toBe(true);
+  });
+
+  it.each(["RUNNING", "FAILED", "CANCELLED"])(
+    "does not mark %s DeepGenome content complete",
+    (status) => {
+      expect(
+        isCompletedDeepGenomeMessage({
+          ...ELIGIBLE_MESSAGE,
+          tool_name: "DeepGenomeAgent",
+          status,
+        })
+      ).toBe(false);
+    }
+  );
+
+  it("marks only a succeeded meaningful DeepGenome server row complete", () => {
+    expect(
+      isCompletedDeepGenomeMessage({
+        ...ELIGIBLE_MESSAGE,
+        tool_name: "DeepGenomeAgent",
+        status: "SUCCEEDED",
+      })
+    ).toBe(true);
+
+    for (const message of [
+      {
+        ...ELIGIBLE_MESSAGE,
+        content: "Server task created: child-task-123",
+        tool_name: "DeepGenomeAgent",
+        status: "SUCCEEDED",
+      },
+      {
+        ...ELIGIBLE_MESSAGE,
+        streaming: true,
+        tool_name: "DeepGenomeAgent",
+        status: "SUCCEEDED",
+      },
+      {
+        ...ELIGIBLE_MESSAGE,
+        id: undefined,
+        tool_name: "DeepGenomeAgent",
+        status: "SUCCEEDED",
+      },
+    ]) {
+      expect(isCompletedDeepGenomeMessage(message)).toBe(false);
+    }
+  });
+
   it.each(CANONICAL_AGENT_TOOLS)(
     "maps canonical %s results to the approved artifact kind",
     (toolName) => {
