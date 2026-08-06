@@ -424,7 +424,7 @@ describe("useSelectChat", () => {
     });
 
     const { selectChat } = makeComposable();
-    await selectChat("d1");
+    await expect(selectChat("d1")).resolves.toBeUndefined();
 
     // currentChatId is written synchronously before the await
     expect(currentChatId.value).toBe("d1");
@@ -971,7 +971,7 @@ describe("useSelectChat", () => {
         }),
       ])
     );
-    await reload;
+    await expect(reload).resolves.toBe("applied");
 
     expect(messageAt("d1", 0, "background reloaded A").content).toBe(
       "updated question"
@@ -1006,7 +1006,7 @@ describe("useSelectChat", () => {
         }),
       ])
     );
-    await newReload;
+    await expect(newReload).resolves.toBe("applied");
     older.resolve(
       historyResponse([
         buildChatHistoryRecord({
@@ -1016,7 +1016,7 @@ describe("useSelectChat", () => {
         }),
       ])
     );
-    await oldReload;
+    await expect(oldReload).resolves.toBe("superseded");
 
     expect(messageAt("d1", 0, "newer background reload").content).toBe(
       "new question"
@@ -1035,7 +1035,7 @@ describe("useSelectChat", () => {
     mockGetAnswerCheck.mockRejectedValueOnce(new Error("network unavailable"));
 
     const { reloadChat } = makeComposable();
-    await reloadChat("d1");
+    await expect(reloadChat("d1")).resolves.toBe("failed");
 
     expect(stateFor("d1").renderedChat?.messages[0]?.content).toBe(
       "keep this answer"
@@ -1045,6 +1045,46 @@ describe("useSelectChat", () => {
     expect(currentChatId.value).toBe("d2");
     expect(updateUrlWithChatId).not.toHaveBeenCalled();
     expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
+  it("keeps the rendered background tree ready when a reload receives a non-200 response", async () => {
+    const stateA = getChatState("d1");
+    stateA.renderedChat = {
+      dialogue_id: "d1",
+      messages: [{ role: "assistant", content: "keep this answer" }],
+    };
+    stateA.historyHydration = "ready";
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([], { code: 500 })
+    );
+
+    await expect(makeComposable().reloadChat("d1")).resolves.toBe("failed");
+
+    expect(stateFor("d1").renderedChat?.messages[0]?.content).toBe(
+      "keep this answer"
+    );
+    expect(stateFor("d1").historyHydration).toBe("ready");
+    expect(stateFor("d1").historyErrorKind).toBe("request");
+  });
+
+  it("keeps the rendered background tree ready when a reload receives malformed data", async () => {
+    const stateA = getChatState("d1");
+    stateA.renderedChat = {
+      dialogue_id: "d1",
+      messages: [{ role: "assistant", content: "keep this answer" }],
+    };
+    stateA.historyHydration = "ready";
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<ChatHistoryRecord[]>>({ code: 200, data: null })
+    );
+
+    await expect(makeComposable().reloadChat("d1")).resolves.toBe("failed");
+
+    expect(stateFor("d1").renderedChat?.messages[0]?.content).toBe(
+      "keep this answer"
+    );
+    expect(stateFor("d1").historyHydration).toBe("ready");
+    expect(stateFor("d1").historyErrorKind).toBe("decode");
   });
 
   it("updates the still-owned DeepGenome history message after leave and reselect", async () => {

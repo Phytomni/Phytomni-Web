@@ -2,6 +2,7 @@ import { watch, type Ref } from "vue";
 import { normalizePositiveTaskRowId, getTaskLifecycle } from "@/api/task";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage, ChatUIState } from "../types";
+import type { ChatReloadResult } from "./useSelectChat";
 import { isPollableChatAgentTool } from "../utils/async-agent-policy";
 import {
   type LifecycleScheduler,
@@ -36,7 +37,7 @@ function isWatchableMessage(message: ChatMessage): string | null {
 export function useChatAgentRunLifecycle(options: {
   chatStates: Ref<Record<string, ChatUIState>>;
   getChatState: (dialogueId: string) => ChatUIState;
-  reloadChat: (dialogueId: string) => Promise<void>;
+  reloadChat: (dialogueId: string) => Promise<ChatReloadResult>;
   fetchLifecycle?: typeof getTaskLifecycle;
   maxConcurrent?: number;
   scheduler?: LifecycleScheduler;

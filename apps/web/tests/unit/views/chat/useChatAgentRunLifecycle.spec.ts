@@ -83,7 +83,7 @@ describe("useChatAgentRunLifecycle", () => {
         )
       );
     });
-    const reloadChat = vi.fn().mockResolvedValue(undefined);
+    const reloadChat = vi.fn().mockResolvedValue("applied");
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
       getChatState: (dialogueId) => chatStates.value[dialogueId],
@@ -147,7 +147,7 @@ describe("useChatAgentRunLifecycle", () => {
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
       getChatState: (dialogueId) => chatStates.value[dialogueId],
-      reloadChat: vi.fn().mockResolvedValue(undefined),
+      reloadChat: vi.fn().mockResolvedValue("applied"),
       fetchLifecycle,
     });
 
@@ -192,7 +192,7 @@ describe("useChatAgentRunLifecycle", () => {
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
       getChatState: (dialogueId) => chatStates.value[dialogueId],
-      reloadChat: vi.fn().mockResolvedValue(undefined),
+      reloadChat: vi.fn().mockResolvedValue("applied"),
       fetchLifecycle,
       jitter: () => 0,
     });
@@ -221,7 +221,7 @@ describe("useChatAgentRunLifecycle", () => {
       },
     });
     const chatStates = ref({ a: state });
-    const reloadChat = vi.fn().mockResolvedValue(undefined);
+    const reloadChat = vi.fn().mockResolvedValue("applied");
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
       getChatState: (dialogueId) => chatStates.value[dialogueId],
@@ -270,7 +270,7 @@ describe("useChatAgentRunLifecycle", () => {
       },
     });
     const chatStates = ref({ a: stateA, b: stateB });
-    const reloadChat = vi.fn().mockResolvedValue(undefined);
+    const reloadChat = vi.fn().mockResolvedValue("applied");
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
       getChatState: (dialogueId) => chatStates.value[dialogueId],
@@ -324,7 +324,7 @@ describe("useChatAgentRunLifecycle", () => {
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
       getChatState: (dialogueId) => chatStates.value[dialogueId],
-      reloadChat: vi.fn().mockResolvedValue(undefined),
+      reloadChat: vi.fn().mockResolvedValue("applied"),
       fetchLifecycle: vi.fn().mockResolvedValue(response(lifecycle(71))),
     });
 
@@ -366,6 +366,7 @@ describe("useChatAgentRunLifecycle", () => {
           }),
         ],
       };
+      return "applied" as const;
     });
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
@@ -387,8 +388,8 @@ describe("useChatAgentRunLifecycle", () => {
 
   it("queues one terminal reload after an in-flight material reload settles", async () => {
     vi.useFakeTimers();
-    const materialReload = deferred<void>();
-    const terminalReload = deferred<void>();
+    const materialReload = deferred<"applied">();
+    const terminalReload = deferred<"applied">();
     const state = buildChatState({
       historyHydration: "ready",
       agentRunLifecycles: { "91": lifecycle(91) },
@@ -419,6 +420,7 @@ describe("useChatAgentRunLifecycle", () => {
             }),
           ],
         };
+        return "applied" as const;
       });
     const fetchLifecycle = vi
       .fn()
@@ -440,11 +442,11 @@ describe("useChatAgentRunLifecycle", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await flush();
     expect(reloadChat).toHaveBeenCalledOnce();
-    materialReload.resolve();
+    materialReload.resolve("applied");
     await flush();
 
     expect(reloadChat).toHaveBeenCalledTimes(2);
-    terminalReload.resolve();
+    terminalReload.resolve("applied");
     await flush();
 
     expect(state.renderedChat?.messages[0]?.content).toBe("completed analysis");
@@ -456,7 +458,7 @@ describe("useChatAgentRunLifecycle", () => {
 
   it("cancels a queued terminal reload when its dialogue is disposed", async () => {
     vi.useFakeTimers();
-    const materialReload = deferred<void>();
+    const materialReload = deferred<"applied">();
     const state = buildChatState({
       historyHydration: "ready",
       agentRunLifecycles: { "92": lifecycle(92) },
@@ -493,7 +495,7 @@ describe("useChatAgentRunLifecycle", () => {
     expect(reloadChat).toHaveBeenCalledOnce();
 
     coordinator.disposeDialogue("a");
-    materialReload.resolve();
+    materialReload.resolve("applied");
     await flush();
 
     expect(reloadChat).toHaveBeenCalledOnce();

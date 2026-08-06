@@ -31,6 +31,8 @@ import {
 } from "../utils/asset-attachments";
 import { isPollableChatAgentTool } from "../utils/async-agent-policy";
 
+export type ChatReloadResult = "applied" | "failed" | "superseded";
+
 export function historyAssistantMetadata(
   item: Pick<
     ChatResponse,
@@ -166,7 +168,7 @@ export function useSelectChat(opts: {
   const hydrateChat = async (
     dialogueId: string,
     mode: HydrationMode
-  ): Promise<void> => {
+  ): Promise<ChatReloadResult> => {
     // Capture dialogue + state before await so a late response never writes
     // another dialogue's renderedChat or steals foreground URL/scroll.
     const capturedDialogueId = dialogueId;
@@ -193,7 +195,7 @@ export function useSelectChat(opts: {
       ) {
         updateUrlWithChatId(capturedDialogueId);
       }
-      return;
+      return "applied";
     }
 
     const previousHistoryHydration = chatState.historyHydration;
@@ -215,7 +217,7 @@ export function useSelectChat(opts: {
       // call getAnswerCheck to get the conversation records
       res = await getAnswerCheck({ dialogue_id: capturedDialogueId });
     } catch {
-      if (!isCurrentHydration()) return;
+      if (!isCurrentHydration()) return "superseded";
       retainReloadedTreeOnFailure();
       if (!mode.force) chatState.historyHydration = "error";
       chatState.historyErrorKind = "request";
@@ -226,10 +228,10 @@ export function useSelectChat(opts: {
       ) {
         updateUrlWithChatId(capturedDialogueId);
       }
-      return;
+      return "failed";
     }
 
-    if (!isCurrentHydration()) return;
+    if (!isCurrentHydration()) return "superseded";
 
     if (res.code !== 200) {
       retainReloadedTreeOnFailure();
@@ -242,7 +244,7 @@ export function useSelectChat(opts: {
       ) {
         updateUrlWithChatId(capturedDialogueId);
       }
-      return;
+      return "failed";
     }
 
     try {
@@ -256,7 +258,7 @@ export function useSelectChat(opts: {
       const nextReactions: Record<string, number> = {};
       const historyRows = normalizeHistoryRows(res.data);
       const attachmentMetadata = await loadAttachmentMetadata();
-      if (!isCurrentHydration()) return;
+      if (!isCurrentHydration()) return "superseded";
       // Reconstruct the per-conversation routing mode from the persisted parent
       // row so refreshes/threads in this conversation route correctly. Default
       // to "instant" for legacy rows that predate the mode column.
@@ -678,9 +680,9 @@ export function useSelectChat(opts: {
           updateUrlWithChatId(capturedDialogueId);
         }
       }
-      return;
+      return "applied";
     } catch {
-      if (!isCurrentHydration()) return;
+      if (!isCurrentHydration()) return "superseded";
       retainReloadedTreeOnFailure();
       if (!mode.force) chatState.historyHydration = "error";
       chatState.historyErrorKind = "decode";
@@ -691,12 +693,14 @@ export function useSelectChat(opts: {
       ) {
         updateUrlWithChatId(capturedDialogueId);
       }
+      return "failed";
     }
   };
 
-  const selectChat = (dialogueId: string) =>
-    hydrateChat(dialogueId, { force: false, foreground: true });
-  const reloadChat = (dialogueId: string) =>
+  const selectChat = async (dialogueId: string): Promise<void> => {
+    await hydrateChat(dialogueId, { force: false, foreground: true });
+  };
+  const reloadChat = (dialogueId: string): Promise<ChatReloadResult> =>
     hydrateChat(dialogueId, { force: true, foreground: false });
 
   return { selectChat, reloadChat };
