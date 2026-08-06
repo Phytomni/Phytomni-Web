@@ -1869,6 +1869,7 @@ const updateUrlWithChatId = (dialogueId: string) => {
 // Select a chat — history-loading logic extracted into the useSelectChat composable
 const { selectChat, reloadChat } = useSelectChat({
   getChatState,
+  ownsChatState: (dialogueId, state) => chatStates.value[dialogueId] === state,
   currentChatId,
   scrollToBottom,
   updateUrlWithChatId,

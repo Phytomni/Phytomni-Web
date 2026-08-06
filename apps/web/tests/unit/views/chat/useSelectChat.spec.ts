@@ -116,6 +116,7 @@ describe("useSelectChat", () => {
   ) {
     return useSelectChat({
       getChatState,
+      ownsChatState: (dialogueId, state) => states.get(dialogueId) === state,
       currentChatId,
       scrollToBottom,
       updateUrlWithChatId,
@@ -980,6 +981,37 @@ describe("useSelectChat", () => {
     expect(currentChatId.value).toBe("d2");
     expect(updateUrlWithChatId).not.toHaveBeenCalled();
     expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
+  it("supersedes an in-flight reload when its captured state is rekeyed", async () => {
+    const pending = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const capturedState = getChatState("d1");
+    capturedState.renderedChat = {
+      dialogue_id: "d1",
+      messages: [{ role: "assistant", content: "preserve moved history" }],
+    };
+    capturedState.historyHydration = "ready";
+    mockGetAnswerCheck.mockReturnValueOnce(pending.promise);
+
+    const { reloadChat } = makeComposable();
+    const reload = reloadChat("d1");
+    states.set("server-dialogue", capturedState);
+    states.delete("d1");
+
+    pending.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
+          query: "stale old-dialogue question",
+          answer: "stale old-dialogue answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+
+    await expect(reload).resolves.toBe("superseded");
+    expect(
+      renderedFor("server-dialogue", "rekeyed history").messages[0]?.content
+    ).toBe("preserve moved history");
   });
 
   it("does not let an older background reload overwrite a newer reload", async () => {

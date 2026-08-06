@@ -110,6 +110,7 @@ function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
 
 export function useSelectChat(opts: {
   getChatState: (dialogueId: string) => ChatUIState;
+  ownsChatState: (dialogueId: string, state: ChatUIState) => boolean;
   currentChatId: Ref<string>;
   scrollToBottom: () => Promise<void>;
   updateUrlWithChatId: (dialogueId: string) => void;
@@ -120,6 +121,7 @@ export function useSelectChat(opts: {
 }) {
   const {
     getChatState,
+    ownsChatState,
     currentChatId,
     scrollToBottom,
     updateUrlWithChatId,
@@ -176,7 +178,8 @@ export function useSelectChat(opts: {
     // A newer selection of this same dialogue supersedes any older fetch.
     const hydrationGeneration = beginHydration(capturedDialogueId);
     const isCurrentHydration = () =>
-      hydrationGenerations.get(capturedDialogueId) === hydrationGeneration;
+      hydrationGenerations.get(capturedDialogueId) === hydrationGeneration &&
+      ownsChatState(capturedDialogueId, chatState);
     if (mode.foreground) currentChatId.value = capturedDialogueId;
     const chat = chatList.value.find(
       (c: Chat) => c.dialogue_id === capturedDialogueId
@@ -513,9 +516,11 @@ export function useSelectChat(opts: {
                     server_file_path: item.server_file_path, // add the server file path
                   };
                   const ownsDeepGenomeMessage = () =>
-                    chatState.renderedChat?.messages.some(
+                    ownsChatState(capturedDialogueId, chatState) &&
+                    (chatState.renderedChat?.messages.some(
                       (message) => toRaw(message) === deepGenomeMessage
-                    ) ?? false;
+                    ) ??
+                      false);
 
                   // if there is a server file path, read the file content asynchronously
                   if (item.server_file_path) {
