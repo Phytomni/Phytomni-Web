@@ -15,6 +15,9 @@
     "review-confirm-fallback",
     "analyst-log-pending",
     "analyst-log-available",
+    "deep-genome-preparing",
+    "deep-genome-running-partial",
+    "deep-genome-succeeded",
   ]);
   const state = root.dataset.agentLifecycleState;
   const failures = [];
@@ -135,6 +138,26 @@
     !visibleText(root.querySelector(".log-pre"))
   ) {
     fail("available Analyst log content is missing");
+  }
+  if (state === "deep-genome-preparing") {
+    if (root.querySelector('[data-testid="deep-genome-viewer"]'))
+      fail("preparing DeepGenome mounted the result viewer");
+    if (/Server task created:/u.test(visibleText(root)))
+      fail("preparing DeepGenome exposed raw task copy");
+  }
+  if (state === "deep-genome-running-partial") {
+    if (!root.querySelector('[data-testid="deep-genome-viewer"]'))
+      fail("partial DeepGenome report is missing");
+    if (root.querySelector(".deep-genome-empty-references"))
+      fail("partial DeepGenome exposed an empty-reference conclusion");
+    if (root.querySelector('[data-testid="deep-genome-toolbar"]'))
+      fail("partial DeepGenome exposed final download actions");
+  }
+  if (state === "deep-genome-succeeded") {
+    if (!root.querySelector(".research-artifact-preview"))
+      fail("completed DeepGenome artifact preview is missing");
+    if (root.querySelector('[data-testid="deep-genome-viewer"]'))
+      fail("completed DeepGenome source leaked beside the preview");
   }
 
   const result = {

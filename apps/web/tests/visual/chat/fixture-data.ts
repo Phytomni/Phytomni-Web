@@ -117,6 +117,12 @@ const SYNTHETIC_NETWORK_RESULT_DATA_URL =
 export type AgentLifecycleVisualData = {
   message: ChatMessage;
   lifecycle?: SyntheticLifecycle;
+  artifactPreview?: {
+    title: string;
+    kind: string;
+    summary: string;
+    openLabel: string;
+  };
   delivery?: SyntheticResultArchiveDelivery;
   artifactLinks?: SyntheticConversationArtifactLink[];
   geneNetworkImages?: Record<string, string[]>;
@@ -374,6 +380,52 @@ const AGENT_LIFECYCLE_VISUAL_DATA: Record<
         can_request_legacy_refresh: false,
         error_code: null,
       },
+    },
+  },
+  "deep-genome-preparing": {
+    message: {
+      id: "901",
+      role: "assistant",
+      content: "Server task created: synthetic-child",
+      status: "RUNNING",
+      tool_name: "DeepGenomeAgent",
+    },
+    lifecycle: lifecycle("PREPARING"),
+  },
+  "deep-genome-running-partial": {
+    message: {
+      id: "902",
+      role: "assistant",
+      content:
+        "### Synthetic partial report\n\nOne bounded analysis section is available.",
+      status: "RUNNING",
+      tool_name: "DeepGenomeAgent",
+      doc_list: [],
+    },
+    lifecycle: lifecycle("RUNNING", {
+      hasReport: true,
+      reportRevision: 1,
+    }),
+  },
+  "deep-genome-succeeded": {
+    message: {
+      id: "903",
+      role: "assistant",
+      content:
+        "### Synthetic final report\n\nThe deterministic fixture report is complete.",
+      status: "SUCCEEDED",
+      tool_name: "DeepGenomeAgent",
+      doc_list: [],
+    },
+    lifecycle: lifecycle("SUCCEEDED", {
+      hasReport: true,
+      reportRevision: 2,
+    }),
+    artifactPreview: {
+      title: "Finished",
+      kind: "Deep Genome Agent",
+      summary: "Synthetic deep genome report",
+      openLabel: "View",
     },
   },
 };

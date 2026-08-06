@@ -289,6 +289,23 @@ claim backend completion, persistence, or measured transfer progress.
 
 ## Artifact and citation behavior
 
+### DeepGenome Chat lifecycle
+
+DeepGenome is an asynchronous Chat row and uses the shared pollable lifecycle
+policy. A lifecycle snapshot can trigger owner-scoped history hydration only
+when the message has a normalized positive Web row id; the snapshot must not
+inject a report body into the row.
+
+| Lifecycle presentation             | Chat ownership rule                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| Preparing transport placeholder    | Show lifecycle status only; raw transport copy never mounts the result viewer.       |
+| Running with a meaningful report   | Render the partial report without an empty-reference conclusion or final actions.    |
+| Succeeded with a meaningful report | Keep the completed preview in Chat and move the full report to the Artifact surface. |
+
+Only `SUCCEEDED` plus a meaningful report is eligible for the completed
+artifact preview. An empty reference list is not a scientific conclusion, so
+partial reports hide both the empty-reference message and the final toolbar.
+
 An artifact is eligible only for a completed assistant message with a non-empty
 server id, non-empty content, and a recognized tool mapping in
 `views/chat/utils/artifact-policy.ts`. Server ids are normalized to strings and

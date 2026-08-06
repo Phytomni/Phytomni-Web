@@ -33,6 +33,9 @@ states=(
     "review-confirm-fallback"
     "analyst-log-pending"
     "analyst-log-available"
+    "deep-genome-preparing"
+    "deep-genome-running-partial"
+    "deep-genome-succeeded"
 )
 viewports=("390 844" "1440 900")
 themes=("light" "dark")

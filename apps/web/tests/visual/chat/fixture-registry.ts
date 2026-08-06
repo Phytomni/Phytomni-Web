@@ -69,6 +69,9 @@ export const AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS = [
   "review-confirm-fallback",
   "analyst-log-pending",
   "analyst-log-available",
+  "deep-genome-preparing",
+  "deep-genome-running-partial",
+  "deep-genome-succeeded",
 ] as const;
 
 export type AgentLifecycleVisualFixtureKey =
@@ -873,6 +876,11 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
   "review-confirm-fallback": agentLifecycleFixture("review-confirm-fallback"),
   "analyst-log-pending": agentLifecycleFixture("analyst-log-pending"),
   "analyst-log-available": agentLifecycleFixture("analyst-log-available"),
+  "deep-genome-preparing": agentLifecycleFixture("deep-genome-preparing"),
+  "deep-genome-running-partial": agentLifecycleFixture(
+    "deep-genome-running-partial"
+  ),
+  "deep-genome-succeeded": agentLifecycleFixture("deep-genome-succeeded"),
 };
 
 export type ResolveChatVisualFixtureOk = {

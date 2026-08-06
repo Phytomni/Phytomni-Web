@@ -180,13 +180,16 @@ is not evidence of a live Bot upload or 10 GiB behavior.
 
 ## Agent lifecycle acceptance matrix
 
-The lifecycle harness registers eight finite, sanitized states separately from
-the long-lived base fixture list: `agent-preparing`, `agent-running-partial`,
+The lifecycle harness registers 15 finite, sanitized states separately from the
+long-lived base fixture list: `agent-preparing`, `agent-running-partial`,
 `agent-succeeded-artifacts`, `agent-succeeded-empty`, `agent-failed`,
-`review-confirm-fallback`, `analyst-log-pending`, and
-`analyst-log-available`. They render the production `ChatMessageContent`,
-`ChatActivity`, `ChatAnalystLog`, and `ConfirmWidget` paths without a network or
-real task data.
+`agent-delivery-pending`, `agent-delivery-ready`,
+`agent-delivery-retryable`, `agent-delivery-nonretryable`,
+`review-confirm-fallback`, `analyst-log-pending`, `analyst-log-available`,
+`deep-genome-preparing`, `deep-genome-running-partial`, and
+`deep-genome-succeeded`. They render the production `ChatMessageContent`,
+`ChatActivity`, `ChatAnalystLog`, `ResultArchiveDelivery`, and `ConfirmWidget`
+paths without a network or real task data.
 
 Start the fixed-port Vite server, then run from `apps/web/`:
 
@@ -194,8 +197,8 @@ Start the fixed-port Vite server, then run from `apps/web/`:
 ./tests/visual/chat/capture-agent-lifecycle-matrix.sh
 ```
 
-The script captures all eight states at `390x844` and `1440x900` in light and
-dark themes: exactly 32 PNGs, 32 geometry records, and 32 lifecycle-style
+The script captures all 15 states at `390x844` and `1440x900` in light and dark
+themes: exactly 60 PNGs, 60 geometry records, and 60 lifecycle-style
 records under the ignored
 `.codex/evidence/frontend-v2/agent-lifecycle/` directory. Geometry and semantic
 style assertions must pass before each screenshot. The style contract checks
@@ -205,14 +208,15 @@ locking exact colors. For the artifact fixture, the capture script also waits
 for at least one successfully decoded artifact image; other states may contain
 no images.
 
-After a successful 32/32/32 capture, the script deterministically regenerates
+After a successful 60/60/60 capture, the script deterministically regenerates
 the ignored `visual-review-ledger.md` with one schema-complete row per PNG.
 Its geometry result is `PASS` because the script asserted it, while every
 `manual_review` starts as `Pending`; rerunning the matrix deliberately resets
-those human findings. Inspect every PNG individually after the final capture
-and update each row to PASS, FAIL, or Needs Verification with a concise note.
-Any FAIL requires a fixture or production-style fix and a complete recapture;
-file counts and automated assertions alone are not visual acceptance.
+those human findings. Inspect every final PNG individually before offering any
+human review packet, then update each row to PASS, FAIL, or Needs Verification
+with a concise note. Any FAIL requires a fixture or production-style fix and a
+complete recapture; file counts and automated assertions alone are not visual
+acceptance.
 
 ## Accessibility modality evidence
 

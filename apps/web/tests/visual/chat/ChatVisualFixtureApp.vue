@@ -285,6 +285,9 @@
                           :digital-design-images="EMPTY_IMAGES"
                           :digital-design-images-loading="EMPTY_LOADING"
                           :lifecycle="agentLifecycleOverlay?.lifecycle"
+                          :artifact-preview="
+                            agentLifecycleOverlay?.artifactPreview
+                          "
                         />
                         <ResultArchiveDelivery
                           v-if="agentLifecycleOverlay?.delivery"

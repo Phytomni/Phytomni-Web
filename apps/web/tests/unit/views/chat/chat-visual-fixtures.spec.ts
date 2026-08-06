@@ -504,6 +504,51 @@ describe("Chat visual fixture registry", () => {
     }
   });
 
+  it("registers sanitized DeepGenome lifecycle visual states", () => {
+    const keys = [
+      "deep-genome-preparing",
+      "deep-genome-running-partial",
+      "deep-genome-succeeded",
+    ] as const;
+    const forbiddenContent =
+      /obs:\/\/|\/home\/|\brun_id\b|OsD18|Oryza sativa|Arabidopsis thaliana|[\w.+-]+@[\w.-]+|password|secret|token|credential/iu;
+
+    for (const key of keys) {
+      const resolved = resolveChatVisualFixture(key, "en-US", "light");
+      expect(resolved.ok).toBe(true);
+      const data = getAgentLifecycleVisualData(key);
+      expect(data.message.tool_name).toBe("DeepGenomeAgent");
+      expect(data.message.content).not.toMatch(forbiddenContent);
+    }
+
+    const preparing = getAgentLifecycleVisualData("deep-genome-preparing");
+    expect(preparing.message.content).toBe(
+      "Server task created: synthetic-child"
+    );
+
+    const partial = getAgentLifecycleVisualData("deep-genome-running-partial");
+    expect(partial.message.content).toContain("### Synthetic partial report");
+    expect(partial.message.doc_list).toEqual([]);
+
+    const succeeded = getAgentLifecycleVisualData("deep-genome-succeeded");
+    expect(succeeded.message.content).toContain("### Synthetic final report");
+    expect(succeeded.artifactPreview).toEqual({
+      title: "Finished",
+      kind: "Deep Genome Agent",
+      summary: "Synthetic deep genome report",
+      openLabel: "View",
+    });
+    expect(Object.keys(succeeded.artifactPreview ?? {})).toHaveLength(4);
+
+    for (const file of [
+      resolve(VISUAL_CHAT, "fixture-registry.ts"),
+      resolve(VISUAL_CHAT, "fixture-data.ts"),
+      resolve(VISUAL_CHAT, "ChatVisualFixtureApp.vue"),
+    ]) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/@\/api\b/);
+    }
+  });
+
   it("uses exact Synthetic user identity and empty has zero message rows", () => {
     expect(SYNTHETIC_IDENTITY).toBe("Synthetic user");
     const empty = getChatVisualFixture("empty");
