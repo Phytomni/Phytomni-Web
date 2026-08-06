@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "bot_commit": "c58ccdbc69048ca30398fb57008646ff4e51e11e",
+  "bot_commit": "e6727d561efa8b0d933e9ca7a2706806638ffbea",
   "required_agents": [
     "chat",
     "knowledge",

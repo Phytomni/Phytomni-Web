@@ -10,7 +10,7 @@ const manifestPath = resolve(
   "tests/fixtures/bot-head/contract-manifest.json"
 );
 
-const releaseSha = "c58ccdbc69048ca30398fb57008646ff4e51e11e";
+const releaseSha = "e6727d561efa8b0d933e9ca7a2706806638ffbea";
 const releaseSlugs = [
   "chat",
   "knowledge",

@@ -15,7 +15,7 @@ import pytest
 import check_bot_web_compatibility as checker
 
 
-RELEASE_SHA = "c58ccdbc69048ca30398fb57008646ff4e51e11e"
+RELEASE_SHA = "e6727d561efa8b0d933e9ca7a2706806638ffbea"
 RELEASE_AGENTS = [
     "chat",
     "knowledge",
